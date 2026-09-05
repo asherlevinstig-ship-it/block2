@@ -2261,7 +2261,10 @@ function updateEncounterPrompt(){
   if(interactionPrompt){
     encounterPromptEl.classList.toggle('danger',!!interactionPrompt.danger);
     encounterPromptEl.classList.remove('hidden');
-    encounterPromptEl.innerHTML='<span class="key">'+escHTML(interactionPrompt.key||'G')+'</span><b>'+escHTML(interactionPrompt.title||'Interact')+'</b><small>'+escHTML(interactionPrompt.small||'Press G to interact')+'</small>';
+    const actions=Array.isArray(interactionPrompt.actions)&&interactionPrompt.actions.length
+      ? '<span class="interaction-actions">'+interactionPrompt.actions.map(action=>'<i>'+escHTML(action)+'</i>').join('')+'</span>'
+      : '';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(interactionPrompt.key||'G')+'</span><span class="interaction-copy"><b>'+escHTML(interactionPrompt.title||'Interact')+'</b><small>'+escHTML(interactionPrompt.small||'Press G to interact')+'</small>'+actions+'</span>';
     return;
   }
   const weeklyCache=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipWeeklyCache&&combatApi.nearFellowshipWeeklyCache();

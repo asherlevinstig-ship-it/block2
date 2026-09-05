@@ -6803,7 +6803,20 @@ function nearbyInteractionPrompt(){
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
   if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at '+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL)),priority:112},0);
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
-  if(socialTarget)push({key:'E',title:String(socialTarget.name||'Hunter'),small:'Trade, add friend, or train pet',priority:111},socialTarget.distance||0);
+  const robberyTargets=globalThis.BlockcraftRobberyTargets;
+  const robberyTarget=!socialTarget&&robberyTargets&&robberyTargets.near?robberyTargets.near(4.8):null;
+  const playerTarget=socialTarget||robberyTarget;
+  if(playerTarget){
+    const actions=[];
+    if(!playerTarget.robberyOnly){
+      actions.push('Trade');
+      if(typeof nearbyPlayerIsPetTamer==='function'&&nearbyPlayerIsPetTamer(playerTarget)&&typeof dragonLoanOwnedTypes==='function'&&dragonLoanOwnedTypes().length)actions.push('Train My Pet');
+      if(typeof dragonLoanReturnForTarget==='function'&&dragonLoanReturnForTarget(playerTarget))actions.push('Return Dragon');
+      actions.push('Add Friend');
+    }
+    actions.push('Rob');
+    push({key:'E',title:'Nearby: '+String(playerTarget.name||'Hunter'),small:'Press E to choose an action',actions,danger:!!playerTarget.robberyOnly,priority:111},playerTarget.distance||0);
+  }
   const readyClaim=claimReadyQuestAtServicePrompt();
   if(readyClaim)push(readyClaim,0);
   push(activeJobContractPrompt(),0);

@@ -96,7 +96,12 @@
   #gateprompt .gate-status{margin-left:9px;font-weight:bold}.gate-status.ready{color:#9be76d}.gate-status.warning{color:#ffad66}.gate-status.danger{color:#ff5d48;text-shadow:0 0 8px rgba(255,93,72,.85)}
   #gateprompt .gate-preview{display:block;margin-top:4px;color:#aebbd0;font-size:11px;letter-spacing:.2px}
   #encounterprompt{position:fixed;left:50%;bottom:176px;transform:translateX(-50%);z-index:15;padding:9px 14px;border:1px solid rgba(102,211,255,.65);border-radius:6px;background:linear-gradient(180deg,rgba(13,27,37,.95),rgba(7,12,18,.95));box-shadow:0 7px 24px rgba(0,0,0,.45);color:#e7f7ff;font-size:13px;pointer-events:none;white-space:nowrap;text-align:center}
-  #encounterprompt .key{display:inline-grid;place-items:center;min-width:26px;height:24px;margin-right:9px;border:1px solid #7dd3fc;border-radius:4px;background:#163247;color:#fff;font-weight:bold}#encounterprompt small{margin-left:9px;color:#9fc4d8}
+  #encounterprompt .key{display:inline-grid;place-items:center;min-width:26px;height:24px;margin-right:9px;border:1px solid #7dd3fc;border-radius:4px;background:#163247;color:#fff;font-weight:bold;vertical-align:top}
+  #encounterprompt .interaction-copy{display:inline-flex;align-items:center;gap:9px;vertical-align:top}
+  #encounterprompt small{color:#9fc4d8}
+  #encounterprompt .interaction-actions{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:5px}
+  #encounterprompt .interaction-actions i{padding:3px 6px;border:1px solid rgba(125,211,252,.34);border-radius:3px;background:rgba(24,67,91,.58);color:#dff6ff;font-size:10px;font-style:normal;font-weight:800;letter-spacing:.45px;text-transform:uppercase}
+  #encounterprompt.danger .interaction-actions i{border-color:rgba(255,98,71,.42);background:rgba(91,31,24,.62);color:#ffd6cc}
   #encounterprompt.danger{border-color:rgba(255,98,71,.75);color:#ffd6cc}
   .gate-preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:10px 0}.gate-preview-card{padding:9px;border:1px solid rgba(242,199,92,.2);border-radius:5px;background:rgba(0,0,0,.2);font-size:12px;line-height:1.45}.gate-preview-card b{color:#f2c75c}
   .gate-preview-grid,.gate-preview-card,.gate-party-readiness,.gate-readiness-list{pointer-events:none}
@@ -1837,6 +1842,7 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
     #blockname{bottom:172px}
     #gateprompt{bottom:176px;max-width:calc(100vw - 20px);white-space:normal}
     #encounterprompt{bottom:216px;max-width:calc(100vw - 20px);white-space:normal}
+    #encounterprompt .interaction-copy{flex-direction:column;gap:5px;max-width:calc(100vw - 76px)}
     #chatlog{left:8px;bottom:180px;width:min(360px,calc(100vw - 16px))}
   }
   @media (max-width:470px){
