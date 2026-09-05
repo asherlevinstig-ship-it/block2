@@ -2036,15 +2036,18 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.doesNotMatch(styles,/body\.onboarding[^\{]*#currentquest/);
 });
 
-test('achievement notices are capped and burst-safe',()=>{
+test('system feedback uses the persistent event log instead of popup notifications',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
-  assert.match(world,/const SYS_MAX_VISIBLE=2, SYS_QUEUE_MAX=5, SYS_BURST_WINDOW_MS=900, SYS_RECENT_COOLDOWN_MS=1800/);
-  assert.match(world,/const sysActive=\[\], sysPending=\[\], sysSpawnedAt=\[\];/);
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.doesNotMatch(html,/id="sysmsgs"/);
+  assert.doesNotMatch(styles,/#sysmsgs|\.sysmsg|system-notice-active/);
+  assert.doesNotMatch(world,/sysEl|sysActive|sysPending|sysSpawnedAt|spawnSysToast|dismissSysToast|armSysHide/);
+  assert.match(world,/const SYS_RECENT_COOLDOWN_MS=1800/);
   assert.match(world,/const sysRecent=new Map\(\);/);
   assert.match(world,/function sysCleanText\(html\)\{/);
-  assert.match(world,/function sysBursting\(now=Date\.now\(\)\)\{/);
-  assert.match(world,/if\(burst&&tier!=='major'\)\{/);
-  assert.match(world,/if\(pendingDup\)\{ pendingDup\.count=\(pendingDup\.count\|\|1\)\+1; return; \}/);
+  assert.match(world,/chatLine\('\['\+title\+'\]',clean,'system-'\+tier\)/);
+  assert.match(styles,/\.chatline\.system-notice,\.chatline\.system-minor,\.chatline\.system-major/);
   assert.match(world,/while\(rewardFeedEl\.children\.length>3\)\{/);
 });
 
@@ -4751,19 +4754,15 @@ test('parkour event has a client-side fall recovery request', () => {
   assert.match(gameRoomSource, /onMessage\('eventReset'/);
 });
 
-test('dismissible game modals and notices expose a consistent close control', () => {
+test('dismissible game modals expose a consistent close control', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
-  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(combat, /function ensureModalCloseControl\(el\)/);
   assert.match(combat, /btn\.className='bc-modal-close'/);
   assert.match(combat, /function dismissSpecificGamePanel\(el,relock=true\)/);
   assert.match(combat, /document\.querySelectorAll\('\[role="dialog"\],\.kc-overlay,\.character-creator\.floating'\)/);
   assert.match(combat, /el\.id==='deathlimbo'/, 'mandatory death recovery cannot be hidden into an unusable dead state');
-  assert.match(world, /class="sysmsgclose"/);
-  assert.match(world, /dismissSysToast\(t,true\)/);
   assert.match(styles, /\.bc-modal-close\{/);
-  assert.match(styles, /\.sysmsgclose\{/);
 });
 
 test('releasing the gameplay cursor explains how Escape restores character control', () => {

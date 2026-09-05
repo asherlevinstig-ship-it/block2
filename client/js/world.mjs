@@ -7962,7 +7962,6 @@ const buffs={dmg:0, armor:0, spd:0, stone:0, regen:0, aegis:0, gather:0, panther
 
 const dmgEl=document.getElementById('dmgflash');
 const sleepEl=document.getElementById('sleepfade');
-const sysEl=document.getElementById('sysmsgs');
 const rewardWin=document.getElementById('rewardwin');
 const rewardPanel=document.getElementById('rewardpanel');
 let rewardHideTimer=0;
@@ -8786,13 +8785,10 @@ function eventFailed(m){
 function escHTML(v){
   return String(v).replace(/[&<>"']/g, ch=>({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
 }
-// Tiered notice channel: 'minor' (compact ambient line), 'notice' (default), 'major'
-// (gold alert). Keep the top of the screen calm: repeats coalesce, burst noise
-// falls back to the chat/event log, and only a couple of notices show at once.
-const SYS_MAX_VISIBLE=2, SYS_QUEUE_MAX=5, SYS_BURST_WINDOW_MS=900, SYS_RECENT_COOLDOWN_MS=1800;
-const sysActive=[], sysPending=[], sysSpawnedAt=[];
+// System feedback lives in the persistent chat/event history instead of spawning
+// interruptive top-centre toast notifications.
+const SYS_RECENT_COOLDOWN_MS=1800;
 const sysRecent=new Map();
-sysEl.setAttribute('aria-live','polite');
 const rewardFeedEl=document.getElementById('rewardfeed');
 const rewardGainActive=new Map();
 let titleFlashTimer=0;
@@ -8854,77 +8850,22 @@ function removeRewardGain(entry){
 function sysMsg(html, opts){
   opts=typeof opts==='string'?{tier:opts}:(opts||{});
   const tier=opts.tier==='minor'||opts.tier==='major'?opts.tier:'notice';
-  const key=tier+'|'+html, now=Date.now(), clean=sysCleanText(html);
-  const dup=sysActive.find(t=>t.key===key);
-  if(dup){
-    dup.count++;
-    const c=dup.el.querySelector('.noticecount');
-    if(c){ c.textContent='x'+dup.count; c.style.display=''; }
-    clearTimeout(dup.hideTimer);
-    armSysHide(dup);
-    return;
-  }
+  const clean=sysCleanText(html);
+  if(!clean)return;
+  const key=String(opts.key||tier+'|'+clean),now=Date.now();
+  const cooldown=Math.max(0,Number(opts.cooldown)||SYS_RECENT_COOLDOWN_MS);
   const recentAt=sysRecent.get(key)||0;
-  if(recentAt&&now-recentAt<SYS_RECENT_COOLDOWN_MS)return;
+  if(recentAt&&now-recentAt<cooldown)return;
   sysRecent.set(key,now);
   if(sysRecent.size>80){
     const cutoff=now-10000;
     for(const [k,t] of sysRecent)if(t<cutoff)sysRecent.delete(k);
   }
-  const burst=sysBursting(now);
-  if(burst&&tier!=='major'){
-    if(clean)eventLog(clean,opts.title?'['+opts.title+']':'[Notice]');
-    return;
-  }
-  if(sysActive.length>=SYS_MAX_VISIBLE){
-    if(tier==='minor') return;
-    const pendingDup=sysPending.find(t=>t.key===key);
-    if(pendingDup){ pendingDup.count=(pendingDup.count||1)+1; return; }
-    if(sysPending.length<SYS_QUEUE_MAX) sysPending.push({html,tier,title:opts.title,key,count:1});
-    else if(clean)eventLog(clean,opts.title?'['+opts.title+']':'[Notice]');
-    return;
-  }
-  spawnSysToast(html,tier,opts.title);
+  const title=String(opts.title||(tier==='major'?'Important':tier==='minor'?'Tip':'Notice')).slice(0,40);
+  chatLine('['+title+']',clean,'system-'+tier);
 }
 function sysCleanText(html){
   return String(html||'').replace(/<br\s*\/?>/gi,' ').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,180);
-}
-function sysBursting(now=Date.now()){
-  while(sysSpawnedAt.length&&now-sysSpawnedAt[0]>SYS_BURST_WINDOW_MS)sysSpawnedAt.shift();
-  return sysSpawnedAt.length>=SYS_MAX_VISIBLE;
-}
-function spawnSysToast(html,tier,title){
-  const d=document.createElement('div'); d.className='sysmsg '+tier;
-  d.innerHTML=tier==='minor'
-    ? '<span class="noticecopy">'+html+'</span><span class="noticecount" style="display:none"></span><button class="sysmsgclose" type="button" aria-label="Dismiss notice">×</button>'
-    : '<span class="noticecrest" aria-hidden="true">'+(tier==='major'?'&#9733;':'&#10022;')+'</span>'
-      +'<span><b class="noticetitle">'+escHTML(title||(tier==='major'?'Major Notice':'Hunter Notice'))+'</b>'
-      +'<span class="noticecopy">'+html+'</span></span><span class="noticecount" style="display:none"></span><button class="sysmsgclose" type="button" aria-label="Dismiss notice">×</button>';
-  sysEl.appendChild(d);
-  document.body.classList.add('system-notice-active');
-  const t={el:d,key:tier+'|'+html,count:1,tier,hideTimer:0};
-  sysActive.push(t);
-  const close=d.querySelector('.sysmsgclose');
-  if(close)close.addEventListener('click',()=>dismissSysToast(t,true));
-  const now=Date.now();sysSpawnedAt.push(now);while(sysSpawnedAt.length&&now-sysSpawnedAt[0]>SYS_BURST_WINDOW_MS)sysSpawnedAt.shift();
-  requestAnimationFrame(()=>{ d.style.opacity=1; d.style.transform='translateY(0)'; });
-  armSysHide(t);
-}
-function dismissSysToast(t,immediate=false){
-  if(!t||!t.el||!t.el.isConnected)return;
-  clearTimeout(t.hideTimer);
-  const remove=()=>{
-    if(t.el&&t.el.isConnected)t.el.remove();
-    const i=sysActive.indexOf(t);if(i>=0)sysActive.splice(i,1);
-    if(!sysEl.children.length)document.body.classList.remove('system-notice-active');
-    const next=sysPending.shift();if(next)spawnSysToast(next.html,next.tier,next.title);
-  };
-  if(immediate){remove();return;}
-  t.el.style.opacity=0;t.el.style.transform='translateY(-4px)';setTimeout(remove,500);
-}
-function armSysHide(t){
-  const dur=t.tier==='major'?6000:t.tier==='minor'?3200:4200;
-  t.hideTimer=setTimeout(()=>dismissSysToast(t),dur);
 }
 function eventLog(text, name='[Event]', channel=''){
   if(dim!=='overworld')return;
