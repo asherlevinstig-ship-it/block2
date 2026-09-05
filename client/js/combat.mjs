@@ -647,20 +647,9 @@ const cursorEl=document.getElementById('cursoritem');
 const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
 const coachHudStateEl=document.getElementById('coachhud');
-const keyPromptHud=document.getElementById('keyprompthud');
 const controlPausePrompt=document.getElementById('controlpauseprompt');
 const questionBtn=document.getElementById('questionbtn');
 const socialBtn=document.getElementById('socialbtn');
-const KEY_PROMPTS=[
-  {key:'TAB',title:'Chat',text:'Open Local quick chat - press Tab again for Team / Whisper'},
-  {key:'F',title:'Action',text:'Mine, attack, harvest, or use the focused action'},
-  {key:'G',title:'Interact',text:'Talk to villagers, place blocks, or use held items'},
-  {key:'E',title:'Inventory',text:'Open your bag, crafting, gear, and hotbar'},
-  {key:'O',title:'Quest Log',text:'Open Story, What Next, Gate Prep, and active objectives'},
-  {key:'C',title:'Stats',text:'Open your character sheet, class paths, and stat points'},
-  {key:'SHIFT',title:'Sprint',text:'Hold while moving to run'},
-];
-let keyPromptIndex=-1,keyPromptNextAt=0;
 const tabletInputState={
   touch:false,
   tablet:false,
@@ -1003,22 +992,6 @@ globalThis.BlockcraftTabletDebug=()=>({
   sprintToggled:tabletInputState.sprintToggled,
   viewport:{w:innerWidth,h:innerHeight},
 });
-function keyPromptMarkup(prompt,index){
-  const dots=KEY_PROMPTS.map((_,i)=>'<i class="'+(i===index?'active':'')+'"></i>').join('');
-  return '<div class="keyart">'+escHTML(prompt.key)+'</div><div class="keycopy"><b>Press '+escHTML(prompt.key)+' - '+escHTML(prompt.title)+'</b><span>'+escHTML(prompt.text)+'</span></div><div class="keydots">'+dots+'</div>';
-}
-function updateKeyPromptHud(show=false,force=false){
-  if(!keyPromptHud)return;
-  if(!show){keyPromptHud.classList.add('hidden');return;}
-  const now=Date.now();
-  if(force||keyPromptIndex<0||now>=keyPromptNextAt){
-    keyPromptIndex=(keyPromptIndex+1)%KEY_PROMPTS.length;
-    keyPromptNextAt=now+4200;
-    keyPromptHud.innerHTML=keyPromptMarkup(KEY_PROMPTS[keyPromptIndex],keyPromptIndex);
-  }
-  keyPromptHud.classList.remove('hidden');
-}
-if(keyPromptHud)setInterval(()=>updateKeyPromptHud(!keyPromptHud.classList.contains('hidden')),1000);
 function bindHudActionButton(btn,handler,name){
   if(!btn)return;
   let lastRunAt=0;
@@ -5220,8 +5193,6 @@ function refreshPlayUi(){
   if(socialBtn)socialBtn.classList.toggle('hidden', !showHud || modalInputOpen || claimMode || networkingCutsceneActive());
   document.getElementById('landmap').classList.toggle('hidden', true);
   document.getElementById('eventhud').classList.toggle('hidden', true);
-  const fishingActive=!!(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active());
-  updateKeyPromptHud(showHud&&!fishingActive&&!modalInputOpen&&!claimMode&&!worldLoading&&!document.body.classList.contains('portal-transitioning')&&!document.body.classList.contains('chat-open')&&!networkingCutsceneActive());
   hintEl.classList.add('hidden');
   updateLandMinimap();
   syncHudLayerState();
