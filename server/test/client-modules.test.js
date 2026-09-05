@@ -1617,6 +1617,17 @@ test('browser and server consume one shared safeguarded comms ruleset', () => {
   assert.deepEqual(serverCommsRules.phraseIdsFor('gate').slice(0, 3), ['gate_ready','gate_need_one','gate_enter']);
 });
 
+test('ability training places the player directly on the meadow floor', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const groundedSpawn = /player\.pos\.set\(ABILITY_MEADOW\.x,ABILITY_MEADOW\.G\+1,ABILITY_MEADOW\.z\+12\)/;
+
+  assert.match(combat, groundedSpawn, 'training entry starts with the player standing on the floor');
+  assert.match(world, groundedSpawn, 'tutorial recovery also returns the player to the floor');
+  assert.doesNotMatch(combat, /ABILITY_MEADOW\.G\+2/, 'training entry must not drop the player from one block up');
+  assert.doesNotMatch(world, /ABILITY_MEADOW\.G\+2/, 'tutorial recovery must not drop the player from one block up');
+});
+
 test('first Gate clears produce the right onboarding handoffs', async () => {
   const { gateMilestoneHandoff, rankPromotionDetails } = await clientModule('onboarding.mjs');
   assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 0, nextRank: 1 } }, true), {

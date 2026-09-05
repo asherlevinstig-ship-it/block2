@@ -9453,7 +9453,7 @@ function die(){
   if(tutorialSafe()){
     hp=maxHp(); sp=maxSp(); hunger=maxHunger();
     if(player){
-      if(abilityTrainingActive && dim==='ability') player.pos.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+2,ABILITY_MEADOW.z+12);
+      if(abilityTrainingActive && dim==='ability') player.pos.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+1,ABILITY_MEADOW.z+12);
       else player.pos.set(TRAINING_MEADOW.x-32,TRAINING_MEADOW.G+2,TRAINING_MEADOW.z+24);
       player.vel.set(0,0,0);
     }

@@ -1919,7 +1919,10 @@ function startAbilityTraining(){
   abilityTrainingFinishAt=0;
   abilityTrainingReturn=abilityRoomReturn&&abilityRoomReturn.pos ? abilityRoomReturn.pos.clone() : (player?player.pos.clone():new THREE.Vector3(TOWN.TC+.5,TOWN.G+1,TOWN.TC+62.5));
   if(player){
-    player.pos.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+2,ABILITY_MEADOW.z+12);
+    // This part of the meadow is deliberately flat at G. Spawn with the
+    // player's feet directly on its top face so the transition never begins
+    // with a visible one-block fall.
+    player.pos.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+1,ABILITY_MEADOW.z+12);
     player.vel.set(0,0,0);
     player.yaw=Math.PI;
     player.pitch=0;
