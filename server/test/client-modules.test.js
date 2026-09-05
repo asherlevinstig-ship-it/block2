@@ -220,6 +220,9 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /addTownDistrictLabel\('PORTAL COURT'/);
   assert.match(world, /BlockcraftTownArrivalGuide/);
   assert.match(world, /Job Board · Tamsin/);
+  assert.match(world, /aegisApproach: \{ x: TOWN\.TC - 17\.5, z: TOWN\.TC - 40\.7 \}/);
+  assert.match(world, /title:'AEGIS SHRINE'.*x:HUB\.guardian\.x-4\.7,z:HUB\.guardian\.z\+3\.7/);
+  assert.match(world, /kind:'server-aegis'.*target:HUB\.aegisApproach/);
   assert.match(world, /\{x:HUB\.forgeChimney\.x, y:TG\+9\.6,\s+z:HUB\.forgeChimney\.z,\s+type:'smoke',\s+rate:2\.2,\s+maxDist:16\}/);
   assert.match(world, /Math\.hypot\(player\.pos\.x-e\.x,player\.pos\.z-e\.z\)>\(e\.maxDist\|\|105\)/);
   assert.match(world, /Math\.hypot\(player\.pos\.x-p\.x,player\.pos\.z-p\.z\)>38\) continue/);
@@ -4771,6 +4774,12 @@ test('captured desktop gameplay hides the system cursor while retaining the cros
   assert.match(combat, /const gameplayCursorCaptured=!!\(locked&&!cursorReleased&&!modalInputOpen/);
   assert.match(combat, /document\.body\.classList\.toggle\('gameplay-cursor-captured',gameplayCursorCaptured\)/);
   assert.match(styles, /body\.gameplay-cursor-captured,body\.gameplay-cursor-captured \*\{cursor:none!important\}/);
+});
+
+test('questions HUD button is visible only in tablet mode', () => {
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(styles, /#questionbtn\{display:none\}/);
+  assert.match(styles, /body\.tablet-mode #questionbtn:not\(\.hidden\)\{display:block\}/);
 });
 
 test('a desktop world click upgrades finite fallback mouse-look to native pointer lock', () => {

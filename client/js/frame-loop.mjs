@@ -1184,7 +1184,7 @@ function localStoryObjectiveLine(){
   const progress=quest.need?objectiveProgressParts(quest.have||countItem(quest.item)||0,quest.need):null;
   const chapter=quest.giver==='Mara Vale'&&quest.chainStep>=0&&quest.chainStep<=2?chapterOneMeta((quest.chainStep|0)+1):null;
   let target=null;
-  if(isAegis)target={label:'Aegis Guardian',x:HUB.guardian.x,z:HUB.guardian.z};
+  if(isAegis)target={label:'Aegis Guardian',x:HUB.aegisApproach.x,z:HUB.aegisApproach.z};
   else if(questDone())target={label:quest.giver==='Mara Vale'?'Mara Vale':'Quest Giver',x:HUB.guide.x,z:HUB.guide.z};
   else if(quest.giver==='Mara Vale'&&quest.title==='First Hands')target={label:'Logging Area',x:HUB.northGate.x,z:HUB.northGate.z-15};
   else if(quest.type==='gate')target=gate?{label:'Active Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
@@ -1893,7 +1893,7 @@ function utilityCompassTarget(){
     const handoff=professionHandoffObjective();
     return handoff&&handoff.target ? handoff.target : {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
-  if(progressionFocus==='c_rank_specialization')return {label:'Aegis',x:HUB.guardian.x,z:HUB.guardian.z};
+  if(progressionFocus==='c_rank_specialization')return {label:'Aegis',x:HUB.aegisApproach.x,z:HUB.aegisApproach.z};
   if(progressionFocus==='b_rank_pressure'){
     const midgame=midgameObjectiveLine();
     if(midgame&&midgame.target)return midgame.target;
@@ -2218,7 +2218,7 @@ function nearbyQuestClaimPrompt(){
   if(!locked||uiOpen||statOpen||qOpen||claimMode||onboardingActive||dim!=='overworld')return null;
   if(quest&&questDone&&questDone()){
     const qTitle=quest.title||questTypeLabel(quest)||'Quest';
-    const target=quest.source==='guardian'?HUB.guardian:quest.giver==='Mara Vale'?HUB.guide:null;
+    const target=quest.source==='guardian'?HUB.aegisApproach:quest.giver==='Mara Vale'?HUB.guide:null;
     if(target&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<5.2){
       return {title:'Turn In '+qTitle,small:'Quest complete - claim reward'};
     }

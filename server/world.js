@@ -42,6 +42,7 @@ const HUB = Object.freeze({
   roost: townPos(96, 65, 'roost'),
   skyport: { ...townPos(32, 64, 'skyport'), y: TOWN.G + 24 },
   guardian: { x: TOWN.TC - 17.5, z: TOWN.TC - 43.5 },
+  aegisApproach: { x: TOWN.TC - 17.5, z: TOWN.TC - 40.7 },
   guild: townPos(54.5, 26.5, 'guild'),
   guildNoticeBoard: townPos(47, 26.7, 'guild'),
   socialMentor: townPos(43.5, 34, 'guild'),

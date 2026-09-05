@@ -66,6 +66,8 @@
   #bugreportbtn:hover{filter:brightness(1.16);border-color:#ffd24a;color:#fff1c2}
   #questionbtn,#socialbtn{position:fixed;left:10px;top:268px;z-index:12;height:34px;min-width:132px;padding:0 12px;border:1px solid rgba(125,211,252,.68);border-radius:6px;background:linear-gradient(180deg,rgba(12,35,52,.94),rgba(6,13,22,.9));box-shadow:0 8px 22px rgba(0,0,0,.34),0 0 15px rgba(125,211,252,.14),inset 0 0 14px rgba(255,255,255,.04);color:#c8f0ff;font:800 10px inherit;letter-spacing:1.3px;text-shadow:0 2px 0 #000;cursor:pointer}
   #questionbtn.hidden,#socialbtn.hidden{display:none}
+  #questionbtn{display:none}
+  body.tablet-mode #questionbtn:not(.hidden){display:block}
   #questionbtn:hover,#socialbtn:hover{filter:brightness(1.16);border-color:#ffd24a;color:#fff1c2}
   #questionbtn:before{content:"? ";color:#7dd3fc}
   #socialbtn:before{content:"☰ ";color:#9ad26b}

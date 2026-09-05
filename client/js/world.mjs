@@ -2001,6 +2001,7 @@ const HUB = {
   tamingPortal: { x: TOWN.TC + 45.5, z: TOWN.TC + 3.5 },
   skyport: { x: dpx(32, 'skyport'), z: dpz(64, 'skyport'), y: TOWN.G + 24 },
   guardian: { x: TOWN.TC - 17.5, z: TOWN.TC - 43.5 },
+  aegisApproach: { x: TOWN.TC - 17.5, z: TOWN.TC - 40.7 },
   guild: { x: dpx(54.5, 'guild'), z: dpz(26.5, 'guild') },
   guildNoticeBoard: { x: dpx(47, 'guild'), z: dpz(26.7, 'guild') },
   socialMentor: { x: dpx(43.5, 'guild'), z: dpz(34, 'guild') },
@@ -5140,7 +5141,7 @@ function setGuideBeaconColor(color){
 }
 function guidanceNpcPosition(name){
   const n=String(name||'').toLowerCase();
-  if(n==='aegis guardian' || n==='guardian') return HUB.guardian;
+  if(n==='aegis guardian' || n==='guardian') return HUB.aegisApproach;
   for(const v of villagers){
     if(!v||!v.grp) continue;
     if(String(v.name||'').toLowerCase()===n || String(v.shortName||'').toLowerCase()===n)
@@ -5309,7 +5310,7 @@ function serverObjectiveGuidanceTarget(o){
     return {kind:'server-guild',color:0x8bbf5a,target:HUB.guild,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guild]};
   }
   if(action==='claim_aegis'||source==='aegis'||loc.includes('aegis')||loc.includes('guardian')){
-    return {kind:'server-aegis',color:0xd7b5ff,target:HUB.guardian,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guardian]};
+    return {kind:'server-aegis',color:0xd7b5ff,target:HUB.aegisApproach,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.aegisApproach]};
   }
   if(action==='cartographer'||loc.includes('orin')||loc.includes('cartographer')||title.includes('town map')){
     return {kind:'server-cartographer',color:0xffd24a,target:HUB.cartographer,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.cartographer]};
@@ -5469,7 +5470,7 @@ function guidanceTargetInfo(){
   if(arrivalTarget)return arrivalTarget;
   if(quest){
     if(questDone()){
-      const p=(quest.source==='guardian') ? HUB.guardian : guidanceNpcPosition(quest.giver);
+      const p=(quest.source==='guardian') ? HUB.aegisApproach : guidanceNpcPosition(quest.giver);
       const outside=!isTownLand(Math.floor(player.pos.x), Math.floor(player.pos.z));
       const route=outside
         ? [{x:player.pos.x,z:player.pos.z},{x:HUB.northGate.x,z:HUB.northGate.z+1.2},{x:TOWN.TC,z:TOWN.TC-5},p]
@@ -5807,7 +5808,7 @@ const TOWN_BUILDING_SIGNS=Object.freeze([
   {title:'FARM PLOTS',sub:'FOOD WORK',x:HUB.farm.x,z:HUB.farm.z-4.25,rot:0,color:'#86efac'},
   {title:'QUARRY WORK',sub:'MINER JOBS',x:HUB.quarry.x,z:HUB.quarry.z-3.45,rot:0,color:'#b8c0cc'},
   {title:'DUNGEON SHARD',sub:'GATE ACCESS',x:HUB.shard.x-3.9,z:HUB.shard.z,rot:-Math.PI/2,color:'#7dd3fc'},
-  {title:'AEGIS SHRINE',sub:'ROAD OATHS',x:HUB.guardian.x,z:HUB.guardian.z-4.1,rot:Math.PI,color:'#d8f2ff'},
+  {title:'AEGIS SHRINE',sub:'ROAD OATHS',x:HUB.guardian.x-4.7,z:HUB.guardian.z+3.7,rot:0,color:'#d8f2ff'},
 ]);
 function makeTownBuildingSign(spec){
   const grp=new THREE.Group();
