@@ -563,7 +563,7 @@ test('client modules expose and route player trading actions', () => {
   assert.match(world, /"townSocialTargetNear":\{get:\(\)=>townSocialTargetNear\}/);
   assert.match(combat, /KeyE[\s\S]*townSocialTargetNear[\s\S]*openPlayerSocialUI[\s\S]*openPlayerTradeUI/);
   assert.match(combat, /actions\.push\('Trade'\)[\s\S]*actions\.push\('Train My Pet'\)[\s\S]*actions\.push\('Return Dragon'\)[\s\S]*actions\.push\('Add Friend'\)[\s\S]*actions\.push\('Rob'\)/);
-  assert.match(combat, /robberyTarget[\s\S]*Nearby: [\s\S]*Press E to choose an action/);
+  assert.match(combat, /robberyTarget[\s\S]*Interact with [\s\S]*Press E to choose an action[\s\S]*kind:'player'/);
   assert.match(readClientModule('frame-loop.mjs'), /interaction-actions[\s\S]*interactionPrompt\.actions\.map/);
   assert.match(menus, /function openPlayerTradeUI/);
   assert.match(menus, /player-trade-sync/);

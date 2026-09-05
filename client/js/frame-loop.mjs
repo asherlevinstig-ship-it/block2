@@ -2251,6 +2251,7 @@ function nearbyQuestClaimPrompt(){
 }
 function updateEncounterPrompt(){
   if(!encounterPromptEl)return;
+  encounterPromptEl.classList.remove('player-interaction');
   const claimPrompt=nearbyQuestClaimPrompt();
   if(claimPrompt){
     encounterPromptEl.classList.remove('danger','hidden');
@@ -2260,6 +2261,7 @@ function updateEncounterPrompt(){
   const interactionPrompt=combatApi.nearbyInteractionPrompt&&combatApi.nearbyInteractionPrompt();
   if(interactionPrompt){
     encounterPromptEl.classList.toggle('danger',!!interactionPrompt.danger);
+    encounterPromptEl.classList.toggle('player-interaction',interactionPrompt.kind==='player');
     encounterPromptEl.classList.remove('hidden');
     const actions=Array.isArray(interactionPrompt.actions)&&interactionPrompt.actions.length
       ? '<span class="interaction-actions">'+interactionPrompt.actions.map(action=>'<i>'+escHTML(action)+'</i>').join('')+'</span>'

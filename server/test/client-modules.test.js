@@ -4819,6 +4819,8 @@ test('desktop social control is a bottom-right chat button', () => {
   assert.match(html, /id="socialbtn"[\s\S]*social-chat-icon[\s\S]*socialbtn-label">CHAT/);
   assert.match(styles, /body:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #socialbtn\{[\s\S]*right:18px;[\s\S]*bottom:18px;/);
   assert.match(combat, /el===socialBtn&&!tabletInputState\.tablet[\s\S]*el\.style\.left=''[\s\S]*el\.style\.top=''/);
+  assert.match(combat, /function openSocialFromHud\(\)[\s\S]*openChat[\s\S]*startQuickChatWheel/);
+  assert.doesNotMatch(combat.match(/function openSocialFromHud\(\)[\s\S]*?\n\}/)?.[0]||'', /openPlayerSocialUI/);
 });
 
 test('a desktop world click upgrades finite fallback mouse-look to native pointer lock', () => {

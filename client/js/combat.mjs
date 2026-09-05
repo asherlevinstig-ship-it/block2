@@ -752,20 +752,9 @@ function openSocialFromHud(){
     }
     if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
   }
-  if(typeof qModalIs==='function'&&qModalIs('social')&&typeof closeQWin==='function'){
-    closeQWin(true);
-    return true;
-  }
   if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
-  const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
-  const robberyTargets=globalThis.BlockcraftRobberyTargets;
-  const robberyTarget=!socialTarget&&robberyTargets&&robberyTargets.near?robberyTargets.near(4.8):null;
-  if((socialTarget||robberyTarget)&&typeof openPlayerSocialUI==='function'){
-    openPlayerSocialUI(socialTarget||robberyTarget);
-    return true;
-  }
-  if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
   if(typeof openChat==='function'){ openChat(); return true; }
+  if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
   return false;
 }
 function tabletApplyJoystick(dx,dy){
@@ -6820,7 +6809,7 @@ function nearbyInteractionPrompt(){
       actions.push('Add Friend');
     }
     actions.push('Rob');
-    push({key:'E',title:'Nearby: '+String(playerTarget.name||'Hunter'),small:'Press E to choose an action',actions,danger:!!playerTarget.robberyOnly,priority:111},playerTarget.distance||0);
+    push({key:'E',title:'Interact with '+String(playerTarget.name||'Hunter'),small:'Press E to choose an action',actions,danger:!!playerTarget.robberyOnly,kind:'player',priority:111},playerTarget.distance||0);
   }
   const readyClaim=claimReadyQuestAtServicePrompt();
   if(readyClaim)push(readyClaim,0);
