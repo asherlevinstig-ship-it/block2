@@ -2136,7 +2136,7 @@ class GameRoom extends Room {
     }
     const spaceId = this.tutorialSpaceId(client, kind);
     const spawn = kind === 'ability'
-      ? { x: 805, y: 20, z: 847 }
+      ? { x: 805, y: 19, z: 847 }
       : kind === 'questions'
         ? { x: 930.5, y: 20, z: 858.5 }
         : { x: W.TRAINING_MEADOW.x - 32, y: W.TRAINING_MEADOW.G + 2, z: W.TRAINING_MEADOW.z + 24 };

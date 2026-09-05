@@ -2819,11 +2819,15 @@ test('first quest bonus requires authoritative Mara completion and is single-cla
 test('combat path is chosen once after town arrival while abilities still unlock by level', () => {
   const room = makeRoom(), client = makeClient('path_owner');
   const { prof } = seedPlayer(room, client);
+  let savedPath = '';
+  room.savePlayerProfileNow = (_token, saved) => { savedPath = saved.S.path; return Promise.resolve(true); };
   room.setPath(client, 'shadow');
   assert.equal(prof.S.path, '', 'training-time selection before town arrival is rejected');
   prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
   room.setPath(client, 'shadow');
   assert.equal(prof.S.path, 'shadow', 'a level 1 arrival can define a hunter path');
+  assert.equal(savedPath, 'shadow', 'the permanent path is flushed immediately for refresh safety');
+  assert.equal(client.sent.some(e => e.type === 'pathResult' && e.msg.path === 'shadow'), true);
   room.setPath(client, 'mage');
   assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
   const bad = makeClient('bad_path_owner');
@@ -2847,6 +2851,23 @@ test('C-rank specialization is server-owned, path-valid, and permanent',()=>{
   assert.equal(client.sent.some(e=>e.type==='profile'),false,'choosing a specialization must not trigger a destructive full-profile restore');
   room.setAbilitySpecialization(client,'assassin');
   assert.equal(prof.abilitySpec,'commander','the permanent choice cannot be replaced');
+});
+
+test('a level 1 hunter can use the first ability only inside its unfinished ability tutorial', () => {
+  const room = makeRoom(), client = makeClient('early_ability_tutorial');
+  const { prof } = seedPlayer(room, client, { lvl: 1 });
+  prof.S.path = 'guardian';
+  prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+  room.clients = [client];
+
+  room.handleAbility(client, { path: 'guardian', slot: 0 });
+  assert.equal(client.sent.some(e => e.type === 'abilityReject' && e.msg.reason === 'level'), true, 'the ability stays level-locked in town');
+
+  client.sent.length = 0;
+  assert.equal(room.handleTutorialEnter(client, { kind: 'ability' }), true);
+  room.handleAbility(client, { path: 'guardian', slot: 0 });
+  assert.equal(client.sent.some(e => e.type === 'abilityReject' && e.msg.reason === 'level'), false, 'the tutorial temporarily unlocks Q');
+  assert.equal(client.sent.some(e => e.type === 'abilityResult' && e.msg.slot === 0), true);
 });
 
 test('failed Shadow Army casts preserve cooldown and ineligible spirits',()=>{
@@ -9126,6 +9147,7 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   const ap = abilityRoom.state.players.get(awakened.sessionId);
   assert.equal(ap.dim, 'tutorial');
   assert.match(ap.dgn, /^tutorial-ability-/);
+  assert.deepEqual([ap.x, ap.y, ap.z], [805, 19, 847], 'ability training begins directly on the meadow floor');
   assert.equal(abilityRoom.spaceSolid(ap.dgn)(ap.x,ap.y,ap.z),false,'private ability-room movement never checks the overworld map');
   abilityRoom.handleTutorialComplete(awakened, { tutorial: 'ability', version: TUTORIAL_VERSIONS.ability });
   assert.equal(ap.dim, 'overworld');

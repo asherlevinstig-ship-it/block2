@@ -279,7 +279,12 @@ class CombatMixin {
     const slot = Math.max(0, Math.min(2, m.slot | 0));
     const def = ABILITY_PATHS[path] && ABILITY_PATHS[path][slot];
     if (!def || def.kind === 'passive') return client.send('abilityReject', { slot, reason: 'invalid' });
-    if (rec.prof.S.lvl < ABILITY_UNLOCK[slot]) return client.send('abilityReject', { slot, reason: 'level' });
+    const tutorialFirstAbility = slot === 0
+      && p.dim === 'tutorial'
+      && p.dgn === this.tutorialSpaceId(client, 'ability')
+      && path === rec.prof.S.path
+      && (!rec.prof.tutorials || (rec.prof.tutorials.ability | 0) < TUTORIAL_VERSIONS.ability);
+    if (rec.prof.S.lvl < ABILITY_UNLOCK[slot] && !tutorialFirstAbility) return client.send('abilityReject', { slot, reason: 'level' });
     if (rec.prof.S.path && rec.prof.S.path !== path) return client.send('abilityReject', { slot, reason: 'path' });
     const spec=rec.prof.abilitySpec||'',rank=ABILITY_PROGRESSION.rankForLevel(rec.prof.S.lvl);
     const manaCost=def.mp*(spec==='arcanist'&&rank>=2?.85:1);
@@ -1274,6 +1279,9 @@ class CombatMixin {
     rec.prof.S.path = path;
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
+    this.savePlayerProfileNow(rec.token, rec.prof);
+    client.send('pathResult', { ok: true, path });
+    return true;
   }
   setAbilitySpecialization(client,spec){
     const rec=this.profileFor(client);

@@ -1633,7 +1633,8 @@ function tutorialSafe(){
   return (onboardingActive && dim==='tutorial') || (abilityTrainingActive && dim==='ability') || (jobTutorialActive && dim==='job');
 }
 function abilityTutorialDone(){
-  try{return serverTutorials.ability>=2||localStorage.getItem('bc_ability_tutorial_done_v2')==='1';}catch(e){return serverTutorials.ability>=2;}
+  if(NET.on) return serverTutorials.ability>=2;
+  try{return localStorage.getItem('bc_ability_tutorial_done_v2')==='1';}catch(e){return false;}
 }
 function setAbilityTutorialDone(){
   try{localStorage.setItem('bc_ability_tutorial_done_v2','1');}catch(e){}
@@ -1848,7 +1849,7 @@ function beginOnboarding(){
   showName('TUTORIAL TRAINING GROUNDS');
 }
 function abilityHudAvailable(){
-  return !!(S && S.lvl>=2);
+  return !!(S && (S.lvl>=2 || abilityTrainingActive));
 }
 function hunterAwakeningStepsHTML(active){
   const steps=[
@@ -1909,7 +1910,7 @@ function showAbilityAwakening(){
 }
 function startAbilityTraining(){
   if(abilityTrainingActive || abilityTutorialDone() || onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
-  if(!abilityHudAvailable()) return false;
+  if(!S||!S.path) return false;
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.training.start.request', { path:S.path, dim });
   if(dim==='overworld' && !enterAbilityRoom()) return false;
   awakeningWin.classList.add('hidden');
@@ -5066,12 +5067,15 @@ function showPathSelection(){
     pathChoiceOpen=false;
     closeBlockingGameModal(pathSelectEl,{relock:true,reason:'path-choice'});
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.closed', { path, afterPath:S&&S.path });
-    sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>.'+(S.lvl>=2?' Your first ability is ready to awaken.':' Reach <b>Level 2</b> to awaken your first ability.'));
-    if(S.lvl>=2 && !abilityTutorialDone()){
-      setTimeout(()=>{
-        if(!runLevel2CutsceneThenTutorial()) showAbilityAwakening();
-      }, 250);
-    }
+    sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>.');
+    setTimeout(()=>{
+      if(!abilityTutorialDone()){
+        if(!startAbilityTraining(true)) sysMsg('<b>Ability training:</b> return to town to enter the training meadow.');
+        return;
+      }
+      if(dim==='ability') exitAbilityRoom();
+      else settleFirstTownAdventureSpawn();
+    }, 0);
   });
   return true;
 }

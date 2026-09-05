@@ -536,7 +536,8 @@ function castArmorPower(){
 function cast(i){
   const path=activeAbilityPath();
   if(!path){ if(S.lvl>=2) sysMsg('Press <b>C</b> to choose your path first'); return; }
-  if(!BETA_ABILITY_TEST && S.lvl<AB_UNLOCK[i]){ sysMsg('Unlocks at <b>'+hunterRankLevelLabel(AB_UNLOCK[i],{long:true})+'</b>'); return; }
+  const tutorialFirstAbility=abilityTrainingActive&&dim==='ability'&&i===0;
+  if(!BETA_ABILITY_TEST && S.lvl<AB_UNLOCK[i]&&!tutorialFirstAbility){ sysMsg('Unlocks at <b>'+hunterRankLevelLabel(AB_UNLOCK[i],{long:true})+'</b>'); return; }
   const a=PATHS[path].ab[i];
   const manaCost=abilityManaCost(a),cooldown=abilityCooldown(a);
   if(a.passive){ sysMsg('<b>'+a.n+'</b> is passive'); return; }
@@ -914,7 +915,7 @@ function renderAbilities(){
   const path=activeAbilityPath();
   if(path){
     const P=PATHS[path];
-    P.ab.forEach((a,i)=>rows.push({a,i,key:['Q','R','H'][i], col:P.col, locked:!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i]}));
+    P.ab.forEach((a,i)=>rows.push({a,i,key:['Q','R','H'][i], col:P.col, locked:!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i]&&!(abilityTrainingActive&&dim==='ability'&&i===0)}));
   } else if(S.lvl>=2){
     ['Q','R','H'].forEach((key,i)=>rows.push({
       a:{g:'?',n:'Choose a path'}, i, key, col:'#7385a3', locked:true, pathPending:true
@@ -973,7 +974,7 @@ function updateAbilityHUD(){
   if(!path && S.lvl>=2) idx=3;
   if(path) PATHS[path].ab.forEach((a,i)=>{
     const d=abSlots[idx++]; if(!d) return;
-    const locked=!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i];
+    const locked=!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i]&&!(abilityTrainingActive&&dim==='ability'&&i===0);
     d.classList.toggle('locked',locked);
     d.querySelector('.lk').textContent=locked?('Lv'+AB_UNLOCK[i]):'';
     const cd=a.passive ? swCd/60 : abCd[i]/abilityCooldown(a);

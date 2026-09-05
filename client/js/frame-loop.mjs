@@ -3092,8 +3092,8 @@ function tick(now){
   if(!cutscene && combatApi.shouldOpenLevel2JobChoice && combatApi.shouldOpenLevel2JobChoice()){
     combatApi.openLevel2JobChoice();
   }else if(shouldOpenLevel2PathChoice()) showPathSelection();
-  else if(!cutscene && !abilityTrainingActive && !abilityAwakeningOpen && abilityHudAvailable() && !abilityTutorialDone()){
-    if(!runLevel2CutsceneThenTutorial()) showAbilityAwakening();
+  else if(!cutscene && !abilityTrainingActive && !abilityAwakeningOpen && S&&S.path && !abilityTutorialDone()){
+    startAbilityTraining(true);
   }
   if(!cutscene) tryStartQueuedGateCutscene();
   renderEventHud();
