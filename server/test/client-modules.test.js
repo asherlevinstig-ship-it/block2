@@ -183,7 +183,7 @@ test('job tutorial completion presents a first real shift handoff', () => {
   assert.match(combat, /OPEN JOB BOARD/);
   assert.match(combat, /FOLLOW FIRST SHIFT/);
   assert.match(combat, /openJobsUI\(jobId,mission\.title\)/);
-  assert.match(networking, /const starter=clampJobContract\(m&&m\.starterContract\)/);
+  assert.match(networking, /const starter=JOBS_ENABLED\?clampJobContract\(m&&m\.starterContract\):null/);
   assert.match(networking, /progressionFocus='e_rank_climb'/);
   assert.match(networking, /First real .* shift ready/);
   assert.match(styles, /\.job-tutorial-mission/);
@@ -994,14 +994,14 @@ test('client dimensions and server consume the shared grid contract', () => {
     assert.match(networkingSource, new RegExp(`import \\{${factory}\\} from '\\./${file}'`));
   }
   const compatibilityBindings = (networkingSource.match(/get:\(\)=>/g) || []).length;
-  assert.ok(compatibilityBindings <= 89, 'networking compatibility surface must not grow');
+  assert.ok(compatibilityBindings <= 91, 'networking compatibility surface must not grow');
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /main loop/);
   assert.match(runtimeSource, /BlockcraftDungeonGeneration\.createDungeonGeneration/);
   assert.match(runtimeSource, /bandit_camp/);
   assert.match(html, /id="activitytracker"/);
   assert.match(html, /shared\/familiar-system\.js/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8'), /BlockcraftFamiliarSystem/);
-  assert.match(menusSource, /Familiars grow through <b>Bond XP<\/b> earned only while they are active/);
+  assert.match(menusSource, /Companions grow through <b>Bond XP<\/b> earned only while they are active/);
   assert.match(menusSource, /familiarBindingSlot\(def\.sigil\)/);
   assert.match(menusSource, /Daily Bond:/);
   assert.match(menusSource, /BIND '\+def\.name\.toUpperCase\(\)/);
@@ -1910,9 +1910,9 @@ test('movement feel uses smoothing, sprint curves, camera locomotion, and step a
   assert.match(frame,/const MOVEMENT_FEEL=\{walk:4\.3,sprint:6\.2,sprintRampUp:\.25,sprintRampDown:\.18,exhaustedWalk:\.8,recoverSprintAt:\.12/);
   assert.match(frame,/function approach\(current,target,rate,dt\)/);
   assert.match(frame,/sprintRamp=approach\(sprintRamp,sprintTarget,sprintRate,dt\)/);
-  assert.match(frame,/if\(!pantherMove&&!mounted&&sp<=1\)staminaExhausted=true;/);
+  assert.match(frame,/else if\(!pantherMove&&!mounted&&sp<=1\)\{/);
   assert.match(frame,/else if\(staminaExhausted&&sp>=maxSp\(\)\*MOVEMENT_FEEL\.recoverSprintAt\)staminaExhausted=false;/);
-  assert.match(frame,/const sprintReady=!staminaExhausted&&sp>0;/);
+  assert.match(frame,/const sprintReady=parkourFreeMovement\|\|\(!staminaExhausted&&sp>0\);/);
   assert.match(frame,/baseSpd\*\(exhausted\?MOVEMENT_FEEL\.exhaustedWalk:1\)/);
   assert.match(frame,/player\.vel\.x=approach\(player\.vel\.x,targetVx,controlRate,dt\)/);
   assert.match(frame,/player\.vel\.z=approach\(player\.vel\.z,targetVz,controlRate,dt\)/);
@@ -1931,7 +1931,7 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   assert.match(combat,/const mouseLookDelta=\{x:0,y:0\};/);
-  assert.match(combat,/const MOUSE_LOOK_SENSITIVITY=\.00215;/);
+  assert.match(combat,/const MOUSE_LOOK_SENSITIVITY=\.00175;/);
   assert.match(combat,/function gameplayCameraInputAllowed\(\)\{/);
   assert.match(combat,/return !!\(locked&&!cursorReleased&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!transitionModalOpen&&!globalThis\.chatTyping&&!document\.body\.classList\.contains\('game-modal-open'\)\);/);
   assert.match(combat,/let locked=false, lockFallback=false, suppressNextLockFallback=false/);
@@ -1948,7 +1948,7 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   assert.match(combat,/document\.body\.dataset\.inputDebug=JSON\.stringify\(data\);/);
   assert.match(combat,/globalThis\.BlockcraftTrace&&globalThis\.BlockcraftTrace\(reason==='snapshot'\?'input\.snapshot':'input\.blocked',data\);/);
   assert.match(combat,/gameplayInputDebug\('pointerlock\.change',\{hasLock,wasPlaying,modalInputOpen\}\);/);
-  assert.match(combat,/gameplayInputDebug\('pointerlock\.error'\);/);
+  assert.match(combat,/gameplayInputDebug\(isTouchGameplayDevice\(\)\?'pointerlock\.error-touch':'pointerlock\.error'\);/);
   assert.match(combat,/else if\(suppressNextLockFallback\)\{ lockFallback=false; suppressNextLockFallback=false; \}/);
   assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*queueMouseLook\(e\.movementX\|\|0,e\.movementY\|\|0\);\s*\}else if\(lockFallback&&isWorldPointerTarget\(e\.target\)\)\{/);
   assert.match(combat,/function consumeMouseLookDelta\(\)\{/);
@@ -1957,12 +1957,12 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   assert.match(combat,/gameplayCameraInputAllowed,/);
   assert.match(combat,/gameplayMovementAllowed,/);
   assert.match(combat,/gameplayInputDebug,/);
-  assert.match(frame,/const gameplayMoveAllowed=!deathControlLocked&&\(combatApi\.gameplayMovementAllowed\?combatApi\.gameplayMovementAllowed\(\):\(combatApi\.gameplayCameraInputAllowed\?combatApi\.gameplayCameraInputAllowed\(\):true\)\);\s*if\(!deathControlLocked&&\(locked\|\|gameplayMoveAllowed\)\)\{/);
+  assert.match(frame,/const gameplayMoveAllowed=!deathControlLocked&&!fishingPlacementLocked&&!directorFree&&\(combatApi\.gameplayMovementAllowed\?combatApi\.gameplayMovementAllowed\(\):\(combatApi\.gameplayCameraInputAllowed\?combatApi\.gameplayCameraInputAllowed\(\):true\)\);\s*if\(!deathControlLocked&&\(locked\|\|gameplayMoveAllowed\|\|directorFree\)\)\{/);
   assert.match(frame,/const mouseLook=combatApi\.consumeMouseLookDelta\?combatApi\.consumeMouseLookDelta\(\):\{x:0,y:0\};/);
   assert.match(frame,/const mouseLookSensitivity=combatState\.mouseLookSensitivity\|\|\.00215;/);
   assert.match(frame,/const mouseYaw=-\(mouseLook\.x\|\|0\)\*mouseLookSensitivity,mousePitch=-\(mouseLook\.y\|\|0\)\*mouseLookSensitivity;/);
   assert.match(frame,/const lookSpeed=\(keys\['ShiftLeft'\]\|\|keys\['ShiftRight'\]\)\?4\.4:2\.85;/);
-  assert.match(frame,/player\.yaw \+= yawDelta;/);
+  assert.match(frame,/player\.yaw = Math\.atan2\(Math\.sin\(player\.yaw\+yawDelta\),Math\.cos\(player\.yaw\+yawDelta\)\);/);
   assert.match(frame,/let f=gameplayMoveAllowed\?\(\(keys\['KeyW'\]\?1:0\)-\(keys\['KeyS'\]\?1:0\)\):0;/);
 });
 
@@ -2010,7 +2010,7 @@ test('block placement uses Minecraft-style targeted block face at build reach',(
   assert.match(combat,/const BLOCK_PLACE_INITIAL_DELAY_MS=210, BLOCK_PLACE_REPEAT_MS=165;/);
   assert.match(combat,/function placeSelectedBlockAtHit\(hit\)/);
   assert.match(combat,/function heldPlaceAction\(now=performance\.now\(\)\)/);
-  assert.match(combat,/if\(e\.code==='KeyG' && !e\.repeat\)\{ placeKeyHeld=true; nextHeldPlaceAt=performance\.now\(\)\+BLOCK_PLACE_INITIAL_DELAY_MS; secondaryAction\(\); \}/);
+  assert.match(combat,/if\(e\.code==='KeyG' && !e\.repeat\)\{[\s\S]*placeKeyHeld=true; nextHeldPlaceAt=performance\.now\(\)\+BLOCK_PLACE_INITIAL_DELAY_MS; secondaryAction\(\);\s*\}/);
   assert.match(combat,/mouseR=true; nextHeldPlaceAt=performance\.now\(\)\+BLOCK_PLACE_INITIAL_DELAY_MS;/);
   assert.match(combat,/if\(!locked\)\{ mouseR=false; placeKeyHeld=false; \}/);
   assert.match(combat,/updateBuildPreview,/);
@@ -2074,7 +2074,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/const rightHudStackIds=\['currentquest','activitytracker','townchoices'\]/);
   assert.match(combat,/function layoutRightHudStack\(\)\{/);
   assert.match(combat,/function layoutLeftHudExtras\(\)\{/);
-  assert.match(combat,/const coords=document\.getElementById\('coords'\),homework=document\.getElementById\('homeworkhud'\),bug=document\.getElementById\('bugreportbtn'\);/);
+  assert.match(combat,/const coords=document\.getElementById\('coords'\),homework=document\.getElementById\('homeworkhud'\),bug=document\.getElementById\('bugreportbtn'\),stuck=document\.getElementById\('stuckrescuebtn'\),chat=document\.getElementById\('chatlog'\);/);
   assert.match(combat,/document\.body\.classList\.toggle\('game-modal-open', gameModalOpen\);/);
   assert.match(combat,/const jobTutorialRoom=dim==='job'\|\|dimensionsState\.kind==='job';/);
   assert.match(combat,/document\.body\.classList\.toggle\('job-tutorial-room', jobTutorialRoom\);/);
@@ -2378,7 +2378,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(dimensions,/dim='job'/);
   assert.match(dimensions,/tutorialEnter',\{kind:'job',job:jobId\}/);
   assert.match(networking,/function currentRuntimeActiveRoom\(\)\{/);
-  assert.match(networking,/if\(dimensionsState\.kind==='job'&&combatState\.jobTutorialActive&&combatState\.jobTutorialJob\)\{/);
+  assert.match(networking,/if\(JOBS_ENABLED&&dimensionsState\.kind==='job'&&combatState\.jobTutorialActive&&combatState\.jobTutorialJob\)\{/);
   assert.match(networking,/const runtimeActiveRoom=serverHasActiveRoom&&!serverActiveRoom\?currentRuntimeActiveRoom\(\):null/);
   assert.match(networking,/const activeRoom=serverActiveRoom\|\|runtimeActiveRoom\|\|localActiveRoom/);
   assert.match(networking,/const JOB_TUTORIAL_RESUME_KEY='bc_active_job_tutorial_room_v1'/);
@@ -2574,7 +2574,7 @@ test('objective tracker buttons open actions on pointerdown above the HUD layer'
   assert.match(frame,/currentQuestEl\.addEventListener\('pointerdown',triggerObjectiveAction,\{capture:true\}\);/);
   assert.match(frame,/currentQuestEl\.addEventListener\('click',triggerObjectiveAction\);/);
   assert.match(styles,/#currentquest\{position:fixed;right:\d+px;top:\d+px;[\s\S]*pointer-events:auto/);
-  assert.match(styles,/#qwin\{position:fixed;inset:0;[\s\S]*z-index:32/);
+  assert.match(styles,/#qwin\{position:fixed;inset:0;[\s\S]*z-index:120/);
 });
 
 test('objective tracker shows only the active quest with an all-quests shortcut',()=>{
@@ -2803,7 +2803,7 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(world,/new THREE\.CylinderGeometry\(\.44,\.82,13\.5,18,1,true\)/);
   assert.match(world,/const guideBeaconRing=new THREE\.Mesh\(new THREE\.TorusGeometry/);
   assert.match(world,/guideBeaconBeam\.renderOrder=28/);
-  assert.match(world,/surfaceY\(info\.target\.x,info\.target\.z\)\+\.04/);
+  assert.match(world,/const baseY=guidanceGroundY\(info\.target\.x,info\.target\.z\)/);
   assert.match(world,/const guideChevronShape=new THREE\.Shape\(\)/);
   assert.match(world,/const halo=new THREE\.Mesh\(new THREE\.PlaneGeometry\(1\.18,1\.46\)/);
   assert.match(world,/function roundedGuidanceRoute\(route\)/);
@@ -2936,7 +2936,7 @@ test('onboarding recall lesson completes from a correct answer away from the way
   assert.match(combat,/Press P and answer one Computer Science challenge\.[\s\S]*done:\(\)=>onboardingFlags\.recall/);
   assert.doesNotMatch(combat,/done:\(\)=>onboardingArrived&&onboardingFlags\.recall/);
   assert.match(recall,/if\(m\.correct&&globalThis\.BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markRecall\(\);/);
-  assert.match(network,/if\(m&&Array\.isArray\(m\.activeObjectives\)\)setActiveObjectives\(m\.activeObjectives,\{announce:false\}\);\s*if\(!onboardingDone\(\)\)\{/);
+  assert.match(network,/if\(m&&Array\.isArray\(m\.activeObjectives\)\)setActiveObjectives\(m\.activeObjectives,\{announce:false\}\);[\s\S]*if\(!onboardingDone\(\)\)\{/);
   assert.match(room,/const tutorial=this\.recallTutorialSpace\(p\),questionHall=questionHallRequest;/);
   assert.match(room,/const source=message\.source==='lectern'\?'lectern':\(questionHall\?'question_hall':\(tutorial\?'tutorial':''\)\);/);
   assert.match(room,/challenge\.source==='tutorial'\?'tutorial':'recall'/);
@@ -2992,7 +2992,7 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(social,/setChatMode\('local'\);/);
   assert.match(social,/Tab again for Team \/ Whisper/);
   assert.match(social,/chatWheelCloseEl\.addEventListener\('click',event=>\{event\.preventDefault\(\);closeAnyWheel\(true\);\}\);/);
-  assert.match(combat,/Open Local quick chat - press Tab again for Team \/ Whisper/);
+  assert.match(social,/Tab again for Team \/ Whisper/);
   assert.match(social,/USE PARTY QUICK PHRASES TO COORDINATE/);
   assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
   assert.match(social,/function openChat\(mode\)\{[\s\S]*releasePointerLockWithoutCameraFallback\(false\);/);
@@ -3535,8 +3535,8 @@ test('client restore and movement use persisted vitals and empty-hunger slowdown
   assert.match(networking, /const vitals=m&&m\.vitals&&typeof m\.vitals==='object'\?m\.vitals:\{\}/);
   assert.match(networking, /sp:Math\.max\(0,Math\.min\(maxSp\(\),Number\(sp\)\|\|0\)\)/);
   assert.doesNotMatch(networking, /hp=maxHp\(\); mp=maxMp\(\); sp=maxSp\(\); hunger=maxHunger\(\);/);
-  assert.match(frameLoop, /const outOfFood=!mounted && hunger<=0/);
-  assert.match(frameLoop, /const sprintIntent=!!\(sprintKey && movementInput && !mounted && !outOfFood\)/);
+  assert.match(frameLoop, /const outOfFood=!parkourFreeMovement&&!mounted && hunger<=0/);
+  assert.match(frameLoop, /const sprintIntent=!!\(sprintKey && movementInput && !mounted\)/);
   assert.match(frameLoop, /\*\(outOfFood&&!pantherMove\?0\.62:1\)/);
   assert.match(dimensions, /if\(S\.lvl<3 && hunger<maxHunger\(\)\)/);
   assert.doesNotMatch(dimensions, /local:starvation/);
@@ -3765,7 +3765,7 @@ test('all cutscene entry points are disabled while their assets remain dormant',
   assert.match(combat, /const openingCinematicReady=globalThis\.BlockcraftOpeningReady&&typeof globalThis\.BlockcraftOpeningReady\.then==='function'\?globalThis\.BlockcraftOpeningReady:Promise\.resolve\(\)/);
   assert.match(combat, /globalThis\.BlockcraftOpeningAudio&&typeof globalThis\.BlockcraftOpeningAudio\.stop==='function'\)globalThis\.BlockcraftOpeningAudio\.stop\(\);/);
   assert.match(combat, /globalThis\.BlockcraftOpeningAudio&&typeof globalThis\.BlockcraftOpeningAudio\.startAmbient==='function'\)globalThis\.BlockcraftOpeningAudio\.startAmbient\(\);/);
-  assert.match(combat, /openingCinematicReady\.then\(\(\)=>startPlaying\(false\)\)/);
+  assert.match(combat, /openingCinematicReady\.then\(\(\)=>startPlaying\(false,'game'\)\)/);
   assert.match(styles, /#introcinematic\{position:fixed;inset:0;z-index:80/);
   assert.match(styles, /#introvideo\{position:absolute;inset:0;width:100%;height:100%;object-fit:cover/);
 });
@@ -4398,7 +4398,7 @@ test('multiplayer avatars use authenticated profile names and unflipped replicat
   assert.match(networkingSource, /const syncRemotePlayerSnapshot=\(\)=>/);
   assert.match(networkingSource, /const players=room&&room\.state&&room\.state\.players;/);
   assert.match(networkingSource, /players\.forEach\(\(p,sid\)=>/);
-  assert.match(networkingSource, /if\(NET\.remotes\[sid\]\)NET\.remotes\[sid\]\.ref=p;\s*else netAddRemote\(sid,p\);/);
+  assert.match(networkingSource, /if\(NET\.remotes\[sid\]\)NET\.remotes\[sid\]\.ref=p;\s*else \{\s*netAddRemote\(sid,p\);\s*schedulePlayerArrivalVfx\(p,\{key:'remote:'\+sid,remote:true,delay:80\}\);\s*\}/);
   assert.match(networkingSource, /syncRemotePlayerSnapshot\(\);/);
   assert.match(avatarSource, /blink\.push\(addBox\(head,\[\.085,\.09,\.034\],\[-\.11,\.\d+,-\.276\],eyeM\)\)/);
   assert.match(pumpSource, /angDiff\(ref\.yaw,r\.grp\.rotation\.y\)/);

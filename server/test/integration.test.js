@@ -194,14 +194,15 @@ async function main() {
     assert.equal(B.state.players.get(A.sessionId).name, 'AlphaPrime');
   });
 
-  await test('forged progression saves are ignored and validated job transactions still work', async () => {
+  await test('forged progression saves are ignored and disabled job transactions stay disabled', async () => {
     A.send('save', { job: 'miner', jobXp: 1e9 });
     await wait(250);
     assert.equal(A.state.players.get(A.sessionId).job, '', 'legacy save changed the authoritative job');
     A.send('setJob', { job: 'miner' });
-    await waitFor(() => { const p = A.state.players.get(A.sessionId); return p && p.job === 'miner'; }, 'A to register the miner job');
-    const lvl = A.state.players.get(A.sessionId).jobLvl;
-    assert.equal(lvl, 1, 'forged jobXp changed the authoritative profession level');
+    await wait(250);
+    const player = A.state.players.get(A.sessionId);
+    assert.equal(player.job, '', 'disabled job transaction changed the authoritative job');
+    assert.equal(player.jobLvl, 0, 'forged jobXp changed the authoritative profession level');
   });
 
   await test('a leaving player is removed from the other player\'s state', async () => {

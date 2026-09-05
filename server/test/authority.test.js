@@ -12,6 +12,13 @@ const { Protocol } = require('@colyseus/shared-types');
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
+  // Production currently hides jobs behind the shared release switch, while
+  // this authority suite still exercises the dormant implementation directly.
+  // Enable it only inside this test process so those server invariants remain
+  // covered without changing the shipped feature flag.
+  if (request === '../../shared/job-system' || request === '../shared/job-system') {
+    return Object.freeze({ ...originalLoad(request, parent, isMain), ENABLED: true });
+  }
   if (request === '@colyseus/core') {
     return {
       Room: class {
@@ -204,12 +211,12 @@ test('overworld room stays warm to avoid concurrent first-join room creation rac
   assert.match(source, /this\.autoDispose\s*=\s*false/);
 });
 
-test('server startup prewarms the main overworld before player matchmaking', () => {
+test('local startup prewarms the main overworld while cloud uses matchmaking', () => {
   const prewarm = fs.readFileSync(path.join(__dirname, '..', 'room-prewarm.js'), 'utf8');
   const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud.js'), 'utf8');
   const local = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
   assert.match(prewarm, /matchMaker\.createRoom\('blockcraft',\s*\{\s*shardId/);
-  assert.match(cloud, /beforeListen:[\s\S]*prewarmOverworldRoom\(await runtime\)/);
+  assert.doesNotMatch(cloud, /prewarmOverworldRoom|beforeListen/);
   assert.match(local, /await gameServer\.listen\(PORT\);[\s\S]*await prewarmOverworldRoom\(config\)/);
 });
 
