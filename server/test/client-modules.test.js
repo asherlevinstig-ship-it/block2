@@ -2039,7 +2039,7 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#currentquest\{top:8px;right:8px;width:min\(270px,58vw\)/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#coords\{top:48px;left:8px;right:auto;flex-direction:row/);
   assert.match(css,/#hotbar \.slot\{width:calc\(\(100vw - 54px\)\/9\)/);
-  assert.match(css,/@media \(max-width:760px\)[\s\S]*#utilitybar\{left:50%;right:auto;bottom:172px;transform:translateX\(-50%\)/);
+  assert.doesNotMatch(css,/#utilitybar\{/);
   assert.doesNotMatch(css,/#keyprompthud|keyPromptSweep/);
   assert.match(css,/#statpointnudge\{position:fixed;left:50%;bottom:146px/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#statpointnudge\{bottom:218px/);
@@ -3429,20 +3429,14 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(menus,/Available to every player without using a slot/);
   assert.doesNotMatch(world,/is running passively/);
   assert.match(world,/"useUtilityHotkey":\{get:\(\)=>useUtilityHotkey\}/);
-  assert.match(hud,/utilityBarEl\.id='utilitybar'/);
-  assert.match(hud,/index===0\?'I':'S\+'\+index/);
-  assert.match(hud,/Hotkey: '\+hotkey/);
-  assert.match(hud,/for\(let i=0;i<4;i\+\+\)/);
+  assert.doesNotMatch(hud,/utilityBarEl|id='utilitybar'|className='utilityslot'/);
   assert.match(hud,/function refreshUtilityHUD\(\)/);
-  assert.match(hud,/if\(index===0&&id&&typeof globalThis\.useActiveUtility==='function'\)globalThis\.useActiveUtility\(\);/);
-  assert.match(hud,/else if\(typeof globalThis\.openUtilitiesUI==='function'\)globalThis\.openUtilitiesUI\(\);/);
   assert.match(hud,/refreshUtilityHUD\(\);\s*refreshStatPointNudge\(\);\s*updateViewModel\(\);/);
   assert.match(hud,/statPointNudgeEl\.id='statpointnudge'/);
   assert.doesNotMatch(hud,/recallRechargeNudge|recallrechargenudge/);
   assert.match(hud,/currentStatPoints\(\)[\s\S]*worldState&&worldState\.stats/);
   assert.match(hud,/refreshStatPointNudge/);
-  assert.match(combat,/const utilityBar=document\.getElementById\('utilitybar'\);/);
-  assert.match(combat,/utilityBar\.classList\.toggle\('hidden', !showHud \|\| minimal\)/);
+  assert.doesNotMatch(combat,/getElementById\('utilitybar'\)/);
   assert.match(combat,/if\(e\.code==='KeyI' && !e\.repeat\)\{ e\.preventDefault\(\); if\(e\.shiftKey&&typeof openUtilitiesUI==='function'\)openUtilitiesUI\(\); else useActiveUtility\(\); \}/);
   assert.match(combat,/if\(e\.shiftKey&&\/\^Digit\[123\]\$\/\.test\(e\.code\)&&!e\.repeat\)\{ e\.preventDefault\(\); if\(typeof useUtilityHotkey==='function'\)useUtilityHotkey\(\+e\.code\.slice\(5\)\); return; \}/);
   assert.match(networking,/utilityLoadout=clampUtilityLoadout\(m\);[\s\S]*refreshHUD\(\);/);
@@ -3455,10 +3449,8 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(styles,/\.utility-library-card/);
   assert.match(styles,/\.utility-detail/);
   assert.match(styles,/\.utility-slots/);
-  assert.match(styles,/#utilitybar/);
-  assert.match(styles,/\.utilityslot\.active\.filled/);
-  assert.match(styles,/body\.game-modal-open [^}]*#utilitybar/);
-  assert.match(styles,/body\.cutscene [^}]*#utilitybar/);
+  assert.doesNotMatch(styles,/#utilitybar\{/);
+  assert.doesNotMatch(styles,/\.utilityslot\{/);
 });
 
 test('utility unlocks present a reward toast with slot outcome and open-utilities action',()=>{

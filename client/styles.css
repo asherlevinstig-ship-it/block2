@@ -30,16 +30,6 @@
   #hotbar:before,#hotbar:after{content:"";position:absolute;top:8px;bottom:8px;width:1px;background:linear-gradient(transparent,rgba(242,199,92,.42),transparent);pointer-events:none}
   #hotbar:before{left:calc(7px + 48px * 2 + 5px * 2 + 8px)}
   #hotbar:after{right:calc(7px + 48px * 3 + 5px * 3 + 8px)}
-  #utilitybar{position:fixed;right:calc(50% + 286px);bottom:13px;display:flex;gap:5px;padding:7px;background:var(--hud-bg);border:1px solid rgba(125,211,252,.42);border-radius:7px;backdrop-filter:blur(6px);box-shadow:0 8px 24px rgba(0,0,0,.4),inset 0 0 20px rgba(125,211,252,.04);z-index:8}
-  .utilityslot{width:48px;height:48px;position:relative;display:grid;grid-template-rows:1fr auto;place-items:center;border:2px solid rgba(95,114,138,.7);border-radius:5px;background:linear-gradient(180deg,rgba(11,19,30,.88),rgba(4,8,14,.82));color:#9fb0c6;font-family:inherit;text-shadow:1px 1px 0 #000;box-shadow:inset 0 0 14px rgba(255,255,255,.04);cursor:pointer;overflow:hidden}
-  .utilityslot .ukey{position:absolute;left:4px;top:3px;color:#fff;font-size:10px;font-weight:bold;letter-spacing:.5px}
-  .utilityslot b{font-size:22px;line-height:1;color:#9fb0c6;text-shadow:0 0 9px currentColor}
-  .utilityslot small{width:100%;padding:0 3px 3px;color:#8fa7bd;font-size:7px;line-height:1.05;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .utilityslot.filled{border-color:rgba(125,211,252,.6);background:linear-gradient(180deg,rgba(12,32,46,.9),rgba(5,11,18,.86))}
-  .utilityslot.filled b{color:#9fd8ff}.utilityslot.passive.filled{border-color:rgba(191,133,255,.5)}.utilityslot.passive.filled b{color:#d7b5ff}
-  .utilityslot.active.filled{box-shadow:0 0 0 1px rgba(125,211,252,.4),0 0 18px rgba(125,211,252,.22),inset 0 0 14px rgba(125,211,252,.08)}
-  .utilityslot.empty{opacity:.64;cursor:help}
-  .utilityslot:hover{filter:brightness(1.16);border-color:#ffd24a}
   #controlpauseprompt{position:fixed;left:50%;top:22%;z-index:155;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:14px;width:min(560px,calc(100vw - 36px));box-sizing:border-box;padding:15px 18px;border:2px solid rgba(242,199,92,.82);border-radius:10px;background:linear-gradient(155deg,rgba(10,17,29,.98),rgba(8,10,17,.96));box-shadow:0 18px 54px rgba(0,0,0,.62),0 0 28px rgba(242,199,92,.18),inset 0 0 24px rgba(255,255,255,.035);color:#eef7ff;transform:translateX(-50%);font-family:inherit;pointer-events:none}
   #controlpauseprompt.hidden{display:none}
   #controlpauseprompt kbd{display:grid;place-items:center;min-width:70px;height:48px;padding:0 9px;border:1px solid #fff4ca;border-bottom:5px solid #786129;border-radius:8px;background:linear-gradient(180deg,#fff7d5,#d5b85f);color:#191406;font:900 15px/1 system-ui;letter-spacing:2px;box-shadow:inset 0 2px 0 rgba(255,255,255,.8),0 5px 0 rgba(0,0,0,.34)}
@@ -179,7 +169,7 @@
   .rewardgain.leaving{opacity:0;transform:translateY(-10px);transition:opacity .32s,transform .32s}
   @keyframes rewardGainIn{from{opacity:0;transform:translateY(9px) scale(.94)}to{opacity:1;transform:none}}
   @keyframes rewardGainBump{50%{transform:scale(1.08);filter:brightness(1.4)}}
-body.game-modal-open #tutorialhud,body.game-modal-open #coachhud,body.game-modal-open #currentquest,body.game-modal-open #homeworkhud,body.game-modal-open #activitytracker,body.game-modal-open #townchoices,body.game-modal-open #eventhud,body.game-modal-open #landmap,body.game-modal-open #coords,body.game-modal-open #locationhud,body.game-modal-open #hotbar,body.game-modal-open #utilitybar,body.game-modal-open #statpointnudge,body.game-modal-open #stats,body.game-modal-open #abilities,body.game-modal-open #dragonhud,body.game-modal-open #familiarhud,body.game-modal-open #questionbtn,body.game-modal-open #socialbtn,body.game-modal-open #bugreportbtn,body.game-modal-open #stuckrescuebtn,body.game-modal-open #gateprompt,body.game-modal-open #encounterprompt,body.game-modal-open #dungeonping,body.game-modal-open #rewardfeed,body.game-modal-open #chatlog,body.game-modal-open #chatbar,body.game-modal-open #adminchatbar,body.game-modal-open #chatwheel{display:none!important}
+body.game-modal-open #tutorialhud,body.game-modal-open #coachhud,body.game-modal-open #currentquest,body.game-modal-open #homeworkhud,body.game-modal-open #activitytracker,body.game-modal-open #townchoices,body.game-modal-open #eventhud,body.game-modal-open #landmap,body.game-modal-open #coords,body.game-modal-open #locationhud,body.game-modal-open #hotbar,body.game-modal-open #statpointnudge,body.game-modal-open #stats,body.game-modal-open #abilities,body.game-modal-open #dragonhud,body.game-modal-open #familiarhud,body.game-modal-open #questionbtn,body.game-modal-open #socialbtn,body.game-modal-open #bugreportbtn,body.game-modal-open #stuckrescuebtn,body.game-modal-open #gateprompt,body.game-modal-open #encounterprompt,body.game-modal-open #dungeonping,body.game-modal-open #rewardfeed,body.game-modal-open #chatlog,body.game-modal-open #chatbar,body.game-modal-open #adminchatbar,body.game-modal-open #chatwheel{display:none!important}
 .bc-modal-close-host{position:relative}
 .bc-modal-close{
   position:absolute!important;top:12px!important;right:12px!important;left:auto!important;bottom:auto!important;z-index:25!important;width:42px!important;height:42px!important;min-width:0!important;min-height:0!important;padding:0!important;border:1px solid rgba(125,211,252,.58)!important;border-radius:50%!important;
@@ -213,7 +203,7 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   #tutorialhud .tuttext{font-size:15px;line-height:1.35;color:#f3fbff}
   #tutorialhud .tutsub{margin-top:6px;font-size:10px;color:#9fb0c6;letter-spacing:.7px}
   #rewardpanel.job-tutorial-complete .rnote{border-color:rgba(154,210,107,.38);background:rgba(8,34,22,.45)}
-  body.onboarding #chatlog,body.onboarding #rewardfeed,body.onboarding #stats,body.onboarding #abilities,body.onboarding #utilitybar,body.onboarding #statpointnudge,body.onboarding #dragonhud,body.onboarding #familiarhud,body.onboarding #activitytracker,body.onboarding #landmap,body.onboarding #eventhud,body.onboarding #coachhud{display:none!important}
+  body.onboarding #chatlog,body.onboarding #rewardfeed,body.onboarding #stats,body.onboarding #abilities,body.onboarding #statpointnudge,body.onboarding #dragonhud,body.onboarding #familiarhud,body.onboarding #activitytracker,body.onboarding #landmap,body.onboarding #eventhud,body.onboarding #coachhud{display:none!important}
   #pathselect{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:30px;background:radial-gradient(circle at 50% 18%,rgba(79,216,255,.16),transparent 32%),linear-gradient(180deg,rgba(3,7,14,.94),rgba(5,8,14,.98));backdrop-filter:blur(8px);color:#d8f2ff}
   #arrivalchoice{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:30px;background:radial-gradient(circle at 50% 10%,rgba(255,210,74,.18),transparent 28%),radial-gradient(circle at 78% 72%,rgba(79,216,255,.16),transparent 32%),linear-gradient(180deg,rgba(2,6,14,.92),rgba(4,7,13,.98));backdrop-filter:blur(9px);color:#f6fbff;pointer-events:auto}
   #arrivalchoice.hidden{display:none!important}
@@ -1247,7 +1237,7 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   #cineskip{position:absolute;bottom:13.8%;right:22px;font-size:10px;letter-spacing:2px;color:#9fb2cc;text-transform:uppercase;opacity:0;transition:opacity .5s}
   #cine.show #cineskip{opacity:.7}
   #cinefade{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .25s}
-  body.cutscene #rewardfeed,body.cutscene #chatlog,body.cutscene #hotbar,body.cutscene #utilitybar,body.cutscene #statpointnudge,body.cutscene #stats,body.cutscene #abilities,body.cutscene #dragonhud,body.cutscene #familiarhud,body.cutscene #coords,body.cutscene #locationhud,body.cutscene #landboundarytoast,body.cutscene #utilityunlocktoast,body.cutscene #crosshair,body.cutscene #currentquest,body.cutscene #homeworkhud,body.cutscene #landmap,body.cutscene #eventhud,body.cutscene #tutorialhud,body.cutscene #coachhud{display:none!important}
+  body.cutscene #rewardfeed,body.cutscene #chatlog,body.cutscene #hotbar,body.cutscene #statpointnudge,body.cutscene #stats,body.cutscene #abilities,body.cutscene #dragonhud,body.cutscene #familiarhud,body.cutscene #coords,body.cutscene #locationhud,body.cutscene #landboundarytoast,body.cutscene #utilityunlocktoast,body.cutscene #crosshair,body.cutscene #currentquest,body.cutscene #homeworkhud,body.cutscene #landmap,body.cutscene #eventhud,body.cutscene #tutorialhud,body.cutscene #coachhud{display:none!important}
   #coords{position:fixed;top:78px;left:10px;display:flex;flex-direction:column;gap:6px;color:#e8f0ff;text-shadow:1px 1px 0 #000;font-size:12px;z-index:7;pointer-events:none}
   .statuschip{display:grid;grid-template-columns:26px auto minmax(42px,auto);align-items:center;gap:8px;min-width:172px;background:rgba(8,14,24,.74);border:1px solid rgba(255,255,255,.13);box-shadow:0 8px 20px rgba(0,0,0,.16);border-radius:6px;padding:6px 9px}
   .statuschip .ico{width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(79,216,255,.12);border:1px solid rgba(79,216,255,.38);color:#9fd8ff;font-size:11px;text-shadow:0 0 6px rgba(79,216,255,.5)}
@@ -1386,7 +1376,6 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   .bar{height:18px;border-color:rgba(255,255,255,.16);border-radius:4px}
   .bar span{font:700 12px system-ui,-apple-system,Segoe UI,sans-serif}
   #hotbar{bottom:14px;padding:8px;border-color:rgba(242,199,92,.42)}
-  #utilitybar{left:auto;right:calc(50% + 268px);top:auto;bottom:14px;transform:none}
   #abilities{left:calc(50% + 268px);right:auto;bottom:18px;transform:none}
   #statpointnudge{left:16px;top:478px;bottom:auto;transform:none;min-width:255px;max-width:300px;z-index:9;border-color:rgba(242,199,92,.48);background:linear-gradient(135deg,rgba(20,34,20,.88),rgba(6,10,13,.82))}
   #encounterprompt,#gateprompt{bottom:188px}
@@ -1835,12 +1824,10 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
     #barcol{width:min(300px,calc(100vw - 72px))}
     #hotbar{bottom:7px;max-width:calc(100vw - 12px);gap:3px;padding:4px}
     #hotbar .slot{width:calc((100vw - 54px)/9);height:calc((100vw - 54px)/9);max-width:48px;max-height:48px;min-width:35px;min-height:35px}
-    #utilitybar{left:50%;right:auto;bottom:172px;transform:translateX(-50%);gap:4px;padding:4px}
     #statpointnudge{bottom:218px;min-width:210px;padding:7px 10px}
     #statpointnudge span{width:28px;height:28px;font-size:14px}
     #statpointnudge b{font-size:11px}
     #statpointnudge small{font-size:8px}
-    .utilityslot{width:40px;height:40px}.utilityslot b{font-size:18px}.utilityslot small{font-size:6px}.utilityslot .ukey{font-size:9px}
     #dragonhud{right:8px;bottom:246px;min-width:150px;max-width:200px;padding:6px 8px}
     #dragonhud .drow{grid-template-columns:minmax(0,1fr);gap:0}
     #dragonhud .dmeta{text-align:left;font-size:9px}
@@ -1862,7 +1849,6 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
     #coords{top:46px}
     .statuschip{padding:3px 5px}.statuschip .ico{display:none}
     #abilities{bottom:112px}.abslot{width:36px;height:36px}
-    #utilitybar{bottom:154px}.utilityslot{width:34px;height:34px}.utilityslot small{display:none}
     #statpointnudge{bottom:194px;min-width:190px}
     #stats{bottom:58px}#hotbar .slot{min-width:29px;min-height:29px}
   }
@@ -1923,7 +1909,6 @@ body.mobile-play-mode #stats{left:50%;transform:translateX(-50%);bottom:86px;max
 body.mobile-play-mode #hotbar{left:50%;transform:translateX(-50%);bottom:12px;max-width:58vw;overflow:hidden}
 body.mobile-play-mode #hotbar .slot{cursor:pointer}
 body.mobile-play-mode #hotbar .slot:active{transform:translateY(2px) scale(.96);filter:brightness(1.25)}
-body.mobile-play-mode #utilitybar{left:calc(50% - min(29vw,360px) - 96px);bottom:22px}
 body.mobile-play-mode #abilities{right:calc(50% - min(29vw,360px) - 132px);bottom:22px}
 @media(max-width:900px),(max-height:620px){
   #tabletcontrols{--tablet-bottom:126px;--tablet-side:14px}
@@ -1937,7 +1922,6 @@ body.mobile-play-mode #abilities{right:calc(50% - min(29vw,360px) - 132px);botto
   .tablet-actions{grid-template-columns:repeat(2,78px);gap:8px}
   .tablet-actions button{min-height:42px;font-size:9px}
   body.mobile-play-mode #stats,body.mobile-play-mode #hotbar{max-width:56vw}
-  body.mobile-play-mode #utilitybar{left:8px;bottom:18px}
   body.mobile-play-mode #abilities{right:8px;bottom:18px}
 }
 @media(orientation:portrait){
@@ -1950,7 +1934,6 @@ body.mobile-play-mode #abilities{right:calc(50% - min(29vw,360px) - 132px);botto
   .tablet-slot-controls{bottom:calc(62px + env(safe-area-inset-bottom,0px))}
   body.mobile-play-mode #stats,body.mobile-play-mode #hotbar{max-width:calc(100vw - 24px)}
   body.mobile-play-mode #abilities{right:12px;bottom:16px}
-  body.mobile-play-mode #utilitybar{left:12px;bottom:16px}
 }
 @media(orientation:landscape) and (max-height:520px){
   #tabletcontrols{--tablet-bottom:84px;--tablet-side:10px}
@@ -1967,8 +1950,6 @@ body.mobile-play-mode #abilities{right:calc(50% - min(29vw,360px) - 132px);botto
   body.phone-mode #stats{bottom:54px;max-width:50vw}
   body.phone-mode #hotbar{bottom:4px;max-width:52vw;padding:4px;gap:3px}
   body.phone-mode #hotbar .slot{min-width:30px;min-height:30px;width:30px;height:30px}
-  body.phone-mode #utilitybar{left:4px;bottom:6px}
-  body.phone-mode #utilitybar .utilityslot{width:34px;height:34px}
   body.phone-mode #abilities{right:4px;bottom:6px}
   body.phone-mode #abilities .abslot{width:34px;height:34px}
 }
@@ -1980,7 +1961,6 @@ body.mobile-play-mode #activitytracker,
 body.mobile-play-mode #townchoices,
 body.mobile-play-mode #bugreportbtn,
 body.mobile-play-mode #stuckrescuebtn,
-body.mobile-play-mode #utilitybar,
 body.mobile-play-mode #statpointnudge{display:none!important}
 body.mobile-portrait-blocked #tabletcontrols,
 body.mobile-portrait-blocked #currentquest,
@@ -2477,4 +2457,48 @@ body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn .social-chat-icon{width
 body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn .socialbtn-label{display:none}
 body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn:hover,
 body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn:focus-visible{transform:translateY(-2px) scale(1.04);border-color:#ffe28a;color:#fff;outline:2px solid rgba(125,211,252,.25);outline-offset:3px}
+
+/* Desktop HUD polish: one strong center action cluster, quiet supporting panels. */
+@media (min-width:1100px){
+  body:not(.tablet-mode):not(.mobile-play-mode) #crosshair{width:18px;height:18px;border-radius:50%;background:radial-gradient(circle,#ffe680 0 1.5px,rgba(0,0,0,.72) 2px 3px,transparent 3.5px);filter:drop-shadow(0 1px 2px #000);mix-blend-mode:normal}
+  body:not(.tablet-mode):not(.mobile-play-mode) #crosshair:before{left:8px;top:0;width:2px;height:18px;background:linear-gradient(#fff 0 5px,transparent 5px 13px,#fff 13px)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #crosshair:after{left:0;top:8px;width:18px;height:2px;background:linear-gradient(90deg,#fff 0 5px,transparent 5px 13px,#fff 13px)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #hotbar{bottom:15px;gap:6px;padding:8px 9px;border:1px solid rgba(255,213,100,.62);border-radius:10px;background:radial-gradient(circle at 50% 0,rgba(242,199,92,.09),transparent 58%),linear-gradient(180deg,rgba(8,15,27,.94),rgba(3,8,15,.9));box-shadow:0 14px 38px rgba(0,0,0,.52),0 0 0 1px rgba(255,255,255,.035) inset,0 0 24px rgba(242,199,92,.08);backdrop-filter:blur(10px)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #hotbar:before,
+  body:not(.tablet-mode):not(.mobile-play-mode) #hotbar:after{display:none}
+  body:not(.tablet-mode):not(.mobile-play-mode) #hotbar .slot{width:50px;height:50px;border:1px solid rgba(154,174,197,.4);border-radius:7px;background:linear-gradient(145deg,rgba(24,34,47,.95),rgba(5,10,17,.96));box-shadow:inset 0 1px rgba(255,255,255,.08),inset 0 -12px 24px rgba(0,0,0,.18);transition:transform .14s ease,border-color .14s ease,filter .14s ease}
+  body:not(.tablet-mode):not(.mobile-play-mode) #hotbar .slot:hover{transform:translateY(-2px);border-color:rgba(255,226,138,.82);filter:brightness(1.12)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #hotbar .slot.sel{transform:translateY(-3px);border-color:#ffe680;box-shadow:0 0 0 2px rgba(255,211,83,.22),0 0 18px rgba(255,199,59,.38),inset 0 0 14px rgba(255,213,100,.12)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #hotbar .slot .key{top:3px;left:5px;color:#dce8f5;font:800 10px/1 system-ui;text-shadow:0 2px 2px #000}
+  body:not(.tablet-mode):not(.mobile-play-mode) #stats{bottom:84px;gap:12px;padding:7px 12px 7px 8px;border:1px solid rgba(125,211,252,.22);border-radius:999px;background:linear-gradient(90deg,rgba(3,10,19,.88),rgba(6,14,25,.75));box-shadow:0 10px 30px rgba(0,0,0,.34),inset 0 0 18px rgba(125,211,252,.035);backdrop-filter:blur(8px)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #lvlbadge{width:50px;height:50px;border-color:#78dbff;font:900 18px/1 system-ui;box-shadow:0 0 0 3px rgba(9,20,34,.86),0 0 18px rgba(79,216,255,.3),inset 0 0 14px rgba(125,211,252,.13)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #barcol{width:min(390px,34vw);gap:4px}
+  body:not(.tablet-mode):not(.mobile-play-mode) .bar{height:14px;border-color:rgba(255,255,255,.14);border-radius:999px}
+  body:not(.tablet-mode):not(.mobile-play-mode) .bar:before{left:8px;font-size:8px}
+  body:not(.tablet-mode):not(.mobile-play-mode) .bar span{right:8px;font-size:10px}
+  body:not(.tablet-mode):not(.mobile-play-mode) .xpb{height:5px}
+  body:not(.tablet-mode):not(.mobile-play-mode) #abilities{left:calc(50% + 272px);bottom:18px;gap:6px;padding:6px;border:1px solid rgba(125,211,252,.36);border-radius:9px;background:linear-gradient(180deg,rgba(8,17,29,.92),rgba(3,8,15,.9));box-shadow:0 12px 32px rgba(0,0,0,.44),inset 0 0 16px rgba(125,211,252,.04);backdrop-filter:blur(8px)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #abilities:before{left:7px;bottom:calc(100% + 7px);color:#d7e8f7;font:800 9px/1 system-ui;letter-spacing:1.8px}
+  body:not(.tablet-mode):not(.mobile-play-mode) #abilities .abslot{width:46px;height:46px;border-width:1px;border-radius:7px;font-size:21px;box-shadow:inset 0 1px rgba(255,255,255,.08),0 6px 16px rgba(0,0,0,.28)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #chatlog{left:18px;bottom:18px;width:min(410px,calc((100vw - 550px)/2 - 28px));max-height:min(17vh,136px);gap:0;padding:7px 7px 7px 9px;border:1px solid rgba(125,211,252,.3);border-left:3px solid rgba(125,211,252,.55);border-radius:8px;background:linear-gradient(110deg,rgba(3,10,19,.88),rgba(4,11,20,.68));box-shadow:0 12px 34px rgba(0,0,0,.4),inset 0 0 20px rgba(125,211,252,.025);backdrop-filter:blur(8px)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #chatlog .chatline{width:100%;padding:3px 5px;border-bottom:1px solid rgba(255,255,255,.045);background:transparent;color:#dce7f2;font:12px/1.32 system-ui,-apple-system,Segoe UI,sans-serif;text-shadow:0 1px 2px #000}
+  body:not(.tablet-mode):not(.mobile-play-mode) #chatlog .chatline:last-child{border-bottom:0}
+  body:not(.tablet-mode):not(.mobile-play-mode) #chatlog .chatline.suggestion{padding:5px 7px;border-left:3px solid #ffd24a;background:linear-gradient(90deg,rgba(94,63,8,.54),transparent);color:#fff0b5}
+  body:not(.tablet-mode):not(.mobile-play-mode) #currentquest{right:22px;width:330px;border-color:rgba(242,199,92,.56);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.42),0 0 0 1px rgba(255,255,255,.025) inset}
+  body:not(.tablet-mode):not(.mobile-play-mode) #currentquest .qt,
+  body:not(.tablet-mode):not(.mobile-play-mode) .activequest-head,
+  body:not(.tablet-mode):not(.mobile-play-mode) #eventhud .et{font-family:Georgia,'Times New Roman',serif;font-weight:700;letter-spacing:2.2px}
+  body:not(.tablet-mode):not(.mobile-play-mode) #eventhud{border-radius:10px;backdrop-filter:blur(9px)}
+  body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn,
+  body:not(.tablet-mode):not(.mobile-play-mode) #bugreportbtn,
+  body:not(.tablet-mode):not(.mobile-play-mode) #stuckrescuebtn{top:auto;bottom:18px;width:48px;min-width:48px;height:48px;padding:0;border-radius:50%;box-shadow:0 9px 24px rgba(0,0,0,.44),inset 0 0 14px rgba(255,255,255,.045);font-size:0;transition:transform .14s ease,filter .14s ease}
+  body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn{left:auto;right:128px;width:48px;min-width:48px;height:48px}
+  body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn .social-chat-icon{width:24px;height:24px}
+  body:not(.tablet-mode):not(.mobile-play-mode) #bugreportbtn{left:auto;right:73px;border-color:rgba(255,171,80,.62);background:linear-gradient(160deg,rgba(62,34,17,.96),rgba(19,10,7,.96))}
+  body:not(.tablet-mode):not(.mobile-play-mode) #bugreportbtn:before{content:"!";display:grid;place-items:center;width:23px;height:23px;margin:auto;border:2px solid currentColor;border-radius:50%;color:#ffd18e;font:900 16px/1 system-ui}
+  body:not(.tablet-mode):not(.mobile-play-mode) #stuckrescuebtn{left:auto;right:18px;border-color:rgba(125,211,252,.65);background:linear-gradient(160deg,rgba(16,48,67,.96),rgba(5,16,26,.96))}
+  body:not(.tablet-mode):not(.mobile-play-mode) #stuckrescuebtn:before{content:"↟";color:#bcecff;font:900 23px/1 system-ui}
+  body:not(.tablet-mode):not(.mobile-play-mode) #bugreportbtn:hover,
+  body:not(.tablet-mode):not(.mobile-play-mode) #stuckrescuebtn:hover{transform:translateY(-2px);filter:brightness(1.16)}
+}
 
