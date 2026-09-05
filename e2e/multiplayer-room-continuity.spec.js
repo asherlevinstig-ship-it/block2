@@ -32,6 +32,12 @@ async function registerReadyHunter(page, label, hunterName) {
     await page.locator('#playbtn').click();
   }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected), { timeout: 25_000 }).toBe(true);
+  if (!(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path))) {
+    await expect(page.locator('#pathselect')).toBeVisible();
+    await page.locator('[data-path-preview="shadow"]').click();
+    await page.locator('#pathconfirm').click();
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('shadow');
+  }
   const total = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal);
   for (let step = 0; step < total; step++) {
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep());

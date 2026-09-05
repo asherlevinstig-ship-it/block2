@@ -11,7 +11,7 @@ async function registerAccount(page, { username, password, hunterName, displayNa
   expect(named.ok()).toBe(true);
 }
 
-async function playRegisteredHunter(page, { username, password, hunterName }) {
+async function playRegisteredHunter(page, { username, password, hunterName, path = 'shadow' }) {
   await page.goto('/?e2e=1');
   await expect(page.locator('#playbtn')).toBeEnabled();
   const buttonText = (await page.locator('#playbtn').textContent() || '').trim().toUpperCase();
@@ -25,11 +25,17 @@ async function playRegisteredHunter(page, { username, password, hunterName }) {
     await page.locator('#playbtn').click();
   }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  if (path && !(await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().path))) {
+    await expect(page.locator('#pathselect')).toBeVisible();
+    await page.locator(`[data-path-preview="${path}"]`).click();
+    await page.locator('#pathconfirm').click();
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().path)).toBe(path);
+  }
 }
 
-async function registerAndPlay(page, { username, password, hunterName, displayName }) {
+async function registerAndPlay(page, { username, password, hunterName, displayName, path = 'shadow' }) {
   await registerAccount(page, { username, password, hunterName, displayName });
-  await playRegisteredHunter(page, { username, password, hunterName });
+  await playRegisteredHunter(page, { username, password, hunterName, path });
 }
 
 module.exports = { registerAccount, playRegisteredHunter, registerAndPlay };

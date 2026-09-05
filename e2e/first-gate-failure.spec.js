@@ -37,7 +37,7 @@ test('a failed first Gate preserves progression and immediately offers a success
     password: 'correct horse gate failure',
     hunterName: 'RetryHunter',
   });
-  for(const kind of ['move','sprint','arrows','jump','cursor','tree','craft','build','farm','eat','combat','subject','recall','finish']){
+  for(const kind of ['move','sprint','arrows','jump','cursor','tree','craft','build','farm','eat','combat','recall','finish']){
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe(kind);
     expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep())).toBe(true);
   }
