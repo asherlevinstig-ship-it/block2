@@ -1267,7 +1267,7 @@ class CombatMixin {
       availableRank: clearResult ? clearResult.availableRank : null,
     };
   }
-  setPath(client, path) {
+  async setPath(client, path) {
     const rec = this.profileFor(client);
     if (!rec || !rec.prof) {
       client.send('pathResult', { ok: false, path, reason: 'profile' });
@@ -1279,16 +1279,21 @@ class CombatMixin {
     }
     if (rec.prof.S.path) {
       const ok=rec.prof.S.path===path;
-      client.send('pathResult', { ok, path: rec.prof.S.path, reason: ok ? 'already' : 'locked' });
-      return ok;
+      if (!ok) {
+        client.send('pathResult', { ok: false, path: rec.prof.S.path, reason: 'locked' });
+        return false;
+      }
+      const saved=await this.savePlayerProfileNow(rec.token, rec.prof);
+      client.send('pathResult', { ok: saved, path: rec.prof.S.path, reason: saved ? 'already' : 'save' });
+      return saved;
     }
     rec.prof.S.path = path;
     rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
-    this.savePlayerProfileNow(rec.token, rec.prof);
-    client.send('pathResult', { ok: true, path });
-    return true;
+    const saved=await this.savePlayerProfileNow(rec.token, rec.prof);
+    client.send('pathResult', { ok: saved, path, reason: saved ? '' : 'save' });
+    return saved;
   }
   setAbilitySpecialization(client,spec){
     const rec=this.profileFor(client);

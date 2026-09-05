@@ -1491,6 +1491,7 @@ class GameRoom extends Room {
     this.dirtyPlayers = new Set();
     this.lastSaveMsg = new Map();
     this.persistedInventorySignatures = new Map();
+    this.playerSaveQueues = new Map();
   }
 
   inventoryPersistenceSignature(prof) {
@@ -1688,11 +1689,23 @@ class GameRoom extends Room {
       const snapshot = this.playerProfileSnapshot(prof);
       const inventorySignature = this.inventoryPersistenceSignature(snapshot);
       try {
-        await this.store.savePlayer(t, snapshot);
+        await this.queuePlayerProfileSnapshot(t, snapshot);
         if (this.persistedInventorySignatures) this.persistedInventorySignatures.set(t, inventorySignature);
       }
       catch (e) { console.warn('[persist] player save failed:', e.message); this.dirtyPlayers.add(t); }
     }
+  }
+
+  queuePlayerProfileSnapshot(token, snapshot) {
+    if (!this.playerSaveQueues) this.playerSaveQueues = new Map();
+    const prior = this.playerSaveQueues.get(token) || Promise.resolve();
+    const task = prior.catch(() => {}).then(() => this.store.savePlayer(token, snapshot));
+    this.playerSaveQueues.set(token, task);
+    const clear = () => {
+      if (this.playerSaveQueues.get(token) === task) this.playerSaveQueues.delete(token);
+    };
+    task.then(clear, clear);
+    return task;
   }
 
   async savePlayerProfileNow(token, prof) {
@@ -1703,7 +1716,7 @@ class GameRoom extends Room {
     const snapshot = this.playerProfileSnapshot(prof);
     const inventorySignature = this.inventoryPersistenceSignature(snapshot);
     try {
-      await this.store.savePlayer(t, snapshot);
+      await this.queuePlayerProfileSnapshot(t, snapshot);
       if (this.persistedInventorySignatures) this.persistedInventorySignatures.set(t, inventorySignature);
       if (this.dirtyPlayers) {
         if (this.inventoryPersistenceSignature(prof) === inventorySignature) this.dirtyPlayers.delete(t);

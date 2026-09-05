@@ -2816,26 +2816,53 @@ test('first quest bonus requires authoritative Mara completion and is single-cla
   assert.equal(client.sent.at(-1).msg.claimed, true);
 });
 
-test('combat path is chosen once after town arrival while abilities still unlock by level', () => {
+test('combat path is chosen once after town arrival while abilities still unlock by level', async () => {
   const room = makeRoom(), client = makeClient('path_owner');
   const { prof } = seedPlayer(room, client);
   let savedPath = '';
   room.savePlayerProfileNow = (_token, saved) => { savedPath = saved.S.path; return Promise.resolve(true); };
-  room.setPath(client, 'shadow');
+  await room.setPath(client, 'shadow');
   assert.equal(prof.S.path, 'shadow', 'a new player can define a hunter path before onboarding');
   assert.equal(prof.tutorials.ability, TUTORIAL_VERSIONS.ability, 'retired ability training is treated as complete');
   assert.equal(savedPath, 'shadow', 'the permanent path is flushed immediately for refresh safety');
   assert.equal(client.sent.some(e => e.type === 'pathResult' && e.msg.path === 'shadow'), true);
-  assert.equal(room.setPath(client, 'shadow'), true, 'retrying the same selection is idempotent');
+  assert.equal(await room.setPath(client, 'shadow'), true, 'retrying the same selection is idempotent');
   assert.equal(client.sent.at(-1).msg.reason, 'already');
-  room.setPath(client, 'mage');
+  await room.setPath(client, 'mage');
   assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
   assert.equal(client.sent.at(-1).msg.reason, 'locked');
   const bad = makeClient('bad_path_owner');
   const { prof: badProf } = seedPlayer(room, bad, { lvl: 2 });
-  room.setPath(bad, 'not_a_path');
+  await room.setPath(bad, 'not_a_path');
   assert.equal(badProf.S.path, '', 'unknown paths are rejected by the server');
   assert.equal(bad.sent.at(-1).msg.reason, 'invalid');
+});
+
+test('player profile writes are serialized so an older snapshot cannot erase a chosen path', async () => {
+  const room = makeRoom();
+  const writes = [];
+  const releases = [];
+  room.store = {
+    savePlayer: (token, profile) => new Promise(resolve => {
+      writes.push({ token, path: profile.S.path });
+      releases.push(resolve);
+    }),
+  };
+  const token = 'ordered_path_owner';
+  const prof = defaultProfile('Ordered');
+  const older = room.savePlayerProfileNow(token, prof);
+  await new Promise(resolve => setImmediate(resolve));
+  prof.S.path = 'guardian';
+  const chosen = room.savePlayerProfileNow(token, prof);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(writes.map(write => write.path), [''], 'the newer write waits for the older snapshot');
+  releases.shift()();
+  await older;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(writes.map(write => write.path), ['', 'guardian']);
+  releases.shift()();
+  await chosen;
+  assert.equal(writes.at(-1).path, 'guardian', 'the durable final write retains the selected path');
 });
 
 test('C-rank specialization is server-owned, path-valid, and permanent',()=>{
