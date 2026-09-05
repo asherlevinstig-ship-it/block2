@@ -4,6 +4,19 @@ const PORT = 2607;
 
 module.exports = defineConfig({
   testDir: './e2e',
+  // The profession/job feature is intentionally disabled for this release.
+  // Keep its full browser coverage in the repository (and the dedicated
+  // test:tutorial-jobs command), but do not make the live-release gate wait
+  // for flows that players cannot enter.
+  testIgnore: [
+    '**/blacksmith-tutorial.spec.js',
+    '**/cook-tutorial.spec.js',
+    '**/farmer-tutorial.spec.js',
+    '**/job-contract-loop.spec.js',
+    '**/miner-monk-tutorial.spec.js',
+    '**/pet-tamer-tutorial.spec.js',
+    '**/town-tutorial-persistence.spec.js',
+  ],
   timeout: 45_000,
   // Connection-readiness polls (`status().connected`) flake under the cumulative
   // load of running every heavy WebGL spec sequentially on one worker: the room
