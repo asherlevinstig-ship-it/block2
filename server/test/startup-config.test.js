@@ -66,3 +66,9 @@ test('MySQL auth backend requires database credentials', async () => {
   }));
   assert.equal(config.production, true);
 });
+
+test('cloud rooms are created through matchmaking instead of stranded prewarming', () => {
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud.js'), 'utf8');
+  assert.doesNotMatch(cloud, /prewarmOverworldRoom|beforeListen/);
+  assert.match(cloud, /blockcraft: defineRoom\(GameRoom\)\.filterBy\(\['shardId'\]\)/);
+});

@@ -3,8 +3,6 @@ const { WebSocketTransport } = require('@colyseus/ws-transport');
 const { GameRoom } = require('./rooms/GameRoom');
 const { DungeonRoom } = require('./rooms/DungeonRoom');
 const { prepareRuntime, attachHttpRoutes } = require('./runtime');
-const { prewarmOverworldRoom } = require('./room-prewarm');
-
 const runtime = prepareRuntime();
 
 const server = defineServer({
@@ -15,9 +13,6 @@ const server = defineServer({
   transport: new WebSocketTransport(),
   express: async app => {
     attachHttpRoutes(app, await runtime);
-  },
-  beforeListen: async () => {
-    await prewarmOverworldRoom(await runtime);
   },
 });
 
