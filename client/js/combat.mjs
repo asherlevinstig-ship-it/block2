@@ -4890,7 +4890,9 @@ function shouldOpenLevel2PathChoice(){
   return !!(S && !S.path && profileReady && onboardingDone() && inTown && !pathChoiceDismissedThisSession && !level2JobChoiceForced && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
 function showPathSelection(){
-  if(!S||S.path||(NET.on&&NET.profileReady!==true)||onboardingActive||dim!=='overworld') return false;
+  const loginPath=AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile&&AUTH_UI.state.gameProfile.path;
+  if(S&&!S.path&&PATHS[loginPath])restoreHydratedPath(loginPath,'login-profile');
+  if(!S||S.path||(AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.account&&NET.profileReady!==true)||onboardingActive||dim!=='overworld') return false;
   pathChoiceOpen=true;
   jobChoiceOpen=false;
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.open', { level:S&&S.lvl, path:S&&S.path, dim });
@@ -4945,6 +4947,20 @@ function showPathSelection(){
     }
     confirmPathSelection({ok:true,path});
   });
+  return true;
+}
+function restoreHydratedPath(path,source='room'){
+  path=String(path||'');
+  if(!S||!PATHS[path])return false;
+  if(S.path!==path)setAbilityPath(path,{message:false,sync:false});
+  if(!pathChoiceOpen)return true;
+  pendingPathConfirmation='';
+  pathChoiceDismissedThisSession=true;
+  pathSelectEl.classList.remove('jobselect');
+  document.body.classList.remove('path-selecting');
+  pathChoiceOpen=false;
+  closeBlockingGameModal(pathSelectEl,{relock:true,reason:'path-restored'});
+  pathDebug('ui.path.closed-by-hydration',{path,source});
   return true;
 }
 function confirmPathSelection(result){
@@ -7295,6 +7311,7 @@ gameContext.registerModule('combat', Object.freeze({
   stopPrimaryAction,
   showPathSelection,
   confirmPathSelection,
+  restoreHydratedPath,
   shouldShowFirstTownArrivalChoice,
   showFirstTownArrivalChoice,
   openLevel2JobChoice,

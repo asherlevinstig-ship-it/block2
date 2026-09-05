@@ -1632,6 +1632,9 @@ test('path selection persists and returns directly to town without ability train
   assert.match(combat, /result\.reason==='locked'/, 'a pre-existing server pathway is restored instead of reopening the picker');
   assert.match(combat, /pathDebug\('ui\.path\.confirm'/, 'path confirmation is recorded for live diagnosis');
   assert.match(networking, /pathDebug\('room\.path\.resolve'/, 'room and login pathway sources are recorded before modal decisions');
+  assert.match(combat, /if\(S&&!S\.path&&PATHS\[loginPath\]\)restoreHydratedPath\(loginPath,'login-profile'\)/, 'the signed-in profile is applied before the picker can open');
+  assert.match(combat, /state\.account&&NET\.profileReady!==true/, 'signed-in players wait for room hydration before a blank-path picker opens');
+  assert.match(networking, /combatApi\.restoreHydratedPath\(S\.path,serverPath\?'room':'auth-or-cache'\)/, 'late room hydration closes a picker opened by stale client state');
   assert.match(networking, /AUTH_UI\.savedPath\(\)/, 'login hydration can recover a confirmed path from the account-scoped browser cache');
   assert.match(combat, /if\(!onboardingDone\(\)\)\{\s*beginOnboarding\(\)/, 'a confirmed first path enters unfinished onboarding');
   assert.match(combat, /dimensionsApi\.placePlayerAtTownReturn\(\)/, 'completed players return through the dimension-owned safe town point');

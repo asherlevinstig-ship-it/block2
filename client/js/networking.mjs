@@ -3007,6 +3007,7 @@ function netRestoreProfile(m){
     }
     S.path=serverPath||authPath||'';
     pathDebug('room.path.applied', { path:S.path, source:serverPath?'room':authPath?'auth-or-cache':'none' });
+    if(S.path&&combatApi.restoreHydratedPath)combatApi.restoreHydratedPath(S.path,serverPath?'room':'auth-or-cache');
     if(authGameProfile&&S.path)authGameProfile.path=S.path;
     if(!serverPath&&authPath&&NET.on&&NET.room){
       const healKey=String(NET.room.sessionId||'')+':'+authPath;
