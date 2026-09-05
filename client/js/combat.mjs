@@ -1378,7 +1378,7 @@ function cancelOnboardingForProfileRestore(){
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
 }
-let pathChoiceOpen=false,pathChoiceDismissedThisSession=false;
+let pathChoiceOpen=false,pathChoiceDismissedThisSession=false,pendingPathConfirmation='';
 let jobChoiceOpen=false;
 let firstTownChoiceOpen=false;
 let firstTownChoiceDismissedThisSession=false;
@@ -1792,7 +1792,8 @@ function buildOnboardingRoute(){
   ];
 }
 function resetForFreshOnboarding(){
-  S.lvl=1; S.xp=0; S.pts=0; S.str=1; S.agi=1; S.vit=1; S.int=1; S.path='';
+  const chosenPath=S.path&&PATHS[S.path]?S.path:'';
+  S.lvl=1; S.xp=0; S.pts=0; S.str=1; S.agi=1; S.vit=1; S.int=1; S.path=chosenPath;
   hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
   gold=0;
   highestGateRankCleared=-1;
@@ -4771,13 +4772,8 @@ function settleFirstTownAdventureSpawn(){
   mouseLookDelta.x=0;
   mouseLookDelta.y=0;
   if(isMeditating)stopMeditation({silent:true});
-  if(player){
-    player.pos.set(TOWN.TC+.5,TOWN.G+1,TOWN.TC+62.5);
-    player.vel.set(0,0,0);
-    player.yaw=0;
-    player.pitch=0;
-    player.onGround=true;
-  }
+  if(dim==='overworld'&&dimensionsApi.placePlayerAtTownReturn)dimensionsApi.placePlayerAtTownReturn();
+  if(player)player.onGround=true;
   if(typeof globalThis.BlockcraftSnapGameplayCamera==='function')globalThis.BlockcraftSnapGameplayCamera();
 }
 function startQuestionHallMeditationPose(){
@@ -4929,17 +4925,45 @@ function showPathSelection(){
     confirm.disabled=true;
     const path=selectedPath;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.click', { path, beforePath:S&&S.path });
-    if(!setAbilityPath(path,{message:false})) return;
-    pathSelectEl.classList.remove('jobselect');
-    document.body.classList.remove('path-selecting');
-    pathChoiceOpen=false;
-    closeBlockingGameModal(pathSelectEl,{relock:true,reason:'path-choice'});
-    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.closed', { path, afterPath:S&&S.path });
-    sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>.');
-    setAbilityTutorialDone();
-    if(dim==='ability') exitAbilityRoom();
-    else settleFirstTownAdventureSpawn();
+    pendingPathConfirmation=path;
+    confirm.textContent='SAVING '+PATHS[path].name.toUpperCase()+'...';
+    if(NET.on&&NET.room){
+      NET.room.send('setPath',{path});
+      return;
+    }
+    confirmPathSelection({ok:true,path});
   });
+  return true;
+}
+function confirmPathSelection(result){
+  const path=String(result&&result.path||pendingPathConfirmation||'');
+  if(!pendingPathConfirmation)return false;
+  if(!result||result.ok!==true||path!==pendingPathConfirmation||!PATHS[path]){
+    pendingPathConfirmation='';
+    const confirm=document.getElementById('pathconfirm');
+    if(confirm){confirm.disabled=false;confirm.textContent='TRY AGAIN';}
+    sysMsg('<b>Path could not be saved.</b> Please choose it again.');
+    return false;
+  }
+  setAbilityPath(path,{message:false,sync:false});
+  pendingPathConfirmation='';
+  pathChoiceDismissedThisSession=true;
+  pathSelectEl.classList.remove('jobselect');
+  document.body.classList.remove('path-selecting');
+  pathChoiceOpen=false;
+  closeBlockingGameModal(pathSelectEl,{relock:true,reason:'path-choice'});
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.closed', { path, afterPath:S&&S.path, onboardingDone:onboardingDone() });
+  sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>.');
+  setAbilityTutorialDone();
+  if(!onboardingDone()){
+    beginOnboarding();
+  }else if(dim==='tutorial'){
+    exitOnboardingRoom({destination:'town'});
+  }else if(dim==='ability'){
+    exitAbilityRoom();
+  }else{
+    settleFirstTownAdventureSpawn();
+  }
   return true;
 }
 function completeOnboarding(){
@@ -7257,6 +7281,7 @@ gameContext.registerModule('combat', Object.freeze({
   heldPlaceAction,
   stopPrimaryAction,
   showPathSelection,
+  confirmPathSelection,
   shouldShowFirstTownArrivalChoice,
   showFirstTownArrivalChoice,
   openLevel2JobChoice,

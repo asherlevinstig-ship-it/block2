@@ -1385,6 +1385,9 @@ function netAttachRoom(room,name,client){
       bugReportRefreshVisible();
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied');
     });
+    room.onMessage('pathResult', m=>{
+      if(combatApi.confirmPathSelection)combatApi.confirmPathSelection(m);
+    });
     room.onMessage('appearanceResult', m=>{
       if(m&&m.ok&&m.appearance){
         playerCustomAppearance=parseReplicatedAppearance(m.appearance);
@@ -2990,6 +2993,17 @@ function netRestoreProfile(m){
     if(AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile)AUTH_UI.state.gameProfile.appearance=playerCustomAppearance;
     if(m&&Array.isArray(m.activeObjectives))setActiveObjectives(m.activeObjectives,{announce:false});
     if(m&&Array.isArray(m.homeworkObjectives))applyHomeworkProgressList(m.homeworkObjectives);
+    if(m&&m.S){
+      S.lvl=m.S.lvl||1; S.xp=m.S.xp||0; S.pts=m.S.pts||0;
+      S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
+      S.path=m.S.path&&PATHS[m.S.path]?m.S.path:'';
+    }
+    if(!S.path){
+      if(onboardingActive)cancelOnboardingForProfileRestore();
+      finishWorldLoading('path-choice');
+      setTimeout(()=>{if(!S.path&&combatApi.showPathSelection)combatApi.showPathSelection();},0);
+      return;
+    }
     if(!onboardingDone()){
       if(!onboardingActive) beginOnboarding();
       eventLog('Tutorial active - saved profile ignored until training is complete');
@@ -2997,11 +3011,6 @@ function netRestoreProfile(m){
       return;
     }
     if(onboardingActive) cancelOnboardingForProfileRestore();
-    if(m.S){
-      S.lvl=m.S.lvl||1; S.xp=m.S.xp||0; S.pts=m.S.pts||0;
-      S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
-      S.path=m.S.path&&PATHS[m.S.path]?m.S.path:'';
-    }
     if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m.abilitySpec||'');
     if(Array.isArray(m.inv)){
       for(let i=0;i<36;i++){

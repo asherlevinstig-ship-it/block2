@@ -1269,8 +1269,19 @@ class CombatMixin {
   }
   setPath(client, path) {
     const rec = this.profileFor(client);
-    const arrived=!!(rec&&rec.prof&&rec.prof.tutorials&&(rec.prof.tutorials.onboarding|0)>=TUTORIAL_VERSIONS.onboarding);
-    if (!rec || rec.prof.S.path || (!arrived&&rec.prof.S.lvl<2) || !ABILITY_PATHS[path]) return;
+    if (!rec || !rec.prof) {
+      client.send('pathResult', { ok: false, path, reason: 'profile' });
+      return false;
+    }
+    if (!ABILITY_PATHS[path]) {
+      client.send('pathResult', { ok: false, path, reason: 'invalid' });
+      return false;
+    }
+    if (rec.prof.S.path) {
+      const ok=rec.prof.S.path===path;
+      client.send('pathResult', { ok, path: rec.prof.S.path, reason: ok ? 'already' : 'locked' });
+      return ok;
+    }
     rec.prof.S.path = path;
     rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
     this.syncPlayerProfile(client, rec.prof);

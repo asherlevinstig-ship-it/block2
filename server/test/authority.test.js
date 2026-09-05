@@ -2822,19 +2822,20 @@ test('combat path is chosen once after town arrival while abilities still unlock
   let savedPath = '';
   room.savePlayerProfileNow = (_token, saved) => { savedPath = saved.S.path; return Promise.resolve(true); };
   room.setPath(client, 'shadow');
-  assert.equal(prof.S.path, '', 'training-time selection before town arrival is rejected');
-  prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
-  room.setPath(client, 'shadow');
-  assert.equal(prof.S.path, 'shadow', 'a level 1 arrival can define a hunter path');
+  assert.equal(prof.S.path, 'shadow', 'a new player can define a hunter path before onboarding');
   assert.equal(prof.tutorials.ability, TUTORIAL_VERSIONS.ability, 'retired ability training is treated as complete');
   assert.equal(savedPath, 'shadow', 'the permanent path is flushed immediately for refresh safety');
   assert.equal(client.sent.some(e => e.type === 'pathResult' && e.msg.path === 'shadow'), true);
+  assert.equal(room.setPath(client, 'shadow'), true, 'retrying the same selection is idempotent');
+  assert.equal(client.sent.at(-1).msg.reason, 'already');
   room.setPath(client, 'mage');
   assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
+  assert.equal(client.sent.at(-1).msg.reason, 'locked');
   const bad = makeClient('bad_path_owner');
   const { prof: badProf } = seedPlayer(room, bad, { lvl: 2 });
   room.setPath(bad, 'not_a_path');
   assert.equal(badProf.S.path, '', 'unknown paths are rejected by the server');
+  assert.equal(bad.sent.at(-1).msg.reason, 'invalid');
 });
 
 test('C-rank specialization is server-owned, path-valid, and permanent',()=>{

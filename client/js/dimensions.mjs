@@ -83,8 +83,10 @@ function setAbilityPath(path, opts={}){
   renderAbilities();
   if(typeof renderStat==='function' && statOpen) renderStat();
   if(typeof refreshAppearanceDummy==='function') refreshAppearanceDummy();
-  sendPlayerMetaNow();
-  sendProfileSaveNow();
+  if(opts.sync!==false){
+    sendPlayerMetaNow();
+    sendProfileSaveNow();
+  }
   return true;
 }
 function equippedArmor(){

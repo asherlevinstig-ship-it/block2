@@ -1621,8 +1621,13 @@ test('path selection persists and returns directly to town without ability train
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
 
-  assert.match(combat, /setAbilityTutorialDone\(\);\s*if\(dim==='ability'\) exitAbilityRoom\(\);\s*else settleFirstTownAdventureSpawn\(\);/, 'path confirmation completes the retired tutorial state and returns to town');
+  assert.match(combat, /NET\.room\.send\('setPath',\{path\}\)/, 'path choice waits on a dedicated authoritative save request');
+  assert.match(networking, /room\.onMessage\('pathResult',[\s\S]*combatApi\.confirmPathSelection\(m\)/, 'the client only completes selection after server confirmation');
+  assert.match(combat, /if\(!onboardingDone\(\)\)\{\s*beginOnboarding\(\)/, 'a confirmed first path enters unfinished onboarding');
+  assert.match(combat, /dimensionsApi\.placePlayerAtTownReturn\(\)/, 'completed players return through the dimension-owned safe town point');
+  assert.match(combat, /const chosenPath=S\.path&&PATHS\[S\.path\]\?S\.path:'';[\s\S]*S\.path=chosenPath;/, 'fresh onboarding initialization preserves the confirmed path');
   assert.doesNotMatch(frame, /startAbilityTraining\(true\)/, 'the frame loop never auto-starts ability training');
   assert.doesNotMatch(frame, /type:'start_awakening'|type:'use_ability'/, 'objective recovery has no ability-training actions');
   assert.doesNotMatch(menus, /Start Awakening|Ability Training/, 'menus no longer advertise ability training');

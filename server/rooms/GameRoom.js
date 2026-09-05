@@ -541,6 +541,7 @@ class GameRoom extends Room {
       if (m.path && ABILITY_PATHS[m.path]) this.setPath(client, m.path);
       p.heldId = clampN(m.heldId, 0, 999) | 0;
     });
+    this.onMessage('setPath', (client, m) => this.setPath(client, String(m && m.path || '')));
 
     this.onMessage('spendStat', (client, m) => this.handleSpendStat(client, m));
     this.onMessage('abilitySpec',(client,m)=>this.setAbilitySpecialization(client,String(m&&m.spec||'')));
