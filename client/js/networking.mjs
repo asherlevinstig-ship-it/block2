@@ -2993,10 +2993,22 @@ function netRestoreProfile(m){
     if(AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile)AUTH_UI.state.gameProfile.appearance=playerCustomAppearance;
     if(m&&Array.isArray(m.activeObjectives))setActiveObjectives(m.activeObjectives,{announce:false});
     if(m&&Array.isArray(m.homeworkObjectives))applyHomeworkProgressList(m.homeworkObjectives);
+    const authGameProfile=AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile;
+    const authPath=authGameProfile&&authGameProfile.path&&PATHS[authGameProfile.path]?authGameProfile.path:'';
+    const serverPath=m&&m.S&&m.S.path&&PATHS[m.S.path]?m.S.path:'';
     if(m&&m.S){
       S.lvl=m.S.lvl||1; S.xp=m.S.xp||0; S.pts=m.S.pts||0;
       S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
-      S.path=m.S.path&&PATHS[m.S.path]?m.S.path:'';
+    }
+    S.path=serverPath||authPath||'';
+    if(authGameProfile&&S.path)authGameProfile.path=S.path;
+    if(!serverPath&&authPath&&NET.on&&NET.room){
+      const healKey=String(NET.room.sessionId||'')+':'+authPath;
+      if(NET.pathHealKey!==healKey){
+        NET.pathHealKey=healKey;
+        NET.room.send('setPath',{path:authPath});
+        globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.path-heal',{path:authPath});
+      }
     }
     if(!S.path){
       if(onboardingActive)cancelOnboardingForProfileRestore();

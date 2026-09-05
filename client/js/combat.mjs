@@ -4948,6 +4948,7 @@ function confirmPathSelection(result){
     return false;
   }
   setAbilityPath(path,{message:false,sync:false});
+  if(AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile)AUTH_UI.state.gameProfile.path=path;
   pendingPathConfirmation='';
   pathChoiceDismissedThisSession=true;
   pathSelectEl.classList.remove('jobselect');

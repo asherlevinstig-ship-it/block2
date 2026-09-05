@@ -77,10 +77,10 @@ test('session cookies authenticate, logout revokes them, and expiry is enforced'
   } finally { await f.close(); }
 });
 
-test('auth responses include the saved hunter-name setup state', { concurrency: false }, async () => {
+test('auth responses include the saved hunter-name and pathway state', { concurrency: false }, async () => {
   const profileStore = {
     async loadPlayer(id) {
-      return id ? { name: 'Mara', nameSet: true, S: { lvl: 1, str: 1, agi: 1, vit: 1, int: 1 } } : null;
+      return id ? { name: 'Mara', nameSet: true, S: { lvl: 1, str: 1, agi: 1, vit: 1, int: 1, path: 'mage' } } : null;
     },
   };
   const f = await fixture({ profileStore });
@@ -88,11 +88,11 @@ test('auth responses include the saved hunter-name setup state', { concurrency: 
     const registered = await f.request('/auth/register', jsonPost({ username: 'profile_user', password: 'long enough password' }));
     assert.equal(registered.status, 200);
     const body = await registered.json();
-    assert.deepEqual(body.gameProfile, { name: 'Mara', nameSet: true, appearance: defaultAppearance });
+    assert.deepEqual(body.gameProfile, { name: 'Mara', nameSet: true, path: 'mage', appearance: defaultAppearance });
     const cookie = sessionCookie(registered);
     const me = await f.request('/auth/me', { headers: { cookie } });
     assert.equal(me.status, 200);
-    assert.deepEqual((await me.json()).gameProfile, { name: 'Mara', nameSet: true, appearance: defaultAppearance });
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Mara', nameSet: true, path: 'mage', appearance: defaultAppearance });
   } finally { await f.close(); }
 });
 
@@ -324,15 +324,15 @@ test('hunter name setup is persisted before joining the world', { concurrency: f
     const registeredBody = await registered.json();
     const accountId = registeredBody.account.id;
     const cookie = sessionCookie(registered);
-    assert.deepEqual(registeredBody.gameProfile, { name: '', nameSet: false, appearance: defaultAppearance });
+    assert.deepEqual(registeredBody.gameProfile, { name: '', nameSet: false, path: '', appearance: defaultAppearance });
 
     const saved = await f.request('/auth/profile/name', jsonPost({ name: 'Kirito' }, { cookie }));
     assert.equal(saved.status, 200);
-    assert.deepEqual((await saved.json()).gameProfile, { name: 'Kirito', nameSet: true, appearance: defaultAppearance });
+    assert.deepEqual((await saved.json()).gameProfile, { name: 'Kirito', nameSet: true, path: '', appearance: defaultAppearance });
 
     const me = await f.request('/auth/me', { headers: { cookie } });
     assert.equal(me.status, 200);
-    assert.deepEqual((await me.json()).gameProfile, { name: 'Kirito', nameSet: true, appearance: defaultAppearance });
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Kirito', nameSet: true, path: '', appearance: defaultAppearance });
     assert.equal(profiles.get(accountId).name, 'Kirito');
     assert.equal(profiles.get(accountId).nameSet, true);
   } finally { await f.close(); }
@@ -385,13 +385,13 @@ test('bearer session token authenticates cross-site auth requests when cookies a
       { origin, 'x-forwarded-proto': 'https', Authorization: 'Bearer ' + loginBody.sessionToken },
     ));
     assert.equal(saved.status, 200);
-    assert.deepEqual((await saved.json()).gameProfile, { name: 'Admin_Levin', nameSet: true, appearance: defaultAppearance });
+    assert.deepEqual((await saved.json()).gameProfile, { name: 'Admin_Levin', nameSet: true, path: '', appearance: defaultAppearance });
 
     const me = await f.request('/auth/me', {
       headers: { origin, 'x-forwarded-proto': 'https', Authorization: 'Bearer ' + loginBody.sessionToken },
     });
     assert.equal(me.status, 200);
-    assert.deepEqual((await me.json()).gameProfile, { name: 'Admin_Levin', nameSet: true, appearance: defaultAppearance });
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Admin_Levin', nameSet: true, path: '', appearance: defaultAppearance });
   } finally { await f.close(); }
 });
 
@@ -694,6 +694,6 @@ test('student registration endpoint creates a MySQL-backed session', { concurren
     assert.equal(body.account.schoolId, '42');
     assert.equal(body.account.yearGroup, 'Year 9');
     assert.equal(body.yearGroupSaved, true);
-    assert.deepEqual(body.gameProfile, { name: '', nameSet: false, appearance: defaultAppearance });
+    assert.deepEqual(body.gameProfile, { name: '', nameSet: false, path: '', appearance: defaultAppearance });
   } finally { await f.close(); }
 });

@@ -1625,6 +1625,9 @@ test('path selection persists and returns directly to town without ability train
 
   assert.match(combat, /NET\.room\.send\('setPath',\{path\}\)/, 'path choice waits on a dedicated authoritative save request');
   assert.match(networking, /room\.onMessage\('pathResult',[\s\S]*combatApi\.confirmPathSelection\(m\)/, 'the client only completes selection after server confirmation');
+  assert.match(networking, /S\.path=serverPath\|\|authPath\|\|'';/, 'login hydration preserves the signed-in profile path when a room snapshot is stale');
+  assert.match(networking, /NET\.room\.send\('setPath',\{path:authPath\}\)/, 'a stale room profile is healed from the durable signed-in profile');
+  assert.match(combat, /AUTH_UI\.state\.gameProfile\.path=path;/, 'confirmed choices update the signed-in profile cache immediately');
   assert.match(combat, /if\(!onboardingDone\(\)\)\{\s*beginOnboarding\(\)/, 'a confirmed first path enters unfinished onboarding');
   assert.match(combat, /dimensionsApi\.placePlayerAtTownReturn\(\)/, 'completed players return through the dimension-owned safe town point');
   assert.match(combat, /const chosenPath=S\.path&&PATHS\[S\.path\]\?S\.path:'';[\s\S]*S\.path=chosenPath;/, 'fresh onboarding initialization preserves the confirmed path');

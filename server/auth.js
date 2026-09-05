@@ -718,7 +718,7 @@ class AuthService {
 
   async publicGameProfile(account) {
     const id = account && account.id;
-    if (!id) return { name: '', nameSet: false, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
+    if (!id) return { name: '', nameSet: false, path: '', appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
     try {
       const raw = await this.getProfileStore().loadPlayer(id);
       if (!raw) {
@@ -726,7 +726,7 @@ class AuthService {
           account: accountSummary(account),
           profile: { exists: false, name: '', nameSet: false, level: 1 },
         });
-        return { name: '', nameSet: false, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
+        return { name: '', nameSet: false, path: '', appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
       }
       const profile = sanitizeProfile(raw);
       if (ensureAsherAdminFishingRod(profile, account)) {
@@ -739,9 +739,10 @@ class AuthService {
           name: profile.name,
           nameSet: profile.nameSet === true,
           level: profile.S && profile.S.lvl || 1,
+          path: profile.S && profile.S.path || '',
         },
       });
-      return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
+      return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, path: profile.S && profile.S.path || '', appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
     } catch (e) {
       console.warn('[auth] game profile lookup failed:', e.message);
       recordIdentityTrace('auth.profile.lookup_failed', {
@@ -984,7 +985,7 @@ class AuthService {
     profile.nameSet = true;
     await store.savePlayer(publicAccount.id, profile);
     await updateLivePlayerProfiles(publicAccount.id, { name: clean, nameSet: true });
-    return { name: clean, nameSet: true, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
+    return { name: clean, nameSet: true, path: profile.S && profile.S.path || '', appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
   }
 
   async saveHunterAppearance(account, appearance) {
@@ -1001,7 +1002,7 @@ class AuthService {
     profile.appearance = nextAppearance;
     await store.savePlayer(publicAccount.id, profile);
     await updateLivePlayerProfiles(publicAccount.id, { appearance: nextAppearance });
-    return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, appearance: nextAppearance };
+    return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, path: profile.S && profile.S.path || '', appearance: nextAppearance };
   }
 
   async saveHunterProfile(account, body) {
@@ -1022,7 +1023,7 @@ class AuthService {
     profile.appearance = nextAppearance;
     await store.savePlayer(publicAccount.id, profile);
     await updateLivePlayerProfiles(publicAccount.id, { name: clean, nameSet: true, appearance: nextAppearance });
-    return { name: clean, nameSet: true, appearance: nextAppearance };
+    return { name: clean, nameSet: true, path: profile.S && profile.S.path || '', appearance: nextAppearance };
   }
 
   async register(username, password, displayName) {
