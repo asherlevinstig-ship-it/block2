@@ -338,6 +338,29 @@ test('hunter name setup is persisted before joining the world', { concurrency: f
   } finally { await f.close(); }
 });
 
+test('hunter pathway is saved through authenticated profile storage and remains permanent', { concurrency: false }, async () => {
+  const profiles = new Map();
+  const profileStore = {
+    async loadPlayer(id) { return profiles.get(id) || null; },
+    async savePlayer(id, profile) { profiles.set(id, structuredClone(profile)); },
+  };
+  const f = await fixture({ profileStore });
+  try {
+    const registered = await f.request('/auth/register', jsonPost({ username: 'path_hunter', password: 'long enough password' }));
+    const body = await registered.json();
+    const cookie = sessionCookie(registered);
+    const saved = await f.request('/auth/profile/path', jsonPost({ path: 'verdant' }, { cookie }));
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).gameProfile.path, 'verdant');
+    assert.equal(profiles.get(body.account.id).S.path, 'verdant');
+
+    const me = await f.request('/auth/me', { headers: { cookie } });
+    assert.equal((await me.json()).gameProfile.path, 'verdant');
+    assert.equal((await f.request('/auth/profile/path', jsonPost({ path: 'mage' }, { cookie }))).status, 409);
+    assert.equal(profiles.get(body.account.id).S.path, 'verdant');
+  } finally { await f.close(); }
+});
+
 test('configured client origins receive credentialed CORS and cross-site cookies', { concurrency: false }, async () => {
   const origin = 'https://blockcraft-client.vercel.app';
   const f = await fixture({ production: true, clientOrigin: origin });

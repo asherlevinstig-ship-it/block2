@@ -9008,6 +9008,29 @@ test('live hunter name updates cannot be overwritten by stale room profiles', as
   assert.equal(room.dirtyPlayers.has(token), false);
 });
 
+test('authenticated pathway updates replace a stale blank live-room pathway before autosave', async () => {
+  const room = makeRoom(), client = makeClient('path_sync');
+  room.clients.push(client);
+  const { token, prof } = seedPlayer(room, client);
+  prof.S.path = '';
+  prof.tutorials.ability = 0;
+  const saved = [];
+  room.store = {
+    async savePlayer(id, profile) {
+      saved.push({ id, path: profile.S.path, abilityTutorial: profile.tutorials.ability });
+    },
+  };
+
+  assert.equal(room.updateLivePlayerProfile(token, { path: 'guardian' }), true);
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(prof.S.path, 'guardian');
+  assert.equal(prof.tutorials.ability, TUTORIAL_VERSIONS.ability);
+  assert.equal(room.state.players.get(client.sessionId).path, 'guardian');
+  assert.equal(client.sent.some(m => m.type === 'profile' && m.msg.S.path === 'guardian'), true);
+  assert.deepEqual(saved, [{ id: token, path: 'guardian', abilityTutorial: TUTORIAL_VERSIONS.ability }]);
+});
+
 test('generated dungeons use compact instance-local grids', () => {
   const d = D.generateDungeon(4, 0x5eed1234);
   const fullWorldBytes = W.WX * W.WH * W.WX;

@@ -4928,6 +4928,10 @@ function showPathSelection(){
     const path=selectedPath;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.click', { path, beforePath:S&&S.path });
     pendingPathConfirmation=path;
+    if(AUTH_UI&&typeof AUTH_UI.rememberPath==='function')AUTH_UI.rememberPath(path);
+    if(AUTH_UI&&typeof AUTH_UI.savePath==='function'){
+      AUTH_UI.savePath(path).catch(error=>console.warn('[path] authenticated save failed:',error&&error.message||error));
+    }
     confirm.textContent='SAVING '+PATHS[path].name.toUpperCase()+'...';
     if(NET.on&&NET.room){
       NET.room.send('setPath',{path});
@@ -4940,7 +4944,8 @@ function showPathSelection(){
 function confirmPathSelection(result){
   const path=String(result&&result.path||pendingPathConfirmation||'');
   if(!pendingPathConfirmation)return false;
-  if(!result||result.ok!==true||path!==pendingPathConfirmation||!PATHS[path]){
+  const restoredLockedPath=!!(result&&result.reason==='locked'&&PATHS[path]);
+  if(!result||(result.ok!==true&&!restoredLockedPath)||(path!==pendingPathConfirmation&&!restoredLockedPath)||!PATHS[path]){
     pendingPathConfirmation='';
     const confirm=document.getElementById('pathconfirm');
     if(confirm){confirm.disabled=false;confirm.textContent='TRY AGAIN';}

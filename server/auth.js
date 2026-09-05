@@ -1005,6 +1005,30 @@ class AuthService {
     return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, path: profile.S && profile.S.path || '', appearance: nextAppearance };
   }
 
+  async saveHunterPath(account, value) {
+    const publicAccount = this.publicAccount(account);
+    if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
+    const nextPath = resolveAdminAbilityPath(value);
+    if (!nextPath) throw Object.assign(new Error('Choose an ability path.'), { status: 400, code: 'ability_path' });
+    const store = this.getProfileStore();
+    let profile = null;
+    try {
+      const existing = await store.loadPlayer(publicAccount.id);
+      profile = existing ? sanitizeProfile(existing) : defaultProfile(publicAccount.displayName || publicAccount.username || 'Hunter');
+    } catch (e) {
+      throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' });
+    }
+    const currentPath = profile.S && profile.S.path || '';
+    if (currentPath && currentPath !== nextPath) {
+      throw Object.assign(new Error('Your hunter path is already locked.'), { status: 409, code: 'path_locked', path: currentPath });
+    }
+    profile.S.path = nextPath;
+    profile.tutorials.ability = Math.max(profile.tutorials.ability | 0, TUTORIAL_VERSIONS.ability);
+    await store.savePlayer(publicAccount.id, profile);
+    await updateLivePlayerProfiles(publicAccount.id, { path: nextPath });
+    return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, path: nextPath, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
+  }
+
   async saveHunterProfile(account, body) {
     const publicAccount = this.publicAccount(account);
     if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
@@ -1275,6 +1299,16 @@ class AuthService {
         res.json({ ok: true, gameProfile });
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Appearance update failed.' });
+      }
+    });
+    app.post('/auth/profile/path', async (req, res) => {
+      const account = this.authenticateRequest(req);
+      if (!account) return res.status(401).json({ ok: false });
+      try {
+        const gameProfile = await this.saveHunterPath(account, req.body && req.body.path);
+        res.json({ ok: true, gameProfile });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', path: e.path || '', error: e.status ? e.message : 'Path update failed.' });
       }
     });
     app.post('/auth/profile', async (req, res) => {

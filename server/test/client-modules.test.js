@@ -1628,6 +1628,8 @@ test('path selection persists and returns directly to town without ability train
   assert.match(networking, /S\.path=serverPath\|\|authPath\|\|'';/, 'login hydration preserves the signed-in profile path when a room snapshot is stale');
   assert.match(networking, /NET\.room\.send\('setPath',\{path:authPath\}\)/, 'a stale room profile is healed from the durable signed-in profile');
   assert.match(combat, /AUTH_UI\.rememberPath\(path\)/, 'confirmed choices update the account-scoped pathway cache immediately');
+  assert.match(combat, /AUTH_UI\.savePath\(path\)/, 'path choices also use authenticated profile storage instead of relying only on the room lifecycle');
+  assert.match(combat, /result\.reason==='locked'/, 'a pre-existing server pathway is restored instead of reopening the picker');
   assert.match(networking, /AUTH_UI\.savedPath\(\)/, 'login hydration can recover a confirmed path from the account-scoped browser cache');
   assert.match(combat, /if\(!onboardingDone\(\)\)\{\s*beginOnboarding\(\)/, 'a confirmed first path enters unfinished onboarding');
   assert.match(combat, /dimensionsApi\.placePlayerAtTownReturn\(\)/, 'completed players return through the dimension-owned safe town point');
@@ -3623,6 +3625,9 @@ test('auth controller logs into the typed account instead of reusing a different
     assert.equal(local.get('blockcraft.hunter.path.v1:u_dylan'), 'mage');
     controller.state.gameProfile.path = '';
     assert.equal(controller.savedPath(), 'mage', 'the confirmed pathway survives a blank login profile');
+    local.delete('blockcraft.hunter.path.v1:u_dylan');
+    controller.state.account = { id: 'student_renumbered', username: 'dylan.lynee@example.com' };
+    assert.equal(controller.savedPath(), 'mage', 'the pathway backup follows a stable login identity when an external account id changes');
     controller.state.account = { id: 'u_admin', username: 'admin.levin@example.com' };
     assert.equal(controller.savedPath(), '', 'pathway recovery is isolated to the signed-in account');
   } finally {

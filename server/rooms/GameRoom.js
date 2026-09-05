@@ -1840,12 +1840,18 @@ class GameRoom extends Room {
         changed = true;
       }
     }
+    if (typeof patch.path === 'string' && ABILITY_PATHS[patch.path] && prof.S.path !== patch.path) {
+      prof.S.path = patch.path;
+      prof.tutorials.ability = Math.max(prof.tutorials.ability | 0, TUTORIAL_VERSIONS.ability);
+      changed = true;
+    }
     if (!changed) return false;
     for (const client of [...(this.clients || [])]) {
       if (this.tokens.get(client.sessionId) !== id) continue;
       const p = this.state.players.get(client.sessionId);
       if (p) {
         if (prof.name) p.name = prof.name;
+        if (typeof patch.path === 'string') p.path = prof.S.path;
         p.appearance = JSON.stringify(APPEARANCE_SYSTEM.sanitizeAppearance(prof.appearance));
       }
       this.sendProfile(client, prof);

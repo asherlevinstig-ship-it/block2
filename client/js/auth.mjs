@@ -11,6 +11,7 @@ export function createAuthController({ user, password, playerName, status, play,
   let draftAppearance = sanitizeAppearance(null);
   const sessionKey = 'blockcraft.auth.session';
   const pathKeyPrefix = 'blockcraft.hunter.path.v1:';
+  const pathRecordKey = 'blockcraft.hunter.path.v2';
   const creator = typeof document === 'undefined' ? null : ensureCharacterCreator();
 
   function pathStorageKey(account = state.account) {
@@ -23,7 +24,14 @@ export function createAuthController({ user, password, playerName, status, play,
     const key = pathStorageKey();
     if (!clean || !key) return '';
     if (state.gameProfile) state.gameProfile.path = clean;
-    try { localStorage.setItem(key, clean); } catch (_) {}
+    try {
+      localStorage.setItem(key, clean);
+      localStorage.setItem(pathRecordKey, JSON.stringify({
+        accountId: String(state.account && state.account.id || ''),
+        username: String(state.account && state.account.username || '').trim().toLowerCase(),
+        path: clean,
+      }));
+    } catch (_) {}
     return clean;
   }
 
@@ -34,8 +42,39 @@ export function createAuthController({ user, password, playerName, status, play,
     if (!key) return '';
     try {
       const localPath = String(localStorage.getItem(key) || '');
-      return /^(shadow|mage|guardian|verdant)$/.test(localPath) ? localPath : '';
+      if (/^(shadow|mage|guardian|verdant)$/.test(localPath)) return localPath;
+      const record = JSON.parse(localStorage.getItem(pathRecordKey) || 'null');
+      const accountId = String(state.account && state.account.id || '');
+      const username = String(state.account && state.account.username || '').trim().toLowerCase();
+      const matchesAccount = !!record && (
+        (accountId && String(record.accountId || '') === accountId)
+        || (username && String(record.username || '').trim().toLowerCase() === username)
+      );
+      return matchesAccount && /^(shadow|mage|guardian|verdant)$/.test(String(record.path || '')) ? String(record.path) : '';
     } catch (_) { return ''; }
+  }
+
+  function forgetRememberedPath(account = state.account) {
+    const key = pathStorageKey(account);
+    try {
+      if (key) localStorage.removeItem(key);
+      const record = JSON.parse(localStorage.getItem(pathRecordKey) || 'null');
+      const accountId = String(account && account.id || '');
+      const username = String(account && account.username || '').trim().toLowerCase();
+      if (record && (
+        (accountId && String(record.accountId || '') === accountId)
+        || (username && String(record.username || '').trim().toLowerCase() === username)
+      )) localStorage.removeItem(pathRecordKey);
+    } catch (_) {}
+  }
+
+  async function savePath(path) {
+    const clean = rememberPath(path);
+    if (!clean) throw new Error('Unknown ability path');
+    const data = await json('/auth/profile/path', { path: clean });
+    if (data.gameProfile) state.gameProfile = data.gameProfile;
+    rememberPath(data.gameProfile && data.gameProfile.path || clean);
+    return data.gameProfile || { path: clean };
   }
 
   function ensureCharacterCreator() {
@@ -521,7 +560,7 @@ export function createAuthController({ user, password, playerName, status, play,
         : state.account && state.account.id ? { accountId: state.account.id }
           : {};
     if (!body.email && !body.accountId) throw new Error('Sign in or enter an email/account id');
-    const ownPathKey = pathStorageKey();
+    const ownAccount = state.account;
     const res = await adminFetch('/auth/admin/reset-player', {
       method: 'POST',
       credentials: 'include',
@@ -531,9 +570,7 @@ export function createAuthController({ user, password, playerName, status, play,
     let data = {};
     try { data = await res.json(); } catch (_) {}
     if (!res.ok) throw new Error(data.error || 'Reset failed');
-    if (ownPathKey && (!value || body.accountId === (state.account && state.account.id) || body.email === (state.account && state.account.username))) {
-      try { localStorage.removeItem(ownPathKey); } catch (_) {}
-    }
+    if (!value || body.accountId === (ownAccount && ownAccount.id) || body.email === (ownAccount && ownAccount.username)) forgetRememberedPath(ownAccount);
     state.account = null;
     state.gameProfile = null;
     state.checked = false;
@@ -635,5 +672,5 @@ export function createAuthController({ user, password, playerName, status, play,
   }
 
   setAppearance(null);
-  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, isAdminAccount, resetPlayerProfile, adminInspectPlayer, adminPatchPlayer, saveHunterName, saveHunterProfile, saveAppearance, openAppearanceEditor, closeAppearanceEditor, rememberPath, savedPath, currentAppearance: () => sanitizeAppearance(draftAppearance) };
+  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, isAdminAccount, resetPlayerProfile, adminInspectPlayer, adminPatchPlayer, saveHunterName, saveHunterProfile, saveAppearance, savePath, openAppearanceEditor, closeAppearanceEditor, rememberPath, savedPath, currentAppearance: () => sanitizeAppearance(draftAppearance) };
 }
