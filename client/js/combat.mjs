@@ -1043,6 +1043,11 @@ function layoutLeftHudExtras(){
   }
   for(const el of [questionBtn,socialBtn,bug,stuck]){
     if(!el)continue;
+    if(el===socialBtn&&!tabletInputState.tablet){
+      el.style.left='';
+      el.style.top='';
+      continue;
+    }
     const visible=!el.classList.contains('hidden')&&getComputedStyle(el).display!=='none';
     if(visible){
       el.style.left=(narrow?8:16)+'px';

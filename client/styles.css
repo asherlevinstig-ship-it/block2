@@ -58,7 +58,9 @@
   body.tablet-mode #questionbtn:not(.hidden){display:block}
   #questionbtn:hover,#socialbtn:hover{filter:brightness(1.16);border-color:#ffd24a;color:#fff1c2}
   #questionbtn:before{content:"? ";color:#7dd3fc}
-  #socialbtn:before{content:"☰ ";color:#9ad26b}
+  #socialbtn .social-chat-icon{width:18px;height:18px;margin-right:7px;overflow:visible;vertical-align:middle}
+  #socialbtn .social-chat-icon path{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+  #socialbtn .social-chat-icon circle{fill:currentColor}
   #stuckrescuebtn{position:fixed;left:10px;top:352px;z-index:12;height:34px;padding:0 12px;border:1px solid rgba(125,211,252,.72);border-radius:6px;background:linear-gradient(180deg,rgba(13,39,57,.94),rgba(7,14,24,.9));box-shadow:0 8px 22px rgba(0,0,0,.38),0 0 16px rgba(125,211,252,.16),inset 0 0 14px rgba(255,255,255,.04);color:#bfecff;font:800 10px inherit;letter-spacing:1.3px;text-shadow:0 2px 0 #000;cursor:pointer}
   #stuckrescuebtn.hidden{display:none}
   #stuckrescuebtn:hover{filter:brightness(1.16);border-color:#bff4ff;color:#fff}
@@ -2451,4 +2453,23 @@ body.tablet-mode.mobile-play-mode:has(#landmap.map-utility:not(.hidden)) #curren
 body.tablet-mode.mobile-play-mode:has(#landmap.map-utility.worldmap:not(.hidden)) #currentquest{
   top:calc(224px + env(safe-area-inset-top,0px))!important;
 }
+body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn{
+  left:auto;
+  right:18px;
+  top:auto;
+  bottom:18px;
+  width:54px;
+  min-width:54px;
+  height:54px;
+  padding:0;
+  border:1px solid rgba(125,211,252,.75);
+  border-radius:50%;
+  background:linear-gradient(160deg,rgba(20,67,91,.97),rgba(5,17,29,.96));
+  box-shadow:0 10px 28px rgba(0,0,0,.48),0 0 20px rgba(80,200,255,.22),inset 0 0 16px rgba(125,211,252,.09);
+  color:#dff7ff;
+}
+body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn .social-chat-icon{width:27px;height:27px;margin:0}
+body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn .socialbtn-label{display:none}
+body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn:hover,
+body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn:focus-visible{transform:translateY(-2px) scale(1.04);border-color:#ffe28a;color:#fff;outline:2px solid rgba(125,211,252,.25);outline-offset:3px}
 

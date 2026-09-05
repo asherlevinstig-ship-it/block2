@@ -4812,6 +4812,15 @@ test('questions HUD button is visible only in tablet mode', () => {
   assert.match(styles, /body\.tablet-mode #questionbtn:not\(\.hidden\)\{display:block\}/);
 });
 
+test('desktop social control is a bottom-right chat button', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  assert.match(html, /id="socialbtn"[\s\S]*social-chat-icon[\s\S]*socialbtn-label">CHAT/);
+  assert.match(styles, /body:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #socialbtn\{[\s\S]*right:18px;[\s\S]*bottom:18px;/);
+  assert.match(combat, /el===socialBtn&&!tabletInputState\.tablet[\s\S]*el\.style\.left=''[\s\S]*el\.style\.top=''/);
+});
+
 test('a desktop world click upgrades finite fallback mouse-look to native pointer lock', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   assert.match(combat, /if\(lockFallback&&document\.pointerLockElement!==renderer\.domElement&&!isTouchGameplayDevice\(\)\)/);
