@@ -8926,9 +8926,9 @@ function armSysHide(t){
   const dur=t.tier==='major'?6000:t.tier==='minor'?3200:4200;
   t.hideTimer=setTimeout(()=>dismissSysToast(t),dur);
 }
-function eventLog(text, name='[Event]'){
+function eventLog(text, name='[Event]', channel=''){
   if(dim!=='overworld')return;
-  chatLine(name, text);
+  chatLine(name, text, channel);
 }
 function itemLabel(id){
   return ITEMS[id] ? ITEMS[id].name : ('Item '+id);

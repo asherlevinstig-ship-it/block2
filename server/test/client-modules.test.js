@@ -1789,11 +1789,19 @@ test('cursor item follows the mouse without relying on a leaked module global',(
   assert.match(combat,/if\(cursorEl\)\{cursorEl\.style\.left=.*cursorEl\.style\.top=/);
 });
 
-test('low mana or stamina does not create automatic Recall prompts',()=>{
+test('low mana or stamina creates a standout event-log suggestion without popup prompts',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const hud=fs.readFileSync(path.join(__dirname,'..','..','client','js','hud.mjs'),'utf8');
-  assert.doesNotMatch(frame,/maybePromptRecallRecharge|nextRecallRechargeHintAt|Recall recharge question/);
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(frame,/function maybeLogRecallResourceSuggestion\(now\)/);
+  assert.match(frame,/manaLow=mp\/Math\.max\(1,maxMp\(\)\)<=\.28,staminaLow=sp\/Math\.max\(1,maxSp\(\)\)<=\.24/);
+  assert.match(frame,/eventLog\('Low '\+what\+'\. Press P to answer a Recall question and recharge\.'[\s\S]*'\[Suggestion\]'[\s\S]*'suggestion'\)/);
+  assert.match(frame,/nextRecallResourceSuggestionAt=now\+60000/);
+  assert.doesNotMatch(frame,/sysMsg\('Low |showName\('LOW |setRecallRechargeNudge/);
   assert.doesNotMatch(hud,/recallRechargeNudge|recallrechargenudge/);
+  assert.match(world,/function eventLog\(text, name='\[Event\]', channel=''\)[\s\S]*chatLine\(name, text, channel\)/);
+  assert.match(styles,/\.chatline\.suggestion\{[\s\S]*font-weight:900/);
 });
 
 test('Recall Cast restores stamina and level-one town HUD shows the stamina bar',()=>{

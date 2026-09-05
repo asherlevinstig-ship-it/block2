@@ -600,6 +600,8 @@ function applyDungeonPing(message){
 globalThis.applyDungeonPing=applyDungeonPing;
 refreshHUD();
 hudState.slots[0].classList.add('sel');
+let recallResourceSuggestionState='';
+let nextRecallResourceSuggestionAt=0;
 let nextTreasureMapHintAt=0;
 let nextFirstHandsProtectedHintAt=0;
 let nextLandProtectedHintAt=0;
@@ -611,6 +613,16 @@ let lastWeatherDiscoveryPromptWeather=null;
 const weatherDiscoveryHintCooldowns=new Map();
 function firstHandsQuestActive(){
   return !!(quest&&quest.giver==='Mara Vale'&&quest.title==='First Hands'&&!questDone());
+}
+function maybeLogRecallResourceSuggestion(now){
+  if(dim!=='overworld'||!NET.on||!NET.room||!locked||cutscene||(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.active))return;
+  const manaLow=mp/Math.max(1,maxMp())<=.28,staminaLow=sp/Math.max(1,maxSp())<=.24;
+  if(!manaLow&&!staminaLow){recallResourceSuggestionState='';nextRecallResourceSuggestionAt=0;return;}
+  const what=manaLow&&staminaLow?'mana and stamina':manaLow?'mana':'stamina';
+  if(what===recallResourceSuggestionState&&now<nextRecallResourceSuggestionAt)return;
+  recallResourceSuggestionState=what;
+  nextRecallResourceSuggestionAt=now+60000;
+  eventLog('Low '+what+'. Press P to answer a Recall question and recharge.','[Suggestion]','suggestion');
 }
 function maybePromptTreasureMap(now){
   const map=globalThis.BlockcraftTreasureMap;
@@ -3548,6 +3560,7 @@ function tick(now){
       regenAcc+=dt;
       if(regenAcc>=3){ regenAcc=0; hp=Math.min(maxHp(), hp+1+Math.floor((S.vit-1)/5)); }
     }
+    maybeLogRecallResourceSuggestion(now);
     maybePromptTreasureMap(now);
     maybePromptWeatherDiscovery(now);
     renderBars();
