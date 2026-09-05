@@ -121,6 +121,37 @@ function biomeAt(x, z) {
   if (moist > 0.52) return BIO.FOREST;
   return BIO.PLAINS;
 }
+function naturalTreeSpecAt(x, z) {
+  x |= 0; z |= 0;
+  if (x < 3 || z < 3 || x >= WX - 3 || z >= WX - 3) return null;
+  const biome = biomeAt(x, z);
+  const treeThresh = biome === BIO.FOREST ? 0.978 : (biome === BIO.PLAINS || biome === BIO.SWAMP) ? 0.992 : (biome === BIO.SNOWY ? 0.987 : 1.1);
+  if (hash2(x * 5 + 1, z * 5 + 7) <= treeThresh) return null;
+  const groundY = terrainHeight(x, z);
+  const ground = groundY > SNOWLINE || biome === BIO.SNOWY ? B.SNOW
+    : (biome === BIO.DESERT ? B.SAND : biome === BIO.MESA ? B.RED_SAND : groundY <= SEA + 1 ? B.SAND : B.GRASS);
+  if (ground !== B.GRASS && ground !== B.SNOW) return null;
+  const height = 4 + Math.floor(hash2(x, z) * 2);
+  const blocks = [];
+  for (let i = 1; i <= height; i++) blocks.push({ x, y: groundY + i, z, id: B.LOG });
+  const top = groundY + height;
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+    const dist = Math.abs(dx) + Math.abs(dz) + Math.abs(dy) * 1.5;
+    if (dist > 3.4) continue;
+    const bx = x + dx, by = top + dy + 1, bz = z + dz;
+    if (bx === x && bz === z && by <= groundY + height) continue;
+    if (hash2(bx * 3 + by, bz * 3 - by) > 0.08) blocks.push({ x: bx, y: by, z: bz, id: B.LEAVES });
+  }
+  return { x, z, groundY, height, blocks };
+}
+function naturalTreeForBlock(x, y, z) {
+  x |= 0; y |= 0; z |= 0;
+  for (let tx = x - 2; tx <= x + 2; tx++) for (let tz = z - 2; tz <= z + 2; tz++) {
+    const spec = naturalTreeSpecAt(tx, tz);
+    if (spec && spec.blocks.some(block => block.x === x && block.y === y && block.z === z)) return spec;
+  }
+  return null;
+}
 function isTrainingMeadowLand(x, z, pad = 0) {
   return Math.hypot(x - TRAINING_MEADOW.x, z - TRAINING_MEADOW.z) <= TRAINING_MEADOW.R + pad;
 }
@@ -1203,7 +1234,7 @@ module.exports = {
   WX, WH, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, TRAINING_MEADOW_TOWN_PORTAL, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
   townPos, townBlockPos,
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
-  biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
+  biomeAt, naturalTreeSpecAt, naturalTreeForBlock, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
   ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, trainingMeadowTownPortalPoint, buildTrainingMeadow,
   buildGuildHallBase, isCentralCourtProtectedEdit, isTownFarmWorksite,

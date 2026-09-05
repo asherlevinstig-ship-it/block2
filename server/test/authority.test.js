@@ -10084,6 +10084,36 @@ test('authoritative room world generates biome blocks', () => {
   assert.equal(w.getB(fx, W.TOWN.G + 1, fz), W.B.WHEAT_3);
 });
 
+test('harvested natural trees regrow without replacing player blocks', async () => {
+  let spec = null;
+  for (let x = 100; x < 260 && !spec; x++) for (let z = 100; z < 260 && !spec; z++) spec = W.naturalTreeSpecAt(x, z);
+  assert.ok(spec, 'expected a deterministic natural tree outside town');
+
+  const room = makeRoom();
+  room.initTreeRegrowthState();
+  room.world.setB(spec.x, spec.groundY, spec.z, W.biomeAt(spec.x, spec.z) === W.BIO.SNOWY ? W.B.SNOW : W.B.GRASS);
+  for (const block of spec.blocks) room.world.setB(block.x, block.y, block.z, block.id);
+  const missingLog = spec.blocks.find(block => block.id === W.B.LOG);
+  const canopyBlock = spec.blocks.find(block => block.id === W.B.LEAVES);
+  room.world.setB(missingLog.x, missingLog.y, missingLog.z, W.B.AIR);
+  room.world.setB(canopyBlock.x, canopyBlock.y, canopyBlock.z, W.B.PLANKS);
+
+  assert.equal(room.queueNaturalTreeRegrowth(missingLog.x, missingLog.y, missingLog.z, 1000), true);
+  assert.equal(room.tickTreeRegrowth(60 * 60 * 1000), 0, 'a player block postpones the whole tree');
+  assert.equal(room.world.getB(missingLog.x, missingLog.y, missingLog.z), W.B.AIR);
+
+  room.world.setB(canopyBlock.x, canopyBlock.y, canopyBlock.z, W.B.AIR);
+  assert.equal(room.tickTreeRegrowth(2 * 60 * 60 * 1000) > 0, true);
+  assert.equal(room.world.getB(missingLog.x, missingLog.y, missingLog.z), W.B.LOG);
+  assert.equal(room.world.getB(canopyBlock.x, canopyBlock.y, canopyBlock.z), W.B.LEAVES);
+  assert.equal(room.treeRestoredEditKeys.has(key(missingLog.x, missingLog.y, missingLog.z)), true);
+  assert.equal(room.dirtyWorld, true);
+  let savedEdits = null;
+  room.store = { saveWorldEdits: async edits => { savedEdits = edits; } };
+  await room.flush();
+  assert.deepEqual(savedEdits, {}, 'restored baseline trees are not retained as permanent world edits');
+});
+
 test('regional landmark layout is deterministic, distributed, and includes every requested archetype', () => {
   const a = W.regionalLandmarkSpecs();
   const b = W.regionalLandmarkSpecs();

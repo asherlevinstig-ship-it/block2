@@ -34,6 +34,9 @@ const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
 const DEFAULT_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
 const BUG_REPORT_MAIL_TIMEOUT_MS = Math.max(2000, Math.min(15000, Number(process.env.BUG_REPORT_MAIL_TIMEOUT_MS || 8000) | 0));
+const TREE_REGROW_MS = Math.max(30000, Math.min(60 * 60 * 1000, Number(process.env.BLOCKCRAFT_TREE_REGROW_MS || 5 * 60 * 1000) | 0));
+const TREE_REGROW_RETRY_MS = Math.max(10000, Math.min(5 * 60 * 1000, Number(process.env.BLOCKCRAFT_TREE_REGROW_RETRY_MS || 30000) | 0));
+const TREE_REGROW_PLAYER_CLEARANCE = 7;
 const TAMING_WILD_TRACKS = Object.freeze({
   rabbit_meadow: { id: 'rabbit_meadow', kind: 'rabbit', label: 'Rabbit Meadow Tracks', x: 396.5, y: 20.16, z: 933.5, clue: 'Tiny quick prints weave through the clover.' },
   deer_grove: { id: 'deer_grove', kind: 'deer', label: 'Deer Grove Tracks', x: 390.5, y: 20.16, z: 953.5, clue: 'Careful hoof marks circle the quiet trees.' },
@@ -328,6 +331,7 @@ class GameRoom extends Room {
     this.cropTimers = new Map();
     this.cropMeta = new Map();
     this.cropGrowAcc = 0;
+    this.initTreeRegrowthState();
 
     // ---- dragon incubation / nesting (dragons.mixin.js) ----
     this.initDragonState();         // must precede the incubation/nest restore loaders below
@@ -360,6 +364,7 @@ class GameRoom extends Room {
       }
       if (claimCount) console.log('[persist] restored ' + claimCount + ' land claims');
     } catch (e) { console.warn('[persist] land claim load failed:', e.message); }
+    this.queueMissingNaturalTrees(saved);
     this.chests = new Map();
     this.furnaces = new Map();
     if (applied) console.log('[persist] restored ' + applied + ' world edits');
@@ -420,6 +425,7 @@ class GameRoom extends Room {
     this.clock.setInterval(() => this.broadcastSkyshipSync(), 30000);
     this.clock.setInterval(() => this.broadcastDayCycleSync(), 30000);
     this.clock.setInterval(() => this.updateGameInterestViews(), 250);
+    this.clock.setInterval(() => this.tickTreeRegrowth(Date.now()), 15000);
 
     // ---- sim state ----
     this.mobSeq = 0;
@@ -1548,6 +1554,7 @@ class GameRoom extends Room {
       const obj = {};
       this.state.edits.forEach((v, k) => {
         if (this.eventTransientEditKeys && this.eventTransientEditKeys.has(k)) return;
+        if (this.treeRestoredEditKeys && this.treeRestoredEditKeys.has(k)) return;
         const [x, , z] = k.split(',').map(Number);
         obj[k] = v;
       });
@@ -2899,6 +2906,67 @@ class GameRoom extends Room {
     if (!p) return false;
     return Math.hypot(x + .5 - p.x, y + .5 - (p.y + PLAYER_EYE_HEIGHT), z + .5 - p.z) <= BLOCK_EDIT_REACH;
   }
+  initTreeRegrowthState() {
+    this.treeRegrowth = new Map();
+    this.treeRestoredEditKeys = new Set();
+  }
+  naturalTreeCanRegrow(spec) {
+    if (!spec || this.isTownProtected(spec.x, spec.z) || W.isTrainingMeadowLand(spec.x, spec.z, 3)) return false;
+    if (![W.B.GRASS, W.B.SNOW].includes(this.world.getB(spec.x, spec.groundY, spec.z))) return false;
+    for (const block of spec.blocks) {
+      const claim = this.landClaimFor(block.x, block.z);
+      if (claim && !this.isLandClaimAbandoned(claim)) return false;
+      const current = this.world.getB(block.x, block.y, block.z);
+      if (current !== W.B.AIR && current !== block.id && current !== W.B.LOG && current !== W.B.LEAVES) return false;
+    }
+    for (const player of this.state.players.values()) {
+      if (!player || player.dgn || player.dim && player.dim !== 'overworld') continue;
+      if (Math.hypot(player.x - spec.x, player.z - spec.z) < TREE_REGROW_PLAYER_CLEARANCE) return false;
+    }
+    return true;
+  }
+  queueNaturalTreeRegrowth(x, y, z, now = Date.now()) {
+    if (!this.treeRegrowth) this.initTreeRegrowthState();
+    const spec = W.naturalTreeForBlock(x, y, z);
+    if (!spec || this.isTownProtected(spec.x, spec.z) || W.isTrainingMeadowLand(spec.x, spec.z, 3)) return false;
+    if (![W.B.GRASS, W.B.SNOW].includes(this.world.getB(spec.x, spec.groundY, spec.z))) return false;
+    const key = spec.x + ',' + spec.z;
+    if (!this.treeRegrowth.has(key)) this.treeRegrowth.set(key, { spec, dueAt: now + TREE_REGROW_MS });
+    return true;
+  }
+  queueMissingNaturalTrees(saved, now = Date.now()) {
+    if (!saved || typeof saved !== 'object') return 0;
+    let queued = 0;
+    for (const [key, id] of Object.entries(saved)) {
+      if ((id | 0) !== W.B.AIR) continue;
+      const parts = key.split(',').map(Number);
+      if (parts.length !== 3 || !parts.every(Number.isFinite)) continue;
+      if (this.queueNaturalTreeRegrowth(parts[0], parts[1], parts[2], now)) queued++;
+    }
+    return queued;
+  }
+  tickTreeRegrowth(now = Date.now()) {
+    if (!this.treeRegrowth || !this.treeRegrowth.size) return 0;
+    let restored = 0;
+    for (const [treeKey, pending] of this.treeRegrowth) {
+      if (!pending || now < pending.dueAt) continue;
+      if (!this.naturalTreeCanRegrow(pending.spec)) {
+        pending.dueAt = now + TREE_REGROW_RETRY_MS;
+        continue;
+      }
+      for (const block of pending.spec.blocks) {
+        if (this.world.getB(block.x, block.y, block.z) !== W.B.AIR) continue;
+        const key = block.x + ',' + block.y + ',' + block.z;
+        this.world.setB(block.x, block.y, block.z, block.id);
+        this.state.edits.set(key, block.id);
+        this.treeRestoredEditKeys.add(key);
+        restored++;
+      }
+      this.treeRegrowth.delete(treeKey);
+    }
+    if (restored) this.dirtyWorld = true;
+    return restored;
+  }
   handleWorldEdit(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m || p.dgn) return;
@@ -2918,10 +2986,13 @@ class GameRoom extends Room {
     if (prev === W.B.CHEST && id === W.B.AIR && !this.canBreakChest(client, 'overworld:' + x + ',' + y + ',' + z)) {
       return this.rejectEdit(client, x, y, z, prev, id);
     }
-    const naturalHarvest = id === W.B.AIR && !this.state.edits.has(x + ',' + y + ',' + z);
+    const editKey = x + ',' + y + ',' + z;
+    const naturalHarvest = id === W.B.AIR && !this.state.edits.has(editKey);
     if (id !== W.B.AIR && !this.consumeForPlacement(client, id)) return this.rejectEdit(client, x, y, z, prev, id);
+    if (id === W.B.AIR && (prev === W.B.LOG || prev === W.B.LEAVES)) this.queueNaturalTreeRegrowth(x, y, z);
+    if (this.treeRestoredEditKeys) this.treeRestoredEditKeys.delete(editKey);
     this.world.setB(x, y, z, id);
-    this.state.edits.set(x + ',' + y + ',' + z, id);
+    this.state.edits.set(editKey, id);
     this.dirtyWorld = true;
     if (prev === W.B.EGG_INSULATOR && id !== W.B.EGG_INSULATOR) { this.cancelDragonIncubationAt(x, y, z); this.cancelNestDragonsAt(x, y, z); }
     if (prev === W.B.CHEST && id === W.B.AIR) this.deleteChest('overworld:' + x + ',' + y + ',' + z);
