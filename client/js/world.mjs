@@ -5067,21 +5067,42 @@ for(const [lx,lz] of [[TOWN.TC-6,TOWN.TC-6],[TOWN.TC+6,TOWN.TC-6],[TOWN.TC-6,TOW
   townGroup.add(sp);
 }
 
-// First-time guidance: small breadcrumbs lead toward a tall pillar of light at the target.
+// Directional quest breadcrumbs lead toward a distinct tall beacon at the target.
 const guidePathGroup=new THREE.Group();
 townGroup.add(guidePathGroup);
-const guidePathSprites=[];
+const guidePathMarkers=[];
 let coachTrail=null;
 const GUIDE_PATH_MAX=56;
+const guideChevronShape=new THREE.Shape();
+guideChevronShape.moveTo(0,.72);
+guideChevronShape.lineTo(.34,.12);
+guideChevronShape.lineTo(.16,-.02);
+guideChevronShape.lineTo(.16,-.42);
+guideChevronShape.lineTo(-.16,-.42);
+guideChevronShape.lineTo(-.16,-.02);
+guideChevronShape.lineTo(-.34,.12);
+guideChevronShape.closePath();
+const guideChevronGeometry=new THREE.ShapeGeometry(guideChevronShape);
 for(let i=0;i<GUIDE_PATH_MAX;i++){
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({
+  const group=new THREE.Group();
+  const chevron=new THREE.Mesh(guideChevronGeometry,new THREE.MeshBasicMaterial({
+    color:0x9ad26b, transparent:true, opacity:0,
+    depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending
+  }));
+  chevron.rotation.x=-Math.PI/2;
+  chevron.position.y=.035;
+  chevron.renderOrder=27;
+  const wisp=new THREE.Sprite(new THREE.SpriteMaterial({
     map:new THREE.CanvasTexture(glowTexCanvas), color:0x9ad26b, transparent:true, opacity:0,
     depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending
   }));
-  sp.scale.set(.78,.78,1);
-  sp.visible=false;
-  guidePathGroup.add(sp);
-  guidePathSprites.push(sp);
+  wisp.scale.set(.18,.36,1);
+  wisp.position.y=.22;
+  wisp.renderOrder=28;
+  group.add(chevron,wisp);
+  group.visible=false;
+  guidePathGroup.add(group);
+  guidePathMarkers.push({group,chevron,wisp});
 }
 const guideBeaconGroup=new THREE.Group();
 guideBeaconGroup.visible=false;
@@ -5159,6 +5180,16 @@ function dragonPracticeTarget(){
 }
 function firstHandsLoggingTarget(){
   return {x:HUB.northGate.x, z:HUB.northGate.z-15};
+}
+let firstHandsNorthGateReached=false;
+function firstHandsLoggingStage(){
+  const gate={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  const crossedNorthGate=player.pos.z<gate.z-1.5&&Math.abs(player.pos.x-gate.x)<10;
+  if(crossedNorthGate&&!firstHandsNorthGateReached){
+    firstHandsNorthGateReached=true;
+    eventLog('North Gate reached ✓. The trail now points toward the nearest logging area.','[Quest]');
+  }
+  return firstHandsNorthGateReached;
 }
 function wildPetTrailsTarget(){
   return {x:HUB.northGate.x+12, z:HUB.northGate.z-18};
@@ -5243,8 +5274,9 @@ function maraQuestGuidanceTarget(q){
   if(q.giver==='Mara Vale'&&q.title==='First Hands'){
     const have=Math.min(q.need||6,countItem(q.item||B.LOG));
     if(have>=(q.need||6)) return {kind:'mara-first-hands-return', color:0xffd24a, target:HUB.guide, route:[{x:player.pos.x,z:player.pos.z},{x:HUB.northGate.x,z:HUB.northGate.z+1.2},{x:TOWN.TC,z:TOWN.TC-5},HUB.guide]};
+    if(!firstHandsLoggingStage()) return {kind:'mara-first-hands-gate', color:0x9ad26b, target:northGate, route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},northGate]};
     const target=firstHandsLoggingTarget();
-    return {kind:'mara-first-hands', color:0x9ad26b, target, route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},northGate,target]};
+    return {kind:'mara-first-hands-logs', color:0x9ad26b, target, route:[{x:player.pos.x,z:player.pos.z},target]};
   }
   if(q.type==='utility'){
     return {kind:'mara-utility', color:0x8bbf5a, target:HUB.jobs, route:townRouteTo(HUB.jobs,'south')};
@@ -5291,8 +5323,9 @@ function serverObjectiveGuidanceTarget(o){
     if(current>=required || o.status==='claimable' || o.status==='complete'){
       return {kind:'server-first-hands-return',color:0xffd24a,target:HUB.guide,route:[{x:player.pos.x,z:player.pos.z},{x:HUB.northGate.x,z:HUB.northGate.z+1.2},{x:TOWN.TC,z:TOWN.TC-5},HUB.guide]};
     }
+    if(!firstHandsLoggingStage()) return {kind:'server-first-hands-gate',color:0x7dd3fc,target:gate,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate]};
     const target=firstHandsLoggingTarget();
-    return {kind:'server-first-hands-logs',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate,target]};
+    return {kind:'server-first-hands-logs',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},target]};
   }
   if(source==='job'&&o.status!=='claimable'&&o.status!=='complete'){
     const contract=o.jobContract&&typeof o.jobContract==='object'?o.jobContract:null;
@@ -5527,47 +5560,89 @@ function guidanceTargetInfo(){
   }
   return null;
 }
-function routePoints(route, spacing=1.75){
+function roundedGuidanceRoute(route){
+  if(!Array.isArray(route)||route.length<3)return Array.isArray(route)?route:[];
+  const out=[route[0]];
+  for(let i=1;i<route.length-1;i++){
+    const a=route[i-1],b=route[i],c=route[i+1];
+    const inDx=b.x-a.x,inDz=b.z-a.z,outDx=c.x-b.x,outDz=c.z-b.z;
+    const inLen=Math.hypot(inDx,inDz),outLen=Math.hypot(outDx,outDz);
+    if(inLen<.01||outLen<.01){out.push(b);continue;}
+    const radius=Math.min(3.2,inLen*.24,outLen*.24);
+    const enter={x:b.x-inDx/inLen*radius,z:b.z-inDz/inLen*radius};
+    const exit={x:b.x+outDx/outLen*radius,z:b.z+outDz/outLen*radius};
+    out.push(enter);
+    for(const t of [.25,.5,.75]){
+      const u=1-t;
+      out.push({
+        x:u*u*enter.x+2*u*t*b.x+t*t*exit.x,
+        z:u*u*enter.z+2*u*t*b.z+t*t*exit.z,
+      });
+    }
+    out.push(exit);
+  }
+  out.push(route[route.length-1]);
+  return out;
+}
+function routePoints(route, spacing=1.35){
   const pts=[];
-  for(let i=0;i<route.length-1;i++){
-    const a=route[i], b=route[i+1], dx=b.x-a.x, dz=b.z-a.z, len=Math.hypot(dx,dz);
-    const steps=Math.max(1, Math.floor(len/spacing));
-    for(let s=0;s<steps;s++){
+  const curved=roundedGuidanceRoute(route);
+  for(let i=0;i<curved.length-1;i++){
+    const a=curved[i], b=curved[i+1], dx=b.x-a.x, dz=b.z-a.z, len=Math.hypot(dx,dz);
+    const steps=Math.max(1, Math.ceil(len/spacing));
+    for(let s=1;s<=steps;s++){
       const t=s/steps;
       pts.push({x:a.x+dx*t, z:a.z+dz*t});
       if(pts.length>=GUIDE_PATH_MAX) return pts;
     }
   }
-  pts.push(route[route.length-1]);
   return pts.slice(0,GUIDE_PATH_MAX);
+}
+function setGuideMarkerOpacity(marker,value){
+  marker.chevron.material.opacity=value;
+  marker.group.visible=value>.02;
 }
 function tickGuidancePath(dt, now){
   const info=guidanceTargetInfo();
   const visible=!!(info && !qOpen && !uiOpen && !statOpen);
   guidePathGroup.visible=dim==='overworld';
   if(!visible){
-    for(const sp of guidePathSprites){
-      sp.material.opacity+=(0-sp.material.opacity)*Math.min(1,dt*8);
-      sp.visible=sp.material.opacity>.02;
+    for(const marker of guidePathMarkers){
+      const opacity=marker.chevron.material.opacity+(0-marker.chevron.material.opacity)*Math.min(1,dt*8);
+      setGuideMarkerOpacity(marker,opacity);
+      marker.wisp.material.opacity=opacity*.35;
     }
     setGuideBeaconOpacity(currentGuideBeaconOpacity()+(0-currentGuideBeaconOpacity())*Math.min(1,dt*8));
     return;
   }
   const pts=routePoints(info.route);
-  const pulse=.62+.28*Math.sin(now/360);
-  for(let i=0;i<guidePathSprites.length;i++){
-    const sp=guidePathSprites[i], p=pts[i];
+  const travel=now/500;
+  for(let i=0;i<guidePathMarkers.length;i++){
+    const marker=guidePathMarkers[i],p=pts[i];
     if(p){
-      sp.material.color.setHex(info.color);
-      sp.position.set(p.x, TOWN.G+1.08+Math.sin(now/420+i*.55)*.08, p.z);
-      sp.scale.set(.68+(i%3)*.08,.68+(i%3)*.08,1);
+      const next=pts[Math.min(i+1,pts.length-1)]||p;
+      const prev=pts[Math.max(0,i-1)]||p;
+      const dx=(next.x-p.x)||(p.x-prev.x),dz=(next.z-p.z)||(p.z-prev.z);
+      const phase=((travel-i)%5+5)%5;
+      const pulseDistance=Math.min(phase,5-phase);
+      const forwardPulse=Math.max(0,1-pulseDistance/1.15);
+      marker.chevron.material.color.setHex(info.color);
+      marker.wisp.material.color.setHex(info.color);
+      marker.group.position.set(p.x,surfaceY(p.x,p.z)+.04,p.z);
+      marker.group.rotation.y=Math.atan2(-dx,-dz);
+      marker.chevron.scale.set(.78+forwardPulse*.14,1+forwardPulse*.18,1);
       const d=Math.hypot(player.pos.x-p.x, player.pos.z-p.z);
-      const target=d<1.1 ? .08 : Math.max(.18, pulse-(i*.006));
-      sp.material.opacity+=(target-sp.material.opacity)*Math.min(1,dt*10);
-      sp.visible=true;
+      const target=d<1.05 ? .03 : .26+forwardPulse*.68;
+      const opacity=marker.chevron.material.opacity+(target-marker.chevron.material.opacity)*Math.min(1,dt*12);
+      setGuideMarkerOpacity(marker,opacity);
+      const rise=((now/850+i*.19)%1+1)%1;
+      marker.wisp.position.y=.18+rise*.38;
+      marker.wisp.scale.set(.14+forwardPulse*.05,.3+rise*.12,1);
+      marker.wisp.material.opacity=opacity*(1-rise)*(.32+forwardPulse*.32);
     } else {
-      sp.material.opacity+=(0-sp.material.opacity)*Math.min(1,dt*8);
-      sp.visible=sp.material.opacity>.02;
+      const opacity=marker.chevron.material.opacity+(0-marker.chevron.material.opacity)*Math.min(1,dt*8);
+      setGuideMarkerOpacity(marker,opacity);
+      marker.wisp.material.opacity=opacity*.25;
     }
   }
   const baseY=surfaceY(info.target.x,info.target.z)+.04;
