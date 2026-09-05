@@ -12,7 +12,6 @@ const JOBS_ENABLED=!!(globalThis.BlockcraftJobSystem&&globalThis.BlockcraftJobSy
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
-const setRecallRechargeNudge=hudApi.setRecallRechargeNudge||(()=>{});
 const NET=networkingState.connection,NETWORK=networkingState.controller,ONBOARD=networkingState.onboarding;
 const netTick=networkingApi.tick;
 /* Blockcraft frame-loop ES module. Runtime scheduling, simulation pumping, rendering, and diagnostics. */
@@ -190,7 +189,7 @@ function ensureDirectorCameraStyle(){
   directorStyleEl.textContent=
     '#directorhud{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:120;min-width:360px;padding:10px 14px;border:1px solid rgba(255,210,74,.55);border-radius:10px;background:rgba(5,10,18,.72);box-shadow:0 16px 40px rgba(0,0,0,.42),0 0 20px rgba(255,210,74,.12);color:#fff7c8;font-family:inherit;text-align:center;text-shadow:0 2px 0 #000;pointer-events:none}'+
     '#directorhud.hidden{display:none}#directorhud b{display:block;color:#ffd24a;letter-spacing:2.5px;font-size:12px}#directorhud span{display:block;margin-top:4px;color:#dbeafe;font-size:11px;letter-spacing:.6px}'+
-    'body.director-clean-hud #locationhud,body.director-clean-hud #coords,body.director-clean-hud #currentquest,body.director-clean-hud #homeworkhud,body.director-clean-hud #activitytracker,body.director-clean-hud #bugreportbtn,body.director-clean-hud #stuckrescuebtn,body.director-clean-hud #eventhud,body.director-clean-hud #keyprompthud,body.director-clean-hud #encounterprompt,body.director-clean-hud #gateprompt,body.director-clean-hud #stats,body.director-clean-hud #abilities,body.director-clean-hud #hotbar,body.director-clean-hud #utilitybar,body.director-clean-hud #statpointnudge,body.director-clean-hud #recallrechargenudge,body.director-clean-hud #sysmsgs,body.director-clean-hud #coachhud,body.director-clean-hud #tutorialhud,body.director-clean-hud #landmap{display:none!important}';
+    'body.director-clean-hud #locationhud,body.director-clean-hud #coords,body.director-clean-hud #currentquest,body.director-clean-hud #homeworkhud,body.director-clean-hud #activitytracker,body.director-clean-hud #bugreportbtn,body.director-clean-hud #stuckrescuebtn,body.director-clean-hud #eventhud,body.director-clean-hud #keyprompthud,body.director-clean-hud #encounterprompt,body.director-clean-hud #gateprompt,body.director-clean-hud #stats,body.director-clean-hud #abilities,body.director-clean-hud #hotbar,body.director-clean-hud #utilitybar,body.director-clean-hud #statpointnudge,body.director-clean-hud #sysmsgs,body.director-clean-hud #coachhud,body.director-clean-hud #tutorialhud,body.director-clean-hud #landmap{display:none!important}';
   document.head.appendChild(directorStyleEl);
 }
 function directorHud(){
@@ -601,7 +600,6 @@ function applyDungeonPing(message){
 globalThis.applyDungeonPing=applyDungeonPing;
 refreshHUD();
 hudState.slots[0].classList.add('sel');
-let nextRecallRechargeHintAt=0;
 let nextTreasureMapHintAt=0;
 let nextFirstHandsProtectedHintAt=0;
 let nextLandProtectedHintAt=0;
@@ -613,19 +611,6 @@ let lastWeatherDiscoveryPromptWeather=null;
 const weatherDiscoveryHintCooldowns=new Map();
 function firstHandsQuestActive(){
   return !!(quest&&quest.giver==='Mara Vale'&&quest.title==='First Hands'&&!questDone());
-}
-function maybePromptRecallRecharge(now){
-  if(dim!=='overworld'||!NET.on||!NET.room||!locked||cutscene){setRecallRechargeNudge(false);return;}
-  if(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.active){setRecallRechargeNudge(false);return;}
-  const manaMax=Math.max(1,maxMp()),staminaMax=Math.max(1,maxSp());
-  const manaLow=mp/manaMax<=.28,staminaLow=sp/staminaMax<=.24;
-  if(!manaLow&&!staminaLow){setRecallRechargeNudge(false);return;}
-  const what=manaLow&&staminaLow?'mana and stamina':manaLow?'mana':'stamina';
-  setRecallRechargeNudge(true,what);
-  if(now<nextRecallRechargeHintAt)return;
-  nextRecallRechargeHintAt=now+10000;
-  showName('LOW '+what.toUpperCase()+' - PRESS P');
-  sysMsg('Low <b>'+what+'</b> — press <b>P</b> for a Recall recharge question.','minor');
 }
 function maybePromptTreasureMap(now){
   const map=globalThis.BlockcraftTreasureMap;
@@ -3563,7 +3548,6 @@ function tick(now){
       regenAcc+=dt;
       if(regenAcc>=3){ regenAcc=0; hp=Math.min(maxHp(), hp+1+Math.floor((S.vit-1)/5)); }
     }
-    maybePromptRecallRecharge(now);
     maybePromptTreasureMap(now);
     maybePromptWeatherDiscovery(now);
     renderBars();

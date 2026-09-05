@@ -1789,19 +1789,11 @@ test('cursor item follows the mouse without relying on a leaked module global',(
   assert.match(combat,/if\(cursorEl\)\{cursorEl\.style\.left=.*cursorEl\.style\.top=/);
 });
 
-test('low mana or stamina prompts Recall recharge without interrupting active questions',()=>{
+test('low mana or stamina does not create automatic Recall prompts',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
-  assert.match(frame,/function maybePromptRecallRecharge\(now\)/);
-  assert.match(frame,/BlockcraftRecall&&globalThis\.BlockcraftRecall\.active/);
-  assert.match(frame,/mp\/manaMax<=\.28/);
-  assert.match(frame,/sp\/staminaMax<=\.24/);
-  assert.match(frame,/setRecallRechargeNudge\(true,what\)/);
-  assert.match(frame,/setRecallRechargeNudge\(false\)/);
-  assert.match(frame,/nextRecallRechargeHintAt=now\+10000/);
-  assert.match(frame,/showName\('LOW '\+what\.toUpperCase\(\)\+' - PRESS P'\)/);
-  assert.match(frame,/press <b>P<\/b> for a Recall recharge question/);
-  assert.match(frame,/Recall recharge question\.',\s*'minor'\)/);
-  assert.match(frame,/maybePromptRecallRecharge\(now\)/);
+  const hud=fs.readFileSync(path.join(__dirname,'..','..','client','js','hud.mjs'),'utf8');
+  assert.doesNotMatch(frame,/maybePromptRecallRecharge|nextRecallRechargeHintAt|Recall recharge question/);
+  assert.doesNotMatch(hud,/recallRechargeNudge|recallrechargenudge/);
 });
 
 test('Recall Cast restores stamina and level-one town HUD shows the stamina bar',()=>{
@@ -1983,9 +1975,8 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
   assert.match(css,/#keyprompthud\{position:fixed;right:18px;bottom:20px/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#keyprompthud\{right:8px;bottom:62px/);
   assert.match(css,/#statpointnudge\{position:fixed;left:50%;bottom:146px/);
-  assert.match(css,/#recallrechargenudge\{position:fixed;left:50%;bottom:204px/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#statpointnudge\{bottom:218px/);
-  assert.match(css,/@media \(max-width:760px\)[\s\S]*#recallrechargenudge\{bottom:262px/);
+  assert.doesNotMatch(css,/#recallrechargenudge/);
 });
 
 test('guided overlays suppress optional side HUD panels instead of overlapping them',()=>{
@@ -2009,7 +2000,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(html,/id="keyprompthud"/);
   assert.match(combat,/const KEY_PROMPTS=\[/);
   assert.match(combat,/updateKeyPromptHud\(showHud&&!modalInputOpen&&!claimMode&&!worldLoading/);
-  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #keyprompthud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #utilitybar,body\.game-modal-open #statpointnudge,body\.game-modal-open #recallrechargenudge,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
+  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #keyprompthud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #utilitybar,body\.game-modal-open #statpointnudge,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud/);
   assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #keyprompthud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
   assert.match(combat,/const minimal=offMainRoom\|\|\(onboardingActive&&dim==='tutorial'\)\|\|\(jobTutorialActive&&dim==='job'\);/);
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
@@ -3324,9 +3315,7 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(hud,/else if\(typeof globalThis\.openUtilitiesUI==='function'\)globalThis\.openUtilitiesUI\(\);/);
   assert.match(hud,/refreshUtilityHUD\(\);\s*refreshStatPointNudge\(\);\s*updateViewModel\(\);/);
   assert.match(hud,/statPointNudgeEl\.id='statpointnudge'/);
-  assert.match(hud,/recallRechargeNudgeEl\.id='recallrechargenudge'/);
-  assert.match(hud,/function setRecallRechargeNudge\(show=false,what='resources'\)/);
-  assert.match(hud,/BlockcraftRecall&&typeof globalThis\.BlockcraftRecall\.start==='function'/);
+  assert.doesNotMatch(hud,/recallRechargeNudge|recallrechargenudge/);
   assert.match(hud,/currentStatPoints\(\)[\s\S]*worldState&&worldState\.stats/);
   assert.match(hud,/refreshStatPointNudge/);
   assert.match(combat,/const utilityBar=document\.getElementById\('utilitybar'\);/);
