@@ -10,7 +10,33 @@ export function createAuthController({ user, password, playerName, status, play,
     : { skin:'#c98952', hair:'#e7d574', face:'#185f68', shirt:'#26283f', pants:'#17182a', accent:'#8f6aa7' };
   let draftAppearance = sanitizeAppearance(null);
   const sessionKey = 'blockcraft.auth.session';
+  const pathKeyPrefix = 'blockcraft.hunter.path.v1:';
   const creator = typeof document === 'undefined' ? null : ensureCharacterCreator();
+
+  function pathStorageKey(account = state.account) {
+    const id = account && String(account.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+    return id ? pathKeyPrefix + id : '';
+  }
+
+  function rememberPath(path) {
+    const clean = /^(shadow|mage|guardian|verdant)$/.test(String(path || '')) ? String(path) : '';
+    const key = pathStorageKey();
+    if (!clean || !key) return '';
+    if (state.gameProfile) state.gameProfile.path = clean;
+    try { localStorage.setItem(key, clean); } catch (_) {}
+    return clean;
+  }
+
+  function savedPath() {
+    const profilePath = state.gameProfile && state.gameProfile.path;
+    if (/^(shadow|mage|guardian|verdant)$/.test(String(profilePath || ''))) return rememberPath(profilePath);
+    const key = pathStorageKey();
+    if (!key) return '';
+    try {
+      const localPath = String(localStorage.getItem(key) || '');
+      return /^(shadow|mage|guardian|verdant)$/.test(localPath) ? localPath : '';
+    } catch (_) { return ''; }
+  }
 
   function ensureCharacterCreator() {
     if (!hunterSetup) return null;
@@ -495,6 +521,7 @@ export function createAuthController({ user, password, playerName, status, play,
         : state.account && state.account.id ? { accountId: state.account.id }
           : {};
     if (!body.email && !body.accountId) throw new Error('Sign in or enter an email/account id');
+    const ownPathKey = pathStorageKey();
     const res = await adminFetch('/auth/admin/reset-player', {
       method: 'POST',
       credentials: 'include',
@@ -504,6 +531,9 @@ export function createAuthController({ user, password, playerName, status, play,
     let data = {};
     try { data = await res.json(); } catch (_) {}
     if (!res.ok) throw new Error(data.error || 'Reset failed');
+    if (ownPathKey && (!value || body.accountId === (state.account && state.account.id) || body.email === (state.account && state.account.username))) {
+      try { localStorage.removeItem(ownPathKey); } catch (_) {}
+    }
     state.account = null;
     state.gameProfile = null;
     state.checked = false;
@@ -605,5 +635,5 @@ export function createAuthController({ user, password, playerName, status, play,
   }
 
   setAppearance(null);
-  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, isAdminAccount, resetPlayerProfile, adminInspectPlayer, adminPatchPlayer, saveHunterName, saveHunterProfile, saveAppearance, openAppearanceEditor, closeAppearanceEditor, currentAppearance: () => sanitizeAppearance(draftAppearance) };
+  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, isAdminAccount, resetPlayerProfile, adminInspectPlayer, adminPatchPlayer, saveHunterName, saveHunterProfile, saveAppearance, openAppearanceEditor, closeAppearanceEditor, rememberPath, savedPath, currentAppearance: () => sanitizeAppearance(draftAppearance) };
 }

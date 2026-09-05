@@ -2994,7 +2994,8 @@ function netRestoreProfile(m){
     if(m&&Array.isArray(m.activeObjectives))setActiveObjectives(m.activeObjectives,{announce:false});
     if(m&&Array.isArray(m.homeworkObjectives))applyHomeworkProgressList(m.homeworkObjectives);
     const authGameProfile=AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile;
-    const authPath=authGameProfile&&authGameProfile.path&&PATHS[authGameProfile.path]?authGameProfile.path:'';
+    const cachedPath=AUTH_UI&&typeof AUTH_UI.savedPath==='function'?AUTH_UI.savedPath():'';
+    const authPath=cachedPath&&PATHS[cachedPath]?cachedPath:'';
     const serverPath=m&&m.S&&m.S.path&&PATHS[m.S.path]?m.S.path:'';
     if(m&&m.S){
       S.lvl=m.S.lvl||1; S.xp=m.S.xp||0; S.pts=m.S.pts||0;
