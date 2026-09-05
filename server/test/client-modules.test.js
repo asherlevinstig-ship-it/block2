@@ -1805,6 +1805,14 @@ test('low mana or stamina creates a standout event-log suggestion without popup 
   assert.match(styles,/\.chatline\.suggestion\{[\s\S]*font-weight:900/);
 });
 
+test('low hunger suggests opening inventory and eating through the event log',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(frame,/function maybeLogHungerSuggestion\(now\)/);
+  assert.match(frame,/hungerLow=hunger\/Math\.max\(1,maxHunger\(\)\)<=\.35/);
+  assert.match(frame,/eventLog\('Hunger is low\. Press E to open inventory, select food, then right-click to eat\.'[\s\S]*'\[Suggestion\]'[\s\S]*'suggestion'\)/);
+  assert.match(frame,/nextHungerSuggestionAt=now\+60000/);
+});
+
 test('Recall Cast restores stamina and level-one town HUD shows the stamina bar',()=>{
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');

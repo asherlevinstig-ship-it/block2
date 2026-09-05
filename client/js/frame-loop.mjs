@@ -602,6 +602,8 @@ refreshHUD();
 hudState.slots[0].classList.add('sel');
 let recallResourceSuggestionState='';
 let nextRecallResourceSuggestionAt=0;
+let hungerSuggestionActive=false;
+let nextHungerSuggestionAt=0;
 let nextTreasureMapHintAt=0;
 let nextFirstHandsProtectedHintAt=0;
 let nextLandProtectedHintAt=0;
@@ -623,6 +625,15 @@ function maybeLogRecallResourceSuggestion(now){
   recallResourceSuggestionState=what;
   nextRecallResourceSuggestionAt=now+60000;
   eventLog('Low '+what+'. Press P to answer a Recall question and recharge.','[Suggestion]','suggestion');
+}
+function maybeLogHungerSuggestion(now){
+  if(dim!=='overworld'||!locked||cutscene)return;
+  const hungerLow=hunger/Math.max(1,maxHunger())<=.35;
+  if(!hungerLow){hungerSuggestionActive=false;nextHungerSuggestionAt=0;return;}
+  if(hungerSuggestionActive&&now<nextHungerSuggestionAt)return;
+  hungerSuggestionActive=true;
+  nextHungerSuggestionAt=now+60000;
+  eventLog('Hunger is low. Press E to open inventory, select food, then right-click to eat.','[Suggestion]','suggestion');
 }
 function maybePromptTreasureMap(now){
   const map=globalThis.BlockcraftTreasureMap;
@@ -3561,6 +3572,7 @@ function tick(now){
       if(regenAcc>=3){ regenAcc=0; hp=Math.min(maxHp(), hp+1+Math.floor((S.vit-1)/5)); }
     }
     maybeLogRecallResourceSuggestion(now);
+    maybeLogHungerSuggestion(now);
     maybePromptTreasureMap(now);
     maybePromptWeatherDiscovery(now);
     renderBars();

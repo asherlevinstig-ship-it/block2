@@ -10842,12 +10842,15 @@ test('admin parkour king and caravan event commands are not blocked by the produ
 test('public gate refill can spawn every missing unlocked rank at once', () => {
   const room = makeRoom();
   const spawned = [];
+  const announcements = [];
   room.spawnGate = rank => { spawned.push(rank); return true; };
+  room.broadcast = (type, msg) => announcements.push({ type, msg });
 
   const count = room.spawnMissingPublicGates(4, new Set([1, 3]));
 
   assert.equal(count, 3);
   assert.deepEqual(spawned, [0, 2, 4]);
+  assert.deepEqual(announcements, [{ type: 'chat', msg: { name: '[System]', text: 'A gate has opened' } }]);
 });
 
 test('the promised E-rank gate has a deterministic placement fallback', () => {

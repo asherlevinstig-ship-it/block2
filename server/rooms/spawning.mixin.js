@@ -1682,8 +1682,9 @@ class SpawningMixin {
   spawnMissingPublicGates(maxPublicRank, publicRanks) {
     let spawned = 0;
     for (let r = 0; r <= maxPublicRank; r++) {
-      if (!publicRanks.has(r) && this.spawnGate(r)) spawned++;
+      if (!publicRanks.has(r) && this.spawnGate(r, { announce: false })) spawned++;
     }
+    if (spawned) this.broadcast('chat', { name: '[System]', text: 'A gate has opened' });
     return spawned;
   }
 
@@ -1719,7 +1720,7 @@ class SpawningMixin {
           const gy = this.world.standHeight(pos.x + .5, pos.z + .5, W.WH - 2);
           if (gy < 3 || gy > 34) continue;
           gate = this.createGate({ x: pos.x + .5, y: gy, z: pos.z + .5, rank: ri, kind: 'public', ttl: 180 });
-          this.broadcast('chat', { name: '[System]', text: 'A guaranteed ' + 'EDCBA'[ri] + '-Rank Gate has opened for the new Hunter' });
+          this.broadcast('chat', { name: '[System]', text: 'A gate has opened' });
           return gate;
         }
       }
@@ -1737,7 +1738,7 @@ class SpawningMixin {
     };
   }
 
-  spawnGate(forceRank) {
+  spawnGate(forceRank, { announce = true } = {}) {
     const ri = forceRank == null ? this.maxUnlockedPublicRank() : Math.max(0, Math.min(4, forceRank | 0));
     const band = GATE_DISTANCE_BANDS[ri];
     for (let i = 0; i < 80; i++) {
@@ -1749,7 +1750,7 @@ class SpawningMixin {
       const gy = this.world.standHeight(x + .5, z + .5, W.WH - 2);
       if (gy < 3 || gy > 34) continue;
       this.createGate({ x: x + .5, y: gy, z: z + .5, rank: ri, kind: 'public', ttl: 75 });
-      this.broadcast('chat', { name: '[System]', text: 'A ' + 'EDCBA'[ri] + '-Rank Gate has opened — party up and enter together' });
+      if (announce) this.broadcast('chat', { name: '[System]', text: 'A gate has opened' });
       return true;
     }
     return false;
