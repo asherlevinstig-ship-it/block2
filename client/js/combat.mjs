@@ -5694,6 +5694,11 @@ window.addEventListener('blockcraft-admin-spawn',e=>{
   if(adminSpawnHere)adminSpawnHere.disabled=false;
   const d=e&&e.detail||{};
   if(d.ok===false){setDevResetStatus(d.reason==='admin'?'Spawn tools are admin-only.':d.reason==='dungeon'?'Leave the dungeon before using overworld spawn tools.':d.reason==='player'?'No live admin player found.':'Spawn failed.','bad');return;}
+  if(d.kind==='test_player'){
+    closeDevResetPanel();
+    showName('TEST PLAYER SPAWNED AHEAD');
+    return;
+  }
   setDevResetStatus('Spawned '+(d.count||0)+' '+String(d.kind||'actor').replace(/_/g,' ')+'.','ok');
 });
 if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDevResetPanel();});

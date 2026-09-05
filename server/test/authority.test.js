@@ -1680,17 +1680,23 @@ test('admin can spawn one persistent test player for safe social interaction che
   admin._accountRole='admin';
   const {prof}=seedPlayer(room,admin,{...townPlayerPos(0,0),gold:25,inv:[{id:I.BREAD,count:3}]});
   seedPlayer(room,normal,{...townPlayerPos(1,0)});
+  room.clients.push(admin,normal);
+  admin.view={add(){},remove(){}};
+  admin.__visibleGamePlayers=new Map();admin.__visibleGameMobs=new Map();
 
   room.handleAdminSpawnMob(normal,{kind:'test_player'});
   assert.equal(normal.sent.some(e=>e.type==='adminSpawnReject'&&e.msg.reason==='admin'),true);
 
-  room.handleAdminSpawnMob(admin,{kind:'test_player',radius:2});
+  room.world.standHeight=(x,z,fromY)=>fromY>30?40:16;
+  room.handleAdminSpawnMob(admin,{kind:'test_player',radius:6});
   const result=admin.sent.find(e=>e.type==='adminSpawnResult'&&e.msg.kind==='test_player');
   assert.ok(result);
   const sid=result.msg.sid,bot=room.state.players.get(sid);
   assert.ok(bot);
   assert.equal(bot.name,'Test Player');
-  assert.equal(Math.hypot(bot.x-W.TOWN.TC,bot.z-W.TOWN.TC)<=3,true);
+  assert.equal(Math.hypot(bot.x-W.TOWN.TC,bot.z-W.TOWN.TC)<=3.3,true,'test player stays inside interaction range');
+  assert.equal(bot.y,16.01,'test player uses ground near the admin instead of a roof above them');
+  assert.equal(admin.__visibleGamePlayers.get(sid),bot,'test player is immediately added to the admin visibility view');
 
   const before={bread:itemCount(prof,I.BREAD),gold:prof.gold,karma:prof.karma|0,friends:[...(prof.friends||[])]};
   room.handleFriendAdd(admin,{targetSid:sid});
@@ -1704,6 +1710,7 @@ test('admin can spawn one persistent test player for safe social interaction che
 
   room.handleAdminSpawnMob(admin,{kind:'test_player',radius:3});
   assert.equal([...room.state.players.keys()].filter(id=>id.startsWith('admin_test_player:')).length,1);
+  assert.equal(room.state.players.get(sid),bot,'re-spawning moves the existing replicated player instead of replacing it');
 });
 
 test('admin gate teleport from DungeonRoom returns the hunter to the hosted gate',()=>{

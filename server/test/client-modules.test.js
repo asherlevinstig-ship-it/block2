@@ -1795,6 +1795,7 @@ test('admin tools expose a safe interactive Test Player',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   assert.match(combat,/<option value="test_player">Test Player<\/option>/);
+  assert.match(combat,/d\.kind==='test_player'[\s\S]*closeDevResetPanel\(\)[\s\S]*TEST PLAYER SPAWNED AHEAD/);
   assert.match(networking,/Test Player ready\.[\s\S]*press <b>E<\/b> to test Trade, Add Friend, and Rob safely/);
   assert.match(menus,/Test trade interaction succeeded/);
   assert.match(menus,/Test friend interaction succeeded/);

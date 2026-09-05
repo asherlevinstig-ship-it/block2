@@ -3733,16 +3733,31 @@ class GameRoom extends Room {
   }
   spawnAdminTestPlayer(client, p, radius = 3) {
     const sid = 'admin_test_player:' + client.sessionId;
-    const a = (p.yaw || 0) + Math.PI;
-    const x = clampN(p.x + Math.sin(a) * radius, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
-    const z = clampN(p.z + Math.cos(a) * radius, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
-    const ground = this.world && this.world.standHeight ? this.world.standHeight(x, z, W.WH - 2) : p.y;
-    if (!Number.isFinite(ground) || ground < 2) return client.send('adminSpawnReject', { reason: 'space' });
-    const bot = new Player();
-    bot.x = x; bot.y = ground + .01; bot.z = z; bot.yaw = (p.yaw || 0) + Math.PI;
+    const safeRadius = Math.max(1.8, Math.min(3.2, Number(radius) || 3));
+    const baseAngle = (p.yaw || 0) + Math.PI;
+    const space = this.stuckRescueSpace(client, p);
+    let spawn = null;
+    for (const r of [safeRadius, 2.4, 1.8]) {
+      for (const offset of [0, .5, -.5, 1, -1, Math.PI]) {
+        const a = baseAngle + offset;
+        const x = clampN(p.x + Math.sin(a) * r, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
+        const z = clampN(p.z + Math.cos(a) * r, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
+        const ground = space.groundAt(x, z, p.y);
+        if (Number.isFinite(ground) && ground >= 2 && Math.abs(ground - p.y) <= 2.25 && space.clear(x, ground + .01, z)) {
+          spawn = { x, y: ground + .01, z };
+          break;
+        }
+      }
+      if (spawn) break;
+    }
+    if (!spawn) return client.send('adminSpawnReject', { reason: 'space' });
+    const existing = this.state.players.get(sid);
+    const bot = existing || new Player();
+    bot.x = spawn.x; bot.y = spawn.y; bot.z = spawn.z; bot.yaw = (p.yaw || 0) + Math.PI;
     bot.name = 'Test Player'; bot.schoolId = 'INTERACTION BOT'; bot.lvl = Math.max(1, p.lvl | 0);
     bot.path = 'guardian'; bot.dim = p.dim || 'overworld'; bot.dgn = p.dgn || '';
-    this.state.players.set(sid, bot);
+    if (!existing) this.state.players.set(sid, bot);
+    this.updateClientGameInterestView(client);
     client.send('adminSpawnResult', { ok: true, kind: 'test_player', count: 1, sid, x: bot.x, y: bot.y, z: bot.z });
     return true;
   }
@@ -3752,7 +3767,7 @@ class GameRoom extends Room {
     if (!p) return client.send('adminSpawnReject', { reason: 'player' });
     if (p.dgn) return client.send('adminSpawnReject', { reason: 'dungeon' });
     let kind = String(m.kind || 'zombie').toLowerCase().replace(/[^a-z0-9_]/g, '');
-    if (kind === 'test_player') return this.spawnAdminTestPlayer(client, p, Math.max(2, Math.min(8, Number(m.radius) || 3)));
+    if (kind === 'test_player') return this.spawnAdminTestPlayer(client, p, Math.max(1.8, Math.min(3.2, Number(m.radius) || 3)));
     const allowed = new Set(['zombie', 'skeleton', 'bandit', 'bandit_archer', 'bandit_brute', 'wolf', 'boss', 'ancient_warden']);
     if (!allowed.has(kind)) kind = 'zombie';
     const count = Math.max(1, Math.min(12, Number(m.count) | 0 || 1));
