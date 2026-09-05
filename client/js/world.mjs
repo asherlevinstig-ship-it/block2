@@ -9329,15 +9329,12 @@ function gainXP(n){
   while(S.xp>=xpNeed()){ S.xp-=xpNeed(); S.lvl++; S.pts+=3; leveled=true; }
   if(leveled){
     hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
-    const shouldRunLevel2Cutscene=CUTSCENES_ENABLED && S.lvl>=2 && S.path && dim==='overworld' && !cutsceneSeen();
     titleFlash('Level '+S.lvl,'+'+((S.lvl-beforeLevel)*3)+' stat points',{kind:'success',duration:1500});
-    if(S.lvl>=2 && S.path && !abilityTutorialDone() && !shouldRunLevel2Cutscene) showAbilityAwakening();
-    else sysMsg('Level <b>'+beforeLevel+' → '+S.lvl+'</b><br>+'+((S.lvl-beforeLevel)*3)+' stat points · HP, MP, SP, and food restored',{tier:'major',title:'Level Up'});
+    sysMsg('Level <b>'+beforeLevel+' → '+S.lvl+'</b><br>+'+((S.lvl-beforeLevel)*3)+' stat points · HP, MP, SP, and food restored',{tier:'major',title:'Level Up'});
     const afterRank=localPlayerRankIndex();
     if(afterRank>beforeRank && !NET.on) sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(afterRank)+'-Rank gates can now appear.');
     SFX.level();
     burst(player.pos.x, player.pos.y+1, player.pos.z, [1,.85,.3], 26, 2.6, 3, .8);
-    if(shouldRunLevel2Cutscene){ markCutsceneSeen(); setTimeout(()=>startIntroCutscene(false), 500); }
     if(CUTSCENES_ENABLED && !hadGateSystem && gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
     if(!S.path) sysMsg('Your hunter path is still waiting. Press <b>C</b> to preview all four paths and confirm your choice.');
     if(S.path){

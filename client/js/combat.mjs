@@ -1849,7 +1849,7 @@ function beginOnboarding(){
   showName('TUTORIAL TRAINING GROUNDS');
 }
 function abilityHudAvailable(){
-  return !!(S && (S.lvl>=2 || abilityTrainingActive));
+  return !!(S && S.lvl>=2);
 }
 function hunterAwakeningStepsHTML(active){
   const steps=[
@@ -1864,143 +1864,11 @@ function hunterAwakeningStepsHTML(active){
     return '<span class="'+cls+'"><b>'+(i+1)+'</b>'+s[1]+'</span>';
   }).join('')+'</div>';
 }
-function portalTransitionVisible(){
-  const el=document.getElementById('portaltransition');
-  return !!(el && el.classList.contains('active'));
-}
-function showAbilityAwakening(){
-  if(abilityAwakeningOpen || abilityAwakeningDismissedThisSession || abilityTrainingActive || abilityTutorialDone() || !S.path || !abilityHudAvailable()) return false;
-  if(onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
-  if(portalTransitionVisible()){
-    setTimeout(()=>showAbilityAwakening(), 650);
-    return false;
-  }
-  abilityAwakeningOpen=true;
-  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.awakening.open', { path:S.path, dim });
-  const P=PATHS[S.path]||PATHS.shadow;
-  const first=P.ab[0];
-  awakeningPanel.innerHTML='<div class="awpill">Hunter Awakening 3 / 4</div>'
-    +hunterAwakeningStepsHTML('ability')
-    +'<h1>YOUR FIRST ABILITY WAKES</h1>'
-    +'<h2 style="color:'+P.col+';margin:4px 0 10px">'+escHTML(P.name)+'</h2>'
-    +'<div class="awtext">Your permanent hunter path is now <b>'+escHTML(P.name)+'</b>. Step into a short training meadow, cast your first ability once, then return to Road Ready.</div>'
-    +'<div class="awability" style="color:'+P.col+'">'
-      +'<div class="awicon">'+escHTML(first.g)+'</div>'
-      +'<div class="awname">'+escHTML('Q - '+first.n)+'</div>'
-      +'<div class="awsub">'+escHTML(first.txt)+'<br>R unlocks at Level 4. H unlocks at Level 8.</div>'
-    +'</div>'
-    +'<div class="awakening-actions"><button id="awakeningbegin" type="button">ENTER TRAINING MEADOW</button></div>';
-  openBlockingGameModal(awakeningWin,'ability-awakening');
-  const beginAwakeningTraining=()=>{
-    SFX.uiClick();
-    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.awakening.begin', { path:S.path, dim });
-    closeBlockingGameModal(awakeningWin,{relock:false,reason:'ability-awakening'});
-    abilityAwakeningOpen=false;
-    startAbilityTraining(true);
-  };
-  const btn=document.getElementById('awakeningbegin');
-  if(btn) btn.addEventListener('click', beginAwakeningTraining);
-  awakeningPanel.onclick=e=>{
-    const b=document.getElementById('awakeningbegin');
-    if(!b || e.target===b) return;
-    const r=b.getBoundingClientRect();
-    if(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom) beginAwakeningTraining();
-  };
-  return true;
-}
-function startAbilityTraining(){
-  if(abilityTrainingActive || abilityTutorialDone() || onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
-  if(!S||!S.path) return false;
-  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.training.start.request', { path:S.path, dim });
-  if(dim==='overworld' && !enterAbilityRoom()) return false;
-  awakeningWin.classList.add('hidden');
-  abilityAwakeningOpen=false;
-  abilityTrainingActive=true;
-  abilityTrainingUsed=false;
-  abilityTrainingFinishAt=0;
-  abilityTrainingReturn=abilityRoomReturn&&abilityRoomReturn.pos ? abilityRoomReturn.pos.clone() : (player?player.pos.clone():new THREE.Vector3(TOWN.TC+.5,TOWN.G+1,TOWN.TC+62.5));
-  if(player){
-    // This part of the meadow is deliberately flat at G. Spawn with the
-    // player's feet directly on its top face so the transition never begins
-    // with a visible one-block fall.
-    player.pos.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+1,ABILITY_MEADOW.z+12);
-    player.vel.set(0,0,0);
-    player.yaw=Math.PI;
-    player.pitch=0;
-  }
-  hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
-  renderBars();
-  renderAbilities();
-  updateAbilityHUD();
-  closeUI(false);
-  if(statOpen) closeStat(false);
-  if(uiShellState.qOpen) closeQWin(false);
-  showName('Ability Awakening');
-  sysMsg('<b>Ability Awakening:</b> you unlocked your first path power. Press <b>Q</b> in the meadow.');
-  updateAbilityTrainingHud();
-  lockFallback=true;
-  locked=true;
-  requestPointerLockSafe(enterPlayFallback);
-  refreshPlayUi();
-  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.training.start.ok', { path:S.path, dim });
-  return true;
-}
-function updateAbilityTrainingHud(){
-  if(!abilityTrainingActive){ if(!onboardingActive&&!townGuidanceActive) tutorialEl.classList.add('hidden'); return; }
-  const P=PATHS[S.path]||PATHS.shadow;
-  const first=P.ab[0];
-  tutorialEl.classList.remove('hidden');
-  tutorialEl.innerHTML='<div class="tutpill">Ability Awakening - '+escHTML(P.name)+'</div>'
-    +'<div class="tutkey">'+(abilityTrainingUsed?'NICE HIT':'PRESS Q')+'</div>'
-    +'<div class="tuttext">'+escHTML(abilityTrainingUsed?'Your first ability is ready for real combat.':'Use '+first.n+' on the training dummy.')+'</div>'
-    +'<div class="tutsub">'+escHTML('Your ability hotbar is now visible. Q unlocks at Level 2; R unlocks at Level 4; H unlocks at Level 8.')+'</div>';
-}
-function noteAbilityTrainingCast(){
-  if(!abilityTrainingActive || abilityTrainingUsed) return;
-  abilityTrainingUsed=true;
-  const p=tutorialDummyGroup.position;
-  burst(p.x,p.y+1.3,p.z,[.55,.35,1],28,3.0,2.4,.7);
-  ringPulse(p.x,p.y+.08,p.z,1.8,PATHS[S.path]?parseInt(PATHS[S.path].col.replace('#',''),16):0x8b5cf6,.55);
-  SFX.crit();
-  updateAbilityTrainingHud();
-  abilityTrainingFinishAt=performance.now()+1300;
-}
-function completeAbilityTraining(){
-  if(!abilityTrainingActive) return;
-  setAbilityTutorialDone();
-  abilityTrainingActive=false;
-  abilityTrainingUsed=false;
-  abilityTrainingFinishAt=0;
-  tutorialDummyGroup.visible=false;
-  tutorialPillarGroup.visible=false;
-  tutorialEl.classList.add('hidden');
-  exitAbilityRoom();
-  abilityTrainingReturn=null;
-  hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
-  renderBars();
-  sysMsg('<b>Ability training complete.</b> Your Lv2 ability is on <b>Q</b>. More unlock at <b>Lv4</b> and <b>Lv8</b>.');
-  showName('Q ability unlocked');
-  requestTownJobGuidance();
-  refreshPlayUi();
-}
-function tickAbilityTraining(now){
-  if(!abilityTrainingActive) return;
-  const target={x:ABILITY_MEADOW.x,z:ABILITY_MEADOW.z};
-  const y=surfaceY(target.x,target.z);
-  tutorialPillarGroup.visible=true;
-  tutorialPillarGroup.position.set(target.x,y+4,target.z);
-  tutorialBeam.material.opacity=.22+.12*Math.sin(now*.004);
-  tutorialRing.position.y=-3.92+Math.sin(now*.005)*.08;
-  const s=1+.08*Math.sin(now*.006);
-  tutorialRing.scale.set(s,s,s);
-  tutorialDummyGroup.visible=true;
-  tutorialDummyGroup.position.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+1,ABILITY_MEADOW.z);
-  tutorialDummyGroup.rotation.y=Math.sin(now*.003)*.08;
-  const hitGlow=abilityTrainingUsed?.18:0;
-  dummyBody.scale.set(1+hitGlow,1+hitGlow,1+hitGlow);
-  updateAbilityTrainingHud();
-  if(abilityTrainingFinishAt && now>=abilityTrainingFinishAt) completeAbilityTraining();
-}
+function showAbilityAwakening(){ return false; }
+function startAbilityTraining(){ return false; }
+function updateAbilityTrainingHud(){}
+function noteAbilityTrainingCast(){}
+function tickAbilityTraining(){}
 function clearJobTutorialTemporaryItems(){
   for(let i=0;i<inv.length;i++){
     const s=inv[i];
@@ -5068,14 +4936,9 @@ function showPathSelection(){
     closeBlockingGameModal(pathSelectEl,{relock:true,reason:'path-choice'});
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.closed', { path, afterPath:S&&S.path });
     sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>.');
-    setTimeout(()=>{
-      if(!abilityTutorialDone()){
-        if(!startAbilityTraining(true)) sysMsg('<b>Ability training:</b> return to town to enter the training meadow.');
-        return;
-      }
-      if(dim==='ability') exitAbilityRoom();
-      else settleFirstTownAdventureSpawn();
-    }, 0);
+    setAbilityTutorialDone();
+    if(dim==='ability') exitAbilityRoom();
+    else settleFirstTownAdventureSpawn();
   });
   return true;
 }

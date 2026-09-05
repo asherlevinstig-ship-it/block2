@@ -1295,15 +1295,15 @@ function tutorialRoomHudSuppressed(){
 }
 function transitionPanelActuallyOpen(type){
   const panels=transitionPanelState();
-  return type==='choose_job'&&panels.jobOpen || type==='choose_path'&&panels.pathOpen || type==='start_awakening'&&panels.awakeningOpen || type==='continue_panel'&&panels.rewardOpen;
+  return type==='choose_job'&&panels.jobOpen || type==='choose_path'&&panels.pathOpen || type==='continue_panel'&&panels.rewardOpen;
 }
 function shouldDeferTransitionAction(transition,{story=null,job=null}={}){
   if(!transition)return false;
-  if(transition.type==='continue_panel'||transition.type==='use_ability')return false;
+  if(transition.type==='continue_panel')return false;
   const baseOnboardingFocus=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus);
   if(transition.type==='choose_job')return !!story || baseOnboardingFocus || progressionFocus==='first_d_gate' || progressionFocus==='c_rank_climb' || progressionFocus==='b_rank_pressure' || progressionFocus==='next_adventurer_contract';
   if(transitionPanelActuallyOpen(transition.type))return false;
-  if(transition.type==='choose_path'||transition.type==='start_awakening'){
+  if(transition.type==='choose_path'){
     return !!story || !!job || baseOnboardingFocus || progressionFocus==='first_profession_contract' || progressionFocus==='first_promotion_job' || progressionFocus==='first_promotion_contract' || progressionFocus==='c_rank_climb' || progressionFocus==='b_rank_pressure' || progressionFocus==='next_adventurer_contract' || progressionFocus==='first_d_gate';
   }
   return false;
@@ -1314,11 +1314,8 @@ function nextBestObjectiveLine(){
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
   const localJob=localJobObjectiveLine();
   if(transition && !shouldDeferTransitionAction(transition,{story,job:localJob})){
-    const title=transition.type==='continue_panel'?'Continue Reward':
-      transition.type==='choose_path'?'Choose Path':
-      transition.type==='start_awakening'?'Start Awakening':
-      transition.type==='use_ability'?'Ability Training':'Continue';
-    const text=transition.type==='use_ability'?(combatState.abilityTrainingUsed?'Finish the training meadow':'Use your Q ability in the training meadow'):'Finish the open step so the next objective can appear';
+    const title=transition.type==='continue_panel'?'Continue Reward':transition.type==='choose_path'?'Choose Path':'Continue';
+    const text='Finish the open step so the next objective can appear';
     return objectiveLine('transition','Now',title,text,transition);
   }
   if(story)return story;
@@ -1392,20 +1389,16 @@ function objectiveCraftAction(scope='what_next'){
 function transitionPanelState(){
   const reward=document.getElementById('rewardwin');
   const path=document.getElementById('pathselect');
-  const awakening=document.getElementById('awakeningwin');
   const rewardOpen=!!(reward&&!reward.classList.contains('hidden'));
   const jobOpen=!!(path&&!path.classList.contains('hidden')&&path.classList.contains('jobselect'));
   const pathOpen=!!(path&&!path.classList.contains('hidden')&&!jobOpen);
-  const awakeningOpen=!!(awakening&&!awakening.classList.contains('hidden'));
-  return {rewardOpen,pathOpen,jobOpen,awakeningOpen};
+  return {rewardOpen,pathOpen,jobOpen,awakeningOpen:false};
 }
 function transitionRecoveryAction(){
   const panels=transitionPanelState();
   if(panels.rewardOpen) return {type:'continue_panel',label:'CONTINUE'};
   if(panels.jobOpen || combatState.jobChoiceOpen) return {type:'choose_job',label:'CHOOSE JOB'};
   if(panels.pathOpen || (S&&!S.path&&serverTutorials.onboarding>=7)) return {type:'choose_path',label:'CHOOSE PATH'};
-  if(panels.awakeningOpen || (S&&S.lvl>=2&&S.path&&combatState.abilityReady&&!combatState.abilityTutorialDone&&!combatState.abilityTrainingActive)) return {type:'start_awakening',label:'START AWAKENING'};
-  if(combatState.abilityTrainingActive) return {type:'use_ability',label:combatState.abilityTrainingUsed?'FINISH TRAINING':'USE ABILITY'};
   return null;
 }
 function currentObjectiveAction(){
@@ -1583,14 +1576,6 @@ function handleObjectiveAction(action,btn){
     sysMsg('<b>Choose Job:</b> open the Job Board when you are ready to try a profession.');
     return;
   }
-  if(action==='start_awakening'){
-    if(transitionPanelState().awakeningOpen){ const b=document.getElementById('awakeningbegin'); if(b){ b.click(); return; } }
-    if(combatApi.showAbilityAwakening&&combatApi.showAbilityAwakening()) return;
-    if(combatApi.startAbilityTraining&&combatApi.startAbilityTraining()) return;
-    sysMsg('<b>Awakening:</b> choose your path first, then start ability training.');
-    return;
-  }
-  if(action==='use_ability'){ combatApi.primaryAction&&combatApi.primaryAction(); return; }
   if(action==='follow_marker'){
     const t=utilityCompassTarget();
     if(t&&Number.isFinite(t.x)&&Number.isFinite(t.z))sysMsg('<b>Follow marker:</b> '+escHTML(t.label||'Objective')+' is '+escHTML(utilityTargetHudLine(t))+'.');
@@ -1728,8 +1713,6 @@ function currentObjective(){
     if(transition.type==='continue_panel') return {label:'Reward Pending', text:'Continue the open reward panel to unlock the next step'};
     if(transition.type==='choose_job'&&progressionFocus!=='first_d_gate'&&progressionFocus!=='c_rank_climb'&&progressionFocus!=='b_rank_pressure'&&progressionFocus!=='next_adventurer_contract') return {label:'Job Tutorial Choice', text:'Choose a first job tutorial, choose later, or open the Job Board'};
     if(transition.type==='choose_path') return {label:'Path Choice', text:'Choose a combat path to unlock your first ability'};
-    if(transition.type==='start_awakening') return {label:'Ability Awakening', text:'Start ability training for your chosen path'};
-    if(transition.type==='use_ability') return {label:'Ability Training', text:combatState.abilityTrainingUsed?'Finish the training meadow':'Use your Q ability in the training meadow'};
   }
   const job=jobContractObjective();
   if(job) return job;
@@ -3092,9 +3075,6 @@ function tick(now){
   if(!cutscene && combatApi.shouldOpenLevel2JobChoice && combatApi.shouldOpenLevel2JobChoice()){
     combatApi.openLevel2JobChoice();
   }else if(shouldOpenLevel2PathChoice()) showPathSelection();
-  else if(!cutscene && !abilityTrainingActive && !abilityAwakeningOpen && S&&S.path && !abilityTutorialDone()){
-    startAbilityTraining(true);
-  }
   if(!cutscene) tryStartQueuedGateCutscene();
   renderEventHud();
   tickSmartSuggestions(now);

@@ -2826,6 +2826,7 @@ test('combat path is chosen once after town arrival while abilities still unlock
   prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
   room.setPath(client, 'shadow');
   assert.equal(prof.S.path, 'shadow', 'a level 1 arrival can define a hunter path');
+  assert.equal(prof.tutorials.ability, TUTORIAL_VERSIONS.ability, 'retired ability training is treated as complete');
   assert.equal(savedPath, 'shadow', 'the permanent path is flushed immediately for refresh safety');
   assert.equal(client.sent.some(e => e.type === 'pathResult' && e.msg.path === 'shadow'), true);
   room.setPath(client, 'mage');
@@ -2851,23 +2852,6 @@ test('C-rank specialization is server-owned, path-valid, and permanent',()=>{
   assert.equal(client.sent.some(e=>e.type==='profile'),false,'choosing a specialization must not trigger a destructive full-profile restore');
   room.setAbilitySpecialization(client,'assassin');
   assert.equal(prof.abilitySpec,'commander','the permanent choice cannot be replaced');
-});
-
-test('a level 1 hunter can use the first ability only inside its unfinished ability tutorial', () => {
-  const room = makeRoom(), client = makeClient('early_ability_tutorial');
-  const { prof } = seedPlayer(room, client, { lvl: 1 });
-  prof.S.path = 'guardian';
-  prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
-  room.clients = [client];
-
-  room.handleAbility(client, { path: 'guardian', slot: 0 });
-  assert.equal(client.sent.some(e => e.type === 'abilityReject' && e.msg.reason === 'level'), true, 'the ability stays level-locked in town');
-
-  client.sent.length = 0;
-  assert.equal(room.handleTutorialEnter(client, { kind: 'ability' }), true);
-  room.handleAbility(client, { path: 'guardian', slot: 0 });
-  assert.equal(client.sent.some(e => e.type === 'abilityReject' && e.msg.reason === 'level'), false, 'the tutorial temporarily unlocks Q');
-  assert.equal(client.sent.some(e => e.type === 'abilityResult' && e.msg.slot === 0), true);
 });
 
 test('failed Shadow Army casts preserve cooldown and ineligible spirits',()=>{

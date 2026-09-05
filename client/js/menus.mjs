@@ -3895,21 +3895,6 @@ function openJobChoiceRecovery(){
   openJobsUI();
   return true;
 }
-function startAwakeningRecovery(){
-  if(panelVisible('awakeningwin')){
-    const button=document.getElementById('awakeningbegin');
-    if(button){closeQWin(false);button.click();return true;}
-  }
-  closeQWin(false);
-  if(combatApi.showAbilityAwakening&&combatApi.showAbilityAwakening())return true;
-  if(combatApi.startAbilityTraining&&combatApi.startAbilityTraining())return true;
-  sysMsg('<b>Awakening:</b> choose your path first, then start ability training.');
-  return false;
-}
-function useAbilityTrainingRecovery(){
-  closeQWin(false);
-  if(combatApi.primaryAction)combatApi.primaryAction();
-}
 function openLandRecovery(){
   closeQWin(false);
   worldApi.toggleLandClaims&&worldApi.toggleLandClaims(true);
@@ -3919,8 +3904,6 @@ function recoveryHubInfo(){
   if(panelVisible('rewardwin'))return {title:'Reward Pending',status:'Continue the open reward or milestone panel to unlock the next step.',where:'Open reward panel',button:'CONTINUE',action:continueOpenTransitionPanel};
   if(jobChoicePanelVisible()||combatState.jobChoiceOpen)return {title:'Choose Job Tutorial',status:'Pick a job tutorial card, choose later, or open the Job Board. Jobs guide play style but do not lock your character.',where:'Job tutorial choice',button:'CHOOSE JOB',action:openJobChoiceRecovery};
   if(pathChoicePanelVisible()||(S&&!S.path&&serverTutorials.onboarding>=7))return {title:'Choose Path',status:'Preview Shadow, Mage, Guardian, and Verdant, then confirm one permanent hunter path. Your first ability unlocks at Level 2.',where:'Town arrival path selection',button:'CHOOSE PATH',action:openPathRecovery};
-  if(panelVisible('awakeningwin')||(S&&S.lvl>=2&&S.path&&combatState.abilityReady&&!combatState.abilityTutorialDone&&!combatState.abilityTrainingActive))return {title:'Start Awakening',status:'Begin the ability lesson for your chosen path so Q becomes part of your real combat loop.',where:'Ability meadow',button:'START AWAKENING',action:startAwakeningRecovery};
-  if(combatState.abilityTrainingActive)return {title:'Ability Training',status:combatState.abilityTrainingUsed?'Finish the training meadow and return to town.':'Use your Q ability in the training meadow.',where:'Ability meadow',button:combatState.abilityTrainingUsed?'FINISH TRAINING':'USE ABILITY',action:useAbilityTrainingRecovery};
   if(quest&&questDone())return {title:'Turn In Quest',status:'Your active story objective is complete. Return to '+escHTML(quest.giver||'the quest giver')+'.',where:quest.giver||'Quest giver',button:'SHOW QUEST',action:()=>sysMsg('<b>Turn in:</b> follow the trail back to '+escHTML(quest&&quest.giver||'the quest giver')+'.')};
   if(quest&&quest.type==='gate'&&!questDone())return {title:'Gate Objective',status:'Find an active public Gate for this rank. If no Gate is tracked, stay in the overworld and check again when a public Gate spawns.',where:'Wilderness Gate',button:'GATE HELP',action:()=>sysMsg('<b>Gate objective:</b> follow the tracker when a Gate is available. Public Gates rotate; collapse timers keep running outside.')};
   if(progressionFocus==='first_craft_station'){

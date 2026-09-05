@@ -1617,21 +1617,15 @@ test('browser and server consume one shared safeguarded comms ruleset', () => {
   assert.deepEqual(serverCommsRules.phraseIdsFor('gate').slice(0, 3), ['gate_ready','gate_need_one','gate_enter']);
 });
 
-test('ability training places the player directly on the meadow floor', () => {
+test('path selection persists and returns directly to town without ability training', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
-  const dimensions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
   const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
-  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
-  const groundedSpawn = /player\.pos\.set\(ABILITY_MEADOW\.x,ABILITY_MEADOW\.G\+1,ABILITY_MEADOW\.z\+12\)/;
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
 
-  assert.match(combat, groundedSpawn, 'training entry starts with the player standing on the floor');
-  assert.match(world, groundedSpawn, 'tutorial recovery also returns the player to the floor');
-  assert.doesNotMatch(combat, /ABILITY_MEADOW\.G\+2/, 'training entry must not drop the player from one block up');
-  assert.doesNotMatch(world, /ABILITY_MEADOW\.G\+2/, 'tutorial recovery must not drop the player from one block up');
-  assert.match(combat, /if\(!abilityTutorialDone\(\)\)\{\s*if\(!startAbilityTraining\(true\)\)/, 'path confirmation enters unfinished training immediately');
-  assert.match(frame, /S&&S\.path && !abilityTutorialDone\(\)\)\{\s*startAbilityTraining\(true\)/, 'refresh resumes an unfinished chosen-path tutorial');
-  assert.match(dimensions, /tutorialFirstAbility=abilityTrainingActive&&dim==='ability'&&i===0/, 'the first ability is available to a level 1 hunter only in training');
-  assert.doesNotMatch(combat, /runLevel2CutsceneThenTutorial\(\)[\s\S]{0,120}showAbilityAwakening\(\)/, 'path selection no longer inserts a cutscene and second confirmation');
+  assert.match(combat, /setAbilityTutorialDone\(\);\s*if\(dim==='ability'\) exitAbilityRoom\(\);\s*else settleFirstTownAdventureSpawn\(\);/, 'path confirmation completes the retired tutorial state and returns to town');
+  assert.doesNotMatch(frame, /startAbilityTraining\(true\)/, 'the frame loop never auto-starts ability training');
+  assert.doesNotMatch(frame, /type:'start_awakening'|type:'use_ability'/, 'objective recovery has no ability-training actions');
+  assert.doesNotMatch(menus, /Start Awakening|Ability Training/, 'menus no longer advertise ability training');
 });
 
 test('first Gate clears produce the right onboarding handoffs', async () => {
@@ -4479,7 +4473,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/Recovery Hub/);
   assert.match(menus,/Reward Pending/);
   assert.match(menus,/Choose Path/);
-  assert.match(menus,/Start Awakening/);
+  assert.doesNotMatch(menus,/Start Awakening/);
   assert.match(menus,/Land Claim Recovery/);
   assert.match(menus,/Contract Recovery/);
   assert.match(menus,/appendRecoveryHubCard\(qpanelEl\)/);
@@ -4599,8 +4593,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/function transitionRecoveryAction\(/);
   assert.match(frame,/continue_panel/);
   assert.match(frame,/choose_path/);
-  assert.match(frame,/start_awakening/);
-  assert.match(frame,/use_ability/);
+  assert.doesNotMatch(frame,/start_awakening/);
+  assert.doesNotMatch(frame,/use_ability/);
   assert.match(frame,/transitionPanels:transitionPanelState\(\)/);
   assert.match(frame,/function e2eCurrentObjectiveAction\(/);
   assert.match(frame,/data-objective-action/);

@@ -1108,6 +1108,12 @@ class GameRoom extends Room {
         }
       }
       this.persistedInventorySignatures.set(token, this.inventoryPersistenceSignature(prof));
+      // Ability training was removed. Existing path owners should never be
+      // routed into its legacy recovery UI after loading an older profile.
+      if (prof.S.path && (prof.tutorials.ability | 0) < TUTORIAL_VERSIONS.ability) {
+        prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
+        this.dirtyPlayers.add(token);
+      }
       if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
       if (ensureAsherAdminFishingRod(prof, auth)) this.dirtyPlayers.add(token);
       const grantedArmor = this.ensureStarterArmor(prof);
