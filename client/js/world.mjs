@@ -9339,7 +9339,7 @@ function gainXP(n){
     burst(player.pos.x, player.pos.y+1, player.pos.z, [1,.85,.3], 26, 2.6, 3, .8);
     if(shouldRunLevel2Cutscene){ markCutsceneSeen(); setTimeout(()=>startIntroCutscene(false), 500); }
     if(CUTSCENES_ENABLED && !hadGateSystem && gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
-    if(S.lvl>=2 && !S.path) sysMsg('You have <b>awakened</b>. Press <b>C</b> to choose your path');
+    if(!S.path) sysMsg('Your hunter path is still waiting. Press <b>C</b> to preview all four paths and confirm your choice.');
     if(S.path){
       for(const unlockedLevel of [2,4,8]){
         if(unlockedLevel<=beforeLevel||unlockedLevel>S.lvl)continue;

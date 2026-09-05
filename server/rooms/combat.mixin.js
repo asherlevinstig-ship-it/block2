@@ -17,7 +17,7 @@ const JOB_SYSTEM = require('../../shared/job-system');
 const GEAR_SYSTEM = require('../../shared/gear-system');
 const SHADOW_ARMY = require('../../shared/shadow-army');
 const ABILITY_PROGRESSION = require('../../shared/ability-progression');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout, TUTORIAL_VERSIONS } = require('../store');
 
 class CombatMixin {
   // Combat-domain simulation state. Co-located here (rather than inline in
@@ -1269,7 +1269,8 @@ class CombatMixin {
   }
   setPath(client, path) {
     const rec = this.profileFor(client);
-    if (!rec || rec.prof.S.path || rec.prof.S.lvl < 2 || !ABILITY_PATHS[path]) return;
+    const arrived=!!(rec&&rec.prof&&rec.prof.tutorials&&(rec.prof.tutorials.onboarding|0)>=TUTORIAL_VERSIONS.onboarding);
+    if (!rec || rec.prof.S.path || (!arrived&&rec.prof.S.lvl<2) || !ABILITY_PATHS[path]) return;
     rec.prof.S.path = path;
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);

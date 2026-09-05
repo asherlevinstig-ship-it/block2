@@ -1852,7 +1852,7 @@ function abilityHudAvailable(){
 }
 function hunterAwakeningStepsHTML(active){
   const steps=[
-    ['reward','Quest Complete'],
+    ['arrival','Town Arrival'],
     ['path','Choose Path'],
     ['ability','Train Ability'],
     ['job','Try A Job']
@@ -1886,7 +1886,7 @@ function showAbilityAwakening(){
     +'<div class="awability" style="color:'+P.col+'">'
       +'<div class="awicon">'+escHTML(first.g)+'</div>'
       +'<div class="awname">'+escHTML('Q - '+first.n)+'</div>'
-      +'<div class="awsub">'+escHTML(first.txt)+'<br>R unlocks at Level 5. H unlocks at Level 8.</div>'
+      +'<div class="awsub">'+escHTML(first.txt)+'<br>R unlocks at Level 4. H unlocks at Level 8.</div>'
     +'</div>'
     +'<div class="awakening-actions"><button id="awakeningbegin" type="button">ENTER TRAINING MEADOW</button></div>';
   openBlockingGameModal(awakeningWin,'ability-awakening');
@@ -1949,7 +1949,7 @@ function updateAbilityTrainingHud(){
   tutorialEl.innerHTML='<div class="tutpill">Ability Awakening - '+escHTML(P.name)+'</div>'
     +'<div class="tutkey">'+(abilityTrainingUsed?'NICE HIT':'PRESS Q')+'</div>'
     +'<div class="tuttext">'+escHTML(abilityTrainingUsed?'Your first ability is ready for real combat.':'Use '+first.n+' on the training dummy.')+'</div>'
-    +'<div class="tutsub">'+escHTML('Your ability hotbar is now visible. Q unlocks at Level 2; R unlocks at Level 5; H unlocks at Level 8.')+'</div>';
+    +'<div class="tutsub">'+escHTML('Your ability hotbar is now visible. Q unlocks at Level 2; R unlocks at Level 4; H unlocks at Level 8.')+'</div>';
 }
 function noteAbilityTrainingCast(){
   if(!abilityTrainingActive || abilityTrainingUsed) return;
@@ -4869,7 +4869,11 @@ function finishOnboardingToTown(){
     enterPlayFallback();
   }
   refreshPlayUi();
-  setTimeout(()=>{ finishWorldLoading('town-arrival'); if(deferArrivalChoice)showFirstTownArrivalChoice(); },720);
+  setTimeout(()=>{
+    finishWorldLoading('town-arrival');
+    if(S&&!S.path) showPathSelection();
+    else if(deferArrivalChoice) showFirstTownArrivalChoice();
+  },720);
 }
 function shouldShowFirstTownArrivalChoice(){
   // The town now teaches itself in-world: fountain, Tamsin, then Question Portal.
@@ -4987,30 +4991,35 @@ function hexToRgba(hex,a){
   const n=parseInt(m,16);
   return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+(a==null ? .3 : a)+')';
 }
+const PATH_PRESENTATION=Object.freeze({
+  shadow:{role:'Mobile Assassin',difficulty:'Advanced',perks:['Fast repositioning and burst damage','Strong for aggressive solo play','Later summons a shadow ally']},
+  mage:{role:'Ranged Control',difficulty:'Intermediate',perks:['Elemental damage from range','Controls groups with frost and lightning','Rewards careful aim and timing']},
+  guardian:{role:'Durable Frontliner',difficulty:'Easiest to learn',beginner:true,perks:['Reduces incoming damage','Pushes enemies away when surrounded','Reliable alone or with a party']},
+  verdant:{role:'Support Shapeshifter',difficulty:'Intermediate',perks:['Heals allies or yourself','Binds groups with living roots','Later shifts into a swift panther']}
+});
 function pathCardHTML(key){
-  const P=PATHS[key], selected=S.path===key;
+  const P=PATHS[key], info=PATH_PRESENTATION[key];
   const glow=hexToRgba(P.col,.32);
-  const perks={
-    shadow:['Fast repositioning and burst attacks','Summon a shadow ally later','Best for aggressive solo explorers'],
-    mage:['Ranged elemental damage','Control crowds with frost and lightning','Best for players who like spell timing'],
-    guardian:['Damage reduction and survival tools','Knock enemies away when surrounded','Best for front-line or team play']
-  }[key]||[];
-  return '<div class="pathselect-card" data-path="'+key+'" style="--path-col:'+P.col+';--path-glow:'+glow+'">'
-    +(selected?'<div class="current">CURRENT</div>':'')
-    +'<div class="sigil">'+escHTML(P.ab[0].g)+'</div>'
-    +'<h2>'+escHTML(P.name)+'</h2>'
-    +'<p>'+escHTML(P.desc)+'</p>'
-    +'<ul>'+perks.map(p=>'<li>'+escHTML(p)+'</li>').join('')+'</ul>'
-    +'<ul>'+P.ab.map((a,i)=>'<li><b>'+escHTML(a.g+' '+a.n)+'</b> - Lv '+AB_UNLOCK[i]+' - '+escHTML(a.txt)+'</li>').join('')+'</ul>'
-    +'<button type="button">'+(selected?'CONTINUE AS '+escHTML(P.name).toUpperCase():'CHOOSE '+escHTML(P.name).toUpperCase())+'</button>'
-    +'</div>';
+  return '<article class="pathselect-card" data-path="'+key+'" style="--path-col:'+P.col+';--path-glow:'+glow+'">'
+    +'<button class="pathselect-preview" type="button" data-path-preview="'+key+'" aria-pressed="false">'
+      +'<span class="sigil" aria-hidden="true">'+escHTML(P.ab[0].g)+'</span>'
+      +'<span class="pathselect-copy"><span class="pathselect-heading"><strong>'+escHTML(P.name)+'</strong>'+(info.beginner?'<em>NEW PLAYER PICK</em>':'')+'</span>'
+      +'<span class="pathselect-tags"><b>'+escHTML(info.role)+'</b><i>'+escHTML(info.difficulty)+'</i></span>'
+      +'<span class="pathselect-desc">'+escHTML(P.desc)+'</span>'
+      +'<span class="pathselect-first"><b>LEVEL 2 · Q · '+escHTML(P.ab[0].n)+'</b><small>'+escHTML(P.ab[0].txt)+'</small></span></span>'
+      +'<span class="pathselect-preview-label">PREVIEW</span>'
+    +'</button>'
+    +'<details class="path-progression"><summary>View progression</summary><ul>'+info.perks.map(p=>'<li>'+escHTML(p)+'</li>').join('')+'</ul><ol>'+P.ab.map((a,i)=>'<li><b>'+escHTML(['Q','R','H'][i]+' · '+a.n)+'</b><span>Level '+AB_UNLOCK[i]+' · '+escHTML(a.txt)+'</span></li>').join('')+'</ol></details>'
+    +'</article>';
 }
 function shouldOpenLevel2PathChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
-  const firstQuestRewardPending=!!(npcQuestChains&&Number(npcQuestChains['Mara Vale']||0)>=1&&!serverFirstQuestComplete);
-  return !!(S && S.lvl>=2 && !S.path && !pathChoiceDismissedThisSession && !level2JobChoiceForced && !firstQuestRewardPending && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+  const inTown=player&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
+  const profileReady=!NET.on||NET.profileReady===true;
+  return !!(S && !S.path && profileReady && onboardingDone() && inTown && !pathChoiceDismissedThisSession && !level2JobChoiceForced && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
 function showPathSelection(){
+  if(!S||S.path||(NET.on&&NET.profileReady!==true)||onboardingActive||dim!=='overworld') return false;
   pathChoiceOpen=true;
   jobChoiceOpen=false;
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.open', { level:S&&S.lvl, path:S&&S.path, dim });
@@ -5021,18 +5030,32 @@ function showPathSelection(){
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
-  const awakeningChoice=S.lvl>=2 && !S.path;
+  let selectedPath='';
+  const abilityReady=S.lvl>=AB_UNLOCK[0];
   pathPanelEl.innerHTML=
-    (awakeningChoice?'<div class="job-choice-kicker">Hunter Awakening 2 / 4</div>'+hunterAwakeningStepsHTML('path'):'')+
-    '<h1>'+(awakeningChoice?'CHOOSE YOUR HUNTER PATH':'CHOOSE YOUR PATH')+'</h1>'+
-    '<div class="pathintro">'+(awakeningChoice
-      ? 'This is the second step of your awakening. Choose the combat style that matches how you want to help a party; your first ability opens immediately after this.'
-      : 'Training is complete. Before you enter the Town of Beginnings, choose the combat path that fits how you want to play. Your path defines your main ability style and future unlocks.')+'</div>'+
+    '<div class="job-choice-kicker">Town Arrival · Hunter Path</div>'+hunterAwakeningStepsHTML('path')+
+    '<h1>CHOOSE YOUR HUNTER PATH</h1>'+
+    '<div class="pathintro">You have reached the Town of Beginnings. Preview all four combat styles, then confirm the one that fits you. '+(abilityReady?'Your first ability is ready immediately.':'Your first ability awakens when you reach Level 2.')+'</div>'+
     '<div id="pathcards">'+Object.keys(PATHS).map(pathCardHTML).join('')+'</div>'+
-    '<div id="pathnote">You can inspect your path later from the Status window with <b>C</b>. Choose carefully: this becomes part of your hunter profile.</div>';
+    '<div id="pathpreview" class="path-confirm" aria-live="polite"><span><b>SELECT A PATH TO PREVIEW</b><small>No choice is made until you press the confirmation button.</small></span><button id="pathconfirm" type="button" disabled>CONFIRM PATH</button></div>'+
+    '<div id="pathnote">This choice is permanent. You can inspect your abilities and future progression later from the Status window with <b>C</b>.</div>';
   openBlockingGameModal(pathSelectEl,'path-choice');
-  pathPanelEl.querySelectorAll('.pathselect-card').forEach(card=>card.addEventListener('click',()=>{
-    const path=card.dataset.path;
+  const previewEl=document.getElementById('pathpreview');
+  pathPanelEl.querySelectorAll('[data-path-preview]').forEach(button=>button.addEventListener('click',()=>{
+    selectedPath=button.dataset.pathPreview;
+    const P=PATHS[selectedPath],info=PATH_PRESENTATION[selectedPath];
+    pathPanelEl.querySelectorAll('.pathselect-card').forEach(card=>card.classList.toggle('selected',card.dataset.path===selectedPath));
+    pathPanelEl.querySelectorAll('[data-path-preview]').forEach(other=>other.setAttribute('aria-pressed',String(other===button)));
+    previewEl.style.setProperty('--path-col',P.col);
+    previewEl.style.setProperty('--path-glow',hexToRgba(P.col,.28));
+    previewEl.innerHTML='<span><b>'+escHTML(P.name)+' · '+escHTML(info.role)+'</b><small>'+(abilityReady?'Available now':'Unlocks at Level 2')+': Q · '+escHTML(P.ab[0].n)+' — '+escHTML(P.ab[0].txt)+'</small><em>Permanent choice</em></span><button id="pathconfirm" type="button">CONFIRM '+escHTML(P.name).toUpperCase()+'</button>';
+    document.getElementById('pathconfirm').focus();
+  }));
+  previewEl.addEventListener('click',e=>{
+    const confirm=e.target&&e.target.closest?e.target.closest('#pathconfirm'):null;
+    if(!confirm||!selectedPath) return;
+    confirm.disabled=true;
+    const path=selectedPath;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.click', { path, beforePath:S&&S.path });
     if(!setAbilityPath(path,{message:false})) return;
     pathSelectEl.classList.remove('jobselect');
@@ -5040,19 +5063,19 @@ function showPathSelection(){
     pathChoiceOpen=false;
     closeBlockingGameModal(pathSelectEl,{relock:true,reason:'path-choice'});
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.closed', { path, afterPath:S&&S.path });
-    sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>. Welcome to the Town of Beginnings.');
+    sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>.'+(S.lvl>=2?' Your first ability is ready to awaken.':' Reach <b>Level 2</b> to awaken your first ability.'));
     if(S.lvl>=2 && !abilityTutorialDone()){
       setTimeout(()=>{
         if(!runLevel2CutsceneThenTutorial()) showAbilityAwakening();
       }, 250);
     }
-  }));
+  });
+  return true;
 }
 function completeOnboarding(){
   setMeadowTutorialDone();
-  // Paths unlock authoritatively at level 2. Training ends at level 1, so send
-  // the player to Mara first and let shouldOpenLevel2PathChoice() open this once
-  // the server confirms the first quest level-up.
+  // The town arrival flow now offers the permanent hunter path immediately.
+  // The chosen path is identity; its first usable ability still unlocks at level 2.
   finishOnboardingToTown();
 }
 function updateOnboardingHud(){

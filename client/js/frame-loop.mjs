@@ -1403,7 +1403,7 @@ function transitionRecoveryAction(){
   const panels=transitionPanelState();
   if(panels.rewardOpen) return {type:'continue_panel',label:'CONTINUE'};
   if(panels.jobOpen || combatState.jobChoiceOpen) return {type:'choose_job',label:'CHOOSE JOB'};
-  if(panels.pathOpen || (S&&S.lvl>=2&&!S.path)) return {type:'choose_path',label:'CHOOSE PATH'};
+  if(panels.pathOpen || (S&&!S.path&&serverTutorials.onboarding>=7)) return {type:'choose_path',label:'CHOOSE PATH'};
   if(panels.awakeningOpen || (S&&S.lvl>=2&&S.path&&combatState.abilityReady&&!combatState.abilityTutorialDone&&!combatState.abilityTrainingActive)) return {type:'start_awakening',label:'START AWAKENING'};
   if(combatState.abilityTrainingActive) return {type:'use_ability',label:combatState.abilityTrainingUsed?'FINISH TRAINING':'USE ABILITY'};
   return null;
@@ -1572,7 +1572,7 @@ function handleObjectiveAction(action,btn){
     return;
   }
   if(action==='choose_path'){
-    if(combatState.pathChoiceOpen || transitionPanelState().pathOpen){ sysMsg('<b>Choose Path:</b> select Shadow, Mage, or Guardian to unlock your first ability.'); return; }
+    if(combatState.pathChoiceOpen || transitionPanelState().pathOpen){ sysMsg('<b>Choose Path:</b> preview Shadow, Mage, Guardian, or Verdant, then confirm your permanent choice.'); return; }
     if(combatApi.showPathSelection&&combatApi.showPathSelection()) return;
     sysMsg('<b>Choose Path:</b> finish the current panel, then choose your combat path.');
     return;

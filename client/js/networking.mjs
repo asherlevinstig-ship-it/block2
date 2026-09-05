@@ -4944,7 +4944,7 @@ function buildCutsceneShots(path){
   return [
     {cap:PATHS[path].name, sub:'Your path awakens in the training meadow. Watch the target dummies.', path, held:q.held, armor:q.armor, name:null, dur:4.0, cam:'wide'},
     {cap:'Unlocked now: Q - '+ab[0].n, sub:abilityCutsceneDescription(path,0), path, held:q.held, armor:q.armor, name:ab[0].n, dur:7.0, castAt:2.6, cam:'hero', slot:0},
-    {cap:'Later: Level 5 - '+ab[1].n, sub:abilityCutsceneDescription(path,1), path, held:r.held, armor:r.armor, name:ab[1].n, dur:6.0, castAt:2.4, cam:'side', slot:1, preview:true},
+    {cap:'Later: Level 4 - '+ab[1].n, sub:abilityCutsceneDescription(path,1), path, held:r.held, armor:r.armor, name:ab[1].n, dur:6.0, castAt:2.4, cam:'side', slot:1, preview:true},
     {cap:'Later: Level 8 - '+ab[2].n, sub:abilityCutsceneDescription(path,2), path, held:h.held, armor:h.armor, name:ab[2].n, dur:6.0, castAt:2.4, cam:'side2', slot:2, preview:true},
   ];
 }

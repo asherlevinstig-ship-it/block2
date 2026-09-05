@@ -2816,14 +2816,14 @@ test('first quest bonus requires authoritative Mara completion and is single-cla
   assert.equal(client.sent.at(-1).msg.claimed, true);
 });
 
-test('combat path is chosen once only after the authoritative level 2 unlock', () => {
+test('combat path is chosen once after town arrival while abilities still unlock by level', () => {
   const room = makeRoom(), client = makeClient('path_owner');
   const { prof } = seedPlayer(room, client);
   room.setPath(client, 'shadow');
-  assert.equal(prof.S.path, '', 'training-time level 1 selection is rejected');
-  prof.S.lvl = 2;
+  assert.equal(prof.S.path, '', 'training-time selection before town arrival is rejected');
+  prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
   room.setPath(client, 'shadow');
-  assert.equal(prof.S.path, 'shadow');
+  assert.equal(prof.S.path, 'shadow', 'a level 1 arrival can define a hunter path');
   room.setPath(client, 'mage');
   assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
   const bad = makeClient('bad_path_owner');

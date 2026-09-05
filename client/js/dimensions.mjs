@@ -1116,13 +1116,11 @@ function renderStat(){
   if(P){
     P.ab.forEach((a,i)=>{
       const got=S.lvl>=AB_UNLOCK[i];
-      h+='<div class="ablist stat-ability-row"><span'+(got?'':' class="dim"')+'><kbd>'+['Q','R','F'][i]+'</kbd> '+a.g+' '+a.n+(a.passive?' (passive)':'')+'</span><span class="dim">'+(got ? a.txt+' &middot; '+(a.mp?a.mp+' MP ':'')+(a.sp?a.sp+' SP ':'')+'&middot; '+a.cd+'s cd' : 'Unlocks at '+hunterRankLevelLabel(AB_UNLOCK[i]))+'</span></div>';
+      h+='<div class="ablist stat-ability-row"><span'+(got?'':' class="dim"')+'><kbd>'+['Q','R','H'][i]+'</kbd> '+a.g+' '+a.n+(a.passive?' (passive)':'')+'</span><span class="dim">'+(got ? a.txt+' &middot; '+(a.mp?a.mp+' MP ':'')+(a.sp?a.sp+' SP ':'')+'&middot; '+a.cd+'s cd' : 'Unlocks at '+hunterRankLevelLabel(AB_UNLOCK[i]))+'</span></div>';
     });
-  }else if(S.lvl>=2){
-    h+='<div class="stat-path-grid">';
-    for(const key in PATHS){const pathDef=PATHS[key];h+='<div class="pathcard" data-path="'+key+'" style="border-color:'+pathDef.col+'"><h3 style="color:'+pathDef.col+'">'+pathDef.name+'</h3><p>'+pathDef.desc+'</p><div class="abl">'+pathDef.ab.map((a,i)=>a.g+' '+a.n+' (Lv'+AB_UNLOCK[i]+')').join(' &middot; ')+'</div></div>';}
-    h+='</div>';
-  }else h+='<p class="stat-empty-copy">Reach level 2 to awaken a class path.</p>';
+  }else{
+    h+='<div class="stat-path-callout"><b>Your hunter path is waiting</b><p>Preview all four paths and confirm your permanent choice in the full path guide.</p><button id="statchoosepath" type="button">CHOOSE HUNTER PATH</button></div>';
+  }
   if(deity&&deity.unlocked){
     const owned=new Set(Array.isArray(deity.powers)?deity.powers:[]);
     const active=deity.active||{};
@@ -1170,7 +1168,7 @@ function renderStat(){
   statPanel.querySelectorAll('.pathcard').forEach(c=>c.addEventListener('click',()=>{
     if(c.dataset.deityChoice){if(NET.on&&NET.room)NET.room.send('deityPowerChoose',{power:c.dataset.deityChoice});return;}
     if(c.dataset.spec){if(!abilitySpec&&highestGateRankCleared<2){sysMsg('Clear a <b>C-rank Gate</b> trial before choosing a specialization.');return;}if(!abilitySpec&&NET.on&&NET.room)NET.room.send('abilitySpec',{spec:c.dataset.spec});return;}
-    setAbilityPath(c.dataset.path);
+    if(c.dataset.path)setAbilityPath(c.dataset.path);
   }));
   statPanel.querySelectorAll('button[data-deity-use]').forEach(b=>b.addEventListener('click',()=>{
     if(!NET.on||!NET.room)return;
@@ -1188,6 +1186,12 @@ function renderStat(){
     if(typeof globalThis.openUtilitiesUI==='function')globalThis.openUtilitiesUI();
   }));
   document.getElementById('statclose').addEventListener('click',()=>closeStat());
+  const choosePathBtn=document.getElementById('statchoosepath');
+  if(choosePathBtn)choosePathBtn.addEventListener('click',()=>{
+    const combat=gameContext&&gameContext.requireModule&&gameContext.requireModule('combat');
+    closeStat(false);
+    if(combat&&combat.showPathSelection)combat.showPathSelection();
+  });
   const jobBtn=document.getElementById('jobopen');
   if(jobBtn)jobBtn.addEventListener('click',()=>openJobsUI());
 }

@@ -2389,7 +2389,7 @@ test('first town arrival stages the fountain, Tamsin, and Question Portal',()=>{
   assert.match(combat,/function showFirstTownArrivalChoice\(\)/);
   assert.match(combat,/function shouldShowFirstTownArrivalChoice\(\)\{[\s\S]*return false;/);
   assert.doesNotMatch(combat,/shouldShowFirstTownArrivalChoice\(\)\{[\s\S]*!quest&&!playerJob/);
-  assert.match(combat,/finishWorldLoading\('town-arrival'\); if\(deferArrivalChoice\)showFirstTownArrivalChoice\(\);/);
+  assert.match(combat,/finishWorldLoading\('town-arrival'\);\s*if\(S&&!S\.path\) showPathSelection\(\);\s*else if\(deferArrivalChoice\) showFirstTownArrivalChoice\(\);/);
   assert.match(combat,/chooseFirstTownArrival\(card\.dataset\.arrivalChoice\)/);
   assert.match(combat,/firstTownChoiceDismissedThisSession=true/);
   assert.match(combat,/closeBlockingGameModal\(arrivalChoiceEl,\{relock:false,reason:'arrival-choice'\}\);/);
@@ -2431,6 +2431,29 @@ test('first town arrival stages the fountain, Tamsin, and Question Portal',()=>{
   assert.match(networking,/m\.kind==='questions'&&dim==='questions'/);
   assert.match(dimensions,/announceArrivalTitle\('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare'\)/);
   assert.match(dimensions,/enterQuestionRoom,\s*\n {2}exitQuestionRoom,\s*\n {2}exitQuestionRoomToTown,/);
+});
+
+test('town arrival offers every path with preview and permanent confirmation',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(combat,/if\(S&&!S\.path\) showPathSelection\(\)/);
+  assert.match(combat,/const profileReady=!NET\.on\|\|NET\.profileReady===true/);
+  assert.match(combat,/S && !S\.path && profileReady && onboardingDone\(\) && inTown/);
+  assert.match(combat,/shadow:\{role:'Mobile Assassin'/);
+  assert.match(combat,/mage:\{role:'Ranged Control'/);
+  assert.match(combat,/guardian:\{role:'Durable Frontliner',difficulty:'Easiest to learn',beginner:true/);
+  assert.match(combat,/verdant:\{role:'Support Shapeshifter'/);
+  assert.match(combat,/data-path-preview/);
+  assert.match(combat,/id="pathconfirm" type="button" disabled/);
+  assert.match(combat,/No choice is made until you press the confirmation button/);
+  assert.match(combat,/if\(!confirm\|\|!selectedPath\) return/);
+  assert.match(dimensions,/id="statchoosepath"/);
+  assert.match(dimensions,/combat&&combat\.showPathSelection/);
+  assert.match(frame,/S&&!S\.path&&serverTutorials\.onboarding>=7/);
+  assert.match(styles,/#pathcards\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles,/@media \(max-width:640px\)\{#pathcards\{grid-template-columns:1fr\}/);
 });
 
 test('status modal presents a styled RPG character sheet instead of browser-default controls',()=>{
