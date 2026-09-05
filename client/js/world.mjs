@@ -5091,18 +5091,25 @@ for(let i=0;i<GUIDE_PATH_MAX;i++){
   }));
   chevron.rotation.x=-Math.PI/2;
   chevron.position.y=.035;
-  chevron.renderOrder=27;
+  chevron.renderOrder=28;
+  const halo=new THREE.Mesh(new THREE.PlaneGeometry(1.18,1.46),new THREE.MeshBasicMaterial({
+    map:new THREE.CanvasTexture(glowTexCanvas), color:0x9ad26b, transparent:true, opacity:0,
+    depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending, side:THREE.DoubleSide
+  }));
+  halo.rotation.x=-Math.PI/2;
+  halo.position.y=.018;
+  halo.renderOrder=27;
   const wisp=new THREE.Sprite(new THREE.SpriteMaterial({
     map:new THREE.CanvasTexture(glowTexCanvas), color:0x9ad26b, transparent:true, opacity:0,
     depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending
   }));
-  wisp.scale.set(.18,.36,1);
-  wisp.position.y=.22;
-  wisp.renderOrder=28;
-  group.add(chevron,wisp);
+  wisp.scale.set(.26,.5,1);
+  wisp.position.y=.24;
+  wisp.renderOrder=29;
+  group.add(halo,chevron,wisp);
   group.visible=false;
   guidePathGroup.add(group);
-  guidePathMarkers.push({group,chevron,wisp});
+  guidePathMarkers.push({group,halo,chevron,wisp});
 }
 const guideBeaconGroup=new THREE.Group();
 guideBeaconGroup.visible=false;
@@ -5600,6 +5607,7 @@ function routePoints(route, spacing=1.35){
 }
 function setGuideMarkerOpacity(marker,value){
   marker.chevron.material.opacity=value;
+  marker.halo.material.opacity=value*.42;
   marker.group.visible=value>.02;
 }
 function tickGuidancePath(dt, now){
@@ -5627,18 +5635,19 @@ function tickGuidancePath(dt, now){
       const pulseDistance=Math.min(phase,5-phase);
       const forwardPulse=Math.max(0,1-pulseDistance/1.15);
       marker.chevron.material.color.setHex(info.color);
+      marker.halo.material.color.setHex(info.color);
       marker.wisp.material.color.setHex(info.color);
       marker.group.position.set(p.x,surfaceY(p.x,p.z)+.04,p.z);
       marker.group.rotation.y=Math.atan2(-dx,-dz);
-      marker.chevron.scale.set(.78+forwardPulse*.14,1+forwardPulse*.18,1);
+      marker.chevron.scale.set(.9+forwardPulse*.16,1.12+forwardPulse*.2,1);
       const d=Math.hypot(player.pos.x-p.x, player.pos.z-p.z);
-      const target=d<1.05 ? .03 : .26+forwardPulse*.68;
+      const target=d<1.05 ? .04 : .48+forwardPulse*.47;
       const opacity=marker.chevron.material.opacity+(target-marker.chevron.material.opacity)*Math.min(1,dt*12);
       setGuideMarkerOpacity(marker,opacity);
       const rise=((now/850+i*.19)%1+1)%1;
-      marker.wisp.position.y=.18+rise*.38;
-      marker.wisp.scale.set(.14+forwardPulse*.05,.3+rise*.12,1);
-      marker.wisp.material.opacity=opacity*(1-rise)*(.32+forwardPulse*.32);
+      marker.wisp.position.y=.2+rise*.4;
+      marker.wisp.scale.set(.24+forwardPulse*.07,.46+rise*.16,1);
+      marker.wisp.material.opacity=opacity*(1-rise)*(.44+forwardPulse*.3);
     } else {
       const opacity=marker.chevron.material.opacity+(0-marker.chevron.material.opacity)*Math.min(1,dt*8);
       setGuideMarkerOpacity(marker,opacity);

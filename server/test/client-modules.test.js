@@ -2732,11 +2732,13 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(world,/guideBeaconBeam\.renderOrder=28/);
   assert.match(world,/surfaceY\(info\.target\.x,info\.target\.z\)\+\.04/);
   assert.match(world,/const guideChevronShape=new THREE\.Shape\(\)/);
+  assert.match(world,/const halo=new THREE\.Mesh\(new THREE\.PlaneGeometry\(1\.18,1\.46\)/);
   assert.match(world,/function roundedGuidanceRoute\(route\)/);
   assert.match(world,/function routePoints\(route, spacing=1\.35\)/);
   assert.match(world,/const travel=now\/500/);
   assert.match(world,/marker\.group\.rotation\.y=Math\.atan2\(-dx,-dz\)/);
-  assert.match(world,/marker\.wisp\.position\.y=\.18\+rise\*\.38/);
+  assert.match(world,/marker\.wisp\.position\.y=\.2\+rise\*\.4/);
+  assert.match(world,/const target=d<1\.05 \? \.04 : \.48\+forwardPulse\*\.47/);
   assert.doesNotMatch(world,/const guideBeacon=new THREE\.Sprite/);
   assert.doesNotMatch(combat,/glowing pillar|follow the glow|FOLLOW LIGHT/);
 });
