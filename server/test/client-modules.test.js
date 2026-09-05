@@ -1633,6 +1633,17 @@ test('path selection persists and returns directly to town without ability train
   assert.doesNotMatch(menus, /Start Awakening|Ability Training/, 'menus no longer advertise ability training');
 });
 
+test('chosen path exposes the ability hotbar immediately with locked-level guidance', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const dimensions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+
+  assert.match(combat, /return !!\(S && \(S\.path \|\| S\.lvl>=2\)\);/, 'a saved Level 1 path makes the hotbar available');
+  assert.match(dimensions, /P\.ab\.forEach\(\(a,i\)=>rows\.push\([\s\S]*locked:!BETA_ABILITY_TEST&&S\.lvl<AB_UNLOCK\[i\]/, 'all path slots render with their level locks');
+  assert.match(dimensions, /unlockLabel[\s\S]*unlocks at Level/, 'locked slots explain when they become usable');
+  assert.match(css, /#abilities:before\{content:attr\(data-path-label\)/, 'the desktop hotbar identifies the selected path');
+});
+
 test('first Gate clears produce the right onboarding handoffs', async () => {
   const { gateMilestoneHandoff, rankPromotionDetails } = await clientModule('onboarding.mjs');
   assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 0, nextRank: 1 } }, true), {

@@ -131,6 +131,7 @@
   body.calm-town #landmap:not(.map-utility){display:none!important}
   /* ability slots */
   #abilities{position:fixed;left:calc(50% + 372px);bottom:16px;display:flex;gap:7px;z-index:8}
+  #abilities:before{content:attr(data-path-label);position:absolute;left:2px;bottom:calc(100% + 5px);color:#b9c9da;font-size:8px;font-weight:700;letter-spacing:1.4px;line-height:1;white-space:nowrap;text-shadow:0 1px 3px #000}
   .abslot{width:52px;height:52px;border:2px solid #555;border-radius:7px;background:linear-gradient(180deg,rgba(10,18,28,.86),rgba(4,7,12,.8));position:relative;color:#dfe9ff;display:flex;align-items:center;justify-content:center;font-size:24px;text-shadow:0 0 10px currentColor;box-shadow:0 7px 20px rgba(0,0,0,.36),inset 0 0 16px rgba(255,255,255,.04)}
   .abslot .k{position:absolute;top:3px;left:5px;font-size:11px;color:#fff;text-shadow:1px 1px 0 #000;font-weight:bold}
   .abslot .cdov{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.72);height:0%;border-radius:0 0 5px 5px;backdrop-filter:grayscale(1)}
@@ -2349,6 +2350,7 @@ body.mobile-play-mode #abilities .abslot{
   cursor:pointer;
   touch-action:none;
 }
+body.mobile-play-mode #abilities:before{display:none}
 body.mobile-play-mode #abilities .abslot .k{
   top:3px;
   left:5px;

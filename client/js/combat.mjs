@@ -1850,7 +1850,9 @@ function beginOnboarding(){
   showName('TUTORIAL TRAINING GROUNDS');
 }
 function abilityHudAvailable(){
-  return !!(S && S.lvl>=2);
+  // Show a chosen path immediately. Locked slots teach new players what is
+  // coming instead of making the entire ability hotbar appear unexpectedly.
+  return !!(S && (S.path || S.lvl>=2));
 }
 function hunterAwakeningStepsHTML(active){
   const steps=[

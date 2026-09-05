@@ -914,6 +914,8 @@ function renderAbilities(){
   abEl.innerHTML=''; abSlots.length=0;
   const rows=[];
   const path=activeAbilityPath();
+  abEl.dataset.pathLabel=path&&PATHS[path]?(PATHS[path].name.toUpperCase()+' ABILITIES'):'ABILITIES';
+  abEl.setAttribute('aria-label',path&&PATHS[path]?(PATHS[path].name+' ability hotbar'):'Ability hotbar');
   if(path){
     const P=PATHS[path];
     P.ab.forEach((a,i)=>rows.push({a,i,key:['Q','R','H'][i], col:P.col, locked:!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i]}));
@@ -945,11 +947,12 @@ function renderAbilities(){
   rows.forEach(row=>{
     const d=document.createElement('div'); d.className='abslot'+(row.pathPending?' path-pending':'');
     d.style.borderColor=row.col; d.style.color=row.col;
-    d.title=row.pathPending?'Choose your ability path with C':(row.a.n||'Ability');
+    const unlockLabel=row.locked&&!row.pathPending&&AB_UNLOCK[row.i]?' — unlocks at Level '+AB_UNLOCK[row.i]:'';
+    d.title=row.pathPending?'Choose your ability path with C':((row.a.n||'Ability')+unlockLabel);
     d.dataset.abilityKey=row.key==='Q'?'KeyQ':row.key==='R'?'KeyR':row.key==='H'?'KeyH':row.key==='J'?'KeyJ':row.key==='F'?'KeyF':'';
     d.setAttribute('role','button');
     d.setAttribute('tabindex','0');
-    d.setAttribute('aria-label',(row.a.n||'Ability')+' - '+row.key);
+    d.setAttribute('aria-label',(row.a.n||'Ability')+' - '+row.key+unlockLabel);
     d.innerHTML='<span class="k">'+row.key+'</span>'+row.a.g+'<div class="cdov"></div><span class="lk">'+(row.pathPending?'PATH':'')+'</span>';
     d.addEventListener('pointerdown',e=>{
       const code=d.dataset.abilityKey||'';
