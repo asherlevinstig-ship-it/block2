@@ -2598,6 +2598,8 @@ class GameRoom extends Room {
       rec.prof.tutorials.gate = TUTORIAL_VERSIONS.gate;
       rec.prof.S.lvl = Math.max(['first_d_gate', 'c_rank_climb'].includes(focus) ? HUNTER_RANK_LEVELS[1] : 3, rec.prof.S.lvl | 0);
       rec.prof.S.path = rec.prof.S.path || 'shadow';
+      rec.prof.firstQuestRewardClaimed = true;
+      rec.prof.npcQuestChains['Mara Vale'] = Math.max(3, rec.prof.npcQuestChains['Mara Vale'] | 0);
       rec.prof.progressionFocus = focus;
       rec.prof.activeNpcQuest = null;
       rec.prof.jobContract = null;
@@ -2656,6 +2658,32 @@ class GameRoom extends Room {
       this.handleLandClaimBuy(client, { x, z });
       client.send('e2eJourneyResult', { action, requestId, ok: true, x, z });
       return true;
+    }
+    if (action === 'completeProgressionBase') {
+      const requestId = String(m && m.requestId || '');
+      const p = this.state.players.get(client.sessionId);
+      let claim = null;
+      this.landClaims.forEach((entry, key) => {
+        if (!claim && entry && entry.owner === rec.token && !this.isLandClaimAbandoned(entry)) {
+          const [x, z] = key.split(',').map(Number);
+          claim = { x, z };
+        }
+      });
+      if (!p || !claim) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      const y = Math.max(2, W.terrainHeight(claim.x, claim.z) + 1);
+      p.dgn = '';
+      p.x = claim.x + 0.5;
+      p.y = y + 0.05;
+      p.z = claim.z + 0.5;
+      this.setWorldBlock(claim.x, y, claim.z, W.B.CHEST);
+      this.setWorldBlock(claim.x, y + 1, claim.z, W.B.TORCH);
+      this.setWorldBlock(claim.x, y + 2, claim.z, W.B.TABLE);
+      const ok = this.checkBaseSetupProgress(client);
+      client.send('e2eJourneyResult', { action, requestId, ok: !!ok, x: claim.x, y, z: claim.z });
+      return ok;
     }
     if (action === 'completeMaraFieldWork') {
       const c = rec.prof.jobContract;
@@ -5349,7 +5377,7 @@ class GameRoom extends Room {
       else if (id === 'progression:first_homestead_upgrade') step = 8;
       else if (id === 'progression:first_profession_contract' || (source === 'job' && job && (job.difficulty === 'starter' || job.difficultyLabel === 'First Real Shift'))) step = 9;
       if (!step) return null;
-      return { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step, total: 9 };
+      return { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step, total: JOB_SYSTEM.ENABLED ? 9 : 8 };
     };
     const lifecycleFor = (state, src = {}) => {
       const normalizedState = ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(state) ? state : 'active';
@@ -5613,7 +5641,7 @@ class GameRoom extends Room {
       first_town_map: ['progression:first_town_map', 'progression', 'Town Map', 'Pick up a Town of Beginnings map from Orin Mapwell.', 'Orin Mapwell', 'cartographer', 'VISIT ORIN', 45],
       first_road_ready: ['progression:first_road_ready', 'progression', 'Road Ready', 'Accept or finish Road Ready from Mara, use the starter sword, and prove you can survive outside town.', 'Mara Vale', 'quest_log', 'OPEN QUEST', 50],
       first_e_gate: ['progression:first_e_gate', 'progression', 'First E-rank Gate', 'Accept Mara\'s Gate briefing, then follow the E-rank Gate marker into your first dungeon.', 'Wilderness Gate', 'find_gate', 'FIND GATE', 50],
-      first_craft_station: ['progression:first_craft_station', 'progression', 'First Craft Station', 'Craft a Crafting Table or Furnace.', 'Crafting menu', 'craft', 'CRAFT STATION', 50],
+      first_craft_station: ['progression:first_craft_station', 'progression', 'First Craft Station', 'Craft a Crafting Table (4 Oak Planks) or Furnace (8 Cobblestone). Your First Gate reward supplied enough for either.', 'Crafting menu', 'craft', 'CRAFT STATION', 50],
       first_land_claim: ['progression:first_land_claim', 'progression', 'First Land Claim', 'Leave town, press L, and buy one protected wilderness tile for your first safe build area.', 'Land Claims', 'land', 'CLAIM LAND', 50],
       first_claim_expand: ['progression:first_claim_expand', 'progression', 'Expand Claim', 'Buy two connected tiles beside your first claim to make a 3-tile Homestead.', 'Land Claims', 'land', 'EXPAND LAND', 50],
       first_base_setup: ['progression:first_base_setup', 'progression', 'Base Setup', 'Inside your Homestead, place storage, light, and a station.', 'Claimed land', 'land', 'OPEN LAND', 50],
@@ -5644,9 +5672,14 @@ class GameRoom extends Room {
       ];
       objective.progress = { current: checks.filter(c => c.done).length, required: checks.length };
       objective.checklist = checks;
-      const missing = checks.filter(c => !c.done).map(c => c.label.replace(' placed', '').toLowerCase());
+      const missing = checks.filter(c => !c.done);
+      const nextHints = {
+        storage: 'Place the Chest granted with your first claim inside your Homestead.',
+        light: 'Place one of your granted Torches inside your Homestead.',
+        station: 'Place the Crafting Table or Furnace you crafted inside your Homestead.',
+      };
       objective.hudText = missing.length
-        ? 'Inside your Homestead, place: ' + missing.join(', ') + '.'
+        ? `${objective.progress.current}/${objective.progress.required} - ${nextHints[missing[0].id]}`
         : 'Base checks complete. Claim your Base Established reward.';
     }
     if (focus === 'first_d_gate' && client) {

@@ -954,8 +954,12 @@ function activeObjectiveList(){
 function serverObjectiveForHud(){
   const list=activeObjectiveList();
   if(!list.length)return null;
-  return list
-    .filter(o=>o.source!=='tutorial')
+  const candidates=list.filter(o=>o.source!=='tutorial');
+  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus)
+    ?candidates.find(o=>o.source==='progression'&&o.id==='progression:'+progressionFocus)
+    :null;
+  if(baseChapter)return baseChapter;
+  return candidates
     .sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')))[0] || null;
 }
 function homeworkObjectiveForHud(){
@@ -1148,7 +1152,7 @@ function progressionObjectiveFallback(){
   if(progressionFocus==='first_homestead_upgrade')return objectiveLine('progression','Next','Homestead Upgrade','Your Homestead is ready. Choose your first upgrade from Land Claims',{type:'land',label:'OPEN HOMESTEAD'});
   if(progressionFocus==='first_craft_station'){
     const craft=objectiveCraftAction('what_next');
-    return objectiveLine('progression','Next','Craft Station','Craft your first table or furnace',craft||{type:'questlog',label:'OPEN QUEST LOG'});
+    return objectiveLine('progression','Next','Craft Station','Craft a Crafting Table (4 Oak Planks) or Furnace (8 Cobblestone)',craft||{type:'questlog',label:'OPEN QUEST LOG'});
   }
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     if(!JOBS_ENABLED){
@@ -1230,7 +1234,7 @@ function serverObjectiveLine(o,labelOverride=''){
   return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),action,serverObjectiveProgressParts(o),{chapter:o.chapter||null,checklist:Array.isArray(o.checklist)?o.checklist:null,serverObjective:o,target});
 }
 function chapterOneMeta(step=8){
-  return {id:'chapter_1_town_beginnings',title:'Chapter 1: Town of Beginnings',step:Math.max(1,step|0),total:9};
+  return {id:'chapter_1_town_beginnings',title:'Chapter 1: Town of Beginnings',step:Math.max(1,step|0),total:JOBS_ENABLED?9:8};
 }
 function starterJobChapter(c){
   return c&&(c.difficulty==='starter'||c.difficultyLabel==='First Real Shift')?chapterOneMeta(8):null;
@@ -1325,12 +1329,14 @@ function nextBestObjectiveLine(){
     const text='Finish the open step so the next objective can appear';
     return objectiveLine('transition','Now',title,text,transition);
   }
+  const chapterProgression=chapterProgressionObjectiveLine();
+  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus);
+  if(baseChapter&&chapterProgression)return chapterProgression;
   if(story)return story;
   if(townGuidanceActive&&!jobContract){
     const tutorial=tutorialObjective();
     if(tutorial)return objectiveLine('tutorial','Guide',tutorial.label,tutorial.text,{type:'follow_marker',label:'FOLLOW MARKER'});
   }
-  const chapterProgression=chapterProgressionObjectiveLine();
   if(chapterProgression)return chapterProgression;
   if(localJob)return localJob;
   const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
@@ -1356,9 +1362,10 @@ function unifiedObjectiveList(){
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
   const job=localJobObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('job'),'Job');
   if((townGuidanceActive&&!jobContract)||(transition&&!shouldDeferTransitionAction(transition,{story,job})))return [];
-  if(story)lines.push(story);
   const chapterProgression=chapterProgressionObjectiveLine();
+  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus);
   if(chapterProgression)lines.push(chapterProgression);
+  if(story&&!baseChapter)lines.push(story);
   const prep=gatePrepObjectiveLine();
   if(prep)lines.push(prep);
   const aegis=!story||story.kind!=='aegis'?serverObjectiveLine(serverObjectiveBySource('aegis'),'Aegis'):null;
@@ -1427,7 +1434,10 @@ function currentObjectiveAction(){
     const craft=objectiveCraftAction('what_next');
     if(craft) return craft;
   }
-  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup'||progressionFocus==='first_homestead_upgrade') return {type:'land',label:progressionFocus==='first_homestead_upgrade'?'OPEN HOMESTEAD':'CLAIM LAND'};
+  if(progressionFocus==='first_land_claim') return {type:'land',label:'CLAIM LAND'};
+  if(progressionFocus==='first_claim_expand') return {type:'land',label:'EXPAND LAND'};
+  if(progressionFocus==='first_base_setup') return {type:'land',label:'OPEN LAND'};
+  if(progressionFocus==='first_homestead_upgrade') return {type:'land',label:'OPEN HOMESTEAD'};
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract') return {type:'quest_log',label:'OPEN QUEST LOG'};
   if(progressionFocus==='c_rank_specialization') return {type:'choose_spec',label:'CHOOSE SPEC'};
   if(progressionFocus==='b_rank_pressure') return progressionObjectiveFallback().action || {type:'guild_contracts',label:'OPEN GUILD BOARD'};
@@ -1888,7 +1898,10 @@ function utilityCompassTarget(){
     return mara?{label:'Mara',x:mara.x,z:mara.z}:null;
   }
   if(progressionFocus==='first_craft_station') return {label:'Crafting',x:HUB.smith.x,z:HUB.smith.z};
-  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup'||progressionFocus==='first_homestead_upgrade') return {label:progressionFocus==='first_homestead_upgrade'?'Homestead':'Claim Land',x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
+  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup'||progressionFocus==='first_homestead_upgrade'){
+    const landTarget=worldApi.progressionLandTarget&&worldApi.progressionLandTarget(progressionFocus);
+    return landTarget||{label:progressionFocus==='first_homestead_upgrade'?'Homestead':'Claim Land',x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
+  }
   if(progressionFocus==='first_profession_contract'){
     const handoff=professionHandoffObjective();
     return handoff&&handoff.target ? handoff.target : {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};

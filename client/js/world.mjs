@@ -3294,11 +3294,16 @@ function baseSetupChecklistHTML(status=baseSetupStatus()){
   ];
   const done=checks.filter(c=>c.done).length;
   const next=checks.find(c=>!c.done);
+  const details={
+    storage:'Chest (granted with your first claim)',
+    light:'Torch, Lantern, or Campfire (Torches were granted)',
+    station:'Crafting Table or Furnace (reuse the station you crafted)',
+  };
   return '<div class="base-setup-card">'
     +'<div class="base-setup-head"><b>Starter Base Checklist</b><span>'+done+'/'+checks.length+'</span></div>'
     +'<p>Build inside your protected Homestead. Only your owned/shared claim tiles count.</p>'
-    +'<div class="base-setup-checks">'+checks.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'&#10003;':'&#9675;')+'</b><span>'+escHTML(c.label)+' placed</span></div>').join('')+'</div>'
-    +'<small>'+(status&&status.ready?'Ready: your base is established.':'Next: place '+escHTML((next&&next.label||'the remaining block').toLowerCase())+' inside your highlighted claim.')+'</small>'
+    +'<div class="base-setup-checks">'+checks.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'&#10003;':'&#9675;')+'</b><span>'+escHTML(c.label)+' placed<small>'+escHTML(details[c.id]||'')+'</small></span></div>').join('')+'</div>'
+    +'<small>'+(status&&status.ready?'Ready: your base is established.':'Next: '+escHTML(details[next&&next.id]||'place the remaining block')+' inside your highlighted claim.')+'</small>'
     +'</div>';
 }
 function explainBaseSetupPlacement(x,z,y,blockId){
@@ -3471,6 +3476,20 @@ function recommendedClaimTile(){
   }
   return fallback;
 }
+function progressionLandTarget(focus=progressionFocus){
+  if(focus==='first_land_claim'||focus==='first_claim_expand'){
+    const rec=recommendedClaimTile();
+    return rec?{label:focus==='first_claim_expand'?'Expand Claim':'Recommended Claim',x:rec.x+.5,z:rec.z+.5}:null;
+  }
+  if(focus!=='first_base_setup'&&focus!=='first_homestead_upgrade') return null;
+  const px=player?player.pos.x:claimCam.x, pz=player?player.pos.z:claimCam.z;
+  let best=null;
+  for(const entry of landClaimEntries(c=>c.own)){
+    const distance=Math.hypot(entry.x+.5-px,entry.z+.5-pz);
+    if(!best||distance<best.distance) best={label:focus==='first_homestead_upgrade'?'Homestead':'Your Claim',x:entry.x+.5,z:entry.z+.5,distance};
+  }
+  return best&&{label:best.label,x:best.x,z:best.z};
+}
 function firstLandClaimGuidanceHTML(){
   const rec=recommendedClaimTile();
   if(!rec) return '<b>First claim route:</b> Leave town and choose a tile marked <b>Available</b>. Town tiles and border tiles cannot be claimed.';
@@ -3480,7 +3499,7 @@ function firstLandClaimGuidanceHTML(){
   let next='';
   if(analysis.canBuy) next='Ready to buy now.';
   else {
-    const moneyHint=shortfall>0?'Shortfall: '+shortfall+' gold. Earn gold from Mara quests, hunting, contracts, or selling spare materials. ':'';
+    const moneyHint=shortfall>0?'Shortfall: '+shortfall+' gold. Earn gold from Mara quests, Guild Hall work, hunting, or selling spare materials. ':'';
     next=moneyHint+(((analysis.blocked||'')==='Need more gold')?'':blocked+' Move outside town and pick a tile marked Available.');
   }
   return '<b>First claim route:</b> Recommended tile <b>'+rec.x+', '+rec.z+'</b> - '+escHTML(rec.relation)+'.<br>Price: <b>'+analysis.price+' gold</b> - You have <b>'+gold+'</b>.<br>'+escHTML(next);
@@ -11769,6 +11788,7 @@ gameContext.registerModule('world', Object.freeze({
   tickRoadSafetyScenes,
   spotlightLandClaim,
   baseSetupStatus,
+  progressionLandTarget,
   openLandClaims:openLandClaimsUI,
   toggleLandClaims:toggleLandClaimOverlay,
   setBuildGhostPreview,

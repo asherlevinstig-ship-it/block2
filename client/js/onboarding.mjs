@@ -1,3 +1,6 @@
+const JOBS_ENABLED=!!(globalThis.BlockcraftJobSystem&&globalThis.BlockcraftJobSystem.ENABLED);
+const CHAPTER_ONE_TOTAL=JOBS_ENABLED?9:8;
+
 // Guided-onboarding UI: the first-promotion / field-work-graduation modals and
 // the D-rank preparation objective + checklist shown in the HUD. Extracted from
 // index.html so the panel/checklist/modal logic lives beside the other client
@@ -97,23 +100,23 @@ export function createOnboardingUI(deps) {
     const focus = getFocus();
     if (focus === 'first_road_ready') return {
       label: 'Progression Path', text: "Take Mara's Road Ready quest, use the starter sword, and reach Level 3", target: HUB.mara,
-      path: { now: 'Road Ready', next: 'Then clear your first E-rank Gate', why: 'The first dungeon should teach combat before the base loop opens up', step: 2, total: 6 },
+      path: { now: 'Road Ready', next: 'Then clear your first E-rank Gate', why: 'The first dungeon should teach combat before the base loop opens up', step: 2, total: CHAPTER_ONE_TOTAL },
     };
     if (focus === 'first_e_gate') return {
       label: 'First Dungeon', text: "Accept Mara's First Gate quest, find the E-rank Gate, and defeat its boss", target: HUB.mara,
-      path: { now: 'Clear an E-rank Gate', next: 'Then build your first station', why: 'This is the first dungeon milestone, not D-rank prep', step: 3, total: 6 },
+      path: { now: 'Clear an E-rank Gate', next: 'Then build your first station', why: 'This is the first dungeon milestone, not D-rank prep', step: 3, total: CHAPTER_ONE_TOTAL },
     };
     if (focus === 'first_craft_station') return {
-      label: 'Progression Path', text: 'Craft a Crafting Table or Furnace so your base has a real work station', target: HUB.smith,
-      path: { now: 'Craft a station', next: 'Then claim land', why: 'Your first dungeon should pay forward into a safer home base', step: 4, total: 9 },
+      label: 'Progression Path', text: 'Craft a Crafting Table (4 Oak Planks) or Furnace (8 Cobblestone). Your First Gate reward supplied enough for either', target: HUB.smith,
+      path: { now: 'Craft a station', next: 'Then claim land', why: 'Your first dungeon should pay forward into a safer home base', step: 4, total: CHAPTER_ONE_TOTAL },
     };
     if (focus === 'first_land_claim') return {
       label: 'Progression Path', text: 'Leave town, press L, and buy your first land claim for a protected base', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
-      path: { now: 'Claim your first land', next: 'Then expand it to 3 connected tiles', why: 'Protect your home before repeatable field work', step: 5, total: 9 },
+      path: { now: 'Claim your first land', next: 'Then expand it to 3 connected tiles', why: 'Protect your home before repeatable field work', step: 5, total: CHAPTER_ONE_TOTAL },
     };
     if (focus === 'first_claim_expand') return {
       label: 'Progression Path', text: 'Expand your protected base to 3 connected land claims. Adjacent expansion gets a discount.', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
-      path: { now: 'Expand to 3 connected claims', next: 'Then establish your base', why: 'A real base needs enough protected room for storage, light, and a station', step: 6, total: 9 },
+      path: { now: 'Expand to 3 connected claims', next: 'Then establish your base', why: 'A real base needs enough protected room for storage, light, and a station', step: 6, total: CHAPTER_ONE_TOTAL },
     };
     if (focus === 'first_base_setup') {
       const base = typeof baseSetupStatus === 'function' ? baseSetupStatus() : null;
@@ -132,12 +135,12 @@ export function createOnboardingUI(deps) {
         target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
         checklist: checks,
         prep: { next },
-        path: { now: 'Place storage, light, and a station', next: 'Then choose a Homestead upgrade', why: 'Your first base should become a usable home before repeatable field work', step: 7, total: 9 },
+        path: { now: 'Place storage, light, and a station', next: 'Then choose a Homestead upgrade', why: 'Your first base should become a usable home before the E-rank climb', step: 7, total: CHAPTER_ONE_TOTAL },
       };
     }
     if (focus === 'first_homestead_upgrade') return {
       label: 'Progression Path', text: 'Open Land Claims while standing in your Homestead and choose your first upgrade', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
-      path: { now: 'Choose a Homestead upgrade', next: 'Then take a contract', why: 'A home base should give a clear practical benefit before repeatable work begins', step: 8, total: 9 },
+      path: { now: 'Choose a Homestead upgrade', next: 'Then begin the E-rank climb', why: 'Your upgraded home supports town quests, Guild work, Gates, and field exploration', step: 8, total: CHAPTER_ONE_TOTAL },
     };
     if (focus === 'first_profession_contract') return { label: 'Progression Path', text: 'Jobs are retired; continue through the Quest Log and Guild Hall', target: HUB.guild };
     if (focus === 'e_rank_climb') return { label: 'E-Rank Journey', text: 'Build Hunter XP through town quests, Guild Contracts, Gates, events, and hostile threats. D-Rank begins at Level 11.', target: HUB.guild };
