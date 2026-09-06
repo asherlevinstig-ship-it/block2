@@ -384,6 +384,12 @@ test('marketplace has a dedicated recipe-based common outfitter', () => {
 
   assert.match(world, /title:'RIVER & TRAIL',sub:'COMMON OUTFITTER'/);
   assert.match(world, /function makeOutfitterStallDecor\(\)/);
+  assert.match(world, /kind:'outfitter_stall',outfitterCounter,rodRack,merchandise,shopLanterns,servicePad,serviceRing/);
+  assert.match(world, /RIVER & TRAIL'[\s\S]*COMMON OUTFITTER/);
+  assert.match(world, /new THREE\.TorusGeometry\(\.16,\.045,6,12\)/);
+  assert.match(world, /new THREE\.RingGeometry\(\.92,1\.08,24\)/);
+  assert.match(combat, /function isOutfitterCounterHit\(hit\)/);
+  assert.match(combat, /if\(isOutfitterCounterHit\(hit\)\)\{ openShopUI\('outfitter'\); return; \}/);
   assert.match(world, /name:'Nessa Reed'[\s\S]*role:'outfitter'/);
   assert.match(menus, /const OUTFITTER_BUY=\[\[I\.FISHING_ROD,1,12\]/);
   assert.match(menus, /vendor==='outfitter'\?'OUTFITTER_BUY|vendor==='outfitter'\?OUTFITTER_BUY/);

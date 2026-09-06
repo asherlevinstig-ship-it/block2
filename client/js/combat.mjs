@@ -6560,6 +6560,11 @@ function isJobBoardHit(hit){
   return Math.abs(hit.x-jbx)<=1 && Math.abs(hit.z-jbz)<=1 && hit.y>=TOWN.G+1 && hit.y<=TOWN.G+3 &&
     (hit.id===B.PLANKS || hit.id===B.LOG);
 }
+function isOutfitterCounterHit(hit){
+  if(!hit || hit.id!==B.PLANKS || hit.y!==TOWN.G+1)return false;
+  const ox=Math.round(HUB.outfitter.x),oz=Math.round(HUB.outfitter.z);
+  return hit.x===ox-2&&hit.z>=oz-1&&hit.z<=oz+1;
+}
 function placementIntersectsPlayer(px,py,pz,placeId){
   if(!isSolid(placeId)) return false;
   return px<player.pos.x+player.w && px+1>player.pos.x-player.w
@@ -6570,8 +6575,8 @@ function isPlacementInteractionHit(hit){
   if(!hit) return false;
   if(isJobBoardHit(hit)) return true;
   if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2) return true;
-  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX &&
-     ((hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)||(hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8))) return true;
+  if(isOutfitterCounterHit(hit))return true;
+  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)return true;
   return hit.id===B.CHEST || hit.id===B.TABLE || hit.id===B.FURNACE || hit.id===B.EGG_INSULATOR || hit.id===B.BED || hit.id===B.WHEAT_3;
 }
 function buildPlacementPreview(){
@@ -6700,7 +6705,7 @@ function blockInteractionPrompt(hit){
   if(!hit)return null;
   if(isJobBoardHit(hit))return {key:'G',title:'Job Board',small:'Open profession and contract work',priority:80};
   if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2)return {key:'G',title:'Shard Pedestal',small:'Open shard keys and Gate options',priority:70};
-  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8)return {key:'G',title:'River & Trail Outfitter',small:'Browse common fishing and trail gear',priority:68};
+  if(isOutfitterCounterHit(hit))return {key:'G',title:'River & Trail Outfitter',small:'Browse common fishing and trail gear',priority:68};
   if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)return {key:'G',title:'Market Stall',small:'Open town shop',priority:68};
   if(hit.id===B.CHEST)return {key:'G',title:'Chest',small:'Open storage',priority:65};
   if(hit.id===B.TABLE)return {key:'G',title:'Crafting Table',small:'Open crafting grid',priority:65};
@@ -7074,7 +7079,7 @@ function secondaryAction(){
   if(interactSmallDiscovery(nearbySmallDiscovery(7),hit))return;
   if(isJobBoardHit(hit)){ openJobsUI(); return; }
   if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2){ openShardUI(); return; }
-  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8){ openShopUI('outfitter'); return; }
+  if(isOutfitterCounterHit(hit)){ openShopUI('outfitter'); return; }
   if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6){ openShopUI(); return; }
   if(hit.id===B.CHEST){ openUI('chest', hit.x+','+hit.y+','+hit.z); return; }
   if(hit.id===B.TABLE){ openUI('table'); return; }

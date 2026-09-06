@@ -2429,12 +2429,16 @@ function buildTown(){
   for(let x=roostX(84);x<=roostX(88);x++) for(let z=roostZ(63);z<=roostZ(67);z++) setB(x,G,z,B.COBBLE); // roost threshold
 
   // --- market stalls on the west road, far enough from spawn to read as a district ---
-  for(const mz of [TC-8, TC+6]){
+  for(const mz of [TC-8]){
     for(const [px,pz] of [[HUB.marketX-2,mz],[HUB.marketX,mz],[HUB.marketX-2,mz+2],[HUB.marketX,mz+2]])
       fillBox(px,G+1,pz, px,G+3,pz, B.LOG);                         // posts
     fillBox(HUB.marketX-2,G+4,mz, HUB.marketX,G+4,mz+2, B.PLANKS);  // canopy
     fillBox(HUB.marketX,G+1,mz, HUB.marketX,G+1,mz+2, B.PLANKS);    // counter
   }
+  // River & Trail uses a larger authored mesh kiosk. Keep only a solid counter here so
+  // interaction has physical weight without an old block canopy clipping through the new shop.
+  const outfitterX=Math.round(HUB.outfitter.x),outfitterZ=Math.round(HUB.outfitter.z);
+  for(let z=outfitterZ-1;z<=outfitterZ+1;z++)setB(outfitterX-2,G+1,z,B.PLANKS);
 
   // --- torches: gate flanks and building interiors ---
   for(const [ax,az] of [[1,0],[-1,0],[0,1],[0,-1]])
@@ -5923,21 +5927,91 @@ const TOWN_BUILDING_SIGNS=Object.freeze([
 function makeOutfitterStallDecor(){
   const grp=new THREE.Group();
   const teal=voxelMats('#126a73','#55d6d0','#0b3b46','#06252d');
+  const tealDark=voxelMats('#083f49','#147780','#05272e','#03171c');
+  const wood=voxelMats('#72491f','#a87537','#43270f','#211207');
+  const woodDark=voxelMats('#3a210d','#684019','#241206','#120903');
   const pale=voxelMats('#c9b782','#f5e9b8','#85734b','#4a3b24');
   const iron=voxelMats('#637486','#b9d2dc','#354552','#17232b');
-  // A colored awning and front valance distinguish this counter from the general market stall.
-  addBox(grp,[3.25,.16,3.15],[0,3.65,0],teal);
-  for(const z of [-1.15,-.38,.38,1.15])addBox(grp,[3.35,.05,.24],[.08,3.78,z],z<0?teal:pale);
-  addBox(grp,[.18,.55,3.05],[1.52,3.35,0],teal);
-  // Two crossed rods form a readable shop crest above the canopy.
-  addBox(grp,[.11,2.35,.11],[-.34,4.72,0],pale,[0,0,.72]);
-  addBox(grp,[.11,2.35,.11],[.34,4.72,0],pale,[0,0,-.72]);
-  addBox(grp,[.12,.12,.45],[1.08,4.03,0],iron);
-  addBox(grp,[.55,.12,.12],[1.2,4.18,0],iron);
-  // Compact tackle crates keep the design useful-looking without widening the town footprint.
-  addBox(grp,[.75,.55,.75],[-.92,.3,-.78],pale);
-  addBox(grp,[.62,.42,.62],[-.82,.22,.75],teal);
+  const brass=glowVoxelMats('#a87520','#ffe08a','#60400e','#ffd86a',.55);
+
+  // A deck, four full-height posts, headers, and braces give the kiosk a believable load path.
+  addBox(grp,[5.85,.12,4.45],[0,.04,0],woodDark);
+  addBox(grp,[5.35,.045,3.95],[-.05,.115,0],pale);
+  for(const [x,z] of [[-2.58,-1.88],[-2.58,1.88],[2.58,-1.88],[2.58,1.88]]){
+    addBox(grp,[.26,3.55,.26],[x,1.82,z],wood);
+    addBox(grp,[.4,.18,.4],[x,.14,z],brass);
+    addBox(grp,[.4,.18,.4],[x,3.5,z],brass);
+  }
+  addBox(grp,[5.75,.26,.28],[0,3.35,-1.88],woodDark);
+  addBox(grp,[5.75,.26,.28],[0,3.35,1.88],woodDark);
+  addBox(grp,[.28,.26,3.55],[-2.58,3.35,0],woodDark);
+  addBox(grp,[.28,.26,3.55],[2.58,3.35,0],woodDark);
+  for(const z of [-1.88,1.88]){
+    addBox(grp,[.15,1.05,.15],[-2.18,2.9,z],wood,[0,0,-.72]);
+    addBox(grp,[.15,1.05,.15],[2.18,2.9,z],wood,[0,0,.72]);
+  }
+
+  // A broad striped awning and hanging valance make this read as a permanent shop from the road.
+  addBox(grp,[6.15,.2,4.85],[0,3.72,0],tealDark);
+  for(let i=-4;i<=4;i++)addBox(grp,[6.25,.055,.42],[0,3.845,i*.5],i%2?teal:pale);
+  addBox(grp,[.3,.62,4.65],[-3.02,3.43,0],teal);
+  for(let i=-4;i<=4;i+=2)addBox(grp,[.09,.24,.38],[-3.19,3.12,i*.48],pale);
+  addBox(grp,[.18,.28,4.55],[3.02,3.48,0],tealDark);
+
+  // Nessa stands behind an enclosed counter instead of between loose crates.
+  const outfitterCounter=addBox(grp,[.72,1.08,3.65],[-1.6,.58,0],wood);
+  addBox(grp,[.9,.17,3.9],[-1.6,1.15,0],pale);
+  addBox(grp,[.06,.58,3.18],[-1.985,.63,0],tealDark);
+  for(const z of [-1.18,0,1.18])addBox(grp,[.075,.72,.11],[-2.025,.62,z],brass);
+  addBox(grp,[1.1,.92,.58],[-.98,.49,-1.5],woodDark);
+  addBox(grp,[1.1,.92,.58],[-.98,.49,1.5],woodDark);
+  const serviceMat=new THREE.MeshLambertMaterial({color:0x123b3e,transparent:true,opacity:.92});
+  const servicePad=new THREE.Mesh(new THREE.CircleGeometry(1.18,24),serviceMat);
+  servicePad.rotation.x=-Math.PI/2;servicePad.position.set(-3.45,.14,0);grp.add(servicePad);
+  const serviceRing=new THREE.Mesh(new THREE.RingGeometry(.92,1.08,24),new THREE.MeshBasicMaterial({color:0x67e8f9,transparent:true,opacity:.42,depthWrite:false,side:THREE.DoubleSide}));
+  serviceRing.rotation.x=-Math.PI/2;serviceRing.position.set(-3.45,.155,0);grp.add(serviceRing);
+
+  // Back-wall stock display: rods, a common axe, torch bundle, rope, packs, and tackle bins.
+  const rodRack=new THREE.Group();rodRack.position.set(1.98,0,0);grp.add(rodRack);
+  addBox(rodRack,[.18,2.45,3.45],[0,1.63,0],woodDark);
+  addBox(rodRack,[.28,.16,3.55],[-.02,.54,0],wood);
+  addBox(rodRack,[.28,.16,3.55],[-.02,2.74,0],wood);
+  for(const [z,tilt] of [[-1.18,-.12],[-.4,.1],[.38,-.08]]){
+    addBox(rodRack,[.08,2.15,.08],[-.18,1.67,z],pale,[0,0,tilt]);
+    const reel=new THREE.Mesh(new THREE.TorusGeometry(.16,.045,6,12),new THREE.MeshLambertMaterial({color:0xaebdca}));
+    reel.rotation.y=Math.PI/2;reel.position.set(-.28,1.05,z);rodRack.add(reel);
+  }
+  addBox(rodRack,[.1,1.65,.1],[-.22,1.72,1.12],wood,[0,0,-.58]);
+  addBox(rodRack,[.5,.12,.32],[-.39,2.18,.76],iron,[0,0,.42]);
+  const rope=new THREE.Mesh(new THREE.TorusGeometry(.38,.085,7,18),new THREE.MeshLambertMaterial({color:0xcbb57b}));
+  rope.rotation.y=Math.PI/2;rope.position.set(-.2,1.35,1.33);rodRack.add(rope);
+  const merchandise=[];
+  merchandise.push(addBox(grp,[.52,.34,.62],[1.5,.34,-1.45],teal));
+  merchandise.push(addBox(grp,[.78,.52,.78],[1.55,.43,1.35],pale));
+  merchandise.push(addBox(grp,[.62,.42,.62],[.88,.3,1.48],tealDark));
+  for(const z of [-.45,-.18,.1])merchandise.push(addBox(grp,[.12,.7,.12],[-1.63,1.57,z],brass));
+  addBox(grp,[.62,.12,.62],[1.5,.72,-1.45],iron);
+  addBox(grp,[.62,.08,.78],[1.55,.73,1.35],woodDark);
+
+  // A physical, front-facing sign stays readable without overlapping Nessa's nameplate.
+  const c=document.createElement('canvas');c.width=512;c.height=160;const g=c.getContext('2d');
+  g.fillStyle='#082a31';g.fillRect(0,0,c.width,c.height);
+  g.strokeStyle='#d8bd72';g.lineWidth=12;g.strokeRect(10,10,c.width-20,c.height-20);
+  g.fillStyle='#f7e8b1';g.textAlign='center';fitCanvasText(g,'RIVER & TRAIL',440,40,'bold');g.fillText('RIVER & TRAIL',256,70);
+  g.fillStyle='#67e8f9';fitCanvasText(g,'COMMON OUTFITTER',390,23,'bold');g.fillText('COMMON OUTFITTER',256,116);
+  const signTex=new THREE.CanvasTexture(c);signTex.magFilter=THREE.NearestFilter;signTex.minFilter=THREE.NearestFilter;
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(3.75,1.18),new THREE.MeshBasicMaterial({map:signTex,side:THREE.DoubleSide}));
+  sign.rotation.y=-Math.PI/2;sign.position.set(-3.18,2.62,0);grp.add(sign);
+  addBox(grp,[.16,1.1,.16],[-3.03,3.08,-1.55],woodDark);
+  addBox(grp,[.16,1.1,.16],[-3.03,3.08,1.55],woodDark);
+
+  const shopLanterns=[];
+  for(const z of [-1.62,1.62]){
+    addBox(grp,[.28,.42,.28],[-2.7,2.72,z],brass);
+    const lamp=new THREE.PointLight(0xffd27a,.58,6);lamp.position.set(-2.78,2.72,z);grp.add(lamp);shopLanterns.push(lamp);
+  }
   grp.position.set(HUB.outfitter.x,TOWN.G+1,HUB.outfitter.z);
+  grp.userData={kind:'outfitter_stall',outfitterCounter,rodRack,merchandise,shopLanterns,servicePad,serviceRing};
   townGroup.add(grp);
   return grp;
 }
