@@ -31,6 +31,7 @@ class MySqlAuthBackend {
     this.bcrypt = options.bcrypt || bcrypt;
     this.env = options.env || process.env;
     this.studentColumnSet = null;
+    this.sessionStoreReady = null;
   }
 
   getPool() {
@@ -47,6 +48,68 @@ class MySqlAuthBackend {
       charset: 'utf8mb4',
     });
     return this.pool;
+  }
+
+  ensureSessionStore() {
+    if (!this.sessionStoreReady) {
+      this.sessionStoreReady = this.getPool().execute(
+        `CREATE TABLE IF NOT EXISTS blockcraft_sessions (
+          session_hash CHAR(64) PRIMARY KEY,
+          account_id VARCHAR(96) NOT NULL,
+          account_json TEXT NOT NULL,
+          expires_at BIGINT NOT NULL,
+          INDEX blockcraft_sessions_expires_at (expires_at),
+          INDEX blockcraft_sessions_account_id (account_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+      ).catch(error => {
+        this.sessionStoreReady = null;
+        throw error;
+      });
+    }
+    return this.sessionStoreReady;
+  }
+
+  async saveSession(sessionHash, session) {
+    if (!/^[a-f0-9]{64}$/.test(String(sessionHash || '')) || !session || !session.accountId || !session.account) throw new Error('invalid shared session');
+    await this.ensureSessionStore();
+    await this.getPool().execute(
+      `INSERT INTO blockcraft_sessions (session_hash, account_id, account_json, expires_at)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE account_id=VALUES(account_id), account_json=VALUES(account_json), expires_at=VALUES(expires_at)`,
+      [sessionHash, String(session.accountId), JSON.stringify(session.account), Number(session.expiresAt)],
+    );
+  }
+
+  async findSession(sessionHash, now = Date.now()) {
+    if (!/^[a-f0-9]{64}$/.test(String(sessionHash || ''))) return null;
+    await this.ensureSessionStore();
+    const [rows] = await this.getPool().execute(
+      'SELECT account_id, account_json, expires_at FROM blockcraft_sessions WHERE session_hash = ? LIMIT 1',
+      [sessionHash],
+    );
+    const row = rows && rows[0];
+    if (!row) return null;
+    if (!(Number(row.expires_at) > now)) {
+      await this.deleteSession(sessionHash);
+      return null;
+    }
+    let account = null;
+    try { account = JSON.parse(String(row.account_json || '')); } catch (_) { return null; }
+    if (!account || String(account.id || '') !== String(row.account_id || '')) return null;
+    return { accountId: String(row.account_id), account, expiresAt: Number(row.expires_at) };
+  }
+
+  async deleteSession(sessionHash) {
+    if (!/^[a-f0-9]{64}$/.test(String(sessionHash || ''))) return;
+    await this.ensureSessionStore();
+    await this.getPool().execute('DELETE FROM blockcraft_sessions WHERE session_hash = ?', [sessionHash]);
+  }
+
+  async deleteSessionsForAccount(accountId) {
+    const id = String(accountId || '').trim();
+    if (!id) return;
+    await this.ensureSessionStore();
+    await this.getPool().execute('DELETE FROM blockcraft_sessions WHERE account_id = ?', [id]);
   }
 
   async findAccount(identifier) {

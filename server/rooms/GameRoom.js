@@ -260,7 +260,10 @@ function setReplicatedPlayerPose(p, x, y, z, yaw) {
 class GameRoom extends Room {
   static async onAuth(_token, options, context) {
     const request = authRequestFromColyseus(options, context);
-    const account = getAuthService().authenticateRequest(request);
+    const authService = getAuthService();
+    const account = typeof authService.authenticateRoomRequest === 'function'
+      ? await authService.authenticateRoomRequest(request)
+      : authService.authenticateRequest(request);
     const roomName = this && this.name === 'DungeonRoom' ? 'dungeon' : 'overworld';
     recordIdentityTrace('room.auth', {
       room: roomName,

@@ -775,6 +775,7 @@ class AuthService {
     for (const [key, session] of [...this.sessions]) {
       if (session && session.accountId === account.id) this.sessions.delete(key);
     }
+    if (this.authBackend && typeof this.authBackend.deleteSessionsForAccount === 'function') await this.authBackend.deleteSessionsForAccount(account.id);
     await this.save();
     return { account, liveRoomsReset };
   }
@@ -1116,7 +1117,10 @@ class AuthService {
   async issueSession(account) {
     const sid = b64url(crypto.randomBytes(32));
     const publicAccount = this.publicAccount(account);
-    this.sessions.set(this.sessionKey(sid), { accountId: publicAccount.id, account: publicAccount, expiresAt: Date.now() + SESSION_MS });
+    const key = this.sessionKey(sid);
+    const session = { accountId: publicAccount.id, account: publicAccount, expiresAt: Date.now() + SESSION_MS };
+    this.sessions.set(key, session);
+    if (this.authBackend && typeof this.authBackend.saveSession === 'function') await this.authBackend.saveSession(key, session);
     await this.save();
     recordIdentityTrace('auth.session.issue', {
       account: accountSummary(publicAccount),
@@ -1139,6 +1143,49 @@ class AuthService {
     if (!session) return null;
     if (session.expiresAt <= Date.now()) { this.sessions.delete(key); return null; }
     return this.byId.get(session.accountId) || session.account || null;
+  }
+
+  async sharedSessionAccount(sid) {
+    const local = this.sessionAccount(sid);
+    if (local || !sid || !this.authBackend || typeof this.authBackend.findSession !== 'function') return local;
+    const key = this.sessionKey(sid);
+    const session = await this.authBackend.findSession(key);
+    if (!session) return null;
+    this.sessions.set(key, session);
+    return this.publicAccount(session.account);
+  }
+
+  async authenticateRoomRequest(req) {
+    const headers = req && req.headers || {};
+    const auth = String(headers.authorization || '');
+    const bearer = auth.match(/^Bearer\s+(.+)$/i);
+    const bearerSid = bearer ? bearer[1].trim() : '';
+    const cookieSid = parseCookies(headers.cookie)[COOKIE] || '';
+    let account = await this.sharedSessionAccount(bearerSid || cookieSid);
+    if (!account && bearerSid && cookieSid && bearerSid !== cookieSid) account = await this.sharedSessionAccount(cookieSid);
+    const publicAccount = account ? this.publicAccount(account) : false;
+    recordIdentityTrace('auth.room-request', {
+      source: bearerSid ? 'bearer' : cookieSid ? 'cookie' : 'none',
+      bearerHash: shortHash(bearerSid),
+      cookieHash: shortHash(cookieSid),
+      account: accountSummary(publicAccount),
+      ok: !!publicAccount,
+    });
+    return publicAccount || false;
+  }
+
+  async shareRequestSession(req) {
+    if (!this.authBackend || typeof this.authBackend.saveSession !== 'function') return false;
+    const headers = req && req.headers || {};
+    const auth = String(headers.authorization || '');
+    const bearer = auth.match(/^Bearer\s+(.+)$/i);
+    const sid = bearer ? bearer[1].trim() : parseCookies(headers.cookie)[COOKIE] || '';
+    if (!sid) return false;
+    const key = this.sessionKey(sid);
+    const session = this.sessions.get(key);
+    if (!session || !(session.expiresAt > Date.now())) return false;
+    await this.authBackend.saveSession(key, session);
+    return true;
   }
 
   authenticateRequest(req) {
@@ -1264,6 +1311,7 @@ class AuthService {
     app.get('/auth/me', async (req, res) => {
       const account = this.authenticateRequest(req);
       if (!account) return res.status(401).json({ ok: false });
+      await this.shareRequestSession(req);
       res.json({ ok: true, account, gameProfile: await this.publicGameProfile(account) });
     });
     app.post('/auth/bug-report', async (req, res) => {
@@ -1589,9 +1637,13 @@ class AuthService {
       res.json({ ok: true, cleared: clearRoomLifecycleTrace() });
     });
     app.post('/auth/logout', async (req, res) => {
-      const sid = parseCookies(req.headers.cookie)[COOKIE];
+      const auth = String(req.headers.authorization || '');
+      const bearer = auth.match(/^Bearer\s+(.+)$/i);
+      const sid = bearer ? bearer[1].trim() : parseCookies(req.headers.cookie)[COOKIE];
       if (sid) {
-        this.sessions.delete(this.sessionKey(sid));
+        const key = this.sessionKey(sid);
+        this.sessions.delete(key);
+        if (this.authBackend && typeof this.authBackend.deleteSession === 'function') await this.authBackend.deleteSession(key);
         await this.save();
       }
       res.setHeader('Set-Cookie', this.cookie('', req, true));

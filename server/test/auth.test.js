@@ -113,6 +113,48 @@ test('shared auth storage lets another server process accept a fresh session', a
   authB.stop();
 });
 
+test('MySQL session storage lets a separate cloud room process authenticate', async () => {
+  const sessionRows = new Map();
+  const pool = {
+    async execute(sql, params = []) {
+      if (/CREATE TABLE IF NOT EXISTS blockcraft_sessions/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/INSERT INTO blockcraft_sessions/i.test(sql)) {
+        sessionRows.set(params[0], { account_id: params[1], account_json: params[2], expires_at: params[3] });
+        return [{ affectedRows: 1 }];
+      }
+      if (/SELECT account_id, account_json, expires_at FROM blockcraft_sessions/i.test(sql)) {
+        return [[sessionRows.get(params[0])].filter(Boolean)];
+      }
+      if (/DELETE FROM blockcraft_sessions WHERE session_hash/i.test(sql)) {
+        sessionRows.delete(params[0]);
+        return [{ affectedRows: 1 }];
+      }
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-cloud-a-'));
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-cloud-b-'));
+  const authA = new AuthService(dirA, { authBackend: new MySqlAuthBackend({ pool }) });
+  const authB = new AuthService(dirB, { authBackend: new MySqlAuthBackend({ pool }) });
+  const account = { id: 'teacher_1', username: 'teacher@example.test', displayName: 'Teacher', accountType: 'teacher', role: 'teacher' };
+  const sid = await authA.issueSession(account);
+
+  assert.equal(authB.sessionAccount(sid), null, 'room process should begin without the HTTP process memory session');
+  assert.deepEqual(await authB.authenticateRoomRequest({ headers: { authorization: 'Bearer ' + sid } }), account);
+  assert.deepEqual(authB.sessionAccount(sid), account, 'shared lookup should warm the room process cache');
+
+  sessionRows.clear();
+  authB.sessions.clear();
+  assert.equal(await authA.shareRequestSession({ headers: { authorization: 'Bearer ' + sid } }), true, 'auth hydration backfills a pre-deployment session');
+  assert.deepEqual(await authB.authenticateRoomRequest({ headers: { authorization: 'Bearer ' + sid } }), account);
+
+  await authA.authBackend.deleteSession(authA.sessionKey(sid));
+  authB.sessions.clear();
+  assert.equal(await authB.authenticateRoomRequest({ headers: { authorization: 'Bearer ' + sid } }), false);
+  authA.stop();
+  authB.stop();
+});
+
 function fakeMysqlPool({ teacher, student } = {}) {
   const calls = [];
   return {
@@ -179,6 +221,8 @@ test('MySQL auth backend exchanges MIS teacher auth_token for a Blockcraft sessi
         }]];
       }
       if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 22, name: 'Riverside School', domain: 'riverside.test' }]];
+      if (/CREATE TABLE IF NOT EXISTS blockcraft_sessions/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/INSERT INTO blockcraft_sessions/i.test(sql)) return [{ affectedRows: 1 }];
       if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
@@ -239,6 +283,8 @@ test('MySQL auth backend exchanges student auth_token for a Blockcraft session a
       if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 3, name: 'Demo School', domain: 'demo.com' }]];
       if (/UPDATE students SET auth_token = NULL WHERE id = \?/i.test(sql)) return [{ affectedRows: 1 }];
       if (/UPDATE students SET last_login_at = NOW\(\) WHERE id = \?/i.test(sql)) return [{ affectedRows: 1 }];
+      if (/CREATE TABLE IF NOT EXISTS blockcraft_sessions/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/INSERT INTO blockcraft_sessions/i.test(sql)) return [{ affectedRows: 1 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
