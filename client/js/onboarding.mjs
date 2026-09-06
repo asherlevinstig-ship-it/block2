@@ -153,6 +153,7 @@ export function createOnboardingUI(deps) {
     if (focus === 'c_rank_climb') return { label: 'C-rank Climb', text: 'Earn Hunter XP through town quests, Guild Contracts, D-rank Gates, events, regional trouble, and C-rank prep checks.', target: HUB.guild };
     if (focus === 'c_rank_specialization') return { label: 'C-rank Specialization', text: 'Choose one permanent specialization for your combat path.', target: HUB.guardian };
     if (focus === 'b_rank_pressure') return { label: 'Gate Pressure', text: 'Contain Gate breaches, clear higher-rank Gates, and use Road Warden or Guild work to stabilize the B-rank climb.', target: HUB.guild };
+    if (focus === 'a_rank_climb') return { label: 'A-rank Climb', text: 'B-rank is cleared. Earn Hunter XP through B-rank Gates, quests, events, and regional threats.', target: HUB.guild };
     if (focus === 'next_adventurer_contract') return { label: 'Guild Contracts', text: 'Visit the Guild Hall and take your next regional contract', target: HUB.guild };
     return null;
   }
@@ -271,7 +272,7 @@ export function createOnboardingUI(deps) {
 
   function showFirstPromotion() {
     const focus = getFocus();
-    if (!['first_promotion_job','first_promotion_contract','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','next_adventurer_contract'].includes(focus)) return false;
+    if (!['first_promotion_job','first_promotion_contract','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','a_rank_climb','next_adventurer_contract'].includes(focus)) return false;
     if (!rewardWin || !rewardPanel || firstPromotionSeen || firstPromotionShown) return false;
     firstPromotionShown = true;
     const hasKey = countItem(I.SOLO_KEY_D) > 0;

@@ -3063,7 +3063,7 @@ const GATE_DIFFICULTIES=['Initiate','Dangerous','Severe','Extreme','Cataclysmic'
 const GATE_LEGENDARY_WEAPONS=new Set([136,138,160,161,162,163,164,165,166,167,168,169,170,171]);
 function gateReadinessHints(req){
   if(req.weapon===3)return {weapon:'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',armor:'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',food:'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.',tool:'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.'};
-  if(req.weapon===4)return {weapon:'Craft a Diamond Sword or Diamond Axe with Diamonds and Sticks, or earn equivalent Gate gear.',armor:'Craft Diamond Armor with 8 Diamonds, then equip it. Stormglass or Stormweave also qualify.',food:'Bring any '+req.food+' food items; Greta sells Cooked Meat at the Tavern.',tool:'Craft a Diamond pick, shovel, or hoe and keep it above '+Math.round(req.health*100)+'% durability.'};
+  if(req.weapon===4)return {weapon:req.weaponPlus?'Take a Diamond Sword to Tobin\'s forge and upgrade it to +'+req.weaponPlus+'. The first upgrade costs 1 Diamond and 130 gold.':'Craft a Diamond Sword or Diamond Axe with Diamonds and Sticks, or earn equivalent Gate gear.',armor:'Craft Diamond Armor with 8 Diamonds, then equip it. Stormglass or Stormweave also qualify.',food:'Bring any '+req.food+' food items; Greta sells Cooked Meat at the Tavern.',tool:'Craft a Diamond pick, shovel, or hoe and keep it above '+Math.round(req.health*100)+'% durability.'};
   return {weapon:'Carry a weapon that meets this rank\'s tier and upgrade requirement.',armor:'Equip the listed armor tier or better.',food:'Bring any '+req.food+' food items.',tool:'Bring the listed utility tool above '+Math.round(req.health*100)+'% durability.'};
 }
 function gateReadinessLocal(rank){
@@ -3082,6 +3082,7 @@ function gateReadinessLocal(rank){
   ];
   if(rank===1&&progressionFocus==='first_d_gate')checks.push({id:'key',label:'D-rank Gate key',done:countItem(I.SOLO_KEY_D)>0||countItem(I.TEAM_KEY_D)>0,hint:'Buy a Solo D-rank Gate Key at Bram\'s Market stall for 110 gold.'});
   if(rank===2&&progressionFocus==='c_rank_climb')checks.push({id:'key',label:'C-rank Gate key',done:countItem(I.SOLO_KEY_C)>0||countItem(I.TEAM_KEY_C)>0,hint:'Your first D-rank clear awards a Solo C-rank Gate Key; replacements cost 240 gold at Bram\'s Market stall.'});
+  if(rank===3&&progressionFocus==='b_rank_pressure')checks.push({id:'key',label:'B-rank Gate key',done:countItem(I.SOLO_KEY_B)>0||countItem(I.TEAM_KEY_B)>0,hint:'Your first C-rank clear awards a Solo B-rank Gate Key; replacements cost 460 gold at Bram\'s Market stall.'});
   const score=checks.filter(c=>c.done).length;
   const missing=checks.filter(c=>!c.done);
   return {rank,difficulty:GATE_DIFFICULTIES[rank],ready:score===checks.length,status:score===checks.length?'READY':'UNDERPREPARED',score,total:checks.length,checks,missing,next:missing[0]||null};
@@ -3090,6 +3091,7 @@ function nextGatePrepRank(){
   if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(4,quest.gateRank|0));
   if(progressionFocus==='first_d_gate')return 1;
   if(progressionFocus==='c_rank_climb')return 2;
+  if(progressionFocus==='b_rank_pressure')return 3;
   if(S&&S.lvl>=3)return Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));
   return -1;
 }
@@ -3921,7 +3923,8 @@ function recoveryHubInfo(){
   if(progressionFocus==='c_rank_specialization')return {title:'C-rank Specialization',status:'Your C-rank positioning trial is cleared. Open Character and choose one permanent specialization for your combat path.',where:'Character',button:'CHOOSE SPEC',action:()=>{if(globalThis.openStat)globalThis.openStat();}};
   if(progressionFocus==='b_rank_pressure')return JOBS_ENABLED
     ? {title:'Gate Pressure',status:'Contain Gate breaches, clear higher-rank Gates, and take Road Warden work from the Guild Hall.',where:'Guild Hall / Gate Prep',button:'OPEN GUILD BOARD',action:()=>openRegionalContractsUI()}
-    : {title:'Gate Pressure',status:'Reach level 31, contain Gate breaches, keep road safety at 65+, and clear higher-rank Gates.',where:'Guild Board / Gate Prep',button:'OPEN GUILD BOARD',action:()=>openRegionalContractsUI()};
+    : {title:'Gate Pressure',status:'Reach level 31, contain Gate breaches, raise Road Safety to 65/100, finish the B-rank prep checklist, and clear a B-rank Gate.',where:'Guild Board / Gate Prep',button:'B PREP CHECK',action:()=>openGatePrepUI(3)};
+  if(progressionFocus==='a_rank_climb')return {title:'A-rank Climb',status:'B-rank cleared. Reach level 41 through B-rank Gates, quests, events, and regional threats.',where:'Quest Log',button:'OPEN QUEST LOG',action:()=>openQuestLogUI()};
   const craft=objectiveTrackerCraftAction('what_next');
   if(craft)return {title:'Crafting Recovery',status:'Open the next useful recipe. Missing materials will show with a concrete gather route.',where:'Crafting menu',button:craft.label,action:()=>activateObjectiveCraftShortcut(craft.outputId,craft.kind)};
   return null;
@@ -4107,7 +4110,7 @@ function questLogCardsHTML(serverCards,historyOnly){
   cards.push(safeQuestLogCard('What Next?',whatNextQuestLogCard));
   if(!serverCards)cards.push(safeQuestLogCard('Story Quests',storyQuestLogCard));
   if(onboardingActive||quest||progressionFocus==='first_road_ready'||progressionFocus==='first_e_gate')cards.push(safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard));
-  if(!early||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||(quest&&quest.type==='gate'))cards.push(safeQuestLogCard('Gate Prep',gatePrepLoopCard));
+  if(!early||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||(quest&&quest.type==='gate'))cards.push(safeQuestLogCard('Gate Prep',gatePrepLoopCard));
   if(!early||S.lvl>=3)cards.push(safeQuestLogCard('First Style',playerStyleGuideQuestLogCard));
   if(!early)cards.push(safeQuestLogCard('Aegis Trial',aegisQuestLogCard));
   return cards.filter(Boolean).join('');
@@ -5617,7 +5620,7 @@ function appendRoadWardenPanel(){
   panel.appendChild(top);
   const safety=document.createElement('p');safety.className='qtext roadwarden-safety';
   const safetyTier=roadSafety>=80?'SECURE':roadSafety>=60?'PATROLLED':roadSafety>=40?'CONTESTED':roadSafety>=20?'DANGEROUS':'OVERRUN';
-  safety.innerHTML='<b>Shared regional safety: '+roadSafety+'/100 · '+safetyTier+'</b><br><small>Successful road work suppresses patrols, improves merchant prices, and brings caravans back. Safety slowly returns toward contested.</small>';
+  safety.innerHTML='<b>Shared regional safety: '+roadSafety+'/100 · '+safetyTier+'</b><br><small>Road Warden contracts and regional trouble raise this shared score. At 65/100 the B-rank readiness target is met; higher safety also suppresses hostile patrols, improves merchant prices, and brings caravans back.</small>';
   panel.appendChild(safety);
   const bar=document.createElement('div'); bar.className='roadwarden-bar'; bar.innerHTML='<i style="width:'+Math.round(info.progress*100)+'%"></i>'; panel.appendChild(bar);
   const next=document.createElement('p'); next.className='qtext roadwarden-next';

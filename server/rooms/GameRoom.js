@@ -2634,6 +2634,51 @@ class GameRoom extends Room {
       client.send('e2eJourneyResult', { action, requestId, ok, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
       return ok;
     }
+    if (action === 'prepareBRankPressure') {
+      const p = this.state.players.get(client.sessionId);
+      if (p && p.dim === 'tutorial') this.leaveTutorialDimension(client);
+      rec.prof.progressionFocus = 'b_rank_pressure';
+      rec.prof.abilitySpec = rec.prof.abilitySpec || 'commander';
+      rec.prof.S.lvl = HUNTER_RANK_LEVELS[3] - 1;
+      rec.prof.S.xp = Math.max(0, xpNeedForLevel(rec.prof.S.lvl) - 1);
+      rec.prof.highestGateRankCleared = Math.max(2, rec.prof.highestGateRankCleared | 0);
+      rec.prof.armor = { id: I.DIA_ARMOR, count: 1, armorType: 'bulwark', dur: ARMOR_INFO[I.DIA_ARMOR].dur, source: 'e2e' };
+      const fixtureIds = new Set([I.DIA_SWORD, I.DIA_PICK, I.BREAD, I.SOLO_KEY_B]);
+      const rest = Array.isArray(rec.prof.inv) ? rec.prof.inv.filter(s => s && !fixtureIds.has(s.id | 0)) : [];
+      rec.prof.inv = [
+        { id: I.DIA_SWORD, count: 1, plus: 1, dur: Math.round(TOOL_INFO[I.DIA_SWORD].dur * 1.15), source: 'e2e' },
+        { id: I.DIA_PICK, count: 1, dur: TOOL_INFO[I.DIA_PICK].dur, source: 'e2e' },
+        { id: I.BREAD, count: 5 },
+        { id: I.SOLO_KEY_B, count: 1 },
+        ...rest,
+      ].slice(0, 36);
+      if (!this.worldProgress) this.worldProgress = {};
+      this.worldProgress.roadSafety = 64;
+      this.worldProgress.roadSafetyUpdatedAt = Date.now();
+      this.dirtyWorldProgress = true;
+      this.syncPlayerProfile(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'reachBRank') {
+      const requestId = String(m && m.requestId || '');
+      this.grantHunterXp(rec.prof, 1, client, 'e2e-b-rank-promotion');
+      const ok = rec.prof.S.lvl >= HUNTER_RANK_LEVELS[3] && rec.prof.progressionFocus === 'b_rank_pressure';
+      this.progressionChanged(client, 'e2eJourney', { action, focus: rec.prof.progressionFocus });
+      this.ensurePublicGateRank(3);
+      client.send('e2eJourneyResult', { action, requestId, ok, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
+      return ok;
+    }
+    if (action === 'stabilizeBRankRoads') {
+      if (!this.worldProgress) this.worldProgress = {};
+      this.worldProgress.roadSafety = 65;
+      this.worldProgress.roadSafetyUpdatedAt = Date.now();
+      this.dirtyWorldProgress = true;
+      this.progressionChanged(client, 'e2eJourney', { action });
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, roadSafety: 65 });
+      return true;
+    }
     if (action === 'prepareProgressionFocus') {
       const focus = String(m && m.focus || '');
       const variant = String(m && m.variant || '');
@@ -2756,6 +2801,20 @@ class GameRoom extends Room {
       client.send('e2eJourneyResult', { action, requestId, ok });
       return ok;
     }
+    if (action === 'failBRankGate') {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      const ok = !!(p && inst && !inst.cleared && (inst.rank | 0) === 3);
+      if (ok) {
+        this.hurtPlayer(client, 999999, 'e2e-b-gate-failure');
+        client.send('e2eJourneyResult', { action, requestId, ok });
+        this.handleQuitDungeonSpirit(client);
+        return true;
+      }
+      client.send('e2eJourneyResult', { action, requestId, ok });
+      return ok;
+    }
     if (action === 'defeatDRankBoss') {
       const requestId = m && String(m.requestId || '').slice(0, 32);
       const p = this.state.players.get(client.sessionId);
@@ -2784,6 +2843,29 @@ class GameRoom extends Room {
       const p = this.state.players.get(client.sessionId);
       const inst = p && p.dgn && this.instances[p.dgn];
       if (!p || !inst || inst.cleared || (inst.rank | 0) !== 2) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      let bossId = '', boss = null;
+      this.state.mobs.forEach((mob, id) => {
+        if (!boss && mob && mob.dgn === inst.id && mob.kind === 'boss') { bossId = String(id); boss = mob; }
+      });
+      if (!boss) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      p.x = inst.bossRoom.x;
+      p.z = inst.bossRoom.z;
+      this.recordBossContribution(client, inst.id, Math.max(1, boss.maxHp | 0));
+      this.finishMobKill(client, bossId, boss);
+      client.send('e2eJourneyResult', { action, requestId, ok: true });
+      return true;
+    }
+    if (action === 'defeatBRankBoss') {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      if (!p || !inst || inst.cleared || (inst.rank | 0) !== 3) {
         client.send('e2eJourneyResult', { action, requestId, ok: false });
         return false;
       }
@@ -5729,6 +5811,7 @@ class GameRoom extends Room {
       c_rank_climb: ['progression:c_rank_climb', 'progression', 'C-rank Climb', JOB_SYSTEM.ENABLED ? 'Reach level 21 through rotating Adventurer contracts, D-rank Gates, regional trouble, and events, then clear a C-rank Gate.' : 'Reach level 21 through town quests, D-rank Gates, regional contracts, events, and field threats, then clear a C-rank Gate.', 'Gate prep', 'gate_prep', 'C PREP CHECK', 70, 2],
       c_rank_specialization: ['progression:c_rank_specialization', 'progression', 'C-rank Specialization', JOB_SYSTEM.ENABLED ? 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then return to rotating contracts.' : 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then continue through Gates, quests, and regional threats.', 'Character', 'choose_spec', 'CHOOSE SPEC', 40],
       b_rank_pressure: ['progression:b_rank_pressure', 'progression', 'Gate Pressure', 'Reach level 31, keep road safety at 65 or higher, contain active Gate breaches, prepare a B-rank kit, and clear a B-rank Gate.', 'Regional pressure', JOB_SYSTEM.ENABLED ? 'jobs' : 'gate_prep', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN PREP', 70],
+      a_rank_climb: ['progression:a_rank_climb', 'progression', 'A-rank Climb', 'B-rank cleared. Reach level 41 through B-rank Gates, regional threats, events, and quests before attempting an A-rank Gate.', 'Guild Hall', 'guild_contracts', 'EARN HUNTER XP', 70],
       next_adventurer_contract: ['progression:next_adventurer_contract', 'progression', 'C-rank Loop', 'Your C-rank specialization is set. Use rotating Adventurer contracts, higher Gates, events, and field threats to keep climbing.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
     };
     const spec = map[focus];
@@ -5869,48 +5952,73 @@ class GameRoom extends Room {
       const rec = this.profileFor(client);
       const prof = rec && rec.prof || {};
       const S = prof.S || {};
-      const hunterRank = hunterRankIndexForLevel(S.lvl | 0);
       const activeBreaches = this.gateBreaches && this.gateBreaches.size || 0;
       const roadSafety = this.worldProgress && Number.isFinite(Number(this.worldProgress.roadSafety)) ? this.worldProgress.roadSafety | 0 : 50;
-      const readinessRank = hunterRank >= 3 ? 3 : 2;
-      const readiness = gateReadinessForProfile(prof, readinessRank);
-      const pressure = Math.max(0, Math.min(100, Math.round(activeBreaches * 28 + Math.max(0, 65 - roadSafety) + Math.max(0, 3 - ((prof.highestGateRankCleared | 0) - 1)) * 8)));
+      const start = HUNTER_RANK_LEVELS[2], target = HUNTER_RANK_LEVELS[3];
+      let required = 0, earned = 0;
+      for (let level = start; level < target; level++) {
+        const need = xpNeedForLevel(level);
+        required += need;
+        if ((S.lvl | 0) > level) earned += need;
+        else if ((S.lvl | 0) === level) earned += Math.max(0, Math.min(need, Math.floor(Number(S.xp) || 0)));
+      }
+      const remaining = Math.max(0, required - earned);
+      const levelReady = (S.lvl | 0) >= target;
+      const readiness = gateReadinessForProfile(prof, 3);
+      const hasBKey = !!(
+        (this.countItem && this.countItem(prof, I.SOLO_KEY_B) > 0) ||
+        (this.countItem && this.countItem(prof, I.TEAM_KEY_B) > 0)
+      );
       const checks = [
-        { id: 'spec', label: 'Specialization chosen', done: !!prof.abilitySpec },
-        { id: 'c_gate', label: 'C-rank Gate cleared', done: (prof.highestGateRankCleared | 0) >= 2 },
-        { id: 'breaches', label: 'No active Gate breaches', done: activeBreaches <= 0 },
-        { id: 'roads', label: 'Regional roads stable', done: roadSafety >= 65 },
-        { id: 'b_ready', label: 'B-rank kit path checked', done: hunterRank >= 3 ? readiness.ready : (prof.S && (prof.S.lvl | 0) >= HUNTER_RANK_LEVELS[2]) },
+        { id: 'level', label: 'Reach Hunter Level 31', done: levelReady, hint: 'Earn Hunter XP from C-rank Gates, quests, events, regional threats, and Guild Contracts.' },
+        { id: 'breaches', label: 'No active Gate breaches', done: activeBreaches <= 0, hint: 'Track the breach from the objective tracker and defeat the escaped boss.' },
+        { id: 'roads', label: `Road Safety 65/100 (${roadSafety}/100)`, done: roadSafety >= 65, hint: 'Complete Road Warden contracts and regional trouble to raise the shared Road Safety score. The B-rank readiness target is 65/100.' },
+        ...readiness.checks.map(c => ({ id: c.id, label: c.label, done: !!c.done, hint: c.hint || '' })),
+        { id: 'key', label: 'B-rank Gate key', done: hasBKey, hint: 'Your first C-rank clear awards a Solo B-rank Gate Key; replacements cost 460 gold at Bram Ledger\'s Market stall.' },
       ];
-      objective.progress = { current: Math.max(0, 100 - pressure), required: 100 };
+      objective.progress = { current: Math.max(0, Math.min(required, earned)), required: Math.max(1, required) };
       objective.checklist = checks;
       if (activeBreaches > 0) {
         objective.action = { type: 'regional_track', label: 'TRACK BREACH' };
         objective.location = 'Gate breach';
-        objective.hudText = activeBreaches + ' active Gate breach' + (activeBreaches === 1 ? '' : 'es') + ' destabilizing the roads. Track and contain the escaped boss.';
-      } else if (hunterRank >= 3 && !readiness.ready) {
-        objective.action = { type: 'gate_prep', label: 'B PREP CHECK', rank: 3 };
-        objective.location = 'Gate prep';
-        objective.hudText = 'B-rank Gate access is opening. Fix prep: ' + (readiness.next && readiness.next.label ? readiness.next.label : 'open the prep check') + '.';
-      } else if (hunterRank >= 3) {
-        objective.action = { type: 'find_gate', label: 'FIND B GATE', rank: 3 };
-        objective.location = 'B-rank Gate';
-        objective.hudText = 'Pressure is contained. Find a B-rank Gate and test your specialization under heavier threats.';
-      } else if ((prof.roadWardenRep | 0) < 3 || roadSafety < 65) {
+        objective.hudText = `${remaining.toLocaleString('en-US')} Hunter XP to Level 31. First: contain ${activeBreaches} active Gate breach${activeBreaches === 1 ? '' : 'es'} before Road Safety falls further.`;
+      } else if (!levelReady) {
+        objective.action = { type: 'guild_contracts', label: 'EARN HUNTER XP' };
+        objective.location = 'Guild Hall';
+        objective.hudText = `${remaining.toLocaleString('en-US')} Hunter XP to Level 31. Recommended now: clear a C-rank Gate.`;
+      } else if (roadSafety < 65) {
         objective.action = { type: 'guild_contracts', label: 'ROAD WARDEN' };
         objective.location = 'Guild Board';
-        objective.hudText = 'Build B-rank footing through Road Warden contracts, regional trouble, and safer roads.';
+        objective.hudText = `Road Safety is ${roadSafety}/100; the B-rank readiness target is 65/100. Complete one Road Warden contract or nearby regional threat to raise it.`;
+      } else if (!readiness.ready || !hasBKey) {
+        const next = readiness.next || (!hasBKey ? checks.find(c => c.id === 'key') : null);
+        objective.action = { type: 'gate_prep', label: 'B PREP CHECK', rank: 3 };
+        objective.location = 'Gate prep';
+        objective.hudText = 'Next fix: ' + (next && next.label || 'B-rank prep') + '. ' + (next && next.hint || 'Open the preparation check.');
       } else {
-        objective.action = { type: 'guild_contracts', label: 'OPEN GUILD BOARD' };
-        objective.location = 'Guild Hall';
-        objective.hudText = 'Keep the pressure down with rotating Guild work, C-rank Gates, events, and regional cleanup.';
+        objective.action = { type: 'find_gate', label: 'FIND B GATE', rank: 3 };
+        objective.location = 'B-rank Gate';
+        objective.hudText = 'Level, roads, kit, and key ready. Find a B-rank Gate and clear its control-pressure trial.';
       }
       objective.reward = {
         xp: hunterXpForActivity(Math.max(HUNTER_RANK_LEVELS[2], S.lvl | 0), 'guild_contract'),
-        gold: BOSS_REWARD_BY_RANK[Math.min(3, readinessRank)].gold,
+        gold: BOSS_REWARD_BY_RANK[3].gold,
         items: [{ id: I.DIAMOND, count: 4 }, { id: I.IRON_INGOT, count: 8 }],
         note: 'B-rank pressure rewards scale through Gates and regional cleanup',
       };
+    }
+    if (focus === 'a_rank_climb' && client) {
+      const rec = this.profileFor(client), S = rec && rec.prof && rec.prof.S || {};
+      const start = HUNTER_RANK_LEVELS[3], target = HUNTER_RANK_LEVELS[4];
+      let required = 0, earned = 0;
+      for (let level = start; level < target; level++) {
+        const need = xpNeedForLevel(level); required += need;
+        if ((S.lvl | 0) > level) earned += need;
+        else if ((S.lvl | 0) === level) earned += Math.max(0, Math.min(need, Math.floor(Number(S.xp) || 0)));
+      }
+      const remaining = Math.max(0, required - earned);
+      objective.progress = { current: Math.max(0, Math.min(required, earned)), required: Math.max(1, required) };
+      objective.hudText = `${remaining.toLocaleString('en-US')} Hunter XP to Level 41. Recommended now: clear a B-rank Gate.`;
     }
     return objective;
   }

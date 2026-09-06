@@ -30,7 +30,9 @@ function readinessHints(req) {
     tool: 'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.',
   };
   if (req.weapon === 4) return {
-    weapon: 'Craft a Diamond Sword or Diamond Axe with Diamonds and Sticks, or earn equivalent Gate gear.',
+    weapon: req.weaponPlus
+      ? `Take a Diamond Sword to Tobin's forge and upgrade it to +${req.weaponPlus}. The first upgrade costs 1 Diamond and 130 gold.`
+      : 'Craft a Diamond Sword or Diamond Axe with Diamonds and Sticks, or earn equivalent Gate gear.',
     armor: 'Craft Diamond Armor with 8 Diamonds, then equip it. Stormglass or Stormweave also qualify.',
     food: `Bring any ${req.food} food items; Greta sells Cooked Meat at the Tavern.`,
     tool: `Craft a Diamond pick, shovel, or hoe and keep it above ${Math.round(req.health * 100)}% durability.`,
