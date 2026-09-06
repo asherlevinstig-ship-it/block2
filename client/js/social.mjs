@@ -447,6 +447,7 @@ addEventListener('keydown',event=>{
 // ---- teams ----
 const TEAM_COLS=['#ffd24a','#6ee06a','#ff9a4a','#c08aff','#4fd8ff','#ff6a8a'];
 const pendingTeamInvites={};
+const socialState={tab:'nearby',snapshot:{friends:[],incomingFriendRequests:[],outgoingFriendRequests:[],teamInvites:[]}};
 function teamCol(id){
   let h=0;
   for(const ch of String(id)) h=(h*31+ch.charCodeAt(0))>>>0;
@@ -473,111 +474,163 @@ function netTeamHud(){
   NET.room.state.players.forEach(p=>{ if(p.team===id) cnt++; });
   return '<br>Team: <span style="color:'+teamCol(id)+'">'+teamName(id)+'</span> ('+cnt+'/5)';
 }
-function openTeamUI(){
+function requestSocialSnapshot(){
+  if(NET.on&&NET.room)NET.room.send('socialRequest',{});
+}
+function applySocialSnapshot(message){
+  const src=message&&typeof message==='object'?message:{};
+  socialState.snapshot={
+    friends:Array.isArray(src.friends)?src.friends:[],
+    incomingFriendRequests:Array.isArray(src.incomingFriendRequests)?src.incomingFriendRequests:[],
+    outgoingFriendRequests:Array.isArray(src.outgoingFriendRequests)?src.outgoingFriendRequests:[],
+    teamInvites:Array.isArray(src.teamInvites)?src.teamInvites:[],
+  };
+  for(const key of Object.keys(pendingTeamInvites))delete pendingTeamInvites[key];
+  for(const invite of socialState.snapshot.teamInvites)if(invite&&invite.id)pendingTeamInvites[invite.id]=Date.now();
+  if(qOpen&&qpanelEl&&qpanelEl.dataset&&qpanelEl.dataset.modal==='social-hub')openTeamUI(socialState.tab,false);
+}
+function receiveTeamInvite(message){
+  if(!message||!message.id)return;
+  pendingTeamInvites[message.id]=Date.now();
+  const invites=socialState.snapshot.teamInvites;
+  const next={id:String(message.id),name:String(message.name||'Team'),from:String(message.from||'Team leader'),private:!!message.private,memberCount:Math.max(1,message.memberCount|0)};
+  const at=invites.findIndex(invite=>invite&&invite.id===next.id);
+  if(at>=0)invites[at]=next;else invites.unshift(next);
+  if(qOpen&&qpanelEl&&qpanelEl.dataset&&qpanelEl.dataset.modal==='social-hub')openTeamUI('team',false);
+}
+function socialHeading(text){
+  const title=document.createElement('div');title.className='social-section-title';title.textContent=text;qpanelEl.appendChild(title);
+}
+function socialEmpty(text){
+  const empty=document.createElement('p');empty.className='qtext social-empty';empty.textContent=text;qpanelEl.appendChild(empty);
+}
+function socialRow(person,status=''){
+  const row=document.createElement('div');row.className='social-person-row'+(person&&person.online?' online':' offline');
+  const avatar=document.createElement('i');avatar.className='social-avatar';avatar.textContent=String(person&&person.name||'H').trim().slice(0,1).toUpperCase()||'H';row.appendChild(avatar);
+  const identity=document.createElement('span');identity.innerHTML='<b>'+escHTML(person&&person.name||'Hunter')+'</b><small>'+(person&&person.online?'ONLINE'+(person.teamName?' · '+escHTML(person.teamName):''):(status||'OFFLINE'))+'</small>';row.appendChild(identity);
+  const actions=document.createElement('div');actions.className='social-row-actions';row.appendChild(actions);
+  qpanelEl.appendChild(row);
+  return {row,actions};
+}
+function nearbySocialPlayers(){
+  const out=[];
+  if(!NET.room||!NET.room.state||!NET.room.state.players)return out;
+  NET.room.state.players.forEach((pl,sid)=>{
+    if(sid===NET.room.sessionId)return;
+    const remote=NET.remotes&&NET.remotes[sid];
+    if(!remote||!remote.grp||!remote.grp.visible)return;
+    const distance=player&&player.pos?Math.hypot(remote.grp.position.x-player.pos.x,remote.grp.position.z-player.pos.z):999;
+    if(distance>16)return;
+    out.push({sid,name:pl.name||'Hunter',teamId:pl.team||'',distance});
+  });
+  return out.sort((a,b)=>a.distance-b.distance);
+}
+function whisperTo(person){
+  if(!person||!person.sid)return;
+  closeQWin(false);openChat('whisper');populateWhisperTargets();chatTargetEl.value=person.sid;updateMuteButton();
+}
+function teamActionFor(person){
+  if(!person||!person.sid)return null;
+  const mine=myTeamId(),players=NET.room&&NET.room.state&&NET.room.state.players,target=players&&players.get(person.sid),targetTeam=target&&target.team||person.teamId||'';
+  if(mine&&targetTeam===mine)return null;
+  if(mine){
+    const team=NET.room.state.teams.get(mine);
+    return isMyTeamLeader(team)?{label:'INVITE TO TEAM',run:()=>NET.room.send('teamInvite',{sid:person.sid})}:null;
+  }
+  if(targetTeam){
+    const team=NET.room.state.teams.get(targetTeam),invited=!!pendingTeamInvites[targetTeam];
+    if(team&&(!team.private||invited))return {label:'JOIN TEAM',run:()=>NET.room.send('teamJoin',{key:targetTeam})};
+    return null;
+  }
+  return {label:'TEAM UP',run:()=>NET.room.send('teamQuickInvite',{sid:person.sid})};
+}
+function renderNearbySocial(){
+  socialHeading('NEARBY HUNTERS');
+  const people=nearbySocialPlayers();
+  if(!people.length){socialEmpty('No hunters are within 16 metres. Walk beside someone to add them or team up.');return;}
+  for(const person of people){
+    const ui=socialRow({...person,online:true},Math.round(person.distance)+'m away');
+    const interact=qBtn('INTERACT',()=>{closeQWin(false);if(typeof openPlayerSocialUI==='function')openPlayerSocialUI(person);});ui.actions.appendChild(interact);
+    if(person.distance<=8){
+      const teamAction=teamActionFor(person);if(teamAction)ui.actions.appendChild(qBtn(teamAction.label,teamAction.run));
+      ui.actions.appendChild(qBtn('ADD FRIEND',()=>NET.room.send('friendAdd',{targetSid:person.sid}),true));
+    }
+  }
+}
+function renderFriendsSocial(){
+  const state=socialState.snapshot;
+  if(state.incomingFriendRequests.length){
+    socialHeading('FRIEND REQUESTS');
+    for(const person of state.incomingFriendRequests){const ui=socialRow(person,'WANTS TO BE FRIENDS');ui.actions.appendChild(qBtn('ACCEPT',()=>NET.room.send('friendRespond',{targetToken:person.token,accept:true})));ui.actions.appendChild(qBtn('DECLINE',()=>NET.room.send('friendRespond',{targetToken:person.token,accept:false}),true));}
+  }
+  socialHeading('FRIENDS');
+  const friends=[...state.friends].sort((a,b)=>Number(!!b.online)-Number(!!a.online)||String(a.name).localeCompare(String(b.name)));
+  if(!friends.length)socialEmpty('No friends yet. Use Nearby to send a request to a hunter beside you.');
+  for(const person of friends){
+    const ui=socialRow(person);
+    if(person.online&&person.sid){const teamAction=teamActionFor(person);if(teamAction)ui.actions.appendChild(qBtn(teamAction.label,teamAction.run));ui.actions.appendChild(qBtn('WHISPER',()=>whisperTo(person),true));}
+    ui.actions.appendChild(qBtn('REMOVE',()=>NET.room.send('friendRemove',{targetToken:person.token}),true));
+  }
+  if(state.outgoingFriendRequests.length){socialHeading('SENT REQUESTS');for(const person of state.outgoingFriendRequests)socialRow(person,'REQUEST PENDING');}
+}
+function renderTeamSocial(){
+  const invites=socialState.snapshot.teamInvites;
+  if(invites.length){
+    socialHeading('TEAM INVITATIONS');
+    for(const invite of invites){
+      const row=document.createElement('div');row.className='social-invite-card';row.innerHTML='<span><b>'+escHTML(invite.name||'Team')+'</b><small>'+Math.max(1,invite.memberCount|0)+'/5 members · invited by '+escHTML(invite.from||'Team leader')+'</small></span>';
+      row.appendChild(qBtn('ACCEPT',()=>NET.room.send('teamJoin',{key:invite.id})));
+      row.appendChild(qBtn('DECLINE',()=>NET.room.send('teamInviteDecline',{id:invite.id}),true));qpanelEl.appendChild(row);
+    }
+  }
+  const mine=myTeamId();
+  if(mine){
+    const t=NET.room.state.teams.get(mine),leader=isMyTeamLeader(t),members=[];
+    NET.room.state.players.forEach((pl,sid)=>{if(pl.team===mine)members.push({sid,name:pl.name,leader:t&&t.leader===sid,online:true});});
+    socialHeading('YOUR TEAM');
+    const summary=document.createElement('div');summary.className='social-team-summary';summary.innerHTML='<b style="color:'+teamCol(mine)+'">'+escHTML(t?t.name:'Your Team')+'</b><span>'+(t&&t.private?'INVITE-ONLY':'OPEN')+(t&&t.lfg?' · LOOKING FOR DUNGEON':'')+' · '+((t&&t.memberCount)|0)+'/5 MEMBERS</span>';qpanelEl.appendChild(summary);
+    for(const member of members){const ui=socialRow(member,member.leader?'LEADER':'TEAM MEMBER');if(leader&&!member.leader){ui.actions.appendChild(qBtn('MAKE LEADER',()=>NET.room.send('teamTransfer',{sid:member.sid})));ui.actions.appendChild(qBtn('KICK',()=>NET.room.send('teamKick',{sid:member.sid}),true));}}
+    if(leader){const controls=document.createElement('div');controls.className='qrow social-team-controls';controls.appendChild(qBtn(t&&t.private?'MAKE OPEN':'MAKE INVITE-ONLY',()=>NET.room.send('teamPrivacy',{private:!(t&&t.private)})));controls.appendChild(qBtn(t&&t.lfg?'CLEAR DUNGEON LFG':'FIND DUNGEON TEAM',()=>NET.room.send('teamLfg',{lfg:!(t&&t.lfg)})));qpanelEl.appendChild(controls);}
+    qpanelEl.appendChild(qBtn(members.length<=1?'DISBAND TEAM':'LEAVE TEAM',()=>NET.room.send('teamLeave',{}),true));
+    return;
+  }
+  socialHeading('FIND A TEAM');
+  let any=false;
+  NET.room.state.teams.forEach((t,id)=>{
+    let online=0;NET.room.state.players.forEach(pl=>{if(pl.team===id)online++;});
+    const total=(t.memberCount|0)||online,invited=!!pendingTeamInvites[id];
+    if(t.private&&!invited&&!t.lfg)return;
+    any=true;const row=document.createElement('div');row.className='social-team-listing';row.innerHTML='<span><b style="color:'+teamCol(id)+'">'+escHTML(t.name)+'</b><small>'+online+' online · '+total+'/5 members'+(t.lfg?' · FINDING DUNGEON':'')+(t.private?' · INVITED':'')+'</small></span>';
+    if(total<5&&(!t.private||invited))row.appendChild(qBtn('JOIN',()=>NET.room.send('teamJoin',{key:id})));qpanelEl.appendChild(row);
+  });
+  if(!any)socialEmpty('No open teams are recruiting. Team up with a nearby hunter or create your own.');
+  socialHeading('CREATE A NAMED TEAM');
+  const create=document.createElement('div');create.className='social-create-team';const inp=document.createElement('input');inp.maxLength=20;inp.placeholder='Team name';create.appendChild(inp);create.appendChild(qBtn('CREATE OPEN',()=>{const name=inp.value.trim();if(name)NET.room.send('teamCreate',{name});}));create.appendChild(qBtn('CREATE INVITE-ONLY',()=>{const name=inp.value.trim();if(name)NET.room.send('teamCreate',{name,private:true});},true));qpanelEl.appendChild(create);
+}
+function openTeamUI(tab='team',refresh=true){
+  socialState.tab=['nearby','friends','team'].includes(tab)?tab:'team';
   openQWin('management');
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent='HUNTER TEAMS'; qpanelEl.appendChild(h);
+  qpanelEl.dataset.modal='social-hub';
+  const h=document.createElement('h2'); h.textContent='SOCIAL'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent='UP TO 5 HUNTERS \u00b7 USE PARTY QUICK PHRASES TO COORDINATE';
+  sub.textContent='FRIENDS · NEARBY HUNTERS · TEAMS';
   qpanelEl.appendChild(sub);
+  const tabs=document.createElement('div');tabs.className='social-tabs';
+  for(const id of ['nearby','friends','team']){const count=id==='friends'?socialState.snapshot.incomingFriendRequests.length:id==='team'?socialState.snapshot.teamInvites.length:0,button=document.createElement('button');button.type='button';button.className=id===socialState.tab?'active':'';button.textContent=id.toUpperCase()+(count?' ('+count+')':'');button.addEventListener('click',()=>openTeamUI(id,false));tabs.appendChild(button);}
+  qpanelEl.appendChild(tabs);
   if(!NET.on){
     const p2=document.createElement('p'); p2.className='qtext';
     p2.textContent='Teams are a multiplayer feature \u2014 connect to a server first.';
     qpanelEl.appendChild(p2);
-    qpanelEl.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
+    qpanelEl.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
     return;
   }
-  const mine=myTeamId();
-  if(mine){
-    const t=NET.room.state.teams.get(mine);
-    const p2=document.createElement('p'); p2.className='qtext';
-    const leader=isMyTeamLeader(t);
-    let members=[];
-    NET.room.state.players.forEach((pl,sid)=>{ if(pl.team===mine) members.push({sid,name:pl.name,leader:t&&t.leader===sid}); });
-    p2.innerHTML='Your team: <b style="color:'+teamCol(mine)+'">'+escHTML(t?t.name:'')+'</b>'
-      +(t&&t.private?' &middot; <b>INVITE-ONLY</b>':' &middot; OPEN')
-      +(t&&t.lfg?' &middot; <b style="color:#9be76d">LOOKING FOR DUNGEON</b>':'')
-      +'<br>'+members.map(m=>escHTML(m.name)+(m.leader?' \u2605':'')).join(' \u00b7 ');
-    qpanelEl.appendChild(p2);
-    for(const m of members){
-      const r=document.createElement('div'); r.className='shoprow';
-      const nm=document.createElement('span'); nm.innerHTML='<b>'+escHTML(m.name)+'</b>'+(m.leader?' <small style="opacity:.75">leader</small>':''); r.appendChild(nm);
-      if(leader && !m.leader){
-        r.appendChild(qBtn('MAKE LEADER',()=>NET.room.send('teamTransfer',{sid:m.sid}),false));
-        r.appendChild(qBtn('KICK',()=>NET.room.send('teamKick',{sid:m.sid}),true));
-      } else {
-        const tag=document.createElement('b'); tag.textContent=m.leader?'LEADER':'MEMBER'; r.appendChild(tag);
-      }
-      qpanelEl.appendChild(r);
-    }
-    if(leader){
-      const row=document.createElement('div'); row.className='qrow';
-      row.appendChild(qBtn(t&&t.private?'MAKE OPEN':'INVITE-ONLY',()=>NET.room.send('teamPrivacy',{private:!(t&&t.private)})));
-      row.appendChild(qBtn(t&&t.lfg?'CLEAR LFG':'LOOKING FOR DUNGEON',()=>NET.room.send('teamLfg',{lfg:!(t&&t.lfg)})));
-      qpanelEl.appendChild(row);
-      const invTitle=document.createElement('div'); invTitle.className='sub2'; invTitle.style.marginTop='10px'; invTitle.textContent='INVITE ONLINE HUNTERS'; qpanelEl.appendChild(invTitle);
-      let anyInvite=false;
-      NET.room.state.players.forEach((pl,sid)=>{
-        if(sid===NET.room.sessionId || pl.team) return;
-        anyInvite=true;
-        const r=document.createElement('div'); r.className='shoprow';
-        r.innerHTML='<span>'+escHTML(pl.name)+'</span>';
-        r.appendChild(qBtn('INVITE',()=>NET.room.send('teamInvite',{sid})));
-        qpanelEl.appendChild(r);
-      });
-      if(!anyInvite){ const empty=document.createElement('p'); empty.className='qtext'; empty.textContent='No unteamed hunters are online right now.'; qpanelEl.appendChild(empty); }
-    }
-    qpanelEl.appendChild(qBtn(members.length<=1?'DISBAND TEAM':'LEAVE TEAM', ()=>{ NET.room.send('teamLeave',{}); closeQWin(); }, true));
-  } else {
-    const row=document.createElement('div'); row.className='shoprow';
-    const inp=document.createElement('input');
-    inp.maxLength=20; inp.placeholder='team name';
-    inp.style.cssText='flex:1;font-family:inherit;font-size:13px;padding:7px 10px;background:rgba(8,14,24,.8);border:1px solid #d8a020;border-radius:4px;color:#f0e4cc;outline:none';
-    row.appendChild(inp);
-    row.appendChild(qBtn('CREATE', ()=>{
-      const nm=inp.value.trim();
-      if(!nm) return;
-      NET.room.send('teamCreate',{name:nm});
-      closeQWin();
-    }));
-    row.appendChild(qBtn('CREATE PRIVATE', ()=>{
-      const nm=inp.value.trim();
-      if(!nm) return;
-      NET.room.send('teamCreate',{name:nm, private:true});
-      closeQWin();
-    }, true));
-    qpanelEl.appendChild(row);
-    const tt=document.createElement('div'); tt.className='sub2'; tt.style.marginTop='10px';
-    tt.textContent='\u2014 OR JOIN \u2014';
-    qpanelEl.appendChild(tt);
-    let any=false;
-    NET.room.state.teams.forEach((t,id)=>{
-      any=true;
-      let online=0;
-      NET.room.state.players.forEach(pl=>{ if(pl.team===id) online++; });
-      const total=(t.memberCount|0)||online;
-      const r=document.createElement('div'); r.className='shoprow';
-      const nm=document.createElement('span');
-      nm.innerHTML='<b style="color:'+teamCol(id)+'">'+escHTML(t.name)+'</b>'
-        +(t.private?' <small style="opacity:.75">invite-only</small>':'')
-        +(t.lfg?' <small style="color:#9be76d">LFG dungeon</small>':'');
-      r.appendChild(nm);
-      const c2=document.createElement('b'); c2.textContent=online+'/'+total+' online'; r.appendChild(c2);
-      const invited=!!pendingTeamInvites[id];
-      r.appendChild(qBtn(total>=5?'FULL':(t.private&&!invited)?'INVITE ONLY':'JOIN', ()=>{
-        if(total>=5 || (t.private&&!invited)) return;
-        NET.room.send('teamJoin',{key:id});
-        closeQWin();
-      }, total>=5 || (t.private&&!invited)));
-      qpanelEl.appendChild(r);
-    });
-    if(!any){
-      const p3=document.createElement('p'); p3.className='qtext';
-      p3.textContent='No teams yet \u2014 found the first one.';
-      qpanelEl.appendChild(p3);
-    }
-  }
+  if(socialState.tab==='nearby')renderNearbySocial();
+  else if(socialState.tab==='friends')renderFriendsSocial();
+  else renderTeamSocial();
   qpanelEl.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
+  if(refresh)requestSocialSnapshot();
 }
 
 
@@ -599,6 +652,9 @@ function openTeamUI(){
     applyBlockList,
     playCommsCue,
     pendingTeamInvites,
+    applySocialSnapshot,
+    receiveTeamInvite,
+    requestSocialSnapshot,
     teamCol,
     teamName,
     myTeamId,

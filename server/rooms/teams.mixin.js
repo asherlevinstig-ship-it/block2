@@ -16,8 +16,14 @@ class TeamsMixin {
     let st = this.state.teams.get(t.id);
     if (!st) { st = new Team(); this.state.teams.set(t.id, st); }
     st.name = t.name;
-    st.leader = t.leader;
     const persistent = this.teamRecords && this.teamRecords.get(t.id);
+    const authoritySid = persistent && this.onlineSidForToken(persistent.leader);
+    const authorityLeader = authoritySid && t.members.has(authoritySid) ? authoritySid : '';
+    const actingLeader = !authorityLeader && persistent
+      ? [...persistent.members].map(token => this.onlineSidForToken(token)).find(sid => sid && t.members.has(sid)) || ''
+      : '';
+    t.leader = authorityLeader || actingLeader || t.leader || '';
+    st.leader = t.leader;
     st.memberCount = persistent ? persistent.members.size : t.members.size;
     st.private = !!(persistent && persistent.private);
     st.lfg = !!(persistent && persistent.lfg);
@@ -114,7 +120,26 @@ class TeamsMixin {
     return id ? this.teamRecords.get(id) : null;
   }
   isTeamLeader(client, rec) {
-    return !!(client && rec && this.clientToken(client) && rec.leader === this.clientToken(client));
+    if (!client || !rec || !this.clientToken(client)) return false;
+    if (rec.leader === this.clientToken(client)) return true;
+    const live = this.teamMgr.teams.get(rec.id);
+    const ownerSid = this.onlineSidForToken(rec.leader);
+    if (ownerSid && live && live.members.has(ownerSid)) return false;
+    const acting = [...rec.members].map(token => this.onlineSidForToken(token)).find(sid => sid && live && live.members.has(sid)) || '';
+    return acting === client.sessionId;
+  }
+  sendTeamNotice(rec, text) {
+    if (!rec) return;
+    for (const token of rec.members) {
+      const sid = this.onlineSidForToken(token);
+      const client = sid && this.clients.find(c => c.sessionId === sid);
+      if (client) client.send('chat', { name: '[Team]', text });
+    }
+  }
+  refreshTeamSocial(rec) {
+    if (!rec || typeof this.refreshSocialSnapshots !== 'function') return;
+    const clients = [...rec.members].map(token => this.socialClientForToken(token)).filter(Boolean);
+    this.refreshSocialSnapshots(clients);
   }
   findOnlinePlayerByNameOrSid(key) {
     const raw = typeof key === 'string' ? key.trim() : '';
@@ -134,8 +159,9 @@ class TeamsMixin {
     this.dirtyTeams = true;
     const live = this.teamMgr.teams.get(rec.id);
     if (live) this.syncTeam(live);
-    this.broadcast('chat', { name: '[Team]', text: '<' + rec.name + '> is now ' + (rec.private ? 'invite-only' : 'open to join') });
+    this.sendTeamNotice(rec, '<' + rec.name + '> is now ' + (rec.private ? 'invite-only' : 'open to join'));
     client.send('teamResult', { ok: true, action: 'privacy', private: rec.private });
+    this.refreshTeamSocial(rec);
   }
   handleTeamLfg(client, m) {
     const rec = this.currentTeamRecordFor(client);
@@ -145,8 +171,9 @@ class TeamsMixin {
     this.dirtyTeams = true;
     const live = this.teamMgr.teams.get(rec.id);
     if (live) this.syncTeam(live);
-    this.broadcast('chat', { name: '[Team]', text: '<' + rec.name + '> is ' + (rec.lfg ? 'looking for a dungeon' : 'no longer looking for a dungeon') });
+    this.sendTeamNotice(rec, '<' + rec.name + '> is ' + (rec.lfg ? 'looking for a dungeon' : 'no longer looking for a dungeon'));
     client.send('teamResult', { ok: true, action: 'lfg', lfg: rec.lfg });
+    this.refreshTeamSocial(rec);
   }
   handleTeamInvite(client, m) {
     const rec = this.currentTeamRecordFor(client);
@@ -157,12 +184,54 @@ class TeamsMixin {
     if (!target) return client.send('teamResult', { ok: false, reason: 'target' });
     const targetToken = this.clientToken(target);
     if (!targetToken) return client.send('teamResult', { ok: false, reason: 'target' });
+    const targetPlayer = this.state.players.get(target.sessionId);
+    if (targetPlayer && targetPlayer.team) return client.send('teamResult', { ok: false, reason: 'target_team' });
     if (rec.members.has(targetToken)) return client.send('teamResult', { ok: false, reason: 'member' });
     if (!rec.invites) rec.invites = new Set();
     rec.invites.add(targetToken);
     this.dirtyTeams = true;
     target.send('teamInvite', { id: rec.id, name: rec.name, from: (this.state.players.get(client.sessionId) || {}).name || 'Team leader', private: !!rec.private });
     client.send('teamResult', { ok: true, action: 'invite', target: (this.state.players.get(target.sessionId) || {}).name || 'Hunter' });
+    this.refreshSocialSnapshots(client, target);
+  }
+  handleTeamQuickInvite(client, m) {
+    const target = this.findOnlinePlayerByNameOrSid(m && (m.sid || m.name));
+    if (!target || target === client) return client.send('teamResult', { ok: false, reason: 'target' });
+    const targetPlayer = this.state.players.get(target.sessionId);
+    let rec = this.currentTeamRecordFor(client);
+    if (!rec && targetPlayer && targetPlayer.team) {
+      const joined = this.joinPersistentTeam(client, targetPlayer.team);
+      if (joined.err) return client.send('teamResult', { ok: false, reason: 'join', detail: joined.err });
+      const joinedRec = this.teamRecords.get(joined.team.id);
+      const player = this.state.players.get(client.sessionId);
+      this.sendTeamNotice(joinedRec, ((player && player.name) || 'A hunter') + ' joined <' + joined.team.name + '> (' + joinedRec.members.size + '/5)');
+      client.send('teamResult', { ok: true, action: 'joined', id: joined.team.id, name: joined.team.name });
+      this.refreshTeamSocial(joinedRec);
+      return;
+    }
+    if (targetPlayer && targetPlayer.team) return client.send('teamResult', { ok: false, reason: targetPlayer.team === (rec && rec.id) ? 'member' : 'target_team' });
+    if (!rec) {
+      const player = this.state.players.get(client.sessionId);
+      const preferred = ((player && player.name) || 'Hunter') + "'s Team";
+      const base = this.findTeamRecord(preferred) ? 'Team ' + (this.teamMgr.seq + 1) : preferred;
+      const created = this.createPersistentTeam(client, base, true);
+      if (created.err) return client.send('teamResult', { ok: false, reason: 'create', detail: created.err });
+      rec = this.currentTeamRecordFor(client);
+      client.send('teamResult', { ok: true, action: 'created', id: rec.id, name: rec.name, quick: true });
+    }
+    if (!this.isTeamLeader(client, rec)) return client.send('teamResult', { ok: false, reason: 'leader' });
+    this.handleTeamInvite(client, { sid: target.sessionId });
+    this.refreshTeamSocial(rec);
+  }
+  handleTeamInviteDecline(client, m) {
+    const rec = this.findTeamRecord(m && m.id);
+    const token = this.clientToken(client);
+    if (!rec || !token || !rec.invites || !rec.invites.has(token)) return client.send('teamResult', { ok: false, reason: 'invite' });
+    rec.invites.delete(token);
+    this.dirtyTeams = true;
+    client.send('teamResult', { ok: true, action: 'invite_declined', id: rec.id, name: rec.name });
+    this.refreshSocialSnapshots(client);
+    this.refreshTeamSocial(rec);
   }
   handleTeamKick(client, m) {
     const rec = this.currentTeamRecordFor(client);
@@ -180,8 +249,9 @@ class TeamsMixin {
     const live = this.teamMgr.teams.get(rec.id);
     if (live) this.syncTeam(live);
     const tp = this.state.players.get(target.sessionId);
-    this.broadcast('chat', { name: '[Team]', text: (tp ? tp.name : 'A hunter') + ' was removed from <' + rec.name + '>' });
+    this.sendTeamNotice(rec, (tp ? tp.name : 'A hunter') + ' was removed from <' + rec.name + '>');
     client.send('teamResult', { ok: true, action: 'kick' });
+    this.refreshSocialSnapshots(client, target);
   }
   handleTeamTransfer(client, m) {
     const rec = this.currentTeamRecordFor(client);
@@ -195,9 +265,10 @@ class TeamsMixin {
     const live = this.teamMgr.teams.get(rec.id);
     if (live) { live.leader = target.sessionId; this.syncTeam(live); }
     const tp = this.state.players.get(target.sessionId);
-    this.broadcast('chat', { name: '[Team]', text: (tp ? tp.name : 'A hunter') + ' now leads <' + rec.name + '>' });
+    this.sendTeamNotice(rec, (tp ? tp.name : 'A hunter') + ' now leads <' + rec.name + '>');
     client.send('teamResult', { ok: true, action: 'transfer' });
     target.send('teamResult', { ok: true, action: 'leader', id: rec.id, name: rec.name });
+    this.refreshTeamSocial(rec);
   }
   detachTeamSession(sid) {
     const id = this.teamMgr.bySid.get(sid);
@@ -207,9 +278,8 @@ class TeamsMixin {
     this.teamMgr.bySid.delete(sid);
     if (live) {
       live.members.delete(sid);
-      // Keep the displayed leader consistent with authority (rec.leader): show the real
-      // leader's online session, or no one if they're offline — never promote a stand-in who
-      // can't actually lead. A genuine departure reassigns rec.leader first (see doTeamLeave).
+      // Preserve the persistent owner, while syncTeam chooses an online acting leader so the
+      // remaining party can still invite, manage, and play when the owner is offline.
       if (live.leader === sid) {
         const leaderSid = rec ? this.onlineSidForToken(rec.leader) : '';
         live.leader = (leaderSid && leaderSid !== sid) ? leaderSid : '';
@@ -277,20 +347,21 @@ class TeamsMixin {
       this.state.teams.delete(id);
       const c = this.clients.find(c => c.sessionId === sid);
       if (c) c.send('teamLeft', { id, name: live ? live.name : id, disbanded: true });
-      this.broadcast('chat', { name: '[System]', text: 'Team <' + (live ? live.name : id) + '> disbanded' });
+      if (c) c.send('chat', { name: '[Team]', text: 'Team <' + (live ? live.name : id) + '> disbanded' });
     } else {
       const updated = this.teamMgr.teams.get(id) || { id, name: rec.name, leader: '', members: new Set() };
       const leaderSid = this.onlineSidForToken(rec.leader);
       updated.leader = leaderSid || updated.leader || [...updated.members][0] || '';
       this.teamMgr.teams.set(id, updated);
       this.syncTeam(updated);
-      this.broadcast('chat', { name: '[System]', text: (p ? p.name : 'A hunter') + ' left <' + rec.name + '>' });
+      this.sendTeamNotice(rec, (p ? p.name : 'A hunter') + ' left <' + rec.name + '>');
       const c = this.clients.find(c => c.sessionId === sid);
       if (c) c.send('teamLeft', { id, name: rec.name });
       if (leaderSid) {
         const np = this.state.players.get(leaderSid);
-        this.broadcast('chat', { name: '[System]', text: (np ? np.name : 'A hunter') + ' now leads <' + rec.name + '>' });
+        this.sendTeamNotice(rec, (np ? np.name : 'A hunter') + ' now leads <' + rec.name + '>');
       }
+      this.refreshTeamSocial(rec);
     }
   }
 }

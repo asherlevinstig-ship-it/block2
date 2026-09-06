@@ -1889,7 +1889,7 @@ test('admin tools expose a safe interactive Test Player',()=>{
   assert.match(combat,/d\.kind==='test_player'[\s\S]*closeDevResetPanel\(\)[\s\S]*TEST PLAYER SPAWNED AHEAD/);
   assert.match(networking,/Test Player ready\.[\s\S]*press <b>E<\/b> to test Trade, Add Friend, and Rob safely/);
   assert.match(menus,/Test trade interaction succeeded/);
-  assert.match(menus,/Test friend interaction succeeded/);
+  assert.match(menus,/Test friend request succeeded/);
   assert.match(networking,/Test robbery interaction succeeded/);
 });
 
@@ -3034,7 +3034,9 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(social,/Tab again for Team \/ Whisper/);
   assert.match(social,/chatWheelCloseEl\.addEventListener\('click',event=>\{event\.preventDefault\(\);closeAnyWheel\(true\);\}\);/);
   assert.match(social,/Tab again for Team \/ Whisper/);
-  assert.match(social,/USE PARTY QUICK PHRASES TO COORDINATE/);
+  assert.match(social,/FRIENDS · NEARBY HUNTERS · TEAMS/);
+  assert.match(social,/function openTeamUI\(tab='team',refresh=true\)/);
+  assert.match(social,/function applySocialSnapshot\(message\)/);
   assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
   assert.match(social,/function openChat\(mode\)\{[\s\S]*releasePointerLockWithoutCameraFallback\(false\);/);
   assert.match(social,/for\(const eventName of \['pointerdown','mousedown','click','wheel'\]\)\{[\s\S]*chatBarEl\.addEventListener\(eventName,event=>event\.stopPropagation\(\)\);/);
@@ -5003,15 +5005,14 @@ test('questions HUD button is visible only in tablet mode', () => {
   assert.match(styles, /body\.tablet-mode #questionbtn:not\(\.hidden\)\{display:block\}/);
 });
 
-test('desktop social control is a bottom-right chat button', () => {
+test('desktop social control opens the unified Social hub from the bottom-right', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
-  assert.match(html, /id="socialbtn"[\s\S]*social-chat-icon[\s\S]*socialbtn-label support-label">CHAT/);
+  assert.match(html, /id="socialbtn"[\s\S]*social-chat-icon[\s\S]*socialbtn-label support-label">SOCIAL/);
   assert.match(styles, /body:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #socialbtn\{[\s\S]*right:18px;[\s\S]*bottom:18px;/);
   assert.match(combat, /if\(!tabletInputState\.tablet\)\{[\s\S]*el\.style\.left=''[\s\S]*el\.style\.top=''/);
-  assert.match(combat, /function openSocialFromHud\(\)[\s\S]*openChat[\s\S]*startQuickChatWheel/);
-  assert.doesNotMatch(combat.match(/function openSocialFromHud\(\)[\s\S]*?\n\}/)?.[0]||'', /openPlayerSocialUI/);
+  assert.match(combat, /function openSocialFromHud\(\)[\s\S]*globalThis\.openSocialUI\('nearby'\)/);
 });
 
 test('desktop HUD is composed into identity, navigation, objective, feed, and support clusters', () => {
@@ -5035,6 +5036,8 @@ test('nearby player menu can finish rendering every core action', () => {
 
   assert.match(networking, /"COMPANIONS":\{get:\(\)=>COMPANIONS\}/);
   assert.match(socialMenu, /qBtn\('TRADE'/);
+  assert.match(socialMenu, /qBtn\(teamLabel/);
+  assert.match(socialMenu, /teamQuickInvite/);
   assert.match(socialMenu, /qBtn\('ADD FRIEND'/);
   assert.match(socialMenu, /qBtn\('ROB'/);
   assert.match(socialMenu, /qBtn\('CLOSE'/);

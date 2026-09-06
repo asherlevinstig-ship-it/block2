@@ -584,7 +584,10 @@ class GameRoom extends Room {
     this.onMessage('tradeOffer', (client, m) => this.handleTradeOffer(client, m));
     this.onMessage('tradeAccept', (client, m) => this.handleTradeAccept(client, m));
     this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
+    this.onMessage('socialRequest', client => this.sendSocialSnapshot(client));
     this.onMessage('friendAdd', (client, m) => this.handleFriendAdd(client, m));
+    this.onMessage('friendRespond', (client, m) => this.handleFriendRespond(client, m));
+    this.onMessage('friendRemove', (client, m) => this.handleFriendRemove(client, m));
     this.onMessage('robPlayer', (client, m) => this.handleRobPlayer(client, m));
     this.onMessage('bugReport', (client, m) => this.handleBugReport(client, m));
     this.onMessage('stuckRescue', (client, m) => this.handleStuckRescue(client, m));
@@ -676,24 +679,29 @@ class GameRoom extends Room {
 
     this.onMessage('teamCreate', (client, m) => {
       const r = this.createPersistentTeam(client, m && m.name, !!(m && m.private));
-      if (r.err) return client.send('chat', { name: '[Team]', text: r.err });
+      if (r.err) return client.send('teamResult', { ok: false, reason: 'create', detail: r.err });
       this.syncTeam(r.team);
       this.setPlayerTeam(client.sessionId, r.team.id);
       this.unlockUtility(client, 'party_compass', 'Team navigation unlocked');
-      const p = this.state.players.get(client.sessionId);
-      this.broadcast('chat', { name: '[System]', text: (p ? p.name : 'A hunter') + ' founded team <' + r.team.name + '>' });
+      client.send('teamResult', { ok: true, action: 'created', id: r.team.id, name: r.team.name });
+      this.refreshTeamSocial(this.teamRecords.get(r.team.id));
     });
     this.onMessage('teamJoin', (client, m) => {
       const r = this.joinPersistentTeam(client, m && m.key);
-      if (r.err) return client.send('chat', { name: '[Team]', text: r.err });
+      if (r.err) return client.send('teamResult', { ok: false, reason: 'join', detail: r.err });
       this.setPlayerTeam(client.sessionId, r.team.id);
       this.unlockUtility(client, 'party_compass', 'Team navigation unlocked');
       const p = this.state.players.get(client.sessionId);
-      this.broadcast('chat', { name: '[System]', text: (p ? p.name : 'A hunter') + ' joined <' + r.team.name + '> (' + r.team.members.size + '/5)' });
+      const rec = this.teamRecords.get(r.team.id);
+      this.sendTeamNotice(rec, (p ? p.name : 'A hunter') + ' joined <' + r.team.name + '> (' + rec.members.size + '/5)');
+      client.send('teamResult', { ok: true, action: 'joined', id: r.team.id, name: r.team.name });
+      this.refreshTeamSocial(rec);
     });
     this.onMessage('teamLeave', (client) => this.doTeamLeave(client.sessionId, true));
     this.onMessage('teamPrivacy', (client, m) => this.handleTeamPrivacy(client, m));
     this.onMessage('teamInvite', (client, m) => this.handleTeamInvite(client, m));
+    this.onMessage('teamQuickInvite', (client, m) => this.handleTeamQuickInvite(client, m));
+    this.onMessage('teamInviteDecline', (client, m) => this.handleTeamInviteDecline(client, m));
     this.onMessage('teamKick', (client, m) => this.handleTeamKick(client, m));
     this.onMessage('teamTransfer', (client, m) => this.handleTeamTransfer(client, m));
     this.onMessage('teamLfg', (client, m) => this.handleTeamLfg(client, m));
@@ -1286,6 +1294,7 @@ class GameRoom extends Room {
       this.sendDayCycleSync(client);
       this.sendWeather(client);
       this.sendGuildHallSync(client);
+      this.sendSocialSnapshot(client);
       this.broadcast('chat', { name: '[System]', text: joined.name + (prof ? ' has returned' : ' has entered the world') });
       logRoomLifecycle('overworld.join.ready', {
         roomId: this.roomId || '',
@@ -4777,11 +4786,106 @@ class GameRoom extends Room {
   socialPlayersCloseInTown(a, b, range = 8) {
     return this.tradePlayersClose(a, b, range);
   }
-  handleFriendAdd(client, m = {}) {
+  async socialProfileForToken(token) {
+    const clean = cleanToken(token);
+    if (!clean) return null;
+    const cached = this.profiles && this.profiles.get(clean);
+    if (cached) return cached;
+    if (!this.store || typeof this.store.loadPlayer !== 'function') return null;
+    try {
+      const raw = await this.store.loadPlayer(clean);
+      return raw ? sanitizeProfile(raw) : null;
+    } catch (e) {
+      console.warn('[social] profile load failed:', e && e.message || e);
+      return null;
+    }
+  }
+  socialClientForToken(token) {
+    const sid = this.onlineSidForToken(cleanToken(token));
+    return sid ? (this.clients || []).find(c => c.sessionId === sid) || null : null;
+  }
+  async socialPerson(token) {
+    const clean = cleanToken(token);
+    if (!clean) return null;
+    const onlineClient = this.socialClientForToken(clean);
+    const prof = await this.socialProfileForToken(clean);
+    const player = onlineClient && this.state.players.get(onlineClient.sessionId);
+    const teamId = player && player.team || '';
+    const team = teamId && this.state.teams.get(teamId);
+    return {
+      token: clean,
+      sid: onlineClient ? onlineClient.sessionId : '',
+      name: String(player && player.name || prof && prof.name || 'Hunter').slice(0, 24),
+      online: !!onlineClient,
+      teamId,
+      teamName: team && team.name || '',
+    };
+  }
+  async sendSocialSnapshot(client) {
+    const rec = this.profileFor(client);
+    if (!rec) return false;
+    const prof = rec.prof;
+    const friends = [...new Set((prof.friends || []).map(cleanToken).filter(Boolean))];
+    const incoming = [...new Set((prof.friendRequests || []).map(cleanToken).filter(Boolean))].filter(token => !friends.includes(token));
+    const outgoing = [...new Set((prof.sentFriendRequests || []).map(cleanToken).filter(Boolean))].filter(token => !friends.includes(token));
+    const mapPeople = async tokens => (await Promise.all(tokens.map(token => this.socialPerson(token)))).filter(Boolean);
+    const teamInvites = [];
+    for (const team of (this.teamRecords || new Map()).values()) {
+      if (!team.invites || !team.invites.has(rec.token) || team.members.has(rec.token)) continue;
+      const leader = await this.socialPerson(team.leader);
+      teamInvites.push({ id: team.id, name: team.name, from: leader && leader.name || 'Team leader', private: !!team.private, memberCount: team.members.size });
+    }
+    client.send('socialSnapshot', {
+      friends: await mapPeople(friends),
+      incomingFriendRequests: await mapPeople(incoming),
+      outgoingFriendRequests: await mapPeople(outgoing),
+      teamInvites,
+    });
+    return true;
+  }
+  refreshSocialSnapshots(...clients) {
+    for (const client of clients.flat().filter(Boolean)) Promise.resolve(this.sendSocialSnapshot(client)).catch(() => {});
+  }
+  async persistSocialProfile(token, prof) {
+    const clean = cleanToken(token);
+    if (!clean || !prof) return false;
+    if (this.profiles && this.profiles.has(clean)) {
+      this.profiles.set(clean, prof);
+      this.dirtyPlayers.add(clean);
+    }
+    return this.savePlayerProfileNow(clean, prof);
+  }
+  normalizeFriendState(prof) {
+    if (!prof) return;
+    prof.friends = [...new Set((prof.friends || []).map(cleanToken).filter(Boolean))].slice(0, 256);
+    prof.friendRequests = [...new Set((prof.friendRequests || []).map(cleanToken).filter(Boolean))].filter(token => !prof.friends.includes(token)).slice(0, 64);
+    prof.sentFriendRequests = [...new Set((prof.sentFriendRequests || []).map(cleanToken).filter(Boolean))].filter(token => !prof.friends.includes(token)).slice(0, 64);
+  }
+  async completeFriendship(client, target, rec, targetRec, action = 'accepted') {
+    const already = rec.prof.friends.includes(targetRec.token);
+    const targetAlready = targetRec.prof.friends.includes(rec.token);
+    if (!already) rec.prof.friends.push(targetRec.token);
+    if (!targetAlready) targetRec.prof.friends.push(rec.token);
+    rec.prof.friendRequests = rec.prof.friendRequests.filter(token => token !== targetRec.token);
+    rec.prof.sentFriendRequests = rec.prof.sentFriendRequests.filter(token => token !== targetRec.token);
+    targetRec.prof.friendRequests = targetRec.prof.friendRequests.filter(token => token !== rec.token);
+    targetRec.prof.sentFriendRequests = targetRec.prof.sentFriendRequests.filter(token => token !== rec.token);
+    const fromKarma = !already ? this.adjustKarma(rec, 2) : { value: rec.prof.karma | 0, delta: 0 };
+    const targetKarma = !targetAlready ? this.adjustKarma(targetRec, 2) : { value: targetRec.prof.karma | 0, delta: 0 };
+    this.normalizeFriendState(rec.prof);
+    this.normalizeFriendState(targetRec.prof);
+    await Promise.all([this.persistSocialProfile(rec.token, rec.prof), this.persistSocialProfile(targetRec.token, targetRec.prof)]);
+    const fromName = (this.state.players.get(client.sessionId) || {}).name || rec.prof.name || 'Hunter';
+    const targetName = target ? (this.state.players.get(target.sessionId) || {}).name || targetRec.prof.name || 'Hunter' : targetRec.prof.name || 'Hunter';
+    client.send('friendResult', { ok: true, action, targetSid: target && target.sessionId || '', targetToken: targetRec.token, targetName, karma: fromKarma.value, karmaDelta: fromKarma.delta });
+    if (target) target.send('friendResult', { ok: true, action, targetSid: client.sessionId, targetToken: rec.token, targetName: fromName, karma: targetKarma.value, karmaDelta: targetKarma.delta });
+    this.refreshSocialSnapshots(client, target);
+  }
+  async handleFriendAdd(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');
     const testTarget = this.adminTestPlayerTarget(client, m);
     if (rec && testTarget) {
-      client.send('friendResult', { ok: true, test: true, action: 'add', targetSid: testTarget.sid, targetToken: '', targetName: testTarget.name, karma: rec.prof.karma | 0, karmaDelta: 0 });
+      client.send('friendResult', { ok: true, test: true, action: 'request', targetSid: testTarget.sid, targetToken: '', targetName: testTarget.name, karma: rec.prof.karma | 0, karmaDelta: 0 });
       return;
     }
     const target = this.clients.find(c => c.sessionId === targetSid);
@@ -4790,24 +4894,66 @@ class GameRoom extends Room {
     if (!rec || !target || !targetRec || target === client) return reject('target');
     if (this.rateLimited(client, 'friendAdd', 4, 12)) return reject('rate');
     if (!this.socialPlayersCloseInTown(client, target)) return reject('range');
-    rec.prof.friends = Array.isArray(rec.prof.friends) ? rec.prof.friends.map(cleanToken).filter(Boolean) : [];
-    targetRec.prof.friends = Array.isArray(targetRec.prof.friends) ? targetRec.prof.friends.map(cleanToken).filter(Boolean) : [];
-    const already = rec.prof.friends.includes(targetRec.token);
-    const targetAlready = targetRec.prof.friends.includes(rec.token);
-    if (!already) rec.prof.friends.push(targetRec.token);
-    if (!targetAlready) targetRec.prof.friends.push(rec.token);
-    const fromKarma = !already ? this.adjustKarma(rec, 2) : { value: rec.prof.karma | 0, delta: 0 };
-    const targetKarma = !targetAlready ? this.adjustKarma(targetRec, 2) : { value: targetRec.prof.karma | 0, delta: 0 };
-    rec.prof.friends = [...new Set(rec.prof.friends)].slice(0, 256);
-    targetRec.prof.friends = [...new Set(targetRec.prof.friends)].slice(0, 256);
-    this.dirtyPlayers.add(rec.token);
-    this.dirtyPlayers.add(targetRec.token);
-    this.sendProfile(client, rec.prof);
-    this.sendProfile(target, targetRec.prof);
+    this.normalizeFriendState(rec.prof);
+    this.normalizeFriendState(targetRec.prof);
+    if (rec.prof.friends.includes(targetRec.token)) {
+      client.send('friendResult', { ok: true, action: 'already', targetSid, targetToken: targetRec.token, targetName: targetRec.prof.name || 'Hunter', karma: rec.prof.karma | 0, karmaDelta: 0 });
+      return;
+    }
+    if (rec.prof.friendRequests.includes(targetRec.token)) return this.completeFriendship(client, target, rec, targetRec, 'accepted');
+    if (rec.prof.sentFriendRequests.includes(targetRec.token)) {
+      client.send('friendResult', { ok: true, action: 'pending', targetSid, targetToken: targetRec.token, targetName: targetRec.prof.name || 'Hunter', karma: rec.prof.karma | 0, karmaDelta: 0 });
+      return;
+    }
+    if (!rec.prof.sentFriendRequests.includes(targetRec.token)) rec.prof.sentFriendRequests.push(targetRec.token);
+    if (!targetRec.prof.friendRequests.includes(rec.token)) targetRec.prof.friendRequests.push(rec.token);
+    this.normalizeFriendState(rec.prof);
+    this.normalizeFriendState(targetRec.prof);
+    await Promise.all([this.persistSocialProfile(rec.token, rec.prof), this.persistSocialProfile(targetRec.token, targetRec.prof)]);
     const fromName = (this.state.players.get(client.sessionId) || {}).name || rec.prof.name || 'Hunter';
     const targetName = (this.state.players.get(target.sessionId) || {}).name || targetRec.prof.name || 'Hunter';
-    client.send('friendResult', { ok: true, action: already ? 'already' : 'add', targetSid: target.sessionId, targetToken: targetRec.token, targetName, karma: fromKarma.value, karmaDelta: fromKarma.delta });
-    target.send('friendResult', { ok: true, action: targetAlready ? 'already' : 'add', targetSid: client.sessionId, targetToken: rec.token, targetName: fromName, karma: targetKarma.value, karmaDelta: targetKarma.delta });
+    client.send('friendResult', { ok: true, action: 'requested', targetSid, targetToken: targetRec.token, targetName, karma: rec.prof.karma | 0, karmaDelta: 0 });
+    target.send('friendRequest', { fromSid: client.sessionId, fromToken: rec.token, fromName });
+    this.refreshSocialSnapshots(client, target);
+  }
+  async handleFriendRespond(client, m = {}) {
+    const rec = this.profileFor(client), requesterToken = cleanToken(m.targetToken);
+    const reject = reason => client.send('friendResult', { ok: false, reason });
+    if (!rec || !requesterToken) return reject('target');
+    this.normalizeFriendState(rec.prof);
+    if (!rec.prof.friendRequests.includes(requesterToken)) return reject('missing');
+    const requesterClient = this.socialClientForToken(requesterToken);
+    const requesterProf = await this.socialProfileForToken(requesterToken);
+    if (!requesterProf) return reject('target');
+    const requesterRec = { token: requesterToken, prof: requesterProf };
+    this.normalizeFriendState(requesterProf);
+    if (m.accept === true) return this.completeFriendship(client, requesterClient, rec, requesterRec, 'accepted');
+    rec.prof.friendRequests = rec.prof.friendRequests.filter(token => token !== requesterToken);
+    requesterProf.sentFriendRequests = requesterProf.sentFriendRequests.filter(token => token !== rec.token);
+    await Promise.all([this.persistSocialProfile(rec.token, rec.prof), this.persistSocialProfile(requesterToken, requesterProf)]);
+    const person = await this.socialPerson(requesterToken);
+    client.send('friendResult', { ok: true, action: 'declined', targetToken: requesterToken, targetName: person && person.name || 'Hunter', karma: rec.prof.karma | 0, karmaDelta: 0 });
+    if (requesterClient) requesterClient.send('friendResult', { ok: true, action: 'declined_by', targetToken: rec.token, targetName: rec.prof.name || 'Hunter', karma: requesterProf.karma | 0, karmaDelta: 0 });
+    this.refreshSocialSnapshots(client, requesterClient);
+  }
+  async handleFriendRemove(client, m = {}) {
+    const rec = this.profileFor(client), targetToken = cleanToken(m.targetToken);
+    const reject = reason => client.send('friendResult', { ok: false, reason });
+    if (!rec || !targetToken || targetToken === rec.token) return reject('target');
+    this.normalizeFriendState(rec.prof);
+    if (!rec.prof.friends.includes(targetToken)) return reject('missing');
+    const targetClient = this.socialClientForToken(targetToken);
+    const targetProf = await this.socialProfileForToken(targetToken);
+    rec.prof.friends = rec.prof.friends.filter(token => token !== targetToken);
+    if (targetProf) {
+      this.normalizeFriendState(targetProf);
+      targetProf.friends = targetProf.friends.filter(token => token !== rec.token);
+    }
+    await Promise.all([this.persistSocialProfile(rec.token, rec.prof), targetProf && this.persistSocialProfile(targetToken, targetProf)]);
+    const person = await this.socialPerson(targetToken);
+    client.send('friendResult', { ok: true, action: 'removed', targetToken, targetName: person && person.name || 'Hunter', karma: rec.prof.karma | 0, karmaDelta: 0 });
+    if (targetClient) targetClient.send('friendResult', { ok: true, action: 'removed_by', targetToken: rec.token, targetName: rec.prof.name || 'Hunter', karma: targetProf && targetProf.karma | 0, karmaDelta: 0 });
+    this.refreshSocialSnapshots(client, targetClient);
   }
   handleTradeOffer(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');

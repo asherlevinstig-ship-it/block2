@@ -1480,13 +1480,19 @@ function netAttachRoom(room,name,client){
     room.onMessage('petTamerPingResult', m=>applyPetTamerPingResult(m));
     room.onMessage('friendResult', m=>{
       applyFriendResult(m);
-      if(m&&m.ok&&m.action!=='already'){
+      if(m&&m.ok&&m.action==='accepted'){
         const kDelta=(m.karmaDelta|0);
         showKarmaFeedback(kDelta,m.karma,'friend');
         if(kDelta)sysMsg('Friendship formed with <b>'+escHTML(String(m.targetName||'Hunter'))+'</b>.<br><b>Karma:</b> +'+kDelta+' · now '+(globalThis.BlockcraftKarma|0),{tier:'minor',title:'Friends'});
         eventFeed('[Friends]','Added '+String(m.targetName||'Hunter')+' as a friend.',{key:'friend:'+String(m.targetToken||m.targetSid||''),cooldown:0});
       }
     });
+    room.onMessage('friendRequest',m=>{
+      sysMsg('<b>'+escHTML(String(m&&m.fromName||'A hunter'))+'</b> sent you a friend request. Open <b>Social → Friends</b> to respond.',{tier:'minor',title:'Friend Request'});
+      eventFeed('[Friends]','Friend request from '+String(m&&m.fromName||'a hunter')+'.',{key:'friend-request:'+String(m&&m.fromToken||''),cooldown:0});
+      SOCIAL.requestSocialSnapshot();
+    });
+    room.onMessage('socialSnapshot',m=>SOCIAL.applySocialSnapshot(m));
     room.onMessage('progressionFocus', m=>{
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
       const restoredFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
@@ -2934,14 +2940,15 @@ function netAttachRoom(room,name,client){
     room.onMessage('commsReportResult',m=>chatLine('[Safety]',m&&m.ok?'Report submitted for moderator review.':m&&m.reason==='rate'?'You recently reported this player.':'Report could not be submitted.',m&&m.ok?'whisper':'blocked'));
     room.onMessage('bugReportResult',m=>applyBugReportResult(m));
     room.onMessage('teamInvite', m=>{
-      if(m&&m.id) pendingTeamInvites[m.id]=Date.now();
-      sysMsg('<b>'+escHTML(m&&m.from||'A team leader')+'</b> invited you to <b>'+escHTML(m&&m.name||'a team')+'</b>. Open Teams (T) to join.');
-      chatLine('[Team]', 'Invite received. Open Teams (T) to join '+((m&&m.name)||'the team')+'.');
+      SOCIAL.receiveTeamInvite(m);
+      sysMsg('<b>'+escHTML(m&&m.from||'A team leader')+'</b> invited you to <b>'+escHTML(m&&m.name||'a team')+'</b>. Open <b>Social → Team</b> to accept or decline.');
+      chatLine('[Team]', 'Invitation received from '+((m&&m.from)||'a team leader')+'.');
       SFX.level();
     });
     room.onMessage('teamLeft', m=>{
       sysMsg((m&&m.kicked)?'You were removed from <b>'+escHTML(m.name||'your team')+'</b>.':(m&&m.disbanded)?'<b>'+escHTML(m.name||'Your team')+'</b> disbanded.':'You left <b>'+escHTML(m&&m.name||'your team')+'</b>.');
-      if(qOpen) openTeamUI();
+      SOCIAL.requestSocialSnapshot();
+      if(qOpen&&qpanelEl&&qpanelEl.dataset.modal==='social-hub') openTeamUI('team',false);
     });
     room.onMessage('teamResult', m=>{
       if(!m||!m.ok){
@@ -2951,15 +2958,21 @@ function netAttachRoom(room,name,client){
                r==='target'?'Could not find that online hunter.':
                r==='member'?'That hunter is already on your team.':
                r==='leader_self'?'Transfer leadership before removing yourself.':
-               'Team action failed.');
+               r==='target_team'?'That hunter is already in a team.':
+               r==='invite'?'That team invitation is no longer active.':
+               escHTML(String(m&&m.detail||'Team action failed.')));
         return;
       }
       if(m.action==='invite') sysMsg('Invited <b>'+escHTML(m.target||'hunter')+'</b> to the team.');
+      else if(m.action==='created') sysMsg('Created <b>'+escHTML(m.name||'your team')+'</b>.');
+      else if(m.action==='joined') sysMsg('Joined <b>'+escHTML(m.name||'the team')+'</b>.');
+      else if(m.action==='invite_declined') sysMsg('Declined the invitation to <b>'+escHTML(m.name||'that team')+'</b>.');
       else if(m.action==='privacy') sysMsg('Team is now <b>'+(m.private?'invite-only':'open')+'</b>.');
       else if(m.action==='lfg') sysMsg(m.lfg?'Team marked <b>looking for dungeon</b>.':'Team dungeon status cleared.');
       else if(m.action==='transfer') sysMsg('Team leadership transferred.');
       else if(m.action==='leader') sysMsg('You now lead <b>'+escHTML(m.name||'your team')+'</b>.');
-      if(qOpen) openTeamUI();
+      SOCIAL.requestSocialSnapshot();
+      if(qOpen&&qpanelEl&&qpanelEl.dataset.modal==='social-hub') openTeamUI('team',false);
     });
     if(onboardingActive){
       resetTrainingMeadowLocal();
@@ -5554,6 +5567,7 @@ globalThis.startQuickChatWheel=SOCIAL.startQuickChatWheel;
 globalThis.closeQuickChatWheel=SOCIAL.closeQuickChatWheel;
 globalThis.startDragonCommandWheel=SOCIAL.startDragonCommandWheel;
 const {chatLine,openChat,closeChat,openAdminChat,pendingTeamInvites,teamCol,teamName,myTeamId,isMyTeamLeader,netTeamHud,openTeamUI}=SOCIAL;
+globalThis.openSocialUI=tab=>openTeamUI(tab||'nearby');
 
 // ---- smart top-screen player suggestions ----
 const SMART_SUGGESTION_KEY='bc_smart_suggestions_v1';

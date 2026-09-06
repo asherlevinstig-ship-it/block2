@@ -7162,35 +7162,46 @@ test('dragon training loan can be returned manually and expires after twelve hou
   assert.equal(room.hasMountUnlock(owner, 'dragon:ember'), true, 'expired loans restore owner access');
 });
 
-test('town friendship creates a mutual persistent friend link', () => {
+test('town friendship uses a durable request that becomes mutual when accepted', async () => {
   const room = makeRoom(), alice = makeClient('friend_alice'), bob = makeClient('friend_bob');
   const tc = W.TOWN.TC;
   const { token: aToken, prof: aProf } = seedPlayer(room, alice, { name: 'Alice', x: tc, z: tc });
   const { token: bToken, prof: bProf } = seedPlayer(room, bob, { name: 'Bob', x: tc + 2, z: tc });
   room.clients = [alice, bob];
 
-  room.handleFriendAdd(alice, { targetSid: bob.sessionId });
+  await room.handleFriendAdd(alice, { targetSid: bob.sessionId });
+
+  assert.deepEqual(aProf.friends, []);
+  assert.deepEqual(bProf.friends, []);
+  assert.deepEqual(aProf.sentFriendRequests, [bToken]);
+  assert.deepEqual(bProf.friendRequests, [aToken]);
+  assert.ok(alice.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.action === 'requested'));
+  assert.ok(bob.sent.some(e => e.type === 'friendRequest' && e.msg.fromName === 'Alice'));
+
+  await room.handleFriendRespond(bob, { targetToken: aToken, accept: true });
 
   assert.deepEqual(aProf.friends, [bToken]);
   assert.deepEqual(bProf.friends, [aToken]);
+  assert.deepEqual(aProf.sentFriendRequests, []);
+  assert.deepEqual(bProf.friendRequests, []);
   assert.equal(aProf.karma, 2);
   assert.equal(bProf.karma, 2);
   assert.ok(room.dirtyPlayers.has(aToken));
   assert.ok(room.dirtyPlayers.has(bToken));
-  assert.ok(alice.sent.some(e => e.type === 'profile'));
-  assert.ok(bob.sent.some(e => e.type === 'profile'));
-  assert.ok(alice.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.targetName === 'Bob' && e.msg.karmaDelta === 2));
-  assert.ok(bob.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.targetName === 'Alice' && e.msg.karmaDelta === 2));
+  assert.ok(alice.sent.some(e => e.type === 'socialSnapshot'));
+  assert.ok(bob.sent.some(e => e.type === 'socialSnapshot'));
+  assert.ok(alice.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.action === 'accepted' && e.msg.targetName === 'Bob' && e.msg.karmaDelta === 2));
+  assert.ok(bob.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.action === 'accepted' && e.msg.targetName === 'Alice' && e.msg.karmaDelta === 2));
 });
 
-test('town friendship rejects players outside town or out of proximity', () => {
+test('town friendship rejects players outside town or out of proximity', async () => {
   const room = makeRoom(), alice = makeClient('friend_far_alice'), bob = makeClient('friend_far_bob');
   const tc = W.TOWN.TC;
   const { prof: aProf } = seedPlayer(room, alice, { x: tc, z: tc });
   const { prof: bProf } = seedPlayer(room, bob, { x: tc + 40, z: tc });
   room.clients = [alice, bob];
 
-  room.handleFriendAdd(alice, { targetSid: bob.sessionId });
+  await room.handleFriendAdd(alice, { targetSid: bob.sessionId });
 
   assert.deepEqual(aProf.friends, []);
   assert.deepEqual(bProf.friends, []);
@@ -7426,7 +7437,7 @@ test('handleFarm is rate-limited like the other mutating handlers', () => {
   assert.ok(throttled, 'a flood of farm actions is throttled like edit/chest/shop');
 });
 
-test('a disconnecting team leader is not replaced by a stand-in falsely shown as leader', () => {
+test('a team keeps its persistent owner but grants an online member acting leadership', () => {
   const room = makeRoom();
   const leader = makeClient('leader');
   const member = makeClient('member');
@@ -7440,9 +7451,33 @@ test('a disconnecting team leader is not replaced by a stand-in falsely shown as
 
   room.detachTeamSession(leader.sessionId);   // leader disconnects (as onLeave does)
 
-  assert.notEqual(live.leader, member.sessionId, 'the remaining member is not promoted to displayed leader');
-  assert.equal(live.leader, '', 'no online leader is shown while the real leader is offline');
+  assert.equal(live.leader, member.sessionId, 'the remaining member is shown as acting leader');
+  assert.equal(room.isTeamLeader(member, room.teamRecords.get(r.team.id)), true, 'the acting leader can manage the team');
   assert.equal(room.teamRecords.get(r.team.id).leader, 'leader_token_123', 'authority (persistent leader) is unchanged');
+});
+
+test('team invitations are returned by the durable Social snapshot', async () => {
+  const room = makeRoom();
+  const leader = makeClient('invite_leader');
+  const target = makeClient('invite_target');
+  room.clients = [leader, target];
+  seedPlayer(room, leader, { token: 'invite_leader_token', name: 'Rhea' });
+  seedPlayer(room, target, { token: 'invite_target_token', name: 'Milo' });
+  const created = room.createPersistentTeam(leader, 'Trailblazers', true);
+
+  room.handleTeamInvite(leader, { sid: target.sessionId });
+  target.sent.length = 0;
+  await room.sendSocialSnapshot(target);
+
+  const snapshot = target.sent.find(event => event.type === 'socialSnapshot');
+  assert.ok(snapshot);
+  assert.deepEqual(snapshot.msg.teamInvites, [{
+    id: created.team.id,
+    name: 'Trailblazers',
+    from: 'Rhea',
+    private: true,
+    memberCount: 1,
+  }]);
 });
 
 test('food use consumes edible items and heals server HP', () => {
@@ -8682,12 +8717,18 @@ test('communication safety data sanitizes display names and persists account blo
     name: '<Bad! Name>✨',
     mutedPlayers: ['target_token_123', 'target_token_123', '../bad'],
     friends: ['friend_token_123', 'friend_token_123', '../bad'],
+    friendRequests: ['request_token_123', 'request_token_123', '../bad'],
+    sentFriendRequests: ['sent_token_123', 'sent_token_123', '../bad'],
   });
   assert.equal(profile.name, 'Bad Name');
   assert.deepEqual(profile.mutedPlayers, ['target_token_123']);
   assert.deepEqual(profile.friends, ['friend_token_123']);
+  assert.deepEqual(profile.friendRequests, ['request_token_123']);
+  assert.deepEqual(profile.sentFriendRequests, ['sent_token_123']);
   assert.deepEqual(defaultProfile('Safe_Name-2').mutedPlayers, []);
   assert.deepEqual(defaultProfile('Safe_Name-2').friends, []);
+  assert.deepEqual(defaultProfile('Safe_Name-2').friendRequests, []);
+  assert.deepEqual(defaultProfile('Safe_Name-2').sentFriendRequests, []);
 });
 
 test('Gate matchmaking advertises nearby eligible parties and joins without bypassing readiness range', () => {

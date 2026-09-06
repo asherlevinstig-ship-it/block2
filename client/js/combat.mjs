@@ -745,15 +745,8 @@ function openQuestionsFromHud(){
   return true;
 }
 function openSocialFromHud(){
-  const wheel=document.getElementById('chatwheel');
-  if(tabletInputState.gameplayTouch){
-    if(wheel&&!wheel.classList.contains('hidden')&&typeof closeQuickChatWheel==='function'){
-      closeQuickChatWheel(true);
-      return true;
-    }
-    if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
-  }
   if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
+  if(typeof globalThis.openSocialUI==='function'){globalThis.openSocialUI('nearby');return true;}
   if(typeof openChat==='function'){ openChat(); return true; }
   if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
   return false;
@@ -6759,6 +6752,7 @@ function nearbyInteractionPrompt(){
   if(playerTarget){
     const actions=[];
     if(!playerTarget.robberyOnly){
+      actions.push('Team Up');
       actions.push('Trade');
       if(typeof nearbyPlayerIsPetTamer==='function'&&nearbyPlayerIsPetTamer(playerTarget)&&typeof dragonLoanOwnedTypes==='function'&&dragonLoanOwnedTypes().length)actions.push('Train My Pet');
       if(typeof dragonLoanReturnForTarget==='function'&&dragonLoanReturnForTarget(playerTarget))actions.push('Return Dragon');

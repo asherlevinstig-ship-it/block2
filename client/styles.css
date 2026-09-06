@@ -674,6 +674,30 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   #qpanel.management .sub2{color:#8fb8d8}
   #qpanel.management .qbtn{background:#16345e;color:#9fd8ff;border-color:#4fd8ff}
   #qpanel.management .qbtn:hover{background:#1f477c}
+  #qpanel.management[data-modal="social-hub"]{width:min(900px,calc(100vw - 36px));padding:22px 28px;background:radial-gradient(circle at 50% 0,rgba(79,216,255,.12),transparent 38%),linear-gradient(160deg,rgba(12,24,39,.985),rgba(5,11,20,.985))}
+  .social-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:18px 0 20px;padding:5px;border:1px solid rgba(79,216,255,.18);border-radius:9px;background:rgba(2,8,15,.52)}
+  .social-tabs button{min-height:42px;border:1px solid transparent;border-radius:6px;background:transparent;color:#8fa8bd;font:800 11px inherit;letter-spacing:1.7px;cursor:pointer}
+  .social-tabs button:hover{color:#e7f7ff;background:rgba(79,216,255,.08)}
+  .social-tabs button.active{border-color:rgba(79,216,255,.6);background:linear-gradient(180deg,rgba(31,83,117,.82),rgba(13,43,66,.82));box-shadow:0 0 16px rgba(79,216,255,.14);color:#e8faff}
+  .social-section-title{margin:15px 0 7px;color:#8fd8ff;font-size:10px;font-weight:900;letter-spacing:2.2px}
+  .social-person-row,.social-invite-card,.social-team-listing{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:11px;min-height:58px;margin-bottom:7px;padding:8px 10px;border:1px solid rgba(125,211,252,.15);border-radius:8px;background:linear-gradient(90deg,rgba(19,43,63,.72),rgba(7,16,27,.72))}
+  .social-person-row.offline{opacity:.72;background:rgba(7,14,24,.68)}
+  .social-avatar{display:grid;place-items:center;width:36px;height:36px;border:1px solid rgba(125,211,252,.48);border-radius:50%;background:radial-gradient(circle,#24506d,#0b1e31);color:#e4f7ff;font-style:normal;font-weight:900}
+  .social-person-row.online .social-avatar{border-color:#78e49a;box-shadow:0 0 12px rgba(110,224,106,.2)}
+  .social-person-row span,.social-invite-card span,.social-team-listing span{min-width:0}
+  .social-person-row span>b,.social-invite-card span>b,.social-team-listing span>b{display:block;color:#eef8ff;font-size:13px}
+  .social-person-row span>small,.social-invite-card span>small,.social-team-listing span>small{display:block;margin-top:3px;color:#8da8bd;font-size:9px;letter-spacing:1px}
+  .social-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+  .social-row-actions .qbtn,.social-invite-card .qbtn,.social-team-listing .qbtn{margin:0;padding:7px 10px;font-size:9px;white-space:nowrap}
+  .social-invite-card,.social-team-listing{grid-template-columns:minmax(0,1fr) auto auto;padding-left:14px}
+  .social-invite-card{border-color:rgba(255,210,74,.42);background:linear-gradient(90deg,rgba(93,63,15,.36),rgba(8,17,28,.8));box-shadow:inset 3px 0 #ffd24a}
+  .social-team-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px;padding:13px 15px;border:1px solid rgba(79,216,255,.28);border-radius:8px;background:rgba(11,30,46,.75)}
+  .social-team-summary>b{font-size:18px}.social-team-summary>span{color:#9db8ca;font-size:9px;font-weight:800;letter-spacing:1.1px}
+  .social-team-controls{justify-content:flex-start;margin:12px 0}
+  .social-create-team{display:grid;grid-template-columns:minmax(160px,1fr) auto auto;gap:8px;align-items:center;padding:10px;border:1px solid rgba(79,216,255,.16);border-radius:8px;background:rgba(3,12,21,.5)}
+  .social-create-team input{height:36px;padding:0 11px;border:1px solid rgba(125,211,252,.35);border-radius:5px;outline:none;background:#071522;color:#eaf7ff;font:12px inherit}
+  .social-create-team input:focus{border-color:#ffd24a;box-shadow:0 0 10px rgba(255,210,74,.15)}
+  .social-create-team .qbtn{margin:0;white-space:nowrap}.social-empty{text-align:left!important;color:#8fa5b8!important}
   #qpanel.questlog{width:min(820px,calc(100vw - 36px));background:linear-gradient(160deg, rgba(16,24,38,.98), rgba(8,12,22,.98));border-color:#ffd24a;box-shadow:0 0 28px rgba(255,210,74,.24), inset 0 0 34px rgba(255,210,74,.05);color:#d8e8ff}
   #qpanel.questlog h2{color:#ffd24a;text-shadow:0 0 10px rgba(255,210,74,.65)}
   #qpanel.questlog .sub2{color:#b8985e}
@@ -1091,6 +1115,7 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   .familiarbar i{background:linear-gradient(90deg,var(--familiar-color,#9ad26b),#ffd24a)}
   .familiar-xp{margin-top:4px;color:#93aabe;font-size:9px;letter-spacing:.8px}
   @media(max-width:620px){#qpanel.management .familiargrid{grid-template-columns:1fr}.familiar-tiers{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:700px){.social-person-row{grid-template-columns:38px minmax(0,1fr)}.social-row-actions{grid-column:1/-1;justify-content:flex-start}.social-invite-card,.social-team-listing,.social-create-team{grid-template-columns:1fr}.social-team-summary{align-items:flex-start;flex-direction:column}.social-tabs button{font-size:9px;letter-spacing:.8px}}
   .dragonactivity{margin:10px 0 12px;padding:9px 10px;border:1px solid rgba(125,211,252,.22);border-left:3px solid #7dd3fc;background:rgba(5,10,16,.48);border-radius:6px;color:#c9d8e8}
   .dragonactivity>b{display:block;margin-bottom:6px;color:#eaf7ff;font-size:10px;letter-spacing:1.8px}
   .dragonactivity .empty{display:block;color:#8497aa;font-size:10px}

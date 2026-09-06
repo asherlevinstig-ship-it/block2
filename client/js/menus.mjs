@@ -5406,6 +5406,10 @@ function openPlayerSocialUI(target){
   qpanelEl.appendChild(intro);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   if(!target.robberyOnly){
+    const players=NET.room&&NET.room.state&&NET.room.state.players;
+    const self=players&&players.get(NET.room.sessionId),other=players&&players.get(target.sid);
+    const teamLabel=self&&self.team?'INVITE TO TEAM':other&&other.team?'JOIN TEAM':'TEAM UP';
+    row.appendChild(qBtn(teamLabel,()=>{NET.room.send('teamQuickInvite',{sid:target.sid});closeQWin();}));
     row.appendChild(qBtn('TRADE',()=>openPlayerTradeUI(target)));
     const canOfferPetTraining=nearbyPlayerIsPetTamer(target)&&dragonLoanOwnedTypes().length;
     if(canOfferPetTraining)row.appendChild(qBtn('TRAIN MY PET',()=>openDragonLoanUI(target),true));
@@ -5483,13 +5487,21 @@ function applyFriendResult(m){
   const name=escHTML(String(m&&m.targetName||'Hunter'));
   if(m&&m.ok){
     SFX.level();
-    sysMsg(m.test
-      ? '<b>Test friend interaction succeeded.</b> No friend data changed.'
-      : (m.action==='already'?'You are already friends with ':'Added ')+('<b>'+name+'</b>')+(m.action==='already'?'.':' as a friend.'),{tier:'minor',title:m.test?'Test Player':'Friends'});
+    const action=String(m.action||'');
+    const text=m.test?'<b>Test friend request succeeded.</b> No friend data changed.':
+      action==='requested'?'Friend request sent to <b>'+name+'</b>.':
+      action==='pending'?'Your friend request to <b>'+name+'</b> is still pending.':
+      action==='accepted'?'You and <b>'+name+'</b> are now friends.':
+      action==='declined'?'Friend request from <b>'+name+'</b> declined.':
+      action==='declined_by'?'<b>'+name+'</b> declined your friend request.':
+      action==='removed'?'Removed <b>'+name+'</b> from your friends.':
+      action==='removed_by'?'<b>'+name+'</b> removed the friendship.':
+      'You are already friends with <b>'+name+'</b>.';
+    sysMsg(text,{tier:'minor',title:m.test?'Test Player':'Friends'});
     return;
   }
   const reason=String(m&&m.reason||'invalid');
-  const text={target:'That hunter is no longer nearby.',range:'Friend actions only work beside another hunter in Town of Beginnings.',rate:'Slow down before adding another friend.'}[reason]||'Friend request failed.';
+  const text={target:'That hunter is no longer available.',range:'Friend requests only work beside another hunter in a safe social area.',rate:'Slow down before sending another friend request.',missing:'That friend request is no longer active.'}[reason]||'Friend request failed.';
   SFX.error();
   sysMsg(text,{tier:'minor',title:'Friends'});
 }
