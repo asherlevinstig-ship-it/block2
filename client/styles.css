@@ -51,6 +51,9 @@
   #socialbtn .social-chat-icon{width:18px;height:18px;margin-right:7px;overflow:visible;vertical-align:middle}
   #socialbtn .social-chat-icon path{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
   #socialbtn .social-chat-icon circle{fill:currentColor}
+  #socialbtn.is-holding{filter:brightness(1.18);border-color:#ffe680;color:#fff1ad}
+  #socialbtn.is-holding:after{content:"";position:absolute;inset:-5px;border:3px solid transparent;border-top-color:#ffe680;border-right-color:#ffe680;border-radius:inherit;pointer-events:none;animation:socialHoldProgress 1.2s linear forwards}
+  @keyframes socialHoldProgress{from{transform:rotate(-45deg);opacity:.35}to{transform:rotate(315deg);opacity:1}}
   #stuckrescuebtn{position:fixed;left:10px;top:352px;z-index:12;height:34px;padding:0 12px;border:1px solid rgba(125,211,252,.72);border-radius:6px;background:linear-gradient(180deg,rgba(13,39,57,.94),rgba(7,14,24,.9));box-shadow:0 8px 22px rgba(0,0,0,.38),0 0 16px rgba(125,211,252,.16),inset 0 0 14px rgba(255,255,255,.04);color:#bfecff;font:800 10px inherit;letter-spacing:1.3px;text-shadow:0 2px 0 #000;cursor:pointer}
   #stuckrescuebtn.hidden{display:none}
   #stuckrescuebtn:hover{filter:brightness(1.16);border-color:#bff4ff;color:#fff}

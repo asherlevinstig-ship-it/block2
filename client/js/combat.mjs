@@ -990,8 +990,53 @@ function bindHudActionButton(btn,handler,name){
   btn.addEventListener('click',run);
   btn.addEventListener('pointerdown',run);
 }
+const SOCIAL_BUTTON_HOLD_MS=1200;
+function openQuickChatFromSocialHud(){
+  if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
+  if(typeof startQuickChatWheel!=='function')return false;
+  startQuickChatWheel();
+  return true;
+}
+function bindSocialHudButton(btn){
+  if(!btn)return;
+  let holdTimer=0,held=false,pointerId=null,suppressClickUntil=0;
+  const clearHold=()=>{
+    if(holdTimer)clearTimeout(holdTimer);
+    holdTimer=0;
+    btn.classList.remove('is-holding');
+  };
+  btn.addEventListener('pointerdown',e=>{
+    if(e.button!==undefined&&e.button!==0)return;
+    e.preventDefault();e.stopPropagation();
+    clearHold();held=false;pointerId=e.pointerId;
+    if(btn.setPointerCapture)try{btn.setPointerCapture(pointerId);}catch(error){}
+    btn.classList.add('is-holding');
+    holdTimer=setTimeout(()=>{
+      holdTimer=0;btn.classList.remove('is-holding');
+      if(openQuickChatFromSocialHud()){
+        held=true;
+        globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('hud.button',{name:'social-hold',ok:true});
+      }
+    },SOCIAL_BUTTON_HOLD_MS);
+  });
+  btn.addEventListener('pointerup',e=>{
+    if(pointerId!==null&&e.pointerId!==pointerId)return;
+    e.preventDefault();e.stopPropagation();
+    const openSocial=!held;
+    clearHold();pointerId=null;suppressClickUntil=performance.now()+500;
+    if(openSocial){const ok=openSocialFromHud();globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('hud.button',{name:'social',ok});}
+  });
+  btn.addEventListener('pointercancel',()=>{clearHold();held=false;pointerId=null;});
+  btn.addEventListener('click',e=>{
+    e.preventDefault();e.stopPropagation();
+    if(performance.now()<suppressClickUntil)return;
+    const ok=openSocialFromHud();
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('hud.button',{name:'social-keyboard',ok});
+  });
+  btn.addEventListener('contextmenu',e=>e.preventDefault());
+}
 bindHudActionButton(questionBtn,openQuestionsFromHud,'questions');
-bindHudActionButton(socialBtn,openSocialFromHud,'social');
+bindSocialHudButton(socialBtn);
 const rightHudStackIds=['currentquest','activitytracker','townchoices'];
 function layoutRightHudStack(){
   const narrow=window.innerWidth<=760;

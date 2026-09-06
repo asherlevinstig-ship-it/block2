@@ -5013,6 +5013,12 @@ test('desktop social control opens the unified Social hub from the bottom-right'
   assert.match(styles, /body:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #socialbtn\{[\s\S]*right:18px;[\s\S]*bottom:18px;/);
   assert.match(combat, /if\(!tabletInputState\.tablet\)\{[\s\S]*el\.style\.left=''[\s\S]*el\.style\.top=''/);
   assert.match(combat, /function openSocialFromHud\(\)[\s\S]*globalThis\.openSocialUI\('nearby'\)/);
+  assert.match(html, /Click for Social · Hold for quick chat/);
+  assert.match(combat, /const SOCIAL_BUTTON_HOLD_MS=1200/);
+  assert.match(combat, /function bindSocialHudButton\(btn\)[\s\S]*setTimeout\([\s\S]*openQuickChatFromSocialHud\(\)[\s\S]*SOCIAL_BUTTON_HOLD_MS/);
+  assert.match(combat, /btn\.addEventListener\('pointerup',[\s\S]*const openSocial=!held/);
+  assert.match(combat, /bindSocialHudButton\(socialBtn\)/);
+  assert.match(styles, /#socialbtn\.is-holding:after[\s\S]*animation:socialHoldProgress 1\.2s linear forwards/);
 });
 
 test('desktop HUD is composed into identity, navigation, objective, feed, and support clusters', () => {
