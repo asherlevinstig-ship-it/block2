@@ -19,6 +19,7 @@ const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
 const RECALL = require('../../shared/recall-system');
 const APPEARANCE_SYSTEM = require('../../shared/appearance-system');
+const ABILITY_PROGRESSION = require('../../shared/ability-progression');
 const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches, drainRequestedPublicGateRanks } = require('./dungeon-handoff');
 const { issueDungeonAdmission } = require('./dungeon-admission');
 const { gateReadinessForProfile } = require('./gate-readiness');
@@ -2598,6 +2599,41 @@ class GameRoom extends Room {
       client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
       return ok;
     }
+    if (action === 'prepareCRankClimb') {
+      const p = this.state.players.get(client.sessionId);
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+      rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
+      rec.prof.tutorials.intro = TUTORIAL_VERSIONS.intro;
+      rec.prof.tutorials.gate = TUTORIAL_VERSIONS.gate;
+      if (p && p.dim === 'tutorial') this.leaveTutorialDimension(client);
+      rec.prof.progressionFocus = 'c_rank_climb';
+      rec.prof.S.lvl = HUNTER_RANK_LEVELS[2] - 1;
+      rec.prof.S.xp = Math.max(0, xpNeedForLevel(rec.prof.S.lvl) - 1);
+      rec.prof.highestGateRankCleared = Math.max(1, rec.prof.highestGateRankCleared | 0);
+      rec.prof.armor = { id: I.DIA_ARMOR, count: 1, armorType: 'bulwark', dur: ARMOR_INFO[I.DIA_ARMOR].dur, source: 'e2e' };
+      const fixtureIds = new Set([I.DIA_SWORD, I.DIA_PICK, I.BREAD, I.SOLO_KEY_C]);
+      const rest = Array.isArray(rec.prof.inv) ? rec.prof.inv.filter(s => s && !fixtureIds.has(s.id | 0)) : [];
+      rec.prof.inv = [
+        { id: I.DIA_SWORD, count: 1, dur: TOOL_INFO[I.DIA_SWORD].dur, source: 'e2e' },
+        { id: I.DIA_PICK, count: 1, dur: TOOL_INFO[I.DIA_PICK].dur, source: 'e2e' },
+        { id: I.BREAD, count: 4 },
+        { id: I.SOLO_KEY_C, count: 1 },
+        ...rest,
+      ].slice(0, 36);
+      this.syncPlayerProfile(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'reachCRank') {
+      const requestId = String(m && m.requestId || '');
+      this.grantHunterXp(rec.prof, 1, client, 'e2e-c-rank-promotion');
+      const ok = rec.prof.S.lvl >= HUNTER_RANK_LEVELS[2] && rec.prof.progressionFocus === 'c_rank_climb';
+      this.progressionChanged(client, 'e2eJourney', { action, focus: rec.prof.progressionFocus });
+      this.ensurePublicGateRank(2);
+      client.send('e2eJourneyResult', { action, requestId, ok, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
+      return ok;
+    }
     if (action === 'prepareProgressionFocus') {
       const focus = String(m && m.focus || '');
       const variant = String(m && m.variant || '');
@@ -2725,6 +2761,29 @@ class GameRoom extends Room {
       const p = this.state.players.get(client.sessionId);
       const inst = p && p.dgn && this.instances[p.dgn];
       if (!p || !inst || inst.cleared || (inst.rank | 0) !== 1) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      let bossId = '', boss = null;
+      this.state.mobs.forEach((mob, id) => {
+        if (!boss && mob && mob.dgn === inst.id && mob.kind === 'boss') { bossId = String(id); boss = mob; }
+      });
+      if (!boss) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      p.x = inst.bossRoom.x;
+      p.z = inst.bossRoom.z;
+      this.recordBossContribution(client, inst.id, Math.max(1, boss.maxHp | 0));
+      this.finishMobKill(client, bossId, boss);
+      client.send('e2eJourneyResult', { action, requestId, ok: true });
+      return true;
+    }
+    if (action === 'defeatCRankBoss') {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      if (!p || !inst || inst.cleared || (inst.rank | 0) !== 2) {
         client.send('e2eJourneyResult', { action, requestId, ok: false });
         return false;
       }
@@ -5757,26 +5816,54 @@ class GameRoom extends Room {
         else if ((S.lvl | 0) === level) earned += Math.max(0, Math.min(need, Math.floor(Number(S.xp) || 0)));
       }
       const readiness = gateReadinessForProfile(prof, 2);
+      const levelReady = (S.lvl | 0) >= target;
+      const hasCKey = !!(
+        (this.countItem && this.countItem(prof, I.SOLO_KEY_C) > 0) ||
+        (this.countItem && this.countItem(prof, I.TEAM_KEY_C) > 0)
+      );
+      const remaining = Math.max(0, required - earned);
       const checks = [
+        { id: 'level', label: 'Reach Hunter Level 21', done: levelReady, hint: 'Earn Hunter XP from Guild Contracts, D-rank Gates, town quests, events, and regional threats.' },
         { id: 'd_clear', label: 'D-rank Gate cleared', done: (prof.highestGateRankCleared | 0) >= 1 },
         ...(JOB_SYSTEM.ENABLED ? [{ id: 'contracts', label: 'Rotating Adventurer work unlocked', done: (prof.adventurerContractsCompleted | 0) >= 1 }] : []),
-        { id: 'c_ready', label: 'C-rank kit checked', done: readiness.ready },
+        ...readiness.checks.map(c => ({ id: c.id, label: c.label, done: !!c.done, hint: c.hint || '' })),
+        { id: 'key', label: 'C-rank Gate key', done: hasCKey, hint: 'Your first D-rank clear awards a Solo C-rank Gate Key; replacements cost 240 gold at Bram Ledger\'s Market stall.' },
         { id: 'c_gate', label: 'C-rank Gate cleared', done: (prof.highestGateRankCleared | 0) >= 2 },
       ];
       objective.progress = { current: Math.max(0, Math.min(required, earned)), required: Math.max(1, required) };
       objective.checklist = checks;
-      objective.action = readiness.ready
-        ? { type: 'find_gate', label: 'FIND C GATE', rank: 2 }
-        : { type: 'gate_prep', label: 'C PREP CHECK', rank: 2 };
-      objective.hudText = readiness.ready
-        ? 'C-rank kit is ready. Find or open a C-rank Gate and practice the positioning check.'
-        : 'C-rank climb: earn Hunter XP and fix prep - ' + (readiness.next && readiness.next.label ? readiness.next.label : 'open the prep check') + '.';
+      if (!levelReady) {
+        objective.action = { type: 'guild_contracts', label: 'EARN HUNTER XP' };
+        objective.location = 'Guild Hall';
+        objective.hudText = `${remaining.toLocaleString('en-US')} Hunter XP to Level 21. Best options: Guild Contract, D-rank Gate, or active town quest.`;
+      } else if (!readiness.ready || !hasCKey) {
+        const next = readiness.next || (!hasCKey ? checks.find(c => c.id === 'key') : null);
+        objective.action = { type: 'gate_prep', label: 'C PREP CHECK', rank: 2 };
+        objective.hudText = 'Next fix: ' + (next && next.label || 'C-rank prep') + '. ' + (next && next.hint || 'Open the preparation check.');
+      } else {
+        objective.action = { type: 'find_gate', label: 'FIND C GATE', rank: 2 };
+        objective.hudText = 'Level and kit ready. Find or open a C-rank Gate and practice the positioning check.';
+      }
       objective.reward = {
         xp: BOSS_REWARD_BY_RANK[2].xp,
         gold: BOSS_REWARD_BY_RANK[2].gold,
         items: [{ id: I.SOLO_KEY_B, count: 1 }, { id: I.DIAMOND, count: 4 }],
         note: 'B key path starts after C clear',
       };
+    }
+    if (focus === 'c_rank_specialization' && client) {
+      const rec = this.profileFor(client);
+      const prof = rec && rec.prof || {};
+      const specs = ABILITY_PROGRESSION.SPECIALIZATIONS[prof.S && prof.S.path] || {};
+      const choices = Object.values(specs);
+      objective.checklist = [
+        { id: 'c_gate', label: 'C-rank positioning trial cleared', done: (prof.highestGateRankCleared | 0) >= 2 },
+        { id: 'spec', label: 'Permanent specialization chosen', done: !!prof.abilitySpec },
+      ];
+      objective.progress = { current: prof.abilitySpec ? 2 : 1, required: 2 };
+      objective.hudText = choices.length === 2
+        ? `Permanent choice: ${choices[0].name} — ${choices[0].desc} OR ${choices[1].name} — ${choices[1].desc}`
+        : 'Open Character, compare your permanent specializations, and confirm one.';
     }
     if (focus === 'b_rank_pressure' && client) {
       const rec = this.profileFor(client);

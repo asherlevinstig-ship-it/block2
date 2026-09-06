@@ -1298,14 +1298,17 @@ class CombatMixin {
     client.send('pathResult', { ok: saved, path, reason: saved ? '' : 'save' });
     return saved;
   }
-  setAbilitySpecialization(client,spec){
+  async setAbilitySpecialization(client,spec){
     const rec=this.profileFor(client);
     const prof=rec&&rec.prof;
     const trialCleared=!!(prof&&((prof.highestGateRankCleared|0)>=2||prof.progressionFocus==='c_rank_specialization'));
     if(!prof||prof.abilitySpec||ABILITY_PROGRESSION.rankForLevel(prof.S.lvl)<2||!trialCleared||!ABILITY_PROGRESSION.validSpecialization(prof.S.path,spec))return client.send('abilitySpecReject',{reason:'invalid'});
+    const previousFocus=prof.progressionFocus;
     prof.abilitySpec=spec;
     if(prof.progressionFocus==='c_rank_specialization')prof.progressionFocus='b_rank_pressure';
     this.dirtyPlayers.add(rec.token);
+    const saved=await this.savePlayerProfileNow(rec.token,prof);
+    if(!saved){prof.abilitySpec='';prof.progressionFocus=previousFocus;return client.send('abilitySpecReject',{reason:'save'});}
     client.send('abilitySpecResult',{spec,path:prof.S.path,progressionFocus:prof.progressionFocus||''});
     if(this.activeQuestObjectives)client.send('progressionFocus',{focus:prof.progressionFocus||'',progressionFocus:prof.progressionFocus||'',activeObjectives:this.activeQuestObjectives(client,prof)});
   }

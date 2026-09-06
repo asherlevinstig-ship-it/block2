@@ -2627,7 +2627,7 @@ test('objective tracker shows only the active quest with an all-quests shortcut'
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(frame,/function unifiedObjectiveList\(\)/);
   assert.match(frame,/const unique=lines\.filter\(line=>\{const key=line\.kind\+':'\+line\.title/);
-  assert.match(frame,/if\(progressionFocus==='e_rank_climb'\)/);
+  assert.match(frame,/if\(progressionFocus==='e_rank_climb'\|\|progressionFocus==='c_rank_climb'\)/);
   assert.match(frame,/return \[climb,activity\]\.filter\(Boolean\)/);
   assert.match(frame,/return unique\.slice\(0,6\)/);
   assert.match(frame,/if\(lines\.length\)return \{label:'Objective Tracker',text:'Active quest categories',unified:true,lines\};/);
@@ -4851,7 +4851,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/gate-party-readiness/);
   assert.match(menus,/PARTY CHECK/);
   assert.match(menus,/UNDER RANK/);
-  assert.match(menus,/GATE_READINESS_HINTS/);
+  assert.match(menus,/gateReadinessHints/);
   assert.match(frame,/Missing: /);
   assert.match(frame,/no nearby Gate/);
   assert.match(frame,/clearInventoryItems/);

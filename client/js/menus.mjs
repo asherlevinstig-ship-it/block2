@@ -3061,28 +3061,27 @@ const GATE_READINESS_REQUIREMENTS=[
 ];
 const GATE_DIFFICULTIES=['Initiate','Dangerous','Severe','Extreme','Cataclysmic'];
 const GATE_LEGENDARY_WEAPONS=new Set([136,138,160,161,162,163,164,165,166,167,168,169,170,171]);
-const GATE_READINESS_HINTS={
-  weapon:'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',
-  armor:'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',
-  food:'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.',
-  tool:'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.',
-  key:'Buy a Solo D-rank Gate Key at Bram\'s Market stall for 110 gold.',
-};
+function gateReadinessHints(req){
+  if(req.weapon===3)return {weapon:'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',armor:'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',food:'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.',tool:'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.'};
+  if(req.weapon===4)return {weapon:'Craft a Diamond Sword or Diamond Axe with Diamonds and Sticks, or earn equivalent Gate gear.',armor:'Craft Diamond Armor with 8 Diamonds, then equip it. Stormglass or Stormweave also qualify.',food:'Bring any '+req.food+' food items; Greta sells Cooked Meat at the Tavern.',tool:'Craft a Diamond pick, shovel, or hoe and keep it above '+Math.round(req.health*100)+'% durability.'};
+  return {weapon:'Carry a weapon that meets this rank\'s tier and upgrade requirement.',armor:'Equip the listed armor tier or better.',food:'Bring any '+req.food+' food items.',tool:'Bring the listed utility tool above '+Math.round(req.health*100)+'% durability.'};
+}
 function gateReadinessLocal(rank){
   rank=Math.max(0,Math.min(4,rank|0));
-  const req=GATE_READINESS_REQUIREMENTS[rank],tierName=['Basic','Wood','Stone','Iron','Diamond','Legendary'];
+  const req=GATE_READINESS_REQUIREMENTS[rank],hints=gateReadinessHints(req),tierName=['Basic','Wood','Stone','Iron','Diamond','Legendary'];
   const stacks=inv.filter(Boolean),weapons=stacks.filter(s=>(ITEMS[s.id]&&ITEMS[s.id].tool&&['sword','axe'].includes(ITEMS[s.id].tool.cls))||GATE_LEGENDARY_WEAPONS.has(s.id));
   const weaponOk=weapons.some(s=>GATE_LEGENDARY_WEAPONS.has(s.id)||((ITEMS[s.id].tool.tier|0)>=req.weapon&&(s.plus|0)>=(req.weaponPlus||0)));
   const armorTier=armorSlot&&armorSlot.id===137?5:armorSlot&&[I.DIA_ARMOR,I.STORMGLASS_ARMOR,I.STORMWEAVE_ROBE].includes(armorSlot.id)?4:armorSlot&&[I.IRON_ARMOR,I.CHAIN_ARMOR,I.ARCWEAVE_ROBE].includes(armorSlot.id)?3:armorSlot&&[I.HIDE_ARMOR,I.APPRENTICE_ROBE].includes(armorSlot.id)?2:0;
   const foodCount=stacks.reduce((n,s)=>n+(FOOD_VALUES[s.id]?Math.max(0,s.count|0):0),0);
   const toolOk=stacks.some(s=>{const t=ITEMS[s.id]&&ITEMS[s.id].tool;if(!t||t.cls==='sword'||t.cls==='axe'||(t.tier|0)<req.tool)return false;const max=toolMaxDur(s),cur=s.dur==null?max:Math.max(0,s.dur|0);return cur/max>=req.health;});
   const checks=[
-    {id:'weapon',label:(req.weaponPlus?'+'+req.weaponPlus+' ':'')+tierName[req.weapon]+'-tier weapon',done:weaponOk,hint:GATE_READINESS_HINTS.weapon},
-    {id:'armor',label:req.armor?tierName[req.armor]+' armor':'Armor optional',done:!req.armor||armorTier>=req.armor,hint:GATE_READINESS_HINTS.armor},
-    {id:'food',label:'Food x'+req.food,done:foodCount>=req.food,hint:GATE_READINESS_HINTS.food},
-    {id:'tool',label:tierName[req.tool]+' utility tool at '+Math.round(req.health*100)+'%',done:toolOk,hint:GATE_READINESS_HINTS.tool},
+    {id:'weapon',label:(req.weaponPlus?'+'+req.weaponPlus+' ':'')+tierName[req.weapon]+'-tier weapon',done:weaponOk,hint:hints.weapon},
+    {id:'armor',label:req.armor?tierName[req.armor]+' armor':'Armor optional',done:!req.armor||armorTier>=req.armor,hint:hints.armor},
+    {id:'food',label:'Food x'+req.food,done:foodCount>=req.food,hint:hints.food},
+    {id:'tool',label:tierName[req.tool]+' utility tool at '+Math.round(req.health*100)+'%',done:toolOk,hint:hints.tool},
   ];
-  if(rank===1&&progressionFocus==='first_d_gate')checks.push({id:'key',label:'D-rank Gate key',done:countItem(I.SOLO_KEY_D)>0||countItem(I.TEAM_KEY_D)>0,hint:GATE_READINESS_HINTS.key});
+  if(rank===1&&progressionFocus==='first_d_gate')checks.push({id:'key',label:'D-rank Gate key',done:countItem(I.SOLO_KEY_D)>0||countItem(I.TEAM_KEY_D)>0,hint:'Buy a Solo D-rank Gate Key at Bram\'s Market stall for 110 gold.'});
+  if(rank===2&&progressionFocus==='c_rank_climb')checks.push({id:'key',label:'C-rank Gate key',done:countItem(I.SOLO_KEY_C)>0||countItem(I.TEAM_KEY_C)>0,hint:'Your first D-rank clear awards a Solo C-rank Gate Key; replacements cost 240 gold at Bram\'s Market stall.'});
   const score=checks.filter(c=>c.done).length;
   const missing=checks.filter(c=>!c.done);
   return {rank,difficulty:GATE_DIFFICULTIES[rank],ready:score===checks.length,status:score===checks.length?'READY':'UNDERPREPARED',score,total:checks.length,checks,missing,next:missing[0]||null};

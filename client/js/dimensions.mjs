@@ -18,8 +18,8 @@ function suppressRoomMouseLook(ms,reason){
 // this adapter keeps the historical client shape (cd in seconds, n/g/txt fields).
 const ABILITY_SYS=window.BlockcraftAbilitySystem;
 const ABILITY_PROGRESSION=window.BlockcraftAbilityProgression;
-let abilitySpec='';
-Object.defineProperty(globalThis,'BlockcraftAbilityProgressionState',{value:Object.freeze({get:()=>abilitySpec,set:v=>{abilitySpec=String(v||'');}}),configurable:true});
+let abilitySpec='',pendingAbilitySpec='';
+Object.defineProperty(globalThis,'BlockcraftAbilityProgressionState',{value:Object.freeze({get:()=>abilitySpec,set:v=>{abilitySpec=String(v||'');if(abilitySpec)pendingAbilitySpec='';}}),configurable:true});
 const PATHS=(()=>{
   const out={};
   for(const pathId in ABILITY_SYS.PATHS){
@@ -1156,8 +1156,8 @@ function renderStat(){
   h+='</section><section class="stat-card stat-specialization-panel">';
   if(P){
     const rank=ABILITY_PROGRESSION.rankForLevel(S.lvl),specs=ABILITY_PROGRESSION.SPECIALIZATIONS[S.path];
-    h+=statPanelTitleHTML('SPECIALIZATION',abilitySpec?'Permanent choice':rank>=2?'Clear a C-rank trial':'Unlock at C-rank');
-    if(rank>=2){const specReady=abilitySpec||highestGateRankCleared>=2;h+='<div class="stat-specialization-grid">';for(const key in specs){const spec=specs[key],chosen=abilitySpec===key;h+='<div class="pathcard abilityspec stat-spec-card'+(chosen?' selected':'')+(specReady?'':' locked')+'" data-spec="'+key+'" style="border-color:'+P.col+'"><h3 style="color:'+P.col+'">'+spec.name+(chosen?' &middot; SELECTED':'')+'</h3><p>'+spec.desc+(specReady?'':' Clear a C-rank Gate positioning trial first.')+'</p></div>';}h+='</div>';}
+    h+=statPanelTitleHTML('SPECIALIZATION',abilitySpec?'Permanent choice':rank>=2?'Compare, preview, then confirm':'Unlock at C-rank');
+    if(rank>=2){const specReady=abilitySpec||highestGateRankCleared>=2;h+='<div class="stat-specialization-grid">';for(const key in specs){const spec=specs[key],chosen=abilitySpec===key,preview=!abilitySpec&&pendingAbilitySpec===key;h+='<div class="pathcard abilityspec stat-spec-card'+(chosen||preview?' selected':'')+(specReady?'':' locked')+'" data-spec="'+key+'" style="border-color:'+P.col+'"><h3 style="color:'+P.col+'">'+spec.name+(chosen?' &middot; SELECTED':preview?' &middot; PREVIEW':'')+'</h3><p>'+spec.desc+(specReady?'':' Clear a C-rank Gate positioning trial first.')+'</p></div>';}h+='</div>';if(!abilitySpec&&pendingAbilitySpec&&specs[pendingAbilitySpec]){const pending=specs[pendingAbilitySpec];h+='<div class="stat-path-callout"><b>Confirm '+escHTML(pending.name)+'?</b><p>'+escHTML(pending.desc)+' This choice is permanent for this hunter.</p><button id="statconfirmspec" type="button" data-spec="'+pendingAbilitySpec+'">CONFIRM PERMANENT CHOICE</button></div>';}}
     else h+='<p class="stat-empty-copy">Reach C-rank to choose a permanent specialization.</p>';
   }else h+=statPanelTitleHTML('PATH SELECTION','Available at Hunter Level 2')+'<p class="stat-empty-copy">Awaken a class path before choosing a specialization.</p>';
   h+='</section></div></div>';
@@ -1172,13 +1172,15 @@ function renderStat(){
   }));
   statPanel.querySelectorAll('.pathcard').forEach(c=>c.addEventListener('click',()=>{
     if(c.dataset.deityChoice){if(NET.on&&NET.room)NET.room.send('deityPowerChoose',{power:c.dataset.deityChoice});return;}
-    if(c.dataset.spec){if(!abilitySpec&&highestGateRankCleared<2){sysMsg('Clear a <b>C-rank Gate</b> trial before choosing a specialization.');return;}if(!abilitySpec&&NET.on&&NET.room)NET.room.send('abilitySpec',{spec:c.dataset.spec});return;}
+    if(c.dataset.spec){if(!abilitySpec&&highestGateRankCleared<2){sysMsg('Clear a <b>C-rank Gate</b> trial before choosing a specialization.');return;}if(!abilitySpec){pendingAbilitySpec=c.dataset.spec;renderStat();}return;}
     if(c.dataset.path)setAbilityPath(c.dataset.path);
   }));
   statPanel.querySelectorAll('button[data-deity-use]').forEach(b=>b.addEventListener('click',()=>{
     if(!NET.on||!NET.room)return;
     NET.room.send('deityPowerUse',{power:b.dataset.deityUse,weather:b.dataset.weather||''});
   }));
+  const confirmSpec=document.getElementById('statconfirmspec');
+  if(confirmSpec)confirmSpec.addEventListener('click',()=>{if(!abilitySpec&&NET.on&&NET.room)NET.room.send('abilitySpec',{spec:confirmSpec.dataset.spec});});
   statPanel.querySelectorAll('button[data-utility-id]').forEach(b=>b.addEventListener('click',()=>{
     const id=b.dataset.utilityId||'';
     if(typeof globalThis.toggleUtilityEquip==='function')globalThis.toggleUtilityEquip(id);

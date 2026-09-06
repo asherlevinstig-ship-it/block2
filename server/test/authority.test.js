@@ -2009,7 +2009,7 @@ test('new adventurers receive Mara field work first, then level-gated random con
   }
 });
 
-test('claiming the first adventurer contract permanently unlocks the rotating pool', () => {
+test('claiming the first adventurer contract permanently unlocks the rotating pool', async () => {
   const room = makeRoom(), client = makeClient('first_contract_owner');
   const { prof } = seedPlayer(room, client, { lvl: 3 });
   room.handleSetJob(client, { job: 'adventurer' });
@@ -2050,17 +2050,19 @@ test('claiming the first adventurer contract permanently unlocks the rotating po
   const cObjective = room.activeQuestObjectives(client, prof).find(o => o.id === 'progression:c_rank_climb');
   assert.equal(cObjective.title, 'C-rank Climb');
   assert.equal(cObjective.progress.required > cObjective.progress.current, true);
-  assert.equal(cObjective.checklist.some(c => c.id === 'c_ready'), true);
-  assert.equal(['gate_prep', 'find_gate'].includes(cObjective.action.type), true);
+  assert.equal(cObjective.checklist.some(c => c.id === 'level'), true);
+  assert.equal(cObjective.checklist.some(c => c.id === 'key'), true);
+  assert.equal(['guild_contracts', 'gate_prep', 'find_gate'].includes(cObjective.action.type), true);
   assert.equal(sanitizeProfile(prof).progressionFocus, 'c_rank_climb');
   room.recordGateProgress(client, 2);
   assert.equal(prof.progressionFocus, 'c_rank_specialization', 'clearing C-rank opens the specialization payoff');
   prof.S.path = 'shadow';
   prof.S.lvl = 21;
+  room.savePlayerProfileNow = async () => true;
   const specObjective = room.activeQuestObjectives(client, prof).find(o => o.id === 'progression:c_rank_specialization');
   assert.equal(specObjective.title, 'C-rank Specialization');
   assert.equal(specObjective.action.type, 'choose_spec');
-  room.setAbilitySpecialization(client, 'commander');
+  await room.setAbilitySpecialization(client, 'commander');
   assert.equal(prof.abilitySpec, 'commander');
   assert.equal(prof.progressionFocus, 'b_rank_pressure', 'choosing a specialization starts the Gate Pressure loop');
   const pressureObjective = room.activeQuestObjectives(client, prof).find(o => o.id === 'progression:b_rank_pressure');
@@ -2895,21 +2897,34 @@ test('player profile writes are serialized so an older snapshot cannot erase a c
   assert.equal(writes.at(-1).path, 'guardian', 'the durable final write retains the selected path');
 });
 
-test('C-rank specialization is server-owned, path-valid, and permanent',()=>{
+test('C-rank specialization is server-owned, path-valid, and permanent',async()=>{
   const room=makeRoom(),client=makeClient('specialist');
+  room.savePlayerProfileNow=async()=>true;
   const {prof}=seedPlayer(room,client,{lvl:21});prof.S.path='shadow';
-  room.setAbilitySpecialization(client,'commander');
+  await room.setAbilitySpecialization(client,'commander');
   assert.equal(prof.abilitySpec,'','a specialization requires the C-rank positioning trial');
   prof.highestGateRankCleared=2;
   prof.progressionFocus='c_rank_specialization';
-  room.setAbilitySpecialization(client,'warden');
+  await room.setAbilitySpecialization(client,'warden');
   assert.equal(prof.abilitySpec,'','a specialization from another path is rejected');
-  room.setAbilitySpecialization(client,'commander');
+  await room.setAbilitySpecialization(client,'commander');
   assert.equal(prof.abilitySpec,'commander');
   assert.equal(prof.progressionFocus,'b_rank_pressure');
   assert.equal(client.sent.some(e=>e.type==='profile'),false,'choosing a specialization must not trigger a destructive full-profile restore');
-  room.setAbilitySpecialization(client,'assassin');
+  await room.setAbilitySpecialization(client,'assassin');
   assert.equal(prof.abilitySpec,'commander','the permanent choice cannot be replaced');
+});
+
+test('C-rank specialization rolls back when its durable save fails',async()=>{
+  const room=makeRoom(),client=makeClient('specialist_save_failure');
+  room.savePlayerProfileNow=async()=>false;
+  const {prof}=seedPlayer(room,client,{lvl:21});
+  prof.S.path='shadow';prof.highestGateRankCleared=2;prof.progressionFocus='c_rank_specialization';
+  await room.setAbilitySpecialization(client,'commander');
+  assert.equal(prof.abilitySpec,'');
+  assert.equal(prof.progressionFocus,'c_rank_specialization');
+  assert.equal(client.sent.at(-1).type,'abilitySpecReject');
+  assert.equal(client.sent.at(-1).msg.reason,'save');
 });
 
 test('failed Shadow Army casts preserve cooldown and ineligible spirits',()=>{

@@ -285,7 +285,7 @@ export function createOnboardingUI(deps) {
         rewardLineHTML({ label: 'Public and Key Access', value: 'D-RANK' }) +
       '</div>' +
       '<div class="rnote"><b>Prepare before entering D-rank:</b><br>Bring iron armor, an iron-tier weapon, food, and a repaired tool.</div>' +
-      '<div class="rnote"><b>Next objective:</b><br>' + escHTML(objective.text) + '. Town quests, Guild Contracts, Gates, events, and field threats drive the climb.</div>' +
+      '<div class="rnote"><b>Next objective:</b><br>' + escHTML(String(objective.text || '').replace(/\.$/, '')) + '. Town quests, Guild Contracts, Gates, events, and field threats drive the climb.</div>' +
       '<button id="promotioncontinue">TRACK NEXT STEP</button>';
     rewardWin.classList.remove('hidden');
     rewardWin.classList.add('promotion-open');
@@ -311,9 +311,9 @@ export function createOnboardingUI(deps) {
     if (!details || !rankUpWin || !rankUpPanel) return false;
     const unlocks = [
       [],
-      ['D-Rank Gates & keys', 'Familiars', 'Improved contract rewards'],
+      ['D-Rank Gates & keys', 'Familiars', 'Improved quest rewards'],
       ['C-Rank Gates & keys', 'Combat specialisation', 'Mount progression'],
-      ['B-Rank Gates & keys', 'Road Warden region', 'Advanced contracts'],
+      ['B-Rank Gates & keys', 'Road Warden region', 'Advanced Guild Contracts'],
       ['A-Rank Gates & keys', 'Fellowships', 'High-rank equipment'],
       ['Western Frontier', 'Dragon mastery', 'S-Rank endgame'],
     ][details.rank] || [];

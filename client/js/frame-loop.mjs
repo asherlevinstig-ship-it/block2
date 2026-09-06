@@ -955,7 +955,7 @@ function serverObjectiveForHud(){
   const list=activeObjectiveList();
   if(!list.length)return null;
   const candidates=list.filter(o=>o.source!=='tutorial');
-  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade','e_rank_climb','first_d_gate'].includes(progressionFocus)
+  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade','e_rank_climb','first_d_gate','c_rank_climb','c_rank_specialization'].includes(progressionFocus)
     ?candidates.find(o=>o.source==='progression'&&o.id==='progression:'+progressionFocus)
     :null;
   if(baseChapter)return baseChapter;
@@ -1168,6 +1168,7 @@ function progressionObjectiveFallback(){
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
     const rankProgress=currentRankProgress&&currentRankProgress();
     const progress=rankProgress&&rankProgress.nextRank===2?objectiveProgressParts(rankProgress.earned,rankProgress.required):null;
+    if(S&&S.lvl<21)return objectiveLine('progression','Next','C-rank Climb',(rankProgress&&rankProgress.remaining||0)+' Hunter XP to Level 21. Use Guild Contracts, D-rank Gates, or an active town quest',{type:'guild_contracts',label:'EARN HUNTER XP'},progress);
     return objectiveLine('progression','Next','C-rank Climb',prep&&prep.ready?'Ready - find or open a C-rank Gate':'Earn Hunter XP and prep for C-rank positioning checks',prep&&prep.ready?{type:'find_gate',label:'FIND C GATE',rank:2}:{type:'gate_prep',label:'C PREP CHECK',rank:2},progress);
   }
   if(progressionFocus==='c_rank_specialization'){
@@ -1379,8 +1380,9 @@ function unifiedObjectiveList(){
   if(midgame)lines.push(midgame);
   const seen=new Set();
   const unique=lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;});
-  if(progressionFocus==='e_rank_climb'){
-    const climb=unique.find(line=>line.title==='E-rank Climb');
+  if(progressionFocus==='e_rank_climb'||progressionFocus==='c_rank_climb'){
+    const climbTitle=progressionFocus==='e_rank_climb'?'E-rank Climb':'C-rank Climb';
+    const climb=unique.find(line=>line.title===climbTitle);
     const activity=unique.find(line=>line!==climb&&['story','guild','aegis'].includes(line.kind));
     return [climb,activity].filter(Boolean);
   }
@@ -1449,6 +1451,7 @@ function currentObjectiveAction(){
   if(progressionFocus==='b_rank_pressure') return progressionObjectiveFallback().action || {type:'guild_contracts',label:'OPEN GUILD BOARD'};
   if(progressionFocus==='c_rank_climb'){
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
+    if(S&&S.lvl<21)return {type:'guild_contracts',label:'EARN HUNTER XP'};
     return prep&&prep.ready?{type:'find_gate',label:'FIND C GATE',rank:2}:{type:'gate_prep',label:'C PREP CHECK',rank:2};
   }
   if(progressionFocus==='first_d_gate'){
@@ -1921,7 +1924,17 @@ function utilityCompassTarget(){
     if(gate)return {label:'Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
-  if(progressionFocus==='e_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='c_rank_climb'||progressionFocus==='next_adventurer_contract'){
+  if(progressionFocus==='c_rank_climb'){
+    if(S&&S.lvl<21)return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
+    const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
+    if(prep&&prep.next){
+      if(prep.next.id==='food')return {label:'C Prep · Tavern',x:HUB.tavern.x,z:HUB.tavern.z};
+      if(prep.next.id==='key')return {label:'C Prep · Market',x:HUB.market.x,z:HUB.market.z};
+      return {label:'C Prep · Crafting',x:HUB.smith.x,z:HUB.smith.z};
+    }
+    if(gate)return {label:'C-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
+  }
+  if(progressionFocus==='e_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
   }
   if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
@@ -3775,6 +3788,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('debug.snapshot.ready');
   window.__BLOCKCRAFT_E2E__={
     status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.sessionId&&NET.room.state.players.get(NET.room.sessionId);let bossState='';const dungeonMobs=[];if(NET.room&&NET.room.state&&NET.room.state.mobs)NET.room.state.mobs.forEach((m,id)=>{if(m.dgn===NET.dgn){dungeonMobs.push({id:String(id),kind:m.kind||'',variant:m.variant||'',bossStyle:m.bossStyle||'',displayName:m.displayName||'',elite:!!m.elite,state:m.state||''});if(m.kind==='boss')bossState=m.state||'';}});return {connected:NET.on&&NET.profileReady===true,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,jobContractOffers:Array.isArray(jobContractOffers)?jobContractOffers.map(c=>JSON.parse(JSON.stringify(c))):[],jobContractOffersJob,jobContractRefreshAt,lastProgressionReject:String(globalThis.__BLOCKCRAFT_LAST_PROGRESSION_REJECT__||''),progressionFocus,activeObjectives:Array.isArray(activeObjectives)?JSON.parse(JSON.stringify(activeObjectives)):[],firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),currentObjectiveHud:currentObjectiveHud(),objectiveText:currentQuestEl&&currentQuestEl.textContent||'',objectiveAction:e2eCurrentObjectiveAction(),transitionPanels:transitionPanelState(),menu:{open:menusState.open,mode:menusState.mode,modalOpen:menusState.modalOpen,craftResult:menusState.craftResult?JSON.parse(JSON.stringify(menusState.craftResult)):null},landClaimOverlay:!!worldState.landClaimOverlay,baseSetup:worldApi.baseSetupStatus?worldApi.baseSetupStatus():null,dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),partyCompassTarget:partyCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTrainingUsed:combatState.abilityTrainingUsed,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonContentId:dungeon&&dungeon.dungeonId||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonBossState:bossState,dungeonMobs,dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
+    abilitySpec:()=>globalThis.BlockcraftAbilityProgressionState&&globalThis.BlockcraftAbilityProgressionState.get()||'',
     petTamerVisualDebug:()=>combatApi.petTamerVisualDebug?combatApi.petTamerVisualDebug():null,
     inventoryCount:id=>inventoryModel.count(id),
     inventorySlot:id=>inventoryModel.slots.findIndex(stack=>stack&&stack.id===id),

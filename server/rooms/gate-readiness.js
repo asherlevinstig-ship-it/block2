@@ -22,12 +22,26 @@ const BOSS_IDENTITY_BY_RANK = [
   'B-rank: control pressure roots the party',
   'A/S-rank: layered mechanics chain into follow-up casts',
 ];
-const HINTS_BY_ID = Object.freeze({
-  weapon: 'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',
-  armor: 'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',
-  food: 'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.',
-  tool: 'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.',
-});
+function readinessHints(req) {
+  if (req.weapon === 3) return {
+    weapon: 'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',
+    armor: 'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',
+    food: 'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.',
+    tool: 'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.',
+  };
+  if (req.weapon === 4) return {
+    weapon: 'Craft a Diamond Sword or Diamond Axe with Diamonds and Sticks, or earn equivalent Gate gear.',
+    armor: 'Craft Diamond Armor with 8 Diamonds, then equip it. Stormglass or Stormweave also qualify.',
+    food: `Bring any ${req.food} food items; Greta sells Cooked Meat at the Tavern.`,
+    tool: `Craft a Diamond pick, shovel, or hoe and keep it above ${Math.round(req.health * 100)}% durability.`,
+  };
+  return {
+    weapon: `Carry a ${TIER_NAME[req.weapon]}-tier weapon that meets the upgrade requirement.`,
+    armor: `Equip ${TIER_NAME[req.armor]} armor or better.`,
+    food: `Bring any ${req.food} food items.`,
+    tool: `Bring a ${TIER_NAME[req.tool]} utility tool above ${Math.round(req.health * 100)}% durability.`,
+  };
+}
 
 function stacks(profile) { return Array.isArray(profile && profile.inv) ? profile.inv.filter(Boolean) : []; }
 function maxDurability(stack, info) {
@@ -35,7 +49,7 @@ function maxDurability(stack, info) {
 }
 function gateReadinessForProfile(profile, rank) {
   rank = Math.max(0, Math.min(4, rank | 0));
-  const req = REQUIREMENTS[rank], items = stacks(profile);
+  const req = REQUIREMENTS[rank], hints = readinessHints(req), items = stacks(profile);
   const weapons = items.filter(s => (TOOL_INFO[s.id] && (TOOL_INFO[s.id].cls === 'sword' || TOOL_INFO[s.id].cls === 'axe')) || LEGENDARY_WEAPONS.has(s.id));
   const weaponOk = weapons.some(s => LEGENDARY_WEAPONS.has(s.id) || (TOOL_INFO[s.id].tier >= req.weapon && (s.plus | 0) >= (req.weaponPlus || 0)));
   const armorTier = ARMOR_TIER[profile && profile.armor && profile.armor.id] || 0;
@@ -48,10 +62,10 @@ function gateReadinessForProfile(profile, rank) {
     return current / max >= req.health;
   });
   const checks = [
-    { id: 'weapon', label: (req.weaponPlus ? `+${req.weaponPlus} ` : '') + `${TIER_NAME[req.weapon]}-tier weapon`, done: weaponOk, hint: HINTS_BY_ID.weapon },
-    { id: 'armor', label: req.armor ? `${TIER_NAME[req.armor]} armor` : 'Armor optional', done: !req.armor || armorTier >= req.armor, hint: HINTS_BY_ID.armor },
-    { id: 'food', label: `Food x${req.food}`, done: foodCount >= req.food, hint: HINTS_BY_ID.food },
-    { id: 'tool', label: `${TIER_NAME[req.tool]} utility tool at ${Math.round(req.health * 100)}%`, done: toolOk, hint: HINTS_BY_ID.tool },
+    { id: 'weapon', label: (req.weaponPlus ? `+${req.weaponPlus} ` : '') + `${TIER_NAME[req.weapon]}-tier weapon`, done: weaponOk, hint: hints.weapon },
+    { id: 'armor', label: req.armor ? `${TIER_NAME[req.armor]} armor` : 'Armor optional', done: !req.armor || armorTier >= req.armor, hint: hints.armor },
+    { id: 'food', label: `Food x${req.food}`, done: foodCount >= req.food, hint: hints.food },
+    { id: 'tool', label: `${TIER_NAME[req.tool]} utility tool at ${Math.round(req.health * 100)}%`, done: toolOk, hint: hints.tool },
   ];
   const passed = checks.reduce((n, check) => n + (check.done ? 1 : 0), 0);
   const missing = checks.filter(check => !check.done);
