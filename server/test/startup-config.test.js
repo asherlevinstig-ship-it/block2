@@ -72,3 +72,11 @@ test('cloud rooms are created through matchmaking instead of stranded prewarming
   assert.doesNotMatch(cloud, /prewarmOverworldRoom|beforeListen/);
   assert.match(cloud, /blockcraft: defineRoom\(GameRoom\)\.filterBy\(\['shardId'\]\)/);
 });
+
+test('overworld defaults to the validated 24-player capacity', () => {
+  const gameRoom = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  const loadTest = fs.readFileSync(path.join(__dirname, '..', '..', 'tools', 'load-test.js'), 'utf8');
+  assert.match(gameRoom, /BLOCKCRAFT_SHARD_MAX_CLIENTS \|\| 24/);
+  assert.match(gameRoom, /Math\.min\(64,/);
+  assert.match(loadTest, /LOAD_CLIENTS \|\| 24/);
+});

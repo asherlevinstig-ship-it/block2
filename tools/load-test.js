@@ -9,7 +9,7 @@ const { AuthService } = require('../server/auth');
 const { JsonStore, defaultProfile } = require('../server/store');
 const W = require('../server/world');
 
-const CLIENTS = 16;
+const CLIENTS = Number(process.env.LOAD_CLIENTS || 24);
 const PORT = Number(process.env.LOAD_PORT || 2617);
 const DURATION_MS = Number(process.env.LOAD_DURATION_MS || 15_000);
 const STEP_MS = 100;
@@ -48,7 +48,10 @@ async function main() {
   process.env.PORT = String(PORT);
   process.env.BLOCKCRAFT_E2E = '1';
   require('../server/index.js');
-  await wait(500);
+  // World generation and overworld prewarming can take a couple of seconds on
+  // the same low-performance shape used in production. Do not let the first
+  // load client race prewarming and make matchmaking probe a duplicate writer.
+  await wait(Number(process.env.LOAD_STARTUP_WAIT_MS || 3_000));
 
   const rooms = [];
   let rejects = 0, messages = 0;
@@ -98,7 +101,7 @@ async function main() {
     eventLoopMaxMs: Math.round(loop.max / 1e4) / 100,
     heapGrowthMb: Math.round((process.memoryUsage().heapUsed - memoryStart) / 1024 / 1024 * 100) / 100,
   };
-  console.log('\n16-player load test\n' + JSON.stringify(report, null, 2));
+  console.log('\n' + CLIENTS + '-player load test\n' + JSON.stringify(report, null, 2));
   assert.equal(report.clients, CLIENTS, 'clients disconnected during load');
   assert.ok(report.messagesPerSecond >= 200, 'throughput fell below 200 messages/sec');
   assert.ok(report.eventLoopP99Ms < Number(process.env.LOAD_MAX_P99_MS || 250), 'event-loop p99 exceeded threshold');

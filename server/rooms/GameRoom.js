@@ -285,7 +285,7 @@ class GameRoom extends Room {
     try {
     claimGlobalWorld(this, this.shardId);
     logRoomLifecycle('overworld.create.claimed', { shardId: this.shardId || 'main', elapsedMs: elapsedMs(createStartedAt) });
-    this.maxClients = Math.max(1, Math.min(64, Number(process.env.BLOCKCRAFT_SHARD_MAX_CLIENTS || 16) | 0));
+    this.maxClients = Math.max(1, Math.min(64, Number(process.env.BLOCKCRAFT_SHARD_MAX_CLIENTS || 24) | 0));
     if (typeof this.setMetadata === 'function') this.setMetadata({ shardId: this.shardId });
     this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());

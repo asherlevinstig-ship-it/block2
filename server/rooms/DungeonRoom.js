@@ -43,7 +43,7 @@ class DungeonRoom extends GameRoom {
     if (!admittedGate || admittedGate.id !== (options && options.gateId)) throw new Error('invalid dungeon admission');
     this.admissionTicket = options.ticket;
     this.isDungeonRoom = true;
-    this.maxClients = 8;                 // a raid party, not the 16-player overworld
+    this.maxClients = 8;                 // a raid party, not the 24-player overworld
     // Same shape as GameRoom.bootId — a per-process stamp for the crash-recovery marker
     // armDungeonRecovery writes. A future overworld room (this or the next boot) compares
     // it against its own bootId to tell a genuine restart from a same-boot rejoin.

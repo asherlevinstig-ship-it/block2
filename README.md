@@ -117,7 +117,7 @@ every hunter inside. The last one out collapses the instance. The HUD shows
 `Name LvN` tinted by class path, interpolated between updates, with walk
 animation driven by velocity. Press **Enter** to chat.
 
-**Scaling note.** One `GameRoom` = one 16-player world. Colyseus will spin up
+**Scaling note.** One `GameRoom` = one 24-player world by default. Colyseus will spin up
 additional rooms automatically as more players join; party dungeons are a
 natural next step as a `DungeonRoom` joined by gate id.
 
@@ -151,7 +151,7 @@ clear every eligible hunter receives bonus loot and a Legendary Weapon Token.
 
 **Persistence.** The overworld is deliberately **one global world**, not one
 world per Colyseus room. Exactly one `GameRoom` may own its persistence lease
-in a server process. At the 16-player capacity, matchmaking fails closed
+in a server process. At the 24-player capacity, matchmaking fails closed
 instead of creating a second, unsynchronized writer. World state (edits,
 claims, containers, gates, teams, and guilds) lives in the single `main`
 namespace; profiles remain isolated by verified account ID. Run one
@@ -223,8 +223,9 @@ and the sim rate live in `GameRoom.js`.
   `KING_ACTIVE_MS`, `CARAVAN_ACTIVE_MS`, skyship `SKYSHIP_*`.
 - **Economy:** `SHOP_BUY` / `SHOP_SELL`, `TAVERN_BUY` / `TAVERN_SELL`, `LAND_BASE_PRICE`,
   `guildFloorPrice`, `RECIPES`, `SMELT`, `TOOL_INFO` (durability).
-- **Room size & sim rate:** the single global room has a hard `maxClients` of
-  16 and the `setSimulationInterval(…, 100)` 10 Hz tick in `GameRoom.js`.
+- **Room size & sim rate:** the single global room defaults to `maxClients` 24
+  (`BLOCKCRAFT_SHARD_MAX_CLIENTS`, clamped to 1–64) and uses the
+  `setSimulationInterval(…, 100)` 10 Hz tick in `GameRoom.js`.
 
 > **Dev/test affordances** in `constants.js` — `BETA_LEGENDARY_TEST`, `BETA_FARM_TEST`, `BETA_EVENT_TEST`
 > (legendary `testWeapon` casts without owning the weapon, the auto-granted farm starter kit, and the
