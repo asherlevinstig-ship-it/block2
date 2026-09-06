@@ -44,12 +44,12 @@
   function defaultAction(o,category,status){
     if(o&&o.action)return actionOf(o.action);
     if(status==='claimable'||status==='complete'){
-      if(category==='job')return {type:'jobs',label:'CLAIM AT JOB BOARD'};
+      if(category==='job')return {type:'quest_log',label:'LEGACY OBJECTIVE'};
       if(category==='guild')return {type:'guild_contracts',label:'CLAIM GUILD CONTRACT'};
       if(category==='aegis')return {type:'claim_aegis',label:'CLAIM AT AEGIS'};
       return {type:'turn_in',label:'TURN IN'};
     }
-    if(category==='job')return {type:'jobs',label:'OPEN JOB BOARD'};
+    if(category==='job')return {type:'quest_log',label:'OPEN QUEST LOG'};
     if(category==='guild')return {type:'guild_contracts',label:'OPEN GUILD CONTRACTS'};
     if(category==='aegis')return {type:'claim_aegis',label:'OPEN AEGIS'};
     return actionOf(o&&o.action)||{type:'quest_log',label:'OPEN QUEST LOG'};
@@ -58,7 +58,7 @@
     if(o&&o.hudText)return clean(o.hudText,'',180);
     const prefix=progress?Math.min(progress.required,progress.current)+'/'+progress.required+' - ':'';
     if(status==='claimable'||status==='complete'){
-      if(o&&o.category==='job')return 'Complete - claim at the Job Board';
+      if(o&&o.category==='job')return 'Retired objective - refresh your quest list';
       if(o&&o.category==='guild')return 'Complete - claim from Guild Contracts';
       if(o&&o.category==='aegis')return 'Complete - claim from the Aegis Guardian';
       return 'Complete - turn in to '+clean(o&&o.location||'the quest giver','the quest giver',80);

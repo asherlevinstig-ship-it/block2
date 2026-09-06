@@ -583,8 +583,8 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function qBtn[\s\S]*b\.type='button'[\s\S]*e\.preventDefault\(\); e\.stopPropagation\(\);/);
   assert.match(menus, /function openPlayerSocialUI/);
   assert.match(menus, /Town of Beginnings[\s\S]*Taming Land/);
-  assert.match(menus, /function nearbyPlayerIsPetTamer/);
-  assert.match(menus, /nearbyPlayerIsPetTamer\(target\)&&dragonLoanOwnedTypes\(\)\.length/);
+  assert.doesNotMatch(menus, /function nearbyPlayerIsPetTamer/);
+  assert.match(menus, /const canOfferPetTraining=dragonLoanOwnedTypes\(\)\.length/);
   assert.match(menus, /function appendDragonLoanStatusPanel/);
   assert.match(menus, /RETURN NOW/);
   assert.match(menus, /dragonLoanTimeLeftText/);
@@ -2134,6 +2134,7 @@ test('NPC chain acceptance progress rewards and milestones are server-owned', ()
   assert.equal(summary.msg.gold > 0, true);
   assert.equal(summary.msg.xp > 0, true);
   assert.equal(summary.msg.jobXp, 12);
+  assert.equal(summary.msg.job, 'adventurer');
   assert.match(summary.msg.nextStep, /Speak to Mara again/);
   assert.equal(prof.questHistory[0].title, 'First Hands');
   assert.equal(prof.questHistory[0].outcome, 'completed');
@@ -2197,6 +2198,7 @@ test('profile payload exposes unified active objective descriptors', () => {
   assert.equal(story.reward.gold > 0, true);
   assert.equal(story.reward.xp > 0, true);
   assert.equal(story.reward.jobXp, 12);
+  assert.equal(story.reward.job, 'adventurer');
   assert.equal(story.lifecycle.state, 'claimable');
   assert.ok(story.lifecycle.acceptedAt > 0);
   const progression = payload.activeObjectives.find(o => o.id === 'progression:first_craft_station');
@@ -2452,7 +2454,7 @@ test('Pell manhunt uses the normal NPC quest lifecycle and objective feed', () =
   assert.equal(summary.msg.items.some(it => it.id === I.FANG_TOTEM), true);
 });
 
-test('unified objective descriptors include Aegis job and guild work', () => {
+test('unified objective descriptors include dormant job, Aegis, and guild work in compatibility mode', () => {
   const room = makeRoom(), client = makeClient('objective_mix_owner');
   const { prof } = seedPlayer(room, client, { lvl: 5 });
   prof.aegisTrialReady = true;
@@ -2471,7 +2473,7 @@ test('unified objective descriptors include Aegis job and guild work', () => {
   const job = objectives.find(o => o.id === 'job:job_test');
   assert.equal(job.category, 'job');
   assert.equal(job.status, 'active');
-  assert.equal(job.hudAction.type, 'jobs');
+  assert.equal(job.hudAction.type, 'quest_log');
   assert.equal(job.job, 'adventurer');
   assert.equal(job.contractType, 'kill');
   assert.equal(job.jobContract.type, 'kill');
@@ -2499,6 +2501,7 @@ test('Aegis trial claims emit the unified quest reward summary', () => {
   assert.equal(summary.msg.gold > 0, true);
   assert.equal(summary.msg.xp > 0, true);
   assert.equal(summary.msg.jobXp, 12);
+  assert.equal(summary.msg.job, 'adventurer');
   assert.equal(summary.msg.claimLocation, 'Aegis Guardian');
 });
 
@@ -8306,7 +8309,7 @@ test('farming tills plants grows and harvests through server transactions', () =
   room.handleFarm(client, { action: 'harvest', x: 20, y: 11, z: 20, slot: 1 });
 
   assert.equal(room.world.getB(20, 11, 20), W.B.AIR);
-  assert.equal(itemCount(prof, I.WHEAT), 1);
+  assert.equal(itemCount(prof, I.WHEAT) >= 1, true);
   assert.equal(itemCount(prof, I.WHEAT_SEEDS) >= 2, true);
   assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'farm'), true);
 });

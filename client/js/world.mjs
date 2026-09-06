@@ -4682,12 +4682,12 @@ const NPC_ROLES=[
    work:[HUB.jobs.x,HUB.jobs.z],home:[HUB.jobs.x,HUB.jobs.z],static:true,
    line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts. Wildlife may drop pet collars for hunters who pay attention.',
    accept:'Keep the merchants moving and the camps nervous.',done:'Another mile of road belongs to honest folk.',focus:'kill',job:'adventurer'},
-  {name:'Bryn Notice',shortName:'Bryn',role:'job_mentor',title:'Job Board Helper',personality:'clear, encouraging, points with both hands',
+  {name:'Bryn Notice',shortName:'Bryn',role:'job_mentor',title:'Guild Route Guide',personality:'clear, encouraging, points with both hands',
    work:[HUB.jobs.x-4,HUB.jobs.z+2],home:[HUB.jobs.x,HUB.jobs.z],static:true,
-   line:'The board is your loop when you feel stuck: pick a job, take one contract, finish it, then come back for XP, gold, and profession progress. Milo beside me can send you back into any worker tutorial.'},
-  {name:'Milo Waywright',shortName:'Milo',role:'worker_tutor',title:'Worker Tutor',personality:'upbeat, patient, carries six different tool belts',
+   line:'When you feel stuck, check your Quest Log or visit the Guild Hall notice board for regional work and Hunter progress.'},
+  {name:'Milo Waywright',shortName:'Milo',role:'worker_tutor',title:'Activity Guide',personality:'upbeat, patient, carries six different tool belts',
    work:[HUB.jobs.x+4,HUB.jobs.z+2],home:[HUB.jobs.x,HUB.jobs.z],static:true,
-   line:'Want to try a different worker path? I can send you to Miner, Farmer, Cook, Blacksmith, Monk, or Pet Tamer practice rooms any time.'},
+   line:'Mining, farming, cooking, smithing, meditation, and dragon care are open to every hunter. Your Quest Log shows where to begin.'},
   {name:'Orin Mapwell',shortName:'Orin',role:'cartographer',title:'Royal Cartographer',personality:'curious, ink-stained, delighted by blank spaces',
    work:[HUB.cartographer.x,HUB.cartographer.z],home:[HUB.cartographer.x,HUB.cartographer.z],static:true,
    line:'A blank map is not empty. It is asking you a question. Bring me honest roads and I will make them remembered.',
@@ -5258,7 +5258,7 @@ function jobContractTarget(c){
 }
 function jobContractTargetLabel(c){
   if(!c)return 'Contract marker';
-  if(jobContractReady())return 'Job Board';
+  if(jobContractReady())return 'Quest Log';
   if(c.targetName)return c.targetName;
   if(c.location)return c.location;
   const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Meditation Hall',tame:'Wild Pet Trails',pet_care:'Dragon Roost'};
@@ -5287,7 +5287,7 @@ function jobContractColor(c=jobContract,readyOverride=false){
 function jobContractGuidanceTarget(){
   const c=clampJobContract(jobContract);
   if(!c || (c.job!=='adventurer'&&c.job!==playerJob))return null;
-  if(jobContractReady())return {kind:'job-claim',color:0xffd24a,colorHex:'#ffd24a',ready:true,target:HUB.jobs,route:townRouteTo(HUB.jobs,'north'),label:'Job Board - claim reward'};
+  if(jobContractReady())return {kind:'job-claim',color:0xffd24a,colorHex:'#ffd24a',ready:true,target:HUB.guide,route:townRouteTo(HUB.guide,'south'),label:'Mara Vale - legacy contract help'};
   const target=jobContractTarget(c);
   if(!target)return null;
   const col=jobContractColor(c,false);
@@ -5362,7 +5362,7 @@ function serverObjectiveGuidanceTarget(o){
     }
   }
   if(action==='jobs'||source==='job'||loc.includes('job board')){
-    return {kind:'server-jobs',color:0x8bbf5a,target:HUB.jobs,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.jobs]};
+    return {kind:'server-jobs',color:0x8bbf5a,target:HUB.guide,route:townRouteTo(HUB.guide,'south')};
   }
   if(action==='guild_contracts'||source==='guild'||loc.includes('guild')){
     return {kind:'server-guild',color:0x8bbf5a,target:HUB.guild,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guild]};
@@ -6053,7 +6053,7 @@ Object.defineProperty(globalThis,'BlockcraftTownLayout',{value:Object.freeze({
   labels:Object.freeze([
     {title:'Cartographer',x:HUB.cartographer.x,z:HUB.cartographer.z,color:'#ffd24a'},
     {title:'Mara Vale',x:HUB.guide.x,z:HUB.guide.z,color:'#9ad26b'},
-    {title:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z,color:'#8bbf5a'},
+    {title:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z,color:'#f2c75c'},
     {title:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z,color:'#d8f2ff'},
   ]),
 }),configurable:true});

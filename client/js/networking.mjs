@@ -2317,7 +2317,7 @@ function netAttachRoom(room,name,client){
       if(!m)return;sysMsg('<b>'+escHTML(m.name||'Discovery')+':</b> '+escHTML(m.text||'Reward acquired')+(m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Weather Vane.':''));
       if(m.id&&m.type!=='ancient_core')claimedDiscoveryIds.add(m.id);
       if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');
-      OVERWORLD_RESULTS.show({title:m.name||'Discovery Mapped',summary:m.text||'Regional discovery secured.',grant:m,next:'Continue exploring, or return to the Job Board if your contract is ready.'});
+      OVERWORLD_RESULTS.show({title:m.name||'Discovery Mapped',summary:m.text||'Regional discovery secured.',grant:m,next:'Continue exploring, or return to the Guild Hall if your contract is ready.'});
       eventFeed('[Discovery]','Investigated '+String(m.name||'Discovery')+'. '+String(m.text||'Reward acquired'),{key:'discovery-result:'+String(m.id||m.name||''),cooldown:0});
     });
     room.onMessage('wardenAlarm',m=>{
@@ -3480,7 +3480,7 @@ function applyDragonTrainingLoanProgress(m){
   if(m.roleMastery && COMPANIONS.applyDragonRoleMasteryUpdate) COMPANIONS.applyDragonRoleMasteryUpdate({type:m.type,...m.roleMastery});
   applyDragonBondXpUpdate(m, m.role||'training');
   const lt=m.loanTraining||{};
-  const tamer=String(lt.tamerName||'Pet Tamer');
+  const tamer=String(lt.tamerName||'Dragon Handler');
   const drills=Math.max(0,lt.trainingDrills|0);
   const xp=Math.max(0,lt.trainingXp|0);
   if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Loan training progress',tamer+' completed '+(m.title||'a drill'));
@@ -5663,8 +5663,8 @@ function smartSuggestionCandidates(){
     out.push({
        id:'equip-utility',
        title:'Utility Ready',
-       text:'Follow the green light to the Job Board. Press G or right-click there, then choose Utilities.',
-       target:HUB.jobs, color:0x9ad26b
+       text:'Open Utilities from the main menu and equip the newly unlocked tool.',
+       target:HUB.guide, color:0x9ad26b
     });
   }
   if(((S&&S.lvl)||1)>=3 && !hasAnyArmorItem()){
@@ -5679,16 +5679,16 @@ function smartSuggestionCandidates(){
     out.push({
        id:'choose-job',
        title:'Take Hunter Work',
-       text:'Follow the green light to the Job Board for a Hunter contract or equip a trade profession.',
-       target:HUB.jobs, color:0x9ad26b
+       text:'Open the Quest Log for town quests, Gates, and Hunter activities.',
+       target:HUB.guide, color:0x9ad26b
     });
   }
   if(!regionalContract && firstQuestMilestoneComplete()){
     out.push({
        id:'guild-contract',
        title:'Try A Guild Contract',
-       text:'Follow the green light to the Job Board. Press G or right-click, then choose Guild Contracts.',
-       target:HUB.jobs, color:0x9ad26b
+       text:'Follow the green light to the Guild Hall notice board, then choose Guild Contracts.',
+       target:HUB.guildNoticeBoard, color:0x9ad26b
     });
   }
   return out;

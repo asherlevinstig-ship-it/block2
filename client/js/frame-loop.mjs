@@ -774,7 +774,7 @@ function currentLocationInfo(){
     return { cls:'town', name:'Westwind Skyport', meta:'G to board - requires S-Rank and 1,000 gold' };
   }
   if(JOBS_ENABLED&&dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<6){
-    return { cls:'town', name:'Job Board', meta:'Profession contracts and non-combat work' };
+    return { cls:'town', name:'Central Plaza', meta:'Quest routes and town services' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.cartographer.x, player.pos.z-HUB.cartographer.z)<7){
     return { cls:'town', name:'Royal Cartographer', meta:'Speak to Orin for map leads, surveys and regional rewards' };
@@ -830,7 +830,7 @@ function compactQuestHud(){
 function compactJobContractHud(){
   const c=clampJobContract(jobContract);
   if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return '';
-  return escHTML('Job Board: '+c.title+' '+Math.min(c.need,c.have)+'/'+c.need+(jobContractReady()?' claim':''));
+  return escHTML('Legacy objective: '+c.title+' '+Math.min(c.need,c.have)+'/'+c.need);
 }
 function compactRegionalContractHud(){
   const c=clampRegionalContract(regionalContract);
@@ -839,7 +839,7 @@ function compactRegionalContractHud(){
 }
 function tutorialObjective(){
   if(!townGuidanceActive) return null;
-  if(townGuidanceStep==='job') return {label:'Tutorial Guide', text:'Follow the lit path to the Job Board'};
+  if(townGuidanceStep==='job') return {label:'Tutorial Guide', text:'Follow the lit path to the Guild Hall'};
   if(townGuidanceStep==='tavern') return {label:'Tutorial Guide', text:'Go to the tavern and buy an item'};
   if(townGuidanceStep==='land') return {label:'Tutorial Guide', text:'Leave town, press L, and buy land'};
   if(townGuidanceStep==='menu') return {label:'Tutorial Guide', text:'Choose a town tutorial'};
@@ -873,7 +873,7 @@ function questObjective(){
     const item=ITEMS[quest.item]&&ITEMS[quest.item].name||'goods';
     return {label:qLabel, text:has?'Bring '+item+' to Greta and sell it':'Gather '+item+' for Greta'};
   }
-  if(quest.type==='utility') return {label:qLabel, text:utilityUnlocked(quest.utility)?'Return to '+quest.giver:'Follow the trail to the Job Board and complete a Guild Contract'};
+  if(quest.type==='utility') return {label:qLabel, text:utilityUnlocked(quest.utility)?'Return to '+quest.giver:'Follow the trail to the Guild Hall and complete a Guild Contract'};
   if(quest.type==='familiar'){
     const def=FAMILIARS&&FAMILIARS[quest.familiar], item=def&&ITEMS[def.sigil]&&ITEMS[def.sigil].name||'binding item';
     return {label:qLabel, text:familiarUnlocks.includes(quest.familiar)?'Return to '+quest.giver:'Use '+item+' from your hotbar, then press K'};
@@ -890,7 +890,7 @@ function guildContractObjective(){
 }
 function jobContractDestinationLabel(c){
   if(!c)return 'the marker';
-  if(jobContractReady())return 'Job Board';
+  if(jobContractReady())return 'Quest Log';
   if(c.targetName)return c.targetName;
   if(c.location)return c.location;
   const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Quarry caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Kitchen or crafting station',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Meditation Hall',tame:'Wild pet trails',pet_care:'Dragon Roost'};
@@ -924,7 +924,7 @@ function jobContractActionText(c){
 }
 function jobContractCompassTarget(c=clampJobContract(jobContract)){
   if(!c || (c.job!=='adventurer'&&c.job!==playerJob))return null;
-  if(jobContractReady())return {label:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z};
+  if(jobContractReady())return {label:'Quest Log',x:HUB.guide.x,z:HUB.guide.z};
   if((c.targetX||c.targetZ)&&Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))return {label:jobContractDestinationLabel(c),x:c.targetX,z:c.targetZ};
   if(c.type==='farm')return {label:'Town Farm',x:HUB.farm.x,z:HUB.farm.z};
   if(c.type==='cook'||c.type==='sell')return {label:c.type==='sell'?'Tavern counter':'Kitchen',x:HUB.tavern.x,z:HUB.tavern.z};
@@ -1004,13 +1004,13 @@ function serverObjectiveHudText(o){
     'progression:first_claim_expand':'Buy two connected tiles beside your first claim to make a 3-tile Homestead',
     'progression:first_base_setup':'Inside your Homestead: place storage, light, and a station',
     'progression:first_homestead_upgrade':'Choose your first Homestead upgrade from Land Claims',
-    'progression:first_profession_contract':'Take your first profession or Adventurer contract at the Job Board'
+    'progression:first_profession_contract':'This retired objective will update on profile sync'
   };
   if(legacy[o.id])return legacy[o.id];
   const prefix=serverObjectiveProgressText(o);
   if(o.status==='claimable'){
     const location=o.location||'the turn-in point';
-    if(o.source==='job')return 'Complete - claim at the Job Board';
+    if(o.source==='job')return 'Retired objective - refresh your quest list';
     if(o.source==='guild')return 'Complete - claim at Guild Contracts';
     if(o.source==='aegis')return 'Complete - claim from the Aegis Guardian';
     return 'Complete - turn in to '+location;
@@ -1021,7 +1021,7 @@ function serverObjectiveHudText(o){
 function objectiveTurnInLabel(o){
   if(!o)return 'TURN IN';
   const location=String(o.location||'').trim();
-  if(o.source==='job')return 'CLAIM AT JOB BOARD';
+  if(o.source==='job')return 'OPEN QUEST LOG';
   if(o.source==='guild')return 'CLAIM GUILD CONTRACT';
   if(o.source==='aegis')return 'CLAIM AT AEGIS';
   if(location==='Mara Vale')return 'TURN IN TO MARA';
@@ -1040,7 +1040,7 @@ function serverObjectiveHudAction(o){
   const type=explicit&&explicit.type||'';
   if(type==='turn_in')return {type:'turn_in',label:objectiveTurnInLabel(o),location:o.location||'',source:o.source||''};
   if(type==='find_gate')return {type:'find_gate',label:explicit.label||'FIND GATE',rank:explicit.rank};
-  if(type==='jobs')return {type:'jobs',label:explicit.label||(o.status==='claimable'?'CLAIM AT JOB BOARD':'OPEN JOB BOARD')};
+  if(type==='jobs')return {type:'questlog',label:'OPEN QUEST LOG'};
   if(type==='guild_contracts')return {type:'guild_contracts',label:explicit.label||(o.status==='claimable'?'CLAIM GUILD CONTRACT':'OPEN GUILD CONTRACTS')};
   if(type==='land')return {type:'land',label:explicit.label||'CLAIM LAND'};
   if(type==='gate_prep')return {type:'gate_prep',label:explicit.label||'PREP CHECK',rank:explicit.rank==null?gatePrepTargetRank():explicit.rank|0};
@@ -1075,22 +1075,22 @@ function professionHandoffObjective(){
   const job=String(playerJob||'');
   if(job==='miner')return {
     title:'Quarry Contract',
-    text:'Open the Job Board for your first mining contract, then head to the quarry for ore seams, hidden routes, and map clues.',
+    text:'Head to the quarry for ore seams, hidden routes, and Hunter-level survey tools.',
     target:{label:'Quarry',x:HUB.quarry.x,z:HUB.quarry.z}
   };
   if(job==='farmer')return {
     title:'Farm Supply Task',
-    text:'Open the Job Board for a farm supply task, then work the farm plots to grow food for cooks, traders, and town stores.',
+    text:'Work the farm plots to grow food for cooks, traders, and town stores.',
     target:{label:'Farm',x:HUB.farm.x,z:HUB.farm.z}
   };
   if(job==='cook')return {
     title:'Tavern Meal Shift',
-    text:'Open the Job Board for a cooking contract, then use the tavern counter to turn ingredients into buffs, recovery, and gold.',
+    text:'Use the tavern counter to turn ingredients into buffs, recovery, and gold.',
     target:{label:'Tavern',x:HUB.tavern.x,z:HUB.tavern.z}
   };
   if(job==='blacksmith')return {
     title:'Forge Work Order',
-    text:'Open the Job Board for a forge order, then visit Tobin to repair, upgrade, craft, or sell gear.',
+    text:'Visit Tobin to repair, upgrade, craft, or sell gear.',
     target:{label:'Forge',x:HUB.smith.x,z:HUB.smith.z}
   };
   if(job==='monk')return S&&S.lvl>=4 ? {
@@ -1099,12 +1099,12 @@ function professionHandoffObjective(){
     target:{label:'Meditation Hall',x:HUB.shrine.x,z:HUB.shrine.z}
   } : {
     title:'Support Contract',
-    text:'Meditation Hall growth unlocks at E-Rank Level 4. For now, open the Job Board for your first support contract.',
-    target:{label:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z}
+    text:'Meditation Hall growth unlocks at E-Rank Level 4. Continue quests and Gates until then.',
+    target:{label:'Meditation Hall',x:HUB.meditate.x,z:HUB.meditate.z}
   };
   if(job==='pet_tamer')return {
     title:'Roost Care Route',
-    text:'Open the Job Board for pet care work, then travel to Taming Land or the Dragon Roost for eggs, bonds, and training services.',
+    text:'Travel to Taming Land or the Dragon Roost for eggs, bonds, and training services.',
     target:{label:'Dragon Roost',x:HUB.roost.x,z:HUB.roost.z}
   };
   return null;
@@ -1157,8 +1157,8 @@ function progressionObjectiveFallback(){
       return objectiveLine('progression','Next','C-rank Specialization','Choose a permanent specialization, then continue toward B-rank',{type:'choose_spec',label:'CHOOSE SPEC'});
     }
     const handoff=professionHandoffObjective();
-    if(handoff)return objectiveLine('progression','Next',handoff.title,handoff.text,{type:'jobs',label:'OPEN JOB BOARD'});
-    return objectiveLine('progression','Next','Profession Work','Take your first profession or Adventurer contract at the Job Board',{type:'jobs',label:'OPEN JOB BOARD'});
+    if(handoff)return objectiveLine('progression','Next',handoff.title,handoff.text,{type:'quest_log',label:'OPEN QUEST LOG'});
+    return objectiveLine('progression','Next','Hunter Progression','Continue through quests, Gates, events, and Guild contracts',{type:'questlog',label:'OPEN QUEST LOG'});
   }
   if(progressionFocus==='c_rank_climb'){
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
@@ -1177,7 +1177,7 @@ function progressionObjectiveFallback(){
     if(prep&&!prep.ready)return objectiveLine('progression','Next','Gate Pressure',rankName+'-Rank pressure is rising. Fix your Gate kit before the next clear',{type:'gate_prep',label:rankName+' PREP CHECK',rank});
     if(gate)return objectiveLine('progression','Next','Gate Pressure','Clear higher-rank Gates, Road Warden work, and regional trouble to stabilize the climb',{type:'find_gate',label:'FIND GATE',rank});
     return JOBS_ENABLED
-      ? objectiveLine('progression','Next','Gate Pressure','No breach is active. Take Adventurer or Road Warden work so B-rank pressure keeps moving',{type:'jobs',label:'OPEN JOB BOARD'})
+      ? objectiveLine('progression','Next','Gate Pressure','No breach is active. Take Road Warden work from the Guild Hall so B-rank pressure keeps moving',{type:'guild_contracts',label:'OPEN GUILD BOARD'})
       : objectiveLine('progression','Next','Gate Pressure','No breach is active. Take Road Warden work and keep road safety at 65 or higher',{type:'guild_contracts',label:'OPEN GUILD BOARD'});
   }
   if(progressionFocus==='first_d_gate'){
@@ -1211,8 +1211,8 @@ function localStoryObjectiveLine(){
 function localJobObjectiveLine(){
   const c=clampJobContract(jobContract),job=jobContractObjective();
   if(!c||!job)return null;
-  const action=jobContractReady()?{type:'jobs',label:'CLAIM AT JOB BOARD'}:(objectiveCraftAction('job')||{type:'follow_marker',label:'FOLLOW MARKER'});
-  return objectiveLine('job','Job',job.label,job.text,action,objectiveProgressParts(c.have,c.need),{chapter:starterJobChapter(c),target:jobContractReady()?{label:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z}:jobContractCompassTarget(c)});
+  const action=jobContractReady()?{type:'quest_log',label:'OPEN QUEST LOG'}:(objectiveCraftAction('job')||{type:'follow_marker',label:'FOLLOW MARKER'});
+  return objectiveLine('job','Legacy',job.label,job.text,action,objectiveProgressParts(c.have,c.need),{chapter:starterJobChapter(c),target:jobContractReady()?{label:'Mara Vale',x:HUB.guide.x,z:HUB.guide.z}:jobContractCompassTarget(c)});
 }
 function localGuildObjectiveLine(){
   const c=clampRegionalContract(regionalContract),guild=guildContractObjective();
@@ -1289,12 +1289,12 @@ function midgameObjectiveLine(){
   const progressText=rankProgress&&!rankProgress.maxRank
     ? 'Current climb: '+rankName+'-Rank toward '+nextRankName+'. '
     : '';
-  return objectiveLine('midgame','Next','Take Rotating Adventurer Work',progressText+'Open the Job Board for Gates, patrols, events, and field contracts so the rank climb keeps moving',{type:'jobs',label:'OPEN JOB BOARD'},null,{target:{label:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z},level});
+  return objectiveLine('midgame','Next','Take Regional Guild Work',progressText+'Open Guild Contracts for Gates, patrols, events, and field routes so the rank climb keeps moving',{type:'guild_contracts',label:'OPEN GUILD BOARD'},null,{target:{label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z},level});
 }
 function idleObjectiveLine(){
   if(dim!=='overworld')return null;
   const inTown=isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
-  if(inTown)return objectiveLine('progression','Next','Choose Work','Open your Quest Log or visit the Job Board for the clearest task',{type:'questlog',label:'OPEN QUEST LOG'});
+  if(inTown)return objectiveLine('progression','Next','Choose Work','Open your Quest Log or visit the Guild Hall for the clearest task',{type:'questlog',label:'OPEN QUEST LOG'});
   return objectiveLine('progression','Next','Find A Lead','Return to town, follow a landmark, or open your Quest Log',{type:'questlog',label:'OPEN QUEST LOG'});
 }
 function tutorialRoomHudSuppressed(){
@@ -1414,7 +1414,7 @@ function currentObjectiveAction(){
   const storyActive=!!(localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story'));
   if(transition && !shouldDeferTransitionAction(transition,{story:storyActive,job:!!jobContract})) return transition;
   if(jobContract){
-    if(jobContractReady()) return {type:'jobs',label:'CLAIM AT JOB BOARD'};
+    if(jobContractReady()) return {type:'quest_log',label:'OPEN QUEST LOG'};
     const craft=objectiveCraftAction('job');
     return craft || {type:'follow_marker',label:'FOLLOW MARKER'};
   }
@@ -1428,9 +1428,9 @@ function currentObjectiveAction(){
     if(craft) return craft;
   }
   if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup'||progressionFocus==='first_homestead_upgrade') return {type:'land',label:progressionFocus==='first_homestead_upgrade'?'OPEN HOMESTEAD':'CLAIM LAND'};
-  if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract') return {type:'jobs',label:'OPEN JOB BOARD'};
+  if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract') return {type:'quest_log',label:'OPEN QUEST LOG'};
   if(progressionFocus==='c_rank_specialization') return {type:'choose_spec',label:'CHOOSE SPEC'};
-  if(progressionFocus==='b_rank_pressure') return progressionObjectiveFallback().action || {type:'jobs',label:'OPEN JOB BOARD'};
+  if(progressionFocus==='b_rank_pressure') return progressionObjectiveFallback().action || {type:'guild_contracts',label:'OPEN GUILD BOARD'};
   if(progressionFocus==='c_rank_climb'){
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
     return prep&&prep.ready?{type:'find_gate',label:'FIND C GATE',rank:2}:{type:'gate_prep',label:'C PREP CHECK',rank:2};
@@ -1578,9 +1578,9 @@ function handleObjectiveAction(action,btn){
     return;
   }
   if(action==='choose_job'){
-    if(combatState.jobChoiceOpen || transitionPanelState().jobOpen){ sysMsg('<b>Choose Job:</b> pick a job tutorial card, choose later, or open the Job Board.'); return; }
+    if(combatState.jobChoiceOpen || transitionPanelState().jobOpen){ sysMsg('<b>Jobs are retired.</b> Continue with the Quest Log, Guild Hall, and town activities.'); return; }
     if(combatApi.openLevel2JobChoice&&combatApi.openLevel2JobChoice(true)) return;
-    sysMsg('<b>Choose Job:</b> open the Job Board when you are ready to try a profession.');
+    sysMsg('<b>Jobs are retired.</b> Town activities now follow Hunter progression.');
     return;
   }
   if(action==='follow_marker'){
@@ -1718,7 +1718,7 @@ function currentObjective(){
   const deferTransition=shouldDeferTransitionAction(transition,{story:!!quest||!!serverObjectiveBySource('story','manhunt'),job:!!jobContract});
   if(transition&&!deferTransition){
     if(transition.type==='continue_panel') return {label:'Reward Pending', text:'Continue the open reward panel to unlock the next step'};
-    if(transition.type==='choose_job'&&progressionFocus!=='first_d_gate'&&progressionFocus!=='c_rank_climb'&&progressionFocus!=='b_rank_pressure'&&progressionFocus!=='next_adventurer_contract') return {label:'Job Tutorial Choice', text:'Choose a first job tutorial, choose later, or open the Job Board'};
+    if(transition.type==='choose_job'&&progressionFocus!=='first_d_gate'&&progressionFocus!=='c_rank_climb'&&progressionFocus!=='b_rank_pressure'&&progressionFocus!=='next_adventurer_contract') return {label:'Quest Log', text:'The retired job step will be skipped automatically'};
     if(transition.type==='choose_path') return {label:'Path Choice', text:'Choose a combat path to unlock your first ability'};
   }
   const job=jobContractObjective();
@@ -1734,7 +1734,7 @@ function currentObjective(){
   const promotion=ONBOARD.firstPromotionObjective();
   if(promotion) return promotion;
   if(JOBS_ENABLED&&dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<6)
-    return {label:'Current Goal', text:'Choose or claim work at the Job Board'};
+    return {label:'Current Goal', text:'Open the Quest Log or Guild Hall for current work'};
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.quarry.x, player.pos.z-HUB.quarry.z)<7)
     return {label:'Current Goal', text:'Speak with Garrik for miner work'};
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.farm.x, player.pos.z-HUB.farm.z)<7)

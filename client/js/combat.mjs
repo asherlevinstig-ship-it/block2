@@ -625,8 +625,6 @@ const adminGrantAllArmor=document.getElementById('admingrantallarmor');
 const adminPreviewModel=document.getElementById('adminpreviewmodel');
 const adminAbilityPath=document.getElementById('adminabilitypath');
 const adminAbilitySpec=document.getElementById('adminabilityspec');
-const adminJob=document.getElementById('adminjob');
-const adminJobXp=document.getElementById('adminjobxp');
 const adminUtilities=document.getElementById('adminutilities');
 const adminUtilityActive=document.getElementById('adminutilityactive');
 const adminUtilityPassive=document.getElementById('adminutilitypassive');
@@ -1588,12 +1586,12 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   pet_tamer:{key:'HATCH EGG',text:'Use the tutorial dragon egg on the Egg Insulator to hatch it quickly.',sub:'The flying dragons show the roost. This room teaches eggs, hatching, care, riding, commands, and bonds.'},
 });
 const JOB_TUTORIAL_HANDOFFS=Object.freeze({
-  miner:{title:'Quarry Contract',text:'Return to the quarry board at the Job Board for your first mining contract: ore seams, hidden routes, and map clues.',target:'Quarry work board',event:'Miner handoff: quarry board and mining contracts unlocked.'},
-  farmer:{title:'Farm Supply Task',text:'Head to the farm plots through the Job Board and take a food supply task. Farmers keep cooks, traders, and town stores stocked.',target:'Farm plots',event:'Farmer handoff: farm supply contracts unlocked.'},
-  cook:{title:'Tavern Meal Shift',text:'Go to the tavern counter through the Job Board for your first meal contract. Cooks turn ingredients into buffs, recovery, and gold.',target:'Tavern counter',event:'Cook handoff: tavern meal contracts unlocked.'},
-  blacksmith:{title:'Forge Work Order',text:'Visit Tobin at the forge through the Job Board for repair, upgrade, and sell orders. Blacksmiths turn materials into better gear.',target:'Tobin Forgehand',event:'Blacksmith handoff: forge work orders unlocked.'},
-  monk:{title:'Meditation Hall',text:'Meditation Hall focus unlocks at E-Rank Level 4. Until then, use the Job Board for support contracts and return when your focus training opens.',target:'Meditation Hall',event:'Monk handoff: Meditation Hall growth is introduced for level 4.'},
-  pet_tamer:{title:'Roost Care Route',text:'Travel to Taming Land or the Dragon Roost through the Job Board to start care contracts, egg work, and dragon training services.',target:'Dragon Roost',event:'Pet Tamer handoff: roost and Taming Land work unlocked.'},
+  miner:{title:'Quarry Practice',text:'Visit the quarry for ore seams, hidden routes, and Hunter-level survey tools.',target:'Quarry work area',event:'Quarry activities unlocked.'},
+  farmer:{title:'Farm Supply Route',text:'Head to the farm plots to grow food for cooks, traders, and town stores.',target:'Farm plots',event:'Farm activities unlocked.'},
+  cook:{title:'Tavern Meal Practice',text:'Go to the tavern counter and turn ingredients into buffs, recovery, and gold.',target:'Tavern counter',event:'Cooking activities unlocked.'},
+  blacksmith:{title:'Forge Practice',text:'Visit Tobin to repair, upgrade, and craft better gear.',target:'Tobin Ashhand',event:'Forge activities unlocked.'},
+  monk:{title:'Meditation Hall',text:'Meditation Hall focus unlocks at E-Rank Level 4. Return when your Hunter level reaches 4.',target:'Meditation Hall',event:'Meditation Hall growth is introduced for level 4.'},
+  pet_tamer:{title:'Roost Care Route',text:'Travel to Taming Land or the Dragon Roost for egg work and dragon training services.',target:'Dragon Roost',event:'Roost and Taming Land activities unlocked.'},
 });
 const JOB_CHOICE_PROFILES=Object.freeze({
   miner:{recommended:'Recommended for explorers, collectors, and secret-route hunters.',preview:'CAVE ROUTE'},
@@ -3920,7 +3918,7 @@ const JOB_TUTORIAL_FIRST_MISSIONS=Object.freeze({
 });
 function jobTutorialFirstMission(jobId){
   const handoff=jobTutorialHandoff(jobId)||{};
-  return JOB_TUTORIAL_FIRST_MISSIONS[jobId]||{title:handoff.title||'First Real Shift',target:handoff.target||'Job Board',action:'Follow your first real job contract',kit:'Starter kit'};
+  return JOB_TUTORIAL_FIRST_MISSIONS[jobId]||{title:handoff.title||'First Activity',target:handoff.target||'Town services',action:'Try the activity in town',kit:'Starter kit'};
 }
 function jobTutorialHandoff(jobId){
   const handoff=JOB_TUTORIAL_HANDOFFS[jobId]||null;
@@ -3951,10 +3949,10 @@ function showJobTutorialCompletionReward(jobId){
       '<span><small>STARTER HELP</small><b>'+escHTML(mission.kit)+'</b></span>'+
     '</div>'+
     '<div class="rnote"><b>Why this matters:</b><br>'+escHTML(jobTutorialRewardText(jobId))+'</div>'+
-    '<div class="rnote first-shift-next"><b>Next Best Action:</b><br>Follow the HUD marker to '+escHTML(mission.target)+'. The Job Board already knows this is your first '+escHTML(job.name)+' shift.</div>'+
+    '<div class="rnote first-shift-next"><b>Next Best Action:</b><br>Follow the HUD marker to '+escHTML(mission.target)+'. Activities now progress with your Hunter level.</div>'+
     '<div class="job-tutorial-actions">'+
       '<button id="jobtutorialfollow">FOLLOW FIRST SHIFT</button>'+
-      '<button id="jobtutorialopenboard">OPEN JOB BOARD</button>'+
+      '<button id="jobtutorialopenboard">OPEN QUEST LOG</button>'+
       '<button id="jobtutorialrewardclose">CLOSE</button>'+
     '</div>';
   rewardWin.classList.remove('hidden');
@@ -3970,7 +3968,7 @@ function showJobTutorialCompletionReward(jobId){
     closeBlockingGameModal(rewardWin,{relock,reason:'job-tutorial-reward'});
   };
   const board=document.getElementById('jobtutorialopenboard');
-  if(board)board.onclick=()=>{closeReward(false);setTimeout(()=>openJobsUI(jobId,mission.title),NET&&NET.on&&(!jobContract||jobContract.job!==jobId)?250:0);};
+  if(board)board.onclick=()=>{closeReward(false);setTimeout(()=>openQuestLogUI(),250);};
   const follow=document.getElementById('jobtutorialfollow');
   if(follow)follow.onclick=()=>{closeReward(true);showName(mission.title);refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();};
   const btn=document.getElementById('jobtutorialrewardclose');
@@ -4060,7 +4058,7 @@ function updateJobTutorialHud(){
   const returnBlocked=minerBlockedReturn||farmerBlockedReturn||cookBlockedReturn||blacksmithBlockedReturn||monkBlockedReturn;
   const keyText=nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':farmerBlockedReturn?'FINISH FARMING':cookBlockedReturn?'FINISH COOKING':blacksmithBlockedReturn?'FINISH FORGING':'FINISH FOCUS'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key;
   const mainText=nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'Sell wheat to Liss Barley before leaving.':'Till soil, plant seeds, and harvest wheat before leaving.'):cookBlockedReturn?(jobTutorialCookStep>=3?'Sell the meal to Pippa Hearth before leaving.':'Prep bread, start the hearth timer, and claim your meal before leaving.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'Sell the armour to Tobin before leaving.':'Craft and inspect armour before leaving.'):monkBlockedReturn?'Start focus in the circle and hold still before leaving.':'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text;
-  const subText=nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farmer loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current Farmer lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cook loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current Cook station.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'The blacksmith loop is: craft gear -> sell or equip it -> improve the party.':'Follow the green pillar back to the forge bench.'):monkBlockedReturn?'The monk loop is: enter a calm space -> answer/hold focus -> restore and support.':'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub;
+  const subText=nearReturn?(minerBlockedReturn?'The mining loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farming loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current farming lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cooking loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current cooking station.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'The forge loop is: craft gear -> sell or equip it -> improve the party.':'Follow the green pillar back to the forge bench.'):monkBlockedReturn?'The meditation loop is: enter a calm space -> answer or hold focus -> restore and support.':'Activity complete. Continue through quests, Gates, and town services.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tuthead"><div><div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div><div class="tutroom">'+escHTML((JOB_TUTORIAL_STEPS[jobTutorialJob]&&JOB_TUTORIAL_STEPS[jobTutorialJob].room)||'Private Lesson')+'</div></div><div class="tutdistance">'+escHTML(distanceText)+'</div></div>'
     +'<div class="tutkey">'+escHTML(keyText)+'</div>'
@@ -4115,7 +4113,7 @@ function completeJobTutorial(){
   const handoff=jobTutorialHandoff(jobId);
   playerJob=jobId;
   progressionFocus='e_rank_climb';
-  sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> '+escHTML(handoff&&handoff.text||'Open the Job Board for your next useful town task.'));
+  sysMsg('<b>'+escHTML(job.name)+' activity complete.</b> '+escHTML(handoff&&handoff.text||'Open the Quest Log for your next useful task.'));
   if(handoff)eventLog(handoff.event);
   showJobTutorialCompletionReward(jobId);
   showName(handoff&&handoff.title||job.name+' ready');
@@ -4411,9 +4409,9 @@ function landTutorialRoute(target){
 }
 function townTutorialInfo(step){
   if(step==='job') return {
-    pill:'Town Tutorial - Job Board', target:HUB.jobs, near:4.0, farKey:'FIND LIGHT', nearKey:'G / Right Click',
-    farText:'Follow the pillar of light to the Job Board.', nearText:'Open the Job Board.',
-    farSub:'The Job Board gives repeatable work, guild contracts, and exploration goals.', nearSub:'Take a job or guild contract for your next objective.'
+    pill:'Town Tutorial - Guild Hall', target:HUB.guildNoticeBoard, near:4.0, farKey:'FIND LIGHT', nearKey:'G / Right Click',
+    farText:'Follow the pillar of light to the Guild Hall notice board.', nearText:'Open Guild Contracts.',
+    farSub:'The Guild Hall offers regional contracts and exploration goals.', nearSub:'Choose a Guild Contract for your next objective.'
   };
   if(step==='tavern') return {
     pill:'Town Tutorial - Tavern', target:{x:bartender.grp.position.x,z:bartender.grp.position.z}, near:4.0, farKey:'FIND LIGHT', nearKey:'G / Right Click',
@@ -4500,7 +4498,7 @@ function openTownTutorialsUI(){
   qpanelEl.appendChild(jobRow);
   const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
   const choices=[
-    ['job','JOB BOARD','Learn jobs, contracts, and guild exploration work.',true],
+    ['job','GUILD HALL','Learn regional contracts and exploration work.',true],
     ['tavern','TAVERN',gold>=5?'Visit Greta, buy supplies, and learn where food becomes gold.':'Needs 5 gold to buy the cheapest tavern item. Earn gold first.',gold>=5],
     ['land','BUY LAND',gold>=firstLandPrice?'Leave town, open Land Claim mode with L, and buy a wilderness tile.':'Needs about '+firstLandPrice+' gold for a near-town claim. Earn gold first.',gold>=firstLandPrice]
   ];
@@ -4533,7 +4531,7 @@ function guideTownTutorialChoice(step, ready=true){
   tutorialPillarGroup.position.set(info.target.x,y+4,info.target.z);
   updateTownGuidanceHud();
   renderTownTutorialOptions();
-  showName('Tutorial started: '+(step==='job'?'Job Board':step==='tavern'?'Tavern':'Buy Land'));
+  showName('Tutorial started: '+(step==='job'?'Guild Hall':step==='tavern'?'Tavern':'Buy Land'));
   eventLog('Town tutorial started - find the light pillar.');
   lockFallback=true;
   requestPointerLockSafe(null);
@@ -4613,19 +4611,19 @@ function openLevel2JobChoice(force=false){
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
   const ids=['miner','farmer','cook','blacksmith','monk','pet_tamer'];
-  pathPanelEl.innerHTML='<div class="job-choice-kicker">Hunter Awakening 4 / 4 - Optional profession trial</div>'
+  pathPanelEl.innerHTML='<div class="job-choice-kicker">Retired activity tutorial</div>'
     +hunterAwakeningStepsHTML('job')
     +'<h1>TRY A WORKER PATH</h1>'
-    +'<div class="pathintro">Combat is only one way to play. Pick a job card to equip that profession and teleport straight to a private practice room, or continue Road Ready and choose later with Milo at the Job Board.</div>'
+    +'<div class="pathintro">These old profession tutorials are retired. Continue Road Ready and use ordinary town activities instead.</div>'
     +'<div id="jobchoicecards">'+ids.map(jobChoiceCardHTML).join('')+'</div>'
     +'<div id="pathnote">Jobs are for different player styles: exploring, crafting, farming, cooking, support, and gear-making all matter.</div>'
-    +'<div class="job-choice-actions"><button id="jobchoicelater" type="button">CONTINUE ROAD READY</button><button id="jobchoiceboard" type="button">OPEN JOB BOARD</button></div>';
+    +'<div class="job-choice-actions"><button id="jobchoicelater" type="button">CONTINUE ROAD READY</button><button id="jobchoiceboard" type="button">OPEN QUEST LOG</button></div>';
   openBlockingGameModal(pathSelectEl,'job-choice');
   pathPanelEl.querySelectorAll('.job-choice-card').forEach(card=>card.addEventListener('click',()=>chooseJobFromLevel2Banner(card.dataset.job)));
   const later=document.getElementById('jobchoicelater');
   if(later)later.addEventListener('click',()=>{setLevel2JobChoiceSeen();closeLevel2JobChoice();renderTownTutorialOptions(true);});
   const board=document.getElementById('jobchoiceboard');
-  if(board)board.addEventListener('click',()=>{setLevel2JobChoiceSeen();closeLevel2JobChoice();openJobsUI();});
+  if(board)board.addEventListener('click',()=>{setLevel2JobChoiceSeen();closeLevel2JobChoice();openQuestLogUI();});
   return true;
 }
 function startTownGuidance(){
@@ -5484,8 +5482,6 @@ function populateAdminFields(profile){
   if(adminMaxStamina)adminMaxStamina.value=String(Number.isFinite(+profile.maxSp)?Math.floor(+profile.maxSp):'');
   if(adminAbilityPath)adminAbilityPath.value=profile.path||'';
   if(adminAbilitySpec)adminAbilitySpec.value=profile.abilitySpec||'';
-  if(adminJob)adminJob.value=profile.job||'adventurer';
-  if(adminJobXp)adminJobXp.value=String(profile.jobXp||0);
   if(adminUtilities)adminUtilities.value=(profile.utilityUnlocks||[]).join(', ');
   const loadout=profile.utilityLoadout||{};
   if(adminUtilityActive)adminUtilityActive.value=loadout.active||'';
@@ -5524,8 +5520,6 @@ function buildAdminPatch(){
   }
   if(adminAbilityPath&&adminAbilityPath.value)patch.abilityPath=adminAbilityPath.value;
   if(adminAbilitySpec&&adminAbilitySpec.value)patch.abilitySpec=adminAbilitySpec.value;
-  if(adminJob&&adminJob.value)patch.job=adminJob.value;
-  if(adminJobXp&&String(adminJobXp.value||'').trim())patch.jobXp=Math.max(0,Number(adminJobXp.value)||0);
   const utilities=adminCsv(adminUtilities&&adminUtilities.value);
   if(utilities.length)patch.utilityUnlocks=utilities;
   const active=String(adminUtilityActive&&adminUtilityActive.value||'').trim().toLowerCase();
@@ -6733,7 +6727,7 @@ function nearbyVillager(range=3.6){
 }
 function blockInteractionPrompt(hit){
   if(!hit)return null;
-  if(isJobBoardHit(hit))return {key:'G',title:'Job Board',small:'Open profession and contract work',priority:80};
+  if(isJobBoardHit(hit))return null;
   if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2)return {key:'G',title:'Shard Pedestal',small:'Open shard keys and Gate options',priority:70};
   if(isOutfitterCounterHit(hit))return {key:'G',title:'River & Trail Outfitter',small:'Browse common fishing and trail gear',priority:68};
   if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)return {key:'G',title:'Market Stall',small:'Open town shop',priority:68};
@@ -6854,7 +6848,6 @@ function nearbyInteractionPrompt(){
   if(petPracticeInsulator&&jobTutorialPetDragonStep===0)push({key:'G',title:'Tutorial Egg',small:jobTutorialPetEggStarted?(Date.now()>=jobTutorialPetEggReadyAt?'Claim the hatchling':'Fast incubation running'):'Use Verdant Dragon Egg',priority:119},petPracticeInsulator.distance);
   const petPracticeDragon=nearPetTamerPracticeDragon();
   if(petPracticeDragon&&jobTutorialPetDragonStep>0&&jobTutorialPetDragonStep<5)push({key:petTamerTutorialPromptKey(),title:'Your Hatched Dragon',small:jobTutorialPetDragonSeen?'Lesson complete':petTamerTutorialProgressLabel()+' - '+petTamerTutorialAction().key,priority:118},petPracticeDragon.distance);
-  if(nearJobBoard())push({key:'G',title:'Job Board',small:'Open profession and contract work',priority:96},0);
   if(guardianUnderCrosshair(8)||nearbyGuardian())push({key:'G',title:'Aegis Guardian',small:'Open Guardian trials and rewards',priority:93},0);
   const vill=villagerUnderCrosshair(4.5)||nearbyVillager(3.7);
   if(vill)push({key:'G',title:vill.name||vill.shortName||'Villager',small:vill.title||'Talk',priority:90},vill.distance||0);
@@ -7212,7 +7205,7 @@ function interactWithVillager(vill){
     openShardUI();
   }
   else if(vill.role==='job_mentor'){
-    sysMsg('<b>'+escHTML(vill.name||'Job Board Helper')+':</b> "Pick one clear contract, finish it, then claim the reward here. Jobs change how you play. If you want to try a worker tutorial, talk to <b>Milo</b> beside the board."');
+    sysMsg('<b>'+escHTML(vill.name||'Town Guide')+':</b> "Jobs are retired. Use the Quest Log, Guild Hall, and town services to choose your next activity."');
     openJobsUI();
   }
   else if(vill.role==='worker_tutor'){

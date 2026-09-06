@@ -5487,8 +5487,8 @@ class GameRoom extends Room {
         reward: {
           gold: npc.gold | 0,
           xp: npc.xp | 0,
-          jobXp: 12,
-          job: 'adventurer',
+          jobXp: JOB_SYSTEM.ENABLED ? 12 : 0,
+          job: JOB_SYSTEM.ENABLED ? 'adventurer' : '',
           items: npc.rewardItems || [],
         },
         priority: 10,
@@ -5511,8 +5511,8 @@ class GameRoom extends Room {
         reward: {
           gold: maraOffer.gold | 0,
           xp: maraOffer.xp | 0,
-          jobXp: 12,
-          job: 'adventurer',
+          jobXp: JOB_SYSTEM.ENABLED ? 12 : 0,
+          job: JOB_SYSTEM.ENABLED ? 'adventurer' : '',
           items: maraOffer.rewardItems || [],
         },
         priority: 10,
@@ -5532,15 +5532,15 @@ class GameRoom extends Room {
       reward: {
         gold: Math.max(0, 135 + Math.max(1, prof.S && prof.S.lvl | 0) * 8),
         xp: Math.max(0, 130 + Math.max(1, prof.S && prof.S.lvl | 0) * 12),
-        jobXp: 12,
-        job: 'adventurer',
+        jobXp: JOB_SYSTEM.ENABLED ? 12 : 0,
+        job: JOB_SYSTEM.ENABLED ? 'adventurer' : '',
         note: 'Aegis cache loot',
       },
       priority: 20,
       lifecycle: lifecycleFor('claimable', prof.aegisTrial || {}),
     });
     const job = prof.jobContract;
-    if (job) add({
+    if (JOB_SYSTEM.ENABLED && job) add({
       id: `job:${job.id || job.job || 'contract'}`,
       source: 'job',
       questType: 'job',

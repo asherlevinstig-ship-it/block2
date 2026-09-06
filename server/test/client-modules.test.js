@@ -173,16 +173,16 @@ test('client celebrates the first completed job contract with clear next actions
   assert.match(styles, /@keyframes firstShiftSpark/);
 });
 
-test('job tutorial completion presents a first real shift handoff', () => {
+test('retired job tutorial handoff redirects imported sessions to the quest log', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
 
   assert.match(combat, /const JOB_TUTORIAL_FIRST_MISSIONS=Object\.freeze\(\{/);
   assert.match(combat, /FIRST REAL SHIFT UNLOCKED/);
-  assert.match(combat, /OPEN JOB BOARD/);
+  assert.match(combat, /OPEN QUEST LOG/);
   assert.match(combat, /FOLLOW FIRST SHIFT/);
-  assert.match(combat, /openJobsUI\(jobId,mission\.title\)/);
+  assert.match(combat, /setTimeout\(\(\)=>openQuestLogUI\(\),250\)/);
   assert.match(networking, /const starter=JOBS_ENABLED\?clampJobContract\(m&&m\.starterContract\):null/);
   assert.match(networking, /progressionFocus='e_rank_climb'/);
   assert.match(networking, /First real .* shift ready/);
@@ -2173,7 +2173,7 @@ test('system feedback uses the persistent event log instead of popup notificatio
   assert.match(world,/while\(rewardFeedEl\.children\.length>3\)\{/);
 });
 
-test('level two job chooser presents six profession tutorial cards',()=>{
+test('retired level two job chooser cannot open',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
@@ -2189,16 +2189,9 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/const JOB_TUTORIAL_STEPS=Object\.freeze\(\{/);
   assert.match(combat,/const JOB_TUTORIAL_ROOM_COPY=Object\.freeze\(\{/);
   assert.match(combat,/const JOB_TUTORIAL_HANDOFFS=Object\.freeze\(\{/);
-  assert.match(combat,/Quarry Contract/);
-  assert.match(combat,/Farm Supply Task/);
-  assert.match(combat,/Tavern Meal Shift/);
-  assert.match(combat,/Forge Work Order/);
-  assert.match(combat,/Meditation Hall focus unlocks at E-Rank Level 4/);
-  assert.match(combat,/Roost Care Route/);
   assert.match(combat,/function jobTutorialHandoff\(jobId\)/);
-  assert.match(combat,/MINER_TUTORIAL_TRADE_GOLD=45/);
-  for(const job of ['miner','farmer','cook','blacksmith','monk','pet_tamer']) assert.match(combat,new RegExp(`${job}:\\{room:`));
-  assert.match(combat,/function shouldOpenLevel2JobChoice\(\)/);
+  assert.match(combat,/function shouldOpenLevel2JobChoice\(\)\{\s*if\(!JOBS_ENABLED\)return false/);
+  assert.match(combat,/function openLevel2JobChoice\(force=false\)\{\s*if\(!JOBS_ENABLED\)return false/);
   assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
   assert.match(combat,/function openTownTutorialsUI\(\)/);
   assert.match(combat,/openQWin\('management'\)/);
@@ -2361,15 +2354,15 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/burst\(player\.pos\.x,player\.pos\.y\+1,player\.pos\.z,jobTutorialColorArr\(jobId\),42,3\.4,3\.3,\.85\)/);
   assert.match(combat,/get jobTutorialPetDragonStep\(\)\{ return jobTutorialPetDragonStep; \}/);
   assert.match(combat,/TRY A WORKER PATH/);
-  assert.match(combat,/Hunter Awakening 4 \/ 4 - Optional profession trial/);
+  assert.match(combat,/Retired activity tutorial/);
   assert.match(combat,/const JOB_CHOICE_PROFILES=Object\.freeze\(\{/);
   assert.match(combat,/Recommended for pet lovers, dragon riders, and companion trainers/);
   assert.match(combat,/job\.name\+' Chosen'/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
   assert.match(combat,/startJobTutorial\(jobId\)/);
-  assert.match(combat,/Milo at the Job Board/);
-  assert.match(combat,/teleport straight to a private practice room/);
+  assert.match(combat,/Jobs are for different player styles/);
+  assert.match(combat,/CONTINUE ROAD READY/);
   assert.match(combat,/enterJobTutorialRoom\(jobId\)/);
   assert.match(combat,/exitJobTutorialRoom\(\)/);
   assert.match(world,/const JOB_TUTORIAL_MEADOWS=Object\.freeze\(\{/);
@@ -2655,7 +2648,7 @@ test('objective tracker shows only the active quest with an all-quests shortcut'
   assert.match(world,/label:'Dragon Roost'/);
   assert.match(world,/function jobContractTarget\(c\)/);
   assert.match(world,/kind:'server-job-'\+String\(inferred\.type\|\|'contract'\)/);
-  assert.match(frame,/target:jobContractReady\(\)\?\{label:'Job Board',x:HUB\.jobs\.x,z:HUB\.jobs\.z\}:jobContractCompassTarget\(c\)/);
+  assert.match(frame,/target:jobContractReady\(\)\?\{label:'Mara Vale',x:HUB\.guide\.x,z:HUB\.guide\.z\}:jobContractCompassTarget\(c\)/);
   assert.match(world,/const isStory=source==='story'\|\|String\(o\.category\|\|''\)==='story'\|\|String\(o\.questType\|\|''\)==='npc'/);
   assert.match(world,/const mentionsMara=loc\.includes\('mara'\)\|\|title\.includes\('mara'\)\|\|text\.includes\('mara'\)/);
   assert.match(world,/o\.status==='offered'\|\|storyNpcAction\|\|o\.status==='claimable'\|\|o\.status==='complete'/);
@@ -2839,7 +2832,7 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(world,/color=toMara\?0x9ad26b:0x7dd3fc/);
   assert.match(combat,/Walk into the pillar of light/);
   assert.match(combat,/FIND LIGHT/);
-  assert.match(combat,/Follow the pillar of light to the Job Board/);
+  assert.match(combat,/Follow the pillar of light to the Guild Hall notice board/);
   assert.match(menus,/function openNpcDialogueShell\(v,context=''\)/);
   assert.match(menus,/npc-dialogue-shell/);
   assert.match(menus,/npc-dialogue-portrait/);
@@ -4639,7 +4632,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/Craft complete/);
   assert.match(menus,/Smelt complete/);
   assert.match(menus,/place it inside editable claimed land/);
-  assert.match(menus,/claim at the Job Board/);
+  assert.match(menus,/This retired contract will be removed on profile sync/);
   assert.match(menus,/data-craft-output/);
   assert.match(menus,/Craftable now/);
   assert.match(menus,/STAGE RECIPE/);
@@ -4703,17 +4696,17 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/localGuildObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('guild'\),'Guild'\)/);
   assert.match(frame,/serverObjectiveLine\(serverObjectiveBySource\('progression'\),'Next'\)\|\|progressionObjectiveFallback\(\)/);
   assert.match(frame,/function professionHandoffObjective\(\)/);
-  assert.match(frame,/Open the Job Board for your first mining contract/);
-  assert.match(frame,/Open the Job Board for a farm supply task/);
-  assert.match(frame,/Open the Job Board for a cooking contract/);
-  assert.match(frame,/Open the Job Board for a forge order/);
+  assert.match(frame,/Head to the quarry for ore seams/);
+  assert.match(frame,/Work the farm plots to grow food/);
+  assert.match(frame,/Use the tavern counter to turn ingredients/);
+  assert.match(frame,/Visit Tobin to repair, upgrade, craft, or sell gear/);
   assert.match(frame,/Meditation Hall growth unlocks at E-Rank Level 4/);
-  assert.match(frame,/Open the Job Board for pet care work/);
+  assert.match(frame,/Travel to Taming Land or the Dragon Roost/);
   assert.match(frame,/obj\.unified&&Array\.isArray\(obj\.lines\)/);
   assert.match(frame,/obj\.nextBest&&obj\.line/);
   assert.match(frame,/class="objective-line /);
   assert.match(frame,/function objectiveTurnInLabel\(o\)/);
-  assert.match(frame,/CLAIM AT JOB BOARD/);
+  assert.match(frame,/OPEN QUEST LOG/);
   assert.match(frame,/CLAIM GUILD CONTRACT/);
   assert.match(frame,/CLAIM AT AEGIS/);
   assert.match(frame,/action==='guild_contracts'/);
@@ -4738,7 +4731,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/function postDRankGuidanceReady\(\)/);
   assert.match(frame,/function midgameObjectiveLine\(\)/);
   assert.match(frame,/Sharpen '\+rankName\+'-Rank Kit/);
-  assert.match(frame,/Take Rotating Adventurer Work/);
+  assert.match(frame,/Take Regional Guild Work/);
   assert.match(frame,/Handle Regional Trouble/);
   assert.match(frame,/action==='regional_track'/);
   assert.match(frame,/action==='recall'/);
@@ -4753,7 +4746,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/data-objective-action/);
   assert.match(frame,/objectiveAction:e2eCurrentObjectiveAction\(\)/);
   assert.match(frame,/landClaimOverlay:!!worldState\.landClaimOverlay/);
-  assert.match(frame,/OPEN JOB BOARD/);
+  assert.match(frame,/OPEN QUEST LOG/);
   assert.match(frame,/TURN IN TO MARA/);
   assert.match(frame,/CLAIM LAND/);
   assert.match(frame,/FIND GATE/);

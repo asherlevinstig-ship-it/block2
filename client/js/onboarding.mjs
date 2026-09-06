@@ -139,21 +139,18 @@ export function createOnboardingUI(deps) {
       label: 'Progression Path', text: 'Open Land Claims while standing in your Homestead and choose your first upgrade', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
       path: { now: 'Choose a Homestead upgrade', next: 'Then take a contract', why: 'A home base should give a clear practical benefit before repeatable work begins', step: 8, total: 9 },
     };
-    if (focus === 'first_profession_contract') return {
-      label: 'Progression Path', text: 'Visit the Job Board and take your first repeatable contract', target: HUB.jobs,
-      path: { now: 'Take a contract', next: 'Then climb E-rank toward promotion', why: 'Contracts become the repeatable path between Gates', step: 9, total: 9 },
-    };
-    if (focus === 'e_rank_climb') return { label: 'E-Rank Journey', text: 'Build Hunter XP through contracts, quests, Gates, events, and hostile threats. D-Rank begins after E-Rank Level 10.', target: HUB.jobs };
-    if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and take your first Hunter contract', target: HUB.jobs };
-    if (focus === 'first_promotion_contract') return { label: 'First Promotion', text: "Take Mara's Field Work from the Job Board", target: HUB.jobs };
+    if (focus === 'first_profession_contract') return { label: 'Progression Path', text: 'Jobs are retired; continue through the Quest Log and Guild Hall', target: HUB.guild };
+    if (focus === 'e_rank_climb') return { label: 'E-Rank Journey', text: 'Build Hunter XP through town quests, Guild Contracts, Gates, events, and hostile threats. D-Rank begins at Level 11.', target: HUB.guild };
+    if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Continue through the Quest Log and Guild Hall', target: HUB.guild };
+    if (focus === 'first_promotion_contract') return { label: 'First Promotion', text: 'Continue through the Quest Log and Guild Hall', target: HUB.guild };
     if (focus === 'first_d_gate') {
       const prep = dRankPrepStatus();
       return { label: 'D-Rank Preparation', text: prep.next.text, checklist: prep.checks, prep };
     }
-    if (focus === 'c_rank_climb') return { label: 'C-rank Climb', text: 'Earn Hunter XP through rotating Adventurer contracts, D-rank Gates, events, regional trouble, and C-rank prep checks.', target: HUB.jobs };
+    if (focus === 'c_rank_climb') return { label: 'C-rank Climb', text: 'Earn Hunter XP through town quests, Guild Contracts, D-rank Gates, events, regional trouble, and C-rank prep checks.', target: HUB.guild };
     if (focus === 'c_rank_specialization') return { label: 'C-rank Specialization', text: 'Choose one permanent specialization for your combat path.', target: HUB.guardian };
-    if (focus === 'b_rank_pressure') return { label: 'Gate Pressure', text: 'Contain Gate breaches, clear higher-rank Gates, and use Road Warden or Adventurer work to stabilize the B-rank climb.', target: HUB.jobs };
-    if (focus === 'next_adventurer_contract') return { label: 'Adventurer Contracts', text: 'Return to the Job Board and take your next rotating contract', target: HUB.jobs };
+    if (focus === 'b_rank_pressure') return { label: 'Gate Pressure', text: 'Contain Gate breaches, clear higher-rank Gates, and use Road Warden or Guild work to stabilize the B-rank climb.', target: HUB.guild };
+    if (focus === 'next_adventurer_contract') return { label: 'Guild Contracts', text: 'Visit the Guild Hall and take your next regional contract', target: HUB.guild };
     return null;
   }
 

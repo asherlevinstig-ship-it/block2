@@ -1309,7 +1309,7 @@ class ProgressionMixin {
     const def = chain[step], lvl = Math.max(1, prof.S.lvl | 0);
     const rewards = {
       gold: Math.round(def.gold + lvl * 2 + step * 4),
-      xp: Math.max(Math.round(def.xp + lvl * 5 + step * 6), hunterXpForActivity(lvl, 'town_quest')),
+      xp: Math.max(Math.round(def.xp + lvl * 5 + step * 6), hunterXpForActivity(lvl, 'town_quest')) + (JOB_SYSTEM.ENABLED ? 0 : 12),
     };
     if ((def.levelTarget | 0) > lvl) {
       let targetXp = 0, targetLvl = lvl, carriedXp = Math.max(0, prof.S.xp | 0);
@@ -1459,8 +1459,10 @@ class ProgressionMixin {
       this.advanceProgressionDirector(client, 'first_e_gate_cleared', { profile: false });
     }
     rec.prof.activeNpcQuest = null;
-    this.grantJobXp(client, 'adventurer', 12);
-    this.progressJobContract(client, 'quest', 1, 0);
+    if (JOB_SYSTEM.ENABLED) {
+      this.grantJobXp(client, 'adventurer', 12);
+      this.progressJobContract(client, 'quest', 1, 0);
+    }
     client.send('npcQuest', { action, quest: null, completed: q, firstQuestMilestone });
     if (this.profileQuestTrace) this.profileQuestTrace(client, 'npcQuest.claimed', rec.prof, {
       title: q.title || '',
@@ -1475,8 +1477,8 @@ class ProgressionMixin {
       title: q.title || q.chainTitle || 'Town Quest',
       gold: q.gold | 0,
       xp: q.xp | 0,
-      jobXp: 12,
-      job: 'adventurer',
+      jobXp: JOB_SYSTEM.ENABLED ? 12 : 0,
+      job: JOB_SYSTEM.ENABLED ? 'adventurer' : '',
       contractType: q.type || '',
       chainStep: q.chainStep | 0,
       giver: q.giver || '',
@@ -1537,7 +1539,7 @@ class ProgressionMixin {
     const rec = this.profileFor(client);
     if (!rec || !rec.prof.aegisTrialReady) return this.progressionReject(client, 'aegisTrial', 'incomplete');
     const lvl = Math.max(1, rec.prof.S.lvl | 0), rewardGold = 135 + lvl * 8;
-    const rewardXp = Math.max(130 + lvl * 12, hunterXpForActivity(lvl, 'aegis_trial'));
+    const rewardXp = Math.max(130 + lvl * 12, hunterXpForActivity(lvl, 'aegis_trial')) + (JOB_SYSTEM.ENABLED ? 0 : 12);
     rec.prof.aegisTrialReady = false;
     rec.prof.aegisTrial = null;
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + rewardGold);
@@ -1563,8 +1565,10 @@ class ProgressionMixin {
         reward.armorType=armorType;reward.rarity='rare';
       }else aegisOverflow = !!this.addRewardItem(rec.prof, reward.id, 1);
     }
-    this.grantJobXp(client, 'adventurer', 12);
-    this.progressJobContract(client, 'quest', 1, 0);
+    if (JOB_SYSTEM.ENABLED) {
+      this.grantJobXp(client, 'adventurer', 12);
+      this.progressJobContract(client, 'quest', 1, 0);
+    }
     this.progressionChanged(client, 'aegisTrial', { rewardGold, rewardXp });
     if (this.sendQuestRewardSummary) this.sendQuestRewardSummary(client, {
       source: 'aegis',
@@ -1572,8 +1576,8 @@ class ProgressionMixin {
       title: 'Silent Bounty',
       gold: rewardGold,
       xp: rewardXp,
-      jobXp: 12,
-      job: 'adventurer',
+      jobXp: JOB_SYSTEM.ENABLED ? 12 : 0,
+      job: JOB_SYSTEM.ENABLED ? 'adventurer' : '',
       items: reward.id && !ARMOR_INFO[reward.id] ? [{ id: reward.id, count: 1 }] : [],
       gear: reward.id && ARMOR_INFO[reward.id] ? { id: reward.id, count: 1, rarity: reward.rarity || 'rare', name: reward.kind || 'Rare Armor' } : null,
       claimLocation: 'Aegis Guardian',

@@ -660,7 +660,7 @@ function objectiveCraftCompletionLines(id,count,source='craft',beforeContract=nu
       const c=clampJobContract(jobContract);
       if(c&&c.title===beforeContract.title){
         const ready=jobContractReady(),have=Math.min(c.need,c.have|0);
-        lines.push('Objective updated: '+c.title+' - '+have+'/'+c.need+'. Next: '+(ready?'claim at the Job Board.':jobContractNextHint(c.job,jobLevelFromXp(jobXpFor(c.job)))));
+        lines.push('Legacy objective updated: '+c.title+' - '+have+'/'+c.need+'. It will be replaced on profile sync.');
       }
     }
   }
@@ -2958,7 +2958,7 @@ const FELLOWSHIP_STATION_OVERVIEW=[
   {id:'weather_vane',name:'Weather Vane',role:'Sky',use:'Active weather-site planning and Weather Sense guidance.'},
 ];
 const FELLOWSHIP_RENOWN_SOURCES=[
-  {id:'contracts',name:'Guild and Road Warden contracts',reward:'+10 / +14 Renown',project:null,action:'Accept work from the Job Board, finish the objective, then claim it.'},
+  {id:'contracts',name:'Guild and Road Warden contracts',reward:'+10 / +14 Renown',project:null,action:'Accept work from the Guild Hall notice board, finish the objective, then claim it there.'},
   {id:'recall_lectern',name:'Study Lectern practice',reward:'+1 Renown',project:'recall_lectern',action:'Use the hall lectern and answer a Recall question. Paced so it rewards study, not spam.'},
   {id:'map_table_contract',name:'Map Table scouting commission',reward:'+1 Renown',project:'map_table',action:'Accept a survey, discover the missing sites, then claim the commission.'},
   {id:'map_table_treasure',name:'Map Table treasure route',reward:'+2 Renown',project:'map_table',action:'Complete the full multi-stage treasure map route.'},
@@ -3594,7 +3594,7 @@ function questLogActionLabel(o){
   if(action&&action.label)return action.label;
   if(status==='claimable')return source==='guild'?'CLAIM GUILD':source==='job'?'CLAIM JOB':source==='aegis'?'CLAIM TRIAL':'TURN IN';
   if(source==='story'||source==='manhunt')return 'TRACK NPC';
-  if(source==='job')return 'OPEN JOB BOARD';
+  if(source==='job')return 'OPEN QUEST LOG';
   if(source==='guild')return 'OPEN GUILD';
   if(source==='aegis')return 'OPEN AEGIS';
   return 'TRACK';
@@ -3887,7 +3887,7 @@ function openPathRecovery(){
 function openJobChoiceRecovery(){
   if(jobChoicePanelVisible()||combatState.jobChoiceOpen){
     closeQWin(false);
-    sysMsg('<b>Choose Job:</b> pick a job tutorial card, choose later, or open the Job Board.');
+    sysMsg('<b>Jobs are retired.</b> Continue with the Quest Log, Guild Hall, and town activities.');
     return true;
   }
   closeQWin(false);
@@ -3902,7 +3902,7 @@ function openLandRecovery(){
 }
 function recoveryHubInfo(){
   if(panelVisible('rewardwin'))return {title:'Reward Pending',status:'Continue the open reward or milestone panel to unlock the next step.',where:'Open reward panel',button:'CONTINUE',action:continueOpenTransitionPanel};
-  if(jobChoicePanelVisible()||combatState.jobChoiceOpen)return {title:'Choose Job Tutorial',status:'Pick a job tutorial card, choose later, or open the Job Board. Jobs guide play style but do not lock your character.',where:'Job tutorial choice',button:'CHOOSE JOB',action:openJobChoiceRecovery};
+  if(jobChoicePanelVisible()||combatState.jobChoiceOpen)return {title:'Retired Step',status:'Close the retired job panel and continue with Hunter progression.',where:'Quest Log',button:'CONTINUE',action:openJobChoiceRecovery};
   if(pathChoicePanelVisible()||(S&&!S.path&&serverTutorials.onboarding>=7))return {title:'Choose Path',status:'Preview Shadow, Mage, Guardian, and Verdant, then confirm one permanent hunter path. Your first ability unlocks at Level 2.',where:'Town arrival path selection',button:'CHOOSE PATH',action:openPathRecovery};
   if(quest&&questDone())return {title:'Turn In Quest',status:'Your active story objective is complete. Return to '+escHTML(quest.giver||'the quest giver')+'.',where:quest.giver||'Quest giver',button:'SHOW QUEST',action:()=>sysMsg('<b>Turn in:</b> follow the trail back to '+escHTML(quest&&quest.giver||'the quest giver')+'.')};
   if(quest&&quest.type==='gate'&&!questDone())return {title:'Gate Objective',status:'Find an active public Gate for this rank. If no Gate is tracked, stay in the overworld and check again when a public Gate spawns.',where:'Wilderness Gate',button:'GATE HELP',action:()=>sysMsg('<b>Gate objective:</b> follow the tracker when a Gate is available. Public Gates rotate; collapse timers keep running outside.')};
@@ -3913,12 +3913,12 @@ function recoveryHubInfo(){
   if(progressionFocus==='first_town_map')return {title:'Town Map',status:'Visit Orin Mapwell and take a Town of Beginnings map. Once you own it, select it on the hotbar and right-click to open it.',where:'Orin Mapwell',button:'VISIT ORIN',action:()=>{if(NET.on&&NET.room)NET.room.send('cartographer',{action:'status'});else sysMsg('Find Orin Mapwell at the cartographer table.');}};
   if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup')return {title:'Land Claim Recovery',status:progressionFocus==='first_base_setup'?'Open Land Claims and place storage, light, and a station inside editable claimed land.':'Open Land Claims and buy or expand protected land.',where:'Land Claims',button:'CLAIM LAND',action:openLandRecovery};
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract')return JOBS_ENABLED
-    ? {title:'Contract Recovery',status:'Open the Job Board and choose, finish, or claim the next usable contract.',where:'Job Board',button:'OPEN JOB BOARD',action:()=>openJobsUI()}
+    ? {title:'Legacy Contract Recovery',status:'This saved profession step is retired. Continue through the Quest Log and Guild Hall contracts.',where:'Quest Log / Guild Hall',button:'OPEN QUEST LOG',action:()=>openQuestLogUI()}
     : {title:'Gate Progression',status:'Profession contracts are currently unavailable. Continue through town quests, regional contracts, and Gate preparation.',where:'Quest Log / Gate Prep',button:'OPEN QUEST LOG',action:()=>openQuestLogUI()};
   if(progressionFocus==='c_rank_climb')return {title:'C-rank Recovery',status:JOBS_ENABLED?'Use the C-rank prep check, then earn Hunter XP through Adventurer contracts, D-rank Gates, events, regional trouble, and a first C-rank Gate.':'Use the C-rank prep check, then earn Hunter XP through town quests, D-rank Gates, events, regional contracts, and a first C-rank Gate.',where:'Gate Prep',button:'C PREP CHECK',action:()=>openGatePrepUI(2)};
   if(progressionFocus==='c_rank_specialization')return {title:'C-rank Specialization',status:'Your C-rank positioning trial is cleared. Open Character and choose one permanent specialization for your combat path.',where:'Character',button:'CHOOSE SPEC',action:()=>{if(globalThis.openStat)globalThis.openStat();}};
   if(progressionFocus==='b_rank_pressure')return JOBS_ENABLED
-    ? {title:'Gate Pressure',status:'Contain Gate breaches, clear higher-rank Gates, and take Road Warden or Adventurer work so the B-rank climb stays active.',where:'Job Board / Guild Board',button:'OPEN JOB BOARD',action:()=>openJobsUI()}
+    ? {title:'Gate Pressure',status:'Contain Gate breaches, clear higher-rank Gates, and take Road Warden work from the Guild Hall.',where:'Guild Hall / Gate Prep',button:'OPEN GUILD BOARD',action:()=>openRegionalContractsUI()}
     : {title:'Gate Pressure',status:'Reach level 31, contain Gate breaches, keep road safety at 65+, and clear higher-rank Gates.',where:'Guild Board / Gate Prep',button:'OPEN GUILD BOARD',action:()=>openRegionalContractsUI()};
   const craft=objectiveTrackerCraftAction('what_next');
   if(craft)return {title:'Crafting Recovery',status:'Open the next useful recipe. Missing materials will show with a concrete gather route.',where:'Crafting menu',button:craft.label,action:()=>activateObjectiveCraftShortcut(craft.outputId,craft.kind)};
@@ -3961,10 +3961,10 @@ function legacyAegisQuestLogCard(){
 }
 function legacyJobQuestLogCard(){
   const c=clampJobContract(jobContract);
-  if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return questLogCardHTML('Job Contract','No active job contract','Choose Hunter or profession work from the Job Board.','Job Board',false);
+  if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return questLogCardHTML('Legacy Contract','No active legacy contract','Jobs are retired; use quests and Guild Contracts.','Quest Log',false);
   return questLogCardHTML('Job Contract', c.title,
     jobContractReady() ? 'Complete — claim your reward' : Math.min(c.need,c.have)+'/'+c.need+' — '+c.desc,
-    jobContractReady() ? 'Job Board' : 'Follow the contract description',
+    jobContractReady() ? 'Quest Log' : 'Follow the contract description',
     true,jobContractReady()?'':objectiveCraftShortcutsHTML('job'));
 }
 function legacyGuildQuestLogCard(){
@@ -3988,8 +3988,8 @@ function aegisQuestLogCard(){
 }
 function jobQuestLogCard(){
   const c=clampJobContract(jobContract);
-  if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return questLogCardHTML('Job Contract','No active job contract','Choose Hunter or profession work from the Job Board.','Job Board',false);
-  return questLogCardHTML('Job Contract', c.title, jobContractReady() ? 'Complete - claim your reward' : Math.min(c.need,c.have)+'/'+c.need+' - '+c.desc, jobContractReady() ? 'Job Board' : 'Follow the contract description', true, jobContractReady()?'':objectiveCraftShortcutsHTML('job'), {ready:jobContractReady(),progressHTML:questProgressHTML(c.have,c.need),rewardHTML:questRewardPreviewFromJob(c)});
+  if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return questLogCardHTML('Legacy Contract','No active legacy contract','Jobs are retired; use quests and Guild Contracts.','Quest Log',false);
+  return questLogCardHTML('Legacy Contract', c.title, 'This retired contract will be removed on profile sync.', 'Quest Log', true);
 }
 function guildQuestLogCard(){
   const c=clampRegionalContract(regionalContract);
@@ -3998,7 +3998,7 @@ function guildQuestLogCard(){
 }
 function menuTutorialObjective(){
   if(!townGuidanceActive)return null;
-  const text={job:'Follow the lit path to the Job Board',tavern:'Go to the tavern and buy an item',land:'Leave town, press L, and buy land',menu:'Choose a town tutorial',quest:'Accept Mara\u2019s first quest'}[townGuidanceStep]||'Follow the glowing pillar';
+  const text={job:'Follow the lit path to the Guild Hall',tavern:'Go to the tavern and buy an item',land:'Leave town, press L, and buy land',menu:'Choose a town tutorial',quest:'Accept Mara\u2019s first quest'}[townGuidanceStep]||'Follow the glowing pillar';
   return {label:'Tutorial Guide',text};
 }
 function tutorialQuestLogCard(){
@@ -4077,7 +4077,7 @@ function progressionRoadmap(){
   return [
     {id:'foundations',title:'Hunter Foundations',requirement:'Begin the training meadow',eligible:true,action:'Complete movement, combat, gathering and Recall training.',where:'Training Meadow'},
     {id:'story',title:'Mara’s Story',requirement:'Finish initial training',eligible:!onboardingActive,action:'Accept and continue Mara’s current story quest.',where:'Mara Vale'},
-    {id:'jobs',title:'Jobs and Contracts',requirement:'Reach E-Rank Level 2',eligible:S.lvl>=2&&!onboardingActive,action:!playerJob?'Choose one job tutorial, then take your first real contract.':jobContract?'Complete and claim your active contract.':'Take your first real contract at the Job Board.',where:!playerJob?'Job choice cards':'Job Board'},
+    {id:'jobs',title:'Legacy Contracts',requirement:'Imported saves only',eligible:JOBS_ENABLED&&S.lvl>=2&&!onboardingActive,action:'Continue through town quests and Guild Hall contracts.',where:'Quest Log / Guild Hall'},
     {id:'combat_path',title:'Combat Path',requirement:JOBS_ENABLED?'Complete your first job contract':'Reach E-Rank Level 2',eligible:S.lvl>=2&&(!JOBS_ENABLED||jobProgress||highestGateRankCleared>=0||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='next_adventurer_contract'),action:S.path?'Practice your first ability when prompted.':'Choose your first combat path when the story asks for it.',where:'Character progression'},
     {id:'gates',title:'Ranked Gates',requirement:JOBS_ENABLED?'Finish Mara’s first town arc and a starter job contract':'Finish Mara’s first town arc',eligible:S.lvl>=3&&(!JOBS_ENABLED||jobProgress||progressionFocus==='first_d_gate'||highestGateRankCleared>=0),action:'Prepare supplies, then complete Mara’s first Gate invitation.',where:'Mara → wilderness Gate'},
     {id:'familiars',title:'Familiars',requirement:'Reach D-Rank progression',eligible:highestGateRankCleared>=1,action:'Follow Mara’s companion quest and bind your first familiar.',where:'Mara Vale'},
@@ -5348,12 +5348,6 @@ function dragonLoanReturnForTarget(target){
     return other&&other.toLowerCase()===name;
   })||null;
 }
-function nearbyPlayerJob(target){
-  return String(target&&target.remote&&target.remote.ref&&target.remote.ref.job||'');
-}
-function nearbyPlayerIsPetTamer(target){
-  return nearbyPlayerJob(target)==='pet_tamer';
-}
 function dragonLoanOwnedTypes(){
   const unavailable=new Set(activeDragonLoans().map(l=>l.type));
   const unlocks=COMPANIONS&&Array.isArray(COMPANIONS.dragonUnlocks)?COMPANIONS.dragonUnlocks:[];
@@ -5361,7 +5355,6 @@ function dragonLoanOwnedTypes(){
 }
 function openDragonLoanUI(target){
   if(!NET.on||!NET.room){sysMsg('Dragon loans require the live world server.');return;}
-  if(!nearbyPlayerIsPetTamer(target)){sysMsg('Dragon training loans can only be offered to a <b>Pet Tamer</b>.');return;}
   const types=dragonLoanOwnedTypes();
   if(!types.length){sysMsg('You need an adult dragon that is not already loaned out.');return;}
   if(uiOpen)closeUI(false);
@@ -5370,7 +5363,7 @@ function openDragonLoanUI(target){
   const h=document.createElement('h2');h.textContent='DRAGON TRAINING LOAN';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='WITH '+String(target&&target.name||'HUNTER').toUpperCase();qpanelEl.appendChild(sub);
   const intro=document.createElement('p');intro.className='qtext';
-  intro.innerHTML='Lend one adult dragon to a <b>Pet Tamer</b>. They pay gold now, train it for up to <b>12 real hours</b>, then it returns automatically or by manual return.';
+  intro.innerHTML='Lend one adult dragon to another <b>Hunter</b>. They pay gold now, train it for up to <b>12 real hours</b>, then it returns automatically or by manual return.';
   qpanelEl.appendChild(intro);
   let chosen=types[0];
   const chips=document.createElement('div');chips.className='qrow';qpanelEl.appendChild(chips);
@@ -5385,7 +5378,7 @@ function openDragonLoanUI(target){
   renderChips();
   const fee=tradeNumberInput(25,1,1000000);
   const form=document.createElement('div');form.className='trade-gold-row';
-  const label=document.createElement('span');label.innerHTML='<b>TAMER FEE</b><small>The Pet Tamer pays this before receiving the dragon.</small>';
+  const label=document.createElement('span');label.innerHTML='<b>HANDLER FEE</b><small>The receiving Hunter pays this before receiving the dragon.</small>';
   form.appendChild(label);form.appendChild(fee);qpanelEl.appendChild(form);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   row.appendChild(qBtn('SEND LOAN OFFER',()=>{
@@ -5415,7 +5408,7 @@ function openPlayerSocialUI(target){
     const teamLabel=self&&self.team?'INVITE TO TEAM':other&&other.team?'JOIN TEAM':'TEAM UP';
     row.appendChild(qBtn(teamLabel,()=>{NET.room.send('teamQuickInvite',{sid:target.sid});closeQWin();}));
     row.appendChild(qBtn('TRADE',()=>openPlayerTradeUI(target)));
-    const canOfferPetTraining=nearbyPlayerIsPetTamer(target)&&dragonLoanOwnedTypes().length;
+    const canOfferPetTraining=dragonLoanOwnedTypes().length;
     if(canOfferPetTraining)row.appendChild(qBtn('TRAIN MY PET',()=>openDragonLoanUI(target),true));
     const returnLoan=dragonLoanReturnForTarget(target);
     if(returnLoan)row.appendChild(qBtn('RETURN DRAGON',()=>{NET.room.send('dragonLoanReturn',{loanId:returnLoan.id});closeQWin();},true));
@@ -5773,7 +5766,7 @@ function renderCosmeticsUI(){
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('UTILITIES', ()=>openUtilitiesUI()));
-  row.appendChild(qBtn('JOB BOARD', ()=>openJobsUI()));
+  row.appendChild(qBtn('QUEST LOG', ()=>openQuestLogUI()));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
 function utilitySlotLabel(id){
@@ -5865,7 +5858,7 @@ function openJobContractGuide(c=jobContract){
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent='CONTRACT GUIDE'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent=c ? ((JOBS[c.job]&&JOBS[c.job].name||'JOB').toUpperCase()+' - '+String(c.title||'CONTRACT').toUpperCase()) : 'JOB BOARD HELP';
+  sub.textContent=c ? ((JOBS[c.job]&&JOBS[c.job].name||'LEGACY').toUpperCase()+' - '+String(c.title||'CONTRACT').toUpperCase()) : 'LEGACY CONTRACT HELP';
   qpanelEl.appendChild(sub);
   const p=document.createElement('p'); p.className='qtext';
   const progress=c ? '<br><br>Progress: <b>'+Math.min(c.need,c.have)+'/'+c.need+'</b>'+ (jobContractReady()?' - ready to claim':'')+'<br><small style="color:#d9b66f">'+escHTML(jobContractNextHint(c.job,jobLevelFromXp(jobXpFor(c.job))))+'</small>' : '';
@@ -5874,7 +5867,7 @@ function openJobContractGuide(c=jobContract){
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   if(c && c.type==='cook') row.appendChild(qBtn('FOOD RECIPES', ()=>openCraftingFromNpc('food')));
   if(c && c.type==='smith') row.appendChild(qBtn('TOOL RECIPES', ()=>openCraftingFromNpc('tools')));
-  row.appendChild(qBtn('JOB BOARD', ()=>openJobsUI()));
+  row.appendChild(qBtn('QUEST LOG', ()=>openQuestLogUI()));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
 function contractTagHTML(c){
@@ -5889,7 +5882,7 @@ function contractBestForHTML(c){
 function jobOfferLoopHTML(offer){
   if(!offer)return '';
   const route=offer.targetName?offer.targetName:(offer.location||'Job objective');
-  const reward=offer.reward||'gold, Hunter XP, and profession XP';
+  const reward=offer.reward||'gold and Hunter XP';
   const focus=offer.focus||'contract work';
   return '<div class="job-offer-loop">'+
     '<span><small>WHY</small><b>'+escHTML(focus)+'</b></span>'+
@@ -5977,7 +5970,7 @@ function professionNowHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
   const active=playerJob===jobId,sel=inv[combatState.selectedSlot],selDef=sel&&ITEMS[sel.id],selTool=selDef&&selDef.tool;
   const line=(text,ready=false)=>'<small><span style="color:'+(ready?'#d8f8c8':'#9fb0c6')+'"><b>Right now:</b> '+escHTML(text)+'</span></small>';
   if(jobId==='miner'){
-    if(level<JOB_SYSTEM.MINER_RULES.oreSenseLevel)return line('Reach Miner Lv 2 to unlock Ore Sense surveys.');
+    if(level<JOB_SYSTEM.MINER_RULES.oreSenseLevel)return line('Reach Hunter Level 2 to unlock Ore Sense surveys.');
     if(!active)return line('Equip Miner, then use Survey near rock or ore.');
     return line(NET.on?'Survey is available from Brokk or the Miner screen.':'Ore surveys need a live world connection.',NET.on);
   }
@@ -6013,8 +6006,8 @@ function professionNowHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
     const hasBinding=inv.some(s=>s&&FAMILIAR_BY_SIGIL&&FAMILIAR_BY_SIGIL[s.id]);
     const hasTreat=countItem(I.DRAGON_TREAT)>0;
     if(active&&hasBinding)return line('Use a collar, charm, sigil, or totem from your hotbar, then press K.',true);
-    if(active&&hasTreat)return line('Use Dragon Treats for companion care or take a Pet Tamer contract.',true);
-    return line(active?'Search animal routes for collars or craft Dragon Treats.':'Equip Pet Tamer to grow companion bonds.');
+    if(active&&hasTreat)return line('Use Dragon Treats for companion care.',true);
+    return line('Search animal routes for collars or craft Dragon Treats.');
   }
   return '';
 }
@@ -6125,8 +6118,8 @@ function openJobsUILegacy(focusJob='', sourceTitle=''){
   openQWin('management');
   qpanelEl.innerHTML='';
   focusJob=JOBS[focusJob]?focusJob:'';
-  const h=document.createElement('h2'); h.textContent=focusJob ? JOBS[focusJob].name.toUpperCase()+' CONTRACTS' : 'JOB BOARD'; qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent=sourceTitle ? sourceTitle.toUpperCase()+' - JOB BOARD CONTRACTS' : 'JOB BOARD CONTRACTS - PROFESSION PROGRESSION'; qpanelEl.appendChild(sub);
+  const h=document.createElement('h2'); h.textContent=focusJob ? JOBS[focusJob].name.toUpperCase()+' LEGACY CONTRACTS' : 'LEGACY CONTRACTS'; qpanelEl.appendChild(h);
+  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='RETIRED SYSTEM - CONTINUE IN THE QUEST LOG'; qpanelEl.appendChild(sub);
   const info=document.createElement('p'); info.className='qtext';
   const ji=jobXpIntoLevel(jobXpFor(playerJob||'adventurer')),career=jobXpIntoLevel(jobXpFor('adventurer'));
   info.innerHTML='Permanent career: <b style="color:'+JOBS.adventurer.col+'">'+jobTitleFor('adventurer',career.lvl)+'</b> <small style="color:#d8f8c8">Lv '+career.lvl+'</small>. '+
@@ -6237,11 +6230,11 @@ function openJobsUI(focusJob='', sourceTitle=''){
   const offerWhy=offerMilestone?'Next '+offerDef.name+' milestone: Lv '+offerMilestone.level+' - '+offerMilestone.title+'.':'All core '+offerDef.name+' milestones earned.';
 
   const h=document.createElement('h2');
-  h.textContent='JOB BOARD';
+  h.textContent='LEGACY CONTRACTS';
   qpanelEl.appendChild(h);
   const sub=document.createElement('div');
   sub.className='sub2';
-  sub.textContent=(sourceTitle?sourceTitle.toUpperCase()+' - ':'')+'JOB BOARD CONTRACTS - TAKE ONE CLEAR TASK';
+  sub.textContent='RETIRED SYSTEM - CONTINUE IN THE QUEST LOG';
   qpanelEl.appendChild(sub);
 
   const shell=document.createElement('div');
@@ -6389,7 +6382,7 @@ function openJobsUI(focusJob='', sourceTitle=''){
   }else{
     const emptyTrade=document.createElement('p');
     emptyTrade.className='job-board-note muted';
-    emptyTrade.textContent='No trade equipped. Choose one below to start earning profession XP.';
+    emptyTrade.textContent='Professions are retired. Hunter progression now comes from quests, Gates, events, and Guild Hall contracts.';
     professionSection.appendChild(emptyTrade);
   }
   const otherTitle=document.createElement('div');
