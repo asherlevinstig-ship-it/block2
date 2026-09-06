@@ -122,14 +122,14 @@ handler — they're short and grouped by system in `rooms/*.mixin.js`.
 | `utilityLoadout` | equip server-earned utilities (compass, minimap, …) |
 | `claimFirstQuestReward` | first-quest reward |
 
-### Gear & professions
+### Gear & Hunter activities
 | Message | Purpose |
 |---------|---------|
 | `equipWeapon` / `equipArmor` | validated gear equips |
 | `gearLock` | lock/unlock an item against salvage |
 | `blacksmithReforge` / `blacksmithSalvage` | reforge modifiers and salvage returns |
-| `prospect` | miner ore survey (level-gated, on cooldown) |
-| `jobContract` | take/claim/abandon contracts from the offer boards |
+| `prospect` | Hunter-level ore survey (level-gated, on cooldown) |
+| `jobContract` | retired compatibility route; active requests are rejected while jobs are disabled |
 | `lootRecovery` | reclaim gear banked when the inventory was full |
 
 ---

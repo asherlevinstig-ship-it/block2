@@ -142,7 +142,7 @@ function applyDeityState(raw){
 function deityPowerName(id){return DEITY_POWER_LABELS[id]||String(id||'Power').replace(/_/g,' ');}
 function claimableObjectiveHint(o){
   const loc=String(o&&o.location||'').trim();
-  if(o&&o.source==='job')return 'Claim at the <b>Job Board</b>.';
+  if(o&&o.source==='job')return 'This retired job objective will be replaced on your next profile sync.';
   if(o&&o.source==='guild')return 'Claim from <b>Guild Contracts</b>.';
   if(o&&o.source==='aegis')return 'Return to the <b>Aegis Guardian</b>.';
   if(loc)return 'Turn in to <b>'+escHTML(loc)+'</b>.';
@@ -391,7 +391,7 @@ function questRewardNextStep(m){
   if(m&&m.nextStep)return String(m.nextStep);
   const source=String(m&&m.source||'');
   if(source==='story'||source==='manhunt')return 'Check the Quest Log or the marked NPC for the next story beat.';
-  if(source==='job')return 'Open the Job Board for your next profession contract.';
+  if(source==='job')return 'Continue with quests, Gates, events, and Guild contracts.';
   if(source==='guild')return 'Open Guild Contracts for another regional job.';
   if(source==='aegis')return 'Return to the Aegis Guardian when you are ready for another trial.';
   return 'Open the Quest Log to choose your next objective.';
@@ -847,7 +847,7 @@ function showProspectMarkers(m){
     const marker=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.08,1.08,1.08)),new THREE.LineBasicMaterial({color,transparent:true,opacity:.92,depthTest:false}));
     marker.position.set((ore.x|0)+.5,(ore.y|0)+.5,(ore.z|0)+.5);marker.renderOrder=20;prospectMarkers.add(marker);
   }
-  scene.add(prospectMarkers);showJobPerk('miner',ores.length+' veins revealed');
+  scene.add(prospectMarkers);showName('Ore Sense: '+ores.length+' veins');
   sysMsg('Ore Sense reveals <b>'+ores.length+'</b> nearby vein'+(ores.length===1?'':'s')+' for '+Math.round(((m&&m.durationMs)||12000)/1000)+' sec.');
   prospectMarkerTimer=setTimeout(clearProspectMarkers,Math.max(1000,(m&&m.durationMs)||12000));
 }
@@ -1476,7 +1476,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonLoanCancel', m=>applyDragonLoanCancel(m));
     room.onMessage('dragonLoanReturn', m=>{applyDragonLoanReturn(m);eventFeed('[Dragon]','Dragon training loan returned.',{key:'dragonloan:return:'+String(m&&m.loan&&m.loan.id||''),cooldown:0});});
     room.onMessage('petTamerServices', m=>applyPetTamerServices(m));
-    room.onMessage('petTamerPing', m=>{applyPetTamerPing(m);eventFeed('[Pet Tamer]',String(m&&m.fromName||'Hunter')+' is looking for dragon training help.',{key:'pettamer:ping:'+String(m&&m.fromSid||''),cooldown:3000});});
+    room.onMessage('petTamerPing', m=>{applyPetTamerPing(m);eventFeed('[Dragon]',String(m&&m.fromName||'Hunter')+' is looking for dragon training help.',{key:'dragonhandler:ping:'+String(m&&m.fromSid||''),cooldown:3000});});
     room.onMessage('petTamerPingResult', m=>applyPetTamerPingResult(m));
     room.onMessage('friendResult', m=>{
       applyFriendResult(m);
@@ -1702,24 +1702,22 @@ function netAttachRoom(room,name,client){
         const ready=homesteadWorkOrder.have>=homesteadWorkOrder.need;
         sysMsg('Homestead supplies updated: <b>'+escHTML(homesteadWorkOrder.title)+'</b> '+homesteadWorkOrder.have+'/'+homesteadWorkOrder.need+(ready?' - ready to claim':'')+'.');
       }
-      if(m&&m.assistRewardJobXp){
-        rewardGain('item',m.assistRewardJobXp,((JOBS[m.assistJob]&&JOBS[m.assistJob].name)||'Job')+' Assist XP',{icon:'JOB'});
-        sysMsg('Homestead assist: <b>+'+(m.assistRewardJobXp|0)+' '+escHTML((JOBS[m.assistJob]&&JOBS[m.assistJob].name)||'Job')+' XP</b>.');
-        eventFeed('[Homestead]','Assisted a homestead and earned '+(m.assistRewardJobXp|0)+' '+((JOBS[m.assistJob]&&JOBS[m.assistJob].name)||'Job')+' XP.',{key:'homestead:assist:'+String(m&&m.assistJob||''),cooldown:2500});
+      if(m&&m.assistRewardXp){
+        rewardGain('xp',m.assistRewardXp,'Hunter Assist XP');
+        sysMsg('Homestead assist: <b>+'+(m.assistRewardXp|0)+' Hunter XP</b>.');
+        eventFeed('[Homestead]','Assisted a homestead and earned '+(m.assistRewardXp|0)+' Hunter XP.',{key:'homestead:assist',cooldown:2500});
       }
       refreshHUD();if(qOpen&&qMode==='management')openLandClaimsUI();
     });
     room.onMessage('homesteadWorkOrderResult',m=>{
       homesteadWorkOrder=null;
       if(typeof (m&&m.gold)==='number')gold=Math.max(0,m.gold|0);
-      if(m&&m.jobXpByJob){for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(m.jobXpByJob&&m.jobXpByJob[id])|0);jobXp=jobXpFor(playerJob||'adventurer');}
       if(m&&m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
-      if(m&&m.rewardJobXp)rewardGain('item',m.rewardJobXp,((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP',{icon:'JOB'});
+      if(m&&m.rewardXp)rewardGain('xp',m.rewardXp,'Hunter XP');
       SFX.coin();
       const roomBonus=m&&m.roomBonus&&m.roomBonus.label?(' <span class="ok">+'+(m.roomBonus.percent|0)+'% '+escHTML(m.roomBonus.label)+'</span>'):'';
       sysMsg('Homestead work order claimed'+roomBonus+(m&&m.rewardGold?'<br>'+economyRecapHTML(m.rewardGold|0,gold,'Homestead contract payout'):'.'));
-      eventFeed('[Homestead]','Work order claimed'+(m&&m.rewardGold?' for '+(m.rewardGold|0)+' gold':'')+(m&&m.rewardJobXp?' and '+(m.rewardJobXp|0)+' Job XP':'')+(m&&m.roomBonus&&m.roomBonus.label?' with '+m.roomBonus.label:'')+'.',{key:'homestead:workorder:'+String(m&&m.id||Date.now()),cooldown:0});
-      for(const milestone of Array.isArray(m&&m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
+      eventFeed('[Homestead]','Work order claimed'+(m&&m.rewardGold?' for '+(m.rewardGold|0)+' gold':'')+(m&&m.rewardXp?' and '+(m.rewardXp|0)+' Hunter XP':'')+(m&&m.roomBonus&&m.roomBonus.label?' with '+m.roomBonus.label:'')+'.',{key:'homestead:workorder:'+String(m&&m.id||Date.now()),cooldown:0});
       refreshHUD();renderBars();if(qOpen&&qMode==='management')openLandClaimsUI();
     });
     room.onMessage('homesteadWorkOrderReject',m=>{
@@ -2391,12 +2389,12 @@ function netAttachRoom(room,name,client){
       else if(m.phase==='cleared'){discoveredIds.add(m.id);updateLandMinimap();sysMsg('<b>Bandit Camp Cleared!</b> The camp chest is unlocked for a short time.');eventFeed('[Roads]','Bandit Camp cleared. Chest unlocked briefly.',{key:'bandit:cleared:'+String(m.id||''),cooldown:0});if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');OVERWORLD_RESULTS.show({title:'BANDIT CAMP CLEARED',summary:m.name||'The captain has fallen.',contract:regionalContract&&regionalContract.ready?'READY':'UPDATED',next:'Open the camp chest before it locks again.'});}
     });
     room.onMessage('banditPatrolSighted',m=>{if(m)sysMsg('<b>Bandit tracks:</b> '+escHTML(m.text||'A patrol has passed nearby.'));if(m)eventFeed('[Roads]',String(m.text||'A bandit patrol passed nearby.'),{key:'bandit:patrol:'+String(m.id||m.text||''),cooldown:12000});});
-    room.onMessage('banditCaravanRescued',m=>{sysMsg('<b>Caravan rescued!</b> The road merchant rewards your intervention.');eventFeed('[Roads]','Caravan rescued. Merchant convoy can continue safely.',{key:'caravan:rescued:'+String(m&&m.campId||''),cooldown:0});if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'CARAVAN RESCUED',summary:'The merchant convoy can continue safely.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Job Board to claim your contract.':'Continue along the road.'});});
-    room.onMessage('banditSpared',m=>{sysMsg('<b>Bandit spared.</b> They surrender their stolen supplies and flee.');eventFeed('[Roads]','Bandit spared. Stolen supplies returned without another kill.',{key:'bandit:spared:'+String(m&&m.campId||''),cooldown:0});if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'SURRENDER ACCEPTED',summary:'The stolen supplies were returned without another kill.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Job Board to claim your contract.':'Continue Road Warden work.'});});
+    room.onMessage('banditCaravanRescued',m=>{sysMsg('<b>Caravan rescued!</b> The road merchant rewards your intervention.');eventFeed('[Roads]','Caravan rescued. Merchant convoy can continue safely.',{key:'caravan:rescued:'+String(m&&m.campId||''),cooldown:0});if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'CARAVAN RESCUED',summary:'The merchant convoy can continue safely.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Guild Hall to claim your contract.':'Continue along the road.'});});
+    room.onMessage('banditSpared',m=>{sysMsg('<b>Bandit spared.</b> They surrender their stolen supplies and flee.');eventFeed('[Roads]','Bandit spared. Stolen supplies returned without another kill.',{key:'bandit:spared:'+String(m&&m.campId||''),cooldown:0});if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'SURRENDER ACCEPTED',summary:'The stolen supplies were returned without another kill.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Guild Hall to claim your contract.':'Continue Road Warden work.'});});
     room.onMessage('caravanState',m=>{
       if(!m)return;
       if(m.state==='departed'){sysMsg('A merchant caravan has departed along the regional road.');eventFeed('[Roads]','A merchant caravan departed along the road.',{key:'caravan:departed:'+String(m.id||''),cooldown:0});}
-      else if(m.state==='arrived'){sysMsg('<b>Escort complete!</b> Road merchants offer you 20% off for ten minutes. Claim the contract reward at the Job Board.');eventFeed('[Roads]','Escort complete. Road merchant discount active.',{key:'caravan:arrived:'+String(m.id||''),cooldown:0});}
+      else if(m.state==='arrived'){sysMsg('<b>Escort complete!</b> Road merchants offer you 20% off for ten minutes. Claim the contract reward at the Guild Hall.');eventFeed('[Roads]','Escort complete. Road merchant discount active.',{key:'caravan:arrived:'+String(m.id||''),cooldown:0});}
       else if(m.state==='escort_failed'){sysMsg('<b>Escort failed.</b> You did not remain with the caravan long enough to earn the reward.');eventFeed('[Roads]','Escort failed. Caravan reward lost.',{key:'caravan:failed:'+String(m.id||''),cooldown:0});}
       else if(m.state==='wrecked'){sysMsg('<b>Caravan lost.</b> Bandits carried its supplies toward a nearby camp.');eventFeed('[Roads]','Caravan lost. Bandits stole its supplies.',{key:'caravan:wrecked:'+String(m.id||''),cooldown:0});}
       else if(m.state==='recovered'){sysMsg('<b>Stolen caravan supplies recovered!</b>');eventFeed('[Roads]','Stolen caravan supplies recovered.',{key:'caravan:recovered:'+String(m.id||''),cooldown:0});}
@@ -2469,7 +2467,7 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('regionalContractReady',m=>{
       const c=clampRegionalContract(m&&m.active);
-      if(c){ regionalContract=c; renderRegionalContractsUI(); sysMsg('Guild contract complete: <b>'+escHTML(c.title)+'</b> - claim it at the Job Board');eventFeed('[Guild]',String(c.title||'Guild contract')+' complete. Claim at the Job Board.',{key:'guild-ready:'+String(c.id||c.title||''),cooldown:0});OVERWORLD_RESULTS.show({title:'CONTRACT COMPLETE',summary:c.title,contract:'READY',next:'Return to the Job Board to claim your rewards.'}); }
+      if(c){ regionalContract=c; renderRegionalContractsUI(); sysMsg('Guild contract complete: <b>'+escHTML(c.title)+'</b> - claim it at the Guild Hall');eventFeed('[Guild]',String(c.title||'Guild contract')+' complete. Claim at the Guild Hall.',{key:'guild-ready:'+String(c.id||c.title||''),cooldown:0});OVERWORLD_RESULTS.show({title:'CONTRACT COMPLETE',summary:c.title,contract:'READY',next:'Return to the Guild Hall to claim your rewards.'}); }
     });
     room.onMessage('regionalContractClaimed',m=>{
       const c=clampRegionalContract(m&&m.contract);
@@ -2492,7 +2490,7 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('regionalContractReject',m=>{
       const r=m&&m.reason;
-      sysMsg(r==='range'?'Use the <b>Job Board</b> to manage guild contracts.':r==='active'?'Finish, claim, or abandon your active guild contract first.':r==='expired'?'That guild contract has rotated out. Refresh the board.':r==='incomplete'?'That guild contract is not complete yet.':'Guild contract unavailable.');
+      sysMsg(r==='range'?'Use the <b>Guild Hall notice board</b> to manage guild contracts.':r==='active'?'Finish, claim, or abandon your active guild contract first.':r==='expired'?'That guild contract has rotated out. Refresh the board.':r==='incomplete'?'That guild contract is not complete yet.':'Guild contract unavailable.');
     });
     room.onMessage('craftLegendaryResult', m=>applyLegendaryCraftResult(m));
     room.onMessage('craftLegendaryReject', m=>legendaryCraftRejected(m));
@@ -2702,8 +2700,8 @@ function netAttachRoom(room,name,client){
         return;
       }
       if(globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.markFound)globalThis.BlockcraftTamingLandTracks.markFound(m.id,m);
-      const xp=m.jobXp&&m.jobXp.gained?(' +'+((m.jobXp.gained)|0)+' Pet Tamer XP'):'';
-      eventFeed('[Pet Tamer]',(m.label||'Wild tracks')+' read.'+xp,{key:'taming:track:'+String(m.id||''),cooldown:0});
+      const xp='';
+      eventFeed('[Taming]',(m.label||'Wild tracks')+' read.',{key:'taming:track:'+String(m.id||''),cooldown:0});
       if(typeof sysMsg==='function')sysMsg('<b>Wild tracks:</b> '+String(m.clue||m.label||'Trail discovered')+xp);
     });
     room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]){ COMPANIONS.activeFamiliar=m.kind; eventFeed('[Familiar]',FAMILIARS[m.kind].name+' summoned.',{key:'familiar:summon:'+m.kind,cooldown:3000}); } });
@@ -2782,7 +2780,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonTrainingReject', m=>dragonTrainingRejected(m));
     room.onMessage('editReject', m=>netEditReject(m));
     room.onMessage('craftResult', m=>{applyServerCraft(m);if(m&&m.out&&ITEMS[m.out.id])eventFeed('[Craft]','Crafted '+feedStackText(m.out.id,m.finalCount||((m.out.count||1)*Math.max(1,m.times|0||1)))+'.',{key:'craft:'+m.out.id,cooldown:1500});});
-    room.onMessage('craftReject', m=>{ SFX.error(); sysMsg(m&&m.reason==='profession'?'Equip <b>'+((JOBS[m.job]&&JOBS[m.job].name)||'Cook')+'</b> and reach Lv '+(m.level||1)+' for that recipe':'Crafting failed: missing server-side ingredients'); });
+    room.onMessage('craftReject', m=>{ SFX.error(); sysMsg(m&&m.reason==='hunter_level'?'Reach <b>Hunter Level '+(m.level||1)+'</b> for that recipe':'Crafting failed: missing server-side ingredients'); });
     room.onMessage('shopResult', m=>{applyShopResult(m);if(m&&ITEMS[m.id])eventFeed('[Trade]',(m.action==='sell'?'Sold ':'Bought ')+feedStackText(m.id,m.count||1)+(m.gold?' for '+Math.abs(m.gold|0)+' gold':'')+'.',{key:'shop:'+String(m.vendor||'')+':'+String(m.action||'')+':'+m.id,cooldown:1500});});
     room.onMessage('shopReject', m=>shopRejected(m));
     room.onMessage('landClaims', m=>applyLandClaims(m));
@@ -2815,11 +2813,11 @@ function netAttachRoom(room,name,client){
       renderBars();
       const focusNames=[m&&m.regen?'Restoration':'',m&&m.speed?'Flow':'',m&&m.stone?'Stone':''].filter(Boolean);
       const focusText=(m&&m.shared?'party focus':'hall focus')+(focusNames.length?': '+focusNames.join(' + '):'');
-      showJobPerk('monk',focusText+' '+secs+'s');
+      showName('Meditation: '+focusText+' '+secs+'s');
       const restored=[m&&Number.isFinite(+m.mana)&&m.mana>0?'+'+(m.mana|0)+' MP':'',m&&Number.isFinite(+m.stamina)&&m.stamina>0?'+'+(m.stamina|0)+' SP':''].filter(Boolean).join(' / ');
       if(restored)showName('Hall focus '+restored);
-      if(m&&m.shared)sysMsg('<b>'+escHTML(m.by||'A monk')+'</b> shares tranquillity: '+[m.regen?'Restoration':'',m.speed?'Flow':'',m.stone?'Stone':''].filter(Boolean).join(', ')+' for '+secs+' sec.');
-      eventFeed('[Meditation]',(m&&m.shared?String(m.by||'A monk')+' shared ':'You entered ')+focusText+(restored?' and restored '+restored:'')+'.',{key:'meditate:focus:'+String(m&&m.shared?m.by:'self'),cooldown:3000});
+      if(m&&m.shared)sysMsg('<b>'+escHTML(m.by||'A focused hunter')+'</b> shares tranquillity: '+[m.regen?'Restoration':'',m.speed?'Flow':'',m.stone?'Stone':''].filter(Boolean).join(', ')+' for '+secs+' sec.');
+      eventFeed('[Meditation]',(m&&m.shared?String(m.by||'A focused hunter')+' shared ':'You entered ')+focusText+(restored?' and restored '+restored:'')+'.',{key:'meditate:focus:'+String(m&&m.shared?m.by:'self'),cooldown:3000});
     });
     room.onMessage('meditationGrowth', m=>{
       if(globalThis.BlockcraftApplyMeditationGrowth)globalThis.BlockcraftApplyMeditationGrowth(m);
@@ -2831,11 +2829,10 @@ function netAttachRoom(room,name,client){
     room.onMessage('meditationAnswerResult', m=>{
       if(globalThis.BlockcraftApplyMeditationAnswer)globalThis.BlockcraftApplyMeditationAnswer(m);
     });
-    room.onMessage('prospectResult',m=>{showProspectMarkers(m);eventFeed('[Miner]','Ore Sense marked nearby underground opportunities.',{key:'prospect:'+String(m&&m.x||'')+':'+String(m&&m.z||''),cooldown:4000});});
+    room.onMessage('prospectResult',m=>{showProspectMarkers(m);eventFeed('[Survey]','Ore Sense marked nearby underground opportunities.',{key:'prospect:'+String(m&&m.x||'')+':'+String(m&&m.z||''),cooldown:4000});});
     room.onMessage('prospectReject',m=>{
       const reason=m&&m.reason;
-      if(reason==='profession')sysMsg('Equip <b>Miner</b> to survey for ore.');
-      else if(reason==='level')sysMsg('Ore Sense unlocks at <b>Miner Lv '+(m.level||2)+'</b>.');
+      if(reason==='level')sysMsg('Ore Sense unlocks at <b>Hunter Level '+(m.level||2)+'</b>.');
       else if(reason==='cooldown')sysMsg('Ore Sense recharges in <b>'+Math.max(1,Math.ceil((m.remainingMs||0)/1000))+' sec</b>.');
       else sysMsg('The ore survey could not begin.');
     });
@@ -2998,7 +2995,7 @@ function netConnectionFailed(err){
 function netRestoreProfile(m){
   try{
     applyServerTutorials(m&&m.tutorials);
-    if(m&&m.forceJobChoice===true){
+    if(JOBS_ENABLED&&m&&m.forceJobChoice===true){
       if(combatApi.forceLevel2JobChoice)combatApi.forceLevel2JobChoice();
     }
     applyDeityState(m&&m.deity);

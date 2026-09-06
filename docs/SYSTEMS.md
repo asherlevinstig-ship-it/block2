@@ -36,10 +36,10 @@ sandbox whose edits are never persisted into the shared world.
 The **Town of Beginnings** is organized around one seven-block-wide Arrival Road from
 the South Gate to the North Gate and an oversized Grand Fountain in the Central Plaza.
 New characters spawn just inside the South Gate facing north, then receive a short local
-orientation: reach the fountain, speak to Tamsin at the Job Board, and inspect the blue
-Question Portal in the eastern Portal Court. Other district callouts unlock after that
-sequence. Market services sit west, adventuring services north, crafting northeast, and
-farm/roost activities southeast. Only the north and south walls have gates.
+orientation: reach the fountain and inspect the blue Question Portal in the eastern Portal
+Court. Other district callouts unlock after that sequence. Market services sit west,
+adventuring services north, crafting northeast, and farm/roost activities southeast. Only
+the north and south walls have gates.
 
 ---
 
@@ -69,13 +69,13 @@ its hunter, and fades after 30s. **Second Wind** procs inside the server's `hurt
 
 ---
 
-## Professions
+## Hunter progression (retired professions)
 
-A hunter also has one active **job** (`Player.job`), with **Adventurer** as the always-on
-baseline. Definitions, level titles, and perk rules live in
-[`shared/job-system.js`](../shared/job-system.js); XP is tracked **per job**
-(`jobXpByJob`) so switching professions never loses progress. Profession level rises on
-`30 × lvl^1.45` (cap 99); perk strength steps at levels **2 / 5 / 10 / 20**.
+The profession/job system is retired. New and returning players are never asked to choose
+a job, the Job Board and job contracts are not presented, and loaded saves have their
+active job and pending job-board state cleared. The legacy `job`, `jobLvl`, `jobXp`, and
+contract fields remain in saved/network schemas temporarily so older profiles and clients
+can migrate without a Colyseus schema mismatch; gameplay does not depend on them.
 
 The early **Progression Director** deliberately introduces systems in order through
 `progressionFocus`: finish Mara's First Hands → Road Ready → the first E-rank Gate →
@@ -98,54 +98,20 @@ short acquisition hint: iron-tier weapon, equipped iron armor, three food, a hea
 utility tool, and a D-rank key. If a hunter on the first-D objective joins the D-rank Gate
 underprepared, the server sends a one-time warning before allowing them to ready up.
 
-Each profession has signature server-validated perks: **miners** run prospect surveys
-(ore sense → deep prospecting, geode finds, durability saves), **farmers** craft compost
-fertilizer and cultivate windseed, **cooks** serve timed meal buffs (might/gathering),
-**blacksmiths** reforge and eventually Masterwork gear, and **monks** channel auras
-(stone skin, regeneration, speed). Job contracts come as refreshing **offer boards** with
-quick/balanced/demanding difficulties. Each offer now carries a visible identity line:
-its focus, party relevance, and reward hook. This lets Miner, Farmer, Cook, Blacksmith,
-Monk, and Adventurer work point at different play rhythms instead of only showing
-`do N actions for XP`; the board also previews the next profession milestone so contracts
-feel connected to useful unlocks. Milestone unlocks carry concrete reward labels through
-server result payloads and the local/offline path; the client shows a rare reward-feed
-moment plus a recap line like **Reward: Prospect survey action** when the level is crossed.
-Direct activity XP also reports every crossed milestone, so mining, farming, cooking,
-smithing, and meditation cannot skip intermediate unlock messaging. Balance tests keep
-the first play-changing Lv5 unlock within seven average contracts for every profession,
-and material-dependent milestones grant a tiny one-time starter kit. The job system is
-currently disabled. Farming remains available to every hunter: ordinary harvesting has
-a 15% bonus-wheat chance, Prairie Windseeds and Compost have no profession requirement,
-all crops receive the Fieldcraft growth speed, and Windseed crops can yield Golden Wheat.
-Profession moments are intentionally named at the point of use: Monk focus labels the
-active blessings and duration, Windseed planting explains the special crop, Compost says
-whether the crop advanced or ripened, and Golden Wheat harvests get a distinct rare-crop
-message.
-Profession UI also includes a compact **Right now** affordance line per job, derived from
-current level, equipped profession, selected tool, and relevant inventory. The Jobs board
-and profession service screens use this to point at immediate actions such as surveying,
-planting Windseeds, crafting Golden Broth, reforging selected gear, or refreshing focus.
-The same screens route common actions directly: farming services can select hotbar Compost,
-Windseeds, or seeds; Cook and cook contracts open the Food recipe tab; smith contracts and
-Blacksmith services open tool recipes; and the forge can select the first unreforged
-hotbar sword, axe, or pick.
-The recipe book reinforces that routing by labeling profession recipes with their job and
-level, showing whether they are locked by profession/level or missing ingredients, and
-calling out unlocked profession recipes that are ready to stage.
-Crafting outcomes close the loop: Cook and Blacksmith crafts recap the item made, the
-profession XP value, the practical effect such as gate food or repair-kit prep, and any
-matching contract progress. Reforge results also state the modifier/masterwork outcome,
-material cost, Blacksmith XP, and contract update relevance.
-Contract claims use the same reward language: completed title, gold, Hunter XP,
-profession XP, profession level movement, milestone starter items, and a next-action hint
-based on the profession or first-contract graduation state.
-The Jobs board, contract-ready notices, and claim recaps share that next-action hint so
-profession guidance stays consistent. Craft-driven contract completion suppresses the
-extra standalone "ready" toast because the craft recap already carries that progress beat.
+Useful activities formerly attached to professions are now universal and use authoritative
+Hunter level thresholds:
 
-Because some XP sources never reach the server, job XP is **rate-capped on save**
-(`clampJobXpGain` in [`store.js`](../server/store.js)) — a forged save can't claim an
-instant max profession. Job level shows on nameplates (`Player.jobLvl`).
+- ore surveying, deep prospecting, geode finds, and pick durability preservation;
+- advanced food recipes and cooking batch bonuses;
+- reforging, Masterwork actions, and crafted-armor rarity bonuses;
+- Meditation Hall focus effects and party sharing;
+- farming, Compost, Prairie Windseeds, and Golden Wheat;
+- Dragon Handler listings and training loans.
+
+The shared job module remains as a compatibility/tuning source for those thresholds while
+the feature flag is disabled. Recipe and service UI describes Hunter-level requirements;
+all rewards from homestead supply orders are Hunter XP. Server handlers remain authoritative
+for level checks, materials, cooldowns, rewards, and persistence.
 
 ---
 
@@ -210,7 +176,7 @@ Town vendors trade for **gold** (all server-validated in
 
 The economy balance target is that the opening quest can still fund a first land claim,
 while repeated land, tavern, and profession loops have real pressure. Tavern buy/sell
-spreads prevent no-loss food flips, and profession contracts lean toward job XP plus
+spreads prevent no-loss food flips, and regional contracts lean toward Hunter XP plus
 modest gold instead of replacing dungeon clears as the best cash source.
 
 Server gold movement is also recorded in a bounded in-memory telemetry ledger by
@@ -331,12 +297,12 @@ bands (`SHADE_RANK_LVLS`, `famTier`):
   3-tile area upgrades the claim panel into a **Homestead** manager with small work
   orders: the server only accepts them while the owner stands inside that connected
   land, consumes supplies from personal chests physically placed inside the Homestead,
-  and pays modest gold plus profession XP. Owners can mark a personal Homestead chest as
+  and pays modest gold plus Hunter XP. Owners can mark a personal Homestead chest as
   **Homestead Supply**; trusted hunters can deposit into those chests but only the owner can
   withdraw, and Work Orders consume Supply Chests before other eligible Homestead storage.
   Trusted hunters standing in the Homestead can also contribute from their own accessible
   Homestead chests; the owner keeps the claim reward, while helpers receive small immediate
-  profession-assist XP and appear on the order's contributor list.
+  Hunter assist XP and appear on the order's contributor list.
 - **Teams** ([`teams.mixin.js`](../server/rooms/teams.mixin.js), `TeamManager`): persistent
   parties (create/join/invite/kick/transfer, privacy + LFG flags). Team membership drives
   team-gate entry and shared discoveries.

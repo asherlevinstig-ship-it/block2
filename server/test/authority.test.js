@@ -589,7 +589,7 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /RETURN NOW/);
   assert.match(menus, /dragonLoanTimeLeftText/);
   assert.match(menus, /function openPetTamerServicesUI/);
-  assert.match(menus, /PET TAMER SERVICES/);
+  assert.match(menus, /DRAGON HANDLERS/);
   assert.match(menus, /NET\.room\.send\('petTamerService'/);
   assert.match(menus, /function applyPetTamerPing/);
   assert.match(menus, /trainingDrills/);
@@ -1419,13 +1419,13 @@ test('legacy single-job XP migrates only to the job that earned it', () => {
   assert.equal(adventurer.jobXpByJob.adventurer, 55);
 });
 
-test('Blacksmith reforging is level-gated, server-priced, persistent, and affects weapon damage', () => {
-  const room=makeRoom(),client=makeClient('reforge_smith'),{prof}=seedPlayer(room,client,{gold:100});
+test('Reforging is Hunter-level gated, server-priced, persistent, and affects weapon damage', () => {
+  const room=makeRoom(),client=makeClient('reforge_smith'),{prof}=seedPlayer(room,client,{gold:100,lvl:1});
   const p=room.state.players.get(client.sessionId);p.x=SMITH_POS.x;p.z=SMITH_POS.z;p.heldId=I.IRON_SWORD;
-  prof.job='blacksmith';prof.inv=[{id:I.IRON_SWORD,count:1,dur:251},{id:I.IRON_INGOT,count:4}];
+  prof.inv=[{id:I.IRON_SWORD,count:1,dur:251},{id:I.IRON_INGOT,count:4}];
   room.handleBlacksmithReforge(client,{slot:0,action:'choose',modifier:'keen'});
   assert.equal(client.sent.at(-1).msg.reason,'level');
-  prof.jobXpByJob.blacksmith=[1,2,3,4].reduce((xp,lvl)=>xp+JOB_SYSTEM.jobXpNeed(lvl),0);
+  prof.S.lvl=5;
   const before=room.meleeProfile(p,client.sessionId).bonus;
   room.handleBlacksmithReforge(client,{slot:0,action:'choose',modifier:'keen'});
   assert.equal(prof.inv[0].forge,'keen');
@@ -6968,7 +6968,7 @@ test('defeating a karma hunter redeems a small amount of karma', () => {
   assert.ok(outlaw.sent.some(e => e.type === 'karmaResult' && e.msg.reason === 'hunter_defeated' && e.msg.karmaDelta === 4));
 });
 
-test('pet tamer service board lists online tamers and delivers owner pings', () => {
+test('dragon handler service board lets any hunter advertise and receive owner pings', () => {
   const room = makeRoom(), owner = makeClient('service_owner'), tamer = makeClient('service_tamer'), miner = makeClient('service_miner');
   seedPlayer(room, owner, { name: 'Owner', ...townPlayerPos(0, 0) });
   const { prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 100, ...townPlayerPos(3, 2) });
@@ -6979,8 +6979,8 @@ test('pet tamer service board lists online tamers and delivers owner pings', () 
 
   room.handlePetTamerService(miner, { action: 'advertise', price: 5 });
   assert.equal(miner.sent.at(-1).type, 'petTamerServices');
-  assert.equal(miner.sent.at(-1).msg.ok, false);
-  assert.equal(miner.sent.at(-1).msg.reason, 'job');
+  assert.equal(miner.sent.at(-1).msg.advertised, true);
+  room.handlePetTamerService(miner, { action: 'stop' });
 
   room.handlePetTamerService(tamer, { action: 'advertise', price: 75, note: 'training drills <fast>' });
   const advertised = tamer.sent.at(-1);
@@ -7118,7 +7118,7 @@ test('dragon training loan transfers gold and grants the pet tamer temporary dra
   assert.equal(tamerProf.jobContract.lifecycleState, 'claimable');
 });
 
-test('dragon training loan rejects non-tamers and duplicate dragon types', () => {
+test('dragon training loans allow any hunter and reject duplicate dragon types', () => {
   const room = makeRoom(), owner = makeClient('loan_owner'), other = makeClient('loan_other');
   const { prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, ...townPlayerPos(0, 0) });
   const { prof: otherProf } = seedPlayer(room, other, { name: 'Other', gold: 100, ...townPlayerPos(1, 0) });
@@ -7126,8 +7126,7 @@ test('dragon training loan rejects non-tamers and duplicate dragon types', () =>
   room.clients = [owner, other];
 
   room.handleDragonLoanOffer(owner, { targetSid: other.sessionId, type: 'frost', gold: 20 });
-  assert.equal(owner.sent.at(-1).type, 'dragonLoanReject');
-  assert.equal(owner.sent.at(-1).msg.reason, 'job');
+  assert.equal(owner.sent.at(-1).type, 'dragonLoanPending');
 
   otherProf.job = 'pet_tamer';
   otherProf.mountUnlocks = ['dragon:frost'];
@@ -7366,7 +7365,7 @@ test('addCraftedRewardItem reuses freed slots for crafted tools', () => {
   assert.ok(prof.inv[7] && prof.inv[7].id === I.IRON_PICK, 'the crafted tool fills the freed hole instead of being dropped');
 });
 
-test('blacksmith crafted armor gains mana-pool rarity bonus', () => {
+test('crafted armor gains a universal mana-pool rarity bonus', () => {
   const room = makeRoom();
   const normal = { job: 'adventurer', S: { int: 1 }, inv: [null] };
   const smith = { job: 'blacksmith', S: { int: 40 }, inv: [null] };
@@ -7378,7 +7377,7 @@ test('blacksmith crafted armor gains mana-pool rarity bonus', () => {
   } finally {
     Math.random = oldRandom;
   }
-  assert.equal(normal.inv[0].rarity, undefined, 'non-blacksmith crafted armor has no bonus rarity roll');
+  assert.equal(normal.inv[0].rarity, 'common', 'every hunter receives the baseline crafted rarity roll');
   assert.equal(smith.inv[0].rarity, 'uncommon', 'high max mana pushes the same craft roll into the next rarity band');
 });
 
@@ -7933,7 +7932,7 @@ test('homestead work orders require owned homestead storage and consume chest su
   room.handleHomesteadWorkOrder(client, { action: 'claim' });
   assert.equal(prof.homesteadWorkOrder, null);
   assert.equal(prof.gold, 12);
-  assert.equal(prof.jobXpByJob.miner, 9);
+  assert.equal(prof.S.xp, 9);
   assert.equal(client.sent.at(-1).type, 'homesteadWorkOrderResult');
   assert.equal(client.sent.at(-1).msg.rewardGold, 12);
 });
@@ -8041,10 +8040,9 @@ test('trusted hunters can contribute to a homestead work order from their own st
   assert.equal(ownerProf.homesteadWorkOrder.contributors.home_helper_token_123.count, 1);
   assert.equal(ownerProf.homesteadWorkOrder.contributors.home_helper_token_123.name, 'Helper');
   assert.equal(room.getChestState('overworld:20,10,20')[0], null);
-  assert.equal(helperProf.jobXpByJob.miner, 3, 'helper receives a small immediate assist reward');
-  assert.equal(helper.sent.some(e => e.type === 'jobProgress' && e.msg.job === 'miner'), true);
+  assert.equal(helperProf.S.xp, 3, 'helper receives a small immediate Hunter XP reward');
   assert.equal(helper.sent.at(-1).type, 'homesteadWorkOrder');
-  assert.equal(helper.sent.at(-1).msg.assistRewardJobXp, 3);
+  assert.equal(helper.sent.at(-1).msg.assistRewardXp, 3);
 
   ownerProf.homesteadWorkOrder.have = ownerProf.homesteadWorkOrder.need;
   room.handleHomesteadWorkOrder(helper, { action: 'claim' });
@@ -8054,7 +8052,8 @@ test('trusted hunters can contribute to a homestead work order from their own st
   room.handleHomesteadWorkOrder(owner, { action: 'claim' });
   assert.equal(ownerProf.homesteadWorkOrder, null);
   assert.equal(ownerProf.gold, 20);
-  assert.equal(ownerProf.jobXpByJob.miner, 20);
+  assert.equal(ownerProf.S.lvl, 2);
+  assert.equal(ownerProf.S.xp, 8);
 });
 
 test('homestead room upgrades persist and boost matching work order XP', () => {
@@ -8102,10 +8101,11 @@ test('homestead room upgrades persist and boost matching work order XP', () => {
 
   room.handleHomesteadWorkOrder(owner, { action: 'claim' });
   assert.equal(prof.homesteadWorkOrder, null);
-  assert.equal(prof.jobXpByJob.blacksmith, 25);
+  assert.equal(prof.S.lvl, 2);
+  assert.equal(prof.S.xp, 13);
   assert.equal(owner.sent.at(-1).type, 'homesteadWorkOrderResult');
-  assert.equal(owner.sent.at(-1).msg.baseRewardJobXp, 20);
-  assert.equal(owner.sent.at(-1).msg.rewardJobXp, 25);
+  assert.equal(owner.sent.at(-1).msg.baseRewardXp, 20);
+  assert.equal(owner.sent.at(-1).msg.rewardXp, 25);
   assert.equal(owner.sent.at(-1).msg.roomBonus.id, 'forge');
 });
 
@@ -8311,17 +8311,16 @@ test('farming tills plants grows and harvests through server transactions', () =
   assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'farm'), true);
 });
 
-test('Cook recipes are profession-level gated and batch through the authoritative craft transaction', async () => {
+test('advanced food recipes are Hunter-level gated and batch through the authoritative craft transaction', async () => {
   const room = makeRoom(), client = makeClient('cook-craft');
   const { prof } = seedPlayer(room, client, { inv: [{ id: I.WHEAT, count: 2 }, { id: I.BREAD, count: 2 }, { id: I.COOKED_MEAT, count: 2 }] });
   const cells = [{ id: I.WHEAT, count: 1 }, { id: I.BREAD, count: 1 }, { id: I.COOKED_MEAT, count: 1 }, null];
   await room.handleCraft(client, { w: 2, cells });
   assert.equal(client.sent.at(-1).type, 'craftReject');
-  assert.equal(client.sent.at(-1).msg.reason, 'profession');
+  assert.equal(client.sent.at(-1).msg.reason, 'hunter_level');
   assert.equal(itemCount(prof, I.WHEAT), 2, 'a rejected recipe consumes nothing');
 
-  prof.job = 'cook';
-  prof.jobXpByJob.cook = [1, 2, 3, 4].reduce((xp, level) => xp + JOB_SYSTEM.jobXpNeed(level), 0);
+  prof.S.lvl = 5;
   const oldRandom = Math.random; Math.random = () => 1;
   try { await room.handleCraft(client, { w: 2, cells }); } finally { Math.random = oldRandom; }
   assert.equal(itemCount(prof, I.GOLDEN_BROTH), 1);
@@ -8347,13 +8346,11 @@ test('Master Feast feeds only nearby teammates and grants authoritative combat b
   assert.equal(cook.sent.at(-1).msg.partyCount, 2);
 });
 
-test('Monk shrine focus regenerates and mitigates damage according to profession level', () => {
+test('Meditation shrine focus regenerates and mitigates damage according to Hunter level', () => {
   const room = makeRoom(), monk = makeClient('focus-monk');
   room.clients = [monk];
   const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
-  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, hp: 10, lvl: 4 });
-  prof.job = 'monk';
-  prof.jobXpByJob.monk = Array.from({ length: 9 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
+  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, hp: 10, lvl: 10 });
   prof.vitals = { hp: 10, mp: 4, sp: 5, hunger: 100 };
   prof.vitalsSavedAt = Date.now();
   room.handleMeditateTick(monk);
@@ -8377,14 +8374,12 @@ test('Zen Master meditation shares focus only with nearby party members', () => 
   const room = makeRoom(), monk = makeClient('aura-monk'), near = makeClient('aura-near'), far = makeClient('aura-far');
   room.clients = [monk, near, far];
   const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
-  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, team: 'T1', lvl: 4 });
+  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, team: 'T1', lvl: 20 });
   seedPlayer(room, near, { x: sx + 4, z: sz, team: 'T1', lvl: 4 });
   seedPlayer(room, far, { x: sx + 30, z: sz, team: 'T1', lvl: 4 });
   const nearProf = room.profiles.get(room.tokens.get(near.sessionId));
   nearProf.vitals = { hp: 20, mp: 3, sp: 1, hunger: 100 };
   nearProf.vitalsSavedAt = Date.now();
-  prof.job = 'monk';
-  prof.jobXpByJob.monk = Array.from({ length: 19 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
   room.handleMeditateTick(monk);
   assert.equal(room.abilityBuffs.get(near.sessionId).monkStoneUntil > Date.now(), true);
   assert.equal(nearProf.vitals.sp, 9);
@@ -8536,10 +8531,9 @@ test('mining requires server-known tool tier and damages the persisted tool', ()
   assert.equal(weak.sent.some(e => e.type === 'mineNoDrop' && e.msg.reason === 'tool'), true);
 });
 
-test('Miner surveys reveal nearby ore with level-based range and cooldown', () => {
+test('Hunter surveys reveal nearby ore with level-based range and cooldown', () => {
   const room=makeRoom(),client=makeClient('prospector');
-  const {prof}=seedPlayer(room,client,{x:30.5,y:10,z:30.5});
-  prof.job='miner';prof.jobXpByJob.miner=Array.from({length:9},(_,i)=>JOB_SYSTEM.jobXpNeed(i+1)).reduce((a,b)=>a+b,0);
+  const {prof}=seedPlayer(room,client,{x:30.5,y:10,z:30.5,lvl:10});
   room.world.setB(34,9,30,W.B.COAL_ORE);
   room.world.setB(47,12,30,W.B.DIAMOND_ORE);
   room.world.setB(50,10,30,W.B.IRON_ORE);
@@ -8554,14 +8548,13 @@ test('Miner surveys reveal nearby ore with level-based range and cooldown', () =
   assert.equal(client.sent.at(-1).type,'prospectReject');
   assert.equal(client.sent.at(-1).msg.reason,'cooldown');
 
-  prof.job='farmer';room.handleProspect(client);
-  assert.equal(client.sent.at(-1).msg.reason,'profession');
+  prof.S.lvl=1;room.prospectAt.delete(client.sessionId);room.handleProspect(client);
+  assert.equal(client.sent.at(-1).msg.reason,'level');
 });
 
-test('high-level Miners can preserve pick durability and uncover geodes', () => {
+test('high-level Hunters can preserve pick durability and uncover geodes', () => {
   const room=makeRoom(),client=makeClient('stonehand');
-  const {prof}=seedPlayer(room,client,{inv:[{id:I.IRON_PICK,count:1,dur:7}]});
-  prof.job='miner';prof.jobXpByJob.miner=Array.from({length:19},(_,i)=>JOB_SYSTEM.jobXpNeed(i+1)).reduce((a,b)=>a+b,0);
+  const {prof}=seedPlayer(room,client,{lvl:20,inv:[{id:I.IRON_PICK,count:1,dur:7}]});
   const random=Math.random;Math.random=()=>0;
   try{room.awardMine(client,W.B.DIAMOND_ORE,0,30,10,30);}finally{Math.random=random;}
   assert.equal(prof.inv[0].dur,7);
@@ -12488,7 +12481,7 @@ test('regional guild contracts rotate through the requested exploration archetyp
 
 test('regional contract acceptance progress and claim are server-owned', () => {
   const room = makeRoom(), client = makeClient('guild');
-  const { prof } = seedPlayer(room, client, { x: W.TOWN.TC + 4.5, y: W.TOWN.G + 1, z: W.TOWN.TC - 8.5 });
+  const { prof } = seedPlayer(room, client, { x: W.HUB.guildNoticeBoard.x, y: W.TOWN.G + 1, z: W.HUB.guildNoticeBoard.z });
   const offer = room.regionalContractOffers().find(o => o.type === 'scout_landmark');
   room.handleRegionalContractAccept(client, { id: offer.id });
   assert.equal(prof.regionalContract.type, 'scout_landmark');
@@ -12508,8 +12501,8 @@ test('regional contract acceptance progress and claim are server-owned', () => {
   assert.ok(readyMsg.msg.active.claimableAt > 0);
 
   const beforeGold = prof.gold;
-  room.state.players.get(client.sessionId).x = W.TOWN.TC + 4.5;
-  room.state.players.get(client.sessionId).z = W.TOWN.TC - 8.5;
+  room.state.players.get(client.sessionId).x = W.HUB.guildNoticeBoard.x;
+  room.state.players.get(client.sessionId).z = W.HUB.guildNoticeBoard.z;
   room.handleRegionalContractClaim(client);
   assert.equal(prof.regionalContract, null);
   assert.equal(prof.gold > beforeGold, true);
@@ -12530,7 +12523,7 @@ test('regional contract acceptance progress and claim are server-owned', () => {
 test('team guild contract abandon clears shared work for online teammates', () => {
   const room = makeRoom(), leader = makeClient('guild_abandon_leader'), mate = makeClient('guild_abandon_mate');
   room.clients = [leader, mate];
-  const pos = { x: W.TOWN.TC + 4.5, y: W.TOWN.G + 1, z: W.TOWN.TC - 8.5 };
+  const pos = { x: W.HUB.guildNoticeBoard.x, y: W.TOWN.G + 1, z: W.HUB.guildNoticeBoard.z };
   const { prof: leaderProf } = seedPlayer(room, leader, { ...pos, team: 'T1' });
   const { prof: mateProf } = seedPlayer(room, mate, { ...pos, team: 'T1' });
   room.teamMgr.bySid.set(leader.sessionId, 'T1');
@@ -12558,7 +12551,7 @@ test('team guild contract abandon clears shared work for online teammates', () =
 
 test('Road Warden reputation milestones unlock utilities and report their reward', () => {
   const room=makeRoom(),client=makeClient('warden-milestone');
-  const {prof}=seedPlayer(room,client,{x:W.TOWN.TC+4.5,y:W.TOWN.G+1,z:W.TOWN.TC-8.5});
+  const {prof}=seedPlayer(room,client,{x:W.HUB.guildNoticeBoard.x,y:W.TOWN.G+1,z:W.HUB.guildNoticeBoard.z});
   prof.roadWardenRep=2;
   prof.regionalContract={id:'road-test',type:'road_escort',targetId:'',targetType:'road_warden',targetName:'Roads',need:1,have:1,title:'Safe Arrival',desc:'',rewardGold:10,rewardXp:10,rewardItems:[]};
   room.handleRegionalContractClaim(client);
@@ -12574,7 +12567,7 @@ test('Road Warden reputation milestones unlock utilities and report their reward
 
 test('Road Warden milestone gear is secured in Loot Recovery when inventory is full',()=>{
   const room=makeRoom(),client=makeClient('warden-recovery');
-  const {prof}=seedPlayer(room,client,{x:W.TOWN.TC+4.5,y:W.TOWN.G+1,z:W.TOWN.TC-8.5});
+  const {prof}=seedPlayer(room,client,{x:W.HUB.guildNoticeBoard.x,y:W.TOWN.G+1,z:W.HUB.guildNoticeBoard.z});
   prof.inv=Array.from({length:36},()=>({id:I.COAL,count:64}));
   prof.roadWardenRep=0;
   prof.regionalContract={id:'road-full',type:'road_rescue',targetId:'',targetType:'road_warden',targetName:'Roads',need:1,have:1,title:'Roadside Rescue',desc:'',rewardGold:10,rewardXp:10,rewardItems:[]};
@@ -12616,7 +12609,7 @@ test('team members share mapped discoveries while online', () => {
 test('team guild contracts copy to online teammates and share progress', () => {
   const room = makeRoom(), leader = makeClient('leader'), mate = makeClient('mate');
   room.clients = [leader, mate];
-  const pos = { x: W.TOWN.TC + 4.5, y: W.TOWN.G + 1, z: W.TOWN.TC - 8.5 };
+  const pos = { x: W.HUB.guildNoticeBoard.x, y: W.TOWN.G + 1, z: W.HUB.guildNoticeBoard.z };
   const { prof: leaderProf } = seedPlayer(room, leader, { ...pos, team: 'T1' });
   const { prof: mateProf } = seedPlayer(room, mate, { ...pos, team: 'T1' });
   room.teamMgr.bySid.set(leader.sessionId, 'T1');
@@ -12637,14 +12630,14 @@ test('team guild contracts copy to online teammates and share progress', () => {
 
 test('regional contracts progress from biome collection and road merchant visits', () => {
   const room = makeRoom(), gatherer = makeClient('gatherer');
-  const { prof } = seedPlayer(room, gatherer, { x: W.TOWN.TC + 4.5, y: W.TOWN.G + 1, z: W.TOWN.TC - 8.5 });
+  const { prof } = seedPlayer(room, gatherer, { x: W.HUB.guildNoticeBoard.x, y: W.TOWN.G + 1, z: W.HUB.guildNoticeBoard.z });
   const collect = room.regionalContractOffers().find(o => o.type === 'collect_biome');
   room.handleRegionalContractAccept(gatherer, { id: collect.id });
   room.awardGrant(gatherer, { source: 'test', items: [{ id: collect.targetItem, count: collect.need }] });
   assert.equal(prof.regionalContract.have, collect.need);
 
   const road = makeClient('roadvisit');
-  const { prof: roadProf } = seedPlayer(room, road, { x: W.TOWN.TC + 4.5, y: W.TOWN.G + 1, z: W.TOWN.TC - 8.5 });
+  const { prof: roadProf } = seedPlayer(room, road, { x: W.HUB.guildNoticeBoard.x, y: W.TOWN.G + 1, z: W.HUB.guildNoticeBoard.z });
   const visit = room.regionalContractOffers().find(o => o.type === 'visit_road_merchant');
   room.handleRegionalContractAccept(road, { id: visit.id });
   const merchant = W.smallDiscoverySpecs().find(s => s.id === visit.targetId);
@@ -12910,7 +12903,7 @@ test('fellowship leadership can transfer and private mode can toggle', () => {
 test('fellowships earn renown from guild work and spend it on projects', () => {
   const room = makeRoom(), leader = makeClient('fellowship_renown');
   room.clients = [leader];
-  const board = { x: W.TOWN.TC + 4.5, y: W.TOWN.G + 1, z: W.TOWN.TC - 8.5 };
+  const board = { x: W.HUB.guildNoticeBoard.x, y: W.TOWN.G + 1, z: W.HUB.guildNoticeBoard.z };
   const { token, prof } = seedPlayer(room, leader, { ...board, token: 'renown_leader_token', name: 'Renown Leader', gold: 100 });
   const guild = { id: 'G1', name: 'Renown Wardens', leader: token, leaderName: 'Renown Leader', members: new Set([token]), roles: new Map(), invites: new Set(), private: false, floor: 0, foundedAt: 1, floorBoughtAt: 0, renown: 0, totalRenown: 0, projects: new Set() };
   room.guilds.set(guild.id, guild);

@@ -308,22 +308,22 @@ function blacksmithRarityName(id){
   return r?r.name:(id?String(id).replace(/_/g,' '):'Common');
 }
 function applyBlacksmithCraftPerk(stack){
-  if(!stack || playerJob!=='blacksmith') return stack;
+  if(!stack) return stack;
   const item=ITEMS[stack.id], info=item&&(item.tool||item.armor);
   if(!info) return stack;
-  const tier=jobPerkTier('blacksmith');
+  const tier=JOB_SYSTEM.perkTierFromLevel(Math.max(1,S&&S.lvl|0));
   if(item.armor){
     const rarity=GEAR_SYSTEM.rollRarity(Math.random(),blacksmithArmorCraftBonusValue()).id;
     stack.rarity=rarity;
     stack.armorType=stack.armorType||info.armorType||'vanguard';
     stack.dur=armorMaxDur(stack)||info.dur;
-    showJobPerk('blacksmith',blacksmithRarityName(rarity)+' armor');
+    showName(blacksmithRarityName(rarity)+' crafted armor');
     return stack;
   }
   if(!tier) return stack;
   const bonus=Math.max(1, Math.round(info.dur*(.08+tier*.04)));
   stack.dur=Math.min(toolMaxDur(stack),(stack.dur==null?toolMaxDur(stack):stack.dur)+bonus);
-  showJobPerk('blacksmith','+'+bonus+' durability');
+  showName('Craft quality: +'+bonus+' durability');
   return stack;
 }
 const RECIPE_SEEN_KEY='blockcraft.recipeSeen.v1';
@@ -393,9 +393,10 @@ function countHeldCursorItem(id){
   return s&&s.id===id ? Math.max(0,s.count|0) : 0;
 }
 function cookingOutputCount(id, n){
-  if(![I.BREAD,I.HEARTY_SANDWICH,I.COOKED_MEAT,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION].includes(id) || playerJob!=='cook') return n;
-  const extra=Math.random()<jobPerkChance('cook', .08) ? Math.max(1, Math.floor(n*.25)) : 0;
-  if(extra) showJobPerk('cook','+'+extra+' food');
+  const level=Math.max(1,S&&S.lvl|0),tier=JOB_SYSTEM.perkTierFromLevel(level);
+  if(![I.BREAD,I.HEARTY_SANDWICH,I.COOKED_MEAT,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION].includes(id) || level<JOB_SYSTEM.COOK_RULES.batchLevel) return n;
+  const extra=Math.random()<JOB_SYSTEM.perkChance(tier,.08) ? Math.max(1, Math.floor(n*.25)) : 0;
+  if(extra) showName('Batch cooking: +'+extra+' food');
   return n+extra;
 }
 
@@ -495,12 +496,12 @@ function finishMine(){
     if(info.drop===null){} // no drop (glass)
     else if(info.drop){ droppedId=info.drop[0]; droppedCount=info.drop[1]; addItem(droppedId, droppedCount); }
     else { droppedId=m.id; droppedCount=1; addItem(m.id,1); }
-    const minerLevel=playerJob==='miner'?jobLevelFromXp(jobXpFor('miner')):0;
-    if(droppedId && minerLevel>=JOB_SYSTEM.MINER_RULES.oreSenseLevel && Math.random()<jobPerkChance('miner', .08)){
+    const minerLevel=Math.max(1,S&&S.lvl|0);
+    if(droppedId && minerLevel>=JOB_SYSTEM.MINER_RULES.oreSenseLevel && Math.random()<JOB_SYSTEM.perkChance(JOB_SYSTEM.perkTierFromLevel(minerLevel),.08)){
       addItem(droppedId, 1);
-      showJobPerk('miner','bonus '+itemLabel(droppedId));
+      showName('Gathering insight: bonus '+itemLabel(droppedId));
     }
-    if(minerLevel>=JOB_SYSTEM.MINER_RULES.geodeLevel && [B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE].includes(m.id) && Math.random()<JOB_SYSTEM.MINER_RULES.geodeChance){addItem(I.GEODE,1);showJobPerk('miner','Prismatic Geode');}
+    if(minerLevel>=JOB_SYSTEM.MINER_RULES.geodeLevel && [B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE].includes(m.id) && Math.random()<JOB_SYSTEM.MINER_RULES.geodeChance){addItem(I.GEODE,1);showName('Prismatic Geode');}
     if(droppedId && activeFamiliar==='sprite' && Math.random()<spriteForageChance((S&&S.lvl)||1)) addItem(droppedId, 1);   // Sprite foraging bonus
     if(m.id===B.GRASS && Math.random()<.35) addItem(I.WHEAT_SEEDS,1);
   }
@@ -526,10 +527,10 @@ function finishMine(){
   // tool durability
   const tool=toolFor(m.id);
   if(!NET.on && tool && m.effective){
-    const minerLevel=playerJob==='miner'?jobLevelFromXp(jobXpFor('miner')):0;
+    const minerLevel=Math.max(1,S&&S.lvl|0);
     const save=minerLevel>=JOB_SYSTEM.MINER_RULES.stonehandLevel && Math.random()<JOB_SYSTEM.MINER_RULES.durabilitySaveChance;
     if(!save) tool.stack.dur--;
-    else showJobPerk('miner','tool spared');
+    else showName('Stonehand spared your tool');
     if(tool.stack.dur<=0){ inv[selected]=null; showName('Tool broke!'); }
     refreshHUD();
   }
@@ -1896,9 +1897,7 @@ function abilityHudAvailable(){
 function hunterAwakeningStepsHTML(active){
   const steps=[
     ['arrival','Town Arrival'],
-    ['path','Choose Path'],
-    ['ability','Train Ability'],
-    ['job','Try A Job']
+    ['path','Choose Path']
   ];
   const activeIndex=Math.max(0,steps.findIndex(s=>s[0]===active));
   return '<div class="awakening-flow-steps" aria-label="Hunter Awakening progress">'+steps.map((s,i)=>{
@@ -4431,7 +4430,7 @@ function townTutorialInfo(step){
   if(step==='menu') return {
     pill:'Town Tutorial - Choose Next', target:HUB.guide, near:9999, farKey:'TOWN HELP', nearKey:'TOWN HELP',
     farText:'Choose what to learn next.', nearText:'Choose what to learn next.',
-    farSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.', nearSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.'
+    farSub:'Open the Town Tutorials menu for Tavern, Land Claim, or playstyle guidance.', nearSub:'Open the Town Tutorials menu for Tavern, Land Claim, or playstyle guidance.'
   };
   if(String(step||'').startsWith('job_')){
     const jobId=String(step).slice(4), info=jobTutorialInfo(jobId), j=JOBS[jobId]||null, target=jobTutorialTarget(jobId);
@@ -4453,7 +4452,6 @@ function renderTownTutorialOptions(force=false){
   if((!force&&!shouldOfferTownJobGuidance()) || onboardingActive || pathChoiceOpen || townGuidanceSequenceHold || (rewardWin&&!rewardWin.classList.contains('hidden'))){ townChoicesEl.classList.add('hidden'); return; }
   const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
   const choices=[
-    ['job','JOB BOARD','Learn jobs, contracts, and guild exploration work.',true],
     ['tavern','TAVERN',gold>=5?'Visit Greta and buy an item.':'Earn 5 gold, then visit Greta and buy an item.',gold>=5],
     ['land','BUY LAND',gold>=firstLandPrice?'Leave town and buy a wilderness title.':'Earn about '+firstLandPrice+' gold, then buy a wilderness title.',gold>=firstLandPrice]
   ].filter(c=>force||!townTutorialStepDone(c[0]));
@@ -4463,11 +4461,6 @@ function renderTownTutorialOptions(force=false){
   const styleButton=document.createElement('button'); styleButton.textContent='CHOOSE';
   styleButton.onpointerdown=e=>{e.preventDefault();e.stopPropagation();if(globalThis.BlockcraftPlayerStyleGuide)globalThis.BlockcraftPlayerStyleGuide.open();};
   styleRow.appendChild(styleButton);townChoicesEl.appendChild(styleRow);
-  const jobRow=document.createElement('div'); jobRow.className='tcrow job-choice';
-  const jobText=document.createElement('div'); jobText.innerHTML='<div class="tcname">JOB PATHS</div><div class="tcdesc">Open the big Level 2 job cards and choose a training room.</div>'; jobRow.appendChild(jobText);
-  const jobButton=document.createElement('button'); jobButton.textContent='OPEN';
-  jobButton.onpointerdown=e=>{e.preventDefault();e.stopPropagation();openLevel2JobChoice(true);};
-  jobRow.appendChild(jobButton);townChoicesEl.appendChild(jobRow);
   for(const [step,label,desc,ready] of choices){
     const active=townGuidanceActive&&townGuidanceStep===step;
     const completed=townTutorialStepDone(step);
@@ -7203,11 +7196,6 @@ function heldPlaceAction(now=performance.now()){
 function interactWithVillager(vill){
   if(!vill) return false;
   if(vill.role==='road_warden'){
-    const arrival=globalThis.BlockcraftTownArrivalGuide;
-    if(arrival&&arrival.stage&&arrival.stage()==='tamsin'){
-      arrival.introducePortal();
-      return true;
-    }
     let first=false;try{first=!localStorage.getItem('bc_tamsin_intro_seen');if(first)localStorage.setItem('bc_tamsin_intro_seen','1');}catch(e){}
     sysMsg(first
       ? '<b>Tamsin Rook:</b> "Take one Road Warden contract, follow the road tracker, then come back for reputation. Camps, caravans, stolen cargo, mercy calls — that is how we make roads boring again."'

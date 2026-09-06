@@ -119,13 +119,13 @@ const PROFESSION_MILESTONE_STARTERS = Object.freeze({
   'miner:20': Object.freeze({ title: 'Geode Mastery Sample', text: 'Crack this open at the forge loop so Geode Mastery has an immediate payoff.', items: Object.freeze([Object.freeze({ id: I.GEODE, count: 1 })]) }),
 });
 const HOMESTEAD_WORK_ORDER_SPECS = Object.freeze([
-  Object.freeze({ type: 'stock', job: 'miner', target: W.B.COBBLE, need: 20, rewardGold: 24, rewardJobXp: 18, title: 'Foundation Stock', desc: 'Contribute cobblestone for repairs and future rooms.' }),
-  Object.freeze({ type: 'stock', job: 'blacksmith', target: W.B.TORCH, need: 8, rewardGold: 20, rewardJobXp: 16, title: 'Lantern Reserve', desc: 'Keep spare torches ready so the homestead stays workable at night.' }),
-  Object.freeze({ type: 'craft', job: 'cook', target: I.BREAD, need: 3, rewardGold: 22, rewardJobXp: 18, title: 'Pantry Ledger', desc: 'Set aside travel bread for the next dungeon run.' }),
-  Object.freeze({ type: 'craft', job: 'blacksmith', target: I.REPAIR_KIT, need: 1, rewardGold: 30, rewardJobXp: 22, title: 'Tool Bench Reserve', desc: 'Add a repair kit to the homestead supplies.' }),
-  Object.freeze({ type: 'craft', job: 'cook', target: I.TRAIL_RATION, need: 1, rewardGold: 34, rewardJobXp: 26, title: 'Kitchen Travel Packs', desc: 'Stock a trail ration so gate teams leave with real meals.' }),
-  Object.freeze({ type: 'stock', job: 'monk', target: W.B.LANTERN, need: 2, rewardGold: 28, rewardJobXp: 24, title: 'Quiet Corner Lamps', desc: 'Bring soft lanterns for a meditation corner.' }),
-  Object.freeze({ type: 'craft', job: 'pet_tamer', target: I.DRAGON_TREAT, need: 1, rewardGold: 32, rewardJobXp: 26, title: 'Nest Care Basket', desc: 'Prepare a dragon treat for the stable or nest.' }),
+  Object.freeze({ type: 'stock', job: 'miner', target: W.B.COBBLE, need: 20, rewardGold: 24, rewardXp: 18, title: 'Foundation Stock', desc: 'Contribute cobblestone for repairs and future rooms.' }),
+  Object.freeze({ type: 'stock', job: 'blacksmith', target: W.B.TORCH, need: 8, rewardGold: 20, rewardXp: 16, title: 'Lantern Reserve', desc: 'Keep spare torches ready so the homestead stays workable at night.' }),
+  Object.freeze({ type: 'craft', job: 'cook', target: I.BREAD, need: 3, rewardGold: 22, rewardXp: 18, title: 'Pantry Ledger', desc: 'Set aside travel bread for the next dungeon run.' }),
+  Object.freeze({ type: 'craft', job: 'blacksmith', target: I.REPAIR_KIT, need: 1, rewardGold: 30, rewardXp: 22, title: 'Tool Bench Reserve', desc: 'Add a repair kit to the homestead supplies.' }),
+  Object.freeze({ type: 'craft', job: 'cook', target: I.TRAIL_RATION, need: 1, rewardGold: 34, rewardXp: 26, title: 'Kitchen Travel Packs', desc: 'Stock a trail ration so gate teams leave with real meals.' }),
+  Object.freeze({ type: 'stock', job: 'monk', target: W.B.LANTERN, need: 2, rewardGold: 28, rewardXp: 24, title: 'Quiet Corner Lamps', desc: 'Bring soft lanterns for a meditation corner.' }),
+  Object.freeze({ type: 'craft', job: 'pet_tamer', target: I.DRAGON_TREAT, need: 1, rewardGold: 32, rewardXp: 26, title: 'Nest Care Basket', desc: 'Prepare a dragon treat for the stable or nest.' }),
 ]);
 const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
   storage: Object.freeze({
@@ -140,7 +140,7 @@ const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
     id: 'forge',
     title: 'Forge Room',
     desc: 'Set up a proper tool bench for repairs, smithing, and metal stock.',
-    benefit: '+25% Blacksmith XP from Homestead work orders',
+    benefit: '+25% Hunter XP from forge supply orders',
     costGold: 0,
     max: 1,
   }),
@@ -148,7 +148,7 @@ const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
     id: 'kitchen',
     title: 'Kitchen',
     desc: 'Build a working pantry so cooked supplies matter between Gates.',
-    benefit: '+25% Cook XP from Homestead work orders',
+    benefit: '+25% Hunter XP from kitchen supply orders',
     costGold: 0,
     max: 1,
   }),
@@ -156,7 +156,7 @@ const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
     id: 'meditation',
     title: 'Meditation Corner',
     desc: 'Keep a quiet corner for focus, breath, and safer recovery.',
-    benefit: '+25% Monk XP from Homestead work orders and stronger active focus support',
+    benefit: '+25% Hunter XP from meditation supply orders and stronger active focus support',
     costGold: 0,
     max: 1,
   }),
@@ -164,7 +164,7 @@ const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
     id: 'stable',
     title: 'Stable / Nest',
     desc: 'Make a calm resting place for companions and dragons.',
-    benefit: '+25% Pet Tamer XP from Homestead work orders and better dragon rest',
+    benefit: '+25% Hunter XP from stable supply orders and better dragon rest',
     costGold: 0,
     max: 1,
   }),
@@ -479,15 +479,11 @@ class ProgressionMixin {
 
   grantHomesteadAssistXp(client, actorRec, ownerToken, order) {
     if (!actorRec || actorRec.token === ownerToken) return 0;
-    const job = JOB_XP_IDS.includes(order && order.job) ? order.job : '';
-    if (!job) return 0;
-    const amount = Math.max(1, Math.round(Math.max(0, order.rewardJobXp | 0) * .25 / Math.max(1, order.need | 0)));
-    const xpMap = ensureJobXpMap(actorRec.prof);
-    xpMap[job] = Math.max(0, (xpMap[job] | 0) + amount);
-    actorRec.prof.jobXp = xpMap[actorRec.prof.job || 'adventurer'] | 0;
+    const baseRewardXp = order.rewardXp == null ? order.rewardJobXp : order.rewardXp;
+    const amount = Math.max(1, Math.round(Math.max(0, baseRewardXp | 0) * .25 / Math.max(1, order.need | 0)));
+    this.grantHunterXp(actorRec.prof, amount, client, 'homestead_assist');
     this.dirtyPlayers.add(actorRec.token);
     this.syncPlayerProfile(client, actorRec.prof);
-    client.send('jobProgress', { job, jobXp: xpMap[job] | 0, jobXpByJob: xpMap, contract: actorRec.prof.jobContract || null });
     return amount;
   }
 
@@ -550,30 +546,22 @@ class ProgressionMixin {
       }
       order.have = Math.min(order.need | 0, (order.have | 0) + 1);
       this.recordHomesteadContributor(order, actorRec);
-      const assistRewardJobXp = this.grantHomesteadAssistXp(client, actorRec, rec.token, order);
+      const assistRewardXp = this.grantHomesteadAssistXp(client, actorRec, rec.token, order);
       if ((order.have | 0) >= (order.need | 0)) order.completedAt = Date.now();
       this.dirtyPlayers.add(rec.token);
-      return this.sendHomesteadWorkOrder(client, 'contribute', { groupSize: ctx.group.length, assistRewardJobXp, assistJob: order.job }, ctx);
+      return this.sendHomesteadWorkOrder(client, 'contribute', { groupSize: ctx.group.length, assistRewardXp }, ctx);
     }
     if (action === 'claim') {
       if (!ctx.own) return this.rejectHomesteadWorkOrder(client, 'owner');
       if ((order.have | 0) < (order.need | 0)) return this.rejectHomesteadWorkOrder(client, 'incomplete');
-      const xpMap = ensureJobXpMap(rec.prof);
       const job = JOB_XP_IDS.includes(order.job) ? order.job : 'miner';
       const rewardGold = Math.max(0, order.rewardGold | 0);
-      const baseRewardJobXp = Math.max(0, order.rewardJobXp | 0);
+      const baseRewardXp = Math.max(0, (order.rewardXp == null ? order.rewardJobXp : order.rewardXp) | 0);
       const roomBonus = this.homesteadRoomBonusForJob(this.cleanHomesteadUpgrades(rec.prof.homesteadUpgrades), job);
-      const rewardJobXp = roomBonus ? Math.max(0, Math.round(baseRewardJobXp * (1 + roomBonus.multiplier))) : baseRewardJobXp;
-      const jobLevelBefore = JOB_SYSTEM.jobLevelFromXp(xpMap[job] | 0);
+      const rewardXp = roomBonus ? Math.max(0, Math.round(baseRewardXp * (1 + roomBonus.multiplier))) : baseRewardXp;
       rec.prof.gold = Math.min(1e9, (rec.prof.gold | 0) + rewardGold);
       if (this.recordEconomyGold) this.recordEconomyGold(client, rewardGold, 'contract_faucet', 'homestead_work_order', { job, title: order.title || '', roomBonus: roomBonus && roomBonus.id || '' });
-      xpMap[job] = Math.max(0, (xpMap[job] | 0) + rewardJobXp);
-      const jobLevelAfter = JOB_SYSTEM.jobLevelFromXp(xpMap[job] | 0);
-      const milestones = JOB_SYSTEM.milestonesFor(job)
-        .filter(milestone => milestone.level > jobLevelBefore && milestone.level <= jobLevelAfter)
-        .map(milestone => ({ ...milestone, reward: milestone.reward || JOB_SYSTEM.milestoneReward(job, milestone.level) }));
-      const milestoneStarterItems = this.grantProfessionMilestoneStarters(client, job, milestones);
-      rec.prof.jobXp = xpMap[rec.prof.job || 'adventurer'] | 0;
+      this.grantHunterXp(rec.prof, rewardXp, client, 'homestead_work_order');
       const completed = order;
       rec.prof.homesteadWorkOrder = null;
       this.syncPlayerProfile(client, rec.prof);
@@ -581,16 +569,10 @@ class ProgressionMixin {
       client.send('homesteadWorkOrderResult', {
         order: completed,
         rewardGold,
-        rewardJobXp,
-        baseRewardJobXp,
+        rewardXp,
+        baseRewardXp,
         roomBonus,
         job,
-        jobXp: xpMap[job] | 0,
-        jobXpByJob: xpMap,
-        jobLevelBefore,
-        jobLevelAfter,
-        milestones,
-        milestoneStarterItems,
         gold: rec.prof.gold | 0,
       });
       return true;
@@ -1143,15 +1125,13 @@ class ProgressionMixin {
   handleMeditateTick(client) {
     const rec = this.profileFor(client);
     const p = this.state.players.get(client.sessionId);
-    if (!rec || !p || rec.prof.job !== 'monk' || p.dgn) return this.progressionReject(client, 'meditate', 'invalid');
+    if (!rec || !p || p.dgn) return this.progressionReject(client, 'meditate', 'invalid');
     if (((rec.prof.S && rec.prof.S.lvl) | 0) < 4) return this.progressionReject(client, 'meditate', 'level');
     if (this.rateLimited(client, 'meditate', 1, 2)) return this.progressionReject(client, 'meditate', 'rate');
     const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
     if (Math.hypot(p.x - sx, p.z - sz) > 9) return this.progressionReject(client, 'meditate', 'range');
-    this.grantJobXp(client, 'monk', 2);
-    this.progressJobContract(client, 'meditate', 5, 0);
     const rules = JOB_SYSTEM.MONK_RULES;
-    const level = JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob && rec.prof.jobXpByJob.monk) || 0);
+    const level = Math.max(1, rec.prof.S && rec.prof.S.lvl | 0);
     const tier = JOB_SYSTEM.perkTierFromLevel(level);
     if (!tier) return true;
     const now = Date.now(), duration = (rules.durationByTier[tier] || 0) * 1000;
@@ -1183,7 +1163,7 @@ class ProgressionMixin {
       if (level >= rules.speedLevel) buffs.monkSpeedUntil = Math.max(buffs.monkSpeedUntil || 0, now + duration);
       if (level >= rules.stoneLevel) buffs.monkStoneUntil = Math.max(buffs.monkStoneUntil || 0, now + duration);
       this.abilityBuffs.set(target.sessionId, buffs);
-      target.send('meditateFocus', { level, tier, durationMs: duration, regen: level >= rules.regenLevel, speed: level >= rules.speedLevel, stone: level >= rules.stoneLevel, shared: !!shared, by: p.name || 'a monk', mana: mpRestore, mp: st ? Math.floor(st.mp) : null, maxMp: st ? st.maxMp : null, stamina: spRestore, sp: nextSp, maxSp });
+      target.send('meditateFocus', { level, tier, durationMs: duration, regen: level >= rules.regenLevel, speed: level >= rules.speedLevel, stone: level >= rules.stoneLevel, shared: !!shared, by: p.name || 'a focused hunter', mana: mpRestore, mp: st ? Math.floor(st.mp) : null, maxMp: st ? st.maxMp : null, stamina: spRestore, sp: nextSp, maxSp });
     };
     applyFocus(client, false);
     if (level >= rules.auraLevel) {

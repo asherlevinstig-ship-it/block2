@@ -2472,7 +2472,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(styles,/#townchoices \.tcrow\.job-choice/);
 });
 
-test('first town arrival stages the fountain, Tamsin, and Question Portal',()=>{
+test('first town arrival stages the fountain and Question Portal',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
@@ -2511,10 +2511,10 @@ test('first town arrival stages the fountain, Tamsin, and Question Portal',()=>{
   assert.match(combat,/shouldShowFirstTownArrivalChoice,\s*\n {2}showFirstTownArrivalChoice,/);
   assert.match(world,/const TOWN_ARRIVAL_KEY='bc_town_arrival_v1'/);
   assert.match(world,/stage==='fountain'.*Grand Fountain/);
-  assert.match(world,/stage==='tamsin'.*Tamsin at the Job Board/);
+  assert.doesNotMatch(world,/Tamsin at the Job Board/);
   assert.match(world,/stage==='portal'.*Question Portal/);
-  assert.match(combat,/arrival\.stage\(\)==='tamsin'/);
-  assert.match(combat,/arrival\.introducePortal\(\)/);
+  assert.doesNotMatch(combat,/arrival\.stage\(\)==='tamsin'/);
+  assert.doesNotMatch(combat,/arrival\.introducePortal\(\)/);
   assert.match(dimensions,/const QUESTION_ROOM=\{x:930,z:855,G:18,R:28\}/);
   assert.match(dimensions,/function generateQuestionRoom\(\)/);
   assert.match(dimensions,/const QUESTION_HALL_TOWN_PORTAL=Object\.freeze\(\{dx:0,dz:12,range:4\.8\}\)/);
@@ -5079,7 +5079,7 @@ test('job system is disabled while ordinary work activities remain available', (
   assert.match(world, /!\['job_mentor','worker_tutor'\]\.includes\(def\.role\)/);
   assert.match(combat, /function shouldOpenLevel2JobChoice\(\)\{\s*if\(!JOBS_ENABLED\)return false/);
   assert.match(dimensions, /function enterJobTutorialRoom\(jobId\)\{[\s\S]*?if\(!JOBS_ENABLED\) return false/);
-  assert.match(menus, /if\(!JOBS_ENABLED\)\{sysMsg\('The <b>Job Board<\/b> is temporarily unavailable/);
+  assert.match(menus, /if\(!JOBS_ENABLED\)\{sysMsg\('Jobs are retired\./);
   assert.match(menus, /!JOBS_ENABLED&&\['JOBS','JOB BOARD','COOK JOBS','FARMER WORK','MONK WORK','MINER WORK'\]/);
   assert.match(menus, /filter\(entry=>JOBS_ENABLED\|\|entry\.id!=='jobs'\)/);
   assert.match(networking, /const restoreJobRoom=JOBS_ENABLED&&/);

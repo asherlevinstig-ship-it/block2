@@ -212,12 +212,11 @@ class DragonsMixin {
       const service = this.petTamerServices.get(client.sessionId);
       if (!service || service.enabled !== true) continue;
       const rec = this.profileFor(client);
-      if (!rec || !rec.prof || rec.prof.job !== 'pet_tamer') continue;
+      if (!rec || !rec.prof) continue;
       const p = this.state && this.state.players && this.state.players.get(client.sessionId);
       rows.push({
         sid: client.sessionId,
-        name: (p && p.name) || rec.prof.name || 'Pet Tamer',
-        job: rec.prof.job || '',
+        name: (p && p.name) || rec.prof.name || 'Dragon Handler',
         price: Math.max(0, Math.min(DRAGON_LOAN_MAX_FEE, service.price | 0)),
         note: typeof service.note === 'string' ? service.note.slice(0, 80) : '',
         dim: (p && p.dim) || 'overworld',
@@ -245,9 +244,7 @@ class DragonsMixin {
     const action = String(m && m.action || 'list');
     if (!this.petTamerServices) this.petTamerServices = new Map();
     if (action === 'advertise') {
-      if (!rec || !rec.prof || rec.prof.job !== 'pet_tamer') {
-        return client.send('petTamerServices', { ok: false, reason: 'job', services: this.petTamerServiceRows() });
-      }
+      if (!rec || !rec.prof) return client.send('petTamerServices', { ok: false, reason: 'invalid', services: this.petTamerServiceRows() });
       const price = Math.max(0, Math.min(DRAGON_LOAN_MAX_FEE, Number(m.price) || 0)) | 0;
       const note = typeof m.note === 'string' ? m.note.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
       this.petTamerServices.set(client.sessionId, { enabled: true, price, note, updatedAt: Date.now() });
@@ -265,13 +262,13 @@ class DragonsMixin {
       const targetSid = String(m.targetSid || '');
       const target = (this.clients || []).find(c => c.sessionId === targetSid);
       const targetRec = target && this.profileFor(target);
-      if (!rec || !target || !targetRec || !targetRec.prof || targetRec.prof.job !== 'pet_tamer') {
+      if (!rec || !target || !targetRec || !targetRec.prof) {
         return client.send('petTamerPingResult', { ok: false, reason: 'target', targetSid });
       }
       const p = this.state && this.state.players && this.state.players.get(client.sessionId);
       const tp = this.state && this.state.players && this.state.players.get(target.sessionId);
       const fromName = (p && p.name) || rec.prof.name || 'Hunter';
-      const targetName = (tp && tp.name) || targetRec.prof.name || 'Pet Tamer';
+      const targetName = (tp && tp.name) || targetRec.prof.name || 'Dragon Handler';
       target.send('petTamerPing', {
         fromSid: client.sessionId,
         fromName,
@@ -309,7 +306,6 @@ class DragonsMixin {
     if (this.dragonIsNested(ownerRec.token, type)) return reject('nested', { type });
     if (this.activeDragonLoanForType(ownerRec.token, ownerRec.prof, type, 'owner')) return reject('loaned', { type });
     if (this.effectiveMountUnlocksFor(tamerRec.token, tamerRec.prof).includes(kind)) return reject('targetOwned', { type, targetName: tamerRec.prof.name || 'Hunter' });
-    if (tamerRec.prof.job !== 'pet_tamer') return reject('job', { targetName: tamerRec.prof.name || 'Hunter' });
     const feeGold = Math.max(0, Math.min(DRAGON_LOAN_MAX_FEE, m.gold | 0));
     if (feeGold <= 0) return reject('fee');
     if ((tamerRec.prof.gold | 0) < feeGold) return reject('targetGold', { targetName: tamerRec.prof.name || 'Hunter' });
@@ -340,7 +336,6 @@ class DragonsMixin {
     if (!owner || !ownerRec || !tamerRec) { this.dragonLoanOffers.delete(id); return reject('offline'); }
     if (Date.now() - offer.createdAt > 45000) { this.dragonLoanOffers.delete(id); return reject('expired'); }
     if (this.tradePlayersClose && !this.tradePlayersClose(owner, client)) return reject('range');
-    if (tamerRec.prof.job !== 'pet_tamer') return reject('job');
     if ((tamerRec.prof.gold | 0) < (offer.feeGold | 0)) return reject('gold');
     const kind = 'dragon:' + offer.type;
     if (!Array.isArray(ownerRec.prof.mountUnlocks) || !ownerRec.prof.mountUnlocks.includes(kind)) return reject('unowned');
@@ -424,7 +419,7 @@ class DragonsMixin {
       loan: this.publicDragonLoan(patch, tamerRec.token),
       ownerLoan: this.publicDragonLoan(patch, ownerRec.token),
       ownerName: patch.ownerName || 'Owner',
-      tamerName: patch.tamerName || 'Pet Tamer',
+      tamerName: patch.tamerName || 'Dragon Handler',
       trainingXp: patch.trainingXp | 0,
       trainingDrills: patch.trainingDrills | 0,
       masteryGained: gained,

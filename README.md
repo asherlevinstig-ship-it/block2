@@ -50,7 +50,7 @@ client/
   js/inventory.mjs      inventory stacking/removal and equipment profile model
   js/network.mjs        join/resume/reconnect lifecycle controller
   js/progression.mjs    authoritative progression message reconciliation
-  js/quests-jobs.mjs    quest progress and profession XP/contract rules
+  js/quests-jobs.mjs    quest progress plus retired-job compatibility helpers
   js/reconnect.mjs      bounded WebSocket reconnect policy
   js/rendering.mjs      Three.js renderer/camera lifecycle
   styles.css            UI/HUD stylesheet (extracted from index.html, linked + served statically)
@@ -92,12 +92,12 @@ no bedrock, and a 10-block reach check from the editing player.
 | Gear & loot       | server    | ranked/rarity drops, reforging, masterwork, equips, and full-inventory loot recovery are rolled and validated server-side (`shared/gear-system.js` + `server/loot-progression.js`) |
 | Legendary weapons | server    | each weapon's effect (meteors, chains, blackholes, revives…) is fully simulated server-side |
 | Dragons & familiars | server  | hatching, breeding, mounts, breath, and familiar binds are all server-gated per species/item |
-| Profession XP     | server    | `jobXp` is server-owned: the save channel ignores client-sent profession XP entirely, and only validated server handlers (mining, kills, quests, contracts, meditation…) grant it, each clamped per event, so a forged save can't claim an instant max profession |
+| Retired job fields | server   | legacy job/profile fields remain schema-compatible but are cleared on load and ignored by active gameplay; former perks use authoritative Hunter level |
 | Land / guilds / teams | server | claims, guild-hall floors, and persistent parties are owned and persisted server-side |
 | Server events     | server    | parkour, King of the Hill, and Caravan Defence instances, scoring, and the roaming skyship run on the server clock |
 | Roads & road safety | server  | road caravans, roadside encounters, and the persisted road-safety meter are simulated and rewarded server-side |
 
-See [docs/SYSTEMS.md](docs/SYSTEMS.md) for the full gameplay-system reference (professions,
+See [docs/SYSTEMS.md](docs/SYSTEMS.md) for the full gameplay-system reference (Hunter progression,
 classes & abilities, biomes, economy, dragons, familiars, events…) and
 [docs/PROTOCOL.md](docs/PROTOCOL.md) for the client↔server message catalogue.
 

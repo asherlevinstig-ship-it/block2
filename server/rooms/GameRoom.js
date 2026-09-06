@@ -638,8 +638,8 @@ class GameRoom extends Room {
         prof.nameSet = true;
         p.lvl = prof.S.lvl;
         p.path = prof.S.path;
-        p.job = JOB_IDS.has(prof.job) ? prof.job : '';
-        p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
+        p.job = '';
+        p.jobLvl = 0;
         if (prof.activeRoom) {
           this.syncLiveActiveRoomPlayer(client, prof, p);
           this.persistActiveRoomPose(client, prof, p);
@@ -1808,7 +1808,7 @@ class GameRoom extends Room {
           p.name = next.name || 'Hunter';
           p.schoolId = client._account && client._account.schoolId != null ? String(client._account.schoolId).slice(0, 24) : '';
           p.lvl = next.S && next.S.lvl || 1;
-          p.job = next.job || '';
+          p.job = '';
           p.jobLvl = 0;
           p.dim = 'overworld';
           p.dgn = '';
@@ -4369,8 +4369,8 @@ class GameRoom extends Room {
     this.refreshSystemIntroductions(prof);
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
-    p.job = JOB_IDS.has(prof.job) ? prof.job : '';
-    p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
+    p.job = '';
+    p.jobLvl = 0;
     p.name = prof.name || p.name;
     p.schoolId = client._account && client._account.schoolId != null ? String(client._account.schoolId).slice(0, 24) : '';
     p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
@@ -5568,7 +5568,7 @@ class GameRoom extends Room {
       title: guild.title || 'Guild Contract',
       status: guild.ready || (guild.have | 0) >= (guild.need | 0) ? 'claimable' : 'active',
       text: guild.desc || 'Complete the guild contract.',
-      location: guild.ready ? 'Job Board' : (guild.targetName || 'Regional target'),
+      location: guild.ready ? 'Guild Hall' : (guild.targetName || 'Regional target'),
       action: guild.ready ? { type: 'guild_contracts', label: 'CLAIM GUILD' } : null,
       progress: { current: Math.max(0, guild.have | 0), required: Math.max(1, guild.need | 0 || 1) },
       reward: {
@@ -5757,9 +5757,9 @@ class GameRoom extends Room {
         objective.location = 'Guild Board';
         objective.hudText = 'Build B-rank footing through Road Warden contracts, regional trouble, and safer roads.';
       } else {
-        objective.action = { type: 'jobs', label: 'OPEN JOB BOARD' };
-        objective.location = 'Job Board';
-        objective.hudText = 'Keep the pressure down with rotating Adventurer work, C-rank Gates, events, and regional cleanup.';
+        objective.action = { type: 'guild_contracts', label: 'OPEN GUILD BOARD' };
+        objective.location = 'Guild Hall';
+        objective.hudText = 'Keep the pressure down with rotating Guild work, C-rank Gates, events, and regional cleanup.';
       }
       objective.reward = {
         xp: hunterXpForActivity(Math.max(HUNTER_RANK_LEVELS[2], S.lvl | 0), 'guild_contract'),
@@ -6800,8 +6800,7 @@ class GameRoom extends Room {
     if(!rec||!this.isPlayerAlive(client))return client.send('blacksmithReject',{reason:'invalid'});
     if(!this.blacksmithNear(client))return client.send('blacksmithReject',{reason:'range'});
     if(this.rateLimited(client,'blacksmith',8,16))return client.send('blacksmithReject',{reason:'rate'});
-    if(rec.prof.job!=='blacksmith')return client.send('blacksmithReject',{reason:'profession'});
-    const level=JOB_SYSTEM.jobLevelFromXp(rec.prof.jobXpByJob&&rec.prof.jobXpByJob.blacksmith||0);
+    const level=Math.max(1,rec.prof.S&&rec.prof.S.lvl|0);
     if(!cost||level<cost.level)return client.send('blacksmithReject',{reason:'level',level:cost&&cost.level||2});
     const slot=Math.max(0,Math.min(35,m&&m.slot|0)),s=rec.prof.inv&&rec.prof.inv[slot],info=s&&TOOL_INFO[s.id];
     if(!s||!info||!['sword','axe','pick'].includes(info.cls))return client.send('blacksmithReject',{reason:'tool'});
@@ -7895,7 +7894,7 @@ class GameRoom extends Room {
     const tool = this.equippedTool(rec.prof, slot);
     if (!tool || tool.cls !== req.cls) return;
     if (tool.slot.dur == null) tool.slot.dur = this.toolMaxDur(tool.slot, tool);
-    const minerLevel=rec.prof.job==='miner'?JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob&&rec.prof.jobXpByJob.miner)||0):0;
+    const minerLevel=Math.max(1,rec.prof.S&&rec.prof.S.lvl|0);
     if (minerLevel>=JOB_SYSTEM.MINER_RULES.stonehandLevel && Math.random() < JOB_SYSTEM.MINER_RULES.durabilitySaveChance) {
       client.send('toolSync', { slot: tool.index, item: { id: tool.slot.id, count: tool.slot.count || 1, dur: tool.slot.dur, plus: this.toolPlus(tool.slot),rarity:tool.slot.rarity||'',forge:tool.slot.forge||'',masterwork:!!tool.slot.masterwork,locked:!!tool.slot.locked }, spared: true });
       return;

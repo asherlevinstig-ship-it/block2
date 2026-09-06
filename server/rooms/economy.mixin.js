@@ -385,7 +385,9 @@ class EconomyMixin {
   }
   craftedOutputCount(prof, id, count) {
     let out = Math.max(1, count | 0);
-    if ((id === I.BREAD || id === I.HEARTY_SANDWICH || id === I.COOKED_MEAT || id === I.DRAGON_TREAT || id === I.GOLDEN_BROTH || id === I.TRAIL_RATION) && prof.job === 'cook' && Math.random() < jobPerkChance(prof, 'cook', 0.08)) {
+    const hunterLevel = Math.max(1, prof && prof.S ? prof.S.lvl | 0 : 1);
+    const cookingChance = JOB_SYSTEM.perkChance(JOB_SYSTEM.perkTierFromLevel(hunterLevel), 0.08);
+    if ((id === I.BREAD || id === I.HEARTY_SANDWICH || id === I.COOKED_MEAT || id === I.DRAGON_TREAT || id === I.GOLDEN_BROTH || id === I.TRAIL_RATION) && hunterLevel >= JOB_SYSTEM.COOK_RULES.batchLevel && Math.random() < cookingChance) {
       out += Math.max(1, Math.floor(out * 0.25));
     }
     return out;
@@ -393,14 +395,14 @@ class EconomyMixin {
   // Returns the count that could NOT be placed (0 = all placed). durOverride, when
   // given, pins the durability instead of the default/blacksmith-perk value.
   blacksmithArmorCraftBonus(prof) {
-    if (!prof || prof.job !== 'blacksmith') return 0;
+    if (!prof) return 0;
     const maxMp = typeof this.maxMpForProfile === 'function'
       ? this.maxMpForProfile(prof)
       : 20 + (Math.max(1, prof.S && prof.S.int ? prof.S.int | 0 : 1) - 1) * 3;
     return Math.max(0, Math.min(0.35, (Math.max(20, maxMp) - 20) / 180));
   }
   blacksmithCraftedArmorRarity(prof) {
-    if (!prof || prof.job !== 'blacksmith') return '';
+    if (!prof) return '';
     return GEAR_SYSTEM.rollRarity(Math.random(), this.blacksmithArmorCraftBonus(prof)).id;
   }
   addCraftedRewardItem(prof, id, count, durOverride) {
@@ -576,8 +578,8 @@ class EconomyMixin {
     });
     const recipe = this.matchRecipe(cells, w);
     if (!recipe) return client.send('craftReject', {});
-    if (recipe.job && (rec.prof.job !== recipe.job || jobLevelFor(rec.prof, recipe.job) < (recipe.level | 0))) {
-      return client.send('craftReject', { reason: 'profession', job: recipe.job, level: recipe.level | 0 });
+    if (recipe.hunterLevel && ((rec.prof.S && rec.prof.S.lvl) | 0) < (recipe.hunterLevel | 0)) {
+      return client.send('craftReject', { reason: 'hunter_level', level: recipe.hunterLevel | 0 });
     }
     const needs = this.recipeNeeds(cells);
     let times = m.shift ? 64 : 1;

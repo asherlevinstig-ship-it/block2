@@ -651,7 +651,7 @@ function sanitizeHomesteadWorkOrder(c) {
     need,
     have: clampI(c.have, 0, need),
     rewardGold: clampI(c.rewardGold, 0, 9999),
-    rewardJobXp: clampI(c.rewardJobXp, 0, 9999),
+    rewardXp: clampI(c.rewardXp == null ? c.rewardJobXp : c.rewardXp, 0, 9999),
     title: cleanShortText(c.title, 'Homestead Work Order', 64),
     desc: cleanShortText(c.desc, 'Bring supplies to your homestead.', 160),
     offeredAt: clampI(c.offeredAt, 0, Number.MAX_SAFE_INTEGER),
@@ -1128,6 +1128,13 @@ function sanitizeProfile(p) {
   }
   out.progressionFocus = PROGRESSION_FOCUS_STATES.has(p.progressionFocus) ? p.progressionFocus : '';
   if (!JOB_SYSTEM.ENABLED) {
+    out.job = '';
+    out.jobContract = null;
+    out.jobContractOffers = [];
+    out.jobContractOffersAt = 0;
+    out.jobContractOfferJob = '';
+    out.jobContractOfferBoards = {};
+    out.forceJobChoice = false;
     if (out.progressionFocus === 'first_profession_contract') out.progressionFocus = 'e_rank_climb';
     else if (['first_promotion_job', 'first_promotion_contract'].includes(out.progressionFocus)) out.progressionFocus = 'first_d_gate';
     else if (out.progressionFocus === 'next_adventurer_contract') out.progressionFocus = out.abilitySpec ? 'b_rank_pressure' : 'c_rank_specialization';
@@ -1145,7 +1152,7 @@ function sanitizeProfile(p) {
     : 'first_d_gate';
   if (['first_profession_contract', 'next_adventurer_contract'].includes(out.progressionFocus) && out.jobContract) out.progressionFocus = '';
   out.firstPromotionSeen = p.firstPromotionSeen === true;
-  out.forceJobChoice = p.forceJobChoice === true;
+  out.forceJobChoice = JOB_SYSTEM.ENABLED && p.forceJobChoice === true;
   out.tutorials = sanitizeTutorials(p.tutorials, out);
   out.dungeonRecovery = sanitizeDungeonRecovery(p.dungeonRecovery);
   out.vitalsSavedAt = clampI(p.vitalsSavedAt, 0, 4102444800000);

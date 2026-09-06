@@ -865,9 +865,9 @@ RECIPES.push({shapeless:[I.WHEAT,I.WHEAT,I.COOKED_MEAT,I.CHARCOAL], out:[I.DRAGO
 RECIPES.push({shapeless:[I.WINDSEED,I.WHEAT,I.WHEAT], out:[I.BREAD,2]});
 RECIPES.push({shapeless:[B.LEAVES,I.WHEAT,I.CHARCOAL], out:[I.COMPOST,2]});
 RECIPES.push({shapeless:[I.GOLDEN_WHEAT,I.BREAD,I.COOKED_MEAT], out:[I.HEARTY_SANDWICH,3]});
-RECIPES.push({shapeless:[I.WHEAT,I.BREAD,I.COOKED_MEAT], out:[I.GOLDEN_BROTH,1], job:'cook', level:5});
-RECIPES.push({shapeless:[I.WINDSEED,I.HEARTY_SANDWICH,I.COOKED_MEAT], out:[I.TRAIL_RATION,2], job:'cook', level:10});
-RECIPES.push({shapeless:[I.GOLDEN_WHEAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.HEARTY_SANDWICH], out:[I.FEAST_PLATTER,1], job:'cook', level:20});
+RECIPES.push({shapeless:[I.WHEAT,I.BREAD,I.COOKED_MEAT], out:[I.GOLDEN_BROTH,1], hunterLevel:5});
+RECIPES.push({shapeless:[I.WINDSEED,I.HEARTY_SANDWICH,I.COOKED_MEAT], out:[I.TRAIL_RATION,2], hunterLevel:10});
+RECIPES.push({shapeless:[I.GOLDEN_WHEAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.HEARTY_SANDWICH], out:[I.FEAST_PLATTER,1], hunterLevel:20});
 RECIPES.push({shapeless:[I.GEODE], out:[I.DIAMOND,1]});
 RECIPES.push({shapeless:[I.HEARTWOOD_RESIN,I.BREAD,I.COOKED_MEAT], out:[I.HEARTY_SANDWICH,2]});
 RECIPES.push({shapeless:[I.SUNSHARD,B.SAND,B.SAND], out:[B.GLASS,4]});
@@ -4059,7 +4059,7 @@ function clampHomesteadWorkOrder(order){
     need,
     have:Math.max(0,Math.min(need,order.have|0)),
     rewardGold:Math.max(0,order.rewardGold|0),
-    rewardJobXp:Math.max(0,order.rewardJobXp|0),
+    rewardXp:Math.max(0,(order.rewardXp==null?order.rewardJobXp:order.rewardXp)|0),
     title:String(order.title||'Homestead Work Order').slice(0,80),
     desc:String(order.desc||'Bring supplies to your homestead.').slice(0,180),
     offeredAt:Math.max(0,Number(order.offeredAt)||0),
@@ -4103,10 +4103,10 @@ function sendHomesteadUpgrade(action,id=''){
 function homesteadUpgradeSpecs(){
   const fallback=[
     {id:'storage',title:'Storage Room',desc:'Turn one claimed room into sorted shelves and bigger chests.',benefit:'+9 slots in each owned Homestead chest',costGold:0,max:1},
-    {id:'forge',title:'Forge Room',desc:'Set up a proper tool bench for repairs, smithing, and metal stock.',benefit:'+25% Blacksmith XP from Homestead work orders',costGold:0,max:1},
-    {id:'kitchen',title:'Kitchen',desc:'Build a working pantry so cooked supplies matter between Gates.',benefit:'+25% Cook XP from Homestead work orders',costGold:0,max:1},
-    {id:'meditation',title:'Meditation Corner',desc:'Keep a quiet corner for focus, breath, and safer recovery.',benefit:'+25% Monk XP from Homestead work orders and stronger active focus support',costGold:0,max:1},
-    {id:'stable',title:'Stable / Nest',desc:'Make a calm resting place for companions and dragons.',benefit:'+25% Pet Tamer XP from Homestead work orders and better dragon rest',costGold:0,max:1},
+    {id:'forge',title:'Forge Room',desc:'Set up a proper tool bench for repairs, smithing, and metal stock.',benefit:'+25% Hunter XP from forge supply orders',costGold:0,max:1},
+    {id:'kitchen',title:'Kitchen',desc:'Build a working pantry so cooked supplies matter between Gates.',benefit:'+25% Hunter XP from kitchen supply orders',costGold:0,max:1},
+    {id:'meditation',title:'Meditation Corner',desc:'Keep a quiet corner for focus, breath, and safer recovery.',benefit:'+25% Hunter XP from meditation supply orders and stronger active focus support',costGold:0,max:1},
+    {id:'stable',title:'Stable / Nest',desc:'Make a calm resting place for companions and dragons.',benefit:'+25% Hunter XP from stable supply orders and better dragon rest',costGold:0,max:1},
     {id:'comfort',title:'Warm Lights',desc:'Your lit Homestead feels safer and more alive.',benefit:'Legacy comfort marker',costGold:0,max:1},
     {id:'rest',title:'Rest Corner',desc:'Adds a safe rest roleplay corner without refilling combat resources on logout.',benefit:'Cosmetic comfort corner',costGold:0,max:1},
   ];
@@ -4186,7 +4186,7 @@ function appendHomesteadWorkOrderPanel(panel, btn, canCreate=true){
     ? '<br>Contributors: '+order.contributors.map(c=>escHTML(c.name)+' '+c.count).join(', ')
     : '';
   const helperLine=canCreate?'':'<br>Trusted helper: contributions grant assist XP; owner claims the final reward.';
-  row.innerHTML='<span><b>'+escHTML(order.title)+'</b><br><small style="opacity:.72">'+escHTML(order.desc)+'<br>'+escHTML(itemLabel(order.target))+' '+order.have+'/'+order.need+' - '+storedLine+' - carrying '+carrying+' - reward '+order.rewardGold+' gold, '+order.rewardJobXp+' '+escHTML((JOBS[order.job]&&JOBS[order.job].name)||'Job')+' XP'+helperLine+contributors+'</small></span>';
+  row.innerHTML='<span><b>'+escHTML(order.title)+'</b><br><small style="opacity:.72">'+escHTML(order.desc)+'<br>'+escHTML(itemLabel(order.target))+' '+order.have+'/'+order.need+' - '+storedLine+' - carrying '+carrying+' - reward '+order.rewardGold+' gold, '+order.rewardXp+' Hunter XP'+helperLine+contributors+'</small></span>';
   if(!ready){
     const contribute=btn('CONTRIBUTE',()=>sendHomesteadWorkOrder('contribute'));
     contribute.disabled=!!stored&&(stored.chests<=0||stored.have<=0);
@@ -5469,7 +5469,8 @@ let townArrivalStageCache='';
 function townArrivalStage(){
   if(townArrivalStageCache)return townArrivalStageCache;
   try{townArrivalStageCache=localStorage.getItem(TOWN_ARRIVAL_KEY)||'';}catch(e){}
-  if(!['fountain','tamsin','portal','done'].includes(townArrivalStageCache))
+  if(townArrivalStageCache==='tamsin')townArrivalStageCache='portal';
+  if(!['fountain','portal','done'].includes(townArrivalStageCache))
     townArrivalStageCache=S&&S.lvl>1?'done':'fountain';
   return townArrivalStageCache;
 }
@@ -5481,7 +5482,6 @@ function setTownArrivalStage(stage,announce=''){
 function townArrivalObjective(){
   const stage=townArrivalStage();
   if(stage==='fountain')return {label:'Town Arrival',text:'Follow Arrival Road to the Grand Fountain'};
-  if(stage==='tamsin')return {label:'Town Arrival',text:'Speak with Tamsin at the Job Board, north of the fountain'};
   if(stage==='portal')return {label:'Town Arrival',text:'Follow the east path to the blue ? Question Portal'};
   return null;
 }
@@ -5489,14 +5489,14 @@ function townArrivalGuidanceInfo(){
   let stage=townArrivalStage();
   if(stage==='done')return null;
   if(stage==='fountain'&&Math.hypot(player.pos.x-TOWN.TC,player.pos.z-TOWN.TC)<13.5){
-    setTownArrivalStage('tamsin','You found the Grand Fountain. Tamsin is waiting at the Job Board just north of the plaza.');
-    stage='tamsin';
+    setTownArrivalStage('portal','You found the Grand Fountain. Follow the blue markers east to the ? Question Portal.');
+    stage='portal';
   }
   if(stage==='portal'&&Math.hypot(player.pos.x-HUB.questionPortal.x,player.pos.z-HUB.questionPortal.z)<6.5){
     setTownArrivalStage('done','The blue ? portal opens Question Hall. Market Square is west, Adventurer\'s Row north, Crafting Row northeast, and the Nature District southeast.');
     return null;
   }
-  const target=stage==='fountain'?{x:TOWN.TC,z:TOWN.TC}:stage==='tamsin'?HUB.jobs:HUB.questionPortal;
+  const target=stage==='fountain'?{x:TOWN.TC,z:TOWN.TC}:HUB.questionPortal;
   const route=stage==='fountain'
     ? [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC+18},target]
     : stage==='portal'
@@ -5507,7 +5507,6 @@ function townArrivalGuidanceInfo(){
 Object.defineProperty(globalThis,'BlockcraftTownArrivalGuide',{value:Object.freeze({
   stage:()=>townArrivalStage(),
   objective:()=>townArrivalObjective(),
-  introducePortal:()=>{if(townArrivalStage()==='tamsin')setTownArrivalStage('portal','Tamsin points east. Follow the blue markers to the ? Question Portal.');},
 }),configurable:true});
 function guidanceTargetInfo(){
   if(dim!=='overworld') return null;

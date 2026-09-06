@@ -303,7 +303,7 @@ function takeOneFromInventory(id){
   return false;
 }
 function stageRecipe(recipe){
-  if(recipe.job && (playerJob!==recipe.job || jobLevelFromXp(jobXpFor(recipe.job))<(recipe.level||1))){sysMsg('Equip <b>'+JOBS[recipe.job].name+'</b> and reach Lv '+recipe.level+' to craft that recipe');return;}
+  if(recipe.hunterLevel && (S.lvl|0)<recipe.hunterLevel){sysMsg('Reach <b>Hunter Level '+recipe.hunterLevel+'</b> to craft that recipe');return;}
   if(!recipe || recipe.shapeless && recipe.shapeless.length>craftCells.length) return;
   if(cursorStack){ sysMsg('Place the held item before choosing a recipe'); return; }
   if(craftCells.some(Boolean)){ sysMsg('Clear the crafting grid before choosing a recipe'); return; }
@@ -345,7 +345,7 @@ function recipeCategory(recipe){
 function recipePurposeTags(entry){
   const out=entry&&entry.out&&entry.out[0],recipe=entry&&entry.recipe,item=ITEMS[out],tags=[];
   if(entry&&entry.smelt)tags.push('Smelt');
-  if(recipe&&recipe.job)tags.push('Profession');
+  if(recipe&&recipe.hunterLevel)tags.push('Hunter Recipe');
   if([B.TABLE,B.FURNACE,B.CHEST,B.TORCH,B.LANTERN,B.CAMPFIRE,B.BED,B.EGG_INSULATOR].includes(out))tags.push('Base');
   if(item&&(item.tool||item.armor)||out===I.REPAIR_KIT)tags.push('Gear');
   if(FOOD_VALUES[out]||[I.BREAD,I.COOKED_MEAT,I.HEARTY_SANDWICH,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(out))tags.push('Food');
@@ -450,20 +450,17 @@ function missingForCounts(counts){
   return missing;
 }
 function recipeJobName(recipe){
-  return recipe && recipe.job && JOBS[recipe.job] ? JOBS[recipe.job].name : '';
+  return recipe && recipe.hunterLevel ? 'Hunter' : '';
 }
 function recipeJobLockText(recipe){
-  if(!recipe || !recipe.job) return '';
-  const name=recipeJobName(recipe);
-  const lvl=recipe.level||1;
-  if(playerJob!==recipe.job) return 'Equip '+name;
-  if(jobLevelFromXp(jobXpFor(recipe.job))<lvl) return name+' Lv '+lvl;
+  if(!recipe || !recipe.hunterLevel) return '';
+  if((S.lvl|0)<recipe.hunterLevel) return 'Hunter Level '+recipe.hunterLevel;
   return '';
 }
 function recipeProfessionHint(entry,state){
   if(entry.smelt) return state.missing.length ? 'Missing: '+state.missing.join(', ') : itemLabel(entry.input)+' + fuel';
   const recipe=entry.recipe;
-  const tag=recipe.job ? recipeJobName(recipe)+' Lv '+(recipe.level||1)+' profession recipe' : '';
+  const tag=recipe.hunterLevel ? 'Hunter Level '+recipe.hunterLevel+' recipe' : '';
   const missing=state.missing.length ? 'Missing: '+state.missing.join(', ') : '';
   if(state.locked) return [state.lockReason,missing].filter(Boolean).join(' - ');
   if(state.needsTable) return [tag,'Needs crafting table'].filter(Boolean).join(' - ');
@@ -707,12 +704,12 @@ function renderRecipeBook(kind='craft'){
       : craftStateForRecipe(entry.recipe);
     state.ready = !state.locked && state.missing.length===0 && !state.needsTable;
     const needTable=!entry.smelt && state.needsTable;
-    const isProfession=!entry.smelt && !!entry.recipe.job;
+    const isProfession=!entry.smelt && !!entry.recipe.hunterLevel;
     const row=document.createElement('div');
     const focus=recipeProgressionFocus(entry);
     row.className='recipeitem '+(state.ready?'ready':'missing')+(needTable?' dim':'')+(isProfession?' profession':'')+(state.locked?' locked':'')+(focus?' next':'');
     if(!entry.smelt){
-      row.title = state.locked ? state.lockReason : needTable && craftW<3 ? 'Needs a crafting table' : focus ? 'Craft this next for '+focus : isProfession && state.ready ? 'Profession recipe ready' : 'Click to fill crafting grid';
+      row.title = state.locked ? state.lockReason : needTable && craftW<3 ? 'Needs a crafting table' : focus ? 'Craft this next for '+focus : isProfession && state.ready ? 'Hunter recipe ready' : 'Click to fill crafting grid';
       row.addEventListener('mousedown', e=>{ e.preventDefault(); stageRecipe(entry.recipe); });
     }
     const icon=iconNode(outId); icon.className='recipeicon'; row.appendChild(icon);
@@ -789,7 +786,7 @@ function slotInteract(acc, e, opts={}){
   if(opts.result){
     const r=craftResult();
     if(!r) return;
-    if(r.job && (playerJob!==r.job || jobLevelFromXp(jobXpFor(r.job))<(r.level||1))){sysMsg('Equip <b>'+JOBS[r.job].name+'</b> and reach Lv '+r.level+' to craft that recipe');return;}
+    if(r.hunterLevel && (S.lvl|0)<r.hunterLevel){sysMsg('Reach <b>Hunter Level '+r.hunterLevel+'</b> to craft that recipe');return;}
     if(NET.on && !tutorialLocalCrafting()){
       requestServerCraft(e.shiftKey);
       return;
@@ -2260,8 +2257,7 @@ function blacksmithServiceRejected(m){
   else if(r==='range') sysMsg('Stand closer to <b>Tobin</b>');
   else if(r==='max') sysMsg('That item is already at the current upgrade limit');
   else if(r==='tool') sysMsg('Select eligible <b>gear</b>');
-  else if(r==='profession') sysMsg('Equip <b>Blacksmith</b> as your profession first');
-  else if(r==='level') sysMsg('Requires <b>Blacksmith Level '+((m&&m.level)||2)+'</b>');
+  else if(r==='level') sysMsg('Requires <b>Hunter Level '+((m&&m.level)||2)+'</b>');
   else if(r==='forged') sysMsg('That item is already reforged');
   else if(r==='unforged') sysMsg('Reforge the item before using this service');
   else if(r==='masterwork') sysMsg('That item is already a Masterwork');
@@ -2650,7 +2646,7 @@ function questBump(){
 function questActivityWhere(q){
   if(!q) return 'Follow the active trail';
   if(q.type==='sell' && countItem(q.item||I.MONSTER_MEAT)>0) return 'Greta at the tavern';
-  if(q.type==='utility') return 'Job Board / Guild Contracts';
+  if(q.type==='utility') return 'Guild Hall / Guild Contracts';
   if(q.type==='familiar') return 'Use the sigil from your hotbar';
   if(q.type==='mount'||q.type==='mount_use') return 'Dragon roost practice area';
   if(q.type==='farm') return 'Town Farm or claimed field';
@@ -2681,7 +2677,7 @@ function maraQuestCue(q){
   if(q.title==='First Hands') showName('Quest accepted: leave through the north gate');
   else if(q.title==='Road Ready') showName('Wooden sword ready - defeat 3 enemies');
   else if(q.type==='gate') showName('Find and clear the E-rank Gate');
-  else if(q.type==='utility') showName('Take a Guild Contract at the Job Board');
+  else if(q.type==='utility') showName('Take a Guild Contract at the Guild Hall');
   else if(q.type==='sell') showName('Hunt Monster Meat, then sell it to Greta');
   else if(q.type==='familiar') showName('Use the Shadow Sigil, then press K');
   else if(q.type==='mount') showName('Place the Egg Insulator, then use the Dragon Egg');
@@ -3535,6 +3531,10 @@ function openGuildHallUI(focus=''){
   const floors=document.createElement('div');floors.className='sub2';floors.style.marginTop='14px';floors.textContent='FELLOWSHIP FLOORS';qpanelEl.appendChild(floors);
   if(!(guildHallState.floors||[]).length){const empty=document.createElement('p');empty.className='qtext';empty.textContent='No fellowship has claimed a floor yet.';qpanelEl.appendChild(empty);}
   for(const floor of guildHallState.floors||[]){const line=document.createElement('div');line.className='shoprow';line.innerHTML='<b style="color:#f2c75c">FLOOR '+floor.floor+'</b><span>'+escHTML(floor.name)+'<br><small style="opacity:.72">Leader: '+escHTML(floor.leaderName)+'</small></span>';qpanelEl.appendChild(line);}
+  const actions=document.createElement('div');actions.className='qrow';
+  actions.appendChild(qBtn('GUILD CONTRACTS',()=>openRegionalContractsUI()));
+  actions.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+  qpanelEl.appendChild(actions);
   focusGuildHallSection(focus);
 }
 function questLogCardHTML(source, title, status, where, active=true, extraHTML='', opts={}){
@@ -3679,7 +3679,7 @@ function questLogFilteredObjectives(filter=questLogFilter){
 function serverObjectiveQuestLogSections(filter=questLogFilter){
   const list=questLogFilteredObjectives(filter);
   if(!list.length){
-    const empty=filter==='ready'?'Complete story, trial, and progression objectives will appear here when a reward is waiting.':filter==='active'?'No active quest work is waiting. Check What Next or speak to town NPCs. Jobs live at the Job Board; Guild Contracts live at the Guild Hall.':'No active objectives in this section.';
+    const empty=filter==='ready'?'Complete story, trial, and progression objectives will appear here when a reward is waiting.':filter==='active'?'No active quest work is waiting. Check What Next, visit the Guild Hall, or speak to town NPCs.':'No active objectives in this section.';
     return questSectionHTML(filter==='ready'?'Ready':filter==='active'?'Active':'Objectives',[],empty);
   }
   const groups=[
@@ -3969,10 +3969,10 @@ function legacyJobQuestLogCard(){
 }
 function legacyGuildQuestLogCard(){
   const c=clampRegionalContract(regionalContract);
-  if(!c) return questLogCardHTML('Guild Contract','No active guild contract','Accept a regional contract from the Hunter Guild board.','Job Board → Guild Contracts',false);
+  if(!c) return questLogCardHTML('Guild Contract','No active guild contract','Accept a regional contract from the Hunter Guild board.','Guild Hall → Guild Contracts',false);
   return questLogCardHTML('Guild Contract', c.title,
     c.ready ? 'Complete — claim your reward' : Math.min(c.need,c.have)+'/'+c.need+' — '+c.desc,
-    c.ready ? 'Job Board' : (c.targetName||'Regional target'));
+    c.ready ? 'Guild Hall' : (c.targetName||'Regional target'));
 }
 function storyQuestLogCard(){
   if(!quest || (quest.source||'npc')!=='npc') return questLogCardHTML('Story Quests','No active story quest','Speak to a town NPC to accept one.','Mara Vale or another villager',false);
@@ -3993,8 +3993,8 @@ function jobQuestLogCard(){
 }
 function guildQuestLogCard(){
   const c=clampRegionalContract(regionalContract);
-  if(!c) return questLogCardHTML('Guild Contract','No active guild contract','Accept a regional contract from the Hunter Guild board.','Job Board -> Guild Contracts',false);
-  return questLogCardHTML('Guild Contract', c.title, c.ready ? 'Complete - claim your reward' : Math.min(c.need,c.have)+'/'+c.need+' - '+c.desc, c.ready ? 'Job Board' : (c.targetName||'Regional target'), true, '', {ready:!!c.ready,progressHTML:questProgressHTML(c.have,c.need),rewardHTML:questRewardPreviewFromGuild(c)});
+  if(!c) return questLogCardHTML('Guild Contract','No active guild contract','Accept a regional contract from the Hunter Guild board.','Guild Hall -> Guild Contracts',false);
+  return questLogCardHTML('Guild Contract', c.title, c.ready ? 'Complete - claim your reward' : Math.min(c.need,c.have)+'/'+c.need+' - '+c.desc, c.ready ? 'Guild Hall' : (c.targetName||'Regional target'), true, '', {ready:!!c.ready,progressHTML:questProgressHTML(c.have,c.need),rewardHTML:questRewardPreviewFromGuild(c)});
 }
 function menuTutorialObjective(){
   if(!townGuidanceActive)return null;
@@ -4679,7 +4679,7 @@ function petTamerRoomLabel(s){
   return 'Town / Overworld';
 }
 function requestPetTamerServices(action='list', extra={}){
-  if(!NET.on||!NET.room){ sysMsg('Pet Tamer services require the live world server.'); return false; }
+  if(!NET.on||!NET.room){ sysMsg('Dragon handler listings require the live world server.'); return false; }
   NET.room.send('petTamerService',{action,...extra});
   return true;
 }
@@ -4692,21 +4692,21 @@ function applyPetTamerServices(m){
     reason:String(m.reason||''),
     updatedAt:Date.now(),
   };
-  if(m.ok===false&&m.reason==='job')sysMsg('Only <b>Pet Tamers</b> can advertise dragon training services.',{tier:'minor',title:'Pet Tamer Services'});
+  if(m.ok===false)sysMsg('Dragon handler services are unavailable right now.',{tier:'minor',title:'Dragon Handlers'});
   if(qModalIs('pet-tamer-services'))setTimeout(()=>openPetTamerServicesUI(false),80);
 }
 function applyPetTamerPing(m){
   if(!m)return;
   const name=escHTML(String(m.fromName||'Hunter'));
   const where=escHTML(petTamerRoomLabel(m));
-  sysMsg('<b>'+name+'</b> is looking for a Pet Tamer.<br>They are in <b>'+where+'</b> near X '+Math.round(Number(m.x)||0)+', Z '+Math.round(Number(m.z)||0)+'. Meet them to arrange a dragon-training loan.',{tier:'major',title:'Pet Tamer Help'});
+  sysMsg('<b>'+name+'</b> is looking for a dragon handler.<br>They are in <b>'+where+'</b> near X '+Math.round(Number(m.x)||0)+', Z '+Math.round(Number(m.z)||0)+'. Meet them to arrange a dragon-training loan.',{tier:'major',title:'Dragon Handler Help'});
 }
 function applyPetTamerPingResult(m){
   if(m&&m.ok){
-    sysMsg('Ping sent to <b>'+escHTML(String(m.targetName||'Pet Tamer'))+'</b>. Meet beside each other, press <b>E</b>, then choose <b>Train My Pet</b>.',{tier:'minor',title:'Pet Tamer Services'});
+    sysMsg('Ping sent to <b>'+escHTML(String(m.targetName||'Dragon Handler'))+'</b>. Meet beside each other, press <b>E</b>, then choose <b>Train My Pet</b>.',{tier:'minor',title:'Dragon Handlers'});
     return;
   }
-  sysMsg('That Pet Tamer is no longer available.',{tier:'minor',title:'Pet Tamer Services'});
+  sysMsg('That dragon handler is no longer available.',{tier:'minor',title:'Dragon Handlers'});
 }
 function openPetTamerServicesUI(shouldRequest=true){
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
@@ -4714,14 +4714,14 @@ function openPetTamerServicesUI(shouldRequest=true){
   openQWin('management');
   qpanelEl.innerHTML='';
   qpanelEl.dataset.modal='pet-tamer-services';
-  const h=document.createElement('h2'); h.textContent='PET TAMER SERVICES'; qpanelEl.appendChild(h);
+  const h=document.createElement('h2'); h.textContent='DRAGON HANDLERS'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
   sub.textContent='ONLINE TRAINERS - DRAGON LOANS - 12 HOUR TRAINING';
   qpanelEl.appendChild(sub);
   const intro=document.createElement('p'); intro.className='qtext';
-  intro.innerHTML='Use this board to find online Pet Tamers. A trainer can advertise a fee; an owner can ping them, meet nearby, then use <b>E - Train My Pet</b> to create the real gold-for-training loan.';
+  intro.innerHTML='Use this board to find online dragon handlers. Any hunter can advertise a fee; an owner can ping them, meet nearby, then use <b>E - Train My Pet</b> to create the real gold-for-training loan.';
   qpanelEl.appendChild(intro);
-  if(playerJob==='pet_tamer'){
+  {
     const panel=document.createElement('div'); panel.className='trade-error-panel';
     panel.innerHTML='<b>Advertise your service</b><br><small>Owners will see your fee and current room while you are online.</small>';
     const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px';
@@ -4737,7 +4737,7 @@ function openPetTamerServicesUI(shouldRequest=true){
   const list=document.createElement('div'); list.className='bondgrid'; qpanelEl.appendChild(list);
   if(!services.length){
     const none=document.createElement('p'); none.className='qtext';
-    none.innerHTML=NET.on?'No Pet Tamers are advertising right now. Check again later or ask in chat.':'Connect to the live server to see online Pet Tamers.';
+    none.innerHTML=NET.on?'No dragon handlers are advertising right now. Check again later or ask in chat.':'Connect to the live server to see online dragon handlers.';
     qpanelEl.appendChild(none);
   } else {
     for(const s of services){
@@ -4746,14 +4746,14 @@ function openPetTamerServicesUI(shouldRequest=true){
       const body=document.createElement('div'); card.appendChild(body);
       const name=document.createElement('div'); name.className='bondname';
       const own=NET&&NET.room&&s.sid===NET.room.sessionId;
-      name.innerHTML='<b>'+escHTML(String(s.name||'Pet Tamer'))+'</b><span>'+(own?'YOUR LISTING':'ONLINE TAMER')+'</span>';
+      name.innerHTML='<b>'+escHTML(String(s.name||'Dragon Handler'))+'</b><span>'+(own?'YOUR LISTING':'ONLINE HANDLER')+'</span>';
       body.appendChild(name);
       const meta=document.createElement('div'); meta.className='bondmeta';
       meta.innerHTML='Fee: <b>'+Math.max(0,s.price|0).toLocaleString('en-US')+'g</b><br>Location: <b>'+escHTML(petTamerRoomLabel(s))+'</b> - X '+Math.round(Number(s.x)||0)+', Z '+Math.round(Number(s.z)||0)+'<br>Active loans: <b>'+Math.max(0,s.activeLoans|0)+'</b><br>'+escHTML(String(s.note||'Ready to train dragons.'));
       body.appendChild(meta);
       const actions=document.createElement('div'); actions.className='bondactions'; body.appendChild(actions);
-      actions.appendChild(qBtn(own?'YOUR SERVICE':'PING TAMER',()=>own?sysMsg('This is your own Pet Tamer listing.'):requestPetTamerServices('ping',{targetSid:s.sid}),own));
-      actions.appendChild(qBtn('HOW LOANS WORK',()=>sysMsg('Stand beside the Pet Tamer, press <b>E</b>, choose <b>Train My Pet</b>, pick an adult dragon, then set the gold fee. The tamer pays the fee and keeps the dragon for training up to 12 real hours.',{tier:'minor',title:'Dragon Loans'}),true));
+      actions.appendChild(qBtn(own?'YOUR SERVICE':'PING HANDLER',()=>own?sysMsg('This is your own dragon handler listing.'):requestPetTamerServices('ping',{targetSid:s.sid}),own));
+      actions.appendChild(qBtn('HOW LOANS WORK',()=>sysMsg('Stand beside the handler, press <b>E</b>, choose <b>Train My Pet</b>, pick an adult dragon, then set the gold fee. The handler pays the fee and keeps the dragon for training up to 12 real hours.',{tier:'minor',title:'Dragon Loans'}),true));
       list.appendChild(card);
     }
   }
@@ -5447,8 +5447,7 @@ function applyDragonLoanOffer(m){
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' OFFERS '+dragonLoanName(m.type).toUpperCase();qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
   p.innerHTML='<b>'+escHTML(String(m.fromName||'Hunter'))+'</b> wants to lend you <b>'+escHTML(dragonLoanName(m.type))+'</b> for training.<br><br>'+
-    'You pay <b>'+Math.max(0,(m.feeGold|0)).toLocaleString('en-US')+'g</b> now. You can train and ride the dragon for up to <b>12 real hours</b>. It returns automatically, or either player can return it manually from Companions.'+
-    (playerJob==='pet_tamer'?'':'<br><br><b>Requires Pet Tamer job.</b>');
+    'You pay <b>'+Math.max(0,(m.feeGold|0)).toLocaleString('en-US')+'g</b> now. You can train and ride the dragon for up to <b>12 real hours</b>. It returns automatically, or either player can return it manually from Companions. No job is required.';
   qpanelEl.appendChild(p);
   const note=document.createElement('div');note.className='trade-error-panel';
   note.innerHTML='<b>Training loop:</b> accept, open <b>Companions</b>, summon the borrowed dragon, then use role training to improve it for the owner.';
@@ -5469,7 +5468,7 @@ function applyDragonLoanResult(m){
 function applyDragonLoanReject(m){
   const reason=String(m&&m.reason||'invalid');
   const text={
-    target:'No nearby hunter found.',rate:'Slow down before sending another loan.',range:'Move closer for a dragon loan.',unowned:'That dragon is not available to loan.',young:'That dragon is still too young.',nested:'Recall the dragon from the nest first.',loaned:'That dragon is already loaned out.',targetOwned:'That Pet Tamer already has that dragon type.',job:'The receiver must equip Pet Tamer.',fee:'Set a gold fee first.',targetGold:'The Pet Tamer does not have enough gold.',gold:'Not enough gold.',missing:'That loan offer expired.',offline:'That hunter went offline.',expired:'That loan offer expired.'
+    target:'No nearby hunter found.',rate:'Slow down before sending another loan.',range:'Move closer for a dragon loan.',unowned:'That dragon is not available to loan.',young:'That dragon is still too young.',nested:'Recall the dragon from the nest first.',loaned:'That dragon is already loaned out.',targetOwned:'That handler already has that dragon type.',fee:'Set a gold fee first.',targetGold:'The handler does not have enough gold.',gold:'Not enough gold.',missing:'That loan offer expired.',offline:'That hunter went offline.',expired:'That loan offer expired.'
   }[reason]||'Dragon loan failed.';
   SFX.error();
   sysMsg(text,{tier:'minor',title:'Dragon Loan'});
@@ -5974,6 +5973,7 @@ function professionGameplayHTML(jobId,level){
   return hooks.length?'<small style="color:#d8f8c8"><b>Gameplay:</b> '+hooks.slice(0,3).map(escHTML).join(' / ')+'</small>':'';
 }
 function professionNowHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
+  if(!JOBS_ENABLED)return '';
   const active=playerJob===jobId,sel=inv[combatState.selectedSlot],selDef=sel&&ITEMS[sel.id],selTool=selDef&&selDef.tool;
   const line=(text,ready=false)=>'<small><span style="color:'+(ready?'#d8f8c8':'#9fb0c6')+'"><b>Right now:</b> '+escHTML(text)+'</span></small>';
   if(jobId==='miner'){
@@ -6046,26 +6046,26 @@ function openFarmerServicesUI(){
 }
 function openMonkRitualUI(){
   openQWin('management');qpanelEl.innerHTML='';
-  const level=jobLevelFromXp(jobXpFor('monk')),rules=JOB_SYSTEM.MONK_RULES;
+  const level=Math.max(1,S.lvl|0),rules=JOB_SYSTEM.MONK_RULES;
   const h=document.createElement('h2');h.textContent='MEDITATION HALL';qpanelEl.appendChild(h);
-  const sub=document.createElement('div');sub.className='sub2';sub.textContent='MONK LV '+level+' · SABLE VENN';qpanelEl.appendChild(sub);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='HUNTER LEVEL '+level+' · SABLE VENN';qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
   const line=(need,title,text)=>'<b style="color:'+(level>=need?'#7dd3fc':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
-  p.innerHTML=professionNowHTML('monk',level)+'<br><br>'+[line(rules.regenLevel,'Restoring Focus','Meditation restores HP, MP, and SP while renewing a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus and resource support.')].join('<br><br>')+'<br><br><small>Reach '+hunterRankLevelLabel(4,{long:true})+', stand inside the Meditation Hall circle, then press <b>G</b> or right-click to meditate. Complete focus questions and stillness milestones to grow your permanent mana pool. Moving ends meditation.</small>';qpanelEl.appendChild(p);
+  p.innerHTML='<small>No job is required. These focus abilities unlock with your Hunter level.</small><br><br>'+[line(rules.regenLevel,'Restoring Focus','Meditation restores HP, MP, and SP while renewing a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus and resource support.')].join('<br><br>')+'<br><br><small>Reach '+hunterRankLevelLabel(4,{long:true})+', stand inside the Meditation Hall circle, then press <b>G</b> or right-click to meditate. Complete focus questions and stillness milestones to grow your permanent mana pool. Moving ends meditation.</small>';qpanelEl.appendChild(p);
   const active=document.createElement('p');active.className='qtext';const activeText=[buffs.regen>0?'Restoration '+Math.ceil(buffs.regen)+'s':'',buffs.spd>0?'Flow '+Math.ceil(buffs.spd)+'s':'',buffs.stone>0?'Stone '+Math.ceil(buffs.stone)+'s':''].filter(Boolean).join(' · ');active.innerHTML='<b>Active focus:</b> '+(activeText||'None');qpanelEl.appendChild(active);
-  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);row.appendChild(qBtn('MONK WORK',()=>openJobsUI('monk','Meditation')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function openMinerSurveyUI(){
   openQWin('management');qpanelEl.innerHTML='';
-  const level=jobLevelFromXp(jobXpFor('miner')),rules=JOB_SYSTEM.MINER_RULES;
-  const h=document.createElement('h2');h.textContent='MINER SURVEY';qpanelEl.appendChild(h);
-  const sub=document.createElement('div');sub.className='sub2';sub.textContent='MINER LV '+level+' · BROKK STONEHAND';qpanelEl.appendChild(sub);
+  const level=Math.max(1,S.lvl|0),rules=JOB_SYSTEM.MINER_RULES;
+  const h=document.createElement('h2');h.textContent='ORE SURVEY';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='HUNTER LEVEL '+level+' · BROKK STONEHAND';qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
   const line=(need,title,text)=>'<b style="color:'+(level>=need?'#fbbf24':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
-  p.innerHTML=professionNowHTML('miner',level)+'<br><br>'+[line(rules.oreSenseLevel,'Ore Sense','Survey nearby rock and reveal ore veins for a short time.'),line(rules.stonehandLevel,'Stonehand','Each tool use has a chance to preserve durability.'),line(rules.deepProspectLevel,'Deep Prospecting','Surveys reach farther and recharge twice as quickly.'),line(rules.geodeLevel,'Geode Mastery','Ore can contain a Prismatic Geode, craftable into a diamond.')].join('<br><br>');qpanelEl.appendChild(p);
+  p.innerHTML='<small>No job is required. These gathering abilities unlock with your Hunter level.</small><br><br>'+[line(rules.oreSenseLevel,'Ore Sense','Survey nearby rock and reveal ore veins for a short time.'),line(rules.stonehandLevel,'Stonehand','Each tool use has a chance to preserve durability.'),line(rules.deepProspectLevel,'Deep Prospecting','Surveys reach farther and recharge twice as quickly.'),line(rules.geodeLevel,'Geode Mastery','Ore can contain a Prismatic Geode, craftable into a diamond.')].join('<br><br>');qpanelEl.appendChild(p);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   if(level>=rules.oreSenseLevel)row.appendChild(qBtn('SURVEY NOW',()=>{if(NET.on&&NET.room){NET.room.send('prospect',{});closeQWin();}else sysMsg('Ore surveys require a live world connection.');}));
-  row.appendChild(qBtn('MINER WORK',()=>openJobsUI('miner','Mine')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function jobBoardLevelCardHTML(jobId,label=''){
   const j=JOBS[jobId]||JOBS.adventurer, prog=jobXpIntoLevel(jobXpFor(jobId));
@@ -6222,7 +6222,7 @@ function openJobsUILegacy(focusJob='', sourceTitle=''){
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
 function openJobsUI(focusJob='', sourceTitle=''){
-  if(!JOBS_ENABLED){sysMsg('The <b>Job Board</b> is temporarily unavailable. You can still mine, farm, cook, craft, meditate, care for pets, and explore normally.');return;}
+  if(!JOBS_ENABLED){sysMsg('Jobs are retired. Mining, farming, cooking, crafting, meditation, and dragon care now use Hunter progression.');return;}
   if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   openQWin('management');
@@ -6588,7 +6588,7 @@ function openBlacksmithServicesUI(){
   sub.innerHTML='TOBIN ASHHAND - YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>';
   qpanelEl.appendChild(sub);
   const body=document.createElement('p'); body.className='qtext';
-  body.innerHTML='"Good steel hates rushing. Pick what needs work, and keep your fingers away from the anvil."<br><br>'+professionNowHTML('blacksmith',jobLevelFromXp(jobXpFor('blacksmith')));
+  body.innerHTML='"Good steel hates rushing. Pick what needs work, and keep your fingers away from the anvil."<br><br><small>Forge services are available to every hunter. Advanced reforges unlock with Hunter level.</small>';
   qpanelEl.appendChild(body);
   const sel=inv[combatState.selectedSlot], selItem=sel&&ITEMS[sel.id],selInfo=selItem&&(selItem.tool||selItem.armor);
   const selectedRepair=selInfo ? (()=>{
@@ -6603,7 +6603,7 @@ function openBlacksmithServicesUI(){
     const txt=document.createElement('span'); txt.innerHTML='<b>'+title+'</b><br><small>'+desc+'</small>'; r.appendChild(txt);
     r.appendChild(qBtn(button,cb,disabled)); qpanelEl.appendChild(r);
   };
-  addService('⚒','Repair combatState.selectedSlot',
+  addService('⚒','Repair selected gear',
     selectedRepair ? escHTML(itemNameWithPlus(sel))+' - restore '+selectedRepair.missing+' durability for '+blacksmithRepairCost(selectedRepair)+'g' : 'Select a damaged tool first.',
     selectedRepair?'REPAIR':'NO TOOL', ()=>requestBlacksmithRepair(combatState.selectedSlot), !selectedRepair || gold<blacksmithRepairCost(selectedRepair));
   addService('✦','Repair most damaged',
@@ -6612,7 +6612,7 @@ function openBlacksmithServicesUI(){
   addService('★','Upgrade combatState.selectedSlot',
     up ? (up.max ? escHTML(itemNameWithPlus(sel))+' is already at +3.' : escHTML(itemNameWithPlus(sel))+' → +'+up.next+' costs '+up.goldCost+'g and '+ITEMS[up.matId].name+' x'+up.matCount) : 'Select an iron/diamond sword or pickaxe.',
     up&&!up.max?'UPGRADE':'NO UPGRADE', ()=>requestBlacksmithUpgrade(combatState.selectedSlot), !up || up.max || gold<up.goldCost || countItem(up.matId)<up.matCount);
-  const blacksmithLevel=jobLevelFromXp(jobXpFor('blacksmith')),reforgeTool=selInfo&&['sword','axe','pick'].includes(selInfo.cls),forgeMod=sel&&JOB_SYSTEM.reforgeModifier(sel.forge);
+  const blacksmithLevel=Math.max(1,S.lvl|0),reforgeTool=selInfo&&['sword','axe','pick'].includes(selInfo.cls),forgeMod=sel&&JOB_SYSTEM.reforgeModifier(sel.forge);
   const afford=action=>{const c=JOB_SYSTEM.reforgeCost(action);return c&&gold>=c.gold&&countItem(I.IRON_INGOT)>=c.iron&&countItem(I.DIAMOND)>=c.diamond;};
   const reforgeHotbarSlot=hotbarSlotWhere(s=>{const def=ITEMS[s.id],tool=def&&def.tool;return tool&&['sword','axe','pick'].includes(tool.cls)&&!s.forge;});
   addService('SEL','Select reforge tool','Pick the first unreforged sword, axe, or pickaxe from your hotbar.','SELECT',()=>{if(selectReforgeTool())openBlacksmithServicesUI();},reforgeHotbarSlot<0);
@@ -6635,7 +6635,6 @@ function openBlacksmithServicesUI(){
     const expiry=item.expiresAt?Math.max(1,Math.ceil((item.expiresAt-Date.now())/86400000))+'d remaining':'Never expires';
     addService(item.locked?'LOCK':'DROP','Recovered '+gear.rank.name,`<span style="color:${gear.rarity.color}">${escHTML(gear.rarity.name+' '+itemNameWithPlus(item))}</span> · ${expiry}`,'CLAIM',()=>requestLootRecoveryClaim(index),!inv.some(s=>!s));
   });
-  addService('JOB','Blacksmith work','Take or manage blacksmith contracts for gold and profession XP.','WORK',()=>openJobsUI('blacksmith','Blacksmith'));
   const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px';
   row.appendChild(qBtn('BACK', ()=>openQuestUI(villagers.find(v=>v.role==='smith')||NPC_ROLES.find(v=>v.role==='smith')), true));
   row.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
@@ -8177,14 +8176,14 @@ const TAVERN_SELL=[
 ];
 function openCookServicesUI(){
   openQWin('management');qpanelEl.innerHTML='';
-  const level=jobLevelFromXp(jobXpFor('cook')),rules=JOB_SYSTEM.COOK_RULES;
+  const level=Math.max(1,S.lvl|0),rules=JOB_SYSTEM.COOK_RULES;
   const h=document.createElement('h2');h.textContent='TAVERN KITCHEN';qpanelEl.appendChild(h);
-  const sub=document.createElement('div');sub.className='sub2';sub.textContent='COOK LV '+level+' · GRETA WARMUG';qpanelEl.appendChild(sub);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='HUNTER LEVEL '+level+' · GRETA WARMUG';qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
   const line=(need,title,text)=>'<b style="color:'+(level>=need?'#fbbf24':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
-  p.innerHTML=professionNowHTML('cook',level)+'<br><br>'+[line(rules.batchLevel,'Batch Cooking','A chance to produce an extra portion when cooking food.'),line(rules.brothLevel,'Golden Broth','A deeply restorative meal made from wheat, bread, and cooked meat.'),line(rules.rationLevel,'Trail Ration','Grants Well Fed: increased combat damage and bonus gathering yields for 2 minutes.'),line(rules.feastLevel,'Feast Platter','Feeds and empowers nearby party members for 3 minutes.')].join('<br><br>');qpanelEl.appendChild(p);
+  p.innerHTML='<small>No job is required. Cooking improvements and advanced recipes unlock with Hunter level.</small><br><br>'+[line(rules.batchLevel,'Batch Cooking','A chance to produce an extra portion when cooking food.'),line(rules.brothLevel,'Golden Broth','A deeply restorative meal made from wheat, bread, and cooked meat.'),line(rules.rationLevel,'Trail Ration','Grants Well Fed: increased combat damage and bonus gathering yields for 2 minutes.'),line(rules.feastLevel,'Feast Platter','Feeds and empowers nearby party members for 3 minutes.')].join('<br><br>');qpanelEl.appendChild(p);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
-  row.appendChild(qBtn('FOOD RECIPES',()=>openCraftingFromNpc('food')));row.appendChild(qBtn('COOK WORK',()=>openJobsUI('cook','Tavern')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+  row.appendChild(qBtn('FOOD RECIPES',()=>openCraftingFromNpc('food')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 const bartender={...makeVillager('#7a3b2e','#5e2c22',false),
   role:'bartender', name:'Greta Warmug', shortName:'Greta', title:'Tavern Keeper',

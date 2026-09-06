@@ -47,8 +47,8 @@ class CombatMixin {
 
   handleProspect(client) {
     const rec=this.profileFor(client),p=this.state.players.get(client.sessionId),rules=JOB_SYSTEM.MINER_RULES;
-    if(!rec||!p||rec.prof.job!=='miner')return client.send('prospectReject',{reason:'profession'});
-    const level=JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob&&rec.prof.jobXpByJob.miner)||0);
+    if(!rec||!p)return client.send('prospectReject',{reason:'invalid'});
+    const level=Math.max(1,rec.prof.S&&rec.prof.S.lvl|0);
     if(level<rules.oreSenseLevel)return client.send('prospectReject',{reason:'level',level:rules.oreSenseLevel});
     const now=Date.now(),cooldown=level>=rules.deepProspectLevel?rules.deepSurveyCooldownMs:rules.surveyCooldownMs,last=this.prospectAt.get(client.sessionId)||0;
     if(now-last<cooldown)return client.send('prospectReject',{reason:'cooldown',remainingMs:cooldown-(now-last)});
@@ -1153,8 +1153,8 @@ class CombatMixin {
     const items = [{ id: drop.item, count: drop.count || 1 }];
     const mealBuff = this.abilityBuffs.get(client.sessionId);
     if (mealBuff && mealBuff.mealGatherUntil > Date.now() && Math.random() < JOB_SYSTEM.COOK_RULES.gatherBonusChance) items[0].count += 1;
-    const minerLevel=rec&&rec.prof.job==='miner'?JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob&&rec.prof.jobXpByJob.miner)||0):0;
-    if (minerLevel>=JOB_SYSTEM.MINER_RULES.oreSenseLevel && Math.random() < jobPerkChance(rec.prof, 'miner', 0.08)) items[0].count += 1;
+    const minerLevel=Math.max(1,rec&&rec.prof&&rec.prof.S?rec.prof.S.lvl|0:1);
+    if (minerLevel>=JOB_SYSTEM.MINER_RULES.oreSenseLevel && Math.random() < JOB_SYSTEM.perkChance(JOB_SYSTEM.perkTierFromLevel(minerLevel),0.08)) items[0].count += 1;
     if (minerLevel>=JOB_SYSTEM.MINER_RULES.geodeLevel && [W.B.COAL_ORE,W.B.IRON_ORE,W.B.DIAMOND_ORE].includes(blockId) && Math.random()<JOB_SYSTEM.MINER_RULES.geodeChance) items.push({id:I.GEODE,count:1});
     const fp = this.state.players.get(client.sessionId);
     const spriteLevel=fp&&fp.familiar==='sprite'?this.familiarPowerLevel(client,'sprite'):1;

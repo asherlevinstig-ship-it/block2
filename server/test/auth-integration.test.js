@@ -541,7 +541,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     const levelTwoBody = await levelTwo.json();
     assert.equal(levelTwoBody.profile.level, 2);
     assert.equal(levelTwoBody.profile.job, '');
-    assert.equal(levelTwoBody.profile.forceJobChoice, true);
+    assert.equal(levelTwoBody.profile.forceJobChoice, false);
     assert.equal(profiles.get('student_42').name, 'Dylan Lynee');
     assert.equal(profiles.get('student_42').S.lvl, 2);
     assert.equal(profiles.get('student_42').job, '');
@@ -578,7 +578,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(patchedBody.profile.gold, 777);
     assert.equal(patchedBody.profile.xp, 456);
     assert.equal(patchedBody.profile.statPoints, 9);
-    assert.equal(patchedBody.profile.job, 'pet_tamer');
+    assert.equal(patchedBody.profile.job, '');
     assert.equal(patchedBody.profile.jobXp, 123);
     assert.equal(patchedBody.profile.jobXpByJob.pet_tamer, 123);
     assert.equal(patchedBody.profile.path, 'verdant');
@@ -596,7 +596,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(profiles.get('student_42').S.xp, 456);
     assert.equal(profiles.get('student_42').S.pts, 9);
     assert.equal(profiles.get('student_42').gold, 777);
-    assert.equal(profiles.get('student_42').job, 'pet_tamer');
+    assert.equal(profiles.get('student_42').job, '');
     assert.equal(profiles.get('student_42').jobXp, 123);
     assert.equal(profiles.get('student_42').jobXpByJob.pet_tamer, 123);
     assert.equal(profiles.get('student_42').S.vit, 23);
@@ -623,7 +623,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     ));
     assert.equal(detailed.status, 200);
     const detailedBody = await detailed.json();
-    assert.equal(detailedBody.profile.job, 'pet_tamer');
+    assert.equal(detailedBody.profile.job, '');
     assert.equal(detailedBody.profile.path, 'verdant');
     assert.equal(detailedBody.profile.abilitySpec, 'grovekeeper');
     assert.deepEqual(detailedBody.profile.utilityLoadout, { active: 'trail_sense', passive: ['compass'] });

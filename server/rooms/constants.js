@@ -582,7 +582,7 @@ const ITEM_NAMES = {
   [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
   [I.CAT_COLLAR]: 'Cat Collar', [I.DOG_COLLAR]: 'Dog Collar', [I.WOLF_COLLAR]: 'Wolf Collar',
 };
-const GUILD_BOARD_POS = { x: W.TOWN.TC + 4.5, z: W.TOWN.TC - 8.5 };
+const GUILD_BOARD_POS = { x: W.HUB.guildNoticeBoard.x, z: W.HUB.guildNoticeBoard.z };
 const REGIONAL_CONTRACT_TYPES = ['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles'];
 const FOOD_VALUES = {
   [I.BREAD]: { hunger: 30, heal: 2 },
@@ -626,9 +626,9 @@ const RECIPES = [
   { shape: ['..s', '.sW', 's..'], keys: { s: I.STICK, W: I.WHEAT }, out: [I.FISHING_ROD, 1] },
   { shapeless: [I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 1] },
   { shapeless: [I.BREAD, I.COOKED_RIVER_FISH], out: [I.HEARTY_SANDWICH, 1] },
-  { shapeless: [I.COOKED_SMALL_FISH, I.COOKED_SMALL_FISH, I.WHEAT], out: [I.GOLDEN_BROTH, 1], job: 'cook', level: 3 },
-  { shapeless: [I.COOKED_PRIZED_FISH, I.BREAD, I.WHEAT], out: [I.TRAIL_RATION, 1], job: 'cook', level: 8 },
-  { shapeless: [I.COOKED_TROPHY_FISH, I.GOLDEN_WHEAT, I.BREAD], out: [I.FEAST_PLATTER, 1], job: 'cook', level: 15 },
+  { shapeless: [I.COOKED_SMALL_FISH, I.COOKED_SMALL_FISH, I.WHEAT], out: [I.GOLDEN_BROTH, 1], hunterLevel: 3 },
+  { shapeless: [I.COOKED_PRIZED_FISH, I.BREAD, I.WHEAT], out: [I.TRAIL_RATION, 1], hunterLevel: 8 },
+  { shapeless: [I.COOKED_TROPHY_FISH, I.GOLDEN_WHEAT, I.BREAD], out: [I.FEAST_PLATTER, 1], hunterLevel: 15 },
   { shape: ['WWW'], keys: { W: I.WHEAT }, out: [I.BREAD, 1] },
   { shapeless: [I.COOKED_MEAT, I.COOKED_MEAT, I.COAL], out: [I.DRAGON_TREAT, 2] },
   { shapeless: [I.COAL, I.COAL, I.COAL, I.DIAMOND], out: [I.SHADOW_SIGIL, 1] },
@@ -647,9 +647,9 @@ const RECIPES = [
   { shapeless: [I.SOLAR_GLYPH, I.SUNSHARD, W.B.GLASS], out: [I.SUNSHARD, 3] },
   { shapeless: [W.B.LEAVES, I.WHEAT, I.CHARCOAL], out: [I.COMPOST, 2] },
   { shapeless: [I.GOLDEN_WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 3] },
-  { shapeless: [I.WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.GOLDEN_BROTH, 1], job: 'cook', level: 5 },
-  { shapeless: [I.WINDSEED, I.HEARTY_SANDWICH, I.COOKED_MEAT], out: [I.TRAIL_RATION, 2], job: 'cook', level: 10 },
-  { shapeless: [I.GOLDEN_WHEAT, I.GOLDEN_BROTH, I.TRAIL_RATION, I.HEARTY_SANDWICH], out: [I.FEAST_PLATTER, 1], job: 'cook', level: 20 },
+  { shapeless: [I.WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.GOLDEN_BROTH, 1], hunterLevel: 5 },
+  { shapeless: [I.WINDSEED, I.HEARTY_SANDWICH, I.COOKED_MEAT], out: [I.TRAIL_RATION, 2], hunterLevel: 10 },
+  { shapeless: [I.GOLDEN_WHEAT, I.GOLDEN_BROTH, I.TRAIL_RATION, I.HEARTY_SANDWICH], out: [I.FEAST_PLATTER, 1], hunterLevel: 20 },
   { shapeless: [I.GEODE], out: [I.DIAMOND, 1] },
 ];
 const TOOL_MAT_ITEMS = { WOOD: W.B.PLANKS, STONE: W.B.COBBLE, IRON: I.IRON_INGOT, DIA: I.DIAMOND };

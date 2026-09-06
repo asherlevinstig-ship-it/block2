@@ -878,8 +878,8 @@ class AuthService {
       townLand: 0,
       familiar: 0,
     };
-    profile.forceJobChoice = true;
-    profile.progressionFocus = 'first_profession_contract';
+    profile.forceJobChoice = false;
+    profile.progressionFocus = 'e_rank_climb';
     profile.vitals = { hp: 20, mp: 20, sp: 100, hunger: 100 };
     profile.vitalsSavedAt = Date.now();
     profile.pos = [64.5, 20, 71.5];
