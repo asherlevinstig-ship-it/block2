@@ -6700,8 +6700,8 @@ function blockInteractionPrompt(hit){
   if(!hit)return null;
   if(isJobBoardHit(hit))return {key:'G',title:'Job Board',small:'Open profession and contract work',priority:80};
   if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2)return {key:'G',title:'Shard Pedestal',small:'Open shard keys and Gate options',priority:70};
-  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX &&
-     ((hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)||(hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8)))return {key:'G',title:'Market Stall',small:'Open town shop',priority:68};
+  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8)return {key:'G',title:'River & Trail Outfitter',small:'Browse common fishing and trail gear',priority:68};
+  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)return {key:'G',title:'Market Stall',small:'Open town shop',priority:68};
   if(hit.id===B.CHEST)return {key:'G',title:'Chest',small:'Open storage',priority:65};
   if(hit.id===B.TABLE)return {key:'G',title:'Crafting Table',small:'Open crafting grid',priority:65};
   if(hit.id===B.FURNACE)return {key:'G',title:'Furnace',small:'Open smelting station',priority:65};
@@ -7074,8 +7074,8 @@ function secondaryAction(){
   if(interactSmallDiscovery(nearbySmallDiscovery(7),hit))return;
   if(isJobBoardHit(hit)){ openJobsUI(); return; }
   if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2){ openShardUI(); return; }
-  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX &&
-     ((hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)||(hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8))){ openShopUI(); return; }
+  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8){ openShopUI('outfitter'); return; }
+  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6){ openShopUI(); return; }
   if(hit.id===B.CHEST){ openUI('chest', hit.x+','+hit.y+','+hit.z); return; }
   if(hit.id===B.TABLE){ openUI('table'); return; }
   if(hit.id===B.FURNACE){ openUI('furnace', hit.x+','+hit.y+','+hit.z); return; }
@@ -7201,6 +7201,10 @@ function interactWithVillager(vill){
     const s=nearbySmallDiscovery(8);
     if(NET.on&&NET.room&&s&&s.type==='traveling_merchant') NET.room.send('regionalContractVisit',{id:s.id});
     openShopUI('road');
+  }
+  else if(vill.role==='outfitter'){
+    sysMsg('<b>Nessa Reed:</b> "Everything here is common, dependable, and ready for the trail. Craft it yourself to save gold, or buy it when you need it now."');
+    openShopUI('outfitter');
   }
   else if(vill.role==='patron') sysMsg('<b>'+escHTML(vill.name||'Patron')+'</b>: '+escHTML(vill.line||'Warm fire, fair drink. That is enough for tonight.'));
   else if(vill.role==='stablemaster') openStablemasterUI(vill);

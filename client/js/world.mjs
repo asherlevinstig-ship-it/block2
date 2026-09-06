@@ -2015,6 +2015,7 @@ const HUB = {
   forgeChimney: { x: dpx(82.5, 'forge'), z: dpz(47.5, 'forge') },
   shard: { x: TOWN.TC + 17, z: TOWN.TC - 43 },
   marketX: dpx(43, 'market'),
+  outfitter: { x: dpx(42, 'market'), z: dpz(70.5, 'market') },
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 };
 const TOWN_INTERACTION_ZONES = Object.freeze({
@@ -4622,6 +4623,9 @@ const NPC_ROLES=[
    accept:'Efficient. I appreciate that in a person.',
    done:'Stock improved. Casualty odds reduced. Excellent.',
    focus:'fetch'},
+  {name:'Nessa Reed', shortName:'Nessa', role:'outfitter', title:'River & Trail Outfitter', personality:'friendly, practical, happiest near water',
+   work:[HUB.outfitter.x,HUB.outfitter.z], home:[HUB.outfitter.x,HUB.outfitter.z], static:true,
+   line:'Fishing rods and common trail tools, ready to use. Crafting them yourself is cheaper, but I am here when the river will not wait.'},
   {name:'Liss Barley', shortName:'Liss', role:'farmer', title:'Farmer', personality:'gentle, stubborn, knows everyone by appetite',
    work:[HUB.farm.x,HUB.farm.z+3], home:[HUB.farm.x,HUB.farm.z],
    line:'The tavern needs bread, and the walls need fed workers. Heroics are easier on a full stomach.',
@@ -5910,11 +5914,34 @@ const TOWN_BUILDING_SIGNS=Object.freeze([
   {title:'FISHING LAKE',sub:'PEACEFUL WATERS',x:HUB.fishingPortal.x-3.1,z:HUB.fishingPortal.z+.1,rot:-Math.PI/2,color:'#67e8f9'},
   {title:'WESTWIND SKYPORT',sub:'DOCK & CARGO',x:dpx(32,'skyport'),z:dpz(55.15,'skyport'),rot:0,color:'#ffd98a'},
   {title:'MARKET STALLS',sub:'SUPPLIES',x:HUB.marketX-1.5,z:TOWN.TC-12.5,rot:Math.PI/2,color:'#ffd24a'},
+  {title:'RIVER & TRAIL',sub:'COMMON OUTFITTER',x:HUB.marketX-1.5,z:TOWN.TC+11.5,rot:Math.PI/2,color:'#67e8f9'},
   {title:'FARM PLOTS',sub:'FOOD WORK',x:HUB.farm.x,z:HUB.farm.z-4.25,rot:0,color:'#86efac'},
   {title:'QUARRY WORK',sub:'MINER JOBS',x:HUB.quarry.x,z:HUB.quarry.z-3.45,rot:0,color:'#b8c0cc'},
   {title:'DUNGEON SHARD',sub:'GATE ACCESS',x:HUB.shard.x-3.9,z:HUB.shard.z,rot:-Math.PI/2,color:'#7dd3fc'},
   {title:'AEGIS SHRINE',sub:'ROAD OATHS',x:HUB.guardian.x-4.7,z:HUB.guardian.z+3.7,rot:0,color:'#d8f2ff'},
 ]);
+function makeOutfitterStallDecor(){
+  const grp=new THREE.Group();
+  const teal=voxelMats('#126a73','#55d6d0','#0b3b46','#06252d');
+  const pale=voxelMats('#c9b782','#f5e9b8','#85734b','#4a3b24');
+  const iron=voxelMats('#637486','#b9d2dc','#354552','#17232b');
+  // A colored awning and front valance distinguish this counter from the general market stall.
+  addBox(grp,[3.25,.16,3.15],[0,3.65,0],teal);
+  for(const z of [-1.15,-.38,.38,1.15])addBox(grp,[3.35,.05,.24],[.08,3.78,z],z<0?teal:pale);
+  addBox(grp,[.18,.55,3.05],[1.52,3.35,0],teal);
+  // Two crossed rods form a readable shop crest above the canopy.
+  addBox(grp,[.11,2.35,.11],[-.34,4.72,0],pale,[0,0,.72]);
+  addBox(grp,[.11,2.35,.11],[.34,4.72,0],pale,[0,0,-.72]);
+  addBox(grp,[.12,.12,.45],[1.08,4.03,0],iron);
+  addBox(grp,[.55,.12,.12],[1.2,4.18,0],iron);
+  // Compact tackle crates keep the design useful-looking without widening the town footprint.
+  addBox(grp,[.75,.55,.75],[-.92,.3,-.78],pale);
+  addBox(grp,[.62,.42,.62],[-.82,.22,.75],teal);
+  grp.position.set(HUB.outfitter.x,TOWN.G+1,HUB.outfitter.z);
+  townGroup.add(grp);
+  return grp;
+}
+makeOutfitterStallDecor();
 function makeTownBuildingSign(spec){
   const grp=new THREE.Group();
   const wood=voxelMats('#6b421f','#9b6934','#40230f','#241307');
@@ -6457,7 +6484,8 @@ function addTownQuestMarker(type,x,y,z){
   return sp;
 }
 addTownInteractLabel('Dungeon Shard', (HUB.shard.x|0)+.5, TOWN.G+4.7, (HUB.shard.z|0)+.5, '#7dd3fc', 8);
-addTownInteractLabel('Market Stall', HUB.marketX-.9, TOWN.G+4.9, TOWN.TC-.5, '#ffd24a', 9);
+addTownInteractLabel('Market Stall', HUB.marketX-.9, TOWN.G+4.9, TOWN.TC-7, '#ffd24a', 9);
+addTownInteractLabel('River & Trail · Common Gear', HUB.outfitter.x, TOWN.G+5.45, HUB.outfitter.z, '#67e8f9', 9);
 addTownInteractLabel('Mara · Town Guide', HUB.guide.x, TOWN.G+3.15, HUB.guide.z, '#9ad26b', 8);
 if(JOBS_ENABLED)addTownInteractLabel('Job Board · Tamsin', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bbf5a', 14);
 addTownInteractLabel('Quarry Work', HUB.quarry.x, TOWN.G+3.9, HUB.quarry.z, '#b8c0cc', 9);

@@ -3,7 +3,7 @@
 const {
   ARMOR_INFO, BIOME_COLLECTIBLE, CHEST_REWARD_BY_RANK, DUNGEON_BOSS_BONUS_LOOT, DUNGEON_CHEST_BONUS_LOOT, DRAGON_DROP_POOL, DRAGON_EGG_CHEST_CHANCE,
   DRAGON_EGG_OF, FUEL, GUARDIAN_POS, GUILD_DECOR_BUY, I, KEY_LOOT, LEGENDARY_CRAFTS, RECIPES, REWARD_ITEMS,
-  ROAD_MERCHANT_BUY, SHARD_ITEM_IDS, SHOP_BUY, SHOP_SELL, SMELT, SMELT_MS, SOLO_KEYS, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TOOL_INFO,
+  OUTFITTER_BUY, ROAD_MERCHANT_BUY, SHARD_ITEM_IDS, SHOP_BUY, SHOP_SELL, SMELT, SMELT_MS, SOLO_KEYS, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TOOL_INFO,
   dangerRingAt, jobLevelFor, jobPerkChance, jobPerkTier, keyForRank,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
@@ -612,13 +612,15 @@ class EconomyMixin {
     const isTavern = m.vendor === 'tavern';
     const isRoad = m.vendor === 'road';
     const isGuild = m.vendor === 'guild';
-    const vendor = isTavern ? 'tavern' : isRoad ? 'road' : isGuild ? 'guild' : 'market';
+    const isOutfitter = m.vendor === 'outfitter';
+    const vendor = isTavern ? 'tavern' : isRoad ? 'road' : isGuild ? 'guild' : isOutfitter ? 'outfitter' : 'market';
     const reject = (reason, extra = null) => client.send('shopReject', Object.assign({ reason, vendor }, extra || {}));
     if (this.rateLimited(client, 'shop', 8, 16)) return reject('rate');
     const p=this.state.players.get(client.sessionId);
     const tavern=this.townTavernAnchor(83.5,77.5);
     if(isTavern&&(!p||p.dgn||Math.hypot(p.x-tavern.x,p.z-tavern.z)>9))return reject('range');
     if(isRoad&&(!p||p.dgn||!W.smallDiscoverySpecs().some(s=>s.type==='traveling_merchant'&&Math.hypot(p.x-s.x,p.z-s.z)<6)))return reject('range');
+    if(isOutfitter&&(!p||p.dgn||Math.hypot(p.x-W.HUB.outfitter.x,p.z-W.HUB.outfitter.z)>8))return reject('range');
     if (isGuild) {
       const guild = this.guildForToken && this.guildForToken(rec.token);
       if (!this.nearGuildReception || !this.nearGuildReception(client)) return reject('range');
@@ -627,7 +629,8 @@ class EconomyMixin {
     }
     const roadSafety=this.roadSafetySnapshot?this.roadSafetySnapshot().score:50;
     const wardenStock=ROAD_MERCHANT_BUY.concat((rec.prof.roadWardenRep|0)>=3?[[I.IRON_INGOT,1,18]]:[],(rec.prof.roadWardenRep|0)>=6?[[I.COOKED_MEAT,2,16]]:[],roadSafety>=80?[[I.BREAD,2,12]]:[]);
-    const catalog = isGuild ? GUILD_DECOR_BUY : isTavern ? (action === 'sell' ? TAVERN_SELL : TAVERN_BUY) : isRoad ? (action === 'sell' ? SHOP_SELL : wardenStock) : (action === 'sell' ? SHOP_SELL : SHOP_BUY);
+    if(isOutfitter&&action!=='buy')return reject('invalid');
+    const catalog = isGuild ? GUILD_DECOR_BUY : isTavern ? (action === 'sell' ? TAVERN_SELL : TAVERN_BUY) : isRoad ? (action === 'sell' ? SHOP_SELL : wardenStock) : isOutfitter ? OUTFITTER_BUY : (action === 'sell' ? SHOP_SELL : SHOP_BUY);
     const id = m.id | 0;
     const entry = this.findCatalogEntry(catalog, id);
     if (!entry) return reject('invalid');

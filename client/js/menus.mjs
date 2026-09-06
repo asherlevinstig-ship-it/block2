@@ -1942,13 +1942,13 @@ function applyShopResult(m){
   if(m.gold) gold+=m.gold;
   SFX.coin();
   refreshHUD();
-  const item=ITEMS[m.id].name,qty=Math.max(1,m.count|0),vendor=m.vendor==='tavern'?'Tavern':m.vendor==='road'?'Road Merchant':m.vendor==='guild'?'Guild Hall':'Market';
+  const item=ITEMS[m.id].name,qty=Math.max(1,m.count|0),vendor=m.vendor==='tavern'?'Tavern':m.vendor==='road'?'Road Merchant':m.vendor==='guild'?'Guild Hall':m.vendor==='outfitter'?'River & Trail':'Market';
   const action=m.action==='sell'?'Sold':'Bought';
   sysMsg('<b>'+action+' '+escHTML(item)+' x'+qty+'</b> at '+vendor+'.<br>'+economyRecapHTML(m.gold||0,gold), 'minor');
   if(!qwinEl.classList.contains('hidden')) {
     if(m.vendor==='guild') openGuildHallUI();
     else if(m.vendor==='tavern') openTavernUI();
-    else openShopUI(m.vendor==='road'?'road':'market');
+    else openShopUI(m.vendor==='road'?'road':m.vendor==='outfitter'?'outfitter':'market');
   }
 }
 function chestCoords(){
@@ -2278,13 +2278,13 @@ function shopRejected(m){
     const price=Number.isFinite(Number(m&&m.price))?Math.max(0,Number(m.price)|0):0;
     const have=Number.isFinite(Number(m&&m.gold))?Math.max(0,Number(m.gold)|0):Math.max(0,Number(gold)||0);
     const item=m&&ITEMS[m.id]?ITEMS[m.id].name:'that';
-    const where=vendor==='tavern'?'The tavern':vendor==='road'?'The road merchant':vendor==='guild'?'The guild hall':'The merchant';
+    const where=vendor==='tavern'?'The tavern':vendor==='road'?'The road merchant':vendor==='guild'?'The guild hall':vendor==='outfitter'?'River & Trail':'The merchant';
     const detail=price?': need <b>'+price+' gold</b>, you have <b>'+have+' gold</b>.':' for '+escHTML(item)+'.';
     sysMsg('<b>Not enough gold.</b> '+where+' cannot sell you <b>'+escHTML(item)+'</b>'+detail);
   }
   else if(reason==='item') sysMsg('Nothing to sell');
   else if(reason==='rank') sysMsg('Clear the previous gate rank first');
-  else if(reason==='range') sysMsg(vendor==='tavern'?'Stand closer to <b>Greta at the tavern counter</b>':vendor==='road'?'Stand closer to the <b>road merchant</b>':'Stand closer to the <b>guild reception desk</b>');
+  else if(reason==='range') sysMsg(vendor==='tavern'?'Stand closer to <b>Greta at the tavern counter</b>':vendor==='road'?'Stand closer to the <b>road merchant</b>':vendor==='outfitter'?'Stand closer to <b>Nessa at River & Trail</b>':'Stand closer to the <b>guild reception desk</b>');
   else if(reason==='full') sysMsg(inventoryFullHelpHTML('shop'));
   else if(reason==='rate') sysMsg('The merchant needs a moment - try that trade again');
   else sysMsg('Trade failed');
@@ -6841,6 +6841,7 @@ function openQuestUI(v){
   if(v.role==='monk') row.appendChild(qBtn('RITUALS', ()=>openMonkRitualUI()));
   if(v.role==='scholar') row.appendChild(qBtn('SHARDS', ()=>openShardUI()));
   if(v.role==='quartermaster') row.appendChild(qBtn('MARKET', ()=>openShopUI()));
+  if(v.role==='outfitter') row.appendChild(qBtn('BROWSE COMMON GEAR', ()=>openShopUI('outfitter')));
   const npcJob=v.job || (v.role==='bartender'?'cook':v.role==='smith'?'blacksmith':v.role==='farmer'?'farmer':v.role==='miner'?'miner':v.role==='monk'?'monk':'');
   if(npcJob) row.appendChild(qBtn(JOBS[npcJob].name.toUpperCase()+' WORK', ()=>openJobsUI(npcJob, v.title||v.name)));
   else if(['guide','mason'].includes(v.role)) row.appendChild(qBtn('JOBS', ()=>openJobsUI()));
@@ -6854,6 +6855,8 @@ const SHOP_BUY=[
 ];
 const SHOP_SELL=[[I.COAL,1,2],[I.IRON_INGOT,1,8],[I.DIAMOND,1,35],[B.LOG,1,1],[B.IRON_ORE,1,5]];
 const ROAD_MERCHANT_BUY=[[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[B.TORCH,12,14],[I.WINDSEED,2,22],[I.HEARTWOOD_RESIN,2,22],[I.SUNSHARD,2,22],[I.MESA_AMBER,2,22],[I.FROST_CRYSTAL,2,22],[I.MIRE_BLOOM,2,22],[I.RAINWAKE_PETAL,1,18],[I.STORMGLASS,1,26],[I.SOLAR_GLYPH,1,24]];
+// Convenience prices deliberately sit above the cost of crafting these starter recipes.
+const OUTFITTER_BUY=[[I.FISHING_ROD,1,12],[I.WOOD_PICK,1,8],[I.WOOD_AXE,1,8],[I.WOOD_SHOVEL,1,7],[I.WOOD_SWORD,1,9],[I.WOOD_HOE,1,7],[I.STONE_PICK,1,18],[I.STONE_AXE,1,18],[I.REPAIR_KIT,1,24]];
 const GUILD_DECOR_BUY=[[B.TORCH,8,10],[B.LANTERN,2,18],[B.CAMPFIRE,1,18],[B.TABLE,1,18],[B.BED,1,24],[B.CHEST,1,28],[B.FURNACE,1,30]];
 function sellDecisionLine(id,vendor='market'){
   if(id===I.DIAMOND)return 'Sell extras only - used for crafting and reforging.';
@@ -6873,16 +6876,16 @@ function buyDecisionLine(id){
 function openShopUI(vendor='market'){
   openQWin('commerce');
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent=vendor==='road'?'ROAD MERCHANT':'MARKET STALL'; qpanelEl.appendChild(h);
+  const h=document.createElement('h2'); h.textContent=vendor==='road'?'ROAD MERCHANT':vendor==='outfitter'?'RIVER & TRAIL OUTFITTER':'MARKET STALL'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; qpanelEl.appendChild(sub);
-  const refresh=()=>{ sub.innerHTML='YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>'; };
+  const refresh=()=>{ sub.innerHTML=(vendor==='outfitter'?'<b style="color:#67e8f9">COMMON GEAR</b> · Crafting is cheaper · ':'')+'YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>'; };
   refresh();
   const mk=(title, list, isBuy)=>{
     const t=document.createElement('div'); t.className='sub2'; t.style.marginTop='10px'; t.textContent=title; qpanelEl.appendChild(t);
     for(const [id,n,price] of list){
       const r=document.createElement('div'); r.className='shoprow';
       r.appendChild(iconNode(id));
-      const nm=document.createElement('span'); nm.innerHTML=escHTML(ITEMS[id].name+(n>1?' x'+n:''))+'<br><small class="safety">'+escHTML(isBuy?buyDecisionLine(id):sellDecisionLine(id,vendor))+'</small>'; r.appendChild(nm);
+      const nm=document.createElement('span'); nm.innerHTML=escHTML(ITEMS[id].name+(n>1?' x'+n:''))+(vendor==='outfitter'?'<small style="color:#a8b6bf"> · COMMON</small>':'')+'<br><small class="safety">'+escHTML(isBuy?buyDecisionLine(id):sellDecisionLine(id,vendor))+'</small>'; r.appendChild(nm);
       const pr=document.createElement('b'); pr.textContent=price+'g'; r.appendChild(pr);
       r.appendChild(qBtn(isBuy?'BUY':'SELL', ()=>{
         if(requestShop(isBuy?'buy':'sell', vendor, id)) return;
@@ -6900,8 +6903,8 @@ function openShopUI(vendor='market'){
   };
   const roadDiscount=1-Math.min(.15,Math.floor(roadWardenRep/3)*.05)-(roadSafety>=80?.10:roadSafety>=60?.05:0);
   const roadStock=ROAD_MERCHANT_BUY.concat(roadWardenRep>=3?[[I.IRON_INGOT,1,18]]:[],roadWardenRep>=6?[[I.COOKED_MEAT,2,16]]:[],roadSafety>=80?[[I.BREAD,2,12]]:[]).map(e=>[e[0],e[1],Math.max(1,Math.ceil(e[2]*roadDiscount))]);
-  mk('\u2014 BUY \u2014', vendor==='road'?roadStock:SHOP_BUY, true);
-  mk('\u2014 SELL \u2014', SHOP_SELL, false);
+  mk('\u2014 BUY \u2014', vendor==='road'?roadStock:vendor==='outfitter'?OUTFITTER_BUY:SHOP_BUY, true);
+  if(vendor!=='outfitter')mk('\u2014 SELL \u2014', SHOP_SELL, false);
   qpanelEl.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }
 

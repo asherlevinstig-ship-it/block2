@@ -4729,6 +4729,31 @@ test('shop buy transaction spends server gold and grants catalog items', () => {
   assert.equal(itemCount(prof, W.B.EGG_INSULATOR), 1);
 });
 
+test('River and Trail sells only its common recipe-based gear near the outfitter', () => {
+  const room = makeRoom();
+  const client = makeClient('outfitter-buyer');
+  const { prof } = seedPlayer(room, client, { gold: 100, ...W.HUB.outfitter });
+
+  room.handleShop(client, { action: 'buy', vendor: 'outfitter', id: C.I.FISHING_ROD });
+  assert.equal(prof.gold, 88);
+  assert.equal(itemCount(prof, C.I.FISHING_ROD), 1);
+  assert.deepEqual(client.sent.at(-1), { type: 'shopResult', msg: { action: 'buy', vendor: 'outfitter', id: C.I.FISHING_ROD, count: 1, gold: -12 } });
+
+  room.handleShop(client, { action: 'buy', vendor: 'outfitter', id: C.I.WOOD_AXE });
+  const axe = prof.inv.find(stack => stack && stack.id === C.I.WOOD_AXE);
+  assert.equal(prof.gold, 80);
+  assert.equal(axe.rarity, undefined, 'stock does not generate an upgraded rarity');
+  assert.equal(axe.dur, C.TOOL_INFO[C.I.WOOD_AXE].dur);
+
+  room.handleShop(client, { action: 'buy', vendor: 'outfitter', id: C.I.IRON_AXE });
+  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'invalid', vendor: 'outfitter' } });
+
+  Object.assign(room.state.players.get(client.sessionId), { x: W.TOWN.TC, z: W.TOWN.TC });
+  room.handleShop(client, { action: 'buy', vendor: 'outfitter', id: C.I.FISHING_ROD });
+  assert.equal(prof.gold, 80, 'remote purchases cannot spend gold');
+  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'range', vendor: 'outfitter' } });
+});
+
 test('tavern buys farmed and hunted food for server gold', () => {
   const room = makeRoom();
   const client = makeClient('seller');

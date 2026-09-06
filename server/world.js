@@ -54,6 +54,7 @@ const HUB = Object.freeze({
   fishingPortal: { x: TOWN.TC + 35.5, z: TOWN.TC + 7.5 },
   tamingPortal: { x: TOWN.TC + 45.5, z: TOWN.TC + 3.5 },
   shard: { x: TOWN.TC + 17, z: TOWN.TC - 43 },
+  outfitter: townPos(42, 70.5, 'market'),
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 });
 function isTownFarmWorksite(x, z) {

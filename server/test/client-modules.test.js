@@ -346,6 +346,7 @@ test('Town of Beginnings has explainer NPC helpers for major areas', () => {
   for (const [role, area] of [
     ['guide', 'central quest path'],
     ['quartermaster', 'market stalls'],
+    ['outfitter', 'River & Trail common gear shop'],
     ['scholar', 'Dungeon Shard'],
     ['smith', 'Smithy'],
     ['miner', 'Quarry Work'],
@@ -372,6 +373,24 @@ test('Town of Beginnings has explainer NPC helpers for major areas', () => {
   assert.match(combat, /Dungeon Shards open Gates/);
   assert.match(combat, /vill\.role==='skyship_attendant'/);
   assert.match(world, /Rabbits, deer, and boars can rarely drop pet collars/);
+});
+
+test('marketplace has a dedicated recipe-based common outfitter', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const constants = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'constants.js'), 'utf8');
+  const economy = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'economy.mixin.js'), 'utf8');
+
+  assert.match(world, /title:'RIVER & TRAIL',sub:'COMMON OUTFITTER'/);
+  assert.match(world, /function makeOutfitterStallDecor\(\)/);
+  assert.match(world, /name:'Nessa Reed'[\s\S]*role:'outfitter'/);
+  assert.match(menus, /const OUTFITTER_BUY=\[\[I\.FISHING_ROD,1,12\]/);
+  assert.match(menus, /vendor==='outfitter'\?'OUTFITTER_BUY|vendor==='outfitter'\?OUTFITTER_BUY/);
+  assert.match(menus, /COMMON GEAR/);
+  assert.match(combat, /openShopUI\('outfitter'\)/);
+  assert.match(constants, /const OUTFITTER_BUY = \[\[I\.FISHING_ROD,1,12\]/);
+  assert.match(economy, /isOutfitter \? OUTFITTER_BUY/);
 });
 
 test('wild pet familiar discovery is taught through hunting and familiar UI', () => {
