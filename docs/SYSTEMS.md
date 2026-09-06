@@ -113,9 +113,10 @@ moment plus a recap line like **Reward: Prospect survey action** when the level 
 Direct activity XP also reports every crossed milestone, so mining, farming, cooking,
 smithing, and meditation cannot skip intermediate unlock messaging. Balance tests keep
 the first play-changing Lv5 unlock within seven average contracts for every profession,
-and material-dependent milestones grant a tiny one-time starter kit: for example
-Windseeds at Farmer Lv5, Compost at Farmer Lv10, sample meals for Cook milestones, and
-starter iron for Blacksmith Lv2.
+and material-dependent milestones grant a tiny one-time starter kit. The job system is
+currently disabled. Farming remains available to every hunter: ordinary harvesting has
+a 15% bonus-wheat chance, Prairie Windseeds and Compost have no profession requirement,
+all crops receive the Fieldcraft growth speed, and Windseed crops can yield Golden Wheat.
 Profession moments are intentionally named at the point of use: Monk focus labels the
 active blessings and duration, Windseed planting explains the special crop, Compost says
 whether the crop advanced or ripened, and Golden Wheat harvests get a distinct rare-crop
@@ -124,7 +125,7 @@ Profession UI also includes a compact **Right now** affordance line per job, der
 current level, equipped profession, selected tool, and relevant inventory. The Jobs board
 and profession service screens use this to point at immediate actions such as surveying,
 planting Windseeds, crafting Golden Broth, reforging selected gear, or refreshing focus.
-The same screens route common actions directly: Farmer can select hotbar Compost,
+The same screens route common actions directly: farming services can select hotbar Compost,
 Windseeds, or seeds; Cook and cook contracts open the Food recipe tab; smith contracts and
 Blacksmith services open tool recipes; and the forge can select the first unreforged
 hotbar sword, axe, or pick.

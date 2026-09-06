@@ -42,10 +42,10 @@
       Object.freeze({level:20,title:'Geode Mastery',desc:'Ore veins can reveal rare geodes containing forge materials.',reward:'Prismatic Geode drops'}),
     ]),
     farmer:Object.freeze([
-      Object.freeze({level:2,title:'Bountiful Harvest',desc:'Unlocks a 15% chance for bonus wheat.',reward:'Bonus wheat harvests'}),
-      Object.freeze({level:5,title:'Windseed Cultivation',desc:'Plant Prairie Windseeds for richer harvests.',reward:'Prairie Windseed planting'}),
-      Object.freeze({level:10,title:'Fieldcraft',desc:'Crops grow 25% faster and compost can advance them instantly.',reward:'Faster crops and Compost use'}),
-      Object.freeze({level:20,title:'Golden Harvest',desc:'Windseed crops can produce valuable Golden Wheat.',reward:'Golden Wheat from windseed'}),
+      Object.freeze({level:2,title:'Bountiful Harvest',desc:'Every hunter has a 15% chance for bonus wheat.',reward:'Bonus wheat harvests'}),
+      Object.freeze({level:5,title:'Windseed Cultivation',desc:'Every hunter can plant Prairie Windseeds for richer harvests.',reward:'Prairie Windseed planting'}),
+      Object.freeze({level:10,title:'Fieldcraft',desc:'All crops grow 25% faster and every hunter can use compost.',reward:'Faster crops and Compost use'}),
+      Object.freeze({level:20,title:'Golden Harvest',desc:'Every Windseed crop can produce valuable Golden Wheat.',reward:'Golden Wheat from windseed'}),
     ]),
     cook:Object.freeze([
       Object.freeze({level:2,title:'Batch Cooking',desc:'Unlocks a chance to create extra meals.',reward:'Extra meal craft chance'}),
@@ -165,7 +165,7 @@
   const LOCATIONS = Object.freeze({kill:'Wilderness roads',hunt:'Wild animal routes',tame:'Wild pet trails',pet_care:'Dragon Roost and companion pens',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',cave_survey:'Cave entrances',ancient_map:'Ancient city clues',treasure:'Treasure map clues',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Meditation Hall'});
   const REFORGE_MODIFIERS=Object.freeze({keen:Object.freeze({name:'Keen',desc:'+2 weapon damage.'}),swift:Object.freeze({name:'Swift',desc:'8% faster weapon and tool use.'}),sturdy:Object.freeze({name:'Sturdy',desc:'20% more maximum durability.'})});
   const REFORGE_ACTIONS=Object.freeze({basic:Object.freeze({level:2,gold:25,iron:1,diamond:0}),choose:Object.freeze({level:5,gold:70,iron:4,diamond:0}),reroll:Object.freeze({level:10,gold:120,iron:0,diamond:1}),masterwork:Object.freeze({level:20,gold:260,iron:0,diamond:3})});
-  const FARMER_RULES=Object.freeze({bonusYieldLevel:2,windseedLevel:5,fieldcraftLevel:10,goldenHarvestLevel:20,fieldcraftGrowthMultiplier:.75,goldenGrowthMultiplier:.6,goldenWheatChance:.25});
+  const FARMER_RULES=Object.freeze({bonusYieldChance:.15,fieldcraftGrowthMultiplier:.75,goldenWheatChance:.25});
   const COOK_RULES=Object.freeze({batchLevel:2,brothLevel:5,rationLevel:10,feastLevel:20,rationDurationMs:120000,feastDurationMs:180000,feastRange:20,mightMultiplier:1.15,gatherBonusChance:.25});
   const MONK_RULES=Object.freeze({regenLevel:4,speedLevel:5,stoneLevel:10,auraLevel:20,durationByTier:Object.freeze([0,8,10,12,16]),regenPerSecond:2,resourceRestoreFraction:.08,speedMultiplier:1.25,stoneMitigation:.35,auraRange:12,auraCooldownMs:15000});
   const MINER_RULES=Object.freeze({oreSenseLevel:2,stonehandLevel:5,deepProspectLevel:10,geodeLevel:20,surveyRadius:8,deepSurveyRadius:18,surveyCooldownMs:30000,deepSurveyCooldownMs:15000,markerDurationMs:12000,geodeChance:.08,durabilitySaveChance:.18});
@@ -274,9 +274,9 @@
       if(lvl>=20)hooks.push('Masterwork perfects forged gear.');
     }else if(job==='farmer'){
       hooks.push('Supply the food economy with wheat, seeds, Windseeds, compost, and Golden Wheat.');
-      if(lvl>=FARMER_RULES.bonusYieldLevel)hooks.push('Bountiful Harvest can produce bonus wheat.');
-      if(lvl>=FARMER_RULES.windseedLevel)hooks.push('Windseed crops produce richer harvests.');
-      if(lvl>=FARMER_RULES.fieldcraftLevel)hooks.push('Fieldcraft speeds crop growth and unlocks compost acceleration.');
+      hooks.push('Every harvest can produce bonus wheat.');
+      hooks.push('Every hunter can plant Windseeds and use compost.');
+      hooks.push('Windseed crops produce richer harvests and can yield Golden Wheat.');
     }else if(job==='monk'){
       hooks.push('Restore mana and stamina in the Meditation Hall, then build controlled permanent mana-pool breakthroughs.');
       if(lvl>=MONK_RULES.regenLevel)hooks.push('Restoring Focus heals and restores resources while meditating.');

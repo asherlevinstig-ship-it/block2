@@ -8417,29 +8417,23 @@ test('Meditation Hall completions unlock at level four and grow rank-capped mana
   assert.equal(room.dirtyPlayers.has(token), true);
 });
 
-test('Farmer milestones gate Windseeds and compost while Golden Harvest persists and rewards', () => {
+test('Windseeds compost and Golden Wheat are available without Farmer job requirements', () => {
   const room = makeRoom();
   const client = makeClient('fieldcraft-farmer');
   const { prof } = seedPlayer(room, client, {
     token: 'fieldcraft_farmer_token', x: 24.5, z: 24.5,
     inv: [{ id: I.WINDSEED, count: 2 }, { id: I.COMPOST, count: 1 }],
   });
-  prof.job = 'farmer';
-  const xpForLevel = level => Array.from({ length: level - 1 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
-  prof.jobXpByJob.farmer = xpForLevel(4);
+  prof.job = '';
+  prof.jobXpByJob.farmer = 0;
   room.world.setB(24, 10, 24, W.B.FARMLAND);
 
-  room.handleFarm(client, { action: 'plant', x: 24, y: 11, z: 24, slot: 0 });
-  assert.equal(client.sent.at(-1).msg.reason, 'farmer_level');
-  assert.equal(prof.inv[0].count, 2, 'locked seeds are not consumed');
-
-  prof.jobXpByJob.farmer = xpForLevel(20);
   room.handleFarm(client, { action: 'plant', x: 24, y: 11, z: 24, slot: 0 });
   assert.equal(room.world.getB(24, 11, 24), W.B.WHEAT_1);
   assert.equal(room.cropMeta.get('24,11,24').kind, 'windseed');
   assert.equal(room.worldProgress.cropKinds['24,11,24'], 'windseed', 'special crop identity is queued for persistence');
   assert.equal(client.sent.at(-1).msg.kind, 'windseed');
-  assert.equal(room.cropGrowMs(20), Math.round(room.cropGrowMs(0) * JOB_SYSTEM.FARMER_RULES.goldenGrowthMultiplier));
+  assert.equal(room.cropGrowMs(20), room.cropGrowMs(0), 'crop speed no longer depends on Farmer level');
 
   room.handleFarm(client, { action: 'fertilize', x: 24, y: 11, z: 24, slot: 1 });
   assert.equal(room.world.getB(24, 11, 24), W.B.WHEAT_2);
@@ -8452,7 +8446,7 @@ test('Farmer milestones gate Windseeds and compost while Golden Harvest persists
   try { room.handleFarm(client, { action: 'harvest', x: 24, y: 11, z: 24, slot: 0 }); }
   finally { Math.random = oldRandom; }
   assert.equal(itemCount(prof, I.GOLDEN_WHEAT), 1);
-  assert.equal(itemCount(prof, I.WHEAT) >= 3, true, 'Windseed and yield perks stack into a richer harvest');
+  assert.equal(itemCount(prof, I.WHEAT) >= 3, true, 'Windseed and universal bountiful harvest stack into a richer harvest');
   assert.equal(room.worldProgress.cropKinds['24,11,24'], undefined, 'harvest removes persisted crop identity');
   assert.equal(client.sent.some(e => e.type === 'farmResult' && e.msg.golden), true);
 });
@@ -8470,7 +8464,7 @@ test('Bright Harvest supplies a Windseed and guarantees Golden Wheat without Far
   const seedSlot = prof.inv.findIndex(slot => slot && slot.id === I.WINDSEED);
   room.world.setB(24, 10, 24, W.B.FARMLAND);
   room.handleFarm(client, { action: 'plant', x: 24, y: 11, z: 24, slot: seedSlot });
-  assert.equal(room.world.getB(24, 11, 24), W.B.WHEAT_1, 'story Windseed bypasses the dormant Farmer level gate');
+  assert.equal(room.world.getB(24, 11, 24), W.B.WHEAT_1, 'story Windseed uses the same unrestricted farming path');
 
   room.world.setB(24, 11, 24, W.B.WHEAT_3);
   const oldRandom = Math.random;

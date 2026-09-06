@@ -6509,9 +6509,9 @@ function farmAction(hit){
     else {
       setB(hit.x,hit.y,hit.z,B.AIR); removeCropMesh(hit.x,hit.y,hit.z); rebuildAround(hit.x,hit.z);
       addItem(I.WHEAT,1); addItem(I.WHEAT_SEEDS,1+((Math.random()*2)|0));
-      if(playerJob==='farmer' && Math.random()<jobPerkChance('farmer', .1)){
+      if(Math.random()<JOB_SYSTEM.FARMER_RULES.bonusYieldChance){
         addItem(I.WHEAT,1);
-        showJobPerk('farmer','bonus wheat');
+        showName('BOUNTIFUL HARVEST');
       }
       gainJobXP('farmer',5,'harvest');
       jobContractProgress('farm', 1, B.WHEAT_3);
@@ -6530,7 +6530,6 @@ function farmAction(hit){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,s.id);
       return true;
     }
-    if(s.id===I.WINDSEED && jobLevelFromXp(jobXpFor('farmer'))<JOB_SYSTEM.FARMER_RULES.windseedLevel){sysMsg('Farmer Lv 5 is required to cultivate <b>Prairie Windseeds</b>');return true;}
     if(NET.on && !tutorialMeadowFarm && !tutorialFarmerFarm) NET.room.send('farm',{action:'plant',x:hit.x,y:hit.y+1,z:hit.z,slot:selected});
     else {
       setB(hit.x,hit.y+1,hit.z,B.WHEAT_1);

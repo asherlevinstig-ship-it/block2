@@ -5983,10 +5983,10 @@ function professionNowHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
   }
   if(jobId==='farmer'){
     const seeds=countItem(I.WHEAT_SEEDS),wind=countItem(I.WINDSEED),compost=countItem(I.COMPOST);
-    if(active&&level>=JOB_SYSTEM.FARMER_RULES.fieldcraftLevel&&compost>0)return line('Use Compost on WHEAT I/II to advance crops.',true);
-    if(active&&level>=JOB_SYSTEM.FARMER_RULES.windseedLevel&&wind>0)return line('Plant Prairie Windseed on empty farmland.',true);
-    if(active&&seeds>0)return line('Plant wheat seeds, then harvest mature crops.',true);
-    return line(active?'Gather seeds or Windseeds before field work.':'Equip Farmer to use Windseeds and Fieldcraft.');
+    if(compost>0)return line('Use Compost on WHEAT I/II to advance crops.',true);
+    if(wind>0)return line('Plant Prairie Windseed on empty farmland.',true);
+    if(seeds>0)return line('Plant wheat seeds, then harvest mature crops.',true);
+    return line('Gather seeds or Windseeds before field work. Farming is open to every player.');
   }
   if(jobId==='cook'){
     const canBroth=level>=JOB_SYSTEM.COOK_RULES.brothLevel&&countItem(I.WHEAT)>0&&countItem(I.BREAD)>0&&countItem(I.COOKED_MEAT)>0;
@@ -6032,18 +6032,16 @@ function selectReforgeTool(){
 }
 function openFarmerServicesUI(){
   openQWin('management'); qpanelEl.innerHTML='';
-  const level=jobLevelFromXp(jobXpFor('farmer')),rules=JOB_SYSTEM.FARMER_RULES;
-  const h=document.createElement('h2');h.textContent='FARMER FIELDCRAFT';qpanelEl.appendChild(h);
-  const sub=document.createElement('div');sub.className='sub2';sub.textContent='FARMER LV '+level+' · LISS BARLEY';qpanelEl.appendChild(sub);
+  const h=document.createElement('h2');h.textContent='FARMING & FIELDCRAFT';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='AVAILABLE TO EVERY HUNTER · LISS BARLEY';qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
-  const line=(need,title,text)=>'<b style="color:'+(level>=need?'#86efac':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
-  p.innerHTML=professionNowHTML('farmer',level)+'<br><br>'+[line(rules.bonusYieldLevel,'Bountiful Harvest','Harvests can produce bonus wheat.'),line(rules.windseedLevel,'Windseed Cultivation','Hold a Prairie Windseed and use it on empty farmland.'),line(rules.fieldcraftLevel,'Fieldcraft','Crops grow faster. Craft Compost from leaves, wheat, and charcoal; use it on growing crops.'),line(rules.goldenHarvestLevel,'Golden Harvest','Windseed crops can yield Golden Wheat for valuable recipes and tavern sales.')].join('<br><br>');qpanelEl.appendChild(p);
+  const line=(title,text)=>'<b style="color:#86efac">'+title+' · AVAILABLE</b><br><small>'+text+'</small>';
+  p.innerHTML=professionNowHTML('farmer',1)+'<br><br>'+[line('Bountiful Harvest','Every harvest can produce bonus wheat.'),line('Windseed Cultivation','Hold a Prairie Windseed and use it on empty farmland.'),line('Fieldcraft','All crops grow faster. Craft Compost from leaves, wheat, and charcoal; use it on growing crops.'),line('Golden Harvest','Every Windseed crop has a chance to yield Golden Wheat.')].join('<br><br>');qpanelEl.appendChild(p);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
-  if(level>=rules.fieldcraftLevel)row.appendChild(qBtn('SELECT COMPOST',()=>selectProfessionItem(I.COMPOST,'Compost'),hotbarSlotForItem(I.COMPOST)<0));
-  if(level>=rules.windseedLevel)row.appendChild(qBtn('SELECT WINDSEED',()=>selectProfessionItem(I.WINDSEED,'Prairie Windseed'),hotbarSlotForItem(I.WINDSEED)<0));
+  row.appendChild(qBtn('SELECT COMPOST',()=>selectProfessionItem(I.COMPOST,'Compost'),hotbarSlotForItem(I.COMPOST)<0));
+  row.appendChild(qBtn('SELECT WINDSEED',()=>selectProfessionItem(I.WINDSEED,'Prairie Windseed'),hotbarSlotForItem(I.WINDSEED)<0));
   row.appendChild(qBtn('SELECT SEEDS',()=>selectProfessionItem(I.WHEAT_SEEDS,'Wheat Seeds'),hotbarSlotForItem(I.WHEAT_SEEDS)<0));
   row.appendChild(qBtn('CRAFT COMPOST',()=>openCraftingFromNpc('food')));
-  row.appendChild(qBtn('FARMER WORK',()=>openJobsUI('farmer','Farmer')));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function openMonkRitualUI(){

@@ -3654,12 +3654,12 @@ function applyFarmResult(m){
     sysMsg(m.ripe?'<b>Compost worked.</b> '+(m.kind==='windseed'?'Windseed crop':'Crop')+' is ready to harvest.':'<b>Compost worked.</b> Crop advanced one stage.');
   }else if(m.action==='harvest'&&m.golden){
     SFX.level();
-    showJobPerk('farmer','Golden Wheat harvest');
-    sysMsg('<b>Golden Wheat!</b> Master harvest yielded a rare cooking crop.');
+    showName('GOLDEN WHEAT');
+    sysMsg('<b>Golden Wheat!</b> Your Windseed yielded a rare cooking crop.');
   }else if(m.action==='harvest'&&m.kind==='windseed'){
     SFX.success();
-    showJobPerk('farmer','rich Windseed harvest');
-  }else if(m.action==='harvest'&&m.bonus)showJobPerk('farmer','bonus wheat');
+    showName('RICH WINDSEED HARVEST');
+  }else if(m.action==='harvest'&&m.bonus)showName('BOUNTIFUL HARVEST');
 }
 function farmRejected(m){
   globalThis.__BLOCKCRAFT_LAST_FARM_REJECT__=JSON.parse(JSON.stringify(m||{}));
@@ -3670,7 +3670,6 @@ function farmRejected(m){
   else if(r==='seeds') sysMsg('You need <b>wheat seeds</b>');
   else if(r==='compost') sysMsg('Hold <b>Compost</b> to fertilize this crop');
   else if(r==='growing') sysMsg('Compost works only on a growing crop');
-  else if(r==='farmer_level') sysMsg('Equip Farmer and reach <b>Farmer Lv '+((m&&m.level)||1)+'</b> first');
   else if(r==='ripe') sysMsg('That crop is not ready');
   else sysMsg('Farming action failed');
 }

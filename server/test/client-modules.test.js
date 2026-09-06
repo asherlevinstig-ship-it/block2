@@ -1254,7 +1254,8 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.deepEqual(Object.keys(sharedJobs.REFORGE_MODIFIERS),['keen','swift','sturdy']);
   assert.deepEqual(Object.values(sharedJobs.REFORGE_ACTIONS).map(a=>a.level),[2,5,10,20]);
   assert.equal(sharedJobs.reforgeCost('masterwork').diamond,3);
-  assert.equal(sharedJobs.FARMER_RULES.windseedLevel,5);
+  assert.equal(sharedJobs.FARMER_RULES.bonusYieldChance,.15);
+  assert.equal(sharedJobs.FARMER_RULES.windseedLevel,undefined);
   assert.equal(sharedJobs.FARMER_RULES.fieldcraftGrowthMultiplier,.75);
   assert.equal(sharedJobs.FARMER_RULES.goldenWheatChance,.25);
   assert.equal(sharedJobs.COOK_RULES.brothLevel,5);
@@ -5091,4 +5092,7 @@ test('job system is disabled while ordinary work activities remain available', (
   assert.match(world, /addTownInteractLabel\('Farm Work'/);
   assert.match(world, /addTownInteractLabel\('Cook Work'/);
   assert.match(world, /addTownInteractLabel\('Meditation Hall'/);
+  assert.doesNotMatch(combat, /Farmer Lv 5 is required/);
+  assert.doesNotMatch(networking, /reason ===? 'farmer_level'/);
+  assert.match(menus, /AVAILABLE TO EVERY HUNTER/);
 });

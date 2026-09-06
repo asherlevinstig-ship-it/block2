@@ -7944,7 +7944,6 @@ class GameRoom extends Room {
     const action = String(m.action || '');
     const x = m.x | 0, y = m.y | 0, z = m.z | 0;
     const slot = Math.max(0, Math.min(35, m.slot | 0));
-    const farmerLevel = rec.prof.job === 'farmer' ? JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob && rec.prof.jobXpByJob.farmer) || 0) : 0;
     const farmerRules = JOB_SYSTEM.FARMER_RULES;
     if (!W.inWorld(x, y, z)) return client.send('farmReject', { reason: 'bounds' });
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 8) return client.send('farmReject', { reason: 'range' });
@@ -7966,21 +7965,19 @@ class GameRoom extends Room {
       if (id !== W.B.AIR || this.world.getB(x, y - 1, z) !== W.B.FARMLAND) return client.send('farmReject', { reason: 'soil' });
       const seedId = rec.prof.inv[slot] && (rec.prof.inv[slot].id | 0);
       const windseed = seedId === I.WINDSEED;
-      const brightHarvest = rec.prof.activeNpcQuest && rec.prof.activeNpcQuest.giver === 'Liss Barley' && rec.prof.activeNpcQuest.title === 'The Bright Harvest';
-      if (windseed && farmerLevel < farmerRules.windseedLevel && !brightHarvest) return client.send('farmReject', { reason: 'farmer_level', level: farmerRules.windseedLevel });
       if (!windseed && seedId !== I.WHEAT_SEEDS) return client.send('farmReject', { reason: 'seeds' });
       if (!this.consumeSlotItem(rec.prof, slot, seedId, 1)) return client.send('farmReject', { reason: 'seeds' });
       this.dirtyPlayers.add(rec.token);
       this.setWorldBlock(x, y, z, W.B.WHEAT_1);
       const key = x + ',' + y + ',' + z;
       const kind = windseed ? 'windseed' : 'wheat';
-      this.cropMeta.set(key, { kind, level: farmerLevel });
+      this.cropMeta.set(key, { kind });
       if (!this.worldProgress.cropKinds) this.worldProgress.cropKinds = {};
       if (windseed) this.worldProgress.cropKinds[key] = kind;
       else delete this.worldProgress.cropKinds[key];
       this.dirtyWorldProgress = true;
       const startedAt = Date.now();
-      const growMs = this.cropGrowMs(farmerLevel);
+      const growMs = this.cropGrowMs();
       const finishAt = startedAt + growMs;
       this.cropTimers.set(key, finishAt);
       this.broadcastCropTimer(x, y, z, W.B.WHEAT_1, startedAt, finishAt, kind);
@@ -7988,7 +7985,6 @@ class GameRoom extends Room {
       return client.send('farmResult', { action, x, y, z, slot, seedId, kind, id: W.B.WHEAT_1, startedAt, finishAt, growMs });
     }
     if (action === 'fertilize') {
-      if (farmerLevel < farmerRules.fieldcraftLevel) return client.send('farmReject', { reason: 'farmer_level', level: farmerRules.fieldcraftLevel });
       if (id !== W.B.WHEAT_1 && id !== W.B.WHEAT_2) return client.send('farmReject', { reason: 'growing' });
       if (!this.consumeSlotItem(rec.prof, slot, I.COMPOST, 1)) return client.send('farmReject', { reason: 'compost' });
       this.dirtyPlayers.add(rec.token);
@@ -7999,7 +7995,7 @@ class GameRoom extends Room {
       let startedAt = Date.now(), growMs = 0, finishAt = 0;
       if (next === W.B.WHEAT_3) this.cropTimers.delete(key);
       else {
-        growMs = this.cropGrowMs(farmerLevel);
+        growMs = this.cropGrowMs();
         finishAt = startedAt + growMs;
         this.cropTimers.set(key, finishAt);
         this.broadcastCropTimer(x, y, z, next, startedAt, finishAt, meta.kind);
@@ -8011,12 +8007,12 @@ class GameRoom extends Room {
       if (id !== W.B.WHEAT_3) return client.send('farmReject', { reason: 'ripe' });
       const key = x + ',' + y + ',' + z;
       this.cropTimers.delete(key);
-      const meta = this.cropMeta.get(key) || { kind: (this.worldProgress.cropKinds || {})[key] || 'wheat', level: farmerLevel };
+      const meta = this.cropMeta.get(key) || { kind: (this.worldProgress.cropKinds || {})[key] || 'wheat' };
       this.setWorldBlock(x, y, z, W.B.AIR);
-      const wheat = 1 + (Math.random() < jobPerkChance(rec.prof, 'farmer', 0.10) ? 1 : 0);
+      const wheat = 1 + (Math.random() < farmerRules.bonusYieldChance ? 1 : 0);
       const rich = meta.kind === 'windseed';
       const brightHarvest = rec.prof.activeNpcQuest && rec.prof.activeNpcQuest.giver === 'Liss Barley' && rec.prof.activeNpcQuest.title === 'The Bright Harvest';
-      const golden = rich && (brightHarvest || (farmerLevel >= farmerRules.goldenHarvestLevel && Math.random() < farmerRules.goldenWheatChance));
+      const golden = rich && (brightHarvest || Math.random() < farmerRules.goldenWheatChance);
       const items = [{ id: I.WHEAT, count: wheat + (rich ? 1 : 0) }, { id: rich ? I.WINDSEED : I.WHEAT_SEEDS, count: 1 + ((Math.random() * (rich ? 2 : 3)) | 0) }];
       if (golden) items.push({ id: I.GOLDEN_WHEAT, count: 1 });
       this.awardGrant(client, { source: 'farm', xp: rich ? 2 : 1, items });
@@ -8026,10 +8022,9 @@ class GameRoom extends Room {
     client.send('farmReject', { reason: 'invalid' });
   }
   // rain (and storms) water the fields: crops advance twice as fast until the skies clear
-  cropGrowMs(farmerLevel = 0) {
+  cropGrowMs() {
     let mult = this.state && this.state.weather && this.state.weather !== 'clear' ? .5 : 1;
-    if (farmerLevel >= JOB_SYSTEM.FARMER_RULES.goldenHarvestLevel) mult *= JOB_SYSTEM.FARMER_RULES.goldenGrowthMultiplier;
-    else if (farmerLevel >= JOB_SYSTEM.FARMER_RULES.fieldcraftLevel) mult *= JOB_SYSTEM.FARMER_RULES.fieldcraftGrowthMultiplier;
+    mult *= JOB_SYSTEM.FARMER_RULES.fieldcraftGrowthMultiplier;
     return Math.round(CROP_GROW_MS * mult);
   }
   growCrops(dt) {
