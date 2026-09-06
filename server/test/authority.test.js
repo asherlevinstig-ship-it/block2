@@ -2041,6 +2041,8 @@ test('claiming the first adventurer contract permanently unlocks the rotating po
   assert.equal(dObjective.title, 'D-rank Gate Prep');
   assert.equal(dObjective.progress.required, 5);
   assert.equal(dObjective.checklist.some(c => c.id === 'key'), true);
+  assert.equal(dObjective.action.type, 'gate_prep');
+  assert.match(dObjective.checklist.find(c => c.id === 'key').hint, /Market stall for 110 gold/);
   room.recordGateProgress(client, 0);
   assert.equal(prof.progressionFocus, 'first_d_gate', 'another E clear does not finish D-rank preparation');
   room.recordGateProgress(client, 1);

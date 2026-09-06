@@ -2626,8 +2626,10 @@ test('objective tracker shows only the active quest with an all-quests shortcut'
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(frame,/function unifiedObjectiveList\(\)/);
-  assert.match(frame,/return lines\.filter\(line=>\{const key=line\.kind\+':'\+line\.title/);
-  assert.match(frame,/\.slice\(0,6\)/);
+  assert.match(frame,/const unique=lines\.filter\(line=>\{const key=line\.kind\+':'\+line\.title/);
+  assert.match(frame,/if\(progressionFocus==='e_rank_climb'\)/);
+  assert.match(frame,/return \[climb,activity\]\.filter\(Boolean\)/);
+  assert.match(frame,/return unique\.slice\(0,6\)/);
   assert.match(frame,/if\(lines\.length\)return \{label:'Objective Tracker',text:'Active quest categories',unified:true,lines\};/);
   assert.match(frame,/const activeQuestCard=line=>\{/);
   assert.match(frame,/class="activequest-open" data-objective-action="questlog" title="View all quests \(O\)"/);

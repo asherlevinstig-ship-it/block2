@@ -23,10 +23,10 @@ const BOSS_IDENTITY_BY_RANK = [
   'A/S-rank: layered mechanics chain into follow-up casts',
 ];
 const HINTS_BY_ID = Object.freeze({
-  weapon: 'Craft or carry an iron-tier sword or axe at Tobin\'s smithy.',
-  armor: 'Craft or equip Chainmail, Iron, robes, Diamond, or better gear before entering.',
-  food: 'Buy food from Greta or cook meals until you have enough rations.',
-  tool: 'Repair or craft a healthy pick, shovel, or hoe for dungeon utility.',
+  weapon: 'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',
+  armor: 'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',
+  food: 'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.',
+  tool: 'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.',
 });
 
 function stacks(profile) { return Array.isArray(profile && profile.inv) ? profile.inv.filter(Boolean) : []; }

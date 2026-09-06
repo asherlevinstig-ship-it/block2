@@ -88,10 +88,10 @@ export function rankPromotionDetails(message) {
 
 export function createOnboardingUI(deps) {
   const {
-    rewardWin, rewardPanel, rankUpWin, rankUpPanel, I, ITEMS, HUB,
-    escHTML, rewardLineHTML, countItem, hasAnyArmorItem, toolMaxDur, refreshPlayUi,
+    rewardWin, rewardPanel, rankUpWin, rankUpPanel, I, ITEMS, FOOD_VALUES, HUB,
+    escHTML, rewardLineHTML, countItem, toolMaxDur, refreshPlayUi,
     getFocus, getInv, releasePointerLock, restoreLock, clearRewardTimer, sendNet,
-    baseSetupStatus,
+    baseSetupStatus, getArmor,
   } = deps;
 
   let firstPromotionSeen = false, firstPromotionShown = false, trainingCompleteShown = false;
@@ -163,8 +163,9 @@ export function createOnboardingUI(deps) {
       const tool = s && ITEMS[s.id] && ITEMS[s.id].tool;
       return !!(tool && tool.tier >= 3 && (tool.cls === 'sword' || tool.cls === 'axe'));
     });
-    const armor = hasAnyArmorItem();
-    const food = [I.BREAD, I.MONSTER_MEAT, I.COOKED_MEAT, I.HEARTY_SANDWICH].reduce((n, id) => n + countItem(id), 0) >= 3;
+    const equipped = typeof getArmor === 'function' ? getArmor() : null;
+    const armor = !!(equipped && [I.CHAIN_ARMOR, I.IRON_ARMOR, I.ARCWEAVE_ROBE, I.DIA_ARMOR, I.STORMGLASS_ARMOR, I.STORMWEAVE_ROBE, 137].includes(equipped.id));
+    const food = inv.reduce((n, s) => n + (s && FOOD_VALUES && FOOD_VALUES[s.id] ? Math.max(0, s.count | 0) : 0), 0) >= 3;
     const tool = inv.some(s => {
       const info = s && ITEMS[s.id] && ITEMS[s.id].tool;
       // swords AND axes are weapons in the gear economy; utility tools are pick/shovel/hoe
@@ -174,11 +175,11 @@ export function createOnboardingUI(deps) {
     });
     const key = countItem(I.SOLO_KEY_D) > 0 || countItem(I.TEAM_KEY_D) > 0;
     const checks = [
-      { id: 'weapon', label: 'Iron-tier weapon', done: weapon, hint: 'Craft or carry an iron sword or axe at Tobin\'s smithy.', target: HUB.smith },
-      { id: 'armor', label: 'Iron armor', done: armor, hint: 'Craft Iron Armor with 8 ingots, then equip it.', target: HUB.smith },
-      { id: 'food', label: 'Food x3', done: food, hint: 'Buy food from Greta or cook meals for the road.', target: HUB.tavern },
-      { id: 'tool', label: 'Healthy tool', done: tool, hint: 'Use a Repair Kit or craft a fresh utility tool.', target: HUB.smith },
-      { id: 'key', label: 'D-rank key', done: key, hint: 'Take Adventurer work or use a D-rank key from your rewards.', target: HUB.jobs },
+      { id: 'weapon', label: 'Iron-tier weapon', done: weapon, hint: 'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft one.', target: HUB.market },
+      { id: 'armor', label: 'Iron armor', done: armor, hint: 'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it.', target: HUB.smith },
+      { id: 'food', label: 'Food x3', done: food, hint: 'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.', target: HUB.tavern },
+      { id: 'tool', label: 'Healthy iron utility tool', done: tool, hint: 'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair one to 75%.', target: HUB.market },
+      { id: 'key', label: 'D-rank Gate key', done: key, hint: 'Buy a Solo D-rank Gate Key at Bram\'s Market stall for 110 gold.', target: HUB.market },
     ];
     let next;
     if (!weapon) next = { ...checks[0], text: 'Equip or carry an iron-tier weapon' };
@@ -284,7 +285,7 @@ export function createOnboardingUI(deps) {
         rewardLineHTML({ label: 'Public and Key Access', value: 'D-RANK' }) +
       '</div>' +
       '<div class="rnote"><b>Prepare before entering D-rank:</b><br>Bring iron armor, an iron-tier weapon, food, and a repaired tool.</div>' +
-      '<div class="rnote"><b>Next objective:</b><br>' + escHTML(objective.text) + '. Adventurer contracts become your repeatable progression path.</div>' +
+      '<div class="rnote"><b>Next objective:</b><br>' + escHTML(objective.text) + '. Town quests, Guild Contracts, Gates, events, and field threats drive the climb.</div>' +
       '<button id="promotioncontinue">TRACK NEXT STEP</button>';
     rewardWin.classList.remove('hidden');
     rewardWin.classList.add('promotion-open');

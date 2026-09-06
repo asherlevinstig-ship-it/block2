@@ -2581,7 +2581,22 @@ class GameRoom extends Room {
       ].slice(0, 36);
       this.syncPlayerProfile(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
+      this.ensurePublicGateRank(1);
       return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'reachDRank') {
+      rec.prof.progressionFocus = 'e_rank_climb';
+      rec.prof.S.lvl = HUNTER_RANK_LEVELS[1] - 1;
+      rec.prof.S.xp = Math.max(0, xpNeedForLevel(rec.prof.S.lvl) - 1);
+      rec.prof.highestGateRankCleared = Math.max(0, rec.prof.highestGateRankCleared | 0);
+      this.syncPlayerProfile(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+      this.grantHunterXp(rec.prof, 1, client, 'e2e-d-rank-promotion');
+      const ok = rec.prof.S.lvl >= HUNTER_RANK_LEVELS[1] && rec.prof.progressionFocus === 'first_d_gate';
+      this.progressionChanged(client, 'e2eJourney', { action, focus: rec.prof.progressionFocus });
+      this.ensurePublicGateRank(1);
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
+      return ok;
     }
     if (action === 'prepareProgressionFocus') {
       const focus = String(m && m.focus || '');
@@ -5444,6 +5459,7 @@ class GameRoom extends Room {
             id: String(c && c.id || '').slice(0, 32),
             label: String(c && c.label || 'Check').slice(0, 64),
             done: !!(c && c.done),
+            hint: String(c && c.hint || '').slice(0, 180),
           }))
           : null,
         progress: objective.progress && typeof objective.progress === 'object' ? {
@@ -5647,10 +5663,10 @@ class GameRoom extends Room {
       first_base_setup: ['progression:first_base_setup', 'progression', 'Base Setup', 'Inside your Homestead, place storage, light, and a station.', 'Claimed land', 'land', 'OPEN LAND', 50],
       first_homestead_upgrade: ['progression:first_homestead_upgrade', 'progression', 'Homestead Upgrade', 'Your Homestead is ready. Open Land Claims while standing in your base and choose your first upgrade.', 'Your Homestead', 'land', 'OPEN HOMESTEAD', 50],
       first_profession_contract: ['progression:first_profession_contract', 'progression', 'First Contract', 'Take your first profession or Adventurer contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
-      e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', JOB_SYSTEM.ENABLED ? 'Reach level 11 through contracts, E-rank Gates, quests, and field work.' : 'Reach level 11 through E-rank Gates, town quests, regional contracts, events, and field work.', JOB_SYSTEM.ENABLED ? 'Job Board' : 'Quest Log', JOB_SYSTEM.ENABLED ? 'jobs' : 'quest_log', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN QUEST LOG', 70],
+      e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', JOB_SYSTEM.ENABLED ? 'Reach level 11 through contracts, E-rank Gates, quests, and field work.' : 'Reach level 11 through E-rank Gates, town quests, Guild Contracts, events, and field work.', JOB_SYSTEM.ENABLED ? 'Job Board' : 'Guild Hall', JOB_SYSTEM.ENABLED ? 'jobs' : 'guild_contracts', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN GUILD BOARD', 70],
       first_promotion_job: ['progression:first_promotion_job', 'progression', 'Choose Work Path', 'Choose Adventurer or a profession before promotion work.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
       first_promotion_contract: ['progression:first_promotion_contract', 'progression', 'Promotion Contract', 'Take the first Adventurer promotion contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
-      first_d_gate: ['progression:first_d_gate', 'progression', 'D-rank Gate Prep', 'Prepare for the first D-rank Gate and its ranged-volley lesson: iron weapon, iron armor, three food, a healthy utility tool, and a D-rank key. Then clear the Gate.', 'Gate prep', 'quest_log', 'OPEN PREP', 50],
+      first_d_gate: ['progression:first_d_gate', 'progression', 'D-rank Gate Prep', 'Prepare for the first D-rank Gate and its ranged-volley lesson: iron weapon, iron armor, three food, a healthy utility tool, and a D-rank key. Then clear the Gate.', 'Gate prep', 'gate_prep', 'OPEN PREP', 50, 1],
       c_rank_climb: ['progression:c_rank_climb', 'progression', 'C-rank Climb', JOB_SYSTEM.ENABLED ? 'Reach level 21 through rotating Adventurer contracts, D-rank Gates, regional trouble, and events, then clear a C-rank Gate.' : 'Reach level 21 through town quests, D-rank Gates, regional contracts, events, and field threats, then clear a C-rank Gate.', 'Gate prep', 'gate_prep', 'C PREP CHECK', 70, 2],
       c_rank_specialization: ['progression:c_rank_specialization', 'progression', 'C-rank Specialization', JOB_SYSTEM.ENABLED ? 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then return to rotating contracts.' : 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then continue through Gates, quests, and regional threats.', 'Character', 'choose_spec', 'CHOOSE SPEC', 40],
       b_rank_pressure: ['progression:b_rank_pressure', 'progression', 'Gate Pressure', 'Reach level 31, keep road safety at 65 or higher, contain active Gate breaches, prepare a B-rank kit, and clear a B-rank Gate.', 'Regional pressure', JOB_SYSTEM.ENABLED ? 'jobs' : 'gate_prep', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN PREP', 70],
@@ -5690,16 +5706,16 @@ class GameRoom extends Room {
         (this.countItem && this.countItem(rec.prof, I.TEAM_KEY_D) > 0)
       ));
       const checks = [
-        ...readiness.checks.map(c => ({ id: c.id, label: c.label, done: !!c.done })),
-        { id: 'key', label: 'D-rank key', done: hasDKey },
+        ...readiness.checks.map(c => ({ id: c.id, label: c.label, done: !!c.done, hint: c.hint || '' })),
+        { id: 'key', label: 'D-rank key', done: hasDKey, hint: 'Buy a Solo D-rank Gate Key at Bram Ledger\'s Market stall for 110 gold.' },
       ];
       const done = checks.filter(c => c.done).length;
-      const missing = checks.filter(c => !c.done).map(c => c.label.toLowerCase());
+      const missing = checks.filter(c => !c.done);
       objective.progress = { current: done, required: checks.length };
       objective.checklist = checks;
       objective.hudText = done >= checks.length
-        ? 'Ready. Find and clear a D-rank Gate to unlock the rotating Adventurer loop.'
-        : 'D-rank Gate prep missing: ' + missing.slice(0, 2).join(', ') + (missing.length > 2 ? ', and ' + (missing.length - 2) + ' more.' : '.');
+        ? 'Ready. Find and clear a D-rank Gate to begin the C-rank climb.'
+        : 'Next fix: ' + missing[0].label + '. ' + missing[0].hint;
       objective.reward = {
         xp: BOSS_REWARD_BY_RANK[1].xp,
         gold: BOSS_REWARD_BY_RANK[1].gold,
@@ -5714,11 +5730,19 @@ class GameRoom extends Room {
     if (focus === 'e_rank_climb' && client) {
       const rec = this.profileFor(client);
       const S = rec && rec.prof && rec.prof.S || {};
-      const target = HUNTER_RANK_LEVELS[1];
-      objective.progress = { current: Math.max(1, Math.min(target, S.lvl | 0 || 1)), required: target };
+      const start = HUNTER_RANK_LEVELS[0], target = HUNTER_RANK_LEVELS[1];
+      let required = 0, earned = 0;
+      for (let level = start; level < target; level++) {
+        const need = xpNeedForLevel(level);
+        required += need;
+        if ((S.lvl | 0) > level) earned += need;
+        else if ((S.lvl | 0) === level) earned += Math.max(0, Math.min(need, Math.floor(Number(S.xp) || 0)));
+      }
+      const remaining = Math.max(0, required - earned);
+      objective.progress = { current: Math.max(0, Math.min(required, earned)), required: Math.max(1, required) };
       objective.hudText = (S.lvl | 0) >= target
         ? 'D-rank reached. Prepare for and clear your first D-rank Gate.'
-        : `Reach level ${target}. Current level: ${Math.max(1, S.lvl | 0 || 1)}.`;
+        : `${remaining.toLocaleString('en-US')} Hunter XP to D-rank. Best options: active town quest, Guild Contract, or E-rank Gate.`;
     }
     if (focus === 'c_rank_climb' && client) {
       const rec = this.profileFor(client);

@@ -3062,10 +3062,11 @@ const GATE_READINESS_REQUIREMENTS=[
 const GATE_DIFFICULTIES=['Initiate','Dangerous','Severe','Extreme','Cataclysmic'];
 const GATE_LEGENDARY_WEAPONS=new Set([136,138,160,161,162,163,164,165,166,167,168,169,170,171]);
 const GATE_READINESS_HINTS={
-  weapon:'Craft or carry an iron-tier sword or axe at Tobin\'s smithy.',
-  armor:'Craft or equip Chainmail, Iron, Diamond, or better armor before entering.',
-  food:'Buy food from Greta or cook meals until you have enough rations.',
-  tool:'Repair or craft a healthy pick, shovel, or hoe for dungeon utility.',
+  weapon:'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',
+  armor:'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',
+  food:'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.',
+  tool:'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.',
+  key:'Buy a Solo D-rank Gate Key at Bram\'s Market stall for 110 gold.',
 };
 function gateReadinessLocal(rank){
   rank=Math.max(0,Math.min(4,rank|0));
@@ -3074,13 +3075,14 @@ function gateReadinessLocal(rank){
   const weaponOk=weapons.some(s=>GATE_LEGENDARY_WEAPONS.has(s.id)||((ITEMS[s.id].tool.tier|0)>=req.weapon&&(s.plus|0)>=(req.weaponPlus||0)));
   const armorTier=armorSlot&&armorSlot.id===137?5:armorSlot&&[I.DIA_ARMOR,I.STORMGLASS_ARMOR,I.STORMWEAVE_ROBE].includes(armorSlot.id)?4:armorSlot&&[I.IRON_ARMOR,I.CHAIN_ARMOR,I.ARCWEAVE_ROBE].includes(armorSlot.id)?3:armorSlot&&[I.HIDE_ARMOR,I.APPRENTICE_ROBE].includes(armorSlot.id)?2:0;
   const foodCount=stacks.reduce((n,s)=>n+(FOOD_VALUES[s.id]?Math.max(0,s.count|0):0),0);
-  const toolOk=stacks.some(s=>{const t=ITEMS[s.id]&&ITEMS[s.id].tool;if(!t||t.cls==='sword'||(t.tier|0)<req.tool)return false;const max=toolMaxDur(s),cur=s.dur==null?max:Math.max(0,s.dur|0);return cur/max>=req.health;});
+  const toolOk=stacks.some(s=>{const t=ITEMS[s.id]&&ITEMS[s.id].tool;if(!t||t.cls==='sword'||t.cls==='axe'||(t.tier|0)<req.tool)return false;const max=toolMaxDur(s),cur=s.dur==null?max:Math.max(0,s.dur|0);return cur/max>=req.health;});
   const checks=[
     {id:'weapon',label:(req.weaponPlus?'+'+req.weaponPlus+' ':'')+tierName[req.weapon]+'-tier weapon',done:weaponOk,hint:GATE_READINESS_HINTS.weapon},
     {id:'armor',label:req.armor?tierName[req.armor]+' armor':'Armor optional',done:!req.armor||armorTier>=req.armor,hint:GATE_READINESS_HINTS.armor},
     {id:'food',label:'Food x'+req.food,done:foodCount>=req.food,hint:GATE_READINESS_HINTS.food},
     {id:'tool',label:tierName[req.tool]+' utility tool at '+Math.round(req.health*100)+'%',done:toolOk,hint:GATE_READINESS_HINTS.tool},
   ];
+  if(rank===1&&progressionFocus==='first_d_gate')checks.push({id:'key',label:'D-rank Gate key',done:countItem(I.SOLO_KEY_D)>0||countItem(I.TEAM_KEY_D)>0,hint:GATE_READINESS_HINTS.key});
   const score=checks.filter(c=>c.done).length;
   const missing=checks.filter(c=>!c.done);
   return {rank,difficulty:GATE_DIFFICULTIES[rank],ready:score===checks.length,status:score===checks.length?'READY':'UNDERPREPARED',score,total:checks.length,checks,missing,next:missing[0]||null};
@@ -3128,6 +3130,7 @@ function openGatePrepUI(rank=nextGatePrepRank()){
   if(r.next){const p=document.createElement('p');p.className='qtext';p.innerHTML='<b>Do this now:</b> '+escHTML(r.next.hint||r.next.label);qpanelEl.appendChild(p);}
   const row=document.createElement('div');row.className='qrow';
   row.appendChild(qBtn('INVENTORY',()=>openUI()));
+  row.appendChild(qBtn('MARKET',()=>openShopUI('market')));
   row.appendChild(qBtn('SMITHY',()=>openQuestUI(villagers.find(v=>v.role==='smith')||NPC_ROLES.find(v=>v.role==='smith'))));
   row.appendChild(qBtn('TAVERN',()=>openTavernUI()));
   row.appendChild(qBtn(r.ready?'FIND GATE':'QUEST LOG',()=>r.ready?sysMsg('<b>Gate ready:</b> follow the Gate marker or join a nearby party.'):openQuestLogUI()));

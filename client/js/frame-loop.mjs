@@ -955,7 +955,7 @@ function serverObjectiveForHud(){
   const list=activeObjectiveList();
   if(!list.length)return null;
   const candidates=list.filter(o=>o.source!=='tutorial');
-  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus)
+  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade','e_rank_climb','first_d_gate'].includes(progressionFocus)
     ?candidates.find(o=>o.source==='progression'&&o.id==='progression:'+progressionFocus)
     :null;
   if(baseChapter)return baseChapter;
@@ -1378,7 +1378,13 @@ function unifiedObjectiveList(){
   const midgame=midgameObjectiveLine();
   if(midgame)lines.push(midgame);
   const seen=new Set();
-  return lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,6);
+  const unique=lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;});
+  if(progressionFocus==='e_rank_climb'){
+    const climb=unique.find(line=>line.title==='E-rank Climb');
+    const activity=unique.find(line=>line!==climb&&['story','guild','aegis'].includes(line.kind));
+    return [climb,activity].filter(Boolean);
+  }
+  return unique.slice(0,6);
 }
 function unifiedObjectiveHud(){
   const lines=unifiedObjectiveList();
@@ -1916,7 +1922,7 @@ function utilityCompassTarget(){
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
   if(progressionFocus==='e_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='c_rank_climb'||progressionFocus==='next_adventurer_contract'){
-    return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
+    return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
   }
   if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
     const rally=dungeonLobbyState.rally,distance=Math.round(Math.hypot(rally.x-player.pos.x,rally.z-player.pos.z));
