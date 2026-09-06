@@ -3938,21 +3938,20 @@ test('network controller sends saved auth token during room matchmaking', async 
   assert.equal(joinedOptions.name, 'Hunter');
 });
 
-test('network controller joins the advertised main room by id before using room discovery', async () => {
+test('network controller uses atomic room discovery instead of a separately advertised room id', async () => {
   const { createNetworkController } = await clientModule('network.mjs');
   const events = [];
   const room = { reconnectionToken: 'main:token', onLeave() {} };
   class Client {
-    async joinById(roomId, options) {
-      events.push(['joinById', roomId, options.shardId, options.authToken]);
+    async joinOrCreate(roomName, options) {
+      events.push(['joinOrCreate', roomName, options.shardId, options.authToken]);
       return room;
     }
-    async joinOrCreate() { throw new Error('room discovery should not run when readiness advertises main'); }
+    async joinById() { throw new Error('fresh joins must not use a potentially stale room id'); }
   }
   const controller = createNetworkController({
     Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
     primaryJoinOptions: () => ({ shardId: 'main' }),
-    resolvePrimaryRoomId: async () => 'ready-main-room',
     authToken: () => 'session-token',
     sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
     onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
@@ -3960,14 +3959,14 @@ test('network controller joins the advertised main room by id before using room 
   });
   controller.connect('Hunter');
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.deepEqual(events, [['joinById', 'ready-main-room', 'main', 'session-token']]);
+  assert.deepEqual(events, [['joinOrCreate', 'blockcraft', 'main', 'session-token']]);
   assert.equal(controller.state.room, room);
 });
 
-test('live network session resolves the healthy main room from readiness', () => {
+test('live network session does not resolve fresh joins through readiness room ids', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
-  assert.match(source, /fetch\(apiUrl\('\/readyz'\),\{cache:'no-store'\}\)/);
-  assert.match(source, /shard\.shardId==='main'&&shard\.roomId/);
+  assert.doesNotMatch(source, /resolvePrimaryRoomId/);
+  assert.doesNotMatch(source, /fetch\(apiUrl\('\/readyz'\)/);
 });
 
 test('network controller clears stale room resume token when auth session changes', async () => {
