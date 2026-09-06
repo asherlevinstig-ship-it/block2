@@ -722,7 +722,7 @@ test('client dimensions and server consume the shared grid contract', () => {
     assert.ok(offset > previousModule, `${name} is loaded in runtime order`);
     previousModule = offset;
   }
-  assert.ok(Buffer.byteLength(html) < 25_000, 'index.html remains a small markup and bootstrap shell');
+  assert.ok(Buffer.byteLength(html) < 26_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
   assert.match(html, /id="authpassshow" class="password-toggle" type="button"/);
@@ -4956,11 +4956,25 @@ test('desktop social control is a bottom-right chat button', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
-  assert.match(html, /id="socialbtn"[\s\S]*social-chat-icon[\s\S]*socialbtn-label">CHAT/);
+  assert.match(html, /id="socialbtn"[\s\S]*social-chat-icon[\s\S]*socialbtn-label support-label">CHAT/);
   assert.match(styles, /body:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #socialbtn\{[\s\S]*right:18px;[\s\S]*bottom:18px;/);
-  assert.match(combat, /el===socialBtn&&!tabletInputState\.tablet[\s\S]*el\.style\.left=''[\s\S]*el\.style\.top=''/);
+  assert.match(combat, /if\(!tabletInputState\.tablet\)\{[\s\S]*el\.style\.left=''[\s\S]*el\.style\.top=''/);
   assert.match(combat, /function openSocialFromHud\(\)[\s\S]*openChat[\s\S]*startQuickChatWheel/);
   assert.doesNotMatch(combat.match(/function openSocialFromHud\(\)[\s\S]*?\n\}/)?.[0]||'', /openPlayerSocialUI/);
+});
+
+test('desktop HUD is composed into identity, navigation, objective, feed, and support clusters', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+
+  assert.match(html, /id="supportdock"[\s\S]*id="socialbtn"[\s\S]*id="bugreportbtn"[\s\S]*id="stuckrescuebtn"/);
+  assert.match(html, /class="hud-brand"[\s\S]*BLOCKCRAFT[\s\S]*HUNTER HUD/);
+  assert.match(styles, /#landmap\.worldmap\{[\s\S]*border-radius:50%/);
+  assert.match(styles, /#chatlog:before\{content:'EVENT FEED[ ]{2}·[ ]{2}SCROLL FOR HISTORY'/);
+  assert.match(styles, /#supportdock>button\{[\s\S]*border-radius:50%!important/);
+  assert.match(styles, /#supportdock>#questionbtn\{display:none!important\}/);
+  assert.match(combat, /function layoutRightHudStack\(\)[\s\S]*let top=narrow\?8:242/);
 });
 
 test('nearby player menu can finish rendering every core action', () => {

@@ -1002,7 +1002,7 @@ bindHudActionButton(socialBtn,openSocialFromHud,'social');
 const rightHudStackIds=['currentquest','activitytracker','townchoices'];
 function layoutRightHudStack(){
   const narrow=window.innerWidth<=760;
-  let top=narrow?8:260;
+  let top=narrow?8:242;
   for(const id of rightHudStackIds){
     const el=document.getElementById(id);
     if(!el) continue;
@@ -1033,7 +1033,7 @@ function layoutLeftHudExtras(){
   }
   for(const el of [questionBtn,socialBtn,bug,stuck]){
     if(!el)continue;
-    if(el===socialBtn&&!tabletInputState.tablet){
+    if(!tabletInputState.tablet){
       el.style.left='';
       el.style.top='';
       continue;
