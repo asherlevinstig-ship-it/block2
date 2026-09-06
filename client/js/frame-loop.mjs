@@ -1151,6 +1151,11 @@ function progressionObjectiveFallback(){
     return objectiveLine('progression','Next','Craft Station','Craft your first table or furnace',craft||{type:'questlog',label:'OPEN QUEST LOG'});
   }
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
+    if(!JOBS_ENABLED){
+      if(progressionFocus==='first_profession_contract')return objectiveLine('progression','Next','E-rank Climb','Reach level 11 through Gates, town quests, regional contracts, events, and field work',{type:'quest_log',label:'OPEN QUEST LOG'});
+      if(progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract')return objectiveLine('progression','Next','D-Rank Prep','Prepare food, gear, repairs, and a D-rank key',{type:'gate_prep',label:'OPEN GATE PREP',rank:1});
+      return objectiveLine('progression','Next','C-rank Specialization','Choose a permanent specialization, then continue toward B-rank',{type:'choose_spec',label:'CHOOSE SPEC'});
+    }
     const handoff=professionHandoffObjective();
     if(handoff)return objectiveLine('progression','Next',handoff.title,handoff.text,{type:'jobs',label:'OPEN JOB BOARD'});
     return objectiveLine('progression','Next','Profession Work','Take your first profession or Adventurer contract at the Job Board',{type:'jobs',label:'OPEN JOB BOARD'});
@@ -1171,7 +1176,9 @@ function progressionObjectiveFallback(){
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(rank);
     if(prep&&!prep.ready)return objectiveLine('progression','Next','Gate Pressure',rankName+'-Rank pressure is rising. Fix your Gate kit before the next clear',{type:'gate_prep',label:rankName+' PREP CHECK',rank});
     if(gate)return objectiveLine('progression','Next','Gate Pressure','Clear higher-rank Gates, Road Warden work, and regional trouble to stabilize the climb',{type:'find_gate',label:'FIND GATE',rank});
-    return objectiveLine('progression','Next','Gate Pressure','No breach is active. Take Adventurer or Road Warden work so B-rank pressure keeps moving',{type:'jobs',label:'OPEN JOB BOARD'});
+    return JOBS_ENABLED
+      ? objectiveLine('progression','Next','Gate Pressure','No breach is active. Take Adventurer or Road Warden work so B-rank pressure keeps moving',{type:'jobs',label:'OPEN JOB BOARD'})
+      : objectiveLine('progression','Next','Gate Pressure','No breach is active. Take Road Warden work and keep road safety at 65 or higher',{type:'guild_contracts',label:'OPEN GUILD BOARD'});
   }
   if(progressionFocus==='first_d_gate'){
     const craft=objectiveCraftAction('what_next'),prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();

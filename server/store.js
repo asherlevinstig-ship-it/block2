@@ -1127,6 +1127,11 @@ function sanitizeProfile(p) {
     out.recallMastery.items[id]={attempts,correct:Math.min(attempts,clampI(raw.correct,0,1000000)),streak:clampI(raw.streak,0,10000),stage:clampI(raw.stage,0,6),lastAt:clampI(raw.lastAt,0,4102444800000),nextDue:clampI(raw.nextDue,0,4102444800000),lastCorrect:raw.lastCorrect===true};
   }
   out.progressionFocus = PROGRESSION_FOCUS_STATES.has(p.progressionFocus) ? p.progressionFocus : '';
+  if (!JOB_SYSTEM.ENABLED) {
+    if (out.progressionFocus === 'first_profession_contract') out.progressionFocus = 'e_rank_climb';
+    else if (['first_promotion_job', 'first_promotion_contract'].includes(out.progressionFocus)) out.progressionFocus = 'first_d_gate';
+    else if (out.progressionFocus === 'next_adventurer_contract') out.progressionFocus = out.abilitySpec ? 'b_rank_pressure' : 'c_rank_specialization';
+  }
   out.systemIntroductions = [...new Set((Array.isArray(p.systemIntroductions) ? p.systemIntroductions : [])
     .filter(v => typeof v === 'string' && /^[a-z_]{2,32}$/.test(v)).slice(0, 32))];
   out.progressionMilestoneRewards = [...new Set((Array.isArray(p.progressionMilestoneRewards) ? p.progressionMilestoneRewards : [])
@@ -1135,7 +1140,9 @@ function sanitizeProfile(p) {
   if (out.progressionFocus === 'c_rank_climb' && (out.highestGateRankCleared >= 2 || (out.S.lvl | 0) >= HUNTER_RANK_LEVELS[2])) out.progressionFocus = out.abilitySpec ? 'b_rank_pressure' : 'c_rank_specialization';
   if (out.progressionFocus === 'c_rank_specialization' && out.abilitySpec) out.progressionFocus = 'b_rank_pressure';
   if (out.progressionFocus === 'next_adventurer_contract' && out.abilitySpec) out.progressionFocus = 'b_rank_pressure';
-  if (out.progressionFocus === 'e_rank_climb' && out.S.lvl >= 11) out.progressionFocus = out.job === 'adventurer' ? 'first_promotion_contract' : 'first_promotion_job';
+  if (out.progressionFocus === 'e_rank_climb' && out.S.lvl >= 11) out.progressionFocus = JOB_SYSTEM.ENABLED
+    ? (out.job === 'adventurer' ? 'first_promotion_contract' : 'first_promotion_job')
+    : 'first_d_gate';
   if (['first_profession_contract', 'next_adventurer_contract'].includes(out.progressionFocus) && out.jobContract) out.progressionFocus = '';
   out.firstPromotionSeen = p.firstPromotionSeen === true;
   out.forceJobChoice = p.forceJobChoice === true;

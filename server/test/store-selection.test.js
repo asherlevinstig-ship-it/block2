@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createStore, JsonStore, cleanShardId } = require('../store');
+const { createStore, JsonStore, cleanShardId, sanitizeProfile } = require('../store');
 
 class BrokenFirebaseStore {
   constructor() { throw new Error('invalid credentials'); }
@@ -44,6 +44,14 @@ test('development may fall back to JSON when requested Firebase storage cannot i
 test('JSON remains the default storage backend', () => {
   const store = createStore({ env: { DATA_DIR: 'local-data' }, JsonStoreClass: FakeJsonStore });
   assert.equal(store.dir, 'local-data');
+});
+
+test('disabled profession objectives migrate to live progression steps', () => {
+  assert.equal(sanitizeProfile({ progressionFocus: 'first_profession_contract' }).progressionFocus, 'e_rank_climb');
+  assert.equal(sanitizeProfile({ progressionFocus: 'first_promotion_job', S: { lvl: 11 } }).progressionFocus, 'first_d_gate');
+  assert.equal(sanitizeProfile({ progressionFocus: 'first_promotion_contract', S: { lvl: 11 } }).progressionFocus, 'first_d_gate');
+  assert.equal(sanitizeProfile({ progressionFocus: 'next_adventurer_contract', abilitySpec: 'nightstalker', S: { lvl: 21, path: 'verdant' } }).progressionFocus, 'b_rank_pressure');
+  assert.equal(sanitizeProfile({ progressionFocus: 'e_rank_climb', S: { lvl: 11 } }).progressionFocus, 'first_d_gate');
 });
 
 test('concurrent world updates serialize the full read-modify-write transaction', async () => {

@@ -2516,10 +2516,12 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   room.handleNpcQuest(client, { action: 'claim' });
   assert.equal(prof.progressionFocus, 'first_road_ready');
   {
-    const payload = client.sent.find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_road_ready').msg;
-    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_road_ready');
+    const activeObjectives = room.activeQuestObjectives(client, prof);
+    const objective = activeObjectives.find(o => o.title === 'Road Ready');
+    assert.equal(objective.source, 'story', 'Mara\'s authored quest replaces the duplicate progression card');
+    assert.equal(activeObjectives.some(o => o.id === 'progression:first_road_ready'), false);
     assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 2, total: 9 });
-    assert.equal(objective.priority, 12, 'Chapter 1 progression stays ahead of optional side systems');
+    assert.equal(objective.priority, 10, 'Mara\'s story quest stays ahead of optional side systems');
   }
 
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
@@ -2696,6 +2698,7 @@ test('server item grants update active fetch NPC quest objectives immediately', 
 
 test('activity NPC quests progress from farming, cooking, smithing, and treasure hooks', () => {
   const cases = [
+    { type:'build', item:W.B.PLANKS, job:'', action:(room, client) => room.recordBuildProgress(client, W.B.PLANKS) },
     { type:'farm', item:0, job:'farmer', action:(room, client) => room.recordFarmProgress(client, 'harvest') },
     { type:'cook', item:I.COOKED_MEAT, job:'cook', action:(room, client) => room.recordCraftProgress(client, I.COOKED_MEAT, 1) },
     { type:'smith', item:I.REPAIR_KIT, job:'blacksmith', action:(room, client) => room.recordCraftProgress(client, I.REPAIR_KIT, 1) },
@@ -8454,6 +8457,31 @@ test('Farmer milestones gate Windseeds and compost while Golden Harvest persists
   assert.equal(client.sent.some(e => e.type === 'farmResult' && e.msg.golden), true);
 });
 
+test('Bright Harvest supplies a Windseed and guarantees Golden Wheat without Farmer levels', () => {
+  const room = makeRoom();
+  const client = makeClient('bright-harvest-story');
+  const { prof } = seedPlayer(room, client, { token: 'bright_harvest_token', x: 24.5, z: 24.5 });
+  prof.job = '';
+  prof.npcQuestChains['Liss Barley'] = 3;
+
+  assert.equal(room.handleNpcQuest(client, { action: 'accept', giver: 'Liss Barley', role: 'farmer' }), true);
+  assert.equal(prof.activeNpcQuest.title, 'The Bright Harvest');
+  assert.equal(itemCount(prof, I.WINDSEED), 1);
+  const seedSlot = prof.inv.findIndex(slot => slot && slot.id === I.WINDSEED);
+  room.world.setB(24, 10, 24, W.B.FARMLAND);
+  room.handleFarm(client, { action: 'plant', x: 24, y: 11, z: 24, slot: seedSlot });
+  assert.equal(room.world.getB(24, 11, 24), W.B.WHEAT_1, 'story Windseed bypasses the dormant Farmer level gate');
+
+  room.world.setB(24, 11, 24, W.B.WHEAT_3);
+  const oldRandom = Math.random;
+  Math.random = () => 0.99;
+  try { room.handleFarm(client, { action: 'harvest', x: 24, y: 11, z: 24, slot: 0 }); }
+  finally { Math.random = oldRandom; }
+  assert.equal(itemCount(prof, I.GOLDEN_WHEAT), 1);
+  assert.equal(prof.activeNpcQuest.lifecycleState, 'claimable');
+  assert.equal(client.sent.some(e => e.type === 'farmResult' && e.msg.golden), true);
+});
+
 test('farming respects protected land but allows the town farm worksite', () => {
   const room = makeRoom();
   const client = makeClient('farmer');
@@ -12460,6 +12488,8 @@ test('regional guild contracts rotate through the requested exploration archetyp
   }
   const aRankOffers = room.regionalContractOffers(0, 41);
   assert.ok(aRankOffers.every(offer => offer.rewardXp >= 713), 'regional work remains meaningful at A-rank');
+  const roadRoles = room.regionalContractOffers(3 * 6 * 60 * 60 * 1000).find(offer => offer.type === 'road_roles');
+  assert.equal(roadRoles.need, 3, 'Know the Enemy tracks the three specialist bandits named in its description');
 });
 
 test('regional contract acceptance progress and claim are server-owned', () => {

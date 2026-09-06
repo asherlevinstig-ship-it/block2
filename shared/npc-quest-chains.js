@@ -4,6 +4,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   const TYPE_META=Object.freeze({
     fetch:Object.freeze({location:'Town delivery',action:null,text:'Gather the requested supplies.',claimLabel:'TURN IN'}),
+    build:Object.freeze({location:'Claimed land or wilderness worksite',action:Object.freeze({type:'land',label:'BUILD PROJECT'}),text:'Place the requested building material in the world.',claimLabel:'REPORT BUILD'}),
     mine:Object.freeze({location:'Mine or cave route',action:null,text:'Mine the requested material.',claimLabel:'TURN IN'}),
     farm:Object.freeze({location:'Town Farm or claimed field',action:Object.freeze({type:'craft',label:'FARM CROPS'}),text:'Work crops through tilling, planting, or harvesting.',claimLabel:'REPORT HARVEST'}),
     cook:Object.freeze({location:'Crafting and kitchens',action:Object.freeze({type:'craft',label:'COOK FOOD'}),text:'Cook the requested food.',claimLabel:'REPORT COOKING'}),
@@ -50,10 +51,10 @@
         {title:'First Hands', type:'fetch', item:B.LOG, need:6, desc:'Gather {N} logs beyond the walls. This first field task will take you to Level 2.', gold:16, xp:28, levelTarget:2},
         {title:'Road Ready', type:'kill', need:3, desc:'Mara hands you a wooden sword. Use it to defeat {N} monsters beyond town, then return ready for Level 3 and your first Gate.', gold:24, xp:47, levelTarget:3, objectiveText:'Use Mara\'s wooden sword to defeat 3 hostile monsters beyond the walls.', objectiveLocation:'Wilderness outside town'},
         {title:'The First Gate', type:'gate', need:1, gateRank:0, desc:'Your first E-rank Gate has opened. Check your health, bring food if you have it, enter the glowing Gate, defeat its boss, and return to Mara.', gold:50, xp:60, objectiveText:'Find the E-rank Gate marker, enter when ready, and defeat the dungeon boss.', objectiveLocation:'First E-rank Gate', objectiveAction:{type:'find_gate',label:'FIND GATE'}},
-        {title:'A Better Sense', type:'utility', utility:'compass', need:1, desc:'Earn and equip a utility. Start with Compass Sense from a Guild Contract, then return to Mara.', gold:42, xp:58},
+        {title:'A Better Sense', type:'utility', utility:'compass', need:1, desc:'Open the Guild Board, complete a Guild Contract that awards Compass Sense, equip it, then return to Mara.', gold:42, xp:58, objectiveText:'Open the Guild Board and earn Compass Sense from a Guild Contract.', objectiveLocation:'Guild Board', objectiveAction:{type:'guild_contracts',label:'OPEN GUILD BOARD'}},
         {title:'Meat Becomes Gold', type:'sell', item:I.MONSTER_MEAT, need:1, desc:'Go hunting, bring Monster Meat to Greta at the tavern, and sell {N} piece for gold.', gold:38, xp:54, rewardItems:[{id:I.SHADOW_SIGIL,count:1}]},
-        {title:'A Shadow Companion', type:'familiar', familiar:'shade', need:1, desc:'Use the Shadow Sigil Mara gave you to bind Shade, then return. Press K to call it afterward.', gold:52, xp:72, rewardItems:[{id:B.EGG_INSULATOR,count:1},{id:I.DRAGON_EGG,count:1}]},
-        {title:'First Bonded Mount', type:'mount', mount:'dragon', need:1, desc:'Place the Egg Insulator, use the Dragon Egg on it, and claim the hatchling when it is ready.', gold:78, xp:100},
+        {title:'A Shadow Companion', type:'familiar', familiar:'shade', need:1, desc:'Recommended level 5+. Use the Shadow Sigil Mara gave you to bind Shade, then return. Press K to call it afterward.', gold:52, xp:72, recommendedLevel:5, rewardItems:[{id:B.EGG_INSULATOR,count:1},{id:I.DRAGON_EGG,count:1}]},
+        {title:'First Bonded Mount', type:'mount', mount:'dragon', need:1, desc:'Recommended level 6+. Place the Egg Insulator, use the Dragon Egg on it, and claim the hatchling when it is ready.', gold:78, xp:100, recommendedLevel:6},
         {title:'Sky Legs', type:'mount_use', mount:'dragon', need:1, desc:'Summon your dragon with X and ride it. Return once you have mounted up.', gold:64, xp:88}
       ],
       'Garrik Flint':[
@@ -69,44 +70,44 @@
       ],
       'Edda Quill':[
         {title:'Gate Notes', type:'gate', need:1, desc:'Clear {N} gate and return with what the air felt like inside.', gold:72, xp:80},
-        {title:'Crystal Harmonics', type:'mine', item:B.DIAMOND_ORE, need:2, desc:'Mine {N} diamond ore veins. Their resonance helps map gate behavior.', gold:90, xp:100},
-        {title:'Scholar Supplies', type:'fetch', item:B.GLASS, need:8, desc:'Bring {N} glass panes for safer experiments and cleaner lenses.', gold:44, xp:58}
+        {title:'Crystal Harmonics', type:'mine', item:B.DIAMOND_ORE, need:2, desc:'Recommended level 10+. Mine {N} diamond ore veins in deeper territory. Their resonance helps map gate behavior.', gold:90, xp:100, recommendedLevel:10},
+        {title:'Scholar Supplies', type:'build', item:B.GLASS, need:8, desc:'Install {N} glass blocks at a claimed field lab or wilderness shelter to test safer experiments and cleaner lenses.', gold:44, xp:58}
       ],
       'Bram Ledger':[
-        {title:'Crates And Claims', type:'fetch', item:B.PLANKS, need:20, desc:'Bring {N} planks so the market can crate supplies properly.', gold:28, xp:34},
-        {title:'Road Reserve', type:'fetch', item:B.COBBLE, need:20, desc:'Deliver {N} cobble for road patches between town buildings.', gold:32, xp:40},
-        {title:'Night Stock', type:'fetch', item:B.TORCH, need:10, desc:'Bring {N} torches for the night patrol supply chest.', gold:42, xp:52}
+        {title:'Crates And Claims', type:'build', item:B.PLANKS, need:12, desc:'Place {N} planks at your claim to build a market supply platform.', gold:28, xp:34},
+        {title:'Road Reserve', type:'build', item:B.COBBLE, need:12, desc:'Place {N} cobble on your claim or a wilderness route to practice a durable road patch.', gold:32, xp:40},
+        {title:'Night Stock', type:'build', item:B.TORCH, need:6, desc:'Place {N} torches along your claim or a wilderness route to create a safe night patrol trail.', gold:42, xp:52}
       ],
       'Liss Barley':[
         {title:'Field Hands', type:'farm', need:8, desc:'Till, plant, or harvest crops {N} times so the tavern can feed workers and travelers.', gold:30, xp:42},
         {title:'Bread Line', type:'fetch', item:I.BREAD, need:3, desc:'Bake and deliver {N} loaves for the morning shift.', gold:42, xp:54},
         {title:'Care Feed', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Craft {N} dragon treat. The roost depends on farmers and cooks.', gold:62, xp:74},
-        {title:'The Bright Harvest', type:'fetch', item:I.GOLDEN_WHEAT, need:1, desc:'Bring Liss one Golden Wheat. She has seen a harvest-sprite following its light.', gold:74, xp:92, rewardItems:[{id:I.FORAGE_CHARM,count:1}]},
-        {title:'A Sprite in the Sheaves', type:'familiar', familiar:'sprite', need:1, desc:'Use the Forage Charm to bind Sprite, then return to Liss.', gold:82, xp:104}
+        {title:'The Bright Harvest', type:'fetch', item:I.GOLDEN_WHEAT, need:1, desc:'Plant the Prairie Windseed Liss gives you, harvest it when ripe, and bring her the guaranteed Golden Wheat. No Farmer profession is required.', gold:74, xp:92, objectiveText:'Plant Liss\'s Prairie Windseed at the Town Farm or on your claim, then harvest its Golden Wheat.', objectiveLocation:'Town Farm or claimed field', objectiveAction:{type:'craft',label:'FARM WINDSEED'}, rewardItems:[{id:I.FORAGE_CHARM,count:1}]},
+        {title:'A Sprite in the Sheaves', type:'familiar', familiar:'sprite', need:1, desc:'Recommended level 8+. Use the Forage Charm to bind Sprite, then return to Liss.', gold:82, xp:104, recommendedLevel:8}
       ],
       'Pippa Hearth':[
         {title:'Warm Meals', type:'cook', item:I.COOKED_MEAT, need:3, desc:'Cook {N} cuts for workers coming in from the cold roads.', gold:36, xp:46},
         {title:'Travel Bread', type:'fetch', item:I.BREAD, need:3, desc:'Bring {N} loaves for travelers headed to the gates.', gold:40, xp:52},
         {title:'Roost Treats', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Prepare {N} dragon treat for the stablemaster.', gold:64, xp:78},
         {title:'A Light for the Wounded', type:'fetch', item:I.HEARTY_SANDWICH, need:1, desc:'Bring Pippa a Hearty Sandwich for the infirmary. She will entrust you with a restorative charm.', gold:76, xp:94, rewardItems:[{id:I.MOTE_CHARM,count:1}]},
-        {title:'The Gentle Mote', type:'familiar', familiar:'mote', need:1, desc:'Use the Mote Charm to bind Mote, then return to Pippa.', gold:84, xp:108}
+        {title:'The Gentle Mote', type:'familiar', familiar:'mote', need:1, desc:'Recommended level 8+. Use the Mote Charm to bind Mote, then return to Pippa.', gold:84, xp:108, recommendedLevel:8}
       ],
       'Oren Mortar':[
-        {title:'Foundation Check', type:'fetch', item:B.COBBLE, need:22, desc:'Bring {N} cobble for the next wall repair.', gold:32, xp:42},
-        {title:'Pane Work', type:'fetch', item:B.GLASS, need:8, desc:'Deliver {N} glass for safer public buildings.', gold:40, xp:50},
-        {title:'Brick Sense', type:'fetch', item:B.BRICK, need:12, desc:'Bring {N} brick blocks. A town should look built, not patched together.', gold:50, xp:64}
+        {title:'Foundation Check', type:'build', item:B.COBBLE, need:14, desc:'Place {N} cobble blocks on your claim to prove the foundation pattern is stable.', gold:32, xp:42},
+        {title:'Pane Work', type:'build', item:B.GLASS, need:8, desc:'Install {N} glass blocks in a claimed building or wilderness shelter.', gold:40, xp:50},
+        {title:'Brick Sense', type:'build', item:B.BRICK, need:12, desc:'Place {N} brick blocks in a claimed structure. A town builder should leave something standing.', gold:50, xp:64}
       ],
       'Sable Venn':[
         {title:'Quiet Watch', type:'kill', need:3, desc:'Remove {N} monsters near the road, then return to the shrine in silence.', gold:34, xp:48},
-        {title:'Candle Reserve', type:'fetch', item:B.TORCH, need:8, desc:'Bring {N} torches for the shrine perimeter candles.', gold:38, xp:50},
+        {title:'Candle Reserve', type:'build', item:B.TORCH, need:6, desc:'Place {N} torches around a claimed retreat or wilderness rest point to make a quiet shrine perimeter.', gold:38, xp:50},
         {title:'Stillness After Storm', type:'gate', need:1, desc:'Clear {N} gate, then bring the noise of it back to stillness.', gold:76, xp:86}
       ],
       'Pell Graywatch':[
         {title:'Wall Patrol', type:'kill', need:5, desc:'Cull {N} monsters beyond the wall before they learn the road.', gold:38, xp:54},
-        {title:'Patrol Gear', type:'fetch', item:B.TORCH, need:10, desc:'Bring {N} torches for patrol routes and gate markers.', gold:42, xp:54},
+        {title:'Patrol Gear', type:'build', item:B.TORCH, need:8, desc:'Place {N} torches along a wilderness route or claim boundary to mark a safe patrol path.', gold:42, xp:54},
         {title:'Gate Duty', type:'gate', need:1, desc:'Clear {N} gate. A warden trusts action more than promises.', gold:82, xp:92},
         {title:'Tracks Beyond the Wall', type:'manhunt', need:8, desc:'Manhunt: track and defeat 8 hostile creatures beyond the wall. Pell says an old guardian hound answers proven hunters.', gold:78, xp:98, rewardItems:[{id:I.FANG_TOTEM,count:1}]},
-        {title:'The Fang Pact', type:'familiar', familiar:'fang', need:1, desc:'Use the Fang Totem to bind Fang, then return to Pell.', gold:86, xp:112}
+        {title:'The Fang Pact', type:'familiar', familiar:'fang', need:1, desc:'Recommended level 10+. Use the Fang Totem to bind Fang, then return to Pell.', gold:86, xp:112, recommendedLevel:10}
       ],
       'Greta Warmug':[
         {title:'Cellar Supper', type:'sell', item:I.COOKED_MEAT, need:3, desc:'Sell {N} cooked meat through the tavern counter so Greta can serve a proper supper.', gold:38, xp:48},
@@ -116,7 +117,7 @@
       'Rook Emberstall':[
         {title:'Roost Manners', type:'fetch', item:I.WHEAT, need:6, desc:'Bring {N} wheat for the calmer dragons and hatchlings.', gold:34, xp:44},
         {title:'Treat Training', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Bring {N} dragon treat and learn how bond care becomes trust.', gold:70, xp:82},
-        {title:'Sky Stock', type:'fetch', item:B.PLANKS, need:24, desc:'Bring {N} planks for roost perches large enough for growing wings.', gold:50, xp:62}
+        {title:'Sky Stock', type:'build', item:B.PLANKS, need:16, desc:'Place {N} planks on your claim to build and test a broad dragon perch.', gold:50, xp:62}
       ]
     });
   }
@@ -130,10 +131,10 @@
         const where=giver+'['+index+']';
         if(!q||typeof q!=='object')return errors.push(where+' is not an object');
         if(!q.title)errors.push(where+' missing title');
-        if(!['fetch','mine','farm','cook','smith','treasure','kill','gate','sell','utility','familiar','mount','mount_use','manhunt'].includes(q.type))errors.push(where+' invalid type '+q.type);
+        if(!['fetch','build','mine','farm','cook','smith','treasure','kill','gate','sell','utility','familiar','mount','mount_use','manhunt'].includes(q.type))errors.push(where+' invalid type '+q.type);
         if((q.need|0)<1)errors.push(where+' need must be >= 1');
         if((q.gold|0)<0||(q.xp|0)<0)errors.push(where+' reward must be non-negative');
-        if(['fetch','mine','cook','smith','sell'].includes(q.type)&&!(q.item>0))errors.push(where+' missing item target');
+        if(['fetch','build','mine','cook','smith','sell'].includes(q.type)&&!(q.item>0))errors.push(where+' missing item target');
         if(q.type==='utility'&&!q.utility)errors.push(where+' missing utility target');
         if(q.type==='familiar'&&!q.familiar)errors.push(where+' missing familiar target');
         if((q.type==='mount'||q.type==='mount_use')&&!q.mount)errors.push(where+' missing mount target');
@@ -183,6 +184,7 @@
       expiresAt:Math.max(0,Number(context.expiresAt)||0)
     };
     if((def.levelTarget|0)>0)quest.levelTarget=def.levelTarget|0;
+    if((def.recommendedLevel|0)>0)quest.recommendedLevel=def.recommendedLevel|0;
     if(def.gateRank!=null)quest.gateRank=Math.max(0,Math.min(4,def.gateRank|0));
     if(typeof def.item==='number')quest.item=def.item;
     if(def.type==='utility')quest.utility=def.utility||def.item;
@@ -196,9 +198,10 @@
     if(npcChainKey(q.giver)!==npcChainKey(giver))return false;
     if((q.chainStep|0)!==(step|0))return false;
     if((q.chainTotal|0)!==(total|0))return false;
-    if(q.type!==def.type)return false;
+    const legacyDeliveryToBuild=q.type==='fetch'&&def.type==='build';
+    if(q.type!==def.type&&!legacyDeliveryToBuild)return false;
     if(String(q.title||q.chainTitle||'')!==String(def.title||''))return false;
-    if((q.need|0)!==(def.need|0))return false;
+    if(!legacyDeliveryToBuild&&(q.need|0)!==(def.need|0))return false;
     if(typeof def.item==='number'&&(q.item|0)!==def.item)return false;
     if(def.type==='gate'&&((q.gateRank|0)!==(def.gateRank|0)))return false;
     if(def.type==='utility'&&String(q.utility||'')!==String(def.utility||def.item||''))return false;

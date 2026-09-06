@@ -1402,11 +1402,14 @@ class ProgressionMixin {
       q.lifecycleState = 'active';
       q.acceptedAt = Date.now();
       const grantRoadReadySword = q.giver === 'Mara Vale' && (q.chainStep | 0) === 1 && !rec.prof.maraRoadReadySwordGranted;
-      if (grantRoadReadySword) {
+      const grantBrightHarvestSeed = q.giver === 'Liss Barley' && q.title === 'The Bright Harvest'
+        && this.countItem(rec.prof, I.WINDSEED) <= 0 && this.countItem(rec.prof, I.GOLDEN_WHEAT) <= 0;
+      if (grantRoadReadySword || grantBrightHarvestSeed) {
         const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(slot => slot ? { ...slot } : null) };
-        if (this.addCraftedRewardItem(draft, I.WOOD_SWORD, 1) !== 0) return this.progressionReject(client, 'npcQuest', 'full');
+        if (grantRoadReadySword && this.addCraftedRewardItem(draft, I.WOOD_SWORD, 1) !== 0) return this.progressionReject(client, 'npcQuest', 'full');
+        if (grantBrightHarvestSeed && this.addCraftedRewardItem(draft, I.WINDSEED, 1) !== 0) return this.progressionReject(client, 'npcQuest', 'full');
         rec.prof.inv = draft.inv;
-        rec.prof.maraRoadReadySwordGranted = true;
+        if (grantRoadReadySword) rec.prof.maraRoadReadySwordGranted = true;
       }
       rec.prof.activeNpcQuest = q;
       if (q.giver === 'Mara Vale' && q.title === 'Road Ready' && ['first_road_ready', ''].includes(rec.prof.progressionFocus || '')) {
@@ -1415,11 +1418,14 @@ class ProgressionMixin {
         rec.prof.progressionFocus = 'first_e_gate';
       }
       this.dirtyPlayers.add(rec.token);
-      if (grantRoadReadySword) this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
+      if (grantRoadReadySword || grantBrightHarvestSeed) this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
       client.send('npcQuest', {
         action,
         quest: q,
-        grantedItems: grantRoadReadySword ? [{ id: I.WOOD_SWORD, count: 1 }] : [],
+        grantedItems: [
+          ...(grantRoadReadySword ? [{ id: I.WOOD_SWORD, count: 1 }] : []),
+          ...(grantBrightHarvestSeed ? [{ id: I.WINDSEED, count: 1 }] : []),
+        ],
       });
       if (this.profileQuestTrace) this.profileQuestTrace(client, 'npcQuest.accepted', rec.prof, {
         title: q.title || '',
@@ -1708,6 +1714,10 @@ class ProgressionMixin {
     this.grantJobXp(client, 'farmer', action === 'harvest' ? 5 : 1);
     this.progressJobContract(client, 'farm', 1, target);
     this.progressNpcQuest(client, 'farm', 1, target);
+  }
+
+  recordBuildProgress(client, blockId) {
+    this.progressNpcQuest(client, 'build', 1, blockId);
   }
 
   recordCraftProgress(client, id, count) {

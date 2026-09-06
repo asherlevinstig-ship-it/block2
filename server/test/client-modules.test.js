@@ -1537,7 +1537,10 @@ test('NPC story and manhunt quests come from one validated authoring registry', 
   assert.equal(chains['Tobin Ashhand'][1].type, 'smith');
   assert.equal(chains['Greta Warmug'][0].type, 'sell');
   assert.equal(chains['Mara Vale'][3].utility, 'compass');
-  assert.equal(chains['Mara Vale'][3].metadata.objectiveAction.type, 'utility');
+  assert.equal(chains['Mara Vale'][3].metadata.objectiveAction.type, 'guild_contracts');
+  assert.equal(chains['Bram Ledger'][0].type, 'build');
+  assert.equal(chains['Bram Ledger'][0].metadata.objectiveAction.type, 'land');
+  assert.equal(chains['Edda Quill'][1].recommendedLevel, 10);
   assert.equal(chains['Mara Vale'][5].familiar, 'shade');
   assert.equal(chains['Mara Vale'][6].mount, 'dragon');
   const runtime = npcQuestChains.buildRuntimeNpcQuest(chains['Mara Vale'][0], {
@@ -1550,6 +1553,12 @@ test('NPC story and manhunt quests come from one validated authoring registry', 
   assert.equal(runtime.category, 'story');
   assert.equal(runtime.lifecycleState, 'offered');
   assert.equal(npcQuestChains.runtimeQuestMatchesDefinition(runtime, chains['Mara Vale'][0], 'Mara Vale', 0, chains['Mara Vale'].length), true);
+  const legacyBuildQuest = npcQuestChains.buildRuntimeNpcQuest(chains['Bram Ledger'][0], {
+    giver: 'Bram Ledger', role: 'market', step: 0, total: chains['Bram Ledger'].length, gold: 30, xp: 40, now: 123,
+  });
+  legacyBuildQuest.type = 'fetch';
+  legacyBuildQuest.need = 20;
+  assert.equal(npcQuestChains.runtimeQuestMatchesDefinition(legacyBuildQuest, chains['Bram Ledger'][0], 'Bram Ledger', 0, chains['Bram Ledger'].length), true);
 });
 
 test('weapons share E-to-Legendary ranks and Common-to-Mythic rarity rules', () => {

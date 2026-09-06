@@ -3036,7 +3036,10 @@ class GameRoom extends Room {
     if (prev === W.B.CHEST && id === W.B.AIR) this.deleteChest('overworld:' + x + ',' + y + ',' + z);
     if (id === W.B.CHEST) this.createPlacedChest(client, 'overworld:' + x + ',' + y + ',' + z, 'personal');
     if (id === W.B.AIR && prev !== W.B.AIR) this.awardMine(client, prev, m.slot, naturalHarvest ? x : undefined, y, naturalHarvest ? z : undefined);
-    if (id !== W.B.AIR) this.checkBaseSetupProgress(client);
+    if (id !== W.B.AIR) {
+      this.checkBaseSetupProgress(client);
+      if (this.recordBuildProgress) this.recordBuildProgress(client, id);
+    }
   }
   handleDungeonEdit(client, m) {
     const p = this.state.players.get(client.sessionId);
@@ -5462,7 +5465,9 @@ class GameRoom extends Room {
       lifecycle: lifecycleFor('active', bounty),
     });
     const npc = prof.activeNpcQuest;
+    let maraQuestTitle = '';
     if (npc) {
+      if (npc.giver === 'Mara Vale') maraQuestTitle = npc.title || '';
       const ready = typeof this.npcQuestReady === 'function' ? this.npcQuestReady(client, npc) : (npc.have | 0) >= (npc.need | 0);
       const current = npc.type === 'fetch' && typeof this.countItem === 'function'
         ? this.countItem(prof, npc.item | 0)
@@ -5491,6 +5496,7 @@ class GameRoom extends Room {
       });
     } else {
       const maraOffer = typeof this.buildNpcQuest === 'function' ? this.buildNpcQuest(prof, 'Mara Vale', 'guide') : null;
+      if (maraOffer) maraQuestTitle = maraOffer.title || '';
       if (maraOffer) add({
         id: `npc:${maraOffer.giver || 'Mara Vale'}:${maraOffer.chainStep | 0}:offered`,
         source: 'story',
@@ -5595,7 +5601,9 @@ class GameRoom extends Room {
         lifecycle: lifecycleFor(complete ? 'completed' : 'active', { acceptedAt: Date.now(), completedAt: complete ? Date.now() : 0 }),
       });
     }
-    const progression = this.progressionObjective(prof.progressionFocus, client);
+    const duplicatesMaraStory = (prof.progressionFocus === 'first_road_ready' && maraQuestTitle === 'Road Ready')
+      || (prof.progressionFocus === 'first_e_gate' && maraQuestTitle === 'The First Gate');
+    const progression = duplicatesMaraStory ? null : this.progressionObjective(prof.progressionFocus, client);
     if (progression) add(progression);
     return objectives.sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));
   }
@@ -5611,13 +5619,13 @@ class GameRoom extends Room {
       first_base_setup: ['progression:first_base_setup', 'progression', 'Base Setup', 'Inside your Homestead, place storage, light, and a station.', 'Claimed land', 'land', 'OPEN LAND', 50],
       first_homestead_upgrade: ['progression:first_homestead_upgrade', 'progression', 'Homestead Upgrade', 'Your Homestead is ready. Open Land Claims while standing in your base and choose your first upgrade.', 'Your Homestead', 'land', 'OPEN HOMESTEAD', 50],
       first_profession_contract: ['progression:first_profession_contract', 'progression', 'First Contract', 'Take your first profession or Adventurer contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
-      e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', JOB_SYSTEM.ENABLED ? 'Use contracts, gates, and field work to grow toward D-rank.' : 'Use gates, quests, events, and field work to grow toward D-rank.', JOB_SYSTEM.ENABLED ? 'Job Board' : 'Quest Log', JOB_SYSTEM.ENABLED ? 'jobs' : 'quest_log', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN QUEST LOG', 70],
+      e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', JOB_SYSTEM.ENABLED ? 'Reach level 11 through contracts, E-rank Gates, quests, and field work.' : 'Reach level 11 through E-rank Gates, town quests, regional contracts, events, and field work.', JOB_SYSTEM.ENABLED ? 'Job Board' : 'Quest Log', JOB_SYSTEM.ENABLED ? 'jobs' : 'quest_log', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN QUEST LOG', 70],
       first_promotion_job: ['progression:first_promotion_job', 'progression', 'Choose Work Path', 'Choose Adventurer or a profession before promotion work.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
       first_promotion_contract: ['progression:first_promotion_contract', 'progression', 'Promotion Contract', 'Take the first Adventurer promotion contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
       first_d_gate: ['progression:first_d_gate', 'progression', 'D-rank Gate Prep', 'Prepare for the first D-rank Gate and its ranged-volley lesson: iron weapon, iron armor, three food, a healthy utility tool, and a D-rank key. Then clear the Gate.', 'Gate prep', 'quest_log', 'OPEN PREP', 50],
-      c_rank_climb: ['progression:c_rank_climb', 'progression', 'C-rank Climb', JOB_SYSTEM.ENABLED ? 'Build Hunter XP through rotating Adventurer contracts, D-rank Gates, regional trouble, and events. Prepare for C-rank positioning checks before taking a C-rank Gate.' : 'Build Hunter XP through quests, D-rank Gates, regional trouble, and events. Prepare for C-rank positioning checks before taking a C-rank Gate.', 'Gate prep', 'gate_prep', 'C PREP CHECK', 70, 2],
+      c_rank_climb: ['progression:c_rank_climb', 'progression', 'C-rank Climb', JOB_SYSTEM.ENABLED ? 'Reach level 21 through rotating Adventurer contracts, D-rank Gates, regional trouble, and events, then clear a C-rank Gate.' : 'Reach level 21 through town quests, D-rank Gates, regional contracts, events, and field threats, then clear a C-rank Gate.', 'Gate prep', 'gate_prep', 'C PREP CHECK', 70, 2],
       c_rank_specialization: ['progression:c_rank_specialization', 'progression', 'C-rank Specialization', JOB_SYSTEM.ENABLED ? 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then return to rotating contracts.' : 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then continue through Gates, quests, and regional threats.', 'Character', 'choose_spec', 'CHOOSE SPEC', 40],
-      b_rank_pressure: ['progression:b_rank_pressure', 'progression', 'Gate Pressure', 'Your specialization makes you a regional anchor. Stabilize roads, contain Gate breaches, and build toward B-rank Gates.', 'Regional pressure', JOB_SYSTEM.ENABLED ? 'jobs' : 'gate_prep', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN PREP', 70],
+      b_rank_pressure: ['progression:b_rank_pressure', 'progression', 'Gate Pressure', 'Reach level 31, keep road safety at 65 or higher, contain active Gate breaches, prepare a B-rank kit, and clear a B-rank Gate.', 'Regional pressure', JOB_SYSTEM.ENABLED ? 'jobs' : 'gate_prep', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN PREP', 70],
       next_adventurer_contract: ['progression:next_adventurer_contract', 'progression', 'C-rank Loop', 'Your C-rank specialization is set. Use rotating Adventurer contracts, higher Gates, events, and field threats to keep climbing.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
     };
     const spec = map[focus];
@@ -5670,6 +5678,15 @@ class GameRoom extends Room {
         note: 'C key secured on first D clear',
       };
     }
+    if (focus === 'e_rank_climb' && client) {
+      const rec = this.profileFor(client);
+      const S = rec && rec.prof && rec.prof.S || {};
+      const target = HUNTER_RANK_LEVELS[1];
+      objective.progress = { current: Math.max(1, Math.min(target, S.lvl | 0 || 1)), required: target };
+      objective.hudText = (S.lvl | 0) >= target
+        ? 'D-rank reached. Prepare for and clear your first D-rank Gate.'
+        : `Reach level ${target}. Current level: ${Math.max(1, S.lvl | 0 || 1)}.`;
+    }
     if (focus === 'c_rank_climb' && client) {
       const rec = this.profileFor(client);
       const prof = rec && rec.prof || {};
@@ -5685,7 +5702,7 @@ class GameRoom extends Room {
       const readiness = gateReadinessForProfile(prof, 2);
       const checks = [
         { id: 'd_clear', label: 'D-rank Gate cleared', done: (prof.highestGateRankCleared | 0) >= 1 },
-        { id: 'contracts', label: 'Rotating Adventurer work unlocked', done: (prof.adventurerContractsCompleted | 0) >= 1 },
+        ...(JOB_SYSTEM.ENABLED ? [{ id: 'contracts', label: 'Rotating Adventurer work unlocked', done: (prof.adventurerContractsCompleted | 0) >= 1 }] : []),
         { id: 'c_ready', label: 'C-rank kit checked', done: readiness.ready },
         { id: 'c_gate', label: 'C-rank Gate cleared', done: (prof.highestGateRankCleared | 0) >= 2 },
       ];
@@ -7337,7 +7354,7 @@ class GameRoom extends Room {
     if(banditCamp)offers.push({id:'regional_'+bucket+'_roadcamp_'+banditCamp.id,type:'road_clear_camp',targetId:banditCamp.id,targetType:'bandit_camp',targetName:banditCamp.name,need:1,have:0,title:'Road Warden: Break the Camp',desc:'Clear the named bandit camp and defeat its captain.',...mkReward(banditCamp,78,54),acceptedAt:0,seed:bucket});
     const roadType=['road_rescue','road_recover','road_spare','road_roles'][bucket%4];
     const roadText={road_escort:['Safe Arrival','Escort a caravan safely to its destination.'],road_rescue:['Roadside Rescue','Defeat a patrol threatening a merchant caravan.'],road_recover:['Stolen Manifest','Recover supplies carried to a bandit camp.'],road_spare:['Mercy with Teeth','Spare one surrendered bandit and recover their stolen goods.'],road_roles:['Know the Enemy','Defeat three specialist bandits.']}[roadType];
-    offers.push({id:'regional_'+bucket+'_'+roadType,type:roadType,targetId:'',targetType:'road_warden',targetName:'Regional Roads',need:roadType==='road_roles'?2:1,have:0,title:'Road Warden: '+roadText[0],desc:roadText[1],rewardGold:72,rewardXp:Math.max(48,hunterXpForActivity(level,'guild_contract')),rewardItems:[{id:I.IRON_INGOT,count:2}],acceptedAt:0,seed:bucket});
+    offers.push({id:'regional_'+bucket+'_'+roadType,type:roadType,targetId:'',targetType:'road_warden',targetName:'Regional Roads',need:roadType==='road_roles'?3:1,have:0,title:'Road Warden: '+roadText[0],desc:roadText[1],rewardGold:72,rewardXp:Math.max(48,hunterXpForActivity(level,'guild_contract')),rewardItems:[{id:I.IRON_INGOT,count:2}],acceptedAt:0,seed:bucket});
     return offers;
   }
   publicRegionalContract(c) {
@@ -7949,7 +7966,8 @@ class GameRoom extends Room {
       if (id !== W.B.AIR || this.world.getB(x, y - 1, z) !== W.B.FARMLAND) return client.send('farmReject', { reason: 'soil' });
       const seedId = rec.prof.inv[slot] && (rec.prof.inv[slot].id | 0);
       const windseed = seedId === I.WINDSEED;
-      if (windseed && farmerLevel < farmerRules.windseedLevel) return client.send('farmReject', { reason: 'farmer_level', level: farmerRules.windseedLevel });
+      const brightHarvest = rec.prof.activeNpcQuest && rec.prof.activeNpcQuest.giver === 'Liss Barley' && rec.prof.activeNpcQuest.title === 'The Bright Harvest';
+      if (windseed && farmerLevel < farmerRules.windseedLevel && !brightHarvest) return client.send('farmReject', { reason: 'farmer_level', level: farmerRules.windseedLevel });
       if (!windseed && seedId !== I.WHEAT_SEEDS) return client.send('farmReject', { reason: 'seeds' });
       if (!this.consumeSlotItem(rec.prof, slot, seedId, 1)) return client.send('farmReject', { reason: 'seeds' });
       this.dirtyPlayers.add(rec.token);
@@ -7997,7 +8015,8 @@ class GameRoom extends Room {
       this.setWorldBlock(x, y, z, W.B.AIR);
       const wheat = 1 + (Math.random() < jobPerkChance(rec.prof, 'farmer', 0.10) ? 1 : 0);
       const rich = meta.kind === 'windseed';
-      const golden = rich && farmerLevel >= farmerRules.goldenHarvestLevel && Math.random() < farmerRules.goldenWheatChance;
+      const brightHarvest = rec.prof.activeNpcQuest && rec.prof.activeNpcQuest.giver === 'Liss Barley' && rec.prof.activeNpcQuest.title === 'The Bright Harvest';
+      const golden = rich && (brightHarvest || (farmerLevel >= farmerRules.goldenHarvestLevel && Math.random() < farmerRules.goldenWheatChance));
       const items = [{ id: I.WHEAT, count: wheat + (rich ? 1 : 0) }, { id: rich ? I.WINDSEED : I.WHEAT_SEEDS, count: 1 + ((Math.random() * (rich ? 2 : 3)) | 0) }];
       if (golden) items.push({ id: I.GOLDEN_WHEAT, count: 1 });
       this.awardGrant(client, { source: 'farm', xp: rich ? 2 : 1, items });
