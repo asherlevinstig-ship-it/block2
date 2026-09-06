@@ -1639,6 +1639,21 @@ test('movement through reported south town exit coordinate is not corrected',()=
   assert.equal(client.sent.some(e=>e.type==='positionCorrection'),false);
 });
 
+test('movement through the Meditation Hall doorway is not snapped back',()=>{
+  const room=makeRoom(),client=makeClient('meditation_hall_hunter');
+  room.lastMoveMsg=new Map();
+  room.world=W.createWorld();
+  room.world.generate();
+  const door=W.townBlockPos(47,56,'shrine');
+  const x=door.x+.5,startZ=door.z+1.5,targetZ=door.z-.5,y=W.TOWN.G+1.05;
+  seedPlayer(room,client,{x,z:startZ,y,hp:20});
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  room.handleMove(client,{x,y,z:targetZ,yaw:Math.PI});
+  const p=room.state.players.get(client.sessionId);
+  assert.equal(p.z,targetZ,'player advances through the visible south doorway');
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'),false,'server collision agrees with the hall entrance');
+});
+
 test('stuck rescue candidates near town exits ignore overhead arch blocks',()=>{
   const room=makeRoom(),client=makeClient('town_exit_rescue_hunter');
   room.world = W.createWorld();

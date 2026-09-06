@@ -926,6 +926,39 @@ function buildGuildHallBase(setBlock = setB) {
   setBlock(doorX - 2, G + 1, z2 + 1, B.TORCH); setBlock(doorX + 2, G + 1, z2 + 1, B.TORCH);
 }
 
+function buildMeditationHall(setBlock = setB) {
+  const G = TOWN.G, shrX = v => dtx(v, 'shrine'), shrZ = v => dtz(v, 'shrine');
+  const x1 = shrX(42), z1 = shrZ(40), x2 = shrX(52), z2 = shrZ(56);
+  const box = (xa, ya, za, xb, yb, zb, id) => {
+    for (let x = xa; x <= xb; x++) for (let y = ya; y <= yb; y++) for (let z = za; z <= zb; z++) setBlock(x, y, z, id);
+  };
+  box(x1, G, z1, x2, G, z2, B.LOG);
+  for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) {
+    const edge = x === x1 || x === x2 || z === z1 || z === z2;
+    if (!edge) continue;
+    const corner = (x === x1 || x === x2) && (z === z1 || z === z2);
+    for (let y = G + 1; y <= G + 5; y++) setBlock(x, y, z, corner ? B.LOG : B.PLANKS);
+  }
+  box(shrX(46), G + 1, z2, shrX(48), G + 3, z2, B.AIR);
+  for (let y = G + 1; y <= G + 3; y++) {
+    setBlock(shrX(45), y, z2, B.LOG);
+    setBlock(shrX(49), y, z2, B.LOG);
+  }
+  box(shrX(46), G + 4, z2, shrX(48), G + 4, z2, B.LOG);
+  for (let i = 0;; i++) {
+    const xa = x1 - 1 + i, xb = x2 + 1 - i;
+    if (xa > xb) break;
+    box(xa, G + 6 + i, z1 - 1, xb, G + 6 + i, z2 + 1, B.LOG);
+  }
+  box(shrX(45), G + 1, shrZ(38), shrX(49), G + 10, shrZ(42), B.LOG);
+  for (const [bx, bz] of [[45, 40], [49, 40], [47, 38], [47, 42]]) setBlock(shrX(bx), G + 9, shrZ(bz), B.LOG);
+  box(shrX(45), G + 11, shrZ(38), shrX(49), G + 11, shrZ(42), B.LOG);
+  box(shrX(46), G + 12, shrZ(39), shrX(48), G + 12, shrZ(41), B.LOG);
+  setBlock(shrX(47), G + 13, shrZ(40), B.LOG);
+  setBlock(shrX(47), G + 14, shrZ(40), B.LOG);
+  box(shrX(45), G + 1, shrZ(44), shrX(49), G + 1, shrZ(44), B.LOG);
+}
+
 function buildTown() {
   const { TC, HS, G } = TOWN;
   const x1 = TC - HS, x2 = TC + HS, z1 = TC - HS, z2 = TC + HS;
@@ -1014,7 +1047,9 @@ function buildTown() {
     fillBox(vx1, G + 1, vdz - 1, vx1, G + 4, vdz, B.AIR);
   }
   fillBox(dtx(74, 'forge'), G + 1, dtz(45, 'forge'), dtx(83, 'forge'), G + 4, dtz(54, 'forge'), B.COBBLE); // smithy
-  fillBox(dtx(42, 'shrine'), G + 1, dtz(40, 'shrine'), dtx(52, 'shrine'), G + 5, dtz(56, 'shrine'), B.BRICK); // meditation hall
+  // A solid server-only footprint here makes movement authority reject the
+  // client's visible doorway and snap players back outside.
+  buildMeditationHall(setB);
   // Dragon roost: a big open pen for bonded dragons (paved yard + low fence, nothing inside).
   {
     const rx1 = dtx(88, 'roost'), rz1 = dtz(48, 'roost'), rx2 = dtx(105, 'roost'), rz2 = dtz(82, 'roost');
@@ -1139,7 +1174,7 @@ function createWorld() {
       fillLocal(vx1, G + 1, vdz - 1, vx1, G + 4, vdz, B.AIR);
     }
     fillLocal(dtx(74, 'forge'), G + 1, dtz(45, 'forge'), dtx(83, 'forge'), G + 4, dtz(54, 'forge'), B.COBBLE);
-    fillLocal(dtx(42, 'shrine'), G + 1, dtz(40, 'shrine'), dtx(52, 'shrine'), G + 5, dtz(56, 'shrine'), B.BRICK);
+    buildMeditationHall(setLocal);
     {
       const rx1 = dtx(88, 'roost'), rz1 = dtz(48, 'roost'), rx2 = dtx(105, 'roost'), rz2 = dtz(82, 'roost');
       for (let x = rx1; x <= rx2; x++) for (let z = rz1; z <= rz2; z++) {
@@ -1238,5 +1273,5 @@ module.exports = {
   biomeAt, naturalTreeSpecAt, naturalTreeForBlock, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
   ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, trainingMeadowTownPortalPoint, buildTrainingMeadow,
-  buildGuildHallBase, isCentralCourtProtectedEdit, isTownFarmWorksite,
+  buildGuildHallBase, buildMeditationHall, isCentralCourtProtectedEdit, isTownFarmWorksite,
 };

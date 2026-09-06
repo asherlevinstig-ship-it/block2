@@ -576,6 +576,22 @@ test('DimensionGrid provides one origin-aware storage contract for every dimensi
   assert.equal(serverDungeon.generateDungeon(0,1).world instanceof DimensionGrid, true);
 });
 
+test('server Meditation Hall collision matches its walkable client interior', () => {
+  const world = W.createWorld(); world.generate();
+  const floor = W.townBlockPos(47, 48, 'shrine');
+  const wall = W.townBlockPos(42, 48, 'shrine');
+  assert.equal(world.getB(floor.x, W.TOWN.G, floor.z), W.B.LOG, 'hall has the same wood floor as the client');
+  assert.equal(world.getB(floor.x, W.TOWN.G + 1, floor.z), W.B.AIR, 'hall interior is not a solid server footprint');
+  assert.equal(world.getB(wall.x, W.TOWN.G + 1, wall.z), W.B.PLANKS, 'hall perimeter remains solid');
+  assert.equal(world.standHeight(floor.x + .5, floor.z + .5, W.TOWN.G + 2), W.TOWN.G + 1, 'hall floor resolves at walking height');
+  for (let doorwayX = 46; doorwayX <= 48; doorwayX++) {
+    const doorway = W.townBlockPos(doorwayX, 56, 'shrine');
+    for (let y = W.TOWN.G + 1; y <= W.TOWN.G + 3; y++) {
+      assert.equal(world.getB(doorway.x, y, doorway.z), W.B.AIR, 'south doorway remains open for the full player body');
+    }
+  }
+});
+
 test('overworld cave networks add explorable underground routes from cave landmarks', () => {
   const nets = W.caveNetworkSpecs();
   assert.equal(nets.length >= 2, true, 'world has multiple cave networks');
