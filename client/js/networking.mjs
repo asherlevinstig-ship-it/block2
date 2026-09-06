@@ -1004,6 +1004,8 @@ function connectionNotice(kind, attempt=0){
   }else if(kind==='failed'){
     eventLog('Server connection failed','[Network]');
     if(typeof sysMsg==='function')sysMsg('<b>Could not reconnect.</b> Check your internet connection, then sign in again.');
+  }else if(kind==='outage'){
+    eventLog('World server restart did not finish in time - press Play to retry','[Network]');
   }
 }
 const SESSION=createNetworkSession({
@@ -2971,10 +2973,12 @@ function netConnectionFailed(err){
   NET.tried=false;NET.on=false;locked=false;lockFallback=false;
   bugReportRefreshVisible();
   loadscreen.classList.add('hidden');overlay.classList.remove('hidden');
-  const authError=err&&/auth/i.test(String(err.message||err));
-  setAuthStatus(authError?'SESSION EXPIRED - SIGN IN AGAIN':'COULD NOT JOIN THE SERVER','bad');
+  const reason=String(err&&err.message||err||'');
+  const authError=/auth/i.test(reason);
+  const serviceOutage=/\b(?:502|503|522|523|524)\b|service unavailable|bad gateway|gateway timeout|failed to fetch|networkerror/i.test(reason);
+  setAuthStatus(authError?'SESSION EXPIRED - SIGN IN AGAIN':serviceOutage?'WORLD SERVER IS RESTARTING - PRESS PLAY TO RETRY':'COULD NOT JOIN THE SERVER','bad');
   if(authError)AUTH_UI.expire();
-  connectionNotice('failed');
+  connectionNotice(serviceOutage?'outage':'failed');
 }
 
 // ---- persistence: restore on join, snapshot on a timer ----

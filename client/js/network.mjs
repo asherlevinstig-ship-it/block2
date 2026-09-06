@@ -49,6 +49,7 @@ export function createNetworkController(options) {
   function transientGatewayError(error) {
     const text = errorMessage(error);
     return text.includes('502') ||
+      text.includes('503') ||
       text.includes('522') ||
       text.includes('523') ||
       text.includes('524') ||
@@ -137,6 +138,10 @@ export function createNetworkController(options) {
         return room;
       } catch (error) {
         lastError = error;
+        // Overflow shards only solve capacity. Authentication failures, gateway outages,
+        // and cold-start errors affect the whole deployment, so scanning every shard would
+        // multiply one failure into dozens (or hundreds) of identical matchmaking calls.
+        if (!shardCapacityError(error)) break;
       }
     }
     throw lastError || new Error('No Blockcraft shard was available');

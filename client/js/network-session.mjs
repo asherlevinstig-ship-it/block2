@@ -37,7 +37,9 @@ export function createNetworkSession({
     endpoint,
     roomName:'blockcraft',
     shardAttempts:16,
-    joinAttempts:12,
+    // Eight exponentially-spaced attempts cover a roughly 20-second cloud restart.
+    // network.mjs stops after this one global sequence unless a shard is genuinely full.
+    joinAttempts:8,
     joinRetryMaxDelay:4000,
     resumeTimeout:2600,
     liveReconnectTimeout:2200,

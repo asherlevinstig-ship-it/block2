@@ -4225,7 +4225,7 @@ test('network controller waits for a booting main shard before trying overflow s
   ]);
 });
 
-test('network controller treats Colyseus gateway matchmake errors as quiet bounded retries', async () => {
+test('network controller treats Colyseus 503 matchmaking outages as quiet bounded retries', async () => {
   const { createNetworkController } = await clientModule('network.mjs');
   const events = [], retries = [], delays = [];
   const main = { reconnectionToken: 'main:token', onLeave() {} };
@@ -4233,7 +4233,7 @@ test('network controller treats Colyseus gateway matchmake errors as quiet bound
   class Client {
     async joinOrCreate(name, options) {
       events.push(['join', name, options.shardId || '']);
-      if (++attempts < 5) throw new Error('matchmake failed with status 523');
+      if (++attempts < 5) throw new Error('matchmake failed with status 503');
       return main;
     }
   }
@@ -4265,6 +4265,35 @@ test('network controller treats Colyseus gateway matchmake errors as quiet bound
     { attempt: 4, shardId: 'main', quiet: true },
   ]);
   assert.deepEqual(delays, [250, 500, 1000, 1000]);
+});
+
+test('a deployment-wide matchmaking outage does not fan out across overflow shards', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const events = [], failures = [];
+  class Client {
+    async joinOrCreate(name, options) {
+      events.push([name, options.shardId]);
+      throw new Error('matchmake failed with status 503 Service Unavailable');
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    joinAttempts: 3, shardAttempts: 16, wait: async () => {},
+    primaryJoinOptions: ({ attempt }) => ({ shardId: attempt === 0 ? 'main' : 'shard-' + (attempt + 1) }),
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
+    onFailure: error => failures.push(error),
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(events, [
+    ['blockcraft', 'main'],
+    ['blockcraft', 'main'],
+    ['blockcraft', 'main'],
+  ]);
+  assert.equal(failures.length, 1);
+  assert.equal(controller.state.joinAttempts, 3);
 });
 
 test('network session fresh joins prefer main before a saved overflow shard', async () => {
@@ -4300,7 +4329,7 @@ test('network session fresh joins prefer main before a saved overflow shard', as
     assert.equal(captured.primaryJoinOptions({ name: 'Hunter', attempt: 1 }).shardId, 'shard-2');
     assert.equal(captured.resumeTimeout, 2600);
     assert.equal(captured.liveReconnectTimeout, 2200);
-    assert.equal(captured.joinAttempts, 12);
+    assert.equal(captured.joinAttempts, 8);
     assert.equal(captured.joinRetryMaxDelay, 4000);
     assert.equal(captured.reconnectAttempts, 1);
   } finally {
