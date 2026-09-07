@@ -1,4 +1,5 @@
 import {disposeObjectTree} from './three-disposal.mjs';
+import {createChunkWorkQueue} from './chunk-work-queue.mjs';
 import {createPrng,varyColor,paintAtlasTile} from './world-textures.mjs';
 import {createParticleBudget} from './performance-budget.mjs';
 import {CUTSCENES_ENABLED} from './feature-flags.mjs';
@@ -2962,6 +2963,7 @@ function tickCropTimers(now){
   }
 }
 const chunkMeshes = {};
+const chunkWork=createChunkWorkQueue({build:rebuildChunk});
 function rebuildChunk(cx,cz){
   const cb=worldChunkBounds();
   if(cx<cb.minCx||cz<cb.minCz||cx>cb.maxCx||cz>cb.maxCz) return;
@@ -2998,6 +3000,7 @@ function disposeChunk(cx,cz){
   }
 }
 function clearChunkMeshes(){
+  chunkWork.clear();
   lastVisibleChunkKey='';
   for(const key of Object.keys(chunkMeshes)){
     const [cx,cz]=key.split(',').map(Number);
@@ -3014,7 +3017,7 @@ function visibleChunkCenter(){
 function updateVisibleChunks(force){
   const c=visibleChunkCenter();
   const stamp=c.cx+','+c.cz+','+c.r+','+dim;
-  if(!force && stamp===lastVisibleChunkKey) return;
+  if(!force && stamp===lastVisibleChunkKey){chunkWork.drain(c.cx,c.cz);return;}
   lastVisibleChunkKey=stamp;
   const wanted=new Set();
   const cb=worldChunkBounds();
@@ -3024,17 +3027,23 @@ function updateVisibleChunks(force){
     if(dx*dx+dz*dz>(c.r+.65)*(c.r+.65)) continue;
     const key=cx+','+cz;
     wanted.add(key);
-    if(!chunkMeshes[key]) rebuildChunk(cx,cz);
+    if(!chunkMeshes[key]){
+      // Keep the arrival area solid-looking; stream the outer rings thereafter.
+      if(force && Math.abs(dx)<=1 && Math.abs(dz)<=1) rebuildChunk(cx,cz);
+      else chunkWork.enqueue(cx,cz);
+    }
   }
+  chunkWork.retain(wanted);
   for(const key of Object.keys(chunkMeshes)){
     if(!wanted.has(key)){
       const [cx,cz]=key.split(',').map(Number);
       disposeChunk(cx,cz);
     }
   }
+  chunkWork.drain(c.cx,c.cz);
 }
 function rebuildChunkIfVisible(cx,cz){
-  if(chunkMeshes[cx+','+cz]) rebuildChunk(cx,cz);
+  if(chunkMeshes[cx+','+cz]) chunkWork.enqueue(cx,cz);
 }
 function rebuildAround(x,z){
   const cx=Math.floor(x/CHUNK), cz=Math.floor(z/CHUNK);
@@ -9018,6 +9027,7 @@ const rewardFeedEl=document.getElementById('rewardfeed');
 const rewardGainActive=new Map();
 let titleFlashTimer=0;
 function titleFlash(title, subtitle='', opts={}){
+  if(document.body.classList.contains('world-loading'))return;
   try{
     let el=document.getElementById('titleflash');
     if(!el){
@@ -11776,6 +11786,7 @@ gameContext.registerModule('world', Object.freeze({
   biomeAt,
   clearChunks:clearChunkMeshes,
   rebuildVisible:updateVisibleChunks,
+  pendingChunkCount:()=>chunkWork.size,
   prepareEvent:prepareEventDimension,
   leaveEvent:leaveEventDimension,
   isParkourEventActive,

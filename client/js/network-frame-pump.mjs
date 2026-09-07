@@ -20,7 +20,7 @@ export function createNetworkFramePump({
   tickRemotePlayerAction,
 }){
   return function netTick(dt,now){
-    if(!NET.on) return;
+    if(!NET.on||NET.profileReady===false) return;
     // 'save' and 'meta' only have handlers on the overworld `blockcraft` room (DungeonRoom's 2c-i
     // profile is read-only and doesn't sync cosmetic meta) — Colyseus 0.15 disconnects a client
     // outright for an unregistered message type, so these must not reach a `dungeon` room.

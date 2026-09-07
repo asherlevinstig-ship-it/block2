@@ -13,16 +13,21 @@ async function registerAccount(page, { username, password, hunterName, displayNa
 
 async function playRegisteredHunter(page, { username, password, hunterName, path = 'shadow' }) {
   await page.goto('/?e2e=1');
-  await expect(page.locator('#playbtn')).toBeEnabled();
-  const buttonText = (await page.locator('#playbtn').textContent() || '').trim().toUpperCase();
-  if (buttonText !== 'PLAY' && buttonText !== 'SAVE HUNTER NAME') {
-    await page.locator('#authuser').fill(username);
-    await page.locator('#authpass').fill(password);
-  }
-  await page.locator('#playbtn').click();
-  if (await page.locator('#huntersetup:not(.hidden)').count()) {
-    await page.locator('#playername').fill(hunterName);
-    await page.locator('#playbtn').click();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.gamePhase)).toBe('ready');
+  const signedIn = await page.evaluate(name => window.AUTH_UI?.state.account?.username === name && window.AUTH_UI.hasHunterName(), username);
+  if (!signedIn) {
+    await expect(page.locator('#playbtn')).toBeEnabled();
+    const buttonText = (await page.locator('#playbtn').textContent() || '').trim().toUpperCase();
+    if (buttonText !== 'PLAY' && buttonText !== 'SAVE HUNTER NAME') {
+      await page.locator('#authuser').fill(username);
+      await page.locator('#authpass').fill(password);
+    }
+    // Auto-entry may already have hidden the signed-in menu.
+    if (buttonText !== 'PLAY') await page.locator('#playbtn').click();
+    if (await page.locator('#huntersetup:not(.hidden)').count()) {
+      await page.locator('#playername').fill(hunterName);
+      await page.locator('#playbtn').click();
+    }
   }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   if (path && !(await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().path))) {

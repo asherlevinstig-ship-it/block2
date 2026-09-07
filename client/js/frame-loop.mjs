@@ -865,7 +865,7 @@ function questObjective(){
   if(quest.giver==='Mara Vale'&&quest.title==='First Hands'){
     const have=Math.min(quest.need,countItem(quest.item||B.LOG));
     if(have>=quest.need) return {label:'First Hands', text:'Return to Mara with '+have+'/'+quest.need+' logs'};
-    return {label:'First Hands', text:(isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))?'Leave through the north gate ':'North Gate ✓ · gather logs beyond town ')+have+'/'+quest.need};
+    return {label:'First Hands', text:(isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))?'Go through the north gate, then gather logs: ':'Gather logs beyond town: ')+have+'/'+quest.need};
   }
   if(quest.type==='fetch') return {label:qLabel, text:'Bring '+Math.min(quest.need,countItem(quest.item))+'/'+quest.need+' to '+quest.giver};
   if(quest.type==='sell'){
@@ -3122,7 +3122,7 @@ function updateInfoHud(held){
   return;
 }
 let last=performance.now();
-const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length,...worldApi.particleBudgetStats()})});
+const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length,pendingChunks:worldApi.pendingChunkCount(),...worldApi.particleBudgetStats()})});
 function tickPetTamerTutorialVisuals(now, dt){
   if(!networkingApi.tickPetTamerTutorialDragons)return;
   const petRoom=(worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS.pet_tamer)||null;

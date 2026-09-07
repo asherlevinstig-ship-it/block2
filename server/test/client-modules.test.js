@@ -16,6 +16,46 @@ const { I } = require('../rooms/constants');
 
 const clientModule = name => import(pathToFileURL(path.join(__dirname, '..', '..', 'client', 'js', name)).href);
 
+test('chunk work coalesces edits, prioritizes nearby terrain, and stops after the frame budget', async () => {
+  const { createChunkWorkQueue } = await clientModule('chunk-work-queue.mjs');
+  let clock = 0;
+  const built = [];
+  const queue = createChunkWorkQueue({ now: () => clock, build: (x, z) => { built.push([x, z]); clock += 5; } });
+  queue.enqueue(5, 0);queue.enqueue(0, 0);queue.enqueue(0, 0);queue.enqueue(1, 0);
+  assert.equal(queue.size, 3);
+  assert.equal(queue.drain(0, 0), 1);
+  assert.deepEqual(built, [[0, 0]]);
+  queue.retain(new Set(['1,0']));
+  assert.equal(queue.size, 1);
+  queue.drain(0, 0);
+  assert.deepEqual(built, [[0, 0], [1, 0]]);
+  queue.enqueue(9, 9);queue.clear();
+  assert.equal(queue.drain(0, 0), 0, 'dimension transitions discard old work');
+});
+
+test('loading watchdog ignores stale timers after success or a new transition', async () => {
+  const { createLoadingWatchdog } = await clientModule('loading-watchdog.mjs');
+  const callbacks = [];
+  let failures = 0;
+  const watchdog = createLoadingWatchdog({ onTimeout: () => failures++, setTimer: cb => { callbacks.push(cb); return callbacks.length; }, clearTimer() {} });
+  watchdog.start();watchdog.stop();callbacks[0]();
+  assert.equal(failures, 0);
+  watchdog.start();watchdog.start();callbacks[1]();
+  assert.equal(failures, 0);
+  callbacks[2]();
+  assert.equal(failures, 1);
+});
+
+test('an unhydrated profile cannot emit movement or overwrite saved vitals', async () => {
+  const { createNetworkFramePump } = await clientModule('network-frame-pump.mjs');
+  const sent = [];
+  let snapshots = 0;
+  const tick = createNetworkFramePump({ connection: { on: true, profileReady: false, room: { name: 'blockcraft', send: (...args) => sent.push(args) } }, snapshot: () => { snapshots++;return {}; } });
+  tick(.016, 30000);
+  assert.equal(snapshots, 0);
+  assert.deepEqual(sent, []);
+});
+
 test('GameContext owns shared services, state slices, module APIs, and runtime lifecycle', async () => {
   const { createGameContext } = await clientModule('game-context.mjs');
   const clock = { now: () => 42 };
@@ -1708,14 +1748,16 @@ test('chosen path exposes the ability hotbar immediately with locked-level guida
 
 test('production build bundles the same Colyseus schema used by the server', () => {
   const build = fs.readFileSync(path.join(__dirname, '..', '..', 'tools', 'build-static-client.js'), 'utf8');
+  const bundler = fs.readFileSync(path.join(__dirname, '..', 'browser-sdk.js'), 'utf8');
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
   const schemaPackage = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'node_modules', '@colyseus', 'schema', 'package.json'), 'utf8'));
 
   assert.equal(packageJson.dependencies['@colyseus/schema'], schemaPackage.version, 'server schema is exactly pinned');
   assert.match(build, /assertColyseusSchemaCompatibility\(\)/);
   assert.match(build, /Colyseus schema mismatch/);
-  assert.match(build, /entryPoints: \['@colyseus\/sdk'\]/, 'browser SDK is rebuilt against installed dependencies');
-  assert.match(build, /globalName: 'Colyseus'/, 'bundle preserves the browser global expected by the game');
+  assert.match(build, /browserSdkBundle\(\)/);
+  assert.match(bundler, /entryPoints: \['@colyseus\/sdk'\]/, 'browser SDK is rebuilt against installed dependencies');
+  assert.match(bundler, /globalName: 'Colyseus'/, 'bundle preserves the browser global expected by the game');
 });
 
 test('first Gate clears produce the right onboarding handoffs', async () => {
@@ -2888,8 +2930,8 @@ test('First Hands guides the player through the first real objective',()=>{
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   assert.match(frame,/First Hands leave town, gather logs/);
-  assert.match(frame,/Leave through the north gate/);
-  assert.match(frame,/North Gate ✓ · gather logs beyond town/);
+  assert.match(frame,/Go through the north gate, then gather logs:/);
+  assert.match(frame,/Gather logs beyond town:/);
   assert.match(frame,/town trees are protected[\s\S]*outside the wall/);
   assert.match(world,/function firstHandsLoggingTarget\(\)/);
   assert.match(world,/function firstHandsLoggingStage\(\)/);
@@ -3877,7 +3919,8 @@ test('play flow does not overwrite an existing server hunter name from the input
 
 test('stored signed-in sessions auto-resume into the live room after refresh', () => {
   const combatSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
-  assert.match(combatSource, /checkAuth\(\)\.then\(account=>\{/);
+  assert.match(combatSource, /checkAuth\(\)\.then\(async account=>\{/);
+  assert.match(combatSource, /addEventListener\('blockcraft-ready'/);
   assert.match(combatSource, /account && AUTH_UI\.hasHunterName\(\) && !NET\.tried/);
   assert.match(combatSource, /setAuthStatus\('RESTORING GAME\.\.\.'\);/);
   assert.match(combatSource, /startPlaying\(false,'game'\)/);

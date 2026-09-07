@@ -3,6 +3,43 @@ const assert = require('node:assert/strict');
 const { Encoder, Reflection, StateView } = require('@colyseus/schema');
 const { State, Player, Mob } = require('../schema');
 
+test('deployed browser bundle decodes full state and filtered entity churn through the server serializer', () => {
+  const vm = require('node:vm');
+  const { SchemaSerializer } = require('@colyseus/core');
+  const { browserSdkBundle } = require('../browser-sdk');
+  const errors = [];
+  const context = vm.createContext({ console: { ...console, error: (...args) => errors.push(args.join(' ')), warn: (...args) => errors.push(args.join(' ')) }, setTimeout, clearTimeout, TextEncoder, TextDecoder, URL, URLSearchParams });
+  vm.runInContext(browserSdkBundle(), context);
+  const serializer = new SchemaSerializer();
+  const state = new State();
+  serializer.reset(state);
+  const clients = [0, 1].map(() => {
+    const decoder = new context.Colyseus.SchemaSerializer();
+    decoder.handshake(serializer.handshake());
+    return { view: new StateView(), state: 1, decoder, raw: bytes => decoder.patch(bytes, { offset: 1 }) };
+  });
+  const player = new Player();state.players.set('self', player);
+  for (const client of clients) {
+    client.view.add(player);
+    client.decoder.setState(serializer.getFullState(client), { offset: 1 });
+  }
+  serializer.applyPatches(clients);
+  for (let i = 0; i < 30; i++) {
+    const mob = new Mob();mob.x = i;state.mobs.set('moving', mob);
+    for (const client of clients)client.view.add(mob);
+    serializer.applyPatches(clients);
+    for (const client of clients)assert.equal(client.decoder.state.mobs.get('moving').x, i);
+    // Include exit/re-entry in one patch, then a deletion from shared state.
+    clients[0].view.remove(mob);clients[0].view.add(mob);
+    serializer.applyPatches(clients);
+    state.mobs.delete('moving');
+    for (const client of clients)client.view.remove(mob);
+    serializer.applyPatches(clients);
+    for (const client of clients)assert.equal(client.decoder.state.mobs.size, 0);
+  }
+  assert.deepEqual(errors, []);
+});
+
 function schemaTypes(klass) {
   const metadata = klass[Symbol.metadata] || {};
   const byName = {};

@@ -122,6 +122,7 @@ try {
   gameContext.markModuleLoaded('frame-loop');
   gameContext.setPhase('ready');
   document.documentElement.dataset.gamePhase = 'ready';
+  window.dispatchEvent(new Event('blockcraft-ready'));
   window.BlockcraftTrace && window.BlockcraftTrace('boot.ready', { modules: gameContext.snapshot().loadedModules });
   document.documentElement.dataset.gameModules = gameContext.snapshot().loadedModules.join(',');
   for (const id of ['playbtn', 'questionsplaybtn', 'registerbtn', 'logoutbtn']) {

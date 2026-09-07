@@ -1381,7 +1381,8 @@ function netAttachRoom(room,name,client){
         firstQuestRewardClaimed:m&&m.firstQuestRewardClaimed,
         activeRoom:m&&m.activeRoom?{dim:m.activeRoom.dim,job:m.activeRoom.job}:null,
       });
-      netRestoreProfile(m);NET.profileReady=true;
+      if(netRestoreProfile(m)===false){NET.profileReady=false;return;}
+      NET.profileReady=true;
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied-vitals', {
         profileVitals:m&&m.vitals,
         localVitals:{hp,mp,sp,hunger,maxHp:maxHp(),maxMp:maxMp(),maxSp:maxSp(),maxHunger:maxHunger()},
@@ -2981,6 +2982,7 @@ function netAttachRoom(room,name,client){
 }
 
 function netConnectionFailed(err){
+  finishWorldLoading('connection-failed');
   NET.tried=false;NET.on=false;locked=false;lockFallback=false;
   bugReportRefreshVisible();
   loadscreen.classList.add('hidden');overlay.classList.remove('hidden');
@@ -3264,7 +3266,7 @@ function netRestoreProfile(m){
       },80);
     }else if(globalThis.BlockcraftRequestedStartMode==='game')globalThis.BlockcraftRequestedStartMode='';
     schedulePlayerArrivalVfx(player&&player.pos,{key:'local:'+String(NET.roomName||'room')+':'+String(dim||'world')+':'+String(NET.dgn||'main'),local:true,delay:320});
-  }catch(e){ console.warn('profile restore failed', e); finishWorldLoading('profile-error'); }
+  }catch(e){ console.warn('profile restore failed', e); finishWorldLoading('profile-error'); return false; }
 }
 function applyAbilitySync(m){
   if(!m) return;
@@ -3773,7 +3775,7 @@ function netSnapshot(){
   };
 }
 function netFlushSave(reason='flush'){
-  if(!NET.on||!NET.room||NET.room.name!=='blockcraft')return false;
+  if(!NET.on||!NET.room||NET.profileReady!==true||NET.room.name!=='blockcraft')return false;
   try{
     const snap=netSnapshot();
     NET.room.send('save',snap);

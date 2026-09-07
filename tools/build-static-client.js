@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { buildSync } = require('esbuild');
+const { browserSdkBundle } = require('../server/browser-sdk');
 
 const root = path.join(__dirname, '..');
 const dist = path.join(root, 'dist');
@@ -36,17 +36,10 @@ copyDir(path.join(root, 'shared'), path.join(dist, 'shared'));
 copyFile(require.resolve('three/build/three.min.js'), path.join(dist, 'three.js'));
 // The SDK's prebuilt UMD file embeds an older schema decoder. Bundle from the
 // installed modules so browser and server execute the same StateView fixes.
-buildSync({
-  entryPoints: ['@colyseus/sdk'],
-  absWorkingDir: root,
-  outfile: path.join(dist, 'colyseus.js'),
-  bundle: true,
-  minify: true,
-  platform: 'browser',
-  format: 'iife',
-  globalName: 'Colyseus',
-  banner: { js: '// Blockcraft Colyseus browser bundle - @colyseus/schema '+schemaVersion },
-  define: { 'process.env.NODE_ENV': '"production"' },
-});
+fs.writeFileSync(path.join(dist, 'colyseus.js'), browserSdkBundle());
+fs.writeFileSync(path.join(dist, 'build-info.json'), JSON.stringify({
+  schemaVersion,
+  commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT || null,
+}));
 
 console.log('Built static client in dist/');

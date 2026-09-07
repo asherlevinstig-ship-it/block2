@@ -1,6 +1,7 @@
 const path = require('path');
 const express = require('express');
 const { Encoder } = require('@colyseus/schema');
+const { browserSdkBundle } = require('./browser-sdk');
 const schemaVersion = require(path.join(path.dirname(require.resolve('@colyseus/schema')), '..', 'package.json')).version;
 const { validateStartup } = require('./startup-config');
 const { securityHeaders } = require('./security-headers');
@@ -25,6 +26,7 @@ function attachHttpRoutes(app, config, getGameServer = () => null) {
     storage: config.storage,
     authBackend: String(process.env.AUTH_BACKEND || 'file').toLowerCase(),
     schemaVersion,
+    commit: process.env.GIT_COMMIT || process.env.COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || null,
     readyPath: '/readyz',
   }));
   app.get('/readyz', readinessHttpHandler());
@@ -48,8 +50,9 @@ function attachHttpRoutes(app, config, getGameServer = () => null) {
   app.use('/shared', express.static(path.join(__dirname, '..', 'shared')));
   app.use(express.static(path.join(__dirname, '..', 'client')));
 
-  const colyseusBrowserSdk = path.join(path.dirname(require.resolve('@colyseus/sdk/package.json')), 'dist', 'colyseus.js');
-  app.get('/colyseus.js', (_req, res) => res.sendFile(colyseusBrowserSdk));
+  // Serve the same schema-matched bundle used by Vercel, including in local tests.
+  const colyseusBrowserSdk = browserSdkBundle();
+  app.get('/colyseus.js', (_req, res) => res.type('application/javascript').send(colyseusBrowserSdk));
   app.get('/three.js', (_req, res) => res.sendFile(require.resolve('three/build/three.min.js')));
 
   app.use((err, _req, res, next) => {

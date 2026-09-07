@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAccount } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 const BASE_URL = 'http://127.0.0.1:2607';
 
@@ -11,33 +11,7 @@ async function registerReadyHunter(page, label, hunterName) {
   });
   const username = `rc_${suffix}`;
   const password = 'correct horse sanctuary';
-  await registerAccount(page, { username, password, hunterName });
-  await page.goto('/?e2e=1');
-  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.gamePhase || ''), { timeout: 60_000 }).toBe('ready');
-  await page.evaluate(({ username, password }) => {
-    const write = (id, value) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.value = value;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-    };
-    write('authuser', username);
-    write('authpass', password);
-  }, { username, password });
-  await expect(page.locator('#playbtn')).toBeEnabled({ timeout: 60_000 });
-  await page.locator('#playbtn').click();
-  if (await page.locator('#huntersetup:not(.hidden)').count()) {
-    await page.locator('#playername').fill(hunterName);
-    await page.locator('#playbtn').click();
-  }
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected), { timeout: 25_000 }).toBe(true);
-  if (!(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path))) {
-    await expect(page.locator('#pathselect')).toBeVisible();
-    await page.locator('[data-path-preview="shadow"]').click();
-    await page.locator('#pathconfirm').click();
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('shadow');
-  }
+  await registerAndPlay(page, { username, password, hunterName });
   const total = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal);
   for (let step = 0; step < total; step++) {
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep());

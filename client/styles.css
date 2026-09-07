@@ -499,11 +499,14 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   #eventstart .escount{font-size:58px;line-height:1;margin-top:15px;color:#ffd24a;text-shadow:0 0 26px rgba(255,210,74,.75);letter-spacing:5px;min-height:58px;animation:eventcountpulse .65s ease-out infinite}
   #eventstart .escount.ready{font-size:22px;line-height:58px;color:#4fd8ff;text-shadow:0 0 22px rgba(79,216,255,.7)}
   @keyframes eventcountpulse{0%{transform:scale(1.13);filter:brightness(1.5)}100%{transform:scale(1);filter:brightness(1)}}
-  #titleflash{position:fixed;left:50%;top:40%;z-index:46;width:min(1280px,calc(100vw - 20px));transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+  #titleflash{position:fixed;left:50%;top:24%;z-index:46;width:min(460px,calc(100vw - 32px));padding:14px 18px;border:1px solid rgba(242,199,92,.4);border-radius:10px;background:rgba(5,12,22,.92);transform:translate(-50%,-50%);text-align:center;pointer-events:none}
+  body.world-loading #titleflash,body.world-loading #eventhud{display:none!important}
+  #loadretry{margin-top:18px;padding:12px 20px;border:1px solid #7dd3fc;border-radius:6px;background:#12344b;color:#effaff;font:inherit;cursor:pointer}
+  #loadretry:focus-visible{outline:3px solid #fff;outline-offset:3px}
   #titleflash.hidden{display:none!important}
   #titleflash.show{display:block;animation:titleflashpop 1.4s ease-out forwards}
-  #titleflash .titleflash-main{font-size:clamp(54px,8vw,118px);line-height:1;letter-spacing:1px;color:#f4b000;text-shadow:4px 5px 0 rgba(91,74,42,.62),0 0 10px rgba(255,214,79,.58)}
-  #titleflash .titleflash-sub{font-size:clamp(20px,3vw,38px);line-height:1.2;color:#202020;text-shadow:2px 2px 0 rgba(255,255,255,.35),0 0 8px rgba(255,255,255,.5);margin-top:16px}
+  #titleflash .titleflash-main{font-size:clamp(18px,2.4vw,28px);line-height:1.2;letter-spacing:.5px;color:#f4b000;overflow-wrap:anywhere;text-shadow:0 1px 3px #000}
+  #titleflash .titleflash-sub{font-size:clamp(12px,1.4vw,16px);line-height:1.4;color:#dce8f2;margin-top:8px}
   #titleflash.danger .titleflash-main{color:#ff6b2a;text-shadow:4px 5px 0 rgba(68,21,10,.65),0 0 12px rgba(255,91,34,.7)}
   #titleflash.success .titleflash-main{color:#76f5a3;text-shadow:4px 5px 0 rgba(15,72,38,.68),0 0 12px rgba(86,255,151,.65)}
   #titleflash.blue .titleflash-main{color:#7dd3fc;text-shadow:4px 5px 0 rgba(24,60,88,.68),0 0 12px rgba(125,211,252,.65)}

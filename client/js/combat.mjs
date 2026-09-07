@@ -1,6 +1,7 @@
 import {api as worldApi,state as worldState} from './world.mjs';
 import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
 import {apiUrl} from './config.mjs';
+import {createLoadingWatchdog} from './loading-watchdog.mjs';
 import {hunterRankLevelLabel} from './progression.mjs';
 import {pathDebug} from './path-debug.mjs';
 const gameContext=window.BlockcraftGameContext;
@@ -1430,6 +1431,29 @@ const ONBOARDING_FULL_TURN=Math.PI*2;
 let onboardingArrowTurn=0,onboardingPreparedStep=-1;
 let townGuidanceActive=false,townGuidanceStep='quest';
 let worldLoading=false, worldLoadingTimer=0, worldLoadingMinUntil=0;
+const worldLoadingWatchdog=createLoadingWatchdog({onTimeout:()=>worldLoadingFailed('Loading is taking longer than expected. Check your connection, then retry.')});
+let loadRetryButton=null;
+function worldLoadingFailed(message){
+  worldLoading=true;
+  clearTimeout(worldLoadingTimer);
+  worldLoadingWatchdog.stop();
+  document.body.classList.add('world-loading');
+  if(loadscreen)loadscreen.classList.remove('hidden','fade');
+  setWorldLoadingStatus(message);
+  if(!loadRetryButton){
+    loadRetryButton=document.createElement('button');
+    loadRetryButton.id='loadretry';loadRetryButton.type='button';
+    loadRetryButton.textContent='RETRY CONNECTION';
+    loadRetryButton.addEventListener('click',()=>{
+      try{sessionStorage.setItem('bc_retry_connection','1');}catch(_){}
+      location.reload();
+    });
+    const panel=document.getElementById('loadpanel');
+    if(panel)panel.appendChild(loadRetryButton);
+  }
+  loadRetryButton.hidden=false;
+  releasePointerLockWithoutCameraFallback(false);
+}
 let onboardingResourceRegenAt=0;
 const ONBOARDING_RESOURCE_REGEN_MS=2500;
 function setWorldLoadingStatus(text){
@@ -1437,18 +1461,27 @@ function setWorldLoadingStatus(text){
 }
 function showWorldLoading(text){
   worldLoading=true;
+  document.body.classList.add('world-loading');
+  if(loadRetryButton)loadRetryButton.hidden=true;
   worldLoadingMinUntil=Date.now()+650;
   clearTimeout(worldLoadingTimer);
   setWorldLoadingStatus(text||'Preparing your hunter profile...');
   if(loadscreen){ loadscreen.classList.remove('hidden','fade'); }
-  worldLoadingTimer=setTimeout(()=>finishWorldLoading('fallback'),6500);
+  worldLoadingWatchdog.start();
 }
 function finishWorldLoading(reason){
+  if(reason==='profile-error'){
+    worldLoadingFailed('Your hunter profile could not be restored. Retry to reconnect safely.');
+    return;
+  }
   if(!worldLoading) return;
+  worldLoadingWatchdog.stop();
   const wait=Math.max(0,worldLoadingMinUntil-Date.now());
   clearTimeout(worldLoadingTimer);
   worldLoadingTimer=setTimeout(()=>{
     worldLoading=false;
+    document.body.classList.remove('world-loading');
+    if(loadRetryButton)loadRetryButton.hidden=true;
     if(loadscreen){
       loadscreen.classList.add('fade');
       setTimeout(()=>{ if(!worldLoading) loadscreen.classList.add('hidden'); },380);
@@ -5275,16 +5308,24 @@ async function startPlaying(create=false,startMode=''){
   }
 }
 try{ const sn=localStorage.getItem('bc_name'); if(sn) document.getElementById('playername').value=sn; }catch(e){}
-checkAuth().then(account=>{
+checkAuth().then(async account=>{
+  // Authentication can resolve while the remaining ES modules are still loading.
+  if(document.documentElement.dataset.gamePhase!=='ready'){
+    await new Promise(resolve=>window.addEventListener('blockcraft-ready',resolve,{once:true}));
+  }
+  let retryConnection=false;
+  try{retryConnection=sessionStorage.getItem('bc_retry_connection')==='1';sessionStorage.removeItem('bc_retry_connection');}catch(_){}
   if(account && AUTH_UI.hasHunterName() && !NET.tried){
-    if(String(account.username||'').trim().toLowerCase()==='asherlevin85@gmail.com'){
+    if(retryConnection){
+      return startPlaying(false,'game');
+    }else if(String(account.username||'').trim().toLowerCase()==='asherlevin85@gmail.com'){
       setAuthStatus('CHOOSE HOW YOU WANT TO ENTER BLOCKCRAFT','ok');
     }else{
       setAuthStatus('RESTORING GAME...');
       openingCinematicReady.then(()=>startPlaying(false,'game'));
     }
   }
-}).catch(()=>{});
+}).catch(error=>{console.warn('Automatic game entry failed',error);setAuthStatus('PRESS PLAY TO ENTER THE WORLD','bad');});
 function primeMenuAudio(){
   if(globalThis.BlockcraftOpeningAudio&&typeof globalThis.BlockcraftOpeningAudio.startAmbient==='function')globalThis.BlockcraftOpeningAudio.startAmbient();
   if(globalThis.SFX&&globalThis.SFX.init)globalThis.SFX.init();
@@ -5718,6 +5759,7 @@ function isWorldPointerTarget(target){
   return target===renderer.domElement||target===document.body||target===document.documentElement;
 }
 function gameplayCameraInputAllowed(){
+  if(worldLoading)return false;
   const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
@@ -5726,6 +5768,7 @@ function gameplayCameraInputAllowed(){
   return !!(locked&&!cursorReleased&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
 }
 function gameplayCameraResumeAllowed(){
+  if(worldLoading)return false;
   const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
