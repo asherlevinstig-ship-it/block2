@@ -53,7 +53,7 @@ const REWARD_ITEMS = { coal: 101, iron: 102, dia: 103 };
 const PROGRESSION_FOCUS_STATES = Object.freeze([
   'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade', 'first_profession_contract',
-  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'a_rank_climb', 's_rank_climb', 'next_adventurer_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'a_rank_climb', 's_rank_climb', 's_rank_complete', 'next_adventurer_contract',
 ]);
 const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
 const DEITY_LEVEL = 60;
@@ -66,7 +66,7 @@ function hunterRankIndexForLevel(level) {
   for (let i = 1; i < HUNTER_RANK_LEVELS.length; i++) if (lvl >= HUNTER_RANK_LEVELS[i]) rank = i;
   return rank;
 }
-function gateRankIndexForLevel(level) { return Math.min(4, hunterRankIndexForLevel(level)); }
+function gateRankIndexForLevel(level) { return Math.min(5, hunterRankIndexForLevel(level)); }
 function isDeityLevel(level) { return Math.max(1, level | 0) >= DEITY_LEVEL; }
 function nextHunterRankLevel(rank) {
   const i = Math.max(0, Math.min(HUNTER_RANK_LEVELS.length - 1, rank | 0));
@@ -113,6 +113,7 @@ const I = {
   FISHING_ROD: 225,
   SMALL_FISH: 226, PRIZED_FISH: 227, COOKED_SMALL_FISH: 228, COOKED_RIVER_FISH: 229, COOKED_PRIZED_FISH: 230,
   TROPHY_FISH: 231, COOKED_TROPHY_FISH: 232,
+  SOLO_KEY_S: 233, TEAM_KEY_S: 234,
 };
 // Familiars. Quest familiars are stronger; pet familiars are rare wildlife finds.
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
@@ -159,8 +160,8 @@ const ARMOR_INFO = {
   [I.STORMWEAVE_ROBE]: { tier: 4, armorType:'robe', mitigation: .09, dur: 620, projectileMagicMultiplier: 1.22 },
   [I.LEGEND_ARMOR]: { tier: 5, armorType:'aegis', legendary: true, mitigation: .20, dur: 1800 },
 };
-const SOLO_KEYS = [I.SOLO_KEY_E, I.SOLO_KEY_D, I.SOLO_KEY_C, I.SOLO_KEY_B, I.SOLO_KEY_A];
-const TEAM_KEYS = [I.TEAM_KEY_E, I.TEAM_KEY_D, I.TEAM_KEY_C, I.TEAM_KEY_B, I.TEAM_KEY_A];
+const SOLO_KEYS = [I.SOLO_KEY_E, I.SOLO_KEY_D, I.SOLO_KEY_C, I.SOLO_KEY_B, I.SOLO_KEY_A, I.SOLO_KEY_S];
+const TEAM_KEYS = [I.TEAM_KEY_E, I.TEAM_KEY_D, I.TEAM_KEY_C, I.TEAM_KEY_B, I.TEAM_KEY_A, I.TEAM_KEY_S];
 // shard system — mirrors client SHARD_TIERS / SHARD_MODS / rollMods (client/index.html)
 const SHARD_ITEM_IDS = [I.SHARD_MINOR, I.SHARD_MAJOR, I.SHARD_GLIMMER, I.SHARD_EFFERV, I.SHARD_RADIANT];
 const SHARD_TIERS = [
@@ -191,15 +192,15 @@ const BOLSTER_RADIUS = 6;
 const BOLSTER_HP = 5;
 const BOLSTER_DMG = 1;
 const BOLSTER_MAX_STACKS = 5;
-const keyForRank = (kind, rank) => (kind === 'team' ? TEAM_KEYS : SOLO_KEYS)[Math.max(0, Math.min(4, rank | 0))];
-const SOLO_KEY_PRICES = [45, 110, 240, 460, 800];
-const TEAM_KEY_PRICES = [70, 165, 350, 650, 1100];
+const keyForRank = (kind, rank) => (kind === 'team' ? TEAM_KEYS : SOLO_KEYS)[Math.max(0, Math.min(5, rank | 0))];
+const SOLO_KEY_PRICES = [45, 110, 240, 460, 800, 1350];
+const TEAM_KEY_PRICES = [70, 165, 350, 650, 1100, 1800];
 const KEY_LOOT = {
-  bossTeamByRank: [0.18, 0.24, 0.30, 0.36, 0.42],
+  bossTeamByRank: [0.18, 0.24, 0.30, 0.36, 0.42, 0.50],
   overworldSolo: 0.012,
   overworldTeam: 0.003,
-  chestSoloByRank: [0.16, 0.20, 0.24, 0.28, 0.32],
-  chestTeamByRank: [0.05, 0.07, 0.09, 0.11, 0.13],
+  chestSoloByRank: [0.16, 0.20, 0.24, 0.28, 0.32, 0.38],
+  chestTeamByRank: [0.05, 0.07, 0.09, 0.11, 0.13, 0.17],
 };
 const BOSS_REWARD_BY_RANK = [
   { xp: 70, gold: 35, coal: 3, iron: 1, dia: 0 },
@@ -207,6 +208,7 @@ const BOSS_REWARD_BY_RANK = [
   { xp: 563, gold: 110, coal: 7, iron: 5, dia: 1 },
   { xp: 813, gold: 175, coal: 9, iron: 7, dia: 2 },
   { xp: 1188, gold: 270, coal: 12, iron: 10, dia: 4 },
+  { xp: 1700, gold: 425, coal: 16, iron: 14, dia: 7 },
 ];
 const BREACH_CLEANUP_REWARD_BY_RANK = [
   { xp: 25, items: [{ id: I.MONSTER_MEAT, count: 2 }, { id: I.COAL, count: 1 }] },
@@ -214,6 +216,7 @@ const BREACH_CLEANUP_REWARD_BY_RANK = [
   { xp: 165, items: [{ id: I.MONSTER_MEAT, count: 4 }, { id: I.COAL, count: 3 }, { id: I.IRON_INGOT, count: 2 }] },
   { xp: 240, items: [{ id: I.MONSTER_MEAT, count: 5 }, { id: I.COAL, count: 4 }, { id: I.IRON_INGOT, count: 3 }, { id: I.DIAMOND, count: 1 }] },
   { xp: 350, items: [{ id: I.MONSTER_MEAT, count: 6 }, { id: I.COAL, count: 5 }, { id: I.IRON_INGOT, count: 5 }, { id: I.DIAMOND, count: 2 }] },
+  { xp: 510, items: [{ id: I.FEAST_PLATTER, count: 2 }, { id: I.COAL, count: 7 }, { id: I.IRON_INGOT, count: 7 }, { id: I.DIAMOND, count: 4 }] },
 ];
 const CHEST_REWARD_BY_RANK = [
   { coal: [2, 4], iron: [0, 1], dia: [0, 0] },
@@ -221,6 +224,7 @@ const CHEST_REWARD_BY_RANK = [
   { coal: [4, 8], iron: [2, 5], dia: [0, 1] },
   { coal: [6, 10], iron: [3, 7], dia: [1, 2] },
   { coal: [8, 12], iron: [5, 9], dia: [2, 4] },
+  { coal: [10, 16], iron: [7, 12], dia: [3, 6] },
 ];
 const REGIONAL_ESSENCE_ITEMS = [I.WINDSEED, I.HEARTWOOD_RESIN, I.SUNSHARD, I.MESA_AMBER, I.FROST_CRYSTAL, I.MIRE_BLOOM];
 const FAMILIAR_RELIC_ITEMS = [I.FANG_TOTEM, I.MOTE_CHARM, I.FORAGE_CHARM];
@@ -261,6 +265,13 @@ const DUNGEON_CHEST_BONUS_LOOT = [
     { id: I.LEGEND_TOKEN, count: [1, 1], chance: .05 },
     { id: FAMILIAR_RELIC_ITEMS, count: [1, 1], chance: .03 },
   ],
+  [
+    { id: I.FEAST_PLATTER, count: [1, 2], chance: .14 },
+    { id: I.STORMGLASS, count: [3, 5], chance: .22 },
+    { id: I.SOLAR_GLYPH, count: [2, 4], chance: .20 },
+    { id: I.LEGEND_TOKEN, count: [1, 2], chance: .12 },
+    { id: FAMILIAR_RELIC_ITEMS, count: [1, 1], chance: .06 },
+  ],
 ];
 const DUNGEON_BOSS_BONUS_LOOT = [
   [
@@ -297,6 +308,13 @@ const DUNGEON_BOSS_BONUS_LOOT = [
     { id: I.LEGEND_TOKEN, count: [1, 2], chance: .10 },
     { id: FAMILIAR_RELIC_ITEMS, count: [1, 1], chance: .05 },
   ],
+  [
+    { id: I.FEAST_PLATTER, count: [1, 2], chance: .18 },
+    { id: I.STORMGLASS, count: [3, 6], chance: .26 },
+    { id: I.SOLAR_GLYPH, count: [2, 5], chance: .22 },
+    { id: I.LEGEND_TOKEN, count: [2, 3], chance: .18 },
+    { id: FAMILIAR_RELIC_ITEMS, count: [1, 1], chance: .08 },
+  ],
 ];
 const GATE_DISTANCE_BANDS = [
   { min: 90, max: 160 },
@@ -304,6 +322,7 @@ const GATE_DISTANCE_BANDS = [
   { min: 300, max: 400 },
   { min: 420, max: 470 },
   { min: 460, max: 480 },
+  { min: 475, max: 500 },
 ];
 const BOSS_CONTRIB_MS = 90000;
 const BOSS_REWARD_RANGE = 24;
@@ -370,21 +389,22 @@ const DRAGON_PERCH_SLOTS = 2;          // dragons a single nest (Egg Insulator) 
 const DRAGON_LOVE_MS = 20000;          // how long a fed dragon stays "in love"
 const DRAGON_BREED_MS = 6000;          // time two in-love dragons must nest together to lay an egg
 const DRAGON_BREED_CD_MS = 45000;      // per-dragon cooldown after laying
-// which species an egg can be, by gate rank (E..A); none at E-rank, rarer types only at higher ranks
+// which species an egg can be, by gate rank (E..S); none at E-rank, rarer types only at higher ranks
 const DRAGON_DROP_POOL = [
   [],
   ['ember', 'verdant'],
   ['ember', 'verdant', 'frost'],
   ['verdant', 'frost', 'storm'],
   ['frost', 'storm', 'void'],
+  ['storm', 'void'],
 ];
 const isDragonMount = (kind) => typeof kind === 'string' && kind.slice(0, 7) === 'dragon:';
 const dragonMountType = (kind) => kind.slice(7);
 const isValidMount = (kind) => kind === 'horse' || (isDragonMount(kind) && DRAGON_TYPE_SET.has(dragonMountType(kind)));
 const isUnlockableMount = (kind) => isDragonMount(kind);
-// Dragon Egg drop chance per dungeon-loot chest / boss kill, indexed by gate rank (E..A). None at E-rank.
-const DRAGON_EGG_CHEST_CHANCE = [0, 0.03, 0.06, 0.10, 0.15];
-const DRAGON_EGG_BOSS_CHANCE  = [0, 0.06, 0.10, 0.14, 0.20];
+// Dragon Egg drop chance per dungeon-loot chest / boss kill, indexed by gate rank (E..S). None at E-rank.
+const DRAGON_EGG_CHEST_CHANCE = [0, 0.03, 0.06, 0.10, 0.15, 0.22];
+const DRAGON_EGG_BOSS_CHANCE  = [0, 0.06, 0.10, 0.14, 0.20, 0.28];
 const DRAGON_INCUBATION_MS = 30000;
 const DRAGON_INCUBATION_MS_BY_TYPE = {
   ember: 30000,

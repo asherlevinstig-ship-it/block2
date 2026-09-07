@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay, resumeAfterReload } = require('./helpers/auth-flow.cjs');
 
 const TEAM_KEY_E = 155;
 
@@ -12,12 +12,7 @@ async function register(page, username, playerName) {
 }
 
 async function resumeAfterRestart(page) {
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(
-    () => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected),
-    { timeout: 15_000 },
-  ).toBe(true);
+  await resumeAfterReload(page);
 }
 
 async function joinGateLobby(page, gateId) {

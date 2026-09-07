@@ -185,7 +185,7 @@
     };
     if((def.levelTarget|0)>0)quest.levelTarget=def.levelTarget|0;
     if((def.recommendedLevel|0)>0)quest.recommendedLevel=def.recommendedLevel|0;
-    if(def.gateRank!=null)quest.gateRank=Math.max(0,Math.min(4,def.gateRank|0));
+    if(def.gateRank!=null)quest.gateRank=Math.max(0,Math.min(5,def.gateRank|0));
     if(typeof def.item==='number')quest.item=def.item;
     if(def.type==='utility')quest.utility=def.utility||def.item;
     if(def.type==='familiar')quest.familiar=def.familiar||def.item;

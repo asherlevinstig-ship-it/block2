@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAccount, playRegisteredHunter } = require('./helpers/auth-flow.cjs');
+const { registerAccount, playRegisteredHunter, resumeAfterReload } = require('./helpers/auth-flow.cjs');
 
 const BASE_URL = 'http://127.0.0.1:2607';
 const TUTORIALS = {
@@ -27,9 +27,7 @@ test('server tutorial milestones restore a returning hunter in a fresh browser',
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareReturningHunter' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(3);
 
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await resumeAfterReload(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().tutorials)).toEqual(TUTORIALS);
 
   const freshContext = await browser.newContext();

@@ -5,7 +5,7 @@ const { createStore, sanitizeProfile, cleanToken, defaultProfile, ensureAsherAdm
 const D = require('../dungeon');
 const { GameRoom } = require('./GameRoom');
 const W = require('../world');
-const { handOff, hostGate, unhostGate, consumeGate, recordGateBreach, requestPublicGateRank } = require('./dungeon-handoff');
+const { handOff, hostGate, unhostGate, consumeGate, recordGateBreach, requestPublicGateRank, progressionGateRank } = require('./dungeon-handoff');
 const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { peekDungeonAdmission, claimDungeonAdmission, revokeDungeonAdmission } = require('./dungeon-admission');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
@@ -336,7 +336,10 @@ class DungeonRoom extends GameRoom {
       rec.prof.dungeonRecovery = null;
       const quest = rec.prof.activeNpcQuest;
       if (quest && quest.type === 'gate' && (quest.gateRank | 0) >= 0) requestPublicGateRank(quest.gateRank);
-      else if (rec.prof.progressionFocus === 'first_d_gate') requestPublicGateRank(1);
+      else {
+        const retryRank = progressionGateRank(rec.prof.progressionFocus);
+        if (retryRank != null) requestPublicGateRank(retryRank);
+      }
       this.dirtyPlayers.add(rec.token);
     }
     client.send('dungeonSpiritQuit', result ? { ...town, ...vitals, result } : { ...town, ...vitals });

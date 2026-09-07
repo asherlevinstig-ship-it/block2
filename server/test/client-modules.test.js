@@ -261,6 +261,7 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /BlockcraftTownArrivalGuide/);
   assert.match(world, /Job Board · Tamsin/);
   assert.match(world, /aegisApproach: \{ x: TOWN\.TC - 17\.5, z: TOWN\.TC - 40\.7 \}/);
+  assert.match(world, /market: \{ x: dpx\(43, 'market'\) - \.9, z: TOWN\.TC - 7 \}/);
   assert.match(world, /grp\.position\.set\(HUB\.guardian\.x, TOWN\.G\+1\.06, HUB\.guardian\.z\)/);
   assert.match(world, /title:'AEGIS SHRINE'.*x:HUB\.guardian\.x-4\.7,z:HUB\.guardian\.z\+3\.7/);
   assert.match(world, /kind:'server-aegis'.*target:HUB\.aegisApproach/);
@@ -1559,6 +1560,7 @@ test('browser and server share authoritative quest objective descriptors', () =>
   assert.match(normalized.hudText, /Complete/);
   assert.deepEqual(normalized.progress, { current: 2, required: 2 });
   assert.deepEqual(normalized.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 1, total: 9 });
+  assert.equal(questObjectives.normalizeObjective({ id:'progression:s', source:'progression', title:'S Gate', action:{ type:'find_gate', label:'FIND S GATE', rank:5 } }).action.rank, 5);
 });
 
 test('NPC story and manhunt quests come from one validated authoring registry', () => {
@@ -1833,7 +1835,7 @@ test('Hunter XP curve has explicit rank thresholds and steepens at high rank', a
   assert.equal(isDeityLevel(59), false);
   assert.equal(isDeityLevel(60), true);
   assert.equal(isDeityLevel(60), serverProgression.isDeityLevel(60));
-  assert.equal(gateRankIndexForLevel(99), 4, 'gate tiers stop at A while Hunter rank reaches S');
+  assert.equal(gateRankIndexForLevel(99), 5, 'S-rank hunters unlock the final Gate tier');
   assert.deepEqual([0, 1, 2, 3, 4, 5].map(nextHunterRankLevel), [11, 21, 31, 41, 51, 0]);
   assert.equal(xpNeedForLevel(3), 53);
   assert.ok(xpNeedForLevel(31) > xpNeedForLevel(10) * 10, 'post-E rank requirements rise sharply');
@@ -2669,7 +2671,7 @@ test('objective tracker shows only the active quest with an all-quests shortcut'
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(frame,/function unifiedObjectiveList\(\)/);
   assert.match(frame,/const unique=lines\.filter\(line=>\{const key=line\.kind\+':'\+line\.title/);
-  assert.match(frame,/if\(progressionFocus==='e_rank_climb'\|\|progressionFocus==='c_rank_climb'\|\|progressionFocus==='b_rank_pressure'\|\|progressionFocus==='a_rank_climb'\|\|progressionFocus==='s_rank_climb'\)/);
+  assert.match(frame,/if\(progressionFocus==='e_rank_climb'\|\|progressionFocus==='c_rank_climb'\|\|progressionFocus==='b_rank_pressure'\|\|progressionFocus==='a_rank_climb'\|\|progressionFocus==='s_rank_climb'\|\|progressionFocus==='s_rank_complete'\)/);
   assert.match(frame,/return \[climb,activity\]\.filter\(Boolean\)/);
   assert.match(frame,/return unique\.slice\(0,6\)/);
   assert.match(frame,/if\(lines\.length\)return \{label:'Objective Tracker',text:'Active quest categories',unified:true,lines\};/);

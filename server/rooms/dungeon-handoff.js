@@ -94,7 +94,18 @@ function drainGateBreaches() {
 
 function requestPublicGateRank(rank) {
   if (!Number.isFinite(rank)) return;
-  requestedPublicGateRanks.add(Math.max(0, Math.min(4, rank | 0)));
+  requestedPublicGateRanks.add(Math.max(0, Math.min(5, rank | 0)));
+}
+
+function progressionGateRank(focus) {
+  return ({
+    first_e_gate: 0,
+    first_d_gate: 1,
+    c_rank_climb: 2,
+    b_rank_pressure: 3,
+    a_rank_climb: 4,
+    s_rank_climb: 5,
+  })[String(focus || '')];
 }
 
 function drainRequestedPublicGateRanks() {
@@ -109,5 +120,5 @@ module.exports = {
   hostGate, unhostGate, isHostedGate,
   consumeGate, drainConsumedGates,
   recordGateBreach, drainGateBreaches,
-  requestPublicGateRank, drainRequestedPublicGateRanks,
+  requestPublicGateRank, drainRequestedPublicGateRanks, progressionGateRank,
 };

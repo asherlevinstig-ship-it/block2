@@ -12,6 +12,7 @@
     Object.freeze(['ember_forge', 'forgotten_keep', 'hollow_sanctum']),
     Object.freeze(['void_monastery', 'frozen_depths', 'storm_bastion']),
     Object.freeze(['monarchs_tomb', 'abyssal_citadel', 'worldscar_nexus']),
+    Object.freeze(['eternal_court', 'starless_foundry', 'throne_of_ashes']),
   ]);
 
   const KNOWN_DUNGEON_IDS = new Set(DUNGEON_POOLS.flat());
@@ -31,10 +32,13 @@
     monarchs_tomb: Object.freeze({ name: "Monarch's Tomb", theme: 'royal_tomb', enemies: Object.freeze(['skeleton', 'graveguard', 'charger']), boss: 'The Buried Monarch', preview: 'Royal brick halls, glass reliquaries, and diamond-lit burial courts.', combat: Object.freeze({ skeletonChance: .64, zombieRoles: Object.freeze(['graveguard', 'graveguard', 'charger']), bossStyle: 'buried_monarch' }), layout: Object.freeze({ roomTypes: ['crypt', 'vault', 'shrine', 'arena'], roomBonus: 3, roomScale: 3, bossScale: 5, wideChance: .82, branchChance: .54, floor: 'brick', dressing: 'royal_tomb', waveRooms: true }) }),
     abyssal_citadel: Object.freeze({ name: 'Abyssal Citadel', theme: 'abyssal', enemies: Object.freeze(['skeleton', 'graveguard', 'charger']), boss: 'The Abyssal Gatekeeper', preview: 'Black-water citadel rooms, glass sigils, and oppressive drowned chambers.', combat: Object.freeze({ skeletonChance: .56, zombieRoles: Object.freeze(['graveguard', 'charger', 'graveguard']), bossStyle: 'abyssal_gatekeeper' }), layout: Object.freeze({ roomTypes: ['vault', 'crypt', 'pit', 'arena'], roomBonus: 3, roomScale: 3, bossScale: 5, wideChance: .8, branchChance: .6, dressing: 'abyssal', waveRooms: true }) }),
     worldscar_nexus: Object.freeze({ name: 'Worldscar Nexus', theme: 'worldscar', enemies: Object.freeze(['skeleton', 'charger', 'graveguard']), boss: 'The Rift Monarch', preview: 'A fractured endgame nexus mixing ice, lava, glass, ore, and unstable stone.', combat: Object.freeze({ skeletonChance: .62, zombieRoles: Object.freeze(['charger', 'graveguard', 'charger']), bossStyle: 'rift_monarch' }), layout: Object.freeze({ roomTypes: ['arena', 'vault', 'pit', 'shrine'], roomBonus: 4, roomScale: 4, bossScale: 6, wideChance: .94, branchChance: .66, dressing: 'worldscar', waveRooms: true }) }),
+    eternal_court: Object.freeze({ name: 'Eternal Court', theme: 'sanctum', enemies: Object.freeze(['skeleton', 'graveguard', 'charger']), boss: 'The Eternal Warden', preview: 'An ascendant court where rotating sanctuaries collapse into chained judgment.', combat: Object.freeze({ skeletonChance: .70, zombieRoles: Object.freeze(['graveguard', 'charger', 'graveguard']), bossStyle: 'eternal_warden' }), layout: Object.freeze({ roomTypes: ['shrine', 'arena', 'vault', 'arena'], roomBonus: 5, roomScale: 4, bossScale: 7, wideChance: .96, branchChance: .70, dressing: 'sanctum', waveRooms: true }) }),
+    starless_foundry: Object.freeze({ name: 'Starless Foundry', theme: 'void', enemies: Object.freeze(['charger', 'graveguard', 'skeleton']), boss: 'The Starforged Titan', preview: 'A lightless forge of crushing lanes, void marks, and relentless add waves.', combat: Object.freeze({ skeletonChance: .58, zombieRoles: Object.freeze(['charger', 'graveguard', 'charger']), bossStyle: 'starforged_titan' }), layout: Object.freeze({ roomTypes: ['vault', 'arena', 'pit', 'arena'], roomBonus: 5, roomScale: 4, bossScale: 8, wideChance: .94, branchChance: .62, dressing: 'void', waveRooms: true }) }),
+    throne_of_ashes: Object.freeze({ name: 'Throne of Ashes', theme: 'worldscar', enemies: Object.freeze(['skeleton', 'charger', 'graveguard']), boss: 'The Ashen Sovereign', preview: 'The final Gate: reality tears, storm lanes, and an arena that leaves no fixed safe ground.', combat: Object.freeze({ skeletonChance: .66, zombieRoles: Object.freeze(['charger', 'graveguard', 'charger']), bossStyle: 'ashen_sovereign' }), layout: Object.freeze({ roomTypes: ['arena', 'shrine', 'vault', 'arena'], roomBonus: 6, roomScale: 5, bossScale: 9, wideChance: .98, branchChance: .72, dressing: 'worldscar', waveRooms: true }) }),
   });
 
   function dungeonPoolForRank(rank) {
-    return DUNGEON_POOLS[Math.max(0, Math.min(4, rank | 0))];
+    return DUNGEON_POOLS[Math.max(0, Math.min(5, rank | 0))];
   }
 
   function dungeonIdForGate(rank, seed) {

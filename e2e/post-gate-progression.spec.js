@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay, resumeAfterReload } = require('./helpers/auth-flow.cjs');
 const { e2eJourney } = require('./helpers/job-contract-flow.cjs');
 
 async function dismissMilestone(page) {
@@ -64,9 +64,7 @@ test('post-gate chapter reaches the E-rank climb and survives reload', async ({ 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('e_rank_climb');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().activeObjectives.some(objective => objective.title === 'E-rank Climb'))).toBe(true);
 
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await resumeAfterReload(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('e_rank_climb');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('shadow');
   await expect(page.locator('#pathselect')).toBeHidden();

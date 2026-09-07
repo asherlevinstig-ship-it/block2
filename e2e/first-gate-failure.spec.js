@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay, resumeAfterReload } = require('./helpers/auth-flow.cjs');
 
 const NEXT_RANK_SOLO_KEY = 151;
 
@@ -102,9 +102,7 @@ test('a failed first Gate preserves progression and immediately offers a success
     failedGate.id,
   );
 
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await resumeAfterReload(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('The First Gate');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.have)).toBe(0);
   expect(await page.evaluate(

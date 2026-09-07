@@ -3,26 +3,34 @@ const { RANK_MUL } = require('../../shared/dungeon-generation');
 const { dungeonDefinition } = require('../../shared/dungeon-pools');
 
 const GATE_INTERACT_RANGE = 6;
-const DIFFICULTIES = ['Initiate', 'Dangerous', 'Severe', 'Extreme', 'Cataclysmic'];
+const DIFFICULTIES = ['Initiate', 'Dangerous', 'Severe', 'Extreme', 'Cataclysmic', 'Ascendant'];
 const REQUIREMENTS = [
   { weapon: 1, armor: 0, food: 1, tool: 1, health: .25 },
   { weapon: 3, armor: 3, food: 3, tool: 3, health: .75 },
   { weapon: 4, armor: 4, food: 4, tool: 4, health: .80 },
   { weapon: 4, weaponPlus: 1, armor: 4, food: 5, tool: 4, health: .85 },
   { weapon: 4, weaponPlus: 2, armor: 5, food: 6, tool: 4, health: .90 },
+  { weapon: 5, armor: 5, food: 8, tool: 4, health: .95 },
 ];
 const LEGENDARY_WEAPONS = new Set(Object.keys(LEGENDARY_CRAFTS).map(Number).filter(id => id !== I.LEGEND_ARMOR));
 const ARMOR_TIER = { [I.HIDE_ARMOR]: 2, [I.APPRENTICE_ROBE]: 2, [I.CHAIN_ARMOR]: 3, [I.IRON_ARMOR]: 3, [I.ARCWEAVE_ROBE]: 3, [I.DIA_ARMOR]: 4, [I.STORMGLASS_ARMOR]: 4, [I.STORMWEAVE_ROBE]: 4, [I.LEGEND_ARMOR]: 5 };
 const TIER_NAME = ['Basic', 'Wood', 'Stone', 'Iron', 'Diamond', 'Legendary'];
-const PARTY_BY_RANK = [[1, 1], [1, 2], [2, 3], [3, 4], [4, 4]];
+const PARTY_BY_RANK = [[1, 1], [1, 2], [2, 3], [3, 4], [4, 4], [4, 4]];
 const BOSS_IDENTITY_BY_RANK = [
   'E-rank: learn slam, charge, and one safe-zone ring',
   'D-rank: first ranged volley mechanic',
   'C-rank: positioning checks with rings and ground spikes',
   'B-rank: control pressure roots the party',
   'A/S-rank: layered mechanics chain into follow-up casts',
+  'S-rank: rotating safe sectors chain three signature mechanics',
 ];
 function readinessHints(req) {
+  if (req.weapon === 5) return {
+    weapon: 'Forge and carry any Legendary weapon at the Aegis Guardian. Legendary weapons cost 1-3 Legendary Tokens.',
+    armor: 'Equip Legendary Aegis Armor. It costs 2 Legendary Tokens at the Aegis Guardian.',
+    food: `Bring any ${req.food} food items; Feast Platters and Golden Broth provide the strongest recovery.`,
+    tool: `Bring a Diamond pick, shovel, or hoe above ${Math.round(req.health * 100)}% durability. Repair it at Tobin's forge.`,
+  };
   if (req.weapon === 3) return {
     weapon: 'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',
     armor: 'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',
@@ -52,7 +60,7 @@ function maxDurability(stack, info) {
   return Math.round((info.dur || 1) * (1 + Math.max(0, Math.min(3, stack.plus | 0)) * .15));
 }
 function gateReadinessForProfile(profile, rank) {
-  rank = Math.max(0, Math.min(4, rank | 0));
+  rank = Math.max(0, Math.min(5, rank | 0));
   const req = REQUIREMENTS[rank], hints = readinessHints(req), items = stacks(profile);
   const weapons = items.filter(s => (TOOL_INFO[s.id] && (TOOL_INFO[s.id].cls === 'sword' || TOOL_INFO[s.id].cls === 'axe')) || LEGENDARY_WEAPONS.has(s.id));
   const weaponOk = weapons.some(s => LEGENDARY_WEAPONS.has(s.id) || (TOOL_INFO[s.id].tier >= req.weapon && (s.plus | 0) >= (req.weaponPlus || 0)));
@@ -76,7 +84,7 @@ function gateReadinessForProfile(profile, rank) {
   return { rank, difficulty: DIFFICULTIES[rank], ready: passed === checks.length, status: passed === checks.length ? 'READY' : 'UNDERPREPARED', score: passed, total: checks.length, checks, missing, next: missing[0] || null };
 }
 function gateProfileSignals(profile, rank) {
-  rank = Math.max(0, Math.min(4, rank | 0));
+  rank = Math.max(0, Math.min(5, rank | 0));
   const req = REQUIREMENTS[rank], items = stacks(profile), ids = new Set(items.map(s => s.id | 0));
   const readiness = gateReadinessForProfile(profile, rank);
   const weapons = items.filter(s => (TOOL_INFO[s.id] && (TOOL_INFO[s.id].cls === 'sword' || TOOL_INFO[s.id].cls === 'axe')) || LEGENDARY_WEAPONS.has(s.id));
@@ -87,7 +95,7 @@ function gateProfileSignals(profile, rank) {
     const lvl = Math.max(1, (profile && profile.S && profile.S.lvl) | 0);
     let out = 0;
     for (let i = 1; i < HUNTER_RANK_LEVELS.length; i++) if (lvl >= HUNTER_RANK_LEVELS[i]) out = i;
-    return Math.min(4, out);
+    return Math.min(5, out);
   })();
   const control = ids.has(I.BLACKHOLE_STAFF) || ids.has(I.GRAVITY_BOW) || ids.has(I.VOID_ANCHOR) || ids.has(I.FROSTBITE_CHAKRAM);
   const ranged = ids.has(I.GRAVITY_BOW) || ids.has(I.METEOR_STAFF) || ids.has(I.BLACKHOLE_STAFF);
@@ -117,7 +125,7 @@ function gateRoleForProfile(profile) {
   return 'Striker';
 }
 function gatePartyReadinessSummary(members, rank, preview = null) {
-  rank = Math.max(0, Math.min(4, rank | 0));
+  rank = Math.max(0, Math.min(5, rank | 0));
   const list = Array.isArray(members) ? members : [];
   const recommended = preview && Array.isArray(preview.recommendedParty) ? preview.recommendedParty : PARTY_BY_RANK[rank];
   const coverage = { damage: 0, frontline: 0, ranged: 0, control: 0, sustain: 0 };
@@ -133,6 +141,7 @@ function gatePartyReadinessSummary(members, rank, preview = null) {
     rank >= 2 ? 'positioning checks' : 'simple recovery windows',
     rank >= 3 ? 'control pressure' : 'light crowd control',
     rank >= 4 ? 'layered mechanics' : 'single mechanic focus',
+    rank >= 5 ? 'rotating safe sectors and chained signatures' : 'recoverable signature patterns',
   ];
   const warnings = [];
   if (list.length < recommended[0]) warnings.push('Recommended party is ' + (recommended[0] === recommended[1] ? recommended[0] : recommended[0] + '-' + recommended[1]) + '; current party has ' + list.length + '.');
@@ -162,14 +171,14 @@ function gatePartyReadinessSummary(members, rank, preview = null) {
 }
 
 function gateEncounterPreview(gate, layout = null) {
-  const rank = Math.max(0, Math.min(4, gate && gate.rank | 0));
+  const rank = Math.max(0, Math.min(5, gate && gate.rank | 0));
   const definition = dungeonDefinition(rank, gate && gate.seed, gate && gate.dungeonId);
   const plus = Math.max(0, Math.min(5, gate && gate.shardPlus | 0));
   const mods = String(gate && gate.shardMods || '').split(',').map(v => v.trim()).filter(Boolean);
   const modSet = new Set(mods), reward = BOSS_REWARD_BY_RANK[rank], base = 1 + .18 * plus;
   const hpMultiplier = base * (modSet.has('Tyrannical') ? 1.7 : 1);
   const damageMultiplier = (1 + .12 * plus) * (modSet.has('Empowered') ? 1.5 : 1) * (modSet.has('Tyrannical') ? 1.4 : 1);
-  const levels = [HUNTER_RANK_LEVELS[rank], (HUNTER_RANK_LEVELS[rank + 1] || 27) - 1];
+  const levels = [HUNTER_RANK_LEVELS[rank], (HUNTER_RANK_LEVELS[rank + 1] || 61) - 1];
   const party = gate && gate.kind === 'solo' ? [1, 1] : PARTY_BY_RANK[rank];
   const traits = ['Telegraphed ground slam', 'Wall-crash stun window', BOSS_IDENTITY_BY_RANK[rank], 'Summons reinforcements'];
   const signatureTraits = {
@@ -188,11 +197,15 @@ function gateEncounterPreview(gate, layout = null) {
     buried_monarch: 'Sandstorm wall and tomb guardians',
     abyssal_gatekeeper: 'Tentacle drag zones',
     rift_monarch: 'Reality-tear blink explosion',
+    eternal_warden: 'Rotating sanctuary judgment',
+    starforged_titan: 'Crushing forge lanes and void collapse',
+    ashen_sovereign: 'Three-stage ascendant mechanic chain',
   };
   const bossStyle = definition.combat && definition.combat.bossStyle;
   if (signatureTraits[bossStyle]) traits.push(signatureTraits[bossStyle]);
   if (mods.length) traits.push(...mods.map(mod => `Shard: ${mod}`));
   return {
+    difficulty: DIFFICULTIES[rank],
     enemyLevels: levels,
     enemyFamilies: definition.enemies || [],
     dungeonId: gate && gate.dungeonId || '',

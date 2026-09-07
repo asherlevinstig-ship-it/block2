@@ -1215,6 +1215,7 @@ const RANKS=[
   {n:'C', col:0xffd24a, mul:2.4},
   {n:'B', col:0xff8c3a, mul:3.4},
   {n:'A', col:0xff4a6a, mul:4.6},
+  {n:'S', col:0xc084fc, mul:6.2},
 ];
 const GATE_DISTANCE_BANDS=[
   {min:90, max:160},
@@ -1222,6 +1223,7 @@ const GATE_DISTANCE_BANDS=[
   {min:300, max:400},
   {min:420, max:470},
   {min:460, max:480},
+  {min:475, max:500},
 ];
 const hex01=h=>[(h>>16&255)/255,(h>>8&255)/255,(h&255)/255];
 function makeGateMesh(col){
@@ -1390,7 +1392,7 @@ const AFFIX_STYLE={
 function dungeonMods(dgn){ return dgn&&dgn.shard&&Array.isArray(dgn.shard.mods) ? dgn.shard.mods : []; }
 function hasAffix(dgn,name){ return dungeonMods(dgn).includes(name); }
 // dark, desaturated cousins of the rank gate colors — every rank gets its own base atmosphere
-const DUNGEON_RANK_MOOD=[0x081006,0x060e15,0x130d04,0x130704,0x120510];
+const DUNGEON_RANK_MOOD=[0x081006,0x060e15,0x130d04,0x130704,0x120510,0x0b0618];
 const DUNGEON_THEME_MOOD={
   mine:0x100b05,crypt:0x050d13,overgrown:0x071108,catacombs:0x100c0a,blighted:0x0a1407,vault:0x07101a,
   forge:0x1b0903,keep:0x100b07,sanctum:0x0a1216,void:0x070510,frozen:0x07121a,storm:0x07101c,
@@ -1516,7 +1518,7 @@ function addVariantRoomDecor(dgn,rm,index,floor,top){
   }
 }
 function addBossArenaIdentityDecor(dgn,rm,floor,top){
-  const arena=rm&&rm.bossArena, rank=Math.max(0,Math.min(4,(dgn&&dgn.rank)|0));
+  const arena=rm&&rm.bossArena, rank=Math.max(0,Math.min(5,(dgn&&dgn.rank)|0));
   if(!arena) return;
   const x=rm.x,z=rm.z,rx=rm.rx||rm.r||6,rz=rm.rz||rm.r||6;
   const colors=[0xff9b4a,0x8ed7ff,0xffd166,0x70e000,0xff4d8d], col=colors[rank]||0xff5a3a;

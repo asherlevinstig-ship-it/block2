@@ -70,13 +70,13 @@ export function rankPromotionDetails(message) {
   const rank = Math.max(0, Math.min(5, (message && message.rank) | 0));
   if (!message || rank <= Math.max(0, (message.fromRank | 0))) return null;
   const letter = 'EDCBAS'[rank];
-  const gateRank = Math.max(0, Math.min(4, message.gateRank | 0));
+  const gateRank = Math.max(0, Math.min(5, message.gateRank | 0));
   const nextRankLevel = Math.max(0, message.nextRankLevel | 0);
   return {
     rank,
     letter,
     title: `${letter}-RANK HUNTER`,
-    gateAccess: `${'EDCBA'[gateRank]}-RANK GATES`,
+    gateAccess: `${'EDCBAS'[gateRank]}-RANK GATES`,
     level: Math.max(1, message.level | 0),
     rankLevel: Math.max(1, Math.min(rank >= 5 ? 10 : 10, Math.max(1, (message.level | 0) - ([1,11,21,31,41,51][rank] || 1) + 1))),
     statPoints: Math.max(0, message.statPoints | 0),
@@ -154,7 +154,8 @@ export function createOnboardingUI(deps) {
     if (focus === 'c_rank_specialization') return { label: 'C-rank Specialization', text: 'Choose one permanent specialization for your combat path.', target: HUB.guardian };
     if (focus === 'b_rank_pressure') return { label: 'Gate Pressure', text: 'Contain Gate breaches, clear higher-rank Gates, and use Road Warden or Guild work to stabilize the B-rank climb.', target: HUB.guild };
     if (focus === 'a_rank_climb') return { label: 'A-rank Climb', text: 'B-rank is cleared. Earn Hunter XP through B-rank Gates, quests, events, and regional threats.', target: HUB.guild };
-    if (focus === 's_rank_climb') return { label: 'S-rank Climb', text: 'A-rank is cleared. Earn Hunter XP through A-rank Gates, events, quests, and high-risk regional threats.', target: HUB.guild };
+    if (focus === 's_rank_climb') return { label: 'S-rank Ascension', text: 'Reach Level 51, stabilize Road Safety, forge a complete Legendary kit, then challenge the final S-rank Gate.', target: HUB.guild };
+    if (focus === 's_rank_complete') return { label: 'S-rank Complete', text: 'The final Gate is cleared. Repeat S-rank mastery runs, help other hunters, or climb toward Deity.', target: HUB.guild };
     if (focus === 'next_adventurer_contract') return { label: 'Guild Contracts', text: 'Visit the Guild Hall and take your next regional contract', target: HUB.guild };
     return null;
   }
@@ -273,7 +274,7 @@ export function createOnboardingUI(deps) {
 
   function showFirstPromotion() {
     const focus = getFocus();
-    if (!['first_promotion_job','first_promotion_contract','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','a_rank_climb','s_rank_climb','next_adventurer_contract'].includes(focus)) return false;
+    if (!['first_promotion_job','first_promotion_contract','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','a_rank_climb','s_rank_climb','s_rank_complete','next_adventurer_contract'].includes(focus)) return false;
     if (!rewardWin || !rewardPanel || firstPromotionSeen || firstPromotionShown) return false;
     firstPromotionShown = true;
     const hasKey = countItem(I.SOLO_KEY_D) > 0;

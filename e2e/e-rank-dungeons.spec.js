@@ -28,8 +28,11 @@ for (const [dungeonId, signatureState, bossStyle, bossName] of VARIANTS) {
     });
 
     await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareERankDungeon', dungeonId: id, requestId: 'prepare' }), dungeonId);
-    await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.dungeonId === id), dungeonId)).toBeTruthy();
-    const gate = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.dungeonId === id), dungeonId);
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult))
+      .toMatchObject({ action: 'prepareERankDungeon', requestId: 'prepare', ok: true, dungeonId });
+    const gateId = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult.id);
+    await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.some(g => g.id === id), gateId)).toBe(true);
+    const gate = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.id === id), gateId);
     expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gate.id)).toBe(gate.id);
     await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gate.id);
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gate.id);

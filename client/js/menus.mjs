@@ -1865,7 +1865,7 @@ function applyDungeonStatus(m){
   const nextBoss=normalizeDungeonBossStatus(m.boss);
   dungeon.status={
     id:m.id||'',
-    rank:Math.max(0,Math.min(4,m.rank|0)),
+    rank:Math.max(0,Math.min(5,m.rank|0)),
     kind:m.kind||dungeon.kind||'public',
     party:Array.isArray(m.party)?m.party.slice(0,8):[],
     totalPlayers:Math.max(0,m.totalPlayers|0),
@@ -3058,16 +3058,18 @@ const GATE_READINESS_REQUIREMENTS=[
   {weapon:4,armor:4,food:4,tool:4,health:.80},
   {weapon:4,weaponPlus:1,armor:4,food:5,tool:4,health:.85},
   {weapon:4,weaponPlus:2,armor:5,food:6,tool:4,health:.90},
+  {weapon:5,armor:5,food:8,tool:4,health:.95},
 ];
-const GATE_DIFFICULTIES=['Initiate','Dangerous','Severe','Extreme','Cataclysmic'];
+const GATE_DIFFICULTIES=['Initiate','Dangerous','Severe','Extreme','Cataclysmic','Ascendant'];
 const GATE_LEGENDARY_WEAPONS=new Set([136,138,160,161,162,163,164,165,166,167,168,169,170,171]);
 function gateReadinessHints(req){
+  if(req.weapon===5)return {weapon:'Forge and carry any Legendary weapon at the Aegis Guardian. Legendary weapons cost 1-3 Legendary Tokens.',armor:'Equip Legendary Aegis Armor. It costs 2 Legendary Tokens at the Aegis Guardian.',food:'Bring any '+req.food+' food items; Feast Platters and Golden Broth provide the strongest recovery.',tool:'Bring a Diamond pick, shovel, or hoe above '+Math.round(req.health*100)+'% durability. Repair it at Tobin\'s forge.'};
   if(req.weapon===3)return {weapon:'Buy an Iron Sword at Bram\'s Market stall for 55 gold, or craft an iron-tier sword or axe.',armor:'Craft Iron Armor with 8 Iron Ingots at a crafting table, then equip it. Chainmail or Arcweave also qualify.',food:'Buy Cooked Meat from Greta at the Tavern for 8 gold each, or bring any three food items.',tool:'Buy an Iron Pick at Bram\'s Market stall for 60 gold, or repair an iron pick, shovel, or hoe to at least 75%.'};
   if(req.weapon===4)return {weapon:req.weaponPlus?'Take a Diamond Sword to Tobin\'s forge and upgrade it to +'+req.weaponPlus+'. +1 costs 1 Diamond and 130 gold; +2 costs another 2 Diamonds and 190 gold.':'Craft a Diamond Sword or Diamond Axe with Diamonds and Sticks, or earn equivalent Gate gear.',armor:req.armor>=5?'Forge Legendary Aegis Armor with 2 Legendary Tokens at the Aegis Guardian. Your first B-rank clear awards both tokens.':'Craft Diamond Armor with 8 Diamonds, then equip it. Stormglass or Stormweave also qualify.',food:'Bring any '+req.food+' food items; Greta sells Cooked Meat at the Tavern.',tool:'Craft a Diamond pick, shovel, or hoe and keep it above '+Math.round(req.health*100)+'% durability.'};
   return {weapon:'Carry a weapon that meets this rank\'s tier and upgrade requirement.',armor:'Equip the listed armor tier or better.',food:'Bring any '+req.food+' food items.',tool:'Bring the listed utility tool above '+Math.round(req.health*100)+'% durability.'};
 }
 function gateReadinessLocal(rank){
-  rank=Math.max(0,Math.min(4,rank|0));
+  rank=Math.max(0,Math.min(5,rank|0));
   const req=GATE_READINESS_REQUIREMENTS[rank],hints=gateReadinessHints(req),tierName=['Basic','Wood','Stone','Iron','Diamond','Legendary'];
   const stacks=inv.filter(Boolean),weapons=stacks.filter(s=>(ITEMS[s.id]&&ITEMS[s.id].tool&&['sword','axe'].includes(ITEMS[s.id].tool.cls))||GATE_LEGENDARY_WEAPONS.has(s.id));
   const weaponOk=weapons.some(s=>GATE_LEGENDARY_WEAPONS.has(s.id)||((ITEMS[s.id].tool.tier|0)>=req.weapon&&(s.plus|0)>=(req.weaponPlus||0)));
@@ -3084,17 +3086,19 @@ function gateReadinessLocal(rank){
   if(rank===2&&progressionFocus==='c_rank_climb')checks.push({id:'key',label:'C-rank Gate key',done:countItem(I.SOLO_KEY_C)>0||countItem(I.TEAM_KEY_C)>0,hint:'Your first D-rank clear awards a Solo C-rank Gate Key; replacements cost 240 gold at Bram\'s Market stall.'});
   if(rank===3&&progressionFocus==='b_rank_pressure')checks.push({id:'key',label:'B-rank Gate key',done:countItem(I.SOLO_KEY_B)>0||countItem(I.TEAM_KEY_B)>0,hint:'Your first C-rank clear awards a Solo B-rank Gate Key; replacements cost 460 gold at Bram\'s Market stall.'});
   if(rank===4&&progressionFocus==='a_rank_climb')checks.push({id:'key',label:'A-rank Gate key',done:countItem(I.SOLO_KEY_A)>0||countItem(I.TEAM_KEY_A)>0,hint:'Your first B-rank clear awards a Solo A-rank Gate Key; replacements cost 800 gold at Bram\'s Market stall.'});
+  if(rank===5&&progressionFocus==='s_rank_climb')checks.push({id:'key',label:'S-rank Gate key',done:countItem(I.SOLO_KEY_S)>0||countItem(I.TEAM_KEY_S)>0,hint:'Your first A-rank clear awards a Solo S-rank Gate Key; replacements cost 1,350 gold at Bram\'s Market stall.'});
   const score=checks.filter(c=>c.done).length;
   const missing=checks.filter(c=>!c.done);
   return {rank,difficulty:GATE_DIFFICULTIES[rank],ready:score===checks.length,status:score===checks.length?'READY':'UNDERPREPARED',score,total:checks.length,checks,missing,next:missing[0]||null};
 }
 function nextGatePrepRank(){
-  if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(4,quest.gateRank|0));
+  if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(5,quest.gateRank|0));
   if(progressionFocus==='first_d_gate')return 1;
   if(progressionFocus==='c_rank_climb')return 2;
   if(progressionFocus==='b_rank_pressure')return 3;
   if(progressionFocus==='a_rank_climb')return 4;
-  if(S&&S.lvl>=3)return Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));
+  if(progressionFocus==='s_rank_climb')return 5;
+  if(S&&S.lvl>=3)return Math.max(0,Math.min(5,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));
   return -1;
 }
 function gatePrepLoopCard(){
@@ -3112,7 +3116,7 @@ function bindGatePrepActions(root=qpanelEl){
   });
 }
 function openGatePrepUI(rank=nextGatePrepRank()){
-  rank=Math.max(0,Math.min(4,rank|0));
+  rank=Math.max(0,Math.min(5,rank|0));
   if(uiOpen)closeUI(false);openQWin('questlog');qpanelEl.innerHTML='';
   const r=gateReadinessLocal(rank),preview=gatePreviewLocal(rank,'team'),rankName=RANKS[rank]&&RANKS[rank].n||'?';
   const h=document.createElement('h2');h.textContent='GATE PREP';qpanelEl.appendChild(h);
@@ -3141,9 +3145,9 @@ function openGatePrepUI(rank=nextGatePrepRank()){
   qpanelEl.appendChild(row);
 }
 function gatePreviewLocal(rank,kind){
-  rank=Math.max(0,Math.min(4,rank|0));
-  const levels=[[1,10],[11,20],[21,30],[31,40],[41,50]][rank];
-  const party=kind==='solo'?[1,1]:[[1,1],[1,2],[2,3],[3,4],[4,4]][rank];
+  rank=Math.max(0,Math.min(5,rank|0));
+  const levels=[[1,10],[11,20],[21,30],[31,40],[41,50],[51,60]][rank];
+  const party=kind==='solo'?[1,1]:[[1,1],[1,2],[2,3],[3,4],[4,4],[4,4]][rank];
   return {enemyLevels:levels,recommendedParty:party};
 }
 function openDungeonLobbyUI(){
@@ -3151,7 +3155,7 @@ function openDungeonLobbyUI(){
   openQWin('dialog'); dungeonLobbyOpen=true; qpanelEl.innerHTML='';
   qwinEl.classList.add('gate-lobby-open');
   qpanelEl.classList.add('gate-lobby-panel');
-  const ri=Math.max(0,Math.min(4,dungeonLobbyState.rank|0));
+  const ri=Math.max(0,Math.min(5,dungeonLobbyState.rank|0));
   const h=document.createElement('h2');h.textContent='GATE LOBBY';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.innerHTML=RANKS[ri].n+'-RANK '+gateKindLabel(dungeonLobbyState.kind||'public').toUpperCase()+' GATE &middot; READY '+((dungeonLobbyState.readyCount|0)||0)+'/'+((dungeonLobbyState.needed|0)||0);qpanelEl.appendChild(sub);
   const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='Gather at the portal, inspect your loadout, then step through together. Readiness advice never blocks entry; the gate opens when every hunter confirms.<br><br><b>Boss clear reward: '+Math.max(0,dungeonLobbyState.rewardXp|0).toLocaleString('en-US')+' Hunter XP</b> plus gold, materials, and key drops.';
@@ -3215,7 +3219,7 @@ function openDungeonLobbyUI(){
   if(!listings.length){const empty=document.createElement('p');empty.className='qtext';empty.textContent=dungeonLobbyState.advertised?'Your party is advertised to nearby hunters.':'No nearby parties are advertising right now.';qpanelEl.appendChild(empty);}
   for(const listing of listings){
     const match=document.createElement('div');match.className='shoprow';
-    match.innerHTML='<span><b style="color:#f2c75c">'+escHTML(listing.leaderName||'Hunter')+'</b> · '+escHTML(listing.leaderRole||'Striker')+'<br><small>'+escHTML(RANKS[Math.max(0,Math.min(4,listing.rank|0))].n)+'-Rank '+escHTML(gateKindLabel(listing.kind))+' · '+(listing.members|0)+'/'+(listing.capacity|0)+' hunters · '+(listing.distance|0)+'m<br><span style="color:'+(listing.readiness==='READY'?'#9be76d':'#ffad66')+'">'+escHTML(listing.readiness||'UNDERPREPARED')+' '+(listing.readinessScore|0)+'/'+(listing.readinessTotal|0)+'</span></small></span>';
+    match.innerHTML='<span><b style="color:#f2c75c">'+escHTML(listing.leaderName||'Hunter')+'</b> · '+escHTML(listing.leaderRole||'Striker')+'<br><small>'+escHTML(RANKS[Math.max(0,Math.min(5,listing.rank|0))].n)+'-Rank '+escHTML(gateKindLabel(listing.kind))+' · '+(listing.members|0)+'/'+(listing.capacity|0)+' hunters · '+(listing.distance|0)+'m<br><span style="color:'+(listing.readiness==='READY'?'#9be76d':'#ffad66')+'">'+escHTML(listing.readiness||'UNDERPREPARED')+' '+(listing.readinessScore|0)+'/'+(listing.readinessTotal|0)+'</span></small></span>';
     const partyLine=[listing.partyStatus||'PARTY CHECK'].concat(Array.isArray(listing.partyStrengths)?listing.partyStrengths:[],Array.isArray(listing.partyWarnings)?listing.partyWarnings:[]).filter(Boolean).join(' - ');
     if(partyLine)match.querySelector('small').insertAdjacentHTML('beforeend','<br>'+escHTML(partyLine));
     match.appendChild(qBtn('JOIN',()=>requestDungeonMatchmakingJoin(listing.gateId)));
@@ -3322,7 +3326,7 @@ function armoryPulse(label,ready=false){
 function armoryCheckRow(c){
   return '<div class="objective-line '+(c.done?'done':'warn')+'"><span>'+(c.done?'✓':'!')+'</span><div class="obody"><b>'+escHTML(c.label)+'</b><small>'+escHTML(c.done?'Ready':c.hint||'Needs attention')+'</small></div></div>';
 }
-function openFellowshipArmoryUI(rank=Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0))){
+function openFellowshipArmoryUI(rank=Math.max(0,Math.min(5,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0))){
   if(uiOpen)closeUI(false);openQWin('questlog');qpanelEl.innerHTML='';
   const data=armoryPrepSummary(rank),r=data.readiness;
   armoryPulse(r.ready?('READY FOR '+RANKS[rank].n+'-RANK'):('CHECK '+RANKS[rank].n+'-RANK'),r.ready);
@@ -3343,7 +3347,7 @@ function openFellowshipArmoryUI(rank=Math.max(0,Math.min(4,localPlayerHunterRank
   qpanelEl.appendChild(cards);
   if(r.next){const next=document.createElement('p');next.className='qtext';next.innerHTML='<b>Next fix:</b> '+escHTML(r.next.label)+'<br>'+escHTML(r.next.hint||'Improve this before your next run.');qpanelEl.appendChild(next);}
   const rankRow=document.createElement('div');rankRow.className='qrow';
-  for(let i=0;i<=Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));i++)rankRow.appendChild(qBtn(RANKS[i].n+' CHECK',()=>openFellowshipArmoryUI(i),i===rank));
+  for(let i=0;i<=Math.max(0,Math.min(5,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));i++)rankRow.appendChild(qBtn(RANKS[i].n+' CHECK',()=>openFellowshipArmoryUI(i),i===rank));
   qpanelEl.appendChild(rankRow);
   const row=document.createElement('div');row.className='qrow';
   row.appendChild(qBtn('INSPECT GEAR',()=>{gearInspectSlot=data.weapon?data.weapon.slot:(data.armor?-2:-1);closeQWin(false);openUI('inv');}));
@@ -3364,7 +3368,7 @@ function pantryFoodStacks(){
   }
   return rows.sort((a,b)=>(b.count-a.count)||(b.score-a.score));
 }
-function pantrySummary(rank=Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0))){
+function pantrySummary(rank=Math.max(0,Math.min(5,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0))){
   const readiness=gateReadinessLocal(rank);
   const foodNeed=(GATE_READINESS_REQUIREMENTS[rank]&&GATE_READINESS_REQUIREMENTS[rank].food)||1;
   const foods=pantryFoodStacks();
@@ -3387,7 +3391,7 @@ function pantryPulse(label='RATIONS CHECKED',ready=false){
 function pantryCheckRow(c){
   return '<div class="objective-line '+(c.done?'done':'warn')+'"><span>'+(c.done?'✓':'!')+'</span><div class="obody"><b>'+escHTML(c.label)+'</b><small>'+escHTML(c.done?'Covered':c.hint||'Needs attention')+'</small></div></div>';
 }
-function openFellowshipPantryUI(rank=Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0))){
+function openFellowshipPantryUI(rank=Math.max(0,Math.min(5,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0))){
   if(uiOpen)closeUI(false);openQWin('questlog');qpanelEl.innerHTML='';
   const data=pantrySummary(rank);
   pantryPulse(data.ready?('RATIONS READY'):('PACK RATIONS'),data.ready);
@@ -3411,7 +3415,7 @@ function openFellowshipPantryUI(rank=Math.max(0,Math.min(4,localPlayerHunterRank
   }
   if(data.next){const next=document.createElement('p');next.className='qtext';next.innerHTML='<b>Next fix:</b> '+escHTML(data.next.label)+'<br>'+escHTML(data.next.hint);qpanelEl.appendChild(next);}
   const rankRow=document.createElement('div');rankRow.className='qrow';
-  for(let i=0;i<=Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));i++)rankRow.appendChild(qBtn(RANKS[i].n+' FOOD',()=>openFellowshipPantryUI(i),i===rank));
+  for(let i=0;i<=Math.max(0,Math.min(5,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));i++)rankRow.appendChild(qBtn(RANKS[i].n+' FOOD',()=>openFellowshipPantryUI(i),i===rank));
   qpanelEl.appendChild(rankRow);
   const row=document.createElement('div');row.className='qrow';
   row.appendChild(qBtn('FOOD RECIPES',()=>openCraftingFromNpc('food')));
@@ -3927,7 +3931,8 @@ function recoveryHubInfo(){
     ? {title:'Gate Pressure',status:'Contain Gate breaches, clear higher-rank Gates, and take Road Warden work from the Guild Hall.',where:'Guild Hall / Gate Prep',button:'OPEN GUILD BOARD',action:()=>openRegionalContractsUI()}
     : {title:'Gate Pressure',status:'Reach level 31, contain Gate breaches, raise Road Safety to 65/100, finish the B-rank prep checklist, and clear a B-rank Gate.',where:'Guild Board / Gate Prep',button:'B PREP CHECK',action:()=>openGatePrepUI(3)};
   if(progressionFocus==='a_rank_climb')return {title:'A-rank Climb',status:'Reach level 41, raise Road Safety to 75/100, forge Legendary Armor, finish the A-rank prep checklist, and clear an A-rank Gate.',where:'Guild Board / Gate Prep',button:'A PREP CHECK',action:()=>openGatePrepUI(4)};
-  if(progressionFocus==='s_rank_climb')return {title:'S-rank Climb',status:'A-rank cleared. Reach level 51 through A-rank Gates, quests, events, and high-risk regional threats.',where:'Quest Log',button:'OPEN QUEST LOG',action:()=>openQuestLogUI()};
+  if(progressionFocus==='s_rank_climb')return {title:'S-rank Ascension',status:'Reach level 51, raise Road Safety to 90/100, equip a Legendary weapon and armor, complete the S-rank prep check, and clear the final Gate.',where:'Guild Board / Gate Prep',button:'S PREP CHECK',action:()=>openGatePrepUI(5)};
+  if(progressionFocus==='s_rank_complete')return {title:'S-rank Complete',status:'The final Gate is cleared. Repeat S-rank Gates, pursue mastery clears, or climb toward Deity at Level 60.',where:'Quest Log / Skyport',button:'OPEN QUEST LOG',action:()=>openQuestLogUI()};
   const craft=objectiveTrackerCraftAction('what_next');
   if(craft)return {title:'Crafting Recovery',status:'Open the next useful recipe. Missing materials will show with a concrete gather route.',where:'Crafting menu',button:craft.label,action:()=>activateObjectiveCraftShortcut(craft.outputId,craft.kind)};
   return null;
@@ -4113,7 +4118,7 @@ function questLogCardsHTML(serverCards,historyOnly){
   cards.push(safeQuestLogCard('What Next?',whatNextQuestLogCard));
   if(!serverCards)cards.push(safeQuestLogCard('Story Quests',storyQuestLogCard));
   if(onboardingActive||quest||progressionFocus==='first_road_ready'||progressionFocus==='first_e_gate')cards.push(safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard));
-  if(!early||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'||(quest&&quest.type==='gate'))cards.push(safeQuestLogCard('Gate Prep',gatePrepLoopCard));
+  if(!early||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'||progressionFocus==='s_rank_climb'||(quest&&quest.type==='gate'))cards.push(safeQuestLogCard('Gate Prep',gatePrepLoopCard));
   if(!early||S.lvl>=3)cards.push(safeQuestLogCard('First Style',playerStyleGuideQuestLogCard));
   if(!early)cards.push(safeQuestLogCard('Aegis Trial',aegisQuestLogCard));
   return cards.filter(Boolean).join('');
@@ -6864,8 +6869,8 @@ function openQuestUI(v){
 const SHOP_BUY=[
   [B.TORCH,8,10],[B.PLANKS,16,8],[B.COBBLE,16,8],[I.COAL,6,15],[I.WHEAT_SEEDS,8,6],[B.GLASS,8,12],
   [B.BED,1,20],[B.EGG_INSULATOR,1,80],[I.IRON_INGOT,3,30],[I.IRON_PICK,1,60],[I.IRON_SWORD,1,55],[I.DIAMOND,1,120],
-  [I.SOLO_KEY_E,1,45],[I.SOLO_KEY_D,1,110],[I.SOLO_KEY_C,1,240],[I.SOLO_KEY_B,1,460],[I.SOLO_KEY_A,1,800],
-  [I.TEAM_KEY_E,1,70],[I.TEAM_KEY_D,1,165],[I.TEAM_KEY_C,1,350],[I.TEAM_KEY_B,1,650],[I.TEAM_KEY_A,1,1100],
+  [I.SOLO_KEY_E,1,45],[I.SOLO_KEY_D,1,110],[I.SOLO_KEY_C,1,240],[I.SOLO_KEY_B,1,460],[I.SOLO_KEY_A,1,800],[I.SOLO_KEY_S,1,1350],
+  [I.TEAM_KEY_E,1,70],[I.TEAM_KEY_D,1,165],[I.TEAM_KEY_C,1,350],[I.TEAM_KEY_B,1,650],[I.TEAM_KEY_A,1,1100],[I.TEAM_KEY_S,1,1800],
 ];
 const SHOP_SELL=[[I.COAL,1,2],[I.IRON_INGOT,1,8],[I.DIAMOND,1,35],[B.LOG,1,1],[B.IRON_ORE,1,5]];
 const ROAD_MERCHANT_BUY=[[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[B.TORCH,12,14],[I.WINDSEED,2,22],[I.HEARTWOOD_RESIN,2,22],[I.SUNSHARD,2,22],[I.MESA_AMBER,2,22],[I.FROST_CRYSTAL,2,22],[I.MIRE_BLOOM,2,22],[I.RAINWAKE_PETAL,1,18],[I.STORMGLASS,1,26],[I.SOLAR_GLYPH,1,24]];
@@ -7506,8 +7511,8 @@ const LEGENDARY_CRAFTS=[
   {id:I.LEVIATHAN_TRIDENT, cost:3, hint:'Throws storm lightning through grouped targets.'},
   {id:I.VOID_ANCHOR, cost:3, hint:'Drops an anti-mobility anchor zone.'},
 ];
-const SOLO_KEY_IDS=[I.SOLO_KEY_E,I.SOLO_KEY_D,I.SOLO_KEY_C,I.SOLO_KEY_B,I.SOLO_KEY_A];
-const TEAM_KEY_IDS=[I.TEAM_KEY_E,I.TEAM_KEY_D,I.TEAM_KEY_C,I.TEAM_KEY_B,I.TEAM_KEY_A];
+const SOLO_KEY_IDS=[I.SOLO_KEY_E,I.SOLO_KEY_D,I.SOLO_KEY_C,I.SOLO_KEY_B,I.SOLO_KEY_A,I.SOLO_KEY_S];
+const TEAM_KEY_IDS=[I.TEAM_KEY_E,I.TEAM_KEY_D,I.TEAM_KEY_C,I.TEAM_KEY_B,I.TEAM_KEY_A,I.TEAM_KEY_S];
 const KEY_ROWS=[
 "................",
 "......kkkk......",

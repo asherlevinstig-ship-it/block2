@@ -1184,9 +1184,9 @@ class CombatMixin {
     this.recordMineProgress(client, blockId);
   }
   rollBossKeyDrops(rank) {
-    const next = Math.min(4, (rank | 0) + 1);
-    const items = [{ id: keyForRank('solo', next), count: 1 }];
-    if (Math.random() < KEY_LOOT.bossTeamByRank[Math.max(0, Math.min(4, rank | 0))]) items.push({ id: keyForRank('team', next), count: 1 });
+    const ri = Math.max(0, Math.min(5, rank | 0));
+    const items = ri < 5 ? [{ id: keyForRank('solo', ri + 1), count: 1 }] : [];
+    if (Math.random() < KEY_LOOT.bossTeamByRank[ri]) items.push({ id: keyForRank('team', Math.min(5, ri + 1)), count: 1 });
     return items;
   }
   rollOverworldKeyDrops(ring = 0) {
@@ -1225,8 +1225,8 @@ class CombatMixin {
   markGateCleared(client, rank) {
     const rec = this.profileFor(client);
     if (!rec) return null;
-    const ri = Math.max(0, Math.min(4, rank | 0));
-    const before = Math.max(-1, Math.min(4, rec.prof.highestGateRankCleared | 0));
+    const ri = Math.max(0, Math.min(5, rank | 0));
+    const before = Math.max(-1, Math.min(5, rec.prof.highestGateRankCleared | 0));
     if (!this.worldProgress) this.worldProgress = { highestGateRankCleared: -1 };
     if ((this.worldProgress.highestGateRankCleared | 0) < ri) {
       this.worldProgress.highestGateRankCleared = ri;
@@ -1244,25 +1244,25 @@ class CombatMixin {
       this.dirtyPlayers.add(rec.token);
       this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
     }
-    const after = Math.max(-1, Math.min(4, rec.prof.highestGateRankCleared | 0));
+    const after = Math.max(-1, Math.min(5, rec.prof.highestGateRankCleared | 0));
     const availableRank = this.maxUnlockedGateRankForProfile(rec.prof);
     this.recordGateProgress(client, ri);
     return {
       clearedRank: ri,
       highestGateRankCleared: after,
       newClear: before < ri,
-      nextRank: ri < 4 ? ri + 1 : null,
-      nextRankUnlocked: ri < 4 && availableRank >= ri + 1,
+      nextRank: ri < 5 ? ri + 1 : null,
+      nextRankUnlocked: ri < 5 && availableRank >= ri + 1,
       availableRank,
     };
   }
   dungeonRewardProgress(rank, clearResult) {
-    const ri = Math.max(0, Math.min(4, rank | 0));
+    const ri = Math.max(0, Math.min(5, rank | 0));
     return {
       clearedRank: ri,
       highestGateRankCleared: clearResult ? clearResult.highestGateRankCleared : null,
       newClear: !!(clearResult && clearResult.newClear),
-      nextRank: ri < 4 ? ri + 1 : null,
+      nextRank: ri < 5 ? ri + 1 : null,
       nextRankUnlocked: !!(clearResult && clearResult.nextRankUnlocked),
       availableRank: clearResult ? clearResult.availableRank : null,
     };

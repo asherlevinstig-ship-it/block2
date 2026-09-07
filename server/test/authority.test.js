@@ -63,6 +63,7 @@ const {
   handOff, takeHandoff,
   hostGate, unhostGate,
   recordGateBreach, drainGateBreaches,
+  progressionGateRank,
 } = require('../rooms/dungeon-handoff');
 const { ADMISSION_TTL_MS, issueDungeonAdmission, peekDungeonAdmission, claimDungeonAdmission, clearDungeonAdmissions } = require('../rooms/dungeon-admission');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
@@ -4473,10 +4474,10 @@ test('server lightning chains to nearby mobs and roots them with stun', () => {
 
 test('stored profiles persist and clamp highest cleared gate rank', () => {
   assert.equal(defaultProfile().highestGateRankCleared, -1);
-  assert.equal(sanitizeProfile({ name: 'A', highestGateRankCleared: 99 }).highestGateRankCleared, 4);
+  assert.equal(sanitizeProfile({ name: 'A', highestGateRankCleared: 99 }).highestGateRankCleared, 5);
   assert.equal(sanitizeProfile({ name: 'A', highestGateRankCleared: -9 }).highestGateRankCleared, -1);
   assert.deepEqual(sanitizeWorldProgress({ highestGateRankCleared: 99, roadSafety: 140, roadSafetyUpdatedAt: -4 }), {
-    highestGateRankCleared: 4, roadSafety: 100, roadSafetyUpdatedAt: 0, cropKinds: {},
+    highestGateRankCleared: 5, roadSafety: 100, roadSafetyUpdatedAt: 0, cropKinds: {},
   });
 });
 
@@ -9586,8 +9587,9 @@ test('first clear of a rank grants a one-time material leg-up (E-clear pulls pro
   assert.ok(c.some(it => it.id === I.IRON_INGOT && it.count > 4), 'higher ranks scale the material leg-up');
   const b = room.firstClearBonusItems(3, { newClear: true });
   assert.ok(b.some(it => it.id === I.LEGEND_TOKEN && it.count === 2), 'first B clear guarantees the tokens needed for A-rank armor prep');
-  // clearing the top rank (A = 4) has no rank above it, so no bonus
-  assert.deepEqual(room.firstClearBonusItems(4, { newClear: true }), []);
+  const a = room.firstClearBonusItems(4, { newClear: true });
+  assert.ok(a.some(it => it.id === I.LEGEND_TOKEN && it.count === 3), 'first A clear funds a Legendary S-rank weapon');
+  assert.deepEqual(room.firstClearBonusItems(5, { newClear: true }), [], 'S clear has no next-rank preparation bonus');
 });
 
 test('ordinary bosses award a rank-matched shard while shard bosses award no replacement shard', () => {
@@ -9780,7 +9782,7 @@ test('team persistence sanitizes records and explicit leave removes membership',
     name: 'Boss Team',
     leader: 'leader_token_123',
     members: ['leader_token_123', 'member_token_123'],
-    highestGateRankCleared: 4,
+    highestGateRankCleared: 5,
     private: false,
     lfg: false,
     invites: [],
@@ -10024,6 +10026,15 @@ test('a first D-rank spirit restores the promised public Gate after choosing tow
   room.handleQuitDungeonSpirit(client);
   assert.deepEqual(ensured, [1]);
   assert.equal(room.instances.g1, undefined);
+});
+
+test('failed progression Gates map every active climb to the same-rank retry', () => {
+  assert.deepEqual([
+    'first_e_gate', 'first_d_gate', 'c_rank_climb',
+    'b_rank_pressure', 'a_rank_climb', 's_rank_climb',
+  ].map(progressionGateRank), [0, 1, 2, 3, 4, 5]);
+  assert.equal(progressionGateRank('s_rank_complete'), undefined);
+  assert.equal(progressionGateRank(''), undefined);
 });
 
 test('team dungeon spirits stay until each player chooses to leave', () => {
@@ -11135,7 +11146,7 @@ test('public gate availability comes from online Hunter XP rank, not clear recor
   seedPlayer(room, fresh, { token: 'fresh_token_123', lvl: 99, highestGateRankCleared: -1 });
   seedPlayer(room, veteran, { token: 'veteran_token_123', lvl: 1, highestGateRankCleared: 2 });
 
-  assert.equal(room.maxUnlockedPublicRank(), 4);
+  assert.equal(room.maxUnlockedPublicRank(), 5);
 
   const emptyRoom = makeRoom();
   emptyRoom.worldProgress.highestGateRankCleared = 3;
@@ -11143,10 +11154,11 @@ test('public gate availability comes from online Hunter XP rank, not clear recor
 });
 
 test('ranked dungeon pools select stable canonical content ids', () => {
-  assert.equal(DUNGEON_POOLS.length, 5);
+  assert.equal(DUNGEON_POOLS.length, 6);
   assert.ok(DUNGEON_POOLS.every(pool => pool.length >= 3));
   assert.equal(dungeonIdForGate(0, 0), 'abandoned_mine');
   assert.equal(dungeonIdForGate(4, 2), 'worldscar_nexus');
+  assert.equal(dungeonIdForGate(5, 0), 'eternal_court');
   assert.equal(canonicalDungeonId(1, 22, 'blighted_grotto'), 'blighted_grotto');
   assert.equal(canonicalDungeonId(4, 0, 'abandoned_mine'), 'monarchs_tomb');
 });
@@ -11176,9 +11188,9 @@ test('gate persistence sanitizes active gate metadata', () => {
     g9: {
       id: 'g9',
       kind: 'team',
-      rank: 4,
+      rank: 5,
       seed: 0,
-      dungeonId: 'monarchs_tomb',
+      dungeonId: 'eternal_court',
       owner: 'owner_token_123',
       team: 'TeamOne',
       refundItem: 150,
@@ -12497,6 +12509,10 @@ test('regional guild contracts rotate through the requested exploration archetyp
   }
   const aRankOffers = room.regionalContractOffers(0, 41);
   assert.ok(aRankOffers.every(offer => offer.rewardXp >= 713), 'regional work remains meaningful at A-rank');
+  const sRankOffers = room.regionalContractOffers(0, 51);
+  assert.ok(sRankOffers.every((offer, index) => offer.rewardXp > aRankOffers[index].rewardXp), 'S-rank regional work advances the final level climb');
+  assert.ok(sRankOffers.every(offer => offer.rewardItems.some(item => item.id === I.DIAMOND && item.count >= 3)), 'S-rank regional work awards final-tier materials');
+  assert.ok(sRankOffers.every(offer => offer.rewardItems.some(item => item.id === I.LEGEND_TOKEN)), 'S-rank regional work awards a legendary token');
   const bRankOffers = room.regionalContractOffers(0, 31);
   assert.ok(bRankOffers.every((offer, index) => offer.rewardGold > offers[index].rewardGold), 'B-rank regional work increases gold rewards');
   assert.ok(bRankOffers.every(offer => offer.rewardItems.some(item => item.id === I.DIAMOND)), 'B-rank regional work adds rank-appropriate materials');

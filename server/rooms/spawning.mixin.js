@@ -317,7 +317,7 @@ class SpawningMixin {
     meta.stateT = stateT * haste;
     if (meta.layeredNext) {
       meta.forcePat = meta.layeredNext;
-      meta.layeredNext = '';
+      meta.layeredNext = Array.isArray(meta.layeredQueue) && meta.layeredQueue.length ? meta.layeredQueue.shift() : '';
       meta.gcd = Math.min(gcd * haste, .55 * haste);
     } else {
       meta.gcd = gcd * haste;
@@ -325,7 +325,7 @@ class SpawningMixin {
   }
 
   bossMaybeLayer(meta, pat) {
-    const rank = Math.max(0, Math.min(4, meta.rank | 0));
+    const rank = Math.max(0, Math.min(5, meta.rank | 0));
     if (rank < 4 || meta.forcePat || meta.layeredNext) return;
     const follow = {
       volley: 'charge',
@@ -350,7 +350,13 @@ class SpawningMixin {
       rift: 'charge',
       eldritchLeap: 'root',
     }[pat];
-    if (follow && follow !== pat) meta.layeredNext = follow;
+    if (follow && follow !== pat) {
+      meta.layeredNext = follow;
+      if (rank >= 5) {
+        const third = { charge: 'graveRing', slam: 'control', spikes: 'volley', graveRing: 'charge', control: 'spikes', ossuary: 'graveRing' }[follow];
+        meta.layeredQueue = third && third !== follow && third !== pat ? [third] : [];
+      }
+    }
   }
 
   // returns true when the boss consumed its turn (skip shared movement)
@@ -702,7 +708,7 @@ class SpawningMixin {
     // 'chase' (or fresh ''): maybe start a pattern, otherwise fall through to pursuit
     if (st === '') m.state = 'chase';
     if (meta.gcd <= 0 && best) {
-      const rank = Math.max(0, Math.min(4, meta.rank | 0));
+      const rank = Math.max(0, Math.min(5, meta.rank | 0));
       const picks = [];
       if (bd < 6) { picks.push('slam', 'slam'); if (rank >= 2) picks.push('spikes'); }
       if (rank === 0 && m.hp <= m.maxHp * .66 && bd < 9) picks.push('graveRing', 'graveRing');
@@ -724,6 +730,9 @@ class SpawningMixin {
       if (rank >= 4 && meta.bossStyle === 'buried_monarch' && bd < 17) picks.push('buried');
       if (rank >= 4 && meta.bossStyle === 'abyssal_gatekeeper' && bd < 15) picks.push('abyssal');
       if (rank >= 4 && meta.bossStyle === 'rift_monarch' && bd < 18) picks.push('rift');
+      if (rank >= 5 && meta.bossStyle === 'eternal_warden' && bd < 18) picks.push('prior', 'thunder');
+      if (rank >= 5 && meta.bossStyle === 'starforged_titan' && bd < 17) picks.push('cinder', 'rime');
+      if (rank >= 5 && meta.bossStyle === 'ashen_sovereign' && bd < 18) picks.push('rift', 'buried', 'abyssal');
       if (meta.bossStyle === 'eldritch_tree' && bd > 3.5 && bd < 26) picks.push('eldritchLeap', 'eldritchLeap');
       if (meta.bossStyle === 'eldritch_tree' && bd < 18) picks.push('root');
       if (rank >= 3 && bd < 13) picks.push('control');
@@ -744,6 +753,9 @@ class SpawningMixin {
           buried_monarch: ['buried', 'ossuary', 'graveRing', 'slam'],
           abyssal_gatekeeper: ['abyssal', 'regent', 'control', 'slam'],
           rift_monarch: ['rift', 'watcher', 'charge', 'spikes'],
+          eternal_warden: ['prior', 'thunder', 'graveRing', 'control'],
+          starforged_titan: ['cinder', 'rime', 'slam', 'spikes'],
+          ashen_sovereign: ['rift', 'buried', 'abyssal', 'charge'],
           eldritch_tree: ['eldritchLeap', 'root', 'slam', 'charge'],
         };
         const combo = combos[meta.bossStyle];
@@ -1689,7 +1701,7 @@ class SpawningMixin {
   }
 
   ensurePublicGateRank(rank) {
-    const ri = Math.max(0, Math.min(4, rank | 0));
+    const ri = Math.max(0, Math.min(5, rank | 0));
     let gate = null;
     this.state.gates.forEach(g => {
       if (!gate && g && g.active && g.kind === 'public' && (g.rank | 0) === ri) gate = g;
@@ -1729,7 +1741,7 @@ class SpawningMixin {
   }
 
   gateSpawnCandidate(rank) {
-    const band = GATE_DISTANCE_BANDS[Math.max(0, Math.min(4, rank | 0))] || GATE_DISTANCE_BANDS[0];
+    const band = GATE_DISTANCE_BANDS[Math.max(0, Math.min(5, rank | 0))] || GATE_DISTANCE_BANDS[0];
     const d = Math.floor(band.min + Math.random() * (band.max - band.min + 1));
     const angle = Math.random() * Math.PI * 2;
     return {
@@ -1739,7 +1751,7 @@ class SpawningMixin {
   }
 
   spawnGate(forceRank, { announce = true } = {}) {
-    const ri = forceRank == null ? this.maxUnlockedPublicRank() : Math.max(0, Math.min(4, forceRank | 0));
+    const ri = forceRank == null ? this.maxUnlockedPublicRank() : Math.max(0, Math.min(5, forceRank | 0));
     const band = GATE_DISTANCE_BANDS[ri];
     for (let i = 0; i < 80; i++) {
       const pos = this.gateSpawnCandidate(ri);

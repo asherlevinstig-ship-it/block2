@@ -108,6 +108,13 @@ test('Gate readiness scales loadout advice without becoming an entry lock', () =
   }, 4);
   assert.equal(veteran.ready, true);
   assert.equal(veteran.score, veteran.total);
+
+  const ascendant = gateReadinessForProfile({
+    inv: [{ id: 136, count: 1 }, { id: 113, count: 1, dur: 1600 }, { id: 181, count: 8 }],
+    armor: { id: 137, count: 1 },
+  }, 5);
+  assert.equal(ascendant.ready, true);
+  assert.equal(ascendant.score, ascendant.total);
 });
 
 test('Gate encounter previews derive difficulty, boss stats, party size, and rewards from live tuning', () => {
@@ -131,8 +138,15 @@ test('Gate encounter previews derive difficulty, boss stats, party size, and rew
 
   const starter = gateEncounterPreview({ rank: 0, kind: 'public' });
   const apex = gateEncounterPreview({ rank: 4, kind: 'public' });
+  const ascendant = gateEncounterPreview({ rank: 5, kind: 'public', dungeonId: 'eternal_court' });
   assert.ok(starter.boss.traits.includes('E-rank: learn slam, charge, and one safe-zone ring'));
   assert.ok(apex.boss.traits.includes('A/S-rank: layered mechanics chain into follow-up casts'));
+  assert.deepEqual(ascendant.enemyLevels, [51, 60]);
+  assert.deepEqual(ascendant.recommendedParty, [4, 4]);
+  assert.equal(ascendant.difficulty, 'Ascendant');
+  assert.equal(ascendant.boss.name, 'The Eternal Warden');
+  assert.ok(ascendant.boss.traits.includes('Rotating sanctuary judgment'));
+  assert.equal(ascendant.rewards.xp, BOSS_REWARD_BY_RANK[5].xp);
 });
 
 test('weapon sources climb one rank at a time and never skip the early gear path', () => {

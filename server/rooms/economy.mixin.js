@@ -159,7 +159,7 @@ class EconomyMixin {
     const chestId = info.x + ',' + info.y + ',' + info.z;
     const looted = this.gateLootedChests.get(info.space) || new Set();
     if (looted.has(chestId)) return { scope: 'dungeon', owner: '', team: '', slots: new Array(18).fill(null) };
-    const rank = Math.max(0, Math.min(4, inst.rank | 0));
+    const rank = Math.max(0, Math.min(5, inst.rank | 0));
     const a = W.hash2(info.x * 92821 + inst.seed, info.z * 68917 + info.y * 37);
     const b = W.hash2(info.z * 8191 + inst.seed, info.x * 31337 + rank);
     const c = W.hash2(info.x * 7001 + info.z * 313 + inst.seed, rank * 997);

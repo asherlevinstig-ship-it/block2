@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay, resumeAfterReload } = require('./helpers/auth-flow.cjs');
 const { e2eJourney } = require('./helpers/job-contract-flow.cjs');
 
 async function dismissRankUp(page) {
@@ -42,8 +42,8 @@ test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
 });
 
-test('C-rank specialization flows through B and A prep, failure recovery, and persistent clears', async ({ page }) => {
-  test.setTimeout(300_000);
+test('C-rank specialization flows through B, A, and the final S-rank Gate with persistent clears', async ({ page }) => {
+  test.setTimeout(420_000);
   await page.addInitScript(() => {
     localStorage.setItem('bc_introcut', '1');
     localStorage.setItem('bc_gatecut_v1', '1');
@@ -66,13 +66,13 @@ test('C-rank specialization flows through B and A prep, failure recovery, and pe
   expect(climb.checklist.find(c => c.id === 'level').done).toBe(false);
   expect(climb.checklist.find(c => c.id === 'key').done).toBe(true);
 
-  await e2eJourney(page, 'reachCRank');
+  const cPromotion = await e2eJourney(page, 'reachCRank');
   await dismissRankUp(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(21);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ type: 'find_gate' });
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 2))).toBeTruthy();
+  await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.some(g => g.id === id), cPromotion.gateId)).toBe(true);
 
-  const gate = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 2));
+  const gate = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.id === id), cPromotion.gateId);
   await enterGate(page, gate.id);
   await e2eJourney(page, 'defeatCRankBoss');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(2);
@@ -91,9 +91,7 @@ test('C-rank specialization flows through B and A prep, failure recovery, and pe
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.abilitySpec())).toBe('commander');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('b_rank_pressure');
 
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await resumeAfterReload(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.abilitySpec())).toBe('commander');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('b_rank_pressure');
 
@@ -104,7 +102,7 @@ test('C-rank specialization flows through B and A prep, failure recovery, and pe
   })).toMatchObject({ text: expect.stringMatching(/1 Hunter XP to Level 31.*clear a C-rank Gate/), remaining: 1, action: { type: 'guild_contracts', label: 'EARN HUNTER XP' } });
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjectiveHud.lines.length)).toBeLessThanOrEqual(2);
 
-  await e2eJourney(page, 'reachBRank');
+  const bPromotion = await e2eJourney(page, 'reachBRank');
   await dismissRankUp(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(31);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ type: 'guild_contracts', label: 'ROAD WARDEN' });
@@ -115,8 +113,8 @@ test('C-rank specialization flows through B and A prep, failure recovery, and pe
 
   await e2eJourney(page, 'stabilizeBRankRoads');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ type: 'find_gate', label: 'FIND B GATE' });
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 3))).toBeTruthy();
-  const failedGate = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 3));
+  await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.some(g => g.id === id), bPromotion.gateId)).toBe(true);
+  const failedGate = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.id === id), bPromotion.gateId);
   await enterGate(page, failedGate.id);
   await e2eJourney(page, 'failBRankGate');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
@@ -133,9 +131,7 @@ test('C-rank specialization flows through B and A prep, failure recovery, and pe
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
   await dismissGateLoot(page);
 
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await resumeAfterReload(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('a_rank_climb');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(3);
 
@@ -145,7 +141,7 @@ test('C-rank specialization flows through B and A prep, failure recovery, and pe
     return objective && { text: objective.hudText, remaining: objective.progress.required - objective.progress.current, action: objective.action };
   })).toMatchObject({ text: expect.stringMatching(/1 Hunter XP to Level 41.*clear a B-rank Gate/), remaining: 1, action: { type: 'guild_contracts', label: 'EARN HUNTER XP' } });
 
-  await e2eJourney(page, 'reachARank');
+  const aPromotion = await e2eJourney(page, 'reachARank');
   await dismissRankUp(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(41);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ type: 'guild_contracts', label: 'ROAD WARDEN' });
@@ -156,8 +152,8 @@ test('C-rank specialization flows through B and A prep, failure recovery, and pe
 
   await e2eJourney(page, 'stabilizeARankRoads');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ type: 'find_gate', label: 'FIND A GATE' });
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 4))).toBeTruthy();
-  const failedAGate = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 4));
+  await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.some(g => g.id === id), aPromotion.gateId)).toBe(true);
+  const failedAGate = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.id === id), aPromotion.gateId);
   await enterGate(page, failedAGate.id);
   await e2eJourney(page, 'failARankGate');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
@@ -177,9 +173,51 @@ test('C-rank specialization flows through B and A prep, failure recovery, and pe
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
   await dismissGateLoot(page);
 
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await resumeAfterReload(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('s_rank_climb');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(4);
+
+  await e2eJourney(page, 'prepareSRankClimb');
+  await expect.poll(() => page.evaluate(() => {
+    const objective = window.__BLOCKCRAFT_E2E__.status().activeObjectives.find(o => o.id === 'progression:s_rank_climb');
+    return objective && { text: objective.hudText, remaining: objective.progress.required - objective.progress.current, action: objective.action };
+  })).toMatchObject({ text: expect.stringMatching(/1 Hunter XP to Level 51.*clear an A-rank Gate/), remaining: 1, action: { type: 'guild_contracts', label: 'EARN HUNTER XP' } });
+
+  const sPromotion = await e2eJourney(page, 'reachSRank');
+  await dismissRankUp(page);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(51);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ type: 'guild_contracts', label: 'ROAD WARDEN' });
+  const sRoadObjective = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().activeObjectives.find(o => o.id === 'progression:s_rank_climb'));
+  expect(sRoadObjective.hudText).toMatch(/Road Safety is 89\/100.*target is 90\/100/);
+  expect(sRoadObjective.checklist.find(c => c.id === 'weapon').hint).toMatch(/Legendary weapon.*Aegis Guardian/);
+  expect(sRoadObjective.checklist.find(c => c.id === 'key').hint).toMatch(/first A-rank clear.*1,350 gold/);
+
+  await e2eJourney(page, 'stabilizeSRankRoads');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ type: 'find_gate', label: 'FIND S GATE', rank: 5 });
+  await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.some(g => g.id === id), sPromotion.gateId)).toBe(true);
+  const failedSGate = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.id === id), sPromotion.gateId);
+  await enterGate(page, failedSGate.id);
+  await e2eJourney(page, 'failSRankGate');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  await clearDeathLimbo(page);
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('s_rank_climb');
+  await expect.poll(() => page.evaluate(oldId => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 5 && g.id !== oldId), failedSGate.id)).toBeTruthy();
+
+  const sRetry = await page.evaluate(oldId => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 5 && g.id !== oldId), failedSGate.id);
+  await enterGate(page, sRetry.id);
+  const sMechanic = await e2eJourney(page, 'exerciseSRankBoss');
+  expect(['eternal_warden', 'starforged_titan', 'ashen_sovereign']).toContain(sMechanic.style);
+  expect(['priorWind', 'cinderWind', 'riftWind']).toContain(sMechanic.state);
+  expect(sMechanic.chainLength).toBe(3);
+  await e2eJourney(page, 'defeatSRankBoss');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(5);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('s_rank_complete');
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useDungeonExit())).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  await dismissGateLoot(page);
+
+  await resumeAfterReload(page);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('s_rank_complete');
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(5);
+  await expect(page.locator('#currentquest')).toContainText(/S-rank Complete/i);
 });

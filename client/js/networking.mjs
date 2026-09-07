@@ -2228,7 +2228,7 @@ function netAttachRoom(room,name,client){
       if(m&&m.result)sysMsg(dungeonReturnRecap(m.result,false));
     });
     room.onMessage('gateBreach', m=>{
-      const rankName=RANKS[Math.max(0,Math.min(4,(m&&m.rank)|0))].n;
+      const rankName=RANKS[Math.max(0,Math.min(5,(m&&m.rank)|0))].n;
       const place=Number.isFinite(m&&m.x)&&Number.isFinite(m&&m.z)?' near '+escHTML(Math.round(m.x)+', '+Math.round(m.z)):' nearby';
       titleFlashNet(rankName+'-Rank Breach','Escaped boss in the overworld',{kind:'danger',duration:1800});
       sysMsg('<b>Gate Breach Emergency.</b> '+escHTML((m&&m.bossName)||'The escaped boss')+' escaped'+place+' with '+((m&&m.count)|0)+' dungeon threat'+(((m&&m.count)|0)===1?'':'s')+'. Track it as a public cleanup bounty: reduced XP + materials, no keys. Full clear rewards only come from beating the Gate before collapse.',{tier:'major',title:rankName+'-Rank Breach'});
@@ -3156,7 +3156,7 @@ function netRestoreProfile(m){
     serverFirstQuestComplete=m.firstQuestRewardClaimed===true;
     firstQuestRewardRequestPending=false;
     if(m.e2eSkipFirstQuestRewardPresentation&&typeof markFirstQuestRewardPresentationSeen==='function') markFirstQuestRewardPresentationSeen();
-    if(typeof m.highestGateRankCleared==='number') highestGateRankCleared=Math.max(-1,Math.min(4,m.highestGateRankCleared|0));
+    if(typeof m.highestGateRankCleared==='number') highestGateRankCleared=Math.max(-1,Math.min(5,m.highestGateRankCleared|0));
     discoveredIds.clear();if(Array.isArray(m.discoveries))for(const id of m.discoveries)if(typeof id==='string')discoveredIds.add(id);
     claimedDiscoveryIds.clear();if(Array.isArray(m.claimedDiscoveries))for(const id of m.claimedDiscoveries)if(typeof id==='string')claimedDiscoveryIds.add(id);
     hintedDiscoveryIds.clear();if(Array.isArray(m.cartographerHints))for(const id of m.cartographerHints)if(typeof id==='string')hintedDiscoveryIds.add(id);

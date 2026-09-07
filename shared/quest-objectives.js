@@ -30,7 +30,9 @@
     if(!action||typeof action!=='object')return null;
     const type=clean(action.type,'',32),label=clean(action.label,'',40);
     if(!type&&!label)return null;
-    return {type,label};
+    const out={type,label};
+    if(action.rank!=null)out.rank=Math.max(0,Math.min(5,action.rank|0));
+    return out;
   }
   function chapterOf(chapter){
     if(!chapter||typeof chapter!=='object')return null;

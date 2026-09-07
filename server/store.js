@@ -52,7 +52,7 @@ const ARMOR_IDS = new Set([137, 183, 184, 211, 212, 213]);
 const PROGRESSION_FOCUS_STATES = new Set([
   'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade', 'first_profession_contract',
-  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'a_rank_climb', 's_rank_climb', 'next_adventurer_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'a_rank_climb', 's_rank_climb', 's_rank_complete', 'next_adventurer_contract',
 ]);
 // earnable mounts that persist on the profile, stored as 'dragon:<type>'
 const MOUNT_UNLOCK_IDS = new Set(['dragon:ember', 'dragon:verdant', 'dragon:frost', 'dragon:storm', 'dragon:void']);
@@ -744,7 +744,7 @@ function sanitizeActiveNpcQuest(q) {
     chainTitle: cleanShortText(q.chainTitle, 'Town Work', 64), title: cleanShortText(q.title, 'Town Work', 64),
     type, item: clampI(q.item, 0, 999), need: clampI(q.need, 1, 999), have: clampI(q.have, 0, clampI(q.need, 1, 999)),
     gold: clampI(q.gold, 0, 99999), xp: clampI(q.xp, 0, 99999), desc: cleanShortText(q.desc, 'Complete the task.', 180),
-    levelTarget: clampI(q.levelTarget, 0, 999), gateRank: clampI(q.gateRank, -1, 4),
+    levelTarget: clampI(q.levelTarget, 0, 999), gateRank: clampI(q.gateRank, -1, 5),
     utility: cleanShortText(q.utility, '', 32), familiar: cleanShortText(q.familiar, '', 32), mount: cleanShortText(q.mount, '', 32),
     lifecycleState,
     offeredAt: clampI(q.offeredAt, 0, 4102444800000),
@@ -881,7 +881,7 @@ function sanitizeWorldProgress(p) {
     }
   }
   return {
-    highestGateRankCleared: clampI(raw.highestGateRankCleared, -1, 4),
+    highestGateRankCleared: clampI(raw.highestGateRankCleared, -1, 5),
     roadSafety: clampI(raw.roadSafety == null ? 50 : raw.roadSafety, 0, 100),
     roadSafetyUpdatedAt: clampI(raw.roadSafetyUpdatedAt || 0, 0, 4102444800000),
     cropKinds,
@@ -972,7 +972,7 @@ function sanitizeProfile(p) {
   // Trade work pauses while another profession is equipped and resumes when the
   // player switches back, so persistence must not discard the paused contract.
   out.jobContractOffers = out.jobContractOffers.filter(c=>c.job==='adventurer'||c.job===out.job);
-  out.highestGateRankCleared = clampI(p.highestGateRankCleared, -1, 4);
+  out.highestGateRankCleared = clampI(p.highestGateRankCleared, -1, 5);
   out.gold = clampI(p.gold, 0, 1e9);          // harmless if the client doesn't use gold yet
   out.karma = p.karma == null ? 0 : clampI(p.karma, -1000, 1000);
   // One-time migration: existing profiles created before starter gold receive enough
@@ -1148,6 +1148,7 @@ function sanitizeProfile(p) {
   if (out.progressionFocus === 'c_rank_specialization' && out.abilitySpec) out.progressionFocus = 'b_rank_pressure';
   if (out.progressionFocus === 'b_rank_pressure' && out.highestGateRankCleared >= 3) out.progressionFocus = 'a_rank_climb';
   if (out.progressionFocus === 'a_rank_climb' && out.highestGateRankCleared >= 4) out.progressionFocus = 's_rank_climb';
+  if (out.progressionFocus === 's_rank_climb' && out.highestGateRankCleared >= 5) out.progressionFocus = 's_rank_complete';
   if (out.progressionFocus === 'next_adventurer_contract' && out.abilitySpec) out.progressionFocus = 'b_rank_pressure';
   if (out.progressionFocus === 'e_rank_climb' && out.S.lvl >= 11) out.progressionFocus = JOB_SYSTEM.ENABLED
     ? (out.job === 'adventurer' ? 'first_promotion_contract' : 'first_promotion_job')
@@ -1376,7 +1377,7 @@ function sanitizeTeams(teams) {
       name,
       leader: members.includes(leader) ? leader : members[0],
       members,
-      highestGateRankCleared: clampI(raw.highestGateRankCleared, -1, 4),
+      highestGateRankCleared: clampI(raw.highestGateRankCleared, -1, 5),
       private: !!raw.private,
       lfg: !!raw.lfg,
       invites: Array.isArray(raw.invites)
@@ -1469,9 +1470,9 @@ function sanitizeGates(gates) {
     out[id] = {
       id,
       kind,
-      rank: clampI(raw.rank, 0, 4),
+      rank: clampI(raw.rank, 0, 5),
       seed: clampI(raw.seed, 0, 4294967295),
-      dungeonId: canonicalDungeonId(clampI(raw.rank, 0, 4), clampI(raw.seed, 0, 4294967295), raw.dungeonId),
+      dungeonId: canonicalDungeonId(clampI(raw.rank, 0, 5), clampI(raw.seed, 0, 4294967295), raw.dungeonId),
       owner: (kind === 'solo' || kind === 'team' || kind === 'shard') ? (cleanToken(raw.owner) || '') : '',
       team: (kind === 'team' || kind === 'shard') ? cleanTeam(raw.team) : '',
       refundItem: clampI(raw.refundItem, 0, 999),

@@ -109,9 +109,10 @@ class DungeonMixin {
       { tag: 'D-rank Volley Lesson', focus: 'first ranged pressure', reasons: ['arrow', 'boss_charge'] },
       { tag: 'C-rank Positioning Lesson', focus: 'rings and ground spikes', reasons: ['grave_ring', 'boss_spikes'] },
       { tag: 'B-rank Control Lesson', focus: 'roots and control pressure', reasons: ['boss_control_roots', 'keeper_roots', 'blighted_roots', 'drowned_tide'] },
-      { tag: 'A/S-rank Layered Lesson', focus: 'layered follow-up mechanics', reasons: ['boss_slam', 'boss_charge', 'grave_ring', 'boss_spikes', 'boss_control_roots', 'keeper_roots', 'blighted_roots', 'drowned_tide', 'ossuary_wave', 'falling_rock'] },
+      { tag: 'A-rank Layered Lesson', focus: 'layered follow-up mechanics', reasons: ['boss_slam', 'boss_charge', 'grave_ring', 'boss_spikes', 'boss_control_roots', 'keeper_roots', 'blighted_roots', 'drowned_tide', 'ossuary_wave', 'falling_rock'] },
+      { tag: 'S-rank Ascendant Trial', focus: 'rotating safe sectors and chained signatures', reasons: ['boss_slam', 'boss_charge', 'grave_ring', 'boss_spikes', 'boss_control_roots', 'drowned_tide', 'ossuary_wave', 'falling_rock'] },
     ];
-    return specs[Math.max(0, Math.min(4, rank | 0))] || specs[0];
+    return specs[Math.max(0, Math.min(5, rank | 0))] || specs[0];
   }
   isBossMasteryReason(reason = '') {
     return ['boss_melee', 'boss_slam', 'boss_charge', 'boss_spikes', 'grave_ring', 'falling_rock', 'keeper_roots', 'boss_control_roots', 'drowned_tide', 'ossuary_wave', 'blighted_roots', 'arrow'].includes(String(reason || '').replace(/_arrow$/, ''));
@@ -340,7 +341,7 @@ class DungeonMixin {
     return this.canAccessGateRank(client, gate.rank);
   }
   isValidRestoredPublicGate(raw) {
-    const rank = Math.max(0, Math.min(4, raw.rank | 0));
+    const rank = Math.max(0, Math.min(5, raw.rank | 0));
     const band = GATE_DISTANCE_BANDS[rank] || GATE_DISTANCE_BANDS[0];
     const x = +raw.x, z = +raw.z;
     if (!isFinite(x) || !isFinite(z)) return false;
@@ -361,7 +362,7 @@ class DungeonMixin {
       g.x = raw.x;
       g.y = raw.y;
       g.z = raw.z;
-      g.rank = Math.max(0, Math.min(4, raw.rank | 0));
+      g.rank = Math.max(0, Math.min(5, raw.rank | 0));
       g.seed = raw.seed >>> 0;
       g.dungeonId = canonicalDungeonId(g.rank, g.seed, raw.dungeonId);
       g.kind = kind;
@@ -389,7 +390,7 @@ class DungeonMixin {
   createGate({ x, y, z, rank, kind, owner, team, ttl, shardPlus, shardName, shardMods, refundItem, refundOwner, dungeonId }) {
     const g = new Gate();
     g.x = x; g.y = y; g.z = z;
-    g.rank = Math.max(0, Math.min(4, rank | 0));
+    g.rank = Math.max(0, Math.min(5, rank | 0));
     g.id = 'g' + (++this.gateSeq);
     g.seed = (Math.random() * 4294967295) >>> 0;
     g.dungeonId = canonicalDungeonId(g.rank, g.seed, dungeonId);
@@ -573,7 +574,7 @@ class DungeonMixin {
     const g = this.state.gates.get(id);
     if (!g) return false;
     if (!this.gateBreaches) this.gateBreaches = new Map();
-    const rank = Math.max(0, Math.min(4, (payload.rank != null ? payload.rank : g.rank) | 0));
+    const rank = Math.max(0, Math.min(5, (payload.rank != null ? payload.rank : g.rank) | 0));
     this.pruneGateBreachesForNew(rank);
     const now = Date.now();
     const breach = {
@@ -631,7 +632,7 @@ class DungeonMixin {
     const id = meta && meta.gateBreach;
     const breach = id && this.gateBreaches && this.gateBreaches.get(id);
     if (!breach) return false;
-    const rank = Math.max(0, Math.min(4, breach.rank | 0));
+    const rank = Math.max(0, Math.min(5, breach.rank | 0));
     const rec = client && this.profileFor ? this.profileFor(client) : null;
     const normal = BOSS_REWARD_BY_RANK[rank] || BOSS_REWARD_BY_RANK[0];
     const cleanup = BREACH_CLEANUP_REWARD_BY_RANK[rank] || BREACH_CLEANUP_REWARD_BY_RANK[0];
@@ -699,7 +700,7 @@ class DungeonMixin {
   recordGateBreachScar(id, breach, reason = 'uncontained', penalty = 0, now = Date.now()) {
     if (!breach) return null;
     if (!this.gateBreachScars) this.gateBreachScars = new Map();
-    const rank = Math.max(0, Math.min(4, breach.rank | 0));
+    const rank = Math.max(0, Math.min(5, breach.rank | 0));
     const ttl = reason === 'uncontained' ? 12 * 60 * 1000 : 6 * 60 * 1000;
     const scar = {
       id: String(id), gateId: String(breach.gateId || id),
@@ -726,7 +727,7 @@ class DungeonMixin {
     const g = this.state.gates.get(lobby.gateId);
     const rank = g ? (g.rank | 0) : (lobby.rank | 0);
     const shardPlus = g ? (g.shardPlus | 0) : 0;
-    const baseReward = BOSS_REWARD_BY_RANK[Math.max(0, Math.min(4, rank))];
+    const baseReward = BOSS_REWARD_BY_RANK[Math.max(0, Math.min(5, rank))];
     if (!lobby.preview) {
       const layout = g ? D.generateDungeon(rank, g.seed, g.dungeonId) : null;
       lobby.preview = gateEncounterPreview(g || { rank, kind: lobby.kind }, layout);
@@ -774,7 +775,7 @@ class DungeonMixin {
   dungeonLobbyFinalSummary(lobby) {
     const payload = this.dungeonLobbyPayload(lobby, '');
     const rankLetters = ['E', 'D', 'C', 'B', 'A'];
-    const rank = Math.max(0, Math.min(4, payload.rank | 0));
+    const rank = Math.max(0, Math.min(5, payload.rank | 0));
     const focusByRank = ['basic boss tells', 'ranged pressure', 'positioning checks', 'control pressure', 'layered mechanics'];
     const pr = payload.partyReadiness || {};
     const warnings = Array.isArray(pr.warnings) ? pr.warnings : [];
@@ -842,7 +843,7 @@ class DungeonMixin {
         return { name: member && member.name || 'Hunter', ...gateProfileSignals(profile || {}, g.rank) };
       });
       const partyReadiness = gatePartyReadinessSummary(memberSignals, g.rank, preview);
-      out.push({ gateId: g.id, rank: g.rank | 0, kind: g.kind || 'public', leaderName: leader && leader.name || 'Hunter', leaderRole: gateRoleForProfile(leaderProfile || {}), readiness: leaderReadiness.status, readinessScore: leaderReadiness.score, readinessTotal: leaderReadiness.total, partyStatus: partyReadiness.status, partyWarnings: partyReadiness.warnings.slice(0, 2), partyStrengths: partyReadiness.strengths.slice(0, 3), members: lobby.members.size, capacity: 4, distance: Math.round(distance), difficulty: ['Initiate','Dangerous','Severe','Extreme','Cataclysmic'][g.rank | 0], recommendedParty: preview.recommendedParty });
+      out.push({ gateId: g.id, rank: g.rank | 0, kind: g.kind || 'public', leaderName: leader && leader.name || 'Hunter', leaderRole: gateRoleForProfile(leaderProfile || {}), readiness: leaderReadiness.status, readinessScore: leaderReadiness.score, readinessTotal: leaderReadiness.total, partyStatus: partyReadiness.status, partyWarnings: partyReadiness.warnings.slice(0, 2), partyStrengths: partyReadiness.strengths.slice(0, 3), members: lobby.members.size, capacity: 4, distance: Math.round(distance), difficulty: ['Initiate','Dangerous','Severe','Extreme','Cataclysmic','Ascendant'][g.rank | 0], recommendedParty: preview.recommendedParty });
     }
     return out.sort((a, b) => a.distance - b.distance).slice(0, 12);
   }
@@ -1598,9 +1599,14 @@ class DungeonMixin {
   // One-time progression hook: the boss already guarantees the next-rank solo key on
   // every clear, so the FIRST time a hunter clears a given rank we add a distinct
   // material leg-up — iron + diamond to craft gear for the rank ahead. Returns []
-  // when it isn't a fresh clear or there's no rank above this one.
+  // when it isn't a fresh clear. A-rank also provides the Legendary Tokens
+  // needed to turn the newly awarded S key into a fair, actionable next step.
   firstClearBonusItems(rank, progress) {
-    if (!progress || !progress.newClear || rank < 0 || rank >= 4) return [];
+    if (!progress || !progress.newClear || rank < 0 || rank > 4) return [];
+    if (rank === 4) return [
+      { id: I.DIAMOND, count: 6 },
+      { id: I.LEGEND_TOKEN, count: 3 },
+    ];
     const items = [
       { id: I.IRON_INGOT, count: 4 + rank * 2 },
       { id: I.DIAMOND, count: 1 + rank },
@@ -1671,7 +1677,7 @@ class DungeonMixin {
         }
         if (firstClear.length) {
           loot.firstClear = { rank: ri, nextRank: ri + 1 };
-          this.broadcast('chat', { name: '[Gate]', text: (q.name || 'A hunter') + ' cleared their first ' + 'EDCBA'[ri] + '-Rank Gate — first-clear bonus awarded!' });
+          this.broadcast('chat', { name: '[Gate]', text: (q.name || 'A hunter') + ' cleared their first ' + 'EDCBAS'[ri] + '-Rank Gate — first-clear bonus awarded!' });
         }
         this.awardLoot(c, loot);
       } else {
@@ -1688,7 +1694,7 @@ class DungeonMixin {
     this.sendDungeonStatus(dgn);
     const clearMsg = plus > 0
       ? 'The ' + (inst.shardName || 'sharded') + ' +' + plus + ' Gate has been cleared — Legendary loot awarded!'
-      : 'The ' + 'EDCBA'[ri] + '-Rank Gate has been cleared!';
+      : 'The ' + 'EDCBAS'[ri] + '-Rank Gate has been cleared!';
     this.broadcast('chat', { name: '[System]', text: clearMsg });
   }
 

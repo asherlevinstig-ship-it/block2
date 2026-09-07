@@ -282,6 +282,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   FISHING_ROD:225,
   SMALL_FISH:226, PRIZED_FISH:227, COOKED_SMALL_FISH:228, COOKED_RIVER_FISH:229, COOKED_PRIZED_FISH:230,
   TROPHY_FISH:231, COOKED_TROPHY_FISH:232,
+  SOLO_KEY_S:233, TEAM_KEY_S:234,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -2015,6 +2016,7 @@ const HUB = {
   forgeFire: { x: dpx(81.7, 'forge'), z: dpz(48.5, 'forge') },
   forgeChimney: { x: dpx(82.5, 'forge'), z: dpz(47.5, 'forge') },
   shard: { x: TOWN.TC + 17, z: TOWN.TC - 43 },
+  market: { x: dpx(43, 'market') - .9, z: TOWN.TC - 7 },
   marketX: dpx(43, 'market'),
   outfitter: { x: dpx(42, 'market'), z: dpz(70.5, 'market') },
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
@@ -2963,17 +2965,33 @@ function tickCropTimers(now){
   }
 }
 const chunkMeshes = {};
+const chunkProfile={builds:0,meshMs:0,totalMs:0,maxMeshMs:0,maxTotalMs:0};
+const chunkProfileSamples={mesh:[],total:[]};
+const CHUNK_PROFILE_SAMPLE_LIMIT=512;
+function recordChunkProfileSample(samples,value){
+  samples.push(value);
+  if(samples.length>CHUNK_PROFILE_SAMPLE_LIMIT)samples.shift();
+}
+function chunkProfilePercentile(samples,p){
+  if(!samples.length)return 0;
+  const sorted=[...samples].sort((a,b)=>a-b);
+  return sorted[Math.min(sorted.length-1,Math.max(0,Math.ceil(sorted.length*p)-1))];
+}
 const chunkWork=createChunkWorkQueue({build:rebuildChunk});
 function rebuildChunk(cx,cz){
+  const started=performance.now();
   const cb=worldChunkBounds();
   if(cx<cb.minCx||cz<cb.minCz||cx>cb.maxCx||cz>cb.maxCz) return;
   const key=cx+','+cz;
   const old=chunkMeshes[key];
   if(old){ for(const m of [old.opaque, old.trans]) if(m){ scene.remove(m); m.geometry.dispose(); } }
   const e={opaque:null, trans:null};
+  const meshStarted=performance.now();
   const g1=buildChunkGeometry(cx,cz,false);
   if(g1){ e.opaque=new THREE.Mesh(g1, matOpaque); scene.add(e.opaque); }
   const g2=buildChunkGeometry(cx,cz,true);
+  const meshMs=performance.now()-meshStarted;
+  chunkProfile.builds++;chunkProfile.meshMs+=meshMs;chunkProfile.maxMeshMs=Math.max(chunkProfile.maxMeshMs,meshMs);recordChunkProfileSample(chunkProfileSamples.mesh,meshMs);
   if(g2){ e.trans=new THREE.Mesh(g2, matTrans); e.trans.renderOrder=1; scene.add(e.trans); }
   chunkMeshes[key]=e;
   syncTorchesForChunk(cx,cz);
@@ -2985,6 +3003,7 @@ function rebuildChunk(cx,cz){
     const id=getB(x,y,z);
     if(id===B.EGG_INSULATOR) syncInsulatorMesh(x,y,z,id);
   }
+  const totalMs=performance.now()-started;chunkProfile.totalMs+=totalMs;chunkProfile.maxTotalMs=Math.max(chunkProfile.maxTotalMs,totalMs);recordChunkProfileSample(chunkProfileSamples.total,totalMs);
 }
 function disposeChunk(cx,cz){
   const key=cx+','+cz;
@@ -7779,7 +7798,7 @@ function torchNear(x,z,r){
 
 // ---------------- RPG stats (the Status Window) ----------------
 const S={lvl:1, xp:0, pts:0, str:1, agi:1, vit:1, int:1, path:null};
-const GATE_RANK_LETTERS='EDCBA';
+const GATE_RANK_LETTERS='EDCBAS';
 const HUNTER_RANK_LETTERS='EDCBAS';
 const UTILITY_DEFS={
   compass:{name:'Compass Sense', icon:'C', slot:'passive', unlock:'Claim your first Guild Contract.', use:'Keeps your current objective on the HUD.', desc:'Adds a bearing and distance readout toward your current quest, guild contract, gate, or town objective.'},
@@ -7807,7 +7826,7 @@ const maxMp=()=>20+(S.int-1)*3+meditationBonus('mp');
 const maxSp=()=>100+(S.agi-1)*4+meditationBonus('sp');
 const maxHunger=()=>100+meditationBonus('hunger');
 const xpNeed=()=>xpNeedForLevel(S.lvl);
-function gateRankLetter(ri){ return GATE_RANK_LETTERS[Math.max(0,Math.min(4,ri|0))]||'E'; }
+function gateRankLetter(ri){ return GATE_RANK_LETTERS[Math.max(0,Math.min(5,ri|0))]||'E'; }
 function rankIndexFromLevel(lvl){ return gateRankIndexForLevel(lvl); }
 function nextRankLevel(ri){ return nextHunterRankLevel(ri); }
 function playerGateRankIndex(lvl=S.lvl, cleared=-1){
@@ -9178,7 +9197,7 @@ function rewardTriageGroup(r){
   if(r.label==='XP'||r.label==='Hunter XP')return 'Progression';
   if(r.label==='Gold')return 'Currency';
   if(item&&(item.tool||item.armor)||r.gear)return 'Gear';
-  if([I.SOLO_KEY_E,I.SOLO_KEY_D,I.SOLO_KEY_C,I.SOLO_KEY_B,I.SOLO_KEY_A,I.TEAM_KEY_E,I.TEAM_KEY_D,I.TEAM_KEY_C,I.TEAM_KEY_B,I.TEAM_KEY_A].includes(id))return 'Keys';
+  if([I.SOLO_KEY_E,I.SOLO_KEY_D,I.SOLO_KEY_C,I.SOLO_KEY_B,I.SOLO_KEY_A,I.SOLO_KEY_S,I.TEAM_KEY_E,I.TEAM_KEY_D,I.TEAM_KEY_C,I.TEAM_KEY_B,I.TEAM_KEY_A,I.TEAM_KEY_S].includes(id))return 'Keys';
   if([I.SHARD_MINOR,I.SHARD_MAJOR,I.SHARD_GLIMMER,I.SHARD_EFFERV,I.SHARD_RADIANT].includes(id))return 'Shards';
   if(id===I.LEGEND_TOKEN||[I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR].includes(id))return 'Rare Protected';
   if(id===I.COAL||id===I.IRON_INGOT||id===I.DIAMOND||(item&&item.place!=null))return 'Materials';
@@ -9226,7 +9245,7 @@ function dungeonResultStatsHTML(result){
 function applyGateProgress(p){
   if(!p || typeof p.highestGateRankCleared!=='number') return;
   const before=localPlayerRankIndex();
-  highestGateRankCleared=Math.max(-1,Math.min(4,p.highestGateRankCleared|0));
+  highestGateRankCleared=Math.max(-1,Math.min(5,p.highestGateRankCleared|0));
   const after=localPlayerRankIndex();
   if(after>before){
     titleFlash('Rank Advanced',localPlayerRankName()+' - '+gateRankLetter(after)+'-Rank gates unlocked',{kind:'success',duration:1700});
@@ -9240,7 +9259,7 @@ function showDungeonReward(m, earned){
   const milestone=gateMilestoneHandoff(m,earned);
   const resumePlay=!!(milestone&&(locked||lockFallback));
   const result=m&&m.result||null,failed=!!(m&&m.failed||result&&result.outcome==='failed');
-  const ri=Math.max(0,Math.min(4,(result&&typeof result.rank==='number')?result.rank:(m&&typeof m.rank==='number')?m.rank:(dungeon?dungeon.rank:0)));
+  const ri=Math.max(0,Math.min(5,(result&&typeof result.rank==='number')?result.rank:(m&&typeof m.rank==='number')?m.rank:(dungeon?dungeon.rank:0)));
   const kind=gateKindLabel((result&&result.kind)||(m&&m.kind)||((dungeon&&dungeon.kind)||'public'));
   const rows=[];
   if(earned){
@@ -11787,6 +11806,8 @@ gameContext.registerModule('world', Object.freeze({
   clearChunks:clearChunkMeshes,
   rebuildVisible:updateVisibleChunks,
   pendingChunkCount:()=>chunkWork.size,
+  chunkProfile:()=>({...chunkProfile,meshP95Ms:chunkProfilePercentile(chunkProfileSamples.mesh,.95),totalP95Ms:chunkProfilePercentile(chunkProfileSamples.total,.95)}),
+  resetChunkProfile:()=>{for(const key in chunkProfile)chunkProfile[key]=0;chunkProfileSamples.mesh.length=0;chunkProfileSamples.total.length=0;},
   prepareEvent:prepareEventDimension,
   leaveEvent:leaveEventDimension,
   isParkourEventActive,

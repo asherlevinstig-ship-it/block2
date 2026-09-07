@@ -37,6 +37,9 @@ const BOSS_CONCEPT_STYLE={
   buried_monarch:{accent:0xfacc15,particle:'sand',rate:18,scale:1.09,float:0,weapon:'golden khopesh'},
   abyssal_gatekeeper:{accent:0x22d3ee,particle:'bubble',rate:18,scale:1.1,float:.02,weapon:'anchor chain'},
   rift_monarch:{accent:0xf472b6,particle:'rift',rate:24,scale:1.1,float:.12,orbit:true,weapon:'rift scepter'},
+  eternal_warden:{accent:0xe9d5ff,particle:'rift',rate:28,scale:1.16,float:.08,orbit:true,weapon:'judgment staff'},
+  starforged_titan:{accent:0xfb923c,particle:'ember',rate:26,scale:1.28,float:0,weapon:'star hammer'},
+  ashen_sovereign:{accent:0xc084fc,particle:'rift',rate:32,scale:1.2,float:.14,orbit:true,weapon:'ashen scepter'},
   eldritch_tree:{accent:0x5cff7a,particle:'leaf',rate:28,scale:1.34,float:0,orbit:true,weapon:'star roots'},
 };
 const EFFECT_BIOME={flanker:'plains',sturdy:'forest',quickshot:'desert',brute:'mesa',frost:'snowy',venom:'swamp',root:'forest'};
@@ -343,7 +346,7 @@ function tickBossConceptFx(m,dt,t,tier=0){
 }
 const ENCOUNTER_NAMES={bandit:'Bandit',bandit_archer:'Bandit Archer',bandit_shield:'Shield Bandit',bandit_scout:'Bandit Scout',bandit_brute:'Bandit Brute',bandit_captain:'Bandit Captain',caravan_guard:'Caravan Guard',caravan_merchant:'Road Merchant',wounded_hunter:'Wounded Hunter',pack_mule:'Pack Mule',caravan_wagon:'Merchant Wagon',caravan_wreck:'Wrecked Wagon',gale_stalker:'Gale Stalker',wind_archer:'Wind Archer',rootbound:'Rootbound',briar_archer:'Briar Archer',dune_husk:'Dune Husk',sun_archer:'Sun Archer',redclaw:'Redclaw',amber_archer:'Amber Archer',frost_wight:'Frost Wight',ice_archer:'Ice Archer',mirewalker:'Mirewalker',bog_archer:'Bog Archer'};
 const BIOME_NAME_COLOR={plains:'#d8f58c',forest:'#8fcf69',desert:'#ffd36a',mesa:'#ff8968',snowy:'#b9f4ff',swamp:'#a8ca72'};
-const BOSS_GALLERY_RANK_LABELS=['E','D','C','B','A'];
+const BOSS_GALLERY_RANK_LABELS=['E','D','C','B','A','S'];
 let bossGallery=[];
 let bossGalleryRAF=0,bossGalleryLast=0;
 function textSprite(text,color='#ffffff',scale=1){
@@ -1022,8 +1025,8 @@ function netFx(m){
     ringPulse(m.x,m.y+.08,m.z,7,0x38bdf8,.4);burst(m.x,m.y+.2,m.z,[.15,.65,1],34,6,1.5,.55);camShake=Math.max(camShake,.3);
   } else if(m.t==='bossStyleWarn'){
     SFX.slamWarn();
-    const colors={cinder_smith:0xff5a1e,castellan:0xf4c95d,choir:0xa5f3fc,void_prior:0x7c3aed,rime_giant:0x8eeaff,thunder_warden:0x38bdf8,buried_monarch:0xfacc15,abyssal_gatekeeper:0x22d3ee,rift_monarch:0xf472b6};
-    const labels={cinder_smith:'Molten Forge - leave the fire!',castellan:'Rune of the Keep - avoid the walls!',choir:'Shard Barrage - leave the lanes!',void_prior:'Sacred Silence - move!',rime_giant:'Icebreaker - get out of the cone!',thunder_warden:'Lightning Spear - sidestep!',buried_monarch:'Sandstorm Walls - find the pocket!',abyssal_gatekeeper:'Tentacle Drag - move!',rift_monarch:'Reality Tear - scatter!'};
+    const colors={cinder_smith:0xff5a1e,castellan:0xf4c95d,choir:0xa5f3fc,void_prior:0x7c3aed,rime_giant:0x8eeaff,thunder_warden:0x38bdf8,buried_monarch:0xfacc15,abyssal_gatekeeper:0x22d3ee,rift_monarch:0xf472b6,eternal_warden:0xe9d5ff,starforged_titan:0xfb923c,ashen_sovereign:0xc084fc};
+    const labels={cinder_smith:'Molten Forge - leave the fire!',castellan:'Rune of the Keep - avoid the walls!',choir:'Shard Barrage - leave the lanes!',void_prior:'Sacred Silence - move!',rime_giant:'Icebreaker - get out of the cone!',thunder_warden:'Lightning Spear - sidestep!',buried_monarch:'Sandstorm Walls - find the pocket!',abyssal_gatekeeper:'Tentacle Drag - move!',rift_monarch:'Reality Tear - scatter!',eternal_warden:'Ascendant Judgment - follow the safe sector!',starforged_titan:'Starless Forge - escape the crushing lanes!',ashen_sovereign:'Final Edict - three attacks are chained!'};
     const col=colors[m.style]||0xffd45c,pat=m.pat||'';
     if(pat==='choir'||pat==='thunder'||pat==='rime'){
       const dx=m.dx||0,dz=m.dz||1,w=pat==='choir'?1.05:pat==='rime'?1.2:.36;
@@ -1041,7 +1044,7 @@ function netFx(m){
     }
     showName(labels[m.style]||'Boss signature - move!');
   } else if(m.t==='bossStyleBurst'){
-    const c={cinder_smith:[1,.34,.08],castellan:[.95,.75,.36],choir:[.64,.94,1],void_prior:[.48,.25,.92],rime_giant:[.72,.94,1],thunder_warden:[.32,.82,1],buried_monarch:[.95,.7,.22],abyssal_gatekeeper:[.18,.85,.92],rift_monarch:[.95,.25,.9]}[m.style]||[1,.85,.35];
+    const c={cinder_smith:[1,.34,.08],castellan:[.95,.75,.36],choir:[.64,.94,1],void_prior:[.48,.25,.92],rime_giant:[.72,.94,1],thunder_warden:[.32,.82,1],buried_monarch:[.95,.7,.22],abyssal_gatekeeper:[.18,.85,.92],rift_monarch:[.95,.25,.9],eternal_warden:[.91,.84,1],starforged_titan:[1,.5,.18],ashen_sovereign:[.75,.35,1]}[m.style]||[1,.85,.35];
     const hex=new THREE.Color(c[0],c[1],c[2]).getHex();
     if(m.targets&&m.targets.length)for(const q of m.targets){burst(q.x,9.35,q.z,c,20,2.6,2.5,.55);ringPulse(q.x,9.08,q.z,2.2,hex,.32);}
     burst(m.x,m.y+1,m.z,c,34,5.6,3.2,.72);ringPulse(m.x,m.y+.08,m.z,m.style==='buried_monarch'?8:m.style==='castellan'?6.8:3.4,hex,.38);

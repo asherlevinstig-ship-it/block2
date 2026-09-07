@@ -18,7 +18,7 @@
 
   const DUNGEON_WIDTH = 136;
   const DUNGEON_HEIGHT = 18;
-  const RANK_MUL = Object.freeze([1, 1.6, 2.4, 3.4, 4.6]);
+  const RANK_MUL = Object.freeze([1, 1.6, 2.4, 3.4, 4.6, 6.2]);
 
   function createDungeonGeneration({ B, hash2 }) {
     if (!B || typeof hash2 !== 'function') throw new TypeError('dungeon generation requires B and hash2');
@@ -157,9 +157,10 @@
       Object.freeze({ id: 'positioning_checks', label: 'Positioning check arena', features: Object.freeze(['Inner pocket marker', 'Outer ring marker']) }),
       Object.freeze({ id: 'control_pressure', label: 'Control pressure arena', features: Object.freeze(['Four recovery pockets', 'Root-pressure floor reads']) }),
       Object.freeze({ id: 'layered_mechanics', label: 'Layered mechanics arena', features: Object.freeze(['Lane pressure', 'Ring checks', 'Recovery pockets']) }),
+      Object.freeze({ id: 'ascendant_trial', label: 'Ascendant trial arena', features: Object.freeze(['Rotating safe sectors', 'Linked mechanic chains', 'Final recovery altar']) }),
     ]);
     function bossArenaForRank(ri) {
-      return BOSS_ARENA_BY_RANK[Math.max(0, Math.min(4, ri | 0))];
+      return BOSS_ARENA_BY_RANK[Math.max(0, Math.min(5, ri | 0))];
     }
     function markCircle(w, rm, radius, id, step) {
       const r=Math.max(1,radius|0), stride=step||1;
@@ -182,7 +183,7 @@
       }
     }
     function decorateBossArena(w, rm, ri, seed) {
-      const rank=Math.max(0,Math.min(4,ri|0)), minR=Math.min(rm.rx,rm.rz);
+      const rank=Math.max(0,Math.min(5,ri|0)), minR=Math.min(rm.rx,rm.rz);
       carveBox(w,rm.x-2,8,rm.z-2,rm.x+2,8,rm.z+2,B.BRICK);
       if(rank===0){
         markCircle(w,rm,Math.max(3,Math.min(5,minR-2)),B.CONCRETE,2);
@@ -364,7 +365,7 @@
       let cx=22, cz=22, px=cx, pz=cz;
       const roomTypes=layout.roomTypes||['guard','crypt','pit','shrine','vault'];
       const roomScale=Math.max(0,layout.roomScale|0), bossScale=Math.max(0,layout.bossScale|0);
-      const rankBossScale=[0,1,2,3,4][Math.max(0,Math.min(4,ri|0))] || 0;
+      const rankBossScale=[0,1,2,3,4,5][Math.max(0,Math.min(5,ri|0))] || 0;
       const wideChance=layout.wideChance==null?.38:Math.max(0,Math.min(1,layout.wideChance));
       for(let i=0;i<count;i++){
         if(usedMainCenters.has(cx+','+cz)){

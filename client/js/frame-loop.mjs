@@ -955,7 +955,7 @@ function serverObjectiveForHud(){
   const list=activeObjectiveList();
   if(!list.length)return null;
   const candidates=list.filter(o=>o.source!=='tutorial');
-  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade','e_rank_climb','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','a_rank_climb','s_rank_climb'].includes(progressionFocus)
+  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade','e_rank_climb','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','a_rank_climb','s_rank_climb','s_rank_complete'].includes(progressionFocus)
     ?candidates.find(o=>o.source==='progression'&&o.id==='progression:'+progressionFocus)
     :null;
   if(baseChapter)return baseChapter;
@@ -1199,7 +1199,17 @@ function progressionObjectiveFallback(){
   if(progressionFocus==='s_rank_climb'){
     const rankProgress=currentRankProgress&&currentRankProgress();
     const remaining=rankProgress&&rankProgress.nextRank===5?Math.max(0,rankProgress.remaining|0):0;
-    return objectiveLine('progression','Next','S-rank Climb',remaining.toLocaleString('en-US')+' Hunter XP to Level 51. Recommended now: clear an A-rank Gate',{type:'guild_contracts',label:'EARN HUNTER XP'},rankProgress?objectiveProgressParts(rankProgress.earned,rankProgress.required):null);
+    const pressure=overworldActivity&&overworldActivity.gateBreach;
+    if(pressure)return objectiveLine('progression','Next','S-rank Climb',(remaining?remaining.toLocaleString('en-US')+' Hunter XP to Level 51. ':'')+'First: contain the active Gate breach',{type:'regional_track',label:'TRACK BREACH'});
+    if(S&&S.lvl<51)return objectiveLine('progression','Next','S-rank Climb',remaining.toLocaleString('en-US')+' Hunter XP to Level 51. Recommended now: clear an A-rank Gate',{type:'guild_contracts',label:'EARN HUNTER XP'},rankProgress?objectiveProgressParts(rankProgress.earned,rankProgress.required):null);
+    if(roadSafety<90)return objectiveLine('progression','Next','S-rank Climb','Road Safety is '+roadSafety+'/100; the S-rank readiness target is 90/100. Complete Road Warden work or a high-risk regional threat',{type:'guild_contracts',label:'ROAD WARDEN'});
+    const prep=menusApi.gateReadiness&&menusApi.gateReadiness(5);
+    if(prep&&!prep.ready)return objectiveLine('progression','Next','S-rank Climb','Next fix: '+(prep.next&&prep.next.label||'S-rank preparation')+'. '+(prep.next&&prep.next.hint||'Open the preparation check.'),{type:'gate_prep',label:'S PREP CHECK',rank:5});
+    return objectiveLine('progression','Next','S-rank Climb','Ascendant kit ready. Rally four hunters, find an S-rank Gate, and survive its chained final trial',{type:'find_gate',label:'FIND S GATE',rank:5});
+  }
+  if(progressionFocus==='s_rank_complete'){
+    const levels=Math.max(0,60-(S&&S.lvl|0));
+    return objectiveLine('progression','Endgame','S-rank Complete',levels?levels+' level'+(levels===1?'':'s')+' to Deity. Repeat S-rank Gates for mastery rewards or help another hunter':'Ranked progression and Deity complete',{type:'quest_log',label:'VIEW ENDGAME'});
   }
   if(progressionFocus==='first_d_gate'){
     const craft=objectiveCraftAction('what_next'),prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();
@@ -1265,7 +1275,7 @@ function gatePrepTargetRank(){
     const rank=menusApi.nextGatePrepRank();
     if(rank>=0)return rank;
   }
-  if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(4,quest.gateRank|0));
+  if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(5,quest.gateRank|0));
   if(progressionFocus==='first_d_gate')return 1;
   if(progressionFocus==='c_rank_climb')return 2;
   return -1;
@@ -1286,9 +1296,9 @@ function postDRankGuidanceReady(){
 function midgameGateRank(){
   if(menusApi.nextGatePrepRank){
     const rank=menusApi.nextGatePrepRank();
-    if(rank>=0)return Math.max(1,Math.min(4,rank|0));
+    if(rank>=0)return Math.max(1,Math.min(5,rank|0));
   }
-  return Math.max(1,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():1));
+  return Math.max(1,Math.min(5,localPlayerHunterRankIndex?localPlayerHunterRankIndex():1));
 }
 function midgameObjectiveLine(){
   if(!postDRankGuidanceReady())return null;
@@ -1396,8 +1406,8 @@ function unifiedObjectiveList(){
   if(midgame)lines.push(midgame);
   const seen=new Set();
   const unique=lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;});
-  if(progressionFocus==='e_rank_climb'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'||progressionFocus==='s_rank_climb'){
-    const climbTitle=progressionFocus==='e_rank_climb'?'E-rank Climb':progressionFocus==='c_rank_climb'?'C-rank Climb':progressionFocus==='b_rank_pressure'?'Gate Pressure':progressionFocus==='a_rank_climb'?'A-rank Climb':'S-rank Climb';
+  if(progressionFocus==='e_rank_climb'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'||progressionFocus==='s_rank_climb'||progressionFocus==='s_rank_complete'){
+    const climbTitle=progressionFocus==='e_rank_climb'?'E-rank Climb':progressionFocus==='c_rank_climb'?'C-rank Climb':progressionFocus==='b_rank_pressure'?'Gate Pressure':progressionFocus==='a_rank_climb'?'A-rank Climb':progressionFocus==='s_rank_climb'?'S-rank Climb':'S-rank Complete';
     const climb=unique.find(line=>line.title===climbTitle);
     const activity=unique.find(line=>line!==climb&&['story','guild','aegis'].includes(line.kind));
     return [climb,activity].filter(Boolean);
@@ -1466,7 +1476,8 @@ function currentObjectiveAction(){
   if(progressionFocus==='c_rank_specialization') return {type:'choose_spec',label:'CHOOSE SPEC'};
   if(progressionFocus==='b_rank_pressure') return progressionObjectiveFallback().action || {type:'guild_contracts',label:'OPEN GUILD BOARD'};
   if(progressionFocus==='a_rank_climb') return progressionObjectiveFallback().action || {type:'guild_contracts',label:'EARN HUNTER XP'};
-  if(progressionFocus==='s_rank_climb') return {type:'guild_contracts',label:'EARN HUNTER XP'};
+  if(progressionFocus==='s_rank_climb') return progressionObjectiveFallback().action || {type:'guild_contracts',label:'EARN HUNTER XP'};
+  if(progressionFocus==='s_rank_complete') return {type:'quest_log',label:'VIEW ENDGAME'};
   if(progressionFocus==='c_rank_climb'){
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
     if(S&&S.lvl<21)return {type:'guild_contracts',label:'EARN HUNTER XP'};
@@ -1489,7 +1500,7 @@ function currentObjectiveAction(){
 }
 function e2eCurrentObjectiveAction(){
   const action=currentObjectiveAction();
-  return action ? {type:action.type||'',label:action.label||'',outputId:action.outputId||0,kind:action.kind||''} : null;
+  return action ? {type:action.type||'',label:action.label||'',rank:action.rank==null?null:action.rank|0,outputId:action.outputId||0,kind:action.kind||''} : null;
 }
 function trackerGuideButton(line,index){
   if(!line)return '';
@@ -1961,6 +1972,20 @@ function utilityCompassTarget(){
     if(gate)return {label:'A-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
+  if(progressionFocus==='s_rank_climb'){
+    const breach=overworldActivity&&overworldActivity.gateBreach;
+    if(breach)return {label:'Breach',x:breach.x,z:breach.z};
+    if(S&&S.lvl<51||roadSafety<90)return {label:roadSafety<90&&S&&S.lvl>=51?'Road Warden':'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
+    const prep=menusApi.gateReadiness&&menusApi.gateReadiness(5);
+    if(prep&&prep.next){
+      if(prep.next.id==='food')return {label:'S Prep · Tavern',x:HUB.tavern.x,z:HUB.tavern.z};
+      if(prep.next.id==='key')return {label:'S Prep · Market',x:HUB.market.x,z:HUB.market.z};
+      if(prep.next.id==='weapon'||prep.next.id==='armor')return {label:'S Prep · Aegis',x:HUB.aegisApproach.x,z:HUB.aegisApproach.z};
+      return {label:'S Prep · Smithy',x:HUB.smith.x,z:HUB.smith.z};
+    }
+    if(gate)return {label:'S-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
+    return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
+  }
   if(progressionFocus==='c_rank_climb'){
     if(S&&S.lvl<21)return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
@@ -1971,7 +1996,7 @@ function utilityCompassTarget(){
     }
     if(gate)return {label:'C-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
   }
-  if(progressionFocus==='e_rank_climb'||progressionFocus==='s_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
+  if(progressionFocus==='e_rank_climb'||progressionFocus==='s_rank_complete'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
   }
   if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
@@ -3862,7 +3887,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     enterTamingLand:()=>dimensionsApi.enterTamingLand?dimensionsApi.enterTamingLand():false,
     enterTamingLandInstant:()=>dimensionsApi.enterTamingLand?dimensionsApi.enterTamingLand({instant:true}):false,
     exitTamingLand:()=>dimensionsApi.exitTamingLand?dimensionsApi.exitTamingLand():false,
-    walkToTamingPortal:()=>e2eWalkTo({x:HUB.tamingPortal.x,y:TOWN.G+1,z:HUB.tamingPortal.z}),
+    walkToTamingPortal:()=>e2eWalkTo({x:HUB.tamingPortal.x,y:TOWN.G+1,z:HUB.tamingPortal.z},5.8),
     walkToTamingExit:()=>e2eWalkTo({x:TAMING_LAND.x+TAMING_LAND.exit.dx+.5,y:TAMING_LAND.G+1,z:TAMING_LAND.z+TAMING_LAND.exit.dz+.5}),
     petTamerTutorialAction:()=>combatApi.performPetTamerDragonTutorialAction?combatApi.performPetTamerDragonTutorialAction():false,
     petTamerFinishRoost:()=>combatApi.finishPetTamerRoostLessonForTest?combatApi.finishPetTamerRoostLessonForTest():false,

@@ -29,8 +29,8 @@ test('town portal travels to Taming Land and returns to Town of Beginnings', asy
   test.setTimeout(90_000);
   await registerReadyHunter(page);
 
-  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToTamingPortal());
-  await expect(page.locator('#encounterprompt').getByText('Taming Land Portal')).toBeVisible();
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToTamingPortal())).toBe(true);
+  await expect(page.locator('#locationhud').getByText('Taming Land Portal')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.enterTamingLand())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('taming_land');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({

@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay, resumeAfterReload } = require('./helpers/auth-flow.cjs');
 
 const SOLO_KEY_E = 150;
 const SHARD_MINOR = 130;
@@ -27,11 +27,34 @@ async function enterGate(page, gateId) {
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(gateId);
 }
 
+async function gateIds(page, kind) {
+  return page.evaluate(
+    gateKind => window.__BLOCKCRAFT_E2E__.status().gates.filter(g => g.kind === gateKind).map(g => g.id),
+    kind,
+  );
+}
+
+async function waitForNewGate(page, kind, existingIds) {
+  await expect.poll(
+    () => page.evaluate(
+      ({ gateKind, oldIds }) => window.__BLOCKCRAFT_E2E__.status().gates.find(
+        g => g.kind === gateKind && !oldIds.includes(g.id),
+      )?.id,
+      { gateKind: kind, oldIds: existingIds },
+    ),
+  ).not.toBeUndefined();
+  return page.evaluate(
+    ({ gateKind, oldIds }) => window.__BLOCKCRAFT_E2E__.status().gates.find(
+      g => g.kind === gateKind && !oldIds.includes(g.id),
+    ),
+    { gateKind: kind, oldIds: existingIds },
+  );
+}
+
 async function restartAndResume(page, request, gate, itemId) {
   const response = await request.post('http://127.0.0.1:2608/restart');
   expect(response.ok()).toBe(true);
-  await page.reload();
-  await page.locator('#playbtn').click();
+  await resumeAfterReload(page);
   await expect.poll(
     () => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected),
     { timeout: 15_000 },
@@ -48,9 +71,7 @@ async function restartAndResume(page, request, gate, itemId) {
     gate.id,
   )).toBe(false);
 
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await resumeAfterReload(page);
   await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), itemId)).toBe(1);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonRestartRecovery)).toBe(null);
 }
@@ -76,14 +97,10 @@ test('private Gate entry items are refunded once and reusable after a server res
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkOutsideTown())).toBe(true);
   const soloSlot = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SOLO_KEY_E);
   expect(soloSlot).toBeGreaterThanOrEqual(0);
+  const existingSoloIds = await gateIds(page, 'solo');
   await page.evaluate(slot => window.__BLOCKCRAFT_E2E__.send('useGateKey', { slot }), soloSlot);
   await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), SOLO_KEY_E)).toBe(0);
-  await expect.poll(
-    () => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'solo')),
-  ).toBeTruthy();
-  const soloGate = await page.evaluate(
-    () => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'solo'),
-  );
+  const soloGate = await waitForNewGate(page, 'solo', existingSoloIds);
 
   await enterGate(page, soloGate.id);
   await restartAndResume(page, request, soloGate, SOLO_KEY_E);
@@ -94,38 +111,26 @@ test('private Gate entry items are refunded once and reusable after a server res
     () => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SOLO_KEY_E),
   ).not.toBe(-1);
   const refundedSoloSlot = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SOLO_KEY_E);
+  const soloIdsBeforeReuse = await gateIds(page, 'solo');
   await page.evaluate(slot => window.__BLOCKCRAFT_E2E__.send('useGateKey', { slot }), refundedSoloSlot);
-  await expect.poll(
-    () => page.evaluate(
-      oldId => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'solo' && g.id !== oldId)?.id,
-      soloGate.id,
-    ),
-  ).not.toBeUndefined();
+  await waitForNewGate(page, 'solo', soloIdsBeforeReuse);
   await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), SOLO_KEY_E)).toBe(0);
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe('');
   const shardSlot = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SHARD_MINOR);
   expect(shardSlot).toBeGreaterThanOrEqual(0);
+  const existingShardIds = await gateIds(page, 'shard');
   await page.evaluate(slot => window.__BLOCKCRAFT_E2E__.send('attuneShard', { slot }), shardSlot);
   await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), SHARD_MINOR)).toBe(0);
-  await expect.poll(
-    () => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'shard')),
-  ).toBeTruthy();
-  const shardGate = await page.evaluate(
-    () => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'shard'),
-  );
+  const shardGate = await waitForNewGate(page, 'shard', existingShardIds);
 
   await enterGate(page, shardGate.id);
   await restartAndResume(page, request, shardGate, SHARD_MINOR);
 
   const refundedShardSlot = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SHARD_MINOR);
+  const shardIdsBeforeReuse = await gateIds(page, 'shard');
   await page.evaluate(slot => window.__BLOCKCRAFT_E2E__.send('attuneShard', { slot }), refundedShardSlot);
   await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), SHARD_MINOR)).toBe(0);
-  await expect.poll(
-    () => page.evaluate(
-      oldId => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'shard' && g.id !== oldId)?.id,
-      shardGate.id,
-    ),
-  ).not.toBeUndefined();
+  await waitForNewGate(page, 'shard', shardIdsBeforeReuse);
 });
