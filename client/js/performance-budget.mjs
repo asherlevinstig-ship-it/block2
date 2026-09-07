@@ -79,6 +79,16 @@ export function createPerformanceDiagnostics({renderer,getCounts=()=>({})}){
   Object.assign(el.style,{position:'fixed',right:'12px',top:'12px',zIndex:'10000',padding:'8px 10px',background:'rgba(5,9,14,.84)',border:'1px solid rgba(125,211,252,.45)',borderRadius:'6px',color:'#dff6ff',font:'12px/1.45 ui-monospace,monospace',whiteSpace:'pre',pointerEvents:'none'});
   document.body.appendChild(el);
   let ema=16.7,updateEma=0,renderEma=0,last=performance.now(),lastPaint=0,frameStartedAt=last,renderStartedAt=0;
+  let frameSamples=[],updateSamples=[],renderSamples=[];
+  const record=(samples,value)=>{
+    samples.push(Math.min(250,Math.max(0,value)));
+    if(samples.length>600)samples.shift();
+  };
+  const percentile=(samples,fraction)=>{
+    if(!samples.length)return 0;
+    const sorted=[...samples].sort((a,b)=>a-b);
+    return sorted[Math.min(sorted.length-1,Math.floor(sorted.length*fraction))];
+  };
   const toggle=e=>{if(e.code==='F3'){e.preventDefault();el.hidden=!el.hidden;}};
   addEventListener('keydown',toggle);
   const updatePaint=now=>{
@@ -101,8 +111,21 @@ export function createPerformanceDiagnostics({renderer,getCounts=()=>({})}){
       if(renderStartedAt){
         const renderTime=Math.min(250,Math.max(0,now-renderStartedAt));
         renderEma+=((renderTime||renderEma)-renderEma)*.12;
+        record(frameSamples,now-frameStartedAt);
+        record(updateSamples,renderStartedAt-frameStartedAt);
+        record(renderSamples,renderTime);
       }
       updatePaint(now);
+    },
+    resetProfile(){frameSamples=[];updateSamples=[];renderSamples=[];},
+    profile(){
+      return {
+        samples:frameSamples.length,
+        p95FrameMs:percentile(frameSamples,.95),
+        maxFrameMs:frameSamples.length?Math.max(...frameSamples):0,
+        p95UpdateMs:percentile(updateSamples,.95),
+        p95RenderMs:percentile(renderSamples,.95),
+      };
     },
     sample(now){
       this.beginFrame(now);

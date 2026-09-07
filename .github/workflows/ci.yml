@@ -42,13 +42,6 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Browser end-to-end tests
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/3
-        env:
-          # ubuntu-latest has no hardware GPU; Chromium's software renderer
-          # settles near 6 FPS for this WebGL scene even when idle. Keep the
-          # local/device defaults strict (65ms absolute, +15ms from idle), and
-          # gate this stable runner class against its calibrated p95 envelope.
-          TERRAIN_MAX_FRAME_P95_MS: 220
-          TERRAIN_MAX_FRAME_P95_DELTA_MS: 35
       - name: Upload Playwright diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

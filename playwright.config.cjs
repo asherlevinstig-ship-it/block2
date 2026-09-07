@@ -38,5 +38,5 @@ module.exports = defineConfig({
   retries: 2,
   workers: 1,
   globalSetup: require.resolve('./e2e/global-setup.cjs'),
-  use: { baseURL: `http://127.0.0.1:${PORT}`, headless: true },
+  use: { baseURL: `http://127.0.0.1:${PORT}`, headless: true, viewport: { width: 800, height: 600 } },
 });

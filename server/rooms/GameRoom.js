@@ -1281,6 +1281,14 @@ class GameRoom extends Room {
     setTimeout(() => {
       if (!this.state.players.has(client.sessionId)) return;
       const joined = this.state.players.get(client.sessionId);
+      // A recovery request can arrive while this async join is still settling.
+      // Deliver any marker that the early request could not see once the client
+      // has installed its room handlers.
+      const pendingRecovery = token && this.restartRecoveries && this.restartRecoveries.get(token);
+      if (pendingRecovery) {
+        client.send('dungeonRestartRecovery', pendingRecovery);
+        this.restartRecoveries.delete(token);
+      }
       const liveHunger = this.playerHunger.get(client.sessionId) || hunger;
       if (liveHunger) client.send('hunger', { hunger: Math.ceil(liveHunger.hunger), maxHunger: liveHunger.max });
       this.sendLandClaims(client);

@@ -145,6 +145,15 @@ test('client performance diagnostics separates update and render timing', async 
     diagnostics.beginFrame(1000);
     diagnostics.beginRender(1012);
     diagnostics.endRender(1017);
+    assert.deepEqual(diagnostics.profile(), {
+      samples: 1,
+      p95FrameMs: 17,
+      maxFrameMs: 17,
+      p95UpdateMs: 12,
+      p95RenderMs: 5,
+    });
+    diagnostics.resetProfile();
+    assert.equal(diagnostics.profile().samples, 0);
     diagnostics.beginFrame(1300);
     assert.match(hud.textContent, /update \d+\.\d ms {2}render \d+\.\d ms/);
     assert.match(hud.textContent, /7 draws {2}900 tris/);
