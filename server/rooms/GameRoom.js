@@ -2837,24 +2837,35 @@ class GameRoom extends Room {
         client.send('e2eJourneyResult', { action, requestId, ok: false });
         return false;
       }
-      const requested = Number.isFinite(Number(m && m.x)) && Number.isFinite(Number(m && m.z))
-        ? [[Number(m.x) | 0, Number(m.z) | 0]]
-        : [];
-      const candidates = requested.concat([
-        [20, 20], [21, 20], [22, 20], [23, 20], [24, 20],
-        [20, 21], [20, 22], [20, 23], [20, 24],
-      ]);
-      const pick = candidates.find(([x, z]) => {
+      const available = (x, z) => {
         if (x < 0 || z < 0 || x >= W.WX || z >= W.WX) return false;
         if (W.isLavaBorderLand(x, z) || this.isTownProtected(x, z)) return false;
         const existing = this.landClaims && this.landClaims.get(this.landKey(x, z));
         return !existing || this.isLandClaimAbandoned(existing);
+      };
+      if (!Array.isArray(client._e2eProgressionClaimCells) || !client._e2eProgressionClaimCells.length) {
+        let cells = null;
+        for (let z = 20; z < W.WX - 20 && !cells; z++) {
+          for (let x = 20; x < W.WX - 22; x++) {
+            const run = [[x, z], [x + 1, z], [x + 2, z]];
+            if (run.every(([cx, cz]) => available(cx, cz))) { cells = run; break; }
+          }
+        }
+        client._e2eProgressionClaimCells = cells || [];
+      }
+      const requested = Number.isFinite(Number(m && m.x)) && Number.isFinite(Number(m && m.z))
+        ? [[Number(m.x) | 0, Number(m.z) | 0]]
+        : [];
+      const candidates = requested.concat(client._e2eProgressionClaimCells || []);
+      const pick = candidates.find(([x, z]) => {
+        return available(x, z);
       });
       if (!pick) {
         client.send('e2eJourneyResult', { action, requestId, ok: false });
         return false;
       }
       const [x, z] = pick;
+      client._e2eProgressionClaimCells = (client._e2eProgressionClaimCells || []).filter(([cx, cz]) => cx !== x || cz !== z);
       rec.prof.gold = Math.max(rec.prof.gold | 0, 500);
       p.dgn = '';
       p.x = x + 0.5;

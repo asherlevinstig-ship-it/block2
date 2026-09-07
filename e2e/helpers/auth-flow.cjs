@@ -45,17 +45,13 @@ async function registerAndPlay(page, { username, password, hunterName, displayNa
 
 async function resumeAfterReload(page, { timeout = 15_000 } = {}) {
   await page.reload();
-  const play = page.locator('#playbtn');
-  await expect.poll(async () => {
-    if (await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected === true)) return 'connected';
-    if (await play.isVisible() && await play.isEnabled()) return 'play';
-    return 'waiting';
-  }, { timeout }).not.toBe('waiting');
-  await page.evaluate(() => {
-    if (window.__BLOCKCRAFT_E2E__?.status().connected === true) return;
+  await expect.poll(() => page.evaluate(() => {
+    if (window.__BLOCKCRAFT_E2E__?.status().connected === true) return 'connected';
     const button = document.getElementById('playbtn');
-    if (button && !button.disabled && button.offsetParent !== null) button.click();
-  });
+    if (!button || button.disabled || button.offsetParent === null) return 'waiting';
+    button.click();
+    return 'clicked';
+  }), { timeout }).not.toBe('waiting');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected), { timeout }).toBe(true);
 }
 

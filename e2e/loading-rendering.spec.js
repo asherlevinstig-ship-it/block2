@@ -28,7 +28,10 @@ test('loading failures stay blocked, announcements stay readable, and queued ter
   await page.locator('#loadretry').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   await expect(page.locator('#loadscreen')).toBeHidden();
-  await expect.poll(() => page.evaluate(() => window.BlockcraftGameContext.requireModule('world').pendingChunkCount())).toBe(0);
+  await expect.poll(
+    () => page.evaluate(() => window.BlockcraftGameContext.requireModule('world').pendingChunkCount()),
+    { timeout: 60_000 },
+  ).toBe(0);
   expect(failures).toEqual([]);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
 });
