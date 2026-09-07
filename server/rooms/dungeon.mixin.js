@@ -1601,10 +1601,12 @@ class DungeonMixin {
   // when it isn't a fresh clear or there's no rank above this one.
   firstClearBonusItems(rank, progress) {
     if (!progress || !progress.newClear || rank < 0 || rank >= 4) return [];
-    return [
+    const items = [
       { id: I.IRON_INGOT, count: 4 + rank * 2 },
       { id: I.DIAMOND, count: 1 + rank },
     ];
+    if (rank === 3) items.push({ id: I.LEGEND_TOKEN, count: 2 });
+    return items;
   }
   bossShardDrop(rank, shardPlus = 0) {
     if ((shardPlus | 0) > 0) return [];

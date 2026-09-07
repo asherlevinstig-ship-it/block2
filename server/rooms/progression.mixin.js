@@ -1769,6 +1769,10 @@ class ProgressionMixin {
       rec.prof.progressionFocus = 'a_rank_climb';
       this.dirtyPlayers.add(rec.token);
       this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
+    } else if (rec && rec.prof.progressionFocus === 'a_rank_climb' && (rank | 0) >= 4) {
+      rec.prof.progressionFocus = 's_rank_climb';
+      this.dirtyPlayers.add(rec.token);
+      this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
     }
   }
 

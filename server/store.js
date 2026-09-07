@@ -52,7 +52,7 @@ const ARMOR_IDS = new Set([137, 183, 184, 211, 212, 213]);
 const PROGRESSION_FOCUS_STATES = new Set([
   'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade', 'first_profession_contract',
-  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'a_rank_climb', 'next_adventurer_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'a_rank_climb', 's_rank_climb', 'next_adventurer_contract',
 ]);
 // earnable mounts that persist on the profile, stored as 'dragon:<type>'
 const MOUNT_UNLOCK_IDS = new Set(['dragon:ember', 'dragon:verdant', 'dragon:frost', 'dragon:storm', 'dragon:void']);
@@ -1147,6 +1147,7 @@ function sanitizeProfile(p) {
   if (out.progressionFocus === 'c_rank_climb' && (out.highestGateRankCleared >= 2 || (out.S.lvl | 0) >= HUNTER_RANK_LEVELS[2])) out.progressionFocus = out.abilitySpec ? 'b_rank_pressure' : 'c_rank_specialization';
   if (out.progressionFocus === 'c_rank_specialization' && out.abilitySpec) out.progressionFocus = 'b_rank_pressure';
   if (out.progressionFocus === 'b_rank_pressure' && out.highestGateRankCleared >= 3) out.progressionFocus = 'a_rank_climb';
+  if (out.progressionFocus === 'a_rank_climb' && out.highestGateRankCleared >= 4) out.progressionFocus = 's_rank_climb';
   if (out.progressionFocus === 'next_adventurer_contract' && out.abilitySpec) out.progressionFocus = 'b_rank_pressure';
   if (out.progressionFocus === 'e_rank_climb' && out.S.lvl >= 11) out.progressionFocus = JOB_SYSTEM.ENABLED
     ? (out.job === 'adventurer' ? 'first_promotion_contract' : 'first_promotion_job')

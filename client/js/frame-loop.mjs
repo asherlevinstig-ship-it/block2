@@ -955,7 +955,7 @@ function serverObjectiveForHud(){
   const list=activeObjectiveList();
   if(!list.length)return null;
   const candidates=list.filter(o=>o.source!=='tutorial');
-  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade','e_rank_climb','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','a_rank_climb'].includes(progressionFocus)
+  const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade','e_rank_climb','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','a_rank_climb','s_rank_climb'].includes(progressionFocus)
     ?candidates.find(o=>o.source==='progression'&&o.id==='progression:'+progressionFocus)
     :null;
   if(baseChapter)return baseChapter;
@@ -1188,7 +1188,18 @@ function progressionObjectiveFallback(){
   if(progressionFocus==='a_rank_climb'){
     const rankProgress=currentRankProgress&&currentRankProgress();
     const remaining=rankProgress&&rankProgress.nextRank===4?Math.max(0,rankProgress.remaining|0):0;
-    return objectiveLine('progression','Next','A-rank Climb',remaining.toLocaleString('en-US')+' Hunter XP to Level 41. Recommended now: clear a B-rank Gate',{type:'guild_contracts',label:'EARN HUNTER XP'},rankProgress?objectiveProgressParts(rankProgress.earned,rankProgress.required):null);
+    const pressure=overworldActivity&&overworldActivity.gateBreach;
+    if(pressure)return objectiveLine('progression','Next','A-rank Climb',(remaining?remaining.toLocaleString('en-US')+' Hunter XP to Level 41. ':'')+'First: contain the active Gate breach before Road Safety falls further',{type:'regional_track',label:'TRACK BREACH'});
+    if(S&&S.lvl<41)return objectiveLine('progression','Next','A-rank Climb',remaining.toLocaleString('en-US')+' Hunter XP to Level 41. Recommended now: clear a B-rank Gate',{type:'guild_contracts',label:'EARN HUNTER XP'},rankProgress?objectiveProgressParts(rankProgress.earned,rankProgress.required):null);
+    if(roadSafety<75)return objectiveLine('progression','Next','A-rank Climb','Road Safety is '+roadSafety+'/100; the A-rank readiness target is 75/100. Complete Road Warden work or regional threats',{type:'guild_contracts',label:'ROAD WARDEN'});
+    const prep=menusApi.gateReadiness&&menusApi.gateReadiness(4);
+    if(prep&&!prep.ready)return objectiveLine('progression','Next','A-rank Climb','Next fix: '+(prep.next&&prep.next.label||'A-rank preparation')+'. '+(prep.next&&prep.next.hint||'Open the preparation check.'),{type:'gate_prep',label:'A PREP CHECK',rank:4});
+    return objectiveLine('progression','Next','A-rank Climb','Level, roads, kit, and key ready. Find an A-rank Gate and clear its layered-mechanics trial',{type:'find_gate',label:'FIND A GATE',rank:4});
+  }
+  if(progressionFocus==='s_rank_climb'){
+    const rankProgress=currentRankProgress&&currentRankProgress();
+    const remaining=rankProgress&&rankProgress.nextRank===5?Math.max(0,rankProgress.remaining|0):0;
+    return objectiveLine('progression','Next','S-rank Climb',remaining.toLocaleString('en-US')+' Hunter XP to Level 51. Recommended now: clear an A-rank Gate',{type:'guild_contracts',label:'EARN HUNTER XP'},rankProgress?objectiveProgressParts(rankProgress.earned,rankProgress.required):null);
   }
   if(progressionFocus==='first_d_gate'){
     const craft=objectiveCraftAction('what_next'),prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();
@@ -1385,8 +1396,8 @@ function unifiedObjectiveList(){
   if(midgame)lines.push(midgame);
   const seen=new Set();
   const unique=lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;});
-  if(progressionFocus==='e_rank_climb'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'){
-    const climbTitle=progressionFocus==='e_rank_climb'?'E-rank Climb':progressionFocus==='c_rank_climb'?'C-rank Climb':progressionFocus==='b_rank_pressure'?'Gate Pressure':'A-rank Climb';
+  if(progressionFocus==='e_rank_climb'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'||progressionFocus==='s_rank_climb'){
+    const climbTitle=progressionFocus==='e_rank_climb'?'E-rank Climb':progressionFocus==='c_rank_climb'?'C-rank Climb':progressionFocus==='b_rank_pressure'?'Gate Pressure':progressionFocus==='a_rank_climb'?'A-rank Climb':'S-rank Climb';
     const climb=unique.find(line=>line.title===climbTitle);
     const activity=unique.find(line=>line!==climb&&['story','guild','aegis'].includes(line.kind));
     return [climb,activity].filter(Boolean);
@@ -1454,7 +1465,8 @@ function currentObjectiveAction(){
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract') return {type:'quest_log',label:'OPEN QUEST LOG'};
   if(progressionFocus==='c_rank_specialization') return {type:'choose_spec',label:'CHOOSE SPEC'};
   if(progressionFocus==='b_rank_pressure') return progressionObjectiveFallback().action || {type:'guild_contracts',label:'OPEN GUILD BOARD'};
-  if(progressionFocus==='a_rank_climb') return {type:'guild_contracts',label:'EARN HUNTER XP'};
+  if(progressionFocus==='a_rank_climb') return progressionObjectiveFallback().action || {type:'guild_contracts',label:'EARN HUNTER XP'};
+  if(progressionFocus==='s_rank_climb') return {type:'guild_contracts',label:'EARN HUNTER XP'};
   if(progressionFocus==='c_rank_climb'){
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
     if(S&&S.lvl<21)return {type:'guild_contracts',label:'EARN HUNTER XP'};
@@ -1935,6 +1947,20 @@ function utilityCompassTarget(){
     if(gate)return {label:'B-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
+  if(progressionFocus==='a_rank_climb'){
+    const breach=overworldActivity&&overworldActivity.gateBreach;
+    if(breach)return {label:'Breach',x:breach.x,z:breach.z};
+    if(S&&S.lvl<41||roadSafety<75)return {label:roadSafety<75?'Road Warden':'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
+    const prep=menusApi.gateReadiness&&menusApi.gateReadiness(4);
+    if(prep&&prep.next){
+      if(prep.next.id==='food')return {label:'A Prep · Tavern',x:HUB.tavern.x,z:HUB.tavern.z};
+      if(prep.next.id==='key')return {label:'A Prep · Market',x:HUB.market.x,z:HUB.market.z};
+      if(prep.next.id==='armor')return {label:'A Prep · Aegis',x:HUB.aegisApproach.x,z:HUB.aegisApproach.z};
+      return {label:'A Prep · Smithy',x:HUB.smith.x,z:HUB.smith.z};
+    }
+    if(gate)return {label:'A-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
+    return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
+  }
   if(progressionFocus==='c_rank_climb'){
     if(S&&S.lvl<21)return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
     const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
@@ -1945,7 +1971,7 @@ function utilityCompassTarget(){
     }
     if(gate)return {label:'C-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
   }
-  if(progressionFocus==='e_rank_climb'||progressionFocus==='a_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
+  if(progressionFocus==='e_rank_climb'||progressionFocus==='s_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
   }
   if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){

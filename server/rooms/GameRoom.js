@@ -2679,6 +2679,50 @@ class GameRoom extends Room {
       client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, roadSafety: 65 });
       return true;
     }
+    if (action === 'prepareARankClimb') {
+      const p = this.state.players.get(client.sessionId);
+      if (p && p.dim === 'tutorial') this.leaveTutorialDimension(client);
+      rec.prof.progressionFocus = 'a_rank_climb';
+      rec.prof.S.lvl = HUNTER_RANK_LEVELS[4] - 1;
+      rec.prof.S.xp = Math.max(0, xpNeedForLevel(rec.prof.S.lvl) - 1);
+      rec.prof.highestGateRankCleared = Math.max(3, rec.prof.highestGateRankCleared | 0);
+      rec.prof.armor = { id: I.LEGEND_ARMOR, count: 1, armorType: 'aegis', rarity: 'mythic', dur: ARMOR_INFO[I.LEGEND_ARMOR].dur, source: 'e2e' };
+      const fixtureIds = new Set([I.DIA_SWORD, I.DIA_PICK, I.BREAD, I.SOLO_KEY_A]);
+      const rest = Array.isArray(rec.prof.inv) ? rec.prof.inv.filter(s => s && !fixtureIds.has(s.id | 0)) : [];
+      rec.prof.inv = [
+        { id: I.DIA_SWORD, count: 1, plus: 2, dur: Math.round(TOOL_INFO[I.DIA_SWORD].dur * 1.30), source: 'e2e' },
+        { id: I.DIA_PICK, count: 1, dur: TOOL_INFO[I.DIA_PICK].dur, source: 'e2e' },
+        { id: I.BREAD, count: 6 },
+        { id: I.SOLO_KEY_A, count: 1 },
+        ...rest,
+      ].slice(0, 36);
+      if (!this.worldProgress) this.worldProgress = {};
+      this.worldProgress.roadSafety = 74;
+      this.worldProgress.roadSafetyUpdatedAt = Date.now();
+      this.dirtyWorldProgress = true;
+      this.syncPlayerProfile(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'reachARank') {
+      const requestId = String(m && m.requestId || '');
+      this.grantHunterXp(rec.prof, 1, client, 'e2e-a-rank-promotion');
+      const ok = rec.prof.S.lvl >= HUNTER_RANK_LEVELS[4] && rec.prof.progressionFocus === 'a_rank_climb';
+      this.progressionChanged(client, 'e2eJourney', { action, focus: rec.prof.progressionFocus });
+      this.ensurePublicGateRank(4);
+      client.send('e2eJourneyResult', { action, requestId, ok, level: rec.prof.S.lvl | 0, focus: rec.prof.progressionFocus });
+      return ok;
+    }
+    if (action === 'stabilizeARankRoads') {
+      if (!this.worldProgress) this.worldProgress = {};
+      this.worldProgress.roadSafety = 75;
+      this.worldProgress.roadSafetyUpdatedAt = Date.now();
+      this.dirtyWorldProgress = true;
+      this.progressionChanged(client, 'e2eJourney', { action });
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, roadSafety: 75 });
+      return true;
+    }
     if (action === 'prepareProgressionFocus') {
       const focus = String(m && m.focus || '');
       const variant = String(m && m.variant || '');
@@ -2815,6 +2859,20 @@ class GameRoom extends Room {
       client.send('e2eJourneyResult', { action, requestId, ok });
       return ok;
     }
+    if (action === 'failARankGate') {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      const ok = !!(p && inst && !inst.cleared && (inst.rank | 0) === 4);
+      if (ok) {
+        this.hurtPlayer(client, 999999, 'e2e-a-gate-failure');
+        client.send('e2eJourneyResult', { action, requestId, ok });
+        this.handleQuitDungeonSpirit(client);
+        return true;
+      }
+      client.send('e2eJourneyResult', { action, requestId, ok });
+      return ok;
+    }
     if (action === 'defeatDRankBoss') {
       const requestId = m && String(m.requestId || '').slice(0, 32);
       const p = this.state.players.get(client.sessionId);
@@ -2876,6 +2934,44 @@ class GameRoom extends Room {
       if (!boss) {
         client.send('e2eJourneyResult', { action, requestId, ok: false });
         return false;
+      }
+      p.x = inst.bossRoom.x;
+      p.z = inst.bossRoom.z;
+      this.recordBossContribution(client, inst.id, Math.max(1, boss.maxHp | 0));
+      this.finishMobKill(client, bossId, boss);
+      client.send('e2eJourneyResult', { action, requestId, ok: true });
+      return true;
+    }
+    if (action === 'exerciseARankBoss' || action === 'defeatARankBoss') {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      if (!p || !inst || inst.cleared || (inst.rank | 0) !== 4) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      let bossId = '', boss = null;
+      this.state.mobs.forEach((mob, id) => {
+        if (!boss && mob && mob.dgn === inst.id && mob.kind === 'boss') { bossId = String(id); boss = mob; }
+      });
+      if (!boss) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      if (action === 'exerciseARankBoss') {
+        const meta = this.mobMeta[bossId];
+        const states = { buried_monarch: 'buriedWind', abyssal_gatekeeper: 'abyssalWind', rift_monarch: 'riftWind' };
+        const style = meta && meta.bossStyle || '';
+        const state = states[style];
+        if (!meta || !state) {
+          client.send('e2eJourneyResult', { action, requestId, ok: false, style });
+          return false;
+        }
+        boss.state = state;
+        meta.stateT = 1.5;
+        meta.woke = true;
+        client.send('e2eJourneyResult', { action, requestId, ok: true, style, state });
+        return true;
       }
       p.x = inst.bossRoom.x;
       p.z = inst.bossRoom.z;
@@ -5812,6 +5908,7 @@ class GameRoom extends Room {
       c_rank_specialization: ['progression:c_rank_specialization', 'progression', 'C-rank Specialization', JOB_SYSTEM.ENABLED ? 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then return to rotating contracts.' : 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then continue through Gates, quests, and regional threats.', 'Character', 'choose_spec', 'CHOOSE SPEC', 40],
       b_rank_pressure: ['progression:b_rank_pressure', 'progression', 'Gate Pressure', 'Reach level 31, keep road safety at 65 or higher, contain active Gate breaches, prepare a B-rank kit, and clear a B-rank Gate.', 'Regional pressure', JOB_SYSTEM.ENABLED ? 'jobs' : 'gate_prep', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN PREP', 70],
       a_rank_climb: ['progression:a_rank_climb', 'progression', 'A-rank Climb', 'B-rank cleared. Reach level 41 through B-rank Gates, regional threats, events, and quests before attempting an A-rank Gate.', 'Guild Hall', 'guild_contracts', 'EARN HUNTER XP', 70],
+      s_rank_climb: ['progression:s_rank_climb', 'progression', 'S-rank Climb', 'A-rank cleared. Reach level 51 through A-rank Gates, high-risk regional threats, events, and quests.', 'Guild Hall', 'guild_contracts', 'EARN HUNTER XP', 70],
       next_adventurer_contract: ['progression:next_adventurer_contract', 'progression', 'C-rank Loop', 'Your C-rank specialization is set. Use rotating Adventurer contracts, higher Gates, events, and field threats to keep climbing.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
     };
     const spec = map[focus];
@@ -6003,12 +6100,12 @@ class GameRoom extends Room {
       objective.reward = {
         xp: hunterXpForActivity(Math.max(HUNTER_RANK_LEVELS[2], S.lvl | 0), 'guild_contract'),
         gold: BOSS_REWARD_BY_RANK[3].gold,
-        items: [{ id: I.DIAMOND, count: 4 }, { id: I.IRON_INGOT, count: 8 }],
-        note: 'B-rank pressure rewards scale through Gates and regional cleanup',
+        items: [{ id: I.DIAMOND, count: 4 }, { id: I.IRON_INGOT, count: 10 }, { id: I.LEGEND_TOKEN, count: 2 }],
+        note: 'First B clear awards two Legendary Tokens for A-rank armor prep',
       };
     }
     if (focus === 'a_rank_climb' && client) {
-      const rec = this.profileFor(client), S = rec && rec.prof && rec.prof.S || {};
+      const rec = this.profileFor(client), prof = rec && rec.prof || {}, S = prof.S || {};
       const start = HUNTER_RANK_LEVELS[3], target = HUNTER_RANK_LEVELS[4];
       let required = 0, earned = 0;
       for (let level = start; level < target; level++) {
@@ -6017,8 +6114,64 @@ class GameRoom extends Room {
         else if ((S.lvl | 0) === level) earned += Math.max(0, Math.min(need, Math.floor(Number(S.xp) || 0)));
       }
       const remaining = Math.max(0, required - earned);
+      const levelReady = (S.lvl | 0) >= target;
+      const activeBreaches = this.gateBreaches && this.gateBreaches.size || 0;
+      const roadSafety = this.worldProgress && Number.isFinite(Number(this.worldProgress.roadSafety)) ? this.worldProgress.roadSafety | 0 : 50;
+      const readiness = gateReadinessForProfile(prof, 4);
+      const hasAKey = !!(
+        (this.countItem && this.countItem(prof, I.SOLO_KEY_A) > 0) ||
+        (this.countItem && this.countItem(prof, I.TEAM_KEY_A) > 0)
+      );
+      const checks = [
+        { id: 'level', label: 'Reach Hunter Level 41', done: levelReady, hint: 'Earn Hunter XP from B-rank Gates, quests, events, regional threats, and Guild Contracts.' },
+        { id: 'breaches', label: 'No active Gate breaches', done: activeBreaches <= 0, hint: 'Track the breach from the objective tracker and defeat the escaped boss.' },
+        { id: 'roads', label: `Road Safety 75/100 (${roadSafety}/100)`, done: roadSafety >= 75, hint: 'Complete Road Warden contracts and regional trouble to raise the shared Road Safety score. The A-rank readiness target is 75/100.' },
+        ...readiness.checks.map(c => ({ id: c.id, label: c.label, done: !!c.done, hint: c.hint || '' })),
+        { id: 'key', label: 'A-rank Gate key', done: hasAKey, hint: 'Your first B-rank clear awards a Solo A-rank Gate Key; replacements cost 800 gold at Bram Ledger\'s Market stall.' },
+      ];
       objective.progress = { current: Math.max(0, Math.min(required, earned)), required: Math.max(1, required) };
-      objective.hudText = `${remaining.toLocaleString('en-US')} Hunter XP to Level 41. Recommended now: clear a B-rank Gate.`;
+      objective.checklist = checks;
+      if (activeBreaches > 0) {
+        objective.action = { type: 'regional_track', label: 'TRACK BREACH' };
+        objective.location = 'Gate breach';
+        objective.hudText = `${remaining.toLocaleString('en-US')} Hunter XP to Level 41. First: contain ${activeBreaches} active Gate breach${activeBreaches === 1 ? '' : 'es'} before Road Safety falls further.`;
+      } else if (!levelReady) {
+        objective.action = { type: 'guild_contracts', label: 'EARN HUNTER XP' };
+        objective.location = 'Guild Hall';
+        objective.hudText = `${remaining.toLocaleString('en-US')} Hunter XP to Level 41. Recommended now: clear a B-rank Gate.`;
+      } else if (roadSafety < 75) {
+        objective.action = { type: 'guild_contracts', label: 'ROAD WARDEN' };
+        objective.location = 'Guild Board';
+        objective.hudText = `Road Safety is ${roadSafety}/100; the A-rank readiness target is 75/100. Complete Road Warden work or regional threats to raise it.`;
+      } else if (!readiness.ready || !hasAKey) {
+        const next = readiness.next || (!hasAKey ? checks.find(c => c.id === 'key') : null);
+        objective.action = { type: 'gate_prep', label: 'A PREP CHECK', rank: 4 };
+        objective.location = 'Gate prep';
+        objective.hudText = 'Next fix: ' + (next && next.label || 'A-rank prep') + '. ' + (next && next.hint || 'Open the preparation check.');
+      } else {
+        objective.action = { type: 'find_gate', label: 'FIND A GATE', rank: 4 };
+        objective.location = 'A-rank Gate';
+        objective.hudText = 'Level, roads, kit, and key ready. Find an A-rank Gate and clear its layered-mechanics trial.';
+      }
+      objective.reward = {
+        xp: BOSS_REWARD_BY_RANK[4].xp,
+        gold: BOSS_REWARD_BY_RANK[4].gold,
+        items: [{ id: I.DIAMOND, count: 4 }],
+        note: 'A-rank clear opens the S-rank climb',
+      };
+    }
+    if (focus === 's_rank_climb' && client) {
+      const rec = this.profileFor(client), S = rec && rec.prof && rec.prof.S || {};
+      const start = HUNTER_RANK_LEVELS[4], target = HUNTER_RANK_LEVELS[5];
+      let required = 0, earned = 0;
+      for (let level = start; level < target; level++) {
+        const need = xpNeedForLevel(level); required += need;
+        if ((S.lvl | 0) > level) earned += need;
+        else if ((S.lvl | 0) === level) earned += Math.max(0, Math.min(need, Math.floor(Number(S.xp) || 0)));
+      }
+      const remaining = Math.max(0, required - earned);
+      objective.progress = { current: Math.max(0, Math.min(required, earned)), required: Math.max(1, required) };
+      objective.hudText = `${remaining.toLocaleString('en-US')} Hunter XP to Level 51. Recommended now: clear an A-rank Gate.`;
     }
     return objective;
   }
@@ -7544,12 +7697,19 @@ class GameRoom extends Room {
     const landmarks = W.regionalLandmarkSpecs();
     const small = W.smallDiscoverySpecs();
     const offers = [];
+    const hunterRank = hunterRankIndexForLevel(level);
+    const rankGoldMultiplier = hunterRank >= 4 ? 1.4 : hunterRank >= 3 ? 1.2 : 1;
+    const rankRewardItems = ring => hunterRank >= 4
+      ? [{ id: I.DIAMOND, count: 2 }]
+      : hunterRank >= 3
+        ? [{ id: I.DIAMOND, count: 1 }]
+        : ring >= 2 ? [{ id: ring >= 3 ? I.DIAMOND : I.IRON_INGOT, count: ring >= 3 ? 1 : 2 }] : [];
     const mkReward = (s, baseGold, baseXp) => {
       const ring = dangerRingAt(s.x, s.z);
       return {
-        rewardGold: Math.round(baseGold * DANGER_RINGS[ring].loot),
+        rewardGold: Math.round(baseGold * DANGER_RINGS[ring].loot * rankGoldMultiplier),
         rewardXp: Math.max(Math.round(baseXp * DANGER_RINGS[ring].loot), hunterXpForActivity(level, 'guild_contract')),
-        rewardItems: ring >= 2 ? [{ id: ring >= 3 ? I.DIAMOND : I.IRON_INGOT, count: ring >= 3 ? 1 : 2 }] : [],
+        rewardItems: rankRewardItems(ring),
       };
     };
     const scout = this.pickContractTarget(landmarks.filter(s => s.major), bucket, 11);
@@ -7575,7 +7735,7 @@ class GameRoom extends Room {
       targetName: bio.name, targetItem: bio.item, targetItemName: bio.name, need: 3 + (bucket % 2), have: 0,
       title: 'Gather ' + bio.name,
       desc: 'Bring back regional material gathered from its native biome.',
-      rewardGold: 46, rewardXp: Math.max(26, hunterXpForActivity(level, 'guild_contract')), rewardItems: [], acceptedAt: 0, seed: bucket,
+      rewardGold: Math.round(46 * rankGoldMultiplier), rewardXp: Math.max(26, hunterXpForActivity(level, 'guild_contract')), rewardItems: rankRewardItems(0), acceptedAt: 0, seed: bucket,
     });
     const cache = this.pickContractTarget(small.filter(s => s.type === 'buried_chest'), bucket, 41);
     if (cache) offers.push({
@@ -7605,7 +7765,7 @@ class GameRoom extends Room {
     if(banditCamp)offers.push({id:'regional_'+bucket+'_roadcamp_'+banditCamp.id,type:'road_clear_camp',targetId:banditCamp.id,targetType:'bandit_camp',targetName:banditCamp.name,need:1,have:0,title:'Road Warden: Break the Camp',desc:'Clear the named bandit camp and defeat its captain.',...mkReward(banditCamp,78,54),acceptedAt:0,seed:bucket});
     const roadType=['road_rescue','road_recover','road_spare','road_roles'][bucket%4];
     const roadText={road_escort:['Safe Arrival','Escort a caravan safely to its destination.'],road_rescue:['Roadside Rescue','Defeat a patrol threatening a merchant caravan.'],road_recover:['Stolen Manifest','Recover supplies carried to a bandit camp.'],road_spare:['Mercy with Teeth','Spare one surrendered bandit and recover their stolen goods.'],road_roles:['Know the Enemy','Defeat three specialist bandits.']}[roadType];
-    offers.push({id:'regional_'+bucket+'_'+roadType,type:roadType,targetId:'',targetType:'road_warden',targetName:'Regional Roads',need:roadType==='road_roles'?3:1,have:0,title:'Road Warden: '+roadText[0],desc:roadText[1],rewardGold:72,rewardXp:Math.max(48,hunterXpForActivity(level,'guild_contract')),rewardItems:[{id:I.IRON_INGOT,count:2}],acceptedAt:0,seed:bucket});
+    offers.push({id:'regional_'+bucket+'_'+roadType,type:roadType,targetId:'',targetType:'road_warden',targetName:'Regional Roads',need:roadType==='road_roles'?3:1,have:0,title:'Road Warden: '+roadText[0],desc:roadText[1],rewardGold:Math.round(72*rankGoldMultiplier),rewardXp:Math.max(48,hunterXpForActivity(level,'guild_contract')),rewardItems:hunterRank>=3?rankRewardItems(0):[{id:I.IRON_INGOT,count:2}],acceptedAt:0,seed:bucket});
     return offers;
   }
   publicRegionalContract(c) {

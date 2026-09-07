@@ -31,9 +31,11 @@ function readinessHints(req) {
   };
   if (req.weapon === 4) return {
     weapon: req.weaponPlus
-      ? `Take a Diamond Sword to Tobin's forge and upgrade it to +${req.weaponPlus}. The first upgrade costs 1 Diamond and 130 gold.`
+      ? `Take a Diamond Sword to Tobin's forge and upgrade it to +${req.weaponPlus}. +1 costs 1 Diamond and 130 gold; +2 costs another 2 Diamonds and 190 gold.`
       : 'Craft a Diamond Sword or Diamond Axe with Diamonds and Sticks, or earn equivalent Gate gear.',
-    armor: 'Craft Diamond Armor with 8 Diamonds, then equip it. Stormglass or Stormweave also qualify.',
+    armor: req.armor >= 5
+      ? 'Forge Legendary Aegis Armor with 2 Legendary Tokens at the Aegis Guardian. Your first B-rank clear awards both tokens.'
+      : 'Craft Diamond Armor with 8 Diamonds, then equip it. Stormglass or Stormweave also qualify.',
     food: `Bring any ${req.food} food items; Greta sells Cooked Meat at the Tavern.`,
     tool: `Craft a Diamond pick, shovel, or hoe and keep it above ${Math.round(req.health * 100)}% durability.`,
   };

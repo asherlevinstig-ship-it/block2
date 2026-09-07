@@ -52,6 +52,7 @@ test('disabled profession objectives migrate to live progression steps', () => {
   assert.equal(sanitizeProfile({ progressionFocus: 'first_promotion_contract', S: { lvl: 11 } }).progressionFocus, 'first_d_gate');
   assert.equal(sanitizeProfile({ progressionFocus: 'next_adventurer_contract', abilitySpec: 'nightstalker', S: { lvl: 21, path: 'verdant' } }).progressionFocus, 'b_rank_pressure');
   assert.equal(sanitizeProfile({ progressionFocus: 'e_rank_climb', S: { lvl: 11 } }).progressionFocus, 'first_d_gate');
+  assert.equal(sanitizeProfile({ progressionFocus: 'a_rank_climb', highestGateRankCleared: 4, S: { lvl: 41 } }).progressionFocus, 's_rank_climb');
 });
 
 test('concurrent world updates serialize the full read-modify-write transaction', async () => {

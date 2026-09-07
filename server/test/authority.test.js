@@ -9584,6 +9584,8 @@ test('first clear of a rank grants a one-time material leg-up (E-clear pulls pro
   // higher first-clears scale the leg-up up
   const c = room.firstClearBonusItems(2, { newClear: true });
   assert.ok(c.some(it => it.id === I.IRON_INGOT && it.count > 4), 'higher ranks scale the material leg-up');
+  const b = room.firstClearBonusItems(3, { newClear: true });
+  assert.ok(b.some(it => it.id === I.LEGEND_TOKEN && it.count === 2), 'first B clear guarantees the tokens needed for A-rank armor prep');
   // clearing the top rank (A = 4) has no rank above it, so no bonus
   assert.deepEqual(room.firstClearBonusItems(4, { newClear: true }), []);
 });
@@ -12495,6 +12497,9 @@ test('regional guild contracts rotate through the requested exploration archetyp
   }
   const aRankOffers = room.regionalContractOffers(0, 41);
   assert.ok(aRankOffers.every(offer => offer.rewardXp >= 713), 'regional work remains meaningful at A-rank');
+  const bRankOffers = room.regionalContractOffers(0, 31);
+  assert.ok(bRankOffers.every((offer, index) => offer.rewardGold > offers[index].rewardGold), 'B-rank regional work increases gold rewards');
+  assert.ok(bRankOffers.every(offer => offer.rewardItems.some(item => item.id === I.DIAMOND)), 'B-rank regional work adds rank-appropriate materials');
   const roadRoles = room.regionalContractOffers(3 * 6 * 60 * 60 * 1000).find(offer => offer.type === 'road_roles');
   assert.equal(roadRoles.need, 3, 'Know the Enemy tracks the three specialist bandits named in its description');
 });
