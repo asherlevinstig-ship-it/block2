@@ -2129,6 +2129,7 @@ function buildGuildHallBase(){
   for(let x=doorX;x<=TOWN.TC;x++)for(let z=TOWN.TC-14;z<=TOWN.TC-12;z++)setB(x,G,z,B.COBBLE);
   setB(doorX-2,G+1,z2+1,B.TORCH);setB(doorX+2,G+1,z2+1,B.TORCH);
 }
+const townLampAnchors=[];
 function buildTown(){
   const {TC,HS,G}=TOWN;
   const x1=TC-HS, x2=TC+HS, z1=TC-HS, z2=TC+HS;
@@ -2359,6 +2360,7 @@ function buildTown(){
     }
   };
   const lanternPost=(x,z)=>{
+    townLampAnchors.push({x,z});
     setB(x,G+1,z,B.LOG); setB(x,G+2,z,B.LOG); setB(x,G+3,z,B.TORCH);
   };
   const benchX=(x,z,len=4)=>{
@@ -2505,9 +2507,15 @@ function blockFaceTile(id, faceIndex, x, y, z){
   }
   return tiles[ faceIndex===3?0 : faceIndex===2?2 : 1 ];
 }
+const foliagePalette=[[.96,1,.88],[.78,.94,.84],[1,.95,.78],[1,.85,.7],[.86,.95,1],[.78,.88,.72]];
 function buildChunkGeometry(cx, cz, translucentPass){
   const pos=[], nor=[], col=[], uv=[], ind=[];
   const x0=cx*CHUNK, z0=cz*CHUNK;
+  const foliageColumns=[];
+  if(dim==='overworld' && !translucentPass){
+    for(let x=x0;x<x0+CHUNK;x++)for(let z=z0;z<z0+CHUNK;z++)
+      foliageColumns[(x-x0)*CHUNK+z-z0]=foliagePalette[biomeAt(x,z)];
+  }
   const b=worldBounds();
   for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++)
   for(let y=b.minY;y<=b.maxY;y++)
@@ -2518,6 +2526,7 @@ function buildChunkGeometry(cx, cz, translucentPass){
     if(def.noMesh) continue;
     const trans = !!def.translucent;
     if(trans !== translucentPass) continue;
+    const foliage=(id===B.GRASS||id===B.LEAVES) && foliageColumns[(x-x0)*CHUNK+z-z0];
     for(let f=0; f<6; f++){
       const face=FACES[f];
       const nb = getB(x+face.dir[0], y+face.dir[1], z+face.dir[2]);
@@ -2535,7 +2544,7 @@ function buildChunkGeometry(cx, cz, translucentPass){
         uv.push(u0 + c.uv[0]*uw, 1 - (v0 + (1-c.uv[1])*vw));
         const ao = trans ? 1 : vertexAO(x,y,z,face.dir,c.p);
         const s = face.shade * ao;
-        col.push(s,s,s);
+        col.push(s*(foliage?foliage[0]:1),s*(foliage?foliage[1]:1),s*(foliage?foliage[2]:1));
       }
       ind.push(base, base+1, base+2, base+2, base+1, base+3);
     }
@@ -4451,12 +4460,43 @@ function npcTex(draw){
 function lam(map){ return new THREE.MeshLambertMaterial({map}); }
 // soft blob shadow under every NPC
 const shadowGeo=new THREE.CircleGeometry(.42,12);
-const shadowMat=new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:.28, depthWrite:false});
+const contactCanvas=document.createElement('canvas');contactCanvas.width=contactCanvas.height=64;
+const contactCtx=contactCanvas.getContext('2d');
+const contactGradient=contactCtx.createRadialGradient(32,32,3,32,32,32);
+contactGradient.addColorStop(0,'rgba(255,255,255,.85)');
+contactGradient.addColorStop(.4,'rgba(255,255,255,.5)');
+contactGradient.addColorStop(1,'rgba(255,255,255,0)');
+contactCtx.fillStyle=contactGradient;contactCtx.fillRect(0,0,64,64);
+const contactTexture=new THREE.CanvasTexture(contactCanvas);
+const shadowMat=new THREE.MeshBasicMaterial({map:contactTexture,color:0x17202a, transparent:true, opacity:.48, depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
 function blobShadow(r){
   const m=new THREE.Mesh(shadowGeo, shadowMat);
-  m.rotation.x=-Math.PI/2; m.position.y=.03; m.scale.setScalar(r);
+  m.rotation.x=-Math.PI/2; m.position.y=.03; m.scale.setScalar(r*1.2);
+  m.renderOrder=1;
   return m;
 }
+// Low ground-only warmth stays behind actor silhouettes and combat rings.
+const townPoolMaterial=new THREE.MeshBasicMaterial({map:contactTexture,color:0xffb45b,transparent:true,opacity:.16,depthWrite:false,blending:THREE.AdditiveBlending});
+const townLightPools=new THREE.InstancedMesh(new THREE.PlaneGeometry(7,7),townPoolMaterial,townLampAnchors.length);
+townLightPools.name='town-lamp-pools';townLightPools.renderOrder=0;
+const townPoolTransform=new THREE.Object3D();
+let townPoolCheck=0;
+function updateTownLightPools(dt,dayF){
+  townPoolMaterial.opacity=.1+(1-dayF)*.2;
+  townPoolCheck-=dt;
+  if(townPoolCheck>0)return;
+  townPoolCheck=.5;
+  townLampAnchors.forEach(({x,z},i)=>{
+    const active=dim==='overworld' && getB(x,TOWN.G+3,z)===B.TORCH && isOpaque(getB(x,TOWN.G,z));
+    townPoolTransform.position.set(x+.5,TOWN.G+1.018,z+.5);
+    townPoolTransform.rotation.x=-Math.PI/2;townPoolTransform.scale.setScalar(active?1:0);
+    townPoolTransform.updateMatrix();townLightPools.setMatrixAt(i,townPoolTransform.matrix);
+  });
+  townLightPools.instanceMatrix.needsUpdate=true;
+}
+// Three r128 does not compute aggregate instance bounds; only ten small planes.
+townLightPools.frustumCulled=false;
+townGroup.add(townLightPools);
 const hatMat=new THREE.MeshLambertMaterial({color:0xc8a85a});
 function solidTex(col, speck){
   return npcTex(g=>{
@@ -7373,7 +7413,11 @@ function makeSkyportDecor(){
   addBox(grp,[7,.3,1.6],[-10.4,.15,0],timber,[0,0,-.025]);
   for(const z of [-.72,.72]) addBox(grp,[7,.16,.16],[-10.4,.75,z],rope,[0,0,-.025]);
   // Signal mast and windsock make departures readable from the plaza.
-  addBox(grp,[.38,9,.38],[5.1,4.5,-5.1],timber);
+  addBox(grp,[.38,12,.38],[5.1,6,-5.1],timber);
+  addBox(grp,[4.8,.2,.2],[5.1,10.2,-5.1],brass);
+  addBox(grp,[.7,.9,.7],[5.1,12.25,-5.1],lamp);
+  addBox(grp,[.2,2.4,.2],[3,9.1,-5.1],signal);
+  addBox(grp,[.2,1.8,.2],[7.2,9.4,-5.1],signal);
   addBox(grp,[3.8,.18,.18],[6.7,7.7,-5.1],brass);
   addBox(grp,[3.1,1.15,.18],[7.15,7.05,-5.1],signal);
   for(const [x,z] of [[-5.8,-5.8],[5.8,-5.8],[-5.8,5.8],[5.8,5.8]])
@@ -7577,6 +7621,7 @@ function updateDayNight(dt){
   const sunE=_sunDir.y;
   const dayF=sstep(-0.12,0.20,sunE);
   gDayF=dayF;
+  updateTownLightPools(dt,dayF);
   const duskF=Math.max(0,1-Math.abs(sunE)/0.42)*sstep(-0.28,0.02,sunE);
 
   // world brightness: tint the baked-light chunk materials
@@ -7600,13 +7645,14 @@ function updateDayNight(dt){
   sun.intensity=Math.max(0,sunE)*0.75+0.05;
   sun.color.setRGB(1,0.93,0.82).lerp(_tmpC.setRGB(1,0.50,0.28), duskF);
   sun.position.set(TOWN.TC+_sunDir.x*120, Math.max(sunE,0.06)*120, TOWN.TC+_sunDir.z*120);
-  hemi.intensity=0.16+dayF*0.84;
-  hemi.color.copy(_tmpC.setRGB(0.42,0.52,0.74)).lerp(new THREE.Color(0.81,0.91,1), dayF);
+  hemi.intensity=0.5+dayF*0.42;
+  hemi.groundColor.set(0x88735b);
+  hemi.color.copy(_tmpC.setRGB(0.65,0.75,0.95)).lerp(new THREE.Color(0.81,0.91,1), dayF);
 
   // weather dims and closes in the overworld; lightning briefly floods it with light
   if(dim==='overworld'){
-    scene.fog.near=40-weatherLerp*22;
-    scene.fog.far=110-weatherLerp*52;
+    scene.fog.near=44-weatherLerp*16;
+    scene.fog.far=110-weatherLerp*34;
     if(weatherLerp>.02){
       _tmpC.setRGB(.34,.38,.45);
       matOpaque.color.lerp(_tmpC,weatherLerp*.58);

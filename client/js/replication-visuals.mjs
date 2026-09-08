@@ -91,8 +91,8 @@ function decorateBiomeHostile(m,kind){
   }
   if(biome==='mesa'||biome==='plains'){
     const radius=biome==='mesa'?3.8:1.15,vfx=BIOME_VFX[biome];
-    const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.11,radius,48),new THREE.MeshBasicMaterial({color:vfx.hex,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));
-    tell.rotation.x=-Math.PI/2;tell.position.y=.07;tell.visible=false;tell.userData.inverseScale={x:1/proportions[0],y:1/proportions[2],z:1/proportions[1]};tell.scale.set(tell.userData.inverseScale.x,tell.userData.inverseScale.y,tell.userData.inverseScale.z);m.grp.add(tell);m.biomeTell=tell;
+    const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.11,radius,48),new THREE.MeshBasicMaterial({color:vfx.hex,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false,depthTest:false,fog:false}));
+    tell.renderOrder=100;tell.rotation.x=-Math.PI/2;tell.position.y=.07;tell.visible=false;tell.userData.inverseScale={x:1/proportions[0],y:1/proportions[2],z:1/proportions[1]};tell.scale.set(tell.userData.inverseScale.x,tell.userData.inverseScale.y,tell.userData.inverseScale.z);m.grp.add(tell);m.biomeTell=tell;
   }
 }
 function tintModel(m,col){
@@ -359,6 +359,13 @@ function decorateEncounter(m,ref){
   const biome=BIOME_HOSTILE_KIND[ref.kind],biomeHostile=!!biome,banditHostile=ref.kind.indexOf('bandit')===0;
   const breached=/^Breached /.test(name);
   const friendly=ref.kind.indexOf('caravan_')===0||ref.kind==='pack_mule'||ref.kind==='wounded_hunter',hostile=!friendly;
+  // A small material fill keeps dark enemy textures readable without extra lights.
+  // Preserve authored emissive colors on bosses, weapons and magical details.
+  if(hostile)for(const mat of m.mats||[]){
+    if(mat.emissive && mat.emissive.getHex()===0){
+      mat.emissive.setRGB(.055,.065,.085);mat.emissiveIntensity=1;
+    }
+  }
   const bodyScale=m.silhouetteScale||{x:1,y:1,z:1},width=biomeHostile?.96:1.29,labelScale=biomeHostile?.78:1;
   const label=textSprite(name,breached?'#ff3b2f':biomeHostile?BIOME_NAME_COLOR[biome]:friendly?'#8edcff':hostile?'#ff9b82':'#fff',breached?1.16:labelScale);
   label.position.y=(m.wagon?2.35:biomeHostile?2.38:2.65)/bodyScale.y;
@@ -369,7 +376,7 @@ function decorateEncounter(m,ref){
   bg.scale.set(bgW/bodyScale.x,(biomeHostile?.095:.13)/bodyScale.y,1/bodyScale.z);fill.scale.set(width/bodyScale.x,barH/bodyScale.y,1/bodyScale.z);bg.position.y=label.position.y-(biomeHostile?.3:.42)/bodyScale.y;fill.position.set(0,bg.position.y,.01);bg.renderOrder=21;fill.renderOrder=22;m.grp.add(bg,fill);m.encounterUi={label,bg,fill,friendly,hostile,width,bodyScale,breached};
   if(!biomeHostile){const ring=new THREE.Mesh(new THREE.TorusGeometry(breached?1.35:m.wagon?1.25:.58,.035,6,30),new THREE.MeshBasicMaterial({color:breached?0xff2f2f:friendly?0x5dd5ff:0xff5c46,transparent:true,opacity:breached?.92:.7,depthWrite:false}));ring.rotation.x=Math.PI/2;ring.position.y=.06;m.grp.add(ring);m.encounterUi.ring=ring;}
   if(banditHostile){const alert=textSprite('?', '#ffd45c',.55),engaged=textSprite('!', '#ff6048',.62);alert.position.y=engaged.position.y=label.position.y+.48;m.grp.add(alert,engaged);m.encounterUi.alert=alert;m.encounterUi.engaged=engaged;}
-  if(hostile){const radius=breached?4.6:ref.kind==='bandit_captain'?4.05:ref.kind==='bandit_brute'?3.65:m.boss?3.2:1.35;const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.1,radius,48),new THREE.MeshBasicMaterial({color:breached?0xff1515:ref.kind==='bandit_captain'||m.boss?0xff3429:0xff8a45,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));tell.rotation.x=-Math.PI/2;tell.position.y=.08;tell.visible=false;m.grp.add(tell);m.encounterUi.tell=tell;const attack=textSprite(breached?'BREACH':'ATTACK', breached?'#ffdf6b':'#ffd05b',breached?.56:.48),stunned=textSprite('STUNNED', '#ffd24a',.48),frozen=textSprite('FROZEN', '#8eeaff',.48);for(const status of [attack,stunned,frozen]){status.position.y=label.position.y+.46;status.visible=false;m.grp.add(status);}m.encounterUi.attackStatus=attack;m.encounterUi.stunStatus=stunned;m.encounterUi.frozenStatus=frozen;if(ref.kind==='bandit_captain'||breached)m.spawnT=2.2;}
+  if(hostile){const radius=breached?4.6:ref.kind==='bandit_captain'?4.05:ref.kind==='bandit_brute'?3.65:m.boss?3.2:1.35;const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.1,radius,48),new THREE.MeshBasicMaterial({color:breached?0xff1515:ref.kind==='bandit_captain'||m.boss?0xff3429:0xff8a45,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false,depthTest:false,fog:false}));tell.renderOrder=100;tell.rotation.x=-Math.PI/2;tell.position.y=.08;tell.visible=false;m.grp.add(tell);m.encounterUi.tell=tell;const attack=textSprite(breached?'BREACH':'ATTACK', breached?'#ffdf6b':'#ffd05b',breached?.56:.48),stunned=textSprite('STUNNED', '#ffd24a',.48),frozen=textSprite('FROZEN', '#8eeaff',.48);for(const status of [attack,stunned,frozen]){status.position.y=label.position.y+.46;status.visible=false;m.grp.add(status);}m.encounterUi.attackStatus=attack;m.encounterUi.stunStatus=stunned;m.encounterUi.frozenStatus=frozen;if(ref.kind==='bandit_captain'||breached)m.spawnT=2.2;}
 }
 function tickEncounterReadability(m,dt,t){
   const u=m.encounterUi;if(!u)return;const r=m.ref,pct=Math.max(0,Math.min(1,(r.hp||0)/(r.maxHp||1))),scaledWidth=u.width/(u.bodyScale&&u.bodyScale.x||1);u.fill.scale.x=scaledWidth*pct;u.fill.position.x=-(scaledWidth-u.fill.scale.x)/2;
@@ -1075,7 +1082,8 @@ function netFx(m){
     ringPulse(m.x,(m.y||player.pos.y)+.08,m.z,2.2,0xff5a1f,.35);
   } else if(m.t==='quakewarn'){            // Quaking telegraph ring under a hunter
     SFX.slamWarn();
-    ringPulse(m.x,player.pos.y+.08,m.z,2.5,0xf59e0b,.95);
+    const warning=ringPulse(m.x,player.pos.y+.08,m.z,2.5,0xf59e0b,.95);
+    warning.material.fog=false;warning.renderOrder=100;
     for(let k2=0;k2<5;k2++){
       const a3=Math.random()*6.283;
       spawnParticle({x:m.x+Math.cos(a3)*2.3, y:player.pos.y+.1, z:m.z+Math.sin(a3)*2.3,
