@@ -1079,6 +1079,10 @@ class DungeonMixin {
         // Flag-on: the ready hunter switches into the dedicated DungeonRoom for this gate.
         // filterBy(gateId) lands the whole ready party in one room; the overworld gate is
         // retired when that room disposes (dungeon-handoff consumeGate), not here.
+        // Persist recovery before the room switch. During a graceful server restart the
+        // overworld room can flush after DungeonRoom; arming here prevents that older
+        // snapshot from erasing a party member's recovery marker.
+        this.armDungeonRecovery(c, g);
         c.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g, ticket, startInfo));
       }
     }

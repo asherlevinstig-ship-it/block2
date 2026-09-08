@@ -9437,8 +9437,8 @@ test('team gate lobby waits until all joined hunters are ready', () => {
   const a = makeClient('a');
   const b = makeClient('b');
   room.clients.push(a, b);
-  seedPlayer(room, a, { x: 20.5, z: 20.5, team: 'T1' });
-  seedPlayer(room, b, { x: 20.5, z: 20.5, team: 'T1' });
+  const { prof: aProf } = seedPlayer(room, a, { x: 20.5, z: 20.5, team: 'T1' });
+  const { prof: bProf } = seedPlayer(room, b, { x: 20.5, z: 20.5, team: 'T1' });
   const gate = makeGate('g-team', 20.5, 20.5, 0, 'team');
   gate.team = 'T1';
   room.state.gates.set(gate.id, gate);
@@ -9459,6 +9459,10 @@ test('team gate lobby waits until all joined hunters are ready', () => {
   const bStart = b.sent.find(e => e.type === 'dungeonLobbyStart').msg;
   assert.equal(aStart.mode, 'room');
   assert.equal(aStart.ticket, bStart.ticket);
+  assert.equal(aProf.dungeonRecovery.gateId, gate.id);
+  assert.equal(bProf.dungeonRecovery.gateId, gate.id);
+  assert.equal(aProf.dungeonRecovery.bootId, room.bootId);
+  assert.equal(bProf.dungeonRecovery.bootId, room.bootId);
 });
 
 test('gate entry rejects with access-specific reasons', () => {
