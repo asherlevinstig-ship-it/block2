@@ -668,11 +668,21 @@ class GameRoom extends Room {
     this.onMessage('tutorialComplete', (client, m) => this.handleTutorialComplete(client, m));
     if(process.env.NODE_ENV!=='production')this.onMessage('familiarTelemetry',client=>client.send('familiarTelemetry',this.familiarTelemetrySnapshot(client)));
     this.onMessage('dungeonRecoveryRequest', client => {
-      const token = this.tokens.get(client.sessionId);
-      const recovery = token && this.restartRecoveries.get(token);
-      if (!recovery) return;
-      client.send('dungeonRestartRecovery', recovery);
-      this.restartRecoveries.delete(token);
+      const deliver = (attempt = 0) => {
+        // A fast client can ask before async onJoin has loaded and registered
+        // its recovery. Wait for that per-client readiness point instead of
+        // dropping the one-shot request.
+        if (client._dungeonRecoveryReady !== true) {
+          if (attempt < 200) setTimeout(() => deliver(attempt + 1), 50);
+          return;
+        }
+        const token = this.tokens.get(client.sessionId);
+        const recovery = token && this.restartRecoveries.get(token);
+        if (!recovery) return;
+        client.send('dungeonRestartRecovery', recovery);
+        this.restartRecoveries.delete(token);
+      };
+      deliver();
     });
     if (process.env.BLOCKCRAFT_E2E === '1') {
       this.onMessage('e2eJourney', async (client, m) => this.handleE2EJourney(client, m));
@@ -1041,6 +1051,7 @@ class GameRoom extends Room {
 
   async onJoin(client, options, auth) {
     const joinStartedAt = performance.now();
+    client._dungeonRecoveryReady = false;
     logRoomLifecycle('overworld.join.start', {
       roomId: this.roomId || '',
       shardId: this.shardId || 'main',
@@ -1278,17 +1289,10 @@ class GameRoom extends Room {
     if (restartRecovery) {
       this.restartRecoveries.set(token, restartRecovery);
     }
+    client._dungeonRecoveryReady = true;
     setTimeout(() => {
       if (!this.state.players.has(client.sessionId)) return;
       const joined = this.state.players.get(client.sessionId);
-      // A recovery request can arrive while this async join is still settling.
-      // Deliver any marker that the early request could not see once the client
-      // has installed its room handlers.
-      const pendingRecovery = token && this.restartRecoveries && this.restartRecoveries.get(token);
-      if (pendingRecovery) {
-        client.send('dungeonRestartRecovery', pendingRecovery);
-        this.restartRecoveries.delete(token);
-      }
       const liveHunger = this.playerHunger.get(client.sessionId) || hunger;
       if (liveHunger) client.send('hunger', { hunger: Math.ceil(liveHunger.hunger), maxHunger: liveHunger.max });
       this.sendLandClaims(client);

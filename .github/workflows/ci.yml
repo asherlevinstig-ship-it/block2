@@ -42,6 +42,13 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Browser end-to-end tests
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/3
+        env:
+          # Shared software-rendered runners are substantially slower than a
+          # player device. These still gate measured update+render work (not
+          # requestAnimationFrame scheduling delay); local defaults stay 65/15/16.
+          TERRAIN_MAX_FRAME_P95_MS: 180
+          TERRAIN_MAX_FRAME_P95_DELTA_MS: 35
+          TERRAIN_MAX_CHUNK_BUILD_P95_MS: 20
       - name: Upload Playwright diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
