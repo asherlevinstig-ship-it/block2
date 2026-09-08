@@ -2994,15 +2994,7 @@ function rebuildChunk(cx,cz){
   chunkProfile.builds++;chunkProfile.meshMs+=meshMs;chunkProfile.maxMeshMs=Math.max(chunkProfile.maxMeshMs,meshMs);recordChunkProfileSample(chunkProfileSamples.mesh,meshMs);
   if(g2){ e.trans=new THREE.Mesh(g2, matTrans); e.trans.renderOrder=1; scene.add(e.trans); }
   chunkMeshes[key]=e;
-  syncTorchesForChunk(cx,cz);
-  const x0=cx*CHUNK, z0=cz*CHUNK;
-  const b=worldBounds();
-  for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++)
-  for(let z=Math.max(z0,b.minZ);z<=Math.min(z0+CHUNK-1,b.maxZ);z++)
-  for(let y=Math.max(1,b.minY);y<=b.maxY;y++){
-    const id=getB(x,y,z);
-    if(id===B.EGG_INSULATOR) syncInsulatorMesh(x,y,z,id);
-  }
+  syncTorchesForChunk(cx,cz,true);
   const totalMs=performance.now()-started;chunkProfile.totalMs+=totalMs;chunkProfile.maxTotalMs=Math.max(chunkProfile.maxTotalMs,totalMs);recordChunkProfileSample(chunkProfileSamples.total,totalMs);
 }
 function disposeChunk(cx,cz){
@@ -7766,16 +7758,22 @@ function removeTorchMesh(x,y,z){
   const key=x+','+y+','+z;
   if(torches[key]){ scene.remove(torches[key]); delete torches[key]; }
 }
-function syncTorchesForChunk(cx,cz){
+function syncTorchesForChunk(cx,cz,syncInsulators=false){
   if(typeof torches==='undefined') return;
   const x0=cx*CHUNK, z0=cz*CHUNK;
   const b=worldBounds();
-  for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++)
+  // Reconcile only existing lights; do not allocate a string key for every voxel.
+  for(const key of Object.keys(torches)){
+    const [x,y,z]=key.split(',').map(Number);
+    if(x>=x0 && x<x0+CHUNK && z>=z0 && z<z0+CHUNK && !isLightBlock(getB(x,y,z))) removeTorchMesh(x,y,z);
+  }
+  // X is contiguous in DimensionGrid. Share this scan with incubator discovery.
+  for(let y=Math.max(1,b.minY);y<=b.maxY;y++)
   for(let z=Math.max(z0,b.minZ);z<=Math.min(z0+CHUNK-1,b.maxZ);z++)
-  for(let y=Math.max(1,b.minY);y<=b.maxY;y++){
-    const key=x+','+y+','+z;
-    if(isLightBlock(getB(x,y,z))) addTorchMesh(x,y,z);
-    else if(torches[key]) removeTorchMesh(x,y,z);
+  for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++){
+    const id=getB(x,y,z);
+    if(isLightBlock(id)) addTorchMesh(x,y,z);
+    else if(syncInsulators && id===B.EGG_INSULATOR) syncInsulatorMesh(x,y,z,id);
   }
 }
 function disposeTorchesForChunk(cx,cz){

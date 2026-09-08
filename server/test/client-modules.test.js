@@ -33,6 +33,33 @@ test('chunk work coalesces edits, prioritizes nearby terrain, and stops after th
   assert.equal(queue.drain(0, 0), 0, 'dimension transitions discard old work');
 });
 
+test('chunk prop scan discovers lights and incubators and removes only stale lights in that chunk', () => {
+  const source=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const start=source.indexOf('function syncTorchesForChunk(');
+  const end=source.indexOf('function disposeTorchesForChunk',start);
+  const grid=new DimensionGrid({width:19,height:4,depth:19,originX:-2,originZ:-2});
+  const B={TORCH:1,LANTERN:2,CAMPFIRE:3,EGG_INSULATOR:4};
+  grid.setB(0,1,0,B.TORCH);grid.setB(1,2,1,B.LANTERN);
+  grid.setB(2,3,2,B.CAMPFIRE);grid.setB(3,1,3,B.EGG_INSULATOR);
+  grid.setB(16,1,16,B.TORCH);grid.setB(-1,1,-1,B.TORCH);
+  const torches={'4,1,4':{},'16,2,16':{}};
+  const incubators=[];
+  const ctx={CHUNK:16,B,torches,worldBounds:()=>grid.bounds,getB:(...args)=>grid.getB(...args),
+    isLightBlock:id=>id>=1&&id<=3,
+    addTorchMesh:(x,y,z)=>{torches[[x,y,z].join(',')]={};},
+    removeTorchMesh:(x,y,z)=>{delete torches[[x,y,z].join(',')];},
+    syncInsulatorMesh:(...args)=>incubators.push(args)};
+  vm.createContext(ctx);vm.runInContext(source.slice(start,end),ctx);
+  ctx.syncTorchesForChunk(0,0,true);
+  assert.deepEqual(Object.keys(torches).sort(),['0,1,0','1,2,1','16,2,16','2,3,2']);
+  assert.deepEqual(incubators,[[3,1,3,B.EGG_INSULATOR]]);
+  ctx.syncTorchesForChunk(0,0);
+  assert.equal(incubators.length,1,'light-only refresh does not resync incubators');
+  ctx.syncTorchesForChunk(1,1,true);ctx.syncTorchesForChunk(-1,-1,true);
+  assert.ok(torches['16,1,16']);assert.ok(torches['-1,1,-1']);
+  assert.equal(torches['16,2,16'],undefined);
+});
+
 test('loading watchdog ignores stale timers after success or a new transition', async () => {
   const { createLoadingWatchdog } = await clientModule('loading-watchdog.mjs');
   const callbacks = [];
