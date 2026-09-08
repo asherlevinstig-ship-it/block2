@@ -1487,6 +1487,7 @@ function noise(dur,vol,fc,q,delay,type){
     boom(){ osc('sine',90,28,.6,.8); noise(.4,.5,160,1,0,'lowpass'); },
     slamWarn(){ osc('sawtooth',72,56,.5,.3); },
     cast(){ noise(.22,.3,2400,2); osc('sine',600,1200,.28,.25); },
+    finisher(){ noise(.07,.28,750); osc('triangle',190,70,.12,.24); osc('sine',880,1320,.1,.15,.025); },
     crit(){ noise(.06,.32,3200,2); osc('sine',1400,2200,.08,.28); },
     step(kind){
       if(kind==='water'){ noise(.07,.18,800,1,0,'lowpass'); return; }

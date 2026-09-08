@@ -5,6 +5,11 @@ export function armorCondition(dur,maxDur){
   return Object.freeze({ratio,band:dur<=0?'broken':ratio<=.1?'critical':ratio<=.25?'low':'sound'});
 }
 
+export function abilityFailureText(reason,remaining=0){
+  const messages={range:'OUT OF RANGE',blocked:'BLOCKED',mana:'INSUFFICIENT MANA',stamina:'INSUFFICIENT STAMINA',target:'NO TARGET IN SIGHT',level:'ABILITY LOCKED',path:'WRONG PATH'};
+  return reason==='cooldown'?'COOLDOWN'+(remaining>0?' · '+Math.max(.1,remaining).toFixed(1)+'s':''):messages[reason]||'CAST FAILED';
+}
+
 export function createCombatFeedback({document,showName,sysMsg,sound}){
   const impact=document.getElementById('combatimpact'),warning=document.getElementById('armorwarning');
   const hitConfirm=document.getElementById('hitconfirm'),telegraph=document.getElementById('enemytelegraph'),abilityPulse=document.getElementById('abilitypulse');
@@ -49,7 +54,7 @@ export function createCombatFeedback({document,showName,sysMsg,sound}){
   function confirmHit(hit={}){
     if(!hitConfirm)return;
     hitConfirm.className=hit.lethal?'lethal':hit.crit?'critical':'';
-    if(sound){if(hit.crit&&sound.crit)sound.crit();else if(sound.hit)sound.hit();}
+    if(sound){if(hit.lethal&&sound.finisher)sound.finisher();else if(hit.crit&&sound.crit)sound.crit();else if(sound.hit)sound.hit();}
     if(document.body){document.body.classList.remove('combat-hit','combat-crit');void document.body.offsetWidth;document.body.classList.add(hit.crit?'combat-crit':'combat-hit');setTimeout(()=>document.body.classList.remove('combat-hit','combat-crit'),hit.lethal?170:hit.crit?135:72);}
     if(hit.crit)showName(hit.lethal?'EXECUTE':'CRITICAL HIT');
     clearTimeout(hitTimer);hitTimer=setTimeout(()=>hitConfirm.classList.add('hidden'),hit.lethal?260:hit.crit?230:190);
@@ -73,9 +78,13 @@ export function createCombatFeedback({document,showName,sysMsg,sound}){
     abilityPulse.textContent='CAST '+(name||('ABILITY '+(Number(slot)+1))).toUpperCase();abilityPulse.className='pending';
     clearTimeout(abilityTimer);abilityTimer=setTimeout(()=>abilityPulse.classList.add('hidden'),520);
   }
-  function abilitySettled(slot,accepted=true){
+  function abilityQueued(slot,name=''){
+    abilityPressed(slot,name);
+    if(abilityPulse)abilityPulse.textContent='QUEUED · '+(name||('ABILITY '+(Number(slot)+1))).toUpperCase();
+  }
+  function abilitySettled(slot,accepted=true,reason='',remaining=0){
     if(!abilityPulse)return;
-    abilityPulse.textContent=accepted?'ABILITY READY':'CAST BLOCKED';abilityPulse.className=accepted?'resolved':'rejected';
+    abilityPulse.textContent=accepted?'CAST CONFIRMED':abilityFailureText(reason,remaining);abilityPulse.className=accepted?'resolved':'rejected';
     clearTimeout(abilityTimer);abilityTimer=setTimeout(()=>abilityPulse.classList.add('hidden'),520);
   }
   function updateMovement(camera,sprinting,moving,dt){
@@ -85,5 +94,5 @@ export function createCombatFeedback({document,showName,sysMsg,sound}){
     const target=baseFov+(sprinting&&moving?4.5:0),next=camera.fov+(target-camera.fov)*(1-Math.exp(-Math.max(0,dt)*9));
     if(Math.abs(next-camera.fov)>.01){camera.fov=next;camera.updateProjectionMatrix();}
   }
-  return Object.freeze({showImpact,syncArmor,confirmHit,showTelegraph,abilityPressed,abilitySettled,updateMovement});
+  return Object.freeze({showImpact,syncArmor,confirmHit,showTelegraph,abilityPressed,abilityQueued,abilitySettled,updateMovement});
 }

@@ -1,3 +1,4 @@
+import {createAbilityInputBuffer} from './ability-input-buffer.mjs';
 import {api as worldApi,state as worldState} from './world.mjs';
 import {DEITY_LEVEL,DEITY_POWER_DEFS,hunterRankLevelLabel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
@@ -535,16 +536,30 @@ function castArmorPower(){
   burst(player.pos.x, player.pos.y+1, player.pos.z, [1,.82,.25], 34, 3.2, 2.8, .9);
   sysMsg('<b>Aegis Pulse</b> surges from your legendary armor');
 }
+const abilityInputBuffer=createAbilityInputBuffer();
+const abilityInputContext=()=>dim+':'+activeAbilityPath()+':'+(NET.room&&NET.room.sessionId||'solo');
+window.addEventListener('blur',()=>abilityInputBuffer.clear());
+document.addEventListener('visibilitychange',()=>abilityInputBuffer.clear());
+function abilityInputAllowed(){
+  return hp>0 && !sleeping && !document.hidden && !(NET.room&&(!NET.on||!NET.profileReady)) && gameContext.requireModule('combat').gameplayMovementAllowed();
+}
 function cast(i){
+  abilityInputBuffer.clear();
+  if(!Number.isInteger(i)||i<0||i>2)return;
+  if(!abilityInputAllowed()){globalThis.COMBAT_FEEDBACK?.abilitySettled(i,false,'blocked');return;}
   const path=activeAbilityPath();
   if(!path){ if(S.lvl>=2) sysMsg('Press <b>C</b> to choose your path first'); return; }
   if(!BETA_ABILITY_TEST && S.lvl<AB_UNLOCK[i]){ sysMsg('Unlocks at <b>'+hunterRankLevelLabel(AB_UNLOCK[i],{long:true})+'</b>'); return; }
   const a=PATHS[path].ab[i];
   const manaCost=abilityManaCost(a),cooldown=abilityCooldown(a);
   if(a.passive){ sysMsg('<b>'+a.n+'</b> is passive'); return; }
-  if(abCd[i]>0) return;
-  if(mp<manaCost){ sysMsg('Not enough <b>mana</b>'); return; }
-  if(sp<a.sp){ sysMsg('Not enough <b>stamina</b>'); return; }
+  if(abCd[i]>0){
+    if(abilityInputBuffer.queue(i,abCd[i]*1000,abilityInputContext()))globalThis.COMBAT_FEEDBACK?.abilityQueued(i,a.n);
+    else globalThis.COMBAT_FEEDBACK?.abilitySettled(i,false,'cooldown',abCd[i]);
+    return;
+  }
+  if(mp<manaCost){ globalThis.COMBAT_FEEDBACK?.abilitySettled(i,false,'mana'); return; }
+  if(sp<a.sp){ globalThis.COMBAT_FEEDBACK?.abilitySettled(i,false,'stamina'); return; }
   if(abilityTrainingActive && i===0) noteAbilityTrainingCast();
   if(NET.on && NET.room){
     sendAbilityRequest(path,i,a);
@@ -557,7 +572,7 @@ function cast(i){
 }
 function sendAbilityRequest(path,i,a){
   const d=viewDir();
-  const target=mobUnderCrosshair(path==='mage'&&i===2?22:24);
+  const target=mobUnderCrosshair(path==='mage'&&i===2?48:24);
   if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.abilityPressed(i,a.n);
   NET.room.send('ability',{
     path, slot:i,
@@ -691,8 +706,15 @@ function doAbility(path,i){
       }
       breakAbilityBlocks(px,py+.4,pz,2.0,8);
     } else {
-      const mob=mobUnderCrosshair(22);
-      if(!mob){ sysMsg('No target in sight'); return false; }
+      const mob=mobUnderCrosshair(48);
+      if(!mob){globalThis.COMBAT_FEEDBACK?.abilitySettled(i,false,'target');return false;}
+      const target=mob.grp.position;
+      if(Math.hypot(target.x-px,target.z-pz)>22){globalThis.COMBAT_FEEDBACK?.abilitySettled(i,false,'range');return false;}
+      const distance=Math.hypot(target.x-px,target.y+.9-(py+1.2),target.z-pz);
+      for(let step=.2;step<distance;step+=.2){
+        const f=step/distance;
+        if(isSolid(getB(Math.floor(px+(target.x-px)*f),Math.floor(py+1.2+(target.y+.9-py-1.2)*f),Math.floor(pz+(target.z-pz)*f)))){globalThis.COMBAT_FEEDBACK?.abilitySettled(i,false,'blocked');return false;}
+      }
       lightningStrikeVfx(mob.grp.position.x, mob.grp.position.y, mob.grp.position.z, null);
       addLightningBeam(player.pos.x,player.pos.y+1.3,player.pos.z,mob.grp.position.x,mob.grp.position.y+1,mob.grp.position.z,1.45);
       damageMob(mob,(18+(S.int-1)*.8)*(abilitySpec==='elementalist'?1.15:1),null);
@@ -788,6 +810,8 @@ function spawnAlly(){
 }
 function tickAbilities(dt,t){
   for(let i=0;i<3;i++) abCd[i]=Math.max(0,abCd[i]-dt);
+  const buffered=abilityInputBuffer.take(abilityInputContext(),slot=>abCd[slot]<=0,abilityInputAllowed());
+  if(buffered!==null)cast(buffered);
   buffs.dmg=Math.max(0,buffs.dmg-dt);
   buffs.armor=Math.max(0,buffs.armor-dt);
   buffs.aegis=Math.max(0,buffs.aegis-dt);
@@ -849,7 +873,7 @@ function tickAbilities(dt,t){
     const b=beams[i]; b.life-=dt;
     if(b.vel){ b.mesh.position.addScaledVector(b.vel,dt); if(b.grav) b.vel.y-=b.grav*dt; }
     if(b.spin){ b.mesh.rotation.x+=b.spin*dt; b.mesh.rotation.z+=b.spin*dt; }
-    b.mesh.material.opacity=Math.max(0,b.life/.2);
+    b.mesh.material.opacity=b.warning?.82:Math.max(0,b.life/.2);
     if(b.life<=0){ scene.remove(b.mesh);if(b.dispose){if(b.mesh.geometry)b.mesh.geometry.dispose();if(b.mesh.material)b.mesh.material.dispose();}beams.splice(i,1); }
   }
   // shadow soldier

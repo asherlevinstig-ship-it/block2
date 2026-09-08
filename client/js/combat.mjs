@@ -6167,9 +6167,9 @@ addEventListener('keydown', e=>{
       }
       return;
     }
-    if(e.code==='KeyQ') cast(0);
-    if(e.code==='KeyR') cast(1);
-    if(e.code==='KeyH') cast(2);
+    if(e.code==='KeyQ' && !e.repeat) cast(0);
+    if(e.code==='KeyR' && !e.repeat) cast(1);
+    if(e.code==='KeyH' && !e.repeat) cast(2);
     if(e.code==='KeyF' && !e.repeat){
       if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.handleKeyDown&&globalThis.BlockcraftFishing.handleKeyDown(e.code)){ e.preventDefault(); return; }
       primaryAction();

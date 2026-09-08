@@ -3284,13 +3284,17 @@ function applyAbilitySync(m){
 function abilityRejected(m){
   SFX.error();
   const i=Math.max(0,Math.min(2,(m&&m.slot)|0));
-  COMBAT_FEEDBACK.abilitySettled(i,false);
-  abCd[i]=0;
   const r=(m&&m.reason)||'invalid';
+  // abilitySync arrives before rejection; do not erase its authoritative cooldown.
+  if(r!=='cooldown')abCd[i]=0;
+  else if(Number.isFinite(m.remainingMs))abCd[i]=Math.max(0,m.remainingMs/1000);
+  COMBAT_FEEDBACK.abilitySettled(i,false,r,abCd[i]);
   if(r==='mana') sysMsg('Not enough <b>mana</b>');
   else if(r==='stamina') sysMsg('Not enough <b>stamina</b>');
   else if(r==='cooldown') sysMsg('Ability is still recharging');
   else if(r==='target') sysMsg('No valid target in sight');
+  else if(r==='range') sysMsg('Target is out of range');
+  else if(r==='blocked') sysMsg('Line of sight is blocked');
   else if(r==='level') sysMsg('That ability is not unlocked yet');
   else sysMsg('Ability failed');
   renderBars(); updateAbilityHUD();

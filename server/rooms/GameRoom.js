@@ -9317,7 +9317,7 @@ class GameRoom extends Room {
             if(meta.commandT<=0){meta.commandT=6;meta.rallyT=.8;this.state.mobs.forEach((o,oid)=>{const om=this.mobMeta[oid];if(om&&om.banditCampId===meta.banditCampId&&!om.surrendered){om.alert=true;om.ralliedT=5;if(m.hp<m.maxHp*.3&&!om.banditCaptain)om.retreating=true;}});}
             if(meta.rallyT>0){meta.rallyT-=dt*statusActionMul;m.state='rally';rooted=true;}
             else if(meta.cleaveT>0){meta.cleaveT-=dt*statusActionMul;m.state='captainCleave';rooted=true;if(meta.cleaveT<=0){m.state='';this.sendSpace('', 'fx',{t:'banditCleave',x:m.x,y:m.y,z:m.z,dgn:''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<=4.2&&Math.abs(target.p.y-m.y)<2.5){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.15),'bandit_captain',{attack:'Captain Cleave'});}}}}
-            else if(meta.alert&&bd<4.2&&meta.atkCd<=0){meta.cleaveT=.9;meta.atkCd=4;m.state='captainCleave';rooted=true;this.sendSpace('', 'fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:4.2,label:'Captain Cleave',dgn:''});}
+            else if(meta.alert&&bd<4.2&&meta.atkCd<=0){meta.cleaveT=.9;meta.atkCd=4;m.state='captainCleave';rooted=true;this.sendSpace('', 'fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:4.2,durationMs:900,label:'Captain Cleave',dgn:''});}
           }
           if (meta.banditPatrol && !meta.banditCaptain && m.hp <= m.maxHp * .3) {
             meta.retreating = true; meta.alert = false; meta.tx = meta.sx; meta.tz = meta.sz;
@@ -9345,7 +9345,7 @@ class GameRoom extends Room {
 
         if (meta.alert && best && !rooted) {
           if (meta.brute && ((meta.bruteT||0)>0 || (bd<3.8&&meta.atkCd<=0))) {
-            if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;this.sendSpace(m.dgn||'','fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:3.8,label:'Brute Slam',dgn:m.dgn||''});}meta.bruteT-=dt*statusActionMul;m.state='bruteWind';rooted=true;
+            if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;this.sendSpace(m.dgn||'','fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:3.8,durationMs:1050,label:'Brute Slam',dgn:m.dgn||''});}meta.bruteT-=dt*statusActionMul;m.state='bruteWind';rooted=true;
             if(meta.bruteT<=0){m.state='';this.sendSpace(m.dgn||'','fx',{t:'biomeSlam',x:m.x,y:m.y,z:m.z,effect:'brute',dgn:m.dgn||''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<3.8){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.35),meta.biomeBehavior||'brute',{attack:'Brute Slam'});}}}
           } else if (RANGED_ENEMY_KINDS.has(m.kind)) {
             if (meta.drawT > 0) {
@@ -9412,7 +9412,7 @@ class GameRoom extends Room {
               if (bd < 2.4 && Math.abs(best.p.y - m.y) < 2.6 && meta.atkCd <= 0 &&
                   AI.losClear(solid, m.x, m.y + 1.2, m.z, best.p.x, best.p.y + 1.2, best.p.z)){
                 meta.lungeT = meta.undeadRole==='graveguard'?.55:(meta.biomeBehavior==='flanker'?.45:.35);
-                this.sendSpace(m.dgn || '', 'fx', { t: 'meleeWarn', x: m.x, y: m.y, z: m.z, radius: meta.undeadRole==='graveguard'?1.75:1.5, label: meta.undeadRole==='graveguard'?'Graveguard Chop':meta.biomeBehavior==='flanker'?'Pack Lunge':'Melee Lunge', dgn: m.dgn || '' });
+                this.sendSpace(m.dgn || '', 'fx', { t: 'meleeWarn', x: m.x, y: m.y, z: m.z, radius: meta.undeadRole==='graveguard'?1.75:1.5, durationMs:meta.lungeT*1000, label: meta.undeadRole==='graveguard'?'Graveguard Chop':meta.biomeBehavior==='flanker'?'Pack Lunge':'Melee Lunge', dgn: m.dgn || '' });
                 if(meta.biomeBehavior==='flanker')this.state.mobs.forEach((ally,aid)=>{const am=this.mobMeta[aid];if(aid!==id&&am&&am.biomeBehavior==='flanker'&&Math.hypot(ally.x-m.x,ally.z-m.z)<7&&!(am.lungeT>0)&&!(am.lunging>0))am.lungeT=.52;});
               }
             }
@@ -9445,7 +9445,7 @@ class GameRoom extends Room {
           meta.bossMeleeT = .42;
           m.state = 'bossMeleeWind';
           rooted = true;
-          this.sendSpace(m.dgn || '', 'fx', { t: 'meleeWarn', x: m.x, y: m.y, z: m.z, radius: 2.35, label: 'Boss Swipe', dgn: m.dgn || '' });
+          this.sendSpace(m.dgn || '', 'fx', { t: 'meleeWarn', x: m.x, y: m.y, z: m.z, radius: 2.35, durationMs:420, label: 'Boss Swipe', dgn: m.dgn || '' });
         }
       }
 

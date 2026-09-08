@@ -775,7 +775,7 @@ class SpawningMixin {
         meta.cdx = (best.p.x - m.x) / bd2; meta.cdz = (best.p.z - m.z) / bd2;
         if (pat === 'slam') {
           m.state = 'slamWind'; meta.stateT = 1.1 * haste;
-          this.sendSpace(m.dgn, 'fx', { t: 'slamWarn', x: m.x, y: m.y, z: m.z, radius: 4.6, dgn: m.dgn || '' });
+          this.sendSpace(m.dgn, 'fx', { t: 'slamWarn', durationMs: meta.stateT*1000, x: m.x, y: m.y, z: m.z, radius: 4.6, dgn: m.dgn || '' });
         } else if (pat === 'eldritchLeap') {
           m.state = 'eldritchLeapWind'; meta.stateT = 1.25 * haste;
           const tx = best.p.x, tz = best.p.z, ty = ground(tx, tz, best.p.y + 8);

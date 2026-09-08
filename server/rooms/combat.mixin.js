@@ -290,7 +290,7 @@ class CombatMixin {
     const cdKey = path + ':' + slot;
     if ((st.cds[cdKey] || 0) > now) {
       this.sendAbilitySync(client, st);
-      return client.send('abilityReject', { slot, reason: 'cooldown' });
+      return client.send('abilityReject', { slot, reason: 'cooldown', remainingMs: Math.max(0,st.cds[cdKey]-now) });
     }
     if(def.kind==='summon'){
       const result=this.handleShadowArmyCast(client,p,rec,st,now,def);
@@ -351,13 +351,15 @@ class CombatMixin {
       if(frozen.length)this.sendSpace(p.dgn||'','fx',{t:'combatReact',kind:'frost',targets:frozen,dgn:p.dgn||''});
       this.breakBlocksInRadius(client, p.x, p.y + .4, p.z, 2.0, 8);
     } else if (def.kind === 'lightning') {
-      if (!target || !target.meta || Math.hypot(target.mob.x - p.x, target.mob.z - p.z) > def.range ||
-          !AI.losClear(this.spaceSolid(p.dgn || ''), p.x, p.y + 1.2, p.z, target.mob.x, target.mob.y + 0.9, target.mob.z)) {
+      const rejection=!target||!target.meta||target.mob.hp<=0?'target'
+        :Math.hypot(target.mob.x-p.x,target.mob.z-p.z)>def.range?'range'
+          :!AI.losClear(this.spaceSolid(p.dgn||''),p.x,p.y+1.2,p.z,target.mob.x,target.mob.y+.9,target.mob.z)?'blocked':'';
+      if(rejection){
         st.mp = Math.min(st.maxMp, st.mp + manaCost);
         st.sp = Math.min(st.maxSp, st.sp + staminaCost);
         st.cds[cdKey] = 0;
         this.sendAbilitySync(client, st);
-        return client.send('abilityReject', { slot, reason: 'target' });
+        return client.send('abilityReject', { slot, reason: rejection });
       }
       const jumps=this.resolveChainLightning(client,target.id,target.mob,rec.prof,3+(rank>=3?1:0)+(spec==='elementalist'&&rank>=2?1:0));
       fx.x = target.mob.x; fx.y = target.mob.y; fx.z = target.mob.z; fx.id = target.id;
