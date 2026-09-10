@@ -21,21 +21,27 @@ export function compareGearReward({stack,item,baseline,gearSystem,toolMaxDur}){
   const currentDur=stack.dur==null?maxDur:stack.dur;
   let verdict='NEW SLOT';
   if(baseProfile){
-    if(armor){
-      const better=profile.powerScore>baseProfile.powerScore||
-        profile.powerScore===baseProfile.powerScore&&profile.mitigation>baseProfile.mitigation;
-      const equal=profile.powerScore===baseProfile.powerScore&&profile.mitigation===baseProfile.mitigation&&
-        profile.moveMultiplier===baseProfile.moveMultiplier&&profile.staminaCostMultiplier===baseProfile.staminaCostMultiplier;
-      verdict=equal?'SIDEGRADE':better?'UPGRADE':'DOWNGRADE';
-    }else{
-      verdict=combat.dps===baseProfile.dps?'SIDEGRADE':combat.dps>baseProfile.dps?'UPGRADE':'DOWNGRADE';
-    }
+    const deltas=armor?[
+      profile.mitigation-baseProfile.mitigation,
+      profile.moveMultiplier-baseProfile.moveMultiplier,
+      baseProfile.staminaCostMultiplier-profile.staminaCostMultiplier,
+      (profile.projectileMagicMultiplier||1)-(baseProfile.projectileMagicMultiplier||1),
+      maxDur-baseProfile.maxDur,
+    ]:[combat.damage-baseProfile.damage,combat.attacksPerSecond-baseProfile.attacksPerSecond,
+      combat.dps-baseProfile.dps,maxDur-toolMaxDur(baseline.stack)];
+    const unique=gearSystem.uniqueFor&&gearSystem.uniqueFor(stack,armor?'armor':'weapon');
+    const baseUnique=gearSystem.uniqueFor&&gearSystem.uniqueFor(baseline.stack,armor?'armor':'weapon');
+    const identityChanged=(unique&&unique.name)!==(baseUnique&&baseUnique.name)||
+      (!armor&&info.cls!==baseInfo.cls);
+    const gain=deltas.some(n=>n>1e-6),loss=deltas.some(n=>n < -1e-6);
+    verdict=identityChanged||gain===loss?'SIDEGRADE':gain?'UPGRADE':'DOWNGRADE';
   }
   const signed=n=>(n>0?'+':'')+(Math.round(n*10)/10);
   const rows=armor?[
     ['MITIGATION',Math.round(profile.mitigation*100)+'%',baseProfile?signed((profile.mitigation-baseProfile.mitigation)*100)+'%':'—'],
     ['MOVEMENT',Math.round(profile.moveMultiplier*100)+'%',baseProfile?signed((profile.moveMultiplier-baseProfile.moveMultiplier)*100)+'%':'—'],
     ['STAMINA',Math.round(profile.staminaCostMultiplier*100)+'%',baseProfile?signed((profile.staminaCostMultiplier-baseProfile.staminaCostMultiplier)*100)+'%':'—'],
+    ['PROJECTILE MAGIC',Math.round((profile.projectileMagicMultiplier||1)*100)+'%',baseProfile?signed(((profile.projectileMagicMultiplier||1)-(baseProfile.projectileMagicMultiplier||1))*100)+'%':'—'],
     ['DURABILITY',currentDur+' / '+maxDur,baseProfile?signed(maxDur-baseProfile.maxDur):'—'],
   ]:[
     ['DAMAGE',String(combat.damage),baseProfile?signed(combat.damage-baseProfile.damage):'—'],
@@ -98,6 +104,7 @@ export function createGearRewardPresenter({
       cell.append(label,value,delta);stats.appendChild(cell);
     }
     panel.appendChild(stats);
+    if(baseline){const note=document.createElement('p');note.className='gr-recovery';note.textContent=verdict==='SIDEGRADE'?'Compare tradeoffs and perks: more protection can cost movement or stamina; different weapons change how you fight.':'Compared with your equipped gear. Durability shows current condition / maximum.';panel.appendChild(note);}
     if(recovered){
       const notice=document.createElement('p');notice.className='gr-recovery';
       notice.textContent='Inventory full. Tobin secured this item; make space and claim it from Loot Recovery.';

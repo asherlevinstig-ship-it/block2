@@ -49,9 +49,9 @@ function readinessHints(req) {
   };
   return {
     weapon: `Carry a ${TIER_NAME[req.weapon]}-tier weapon that meets the upgrade requirement.`,
-    armor: `Equip ${TIER_NAME[req.armor]} armor or better.`,
+    armor: req.armor ? `Equip ${TIER_NAME[req.armor]} armor or better.` : 'Armor is optional for the first E-rank Gate. Compare movement and stamina costs before equipping.',
     food: `Bring any ${req.food} food items.`,
-    tool: `Bring a ${TIER_NAME[req.tool]} utility tool above ${Math.round(req.health * 100)}% durability.`,
+    tool: `Bring a ${TIER_NAME[req.tool]} pick, shovel, or hoe at or above ${Math.round(req.health * 100)}% durability.`,
   };
 }
 

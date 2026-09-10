@@ -2228,8 +2228,9 @@ function updateDungeonCoordination(now){
     const me=dungeonStatusMember(status,mine);
     const runState=dungeonObjectiveState(status,me,chestCount);
     const eligibility=dungeonEligibilityState(status,me);
-    const roomsLine=(status.roomTotal|0)>0?'Rooms Cleared '+Math.max(0,status.roomsCleared|0)+'/'+Math.max(0,status.roomTotal|0)+' - ':'';
-    const runCard='<div class="dungeonrun '+runState.cls+'"><div><b>OBJECTIVE</b><span>'+escHTML(runState.label)+'</span></div><p>'+escHTML(runState.text)+'</p>'+dungeonBossHud(status)+'<small class="dungeonnav">'+roomsLine+escHTML(dungeonBossGateLabel(status))+'</small><small class="dungeonnav">Chests '+chestCount+' - Alive '+alive+' - Spirits '+spirits+'</small>'+dungeonNavLine(runState)+'<span class="dungeonelig '+eligibility.cls+'">'+escHTML(eligibility.text)+'</span></div>';
+    const roomsLine=(status.roomTotal|0)>0?'Main rooms '+Math.max(0,status.roomsCleared|0)+'/'+Math.max(0,status.roomTotal|0)+' - ':'';
+    const branchLine=(status.optionalRooms||[]).filter(r=>!r.cleared).slice(0,3).map(r=>'<small class="dungeonnav">Optional '+(r.objective==='rescue'?'rescue: +12 MP / +25 SP':'elite cache: guarded loot')+' · '+escHTML(bearingLabelTo(r.x,r.z))+'</small>').join('');
+    const runCard='<div class="dungeonrun '+runState.cls+'"><div><b>OBJECTIVE</b><span>'+escHTML(runState.label)+'</span></div><p>'+escHTML(runState.text)+'</p>'+dungeonBossHud(status)+'<small class="dungeonnav">'+roomsLine+escHTML(dungeonBossGateLabel(status))+'</small><small class="dungeonnav">Chests '+chestCount+' - Alive '+alive+' - Spirits '+spirits+'</small>'+dungeonNavLine(runState)+branchLine+'<span class="dungeonelig '+eligibility.cls+'">'+escHTML(eligibility.text)+'</span></div>';
     const summary=runCard+'<div class="partysummary"><span>'+alive+' alive</span><span>'+spirits+' spirit'+(spirits===1?'':'s')+'</span>'+(returned?'<span>'+returned+' returned</span>':'')+'</div>';
     const warning=(status.wipe||status.party.length>0&&alive===0)?'<div class="partywipe">PARTY WIPED · CHOOSE RETURN TO TOWN</div>':'';
     const returnedCard=returned?'<div class="partycard returned"><div class="partyline"><b>Returned to Town</b><small>'+returned+'/'+total+'</small></div><div class="partyline"><small>Left the dungeon instance</small><span class="partycontrib">Safe</span></div></div>':'';

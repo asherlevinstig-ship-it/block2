@@ -1397,7 +1397,7 @@ function rebuildAllChunks(){
 }
 // ---------------- dungeon decoration & atmosphere (client-only cosmetics) ----------------
 const dungeonDecor=[];
-function clearDungeonDecor(){ for(const m of dungeonDecor) scene.remove(m); dungeonDecor.length=0; }
+function clearDungeonDecor(){ for(const m of dungeonDecor){scene.remove(m);if(m.userData.rescueKey){const materials=new Set(),geometries=new Set();m.traverse(o=>{if(o.geometry&&!o.isSprite)geometries.add(o.geometry);if(o.isSprite&&o.material.map)o.material.map.dispose();for(const mat of Array.isArray(o.material)?o.material:o.material?[o.material]:[])materials.add(mat);});for(const g of geometries)g.dispose();for(const mat of materials){mat.dispose();}}} dungeonDecor.length=0; }
 function dDecor(m){ scene.add(m); dungeonDecor.push(m); return m; }
 const AFFIX_STYLE={
   Empowered:{col:0xa855f7,label:'POWER'},
@@ -1609,6 +1609,14 @@ function placeHallLanterns(dgn){
 function placeDungeonDecor(dgn){
   clearDungeonDecor();
   if(!dgn || !dgn.rooms) return;
+  for(const room of dgn.rooms.filter(r=>r.objective==='rescue')){
+    const captive=makeVillager('#587c86','#354e58',false).grp;
+    captive.position.set(room.x+1,10,room.z);
+    captive.userData.rescueKey=room.x+','+room.z;
+    const label=makeTextSprite('RESCUE · DEFEAT GUARD','#a8ead7');
+    label.position.set(0,2.3,0);label.scale.set(2.8,.7,1);captive.add(label);
+    dDecor(captive);
+  }
   const FLOOR=9;
   const mods=dungeonMods(dgn);
   const webMat=new THREE.MeshBasicMaterial({color:0xc6ccd6,transparent:true,opacity:.28,depthWrite:false,side:THREE.DoubleSide});
@@ -1902,6 +1910,7 @@ function tickDungeonAmbient(dt,t){
   if(dim!=='dungeon') return;
   const mods=dungeonMods(dungeon);
   for(const m of dungeonDecor){
+    if(m.userData.rescueKey)m.visible=!(dungeon.status&&dungeon.status.optionalRooms||[]).some(r=>r.key===m.userData.rescueKey&&r.cleared);
     if(m.userData&&m.userData.mist&&m.material){
       const u=m.userData.mist;
       m.material.opacity=u.base*(.75+.25*Math.sin(t*.55+u.phase));

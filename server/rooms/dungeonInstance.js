@@ -81,6 +81,8 @@ class DungeonInstance {
       this.roomProgress.rooms.set(group.key, {
         key: group.key,
         type: group.type || 'guard',
+        optional: !!group.optional,
+        objective: group.objective || '',
         x: group.x,
         z: group.z,
         total: group.list.length,
@@ -88,7 +90,7 @@ class DungeonInstance {
         cleared: false,
       });
     }
-    this.roomProgress.total = this.roomProgress.rooms.size;
+    this.roomProgress.total = [...this.roomProgress.rooms.values()].filter(r => !r.optional).length;
   }
 
   roomKeyNear(x, z) {
@@ -100,17 +102,19 @@ class DungeonInstance {
     return best;
   }
 
-  markRoomMobKilled(x, z) {
-    const key = this.roomKeyNear(x, z);
+  markRoomMobKilled(x, z, originKey) {
+    const key = originKey === undefined ? this.roomKeyNear(x, z) : originKey;
     const room = key && this.roomProgress.rooms.get(key);
     if (!room || room.cleared) return null;
     room.alive = Math.max(0, (room.alive | 0) - 1);
     if (room.alive > 0) return null;
     room.cleared = true;
-    this.roomProgress.cleared = [...this.roomProgress.rooms.values()].filter(r => r.cleared).length;
+    this.roomProgress.cleared = [...this.roomProgress.rooms.values()].filter(r => r.cleared && !r.optional).length;
     return {
       key: room.key,
       type: room.type,
+      optional: room.optional,
+      objective: room.objective,
       x: room.x,
       z: room.z,
       roomsCleared: this.roomProgress.cleared,

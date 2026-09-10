@@ -681,6 +681,7 @@ function announceBossMastery(m){
 function announceDungeonRoomCleared(m){
   const cleared=Math.max(0,m&&m.roomsCleared|0),total=Math.max(0,m&&m.roomTotal|0);
   const gate=m&&m.bossGateState==='open'?' Boss gate open.':m&&m.bossGateState==='defeated'?' Boss defeated.':'';
+  if(m&&m.optional){sysMsg(m.objective==='rescue'?'<b>Hunter rescued.</b> Living party members recover up to 12 mana and 25 stamina.':'<b>Elite cache secured.</b> Claim the side-room chest.','minor');return;}
   sysMsg('<b>Room cleared.</b> Boss gate progress '+cleared+'/'+total+'.'+gate,'minor');
 }
 function announceDungeonLobbyStart(m){
@@ -2069,7 +2070,7 @@ function netAttachRoom(room,name,client){
         player.pos.set(+m.sx,+m.sy,+m.sz);
         if(player.vel)player.vel.set(0,0,0);
       }
-      beginDungeon(m.rank, m.seed, m.edits, {back:{x:m.bx,y:m.by,z:m.bz}, spawnX:m.sx, spawnY:m.sy, spawnZ:m.sz, dungeonId:m.dungeonId||'', shard, localMobs:false, cleared:m.cleared, kind:m.kind||'public'});
+      beginDungeon(m.rank, m.seed, m.edits, {back:{x:m.bx,y:m.by,z:m.bz}, spawnX:m.sx, spawnY:m.sy, spawnZ:m.sz, dungeonId:m.dungeonId||'', shard, localMobs:false, status:m.status||null, cleared:m.cleared, kind:m.kind||'public'});
       globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();
       eventFeed('[Dungeon]','Entered '+RANKS[Math.max(0,Math.min(RANKS.length-1,(m.rank|0)))].n+'-Rank '+gateKindLabel(m.kind||'public')+' Gate.',{key:'dungeon:enter:'+String(m.id||''),cooldown:0});
     });

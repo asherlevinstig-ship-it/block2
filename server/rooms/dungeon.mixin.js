@@ -79,6 +79,7 @@ class DungeonMixin {
       cleared: !!inst.cleared,
       roomsCleared: Math.max(0, roomProgress.cleared | 0),
       roomTotal: Math.max(0, roomProgress.total | 0),
+      optionalRooms: [...(roomProgress.rooms || new Map()).values()].filter(r => r.optional).map(r => ({key:r.key,x:r.x,z:r.z,objective:r.objective,cleared:r.cleared})),
       bossGateState: typeof inst.bossGateState === 'function' ? inst.bossGateState() : (inst.cleared ? 'defeated' : 'open'),
       bossRoom: inst.bossRoom ? { x: inst.bossRoom.x, z: inst.bossRoom.z } : null,
       exit: inst.entrance ? { x: inst.entrance.x, z: inst.entrance.z } : null,
@@ -955,6 +956,7 @@ class DungeonMixin {
     return {
       id: inst.id, seed: inst.seed, dungeonId: inst.dungeonId || canonicalDungeonId(inst.rank, inst.seed), rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public',
       edits: inst.edits,
+      status: this.dungeonStatusPayload(inst),
       bx: g ? g.x : inst.gateX, by: g ? g.y : inst.gateY, bz: g ? g.z : inst.gateZ,
       sx: spawn.x, sy: spawn.y, sz: spawn.z,
       cleared: inst.cleared,
@@ -1231,11 +1233,11 @@ class DungeonMixin {
       const rm = roomOf(s.x, s.z);
       const key = rm ? rm.x + ',' + rm.z : 'loose';
       let group = byRoom.get(key);
-      if (!group) byRoom.set(key, group = { key, type: rm ? rm.type : 'guard', x: rm ? rm.x : s.x, z: rm ? rm.z : s.z, list: [] });
+      if (!group) byRoom.set(key, group = { key, optional: !!(g.rank >= 1 && rm && rm.main === false), objective: rm && rm.objective || '', type: rm ? rm.type : 'guard', x: rm ? rm.x : s.x, z: rm ? rm.z : s.z, list: [] });
       group.list.push(s);
     }
     inst.configureRoomProgress(byRoom.values());
-    for (const { type, list } of byRoom.values()) {
+    for (const { key, type, list } of byRoom.values()) {
       list.forEach((s, i) => {
         // skeletons add ranged variety — now present from E-rank (was rank >= 1 only)
         let skelChance = Number.isFinite(combat.skeletonChance) ? combat.skeletonChance : (g.rank >= 1 ? .35 : .22);
@@ -1247,6 +1249,7 @@ class DungeonMixin {
         // vault / treasure rooms post a tougher elite standing guard over the loot
         const elite = (type === 'vault' || type === 'treasure' || (type === 'arena' && s.wave)) && i === 0;
         const id = this.addDungeonMob(g.id, s.x, s.z, kind, trashHp(kind, elite), trashDmg(elite), trashSpd(kind), d.world, g.rank);
+        if (this.mobMeta[id]) this.mobMeta[id].dungeonRoomKey = key;
         // The first Gate teaches the undead family in readable pairs: skeletons
         // hold range while alternating zombie roles pressure or punish greed.
         if (kind === 'zombie' && this.mobMeta[id]) {
@@ -1365,11 +1368,21 @@ class DungeonMixin {
     }
     return out;
   }
-  onDungeonTrashDeath(dgn, x, y, z) {
+  onDungeonTrashDeath(dgn, x, y, z, originKey) {
     const inst = this.instances[dgn];
     if (!inst) return;
-    const clear = typeof inst.markRoomMobKilled === 'function' ? inst.markRoomMobKilled(x, z) : null;
+    const clear = typeof inst.markRoomMobKilled === 'function' ? inst.markRoomMobKilled(x, z, originKey) : null;
     if (clear) {
+      if (clear.optional && clear.objective === 'rescue') {
+        for (const {sid,p} of this.instancePlayers(inst)) {
+          const hp=this.playerHp.get(sid),client=this.clients.find(c=>c.sessionId===sid);
+          if (!client || !hp || hp.hp<=0 || p && p.spirit) continue;
+          const st=this.regenAbilityState(client,Date.now());
+          if (!st) continue;
+          st.mp=Math.min(st.maxMp,st.mp+12);st.sp=Math.min(st.maxSp,st.sp+25);
+          this.sendAbilitySync(client,st);
+        }
+      }
       this.sendSpace(dgn, 'dungeonRoomCleared', clear);
       this.sendDungeonStatus(dgn);
     }

@@ -1155,7 +1155,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(runtimeSource, /function parkourCheckpointReached\(m\)/);
   assert.match(networkingSource, /eventCheckpoint/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /OBJECTIVE/);
-  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Rooms Cleared/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Main rooms/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Boss locked/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Boss open/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /dungeonBossHud/);

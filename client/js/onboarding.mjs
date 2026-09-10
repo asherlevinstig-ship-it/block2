@@ -104,7 +104,7 @@ export function createOnboardingUI(deps) {
     };
     if (focus === 'first_e_gate') return {
       label: 'First Dungeon', text: "Accept Mara's First Gate quest, find the E-rank Gate, and defeat its boss", target: HUB.mara,
-      path: { now: 'Clear an E-rank Gate', next: 'Then build your first station', why: 'This is the first dungeon milestone, not D-rank prep', step: 3, total: CHAPTER_ONE_TOTAL },
+      path: { now: 'Clear an E-rank Gate', next: 'Then build your first station', why: 'Inspect gear before entering: compare damage, speed and perks. A stronger sword helps, but Wood is enough. Bring food and a usable utility tool; armor is optional', step: 3, total: CHAPTER_ONE_TOTAL },
     };
     if (focus === 'first_craft_station') return {
       label: 'Progression Path', text: 'Craft a Crafting Table (4 Oak Planks) or Furnace (8 Cobblestone). Your First Gate reward supplied enough for either', target: HUB.smith,
@@ -223,7 +223,7 @@ export function createOnboardingUI(deps) {
         rewardLineHTML({ label: 'Next Contact', value: 'MARA VALE' }) +
         rewardLineHTML({ label: 'First Assignment', value: 'FIRST HANDS' }) +
       '</div>' +
-      '<div class="rnote"><b>Your next three steps:</b><br>Follow the green light to Mara, accept your first field quest, then return at Level 2 to awaken your combat path.</div>' +
+      '<div class="rnote"><b>Your route: gather → craft → fight → upgrade → first Gate</b><br>You gathered logs and crafted planks in training. Follow the green light to Mara, awaken your combat path at Level 2, then fight for Road Ready. Inspect your gear and consider a stronger sword before your first Gate. Land and base systems follow that clear.</div>' +
       '<button id="trainingcontinue">MEET MARA</button>';
     rewardWin.classList.remove('hidden');
     if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(rewardWin);

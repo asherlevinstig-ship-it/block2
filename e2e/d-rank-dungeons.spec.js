@@ -52,4 +52,13 @@ test('D-rank dungeon mobs replicate boss style, boss name, and trash variants', 
   expect(status.bossStyle).toBe('blight');
   expect(status.displayName).toBe('The Spore Matron');
   expect(status.variants.length).toBeGreaterThan(0);
+  const choices=await page.evaluate(()=>({
+    expected:dungeon.rooms.filter(r=>r.main===false).map(r=>r.objective).sort(),
+    actual:(dungeon.status.optionalRooms||[]).map(r=>r.objective).sort(),
+    captives:scene.children.filter(m=>m.userData.rescueKey).length,
+  }));
+  expect(choices.actual).toEqual(choices.expected);
+  expect(choices.captives).toBe(choices.expected.filter(o=>o==='rescue').length);
+  if(choices.actual.length)await expect(page.locator('#dungeonparty')).toContainText('Optional');
+
 });

@@ -1,3 +1,4 @@
+import {compareGearReward} from './gear-rewards.mjs';
 import {api as worldApi,state as worldState} from './world.mjs';
 import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
 import {api as combatApi,state as combatState} from './combat.mjs';
@@ -1017,19 +1018,8 @@ function renderGearComparison(){
   let verdict='NEW SLOT',verdictClass='upgrade';
   if(equipped){verdict='EQUIPPED';verdictClass='equipped';}
   else if(baseline){
-    let better,equal,tradeoff=false;
-    if(armor){
-      const magic=profile.projectileMagicMultiplier||1,baseMagic=baseProfile.projectileMagicMultiplier||1;
-      const dominates=profile.mitigation>=baseProfile.mitigation&&profile.moveMultiplier>=baseProfile.moveMultiplier&&profile.staminaCostMultiplier<=baseProfile.staminaCostMultiplier&&magic>=baseMagic&&maxDur>=baseProfile.maxDur;
-      const dominated=profile.mitigation<=baseProfile.mitigation&&profile.moveMultiplier<=baseProfile.moveMultiplier&&profile.staminaCostMultiplier>=baseProfile.staminaCostMultiplier&&magic<=baseMagic&&maxDur<=baseProfile.maxDur;
-      equal=profile.powerScore===baseProfile.powerScore&&profile.mitigation===baseProfile.mitigation&&profile.moveMultiplier===baseProfile.moveMultiplier&&profile.staminaCostMultiplier===baseProfile.staminaCostMultiplier&&magic===baseMagic&&maxDur===baseProfile.maxDur;
-      better=profile.powerScore!==baseProfile.powerScore?profile.powerScore>baseProfile.powerScore:dominates&&!dominated;
-      tradeoff=profile.powerScore===baseProfile.powerScore&&!equal&&!dominates&&!dominated;
-    }else{
-      better=combat.dps>baseProfile.dps||combat.dps===baseProfile.dps&&maxDur>toolMaxDur(baseline);
-      equal=combat.dps===baseProfile.dps&&maxDur===toolMaxDur(baseline);
-    }
-    verdict=tradeoff||equal?'SIDEGRADE':better?'UPGRADE':'DOWNGRADE';verdictClass=tradeoff||equal?'sidegrade':better?'upgrade':'downgrade';
+    verdict=compareGearReward({stack,item,baseline:{stack:baseline,item:ITEMS[baseline.id]},gearSystem:GEAR_SYSTEM,toolMaxDur}).verdict;
+    verdictClass=verdict.toLowerCase();
   }
   const unique=GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(stack,armor?'armor':'weapon');
   const special=unique?(unique.name+' · '+unique.perk):(armor?(profile.type.name+' · '+profile.type.desc+(info.power==='aegis'?' · J: Aegis Pulse':'')):(info.cls==='sword'?'Momentum · consecutive hits gain damage':'Stagger · interrupts and slows'));
@@ -1881,6 +1871,7 @@ function applyDungeonStatus(m){
     cleared:!!m.cleared,
     roomsCleared:Math.max(0,m.roomsCleared|0),
     roomTotal:Math.max(0,m.roomTotal|0),
+    optionalRooms:Array.isArray(m.optionalRooms)?m.optionalRooms.filter(r=>r&&Number.isFinite(r.x)&&Number.isFinite(r.z)).slice(0,8):[],
     bossGateState:['locked','open','defeated'].includes(m.bossGateState)?m.bossGateState:(m.cleared?'defeated':'open'),
     bossRoom:m.bossRoom&&Number.isFinite(m.bossRoom.x)&&Number.isFinite(m.bossRoom.z)?{x:m.bossRoom.x,z:m.bossRoom.z}:null,
     exit:m.exit&&Number.isFinite(m.exit.x)&&Number.isFinite(m.exit.z)?{x:m.exit.x,z:m.exit.z}:null,

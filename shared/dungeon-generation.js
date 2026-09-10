@@ -406,6 +406,7 @@
           const sx=cx+(alongX?side*(rx+8):Math.floor((hash2(i+seed,91)-.5)*rx));
           const sz=cz+(alongX?Math.floor((hash2(i+seed,71)-.5)*rz):side*(rz+8));
           const sideRoom={x:sx,z:sz,rx:sr,rz:sr+(hash2(i+seed,23)<.5?1:0),r:sr+1,h:4,type:hash2(i+seed,61)<.45?'treasure':'shrine',main:false,solidFloor:layout.solidFloors!==false};
+          if(ri>=1)sideRoom.objective=sideRoom.type==='treasure'?'elite_cache':'rescue';
           rooms.push(sideRoom);
           carveRoomBox(w, sideRoom, roomFloorId(sideRoom,pal), pal, seed+i*137);
           decorateDungeonRoom(w, sideRoom, layout, seed+i*137, i, ri);

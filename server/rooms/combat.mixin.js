@@ -1138,7 +1138,7 @@ class CombatMixin {
       if(!dgn&&killedMeta.bandit&&['shield','scout','brute'].includes(killedMeta.banditRole))this.progressRegionalContract(client,'road_roles',{});
       if (!dgn && killedMeta.elite && killedMeta.campId)
         this.progressRegionalContract(client, 'clear_elite_camp', { targetId: killedMeta.campId });
-      if (dgn) this.onDungeonTrashDeath(dgn, dx, dy, dz);
+      if (dgn) this.onDungeonTrashDeath(dgn, dx, dy, dz, killedMeta.dungeonRoomKey || '');
     }
     if (!dgn && killedMeta.bandit) this.onBanditKilled(killedMeta, client);
   }
