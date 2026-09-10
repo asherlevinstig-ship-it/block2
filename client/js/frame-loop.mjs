@@ -1136,6 +1136,7 @@ function playerStyleObjectiveLine(){
   if(dim!=='overworld')return null;
   const guide=currentPlayerStyleGuide();
   if(guide)return objectiveLine('player_style','Style',guide.title,guide.action,{type:'player_style',label:guide.label||'FOLLOW STYLE'});
+  if(highestGateRankCleared<0&&S.lvl<11)return null;
   if(isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return objectiveLine('player_style','Style','Choose Your First Style','Pick fighter, builder, farmer, miner, social, collector, explorer, or learner guidance',{type:'player_style',label:'CHOOSE STYLE'});
   return null;
 }

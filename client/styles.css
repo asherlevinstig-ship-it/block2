@@ -2602,3 +2602,6 @@ body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn:focus-visible{transform
   body:not(.tablet-mode):not(.mobile-play-mode) #supportdock #stuckrescuebtn:before{display:none}
 }
 
+
+.quest-optional-systems > summary { cursor: pointer; padding: 12px 14px; color: #c8d7e6; border: 1px solid #425268; border-radius: 8px; margin-top: 12px; }
+.quest-optional-systems > summary:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 3px; }

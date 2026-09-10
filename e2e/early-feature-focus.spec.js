@@ -1,0 +1,22 @@
+const {test,expect}=require('@playwright/test');
+const {registerAndPlay}=require('./helpers/auth-flow.cjs');
+test('early quest log focuses the core loop while optional systems remain discoverable',async({page})=>{
+  test.setTimeout(90000);
+  await registerAndPlay(page,{username:'focus_'+Date.now().toString(36),password:'focus test account',hunterName:'FocusTest'});
+  await page.evaluate(()=>__BLOCKCRAFT_E2E__.finishOnboarding());
+  await expect.poll(()=>page.evaluate(()=>__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  await page.evaluate(()=>BlockcraftGameContext.requireModule('menus').openQuestLog());
+  const panel=page.locator('#qpanel'),optional=panel.locator('details.quest-optional-systems');
+  await expect(panel).toContainText('gather → craft → fight → upgrade → first Gate');
+  await expect(panel).toContainText('First Hands');
+  await expect(optional).toHaveCount(1);
+  await expect(optional.locator('.progression-roadmap')).toBeHidden();
+  await expect(panel.getByRole('button',{name:'CHOOSE STYLE',exact:true})).toBeHidden();
+  await optional.locator('summary').click();
+  await expect(optional.locator('.progression-roadmap')).toBeVisible();
+  await expect(panel.getByRole('button',{name:'CHOOSE STYLE',exact:true})).toBeVisible();
+  await page.evaluate(()=>{highestGateRankCleared=0;BlockcraftGameContext.requireModule('menus').openQuestLog();});
+  await expect(panel.locator('details.quest-optional-systems')).toHaveCount(0);
+  await expect(panel.locator('.progression-roadmap')).toBeVisible();
+  await page.evaluate(()=>__BLOCKCRAFT_E2E__.shutdown());
+});

@@ -4108,11 +4108,11 @@ function questLogCardsHTML(serverCards,historyOnly){
   if(serverCards&&historyOnly)return serverCards;
   const early=earlyJourneyActive(),cards=[];
   if(serverCards)cards.push(serverCards);
-  cards.push(safeQuestLogCard('What Next?',whatNextQuestLogCard));
+  if(!early||!serverCards)cards.push(safeQuestLogCard('What Next?',whatNextQuestLogCard));
   if(!serverCards)cards.push(safeQuestLogCard('Story Quests',storyQuestLogCard));
-  if(onboardingActive||quest||progressionFocus==='first_road_ready'||progressionFocus==='first_e_gate')cards.push(safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard));
+  if(onboardingActive||!serverCards&&(quest||progressionFocus==='first_road_ready'||progressionFocus==='first_e_gate'))cards.push(safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard));
   if(!early||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'||progressionFocus==='s_rank_climb'||(quest&&quest.type==='gate'))cards.push(safeQuestLogCard('Gate Prep',gatePrepLoopCard));
-  if(!early||S.lvl>=3)cards.push(safeQuestLogCard('First Style',playerStyleGuideQuestLogCard));
+  if(!early)cards.push(safeQuestLogCard('First Style',playerStyleGuideQuestLogCard));
   if(!early)cards.push(safeQuestLogCard('Aegis Trial',aegisQuestLogCard));
   return cards.filter(Boolean).join('');
 }
@@ -4405,7 +4405,7 @@ function openQuestLogUI(){
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent='QUEST LOG'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='PRESS O TO OPEN · ESC TO CLOSE'; qpanelEl.appendChild(sub);
-  const p=document.createElement('p'); p.className='qtext'; p.textContent='All active objectives are grouped by source so you know what kind of work you are doing and where to go next.'; qpanelEl.appendChild(p);
+  const p=document.createElement('p'); p.className='qtext'; p.textContent=earlyJourneyActive()?'Follow Mara: gather → craft → fight → upgrade → first Gate. Your current objective is below.':'All active objectives are grouped by source so you know what kind of work you are doing and where to go next.'; qpanelEl.appendChild(p);
   const journey=document.createElement('div');journey.className='quest-rank-summary';
   const rankProgress=currentRankProgress(),rank=localPlayerHunterRankIndex();
   journey.innerHTML='<span><small>HUNTER JOURNEY</small><b>'+hunterRankLetter(rank)+'-Rank · '+rankJourneyLevelText(rank)+'</b></span><span>'+(rankProgress.maxRank?'S-Rank achieved':rankProgress.remaining.toLocaleString('en-US')+' XP to '+hunterRankLetter(rankProgress.nextRank)+'-Rank')+'</span>';
@@ -4422,13 +4422,21 @@ function openQuestLogUI(){
   bindObjectiveCraftShortcuts();
   bindServerObjectiveActions(qpanelEl);
   bindPlayerStyleOpenActions(qpanelEl);
-  const directed=progressionDirectorCandidate();
+  const directed=earlyJourneyActive()?null:progressionDirectorCandidate();
   if(directed){const controls=document.createElement('div');controls.className='qrow progression-guide-controls';controls.appendChild(qBtn('ACTIVATE '+directed.title.toUpperCase(),()=>activateProgressionGuide(directed.id)));controls.appendChild(qBtn('DISMISS GUIDE',()=>dismissProgressionGuide(directed.id),true));qpanelEl.appendChild(controls);}
-  const roadmap=document.createElement('div');roadmap.innerHTML=progressionRoadmapHTML();qpanelEl.appendChild(roadmap.firstElementChild);
+  const optional=document.createElement(earlyJourneyActive()?'details':'div');
+  optional.className='quest-optional-systems';
+  if(earlyJourneyActive()){
+    const summary=document.createElement('summary');summary.textContent='Explore other systems';optional.appendChild(summary);
+    const note=document.createElement('p');note.className='qtext';note.textContent='Optional paths and later milestones. You can explore them now; they are not a checklist for your first Gate.';optional.appendChild(note);
+  }
+  const roadmap=document.createElement('div');roadmap.innerHTML=progressionRoadmapHTML();optional.appendChild(roadmap.firstElementChild);
+  const explore=document.createElement('div');explore.className='qrow';
+  explore.appendChild(qBtn('CHOOSE STYLE',()=>openPlayerStyleGuideUI()));
+  explore.appendChild(qBtn('RANK JOURNEY',()=>openRankJourneyUI()));
+  explore.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
+  optional.appendChild(explore);qpanelEl.appendChild(optional);
   const row=document.createElement('div'); row.className='qrow';
-  row.appendChild(qBtn('CHOOSE STYLE',()=>openPlayerStyleGuideUI()));
-  row.appendChild(qBtn('RANK JOURNEY',()=>openRankJourneyUI()));
-  if(!earlyJourneyActive())row.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   qpanelEl.appendChild(row);
 }
