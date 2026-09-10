@@ -65,6 +65,11 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'accept',giver:'Mara Vale',role:'guide'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('Road Ready');
+  if(await page.evaluate(()=>quest&&quest.craftPending)){
+    await page.evaluate(()=>BlockcraftGameContext.requireModule('menus').activateCraftShortcut(I.WOOD_SWORD));
+    await page.locator('#craftarea > .slot').dispatchEvent('mousedown',{button:0});
+    await expect.poll(()=>page.evaluate(()=>quest&&quest.craftPending)).toBe(false);
+  }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(122))).toBe(1);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('defeat 3 monsters');
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney',{action:'completeRoadReady'}));

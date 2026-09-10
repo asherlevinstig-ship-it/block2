@@ -99,8 +99,8 @@ export function createOnboardingUI(deps) {
   function firstPromotionObjective() {
     const focus = getFocus();
     if (focus === 'first_road_ready') return {
-      label: 'Progression Path', text: "Take Mara's Road Ready quest, use the starter sword, and reach Level 3", target: HUB.mara,
-      path: { now: 'Road Ready', next: 'Then clear your first E-rank Gate', why: 'The first dungeon should teach combat before the base loop opens up', step: 2, total: CHAPTER_ONE_TOTAL },
+      label: 'Progression Path', text: "Take Mara's Road Ready quest, craft the starter sword, defeat 3 monsters, and claim your Stone Sword upgrade", target: HUB.mara,
+      path: { now: 'Road Ready', next: 'Equip the Stone Sword, then enter your first E-rank Gate', why: 'The first dungeon should teach combat before the base loop opens up', step: 2, total: CHAPTER_ONE_TOTAL },
     };
     if (focus === 'first_e_gate') return {
       label: 'First Dungeon', text: "Accept Mara's First Gate quest, find the E-rank Gate, and defeat its boss", target: HUB.mara,

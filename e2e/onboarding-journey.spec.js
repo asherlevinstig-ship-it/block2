@@ -93,6 +93,11 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'accept', giver: 'Mara Vale', role: 'guide' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('Road Ready');
+  if(await page.evaluate(()=>quest&&quest.craftPending)){
+    await page.evaluate(()=>BlockcraftGameContext.requireModule('menus').activateCraftShortcut(I.WOOD_SWORD));
+    await page.locator('#craftarea > .slot').dispatchEvent('mousedown',{button:0});
+    await expect.poll(()=>page.evaluate(()=>quest&&quest.craftPending)).toBe(false);
+  }
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'completeRoadReady' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.have)).toBe(3);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'claim' }));

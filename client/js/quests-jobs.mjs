@@ -48,7 +48,7 @@ export function clampJobContract(contract, knownJobs) {
 
 export function createQuestModel(context) {
   function done(quest) {
-    if (!quest) return false;
+    if (!quest || quest.craftPending) return false;
     if (quest.type === 'fetch') return context.countItem(quest.item) >= quest.need;
     if (quest.type === 'utility') return quest.utility ? context.utilityUnlocked(quest.utility) : context.utilityUnlocks().length > 0;
     if (quest.type === 'familiar') return quest.familiar ? context.familiarUnlocks().includes(quest.familiar) : context.familiarUnlocks().length > 0;
@@ -59,6 +59,7 @@ export function createQuestModel(context) {
 
   function progressText(quest) {
     if (!quest) return '';
+    if (quest.craftPending) return 'Craft starter sword · then defeat 3 monsters';
     if (quest.type === 'pvp_bounty') return 'Target: ' + context.escape(quest.targetName || 'Unknown') + ' - ' + (done(quest) ? 'completed' : context.formatTime((quest.expiresAt || 0) - Date.now()));
     if (quest.type === 'fetch') return Math.min(quest.need, context.countItem(quest.item)) + ' / ' + quest.need;
     if (quest.type === 'utility') {

@@ -2534,6 +2534,7 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
 
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
   assert.equal(prof.progressionFocus, 'first_road_ready');
+  await room.handleCraft(client,{w:3,cells:[W.B.PLANKS,0,0,W.B.PLANKS,0,0,I.STICK,0,0]});
   for (let i = 0; i < 3; i++) room.recordKillProgress(client);
   room.handleNpcQuest(client, { action: 'claim' });
   assert.equal(prof.progressionFocus, 'first_e_gate');
@@ -2784,7 +2785,34 @@ test('state-backed NPC quests refresh from utility familiar mount and ride actio
   }
 });
 
-test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate', () => {
+test('legacy Road Ready remains completable without imposing the new crafting stage', () => {
+  const room=makeRoom(),client=makeClient('legacy_road');
+  const {prof}=seedPlayer(room,client,{inv:[]});
+  prof.npcQuestChains['Mara Vale']=1;
+  prof.maraRoadReadySwordGranted=true;
+  room.handleNpcQuest(client,{action:'accept',giver:'Mara Vale',role:'guide'});
+  assert.equal(prof.activeNpcQuest.craftPending,false);
+  for(let i=0;i<3;i++)room.recordKillProgress(client);
+  assert.equal(room.npcQuestReady(client,prof.activeNpcQuest),true);
+});
+
+test('Road Ready cannot claim before crafting and keeps early combat credit', () => {
+  const room=makeRoom(),client=makeClient('craft_gate');
+  const {prof}=seedPlayer(room,client,{inv:[]});
+  prof.npcQuestChains['Mara Vale']=1;
+  room.handleNpcQuest(client,{action:'accept',giver:'Mara Vale',role:'guide'});
+  for(let i=0;i<3;i++)room.recordKillProgress(client);
+  assert.equal(room.npcQuestReady(client,prof.activeNpcQuest),false);
+  assert.equal(prof.activeNpcQuest.have,3);
+  room.handleNpcQuest(client,{action:'claim'});
+  assert.equal(prof.npcQuestChains['Mara Vale'],1);
+  assert.equal(itemCount(prof,I.STONE_SWORD),0);
+  room.recordCraftProgress(client,I.WOOD_SWORD,1);
+  assert.equal(room.npcQuestReady(client,prof.activeNpcQuest),true);
+  assert.equal(prof.activeNpcQuest.have,3);
+});
+
+test('Mara quests guarantee crafting, an upgrade and levels 2 and 3 before the first gate', async () => {
   const room = makeRoom(), client = makeClient('mara_path_owner');
   const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });
   const ensured = [];
@@ -2798,20 +2826,30 @@ test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate'
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
   assert.equal(prof.activeNpcQuest.title, 'Road Ready');
   assert.equal(prof.activeNpcQuest.levelTarget, 3);
-  assert.equal(itemCount(prof, I.WOOD_SWORD), 1, 'Mara gives a wooden sword when Road Ready begins');
+  assert.equal(itemCount(prof, I.WOOD_SWORD), 0, 'the player makes the starter weapon');
+  assert.equal(prof.activeNpcQuest.craftPending, true);
   assert.equal(prof.maraRoadReadySwordGranted, true);
   assert.deepEqual(
     client.sent.filter(message => message.type === 'npcQuest').at(-1).msg.grantedItems,
-    [{ id: I.WOOD_SWORD, count: 1 }],
-    'Road Ready explicitly tells the client which starter weapon Mara granted',
+    [{ id: W.B.PLANKS, count: 2 }, { id: I.STICK, count: 1 }],
+    'Road Ready supplies the exact starter recipe',
   );
   room.handleNpcQuest(client, { action: 'abandon' });
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
-  assert.equal(itemCount(prof, I.WOOD_SWORD), 1, 're-accepting Road Ready cannot duplicate the starter sword');
+  assert.equal(itemCount(prof, W.B.PLANKS), 2, 're-accepting cannot duplicate the kit');
+  assert.equal(sanitizeProfile(prof).maraRoadReadyCraftRequired, true);
+  prof.activeNpcQuest = room.rehydrateNpcQuestFromAuthoring(sanitizeProfile(prof), prof.activeNpcQuest);
+  assert.equal(prof.activeNpcQuest.craftPending, true, 'crafting stage survives reload');
+  await room.handleCraft(client, {w:3,cells:[W.B.PLANKS,0,0,W.B.PLANKS,0,0,I.STICK,0,0]});
+  assert.equal(itemCount(prof,I.WOOD_SWORD),1);
+  assert.equal(prof.activeNpcQuest.craftPending,false);
+  assert.equal(sanitizeProfile(prof).maraRoadReadyCrafted,true);
   for (let i = 0; i < 3; i++) room.recordKillProgress(client);
   room.handleNpcQuest(client, { action: 'claim' });
   assert.equal(prof.S.lvl, 3);
   assert.equal(prof.npcQuestChains['Mara Vale'], 2);
+  assert.equal(itemCount(prof,I.STONE_SWORD),1);
+  assert.equal(itemCount(prof,I.COOKED_MEAT),2);
 
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
   assert.equal(prof.activeNpcQuest.title, 'The First Gate');

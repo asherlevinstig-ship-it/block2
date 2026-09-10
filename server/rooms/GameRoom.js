@@ -5635,7 +5635,7 @@ class GameRoom extends Room {
     }
     if (source === 'story' || source === 'manhunt') {
       if (title === 'First Hands') return 'Speak to Mara again for Road Ready, then start preparing for your first Gate.';
-      if (title === 'Road Ready') return 'Use the Compass path to find and clear the first E-rank Gate.';
+      if (title === 'Road Ready') return 'Compare and equip your Stone Sword reward, pack the food, then find the first E-rank Gate.';
       if (title === 'The First Gate') return 'Use the payoff supplies to craft your first station, then claim land and build a safe base.';
       return 'Open the Quest Log or follow the marked NPC for the next story beat.';
     }
@@ -5906,7 +5906,7 @@ class GameRoom extends Room {
         text: ready ? (npc.turnInText || `Turn in to ${npc.giver || 'the quest giver'}`) : (npc.desc || npc.objectiveText || `Complete ${required} objective${required === 1 ? '' : 's'}.`),
         location: ready ? (npc.turnInLocation || npc.giver || 'Quest giver') : (npc.objectiveLocation || (npc.type === 'gate' ? 'Wilderness Gate' : 'Follow the active trail')),
         action: ready ? (npc.turnInAction || { type: 'turn_in', label: 'TURN IN' }) : (npc.objectiveAction || (npc.type === 'gate' ? { type: 'find_gate', label: 'FIND GATE' } : null)),
-        progress: { current: Math.min(required, current), required },
+        progress: npc.craftPending ? {current:0,required:1} : { current: Math.min(required, current), required },
         reward: {
           gold: npc.gold | 0,
           xp: npc.xp | 0,

@@ -289,6 +289,11 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       textIncludes: 'Defeat',
       activeObjectiveId: 'npc:Mara Vale:1',
     });
+  if(await page.evaluate(()=>quest&&quest.craftPending)){
+    await page.evaluate(()=>BlockcraftGameContext.requireModule('menus').activateCraftShortcut(I.WOOD_SWORD));
+    await page.locator('#craftarea > .slot').dispatchEvent('mousedown',{button:0});
+    await expect.poll(()=>page.evaluate(()=>quest&&quest.craftPending)).toBe(false);
+  }
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'completeRoadReady' }));
     await expectChapterCheckpoint(page, qualityAudit, 'road ready ready to claim', {
       focus: 'first_road_ready',

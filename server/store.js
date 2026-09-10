@@ -398,6 +398,8 @@ function defaultProfile(name) {
     starterGoldGranted: true,
     firstQuestRewardClaimed: false,
     maraRoadReadySwordGranted: false,
+    maraRoadReadyCraftRequired: false,
+    maraRoadReadyCrafted: false,
     npcQuestChains: {},
     activeNpcQuest: null,
     questHistory: [],
@@ -739,6 +741,7 @@ function sanitizeActiveNpcQuest(q) {
   if (!type || !giver) return null;
   const lifecycleState = ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(q.lifecycleState) ? q.lifecycleState : 'active';
   return {
+    craftPending: q.craftPending === true,
     source: 'npc', giver, role: cleanShortText(q.role, 'town', 32),
     chainKey: giver, chainStep: clampI(q.chainStep, 0, 99), chainTotal: clampI(q.chainTotal, 1, 99),
     chainTitle: cleanShortText(q.chainTitle, 'Town Work', 64), title: cleanShortText(q.title, 'Town Work', 64),
@@ -989,6 +992,8 @@ function sanitizeProfile(p) {
   } else out.skyshipTransit = null;
   out.firstQuestRewardClaimed = p.firstQuestRewardClaimed === true;
   out.maraRoadReadySwordGranted = p.maraRoadReadySwordGranted === true;
+  out.maraRoadReadyCraftRequired = p.maraRoadReadyCraftRequired === true;
+  out.maraRoadReadyCrafted = p.maraRoadReadyCrafted === true;
   out.npcQuestChains = sanitizeNpcQuestChains(p.npcQuestChains);
   out.activeNpcQuest = sanitizeActiveNpcQuest(p.activeNpcQuest);
   out.questHistory = sanitizeQuestHistory(p.questHistory);

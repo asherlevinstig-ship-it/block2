@@ -1846,6 +1846,7 @@ function netAttachRoom(room,name,client){
           sysMsg('Mara hands you a <b>Wooden Sword</b>. It is already in your inventory.');
           showName('Wooden Sword received');
         }
+        if(quest.craftPending){sysMsg('<b>Starter kit received:</b> 2 Oak Planks + 1 Stick. Use <b>CRAFT STARTER</b> in your objective tracker to make a Wood Sword.');showName('Starter crafting kit received');}
         maraQuestCue(quest);
       }
       else if(m.action==='abandon'&&!m.abandoned)sysMsg('Quest abandoned.');

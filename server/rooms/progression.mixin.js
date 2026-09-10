@@ -1322,9 +1322,23 @@ class ProgressionMixin {
       // land exactly on the advertised level even when the wider XP economy rises.
       rewards.xp = targetXp;
     }
-    return NPC_QUEST_REGISTRY.buildRuntimeNpcQuest(def, {
+    const quest = NPC_QUEST_REGISTRY.buildRuntimeNpcQuest(def, {
       giver, role, step, total: chain.length, level: lvl, gold: rewards.gold, xp: rewards.xp, lifecycleState: 'offered', now: Date.now(),
     });
+    return this.updateRoadReadyCraftStep(prof, quest);
+  }
+
+  updateRoadReadyCraftStep(prof, q) {
+    if (!q || q.giver !== 'Mara Vale' || q.title !== 'Road Ready') return q;
+    q.craftPending = prof.maraRoadReadyCraftRequired === true && !prof.maraRoadReadyCrafted;
+    const def = NPC_QUEST_CHAINS['Mara Vale'][1];
+    q.desc = q.craftPending
+      ? 'Craft your Wood Sword: 2 Oak Planks above 1 Stick in a vertical line. Your kit is supplied. Use CRAFT STARTER, then defeat 3 monsters for a Stone Sword and food.'
+      : def.desc.replace('{N}', String(q.need));
+    q.objectiveText = q.desc;
+    q.objectiveAction = q.craftPending ? {type:'craft',label:'CRAFT STARTER'} : null;
+    q.objectiveLocation = q.craftPending ? 'Starter crafting kit' : def.objectiveLocation;
+    return q;
   }
 
   rehydrateNpcQuestFromAuthoring(prof, q) {
@@ -1354,6 +1368,7 @@ class ProgressionMixin {
   npcQuestReady(client, quest) {
     const rec = this.profileFor(client), p = this.state.players.get(client.sessionId);
     if (!rec || !quest) return false;
+    if (this.updateRoadReadyCraftStep(rec.prof, quest).craftPending) return false;
     if (quest.type === 'fetch') return this.countItem(rec.prof, quest.item | 0) >= (quest.need | 0);
     if (quest.type === 'utility') return Array.isArray(rec.prof.utilityUnlocks) && rec.prof.utilityUnlocks.includes(quest.utility);
     if (quest.type === 'familiar') return Array.isArray(rec.prof.familiarUnlocks) && rec.prof.familiarUnlocks.includes(quest.familiar);
@@ -1386,12 +1401,12 @@ class ProgressionMixin {
         && this.countItem(rec.prof, I.WINDSEED) <= 0 && this.countItem(rec.prof, I.GOLDEN_WHEAT) <= 0;
       if (grantRoadReadySword || grantBrightHarvestSeed) {
         const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(slot => slot ? { ...slot } : null) };
-        if (grantRoadReadySword && this.addCraftedRewardItem(draft, I.WOOD_SWORD, 1) !== 0) return this.progressionReject(client, 'npcQuest', 'full');
+        if (grantRoadReadySword && (this.addCraftedRewardItem(draft, W.B.PLANKS, 2) !== 0 || this.addCraftedRewardItem(draft, I.STICK, 1) !== 0)) return this.progressionReject(client, 'npcQuest', 'full');
         if (grantBrightHarvestSeed && this.addCraftedRewardItem(draft, I.WINDSEED, 1) !== 0) return this.progressionReject(client, 'npcQuest', 'full');
         rec.prof.inv = draft.inv;
-        if (grantRoadReadySword) rec.prof.maraRoadReadySwordGranted = true;
+        if (grantRoadReadySword) {rec.prof.maraRoadReadySwordGranted = true;rec.prof.maraRoadReadyCraftRequired = true;}
       }
-      rec.prof.activeNpcQuest = q;
+      rec.prof.activeNpcQuest = this.updateRoadReadyCraftStep(rec.prof, q);
       if (q.giver === 'Mara Vale' && q.title === 'Road Ready' && ['first_road_ready', ''].includes(rec.prof.progressionFocus || '')) {
         rec.prof.progressionFocus = 'first_road_ready';
       } else if (q.giver === 'Mara Vale' && q.title === 'The First Gate' && ['first_road_ready', 'first_e_gate', ''].includes(rec.prof.progressionFocus || '')) {
@@ -1403,7 +1418,7 @@ class ProgressionMixin {
         action,
         quest: q,
         grantedItems: [
-          ...(grantRoadReadySword ? [{ id: I.WOOD_SWORD, count: 1 }] : []),
+          ...(grantRoadReadySword ? [{ id: W.B.PLANKS, count: 2 }, { id: I.STICK, count: 1 }] : []),
           ...(grantBrightHarvestSeed ? [{ id: I.WINDSEED, count: 1 }] : []),
         ],
       });
@@ -1499,7 +1514,7 @@ class ProgressionMixin {
     if (q.item && target && (q.item | 0) !== (target | 0)) return false;
     if (type === 'gate' && q.gateRank >= 0 && (q.gateRank | 0) !== (target | 0)) return false;
     q.have = Math.min(q.need | 0, (q.have | 0) + Math.max(1, count | 0));
-    if ((q.have | 0) >= (q.need | 0)) {
+    if ((q.have | 0) >= (q.need | 0) && !this.updateRoadReadyCraftStep(rec.prof, q).craftPending) {
       q.lifecycleState = 'claimable';
       q.claimableAt = Date.now();
     }
@@ -1705,6 +1720,17 @@ class ProgressionMixin {
   }
 
   recordCraftProgress(client, id, count) {
+    const starterRec=this.profileFor(client);
+    if (id===I.WOOD_SWORD && starterRec && starterRec.prof.maraRoadReadyCraftRequired && !starterRec.prof.maraRoadReadyCrafted) {
+      starterRec.prof.maraRoadReadyCrafted=true;
+      const q=this.updateRoadReadyCraftStep(starterRec.prof,starterRec.prof.activeNpcQuest);
+      if(q && q.title==='Road Ready'){
+        if((q.have|0)>=(q.need|0)){q.lifecycleState='claimable';q.claimableAt=Date.now();}
+        client.send('npcQuest',{action:'progress',quest:q});
+      }
+      this.dirtyPlayers.add(starterRec.token);
+      if(this.activeQuestObjectives)client.send('progressionFocus',{focus:starterRec.prof.progressionFocus||'',activeObjectives:this.activeQuestObjectives(client,starterRec.prof)});
+    }
     count = Math.max(1, count | 0);
     if ([I.BREAD, I.HEARTY_SANDWICH, I.DRAGON_TREAT, I.COOKED_MEAT, I.GOLDEN_BROTH, I.TRAIL_RATION, I.FEAST_PLATTER].includes(id)) {
       const xp = id === I.FEAST_PLATTER ? 20 : id === I.TRAIL_RATION ? 10 : id === I.GOLDEN_BROTH ? 8 : id === I.DRAGON_TREAT ? 6 : id === I.COOKED_MEAT ? 4 : 5;

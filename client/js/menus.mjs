@@ -507,6 +507,7 @@ function pushObjectiveCraftCandidate(list, seen, outputId, reason, kind='craft')
 }
 function objectiveCraftCandidates(scope='what_next'){
   const list=[],seen=new Set(),base=typeof baseSetupStatus==='function'?baseSetupStatus():null;
+  if(quest&&quest.craftPending){pushObjectiveCraftCandidate(list,seen,I.WOOD_SWORD,'Road Ready starter');return list;}
   if(progressionFocus==='first_craft_station'){
     pushObjectiveCraftCandidate(list,seen,B.TABLE,'First craft station');
     pushObjectiveCraftCandidate(list,seen,B.FURNACE,'First craft station');
@@ -591,7 +592,7 @@ function objectiveCraftShortcutsHTML(scope='what_next'){
 function objectiveTrackerCraftAction(scope='what_next'){
   const candidate=objectiveCraftCandidates(scope)[0];
   if(!candidate) return null;
-  return {label:candidate.kind==='smelt'?'USE FURNACE':'OPEN RECIPE', outputId:candidate.id, kind:candidate.kind};
+  return {label:quest&&quest.craftPending?'CRAFT STARTER':candidate.kind==='smelt'?'USE FURNACE':'OPEN RECIPE', outputId:candidate.id, kind:candidate.kind};
 }
 function activateObjectiveCraftShortcut(outputId, kind='craft'){
   const candidate=objectiveCraftCandidate(outputId, kind==='smelt'?'Smelt objective':'Craft objective', kind);
@@ -2667,7 +2668,7 @@ function questSystemCheck(){
 function maraQuestCue(q){
   if(!q || q.giver!=='Mara Vale') return;
   if(q.title==='First Hands') showName('Quest accepted: leave through the north gate');
-  else if(q.title==='Road Ready') showName('Wooden sword ready - defeat 3 enemies');
+  else if(q.title==='Road Ready') showName(q.craftPending?'Craft your starter sword':'Sword ready - defeat 3 enemies');
   else if(q.type==='gate') showName('Find and clear the E-rank Gate');
   else if(q.type==='utility') showName('Take a Guild Contract at the Guild Hall');
   else if(q.type==='sell') showName('Hunt Monster Meat, then sell it to Greta');
