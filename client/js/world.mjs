@@ -1,3 +1,4 @@
+import {createTownLandmarks} from './town-landmarks.mjs';
 import {disposeObjectTree} from './three-disposal.mjs';
 import {createChunkWorkQueue} from './chunk-work-queue.mjs';
 import {createPrng,varyColor,paintAtlasTile} from './world-textures.mjs';
@@ -7426,6 +7427,7 @@ function makeSkyportDecor(){
   return grp;
 }
 townGroup.add(makeSkyportDecor());
+townGroup.add(createTownLandmarks({THREE,town:TOWN,textureFor:pixelMaterialTextures}));
 
 const tintNight=new THREE.Color(0.17,0.21,0.36), tintDay=new THREE.Color(1,1,1), tintDusk=new THREE.Color(1,0.72,0.50);
 const fogNight=new THREE.Color(0.030,0.050,0.105), fogDay=new THREE.Color(0.62,0.81,0.94), fogDusk=new THREE.Color(0.92,0.52,0.28);
