@@ -9374,7 +9374,7 @@ class GameRoom extends Room {
               if (bd > 4 && bd < 18 && meta.shootCd <= 0 &&
                   AI.losClear(solid, m.x, m.y + 1.4, m.z, best.p.x, best.p.y + 1.2, best.p.z)){
                 meta.drawT = meta.quickShot ? .3 : .5;
-                this.sendSpace(m.dgn || '', 'fx', { t: 'rangedWarn', x: m.x, y: m.y, z: m.z, tx: best.p.x, ty: best.p.y + 1.2, tz: best.p.z, quick: !!meta.quickShot, dgn: m.dgn || '' });
+                this.sendSpace(m.dgn || '', 'fx', { t: 'rangedWarn', durationMs: meta.drawT*1000, x: m.x, y: m.y, z: m.z, tx: best.p.x, ty: best.p.y + 1.2, tz: best.p.z, quick: !!meta.quickShot, dgn: m.dgn || '' });
               }
             }
           } else {                                           // zombie

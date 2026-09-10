@@ -13,7 +13,7 @@ export function abilityFailureText(reason,remaining=0){
 export function createCombatFeedback({document,showName,sysMsg,sound}){
   const impact=document.getElementById('combatimpact'),warning=document.getElementById('armorwarning');
   const hitConfirm=document.getElementById('hitconfirm'),telegraph=document.getElementById('enemytelegraph'),abilityPulse=document.getElementById('abilitypulse');
-  let impactTimer=0,hitTimer=0,telegraphTimer=0,abilityTimer=0,lastArmorBand='sound',baseFov=0;
+  let impactTimer=0,hitTimer=0,hitClassTimer=0,telegraphUrgent=false,telegraphTimer=0,abilityTimer=0,lastArmorBand='sound',baseFov=0;
   function showImpact(hit={}){
     if(!impact)return;
     const damage=Math.max(0,Number(hit.n)||0),absorbed=Math.max(0,Number(hit.absorbed)||0);
@@ -55,7 +55,7 @@ export function createCombatFeedback({document,showName,sysMsg,sound}){
     if(!hitConfirm)return;
     hitConfirm.className=hit.lethal?'lethal':hit.crit?'critical':'';
     if(sound){if(hit.lethal&&sound.finisher)sound.finisher();else if(hit.crit&&sound.crit)sound.crit();else if(sound.hit)sound.hit();}
-    if(document.body){document.body.classList.remove('combat-hit','combat-crit');void document.body.offsetWidth;document.body.classList.add(hit.crit?'combat-crit':'combat-hit');setTimeout(()=>document.body.classList.remove('combat-hit','combat-crit'),hit.lethal?170:hit.crit?135:72);}
+    if(document.body){document.body.classList.remove('combat-hit','combat-crit');void document.body.offsetWidth;document.body.classList.add(hit.crit?'combat-crit':'combat-hit');clearTimeout(hitClassTimer);hitClassTimer=setTimeout(()=>document.body.classList.remove('combat-hit','combat-crit'),hit.lethal?170:hit.crit?135:72);}
     if(hit.crit)showName(hit.lethal?'EXECUTE':'CRITICAL HIT');
     clearTimeout(hitTimer);hitTimer=setTimeout(()=>hitConfirm.classList.add('hidden'),hit.lethal?260:hit.crit?230:190);
   }
@@ -69,9 +69,11 @@ export function createCombatFeedback({document,showName,sysMsg,sound}){
       volleyWarn:['VOLLEY - LEAVE THE LANES',true],
       quakewarn:['QUAKE - CLEAR THE RING',false],growl:['ATTACK INCOMING',false],
     };
-    const cue=cues[fx.t];if(!cue)return;
+    const cue=cues[fx.t];if(!cue||telegraphUrgent&&!cue[1])return;
+    telegraphUrgent=cue[1];
     telegraph.textContent=cue[0];telegraph.className=cue[1]?'urgent':'';
-    clearTimeout(telegraphTimer);telegraphTimer=setTimeout(()=>telegraph.classList.add('hidden'),cue[1]?730:920);
+    const duration=Number.isFinite(fx.durationMs)&&fx.durationMs>0?Math.max(100,Math.min(10000,fx.durationMs)):cue[1]?730:920;
+    clearTimeout(telegraphTimer);telegraphTimer=setTimeout(()=>{telegraph.classList.add('hidden');telegraphUrgent=false;},duration);
   }
   function abilityPressed(slot,name=''){
     if(!abilityPulse)return;

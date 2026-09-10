@@ -52,3 +52,23 @@ test('hit, critical and finishing blows select distinct impact sounds',async()=>
  feedback.abilitySettled(0,true);assert.equal(node.textContent,'CAST CONFIRMED');
  feedback.abilitySettled(0,false,'blocked');assert.equal(node.textContent,'BLOCKED');
 });
+
+test('overlapping hits keep the latest impact and urgent warnings survive minor cues',async t=>{
+ const {createCombatFeedback}=await import('../../client/js/combat-feedback.mjs');
+ t.mock.timers.enable({apis:['setTimeout']});
+ const classes=new Set(),nodes=new Map();
+ const classList={add:(...names)=>names.forEach(n=>classes.add(n)),remove:(...names)=>names.forEach(n=>classes.delete(n))};
+ const document={body:{classList,offsetWidth:100},getElementById:id=>{
+  if(!nodes.has(id))nodes.set(id,{classList:{add(){}},dataset:{}});
+  return nodes.get(id);
+ }};
+ const f=createCombatFeedback({document,showName(){},sysMsg(){}});
+ f.confirmHit({});t.mock.timers.tick(50);f.confirmHit({crit:true});
+ t.mock.timers.tick(23);assert.equal(classes.has('combat-crit'),true);
+ t.mock.timers.tick(112);assert.equal(classes.has('combat-crit'),false);
+ f.showTelegraph({t:'meleeWarn',label:'Brute Slam',durationMs:1050});
+ t.mock.timers.tick(800);f.showTelegraph({t:'rangedWarn'});
+ assert.match(nodes.get('enemytelegraph').textContent,/Brute Slam/);
+ t.mock.timers.tick(250);f.showTelegraph({t:'rangedWarn',durationMs:300});
+ assert.match(nodes.get('enemytelegraph').textContent,/ARROW DRAW/);
+});

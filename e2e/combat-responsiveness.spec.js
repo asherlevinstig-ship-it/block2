@@ -1,6 +1,6 @@
 const {test,expect}=require('@playwright/test');
 const {registerAndPlay}=require('./helpers/auth-flow.cjs');
-test('dungeon casts buffer once and show resource, cooldown and recovery feedback',async({page},testInfo)=>{
+for(const uplinkMs of [0,75,150])test('dungeon combat feedback with '+uplinkMs+'ms added ability uplink delay',async({page},testInfo)=>{
  test.setTimeout(120000);
  await registerAndPlay(page,{username:'combat_'+Date.now().toString(36),password:'combat playtest account',hunterName:'CombatTest',path:'mage'});
  await page.evaluate(()=>__BLOCKCRAFT_E2E__.send('e2eJourney',{action:'prepareERankDungeon',dungeonId:'abandoned_mine',requestId:'prepare'}));
@@ -13,12 +13,12 @@ test('dungeon casts buffer once and show resource, cooldown and recovery feedbac
  await expect.poll(()=>page.evaluate(()=>__BLOCKCRAFT_E2E__.status().roomName),{timeout:30000}).toBe('dungeon');
  await expect(page.locator('#loadscreen')).toBeHidden();
  await page.evaluate(()=>BlockcraftGameContext.requireModule('combat').resumeGameplayCamera());
- await page.evaluate(()=>{
+ await page.evaluate(uplinkMs=>{
   window.combatResults=[];NET.room.onMessage('abilityResult',m=>combatResults.push({at:performance.now(),...m}));
   window.combatRejects=[];NET.room.onMessage('abilityReject',m=>combatRejects.push(m));
-  window.combatSends=[];const send=NET.room.send.bind(NET.room);NET.room.send=(type,msg)=>{if(type==='ability')combatSends.push({at:performance.now(),...msg});return send(type,msg);};
+  window.combatSends=[];const send=NET.room.send.bind(NET.room);NET.room.send=(type,msg)=>{if(type==='ability')combatSends.push({at:performance.now(),...msg});if(type==='ability'&&uplinkMs){setTimeout(()=>send(type,msg),uplinkMs);return;}return send(type,msg);};
   cast(0);
- });
+ },uplinkMs);
  await expect.poll(()=>page.evaluate(()=>combatResults.length)).toBe(1);
  expect(await page.evaluate(()=>{cast(0);return document.getElementById('abilitypulse').textContent;})).toContain('COOLDOWN');
  const queued=await page.evaluate(async()=>{
