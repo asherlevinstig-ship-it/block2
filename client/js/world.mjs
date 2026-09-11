@@ -1,3 +1,4 @@
+import {createEnvironmentIdentity} from './environment-identity.mjs';
 import {batchStaticModelParts} from './model-batching.mjs';
 import {createTownLandmarks} from './town-landmarks.mjs';
 import {disposeObjectTree} from './three-disposal.mjs';
@@ -4446,6 +4447,7 @@ scene.add(cloudGroup);
 
 // ---------------- villagers ----------------
 // lights only affect the Lambert-shaded NPCs; chunk meshes use baked vertex light
+const environmentIdentity=createEnvironmentIdentity(THREE);
 const hemi=new THREE.HemisphereLight(0xcfe8ff, 0x9a8a6a, 0.95);
 scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff2d8, 0.55);
@@ -7652,6 +7654,12 @@ function updateDayNight(dt){
   hemi.groundColor.set(0x88735b);
   hemi.color.copy(_tmpC.setRGB(0.65,0.75,0.95)).lerp(new THREE.Color(0.81,0.91,1), dayF);
 
+  if(dim==='overworld') environmentIdentity.surface({
+    biome:biomeAt(Math.floor(player.pos.x),Math.floor(player.pos.z)),
+    town:isTownLand(player.pos.x,player.pos.z),dt,day:dayF,
+    opaque:matOpaque,transparent:matTrans,fog:scene.fog,backdrop:SKY,hemi,
+  });
+
   // weather dims and closes in the overworld; lightning briefly floods it with light
   if(dim==='overworld'){
     scene.fog.near=44-weatherLerp*16;
@@ -7722,14 +7730,17 @@ function updateDayNight(dt){
   else if(dim==='dungeon'){
     const mood=new THREE.Color(dungeonMoodColor(dungeon));
     const dungeonTheme=dungeon&&dungeon.definition&&dungeon.definition.theme;
-    const tint=new THREE.Color(0x8a8198).lerp(mood,.35);
+    const palette=environmentIdentity.dungeon(dungeonTheme);
+    const tint=palette.tint;
     matOpaque.color.copy(tint);
     matTrans.color.copy(tint);
-    scene.fog.near=5.5;
+    scene.fog.near=8;
     scene.fog.far=dungeonTheme==='mine'?34:dungeonTheme==='crypt'?26:dungeonTheme==='overgrown'?29:30;
     scene.fog.color.copy(mood);
     SKY.copy(mood);
-    hemi.intensity=.46; hemi.color.copy(new THREE.Color(0x6d6388).lerp(mood,.2));
+    hemi.intensity=.6; hemi.color.copy(palette.sky);
+    hemi.groundColor.copy(palette.ground);
+    sun.color.copy(palette.key);
     sun.intensity=.08;
   }
   else if(dim==='gatecutscene'){
