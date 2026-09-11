@@ -1,3 +1,4 @@
+const {treeHeight,treeBlocks,clearLandmarkApproach}=require('../shared/vegetation-identity');
 // Deterministic world model, mirroring the client's generator.
 // The same seeded hash-noise means client and server agree on terrain
 // without ever shipping the 1MB world array — only edits are synced.
@@ -132,22 +133,14 @@ function naturalTreeSpecAt(x, z) {
   const ground = groundY > SNOWLINE || biome === BIO.SNOWY ? B.SNOW
     : (biome === BIO.DESERT ? B.SAND : biome === BIO.MESA ? B.RED_SAND : groundY <= SEA + 1 ? B.SAND : B.GRASS);
   if (ground !== B.GRASS && ground !== B.SNOW) return null;
-  const height = 4 + Math.floor(hash2(x, z) * 2);
+  const height = treeHeight(biome, hash2(x, z));
   const blocks = [];
-  for (let i = 1; i <= height; i++) blocks.push({ x, y: groundY + i, z, id: B.LOG });
-  const top = groundY + height;
-  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
-    const dist = Math.abs(dx) + Math.abs(dz) + Math.abs(dy) * 1.5;
-    if (dist > 3.4) continue;
-    const bx = x + dx, by = top + dy + 1, bz = z + dz;
-    if (bx === x && bz === z && by <= groundY + height) continue;
-    if (hash2(bx * 3 + by, bz * 3 - by) > 0.08) blocks.push({ x: bx, y: by, z: bz, id: B.LEAVES });
-  }
+  treeBlocks({x,y:groundY,z,biome,hash:hash2,B,emit:(bx,by,bz,id)=>blocks.push({x:bx,y:by,z:bz,id})});
   return { x, z, groundY, height, blocks };
 }
 function naturalTreeForBlock(x, y, z) {
   x |= 0; y |= 0; z |= 0;
-  for (let tx = x - 2; tx <= x + 2; tx++) for (let tz = z - 2; tz <= z + 2; tz++) {
+  for (let tx = x - 3; tx <= x + 3; tx++) for (let tz = z - 3; tz <= z + 3; tz++) {
     const spec = naturalTreeSpecAt(tx, tz);
     if (spec && spec.blocks.some(block => block.x === x && block.y === y && block.z === z)) return spec;
   }
@@ -719,7 +712,7 @@ function buildAncientCities(setBlock, getBlock = getB) {
   }
   return ancientCitySpecs();
 }
-function buildRegionalLandmarks(setBlock) {
+function buildRegionalLandmarks(setBlock,getBlock) {
   const specs = regionalLandmarkSpecs();
   const box = (x1,y1,z1,x2,y2,z2,id) => { for(let x=x1;x<=x2;x++) for(let y=y1;y<=y2;y++) for(let z=z1;z<=z2;z++) setBlock(x,y,z,id); };
   const prep = (s,r,floor=B.COBBLE) => {
@@ -752,8 +745,8 @@ function buildRegionalLandmarks(setBlock) {
       prep(s,5,B.GRASS); for(let gx=-3;gx<=3;gx+=3) for(let gz=-3;gz<=3;gz+=3){ setBlock(x+gx,y+1,z+gz,B.COBBLE); setBlock(x+gx,y+2,z+gz,B.BRICK); }
       for(let i=-5;i<=5;i++){ setBlock(x+i,y+1,z-5,B.LOG); setBlock(x+i,y+1,z+5,B.LOG); setBlock(x-5,y+1,z+i,B.LOG); setBlock(x+5,y+1,z+i,B.LOG); } setBlock(x,y+1,z,B.LANTERN);
     } else if(s.type==='abandoned_tower'){
-      prep(s,8,B.COBBLE); for(let k=1;k<=12;k++) for(let ox=-5;ox<=5;ox++) for(let oz=-5;oz<=5;oz++) if(Math.abs(ox)===5||Math.abs(oz)===5){ if(!(oz===5&&Math.abs(ox)<=1&&k<=3) && hash2(x+ox+k,z+oz-k)>.08) setBlock(x+ox,y+k,z+oz,k%3?B.COBBLE:B.BRICK); }
-      box(x-6,y+12,z-6,x+6,y+12,z+6,B.PLANKS); for(const [ox,oz] of [[-6,-6],[6,-6],[-6,6],[6,6]]) setBlock(x+ox,y+13,z+oz,B.LANTERN);
+      prep(s,8,B.COBBLE); for(let k=1;k<=18;k++) for(let ox=-5;ox<=5;ox++) for(let oz=-5;oz<=5;oz++) if(Math.abs(ox)===5||Math.abs(oz)===5){ if(!(oz===5&&Math.abs(ox)<=1&&k<=3) && hash2(x+ox+k,z+oz-k)>.08) setBlock(x+ox,y+k,z+oz,k%3?B.COBBLE:B.BRICK); }
+      box(x-6,y+18,z-6,x+6,y+18,z+6,B.PLANKS); for(const [ox,oz] of [[-6,-6],[6,-6],[-6,6],[6,6]]) setBlock(x+ox,y+19,z+oz,B.LANTERN);
     } else if(s.type==='cave'){
       prep(s,7,B.STONE); for(let dz=-6;dz<=8;dz++){ const fy=y-Math.floor((dz+6)/4); for(let ox=-2;ox<=2;ox++) for(let oy=1;oy<=4;oy++) setBlock(x+ox,fy+oy,z+dz,B.AIR); for(let ox=-2;ox<=2;ox++) setBlock(x+ox,fy,z+dz,B.COBBLE); }
       for(let ox=-5;ox<=5;ox++) for(let oz=7;oz<=15;oz++) for(let oy=-4;oy<=3;oy++) if((ox*ox)/25+(oz-11)*(oz-11)/20+(oy*oy)/16<1) setBlock(x+ox,y-3+oy,z+oz,B.AIR);
@@ -766,6 +759,7 @@ function buildRegionalLandmarks(setBlock) {
       box(x-6,y+1,z,x+8,y+1,z,B.LOG); for(let i=-6;i<=5;i+=3){ box(x+i,y+6,z-4,x+i+2,y+8,z-1,B.TERRACOTTA); box(x+i,y+5,z+2,x+i+2,y+7,z+4,B.TERRACOTTA); } setBlock(x+7,y+5,z,B.LANTERN);
     }
   }
+  if(getBlock)for(const s of specs)clearLandmarkApproach({s,center:WX/2,getBlock,setBlock,B,WH});
   return specs;
 }
 
@@ -858,15 +852,9 @@ function generate() {
       let y = WH - 1; while (y > 0 && getB(x, y, z) === B.AIR) y--;
       const t0 = getB(x, y, z);
       if (t0 !== B.GRASS && t0 !== B.SNOW) continue;
-      const th = 4 + Math.floor(hash2(x, z) * 2);
-      for (let i = 1; i <= th; i++) setB(x, y + i, z, B.LOG);
-      const top = y + th;
-      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
-        const dist = Math.abs(dx) + Math.abs(dz) + Math.abs(dy) * 1.5;
-        if (dist > 3.4) continue;
-        const bx = x + dx, by = top + dy + 1, bz = z + dz;
-        if (getB(bx, by, bz) === B.AIR && hash2(bx * 3 + by, bz * 3 - by) > 0.08) setB(bx, by, bz, B.LEAVES);
-      }
+      treeBlocks({x,y,z,biome,hash:hash2,B,emit:(bx,by,bz,id)=>{
+        if(id===B.LOG||getB(bx,by,bz)===B.AIR)setB(bx,by,bz,id);
+      }});
     } else if (biome === BIO.DESERT && hash2(x * 7 + 3, z * 7 + 9) > 0.978) {
       let y = WH - 1; while (y > 0 && getB(x, y, z) === B.AIR) y--;
       if (getB(x, y, z) === B.SAND) { const ch = 2 + Math.floor(hash2(x * 3, z * 3) * 2); for (let i = 1; i <= ch; i++) setB(x, y + i, z, B.CACTUS); }
@@ -874,7 +862,7 @@ function generate() {
   }
   buildRoadNetwork(setB);
   buildSmallDiscoveries(setB);
-  buildRegionalLandmarks(setB);
+  buildRegionalLandmarks(setB,getB);
   buildCaveNetworks(setB, getB);
   buildAncientCities(setB, getB);
   buildTreasureCaches(setB);
@@ -1218,15 +1206,9 @@ function createWorld() {
         let y = WH - 1; while (y > 0 && getLocal(x, y, z) === B.AIR) y--;
         const t0 = getLocal(x, y, z);
         if (t0 !== B.GRASS && t0 !== B.SNOW) continue;
-        const th = 4 + Math.floor(hash2(x, z) * 2);
-        for (let i = 1; i <= th; i++) setLocal(x, y + i, z, B.LOG);
-        const top = y + th;
-        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
-          const dist = Math.abs(dx) + Math.abs(dz) + Math.abs(dy) * 1.5;
-          if (dist > 3.4) continue;
-          const bx = x + dx, by = top + dy + 1, bz = z + dz;
-          if (getLocal(bx, by, bz) === B.AIR && hash2(bx * 3 + by, bz * 3 - by) > 0.08) setLocal(bx, by, bz, B.LEAVES);
-        }
+        treeBlocks({x,y,z,biome,hash:hash2,B,emit:(bx,by,bz,id)=>{
+          if(id===B.LOG||getLocal(bx,by,bz)===B.AIR)setLocal(bx,by,bz,id);
+        }});
       } else if (biome === BIO.DESERT && hash2(x * 7 + 3, z * 7 + 9) > 0.978) {
         let y = WH - 1; while (y > 0 && getLocal(x, y, z) === B.AIR) y--;
         if (getLocal(x, y, z) === B.SAND) {
@@ -1237,7 +1219,7 @@ function createWorld() {
     }
     buildRoadNetwork(setLocal);
     buildSmallDiscoveries(setLocal);
-    buildRegionalLandmarks(setLocal);
+    buildRegionalLandmarks(setLocal,getLocal);
     buildCaveNetworks(setLocal, getLocal);
     buildAncientCities(setLocal, getLocal);
     buildTreasureCaches(setLocal);

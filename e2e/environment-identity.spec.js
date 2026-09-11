@@ -93,6 +93,26 @@ test('six overworld biome views', async ({ page }, testInfo) => {
     return points;
   });
   expect(points.filter(Boolean)).toHaveLength(6);
+  points.push(...await page.evaluate(()=>regionalLandmarks.filter(s=>['abandoned_tower','giant_tree','cave'].includes(s.type)).filter((s,i,a)=>a.findIndex(t=>t.type===s.type)===i).map(s=>{
+    const dx=TOWN.TC-s.x,dz=TOWN.TC-s.z,length=Math.hypot(dx,dz)||1;
+    const x=s.x+dx/length*26,z=s.z+dz/length*26;
+    return {biome:'landmark-'+s.type,x,z,y:terrainHeight(x,z),target:{x:s.x,y:s.y+7,z:s.z}};
+  })));
+  const worldModel=require('../server/world');
+  const authoritative=worldModel.createWorld();
+  authoritative.generate();
+  for(const point of points){
+    const sampled=await page.evaluate(p=>{
+      const out=[];
+      for(let x=Math.floor(p.x)-4;x<=Math.floor(p.x)+4;x++)for(let z=Math.floor(p.z)-4;z<=Math.floor(p.z)+4;z++)for(let y=terrainHeight(x,z)+1;y<64;y++)out.push(getB(x,y,z));
+      return out;
+    },point);
+    let index=0,mismatch=false;
+    for(let x=Math.floor(point.x)-4;x<=Math.floor(point.x)+4;x++)for(let z=Math.floor(point.z)-4;z<=Math.floor(point.z)+4;z++)for(let y=worldModel.terrainHeight(x,z)+1;y<64;y++){
+      if(sampled[index++]!==authoritative.getB(x,y,z)){if(!mismatch)console.log('TERRAIN_DIFF',point.biome,x,y,z,sampled[index-1],authoritative.getB(x,y,z));mismatch=true;}
+    }
+    expect(mismatch,`Client/server terrain mismatch at ${point.biome}`).toBe(false);
+  }
   for(const point of points){
     await page.evaluate(p=>{
       player.pos.set(p.x,p.y+2,p.z);tod=.38;
@@ -102,7 +122,7 @@ test('six overworld biome views', async ({ page }, testInfo) => {
     const shot=await page.evaluate(async p=>{
       const original=renderer.render;
       renderer.render=function(s,c){
-        if(s===scene&&c===camera){camera.position.set(p.x,p.y+10,p.z+13);camera.lookAt(p.x,p.y+1,p.z-10);}
+        if(s===scene&&c===camera){camera.position.set(p.x,p.y+(p.target?2:10),p.z+(p.target?0:13));camera.lookAt(p.target?.x??p.x,p.target?.y??p.y+1,p.target?.z??p.z-10);}
         return original.call(this,s,c);
       };
       const start=performance.now();
