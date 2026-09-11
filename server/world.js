@@ -1,4 +1,4 @@
-const {treeHeight,treeBlocks,clearLandmarkApproach}=require('../shared/vegetation-identity');
+const {treeHeight,treeBlocks,clearLandmarkApproach,carveCaveApproach}=require('../shared/vegetation-identity');
 // Deterministic world model, mirroring the client's generator.
 // The same seeded hash-noise means client and server agree on terrain
 // without ever shipping the 1MB world array — only edits are synced.
@@ -760,6 +760,7 @@ function buildRegionalLandmarks(setBlock,getBlock) {
     }
   }
   if(getBlock)for(const s of specs)clearLandmarkApproach({s,center:WX/2,getBlock,setBlock,B,WH});
+  for(const s of specs)carveCaveApproach({s,terrainHeight,setBlock,B,WH});
   return specs;
 }
 

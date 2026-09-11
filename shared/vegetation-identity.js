@@ -51,5 +51,22 @@
       }
     }
   }
-  return {treeHeight,treeBlocks,clearLandmarkApproach};
+  function carveCaveApproach({s,terrainHeight,setBlock,B,WH}){
+    if(s.type!=='cave')return;
+    // The actual cave mouth faces north, independent of the town bearing.
+    // A bounded stepped cutting exposes the mouth without flattening the region.
+    const length=22,startZ=s.z-6;
+    const endY=terrainHeight(s.x,startZ-length);
+    for(let d=1;d<=length;d++){
+      const floor=Math.max(1,Math.min(WH-6,s.y+Math.round(Math.max(-length,Math.min(length,endY-s.y))*d/length)));
+      const radius=d<8?3:2;
+      for(let dx=-radius;dx<=radius;dx++){
+        const x=s.x+dx,z=startZ-d;
+        for(let y=Math.max(1,Math.min(floor-3,terrainHeight(x,z)));y<floor;y++)setBlock(x,y,z,B.STONE);
+        setBlock(x,floor,z,B.COBBLE);
+        for(let y=floor+1;y<WH;y++)setBlock(x,y,z,B.AIR);
+      }
+    }
+  }
+  return {treeHeight,treeBlocks,clearLandmarkApproach,carveCaveApproach};
 });

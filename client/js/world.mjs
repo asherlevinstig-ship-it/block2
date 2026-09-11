@@ -1,4 +1,4 @@
-const {treeBlocks,clearLandmarkApproach}=globalThis.BlockcraftVegetation;
+const {treeBlocks,clearLandmarkApproach,carveCaveApproach}=globalThis.BlockcraftVegetation;
 import {createEnvironmentIdentity} from './environment-identity.mjs';
 import {batchStaticModelParts} from './model-batching.mjs';
 import {createTownLandmarks} from './town-landmarks.mjs';
@@ -1894,6 +1894,7 @@ function buildRegionalLandmarks(setBlock,getBlock){
     }else if(s.type==='crashed_airship'){prep(s,9,B.GRASS);for(let i=-8;i<=8;i++){const yy=y+2+Math.floor((i+8)/7);box(x+i,yy,z-2,x+i,yy+2,z+2,B.PLANKS);if(i%3===0){setBlock(x+i,yy-1,z-3,B.LOG);setBlock(x+i,yy-1,z+3,B.LOG);}}box(x-6,y+1,z,x+8,y+1,z,B.LOG);for(let i=-6;i<=5;i+=3){box(x+i,y+6,z-4,x+i+2,y+8,z-1,B.TERRACOTTA);box(x+i,y+5,z+2,x+i+2,y+7,z+4,B.TERRACOTTA);}setBlock(x+7,y+5,z,B.LANTERN);}
   }
   if(getBlock)for(const s of specs)clearLandmarkApproach({s,center:WX/2,getBlock,setBlock,B,WH});
+  for(const s of specs)carveCaveApproach({s,terrainHeight,setBlock,B,WH});
   return specs;
 }
 function isOverworldGrid(grid=world){

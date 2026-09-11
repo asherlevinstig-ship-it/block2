@@ -46,3 +46,26 @@ test('landmark approach removes only vegetation and preserves nearby terrain and
   assert.equal(getBlock(113,20,113),W.B.STONE);
   assert.equal(getBlock(116,20,110),W.B.LOG);
 });
+
+test('cave approach exposes the north mouth with connected steps and bounded terrain edits',()=>{
+  const {carveCaveApproach}=require('../../shared/vegetation-identity');
+  for(const endY of [2,16,38]){
+    const cells=new Map();
+    const s={type:'cave',x:100,y:16,z:100};
+    carveCaveApproach({s,terrainHeight:()=>endY,setBlock:(x,y,z,id)=>cells.set(`${x},${y},${z}`,id),B:W.B,WH:64});
+    let previous=s.y;
+    for(let d=1;d<=22;d++){
+      const z=94-d;
+      const floor=[...cells].find(([key,id])=>id===W.B.COBBLE&&key.startsWith('100,')&&key.endsWith(`,${z}`));
+      assert.ok(floor);
+      const y=Number(floor[0].split(',')[1]);
+      assert.ok(Math.abs(y-previous)<=1,'No step exceeds one block');previous=y;
+      for(let head=y+1;head<64;head++)assert.equal(cells.get(`100,${head},${z}`),W.B.AIR);
+    }
+    for(const key of cells.keys()){
+      const [x,y,z]=key.split(',').map(Number);
+      assert.ok(Math.abs(x-100)<=3&&z>=72&&z<=93&&y>=1&&y<64);
+    }
+    assert.equal(cells.has('100,16,94'),false,'Existing cave mouth stays untouched');
+  }
+});

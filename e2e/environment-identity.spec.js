@@ -95,8 +95,9 @@ test('six overworld biome views', async ({ page }, testInfo) => {
   expect(points.filter(Boolean)).toHaveLength(6);
   points.push(...await page.evaluate(()=>regionalLandmarks.filter(s=>['abandoned_tower','giant_tree','cave'].includes(s.type)).filter((s,i,a)=>a.findIndex(t=>t.type===s.type)===i).map(s=>{
     const dx=TOWN.TC-s.x,dz=TOWN.TC-s.z,length=Math.hypot(dx,dz)||1;
-    const x=s.x+dx/length*26,z=s.z+dz/length*26;
-    return {biome:'landmark-'+s.type,x,z,y:terrainHeight(x,z),target:{x:s.x,y:s.y+7,z:s.z}};
+    const x=s.type==='cave'?s.x:s.x+dx/length*26,z=s.type==='cave'?s.z-26:s.z+dz/length*26;
+    let ground=63;while(ground>0&&getB(Math.floor(x),ground,Math.floor(z))===B.AIR)ground--;
+    return {biome:'landmark-'+s.type,x,z,y:ground,target:{x:s.x,y:s.y+(s.type==='cave'?2:7),z:s.type==='cave'?s.z-5:s.z}};
   })));
   const worldModel=require('../server/world');
   const authoritative=worldModel.createWorld();
