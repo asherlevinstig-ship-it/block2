@@ -1,3 +1,4 @@
+import {batchStaticModelParts} from './model-batching.mjs';
 import {createTownLandmarks} from './town-landmarks.mjs';
 import {disposeObjectTree} from './three-disposal.mjs';
 import {createChunkWorkQueue} from './chunk-work-queue.mjs';
@@ -9820,6 +9821,7 @@ function makeZombie(){
     grp.add(arm); arms.push(arm);
   }
   grp.add(blobShadow(1.05));
+  batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head]});
   return {grp, mats, legs, arms, head};
 }
 const mobs=[];
