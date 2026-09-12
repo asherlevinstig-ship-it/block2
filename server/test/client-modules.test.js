@@ -1300,6 +1300,29 @@ test('onboarding building counts a three-block stack above the stone pad', async
     'progress is recovered from the blocks in the world even if a placement event was missed');
 });
 
+test('opening tutorial makes task completion, active guidance, and the full build pad unmistakable', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(combat, /el\.id='tutorialsuccess'/);
+  assert.match(combat, /showOnboardingStepSuccess\(step,onboardingStep\)/);
+  assert.match(combat, /onboardingNextAt=now\+1450/);
+  assert.match(styles, /tutorialTaskPulse 1\.15s/);
+  assert.match(styles, /tutorialSuccessCard/);
+  assert.match(world, /new THREE\.BoxGeometry\(3\.08,40,3\.08\)/);
+  assert.match(world, /buildAreaFloor/);
+});
+
+test('Recall pillars explicitly tell players to run towards the correct answer', () => {
+  const recall = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'recall.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  assert.match(html, /id="recallinstruction"/);
+  assert.match(recall, /RUN TOWARDS THE CORRECT ANSWER/);
+  assert.match(recall, /m\.fallback\?'CHOOSE':'RUN'/);
+  assert.match(styles, /#recallinstruction/);
+});
+
 test('onboarding resource manifest restores every tutorial log and mature crop', async () => {
   const { onboardingResourceCells, onboardingTreeTarget, isOnboardingTreeLog } = await clientModule('onboarding.mjs');
   const meadow = { x: 100, z: 200, G: 12 };

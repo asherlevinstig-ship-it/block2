@@ -647,6 +647,14 @@ const uipanel=document.getElementById('uipanel');
 const cursorEl=document.getElementById('cursoritem');
 const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
+const tutorialSuccessEl=(()=>{
+  const el=document.createElement('div');
+  el.id='tutorialsuccess';el.className='hidden';el.setAttribute('role','status');el.setAttribute('aria-live','assertive');el.setAttribute('aria-atomic','true');
+  el.innerHTML='<div class="tutorial-success-rays"></div><div class="tutorial-success-card"><i>✓</i><small id="tutorialsuccesslesson">LESSON COMPLETE</small><strong id="tutorialsuccesstitle">TASK COMPLETE</strong><span>NEXT TASK INCOMING</span></div>';
+  document.body.appendChild(el);return el;
+})();
+const tutorialSuccessLessonEl=document.getElementById('tutorialsuccesslesson');
+const tutorialSuccessTitleEl=document.getElementById('tutorialsuccesstitle');
 const coachHudStateEl=document.getElementById('coachhud');
 const controlPausePrompt=document.getElementById('controlpauseprompt');
 const questionBtn=document.getElementById('questionbtn');
@@ -1390,7 +1398,7 @@ const pathPanelEl=document.getElementById('pathpanel');
 const arrivalChoiceEl=document.getElementById('arrivalchoice');
 const awakeningWin=document.getElementById('awakeningwin');
 const awakeningPanel=document.getElementById('awakeningpanel');
-let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[];
+let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[],tutorialSuccessTimer=0;
 const TUTORIAL_VERSIONS={onboarding:7,ability:2,intro:1,gate:1,townJob:1,townTavern:1,townLand:1,familiar:1};
 let serverTutorials={onboarding:0,ability:0,intro:0,gate:0,townJob:0,townTavern:0,townLand:0,familiar:0};
 function applyServerTutorials(raw){
@@ -1433,7 +1441,11 @@ function cancelOnboardingForProfileRestore(){
   document.body.classList.remove('onboarding');
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
+  if(tutorialPillarGroup.userData.buildAreaBeam)tutorialPillarGroup.userData.buildAreaBeam.visible=false;
+  if(tutorialPillarGroup.userData.buildAreaFloor)tutorialPillarGroup.userData.buildAreaFloor.visible=false;
   tutorialDummyGroup.visible=false;
+  if(tutorialSuccessTimer){clearTimeout(tutorialSuccessTimer);tutorialSuccessTimer=0;}
+  if(tutorialSuccessEl)tutorialSuccessEl.classList.add('hidden');
 }
 let pathChoiceOpen=false,pathChoiceDismissedThisSession=false,pendingPathConfirmation='';
 let jobChoiceOpen=false;
@@ -1447,6 +1459,24 @@ Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
 }),configurable:true});
 const ONBOARDING_FULL_TURN=Math.PI*2;
 let onboardingArrowTurn=0,onboardingPreparedStep=-1;
+const ONBOARDING_SUCCESS_TITLES=Object.freeze({
+  move:'MOVEMENT MASTERED',sprint:'SPRINT MASTERED',arrows:'FULL TURN COMPLETE',jump:'JUMP MASTERED',cursor:'CURSOR UNLOCKED',tree:'LOG GATHERED',craft:'PLANKS CRAFTED',build:'BUILD COMPLETE',farm:'CROP HARVESTED',eat:'HUNGER RESTORED',combat:'DUMMY DEFEATED',recall:'CORRECT ANSWER',finish:'TRAINING COMPLETE'
+});
+function showOnboardingStepSuccess(step,index){
+  if(!tutorialSuccessEl||!step)return;
+  if(tutorialSuccessTimer){clearTimeout(tutorialSuccessTimer);tutorialSuccessTimer=0;}
+  if(tutorialSuccessLessonEl)tutorialSuccessLessonEl.textContent='LESSON '+Math.min(13,(index|0)+1)+' COMPLETE';
+  if(tutorialSuccessTitleEl)tutorialSuccessTitleEl.textContent=ONBOARDING_SUCCESS_TITLES[step.kind]||'TASK COMPLETE';
+  tutorialSuccessEl.classList.remove('hidden','show');
+  void tutorialSuccessEl.offsetWidth;
+  tutorialSuccessEl.classList.add('show');
+  if(player&&player.pos){
+    burst(player.pos.x,player.pos.y+1.1,player.pos.z,[.48,1,.44],54,4.2,3.2,.8,4);
+    ringPulse(player.pos.x,player.pos.y+.12,player.pos.z,3.4,0x8dff78,.8);
+  }
+  SFX.level();
+  tutorialSuccessTimer=setTimeout(()=>{tutorialSuccessTimer=0;tutorialSuccessEl.classList.add('hidden');tutorialSuccessEl.classList.remove('show');},1450);
+}
 let townGuidanceActive=false,townGuidanceStep='quest';
 let worldLoading=false, worldLoadingTimer=0, worldLoadingMinUntil=0;
 const worldLoadingWatchdog=createLoadingWatchdog({onTimeout:()=>worldLoadingFailed('Loading is taking longer than expected. Check your connection, then retry.')});
@@ -1931,6 +1961,8 @@ function beginOnboarding(){
   onboardingResourceRegenAt=0;
   onboardingArrowTurn=0;
   onboardingPreparedStep=-1;
+  if(tutorialSuccessTimer){clearTimeout(tutorialSuccessTimer);tutorialSuccessTimer=0;}
+  if(tutorialSuccessEl)tutorialSuccessEl.classList.add('hidden');
   grantOnboardingKit();
   prepareOnboardingStep();
   document.body.classList.add('onboarding');
@@ -5106,11 +5138,21 @@ function updateOnboardingPillar(now){
     const hitGlow=(onboardingFlags.dummy|0)>0 ? .12 : 0;
     dummyBody.scale.set(1+hitGlow,1+hitGlow,1+hitGlow);
   }
-  if(!onboardingActive||dim!=='tutorial'){tutorialPillarGroup.visible=false;return;}
+  if(!onboardingActive||dim!=='tutorial'){
+    tutorialPillarGroup.visible=false;
+    if(tutorialPillarGroup.userData.buildAreaBeam)tutorialPillarGroup.userData.buildAreaBeam.visible=false;
+    if(tutorialPillarGroup.userData.buildAreaFloor)tutorialPillarGroup.userData.buildAreaFloor.visible=false;
+    return;
+  }
   const target=onboardingRoute[onboardingStep]; if(!target){tutorialPillarGroup.visible=false;return;}
   const y=TRAINING_MEADOW?TRAINING_MEADOW.G+1.035:surfaceY(target.x,target.z);
   tutorialPillarGroup.visible=true;
   tutorialPillarGroup.position.set(target.x,y+4,target.z);
+  const buildAreaBeam=tutorialPillarGroup.userData.buildAreaBeam;
+  const buildAreaFloor=tutorialPillarGroup.userData.buildAreaFloor;
+  const building=onboardingKind()==='build';
+  if(buildAreaBeam){buildAreaBeam.visible=building;buildAreaBeam.material.opacity=.11+.055*Math.sin(now*.004);}
+  if(buildAreaFloor){buildAreaFloor.visible=building;buildAreaFloor.material.opacity=.36+.13*Math.sin(now*.006);}
   tutorialBeam.material.opacity=.22+.12*Math.sin(now*.004);
   tutorialRing.position.y=-3.92+Math.sin(now*.005)*.08;
   const s=1+.08*Math.sin(now*.006);
@@ -5162,7 +5204,7 @@ function tickOnboarding(now){
   const step=ONBOARDING_STEPS[onboardingStep];
   if(!step) return completeOnboarding();
   if(step.done()){
-    if(!onboardingNextAt) onboardingNextAt=now+500;
+    if(!onboardingNextAt){onboardingNextAt=now+1450;showOnboardingStepSuccess(step,onboardingStep);}
     if(now>=onboardingNextAt){
       onboardingStep++;
       onboardingNextAt=0;
