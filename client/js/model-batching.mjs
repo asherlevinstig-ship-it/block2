@@ -6,13 +6,13 @@ export function batchStaticModelParts({THREE,root,animated=[]}){
     const batches=new Map();
     for(const child of parent.children){
       if(!child.isMesh||child.children.length||protectedNodes.has(child)||Array.isArray(child.material)||!child.visible)continue;
-      if(!child.geometry.index||!child.geometry.attributes.normal||!child.geometry.attributes.uv)continue;
+      if(!child.geometry.attributes.normal||!child.geometry.attributes.uv)continue;
       const group=batches.get(child.material)||[];group.push(child);batches.set(child.material,group);
     }
     for(const [material,parts] of batches){
       if(parts.length<2)continue;
       const geometries=parts.map(part=>{
-        part.updateMatrix();return part.geometry.toNonIndexed().applyMatrix4(part.matrix);
+        part.updateMatrix();return (part.geometry.index?part.geometry.toNonIndexed():part.geometry.clone()).applyMatrix4(part.matrix);
       });
       const merged=new THREE.BufferGeometry();
       for(const name of ['position','normal','uv']){
@@ -30,4 +30,7 @@ export function batchStaticModelParts({THREE,root,animated=[]}){
     }
   };
   visit(root);
+  root.traverse(node=>{
+    if(node!==root&&!protectedNodes.has(node)){node.updateMatrix();node.matrixAutoUpdate=false;}
+  });
 }

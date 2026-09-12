@@ -3148,6 +3148,7 @@ function updateInfoHud(held){
   }
   return;
 }
+let nextEventHudAt=0;
 let last=performance.now();
 const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length,pendingChunks:worldApi.pendingChunkCount(),...worldApi.particleBudgetStats()})});
 function tickPetTamerTutorialVisuals(now, dt){
@@ -3179,7 +3180,7 @@ function tick(now){
     combatApi.openLevel2JobChoice();
   }else if(shouldOpenLevel2PathChoice()) showPathSelection();
   if(!cutscene) tryStartQueuedGateCutscene();
-  renderEventHud();
+  if(now>=nextEventHudAt){nextEventHudAt=now+100;renderEventHud();}
   tickSmartSuggestions(now);
   updateDayNight(dt);
   if(now-lavaAnimT>80){ lavaAnimT=now; paintLavaTile(now*0.0045); }   // animate lava ~12fps

@@ -47,3 +47,32 @@ test('static batching preserves transformed surfaces and animated pivots', async
   arm.rotation.y = 0.8;
   close(surfaces(), animatedBefore);
 });
+
+test('model atlas keeps face UVs, pivots and combat tint controls', async () => {
+  const {atlasModelMaterials}=await import('../../client/js/model-atlas.mjs');
+  const previousDocument=global.document;
+  const draws=[];
+  global.document={createElement:()=>({getContext:()=>({drawImage:(...args)=>draws.push(args)})})};
+  try {
+    const root=new THREE.Group();
+    const mats=Array.from({length:6},()=>new THREE.MeshLambertMaterial({map:new THREE.Texture({width:16,height:16})}));
+    const head=new THREE.Mesh(new THREE.BoxGeometry(),mats.slice());root.add(head);
+    const originalPositions=head.geometry.toNonIndexed().attributes.position.array.slice();
+    atlasModelMaterials({THREE,root,mats});
+    assert.equal(draws.length,6);
+    assert.equal(mats.length,1);
+    assert.equal(head.material,mats[0]);
+    assert.equal(head.parent,root);
+    assert.deepEqual(head.geometry.attributes.position.array,originalPositions);
+    assert.equal(head.geometry.groups.length,0);
+    const uv=head.geometry.attributes.uv;
+    for(let face=0;face<6;face++)for(let i=face*6;i<face*6+6;i++){
+      const u=uv.getX(i),v=uv.getY(i);
+      assert.ok(u>face%4/4&&u<(face%4+1)/4);
+      assert.ok(v>(1-Math.floor(face/4))/2&&v<(2-Math.floor(face/4))/2);
+    }
+    mats.forEach(m=>{m.color.setRGB(1,.2,.2);m.opacity=.5;});
+    assert.equal(head.material.color.g,.2);
+    assert.equal(head.material.opacity,.5);
+  } finally {if(previousDocument===undefined)delete global.document;else global.document=previousDocument;}
+});

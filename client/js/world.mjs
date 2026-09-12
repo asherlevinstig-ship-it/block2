@@ -1,3 +1,4 @@
+import {atlasModelMaterials} from './model-atlas.mjs';
 const {treeBlocks,clearLandmarkApproach,carveCaveApproach}=globalThis.BlockcraftVegetation;
 import {createEnvironmentIdentity} from './environment-identity.mjs';
 import {batchStaticModelParts} from './model-batching.mjs';
@@ -9829,6 +9830,7 @@ function makeZombie(){
     grp.add(arm); arms.push(arm);
   }
   grp.add(blobShadow(1.05));
+  atlasModelMaterials({THREE,root:grp,mats});
   batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head]});
   return {grp, mats, legs, arms, head};
 }

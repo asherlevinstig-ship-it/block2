@@ -1,3 +1,4 @@
+import {atlasModelMaterials} from './model-atlas.mjs';
 import {batchStaticModelParts} from './model-batching.mjs';
 import {compareGearReward} from './gear-rewards.mjs';
 import {api as worldApi,state as worldState} from './world.mjs';
@@ -1683,6 +1684,7 @@ function makeSkeleton(){
   addBox(grp,[.14,.46,.14],[.12,1.16,-.22],quiverM,[-.22,0,0]);
   for(const qx of [-.03,.04]) addBox(grp,[.03,.2,.03],[.12+qx,1.44,-.2],boneM);
   grp.add(blobShadow(.95));
+  atlasModelMaterials({THREE,root:grp,mats});
   batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head]});
   return {grp, mats, legs, arms, head};
 }
