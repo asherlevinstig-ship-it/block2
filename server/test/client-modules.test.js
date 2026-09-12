@@ -1964,7 +1964,7 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(room,/questionHallRequest=message\.source==='question_hall'/);
   assert.match(room,/if\(questionHallRequest&&active\.source==='question_hall'\)this\.recallChallenges\.delete\(client\.sessionId\)/);
   assert.match(room,/fallback=questionHall\|\|pillars\.some/);
-  assert.match(room,/questionHall:source==='question_hall'/);
+  assert.match(room,/questionHall:challenge\.source==='question_hall'/);
   assert.match(room,/const hall=challenge\.source==='question_hall',freezeMs=hall\?0:RECALL\.FREEZE_MS/);
 });
 
@@ -2029,6 +2029,8 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(room,/this\.recallRecentQuestions\.set\(client\.sessionId,\[q\.id,\.\.\.recent\.filter/);
   assert.match(room,/this\.recallRecentPrompts\.set\(client\.sessionId,\[prompt,\.\.\.recentPrompts\.filter/);
   assert.match(recall,/renderBars\(\);active=null;answerPending=false;if\(hall\)queueQuestionHallNext/);
+  assert.match(recall,/if\(recallClearTimer\)\{clearTimeout\(recallClearTimer\);recallClearTimer=0;\}[\s\S]*clearRecall\(\{keepQuestionHall:hall\}\)/,'a stale result timer cannot erase a newly arrived question');
+  assert.match(room,/else return this\.sendRecallQuestion\(client,active,rec,p\)/,'requesting Recall while the server still has a challenge resends its pillars');
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.mpb,body\.calm-town:not\(\.level-two-hud\) #stats \.hub\{display:none\}/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.spb[^{}]*\{display:none\}/);
 });

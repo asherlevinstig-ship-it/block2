@@ -12,6 +12,21 @@ test('recall avoidance carries recently answered prompts across reconnects',()=>
   assert.ok(avoid.prompts.includes('what is hexadecimal 2f in binary?'));
 });
 
+test('starting Recall again resends the active question and its pillars',async()=>{
+  const room=Object.create(recall),sessionId='player-1',now=Date.now(),sent=[];
+  const player={x:10,y:4,z:20,yaw:0,dim:'overworld',dgn:''};
+  const challenge={id:'challenge-1',questionId:'it_ns_hex_bin_003',subject:'Computer Science',stage:'GCSE',topic:'Number systems',difficulty:2,prompt:'What is hexadecimal 2F in binary?',answers:['0010 1111','0011 1110','0010 1011','1111 0010'],pillars:[{index:0,x:10,y:4,z:4}],fallback:false,expiresAt:now+60_000,source:''};
+  room.state={players:new Map([[sessionId,player]])};
+  room.recallChallenges=new Map([[sessionId,challenge]]);
+  room.rateLimited=()=>false;
+  room.profileFor=()=>({prof:{recallMastery:{items:{}}}});
+  await room.handleRecallStart({sessionId,send:(type,message)=>sent.push({type,message})},{});
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].type,'recallQuestion');
+  assert.equal(sent[0].message.id,challenge.id);
+  assert.deepEqual(sent[0].message.pillars,challenge.pillars);
+});
+
 test('recall answer pillars spawn in a wide facing-relative diamond',()=>{
   const p={x:10,y:4,z:20,yaw:0};
   const pillars=recall.recallPositions(p);

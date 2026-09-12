@@ -1,5 +1,5 @@
 const hud=document.getElementById('recallhud'),subjectEl=document.getElementById('recallsubject'),timeEl=document.getElementById('recalltime'),progressEl=document.getElementById('recallprogress'),closeEl=document.getElementById('recallclose'),questionEl=document.getElementById('recallquestion'),fallbackEl=document.getElementById('recallfallback'),feedbackEl=document.getElementById('recallfeedback');
-let active=null,group=null,freezeUntil=0,answerPending=false,masterySummary=null,questionHallOpen=false,questionHallAnswered=0,questionHallNextTimer=0;
+let active=null,group=null,freezeUntil=0,answerPending=false,masterySummary=null,questionHallOpen=false,questionHallAnswered=0,questionHallNextTimer=0,recallClearTimer=0;
 const questionHallMarks=[];
 const colors=[0x38bdf8,0xa78bfa,0xfbbf24,0x34d399],QUESTION_HALL_GOAL=10;
 
@@ -70,6 +70,7 @@ function syncRecallPose(){
 function submitAnswer(index){if(!active||answerPending)return;answerPending=true;syncRecallPose();fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=true);NET.room.send('recallAnswer',{id:active.id,index});}
 function showQuestion(m){
   const hall=!!(m&&m.questionHall)||questionHallOpen;
+  if(recallClearTimer){clearTimeout(recallClearTimer);recallClearTimer=0;}
   clearRecall({keepQuestionHall:hall});active=m;answerPending=false;masterySummary=m.mastery||masterySummary;group=new THREE.Group();
   if(hall)questionHallOpen=true;
   if(!m.fallback&&!hall)m.pillars.forEach((p,i)=>{
@@ -86,7 +87,7 @@ function showQuestion(m){
   document.body.classList.add('recall-active');document.body.classList.toggle('question-hall-recall-open',hall);hud.classList.toggle('question-hall-recall',hall);updateQuestionHallProgress();hud.classList.remove('hidden');
 }
 function clearRecall(opts={}){
-  active=null;answerPending=false;if(questionHallNextTimer){clearTimeout(questionHallNextTimer);questionHallNextTimer=0;}
+  active=null;answerPending=false;if(questionHallNextTimer){clearTimeout(questionHallNextTimer);questionHallNextTimer=0;}if(recallClearTimer){clearTimeout(recallClearTimer);recallClearTimer=0;}
   clearMeshes();fallbackEl.innerHTML='';fallbackEl.classList.add('hidden');feedbackEl.className='hidden';hud.classList.remove('question-hall-recall');hud.classList.add('hidden');document.body.classList.remove('recall-active','question-hall-recall-open');
   if(!opts.keepQuestionHall){questionHallOpen=false;questionHallAnswered=0;}updateQuestionHallProgress();
 }
@@ -119,9 +120,9 @@ function result(m){
   if(hall)spawnQuestionHallAnswerMark(!!m.correct);
   if(m.correct){const gain=Number.isFinite(+m.stamina)?Math.max(1,Math.round(+m.stamina)):Math.max(1,Math.ceil(maxSp()*(Number(m.staminaFraction)||.2)));if(Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));else sp=Math.min(maxSp(),sp+gain);resultFlash();if(m.fellowshipRenown&&globalThis.BlockcraftFellowshipEffects&&globalThis.BlockcraftFellowshipEffects.pulseRecallLecternRenown)globalThis.BlockcraftFellowshipEffects.pulseRecallLecternRenown(m.fellowshipRenown|0);showName('+'+(m.mana|0)+' MP · +'+gain+' SP'+(m.explorationGold?' · +'+m.explorationGold+' GOLD':'')+(m.fellowshipRenown?' · +'+m.fellowshipRenown+' RENOWN':''));feedbackEl.textContent='Correct. '+(m.explanation||'')+' Review '+reviewTiming(m.nextDue)+'.';feedbackEl.className='correct';sysMsg('Recall reward: <b>+'+(m.mana|0)+' MP</b> and <b>+'+gain+' SP</b>'+(m.explorationGold?' plus <b>+'+(m.explorationGold|0)+' gold</b> from the ruins.':'.')+(m.fellowshipRenown?' Fellowship study: <b>+'+(m.fellowshipRenown|0)+' Renown</b>.':'')+' '+escHTML(m.explanation||'')+' <b>Review '+reviewTiming(m.nextDue)+'.</b>');SFX.level();}
   else{if(!hall)freezeUntil=performance.now()+Math.max(0,m.freezeMs|0);resultFlash(true);if(active&&Number.isInteger(m.correctIndex)){const node=group&&group.children[m.correctIndex];if(node){node.scale.set(1.28,1.28,1.28);node.children[0].material.color.setHex(0x34d399);}}showName(hall?'TRY AGAIN':'WRONG — FROZEN');feedbackEl.textContent='Correct answer: '+answer+'. '+(m.explanation||'')+' This topic will return '+reviewTiming(m.nextDue)+'.';feedbackEl.className='wrong';sysMsg('<b>Correct answer:</b> '+escHTML(answer)+' · '+escHTML(m.explanation||'')+' <b>Returns '+reviewTiming(m.nextDue)+'.</b>');SFX.error();}
-  renderBars();active=null;answerPending=false;if(hall)queueQuestionHallNext(m.correct?1150:1700);else setTimeout(clearRecall,m.correct?1800:Math.max(3500,m.freezeMs|0));
+  renderBars();active=null;answerPending=false;if(hall)queueQuestionHallNext(m.correct?1150:1700);else{if(recallClearTimer)clearTimeout(recallClearTimer);recallClearTimer=setTimeout(()=>{recallClearTimer=0;clearRecall();},m.correct?1800:Math.max(3500,m.freezeMs|0));}
 }
-function reject(m){const r=m&&m.reason;if(r==='active')sysMsg(questionHallOpen?'Answer or close the current question.':'Choose an <b>answer pillar</b>.');else if(r==='position'){answerPending=false;sysMsg('Move fully inside the pillar to answer.');}else if(r==='ruin_claimed')sysMsg('You have already deciphered this ruin.');else if(r==='ruin_range')sysMsg('Move closer to the ancient ruins.');else clearRecall();}
+function reject(m){const r=m&&m.reason;if(r==='active')sysMsg(questionHallOpen?'Answer or close the current question.':'Choose an <b>answer pillar</b>.');else if(r==='pending')sysMsg('Preparing the next Recall question…');else if(r==='rate')sysMsg('Recall is recharging—try again in a moment.');else if(r==='position'){answerPending=false;sysMsg('Move fully inside the pillar to answer.');}else if(r==='ruin_claimed')sysMsg('You have already deciphered this ruin.');else if(r==='ruin_range')sysMsg('Move closer to the ancient ruins.');else clearRecall();}
 function tick(now=performance.now()){
   tickQuestionHallMarks(now);
   if(freezeUntil>now){keys.KeyW=keys.KeyA=keys.KeyS=keys.KeyD=keys.Space=keys.ShiftLeft=keys.ShiftRight=false;player.vel.x=0;player.vel.z=0;}
