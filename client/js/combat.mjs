@@ -1549,7 +1549,7 @@ ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
   {kind:'farm',pillar:'Lesson 9 / 13 - Farming', key:'WOODEN HOE + G', text:'Use the wooden hoe on one mature wheat crop.', sub:'Select the hoe on your hotbar, aim at tall golden wheat, then use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
   {kind:'eat',pillar:'Lesson 10 / 13 - Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
   {kind:'combat',pillar:'Lesson 11 / 13 - Combat', key:'LEFT CLICK / F', text:'Break the training dummy with three strikes.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingFlags.dummy>=3},
-  {kind:'recall',pillar:'Lesson 12 / 13 - Recall Cast', key:'P', text:'Press P and answer one Computer Science challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingFlags.recall},
+  {kind:'recall',pillar:'Lesson 12 / 13 - Recall Cast', key:'P', text:'Low on mana or stamina? Press P, then run towards the correct answer.', sub:'A correct Recall answer recharges both mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingFlags.recall},
   {kind:'finish',pillar:'Lesson 13 / 13 - Departure', key:'FIND LIGHT', text:'Step into the final pillar of light to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
 );
 for(const step of ONBOARDING_STEPS){

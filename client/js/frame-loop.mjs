@@ -23,6 +23,14 @@ homeworkHudEl.id='homeworkhud';
 homeworkHudEl.className='hidden';
 homeworkHudEl.setAttribute('aria-live','polite');
 document.body.appendChild(homeworkHudEl);
+const recallResourceWarningEl=document.createElement('div');
+recallResourceWarningEl.id='recallresourcewarning';
+recallResourceWarningEl.className='hidden';
+recallResourceWarningEl.setAttribute('role','alert');
+recallResourceWarningEl.setAttribute('aria-live','assertive');
+recallResourceWarningEl.setAttribute('aria-atomic','true');
+recallResourceWarningEl.innerHTML='<div class="recallresource-icon">!</div><div class="recallresource-copy"><small>RECALL READY</small><b id="recallresourcetitle">LOW MANA</b><span>Press <strong>P</strong>, then run towards the correct answer to recharge.</span></div><kbd>P</kbd>';
+document.body.appendChild(recallResourceWarningEl);
 const locationEl=document.getElementById('locationhud');
 const activityTrackerEl=document.getElementById('activitytracker');
 const zoneNameEl=document.getElementById('zonename');
@@ -614,6 +622,7 @@ refreshHUD();
 hudState.slots[0].classList.add('sel');
 let recallResourceSuggestionState='';
 let nextRecallResourceSuggestionAt=0;
+let recallResourceWarningUntil=0;
 let hungerSuggestionActive=false;
 let nextHungerSuggestionAt=0;
 let nextTreasureMapHintAt=0;
@@ -628,15 +637,29 @@ const weatherDiscoveryHintCooldowns=new Map();
 function firstHandsQuestActive(){
   return !!(quest&&quest.giver==='Mara Vale'&&quest.title==='First Hands'&&!questDone());
 }
+function hideRecallResourceWarning(){
+  recallResourceWarningUntil=0;
+  recallResourceWarningEl.classList.add('hidden');
+  document.body.classList.remove('recall-resource-warning-active');
+}
+function showRecallResourceWarning(what,now){
+  const title=recallResourceWarningEl.querySelector('#recallresourcetitle');
+  if(title) title.textContent='LOW '+String(what||'mana').toUpperCase();
+  recallResourceWarningUntil=now+12000;
+  recallResourceWarningEl.classList.remove('hidden');
+  document.body.classList.add('recall-resource-warning-active');
+}
 function maybeLogRecallResourceSuggestion(now){
-  if(dim!=='overworld'||!NET.on||!NET.room||!locked||cutscene||(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.active))return;
+  if(dim!=='overworld'||!NET.on||!NET.room||!locked||cutscene||(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.active)){hideRecallResourceWarning();return;}
   const manaLow=mp/Math.max(1,maxMp())<=.28,staminaLow=sp/Math.max(1,maxSp())<=.24;
-  if(!manaLow&&!staminaLow){recallResourceSuggestionState='';nextRecallResourceSuggestionAt=0;return;}
+  if(!manaLow&&!staminaLow){recallResourceSuggestionState='';nextRecallResourceSuggestionAt=0;hideRecallResourceWarning();return;}
+  if(recallResourceWarningUntil&&now>=recallResourceWarningUntil)hideRecallResourceWarning();
   const what=manaLow&&staminaLow?'mana and stamina':manaLow?'mana':'stamina';
   if(what===recallResourceSuggestionState&&now<nextRecallResourceSuggestionAt)return;
   recallResourceSuggestionState=what;
   nextRecallResourceSuggestionAt=now+60000;
-  eventLog('Low '+what+'. Press P to answer a Recall question and recharge.','[Suggestion]','suggestion');
+  showRecallResourceWarning(what,now);
+  eventLog('Low '+what+'. Press P, then run towards the correct answer to recharge.','[Suggestion]','suggestion');
 }
 function maybeLogHungerSuggestion(now){
   if(dim!=='overworld'||!locked||cutscene)return;

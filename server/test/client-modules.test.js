@@ -2009,18 +2009,21 @@ test('admin tools expose a safe interactive Test Player',()=>{
   assert.match(networking,/Test robbery interaction succeeded/);
 });
 
-test('low mana or stamina creates a standout event-log suggestion without popup prompts',()=>{
+test('low mana or stamina creates a prominent Recall notification and event-log suggestion',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
-  const hud=fs.readFileSync(path.join(__dirname,'..','..','client','js','hud.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(frame,/function maybeLogRecallResourceSuggestion\(now\)/);
   assert.match(frame,/manaLow=mp\/Math\.max\(1,maxMp\(\)\)<=\.28,staminaLow=sp\/Math\.max\(1,maxSp\(\)\)<=\.24/);
-  assert.match(frame,/eventLog\('Low '\+what\+'\. Press P to answer a Recall question and recharge\.'[\s\S]*'\[Suggestion\]'[\s\S]*'suggestion'\)/);
+  assert.match(frame,/recallResourceWarningEl\.id='recallresourcewarning'/);
+  assert.match(frame,/Press <strong>P<\/strong>, then run towards the correct answer to recharge\./);
+  assert.match(frame,/showRecallResourceWarning\(what,now\)/);
+  assert.match(frame,/recallResourceWarningUntil=now\+12000/);
+  assert.match(frame,/eventLog\('Low '\+what\+'\. Press P, then run towards the correct answer to recharge\.'[\s\S]*'\[Suggestion\]'[\s\S]*'suggestion'\)/);
   assert.match(frame,/nextRecallResourceSuggestionAt=now\+60000/);
-  assert.doesNotMatch(frame,/sysMsg\('Low |showName\('LOW |setRecallRechargeNudge/);
-  assert.doesNotMatch(hud,/recallRechargeNudge|recallrechargenudge/);
   assert.match(world,/function eventLog\(text, name='\[Event\]', channel=''\)[\s\S]*chatLine\(name, text, channel\)/);
+  assert.match(styles,/#recallresourcewarning\{[\s\S]*animation:recallResourceArrival/);
+  assert.match(styles,/body\.recall-resource-warning-active #coachhud\{display:none!important\}/);
   assert.match(styles,/\.chatline\.suggestion\{[\s\S]*font-weight:900/);
 });
 
@@ -3093,7 +3096,7 @@ test('onboarding recall lesson completes from a correct answer away from the way
   const network=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
   assert.match(combat,/markRecall:\(\)=>\{if\(onboardingActive&&onboardingKind\(\)==='recall'\)onboardingFlags\.recall=true;\}/);
-  assert.match(combat,/Press P and answer one Computer Science challenge\.[\s\S]*done:\(\)=>onboardingFlags\.recall/);
+  assert.match(combat,/Low on mana or stamina\? Press P, then run towards the correct answer\.[\s\S]*A correct Recall answer recharges both mana and stamina\.[\s\S]*done:\(\)=>onboardingFlags\.recall/);
   assert.doesNotMatch(combat,/done:\(\)=>onboardingArrived&&onboardingFlags\.recall/);
   assert.match(recall,/if\(m\.correct&&globalThis\.BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markRecall\(\);/);
   assert.match(network,/if\(m&&Array\.isArray\(m\.activeObjectives\)\)setActiveObjectives\(m\.activeObjectives,\{announce:false\}\);[\s\S]*if\(!onboardingDone\(\)\)\{/);
