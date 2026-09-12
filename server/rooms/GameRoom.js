@@ -8848,6 +8848,7 @@ class GameRoom extends Room {
       flank: (Math.random() < .5 ? -1 : 1) * (.5 + Math.random() * .7),
       strafe: Math.random() < .5 ? -1 : 1, strafeT: 2 + Math.random() * 2,
       drawT: 0, lungeT: 0, lunging: 0, ldx: 0, ldz: 0,
+      aggroSid: '', aggroUntil: 0, combatTargetSid: '',
       arrowDmg: 2 + (rank || 0),
       // boss
       stateT: 0, gcd: 2.5, lastPat: '', cdx: 0, cdz: 0,
@@ -9271,6 +9272,19 @@ class GameRoom extends Room {
         const d = Math.hypot(s.p.x - m.x, s.p.z - m.z);
         if (d < bd && mobTargetInRange(m.kind, m.y, s.p.y, d)) { bd = d; best = s; }
       }
+      // Recent attackers take priority over a merely closer bystander. This makes
+      // aggro responsive in co-op and prevents one friend from owning every mob.
+      if((meta.aggroUntil||0)>Date.now()&&meta.aggroSid){
+        const provoker=candidates.find(s=>s.sid===meta.aggroSid);
+        if(provoker&&(!m.dgn||!this.isInDungeonSpawnSafeZone(m.dgn,provoker.p.x,provoker.p.z,.75))&&
+            (m.dgn||this.isAnimalKind(m.kind)||!this.isTownProtected(provoker.p.x,provoker.p.z))){
+          const provokerDistance=Math.hypot(provoker.p.x-m.x,provoker.p.z-m.z);
+          if(provokerDistance<(meta.scout?48:34)&&mobTargetInRange(m.kind,m.y,provoker.p.y,provokerDistance)){
+            best=provoker;bd=provokerDistance;
+          }
+        }
+      }else if(meta.aggroSid){meta.aggroSid='';meta.aggroUntil=0;}
+      meta.combatTargetSid=best?best.sid:'';
 
       if (this.isAnimalKind(m.kind)) {
         const animalBase = ANIMAL_BASE_KIND[m.kind] || m.kind;

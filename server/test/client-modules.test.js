@@ -2866,6 +2866,15 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(styles,/body\.combat-hit #game canvas/);
 });
 
+test('empty-hand melee uses the full server reach and forgiving block-character hit volume',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(combat,/mobUnderCrosshair\(pantherMelee\?5\.6:4\.1\)/);
+  assert.match(world,/function mobUnderCrosshair\(range=4\.1\)/);
+  assert.match(world,/perp<\(m\.boss\?1\.45:1\.0\)/);
+  assert.match(world,/NET\.room\.send\('attack', \{id:mob\.netId\}\)/);
+});
+
 test('admin quick gate opens a ranked dungeon picker instead of auto-cycling',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');

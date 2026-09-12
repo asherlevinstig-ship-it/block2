@@ -10438,7 +10438,7 @@ function tickMobs(dt,t){
     }
   }
 }
-function mobUnderCrosshair(range=3.5){
+function mobUnderCrosshair(range=4.1){
   const dir=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch,player.yaw,0,'YXZ'));
   const o=new THREE.Vector3(player.pos.x,player.pos.y+player.eye,player.pos.z);
   let best=null, bd=range;
@@ -10449,7 +10449,9 @@ function mobUnderCrosshair(range=3.5){
     const t=v.dot(dir);
     if(t<0||t>range) continue;
     const perp=Math.sqrt(Math.max(0,v.lengthSq()-t*t));
-    if(perp<(m.boss?1.2:0.75) && t<bd){ bd=t; best=m; }
+    // Melee gets a modest aim-assist cylinder so an empty-hand strike that visibly
+    // overlaps an enemy is not lost between its blocky limbs or during replication.
+    if(perp<(m.boss?1.45:1.0) && t<bd){ bd=t; best=m; }
   }
   return best;
 }

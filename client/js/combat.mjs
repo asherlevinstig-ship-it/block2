@@ -6296,7 +6296,7 @@ function primaryAction(){
   if(selectedLegendaryWeapon() && castLegendaryWeapon()){ suppressMine=true; mouseL=false; return; }
   if(attackCd<=0){
     const pantherMelee=buffs&&buffs.panther>0&&!mounted;
-    const mob=mobUnderCrosshair(pantherMelee?5.6:3.25);
+    const mob=mobUnderCrosshair(pantherMelee?5.6:4.1);
     if(mob){
       attackCd=pantherMelee?Math.min(.28,meleeSwingTime()):meleeSwingTime();
       suppressMine=true;

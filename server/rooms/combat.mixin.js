@@ -837,6 +837,7 @@ class CombatMixin {
     const raw=Math.max(0,damage);
     const multiplier=this.banditProtectionMultiplier(String(mobId),mob);
     const applied=raw*multiplier;
+    this.provokeMob(String(mobId),client,applied);
     this.emitDamageNumber(client,mob,applied,false,mob.hp-applied<=0);
     mob.hp -= applied;
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
@@ -858,6 +859,15 @@ class CombatMixin {
     const n = Math.round(damage);
     if (n <= 0) return;
     client.send('dmgnum', { x: mob.x, y: mob.y, z: mob.z, n, crit: !!crit, lethal: !!lethal });
+  }
+  provokeMob(mobId, client, damage=1) {
+    const id=String(mobId||''),meta=this.mobMeta[id],mob=this.state.mobs.get(id);
+    if(!client||!meta||!mob||this.isAnimalKind(mob.kind)||meta.friendly)return;
+    meta.aggroSid=client.sessionId;
+    // A landed hit must matter more than passive proximity. Strong hits hold the
+    // creature slightly longer, while the cap still lets another hunter take over.
+    meta.aggroUntil=Date.now()+Math.min(10000,6500+Math.max(0,Math.round(Number(damage)||0))*100);
+    meta.alert=true;
   }
   handleAttack(client, m) {
     const reject = () => {};
@@ -908,6 +918,7 @@ class CombatMixin {
     if (mob.kind === 'boss' && !mob.dgn && this.recordMeteorBossDamage) this.recordMeteorBossDamage(client, mobId, dmg);
     const mitigationMultiplier=this.banditProtectionMultiplier(mobId,mob);
     const applied=dmg*mitigationMultiplier;
+    this.provokeMob(mobId,client,applied);
     this.emitDamageNumber(client,mob,applied,crit,mob.hp-applied<=0);
     mob.hp -= applied;
     if(crit||executeReady)this.sendSpace(mob.dgn||'','fx',{t:'combatReact',kind:executeReady?'execute':'crit',x:mob.x,y:mob.y,z:mob.z,dgn:mob.dgn||''});

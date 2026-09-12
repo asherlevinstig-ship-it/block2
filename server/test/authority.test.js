@@ -5029,6 +5029,32 @@ test('a melee hit reports the server-authoritative damage for the floating numbe
   assert.equal(crit.msg.n, Math.round(expected * 1.5), 'crit number reflects the x1.5');
 });
 
+test('bare-handed overworld attacks deal damage and pull aggro from a closer friend', () => {
+  const room=makeRoom(),attacker=makeClient('unarmed_hunter'),friend=makeClient('nearby_friend');
+  room.clients.push(attacker,friend);
+  seedPlayer(room,attacker,{x:23.5,y:10,z:20.5,lvl:1});
+  seedPlayer(room,friend,{x:21,y:10,z:20.5,lvl:1});
+  const mob={x:20.5,y:10,z:20.5,yaw:0,hp:30,maxHp:30,kind:'zombie',dgn:'',state:''};
+  room.state.mobs.set('aggro_zombie',mob);
+  const meta=room.mobMeta.aggro_zombie=room.freshMeta(mob.x,mob.z,3,1.5,mob.kind,0,true);
+
+  room.handleAttack(attacker,{id:'aggro_zombie'});
+
+  assert.equal(mob.hp,26,'an empty hand applies the level-one base damage');
+  assert.equal(attacker.sent.some(e=>e.type==='dmgnum'&&e.msg.n===4),true,'the hit has visible authoritative feedback');
+  assert.equal(meta.aggroSid,attacker.sessionId,'the creature remembers who struck it');
+  const spaces={'':[
+    {p:room.state.players.get(attacker.sessionId),sid:attacker.sessionId},
+    {p:room.state.players.get(friend.sessionId),sid:friend.sessionId},
+  ]};
+  room.simulateMob(mob,'aggro_zombie',meta,.05,spaces);
+  assert.equal(meta.combatTargetSid,attacker.sessionId,'a landed hit overrides the closer passive target');
+
+  meta.aggroUntil=0;
+  room.simulateMob(mob,'aggro_zombie',meta,.05,spaces);
+  assert.equal(meta.combatTargetSid,friend.sessionId,'normal nearest-player targeting resumes after aggro expires');
+});
+
 test('axes hit harder but swing slower than swords (per-weapon feel)', () => {
   const room = makeRoom();
   const client = makeClient('brute');
