@@ -4609,6 +4609,18 @@ function makeTextSprite(text,color){
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false}));
   sp.scale.set(2.6,1.3,1); return sp;
 }
+function atlasVoxelRoot(root){
+  const groups=new Map();
+  root.traverse(node=>{
+    if(!node.isMesh)return;
+    for(const mat of Array.isArray(node.material)?node.material:[node.material]){
+      if(!mat||!mat.isMeshLambertMaterial||!mat.map?.image)continue;
+      const key=[mat.emissive&&mat.emissive.getHex()||0,mat.emissiveIntensity||0,mat.transparent?1:0,mat.opacity,mat.side].join(':');
+      const group=groups.get(key)||new Set();group.add(mat);groups.set(key,group);
+    }
+  });
+  for(const group of groups.values())atlasModelMaterials({THREE,root,mats:[...group],disposeSourceTextures:false});
+}
 function makeVillager(robe, robeDark, hat, profile={}){
   const grp=new THREE.Group(), legs=[], arms=[];
   const [skin,skinD]=profile.skinPair||VILL_SKIN[(Math.random()*VILL_SKIN.length)|0];
@@ -4687,20 +4699,11 @@ function makeVillager(robe, robeDark, hat, profile={}){
     addBox(torso,[.3,.36,.1],[-.31,-.04,.2],beltM,[0,0,.08]);
   }
   grp.add(blobShadow(1));
-  if(profile.signature!=='mara'){
-    // Ordinary villagers have rigid voxel parts and animated limb/head pivots.
-    // Their colour textures are shared with town props, so only the per-model
-    // materials are disposed after atlasing—not the cached source textures.
-    const mats=[],seen=new Set();
-    grp.traverse(node=>{
-      if(!node.isMesh)return;
-      for(const mat of Array.isArray(node.material)?node.material:[node.material]){
-        if(mat&&mat.isMeshLambertMaterial&&mat.map?.image&&!seen.has(mat)){seen.add(mat);mats.push(mat);}
-      }
-    });
-    atlasModelMaterials({THREE,root:grp,mats,disposeSourceTextures:false});
-    batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head]});
-  }
+  // Preserve each palette and emissive treatment while collapsing a voxel box's
+  // six face materials into one atlas-backed draw.
+  atlasVoxelRoot(grp);
+  // Merge rigid siblings around the pivots used by walking and Mara's signature motion.
+  batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head,signatureGlow,signatureCape].filter(Boolean)});
   return {grp, head, torso, legs, arms, signature:profile.signature||'', signatureGlow, signatureCape};
 }
 function angDiff(a,b){ let d=a-b; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI; return d; }
@@ -5954,6 +5957,8 @@ function makeWingedGiantNpc(){
     sp.position.set(sx,2.12,-.46); sp.scale.set(.72,.72,1);
     torso.add(sp); parts.runes.push(sp);
   }
+  atlasVoxelRoot(grp);
+  batchStaticModelParts({THREE,root:grp,animated:[...parts.wings,...parts.feathers,...parts.runes,parts.head,parts.torso,parts.halo].filter(Boolean)});
   return parts;
 }
 
@@ -6020,6 +6025,8 @@ function makeAegisShrineDecor(){
   sigil.position.set(0,4.7,-3.05); sigil.scale.set(3.9,1.25,1); grp.add(sigil);
   const forge=makeTextSprite('LEGENDARY FORGE','#7dd3fc');
   forge.position.set(0,3.85,-3.0); forge.scale.set(2.8,.9,1); grp.add(forge);
+  atlasVoxelRoot(grp);
+  batchStaticModelParts({THREE,root:grp});
   return grp;
 }
 townGroup.add(makeAegisShrineDecor());
@@ -6173,6 +6180,8 @@ function makeTownBuildingSign(spec){
   grp.add(face);
   grp.position.set(spec.x,TOWN.G+1,spec.z);
   grp.rotation.y=spec.rot||0;
+  atlasVoxelRoot(grp);
+  batchStaticModelParts({THREE,root:grp});
   townGroup.add(grp);
   return grp;
 }
@@ -6272,6 +6281,8 @@ function makeTamingLandPortalDecor(){
   label.scale.set(3.05,1.45,1);
   grp.add(label);
   grp.userData={veil,veilBack,core,rings,motes,phase:Math.random()*Math.PI*2,emitAcc:0};
+  atlasVoxelRoot(grp);
+  batchStaticModelParts({THREE,root:grp,animated:[veil,veilBack,core,...rings,...motes.map(m=>m.sp)]});
   grp.position.set(HUB.tamingPortal.x,TOWN.G+1,HUB.tamingPortal.z);
   grp.rotation.y=Math.PI;
   townGroup.add(grp);
@@ -6314,6 +6325,8 @@ function makeQuestionHallPortalDecor(){
   label.scale.set(3.25,1.45,1);
   grp.add(label);
   grp.userData={veil,ring,core,phase:Math.random()*Math.PI*2,emitAcc:0};
+  atlasVoxelRoot(grp);
+  batchStaticModelParts({THREE,root:grp,animated:[veil,ring,core]});
   grp.position.set(HUB.questionPortal.x,TOWN.G+1,HUB.questionPortal.z);
   grp.rotation.y=Math.PI;
   townGroup.add(grp);
@@ -6353,6 +6366,8 @@ function makeFishingLakePortalDecor(){
   label.scale.set(3.15,1.4,1);
   grp.add(label);
   grp.userData={veil,core,phase:Math.random()*Math.PI*2,emitAcc:0};
+  atlasVoxelRoot(grp);
+  batchStaticModelParts({THREE,root:grp,animated:[veil,core]});
   grp.position.set(HUB.fishingPortal.x,TOWN.G+1,HUB.fishingPortal.z);
   grp.rotation.y=Math.PI;
   townGroup.add(grp);

@@ -48,6 +48,24 @@ test('static batching preserves transformed surfaces and animated pivots', async
   close(surfaces(), animatedBefore);
 });
 
+test('crowded-combat proxy merges allowed model material without mutating detailed parts',async()=>{
+  const {createStaticModelProxy}=await import('../../client/js/model-batching.mjs');
+  const root=new THREE.Group(),limb=new THREE.Group();root.add(limb);
+  const bodyMaterial=new THREE.MeshLambertMaterial(),detailMaterial=new THREE.MeshBasicMaterial();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(1,2,1),bodyMaterial);body.position.set(1,.5,0);limb.add(body);
+  const arm=new THREE.Mesh(new THREE.BoxGeometry(.4,1,.4),bodyMaterial);arm.position.set(-.8,1,0);root.add(arm);
+  const eye=new THREE.Mesh(new THREE.BoxGeometry(.1,.1,.1),detailMaterial);eye.position.set(1,1,-.5);limb.add(eye);
+  const bodyVertexCount=body.geometry.toNonIndexed().attributes.position.count+arm.geometry.toNonIndexed().attributes.position.count;
+  const proxy=createStaticModelProxy({THREE,root,roots:[limb,arm],materials:[bodyMaterial]});
+  assert.equal(proxy.visible,false);
+  assert.equal(proxy.children.length,1);
+  assert.equal(proxy.children[0].material,bodyMaterial);
+  assert.equal(proxy.children[0].geometry.attributes.position.count,bodyVertexCount);
+  assert.equal(body.parent,limb);
+  assert.equal(arm.parent,root);
+  assert.equal(eye.parent,limb);
+});
+
 test('model atlas keeps face UVs, pivots and combat tint controls', async () => {
   const {atlasModelMaterials}=await import('../../client/js/model-atlas.mjs');
   const previousDocument=global.document;

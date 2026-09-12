@@ -1,13 +1,21 @@
 import {mobDistanceTierSq,consumeEntityStep} from './performance-budget.mjs';
 import {disposeObjectTree} from './three-disposal.mjs';
 import {combatCue,ordinaryCombatPhase,ordinaryCombatPose,ordinaryFollowThrough,ordinaryFollowPose} from './combat-visual-language.mjs';
+import {createStaticModelProxy} from './model-batching.mjs';
 
 export function createReplicationVisuals({NET,player,familiarReaction=()=>{},companions=()=>null}){
+let lastCrowdedWarningSoundAt=0;
+const dangerRingGeometry=new THREE.TorusGeometry(1,.016,6,32);
+const dangerRingPool=Array.from({length:32},()=>{
+  const ring=new THREE.Mesh(dangerRingGeometry,new THREE.MeshBasicMaterial({color:0xff713d,transparent:true,opacity:.82,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+  ring.rotation.x=Math.PI/2;ring.renderOrder=100;return ring;
+});
 function dangerCircle(x,y,z,radius,life){
-  const ring=ringPulse(x,y,z,radius,0xff713d,life);
-  ring.material.fog=false;ring.renderOrder=100;
-  const entry=beams.find(b=>b.mesh===ring);
-  if(entry){entry.dispose=true;entry.warning=true;}
+  const ring=dangerRingPool.find(candidate=>!candidate.parent&&!beams.some(entry=>entry.mesh===candidate));
+  if(!ring)return null;
+  ring.material.opacity=.82;
+  ring.rotation.x=Math.PI/2;ring.position.set(x,y,z);ring.scale.setScalar(radius);ring.renderOrder=100;scene.add(ring);
+  beams.push({mesh:ring,life,warning:true});
   return ring;
 }
 // ---- server mobs: kind-aware models, state-driven telegraph animation ----
@@ -394,10 +402,10 @@ function decorateEncounter(m,ref){
 }
 function tickEncounterReadability(m,dt,t){
   const u=m.encounterUi;if(!u)return;const r=m.ref,pct=Math.max(0,Math.min(1,(r.hp||0)/(r.maxHp||1))),scaledWidth=u.width/(u.bodyScale&&u.bodyScale.x||1);u.fill.scale.x=scaledWidth*pct;u.fill.position.x=-(scaledWidth-u.fill.scale.x)/2;
-  const distance=Math.hypot(m.grp.position.x-player.pos.x,m.grp.position.z-player.pos.z),important=m.boss||u.breached;
-  u.label.visible=distance<=(important?22:u.friendly?14:9);
+  const distance=Math.hypot(m.grp.position.x-player.pos.x,m.grp.position.z-player.pos.z),important=m.boss||u.breached,crowded=globalThis.BlockcraftCrowdedCombat===true;
+  u.label.visible=distance<=(important?22:u.friendly?14:crowded?5.5:9);
   u.bg.visible=u.fill.visible=distance<=(important?24:u.friendly?16:11);
-  if(u.ring)u.ring.visible=distance<=(important?18:12);
+  if(u.ring)u.ring.visible=distance<=(important?18:crowded?6:12);
   if(u.alert){const aware=['draw','windup','bruteWind','rally'].includes(r.state);u.alert.visible=!aware&&r.state!=='surrender'&&r.state!=='retreat';if(u.engaged)u.engaged.visible=aware;}
   if(r.state==='retreat'){u.label.material.color.set(0xffd26b);if(u.ring)u.ring.material.color.set(0xffc34d);}else if(u.ring)u.ring.material.color.set(u.friendly?0x5dd5ff:0xff5c46);
   if(m.spawnT>0){m.spawnT=Math.max(0,m.spawnT-dt);m.grp.scale.y=1+Math.sin((2.2-m.spawnT)*8)*.08;if(u.tell){u.tell.visible=true;u.tell.scale.setScalar(1+(2.2-m.spawnT)*.8);u.tell.material.opacity=m.spawnT/2.2;}}
@@ -500,6 +508,7 @@ function netAddMob(id, ref){
     kind:ref.kind, kb:new THREE.Vector3(), phase:Math.random()*10, hitT:0, slowT:0,
     aT:0, lastState:'', cdx:0, cdz:0,
     boss};
+  const crowdDetailed=[...m.grp.children];
   if(ref.kind!=='zombie'&&ref.kind!=='skeleton')m.combatProfile=null;
   if(m.boss){
     m.grp.scale.setScalar(1.6);
@@ -530,6 +539,7 @@ function netAddMob(id, ref){
       m.elite=true;
     }
   }
+  if(!m.boss&&!m.elite&&crowdDetailed.length){m.crowdDetailed=crowdDetailed;m.crowdProxy=createStaticModelProxy({THREE,root:m.grp,roots:crowdDetailed,materials:m.mats});}
   m.grp.position.set(ref.x, ref.y, ref.z);
   decorateEncounter(m,ref);
   scene.add(m.grp);
@@ -629,6 +639,10 @@ function netMobTick(m, dt, t){
   const tier=mobDistanceTierSq(dx*dx+dz*dz,important);
   m.grp.visible = (r.dgn||'')===NET.dgn&&tier<3;
   if(!m.grp.visible)return;
+  if(m.crowdProxy){
+    const proxyActive=globalThis.BlockcraftCrowdedCombat===true;
+    if(proxyActive!==m.crowdProxy.visible){for(const root of m.crowdDetailed)root.visible=!proxyActive;m.crowdProxy.visible=proxyActive;}
+  }
   const stepDt=consumeEntityStep(m,dt,tier);
   if(!stepDt)return;
   dt=stepDt;
@@ -1020,9 +1034,10 @@ function netFx(m){
     dangerCircle(m.x,m.y+.08,m.z,m.radius||4.6,(m.durationMs||1100)/1000);
     showName('Boss Slam - leave the circle!');
   } else if(m.t==='meleeWarn'){
-    SFX.slamWarn();
+    const crowded=globalThis.BlockcraftCrowdedCombat===true,now=performance.now();
+    if(!crowded||now-lastCrowdedWarningSoundAt>=750){SFX.slamWarn();lastCrowdedWarningSoundAt=now;}
     dangerCircle(m.x,m.y+.08,m.z,m.radius||1.6,(m.durationMs||420)/1000);
-    if(m.label)showName(String(m.label)+' - dodge out!');
+    if(m.label&&!crowded)showName(String(m.label)+' - dodge out!');
   } else if(m.t==='eldritchLeapWarn'){
     SFX.slamWarn();
     const tx=Number.isFinite(+m.tx)?+m.tx:m.x,ty=Number.isFinite(+m.ty)?+m.ty:m.y,tz=Number.isFinite(+m.tz)?+m.tz:m.z,r=Number(m.radius)||5.2;

@@ -3186,6 +3186,55 @@ function updateInfoHud(held){
 let nextEventHudAt=0;
 let last=performance.now();
 const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length,pendingChunks:worldApi.pendingChunkCount(),...worldApi.particleBudgetStats()})});
+const CROWDED_COMBAT_ENTER_COUNT=12,CROWDED_COMBAT_EXIT_COUNT=7,CROWDED_COMBAT_RADIUS_SQ=24*24;
+let crowdedCombat=false,nextCrowdCheckAt=0,ambientFrame=0,ambientDt=0;
+function nearbyHostileCount(){
+  let count=0;
+  for(const mob of mobs){
+    if(!mob||!mob.grp||mob.shadowAlly||mob.animal||mob.wagon)continue;
+    const ref=mob.ref;
+    if(ref&&((ref.dgn||'')!==NET.dgn||(ref.hp||0)<=0))continue;
+    if(mob.encounterUi&&mob.encounterUi.friendly)continue;
+    const dx=mob.grp.position.x-player.pos.x,dz=mob.grp.position.z-player.pos.z;
+    if(dx*dx+dz*dz<=CROWDED_COMBAT_RADIUS_SQ&&++count>=CROWDED_COMBAT_ENTER_COUNT)break;
+  }
+  return count;
+}
+function syncCrowdedVillagers(active){
+  for(const villager of villagers){
+    if(!villager?.grp||villager.role==='guide'||villager.role==='guardian')continue;
+    if(!active){
+      if(villager.grp.userData.crowdHidden){villager.grp.visible=villager.grp.userData.crowdWasVisible;delete villager.grp.userData.crowdHidden;delete villager.grp.userData.crowdWasVisible;}
+      continue;
+    }
+    const dx=villager.grp.position.x-player.pos.x,dz=villager.grp.position.z-player.pos.z;
+    if(dx*dx+dz*dz>12*12){
+      if(!villager.grp.userData.crowdHidden)villager.grp.userData.crowdWasVisible=villager.grp.visible;
+      villager.grp.userData.crowdHidden=true;villager.grp.visible=false;
+    }else if(villager.grp.userData.crowdHidden){
+      villager.grp.visible=villager.grp.userData.crowdWasVisible;delete villager.grp.userData.crowdHidden;delete villager.grp.userData.crowdWasVisible;
+    }
+  }
+}
+function syncCrowdedCombat(now){
+  if(now<nextCrowdCheckAt)return crowdedCombat;
+  nextCrowdCheckAt=now+250;
+  const count=nearbyHostileCount();
+  const next=crowdedCombat?count>CROWDED_COMBAT_EXIT_COUNT:count>=CROWDED_COMBAT_ENTER_COUNT;
+  if(next!==crowdedCombat){
+    crowdedCombat=next;
+    globalThis.BlockcraftCrowdedCombat=next;
+    for(const mob of mobs){
+      if(!mob.crowdProxy)continue;
+      for(const root of mob.crowdDetailed)root.visible=!next;
+      mob.crowdProxy.visible=next;
+    }
+    syncCrowdedVillagers(next);
+    if(rendering.setResolutionScale)rendering.setResolutionScale(next?.5:1);
+    if(!next){ambientFrame=0;ambientDt=0;}
+  }
+  return crowdedCombat;
+}
 function tickPetTamerTutorialVisuals(now, dt){
   if(!networkingApi.tickPetTamerTutorialDragons)return;
   const petRoom=(worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS.pet_tamer)||null;
@@ -3198,37 +3247,43 @@ function tick(now){
   const dt=Math.max(0,Math.min((now-last)/1000,.05)); last=now;
   worldApi.resetParticleBudget();
   perfDiagnostics.beginFrame(now);
+  const combatFocus=syncCrowdedCombat(now);
+  ambientDt+=dt;
+  const runAmbient=!combatFocus||ambientFrame++%4===0;
+  const ambientStep=runAmbient?Math.min(.2,ambientDt):0;
+  if(runAmbient)ambientDt=0;
   biomeStatus.tick(now);
   globalThis.BlockcraftRecall.tick(now);
   if(globalThis.BlockcraftDeathDrops)globalThis.BlockcraftDeathDrops.tick(now);
   if(biomeStatus.active('frost',now)&&Math.random()<dt*14)spawnParticle({x:player.pos.x+(Math.random()-.5)*1.5,y:player.pos.y+.15+Math.random()*1.8,z:player.pos.z+(Math.random()-.5)*1.5,vx:(Math.random()-.5)*.18,vy:.12,vz:(Math.random()-.5)*.18,life:.7,grav:0,r:.56,g:.92,b:1});
   if(biomeStatus.active('venom',now)&&Math.random()<dt*9)spawnParticle({x:player.pos.x+(Math.random()-.5)*1.1,y:player.pos.y+.1+Math.random()*1.4,z:player.pos.z+(Math.random()-.5)*1.1,vx:0,vy:.28,vz:0,life:.6,grav:0,r:.51,g:.66,b:.29});
-  tickFurnaces(dt);
-  tickOnboarding(now);
-  tickAbilityTraining(now);
-  tickJobTutorial(now);
-  if(globalThis.BlockcraftFishing)globalThis.BlockcraftFishing.tick(now,dt);
-  enforceFishingLakeBounds(now);
-  tickTownGuidance(now);
-  tickLandBoundaryToast(now);
-  if(!cutscene && combatApi.shouldOpenLevel2JobChoice && combatApi.shouldOpenLevel2JobChoice()){
-    combatApi.openLevel2JobChoice();
-  }else if(shouldOpenLevel2PathChoice()) showPathSelection();
-  if(!cutscene) tryStartQueuedGateCutscene();
-  if(now>=nextEventHudAt){nextEventHudAt=now+100;renderEventHud();}
-  tickSmartSuggestions(now);
-  updateDayNight(dt);
-  if(now-lavaAnimT>80){ lavaAnimT=now; paintLavaTile(now*0.0045); }   // animate lava ~12fps
-  tickTorches(now/1000, dt);
-  tickDragonIncubationMeshes(now);
-  tickPerchedDragons(now, dt);
-  tickFamiliars(now, dt);
-  tickPetTamerTutorialVisuals(now, dt);
-  if(globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.tick)globalThis.BlockcraftTamingLandTracks.tick(now,dt);
-  tickWatchfulShade(now);
-  updateFamiliarHUD();
+  if(runAmbient){
+    tickFurnaces(ambientStep);
+    tickOnboarding(now);
+    tickAbilityTraining(now);
+    tickJobTutorial(now);
+    if(globalThis.BlockcraftFishing)globalThis.BlockcraftFishing.tick(now,ambientStep);
+    enforceFishingLakeBounds(now);
+    tickTownGuidance(now);
+    tickLandBoundaryToast(now);
+    if(!cutscene && combatApi.shouldOpenLevel2JobChoice && combatApi.shouldOpenLevel2JobChoice())combatApi.openLevel2JobChoice();
+    else if(shouldOpenLevel2PathChoice())showPathSelection();
+    if(!cutscene)tryStartQueuedGateCutscene();
+    if(now>=nextEventHudAt){nextEventHudAt=now+100;renderEventHud();}
+    tickSmartSuggestions(now);
+    updateDayNight(ambientStep);
+    if(now-lavaAnimT>80){lavaAnimT=now;paintLavaTile(now*.0045);}
+    tickTorches(now/1000,ambientStep);
+    tickDragonIncubationMeshes(now);
+    tickPerchedDragons(now,ambientStep);
+    tickFamiliars(now,ambientStep);
+    tickPetTamerTutorialVisuals(now,ambientStep);
+    if(globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.tick)globalThis.BlockcraftTamingLandTracks.tick(now,ambientStep);
+    tickWatchfulShade(now);
+    updateFamiliarHUD();
+  }
   if(cutscene) tickCutscene(now, dt);   // cinematic drives its own camera, regardless of pointer-lock
-  tickDungeonAmbient(dt, now/1000);
+  if(runAmbient)tickDungeonAmbient(ambientStep, now/1000);
 
   if(claimMode){
     camera.position.set(claimCam.x, claimCam.h, claimCam.z);
@@ -3626,32 +3681,35 @@ function tick(now){
       gateLine='<br>Dungeon: '+RANKS[ri].n+'-Rank '+gateKindLabel(kind)+' - '+boss+' - Party '+party+partyNames+chest;
     }
     tickQuestTimers();
-    updateLocationHud();
-    if(now>=nextInfoHudAt){nextInfoHudAt=now+HUD_UPDATE_INTERVAL_MS;updateInfoHud(held);}
+    if(now>=nextInfoHudAt){nextInfoHudAt=now+HUD_UPDATE_INTERVAL_MS;updateLocationHud();updateInfoHud(held);}
   } else { crack.visible=false; combatApi.updateBuildPreview(false); }
-  updateGatePrompt();
-  updateGateRally(now);
+  if(runAmbient){updateGatePrompt();updateGateRally(now);}
   if(now>=nextDungeonHudAt){nextDungeonHudAt=now+HUD_UPDATE_INTERVAL_MS;updateDungeonCoordination(now);}
   else if(activeDungeonPing&&dim==='dungeon'&&now<activeDungeonPing.expires){
     dungeonPingGroup.visible=true;dungeonPingGroup.position.set(activeDungeonPing.x||0,(activeDungeonPing.y||8)+.1,activeDungeonPing.z||0);
     const pulse=1+Math.sin(now*.009)*.18;dungeonPingRing.scale.setScalar(pulse);dungeonPingRing.rotation.z=now*.001;
   }
-  updateUtilityWorldFeedback(now,dt);
+  if(runAmbient)updateUtilityWorldFeedback(now,ambientStep);
 
-  tickVillagers(dt, now/1000);
-  tickTownInteractLabels(dt);
-  tickGuidancePath(dt, now);
+  if(runAmbient){
+    tickVillagers(ambientStep, now/1000);
+    if(combatFocus)syncCrowdedVillagers(true);
+    tickTownInteractLabels(ambientStep);
+    tickGuidancePath(ambientStep, now);
+  }
   if(locked || uiOpen) tickMobs(dt, now/1000);   // sim pauses on the menu screen
   tickBlackholes(dt);
   updateParticles(dt);
   updateDamageNumbers(dt);
   updateEmitters(dt);
-  updateRoadBirds(dt,now/1000);
-  updateSkyDragons(dt,now/1000);
-  updateFishSchools(dt,now/1000);
-  updateTavernNightEffects(dt, now);
-  tickExplorationPresentation(now,dt);
-  { // flame flicker
+  if(runAmbient){
+    updateRoadBirds(ambientStep,now/1000);
+    updateSkyDragons(ambientStep,now/1000);
+    updateFishSchools(ambientStep,now/1000);
+    updateTavernNightEffects(ambientStep, now);
+    tickExplorationPresentation(now,ambientStep);
+  }
+  if(runAmbient){ // flame flicker
     const tt=now/1000;
     torchGlowMat.opacity=.5+Math.sin(tt*11)*.05+Math.sin(tt*23.7)*.04;
     fireGlowMat.opacity=.45+Math.sin(tt*9)*.09+Math.sin(tt*27.3)*.07;
@@ -3688,11 +3746,11 @@ function tick(now){
     syncPresentationMode(worldApi.inVisualBattle());
     SFX.tick(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern(), inMenu, !!cutscene, worldApi.inOverworldBattle(), tutorialJob, dim, inMeditation);
   }
-  tickGates(dt, now);
+  if(runAmbient)tickGates(ambientStep, now);
   tickAbilities(dt, now/1000);
-  worldApi.tickRoadSafetyScenes(dt, now/1000);
-  tickCropTimers(now);
-  updateAbilityHUD();
+  if(runAmbient)worldApi.tickRoadSafetyScenes(ambientStep, now/1000);
+  if(runAmbient)tickCropTimers(now);
+  if(runAmbient)updateAbilityHUD();
   if(hp>0){
     if(hp<maxHp() && performance.now()-lastHurt>8000){
       regenAcc+=dt;
@@ -3702,13 +3760,13 @@ function tick(now){
     maybeLogHungerSuggestion(now);
     maybePromptTreasureMap(now);
     maybePromptWeatherDiscovery(now);
-    renderBars();
+    if(runAmbient)renderBars();
   }
-  cloudGroup.children.forEach((c,i)=>{ c.position.x += dt*(.6+ i*.04); if(c.position.x>WX+20) c.position.x=-20; });
-  updateVisibleChunks(false);
-  if(worldApi.tickLandClaimOverlay) worldApi.tickLandClaimOverlay();
-  updateLandMinimap(false);
-  updateBossUI();
+  if(runAmbient)cloudGroup.children.forEach((c,i)=>{ c.position.x += ambientStep*(.6+ i*.04); if(c.position.x>WX+20) c.position.x=-20; });
+  if(runAmbient)updateVisibleChunks(false);
+  if(runAmbient&&worldApi.tickLandClaimOverlay)worldApi.tickLandClaimOverlay();
+  if(runAmbient)updateLandMinimap(false);
+  if(runAmbient)updateBossUI();
   perfDiagnostics.beginRender(performance.now());
   rendering.render();
   perfDiagnostics.endRender(performance.now());

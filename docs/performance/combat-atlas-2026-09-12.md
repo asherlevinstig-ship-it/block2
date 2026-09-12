@@ -1,6 +1,6 @@
 # Crowded combat: atlas pass and corrected benchmark â€” 2026-09-12
 
-Status: AMBER. The 33.3 ms p95 frame-interval target is NOT met. The opt-in benchmark now enforces that target by default, instead of a 100 ms stall threshold.
+Status: AMBER. The corrected SwiftShader fixture now meets the 33.3 ms native p95 frame-interval target, but representative physical-device validation is still outstanding.
 
 ## Implementation
 
@@ -33,9 +33,26 @@ Same corrected fixture with clear weather, valid visible enemies and CPU profile
 
 Native draw calls fell 12.1%. These are individual runs, not statistically established speedups. Both runs fail the 33.3 ms target. Intermediate indoor and courtyard runs had inconsistent weather, camera placement or missing enemy yaw and are superseded by these results. The earlier 74–80 ms claim does not establish crowded-combat performance.
 
+## Crowded-combat focus pass
+
+The client now enters a hysteretic combat-focus tier at 12 hostile mobs within 24 m and exits below eight. It requests the high-performance WebGL context, reduces internal resolution to 0.5, moves ambient-only simulation and presentation to 15 Hz, limits ordinary labels and ground rings, and distance-culls ordinary villagers outside 12 m. Combat simulation, networking, projectiles, particles, damage numbers, health bars, boss UI data, and ground telegraphs remain active.
+
+Mara, the Aegis Guardian, shrine, building signs, and portal arches now use emissive-compatible texture atlases and rigid batching. Ordinary enemies retain their full animated model outside crowded combat and use an atlas-backed merged voxel silhouette inside it. Warning circles use a preallocated 32-ring pool, avoiding geometry allocation during attacks.
+
+Latest corrected 24-mob run on the same headless SwiftShader fixture:
+
+| Metric | Before focus pass | Latest |
+| --- | ---: | ---: |
+| Native p95 frame interval | 66.6 ms | **31.2 ms** |
+| Native peak draw calls | ~1,679 | **577** |
+| Native p95 render submission | 8.5 ms | **6.4 ms** |
+| 4× CPU p95 frame interval | 227.2 ms | **155.7 ms** |
+
+The native target passed in that run. SwiftShader's 4× mode throttles both game code and the software renderer, so it is retained as a 200 ms regression guard rather than treated as a physical-device 33.3 ms acceptance result.
+
 ## Validation and reproduction
 
-887 unit tests passed, including triangle-position/UV mapping, animated pivots and combat tint controls. Build, lint and formatting passed. The corrected browser benchmark records results and fails its performance assertion as expected; it is not reported as a passing browser performance gate.
+907 unit tests passed, including triangle-position/UV mapping, animated pivots, the crowded-model proxy, and combat tint controls. Build, lint and formatting passed. The corrected browser performance gate passes its 33.3 ms native target and 200 ms artificial-stress regression guard on the recorded run.
 
 ```powershell
 $env:COMBAT_PERF='1'
@@ -45,6 +62,6 @@ $env:COMBAT_DISABLE_ATLAS='0'
 npx playwright test e2e/combat-performance.spec.js --retries=0 --reporter=line
 ```
 
-COMBAT_CPU_PROFILE=1 records CPU profiles. COMBAT_MAX_FRAME_P95_MS can set a machine-specific threshold; do not use that override to claim the 33.3 ms target passed. Recorded runs used an isolated local E2E server on port 2649.
+COMBAT_CPU_PROFILE=1 records CPU profiles. COMBAT_MAX_FRAME_P95_MS changes the native threshold and COMBAT_STRESS_MAX_FRAME_P95_MS changes the artificial 4× SwiftShader regression guard; do not use either override to claim a physical-device pass. Recorded runs used an isolated local E2E server on port 2649.
 
 Next: measure this corrected scene on hardware WebGL, then attribute the remaining town draw calls to scenery categories before changing detail density. Validate sustained real multiplayer separately; this fixture disconnects networking and does not measure server latency or remote-player animation.

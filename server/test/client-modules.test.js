@@ -506,7 +506,7 @@ test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   assert.match(world, /playerOverworldDistanceSq\(d\.cx,d\.cz\)<360\*360/);
   assert.match(world, /"skyDragons":\{get:\(\)=>skyDragons\}/);
   assert.match(world, /"updateSkyDragons":\{get:\(\)=>updateSkyDragons\}/);
-  assert.match(frame, /updateSkyDragons\(dt,now\/1000\)/);
+  assert.match(frame, /updateSkyDragons\(ambientStep,now\/1000\)/);
   assert.match(companions, /function tickPetTamerTutorialGroundDragon\(active, room, now, dt=0\.016\)/);
   assert.match(companions, /function animateDragonMotion\(obj, now, dt=0\.016, mode='idle', speed=0, bank=0\)/);
   assert.match(companions, /grp\.userData\.dragonAnim=anim/);
@@ -3252,11 +3252,11 @@ test('road safety scenes use physical signs instead of floating text sprites',()
   assert.doesNotMatch(world,/const traveller=/);
 });
 
-test('frame loop animates road patrol guards every tick',()=>{
+test('frame loop keeps road patrol guards on the ambient animation cadence',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(world,/tickRoadSafetyScenes,/);
-  assert.match(frame,/worldApi\.tickRoadSafetyScenes\(dt, now\/1000\)/);
+  assert.match(frame,/worldApi\.tickRoadSafetyScenes\(ambientStep, now\/1000\)/);
 });
 
 test('caravan escort tracking begins only after accepting work from a caravan NPC',()=>{
