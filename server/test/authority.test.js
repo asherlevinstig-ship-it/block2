@@ -1287,6 +1287,20 @@ test('Deity invisibility hides players from mob targeting until combat reveals t
   assert.equal(fx.at(-1).active, false);
 });
 
+test('small overworld AI steps accumulate into replicated mob movement', () => {
+  const room = makeRoom(), client = makeClient('mob_motion');
+  room.clients = [client];
+  seedPlayer(room, client, { x: 225, y: 16, z: 220 });
+  const mob = { x: 220, y: 16, z: 220, yaw: 0, hp: 20, maxHp: 20, kind: 'zombie', dgn: '', state: '' };
+  const meta = room.mobMeta.moving_zombie = room.freshMeta(mob.x, mob.z, 3, 1.5, mob.kind, 0, false);
+  meta.alert = true;
+  room.state.mobs.set('moving_zombie', mob);
+  const startX = mob.x;
+  const spaces = { '': [{ p: room.state.players.get(client.sessionId), sid: client.sessionId }] };
+  for (let tick = 0; tick < 6; tick++) room.simulateMob(mob, 'moving_zombie', meta, .05, spaces);
+  assert.ok(mob.x > startX + .25, 'sub-threshold chase steps eventually update the replicated position');
+});
+
 test('jobs and repeatable contracts are created progressed and claimed only by the server', () => {
   const room = makeRoom(), client = makeClient('job_owner');
   const { prof } = seedPlayer(room, client);

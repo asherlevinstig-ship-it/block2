@@ -233,12 +233,30 @@ function normalizeYaw(value, fallback = 0) {
   return Math.atan2(Math.sin(yaw), Math.cos(yaw));
 }
 
+const pendingMobReplicationMotion = new WeakMap();
 function setReplicatedMobPose(m, x, y, z, yaw) {
   if (!m) return;
   const posEps = m.dgn ? DUNGEON_MOB_REPLICATION_POS_EPS : OVERWORLD_MOB_REPLICATION_POS_EPS;
   const yEps = m.dgn ? DUNGEON_MOB_REPLICATION_Y_EPS : OVERWORLD_MOB_REPLICATION_Y_EPS;
   const yawEps = m.dgn ? DUNGEON_MOB_REPLICATION_YAW_EPS : OVERWORLD_MOB_REPLICATION_YAW_EPS;
-  if (Math.hypot(x - m.x, z - m.z) >= posEps) { m.x = x; m.z = z; }
+  let pending = pendingMobReplicationMotion.get(m);
+  if (!pending || pending.baseX !== m.x || pending.baseZ !== m.z) {
+    pending = { baseX: m.x, baseZ: m.z, dx: 0, dz: 0 };
+    pendingMobReplicationMotion.set(m, pending);
+  }
+  // AI advances by less than the overworld replication threshold per server
+  // tick. Accumulate those valid steps instead of discarding each one and
+  // restarting from the same replicated coordinate forever.
+  pending.dx += Number(x) - m.x;
+  pending.dz += Number(z) - m.z;
+  if (posEps <= 0 || Math.hypot(pending.dx, pending.dz) >= posEps) {
+    m.x += pending.dx;
+    m.z += pending.dz;
+    pending.baseX = m.x;
+    pending.baseZ = m.z;
+    pending.dx = 0;
+    pending.dz = 0;
+  }
   if (Math.abs(y - m.y) >= yEps) m.y = y;
   if (angleDelta(yaw, m.yaw) >= yawEps) m.yaw = yaw;
 }
