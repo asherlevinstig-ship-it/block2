@@ -43,6 +43,10 @@ for (const [dungeonId, _signatureState, bossStyle, bossName] of VARIANTS) {
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonContentId)).toBe(dungeonId);
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonBossCount)).toBe(1);
     await expect.poll(() => page.evaluate(() => {
+      const arch=scene.getObjectByName('e-rank-threshold');
+      return {present:!!arch,parts:arch?.children.length||0};
+    })).toEqual({present:true,parts:6});
+    await expect.poll(() => page.evaluate(() => {
       const mobs = window.__BLOCKCRAFT_E2E__.status().dungeonMobs || [];
       const boss = mobs.find(m => m.kind === 'boss');
       const variants = mobs.filter(m => m.kind !== 'boss' && m.variant).map(m => m.variant);
@@ -51,6 +55,22 @@ for (const [dungeonId, _signatureState, bossStyle, bossName] of VARIANTS) {
     expect(await page.evaluate(() => (window.__BLOCKCRAFT_E2E__.status().dungeonMobs || []).some(m => m.kind !== 'boss' && m.variant))).toBe(true);
 
     await expect.poll(()=>page.evaluate(()=>BlockcraftGameContext.requireModule('world').pendingChunkCount()),{timeout:60000}).toBe(0);
+    if(dungeonId==='abandoned_mine'){
+      const entry=await page.evaluate(async()=>{
+        const e=dungeon.entrance,rz=e.rz||e.r||3,original=renderer.render;
+        renderer.render=function(s,c){
+          if(s===scene&&c===camera){camera.position.set(e.x,10.8,e.z+rz*.45);camera.lookAt(e.x,10.8,e.z-(rz-1.1));}
+          return original.call(this,s,c);
+        };
+        for(let i=0;i<12;i++)await new Promise(requestAnimationFrame);
+        renderer.render(scene,camera);
+        const shot=renderer.domElement.toDataURL('image/png').split(',')[1];renderer.render=original;
+        return shot;
+      });
+      const buffer=Buffer.from(entry,'base64');
+      fs.writeFileSync(testInfo.outputPath('e-rank-threshold.png'),buffer);
+      await testInfo.attach('e-rank-threshold',{body:buffer,contentType:'image/png'});
+    }
     const shot=await page.evaluate(async readability=>{
       const room=dungeon.rooms.find(r=>r.main&&r.type!=='boss'&&r.type!=='start')||dungeon.rooms[0];
       const original=renderer.render;

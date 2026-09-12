@@ -7,6 +7,8 @@ export const SURFACE_PALETTES = Object.freeze([
   { name: 'snowy', tint: 0xe5f3ff, horizon: 0xc0dce9, ground: 0x728b9d },
   { name: 'swamp', tint: 0xe3ece0, horizon: 0x96aba0, ground: 0x58634b },
 ]);
+// Civic warmth is distinct from the surrounding plains without tinting warning VFX.
+export const TOWN_PALETTE = Object.freeze({ name: 'town', tint: 0xffedce, horizon: 0xd5bd9d, ground: 0x806449 });
 const stone = { tint: 0xc0b5a4, sky: 0xc5d1de, ground: 0x73604b, key: 0xffdfb2 };
 const cold = { tint: 0xb6cad3, sky: 0xb5d9eb, ground: 0x586b80, key: 0xd2eaff };
 const moss = { tint: 0xc2ceb0, sky: 0xd0dfbd, ground: 0x556b47, key: 0xffe6b5 };
@@ -23,6 +25,7 @@ export function createEnvironmentIdentity(THREE) {
   const surface = SURFACE_PALETTES.map(p => ({
     tint: new THREE.Color(p.tint), horizon: new THREE.Color(p.horizon), ground: new THREE.Color(p.ground),
   }));
+  const townSurface={tint:new THREE.Color(TOWN_PALETTE.tint),horizon:new THREE.Color(TOWN_PALETTE.horizon),ground:new THREE.Color(TOWN_PALETTE.ground)};
   const dungeons = Object.fromEntries(Object.entries(DUNGEON_PALETTES).map(([name, p]) => [name, {
     tint: new THREE.Color(p.tint), sky: new THREE.Color(p.sky),
     ground: new THREE.Color(p.ground), key: new THREE.Color(p.key),
@@ -31,7 +34,7 @@ export function createEnvironmentIdentity(THREE) {
   const multiplier = new THREE.Color();
   return {
     surface({ biome, town, dt, day, opaque, transparent, fog, backdrop, hemi }) {
-      const target = surface[town ? 0 : biome] || surface[0];
+      const target = town ? townSurface : surface[biome] || surface[0];
       const alpha = 1 - Math.exp(-Math.max(0, dt) * 1.5);
       tint.lerp(target.tint, alpha); horizon.lerp(target.horizon, alpha); ground.lerp(target.ground, alpha);
       multiplier.set(0xffffff).lerp(tint, 0.38);

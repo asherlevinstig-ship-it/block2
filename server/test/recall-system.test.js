@@ -45,6 +45,22 @@ test('adaptive selection prioritises due work and interleaves topics',()=>{
   assert.equal(selected.difficulty,2,'high recent success selects GCSE difficulty when available');
 });
 
+test('focused same-topic banks never repeat the previous question immediately',()=>{
+  const previous=RECALL.QUESTIONS.find(q=>q.id==='it_ns_bin_den_003'),now=2_000_000;
+  const history={items:{},lastQuestionId:previous.id,lastTopic:previous.topic,totalAttempts:5,totalCorrect:5};
+  const selected=RECALL.selectQuestion('Computer Science',history,now,()=>0);
+  assert.notEqual(selected.id,previous.id);
+  assert.equal(selected.topic,'Number systems');
+});
+
+test('a lone due question yields to another item instead of repeating immediately',()=>{
+  const previous=RECALL.QUESTIONS.find(q=>q.id==='it_ns_hex_bin_003'),now=2_000_000;
+  const items=Object.fromEntries(RECALL.QUESTIONS.filter(q=>q.subject==='Computer Science').map(q=>[q.id,{attempts:1,correct:1,stage:1,nextDue:now+10_000}]));
+  items[previous.id].nextDue=now-1;
+  const selected=RECALL.selectQuestion('Computer Science',{items,lastQuestionId:previous.id,lastTopic:previous.topic,totalAttempts:5,totalCorrect:5},now,()=>0);
+  assert.notEqual(selected.id,previous.id);
+});
+
 test('mastery summary reports accuracy, due work, and durable successes',()=>{
   const q=RECALL.QUESTIONS.find(item=>item.subject==='English');
   const history={items:{[q.id]:{attempts:5,correct:4,stage:4,nextDue:0}},totalAttempts:5,totalCorrect:4};

@@ -2313,7 +2313,12 @@ class MySqlGameQuestionStore {
     const avoidInput = (Array.isArray(input.avoidQuestionIds) ? input.avoidQuestionIds : [input.avoidQuestionId])
       .filter(v => v != null && v !== '');
     const avoided = new Set(avoidInput.flatMap(v => { const raw = String(v); return [raw, raw.replace(/^db-recall-/, '')]; }));
-    const immediate = avoidInput.length ? String(avoidInput[0]).replace(/^db-recall-/, '') : '';
+    const normalizedRecallPrompt = value => cleanText(value, 500).toLowerCase().replace(/\s+/g, ' ');
+    const avoidedPrompts = new Set(
+      (Array.isArray(input.avoidPrompts) ? input.avoidPrompts : [input.avoidPrompt])
+        .map(normalizedRecallPrompt)
+        .filter(Boolean),
+    );
     const candidates = [];
     for (const row of rows || []) {
       let answers = [];
@@ -2335,10 +2340,13 @@ class MySqlGameQuestionStore {
         explanation: row.explanation || '',
       });
     }
-    return candidates.find(q => !avoided.has(String(q.id)) && !avoided.has(String(q.questionId)))
-      || candidates.find(q => String(q.questionId) !== immediate)
-      || candidates[0]
-      || null;
+    // Returning an avoided question here traps a newly-created question bank at
+    // one item: the first built-in Recall question recorded for analytics becomes
+    // the only DB candidate and is then served forever. Let the room use its full
+    // built-in bank until the live bank has a genuinely fresh alternative.
+    return candidates.find(q => !avoided.has(String(q.id))
+      && !avoided.has(String(q.questionId))
+      && !avoidedPrompts.has(normalizedRecallPrompt(q.prompt))) || null;
   }
 
   async findPlayableRecallSubject(account, input = {}) {

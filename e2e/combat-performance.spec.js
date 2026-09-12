@@ -30,6 +30,29 @@ test('crowded combat render budget at native and fourfold CPU throttling',async(
   });
   const graphics=await page.evaluate(()=>{const gl=renderer.getContext(),ext=gl.getExtension('WEBGL_debug_renderer_info');return {renderer:ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER),pixelRatio:renderer.getPixelRatio()};});
   console.log('GRAPHICS',JSON.stringify(graphics));
+  if(process.env.COMBAT_PROFILE_SCENE==='1'){
+    const sceneProfile=await page.evaluate(()=>{
+      const roots=scene.children.map((root,index)=>{
+        let visible=0,meshes=0,sprites=0,triangles=0;
+        root.traverse(node=>{
+          if(!node.visible)return;
+          visible++;
+          if(node.isMesh){meshes++;triangles+=node.geometry?.index?.count/3||node.geometry?.attributes?.position?.count/3||0;}
+          if(node.isSprite)sprites++;
+        });
+        return {index,name:root.name||root.type,visible,meshes,sprites,triangles:Math.round(triangles)};
+      });
+      const town=scene.children[0];
+      const townChildren=town.children.map((root,index)=>{
+        let meshes=0,sprites=0;root.traverse(node=>{if(node.isMesh)meshes++;if(node.isSprite)sprites++;});
+        return {index,name:root.name||root.type,type:root.type,meshes,sprites,visible:root.visible};
+      }).sort((a,b)=>b.meshes+b.sprites-a.meshes-a.sprites).slice(0,35);
+      const villagersProfile=villagers.slice(0,8).map(v=>{let meshes=0;const types={},missingMaps=[];v.grp.traverse(n=>{if(!n.isMesh)return;meshes++;for(const mat of Array.isArray(n.material)?n.material:[n.material]){types[mat?.type]=(types[mat?.type]||0)+1;if(!mat?.map?.image)missingMaps.push(mat?.type||'none');}});return {role:v.role,meshes,rootIndex:town.children.indexOf(v.grp),material:v.head.material?.type,headDetails:v.head.children.length,types,missingMaps:missingMaps.slice(0,5)};});
+      return {roots:roots.sort((a,b)=>b.meshes+b.sprites-a.meshes-a.sprites).slice(0,25),townChildren,villagersProfile,townIsRoot:town===townGroup,totalRoots:roots.length,totalMeshes:roots.reduce((n,r)=>n+r.meshes,0),totalSprites:roots.reduce((n,r)=>n+r.sprites,0)};
+    });
+    console.log('SCENE_PROFILE',JSON.stringify(sceneProfile));
+    if(process.env.COMBAT_PROFILE_ONLY==='1')return;
+  }
   const cdp=await page.context().newCDPSession(page),profiles=[];
   for(const rate of [1,4]){
     if(process.env.COMBAT_CPU_PROFILE==='1'){await cdp.send('Profiler.enable');await cdp.send('Profiler.start');}
@@ -71,6 +94,7 @@ test('crowded combat render budget at native and fourfold CPU throttling',async(
     profiles.push({cpuRate:rate,...result});console.log('RATE_RESULT',JSON.stringify(profiles.at(-1)));
     expect(result.mobs).toBe(24);
     expect(result.samples).toBeGreaterThan(30);
+    expect(result.maxDrawCalls).toBeLessThanOrEqual(1900);
   }
   await cdp.send('Emulation.setCPUThrottlingRate',{rate:1});
   console.log('COMBAT_PERFORMANCE '+JSON.stringify(profiles));

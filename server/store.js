@@ -1122,12 +1122,15 @@ function sanitizeProfile(p) {
   out.recallSubject = 'Computer Science';
   out.recallMastery = { items: {}, lastQuestionId: '', lastTopic: '', totalAttempts: 0, totalCorrect: 0 };
   const recall = p.recallMastery && typeof p.recallMastery === 'object' ? p.recallMastery : {};
-  out.recallMastery.lastQuestionId = typeof recall.lastQuestionId === 'string' ? recall.lastQuestionId.slice(0,16) : '';
+  // Stable curriculum IDs and DB-backed Recall IDs are longer than the old
+  // player-name-sized limit. Keep the complete ID so anti-repeat state survives
+  // a save/reconnect cycle.
+  out.recallMastery.lastQuestionId = typeof recall.lastQuestionId === 'string' ? recall.lastQuestionId.slice(0,64) : '';
   out.recallMastery.lastTopic = typeof recall.lastTopic === 'string' ? recall.lastTopic.replace(/[<>]/g,'').slice(0,48) : '';
   out.recallMastery.totalAttempts = clampI(recall.totalAttempts,0,1000000);
   out.recallMastery.totalCorrect = Math.min(out.recallMastery.totalAttempts,clampI(recall.totalCorrect,0,1000000));
   if(recall.items&&typeof recall.items==='object')for(const [id,raw] of Object.entries(recall.items).slice(0,256)){
-    if(!/^(?:q\d{3}|[a-z]{2,4}_[a-z0-9_]{3,40})$/.test(id)||!raw||typeof raw!=='object')continue;
+    if(!/^(?:q\d{3}|[a-z]{2,4}_[a-z0-9_]{3,40}|db-recall-\d{1,20})$/.test(id)||!raw||typeof raw!=='object')continue;
     const attempts=clampI(raw.attempts,0,1000000);
     out.recallMastery.items[id]={attempts,correct:Math.min(attempts,clampI(raw.correct,0,1000000)),streak:clampI(raw.streak,0,10000),stage:clampI(raw.stage,0,6),lastAt:clampI(raw.lastAt,0,4102444800000),nextDue:clampI(raw.nextDue,0,4102444800000),lastCorrect:raw.lastCorrect===true};
   }

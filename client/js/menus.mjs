@@ -1658,6 +1658,9 @@ function makeSkeleton(){
   addBox(torso,[.34,.12,.24],[0,-.34,0],boneM);                      // pelvis
   addBox(torso,[.52,.16,.27],[0,.3,0],clothM);                       // tattered shoulder wrap
   addBox(torso,[.16,.24,.06],[-.24,.14,.13],clothM);                 // hanging shred
+  addBox(torso,[.36,.56,.055],[.08,-.06,-.14],clothM,[.08,0,.1]);    // asymmetric grave-banner silhouette
+  addBox(torso,[.14,.2,.06],[.24,-.39,-.14],clothM,[.2,0,-.18]);
+  for(const sx of [-.16,.16])addBox(torso,[.055,.28,.055],[sx,.48,-.02],boneM,[0,0,sx<0?.34:-.34]);
   // thin legs with knee joints
   for(const sx of [-.12,.12]){
     const leg=new THREE.Group(); leg.position.set(sx,.72,0);
@@ -1677,7 +1680,7 @@ function makeSkeleton(){
     grp.add(arm); arms.push(arm);
   }
   // recurve bow (held forward-left) + quiver + arrow fletching
-  const bow=new THREE.Group(); bow.position.set(-.2,1.32,.62); grp.add(bow);
+  const bow=new THREE.Group(); bow.position.set(0,0,.58); arms[0].add(bow);
   addBox(bow,[.05,.42,.05],[0,0,0],woodM);
   addBox(bow,[.05,.2,.05],[0,.27,-.07],woodM,[.55,0,0]);
   addBox(bow,[.05,.2,.05],[0,-.27,-.07],woodM,[-.55,0,0]);
@@ -1685,8 +1688,8 @@ function makeSkeleton(){
   for(const qx of [-.03,.04]) addBox(grp,[.03,.2,.03],[.12+qx,1.44,-.2],boneM);
   grp.add(blobShadow(.95));
   atlasModelMaterials({THREE,root:grp,mats});
-  batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head]});
-  return {grp, mats, legs, arms, head};
+  batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head,bow]});
+  return {grp, mats, legs, arms, head, bow, combatProfile:{family:'skeleton',accent:0x6fe7ee,aftermath:[.72,.82,.78]}};
 }
 
 // boss reinforcement summon

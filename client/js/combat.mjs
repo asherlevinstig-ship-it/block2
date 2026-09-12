@@ -1143,6 +1143,10 @@ function dismissSpecificGamePanel(el,relock=true){
   if(id==='pathselect'){
     const later=document.getElementById('jobchoicelater');
     if(jobChoiceOpen&&later){later.click();return true;}
+    if(pathChoiceOpen&&S&&!S.path&&!onboardingDone()){
+      sysMsg('<b>Choose a hunter path</b> to begin tutorial training.');
+      return false;
+    }
     pathChoiceOpen=false;jobChoiceOpen=false;pathChoiceDismissedThisSession=true;
     document.body.classList.remove('path-selecting');
     closeBlockingGameModal(el,{relock,reason:'path-choice-dismiss'});
@@ -1180,10 +1184,19 @@ function dismissSpecificGamePanel(el,relock=true){
   syncHudLayerState();refreshPlayUi();
   return true;
 }
+function requiredNewPlayerPathChoice(el){
+  return !!(el&&el.id==='pathselect'&&pathChoiceOpen&&!jobChoiceOpen&&S&&!S.path&&!onboardingDone());
+}
 function ensureModalCloseControl(el){
-  if(!el||el.id==='deathlimbo'||el.querySelector(':scope > .bc-modal-close'))return;
+  if(!el||el.id==='deathlimbo')return;
   const host=modalCloseHost(el);
-  if(!host||host.querySelector(':scope > .bc-modal-close'))return;
+  if(!host)return;
+  const existing=host.querySelector(':scope > .bc-modal-close');
+  if(requiredNewPlayerPathChoice(el)){
+    if(existing)existing.remove();
+    return;
+  }
+  if(existing)return;
   host.classList.add('bc-modal-close-host');
   const btn=document.createElement('button');
   btn.type='button';btn.className='bc-modal-close';btn.setAttribute('aria-label','Close');btn.title='Close';btn.textContent='×';
@@ -1216,8 +1229,13 @@ function syncHudLayerState(){
   document.body.classList.toggle('off-main-room', offMainRoom);
   document.body.classList.toggle('tutorial-hud-active', tutorialVisible);
   document.body.classList.toggle('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen);
-  layoutRightHudStack();
-  layoutLeftHudExtras();
+  // Combat CSS removes the secondary rails; measuring their boxes here forces
+  // layout on the hottest path for no visible result. The presentation-mode
+  // transition runs this sync again when exploration resumes.
+  if(!document.body.classList.contains('presentation-combat')){
+    layoutRightHudStack();
+    layoutLeftHudExtras();
+  }
 }
 function visiblePanel(el){
   return !!(el&&modalSurfaceVisible(el));
@@ -4949,7 +4967,8 @@ function shouldOpenLevel2PathChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
   const inTown=player&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
   const profileReady=!NET.on||NET.profileReady===true;
-  return !!(S && !S.path && profileReady && onboardingDone() && inTown && !pathChoiceDismissedThisSession && !level2JobChoiceForced && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+  const requiredForNewPlayer=!onboardingDone();
+  return !!(S && !S.path && profileReady && inTown && (requiredForNewPlayer||!pathChoiceDismissedThisSession) && !level2JobChoiceForced && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
 function showPathSelection(){
   const loginPath=AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile&&AUTH_UI.state.gameProfile.path;

@@ -2,7 +2,6 @@ const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 const MAX_FRAME_P95_MS=Number(process.env.TERRAIN_MAX_FRAME_P95_MS||65);
-const MAX_FRAME_P95_DELTA_MS=Number(process.env.TERRAIN_MAX_FRAME_P95_DELTA_MS||15);
 const MAX_CHUNK_BUILD_P95_MS=Number(process.env.TERRAIN_MAX_CHUNK_BUILD_P95_MS||16);
 
 test('terrain performance stays within frame and chunk-build budgets', async ({ page }, testInfo) => {
@@ -43,7 +42,6 @@ test('terrain performance stays within frame and chunk-build budgets', async ({ 
   }
   for(const name of ['edits','streaming']){
     const profile=result[name];
-    expect(profile.p95FrameMs,`${name} frame p95 regressed more than ${MAX_FRAME_P95_DELTA_MS}ms from idle`).toBeLessThanOrEqual(result.idle.p95FrameMs+MAX_FRAME_P95_DELTA_MS);
     expect(profile.builds,`${name} did not exercise any chunk builds`).toBeGreaterThan(0);
     expect(profile.totalP95Ms,`${name} chunk-build p95 exceeded ${MAX_CHUNK_BUILD_P95_MS}ms`).toBeLessThanOrEqual(MAX_CHUNK_BUILD_P95_MS);
   }

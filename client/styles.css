@@ -172,6 +172,19 @@
   .rewardgain.leaving{opacity:0;transform:translateY(-10px);transition:opacity .32s,transform .32s}
   @keyframes rewardGainIn{from{opacity:0;transform:translateY(9px) scale(.94)}to{opacity:1;transform:none}}
   @keyframes rewardGainBump{50%{transform:scale(1.08);filter:brightness(1.4)}}
+  #rewardmoment{--moment:#e8bd62;position:fixed;left:50%;top:19%;z-index:119;width:min(560px,calc(100vw - 32px));transform:translateX(-50%);pointer-events:none;color:#f6fbff;filter:drop-shadow(0 14px 24px rgba(0,0,0,.55))}
+  #rewardmoment.hidden{display:none}
+  #rewardmoment.show{display:block;animation:rewardMomentIn .34s cubic-bezier(.2,.8,.2,1)}
+  #rewardmoment.leaving{opacity:0;transform:translateX(-50%) translateY(-12px) scale(.98);transition:opacity .2s ease,transform .2s ease}
+  #rewardmoment.important{--moment:#b88cff}#rewardmoment.major{--moment:#e8bd62}#rewardmoment.legendary{--moment:#ffca3a}
+  .rewardmoment-frame{position:relative;display:grid;grid-template-columns:72px minmax(0,1fr);align-items:center;gap:15px;min-height:92px;padding:13px 26px 13px 18px;clip-path:polygon(0 13px,13px 0,calc(100% - 13px) 0,100% 13px,100% calc(100% - 13px),calc(100% - 13px) 100%,13px 100%,0 calc(100% - 13px));background:linear-gradient(100deg,rgba(6,13,20,.96),rgba(14,22,30,.93) 70%,color-mix(in srgb,var(--moment) 15%,rgba(6,13,20,.96)));border-top:2px solid var(--moment);border-bottom:1px solid color-mix(in srgb,var(--moment) 72%,transparent)}
+  .rewardmoment-frame:after{content:"";position:absolute;left:0;bottom:0;width:100%;height:3px;background:linear-gradient(90deg,var(--moment),#d8f4ff 58%,transparent);transform-origin:left;animation:rewardMomentTimer var(--moment-duration,3s) linear forwards}
+  .rewardmoment-icon{display:grid;place-items:center;width:60px;height:60px;clip-path:polygon(50% 0,88% 15%,100% 50%,88% 85%,50% 100%,12% 85%,0 50%,12% 15%);background:linear-gradient(145deg,color-mix(in srgb,var(--moment) 32%,#26343c),#0b141d);box-shadow:inset 0 0 0 2px var(--moment);color:var(--moment);font:700 28px/1 Georgia,serif;font-style:normal}
+  .rewardmoment-frame>div{display:grid;gap:3px;min-width:0}.rewardmoment-kicker{color:var(--moment);font-size:9px;letter-spacing:3px}.rewardmoment-title{overflow:hidden;color:#f7fbff;font:700 21px/1.15 Georgia,serif;letter-spacing:1.5px;text-overflow:ellipsis;white-space:nowrap}.rewardmoment-detail{color:#dbe7ef;font-size:13px;letter-spacing:.5px}.rewardmoment-hint{color:#8fb3c4;font-size:10px;font-style:normal;letter-spacing:1px}
+  body.presentation-combat #rewardfeed{opacity:.32;transform:translateX(-50%) scale(.92);transition:opacity .16s,transform .16s}
+  @keyframes rewardMomentIn{from{opacity:0;transform:translateX(-50%) translateY(-14px) scale(.94)}60%{opacity:1;transform:translateX(-50%) translateY(2px) scale(1.015)}to{transform:translateX(-50%)}}
+  @keyframes rewardMomentTimer{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @media(max-width:720px){#rewardmoment{top:14%;width:calc(100vw - 24px)}.rewardmoment-frame{grid-template-columns:52px minmax(0,1fr);min-height:74px;padding:10px 16px 10px 12px;gap:10px}.rewardmoment-icon{width:46px;height:46px;font-size:22px}.rewardmoment-title{font-size:16px}.rewardmoment-detail{font-size:11px}.rewardmoment-hint{font-size:8px}}
 body.game-modal-open #tutorialhud,body.game-modal-open #coachhud,body.game-modal-open #currentquest,body.game-modal-open #homeworkhud,body.game-modal-open #activitytracker,body.game-modal-open #townchoices,body.game-modal-open #eventhud,body.game-modal-open #landmap,body.game-modal-open #coords,body.game-modal-open #locationhud,body.game-modal-open #hotbar,body.game-modal-open #statpointnudge,body.game-modal-open #stats,body.game-modal-open #abilities,body.game-modal-open #dragonhud,body.game-modal-open #familiarhud,body.game-modal-open #questionbtn,body.game-modal-open #socialbtn,body.game-modal-open #bugreportbtn,body.game-modal-open #stuckrescuebtn,body.game-modal-open #gateprompt,body.game-modal-open #encounterprompt,body.game-modal-open #dungeonping,body.game-modal-open #rewardfeed,body.game-modal-open #chatlog,body.game-modal-open #chatbar,body.game-modal-open #adminchatbar,body.game-modal-open #chatwheel{display:none!important}
 .bc-modal-close-host{position:relative}
 .bc-modal-close{
@@ -534,10 +547,29 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   #eventresult .erbar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#4fd8ff,#ffd24a);transition:width .1s linear}
   @media (max-width:620px){#eventresultpanel{padding:24px 18px}#eventresult h1{font-size:24px;letter-spacing:5px}#eventresultstats,#eventresultrewards{grid-template-columns:1fr 1fr}}
   #rewardwin{position:fixed;right:18px;top:178px;bottom:18px;width:360px;max-width:calc(100vw - 36px);z-index:9;pointer-events:none;display:flex;align-items:flex-start}
+  #rewardwin{transition:opacity .22s ease,transform .22s ease}
+  body.reward-moment-staging #rewardwin{opacity:0;transform:translateX(14px);pointer-events:none}
+  body.reward-moment-staging #titleflash,body.reward-moment-staging #traininggroundstitle,body.reward-moment-staging #locationhud{opacity:0!important;pointer-events:none!important}
   #rewardwin.promotion-open{z-index:120;pointer-events:auto}
   #rewardpanel{width:100%;max-height:100%;background:linear-gradient(160deg, rgba(12,22,44,.97), rgba(6,10,22,.97));border:1px solid #4fd8ff;box-shadow:0 0 24px rgba(79,216,255,.38), inset 0 0 32px rgba(79,216,255,.07);border-radius:8px;padding:14px 16px;color:#d8e8ff;pointer-events:auto;position:relative;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:rgba(79,216,255,.55) rgba(4,10,20,.45)}
   #rewardpanel:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,#4fd8ff,#ffd24a,#b88cff)}
   #rewardpanel.earned{border-color:#ffd24a;box-shadow:0 0 26px rgba(255,210,74,.28), inset 0 0 32px rgba(79,216,255,.07)}
+  #rewardpanel.gate-clear-result{background:linear-gradient(145deg,rgba(21,28,31,.98),rgba(7,13,22,.98) 55%,rgba(11,14,25,.99));border-color:#e8bd62}
+  #rewardpanel.gate-clear-result:before{height:4px;background:linear-gradient(90deg,#e8bd62 0 38%,#d8f4ff 38% 62%,#8462b8 62%)}
+  #rewardpanel.gate-clear-result h2{padding-right:94px;color:#e8bd62;text-shadow:none}
+  .gate-clear-seal{position:absolute;right:16px;top:13px;width:76px;height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;clip-path:polygon(50% 0,88% 15%,100% 50%,88% 85%,50% 100%,12% 85%,0 50%,12% 15%);background:linear-gradient(145deg,#34404a,#101b25);box-shadow:inset 0 0 0 2px #e8bd62;color:#d8f4ff;pointer-events:none}
+  .gate-clear-seal b{font-size:30px;line-height:1;color:#e8bd62;font-family:Georgia,serif}
+  .gate-clear-seal small{font-size:7px;line-height:1;letter-spacing:.5px;color:#d8f4ff;white-space:nowrap}
+  #rewardpanel.gate-clear-result .rsub{padding-right:94px;color:#a8c9d8}
+  #rewardpanel.gate-clear-result .rline{border-color:rgba(232,189,98,.25);background:rgba(14,23,29,.75)}
+  #rewardpanel.gate-clear-result #rewardclose{position:static;background:#223439;color:#e8bd62;border-color:#e8bd62;box-shadow:none}
+  #rewardpanel.gate-clear-result .gate-clear-seal{animation:gateRewardSeal .34s .08s both cubic-bezier(.2,.8,.2,1)}
+  #rewardpanel.gate-clear-result h2,#rewardpanel.gate-clear-result .rsub{animation:gateRewardLine .28s .14s both ease-out}
+  #rewardpanel.gate-clear-result .resultstats{animation:gateRewardLine .3s .2s both ease-out}
+  #rewardpanel.gate-clear-result .rewardloot{animation:gateRewardLine .32s .28s both ease-out}
+  #rewardpanel.gate-clear-result .rnote,#rewardpanel.gate-clear-result .rbonus,#rewardpanel.gate-clear-result #rewardclose{animation:gateRewardLine .3s .36s both ease-out}
+  @keyframes gateRewardSeal{from{opacity:0;transform:scale(.55) rotate(-18deg)}to{opacity:1;transform:none}}
+  @keyframes gateRewardLine{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   #rewardpanel.missed{border-color:#ff6a6a;box-shadow:0 0 22px rgba(255,80,80,.2), inset 0 0 32px rgba(255,80,80,.05)}
   #rewardpanel h2{font-size:15px;letter-spacing:3px;color:#4fd8ff;text-shadow:0 0 10px #4fd8ff;margin-bottom:3px}
   #rewardpanel.earned h2{color:#ffd24a;text-shadow:0 0 12px rgba(255,210,74,.75)}
@@ -2605,3 +2637,131 @@ body:not(.tablet-mode):not(.mobile-play-mode) #socialbtn:focus-visible{transform
 
 .quest-optional-systems > summary { cursor: pointer; padding: 12px 14px; color: #c8d7e6; border: 1px solid #425268; border-radius: 8px; margin-top: 12px; }
 .quest-optional-systems > summary:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 3px; }
+
+/* Visual identity quality bar: one semantic palette and context-aware HUD hierarchy. */
+:root{
+  --bc-ink:#07101a;
+  --bc-ink-soft:rgba(7,16,26,.82);
+  --bc-silver:#dbe7ef;
+  --bc-muted:#8fa6b8;
+  --bc-gold:#e8bd62;
+  --bc-cyan:#75cbe8;
+  --bc-jade:#72b879;
+  --bc-danger:#ef6254;
+  --bc-void:#8462b8;
+  --hud-bg:linear-gradient(180deg,rgba(7,16,26,.91),rgba(3,8,14,.84));
+  --hud-edge:rgba(143,166,184,.34);
+  --hud-panel:rgba(7,16,26,.82);
+  --hud-gold:var(--bc-gold);
+  --hud-blue:var(--bc-cyan);
+  --hud-green:var(--bc-jade);
+  --hud-red:var(--bc-danger);
+}
+
+#game:after{
+  content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:
+    linear-gradient(180deg,rgba(7,13,20,.08),transparent 18%,transparent 76%,rgba(2,5,9,.18)),
+    radial-gradient(ellipse at 50% 46%,transparent 54%,rgba(2,5,9,.16) 100%);
+  transition:background .3s ease,opacity .3s ease;
+}
+body.presentation-combat #game:after{
+  background:
+    linear-gradient(180deg,rgba(7,13,20,.12),transparent 16%,transparent 70%,rgba(2,5,9,.24)),
+    radial-gradient(ellipse at 50% 48%,transparent 48%,rgba(31,7,9,.16) 100%);
+}
+body.presentation-dungeon #game:after{
+  background:
+    linear-gradient(180deg,rgba(2,4,8,.16),transparent 24%,transparent 68%,rgba(1,3,7,.3)),
+    radial-gradient(ellipse at 50% 45%,transparent 42%,rgba(3,5,10,.28) 100%);
+}
+body.presentation-combat #traininggroundstitle{opacity:0!important;pointer-events:none;transition:opacity .12s ease}
+
+#enemytelegraph{
+  border:1px solid color-mix(in srgb,var(--bc-danger) 72%,transparent);
+  border-left-width:4px;border-right-width:4px;border-radius:4px;
+  background:linear-gradient(90deg,transparent,rgba(35,7,8,.9) 18%,rgba(35,7,8,.9) 82%,transparent);
+  color:#ff9a8f;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  box-shadow:0 12px 28px rgba(0,0,0,.32),0 0 20px rgba(239,98,84,.13);
+}
+#enemytelegraph.urgent{color:#ffd08a;border-color:rgba(239,98,84,.86)}
+#combatimpact,#abilitypulse{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+
+@media (min-width:721px){
+  body:not(.tablet-mode):not(.mobile-play-mode) #locationhud,
+  body:not(.tablet-mode):not(.mobile-play-mode) #coords,
+  body:not(.tablet-mode):not(.mobile-play-mode) #currentquest,
+  body:not(.tablet-mode):not(.mobile-play-mode) #homeworkhud,
+  body:not(.tablet-mode):not(.mobile-play-mode) #activitytracker,
+  body:not(.tablet-mode):not(.mobile-play-mode) #tutorialhud,
+  body:not(.tablet-mode):not(.mobile-play-mode) #coachhud,
+  body:not(.tablet-mode):not(.mobile-play-mode) #townchoices,
+  body:not(.tablet-mode):not(.mobile-play-mode) #eventhud,
+  body:not(.tablet-mode):not(.mobile-play-mode) #landmap,
+  body:not(.tablet-mode):not(.mobile-play-mode) #chatlog,
+  body:not(.tablet-mode):not(.mobile-play-mode) #supportdock>button{
+    transition:opacity .2s ease,transform .24s ease,filter .2s ease;
+  }
+
+  body:not(.tablet-mode):not(.mobile-play-mode) #locationhud{
+    border-color:rgba(232,189,98,.42);background:linear-gradient(145deg,rgba(7,16,26,.88),rgba(3,8,14,.76));
+  }
+  body:not(.tablet-mode):not(.mobile-play-mode) #currentquest{
+    border-color:rgba(232,189,98,.38);background:linear-gradient(155deg,rgba(7,16,26,.88),rgba(3,8,14,.78));
+  }
+  body:not(.tablet-mode):not(.mobile-play-mode) #eventhud{
+    border-color:rgba(132,98,184,.48);background:linear-gradient(180deg,rgba(13,11,24,.9),rgba(5,7,13,.82));
+  }
+  body:not(.tablet-mode):not(.mobile-play-mode) #chatlog{
+    border-color:rgba(117,203,232,.2);border-left-color:rgba(117,203,232,.42);background:linear-gradient(110deg,rgba(7,16,26,.72),rgba(4,10,17,.48));
+  }
+
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #locationhud,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #coords{
+    opacity:.16;filter:saturate(.6);transform:translateX(-10px);
+  }
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #homeworkhud,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #activitytracker,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #tutorialhud,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #coachhud,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #townchoices{
+    opacity:0;pointer-events:none;transform:translateX(24px);
+  }
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #eventhud{
+    opacity:.12;pointer-events:none;filter:saturate(.55);transform:translateX(-50%) translateY(-8px) scale(.96);
+  }
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #landmap{
+    opacity:.12;transform:translate(12px,-8px) scale(.9);transform-origin:top right;
+  }
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #chatlog{
+    opacity:.12;pointer-events:none;transform:translateY(10px);
+  }
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #supportdock>button{
+    opacity:0;pointer-events:none;transform:translateY(12px);
+  }
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #stats{
+    border-color:rgba(239,98,84,.3);box-shadow:0 13px 34px rgba(0,0,0,.42),0 0 24px rgba(239,98,84,.08);
+  }
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #hotbar,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #abilities{
+    filter:brightness(1.08);box-shadow:0 15px 40px rgba(0,0,0,.54),0 0 22px rgba(117,203,232,.1);
+  }
+}
+
+/* Onboarding owns the objective hierarchy; suppress duplicate live-world chrome. */
+body.tutorial-hud-active #currentquest,
+body.tutorial-hud-active #homeworkhud,
+body.tutorial-hud-active #activitytracker{display:none!important}
+body.tutorial-hud-active:has(#traininggroundstitle.show) #tutorialhud{opacity:0;pointer-events:none}
+@media (min-width:721px){
+  body.tutorial-hud-active:not(.tablet-mode):not(.mobile-play-mode) #eventhud,
+  body.tutorial-hud-active:not(.tablet-mode):not(.mobile-play-mode) #landmap,
+  body.tutorial-hud-active:not(.tablet-mode):not(.mobile-play-mode) #chatlog{opacity:.08;pointer-events:none}
+  body.tutorial-hud-active:not(.tablet-mode):not(.mobile-play-mode) #supportdock>button{opacity:0;pointer-events:none}
+}
+
+@media (prefers-reduced-motion:reduce){
+  #game:after,#locationhud,#coords,#currentquest,#homeworkhud,#activitytracker,#tutorialhud,#coachhud,#townchoices,#eventhud,#landmap,#chatlog,#supportdock>button{transition:none!important}
+  #rewardmoment,#rewardmoment *,.rewardgain,#rewardwin,#rewardpanel.gate-clear-result *{animation:none!important;transition:none!important}
+}

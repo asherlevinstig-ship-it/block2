@@ -35,6 +35,18 @@ const HUD_UPDATE_INTERVAL_MS=125;
 let nextInfoHudAt=0,nextDungeonHudAt=0;
 let lastCoordsHudHTML='',lastCoordsHudHidden=false,lastDungeonPartyHTML='',lastDungeonPartyHidden=false;
 let lastObjectiveHudHTML='',lastObjectiveHudHidden=false;
+let presentationMode='';
+function syncPresentationMode(overworldBattle=false){
+  const next=dim==='dungeon'?'dungeon':dim==='event'?'event':overworldBattle?'combat':'exploration';
+  if(next===presentationMode)return;
+  presentationMode=next;
+  const body=document.body;
+  if(!body)return;
+  body.classList.toggle('presentation-combat',next==='combat'||next==='dungeon'||next==='event');
+  body.classList.toggle('presentation-dungeon',next==='dungeon');
+  body.dataset.presentation=next;
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
+}
 const landBoundaryToastEl=document.createElement('div');
 landBoundaryToastEl.id='landboundarytoast';
 landBoundaryToastEl.setAttribute('aria-live','polite');
@@ -3650,6 +3662,7 @@ function tick(now){
     const inMenu=overlay && !overlay.classList.contains('hidden');
     const tutorialJob=dim==='job'&&combatState.jobTutorialActive ? combatState.jobTutorialJob : '';
     const inMeditation=typeof inMeditationSpot==='function'&&inMeditationSpot();
+    syncPresentationMode(worldApi.inVisualBattle());
     SFX.tick(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern(), inMenu, !!cutscene, worldApi.inOverworldBattle(), tutorialJob, dim, inMeditation);
   }
   tickGates(dt, now);

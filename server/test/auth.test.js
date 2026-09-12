@@ -1222,6 +1222,40 @@ test('MySQL Recall avoids recently served questions when alternatives exist', as
   assert.equal(question.prompt, 'Fresh question');
 });
 
+test('MySQL Recall yields to the built-in bank when its only question was just served', async () => {
+  const pool = {
+    async execute(sql) {
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework_progress/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/SELECT id, name, code, school_id FROM subjects/i.test(sql) && /LOWER\(name\) = LOWER\(\?\)/i.test(sql)) {
+        return [[{ id: 5, name: 'Computer Science', code: 'CS', school_id: 12 }]];
+      }
+      if (/SELECT COUNT\(\*\) AS n\s+FROM game_question/i.test(sql)) return [[{ n: 1 }]];
+      if (/SELECT id, prompt, answers, correct_index/i.test(sql)) return [[{
+        id: 91,
+        prompt: 'What is hexadecimal 2F in binary?',
+        answers: JSON.stringify(['0010 1111', '0011 1110', '0010 1011', '1111 0010']),
+        correct_index: 0,
+        explanation: 'Convert each hexadecimal digit into its four-bit binary nibble.',
+        topic: 'Number systems',
+        stage: 'GCSE',
+        difficulty: 2,
+        spec: 'number-systems-base2-base10-base16',
+      }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const question = await store.loadRecallQuestion(
+    { id: 'student_9', accountType: 'student', role: 'student', schoolId: '12' },
+    { subject: 'Computer Science', avoidQuestionIds: ['db-recall-91'], avoidPrompts: ['What is hexadecimal 2F in binary?'] },
+  );
+  assert.equal(question, null);
+});
+
 test('MySQL game question analytics includes class students with zero attempts', async () => {
   const pool = {
     async execute(sql, params = []) {

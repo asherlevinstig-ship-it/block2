@@ -5,6 +5,14 @@ const os = require('os');
 const path = require('path');
 const { createStore, JsonStore, cleanShardId, sanitizeProfile } = require('../store');
 
+test('Recall mastery preserves complete built-in and database question IDs',()=>{
+  const builtIn='it_ns_hex_bin_003',db='db-recall-123456';
+  const clean=sanitizeProfile({recallMastery:{lastQuestionId:builtIn,items:{[builtIn]:{attempts:1,lastAt:10},[db]:{attempts:1,lastAt:20}}}});
+  assert.equal(clean.recallMastery.lastQuestionId,builtIn);
+  assert.ok(clean.recallMastery.items[builtIn]);
+  assert.ok(clean.recallMastery.items[db]);
+});
+
 class BrokenFirebaseStore {
   constructor() { throw new Error('invalid credentials'); }
 }

@@ -1766,6 +1766,9 @@ test('path selection persists and returns directly to town without ability train
   assert.match(networking, /combatApi\.restoreHydratedPath\(S\.path,serverPath\?'room':'auth-or-cache'\)/, 'late room hydration closes a picker opened by stale client state');
   assert.match(networking, /AUTH_UI\.savedPath\(\)/, 'login hydration can recover a confirmed path from the account-scoped browser cache');
   assert.match(combat, /if\(!onboardingDone\(\)\)\{\s*beginOnboarding\(\)/, 'a confirmed first path enters unfinished onboarding');
+  assert.match(combat, /const requiredForNewPlayer=!onboardingDone\(\);[\s\S]*\(requiredForNewPlayer\|\|!pathChoiceDismissedThisSession\)/, 'unfinished onboarding keeps retrying a required blank-path picker');
+  assert.match(combat, /if\(pathChoiceOpen&&S&&!S\.path&&!onboardingDone\(\)\)\{[\s\S]*return false;/, 'the required newcomer path picker cannot be dismissed');
+  assert.match(combat, /if\(requiredNewPlayerPathChoice\(el\)\)\{[\s\S]*existing\.remove\(\)/, 'the required newcomer picker does not render a misleading close control');
   assert.match(combat, /dimensionsApi\.placePlayerAtTownReturn\(\)/, 'completed players return through the dimension-owned safe town point');
   assert.match(combat, /const chosenPath=S\.path&&PATHS\[S\.path\]\?S\.path:'';[\s\S]*S\.path=chosenPath;/, 'fresh onboarding initialization preserves the confirmed path');
   assert.doesNotMatch(frame, /startAbilityTraining\(true\)/, 'the frame loop never auto-starts ability training');
@@ -2020,8 +2023,11 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(recall,/function submitAnswer\(index\)\{if\(!active\|\|answerPending\)return;answerPending=true;syncRecallPose\(\)/);
   assert.match(recall,/if\(m\.correct\)syncRecallPose\(\);else releaseRecallMovement\('recall-wrong'\)/);
   assert.doesNotMatch(recall,/releaseRecallMovement\('recall-submit'\)/);
-  assert.match(room,/avoidQuestionIds:\[mastery\.lastQuestionId,\.\.\.recent\]/);
+  assert.match(room,/const ids=\[\.\.\.new Set\(\[mastery\.lastQuestionId,\.\.\.recent,\.\.\.answered\]/);
+  assert.match(room,/avoidQuestionIds:avoid\.ids/);
+  assert.match(room,/avoidPrompts:avoid\.prompts/);
   assert.match(room,/this\.recallRecentQuestions\.set\(client\.sessionId,\[q\.id,\.\.\.recent\.filter/);
+  assert.match(room,/this\.recallRecentPrompts\.set\(client\.sessionId,\[prompt,\.\.\.recentPrompts\.filter/);
   assert.match(recall,/renderBars\(\);active=null;answerPending=false;if\(hall\)queueQuestionHallNext/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.mpb,body\.calm-town:not\(\.level-two-hud\) #stats \.hub\{display:none\}/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.spb[^{}]*\{display:none\}/);
@@ -2614,7 +2620,7 @@ test('town arrival offers every path with preview and permanent confirmation',()
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(combat,/if\(S&&!S\.path\) showPathSelection\(\)/);
   assert.match(combat,/const profileReady=!NET\.on\|\|NET\.profileReady===true/);
-  assert.match(combat,/S && !S\.path && profileReady && onboardingDone\(\) && inTown/);
+  assert.match(combat,/S && !S\.path && profileReady && inTown && \(requiredForNewPlayer\|\|!pathChoiceDismissedThisSession\)/);
   assert.match(combat,/shadow:\{role:'Mobile Assassin'/);
   assert.match(combat,/mage:\{role:'Ranged Control'/);
   assert.match(combat,/guardian:\{role:'Durable Frontliner',difficulty:'Easiest to learn',beginner:true/);
@@ -2784,6 +2790,9 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(visuals,/volleyWarn/);
   assert.match(visuals,/bossStyleWarn/);
   assert.match(visuals,/bossStyleBurst/);
+  assert.match(visuals,/Number\.isFinite\(\+q\.y\)\?\+q\.y:9/,'targeted boss telegraphs use replicated terrain height');
+  assert.doesNotMatch(visuals,/ringPulse\(q\.x,9\.08,q\.z/,'targeted boss warnings are not buried at a fixed dungeon height');
+  assert.doesNotMatch(visuals,/burst\(q\.x,9\.(?:25|35),q\.z/,'targeted boss impacts are not buried at a fixed dungeon height');
   assert.match(visuals,/cinderWind/);
   assert.match(visuals,/thunderWind/);
   assert.match(visuals,/riftWind/);

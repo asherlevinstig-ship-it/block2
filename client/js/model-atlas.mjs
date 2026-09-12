@@ -1,6 +1,7 @@
-// Model constructors own these textures. All registered materials share the
-// same Lambert settings and receive the same combat tint/opacity updates.
-export function atlasModelMaterials({THREE,root,mats}){
+// All registered materials share Lambert settings after atlasing. Most model
+// constructors own their source textures; callers using a shared texture cache
+// must leave disposeSourceTextures false.
+export function atlasModelMaterials({THREE,root,mats,disposeSourceTextures=true}){
   if(!mats.length||mats.some(m=>!m.isMeshLambertMaterial||!m.map?.image))return;
   const tile=32,columns=4,rows=Math.ceil(mats.length/columns);
   const canvas=document.createElement('canvas');canvas.width=columns*tile;canvas.height=rows*tile;
@@ -28,6 +29,6 @@ export function atlasModelMaterials({THREE,root,mats}){
     }
     geometry.clearGroups();mesh.geometry=geometry;mesh.material=material;previous.dispose();
   });
-  for(const m of mats){m.map.dispose();m.dispose();}
+  for(const m of mats){if(disposeSourceTextures)m.map.dispose();m.dispose();}
   mats.splice(0,mats.length,material);
 }

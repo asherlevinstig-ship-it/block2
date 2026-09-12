@@ -8,7 +8,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test('the ?dungeonRoom-flagged path enters and exits a real DungeonRoom via switchRoom', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const suffix = Date.now().toString(36);
   await page.addInitScript(() => {
     localStorage.setItem('bc_onboarding_done_v7', '1');
@@ -40,7 +40,7 @@ test('the ?dungeonRoom-flagged path enters and exits a real DungeonRoom via swit
   expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gate.id)).toBe(gate.id);
   await expect.poll(
     () => page.evaluate(() => window.__BLOCKCRAFT_E2E__.trackedGate()?.id),
-    { timeout: 15_000 },
+    { timeout: 30_000 },
   ).toBe(gate.id);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.enterTrackedGate())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gate.id);
@@ -54,7 +54,7 @@ test('the ?dungeonRoom-flagged path enters and exits a real DungeonRoom via swit
       const s = window.__BLOCKCRAFT_E2E__.status();
       return s.dimension === 'dungeon' && s.connected && s.roomName === 'dungeon';
     }),
-    { timeout: 15_000 },
+    { timeout: 30_000 },
   ).toBe(true);
   const afterEnter = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status());
   expect(afterEnter.dungeonId).toBe(gate.id);

@@ -1397,7 +1397,7 @@ function rebuildAllChunks(){
 }
 // ---------------- dungeon decoration & atmosphere (client-only cosmetics) ----------------
 const dungeonDecor=[];
-function clearDungeonDecor(){ for(const m of dungeonDecor){scene.remove(m);if(m.userData.rescueKey){const materials=new Set(),geometries=new Set();m.traverse(o=>{if(o.geometry&&!o.isSprite)geometries.add(o.geometry);if(o.isSprite&&o.material.map)o.material.map.dispose();for(const mat of Array.isArray(o.material)?o.material:o.material?[o.material]:[])materials.add(mat);});for(const g of geometries)g.dispose();for(const mat of materials){mat.dispose();}}} dungeonDecor.length=0; }
+function clearDungeonDecor(){ for(const m of dungeonDecor){scene.remove(m);if(m.userData.rescueKey||m.userData.visualSliceDisposable){const materials=new Set(),geometries=new Set();m.traverse(o=>{if(o.geometry&&!o.isSprite)geometries.add(o.geometry);if(o.isSprite&&o.material.map)o.material.map.dispose();for(const mat of Array.isArray(o.material)?o.material:o.material?[o.material]:[])materials.add(mat);});for(const g of geometries)g.dispose();for(const mat of materials){mat.dispose();}}} dungeonDecor.length=0; }
 function dDecor(m){ scene.add(m); dungeonDecor.push(m); return m; }
 const AFFIX_STYLE={
   Empowered:{col:0xa855f7,label:'POWER'},
@@ -1582,6 +1582,26 @@ function addHallLantern(x,ceilY,z){
   gl.userData.pulse={base:.26,phase:hash2(x*7,z*11)*6.28};
   return dDecor(gl);
 }
+function addERankThreshold(entrance,floor){
+  const rx=entrance.rx||entrance.r||3,rz=entrance.rz||entrance.r||3;
+  const halfWidth=Math.min(2.15,Math.max(1.25,rx-.9));
+  const group=new THREE.Group();group.name='e-rank-threshold';group.userData.visualSliceDisposable=true;
+  const stone=new THREE.MeshLambertMaterial({color:0x27343c});
+  const crystal=new THREE.MeshBasicMaterial({color:0x75cbe8});
+  const gold=new THREE.MeshBasicMaterial({color:0xe8bd62});
+  for(const side of [-1,1]){
+    const post=new THREE.Mesh(new THREE.BoxGeometry(.38,2.75,.38),stone);
+    post.position.set(side*halfWidth,1.38,0);group.add(post);
+    const seam=new THREE.Mesh(new THREE.BoxGeometry(.09,1.65,.05),crystal);
+    seam.position.set(side*halfWidth,1.45,.22);group.add(seam);
+  }
+  const lintel=new THREE.Mesh(new THREE.BoxGeometry(halfWidth*2+.36,.3,.42),stone);
+  lintel.position.y=2.85;group.add(lintel);
+  const crest=new THREE.Mesh(new THREE.OctahedronGeometry(.23,0),gold);
+  crest.position.set(0,3.16,.24);group.add(crest);
+  group.position.set(entrance.x,floor,entrance.z-(rz-1.1));
+  return dDecor(group);
+}
 // Reconstruct the L-shaped corridors carved between consecutive *main* rooms (x-leg at the
 // previous room's z, then z-leg at the current room's x — mirrors carveDungeonHall exactly)
 // and hang warm lanterns down their centerlines so the halls read as travelled arteries.
@@ -1640,6 +1660,7 @@ function placeDungeonDecor(dgn){
     // rank-lit waystone marking the way home: kept on the +z wall, opposite the exit portal,
     // so the entrance room's landmarks don't pile up in one corner
     const e=dgn.entrance, erx=e.rx||e.r||3, erz=e.rz||e.r||3;
+    if((dgn.rank|0)===0)addERankThreshold(e,FLOOR);
     const side=hash2(e.x,e.z)<.5?-1:1;
     const wx=e.x+side*(erx-1.2), wz=e.z+(erz-1.2);
     const base=new THREE.Mesh(new THREE.BoxGeometry(1.05,.3,1.05),new THREE.MeshLambertMaterial({color:0x2c2c34}));

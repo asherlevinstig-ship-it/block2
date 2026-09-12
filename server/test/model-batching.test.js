@@ -76,3 +76,23 @@ test('model atlas keeps face UVs, pivots and combat tint controls', async () => 
     assert.equal(head.material.opacity,.5);
   } finally {if(previousDocument===undefined)delete global.document;else global.document=previousDocument;}
 });
+
+test('villager atlasing preserves shared source textures and separates transparent shadows',async()=>{
+  const {atlasModelMaterials}=await import('../../client/js/model-atlas.mjs');
+  const previousDocument=global.document;
+  global.document={createElement:()=>({getContext:()=>({drawImage:()=>{}})})};
+  try{
+    const root=new THREE.Group(),source=new THREE.Texture({width:16,height:16});
+    let disposed=0;source.dispose=()=>{disposed++;};
+    const bodyMat=new THREE.MeshLambertMaterial({map:source});
+    const shadowMat=new THREE.MeshBasicMaterial({map:source,transparent:true});
+    const body=new THREE.Mesh(new THREE.BoxGeometry(),bodyMat),shadow=new THREE.Mesh(new THREE.PlaneGeometry(),shadowMat);
+    root.add(body,shadow);
+    const mats=[bodyMat];
+    atlasModelMaterials({THREE,root,mats,disposeSourceTextures:false});
+    assert.equal(disposed,0);
+    assert.equal(body.material,mats[0]);
+    assert.equal(shadow.material,shadowMat);
+    assert.equal(body.material.map===source,false);
+  }finally{if(previousDocument===undefined)delete global.document;else global.document=previousDocument;}
+});

@@ -1,5 +1,6 @@
 import {mobDistanceTierSq,consumeEntityStep} from './performance-budget.mjs';
 import {disposeObjectTree} from './three-disposal.mjs';
+import {combatCue,ordinaryCombatPhase,ordinaryCombatPose,ordinaryFollowThrough,ordinaryFollowPose} from './combat-visual-language.mjs';
 
 export function createReplicationVisuals({NET,player,familiarReaction=()=>{},companions=()=>null}){
 function dangerCircle(x,y,z,radius,life){
@@ -360,6 +361,12 @@ function textSprite(text,color='#ffffff',scale=1){
   const cv=document.createElement('canvas');cv.width=256;cv.height=64;const cx=cv.getContext('2d');cx.font='bold 26px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.strokeStyle='rgba(0,0,0,.9)';cx.lineWidth=7;cx.strokeText(text,128,32);cx.fillStyle=color;cx.fillText(text,128,32);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));sp.scale.set(2.8*scale,.7*scale,1);return sp;
 }
+function setTextSprite(sp,text,color){
+  if(sp.userData.cueText===text&&sp.userData.cueColor===color)return;
+  const texture=sp.material.map,cv=texture.image,cx=cv.getContext('2d');
+  cx.clearRect(0,0,cv.width,cv.height);cx.font='bold 26px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.strokeStyle='rgba(0,0,0,.9)';cx.lineWidth=7;cx.strokeText(text,128,32);cx.fillStyle=color;cx.fillText(text,128,32);
+  texture.needsUpdate=true;sp.userData.cueText=text;sp.userData.cueColor=color;
+}
 function decorateEncounter(m,ref){
   let name=ref.displayName||ENCOUNTER_NAMES[ref.kind];if(!name&&isAnimalKind(ref.kind))return;
   if(!name)name=ref.kind==='boss'?'Gate Monarch':String(ref.kind||'Enemy').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
@@ -373,7 +380,7 @@ function decorateEncounter(m,ref){
       mat.emissive.setRGB(.055,.065,.085);mat.emissiveIntensity=1;
     }
   }
-  const bodyScale=m.silhouetteScale||{x:1,y:1,z:1},width=biomeHostile?.96:1.29,labelScale=biomeHostile?.78:1;
+  const bodyScale=m.silhouetteScale||{x:1,y:1,z:1},width=biomeHostile?.96:1.29,labelScale=biomeHostile?.7:.82;
   const label=textSprite(name,breached?'#ff3b2f':biomeHostile?BIOME_NAME_COLOR[biome]:friendly?'#8edcff':hostile?'#ff9b82':'#fff',breached?1.16:labelScale);
   label.position.y=(m.wagon?2.35:biomeHostile?2.38:2.65)/bodyScale.y;
   if(biomeHostile)label.scale.set(label.scale.x/bodyScale.x,label.scale.y/bodyScale.y,1/bodyScale.z);
@@ -383,14 +390,18 @@ function decorateEncounter(m,ref){
   bg.scale.set(bgW/bodyScale.x,(biomeHostile?.095:.13)/bodyScale.y,1/bodyScale.z);fill.scale.set(width/bodyScale.x,barH/bodyScale.y,1/bodyScale.z);bg.position.y=label.position.y-(biomeHostile?.3:.42)/bodyScale.y;fill.position.set(0,bg.position.y,.01);bg.renderOrder=21;fill.renderOrder=22;m.grp.add(bg,fill);m.encounterUi={label,bg,fill,friendly,hostile,width,bodyScale,breached};
   if(!biomeHostile){const ring=new THREE.Mesh(new THREE.TorusGeometry(breached?1.35:m.wagon?1.25:.58,.035,6,30),new THREE.MeshBasicMaterial({color:breached?0xff2f2f:friendly?0x5dd5ff:0xff5c46,transparent:true,opacity:breached?.92:.7,depthWrite:false}));ring.rotation.x=Math.PI/2;ring.position.y=.06;m.grp.add(ring);m.encounterUi.ring=ring;}
   if(banditHostile){const alert=textSprite('?', '#ffd45c',.55),engaged=textSprite('!', '#ff6048',.62);alert.position.y=engaged.position.y=label.position.y+.48;m.grp.add(alert,engaged);m.encounterUi.alert=alert;m.encounterUi.engaged=engaged;}
-  if(hostile){const radius=breached?4.6:ref.kind==='bandit_captain'?4.05:ref.kind==='bandit_brute'?3.65:m.boss?3.2:1.35;const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.1,radius,48),new THREE.MeshBasicMaterial({color:breached?0xff1515:ref.kind==='bandit_captain'||m.boss?0xff3429:0xff8a45,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false,depthTest:false,fog:false}));tell.renderOrder=100;tell.rotation.x=-Math.PI/2;tell.position.y=.08;tell.visible=false;m.grp.add(tell);m.encounterUi.tell=tell;const attack=textSprite(breached?'BREACH':'ATTACK', breached?'#ffdf6b':'#ffd05b',breached?.56:.48),stunned=textSprite('STUNNED', '#ffd24a',.48),frozen=textSprite('FROZEN', '#8eeaff',.48),recovery=textSprite('RECOVERING', '#8eeaff',.48);for(const status of [attack,stunned,frozen,recovery]){status.position.y=label.position.y+.46;status.visible=false;m.grp.add(status);}m.encounterUi.attackStatus=attack;m.encounterUi.stunStatus=stunned;m.encounterUi.frozenStatus=frozen;m.encounterUi.recoveryStatus=recovery;if(ref.kind==='bandit_captain'||breached)m.spawnT=2.2;}
+  if(hostile){const radius=breached?4.6:ref.kind==='bandit_captain'?4.05:ref.kind==='bandit_brute'?3.65:m.boss?3.2:1.35;const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.1,radius,48),new THREE.MeshBasicMaterial({color:breached?0xff1515:ref.kind==='bandit_captain'||m.boss?0xff3429:0xff8a45,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false,depthTest:false,fog:false}));tell.renderOrder=100;tell.rotation.x=-Math.PI/2;tell.position.y=.08;tell.visible=false;m.grp.add(tell);m.encounterUi.tell=tell;m.encounterUi.tellRadius=radius;const attack=textSprite(breached?'BREACH':'ATTACK', breached?'#ffdf6b':'#ffd05b',breached?.56:.48),stunned=textSprite('STUNNED', '#ffd24a',.48),frozen=textSprite('FROZEN', '#8eeaff',.48),recovery=textSprite('RECOVERING', '#8eeaff',.48);for(const status of [attack,stunned,frozen,recovery]){status.position.y=label.position.y+.46;status.visible=false;m.grp.add(status);}m.encounterUi.attackStatus=attack;m.encounterUi.stunStatus=stunned;m.encounterUi.frozenStatus=frozen;m.encounterUi.recoveryStatus=recovery;if(ref.kind==='bandit_captain'||breached)m.spawnT=2.2;}
 }
 function tickEncounterReadability(m,dt,t){
   const u=m.encounterUi;if(!u)return;const r=m.ref,pct=Math.max(0,Math.min(1,(r.hp||0)/(r.maxHp||1))),scaledWidth=u.width/(u.bodyScale&&u.bodyScale.x||1);u.fill.scale.x=scaledWidth*pct;u.fill.position.x=-(scaledWidth-u.fill.scale.x)/2;
+  const distance=Math.hypot(m.grp.position.x-player.pos.x,m.grp.position.z-player.pos.z),important=m.boss||u.breached;
+  u.label.visible=distance<=(important?22:u.friendly?14:9);
+  u.bg.visible=u.fill.visible=distance<=(important?24:u.friendly?16:11);
+  if(u.ring)u.ring.visible=distance<=(important?18:12);
   if(u.alert){const aware=['draw','windup','bruteWind','rally'].includes(r.state);u.alert.visible=!aware&&r.state!=='surrender'&&r.state!=='retreat';if(u.engaged)u.engaged.visible=aware;}
   if(r.state==='retreat'){u.label.material.color.set(0xffd26b);if(u.ring)u.ring.material.color.set(0xffc34d);}else if(u.ring)u.ring.material.color.set(u.friendly?0x5dd5ff:0xff5c46);
   if(m.spawnT>0){m.spawnT=Math.max(0,m.spawnT-dt);m.grp.scale.y=1+Math.sin((2.2-m.spawnT)*8)*.08;if(u.tell){u.tell.visible=true;u.tell.scale.setScalar(1+(2.2-m.spawnT)*.8);u.tell.material.opacity=m.spawnT/2.2;}}
-  else if(u.tell){const warning=['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind','eldritchLeapWind','eldritchLeap'].includes(r.state);u.tell.visible=warning;if(u.attackStatus)u.attackStatus.visible=warning;if(u.stunStatus)u.stunStatus.visible=r.state==='stun';if(u.frozenStatus)u.frozenStatus.visible=r.state==='frozen';if(warning){const charge=Math.min(1,(m.aT||0)/(r.state==='captainCleave'?.9:.7));u.tell.scale.setScalar(1);u.tell.material.opacity=.42+charge*.5;}}
+  else if(u.tell){const cue=combatCue(r.state),warning=!!cue;u.tell.visible=warning&&cue.radius>0;if(u.attackStatus){u.attackStatus.visible=warning;if(warning)setTextSprite(u.attackStatus,u.breached?'BREACH':cue.label,`#${cue.color.toString(16).padStart(6,'0')}`);}if(u.stunStatus)u.stunStatus.visible=r.state==='stun';if(u.frozenStatus)u.frozenStatus.visible=r.state==='frozen';if(warning&&cue.radius>0){const charge=Math.min(1,(m.aT||0)/cue.duration);u.tell.scale.setScalar(cue.radius/u.tellRadius);u.tell.material.color.setHex(cue.color);u.tell.material.opacity=.32+charge*.58;}}
   if(u.recoveryStatus)u.recoveryStatus.visible=r.state==='recover';
   if(m.wagon){const wreck=r.kind==='caravan_wreck',damaged=pct<.65,critical=pct<.3;m.grp.rotation.z=wreck?.22:0;if(m.mats[0])m.mats[0].color.set(wreck?0x34271f:critical?0x49301f:damaged?0x5b3822:0x704321);if((damaged||wreck)&&m.grp.visible&&Math.random()<dt*(wreck?18:critical?14:6))spawnParticle({x:m.grp.position.x+(Math.random()-.5),y:m.grp.position.y+1.2,z:m.grp.position.z+(Math.random()-.5),vx:(Math.random()-.5)*.25,vy:.8,vz:(Math.random()-.5)*.25,life:1,grav:-.1,r:.28,g:.28,b:.28});}
 }
@@ -489,6 +500,7 @@ function netAddMob(id, ref){
     kind:ref.kind, kb:new THREE.Vector3(), phase:Math.random()*10, hitT:0, slowT:0,
     aT:0, lastState:'', cdx:0, cdz:0,
     boss};
+  if(ref.kind!=='zombie'&&ref.kind!=='skeleton')m.combatProfile=null;
   if(m.boss){
     m.grp.scale.setScalar(1.6);
     m.baseCol=[1,1,1];                          // the Gate Monarch model carries its own palette
@@ -545,7 +557,8 @@ function netRemoveMob(id){
     ringPulse(p.x,p.y+.08,p.z,dead.boss?2.5:1.1,0x8b5cf6,.45);
     disposeObjectTree(dead.grp);mobs.splice(i,1);return;
   }
-  burst(p.x,p.y+1,p.z,color,major?34:18,major?4.2:2.6,major?3:2.2,major?.9:.7);
+  const aftermath=dead.combatProfile&&dead.combatProfile.aftermath||color;
+  burst(p.x,p.y+1,p.z,aftermath,major?34:18,major?4.2:2.6,major?3:2.2,major?.9:.7);
   if(major)ringPulse(p.x,p.y+.08,p.z,dead.boss?3.2:1.9,dead.boss?0xff4938:0xffa34f,.4);
   SFX.kill();
   mobs.splice(i,1);
@@ -611,7 +624,7 @@ function applyMobReactionPose(m,p,t,dt){
 }
 function netMobTick(m, dt, t){
   const r=m.ref, p=m.grp.position;
-  if((r.hp||0)<(m.hp||0)){const lost=(m.hp||0)-(r.hp||0),ratio=lost/Math.max(1,r.maxHp||m.hp||1);m.hitT=.18+Math.min(.14,ratio*.5);m.hitLean=(Math.random()<.5?-1:1)*(.08+Math.min(.14,ratio));const flash=m.encounterUi&&m.encounterUi.hostile?[1,.25,.18]:[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(flash[0],flash[1],flash[2]));if(m.grp.visible){burst(p.x,p.y+1,p.z,flash,ratio>.2?12:7,ratio>.2?2.2:1.5,1.6,.28);if(ratio>.2)ringPulse(p.x,p.y+.08,p.z,1.15,0xffffff,.18);}}m.hp=r.hp;
+  if((r.hp||0)<(m.hp||0)){const lost=(m.hp||0)-(r.hp||0),ratio=lost/Math.max(1,r.maxHp||m.hp||1);m.hitT=.18+Math.min(.14,ratio*.5);m.hitLean=(Math.random()<.5?-1:1)*(.08+Math.min(.14,ratio));const flash=m.encounterUi&&m.encounterUi.hostile?[1,.88,.58]:[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(flash[0],flash[1],flash[2]));if(m.grp.visible){burst(p.x,p.y+1,p.z,flash,ratio>.2?12:7,ratio>.2?2.2:1.5,1.6,.28);if(ratio>.2)ringPulse(p.x,p.y+.08,p.z,1.15,0xffffff,.18);}}m.hp=r.hp;
   const dx=p.x-player.pos.x,dz=p.z-player.pos.z,important=!!(m.boss||m.elite||m.kind==='bandit_captain');
   const tier=mobDistanceTierSq(dx*dx+dz*dz,important);
   m.grp.visible = (r.dgn||'')===NET.dgn&&tier<3;
@@ -666,8 +679,17 @@ function netMobTick(m, dt, t){
   // state-driven telegraphs
   const st=r.state||'';
   if(st!==m.lastState){
+    if(m.combatProfile)m.ordinaryFollowT=ordinaryFollowThrough(m.lastState,st,m.ordinaryFollowT);
     m.lastState=st; m.aT=0;
-    if(['bruteWind','packWind','graveWind','captainCleave','slamWind','bossMeleeWind','graveRingWind','chargeWind','volleyWind','spikeWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind','eldritchLeapWind','eldritchLeap'].includes(st)&&
+    const family=m.combatProfile&&m.combatProfile.family,phase=ordinaryCombatPhase(st),cue=combatCue(st);
+    if(family&&tier===0&&phase==='anticipation'&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<12){
+      ringPulse(p.x,p.y+.075,p.z,family==='skeleton'?.72:1.02,m.combatProfile.accent,.28);
+      burst(p.x,p.y+1.25,p.z,family==='skeleton'?[.44,.88,.9]:[1,.38,.24],4,.5,.55,.22);
+    }else if(family&&tier===0&&m.ordinaryFollowT>0&&phase==='idle'){
+      // A swing or release cue, not a predicted hit. Damage feedback stays HP-driven.
+      burst(p.x,p.y+1.15,p.z,family==='skeleton'?[1,.82,.31]:[1,.5,.27],3,.55,.7,.18);
+    }
+    if(cue&&cue.type!=='ranged'&&
        m.grp.visible&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<11&&
        (m.boss||m.elite||m.kind==='bandit_captain'||m.kind==='bandit_brute'||m.kind==='redclaw'||m.kind==='gale_stalker'))SFX.slamWarn();
     if(st==='draw'&&m.kind==='sun_archer'&&m.grp.visible&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<14)ringPulse(p.x,p.y+.08,p.z,.72,0xffd34f,.22);
@@ -677,6 +699,7 @@ function netMobTick(m, dt, t){
     else if(m.hitT<=0){ const bc=m.baseCol||[1,1,1]; m.mats.forEach(mm=>mm.color.setRGB(bc[0],bc[1],bc[2])); }
   }
   m.aT+=dt;
+  if(m.ordinaryFollowT>0)m.ordinaryFollowT=Math.max(0,m.ordinaryFollowT-dt);
   if(m.biomeTell){
     const mesa=st==='bruteWind'&&m.kind==='redclaw',pack=st==='packWind'&&m.kind==='gale_stalker',active=mesa||pack;
     m.biomeTell.visible=active;
@@ -763,6 +786,21 @@ function netMobTick(m, dt, t){
       m.arms[1].rotation.x=-1.05+Math.cos(t*5+m.phase)*.1;
     } else if(m.arms){
       m.arms[0].rotation.x*= .9; m.arms[1].rotation.x*=.9;
+    }
+  }
+  // Ordinary foes follow the same anticipation → contact → recovery rhythm,
+  // while keeping their melee and bow silhouettes distinct.
+  if(m.combatProfile&&!m.boss){
+    const follow=ordinaryFollowPose(m.ordinaryFollowT||0);
+    const pose=ordinaryCombatPose(m.combatProfile.family,follow?follow.state:st,follow?follow.elapsed:m.aT);
+    if(pose){
+      m.arms[0].rotation.x=pose.left;m.arms[1].rotation.x=pose.right;
+      if(m.head)m.head.rotation.x=pose.head;
+      if(m.bow)m.bow.rotation.x=pose.bow;
+      if(m.hitT<=0)m.grp.rotation.z=pose.lean;
+    }else{
+      if(m.head)m.head.rotation.x*=Math.max(0,1-dt*9);
+      if(m.bow)m.bow.rotation.x*=Math.max(0,1-dt*9);
     }
   }
   if(m.boss){
@@ -1015,26 +1053,28 @@ function netFx(m){
     showName(m.quick?'Quick Shot - break line!':'Arrow Draw - sidestep!');
   } else if(m.t==='volleyWarn'){
     SFX.slamWarn();
+    const duration=Math.max(.1,Math.min(3,(Number(m.durationMs)||700)/1000));
     const mob=mobs.find(o=>o.net && o.netId===m.id),p=mob&&mob.grp&&mob.grp.position;
     if(p){
       const dx=m.dx||0,dz=m.dz||1;
       for(const off of m.wide?[-.44,-.22,0,.22,.44]:[-.24,0,.24]){
         const ca=Math.cos(off),sa=Math.sin(off),vx=dx*ca-dz*sa,vz=dx*sa+dz*ca;
-        energyTrailVfx(p.x,p.y+1.25,p.z,p.x+vx*10,p.y+1.25,p.z+vz*10,0xff7040,.04,.55,.58);
+        energyTrailVfx(p.x,p.y+1.25,p.z,p.x+vx*10,p.y+1.25,p.z+vz*10,0xffd34f,.04,duration,.68);
       }
     }
     showName(m.wide?'Watcher Volley - leave the lanes!':'Volley - leave the lanes!');
   } else if(m.t==='graveRingWarn'){
-    SFX.slamWarn(); ringPulse(m.x,m.y+.08,m.z,6.2,0x7c3aed,1.25);
-    ringPulse(m.x,m.y+.09,m.z,2.2,0x25103f,1.25);
+    const duration=Math.max(.1,Math.min(3,(Number(m.durationMs)||1350)/1000));
+    SFX.slamWarn(); ringPulse(m.x,m.y+.08,m.z,6.2,0x7c3aed,duration);
+    ringPulse(m.x,m.y+.09,m.z,2.2,0x25103f,duration);
     showName('Grave Ring — get close or move beyond the outer ring!');
   } else if(m.t==='rockWarn'||m.t==='rootWarn'){
     const root=m.t==='rootWarn',col=root?0x42d45b:0xff8a2a;
-    for(const q of m.targets||[])ringPulse(q.x,9.08,q.z,1.65,col,1.05);
+    for(const q of m.targets||[]){const y=Number.isFinite(+q.y)?+q.y:9;ringPulse(q.x,y+.08,q.z,1.65,col,1.05);}
     showName(root?'Roots rising - move!':'Falling rock - move!');
   } else if(m.t==='rockFall'||m.t==='rootBurst'){
     const root=m.t==='rootBurst',color=root?[.2,.78,.28]:[.72,.42,.2];
-    for(const q of m.targets||[]){burst(q.x,9.25,q.z,color,18,2.2,2.3,.5);ringPulse(q.x,9.08,q.z,1.65,root?0x42d45b:0xff8a2a,.25);}
+    for(const q of m.targets||[]){const y=Number.isFinite(+q.y)?+q.y:9;burst(q.x,y+.25,q.z,color,18,2.2,2.3,.5);ringPulse(q.x,y+.08,q.z,1.65,root?0x42d45b:0xff8a2a,.25);}
     camShake=Math.max(camShake,.35);
   } else if(m.t==='tideWarn'){
     ringPulse(m.x,m.y+.08,m.z,7,0x38bdf8,1.25);ringPulse(m.x,m.y+.09,m.z,3,0x164e63,1.25);
@@ -1058,13 +1098,13 @@ function netFx(m){
       ringPulse(m.x,m.y+.08,m.z,3.4,col,1.05);
       for(let i=0;i<12;i++){const a=i/12*6.283,r=1.2+(i%3)*.55;spawnParticle({x:m.x+Math.cos(a)*r,y:m.y+.45+(i%4)*.3,z:m.z+Math.sin(a)*r,vx:0,vy:.18,vz:0,life:.75,grav:0,r:.95,g:.25,b:.9});}
     }else{
-      for(const q of m.targets||[])ringPulse(q.x,9.08,q.z,pat==='prior'||pat==='abyssal'?2.4:2.15,col,1.05);
+      for(const q of m.targets||[]){const y=Number.isFinite(+q.y)?+q.y:9;ringPulse(q.x,y+.08,q.z,pat==='prior'||pat==='abyssal'?2.4:2.15,col,1.05);}
     }
     showName(labels[m.style]||'Boss signature - move!');
   } else if(m.t==='bossStyleBurst'){
     const c={cinder_smith:[1,.34,.08],castellan:[.95,.75,.36],choir:[.64,.94,1],void_prior:[.48,.25,.92],rime_giant:[.72,.94,1],thunder_warden:[.32,.82,1],buried_monarch:[.95,.7,.22],abyssal_gatekeeper:[.18,.85,.92],rift_monarch:[.95,.25,.9],eternal_warden:[.91,.84,1],starforged_titan:[1,.5,.18],ashen_sovereign:[.75,.35,1]}[m.style]||[1,.85,.35];
     const hex=new THREE.Color(c[0],c[1],c[2]).getHex();
-    if(m.targets&&m.targets.length)for(const q of m.targets){burst(q.x,9.35,q.z,c,20,2.6,2.5,.55);ringPulse(q.x,9.08,q.z,2.2,hex,.32);}
+    if(m.targets&&m.targets.length)for(const q of m.targets){const y=Number.isFinite(+q.y)?+q.y:9;burst(q.x,y+.35,q.z,c,20,2.6,2.5,.55);ringPulse(q.x,y+.08,q.z,2.2,hex,.32);}
     burst(m.x,m.y+1,m.z,c,34,5.6,3.2,.72);ringPulse(m.x,m.y+.08,m.z,m.style==='buried_monarch'?8:m.style==='castellan'?6.8:3.4,hex,.38);
     if(m.style==='thunder_warden')addLightningBeam(m.x,m.y+2,m.z,m.x+(m.dx||0)*10,m.y+1.2,m.z+(m.dz||1)*10,.9);
     camShake=Math.max(camShake,.42);
@@ -1681,21 +1721,26 @@ function decorateFirstPublicGate(local){
   if(!local||!local.grp||local.firstGateDecor||(local.rank|0)!==0||(local.kind||'public')!=='public')return;
   local.firstGateDecor=true;
   const group=new THREE.Group();
-  const mat=new THREE.MeshBasicMaterial({color:0x8cff9a,transparent:true,opacity:.34,blending:THREE.AdditiveBlending,depthWrite:false});
-  const gold=new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.82,blending:THREE.AdditiveBlending,depthWrite:false});
-  const base=new THREE.Mesh(new THREE.RingGeometry(1.9,2.35,44),mat);
+  group.name='first-gate-threshold';
+  const mat=new THREE.MeshBasicMaterial({color:0x8cff9a,transparent:true,opacity:.26,blending:THREE.AdditiveBlending,depthWrite:false});
+  const gold=new THREE.MeshBasicMaterial({color:0xe8bd62,transparent:true,opacity:.72,blending:THREE.AdditiveBlending,depthWrite:false});
+  const crystal=new THREE.MeshBasicMaterial({color:0x75cbe8,transparent:true,opacity:.82,blending:THREE.AdditiveBlending,depthWrite:false});
+  const stone=new THREE.MeshLambertMaterial({color:0x24323a});
+  const base=new THREE.Mesh(new THREE.RingGeometry(1.9,2.35,8),mat);
   base.rotation.x=-Math.PI/2;base.position.y=.08;group.add(base);
   for(const x of [-2.05,2.05]){
-    const pylon=new THREE.Mesh(new THREE.CylinderGeometry(.08,.14,2.8,6),gold);
-    pylon.position.set(x,1.42,0);group.add(pylon);
-    const flame=new THREE.Mesh(new THREE.SphereGeometry(.22,8,6),mat);
-    flame.position.set(x,2.98,0);group.add(flame);
+    const pylon=new THREE.Mesh(new THREE.BoxGeometry(.42,2.55,.42),stone);
+    pylon.position.set(x,1.28,0);group.add(pylon);
+    const seam=new THREE.Mesh(new THREE.BoxGeometry(.12,1.55,.045),crystal);
+    seam.position.set(x,1.42,.24);group.add(seam);
+    const cap=new THREE.Mesh(new THREE.OctahedronGeometry(.26,0),gold);
+    cap.position.set(x,2.76,0);group.add(cap);
   }
   const canvas=document.createElement('canvas');canvas.width=256;canvas.height=72;
   const cx=canvas.getContext('2d');
   cx.fillStyle='rgba(5,14,20,.8)';cx.fillRect(8,10,240,52);
-  cx.strokeStyle='#8cff9a';cx.lineWidth=4;cx.strokeRect(8,10,240,52);
-  cx.font='bold 24px Courier New';cx.textAlign='center';cx.fillStyle='#eaffc8';cx.fillText('FIRST GATE',128,42);
+  cx.strokeStyle='#e8bd62';cx.lineWidth=3;cx.strokeRect(8,10,240,52);
+  cx.font='bold 24px sans-serif';cx.textAlign='center';cx.fillStyle='#d8f4ff';cx.fillText('FIRST GATE',128,42);
   const tex=new THREE.CanvasTexture(canvas);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
   const banner=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}));
   banner.position.y=5.05;banner.scale.set(4.1,1.15,1);group.add(banner);

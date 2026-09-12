@@ -538,7 +538,8 @@ class SpawningMixin {
         const rooted = st === 'rootWind' || control;
         this.sendSpace(m.dgn, 'fx', { t: rooted ? 'rootBurst' : 'rockFall', targets: meta.signatureTargets || [], dgn: m.dgn || '' });
         for (const target of meta.signatureTargets || []) for (const s of candidates) {
-          if (Math.hypot(s.p.x - target.x, s.p.z - target.z) > 1.65) continue;
+          if (Math.hypot(s.p.x - target.x, s.p.z - target.z) > 1.65 ||
+              Math.abs(s.p.y - (Number.isFinite(target.y) ? target.y : m.y)) > 2.8) continue;
           const c = this.clients.find(client => client.sessionId === s.sid);
           if (!c) continue;
           this.hurtPlayer(c, rooted ? Math.max(1, meta.slamDmg - (control ? 5 : 3)) : meta.slamDmg, control ? 'boss_control_roots' : rooted ? 'keeper_roots' : 'falling_rock', { attack: control ? 'Control Roots' : rooted ? 'Keeper Roots' : 'Falling Rock' });
@@ -582,7 +583,8 @@ class SpawningMixin {
       if (meta.stateT <= 0) {
         this.sendSpace(m.dgn, 'fx', { t: 'rootBurst', targets: meta.signatureTargets || [], dgn: m.dgn || '' });
         for (const target of meta.signatureTargets || []) for (const s of candidates) {
-          if (Math.hypot(s.p.x - target.x, s.p.z - target.z) > 2.0) continue;
+          if (Math.hypot(s.p.x - target.x, s.p.z - target.z) > 2.0 ||
+              Math.abs(s.p.y - (Number.isFinite(target.y) ? target.y : m.y)) > 2.8) continue;
           const c = this.clients.find(client => client.sessionId === s.sid);
           if (!c) continue;
           this.hurtPlayer(c, Math.max(2, meta.slamDmg - 2), 'blighted_roots');
@@ -783,7 +785,7 @@ class SpawningMixin {
           this.sendSpace(m.dgn, 'fx', { t: 'eldritchLeapWarn', x: m.x, y: m.y, z: m.z, tx, ty: meta.leapTarget.y, tz, radius: 5.2, dgn: m.dgn || '' });
         } else if (pat === 'graveRing') {
           m.state = 'graveRingWind'; meta.stateT = 1.35 * haste;
-          this.sendSpace(m.dgn, 'fx', { t: 'graveRingWarn', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
+          this.sendSpace(m.dgn, 'fx', { t: 'graveRingWarn', durationMs: meta.stateT*1000, x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
         } else if (pat === 'charge') {
           m.state = 'chargeWind'; meta.stateT = .8 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'growl', dgn: m.dgn || '' });
@@ -791,39 +793,39 @@ class SpawningMixin {
         } else if (pat === 'volley') {
           m.state = 'volleyWind'; meta.stateT = .7 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'growl', dgn: m.dgn || '' });
-          this.sendSpace(m.dgn, 'fx', { t: 'volleyWarn', id, dx: meta.cdx, dz: meta.cdz, dgn: m.dgn || '' });
+          this.sendSpace(m.dgn, 'fx', { t: 'volleyWarn', durationMs: meta.stateT*1000, id, dx: meta.cdx, dz: meta.cdz, dgn: m.dgn || '' });
         } else if (pat === 'spikes') {
           m.state = 'spikeWind'; meta.stateT = .7 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'warn', dgn: m.dgn || '' });
           this.sendSpace(m.dgn, 'fx', { t: 'swind', id, dx: meta.cdx, dz: meta.cdz, dgn: m.dgn || '' });
         } else if (pat === 'control') {
           m.state = 'controlWind'; meta.stateT = 1 * haste;
-          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, 5);
-          if (!meta.signatureTargets.length && best) meta.signatureTargets = [{ x: best.p.x, z: best.p.z }];
+          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, y: s.p.y, z: s.p.z })).slice(0, 5);
+          if (!meta.signatureTargets.length && best) meta.signatureTargets = [{ x: best.p.x, y: best.p.y, z: best.p.z }];
           this.sendSpace(m.dgn, 'fx', { t: 'rootWarn', targets: meta.signatureTargets, dgn: m.dgn || '' });
         } else if (pat === 'regent') {
           m.state = 'regentWind'; meta.stateT = 1.25 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'tideWarn', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
         } else if (pat === 'ossuary') {
           m.state = 'ossuaryWind'; meta.stateT = 1.35 * haste;
-          this.sendSpace(m.dgn, 'fx', { t: 'graveRingWarn', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
+          this.sendSpace(m.dgn, 'fx', { t: 'graveRingWarn', durationMs: meta.stateT*1000, x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
         } else if (pat === 'blight') {
           m.state = 'blightWind'; meta.stateT = 1.1 * haste;
-          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, 5);
+          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, y: s.p.y, z: s.p.z })).slice(0, 5);
           this.sendSpace(m.dgn, 'fx', { t: 'rootWarn', targets: meta.signatureTargets, dgn: m.dgn || '' });
         } else if (pat === 'watcher') {
           m.state = 'watcherWind'; meta.stateT = .9 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'growl', dgn: m.dgn || '' });
-          this.sendSpace(m.dgn, 'fx', { t: 'volleyWarn', id, dx: meta.cdx, dz: meta.cdz, wide: true, dgn: m.dgn || '' });
+          this.sendSpace(m.dgn, 'fx', { t: 'volleyWarn', durationMs: meta.stateT*1000, id, dx: meta.cdx, dz: meta.cdz, wide: true, dgn: m.dgn || '' });
         } else if (['cinder', 'castellan', 'choir', 'prior', 'rime', 'thunder', 'buried', 'abyssal', 'rift'].includes(pat)) {
           const stateByPat = { cinder: 'cinderWind', castellan: 'castellanWind', choir: 'choirWind', prior: 'priorWind', rime: 'rimeWind', thunder: 'thunderWind', buried: 'buriedWind', abyssal: 'abyssalWind', rift: 'riftWind' };
           m.state = stateByPat[pat]; meta.stateT = ({ cinder: 1.05, castellan: 1.25, choir: .9, prior: 1.05, rime: 1.15, thunder: .85, buried: 1.35, abyssal: 1.05, rift: .75 }[pat] || 1) * haste;
-          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, pat === 'castellan' || pat === 'buried' ? 6 : 5);
-          if (!meta.signatureTargets.length && best) meta.signatureTargets = [{ x: best.p.x, z: best.p.z }];
+          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, y: s.p.y, z: s.p.z })).slice(0, pat === 'castellan' || pat === 'buried' ? 6 : 5);
+          if (!meta.signatureTargets.length && best) meta.signatureTargets = [{ x: best.p.x, y: best.p.y, z: best.p.z }];
           this.sendSpace(m.dgn, 'fx', { t: 'bossStyleWarn', style: meta.bossStyle || '', pat, x: m.x, y: m.y, z: m.z, targets: meta.signatureTargets, dx: meta.cdx, dz: meta.cdz, dgn: m.dgn || '' });
         } else {
           m.state = pat === 'root' ? 'rootWind' : 'foremanWind'; meta.stateT = (pat === 'root' ? 1 : 1.15) * haste;
-          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, 4);
+          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, y: s.p.y, z: s.p.z })).slice(0, 4);
           this.sendSpace(m.dgn, 'fx', { t: pat === 'root' ? 'rootWarn' : 'rockWarn', targets: meta.signatureTargets, dgn: m.dgn || '' });
         }
         return true;

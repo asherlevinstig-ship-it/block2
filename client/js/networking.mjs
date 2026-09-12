@@ -222,7 +222,7 @@ function showLevelUpReveal(m){
   requestAnimationFrame(()=>card.classList.add('show'));
   setTimeout(()=>{card.classList.add('leaving');setTimeout(()=>card.remove(),360);},4300);
   SFX.level();
-  rewardGain('rare',statPoints||1,'Stat Points',{icon:'LV',duration:2700});
+  rewardGain('rare',statPoints||1,'Stat Points',{icon:'LV',duration:2700,immersive:false});
   showName(hunterRankLevelLabel(level).toUpperCase());
   sysMsg('<b>'+hunterRankLevelLabel(level,{long:true})+' reached!</b> You earned <b>+'+statPoints+'</b> stat point'+(statPoints===1?'':'s')+'. Press <b>C</b> to spend them.',{tier:'major',title:'Level Up'});
   refreshHUD();
@@ -250,7 +250,7 @@ function showDeityAscension(m){
   requestAnimationFrame(()=>card.classList.add('show'));
   setTimeout(()=>{card.classList.add('leaving');setTimeout(()=>card.remove(),420);},6200);
   SFX.level();
-  rewardGain('legendary',1,'Deity Power',{icon:'DIV',duration:4200});
+  rewardGain('legendary',1,'Deity Power',{icon:'DIV',duration:4200,immersive:false});
   showName('DEITY ASCENDED');
   sysMsg('<b>Deity unlocked!</b> You reached <b>S-Rank Level 10</b>. Press <b>C</b> to choose one Deity power.',{tier:'major',title:'Ascension'});
   refreshHUD();
@@ -494,7 +494,7 @@ const GEAR_REWARDS=createGearRewardPresenter({
     const color=summary.profile.rarity.color;
     if(summary.profile.rarityIndex>=3||summary.profile.rankIndex>=5)SFX.level();else SFX.success();
     const quality=summary.profile.rarityIndex>=4?'legendary':summary.profile.rarityIndex>=2?'rare':'item';
-    rewardGain(quality,1,summary.profile.rarity.name+' Gear',{icon:summary.armor?'AR':'WP'});
+    rewardGain(quality,1,summary.profile.rarity.name+' Gear',{icon:summary.armor?'AR':'WP',immersive:false});
     if(quality==='legendary')showName('LEGENDARY GEAR ACQUIRED');
     const beam=new THREE.Mesh(new THREE.CylinderGeometry(.055,.15,recovered?3.5:5,8),new THREE.MeshBasicMaterial({color,transparent:true,opacity:recovered?.42:.72,depthWrite:false}));
     beam.position.set(player.pos.x,player.pos.y+(recovered?1.75:2.5),player.pos.z);scene.add(beam);
@@ -4029,7 +4029,7 @@ Object.defineProperty(globalThis,'BlockcraftDragonWorld',{value:Object.freeze({
   react:(type,mood)=>COMPANIONS.dragonReaction ? COMPANIONS.dragonReaction(type,mood) : false,
 }),configurable:true});
 Object.defineProperty(globalThis,'BlockcraftDragonCommandFx',{value:dragonCommandFx,configurable:true});
-const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,animateAvatarCape,netAddRemote,netRefreshRemoteAvatar,triggerRemotePlayerAction,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
+const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,animateAvatarCape,animateHunterIdle,netAddRemote,netRefreshRemoteAvatar,triggerRemotePlayerAction,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
 const ARRIVAL_VFX_COOLDOWN_MS=550;
 const arrivalVfxLastByKey=new Map();
 function schedulePlayerArrivalVfx(pos,opts={}){
@@ -5770,6 +5770,7 @@ const netTick=createNetworkFramePump({
   emitDragonTrail,
   pulseAegisGlow,
   animateAvatarCape,
+  animateHunterIdle,
   tickSpiritVisual,
   tickPantherFormVisual,
   tickLocalSpiritVisual,

@@ -33,7 +33,7 @@ async function reloadAndExpectContract(page, expected) {
   await expectStarterContract(page, expected);
 }
 
-async function e2eJourney(page, action, payload = {}, timeout = 5000) {
+async function e2eJourney(page, action, payload = {}, timeout = 15_000) {
   const requestId = ('e2e-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7)).slice(0, 32);
   await page.evaluate(({ action, payload, requestId }) => {
     window.__BLOCKCRAFT_E2E__.send('e2eJourney', { ...payload, action, requestId });

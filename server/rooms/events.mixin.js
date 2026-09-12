@@ -1403,15 +1403,16 @@ class EventsMixin {
       const distance = Math.hypot(tx - mob.x, tz - mob.z) || 1;
       const attackRange = ranged ? 9 : meta.banditCaptain ? 2.5 : 1.7;
       if (distance > attackRange) {
+        if (!ranged) meta.eventMeleeAt = 0;
         const step = Math.min(distance, (meta.speed || 1.5) * dt);
         mob.x += (tx - mob.x) / distance * step;
         mob.z += (tz - mob.z) / distance * step;
         mob.y = W.TOWN.G + 1.05;
         mob.yaw = Math.atan2(tx - mob.x, tz - mob.z);
         mob.state = ranged && distance < 13 ? 'draw' : 'chase';
-      } else if (now >= (meta.eventAttackAt || 0)) {
-        meta.eventAttackAt = now + (ranged ? 2200 : 1500);
-        mob.state = meta.banditCaptain ? 'bruteWind' : ranged ? 'draw' : 'attack';
+      } else if (ranged && now >= (meta.eventAttackAt || 0)) {
+        meta.eventAttackAt = now + 2200;
+        mob.state = 'draw';
         if (target && targetSid && ranged) {
           // Archers loose a genuine server-simulated arrow (dodgeable, like every other
           // ranged enemy) instead of instant damage; lead the shot with tracked velocity.
@@ -1420,13 +1421,27 @@ class EventsMixin {
           mob.yaw = Math.atan2(tx - mob.x, tz - mob.z);
           this.fireArrow(mob, ev.id, target.x + v.x * lead, target.y + 1.4, target.z + v.z * lead,
             Math.max(2, Math.round((meta.dmg || 4) * .65)), false);
-        } else if (target && targetSid) {
-          const targetClient = this.clients.find(c => c.sessionId === targetSid);
-          if (targetClient) this.hurtPlayer(targetClient, Math.max(2, Math.round((meta.dmg || 4) * .65)), 'caravan_bandit');
         } else {
           wagon.hp = Math.max(0, wagon.hp - Math.max(2, Math.round(meta.dmg || 4)));
           ev.caravan.hp = Math.round(wagon.hp);
         }
+      } else if (!ranged && meta.eventMeleeAt && now >= meta.eventMeleeAt) {
+        meta.eventMeleeAt = 0;
+        meta.eventAttackAt = now + 1500;
+        mob.state = 'attack';
+        if (target && targetSid) {
+          const targetClient = this.clients.find(c => c.sessionId === targetSid);
+          if (targetClient) this.hurtPlayer(targetClient, Math.max(2, Math.round((meta.dmg || 4) * .65)), 'caravan_bandit', { attack: meta.banditCaptain ? 'Captain Strike' : 'Bandit Strike' });
+        } else {
+          wagon.hp = Math.max(0, wagon.hp - Math.max(2, Math.round(meta.dmg || 4)));
+          ev.caravan.hp = Math.round(wagon.hp);
+        }
+      } else if (!ranged && !meta.eventMeleeAt && now >= (meta.eventAttackAt || 0)) {
+        const windupMs = meta.banditCaptain ? 800 : 500;
+        meta.eventMeleeAt = now + windupMs;
+        mob.state = meta.banditCaptain ? 'bruteWind' : 'windup';
+        mob.yaw = Math.atan2(tx - mob.x, tz - mob.z);
+        this.sendSpace(ev.id, 'fx', { t: 'meleeWarn', x: mob.x, y: mob.y, z: mob.z, radius: attackRange, durationMs: windupMs, label: meta.banditCaptain ? 'Captain Strike' : 'Bandit Strike', dgn: ev.id });
       }
     }
 

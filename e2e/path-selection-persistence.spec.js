@@ -20,6 +20,9 @@ test('a new hunter chooses a pathway before training and keeps it after reload',
 
   await expect(page.locator('#pathselect')).toBeVisible();
   await expect(page.locator('.pathselect-card')).toHaveCount(4);
+  await expect(page.locator('#pathselect .bc-modal-close')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#pathselect')).toBeVisible();
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('');
 
   await page.locator('[data-path-preview="shadow"]').click();

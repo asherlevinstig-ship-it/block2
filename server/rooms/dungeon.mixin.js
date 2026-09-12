@@ -1059,7 +1059,7 @@ class DungeonMixin {
     client.send('enterDungeon', this.gateEntryPayload(g, inst));
     return true;
   }
-  startDungeonLobby(lobby) {
+  async startDungeonLobby(lobby) {
     const g = this.state.gates.get(lobby.gateId);
     if (!g || !g.active) return this.disbandDungeonLobby(lobby.gateId, 'gone');
     const members = [...lobby.members];
@@ -1070,6 +1070,7 @@ class DungeonMixin {
     this.dungeonLobbies.delete(lobby.gateId);
     // Legacy in-room instance is created lazily and only if a flag-off member actually needs it —
     // a fully flag-on party enters the dedicated DungeonRoom and leaves no instance in the overworld.
+    const starters = [];
     for (const sid of members) {
       const c = this.clients.find(cl => cl.sessionId === sid);
       const p = this.state.players.get(sid);
@@ -1085,14 +1086,30 @@ class DungeonMixin {
         // overworld room can flush after DungeonRoom; arming here prevents that older
         // snapshot from erasing a party member's recovery marker.
         this.armDungeonRecovery(c, g);
-        c.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g, ticket, startInfo));
+        const rec = this.profileFor(c);
+        starters.push({ c, rec });
       }
     }
+    // Do not ask the browser to leave the overworld until every party member's marker
+    // is durable. A process restart can otherwise land between the switch signal and
+    // the asynchronous leave flush, stranding whichever teammate lost that race.
+    const sendStarts = persisted => {
+      const allPersisted = persisted.every(Boolean);
+      for (const { c } of starters) {
+        if (allPersisted) c.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g, ticket, startInfo));
+        else c.send('dungeonLobbyClosed', { gateId: g.id, reason: 'persist' });
+      }
+    };
+    // Prototype-level authority tests intentionally have no backing store. Preserve their
+    // synchronous room contract; live rooms always have savePlayer and take the durable path.
+    if (!this.store || typeof this.store.savePlayer !== 'function') return sendStarts(starters.map(() => true));
+    const persisted = await Promise.all(starters.map(({ rec }) => rec && this.savePlayerProfileNow(rec.token, rec.prof)));
+    sendStarts(persisted);
   }
-  maybeStartDungeonLobby(lobby) {
+  async maybeStartDungeonLobby(lobby) {
     if (!lobby || !lobby.members.size) return;
     for (const sid of lobby.members) if (!lobby.ready.has(sid)) return;
-    this.startDungeonLobby(lobby);
+    return this.startDungeonLobby(lobby);
   }
   warnFirstDGatePrep(client, lobby, rank) {
     if (!client || !lobby || (rank | 0) !== 1) return false;
@@ -1147,7 +1164,7 @@ class DungeonMixin {
     this.warnFirstDGatePrep(client, lobby, g.rank | 0);
     this.sendDungeonLobby(lobby);
   }
-  handleDungeonLobbyReady(client, m) {
+  async handleDungeonLobbyReady(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || p.dgn) return client.send('gateReject', { reason: 'invalid' });
     if (this.rateLimited(client, 'action', 5, 10)) return client.send('gateReject', { reason: 'rate' });
@@ -1180,7 +1197,7 @@ class DungeonMixin {
       // during the opt-in phase degrades gracefully rather than forcing one path on everyone.
     }
     this.sendDungeonLobby(lobby);
-    this.maybeStartDungeonLobby(lobby);
+    await this.maybeStartDungeonLobby(lobby);
   }
 
   createInstance(g) {

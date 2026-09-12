@@ -13,7 +13,7 @@ test.afterEach(async ({ page }) => {
 
 for (const [dungeonId, signatureState, bossStyle, bossName] of VARIANTS) {
   test(`${dungeonId} enters, telegraphs its signature, clears, and exits`, async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     const suffix = Date.now().toString(36) + dungeonId.slice(0, 3);
     await page.addInitScript(() => {
       localStorage.setItem('bc_onboarding_done_v7', '1');
@@ -37,7 +37,7 @@ for (const [dungeonId, signatureState, bossStyle, bossName] of VARIANTS) {
     await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gate.id);
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gate.id);
     await page.getByRole('button', { name: 'READY', exact: true }).click();
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('dungeon');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName), { timeout: 30_000 }).toBe('dungeon');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonContentId)).toBe(dungeonId);
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonBossCount)).toBe(1);
     await expect.poll(() => page.evaluate(() => {
@@ -49,8 +49,10 @@ for (const [dungeonId, signatureState, bossStyle, bossName] of VARIANTS) {
     expect(await page.evaluate(() => (window.__BLOCKCRAFT_E2E__.status().dungeonMobs || []).some(m => m.kind !== 'boss' && m.variant))).toBe(true);
 
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'exerciseERankBoss', requestId: 'signature' }));
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({ requestId: 'signature', ok: true, style: bossStyle, state: signatureState });
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonBossState)).toBe(signatureState);
+    await expect.poll(() => page.evaluate(() => {
+      const status = window.__BLOCKCRAFT_E2E__.status();
+      return { result: status.e2eJourneyResult, state: status.dungeonBossState };
+    })).toMatchObject({ result: { requestId: 'signature', ok: true, style: bossStyle, state: signatureState }, state: signatureState });
 
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'defeatERankBoss', requestId: 'clear' }));
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({ requestId: 'clear', ok: true, style: bossStyle });

@@ -4227,6 +4227,40 @@ test('eldritch meteor boss leaps into the air and lands on marked players', () =
   assert.equal(room.playerHp.get(client.sessionId).hp < hpBefore, true);
 });
 
+test('Heartwood root telegraphs preserve overworld height and cannot hit across vertical separation', () => {
+  const room = makeRoom();
+  const client = makeClient('heartwood_root_target');
+  room.clients = [client];
+  room.sendSpace = (dgn, type, msg) => client.send(type, msg);
+  seedPlayer(room, client, { x: 30, y: 18, z: 30, hp: 30 });
+  const player = room.state.players.get(client.sessionId);
+  const boss = new Mob();
+  boss.kind = 'boss'; boss.bossStyle = 'eldritch_tree'; boss.x = 24; boss.y = 18; boss.z = 30;
+  boss.hp = boss.maxHp = 500; boss.state = 'chase';
+  const meta = room.freshMeta(boss.x, boss.z, 8, 1.1, 'boss', 1, true);
+  meta.bossStyle = 'eldritch_tree'; meta.meteorBoss = true; meta.woke = true; meta.gcd = -1; meta.forcePat = 'root';
+  meta.slamDmg = 7;
+  const candidates = [{ sid: client.sessionId, p: player }];
+  const ground = () => 18, solid = () => false;
+
+  assert.equal(room.bossBrain(boss, 'heartwood', meta, 0.01, candidates[0], 6, candidates, ground, solid), true);
+  const warning = client.sent.find(e => e.type === 'fx' && e.msg.t === 'rootWarn');
+  assert.equal(warning.msg.targets[0].y, 18, 'the warning carries the target terrain height');
+
+  const hpBefore = room.playerHp.get(client.sessionId).hp;
+  player.y = 25;
+  meta.stateT = -0.01;
+  room.bossBrain(boss, 'heartwood', meta, 0.01, candidates[0], 6, candidates, ground, solid);
+  assert.equal(room.playerHp.get(client.sessionId).hp, hpBefore, 'moving vertically clear of the marked roots avoids damage');
+
+  player.y = 18;
+  boss.state = 'rootWind'; meta.stateT = -0.01; meta.signatureTargets = [{ x: player.x, y: player.y, z: player.z }];
+  room.bossBrain(boss, 'heartwood', meta, 0.01, candidates[0], 6, candidates, ground, solid);
+  assert.equal(room.playerHp.get(client.sessionId).hp < hpBefore, true, 'roots still damage a hunter standing on the marked elevation');
+  const impact = client.sent.find(e => e.type === 'fx' && e.msg.t === 'rootBurst');
+  assert.equal(impact.msg.targets[0].y, 18, 'the impact carries the same terrain height');
+});
+
 test('second legendary weapon batch drains lifts and pierces server-side', () => {
   const room = makeRoom();
   const client = makeClient('legend2');
@@ -6471,7 +6505,7 @@ test('B-rank bosses add control pressure roots', () => {
   }
 
   assert.equal(m.state, 'controlWind');
-  assert.deepEqual(meta.signatureTargets, [{ x: 108, z: 100 }]);
+  assert.deepEqual(meta.signatureTargets, [{ x: 108, y: 9, z: 100 }]);
 });
 
 test('A/S-rank bosses layer mechanics into a queued follow-up cast', () => {
@@ -9470,8 +9504,12 @@ test('legacy dungeon instance exits return players to the safe town spawn', () =
   assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 });
 
-test('team gate lobby waits until all joined hunters are ready', () => {
+test('team gate lobby waits until all joined hunters are ready', async () => {
   const room = makeRoom();
+  room.bootId = 'test-boot';
+  const saved = new Map();
+  room.store = { async savePlayer(token, profile) { saved.set(token, profile); } };
+  room.playerSaveQueues = new Map();
   const a = makeClient('a');
   const b = makeClient('b');
   room.clients.push(a, b);
@@ -9484,12 +9522,12 @@ test('team gate lobby waits until all joined hunters are ready', () => {
 
   room.enterGate(a, { id: gate.id });
   room.enterGate(b, { id: gate.id });
-  room.handleDungeonLobbyReady(a, { gateId: gate.id, ready: true });
+  await room.handleDungeonLobbyReady(a, { gateId: gate.id, ready: true });
 
   assert.equal(room.state.players.get(a.sessionId).dgn, '');
   assert.equal(room.state.players.get(b.sessionId).dgn, '');
 
-  room.handleDungeonLobbyReady(b, { gateId: gate.id, ready: true });
+  await room.handleDungeonLobbyReady(b, { gateId: gate.id, ready: true });
 
   assert.equal(room.state.players.get(a.sessionId).dgn, '');
   assert.equal(room.state.players.get(b.sessionId).dgn, '');
@@ -9501,6 +9539,8 @@ test('team gate lobby waits until all joined hunters are ready', () => {
   assert.equal(bProf.dungeonRecovery.gateId, gate.id);
   assert.equal(aProf.dungeonRecovery.bootId, room.bootId);
   assert.equal(bProf.dungeonRecovery.bootId, room.bootId);
+  assert.equal(saved.get('a_token_123').dungeonRecovery.gateId, gate.id);
+  assert.equal(saved.get('b_token_123').dungeonRecovery.gateId, gate.id);
 });
 
 test('gate entry rejects with access-specific reasons', () => {
@@ -10651,7 +10691,7 @@ test('Caravan Defence stages a co-op escort, runs waves, revives allies, and rew
   assert.equal(result.msg.caravanHealthPct >= 80, true);
 });
 
-test('caravan bandit archers fire dodgeable server arrows while melee bandits strike directly', () => {
+test('caravan bandit archers fire dodgeable arrows and melee bandits telegraph before striking', () => {
   const room = makeRoom();
   room.mobSeq = 0;
   const alpha = makeClient('caravan-arrow-alpha');
@@ -10703,8 +10743,14 @@ test('caravan bandit archers fire dodgeable server arrows while melee bandits st
   assert.equal(alpha.sent.some(e => e.type === 'arrow' && e.msg.dgn === ev.id), true, 'participants see the arrow');
   assert.equal(alpha.sent.some(e => e.type === 'hurt' && e.msg.reason === 'caravan_bandit'), false,
     'the archer deals no instant damage — the arrow must land first');
+  assert.equal(bravo.sent.some(e => e.type === 'fx' && e.msg.t === 'meleeWarn'), true,
+    'the adjacent melee bandit announces a replicated windup');
+  assert.equal(bravo.sent.some(e => e.type === 'hurt' && e.msg.reason === 'caravan_bandit'), false,
+    'the melee windup cannot deal immediate damage before the mob is visible');
+
+  room.tickCaravanEvent(ev, now + 1600);
   assert.equal(bravo.sent.some(e => e.type === 'hurt' && e.msg.reason === 'caravan_bandit'), true,
-    'melee bandits still strike adjacent hunters directly');
+    'the melee strike lands only after its warning window');
 });
 
 test('weather transition tables and spawn modifiers are well-formed and deterministic', () => {

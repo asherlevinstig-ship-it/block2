@@ -95,7 +95,14 @@
     let pool=QUESTIONS.filter(q=>!SUBJECTS.includes(subject)||q.subject===subject);if(!pool.length)pool=QUESTIONS;
     const items=history.items||{},due=pool.filter(q=>items[q.id]&&cleanRecord(items[q.id]).nextDue<=now),unseen=pool.filter(q=>!items[q.id]);
     let candidates=due.length?due:unseen.length?unseen:pool.slice().sort((a,b)=>cleanRecord(items[a.id]).nextDue-cleanRecord(items[b.id]).nextDue).slice(0,Math.max(1,Math.ceil(pool.length/2)));
-    const alternates=candidates.filter(q=>q.id!==history.lastQuestionId&&q.topic!==history.lastTopic);if(alternates.length)candidates=alternates;
+    // Never require a topic change in order to avoid an exact repeat. Some
+    // focused banks (notably Computer Science number systems) intentionally
+    // contain many questions under one topic, so the old combined condition
+    // made their last question eligible again immediately.
+    const differentQuestion=candidates.filter(q=>q.id!==history.lastQuestionId);
+    if(differentQuestion.length)candidates=differentQuestion;
+    else if(pool.length>1&&candidates.some(q=>q.id===history.lastQuestionId))candidates=pool.filter(q=>q.id!==history.lastQuestionId);
+    const differentTopic=candidates.filter(q=>q.topic!==history.lastTopic);if(differentTopic.length)candidates=differentTopic;
     const accuracy=(history.totalAttempts|0)>0?(history.totalCorrect|0)/(history.totalAttempts|0):0;
     const targetDifficulty=accuracy>=.8?2:1,matched=candidates.filter(q=>q.difficulty===targetDifficulty);if(matched.length)candidates=matched;
     const selected=candidates[Math.min(candidates.length-1,Math.floor(random()*candidates.length))]||pool[0];

@@ -2,6 +2,16 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const recall=require('../rooms/recall.mixin');
 
+test('recall avoidance carries recently answered prompts across reconnects',()=>{
+  const room=Object.create(recall),id='it_ns_hex_bin_003';
+  const avoid=room.recallAvoidance({
+    lastQuestionId:'it_ns_hex_bin_00',
+    items:{[id]:{lastAt:1234}},
+  },[],[]);
+  assert.ok(avoid.ids.includes(id));
+  assert.ok(avoid.prompts.includes('what is hexadecimal 2f in binary?'));
+});
+
 test('recall answer pillars spawn in a wide facing-relative diamond',()=>{
   const p={x:10,y:4,z:20,yaw:0};
   const pillars=recall.recallPositions(p);

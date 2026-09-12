@@ -8,6 +8,7 @@ import {createChunkWorkQueue} from './chunk-work-queue.mjs';
 import {createPrng,varyColor,paintAtlasTile} from './world-textures.mjs';
 import {createParticleBudget} from './performance-budget.mjs';
 import {CUTSCENES_ENABLED} from './feature-flags.mjs';
+import {REWARD_TIERS,rewardMomentCopy,mergeRewardMoment} from './reward-notification-policy.mjs';
 
 /* Blockcraft world runtime module. World data, generation, rendering, entities, and shared game foundations.
  * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
@@ -4663,8 +4664,39 @@ function makeVillager(robe, robeDark, hat, profile={}){
     addBox(head,[.36,.2,.36],[0,.44,0],hatM);                 // crown
     addBox(head,[.38,.05,.38],[0,.36,0],tunicTrimM);          // band
   }
+  let signatureGlow=null, signatureCape=null;
+  if(profile.signature==='mara'){
+    const mantleM=voxelMats('#173f46','#2f6970','#0b252b','#07191d');
+    const mantleTrimM=glowVoxelMats('#d6a642','#fff0a8','#8a6424','#ffd24a',.52);
+    const crystalM=glowVoxelMats('#3fd8d0','#c4fff8','#177a78','#65fff2',1.05);
+    // One high shoulder, a split mantle and a lantern-staff make Mara readable before her nameplate is.
+    addBox(torso,[.76,.16,.36],[0,.31,.01],mantleM);
+    addBox(torso,[.24,.16,.39],[-.4,.34,.01],mantleTrimM,[0,0,.08]);
+    signatureCape=addBox(torso,[.52,.84,.07],[-.08,-.12,.2],mantleM,[.06,0,-.05]);
+    addBox(signatureCape,[.46,.06,.08],[0,-.4,.01],mantleTrimM);
+    addBox(torso,[.1,.58,.05],[.2,-.06,-.18],mantleTrimM,[0,0,-.12]);
+    const staff=new THREE.Group();staff.position.set(.52,.92,.02);grp.add(staff);
+    addBox(staff,[.07,1.62,.07],[0,-.18,0],beltM,[0,0,-.06]);
+    addBox(staff,[.32,.07,.07],[.1,.61,0],mantleTrimM,[0,0,-.18]);
+    signatureGlow=addBox(staff,[.17,.17,.17],[.22,.74,0],crystalM,[0,.785,.785]);
+    addBox(torso,[.3,.36,.1],[-.31,-.04,.2],beltM,[0,0,.08]);
+  }
   grp.add(blobShadow(1));
-  return {grp, head, legs, arms};
+  if(profile.signature!=='mara'){
+    // Ordinary villagers have rigid voxel parts and animated limb/head pivots.
+    // Their colour textures are shared with town props, so only the per-model
+    // materials are disposed after atlasing—not the cached source textures.
+    const mats=[],seen=new Set();
+    grp.traverse(node=>{
+      if(!node.isMesh)return;
+      for(const mat of Array.isArray(node.material)?node.material:[node.material]){
+        if(mat&&mat.isMeshLambertMaterial&&mat.map?.image&&!seen.has(mat)){seen.add(mat);mats.push(mat);}
+      }
+    });
+    atlasModelMaterials({THREE,root:grp,mats,disposeSourceTextures:false});
+    batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head]});
+  }
+  return {grp, head, torso, legs, arms, signature:profile.signature||'', signatureGlow, signatureCape};
 }
 function angDiff(a,b){ let d=a-b; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI; return d; }
 
@@ -4777,6 +4809,13 @@ const NPC_ROLES=[
    work:[HUB.skyport.x-10.5,HUB.skyport.z+2.2],home:[HUB.skyport.x,HUB.skyport.z],static:true,fixedY:HUB.skyport.y+1,
    line:'The Westwind is long-distance travel. You need S-Rank clearance and 1,000 gold, then press G at the gangway to board before departure.'},
 ];
+function npcVisualProfile(def,index){
+  if(def&&def.role==='guide')return {
+    signature:'mara',robe:['#255e64','#153b43'],hat:false,
+    skinPair:['#b77959','#87523f'],hair:'#241b22'
+  };
+  return {robe:ROBES[index%ROBES.length],hat:index%2===1};
+}
 function npcSpotFree(x,z){
   const bx=Math.floor(x), bz=Math.floor(z), G=TOWN.G;
   if(!isSolid(getB(bx,G,bz))) return false;
@@ -4799,8 +4838,8 @@ function spawnVillagers(n){
   const roles=JOBS_ENABLED?NPC_ROLES:NPC_ROLES.filter(def=>!['job_mentor','worker_tutor'].includes(def.role));
   for(let i=0;i<Math.min(n,roles.length);i++){
     const def=roles[i]||roles[roles.length-1];
-    const [r,rd]=ROBES[i%ROBES.length];
-    const v={...makeVillager(r,rd,i%2===1), wait:Math.random()*2, tx:0, tz:0,
+    const visual=npcVisualProfile(def,i),[r,rd]=visual.robe;
+    const v={...makeVillager(r,rd,visual.hat,visual), wait:Math.random()*2, tx:0, tz:0,
              speed:1+Math.random()*.5, phase:Math.random()*10,
              name:def.name, shortName:def.shortName||def.name, role:def.role, title:def.title,
              personality:def.personality, line:def.line, accept:def.accept, done:def.done, focus:def.focus,
@@ -4865,6 +4904,12 @@ function tickVillagers(dt, t){
     }
     const pd=Math.sqrt(pdSq);
     headTrack(v, dt);
+    if(v.signatureGlow){
+      const pulse=.92+Math.sin(t*2.4+v.phase)*.1;v.signatureGlow.scale.setScalar(pulse);
+      const mats=Array.isArray(v.signatureGlow.material)?v.signatureGlow.material:[v.signatureGlow.material];
+      for(const mat of mats)if(mat&&'emissiveIntensity' in mat)mat.emissiveIntensity=.72+pulse*.32;
+    }
+    if(v.signatureCape)v.signatureCape.rotation.x=.06+Math.sin(t*1.15+v.phase)*.025;
     if(v.legs){ const k=Math.max(0,1-dt*9);                                 // ease limbs back to rest each tick
       v.legs[0].rotation.x*=k; v.legs[1].rotation.x*=k; v.arms[0].rotation.x*=k; v.arms[1].rotation.x*=k; }
     if(v.nameplate && v.nameplate.material){
@@ -5158,6 +5203,7 @@ for(const [lx,lz] of [[TOWN.TC-6,TOWN.TC-6],[TOWN.TC+6,TOWN.TC-6],[TOWN.TC-6,TOW
 
 // Directional quest breadcrumbs lead toward a distinct tall beacon at the target.
 const guidePathGroup=new THREE.Group();
+guidePathGroup.name='navigation-breadcrumbs';
 townGroup.add(guidePathGroup);
 const guidePathMarkers=[];
 let coachTrail=null;
@@ -5719,7 +5765,7 @@ function setGuideMarkerOpacity(marker,value){
 }
 function tickGuidancePath(dt, now){
   const info=guidanceTargetInfo();
-  const visible=!!(info && !qOpen && !uiOpen && !statOpen);
+  const visible=!!(info && !qOpen && !uiOpen && !statOpen && !document.body.classList.contains('presentation-combat'));
   guidePathGroup.visible=dim==='overworld';
   if(!visible){
     for(const marker of guidePathMarkers){
@@ -9099,8 +9145,86 @@ function escHTML(v){
 const SYS_RECENT_COOLDOWN_MS=1800;
 const sysRecent=new Map();
 const rewardFeedEl=document.getElementById('rewardfeed');
+const rewardMomentEl=document.getElementById('rewardmoment');
 const rewardGainActive=new Map();
+const rewardMomentQueue=[];
+const rewardMomentHistory=[];
+let rewardMomentActive=null,rewardMomentTimer=0,rewardMomentRetry=0;
 let titleFlashTimer=0;
+function rewardMomentBlocked(){
+  if(document.body.dataset.presentation==='combat')return true;
+  const telegraph=document.getElementById('enemytelegraph');
+  return !!(telegraph&&!telegraph.classList.contains('hidden'));
+}
+function suspendRewardMomentForCombat(){
+  if(!rewardMomentActive||!rewardMomentBlocked())return false;
+  clearTimeout(rewardMomentTimer);rewardMomentTimer=0;
+  rewardMomentQueue.unshift(rewardMomentActive);rewardMomentActive=null;
+  if(rewardMomentEl)rewardMomentEl.className='hidden';
+  document.body.classList.remove('reward-moment-staging');
+  clearTimeout(rewardMomentRetry);rewardMomentRetry=setTimeout(pumpRewardMoments,250);
+  return true;
+}
+function rememberRewardMoment(entry){
+  rewardMomentHistory.unshift({at:Date.now(),tier:entry.tier,title:entry.title,detail:entry.detail,hint:entry.hint});
+  if(rewardMomentHistory.length>20)rewardMomentHistory.length=20;
+}
+function closeRewardMoment(){
+  clearTimeout(rewardMomentTimer);rewardMomentTimer=0;
+  if(rewardMomentEl){rewardMomentEl.classList.add('leaving');setTimeout(()=>rewardMomentEl.className='hidden',220);}
+  document.body.classList.remove('reward-moment-staging');
+  rewardMomentActive=null;
+  setTimeout(pumpRewardMoments,260);
+}
+function pumpRewardMoments(){
+  clearTimeout(rewardMomentRetry);rewardMomentRetry=0;
+  if(rewardMomentActive||!rewardMomentQueue.length||!rewardMomentEl)return;
+  if(rewardMomentBlocked()){rewardMomentRetry=setTimeout(pumpRewardMoments,250);return;}
+  const entry=rewardMomentQueue.shift();rewardMomentActive=entry;
+  rewardMomentEl.querySelector('.rewardmoment-icon').textContent=entry.icon;
+  rewardMomentEl.querySelector('.rewardmoment-kicker').textContent=entry.kicker;
+  rewardMomentEl.querySelector('.rewardmoment-title').textContent=entry.title;
+  rewardMomentEl.querySelector('.rewardmoment-detail').textContent=entry.detail;
+  rewardMomentEl.querySelector('.rewardmoment-hint').textContent=entry.hint;
+  rewardMomentEl.style.setProperty('--moment-duration',entry.duration+'ms');
+  rewardMomentEl.className='show '+entry.tier;
+  document.body.classList.toggle('reward-moment-staging',entry.stagePanel);
+  if(!entry.remembered){rememberRewardMoment(entry);entry.remembered=true;}
+  if(typeof SFX!=='undefined'){
+    if(entry.tier==='legendary'&&SFX.level)SFX.level();
+    else if(REWARD_TIERS[entry.tier]>=REWARD_TIERS.major&&SFX.success)SFX.success();
+  }
+  rewardMomentTimer=setTimeout(closeRewardMoment,entry.duration);
+}
+function rewardMoment(kind,amount,label,opts={}){
+  const entry=rewardMomentCopy(kind,amount,label,opts);
+  if(entry.tier==='minor'||!rewardMomentEl)return entry;
+  if(rewardMomentActive&&rewardMomentActive.key===entry.key){
+    const merged=mergeRewardMoment(rewardMomentActive,entry);
+    if(merged){rewardMomentActive=merged;rewardMomentEl.querySelector('.rewardmoment-detail').textContent=merged.detail;clearTimeout(rewardMomentTimer);rewardMomentTimer=setTimeout(closeRewardMoment,merged.duration);}
+    return merged||entry;
+  }
+  const index=rewardMomentQueue.findIndex(item=>item.key===entry.key);
+  if(index>=0)rewardMomentQueue[index]=mergeRewardMoment(rewardMomentQueue[index],entry)||entry;
+  else{
+    rewardMomentQueue.push(entry);
+    rewardMomentQueue.sort((a,b)=>REWARD_TIERS[b.tier]-REWARD_TIERS[a.tier]);
+  }
+  pumpRewardMoments();return entry;
+}
+globalThis.BlockcraftRewardNotifications=Object.freeze({
+  announce:rewardMoment,
+  history:()=>rewardMomentHistory.map(entry=>({...entry})),
+  snapshot:()=>({active:rewardMomentActive&&{...rewardMomentActive},queued:rewardMomentQueue.map(entry=>({...entry}))}),
+});
+if(typeof MutationObserver!=='undefined'){
+  const rewardPriorityObserver=new MutationObserver(()=>{
+    if(!suspendRewardMomentForCombat())pumpRewardMoments();
+  });
+  rewardPriorityObserver.observe(document.body,{attributes:true,attributeFilter:['class','data-presentation']});
+  const telegraph=document.getElementById('enemytelegraph');
+  if(telegraph)rewardPriorityObserver.observe(telegraph,{attributes:true,attributeFilter:['class']});
+}
 function titleFlash(title, subtitle='', opts={}){
   if(document.body.classList.contains('world-loading'))return;
   try{
@@ -9126,6 +9250,7 @@ function rewardGain(kind, amount, label, opts={}){
   if(!rewardFeedEl||!amount)return;
   kind=['xp','gold','item','rare','legendary','renown'].includes(kind)?kind:'item';
   label=String(label||kind.toUpperCase()).slice(0,48);
+  if(opts.immersive!==false&&(kind==='rare'||kind==='legendary'||opts.major))rewardMoment(kind,amount,label,opts);
   const key=kind+'|'+label;
   const old=rewardGainActive.get(key);
   if(old){
@@ -9316,6 +9441,11 @@ function showDungeonReward(m, earned){
   const resumePlay=!!(milestone&&(locked||lockFallback));
   const result=m&&m.result||null,failed=!!(m&&m.failed||result&&result.outcome==='failed');
   const ri=Math.max(0,Math.min(5,(result&&typeof result.rank==='number')?result.rank:(m&&typeof m.rank==='number')?m.rank:(dungeon?dungeon.rank:0)));
+  if(earned)rewardMoment('rare',1,(result&&result.dungeonName)||'Dungeon clear',{
+    tier:'major',key:'gate-clear|'+String((result&&result.dungeonName)||ri)+'|'+String((result&&result.clearMs)||0),
+    icon:RANKS[ri].n,kicker:'GATE SEALED',title:RANKS[ri].n+'-RANK GATE CLEARED',
+    detail:String((result&&result.bossName)||'Gate boss')+' defeated',hint:'Loot secured · Review rewards',duration:2600,stagePanel:true,
+  });
   const kind=gateKindLabel((result&&result.kind)||(m&&m.kind)||((dungeon&&dungeon.kind)||'public'));
   const rows=[];
   if(earned){
@@ -9326,7 +9456,7 @@ function showDungeonReward(m, earned){
     if(m.dia) rows.push({label:itemLabel(I.DIAMOND), value:'x'+(m.dia|0), id:I.DIAMOND});
     if(Array.isArray(m.items)) for(const it of m.items) if(it&&ITEMS[it.id]){const gear=it.gear&&ITEMS[it.id].tool?GEAR_SYSTEM.profile({tier:ITEMS[it.id].tool.tier,legendary:!!ITEMS[it.id].legendary},it):null;rows.push({label:(gear?gear.rank.name+' '+gear.rarity.name+' ':'')+itemLabel(it.id),value:'x'+(it.count||1),id:it.id,gear:!!gear});}
   }
-  rewardPanel.className=earned?'earned':'missed';
+  rewardPanel.className=earned?'earned gate-clear-result':'missed';
   const shard=result&&result.shard||m&&m.shard;
   const shardLine=shard ? '<div class="rbonus"><b>Shard bonus:</b> '+escHTML((shard.name||'Sharded')+' +'+(shard.plus||0))+(earned?' increased boss gold, XP, and legendary token drops.':' shaped this attempt with '+(Array.isArray(shard.mods)&&shard.mods.length?shard.mods.join(', '):'extra danger')+'.')+'</div>' : '';
   const milestoneLine=milestone?'<div class="rbonus"><b>'+escHTML(milestone.label)+':</b> '+escHTML(milestone.text)+'</div>':'';
@@ -9341,6 +9471,7 @@ function showDungeonReward(m, earned){
     ? (rows.length?'<div class="rewardloot triage">'+groupedRewardLootHTML(rows)+'</div>':'<div class="rnote">No item drops this time.</div>')
     : '<div class="rnote"><b>No loot earned.</b><br>'+escHTML(rewardReasonText(m&&m.reason))+'</div>';
   rewardPanel.innerHTML=
+    (earned?'<div class="gate-clear-seal" aria-hidden="true"><b>'+escHTML(RANKS[ri].n)+'</b><small>GATE SEALED</small></div>':'')+
     '<h2>'+(failed?'DUNGEON FAILED':earned?'DUNGEON CLEARED':'LOOT MISSED')+'</h2>'+
     '<div class="rsub">'+escHTML((result&&result.dungeonName?result.dungeonName+' · ':'')+RANKS[ri].n+'-Rank '+kind+' Gate')+'</div>'+
     dungeonResultStatsHTML(result)+
@@ -9763,10 +9894,10 @@ function showDeathScreen(cause,sub,recap='',opts={}){
 function makeZombie(){
   const grp=new THREE.Group(), mats=[], legs=[], arms=[];
   const reg=m=>{mats.push(m);return m;};
-  const skin='#5f9e4a', skinDk='#4a7c3a';
+  const skin='#71805b', skinDk='#48563c';
   const skinM=reg(lam(solidTex(skin,skinDk)));
-  const rotM=reg(lam(solidTex('#42662f','#33501f')));                  // rotten patches
-  const woundM=reg(lam(solidTex('#7a2b24','#561d18')));                // exposed flesh
+  const rotM=reg(lam(solidTex('#3d4930','#283322')));                  // rotten patches
+  const woundM=reg(lam(solidTex('#85382f','#54221f')));                // exposed flesh
   const boneM=reg(lam(solidTex('#d8d2bc','#b3ac93')));                 // poking bone
   const shirtM=reg(lam(solidTex('#41576a','#33485a')));                // tattered tunic
   const shirtDarkM=reg(lam(solidTex('#2c3d4c','#22303c')));
@@ -9808,6 +9939,10 @@ function makeZombie(){
   addBox(torso,[.11,.2,.31],[-.2,-.16,0],skinM);                      // torn flap baring skin
   addBox(torso,[.16,.13,.3],[-.3,.26,0],skinM);                       // hunched left shoulder
   addBox(torso,[.13,.1,.28],[.31,.2,0],rotM);                         // dropped right shoulder
+  addBox(torso,[.34,.52,.06],[-.1,-.05,-.18],shirtDarkM,[.12,0,-.08]); // torn rear shroud
+  addBox(torso,[.12,.25,.08],[-.24,-.35,-.18],shirtM,[.18,0,.2]);      // uneven split tail
+  addBox(torso,[.1,.18,.08],[.12,-.38,-.18],shirtDarkM,[.22,0,-.18]);
+  for(const sx of [-.22,.2])addBox(torso,[.06,.24,.06],[sx,.42,-.04],boneM,[0,0,sx<0?.45:-.28]); // broken silhouette spikes
   // legs (groups, pivot at hip) — one shin bared to bone, clawed feet
   for(const sx of [-.13,.13]){
     const leg=new THREE.Group(); leg.position.set(sx,.7,0);
@@ -9832,7 +9967,7 @@ function makeZombie(){
   grp.add(blobShadow(1.05));
   atlasModelMaterials({THREE,root:grp,mats});
   batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head]});
-  return {grp, mats, legs, arms, head};
+  return {grp, mats, legs, arms, head, combatProfile:{family:'zombie',accent:0xff684e,aftermath:[.38,.48,.24]}};
 }
 const mobs=[];
 let mobSpawnT=2;
@@ -9848,8 +9983,8 @@ function isBattleMusicMob(m){
   const hp=typeof (m.ref&&m.ref.hp)==='number'?m.ref.hp:m.hp;
   return hp>0;
 }
-function inOverworldBattle(){
-  if(dim!=='overworld'||isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return false;
+function nearbyHostileBattle(){
+  if(dim!=='overworld')return false;
   for(const m of mobs){
     if(!isBattleMusicMob(m)||m.grp.visible===false)continue;
     const p=m.grp.position;
@@ -9860,6 +9995,11 @@ function inOverworldBattle(){
   }
   return false;
 }
+function inOverworldBattle(){
+  if(dim!=='overworld'||isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return false;
+  return nearbyHostileBattle();
+}
+function inVisualBattle(){return nearbyHostileBattle();}
 function standHeight(x,z,fromY){
   const bx=Math.floor(x), bz=Math.floor(z);
   if(bx<0||bx>=WX||bz<0||bz>=WX) return -1;
@@ -10650,8 +10790,8 @@ function shadowDashVfx(start,end){
   if(flatDir.lengthSq()>.001) flatDir.normalize(); else flatDir.set(0,0,-1);
   shadowRiftVfx(sx,sy,sz,flatDir,.58);
   setTimeout(()=>shadowRiftVfx(ex,ey,ez,flatDir,.7),85);
-  burst(sx,sy+.8,sz,[.22,.08,.42],34,3.2,2.4,.55);
-  burst(ex,ey+.8,ez,[.64,.38,1],44,3.8,2.8,.7);
+  burst(sx,sy+.8,sz,[.22,.08,.42],20,3.2,2.4,.55);
+  burst(ex,ey+.8,ez,[.64,.38,1],26,3.8,2.8,.7);
   const streak=new THREE.Mesh(new THREE.CylinderGeometry(.1,.22,len,8),
     new THREE.MeshBasicMaterial({color:0x8b5cf6, transparent:true, opacity:.62, blending:THREE.AdditiveBlending, depthWrite:false}));
   streak.position.copy(a.clone().add(b).multiplyScalar(.5));
@@ -10665,10 +10805,10 @@ function shadowDashVfx(start,end){
   slit.position.set((sx+ex)/2, Math.min(sy,ey)+.08, (sz+ez)/2);
   slit.quaternion.copy(streak.quaternion);
   scene.add(slit); beams.push({mesh:slit, life:.34});
-  for(let k=0;k<6;k++){
-    const f=k/5, x=sx+(ex-sx)*f, y=sy+(ey-sy)*f, z=sz+(ez-sz)*f;
+  for(let k=0;k<4;k++){
+    const f=k/3, x=sx+(ex-sx)*f, y=sy+(ey-sy)*f, z=sz+(ez-sz)*f;
     setTimeout(()=>shadowDashAfterimage(x,y,z,f), k*28);
-    for(let j=0;j<7;j++){
+    for(let j=0;j<4;j++){
       spawnParticle({x:x+(Math.random()-.5)*.5,y:y+.35+Math.random()*1.25,z:z+(Math.random()-.5)*.5,
         vx:(Math.random()-.5)*.6,vy:.15+Math.random()*.55,vz:(Math.random()-.5)*.6,
         life:.38+.18*Math.random(),grav:0,r:.42,g:.2,b:.9});
@@ -10690,7 +10830,7 @@ function shadowRiftVfx(x,y,z,dir,life=.55){
   dir=dir||new THREE.Vector3(0,0,-1);
   const yaw=Math.atan2(dir.x,dir.z);
   for(const [col,scale,op] of [[0x05010a,1.25,.9],[0x8b5cf6,1.0,.62],[0xd8b4fe,.72,.42]]){
-    const rift=new THREE.Mesh(new THREE.TorusGeometry(scale,.035,8,44),
+    const rift=new THREE.Mesh(new THREE.TorusGeometry(scale,.035,4,8),
       new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false}));
     rift.position.set(x,y+1.05,z);
     rift.rotation.set(Math.PI/2,yaw,0);
@@ -10773,13 +10913,13 @@ function blacksmithRitualVfx(action='upgrade', itemId=I.IRON_SWORD, plus=0, who=
   },120);
 }
 function guardShellVfx(x,y,z,life=.75){
-  const shell=new THREE.Mesh(new THREE.SphereGeometry(1.05,18,12),
-    new THREE.MeshBasicMaterial({color:0xf59e0b,transparent:true,opacity:.22,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
-  shell.position.set(x,y+1.05,z); shell.scale.set(1,.92,1);
-  scene.add(shell); beams.push({mesh:shell,life,spin:.7});
+  const shell=new THREE.Mesh(new THREE.BoxGeometry(1.75,1.9,1.75),
+    new THREE.MeshBasicMaterial({color:0xe8bd62,transparent:true,opacity:.68,wireframe:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+  shell.position.set(x,y+1.05,z);shell.rotation.y=Math.PI/4;
+  scene.add(shell); beams.push({mesh:shell,life,spin:.7,dispose:true});
   ringPulse(x,y+.08,z,1.3,0xffd24a,.5);
   ringPulse(x,y+1.75,z,.72,0xfff0a8,.45);
-  for(let k=0;k<18;k++){
+  for(let k=0;k<10;k++){
     const a=Math.random()*Math.PI*2;
     spawnParticle({x:x+Math.cos(a)*.85,y:y+.25+Math.random()*1.8,z:z+Math.sin(a)*.85,
       vx:Math.cos(a)*.18,vy:.75+Math.random()*.8,vz:Math.sin(a)*.18,life:.65,grav:0,r:1,g:.75,b:.18});
@@ -10862,12 +11002,12 @@ function splashBurstVfx(x,y,z,count,spread){
       life:.45+Math.random()*.3,grav:8,r:.45,g:.8,b:1});
   }
 }
-// richer fireball projectile: white-hot core, glowing shell, big additive halo
+// The first mage spell reads as a faceted ember with a white-hot voxel core.
 function fireballMesh(){
   const grp=new THREE.Group();
-  grp.add(new THREE.Mesh(new THREE.SphereGeometry(.13,10,10), new THREE.MeshBasicMaterial({color:0xfff2c0})));
-  grp.add(new THREE.Mesh(new THREE.SphereGeometry(.21,10,10),
-    new THREE.MeshBasicMaterial({color:0xff7a18, transparent:true, opacity:.6, blending:THREE.AdditiveBlending, depthWrite:false})));
+  const core=new THREE.Mesh(new THREE.BoxGeometry(.21,.21,.21),new THREE.MeshBasicMaterial({color:0xfff2c0}));core.rotation.set(.22,.38,.1);grp.add(core);
+  const shell=new THREE.Mesh(new THREE.BoxGeometry(.35,.35,.35),
+    new THREE.MeshBasicMaterial({color:0xff7a18,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false}));shell.rotation.set(.15,-.25,.3);grp.add(shell);
   const gl=new THREE.Sprite(fireGlowMat.clone()); gl.material.opacity=.95; gl.scale.set(2,2,1); grp.add(gl);
   return grp;
 }
@@ -10875,16 +11015,16 @@ function fireballExplodeVfx(x,y,z){
   SFX.boom(); camShake=Math.max(camShake,.42);
   glowFlash(x,y,z,0xffd27a,5.6,.26);
   ringPulse(x,y+.1,z,1.0,0xff8a2a,.32); setTimeout(()=>ringPulse(x,y+.1,z,2.5,0xff5a16,.34),55);
-  burst(x,y,z,[1,.7,.2],30,4.6,2.6,.7);
-  burst(x,y,z,[1,.34,.06],26,3.4,3,.6);
-  for(let k=0;k<14;k++){                                   // flying ember chunks
+  burst(x,y,z,[1,.7,.2],22,4.6,2.6,.7);
+  burst(x,y,z,[1,.34,.06],18,3.4,3,.6);
+  for(let k=0;k<8;k++){                                   // flying ember chunks
     const a=Math.random()*Math.PI*2, sp=3+Math.random()*4;
     const chunk=new THREE.Mesh(new THREE.BoxGeometry(.16,.16,.16),
       new THREE.MeshBasicMaterial({color:Math.random()<.5?0xff9a2a:0xff5a12, transparent:true, opacity:1, blending:THREE.AdditiveBlending, depthWrite:false}));
     chunk.position.set(x,y+.1,z); scene.add(chunk);
     beams.push({mesh:chunk, life:.5, vel:new THREE.Vector3(Math.cos(a)*sp,1.6+Math.random()*2.6,Math.sin(a)*sp), grav:9, spin:7});
   }
-  for(let k=0;k<26;k++){
+  for(let k=0;k<14;k++){
     const a=Math.random()*Math.PI*2, r=Math.random()*1.2;
     spawnParticle({x:x+Math.cos(a)*r,y:y+.2,z:z+Math.sin(a)*r,
       vx:Math.cos(a)*(2+Math.random()*4),vy:1+Math.random()*3,vz:Math.sin(a)*(2+Math.random()*4),
@@ -11885,6 +12025,7 @@ gameContext.registerModule('world', Object.freeze({
   setTargetBlockHighlight,
   ancientCityDiscoverySpecs,
   inOverworldBattle,
+  inVisualBattle,
   resetParticleBudget,
   particleBudgetStats,
   karmaPulseVfx,

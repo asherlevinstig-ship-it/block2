@@ -2477,6 +2477,13 @@ function animateAvatarCape(avatar, now, speed=0, stride=0, dt=0.016){
     g.position.y=p.baseY+targetY;
   }
 }
+function animateHunterIdle(avatar,now,dt,moving=false){
+  if(!avatar||!avatar.idle||!avatar.idle.length)return;
+  const t=now/1000+(avatar.phase||0),rest=moving?.32:1;
+  const torso=avatar.idle[0],sway=Math.sin(t*1.55)*.016*rest;
+  if(torso)torso.rotation.z+=(sway-torso.rotation.z)*Math.min(1,dt*8);
+  if(avatar.head){const nod=Math.sin(t*1.55+.4)*.018*rest;avatar.head.rotation.x+=(nod-avatar.head.rotation.x)*Math.min(1,dt*7);}
+}
 
 function makeRemoteAvatar(look){
   look=look||playerAppearance();
@@ -2749,6 +2756,12 @@ function makeRemoteAvatar(look){
     addBox(torso,[.16,.08,.04],[0,-.1,-.205],trimM);          // stitched knot, no metal
   }
   addBox(torso,[isRobe ? .68 : .5,.1,.3],[0,-.38,0],isRobe?robeDarkM:shirtDarkM); // tunic or robe hem
+  if(!isRobe){
+    // Asymmetric hunter pennant: a clear back/side silhouette even with starter gear.
+    addBox(torso,[.19,.58,.065],[.33,-.09,.205],capeM,[.08,0,-.08]);
+    addBox(torso,[.19,.055,.075],[.33,-.38,.205],trimM);
+    addBox(torso,[.13,.11,.08],[.34,.33,-.05],guardM,[0,0,.18]);
+  }
   if(hasArmor&&!isRobe){
     addBox(torso,[.065,.62,.055],[-.23,.04,-.18],packDarkM);  // front shoulder straps
     addBox(torso,[.065,.62,.055],[.23,.04,-.18],packDarkM);
@@ -3058,6 +3071,7 @@ globalThis.BlockcraftSelfAvatar={
       a.arms[1].rotation.z+=((-0.08+swing*.24)-a.arms[1].rotation.z)*Math.min(1,(dt||.016)*16);
     }
     if(a.capeSegments&&a.capeSegments.length&&typeof animateAvatarCape==='function'){ const spd=moving?2.4:0; animateAvatarCape(a,now||0,spd,sw,dt||.016); }
+    animateHunterIdle(a,now||0,dt||.016,moving);
   }
 };
 function makePantherAvatar(){
@@ -3478,6 +3492,7 @@ function netRemoveRemote(sid){
     familiarBoundLocal,
     makeRemoteAvatar,
     animateAvatarCape,
+    animateHunterIdle,
     makePantherAvatar,
     applyPantherFormVisual,
     clearPantherFormVisual,
