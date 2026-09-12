@@ -24,6 +24,7 @@ unsafe or incomplete.
 | `DATA_DIR` | Explicit absolute path on durable storage, writable by the service user |
 | `STORE` | `json` or `firebase`; defaults to `json` outside production |
 | `PORT` | Internal listen port; defaults to `2567` |
+| `BLOCKCRAFT_RESTART_WARNING_MS` | Optional player restart countdown; defaults to `8000`, capped at `15000` |
 
 `DEV_CHEATS`, `BLOCKCRAFT_BETA_TEST`, and `BLOCKCRAFT_E2E` must be unset in
 production. Never commit credentials or include them in a backup archive.
@@ -58,7 +59,8 @@ CSP, clickjacking, MIME-sniffing, permissions, and production HSTS headers.
 1. Back up the current deployment using the appropriate procedure below.
 2. Install from the lockfile with `npm ci`.
 3. Run `npm run check`, `npm run test:integration`, and `npm run test:e2e`.
-4. Stop the old process gracefully so its final flush completes.
+4. Stop the old process gracefully. Connected players receive the restart countdown,
+   matchmaking locks, and the server performs a final progress flush before disconnecting.
 5. Start the new process with the production environment.
 6. Confirm the startup log has no `[startup]`, `[store]`, or `[persist]` errors.
 7. Register a disposable account, join the world, reconnect, and verify persistence.

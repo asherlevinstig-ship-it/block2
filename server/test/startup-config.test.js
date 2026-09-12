@@ -73,6 +73,15 @@ test('cloud rooms are created through matchmaking instead of stranded prewarming
   assert.match(cloud, /blockcraft: defineRoom\(GameRoom\)\.filterBy\(\['shardId'\]\)/);
 });
 
+test('local and cloud servers install the graceful restart warning hook', () => {
+  const local = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud.js'), 'utf8');
+  for (const entrypoint of [local, cloud]) {
+    assert.match(entrypoint, /onBeforeShutdown/);
+    assert.match(entrypoint, /warnForRestart\(getActiveRooms\(\)/);
+  }
+});
+
 test('overworld defaults to the validated 24-player capacity', () => {
   const gameRoom = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   const loadTest = fs.readFileSync(path.join(__dirname, '..', '..', 'tools', 'load-test.js'), 'utf8');

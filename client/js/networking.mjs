@@ -954,12 +954,44 @@ for(const [bindingName,binding] of Object.entries(legacyNetworkingBindings)){
  * Loaded sequentially; shares the compatibility scope with combat and sibling UI modules.
  */
 // ---------------- multiplayer (colyseus) ----------------
+let serverRestartTimer=0;
+let serverRestartPlanned=false;
+function hideServerRestartWarning(){
+  if(serverRestartTimer){clearInterval(serverRestartTimer);serverRestartTimer=0;}
+  serverRestartPlanned=false;
+  document.getElementById('serverrestart')?.classList.add('hidden');
+}
+function showServerRestartWarning(message={}){
+  const banner=document.getElementById('serverrestart');
+  if(!banner)return;
+  if(serverRestartTimer)clearInterval(serverRestartTimer);
+  serverRestartPlanned=true;
+  const delayMs=Math.max(0,Number(message.delayMs)||0);
+  const deadline=Date.now()+delayMs;
+  const title=document.getElementById('serverrestarttitle');
+  const detail=document.getElementById('serverrestartdetail');
+  const time=document.getElementById('serverrestarttime');
+  if(title)title.textContent=String(message.message||'Server restarting for an update');
+  if(detail)detail.textContent=String(message.detail||'Your progress is being saved. Reconnecting automatically.');
+  const update=()=>{if(time)time.textContent=String(Math.max(0,Math.ceil((deadline-Date.now())/1000)));};
+  update();
+  banner.classList.remove('hidden');
+  serverRestartTimer=setInterval(update,200);
+  eventLog('Server update starting - progress is being saved and reconnection is automatic','[Network]');
+  if(typeof sysMsg==='function')sysMsg('<b>Server update incoming.</b> Your progress is being saved; you will reconnect automatically.');
+}
 function connectionNotice(kind, attempt=0){
   if(kind==='lost'){
-    eventLog('Connection lost - trying to reconnect and keep your progress safe','[Network]');
-    if(typeof sysMsg==='function')sysMsg('<b>Connection lost.</b> Reconnecting to the world...');
-    if(typeof showName==='function')showName('Reconnecting...');
-    setWorldLoadingStatus('Connection lost - reconnecting...');
+    if(serverRestartPlanned){
+      const detail=document.getElementById('serverrestartdetail');
+      if(detail)detail.textContent='Restarting now. Reconnecting automatically...';
+      setWorldLoadingStatus('Server restarting - reconnecting automatically...');
+    }else{
+      eventLog('Connection lost - trying to reconnect and keep your progress safe','[Network]');
+      if(typeof sysMsg==='function')sysMsg('<b>Connection lost.</b> Reconnecting to the world...');
+      if(typeof showName==='function')showName('Reconnecting...');
+      setWorldLoadingStatus('Connection lost - reconnecting...');
+    }
   }else if(kind==='attempt'){
     setWorldLoadingStatus('Reconnecting to world... attempt '+attempt);
   }else if(kind==='joinAttempt'){
@@ -998,6 +1030,7 @@ function connectionNotice(kind, attempt=0){
     if(typeof showName==='function')showName('Rejoining world...');
     setWorldLoadingStatus('Reconnect stalled - fresh joining...');
   }else if(kind==='restored'){
+    hideServerRestartWarning();
     eventLog('Connection restored','[Network]');
     if(typeof sysMsg==='function')sysMsg('<b>Back online.</b> World state restored.');
     if(typeof showName==='function')showName('Back online');
@@ -1296,6 +1329,7 @@ function netAttachRoom(room,name,client){
     // routine has registered every handler. Keep those early packets from
     // turning into noisy SDK warnings while the explicit handlers below come online.
     room.onMessage('*',()=>{});
+    room.onMessage('serverRestartWarning',showServerRestartWarning);
     room.onMessage('e2eJourneyResult',m=>{e2eJourneyResult=m||null;});
     room.onMessage('familiarTelemetry',renderFamiliarTelemetry);
     room.onMessage('dungeonRestartRecovery',m=>{

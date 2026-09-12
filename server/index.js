@@ -5,6 +5,8 @@ const { Server } = require('@colyseus/core');
 const { WebSocketTransport } = require('@colyseus/ws-transport');
 const { prepareRuntime, attachHttpRoutes } = require('./runtime');
 const { prewarmOverworldRoom } = require('./room-prewarm');
+const { getActiveRooms } = require('./metrics-registry');
+const { restartWarningDelay, warnForRestart } = require('./restart-warning');
 
 async function main() {
   const config = await prepareRuntime();
@@ -25,6 +27,10 @@ async function main() {
 
   gameServer.define('blockcraft', GameRoom).filterBy(['shardId']);
   gameServer.define('dungeon', DungeonRoom).filterBy(['gateId']);
+  gameServer.onBeforeShutdown(async () => {
+    const result = await warnForRestart(getActiveRooms(), { delayMs: restartWarningDelay() });
+    console.log(`[shutdown] warned ${result.rooms} active room(s), flushed progress, and completed the ${result.delayMs}ms restart countdown`);
+  });
 
   const PORT = process.env.PORT || 2567;
   await gameServer.listen(PORT);

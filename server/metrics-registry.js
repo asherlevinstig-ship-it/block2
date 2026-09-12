@@ -20,6 +20,10 @@ function unregisterRoom(room) {
   activeRooms.delete(room);
 }
 
+function getActiveRooms() {
+  return Array.from(activeRooms);
+}
+
 function round2(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
@@ -313,6 +317,7 @@ function readinessHttpHandler(options = {}) {
 module.exports = {
   registerRoom,
   unregisterRoom,
+  getActiveRooms,
   metricsSnapshot,
   metricsHttpHandler,
   readinessSnapshot,
