@@ -2565,7 +2565,10 @@ function makeRemoteAvatar(look){
   const cartoGoldM=glowVoxelMats('#d6a642','#fff0a8','#8a6424','#ffd24a',.65);
   const cartoInkM=voxelMats('#173044','#2f5f7a','#071722','#050d14');
 
-  const head=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),[skinM[0],skinM[1],skinM[2],skinM[3],faceM,skinM[5]]);
+  // BoxGeometry materials 4/5 are +Z/-Z. The hunter faces -Z (all raised
+  // eyebrows, eyes, nose, and mouth below sit at z=-.276), so the painted face
+  // belongs on material 5. Keeping it on +Z paints a second face on the rear.
+  const head=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),[skinM[0],skinM[1],skinM[2],skinM[3],skinM[4],faceM]);
   head.position.y=1.72; grp.add(head);
   hair.push(addBox(head,[.54,.09,.54],[0,.3,0],hairM));       // blond top hair cap
   hair.push(addBox(head,[.44,.055,.48],[0,.36,-.01],voxelMats(look.hairLight,'#fff7b8',look.hair,look.hairDark))); // stepped top layer

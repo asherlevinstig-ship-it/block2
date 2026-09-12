@@ -3839,6 +3839,8 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(networking, /showAppearanceInspectionStand/);
   assert.match(networking, /previewAppearanceDraft/);
   assert.match(companions, /const hairStyle=\['windswept','cropped','long','braided'\]/);
+  assert.match(companions, /\[skinM\[0\],skinM\[1\],skinM\[2\],skinM\[3\],skinM\[4\],faceM\]/);
+  assert.doesNotMatch(companions, /\[skinM\[0\],skinM\[1\],skinM\[2\],skinM\[3\],faceM,skinM\[5\]\]/);
   assert.match(companions, /outfitStyle==='wanderer'/);
   assert.ok(companions.indexOf("if(accessory==='scarf'&&!hasAegis)") > companions.indexOf('const torso=new THREE.Group()'), 'scarf accessory is mounted after the torso exists');
   assert.match(companions, /raised cloth shell with tiny shadow gap/);
