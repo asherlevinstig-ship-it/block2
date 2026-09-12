@@ -187,6 +187,7 @@ paintTile(7,5,(x,y,r)=>{ // damp mossy dungeon trim
 });
 
 const atlasTex = new THREE.CanvasTexture(atlasCanvas);
+atlasTex.encoding = THREE.sRGBEncoding;
 atlasTex.magFilter = THREE.NearestFilter;
 atlasTex.minFilter = THREE.NearestFilter;
 atlasTex.generateMipmaps = false;
@@ -2510,6 +2511,13 @@ function blockFaceTile(id, faceIndex, x, y, z){
   return tiles[ faceIndex===3?0 : faceIndex===2?2 : 1 ];
 }
 const foliagePalette=[[.96,1,.88],[.78,.94,.84],[1,.95,.78],[1,.85,.7],[.86,.95,1],[.78,.88,.72]];
+const NATURAL_VARIANTS=new Set([B.GRASS,B.DIRT,B.STONE,B.SAND,B.LOG,B.LEAVES,B.COBBLE,B.SNOW,B.RED_SAND,B.TERRACOTTA]);
+function blockSurfaceVariation(id,x,y,z){
+  // Large surfaces need quiet macro variation as well as 16px grain. Keep it
+  // deterministic so rebuilt chunks never shimmer or disagree between clients.
+  const spread=NATURAL_VARIANTS.has(id)?.055:.018;
+  return 1-spread*.5+hash2(x*37+y*11+id*101,z*43-y*17-id*29)*spread;
+}
 function buildChunkGeometry(cx, cz, translucentPass){
   const pos=[], nor=[], col=[], uv=[], ind=[];
   const x0=cx*CHUNK, z0=cz*CHUNK;
@@ -2540,15 +2548,21 @@ function buildChunkGeometry(cx, cz, translucentPass){
       const u0=(tile[0]+EPS)*tileU, v0=(tile[1]+EPS)*tileV;
       const uw=(1-2*EPS)*tileU, vw=(1-2*EPS)*tileV;
       const base=pos.length/3;
+      const aos=[];
+      const variation=blockSurfaceVariation(id,x,y,z);
       for(const c of face.corners){
         pos.push(x+c.p[0], y+c.p[1], z+c.p[2]);
         nor.push(face.dir[0],face.dir[1],face.dir[2]);
         uv.push(u0 + c.uv[0]*uw, 1 - (v0 + (1-c.uv[1])*vw));
         const ao = trans ? 1 : vertexAO(x,y,z,face.dir,c.p);
-        const s = face.shade * ao;
+        aos.push(ao);
+        const s = Math.min(1,face.shade * ao * variation);
         col.push(s*(foliage?foliage[0]:1),s*(foliage?foliage[1]:1),s*(foliage?foliage[2]:1));
       }
-      ind.push(base, base+1, base+2, base+2, base+1, base+3);
+      // Choose the less-visible diagonal so AO does not draw a bright seam
+      // through concave block corners.
+      if(!trans&&aos[0]+aos[3]>aos[1]+aos[2]) ind.push(base,base+1,base+3,base,base+3,base+2);
+      else ind.push(base, base+1, base+2, base+2, base+1, base+3);
     }
   }
   if(ind.length===0) return null;
@@ -7721,13 +7735,13 @@ function updateDayNight(dt){
   if(dim==='overworld') environmentIdentity.surface({
     biome:biomeAt(Math.floor(player.pos.x),Math.floor(player.pos.z)),
     town:isTownLand(player.pos.x,player.pos.z),dt,day:dayF,
-    opaque:matOpaque,transparent:matTrans,fog:scene.fog,backdrop:SKY,hemi,
+    opaque:matOpaque,transparent:matTrans,fog:scene.fog,backdrop:SKY,hemi,sun,
   });
 
   // weather dims and closes in the overworld; lightning briefly floods it with light
   if(dim==='overworld'){
-    scene.fog.near=44-weatherLerp*16;
-    scene.fog.far=110-weatherLerp*34;
+    scene.fog.near=Math.max(8,scene.fog.near-weatherLerp*16);
+    scene.fog.far=Math.max(scene.fog.near+20,scene.fog.far-weatherLerp*34);
     if(weatherLerp>.02){
       _tmpC.setRGB(.34,.38,.45);
       matOpaque.color.lerp(_tmpC,weatherLerp*.58);

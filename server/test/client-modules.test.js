@@ -16,6 +16,16 @@ const { I } = require('../rooms/constants');
 
 const clientModule = name => import(pathToFileURL(path.join(__dirname, '..', '..', 'client', 'js', name)).href);
 
+test('renderer uses an sRGB ACES colour pipeline without a post-process pass',async()=>{
+  const {configureRendererColorPipeline}=await clientModule('rendering.mjs');
+  const THREE=require('three');
+  const renderer={};
+  configureRendererColorPipeline(THREE,renderer);
+  assert.equal(renderer.outputEncoding,THREE.sRGBEncoding);
+  assert.equal(renderer.toneMapping,THREE.ACESFilmicToneMapping);
+  assert.ok(renderer.toneMappingExposure>=1&&renderer.toneMappingExposure<1.1);
+});
+
 test('chunk work coalesces edits, prioritizes nearby terrain, and stops after the frame budget', async () => {
   const { createChunkWorkQueue } = await clientModule('chunk-work-queue.mjs');
   let clock = 0;

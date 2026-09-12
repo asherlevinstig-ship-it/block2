@@ -1,7 +1,18 @@
+export function configureRendererColorPipeline(THREE, renderer) {
+  // Canvas and authored colour textures are painted in display (sRGB) space.
+  // Decode them for lighting, then encode once at the backbuffer. ACES gives
+  // emissive combat effects highlight roll-off without a post-process pass.
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.04;
+  return renderer;
+}
+
 export function createRenderingRuntime({ THREE, mount, width, height, pixelRatio }) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(72, width / height, 0.08, 300);
   const renderer = new THREE.WebGLRenderer({ antialias: false, stencil: false, precision: 'mediump', powerPreference: 'high-performance' });
+  configureRendererColorPipeline(THREE, renderer);
   const basePixelRatio = Math.min(pixelRatio, 2);
   let resolutionScale = 1;
   renderer.setSize(width, height);
