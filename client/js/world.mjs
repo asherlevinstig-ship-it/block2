@@ -7,6 +7,7 @@ import {disposeObjectTree} from './three-disposal.mjs';
 import {createChunkWorkQueue} from './chunk-work-queue.mjs';
 import {createPrng,varyColor,paintAtlasTile} from './world-textures.mjs';
 import {createParticleBudget} from './performance-budget.mjs';
+import {buildChunkLightField,sampleChunkLight} from './voxel-lighting.mjs';
 import {CUTSCENES_ENABLED} from './feature-flags.mjs';
 import {REWARD_TIERS,rewardMomentCopy,mergeRewardMoment} from './reward-notification-policy.mjs';
 
@@ -1012,7 +1013,12 @@ const {DimensionGrid}=window.BlockcraftDimensions;
 let world = new DimensionGrid({kind:'overworld',id:'global',width:WX,height:WH,depth:WX,empty:B.AIR,outside:B.AIR});
 const inWorld = (x,y,z)=> x>=0&&x<WX&&y>=0&&y<WH&&z>=0&&z<WX;
 const getB = (x,y,z)=>world.getB(x,y,z);
-const setB = (x,y,z,v)=>world.setB(x,y,z,v);
+let trackVoxelLighting=false;
+const setB = (x,y,z,v)=>{
+  const previous=trackVoxelLighting?world.getB(x,y,z):B.AIR,changed=world.setB(x,y,z,v);
+  if(trackVoxelLighting&&changed&&isVoxelLightChange(previous,v))refreshPropagatedLightAround(x,z);
+  return changed;
+};
 function worldBounds(){
   return world && world.bounds ? world.bounds : {minX:0,minY:0,minZ:0,maxX:WX-1,maxY:WH-1,maxZ:WX-1};
 }
@@ -2558,6 +2564,39 @@ const DUNGEON_TILES={
   [B.IRON_ORE]:[[5,5],[5,5],[5,5]],
   [B.DIAMOND_ORE]:[[6,5],[6,5],[6,5]],
 };
+const VOXEL_LIGHT_PROFILES={
+  [B.TORCH]:{strength:.9,color:[1,.55,.2]},
+  [B.LANTERN]:{strength:1,color:[1,.72,.32]},
+  [B.CAMPFIRE]:{strength:1,color:[1,.38,.1]},
+  [B.LAVA]:{strength:.86,color:[1,.24,.05]},
+};
+const emitterChunkCaches=new WeakMap();
+function emitterChunkCache(){
+  let cache=emitterChunkCaches.get(world);
+  if(!cache){cache=new Map();emitterChunkCaches.set(world,cache);}
+  return cache;
+}
+function scanEmitterChunk(cx,cz,refresh=false){
+  const cache=emitterChunkCache(),key=cx+','+cz;
+  if(!refresh&&cache.has(key))return cache.get(key);
+  const b=worldBounds(),sources=[],x0=cx*CHUNK,z0=cz*CHUNK;
+  for(let y=b.minY;y<=b.maxY;y++)for(let z=Math.max(b.minZ,z0);z<=Math.min(b.maxZ,z0+CHUNK-1);z++)for(let x=Math.max(b.minX,x0);x<=Math.min(b.maxX,x0+CHUNK-1);x++){
+    const profile=VOXEL_LIGHT_PROFILES[getB(x,y,z)];
+    if(profile)sources.push({x:x+.5,y:y+.6,z:z+.5,strength:profile.strength,color:profile.color});
+  }
+  cache.set(key,sources);return sources;
+}
+function propagatedLightForChunk(cx,cz){
+  const sources=[];
+  for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++)sources.push(...scanEmitterChunk(cx+dx,cz+dz,dx===0&&dz===0));
+  return buildChunkLightField({cx,cz,chunkSize:CHUNK,worldBounds:worldBounds(),getBlock:getB,isOpaque,sources});
+}
+function isVoxelLightChange(previous,next){return !!VOXEL_LIGHT_PROFILES[previous]||!!VOXEL_LIGHT_PROFILES[next];}
+function refreshPropagatedLightAround(x,z){
+  const cx=Math.floor(x/CHUNK),cz=Math.floor(z/CHUNK),cache=emitterChunkCaches.get(world);
+  if(cache)cache.delete(cx+','+cz);
+  for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++)rebuildChunkIfVisible(cx+dx,cz+dz);
+}
 function blockFaceTile(id, faceIndex, x, y, z, columnBiome=BIO.PLAINS){
   let tiles=BLOCKS[id].tiles;
   if(dim==='dungeon' && DUNGEON_TILES[id]){
@@ -2602,7 +2641,7 @@ function blockSurfaceVariation(id,x,y,z){
   const spread=NATURAL_VARIANTS.has(id)?.055:.018;
   return 1-spread*.5+hash2(x*37+y*11+id*101,z*43-y*17-id*29)*spread;
 }
-function buildChunkGeometry(cx, cz, translucentPass){
+function buildChunkGeometry(cx, cz, translucentPass, lightField=null){
   const pos=[], nor=[], col=[], uv=[], ind=[];
   const x0=cx*CHUNK, z0=cz*CHUNK;
   const biomeColumns=[],foliageColumns=[];
@@ -2612,6 +2651,7 @@ function buildChunkGeometry(cx, cz, translucentPass){
       biomeColumns[column]=biome;foliageColumns[column]=foliagePalette[biome];
     }
   }
+  const sampledLight=[0,1,1,1];
   const b=worldBounds();
   for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++)
   for(let y=b.minY;y<=b.maxY;y++)
@@ -2646,7 +2686,14 @@ function buildChunkGeometry(cx, cz, translucentPass){
         const contrast=dim==='overworld'&&!trans?BIOME_FACE_CONTRAST[biome]:1;
         const directional=Math.max(.35,1-(1-face.shade)*contrast);
         const s = Math.min(1,directional * ao * variation);
-        col.push(s*(foliage?foliage[0]:1),s*(foliage?foliage[1]:1),s*(foliage?foliage[2]:1));
+        sampleChunkLight(lightField,x+c.p[0],y+c.p[1],z+c.p[2],sampledLight);
+        if(id===B.LAVA){sampledLight[0]=Math.max(sampledLight[0],1);sampledLight[1]=1;sampledLight[2]=.24;sampledLight[3]=.05;}
+        const lightPower=sampledLight[0]*(id===B.LAVA?2.4:dim==='dungeon'?1.55:1.25);
+        col.push(
+          s*(foliage?foliage[0]:1)*(1+lightPower*sampledLight[1]),
+          s*(foliage?foliage[1]:1)*(1+lightPower*sampledLight[2]),
+          s*(foliage?foliage[2]:1)*(1+lightPower*sampledLight[3])
+        );
       }
       // Choose the less-visible diagonal so AO does not draw a bright seam
       // through concave block corners.
@@ -3106,9 +3153,10 @@ function rebuildChunk(cx,cz){
   if(old){ for(const m of [old.opaque, old.trans]) if(m){ scene.remove(m); m.geometry.dispose(); } }
   const e={opaque:null, trans:null};
   const meshStarted=performance.now();
-  const g1=buildChunkGeometry(cx,cz,false);
+  const lightField=propagatedLightForChunk(cx,cz);
+  const g1=buildChunkGeometry(cx,cz,false,lightField);
   if(g1){ e.opaque=new THREE.Mesh(g1, matOpaque); scene.add(e.opaque); }
-  const g2=buildChunkGeometry(cx,cz,true);
+  const g2=buildChunkGeometry(cx,cz,true,lightField);
   const meshMs=performance.now()-meshStarted;
   chunkProfile.builds++;chunkProfile.meshMs+=meshMs;chunkProfile.maxMeshMs=Math.max(chunkProfile.maxMeshMs,meshMs);recordChunkProfileSample(chunkProfileSamples.mesh,meshMs);
   if(g2){ e.trans=new THREE.Mesh(g2, matTrans); e.trans.renderOrder=1; scene.add(e.trans); }
@@ -3183,6 +3231,7 @@ function rebuildAround(x,z){
   if(z%CHUNK===0) rebuildChunkIfVisible(cx,cz-1);
   if(z%CHUNK===CHUNK-1) rebuildChunkIfVisible(cx,cz+1);
 }
+trackVoxelLighting=true;
 
 // highlight + crack overlay
 const highlight = new THREE.LineSegments(
