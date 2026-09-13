@@ -948,6 +948,33 @@ function buildMeditationHall(setBlock = setB) {
   box(shrX(45), G + 1, shrZ(44), shrX(49), G + 1, shrZ(44), B.LOG);
 }
 
+function buildSmithy(setBlock = setB) {
+  const G = TOWN.G, forgeX = v => dtx(v, 'forge'), forgeZ = v => dtz(v, 'forge');
+  const x1 = forgeX(74), z1 = forgeZ(45), x2 = forgeX(83), z2 = forgeZ(54);
+  const box = (xa, ya, za, xb, yb, zb, id) => {
+    for (let x = xa; x <= xb; x++) for (let y = ya; y <= yb; y++) for (let z = za; z <= zb; z++) setBlock(x, y, z, id);
+  };
+  box(x1, G, z1, x2, G, z2, B.COBBLE);
+  for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) {
+    if (x !== x1 && x !== x2 && z !== z1 && z !== z2) continue;
+    const corner = (x === x1 || x === x2) && (z === z1 || z === z2);
+    for (let y = G + 1; y <= G + 3; y++) setBlock(x, y, z, corner ? B.LOG : B.COBBLE);
+  }
+  // Match the client's west-facing open front. Clear above head height too:
+  // authoritative stand-height probes must not mistake the roof for the floor.
+  box(x1, G + 1, forgeZ(49), x1, G + 3, forgeZ(51), B.AIR);
+  for (const z of [z1, z2]) {
+    setBlock(forgeX(78), G + 2, z, B.GLASS);
+    setBlock(forgeX(79), G + 2, z, B.GLASS);
+  }
+  box(x1 - 1, G + 4, z1 - 1, x2 + 1, G + 4, z2 + 1, B.BRICK);
+  box(forgeX(82), G + 5, forgeZ(47), forgeX(82), G + 8, forgeZ(47), B.COBBLE);
+  for (let z = forgeZ(47); z <= forgeZ(49); z++) setBlock(forgeX(82), G + 1, z, B.FURNACE);
+  setBlock(forgeX(82), G + 1, forgeZ(52), B.TABLE);
+  setBlock(forgeX(82), G + 1, forgeZ(53), B.TABLE);
+  setBlock(forgeX(78), G + 1, forgeZ(47), B.STONE);
+}
+
 function buildTown() {
   const { TC, HS, G } = TOWN;
   const x1 = TC - HS, x2 = TC + HS, z1 = TC - HS, z2 = TC + HS;
@@ -1022,7 +1049,7 @@ function buildTown() {
     setB(tc(64) + w, G, z, B.COBBLE);
     setB(tc(40) + w, G, z, B.COBBLE);
   }
-  // buildings as solid collision footprints (visual detail lives on the client)
+  // Authoritative building collision must preserve every visible public entrance.
   // The tavern is a hollow shell with a west door instead of a solid block, so the
   // server's collision matches the client's walkable interior and players can enter.
   {
@@ -1035,9 +1062,7 @@ function buildTown() {
     // lintel here makes the server snap players onto the doorway instead of in.
     fillBox(vx1, G + 1, vdz - 1, vx1, G + 4, vdz, B.AIR);
   }
-  fillBox(dtx(74, 'forge'), G + 1, dtz(45, 'forge'), dtx(83, 'forge'), G + 4, dtz(54, 'forge'), B.COBBLE); // smithy
-  // A solid server-only footprint here makes movement authority reject the
-  // client's visible doorway and snap players back outside.
+  buildSmithy(setB);
   buildMeditationHall(setB);
   // Dragon roost: a big open pen for bonded dragons (paved yard + low fence, nothing inside).
   {
@@ -1162,7 +1187,7 @@ function createWorld() {
       // lintel here makes the server snap players onto the doorway instead of in.
       fillLocal(vx1, G + 1, vdz - 1, vx1, G + 4, vdz, B.AIR);
     }
-    fillLocal(dtx(74, 'forge'), G + 1, dtz(45, 'forge'), dtx(83, 'forge'), G + 4, dtz(54, 'forge'), B.COBBLE);
+    buildSmithy(setLocal);
     buildMeditationHall(setLocal);
     {
       const rx1 = dtx(88, 'roost'), rz1 = dtz(48, 'roost'), rx2 = dtx(105, 'roost'), rz2 = dtz(82, 'roost');
@@ -1256,5 +1281,5 @@ module.exports = {
   biomeAt, naturalTreeSpecAt, naturalTreeForBlock, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
   ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, trainingMeadowTownPortalPoint, buildTrainingMeadow,
-  buildGuildHallBase, buildMeditationHall, isCentralCourtProtectedEdit, isTownFarmWorksite,
+  buildGuildHallBase, buildMeditationHall, buildSmithy, isCentralCourtProtectedEdit, isTownFarmWorksite,
 };
