@@ -21,6 +21,7 @@
   const CHANNELS = Object.freeze({
     local:Object.freeze({label:'Local',icon:'◉',color:'#9fd8ff'}),
     party:Object.freeze({label:'Party',icon:'◆',color:'#82e6a7'}),
+    fellowship:Object.freeze({label:'Fellowship',icon:'❖',color:'#e1b5ff'}),
     whisper:Object.freeze({label:'Whisper',icon:'✦',color:'#d49cff'}),
   });
   const RULES = Object.freeze({localRange:48,rapidCooldownMs:250,duplicateCooldownMs:2000,reportHistoryMs:300000,reportCooldownMs:3600000,maxWheelPhrases:8});

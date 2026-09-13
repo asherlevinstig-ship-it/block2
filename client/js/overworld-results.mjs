@@ -17,6 +17,7 @@ export function createOverworldResultPresenter({document,itemName}){
     const grant=result.grant||fresh(recentGrant),safety=result.safety||fresh(recentSafety);
     titleEl.textContent=result.title||'REGIONAL WORK COMPLETE';summaryEl.textContent=result.summary||'The road is quieter for now.';
     const rows=[];
+    if(grant&&grant.gold)rows.push('<span><b>+'+(grant.gold|0)+'</b> gold</span>');
     if(grant&&grant.xp)rows.push('<span><b>+'+(grant.xp|0)+'</b> Hunter XP</span>');
     if(grant&&Array.isArray(grant.items))for(const item of grant.items)rows.push('<span><b>+'+Math.max(1,item.count|0)+'</b> '+itemName(item.id)+'</span>');
     if(safety&&safety.delta)rows.push('<span><b>'+(safety.delta>0?'+':'')+(safety.delta|0)+'</b> road safety</span>');

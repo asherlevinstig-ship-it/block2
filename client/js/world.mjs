@@ -3888,9 +3888,14 @@ function updateLandMinimap(force=true){
     if(contractSite)cartographerMapTarget(contractSite,'#7dd3fc','C');
     const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&treasure.targetId?sites.find(s=>s.id===treasure.targetId):null;
     if(treasureSite)cartographerMapTarget(treasureSite,'#ffd24a','T');
+    const expedition=globalThis.BlockcraftElderheartExpedition;
+    if(expedition&&expedition.active&&expedition.target)cartographerMapTarget(expedition.target,'#75e89a','E');
+    if(expedition&&expedition.active&&expedition.lead)cartographerMapTarget(expedition.lead,'#ffb66f','B');
   }
   if(mapUtility&&overworldActivity){
     const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z)||miniMap&&!worldMap&&!nearPlayer(s))return;const x=mapPx(s.x),z=mapPz(s.z);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
+    const expedition=globalThis.BlockcraftElderheartExpedition;
+    if(expedition&&expedition.active)dynamic(expedition.target,'#75e89a',6);
     const jobTarget=jobContractGuidanceTarget();
     if(jobTarget)dynamic(jobTarget.target,jobTarget.colorHex||'#9fd7ff',jobTarget.ready?7:5);
     dynamic(overworldActivity.caravan,overworldActivity.caravan&&overworldActivity.caravan.state==='ambushed'?'#ff5d48':'#f6c764',4);
@@ -4929,7 +4934,7 @@ const NPC_ROLES=[
    focus:'meditate', job:'monk'},
   {name:'Pell Graywatch', shortName:'Pell', role:'warden', title:'Night Warden', personality:'quiet, severe, notices every sound',
    work:[TOWN.TC+.5,TOWN.TC-TOWN.HS+3], home:[HUB.northGate.x,HUB.northGate.z],
-   line:'I watch the north gate. Rabbits, deer, and boars can rarely drop pet collars. Use one from your hotbar, then press K to call the familiar.',
+   line:'I watch the north gate. Wild cats, dogs, and wolves live beyond the walls. Approach without attacking, offer the right food, calm them, then fasten the collar.',
    accept:'Do not chase glory. End threats. Come back.',
    done:'Fewer eyes in the dark tonight. Good.',
    focus:'kill', job:'adventurer'},
@@ -4953,7 +4958,7 @@ const NPC_ROLES=[
    focus:'social'},
   {name:'Tamsin Rook',shortName:'Tamsin',role:'road_warden',title:'Road Warden',personality:'watchful, practical, unimpressed by excuses',
    work:[HUB.jobs.x,HUB.jobs.z],home:[HUB.jobs.x,HUB.jobs.z],static:true,
-   line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts. Wildlife may drop pet collars for hunters who pay attention.',
+   line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts. Patient hunters may also earn the trust of wild companions.',
    accept:'Keep the merchants moving and the camps nervous.',done:'Another mile of road belongs to honest folk.',focus:'kill',job:'adventurer'},
   {name:'Bryn Notice',shortName:'Bryn',role:'job_mentor',title:'Guild Route Guide',personality:'clear, encouraging, points with both hands',
    work:[HUB.jobs.x-4,HUB.jobs.z+2],home:[HUB.jobs.x,HUB.jobs.z],static:true,
@@ -8538,6 +8543,7 @@ const eventResultTitle=document.getElementById('eventresulttitle');
 const eventResultName=document.getElementById('eventresultname');
 const eventResultStats=document.getElementById('eventresultstats');
 const eventResultRewards=document.getElementById('eventresultrewards');
+const eventResultSocial=document.getElementById('eventresultsocial');
 const eventResultReturn=document.getElementById('eventresultreturn');
 const eventResultTime=document.getElementById('eventresulttime');
 const eventResultBar=document.getElementById('eventresultbar');
@@ -9595,6 +9601,64 @@ function dungeonResultStatsHTML(result){
   ];
   return '<div class="resultstats">'+stats.map(([k,v])=>'<span><b>'+escHTML(k)+'</b>'+escHTML(String(v))+'</span>').join('')+'</div>';
 }
+function postActivitySend(button,activity,action,targetToken=''){
+  if(!NET.on||!NET.room||!activity||!activity.id)return;
+  button.disabled=true;button.textContent=action==='play_again'?'QUEUING…':action==='commend'?'THANKING…':'SENDING…';
+  NET.room.send('postActivityAction',{activityId:activity.id,activityKind:activity.kind||'',action,targetToken});
+}
+function postActivitySocial(container,activity){
+  if(!container)return;
+  container.innerHTML='';
+  const participants=Array.isArray(activity&&activity.participants)?activity.participants:[];
+  const ownToken=String(gameContext&&gameContext.account&&gameContext.account.id||'');
+  const others=participants.filter(person=>person&&person.token&&person.token!==ownToken&&!person.self);
+  const shell=document.createElement('section');shell.className='post-activity-social';
+  const head=document.createElement('header');head.innerHTML='<span><small>KEEP THE PARTY GOING</small><b>Adventure is better together</b></span>';
+  const replay=document.createElement('button');replay.type='button';replay.className='post-social-replay';replay.dataset.postAction='play_again';replay.textContent='PLAY AGAIN';replay.onclick=()=>postActivitySend(replay,activity,'play_again');head.appendChild(replay);shell.appendChild(head);
+  if(others.length){
+    const list=document.createElement('div');list.className='post-social-roster';
+    for(const person of others){
+      const row=document.createElement('article');row.dataset.targetToken=person.token;
+      const identity=document.createElement('span');const avatar=document.createElement('i');avatar.textContent=String(person.name||'H').slice(0,1).toUpperCase();const name=document.createElement('b');name.textContent=String(person.name||'Hunter');identity.append(avatar,name);row.appendChild(identity);
+      const actions=document.createElement('div');actions.className='post-social-actions';
+      for(const [action,label] of [['friend','ADD FRIEND'],['team','INVITE TO TEAM'],['commend','COMMEND'],['fellowship','INVITE TO FELLOWSHIP']]){
+        const button=document.createElement('button');button.type='button';button.dataset.postAction=action;button.dataset.targetToken=person.token;button.textContent=label;button.onclick=()=>postActivitySend(button,activity,action,person.token);actions.appendChild(button);
+      }
+      row.appendChild(actions);list.appendChild(row);
+    }
+    shell.appendChild(list);
+  }else{
+    const solo=document.createElement('p');solo.textContent='No other hunters completed this activity with you.';shell.appendChild(solo);
+  }
+  const status=document.createElement('div');status.className='post-social-status';status.setAttribute('aria-live','polite');shell.appendChild(status);container.appendChild(shell);
+}
+function applyPostActivityResult(m){
+  const action=String(m&&m.action||''),targetToken=String(m&&m.targetToken||'');
+  const roots=[rewardPanel,eventResultSocial].filter(Boolean);
+  for(const root of roots){
+    const status=root.querySelector&&root.querySelector('.post-social-status');
+    const buttons=root.querySelectorAll?root.querySelectorAll('[data-post-action]'):[];
+    for(const button of buttons){
+      if(button.dataset.postAction!==action||(targetToken&&button.dataset.targetToken!==targetToken))continue;
+      if(m&&m.ok){button.disabled=true;button.classList.add('complete');button.textContent=action==='commend'?'COMMENDED':action==='friend'?(m.accepted?'FRIENDS':'REQUEST SENT'):action==='team'?'TEAM INVITE SENT':action==='fellowship'?'FELLOWSHIP INVITE SENT':'REPLAY QUEUED';}
+      else{button.disabled=false;button.textContent=action==='commend'?'COMMEND':action==='friend'?'ADD FRIEND':action==='team'?'INVITE TO TEAM':action==='fellowship'?'INVITE TO FELLOWSHIP':'PLAY AGAIN';}
+    }
+    if(status){
+      const reason=String(m&&m.reason||'');
+      status.textContent=m&&m.ok
+        ? action==='commend'?'Commendation sent to '+String(m.targetName||'your teammate')+'.'+(m.titleUnlocked?' They earned the '+m.title+' title.':'')
+          :action==='play_again'?(m.activityKind==='dungeon'?'A matching Gate will open after you return if you have another key.':'You will automatically join the next '+String(m.activityKind||'matching')+' event.')
+          :(m.queued?'Request saved and sending when you return to the overworld.':'Social request sent.')
+        : reason==='team'?'Create or lead a team before inviting this player.'
+          :reason==='leader'?'Only the team leader can invite players.'
+          :reason==='fellowship'?'Join a fellowship before inviting players.'
+          :reason==='officer'?'Only fellowship officers can invite players.'
+          :reason==='duplicate'?'You already commended this teammate for this activity.'
+          :reason==='offline'?'That player has already gone offline.'
+          :'That social action is no longer available.';
+    }
+  }
+}
 function applyGateProgress(p){
   if(!p || typeof p.highestGateRankCleared!=='number') return;
   const before=localPlayerRankIndex();
@@ -9651,8 +9715,11 @@ function showDungeonReward(m, earned){
     shardLine+
     milestoneLine+
     '<div class="rnote">'+escHTML(dungeonRewardHandoffText(m||{}, earned, failed))+'</div>'+
+    '<div id="dungeonresultsocial"></div>'+
     '<button id="rewardclose">'+escHTML(milestone?milestone.action:'CLOSE')+'</button>';
+  postActivitySocial(document.getElementById('dungeonresultsocial'),result);
   rewardWin.classList.remove('hidden');
+  rewardWin.classList.toggle('post-activity-open',!!(result&&Array.isArray(result.participants)));
   rewardWin.classList.toggle('promotion-open',!!milestone);
   rewardWin.style.pointerEvents=milestone?'auto':'';
   if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
@@ -9665,6 +9732,7 @@ function showDungeonReward(m, earned){
   if(btn) btn.onclick=()=>{
     rewardWin.classList.add('hidden');
     rewardWin.classList.remove('promotion-open');
+    rewardWin.classList.remove('post-activity-open');
     rewardWin.style.pointerEvents='';
     if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     if(resumePlay){
@@ -9672,7 +9740,10 @@ function showDungeonReward(m, earned){
     }
   };
   clearTimeout(rewardHideTimer);
-  if(!milestone) rewardHideTimer=setTimeout(()=>{rewardWin.classList.add('hidden');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();}, 12000);
+  if(!milestone){
+    const resultHoldMs=result&&Array.isArray(result.participants)?20000:12000;
+    rewardHideTimer=setTimeout(()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('post-activity-open');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();},resultHoldMs);
+  }
 }
 function eventStartLocked(){
   return !!(serverEvent&&serverEvent.phase==='starting'&&serverEvent.participating);
@@ -9771,11 +9842,12 @@ function showEventResult(m){
   eventResultRewards.innerHTML=rewardRows.length
     ? '<div class="rewardloot">'+rewardRows.map(rewardLineHTML).join('')+'</div>'
     : '<div class="rnote">'+(won?'Reward delivered':'No reward this time')+'</div>';
+  postActivitySocial(eventResultSocial,m);
   renderEventResult();
 }
 function renderEventResult(){
   if(!pendingEventResult||!eventResultWin) return;
-  const total=7000;
+  const total=15000;
   const left=Math.max(0,(pendingEventResult.returnAt||Date.now())-Date.now());
   eventResultReturn.textContent=left>0?'Returning to the overworld…':'Returning now…';
   eventResultTime.textContent=String(Math.max(0,Math.ceil(left/1000)));
@@ -12339,6 +12411,7 @@ const legacyWorldBindings={
   "caravanHunterDowned":{get:()=>caravanHunterDowned},
   "caravanHunterRevived":{get:()=>caravanHunterRevived},
   "showEventResult":{get:()=>showEventResult},
+  "applyPostActivityResult":{get:()=>applyPostActivityResult},
   "showLandEditDenied":{get:()=>showLandEditDenied},
   "setBuildGhostPreview":{get:()=>setBuildGhostPreview},
   "explainBaseSetupPlacement":{get:()=>explainBaseSetupPlacement},

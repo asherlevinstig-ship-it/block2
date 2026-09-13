@@ -2,7 +2,7 @@
 // public gate spawning, and the boss pattern machine. Lifted verbatim out of
 // GameRoom.js and mixed into its prototype; update() stays as the orchestrator.
 const {
-  ANIMAL_BASE_KIND, ANIMAL_DESPAWN_RADIUS, ANIMAL_SPAWN_INTERVAL, BIOME_ANIMAL, BIOME_HOSTILE, DANGER_RINGS, ELITE_FAMILIES,
+  ANIMAL_BASE_KIND, ANIMAL_DESPAWN_RADIUS, ANIMAL_SPAWN_INTERVAL, BIOME_ANIMAL, BIOME_WILD_PET, BIOME_HOSTILE, DANGER_RINGS, ELITE_FAMILIES,
   GATE_DISTANCE_BANDS, HOSTILE_DESPAWN_RADIUS, HOSTILE_SPAWN_INTERVAL, I, LOCAL_ANIMAL_COUNT_RADIUS,
   LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, animalBudgetFor, dangerRingAt, hostileBudgetFor, townDistance,
   weatherSpawnMods,
@@ -1673,7 +1673,9 @@ class SpawningMixin {
       if (cluster && this.countOverworldMobsNear(x, z, LOCAL_ANIMAL_COUNT_RADIUS, m => this.isAnimalKind(m.kind)) >= cluster.animalBudget) continue;
       const gy = this.world.standHeight(x, z, W.WH - 2);
       const ground = this.world.getB(Math.floor(x), gy - 1, Math.floor(z));
-      const biome = W.biomeAt(x, z), kind = BIOME_ANIMAL[biome];
+      const biome = W.biomeAt(x, z);
+      const ambientKind = BIOME_ANIMAL[biome], wildPetKind = BIOME_WILD_PET[biome];
+      const kind = wildPetKind && Math.random() < .22 ? wildPetKind : ambientKind;
       const allowed = biome === W.BIO.DESERT ? ground === W.B.SAND
         : biome === W.BIO.MESA ? (ground === W.B.RED_SAND || ground === W.B.TERRACOTTA)
           : biome === W.BIO.SNOWY ? (ground === W.B.SNOW || ground === W.B.ICE) : ground === W.B.GRASS;
@@ -1683,10 +1685,16 @@ class SpawningMixin {
       const mob = new Mob();
       mob.x = x; mob.y = gy; mob.z = z;
       mob.kind = kind;
-      mob.maxHp = mob.hp = baseKind === 'boar' ? 10 : baseKind === 'deer' ? 7 : 3;
+      mob.maxHp = mob.hp = baseKind === 'boar' ? 10 : baseKind === 'deer' ? 7 : baseKind === 'wolf' ? 9 : baseKind === 'dog' ? 7 : 4;
       this.state.mobs.set(id, mob);
-      const meta = this.freshMeta(x, z, 0, baseKind === 'rabbit' ? 2.5 : baseKind === 'deer' ? 2.0 : 1.55, kind, 0, false);
+      const meta = this.freshMeta(x, z, 0, baseKind === 'rabbit' || baseKind === 'cat' ? 2.5 : baseKind === 'deer' || baseKind === 'dog' ? 2.0 : 1.55, kind, 0, false);
       meta.patrolT = .2 + Math.random() * 1.5;
+      // Stable spatial groups let independently spawned wildlife form herds and
+      // colonies without increasing the per-player animal budget.
+      meta.herdId = `${baseKind}:${Math.floor(x / 28)}:${Math.floor(z / 28)}`;
+      meta.behaviorT = 1.5 + Math.random() * 4;
+      meta.wildlifeScanT = Math.random() * .8;
+      meta.predatorBiteCd = 2 + Math.random() * 4;
       this.mobMeta[id] = meta;
       return true;
     }

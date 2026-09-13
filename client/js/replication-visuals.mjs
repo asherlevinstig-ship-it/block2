@@ -19,7 +19,7 @@ function dangerCircle(x,y,z,radius,life){
   return ring;
 }
 // ---- server mobs: kind-aware models, state-driven telegraph animation ----
-const ANIMAL_BASE_KIND={prairie_hare:'rabbit',forest_stag:'deer',dune_hare:'rabbit',ridge_boar:'boar',frost_stag:'deer',mire_boar:'boar',pack_mule:'deer'};
+const ANIMAL_BASE_KIND={prairie_hare:'rabbit',forest_stag:'deer',dune_hare:'rabbit',ridge_boar:'boar',frost_stag:'deer',mire_boar:'boar',wild_cat:'cat',wild_dog:'dog',wild_wolf:'wolf',pack_mule:'deer'};
 function isAnimalKind(kind){ return kind==='deer'||kind==='boar'||kind==='rabbit'||!!ANIMAL_BASE_KIND[kind]; }
 const RANGED_ENEMY_KINDS=new Set(['skeleton','bone_archer','ash_archer','void_archer','bandit_archer','wind_archer','briar_archer','sun_archer','amber_archer','ice_archer','bog_archer']);
 const ENEMY_FAMILY_COLORS={
@@ -431,6 +431,9 @@ function makeAnimal(kind){
     ridge_boar:{body:'#8b3e2c',dark:'#47241e',light:'#d0764d',nose:'#301814'},
     frost_stag:{body:'#b8d1d8',dark:'#537681',light:'#efffff',nose:'#253f4b'},
     mire_boar:{body:'#4d6338',dark:'#283522',light:'#83955a',nose:'#20251a'},
+    wild_cat:{body:'#817a6e',dark:'#3d3937',light:'#d8c6a5',nose:'#9b5b64'},
+    wild_dog:{body:'#9b6031',dark:'#432819',light:'#dbac72',nose:'#241710'},
+    wild_wolf:{body:'#5d6976',dark:'#29343e',light:'#aab7c2',nose:'#1d252c'},
   };
   const pal = nativePal[kind] || (base==='deer'
     ? {body:'#9a6b3a', dark:'#6f4726', light:'#d2a064', nose:'#2b1a12'}
@@ -441,7 +444,8 @@ function makeAnimal(kind){
   const darkM=reg(lam(solidTex(pal.dark)));
   const lightM=reg(lam(solidTex(pal.light)));
   const noseM=reg(lam(solidTex(pal.nose)));
-  const s=base==='rabbit'?.72:base==='boar'?1.05:1.12;
+  const pet=base==='cat'||base==='dog'||base==='wolf';
+  const s=base==='rabbit'?.72:base==='cat'?.74:base==='dog'?.9:base==='wolf'?1.0:base==='boar'?1.05:1.12;
   addBox(grp,[.9*s,.46*s,.42*s],[0,.62*s,0],bodyM);
   addBox(grp,[.38*s,.36*s,.36*s],[0,.72*s,.42*s],base==='rabbit'?lightM:bodyM);
   addBox(grp,[.18*s,.1*s,.12*s],[0,.68*s,.64*s],noseM);
@@ -455,6 +459,10 @@ function makeAnimal(kind){
   } else if(base==='rabbit'){
     for(const sx of [-.09,.09]) addBox(grp,[.08*s,.42*s,.08*s],[sx*s,1.02*s,.38*s],bodyM,[sx>0?.18:-.18,0,0]);
     addBox(grp,[.2*s,.16*s,.08*s],[0,.6*s,-.34*s],lightM);
+  } else if(pet){
+    for(const sx of [-.11,.11]) addBox(grp,[.075*s,.22*s,.06*s],[sx*s,.98*s,.42*s],bodyM,[0,0,sx>0?-.18:.18]);
+    addBox(grp,[.1*s,.1*s,.5*s],[0,.72*s,-.42*s],bodyM,[base==='cat'?.45:.25,0,0]);
+    addBox(grp,[.2*s,.12*s,.08*s],[0,.66*s,.62*s],lightM);
   } else {
     for(const sx of [-.11,.11]) addBox(grp,[.06*s,.13*s,.04*s],[sx*s,.66*s,.7*s],lightM,[.2,0,sx>0?.25:-.25]);
     addBox(grp,[.14*s,.16*s,.1*s],[0,.78*s,-.35*s],darkM);
@@ -678,14 +686,29 @@ function netMobTick(m, dt, t){
   if(m.wagon)return;
   const moving=Math.hypot(mvx,mvz)>.08;
   if(m.animal){
-    const sw=moving?Math.sin(t*((ANIMAL_BASE_KIND[r.kind]||r.kind)==='rabbit'?12:8)+m.phase)*.55:0;
+    const st=r.state||'',base=ANIMAL_BASE_KIND[r.kind]||r.kind;
+    const pace=st==='boarCharge'||st==='pounce'?15:st==='flee'?12:base==='rabbit'?11:7.5;
+    const sw=moving?Math.sin(t*pace+m.phase)*(st==='boarCharge'||st==='flee'||st==='pounce'?.72:.5):0;
     for(let i=0;i<m.legs.length;i++) m.legs[i].rotation.x=sw*(i%2? -1:1);
-    if((r.state||'')!==m.lastState){
-      m.lastState=r.state||'';
+    const sleep=st==='sleep',burrow=st==='burrow',alert=st==='alert'||st==='boarWarn';
+    const scaleY=burrow?.07:sleep?.48:alert?1.08:1;
+    const scaleXZ=burrow?.2:st==='boarCharge'||st==='pounce'?1.08:1;
+    m.grp.scale.x+=(scaleXZ-m.grp.scale.x)*Math.min(1,dt*9);
+    m.grp.scale.y+=(scaleY-m.grp.scale.y)*Math.min(1,dt*(burrow?5:8));
+    m.grp.scale.z+=(scaleXZ-m.grp.scale.z)*Math.min(1,dt*9);
+    const lean=st==='graze'?.12:sleep?.08:st==='boarCharge'||st==='pounce'?-.16:0;
+    const shake=alert?Math.sin(t*22+m.phase)*.045:0;
+    m.grp.rotation.z+=(shake-m.grp.rotation.z)*Math.min(1,dt*8);
+    m.grp.rotation.x+=(lean-m.grp.rotation.x)*Math.min(1,dt*7);
+    if(st==='graze')for(let i=0;i<m.legs.length;i++)m.legs[i].rotation.x=Math.sin(t*1.7+m.phase+i)*.035;
+    if(st!==m.lastState){
+      m.lastState=st;
       if(m.hitT<=0){ const bc=m.baseCol||[1,1,1]; m.mats.forEach(mm=>mm.color.setRGB(bc[0],bc[1],bc[2])); }
     }
-    if(r.state==='flee' && m.grp.visible && Math.random()<dt*10)
+    if((st==='flee'||st==='boarCharge'||st==='pounce') && m.grp.visible && Math.random()<dt*(st==='flee'?10:18))
       spawnParticle({x:p.x, y:p.y+.12, z:p.z, vx:(Math.random()-.5)*.4, vy:.5, vz:(Math.random()-.5)*.4, life:.25, grav:1.5, r:.55, g:.45, b:.32});
+    if(st==='alert'&&m.grp.visible&&Math.random()<dt*5)
+      spawnParticle({x:p.x+(Math.random()-.5)*.5,y:p.y+1.25,z:p.z+(Math.random()-.5)*.5,vx:0,vy:.35,vz:0,life:.3,grav:0,r:1,g:.72,b:.2});
     return;
   }
   const sw=moving?Math.sin(t*7.5+m.phase)*.55:m.legs[0].rotation.x*.9;
@@ -900,6 +923,13 @@ function deityPowerFx(m){
 }
 function netFx(m){
   if((m.dgn||'')!==NET.dgn) return;
+  if(m.t==='expeditionSignal'){
+    const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
+    ringPulse(x,y+.08,z,3.2,m.stage===2?0x75e89a:0xffd24a,.65);
+    burst(x,y+1,z,m.stage===2?[.45,.95,.6]:[1,.8,.3],28,3.4,3.2,.7,2);
+    glowFlash(x,y+1.8,z,m.stage===2?0x75e89a:0xffd24a,4,.45);
+    return;
+  }
   if(m.t==='deityPower'){deityPowerFx(m);return;}
   if(m.t==='meteorFalling'){
     const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
@@ -954,6 +984,21 @@ function netFx(m){
     const col=m.kind==='shade'?[.45,.2,.7]:m.kind==='fang'?[.55,.4,.3]:m.kind==='mote'?[.55,1,.38]:[1,.85,.3];
     burst(m.x,m.y+.8,m.z,col,m.t==='familiarSummon'?20:12,m.t==='familiarSummon'?2.3:1.5,2,.5); return;
   }
+  if(m.t==='petCommand'){
+    const col=m.kind==='cat'?[.62,.84,.45]:m.kind==='wolf'?[.55,.82,1]:[1,.64,.28];
+    const hex=m.kind==='cat'?0x9ad26b:m.kind==='wolf'?0x8bd7ff:0xff9a42,action=String(m.action||'follow');
+    if(action==='feed'||action==='pet'){
+      burst(m.x,m.y+.65,m.z,col,action==='feed'?22:14,1.8,1.6,.5);
+      ringPulse(m.x,m.y+.08,m.z,1.25,hex,.42);
+    }else if(action==='guardHit'){
+      burst(m.x,m.y+.8,m.z,col,16,2.4,1.6,.38);ringPulse(m.x,m.y+.08,m.z,1.1,hex,.28);
+    }else{
+      ringPulse(m.x,m.y+.08,m.z,action==='scout'?2.2:1.45,hex,.5);
+      burst(m.x,m.y+.35,m.z,col,action==='return'?18:10,1.7,1.4,.42);
+    }
+    if(NET.room&&m.sid===NET.room.sessionId&&action!=='guardHit')showName(action==='return'?'PET RETURNED':('PET: '+action.toUpperCase()));
+    return;
+  }
   if(m.t==='spriteBonus'){
     const count=Math.max(1,m.count|0); burst(m.x,m.y,m.z,[1,.9,.45],10+count*8,2.1+count*.35,1.8,.45);
     if(NET.room&&m.sid===NET.room.sessionId){ if(SFX.coin)SFX.coin(); familiarReaction('sprite',count); }
@@ -964,6 +1009,44 @@ function netFx(m){
     const col=m.kind==='wolf'?[.55,.72,1]:m.kind==='boar'?[1,.52,.2]:m.kind==='cat'?[1,.62,.84]:m.kind==='deer'?[1,.86,.45]:[.62,1,.82];
     burst(m.x,m.y,m.z,col,22,2.7,2.3,.62);
     ringPulse(m.x,m.y-.25,m.z,1.8,m.kind==='boar'?0xfb923c:m.kind==='cat'?0xf9a8d4:m.kind==='wolf'?0x93c5fd:0xa7f3d0,.42);
+    return;
+  }
+  if(m.t==='wildlifeAlert'){
+    const predator=m.kind==='predator',hex=predator?0xef4444:0xf59e0b,col=predator?[1,.22,.18]:[1,.68,.14];
+    ringPulse(m.x,m.y+.08,m.z,predator?2.4:1.75,hex,.42);
+    burst(m.x,m.y+1.15,m.z,col,predator?16:10,1.6,1.8,.42);
+    if(Math.hypot(m.x-player.pos.x,m.z-player.pos.z)<14&&SFX.slamWarn)SFX.slamWarn();
+    return;
+  }
+  if(m.t==='boarWarn'){
+    dangerCircle(m.x,m.y+.08,m.z,m.radius||2.1,(m.durationMs||900)/1000);
+    ringPulse(m.x,m.y+.1,m.z,1.1,0xfb923c,.55);
+    burst(m.x,m.y+.45,m.z,[1,.34,.12],18,2.2,1.2,.45);
+    if(SFX.slamWarn)SFX.slamWarn();
+    showName('BOAR CHARGE - MOVE!');
+    return;
+  }
+  if(m.t==='rabbitBurrow'){
+    const emerge=m.action==='emerge';
+    ringPulse(m.x,m.y+.05,m.z,emerge?1.35:.85,emerge?0xa7f3d0:0x8b6b43,.36);
+    burst(m.x,m.y+.12,m.z,emerge?[.58,.82,.62]:[.42,.31,.2],emerge?20:14,1.8,1.1,.48);
+    return;
+  }
+  if(m.t==='wildlifeSnap'){
+    const boar=m.kind==='boar';
+    burst(m.x,m.y+.55,m.z,boar?[1,.3,.12]:[.85,.75,.58],boar?24:12,boar?3.1:1.8,1.5,.4);
+    ringPulse(m.x,m.y+.08,m.z,boar?1.5:.8,boar?0xf97316:0xd6b98a,.26);
+    if(boar)camShake=Math.max(camShake,.2);
+    return;
+  }
+  if(m.t==='wildTame'){
+    const col=m.kind==='wild_wolf'?[.55,.82,1]:m.kind==='wild_dog'?[1,.64,.28]:[.96,.62,.82];
+    const hex=m.kind==='wild_wolf'?0x8bd7ff:m.kind==='wild_dog'?0xff9a42:0xf39ac5;
+    const complete=m.stage==='bound';
+    burst(m.x,m.y+.65,m.z,col,complete?48:24,complete?4.2:2.4,complete?3.4:2,.7);
+    ringPulse(m.x,m.y+.08,m.z,complete?3.1:1.65,hex,complete?.72:.42);
+    if(complete){glowFlash(m.x,m.y+1,m.z,hex,4.5,.55);SFX.level&&SFX.level();}
+    else SFX.success&&SFX.success();
     return;
   }
   if(m.t==='shadeStep'){ shadowDashVfx({x:m.sx,y:m.sy,z:m.sz},{x:m.x,y:m.y,z:m.z}); return; }

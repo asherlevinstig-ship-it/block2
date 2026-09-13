@@ -459,7 +459,7 @@ test('Town of Beginnings has explainer NPC helpers for major areas', () => {
   assert.match(combat, /vill\.role==='scholar'/);
   assert.match(combat, /Dungeon Shards open Gates/);
   assert.match(combat, /vill\.role==='skyship_attendant'/);
-  assert.match(world, /Rabbits, deer, and boars can rarely drop pet collars/);
+  assert.match(world, /Wild cats, dogs, and wolves live beyond the walls/);
 });
 
 test('marketplace has a dedicated recipe-based common outfitter', () => {
@@ -486,17 +486,29 @@ test('marketplace has a dedicated recipe-based common outfitter', () => {
   assert.match(economy, /isOutfitter \? OUTFITTER_BUY/);
 });
 
-test('wild pet familiar discovery is taught through hunting and familiar UI', () => {
+test('wild pet familiar discovery teaches the live taming sequence', () => {
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
   const jobs = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'job-system.js'), 'utf8');
-  assert.match(networking, /PET_FAMILIAR_COLLAR_IDS/);
-  assert.match(networking, /Pet collar found:/);
-  assert.match(networking, /rabbits, deer, and boars outside town can rarely drop pet collars/);
-  assert.match(networking, /press <b>K<\/b> to call your familiar/);
-  assert.match(menus, /Pet collars can drop from animals outside town/);
-  assert.match(menus, /COLLARS<\/b> hunt wildlife outside town/);
-  assert.match(jobs, /Rare pet collars can drop from rabbits, deer, and boars/);
+  assert.match(networking, /teachWildTamingFromHunt/);
+  assert.match(networking, /wild cats, dogs, and wolves live outside town/);
+  assert.match(networking, /approach gently, feed and calm it/);
+  assert.match(menus, /approach without attacking, feed its favourite food, calm it/);
+  assert.match(menus, /TAMING<\/b> approach · feed · calm · collar/);
+  assert.match(jobs, /approach a wild cat, dog, or wolf, feed its favourite food, calm it/);
+});
+
+test('ordinary pet commands expose care controls and state-driven movement', () => {
+  const companions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(companions, /function commandFamiliar\(command,slot=-1\)/);
+  assert.match(companions, /mode==='play'/);
+  assert.match(companions, /mode==='guard'/);
+  assert.match(menus, /\['retrieve','RETRIEVE'\]/);
+  assert.match(menus, /COMPANIONS\.commandFamiliar\('feed',foodSlot\)/);
+  assert.match(menus, /COMPANIONS\.commandFamiliar\('pet'\)/);
+  assert.match(networking, /room\.onMessage\('familiarCommandResult'/);
 });
 
 test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
@@ -1133,9 +1145,9 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(menusSource, /familiarBindingSlot\(def\.sigil\)/);
   assert.match(menusSource, /Daily Bond:/);
   assert.match(menusSource, /BIND '\+def\.name\.toUpperCase\(\)/);
-  assert.match(menusSource, /Rare Cat Collar from rabbits and hares outside town/);
-  assert.match(menusSource, /Rare Dog Collar from deer and stags outside town/);
-  assert.match(menusSource, /Rare Wolf Collar from boars outside town/);
+  assert.match(menusSource, /Befriend a wild cat with River Fish/);
+  assert.match(menusSource, /Befriend a wild dog with Cooked Meat/);
+  assert.match(menusSource, /Befriend a wild wolf with Raw Meat/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8'), /cat:\{ name:'Cat', sigil:I\.CAT_COLLAR/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /ITEMS\[I\.CAT_COLLAR\]=\{name:'Cat Collar'/);
   assert.match(runtimeSource, /Caravan Under Attack/);
@@ -1954,7 +1966,7 @@ test('Recall Cast uses the dedicated P practice hotkey',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
-  assert.match(combat,/String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'&&!e\.repeat&&gameInput[\s\S]*BlockcraftRecall\.start\(dim==='questions'\?\{source:'question_hall'\}:undefined\);\s*return;/);
+  assert.match(combat,/e\.code==='KeyP'\|\|String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'\)&&!e\.repeat&&gameInput[\s\S]*BlockcraftRecall\.start\(dim==='questions'\?\{source:'question_hall'\}:undefined\);\s*return;/);
   assert.doesNotMatch(combat,/e\.code==='KeyI'[\s\S]*BlockcraftRecall\.start\(\)/);
   assert.match(html,/<kbd>P<\/kbd><\/div><b>Recall Cast<\/b>/);
   assert.doesNotMatch(html,/id="recallanswers"/);
@@ -2056,7 +2068,7 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(room,/recordRecallAttempt/);
   assert.match(recall,/Number\.isFinite\(\+m\.stamina\)/);
   assert.match(recall,/Number\.isFinite\(\+m\.sp\)/);
-  assert.match(recall,/function submitAnswer\(index\)\{if\(!active\|\|answerPending\)return;answerPending=true;syncRecallPose\(\)/);
+  assert.match(recall,/function submitAnswer\(index\)\{\s*if\(!active\|\|answerPending\)return;[\s\S]*answerPending=true;syncRecallPose\(\)/);
   assert.match(recall,/if\(m\.correct\)syncRecallPose\(\);else releaseRecallMovement\('recall-wrong'\)/);
   assert.doesNotMatch(recall,/releaseRecallMovement\('recall-submit'\)/);
   assert.match(room,/const ids=\[\.\.\.new Set\(\[mastery\.lastQuestionId,\.\.\.recent,\.\.\.answered\]/);
@@ -3172,10 +3184,10 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(social,/Whisper quick phrase/);
   assert.match(social,/function chatModeLabel\(\)\{return chatMode==='party'\?'TEAM':chatMode\.toUpperCase\(\);\}/);
   assert.match(social,/setChatMode\('local'\);/);
-  assert.match(social,/Tab again for Team \/ Whisper/);
+  assert.match(social,/Tab changes Local \/ Team \/ Fellowship \/ Whisper/);
   assert.match(social,/chatWheelCloseEl\.addEventListener\('click',event=>\{event\.preventDefault\(\);closeAnyWheel\(true\);\}\);/);
-  assert.match(social,/Tab again for Team \/ Whisper/);
-  assert.match(social,/FRIENDS · NEARBY HUNTERS · TEAMS/);
+  assert.match(social,/Tab changes Local \/ Team \/ Fellowship \/ Whisper/);
+  assert.match(social,/FRIENDS · RECENT PLAYERS · NEARBY HUNTERS · TEAMS/);
   assert.match(social,/function openTeamUI\(tab='team',refresh=true\)/);
   assert.match(social,/function applySocialSnapshot\(message\)/);
   assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
@@ -4351,6 +4363,36 @@ test('network controller tries the next overworld shard and returns to it after 
   ]);
 });
 
+test('join-friend shard switch updates the primary shard and restores it if the target fills', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const joins = [], selected = [];
+  const room = token => ({ reconnectionToken: token, onLeave(fn) { this.leaveHandler = fn; }, async leave() { if (this.leaveHandler) this.leaveHandler(); } });
+  const main = room('main'), friend = room('friend'), restored = room('restored');
+  let shard2Joins = 0;
+  class Client {
+    async joinOrCreate(name, options) {
+      joins.push([name, options.shardId, options.name]);
+      if (options.shardId === 'main') return main;
+      if (options.shardId === 'shard-2') return shard2Joins++ ? restored : friend;
+      throw new Error('room is full');
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume', joinAttempts: 1,
+    primaryJoinOptions: () => ({ shardId: 'main' }), onPrimaryJoinOptions: options => selected.push(options.shardId),
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {}, onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(await controller.switchPrimaryShard('shard-2'), friend);
+  assert.equal(controller.state.shardId, 'shard-2');
+  await assert.rejects(controller.switchPrimaryShard('shard-3'), /room is full/);
+  assert.equal(controller.state.room, restored);
+  assert.equal(controller.state.shardId, 'shard-2');
+  assert.deepEqual(selected, ['main', 'shard-2']);
+  assert.deepEqual(joins, [['blockcraft', 'main', 'Hunter'], ['blockcraft', 'shard-2', 'Hunter'], ['blockcraft', 'shard-3', 'Hunter'], ['blockcraft', 'shard-2', 'Hunter']]);
+});
+
 test('network controller waits for a booting main shard before trying overflow shards', async () => {
   const { createNetworkController } = await clientModule('network.mjs');
   const events = [], selected = [], retries = [];
@@ -5165,6 +5207,69 @@ test('desktop social control opens the unified Social hub from the bottom-right'
   assert.match(styles, /#socialbtn\.is-holding:after[\s\S]*animation:socialHoldProgress 1\.2s linear forwards/);
 });
 
+test('social invitations use actionable deferred notifications with unread history', () => {
+  const notifications = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'social-notifications.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  assert.match(notifications, /incomingFriendRequests[\s\S]*teamInvites[\s\S]*guildInvites/);
+  assert.match(notifications, /label:'Accept'[\s\S]*label:'Decline'[\s\S]*label:'View'/);
+  assert.match(notifications, /label:'Review trade'/);
+  assert.match(notifications, /history\.length>20/);
+  assert.match(notifications, /bc_social_notification_history_v1/);
+  assert.match(notifications, /bc_social_notification_settings_v1/);
+  assert.match(notifications, /function dungeonLobby\(/);
+  assert.match(notifications, /Match found/);
+  assert.match(networking, /SOCIAL_NOTIFICATIONS\.trade\(m\)/);
+  assert.match(networking, /SOCIAL_NOTIFICATIONS\.dungeonLobby\(m,previous,room\.sessionId\)/);
+  assert.match(networking, /SOCIAL_NOTIFICATIONS\.dungeonStart\(m\)/);
+  assert.doesNotMatch(networking, /const receiveTradeOffer=m=>\{[\s\S]{0,120}applyTradeOffer\(m\)/);
+  assert.match(styles, /body\.presentation-combat #socialnotificationstack/);
+  assert.match(styles, /#socialnotificationbadge/);
+  assert.match(styles, /\.social-notification-settings/);
+  assert.match(styles, /@media\(max-width:700px\)\{#socialnotificationstack/);
+  assert.match(room, /guildInviteDecline/);
+  assert.match(room, /guildInvites/);
+});
+
+test('activity results expose replay, friendship, team, commendation, and fellowship actions', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  const store = fs.readFileSync(path.join(__dirname, '..', 'store.js'), 'utf8');
+
+  assert.match(html, /id="eventresultsocial"/);
+  assert.match(world, /PLAY AGAIN/);
+  assert.match(world, /ADD FRIEND/);
+  assert.match(world, /INVITE TO TEAM/);
+  assert.match(world, /COMMEND/);
+  assert.match(world, /INVITE TO FELLOWSHIP/);
+  assert.match(world, /postActivityAction/);
+  assert.match(networking, /postActivityResult/);
+  assert.match(networking, /commendationReceived/);
+  assert.match(styles, /\.post-activity-social/);
+  assert.match(room, /handlePostActivityAction/);
+  assert.match(room, /postActivityTitle/);
+  assert.match(store, /commendationWeekKarma/);
+});
+
+test('social hub exposes recent players, friend shard joins, and fellowship quick chat', () => {
+  const social = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'social.mjs'), 'utf8');
+  const network = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'network.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const rules = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'comms-rules.js'), 'utf8');
+  assert.match(social, /function renderRecentSocial\(/);
+  assert.match(social, /recentFriendAdd/);
+  assert.match(social, /JOIN FRIEND/);
+  assert.match(social, /Fellowship quick phrase/);
+  assert.match(network, /function switchPrimaryShard\(/);
+  assert.match(networking, /friendJoinResult/);
+  assert.match(networking, /fellowshipActivity/);
+  assert.match(rules, /fellowship:Object\.freeze/);
+});
+
 test('desktop HUD is composed into identity, navigation, objective, feed, and support clusters', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
@@ -5229,4 +5334,26 @@ test('job system is disabled while ordinary work activities remain available', (
   assert.doesNotMatch(combat, /Farmer Lv 5 is required/);
   assert.doesNotMatch(networking, /reason ===? 'farmer_level'/);
   assert.match(menus, /AVAILABLE TO EVERY HUNTER/);
+});
+
+
+test('craft requests correlate replies, prevent double clicks and retry the same intent',async()=>{
+  const {createCraftRequests,craftFailureText}=await clientModule('craft-requests.mjs');
+  const sent=[],timers=new Map();let n=0,id=0;
+  let room={send:(type,payload)=>sent.push({type,payload})};
+  const tracker=createCraftRequests({room:()=>room,notify(){},newId:()=>String(++id),setTimer:fn=>{timers.set(++n,fn);return n;},clearTimer:key=>timers.delete(key)});
+  const grid=[{id:5,count:1}];
+  assert.equal(tracker.start({w:2,cells:[5,0,0,0]},grid),true);
+  assert.equal(tracker.start({w:2,cells:[5,0,0,0]},grid),false);
+  const retry=timers.values().next().value;timers.clear();retry();
+  assert.equal(sent.length,2);assert.equal(sent[0].payload.requestId,sent[1].payload.requestId);
+  assert.equal(tracker.settle({requestId:'stale'}),null);assert.equal(tracker.pending,true);
+  assert.equal(tracker.settle({requestId:'1'}).grid,grid);assert.equal(tracker.pending,false);
+  assert.equal(tracker.settle({requestId:'1'}),null,'duplicate result is ignored');
+  tracker.start({w:2,cells:[5,0,0,0]},[]);room=null;
+  assert.equal(tracker.pending,false);assert.equal(timers.size,0);
+  assert.match(craftFailureText({reason:'full'}),/bag/);
+  assert.match(craftFailureText({reason:'rate'}),/Too many/);
+  assert.match(craftFailureText({reason:'hunter_level',level:8}),/Level 8/);
+  assert.doesNotMatch(craftFailureText({reason:'server'}),/ingredients/);
 });

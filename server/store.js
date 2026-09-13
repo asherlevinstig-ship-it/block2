@@ -435,6 +435,8 @@ function defaultProfile(name) {
     cartographerHints: [],
     cartographerContract: null,
     treasureMap: null,
+    elderheartExpedition: null,
+    elderheartExpeditionDone: false,
     cartographerIntroSeen: false,
     townMapClaimed: false,
     cosmeticUnlocks: [],
@@ -448,6 +450,15 @@ function defaultProfile(name) {
     friends: [],
     friendRequests: [],
     sentFriendRequests: [],
+    commendationsGiven: [],
+    commendationsReceived: 0,
+    commendationWeek: 0,
+    commendationWeekKarma: 0,
+    socialTitle: '',
+    recentPlayers: [],
+    postActivityIntents: [],
+    eventReplayKind: '',
+    dungeonReplay: null,
     recallSubject: 'Computer Science',
     recallMastery: { items: {}, lastQuestionId: '', lastTopic: '', totalAttempts: 0, totalCorrect: 0 },
     progressionFocus: '',
@@ -1104,6 +1115,10 @@ function sanitizeProfile(p) {
     id: cleanShortText(p.treasureMap.id, '', 48), stage: clampI(p.treasureMap.stage, 0, 3),
     targets: cleanDiscoveryList(p.treasureMap.targets).slice(0, 3), rewardGold: clampI(p.treasureMap.rewardGold, 0, 9999),
   } : null;
+  out.elderheartExpedition = p.elderheartExpedition && p.elderheartExpedition.id === 'elderheart_road'
+    ? { id: 'elderheart_road', stage: clampI(p.elderheartExpedition.stage, 0, 3), startedAt: Math.max(0, Math.min(1e13, Number(p.elderheartExpedition.startedAt) || 0)) }
+    : null;
+  out.elderheartExpeditionDone = p.elderheartExpeditionDone === true;
   out.cartographerIntroSeen = !!p.cartographerIntroSeen;
   out.townMapClaimed = p.townMapClaimed === true;
   out.cosmeticUnlocks = sanitizeCosmeticUnlocks(p.cosmeticUnlocks);
@@ -1119,6 +1134,30 @@ function sanitizeProfile(p) {
   out.friends = Array.isArray(p.friends) ? [...new Set(p.friends.map(cleanToken).filter(Boolean))].slice(0, 256) : [];
   out.friendRequests = Array.isArray(p.friendRequests) ? [...new Set(p.friendRequests.map(cleanToken).filter(Boolean))].filter(token => !out.friends.includes(token)).slice(0, 64) : [];
   out.sentFriendRequests = Array.isArray(p.sentFriendRequests) ? [...new Set(p.sentFriendRequests.map(cleanToken).filter(Boolean))].filter(token => !out.friends.includes(token)).slice(0, 64) : [];
+  out.commendationsGiven = Array.isArray(p.commendationsGiven) ? [...new Set(p.commendationsGiven.filter(v => typeof v === 'string').map(v => v.replace(/[^A-Za-z0-9_|-]/g, '').slice(0, 140)).filter(Boolean))].slice(-128) : [];
+  out.commendationsReceived = clampI(p.commendationsReceived, 0, 1000000);
+  out.commendationWeek = clampI(p.commendationWeek, 0, 100000);
+  out.commendationWeekKarma = clampI(p.commendationWeekKarma, 0, 5);
+  out.socialTitle = ['Reliable Teammate','Party Hero','Legendary Ally'].includes(p.socialTitle) ? p.socialTitle : '';
+  out.recentPlayers = Array.isArray(p.recentPlayers) ? p.recentPlayers.slice(0, 20).map(raw => ({
+    token: cleanToken(raw && raw.token),
+    name: cleanShortText(raw && raw.name, 'Hunter', 24),
+    lastPlayedAt: clampI(raw && raw.lastPlayedAt, 0, 4102444800000),
+    activityKind: cleanShortText(raw && raw.activityKind, 'Activity', 48),
+  })).filter((entry, index, all) => entry.token && all.findIndex(other => other.token === entry.token) === index) : [];
+  out.postActivityIntents = Array.isArray(p.postActivityIntents) ? p.postActivityIntents.slice(-12).map(raw => ({
+    key: cleanShortText(raw && raw.key, '', 140),
+    action: ['team','fellowship'].includes(raw && raw.action) ? raw.action : '',
+    targetToken: cleanToken(raw && raw.targetToken),
+    activityId: cleanShortText(raw && raw.activityId, '', 64),
+    at: clampI(raw && raw.at, 0, 4102444800000),
+  })).filter(intent => intent.key && intent.action && intent.targetToken) : [];
+  out.eventReplayKind = ['parkour','king','caravan'].includes(p.eventReplayKind) ? p.eventReplayKind : '';
+  out.dungeonReplay = p.dungeonReplay && typeof p.dungeonReplay === 'object' ? {
+    rank: clampI(p.dungeonReplay.rank, 0, 5),
+    kind: cleanShortText(p.dungeonReplay.kind, 'public', 16),
+    dungeonId: cleanShortText(p.dungeonReplay.dungeonId, '', 48),
+  } : null;
   out.recallSubject = 'Computer Science';
   out.recallMastery = { items: {}, lastQuestionId: '', lastTopic: '', totalAttempts: 0, totalCorrect: 0 };
   const recall = p.recallMastery && typeof p.recallMastery === 'object' ? p.recallMastery : {};

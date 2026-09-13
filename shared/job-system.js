@@ -143,7 +143,7 @@
     treasure:['Start a treasure map with Orin or find a buried cache discovery.','Follow the gold map clue and press G at the marked site.','Completing the route or recovering a buried cache advances the contract.'],
     farm:['Till soil, plant seeds, and harvest mature crops.','General farm contracts accept all three actions.','Harvest Basket requires mature wheat.'],
     cook:['Gather ingredients and prepare meals through crafting or cooking stations.','Completed food items advance the contract.','Return to the board when ready.'],
-    hunt:['Find wild animals outside town.','Defeat passive wildlife to gather meat for the kitchen.','Rare pet collars can drop from rabbits, deer, and boars; use one from your hotbar, then press K.','Hostile monsters do not count for Cook hunting contracts.'],
+    hunt:['Find wild animals outside town.','Defeat passive wildlife to gather meat for the kitchen.','To gain a pet, do not attack: approach a wild cat, dog, or wolf, feed its favourite food, calm it, then fasten its collar.','Hostile monsters do not count for Cook hunting contracts.'],
     tame:['Search outside town for rabbit, deer, boar, cat, dog, or wolf signs.','Pet collars, sigils, charms, and totems count when used from your hotbar.','Press K after binding to call or cycle your familiar.'],
     pet_care:['Craft Dragon Treats or prepare companion care supplies.','Feed dragons or keep a familiar active while travelling.','Return to the Job Board when your care work is ready.'],
     sell:['Prepare food items.','Sell them at the tavern counter.','Each accepted food item advances the contract.'],

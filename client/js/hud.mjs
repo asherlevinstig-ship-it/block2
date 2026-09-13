@@ -114,9 +114,9 @@ function itemTooltipText(stack){
   if(stack.id===I.FANG_TOTEM) lines.push('Use to bind the familiar Fang (then press K)');
   if(stack.id===I.MOTE_CHARM) lines.push('Use to bind the familiar Mote (then press K)');
   if(stack.id===I.FORAGE_CHARM) lines.push('Use to bind the familiar Sprite (then press K)');
-  if(stack.id===I.CAT_COLLAR) lines.push('Use to bind the pet familiar Cat (then press K)');
-  if(stack.id===I.DOG_COLLAR) lines.push('Use to bind the pet familiar Dog (then press K)');
-  if(stack.id===I.WOLF_COLLAR) lines.push('Use to bind the pet familiar Wolf (then press K)');
+  if(stack.id===I.CAT_COLLAR) lines.push('Fasten onto a calmed wild cat to complete its bond');
+  if(stack.id===I.DOG_COLLAR) lines.push('Fasten onto a calmed wild dog to complete its bond');
+  if(stack.id===I.WOLF_COLLAR) lines.push('Fasten onto a calmed wild wolf to complete its bond');
   if(stack.id===B.EGG_INSULATOR) lines.push('Place down, then use a dragon egg on top');
   return lines.join('\n');
 }

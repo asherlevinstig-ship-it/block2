@@ -5,6 +5,7 @@ import {api as hudApi,state as hudState} from './hud.mjs';
 import {api as menusApi,state as menusState} from './menus.mjs';
 import {createNetworkSession} from './network-session.mjs';
 import {createSocialSystem} from './social.mjs';
+import {createSocialNotifications} from './social-notifications.mjs';
 import {createNetworkFramePump} from './network-frame-pump.mjs';
 import {createCompanionSystem} from './companions.mjs';
 import {createReplicationVisuals} from './replication-visuals.mjs';
@@ -458,24 +459,13 @@ function receiveRewardItem(it){
   inv[slot]=stack;refreshHUD();
   return {stack,slot,baseline};
 }
-const PET_FAMILIAR_COLLAR_IDS=new Set([I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR]);
 let nextPetFamiliarHuntHintAt=0;
-function petFamiliarCollarDrops(items){
-  return Array.isArray(items)?items.filter(it=>it&&PET_FAMILIAR_COLLAR_IDS.has(it.id)&&ITEMS[it.id]):[];
-}
-function teachPetFamiliarFromHunt(items){
-  const collars=petFamiliarCollarDrops(items);
-  if(collars.length){
-    const names=collars.map(it=>ITEMS[it.id].name+' x'+Math.max(1,it.count|0||1)).join(', ');
-    sysMsg('<b>Pet collar found:</b> '+escHTML(names)+'. Put it on your hotbar, use it to bind the pet, then press <b>K</b> to call your familiar.',{tier:'major',title:'Familiar Found'});
-    eventFeed('[Familiar]','Pet collar found: '+names+'. Use it from the hotbar, then press K.',{key:'familiar:collar:'+names,cooldown:0});
-    return true;
-  }
+function teachWildTamingFromHunt(){
   const now=Date.now(),hasFamiliar=Array.isArray(COMPANIONS&&COMPANIONS.familiarUnlocks)&&COMPANIONS.familiarUnlocks.length>0;
   if(!hasFamiliar&&now>=nextPetFamiliarHuntHintAt){
     nextPetFamiliarHuntHintAt=now+180000;
-    sysMsg('<b>Familiar hint:</b> rabbits, deer, and boars outside town can rarely drop pet collars. Use a collar from your hotbar, then press <b>K</b> to call the pet.','minor');
-    eventFeed('[Familiar]','Wild animals can rarely drop pet collars. Use one from the hotbar, then press K.',{key:'familiar:hunt-hint',cooldown:180000});
+    sysMsg('<b>Taming hint:</b> wild cats, dogs, and wolves live outside town. Do not attack—look at one and press <b>G</b> to begin earning its trust.','minor');
+    eventFeed('[Familiar]','Wild companions are befriended through approach, food, calm, and a collar.',{key:'familiar:hunt-hint',cooldown:180000});
   }
   return false;
 }
@@ -1329,6 +1319,8 @@ function netAttachRoom(room,name,client){
     // routine has registered every handler. Keep those early packets from
     // turning into noisy SDK warnings while the explicit handlers below come online.
     room.onMessage('*',()=>{});
+    menusApi.applyRandomGateQueue({queued:false,rank:-1,waiting:0});
+    menusApi.applyElderheartExpedition(null);
     room.onMessage('serverRestartWarning',showServerRestartWarning);
     room.onMessage('e2eJourneyResult',m=>{e2eJourneyResult=m||null;});
     room.onMessage('familiarTelemetry',renderFamiliarTelemetry);
@@ -1444,13 +1436,13 @@ function netAttachRoom(room,name,client){
     });
     const receiveTradeOffer=m=>{
       if(m&&m.toSid&&m.toSid!==room.sessionId)return;
-      applyTradeOffer(m);
+      SOCIAL_NOTIFICATIONS.trade(m);
       eventFeed('[Trade]',String(m&&m.fromName||'Hunter')+' offered a player trade.',{key:'trade:'+String(m&&m.id||''),cooldown:0});
     };
     room.onMessage('tradeOffer', receiveTradeOffer);
     room.onMessage('tradeOfferBroadcast', receiveTradeOffer);
     room.onMessage('tradePending', m=>applyTradePending(m));
-    room.onMessage('tradeResult', m=>{applyTradeResult(m);eventFeed('[Trade]','Trade completed with '+String(m&&m.withName||'Hunter')+'.',{key:'trade:done:'+String(m&&m.id||''),cooldown:0});});
+    room.onMessage('tradeResult', m=>{SOCIAL_NOTIFICATIONS.resolve('trade:'+String(m&&m.id||''),'Trade completed');applyTradeResult(m);eventFeed('[Trade]','Trade completed with '+String(m&&m.withName||'Hunter')+'.',{key:'trade:done:'+String(m&&m.id||''),cooldown:0});});
     room.onMessage('karmaResult', m=>{
       const delta=m&&m.karmaDelta|0;
       showKarmaFeedback(delta,m&&m.karma,m&&m.reason||'karma');
@@ -1467,7 +1459,7 @@ function netAttachRoom(room,name,client){
       eventFeed('[Karma]',count+' karma soldier'+(count===1?' is':'s are')+' hunting you.',{key:'karma:hunter:'+String(Date.now()),cooldown:0});
     });
     room.onMessage('tradeReject', m=>applyTradeReject(m));
-    room.onMessage('tradeCancel', m=>applyTradeCancel(m));
+    room.onMessage('tradeCancel', m=>{SOCIAL_NOTIFICATIONS.resolve('trade:'+String(m&&m.id||''),'Trade cancelled');applyTradeCancel(m);});
     room.onMessage('robResult', m=>{
       if(m&&typeof m.totalGold==='number'){gold=Math.max(0,m.totalGold|0);refreshHUD();refreshPlayUi();}
       if(m&&m.test){
@@ -1516,6 +1508,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('petTamerPing', m=>{applyPetTamerPing(m);eventFeed('[Dragon]',String(m&&m.fromName||'Hunter')+' is looking for dragon training help.',{key:'dragonhandler:ping:'+String(m&&m.fromSid||''),cooldown:3000});});
     room.onMessage('petTamerPingResult', m=>applyPetTamerPingResult(m));
     room.onMessage('friendResult', m=>{
+      if(m&&m.targetToken)SOCIAL_NOTIFICATIONS.resolve('friend:'+String(m.targetToken),m.action==='accepted'?'Friend added':'Request '+String(m.action||'updated'));
       applyFriendResult(m);
       if(m&&m.ok&&m.action==='accepted'){
         const kDelta=(m.karmaDelta|0);
@@ -1525,11 +1518,41 @@ function netAttachRoom(room,name,client){
       }
     });
     room.onMessage('friendRequest',m=>{
+      SOCIAL_NOTIFICATIONS.friend(m);
       sysMsg('<b>'+escHTML(String(m&&m.fromName||'A hunter'))+'</b> sent you a friend request. Open <b>Social → Friends</b> to respond.',{tier:'minor',title:'Friend Request'});
       eventFeed('[Friends]','Friend request from '+String(m&&m.fromName||'a hunter')+'.',{key:'friend-request:'+String(m&&m.fromToken||''),cooldown:0});
       SOCIAL.requestSocialSnapshot();
     });
-    room.onMessage('socialSnapshot',m=>SOCIAL.applySocialSnapshot(m));
+    room.onMessage('friendJoinResult',m=>{
+      if(!m||!m.ok){
+        const reason=String(m&&m.reason||'');
+        sysMsg(reason==='full'?'Your friend’s shard is full or they are currently in an activity.':reason==='activity'?'Finish your current activity before changing shards.':reason==='offline'?'Your friend is no longer online.':reason==='same_shard'?'You are already in your friend’s shard.':'Could not join that friend right now.',{tier:'minor',title:'Join Friend'});
+        SOCIAL.requestSocialSnapshot();return;
+      }
+      if(!NETWORK||typeof NETWORK.switchPrimaryShard!=='function')return;
+      closeQWin(false);
+      sysMsg('Joining <b>'+escHTML(String(m.targetName||'your friend'))+'</b> in '+escHTML(String(m.shardId||'their shard'))+'…',{tier:'minor',title:'Join Friend'});
+      NETWORK.switchPrimaryShard(m.shardId).then(joined=>{
+        if(joined)sysMsg('You joined <b>'+escHTML(String(m.targetName||'your friend'))+'</b>’s shard.',{tier:'major',title:'Joined Friend'});
+      }).catch(()=>sysMsg('That shard filled or became unavailable. You were returned to your previous shard if possible.',{tier:'minor',title:'Join Friend'}));
+    });
+    room.onMessage('postActivityResult',m=>{
+      if(worldApi.applyPostActivityResult)worldApi.applyPostActivityResult(m);
+      if(m&&m.ok&&m.action==='commend')sysMsg('You commended <b>'+escHTML(String(m.targetName||'a teammate'))+'</b>.',{tier:'minor',title:'Teamwork'});
+    });
+    room.onMessage('commendationReceived',m=>{
+      const reward=(m&&m.karmaDelta)?' <b>+'+(m.karmaDelta|0)+' karma</b>.':'';
+      const title=m&&m.titleUnlocked?' New social title: <b>'+escHTML(String(m.title||''))+'</b>.':'';
+      if(m&&m.karmaDelta)showKarmaFeedback(m.karmaDelta,m.karma,'commendation');
+      if(m&&m.title)globalThis.BlockcraftSocialTitle=String(m.title);
+      sysMsg('<b>'+escHTML(String(m&&m.fromName||'A teammate'))+'</b> commended you!'+reward+title,{tier:'major',title:'Commendation'});
+      if(SFX.success)SFX.success();
+    });
+    room.onMessage('postActivityReplayResult',m=>{
+      if(m&&m.ok)sysMsg('<b>Rematch Gate opened.</b> Follow the Gate marker and regroup with your party.',{tier:'major',title:'Play Again'});
+      else sysMsg('You need another matching Gate key to play that dungeon again.',{tier:'minor',title:'Play Again'});
+    });
+    room.onMessage('socialSnapshot',m=>{SOCIAL.applySocialSnapshot(m);SOCIAL_NOTIFICATIONS.syncSnapshot(m);});
     room.onMessage('progressionFocus', m=>{
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
       const restoredFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
@@ -1944,9 +1967,10 @@ function netAttachRoom(room,name,client){
       if(guildHallOpen) openGuildHallUI();
     });
     room.onMessage('guildCreated',m=>{sysMsg('Guild founded: <b>'+escHTML(m&&m.name||'New Guild')+'</b>. You are its leader.');SFX.level();showFellowshipTutorial(m,'created');});
-    room.onMessage('guildJoined',m=>{if(m&&m.id)delete pendingGuildInvites[m.id];sysMsg('Joined fellowship: <b>'+escHTML(m&&m.name||'Fellowship')+'</b>.');SFX.level();showFellowshipTutorial(m,'joined');});
+    room.onMessage('guildJoined',m=>{if(m&&m.id){delete pendingGuildInvites[m.id];SOCIAL_NOTIFICATIONS.resolve('fellowship:'+String(m.id),'Fellowship joined');}sysMsg('Joined fellowship: <b>'+escHTML(m&&m.name||'Fellowship')+'</b>.');SFX.level();showFellowshipTutorial(m,'joined');});
     room.onMessage('guildLeft',m=>{sysMsg((m&&m.kicked)?'You were removed from <b>'+escHTML(m.name||'your fellowship')+'</b>.':(m&&m.disbanded)?'<b>'+escHTML(m&&m.name||'Your fellowship')+'</b> disbanded.':'You left <b>'+escHTML(m&&m.name||'your fellowship')+'</b>.');SFX.uiClose();});
-    room.onMessage('guildInvite',m=>{if(m&&m.id)pendingGuildInvites[m.id]=Date.now();sysMsg('<b>'+escHTML(m&&m.from||'An officer')+'</b> invited you to <b>'+escHTML(m&&m.name||'a fellowship')+'</b>. Visit Lyra at the Fellowship Hall to join.');SFX.level();});
+    room.onMessage('guildInvite',m=>{if(m&&m.id)pendingGuildInvites[m.id]=Date.now();SOCIAL_NOTIFICATIONS.fellowship(m);sysMsg('<b>'+escHTML(m&&m.from||'An officer')+'</b> invited you to <b>'+escHTML(m&&m.name||'a fellowship')+'</b>. Accept from the notification or review it at the Fellowship Hall.');SFX.level();});
+    room.onMessage('guildInviteDeclined',m=>{if(m&&m.id){delete pendingGuildInvites[m.id];SOCIAL_NOTIFICATIONS.resolve('fellowship:'+String(m.id),'Invitation declined');}sysMsg('Fellowship invitation declined.',{tier:'minor',title:'Fellowship'});});
     room.onMessage('guildResult',m=>{
       if(!m||!m.ok){sysMsg('Fellowship action failed.');return;}
       if(m.action==='privacy')sysMsg('Fellowship is now <b>'+(m.private?'invite-only':'open')+'</b>.');
@@ -2125,15 +2149,28 @@ function netAttachRoom(room,name,client){
     room.onMessage('dungeonRoomCleared', m=>announceDungeonRoomCleared(m));
     room.onMessage('dungeonPing', m=>{if(globalThis.applyDungeonPing)globalThis.applyDungeonPing(m);});
     room.onMessage('dungeonLobby', m=>{
+      const previous=dungeonLobbyState;
+      SOCIAL_NOTIFICATIONS.dungeonLobby(m,previous,room.sessionId);
       dungeonLobbyState=m;
       if(typeof closeLevel2JobChoice==='function') closeLevel2JobChoice();
-      openDungeonLobbyUI();
+      if(!previous||dungeonLobbyOpen)openDungeonLobbyUI();
     });
     room.onMessage('dungeonMatchmaking', m=>{
       dungeonMatchmakingState=m&&Array.isArray(m.listings)?m:{listings:[]};
       if(dungeonLobbyOpen&&dungeonLobbyState)openDungeonLobbyUI();
     });
+    room.onMessage('randomGateQueue', m=>menusApi.applyRandomGateQueue(m));
+    room.onMessage('randomGateQueueReject', m=>{
+      const reason=m&&m.reason;
+      const message=reason==='gate'?'No active public Gate of that rank is available right now.'
+        :reason==='rank'?'That Gate rank is not unlocked yet.'
+        :reason==='team'?'Only a team leader with room for recruits can queue. Leave your team or ask its leader to queue.'
+        :reason==='lobby'?'Leave your current Gate Lobby before joining the random queue.'
+        :'Could not join Random Gate matchmaking right now.';
+      sysMsg(message);
+    });
     room.onMessage('dungeonLobbyStart', m=>{
+      SOCIAL_NOTIFICATIONS.dungeonStart(m);
       if(dungeonLobbyOpen) closeQWin();
       dungeonLobbyState=null;
       announceDungeonLobbyStart(m);
@@ -2144,6 +2181,7 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('dungeonLobbyClosed', m=>{
       const r=m&&m.reason;
+      SOCIAL_NOTIFICATIONS.resolve('dungeon:'+String(m&&m.gateId||dungeonLobbyState&&dungeonLobbyState.gateId||''),'Lobby closed');
       dungeonLobbyState=null;
       if(dungeonLobbyOpen) closeQWin();
       if(r==='gone') sysMsg('That <b>Gate</b> closed before the party entered.');
@@ -2327,8 +2365,11 @@ function netAttachRoom(room,name,client){
         gainJobXP('adventurer', 12, 'event');
         jobContractProgress('event', 1, 0);
       }
-      if(m.source==='hunt'){
-        teachPetFamiliarFromHunt(m.items);
+      if(m.source==='wild_pet_harmed'){
+        sysMsg('<b>The bond is broken.</b> Wild companions grant no loot or XP when attacked. Find another and approach gently.','minor');
+        eventFeed('[Taming]','A frightened wild companion fled the bond.',{key:'taming:harmed',cooldown:5000});
+      } else if(m.source==='hunt'){
+        teachWildTamingFromHunt();
         const meat=(m.items||[]).find(it=>it&&it.id===I.MONSTER_MEAT);
         if(meat){
           sysMsg('Hunted food acquired: <b>Monster Meat x'+(meat.count||1)+'</b>','minor');
@@ -2389,6 +2430,33 @@ function netAttachRoom(room,name,client){
       eventFeed('[Weather]',String(m.title||'Weather discovery milestone')+' achieved.',{key:'weather-milestone:'+String(m.kind||''),cooldown:0});
     });
     room.onMessage('cartographerIntro',()=>sysMsg('<b>Orin Mapwell:</b> I mark leads in gold, treasure in ink, and weather-sites by patience. Some discoveries only wake under the right sky.'));
+    room.onMessage('elderheartExpedition',m=>{
+      const prior=globalThis.BlockcraftElderheartExpedition;
+      menusApi.applyElderheartExpedition(m);
+      if(m&&m.active&&(!prior||!prior.active||prior.stage!==m.stage)){
+        showName(m.stage===0?'EXPEDITION STARTED':m.stage===3?'EXPEDITION READY TO CLAIM':'EXPEDITION STEP '+(m.stage|0)+' COMPLETE');
+        sysMsg('<b>Roads of the Elderheart:</b> '+escHTML(m.instruction||'Follow the expedition marker.')+(m.target?'<br><b>Next:</b> '+escHTML(m.target.name||'marked site')+' is marked E on the world map.':''));
+        eventFeed('[Expedition]',String(m.instruction||'Follow the route.'),{key:'elderheart:stage:'+String(m.stage),cooldown:0});
+      }
+    });
+    room.onMessage('elderheartExpeditionPrompt',m=>menusApi.openElderheartExpeditionPrompt(m));
+    room.onMessage('elderheartExpeditionReject',m=>{
+      const reason=m&&m.reason;
+      sysMsg(reason==='camp'?'The camp is still defended. Defeat its guards and captain, then press <b>G</b> at the camp to recover the manifest.'
+        :reason==='bearing'?'The beacon points away from the road camp. Compare the camp marker on your map and try again.'
+        :reason==='full'?'Make room in your inventory before claiming Orin’s expedition reward.'
+        :reason==='done'?'You have already completed Roads of the Elderheart.'
+        :reason==='claim'?'Finish the route and return to Orin Mapwell to claim your reward.'
+        :'Move closer to the marked expedition site.');
+    });
+    room.onMessage('elderheartExpeditionComplete',m=>{
+      if(!m)return;
+      showName('ROADS OF THE ELDERHEART COMPLETE');
+      const next=m.nextGate?' A public '+(['E','D','C','B','A','S'][Math.max(0,Math.min(5,m.nextGate.rank|0))])+'-rank Gate is available at '+Math.round(m.nextGate.x)+', '+Math.round(m.nextGate.z)+'.':'';
+      sysMsg('<b>Expedition complete!</b> +'+Math.max(0,m.gold|0)+' gold, +'+Math.max(0,m.xp|0)+' Hunter XP, and Heartwood Resin x2. Road Safety: '+Math.max(0,m.roadSafety|0)+'/100.'+next);
+      eventFeed('[Expedition]','Roads of the Elderheart complete. Orin recorded the route.',{key:'elderheart:complete',cooldown:0});
+      OVERWORLD_RESULTS.show({title:'EXPEDITION COMPLETE',summary:'Beacon aligned · manifest recovered · Elderheart traced',grant:{gold:m.gold,xp:m.xp,items:m.items},next:next||'Choose another regional contract or treasure map at Orin.'});
+    });
     room.onMessage('cartographerUpdate',m=>{if(m&&Number.isFinite(m.gold))gold=m.gold|0;if(m){const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m.treasure||null;if(m.treasure&&m.treasure.targetId)hintedDiscoveryIds.add(m.treasure.targetId);}refreshHUD();updateLandMinimap();if(document.querySelector('#qpanel .fellowship-map-table-marker')&&typeof openFellowshipMapTableUI==='function')openFellowshipMapTableUI(m);else openCartographerUI(m);});
     room.onMessage('cartographerHint',m=>{
       if(!m||!m.id)return;hintedDiscoveryIds.add(m.id);if(Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();
@@ -2722,6 +2790,7 @@ function netAttachRoom(room,name,client){
         :trait==='mote_burst'?name+' bloomed for '+Math.max(1,(m.heal||0)|0)+' HP.'
         :trait==='trail_nose'?name+' sniffed out extra meat.'
         :trait==='hunter_howl'?name+' howled: +'+Math.max(1,(m.bonus||0)|0)+' XP.'
+        :trait==='pet_guard'?name+(m.damage?' struck the threat for '+Math.max(1,m.damage|0)+' damage.':' warned you about a nearby threat.')
         :trait==='bonus_find'?name+' found +'+Math.max(1,(m.count||0)|0)+' extra drop'+(((m.count||0)|0)===1?'':'s')+'.'
         :name+' helped you.';
       eventFeed('[Companion]',line,{key:'familiar:trait:'+trait,cooldown:1800});
@@ -2742,12 +2811,56 @@ function netAttachRoom(room,name,client){
       eventFeed('[Taming]',(m.label||'Wild tracks')+' read.',{key:'taming:track:'+String(m.id||''),cooldown:0});
       if(typeof sysMsg==='function')sysMsg('<b>Wild tracks:</b> '+String(m.clue||m.label||'Trail discovered')+xp);
     });
-    room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]){ COMPANIONS.activeFamiliar=m.kind; eventFeed('[Familiar]',FAMILIARS[m.kind].name+' summoned.',{key:'familiar:summon:'+m.kind,cooldown:3000}); } });
+    room.onMessage('tameAnimalResult', m=>{
+      if(!(m&&m.ok)){
+        const r=m&&m.reason, food=(m&&m.foodName)||'the food it trusts';
+        if(r==='rate'||r==='patience')return;
+        if(r==='range')sysMsg('Move slowly and get a little closer to the wild animal.');
+        else if(r==='food')sysMsg('It is interested, but cautious. Select <b>'+escHTML(food)+'</b> and press <b>G</b> while looking at it.');
+        else if(r==='collar')sysMsg('The animal trusts you now. Select its <b>collar</b> and press <b>G</b> to complete the bond.');
+        else if(r==='hurt')sysMsg('This animal is frightened and hurt. Give it space and find an unharmed animal to befriend.');
+        else if(r==='owned')sysMsg('That kind of companion is already bonded to you.');
+        else sysMsg('Keep the wild animal in sight and approach gently.');
+        return;
+      }
+      const name=escHTML(m.name||'Wild animal');
+      if(m.stage==='noticed'){
+        SFX.success(); showName('A WILD ANIMAL NOTICES YOU');
+        sysMsg('<b>'+name+' noticed you.</b><br>Do not attack. Select <b>'+escHTML(m.foodName||'its favourite food')+'</b>, then look at it and press <b>G</b>.',{tier:'major',title:'Taming · Approach'});
+      }else if(m.stage==='fed'){
+        SFX.success(); showName('TRUST GAINED');
+        sysMsg('<b>Food accepted!</b><br>Stay close, wait for it to settle, then press <b>G</b> again to calm it.',{tier:'major',title:'Taming · Feed'});
+      }else if(m.stage==='calmed'){
+        SFX.level(); showName('THE ANIMAL TRUSTS YOU');
+        sysMsg('<b>Bond formed!</b><br>A collar has been prepared. Select it on your hotbar, look at '+name+', and press <b>G</b> to make the bond permanent.',{tier:'major',title:'Taming · Calm'});
+        eventFeed('[Taming]',String(m.name||'Wild animal')+' trusts you. Fasten its collar.',{key:'taming:calmed:'+String(m.mobId||''),cooldown:0});
+      }else if(m.stage==='bound'){
+        SFX.level(); showName('NEW COMPANION BONDED!');
+        rewardGain('legendary',1,String(m.name||'Companion')+' bonded',{icon:'PET',immersive:true});
+        sysMsg('<b>COMPANION BONDED!</b><br>'+name+' chose to travel with you. Press <b>K</b> to summon your new companion.',{tier:'major',title:'Taming Complete'});
+        eventFeed('[Taming]',String(m.name||'Companion')+' bonded successfully.',{key:'taming:bound:'+String(m.familiar||''),cooldown:0});
+      }
+    });
+    room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]){ COMPANIONS.activeFamiliar=m.kind; COMPANIONS.applyFamiliarCommand({ok:true,command:'follow',kind:m.kind}); eventFeed('[Familiar]',FAMILIARS[m.kind].name+' summoned.',{key:'familiar:summon:'+m.kind,cooldown:3000}); } });
     room.onMessage('familiarDismissed', ()=>{ COMPANIONS.activeFamiliar=''; eventFeed('[Familiar]','Familiar dismissed.',{key:'familiar:dismiss',cooldown:3000}); });
+    room.onMessage('familiarCommandResult',m=>{
+      if(!(m&&m.ok)){
+        const reason=m&&m.reason;
+        if(reason==='food')sysMsg('Select <b>'+escHTML(m.foodName||'your pet\'s favourite food')+'</b> in the hotbar first.');
+        else if(reason!=='rate')sysMsg(reason==='pet'?'Call a bonded <b>Cat, Dog, or Wolf</b> first.':'Your pet cannot do that right now.');
+        return;
+      }
+      COMPANIONS.applyFamiliarCommand(m);
+      const name=(FAMILIARS[m.kind]&&FAMILIARS[m.kind].name)||'Pet',command=String(m.command||'follow');
+      let line=m.complete?name+' returned to your side.':name+' is now '+({follow:'following you',stay:'staying here',guard:'guarding this spot',scout:'scouting ahead',retrieve:'retrieving the thrown marker',play:'playing',feed:'fed and content',pet:'enjoying the attention'}[command]||command)+'.';
+      if(m.discovery)line+=' '+(m.discovery.hostile?'Threat':'Animal')+' spotted: '+String(m.discovery.kind||'unknown').replace(/_/g,' ')+' ('+Math.max(0,m.discovery.distance|0)+'m).';
+      eventFeed('[Pet Command]',line,{key:'pet-command:'+command+':'+!!m.complete,cooldown:m.complete?1200:400});
+      sysMsg('<b>Pet:</b> '+escHTML(line),{key:'pet-command-msg:'+command+':'+!!m.complete,cooldown:800});
+    });
     room.onMessage('familiarReject', m=>{
       const kind=(m&&m.kind)||'shade', def=FAMILIARS[kind]||FAMILIARS.shade, r=m&&m.reason;
       if(m&&m.action==='summon') COMPANIONS.activeFamiliar='';
-      sysMsg(r==='owned'?'<b>'+def.name+'</b> is already bound to you':r==='item'?'You need a <b>'+((ITEMS[def.sigil]&&ITEMS[def.sigil].name)||'binding item')+'</b>':r==='locked'?'You have not bound <b>'+def.name+'</b> yet':'<b>'+def.name+'</b> will not answer that call');
+      sysMsg(r==='owned'?'<b>'+def.name+'</b> is already bound to you':r==='tame'?'Find a living <b>'+def.name+'</b> outside town, approach gently, feed and calm it, then fasten the collar':r==='item'?'You need a <b>'+((ITEMS[def.sigil]&&ITEMS[def.sigil].name)||'binding item')+'</b>':r==='locked'?'You have not bound <b>'+def.name+'</b> yet':'<b>'+def.name+'</b> will not answer that call');
     });
     room.onMessage('shadeStepResult', m=>{applyShadeStepResult(m);eventFeed('[Familiar]','Shade carried you through Dark Passage.',{key:'shade:step',cooldown:2500});});
     room.onMessage('shadeStepReject', m=>{
@@ -2817,8 +2930,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonTrainingCancel', m=>{ if(COMPANIONS.clearDragonTraining) COMPANIONS.clearDragonTraining(m); sysMsg('Dragon training '+(((m&&m.reason)||'cancelled'))+'.'); });
     room.onMessage('dragonTrainingReject', m=>dragonTrainingRejected(m));
     room.onMessage('editReject', m=>netEditReject(m));
-    room.onMessage('craftResult', m=>{applyServerCraft(m);if(m&&m.out&&ITEMS[m.out.id])eventFeed('[Craft]','Crafted '+feedStackText(m.out.id,m.finalCount||((m.out.count||1)*Math.max(1,m.times|0||1)))+'.',{key:'craft:'+m.out.id,cooldown:1500});});
-    room.onMessage('craftReject', m=>{ SFX.error(); sysMsg(m&&m.reason==='hunter_level'?'Reach <b>Hunter Level '+(m.level||1)+'</b> for that recipe':'Crafting failed: missing server-side ingredients'); });
+    room.onMessage('craftResult', m=>{if(room!==NET.room||!applyServerCraft(m))return;if(m&&m.out&&ITEMS[m.out.id])eventFeed('[Craft]','Crafted '+feedStackText(m.out.id,m.finalCount||((m.out.count||1)*Math.max(1,m.times|0||1)))+'.',{key:'craft:'+m.out.id,cooldown:1500});});
+    room.onMessage('craftReject', m=>{if(room===NET.room)menusApi.craftingRejected(m);});
     room.onMessage('shopResult', m=>{applyShopResult(m);if(m&&ITEMS[m.id])eventFeed('[Trade]',(m.action==='sell'?'Sold ':'Bought ')+feedStackText(m.id,m.count||1)+(m.gold?' for '+Math.abs(m.gold|0)+' gold':'')+'.',{key:'shop:'+String(m.vendor||'')+':'+String(m.action||'')+':'+m.id,cooldown:1500});});
     room.onMessage('shopReject', m=>shopRejected(m));
     room.onMessage('landClaims', m=>applyLandClaims(m));
@@ -2969,13 +3082,21 @@ function netAttachRoom(room,name,client){
       if(m.fromSid&&m.fromSid===room.sessionId&&SOCIAL.showLocalChatBubble)SOCIAL.showLocalChatBubble(m.text||'',m.mode||'local');
       else if(m.fromSid)SOCIAL.showChatBubble(m.fromSid,m.text||'',m.mode||'local');
     });
-    room.onMessage('commsReject',m=>chatLine('[Comms]',m&&m.reason==='party'?'Join a party before using Party chat.':m&&m.reason==='target'?'That whisper target is no longer online.':m&&m.reason==='muted'?'That player has muted your communications.':m&&m.reason==='duplicate'?'Please avoid repeating the same phrase.':m&&m.reason==='rate'?'Communication cooldown active.':'Only approved quick-chat phrases are allowed.','blocked'));
+    room.onMessage('commsReject',m=>chatLine('[Comms]',m&&m.reason==='party'?'Join a party before using Party chat.':m&&m.reason==='fellowship'?'Join a fellowship before using Fellowship chat.':m&&m.reason==='target'?'That whisper target is no longer online.':m&&m.reason==='muted'?'That player has muted your communications.':m&&m.reason==='duplicate'?'Please avoid repeating the same phrase.':m&&m.reason==='rate'?'Communication cooldown active.':'Only approved quick-chat phrases are allowed.','blocked'));
+    room.onMessage('fellowshipActivity',m=>{
+      if(!m)return;
+      const names=Array.isArray(m.names)?m.names.map(name=>String(name||'').slice(0,24)).filter(Boolean).join(', '):'Fellowship members';
+      const kind=String(m.activityKind||'activity').slice(0,48);
+      const message=m.outcome==='renown'?names+' earned +'+Math.max(0,m.amount|0)+' Renown from '+kind+'.':names+' '+(m.outcome==='failed'?'attempted':'completed')+' '+kind+'.';
+      eventFeed('[Fellowship]',message,{key:'fellowship-activity:'+String(m.activityId||kind)+':'+String(m.at||''),cooldown:0});
+    });
     room.onMessage('commsMuteResult',m=>SOCIAL.applyMuteResult(m));
     room.onMessage('commsBlockList',m=>SOCIAL.applyBlockList(m));
     room.onMessage('commsReportResult',m=>chatLine('[Safety]',m&&m.ok?'Report submitted for moderator review.':m&&m.reason==='rate'?'You recently reported this player.':'Report could not be submitted.',m&&m.ok?'whisper':'blocked'));
     room.onMessage('bugReportResult',m=>applyBugReportResult(m));
     room.onMessage('teamInvite', m=>{
       SOCIAL.receiveTeamInvite(m);
+      SOCIAL_NOTIFICATIONS.team(m);
       sysMsg('<b>'+escHTML(m&&m.from||'A team leader')+'</b> invited you to <b>'+escHTML(m&&m.name||'a team')+'</b>. Open <b>Social → Team</b> to accept or decline.');
       chatLine('[Team]', 'Invitation received from '+((m&&m.from)||'a team leader')+'.');
       SFX.level();
@@ -3000,8 +3121,8 @@ function netAttachRoom(room,name,client){
       }
       if(m.action==='invite') sysMsg('Invited <b>'+escHTML(m.target||'hunter')+'</b> to the team.');
       else if(m.action==='created') sysMsg('Created <b>'+escHTML(m.name||'your team')+'</b>.');
-      else if(m.action==='joined') sysMsg('Joined <b>'+escHTML(m.name||'the team')+'</b>.');
-      else if(m.action==='invite_declined') sysMsg('Declined the invitation to <b>'+escHTML(m.name||'that team')+'</b>.');
+      else if(m.action==='joined'){SOCIAL_NOTIFICATIONS.resolve('team:'+String(m.id||''),'Team joined');sysMsg('Joined <b>'+escHTML(m.name||'the team')+'</b>.');}
+      else if(m.action==='invite_declined'){SOCIAL_NOTIFICATIONS.resolve('team:'+String(m.id||''),'Invitation declined');sysMsg('Declined the invitation to <b>'+escHTML(m.name||'that team')+'</b>.');}
       else if(m.action==='privacy') sysMsg('Team is now <b>'+(m.private?'invite-only':'open')+'</b>.');
       else if(m.action==='lfg') sysMsg(m.lfg?'Team marked <b>looking for dungeon</b>.':'Team dungeon status cleared.');
       else if(m.action==='transfer') sysMsg('Team leadership transferred.');
@@ -5601,6 +5722,16 @@ const SOCIAL=createSocialSystem({
   markGateCutsceneSeen,
   startIntroCutscene,
   resetLevel2AbilityFlow,
+});
+const SOCIAL_NOTIFICATIONS=createSocialNotifications({
+  document,
+  send:(type,message)=>{if(NET.on&&NET.room)NET.room.send(type,message);},
+  openSocial:tab=>openTeamUI(tab||'nearby'),
+  openFellowship:()=>{if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'notification'});menusApi.openGuildHallUI();},
+  openDungeonLobby:()=>{if(dungeonLobbyState)openDungeonLobbyUI();},
+  reviewTrade:offer=>menusApi.applyTradeOffer(offer),
+  playSound:()=>{if(SFX.level)SFX.level();},
+  isPresentationBlocked:()=>document.body.classList.contains('presentation-combat')||document.body.classList.contains('cutscene'),
 });
 globalThis.startQuickChatWheel=SOCIAL.startQuickChatWheel;
 globalThis.closeQuickChatWheel=SOCIAL.closeQuickChatWheel;

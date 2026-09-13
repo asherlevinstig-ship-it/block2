@@ -163,6 +163,8 @@ class DungeonRoom extends GameRoom {
     this.onMessage('useRepairKit', (c, m) => this.handleUseRepairKit(c, m));
     this.onMessage('dedit', (c, m) => this.handleDungeonEdit(c, m));   // mining inside the dungeon
     this.onMessage('requestDungeonStatus', c => this.handleDungeonStatusRequest(c));
+    this.onMessage('comms', (c, m) => this.handleComms(c, m));
+    this.onMessage('postActivityAction', (c, m) => this.handlePostActivityAction(c, m));
     if (process.env.BLOCKCRAFT_E2E === '1') this.onMessage('e2eJourney', (c, m) => this.handleE2EJourney(c, m));
   }
 
@@ -189,6 +191,7 @@ class DungeonRoom extends GameRoom {
       this.profiles.set(token, prof);
     }
     this.tokens.set(client.sessionId, token);
+    client._mutedComms = new Set(prof.mutedPlayers || []);
     this.persistedInventorySignatures.set(token, this.inventoryPersistenceSignature(prof));
     if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
     if (ensureAsherAdminFishingRod(prof, auth)) this.dirtyPlayers.add(token);

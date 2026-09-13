@@ -1,6 +1,8 @@
 const hud=document.getElementById('recallhud'),subjectEl=document.getElementById('recallsubject'),timeEl=document.getElementById('recalltime'),progressEl=document.getElementById('recallprogress'),closeEl=document.getElementById('recallclose'),questionEl=document.getElementById('recallquestion'),instructionEl=document.getElementById('recallinstruction'),fallbackEl=document.getElementById('recallfallback'),feedbackEl=document.getElementById('recallfeedback');
 let active=null,group=null,freezeUntil=0,answerPending=false,masterySummary=null,questionHallOpen=false,questionHallAnswered=0,questionHallNextTimer=0,recallClearTimer=0;
 const questionHallMarks=[];
+let requestTimer=0,recallRoom=null,recallDim=null;
+function finishRequest(){if(requestTimer)clearTimeout(requestTimer);requestTimer=0;}
 const colors=[0x38bdf8,0xa78bfa,0xfbbf24,0x34d399],QUESTION_HALL_GOAL=10;
 
 function clearMeshes(){if(!group)return;scene.remove(group);group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});group=null;}
@@ -67,8 +69,17 @@ function releaseRecallMovement(reason){
 function syncRecallPose(){
   try{if(NET&&NET.on&&NET.room&&player&&player.pos)NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,heldId:typeof displayHeldId==='function'?displayHeldId():undefined});}catch(e){}
 }
-function submitAnswer(index){if(!active||answerPending)return;answerPending=true;syncRecallPose();fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=true);NET.room.send('recallAnswer',{id:active.id,index});}
+function submitAnswer(index){
+  if(!active||answerPending)return;
+  if(!NET.on||!NET.room)return sysMsg('Recall answer requires a server connection.');
+  answerPending=true;syncRecallPose();fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=true);
+  requestTimer=setTimeout(()=>{requestTimer=0;answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Answer confirmation delayed. Try your answer again.');},8000);
+  try{NET.room.send('recallAnswer',{id:active.id,index});}
+  catch(_){finishRequest();answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Could not send answer. Try again after reconnecting.');}
+}
 function showQuestion(m){
+  if(m&&m.questionHall&&!questionHallOpen)return;
+  finishRequest();recallRoom=NET.room;recallDim=dim;
   const hall=!!(m&&m.questionHall)||questionHallOpen;
   if(recallClearTimer){clearTimeout(recallClearTimer);recallClearTimer=0;}
   clearRecall({keepQuestionHall:hall});active=m;answerPending=false;masterySummary=m.mastery||masterySummary;group=new THREE.Group();
@@ -88,6 +99,7 @@ function showQuestion(m){
   document.body.classList.add('recall-active');document.body.classList.toggle('question-hall-recall-open',hall);hud.classList.toggle('question-hall-recall',hall);updateQuestionHallProgress();hud.classList.remove('hidden');
 }
 function clearRecall(opts={}){
+  finishRequest();
   active=null;answerPending=false;if(questionHallNextTimer){clearTimeout(questionHallNextTimer);questionHallNextTimer=0;}if(recallClearTimer){clearTimeout(recallClearTimer);recallClearTimer=0;}
   clearMeshes();fallbackEl.innerHTML='';fallbackEl.classList.add('hidden');if(instructionEl)instructionEl.classList.add('hidden');feedbackEl.className='hidden';hud.classList.remove('question-hall-recall');hud.classList.add('hidden');document.body.classList.remove('recall-active','question-hall-recall-open');
   if(!opts.keepQuestionHall){questionHallOpen=false;questionHallAnswered=0;}updateQuestionHallProgress();
@@ -96,9 +108,16 @@ function selectedSubject(){return 'Computer Science';}
 function start(opts={}){
   if(!NET.on||!NET.room)return sysMsg('Recall Cast requires a server connection.');
   const source=opts&&opts.source==='lectern'?'lectern':(opts&&opts.source==='question_hall'?'question_hall':'');
-  if(active)return sysMsg(source==='question_hall'?'Answer or close the current question.':'Run towards the <b>correct answer pillar</b>.');
+  if(active&&(active.expiresAt<=Date.now()||recallRoom!==NET.room||recallDim!==dim))clearRecall();
+  if(active){hud.classList.remove('hidden');return sysMsg(active.fallback||active.questionHall?'Choose an answer to the current question.':'Run towards the <b>correct answer pillar</b>.');}
+  if(requestTimer)return sysMsg('Preparing the next Recall question…');
+  clearRecall({keepQuestionHall:questionHallOpen});
   if(source==='question_hall')questionHallOpen=true;
-  NET.room.send('recallStart',{yaw:player.yaw,subject:selectedSubject(),source});
+  recallRoom=NET.room;recallDim=dim;
+  showName('PREPARING QUESTION…');
+  requestTimer=setTimeout(()=>{requestTimer=0;showName('QUESTION DELAYED · PRESS P TO RETRY');sysMsg('No Recall question received. Press P to retry.');},8000);
+  try{NET.room.send('recallStart',{yaw:player.yaw,subject:selectedSubject(),source});}
+  catch(_){finishRequest();sysMsg('Could not send Recall request. Check your connection and press P to retry.');}
 }
 function closeQuestionHall(){
   const wasHall=questionHallOpen;
@@ -112,7 +131,7 @@ function queueQuestionHallNext(delay=900){
 }
 function reviewTiming(nextDue){const ms=Math.max(0,(Number(nextDue)||0)-Date.now());if(ms<3*60*1000)return 'again soon';if(ms<60*60*1000)return 'in '+Math.max(1,Math.round(ms/60000))+' minutes';if(ms<36*60*60*1000)return 'tomorrow';return 'in '+Math.max(2,Math.round(ms/86400000))+' days';}
 function result(m){
-  if(!m)return;if(m.expired){clearRecall();return sysMsg('The Recall Cast faded.');}
+  if(!m||!active||m.id!==active.id)return;finishRequest();if(m.expired){clearRecall();return sysMsg('The Recall Cast faded.');}
   if(m.correct)syncRecallPose();else releaseRecallMovement('recall-wrong');
   masterySummary=m.mastery||masterySummary;
   const hall=questionHallOpen||!!m.questionHall,answer=active&&active.answers&&active.answers[m.correctIndex]||'';
@@ -123,9 +142,19 @@ function result(m){
   else{if(!hall)freezeUntil=performance.now()+Math.max(0,m.freezeMs|0);resultFlash(true);if(active&&Number.isInteger(m.correctIndex)){const node=group&&group.children[m.correctIndex];if(node){node.scale.set(1.28,1.28,1.28);node.children[0].material.color.setHex(0x34d399);}}showName(hall?'TRY AGAIN':'WRONG — FROZEN');feedbackEl.textContent='Correct answer: '+answer+'. '+(m.explanation||'')+' This topic will return '+reviewTiming(m.nextDue)+'.';feedbackEl.className='wrong';sysMsg('<b>Correct answer:</b> '+escHTML(answer)+' · '+escHTML(m.explanation||'')+' <b>Returns '+reviewTiming(m.nextDue)+'.</b>');SFX.error();}
   renderBars();active=null;answerPending=false;if(hall)queueQuestionHallNext(m.correct?1150:1700);else{if(recallClearTimer)clearTimeout(recallClearTimer);recallClearTimer=setTimeout(()=>{recallClearTimer=0;clearRecall();},m.correct?1800:Math.max(3500,m.freezeMs|0));}
 }
-function reject(m){const r=m&&m.reason;if(r==='active')sysMsg(questionHallOpen?'Answer or close the current question.':'Run towards the <b>correct answer pillar</b>.');else if(r==='pending')sysMsg('Preparing the next Recall question…');else if(r==='rate')sysMsg('Recall is recharging—try again in a moment.');else if(r==='position'){answerPending=false;sysMsg('Run fully inside the correct pillar to answer.');}else if(r==='ruin_claimed')sysMsg('You have already deciphered this ruin.');else if(r==='ruin_range')sysMsg('Move closer to the ancient ruins.');else clearRecall();}
+function reject(m){
+  const r=m&&m.reason;
+  if(r==='pending')return sysMsg('Preparing the next Recall question…');
+  finishRequest();
+  if(r==='active')sysMsg(questionHallOpen?'Answer or close the current question.':'Run towards the <b>correct answer pillar</b>.');
+  else if(r==='rate'){showName('RECALL BUSY · TRY AGAIN SHORTLY');sysMsg('Too many Recall requests. Try again in a moment.');if(questionHallOpen&&!active)queueQuestionHallNext(2200);}
+  else if(r==='position'){answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Run fully inside the correct pillar to answer.');}
+  else {clearRecall();sysMsg(r==='ruin_claimed'?'You have already deciphered this ruin.':r==='ruin_range'?'Move closer to the ancient ruins.':r==='space_changed'?'Location changed while preparing Recall. Press P to try again.':'Recall is no longer available. Press P for a question.');}
+}
 function tick(now=performance.now()){
   tickQuestionHallMarks(now);
+  if((active||requestTimer||questionHallOpen)&&(!NET.on||recallRoom!==NET.room||recallDim!==dim)){clearRecall();return;}
+  if(active&&active.expiresAt<=Date.now()){const hall=questionHallOpen;clearRecall({keepQuestionHall:hall});if(hall)queueQuestionHallNext();else sysMsg('The Recall question expired. Press P for another.');return;}
   if(freezeUntil>now){keys.KeyW=keys.KeyA=keys.KeyS=keys.KeyD=keys.Space=keys.ShiftLeft=keys.ShiftRight=false;player.vel.x=0;player.vel.z=0;}
   if(!active)return;
   if(group)group.children.forEach((p,i)=>{p.children[0].material.opacity=.34+Math.sin(now*.004+i)*.12;p.children[1].rotation.z+=.012;p.children[2].intensity=1.5+Math.sin(now*.006+i)*.45;});

@@ -18,6 +18,16 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 const FAMILIAR_SYSTEM = require('../../shared/familiar-system');
 const DRAGON_LOAN_MS = 12 * 60 * 60 * 1000;
 const DRAGON_LOAN_MAX_FEE = 1000000;
+const WILD_PET_TAMING = Object.freeze({
+  wild_cat: Object.freeze({ familiar: 'cat', food: I.RIVER_FISH, collar: I.CAT_COLLAR, name: 'Wild Cat', foodName: 'River Fish' }),
+  wild_dog: Object.freeze({ familiar: 'dog', food: I.COOKED_MEAT, collar: I.DOG_COLLAR, name: 'Wild Dog', foodName: 'Cooked Meat' }),
+  wild_wolf: Object.freeze({ familiar: 'wolf', food: I.MONSTER_MEAT, collar: I.WOLF_COLLAR, name: 'Wild Wolf', foodName: 'Raw Meat' }),
+});
+const ORDINARY_PET_CARE = Object.freeze({
+  cat: Object.freeze({ food: I.RIVER_FISH, foodName: 'River Fish', guardDamage: 0 }),
+  dog: Object.freeze({ food: I.COOKED_MEAT, foodName: 'Cooked Meat', guardDamage: 1 }),
+  wolf: Object.freeze({ food: I.MONSTER_MEAT, foodName: 'Raw Meat', guardDamage: 2 }),
+});
 
 class DragonsMixin {
   // Dragon incubation and nesting state, co-located with the mixin that owns it.
@@ -30,6 +40,66 @@ class DragonsMixin {
     this.dragonLoanOffers = new Map();    // offerId -> pending dragon training loan
     this.dragonLoanSeq = 0;
     this.petTamerServices = new Map();    // sessionId -> { enabled, price, note, updatedAt }
+    this.wildTaming = new Map();          // sessionId -> { mobId, stage, readyAt }
+    this.familiarCommands = new Map();    // sessionId -> active ordinary-pet command state
+    this.familiarCareCd = new Map();      // sessionId:action -> next Bond XP timestamp
+  }
+
+  handleTameAnimal(client, m) {
+    const p = client && this.state.players.get(client.sessionId), rec = client && this.profileFor(client);
+    const mobId = String(m && m.mobId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+    const mob = this.state.mobs.get(mobId), def = mob && WILD_PET_TAMING[mob.kind];
+    const reject = (reason, extra = {}) => client && client.send('tameAnimalResult', { ok: false, reason, ...extra });
+    if (!p || !rec || !mob || !def || mob.dgn || p.dim !== 'overworld' || p.dgn) return reject('target');
+    if (Math.hypot(p.x - mob.x, p.z - mob.z) > 5.2 || Math.abs(p.y - mob.y) > 3.5) return reject('range');
+    if (Array.isArray(rec.prof.familiarUnlocks) && rec.prof.familiarUnlocks.includes(def.familiar)) return reject('owned', { familiar: def.familiar });
+    if (mob.hp < mob.maxHp) {
+      this.wildTaming.delete(client.sessionId);
+      const meta = this.mobMeta[mobId]; if (meta && meta.tamingSid === client.sessionId) meta.tamingSid = '';
+      return reject('hurt');
+    }
+    if (this.rateLimited(client, 'tameAnimal', .65, 3)) return reject('rate');
+    let attempt = this.wildTaming.get(client.sessionId);
+    if (!attempt || attempt.mobId !== mobId) attempt = { mobId, stage: 0, readyAt: 0 };
+    const slot = Math.max(0, Math.min(35, m && m.slot | 0));
+    const held = rec.prof.inv && rec.prof.inv[slot];
+    const meta = this.mobMeta[mobId];
+    if (attempt.stage === 0) {
+      attempt.stage = 1; attempt.readyAt = Date.now() + 900;
+      if (meta) { meta.tamingSid = client.sessionId; meta.tx = mob.x; meta.tz = mob.z; }
+      this.wildTaming.set(client.sessionId, attempt);
+      return client.send('tameAnimalResult', { ok: true, stage: 'noticed', mobId, familiar: def.familiar, name: def.name, food: def.food, foodName: def.foodName });
+    }
+    if (Date.now() < attempt.readyAt) return reject('patience', { stage: attempt.stage });
+    if (attempt.stage === 1) {
+      if (!held || held.id !== def.food) return reject('food', { food: def.food, foodName: def.foodName, familiar: def.familiar });
+      if (!this.consumeSlotItem(rec.prof, slot, def.food, 1)) return reject('food', { food: def.food, foodName: def.foodName });
+      attempt.stage = 2; attempt.readyAt = Date.now() + 1400; this.wildTaming.set(client.sessionId, attempt);
+      this.syncPlayerProfile(client, rec.prof); this.dirtyPlayers.add(rec.token);
+      this.sendSpace('', 'fx', { t: 'wildTame', stage: 'fed', kind: mob.kind, x: mob.x, y: mob.y, z: mob.z, sid: client.sessionId, dgn: '' });
+      return client.send('tameAnimalResult', { ok: true, stage: 'fed', mobId, familiar: def.familiar, name: def.name });
+    }
+    if (attempt.stage === 2) {
+      attempt.stage = 3; attempt.readyAt = Date.now() + 900; this.wildTaming.set(client.sessionId, attempt);
+      this.awardGrant(client, { source: 'wild_taming', items: [{ id: def.collar, count: 1 }] });
+      this.sendSpace('', 'fx', { t: 'wildTame', stage: 'calmed', kind: mob.kind, x: mob.x, y: mob.y, z: mob.z, sid: client.sessionId, dgn: '' });
+      return client.send('tameAnimalResult', { ok: true, stage: 'calmed', mobId, familiar: def.familiar, name: def.name, collar: def.collar });
+    }
+    if (!held || held.id !== def.collar) return reject('collar', { collar: def.collar, familiar: def.familiar });
+    if (!this.consumeSlotItem(rec.prof, slot, def.collar, 1)) return reject('collar', { collar: def.collar, familiar: def.familiar });
+    if (!Array.isArray(rec.prof.familiarUnlocks)) rec.prof.familiarUnlocks = [];
+    rec.prof.familiarUnlocks.push(def.familiar); this.ensureFamiliarXpBag(rec.prof);
+    if (rec.prof.job === 'pet_tamer' && typeof this.grantJobXp === 'function') {
+      this.grantJobXp(client, 'pet_tamer', 24);
+      if (typeof this.progressJobContract === 'function') this.progressJobContract(client, 'tame', 1, 0);
+    }
+    this.wildTaming.delete(client.sessionId); this.state.mobs.delete(mobId); delete this.mobMeta[mobId];
+    this.dirtyPlayers.add(rec.token); this.syncPlayerProfile(client, rec.prof);
+    client.send('familiarBound', { kind: def.familiar, slot });
+    client.send('tameAnimalResult', { ok: true, stage: 'bound', mobId, familiar: def.familiar, name: def.name });
+    this.sendSpace('', 'fx', { t: 'wildTame', stage: 'bound', kind: mob.kind, x: mob.x, y: mob.y, z: mob.z, sid: client.sessionId, dgn: '' });
+    if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
+    return true;
   }
 
   awardPetTamerCare(client, count = 1, xp = 4, target = 0) {
@@ -500,6 +570,7 @@ class DragonsMixin {
     if (!rec) return client.send('familiarReject', { reason: 'invalid' });
     const kind = m && typeof m.kind === 'string' ? m.kind : 'shade';
     if (!FAMILIAR_KINDS.has(kind)) return client.send('familiarReject', { reason: 'kind' });
+    if (kind === 'cat' || kind === 'dog' || kind === 'wolf') return client.send('familiarReject', { reason: 'tame', kind });
     if (!Array.isArray(rec.prof.familiarUnlocks)) rec.prof.familiarUnlocks = [];
     if (rec.prof.familiarUnlocks.includes(kind)) return client.send('familiarReject', { reason: 'owned' });
     const itemId = FAMILIAR_BIND_ITEM[kind];
@@ -526,6 +597,8 @@ class DragonsMixin {
     if (p.familiar !== kind && this.moteAcc) this.moteAcc.delete(client.sessionId);
     p.familiar = kind;
     p.familiarTier=FAMILIAR_SYSTEM.bondTier(this.profileFor(client).prof.familiarXp&&this.profileFor(client).prof.familiarXp[kind]||0);
+    p.familiarMode = 'follow'; p.familiarTarget = '';
+    this.familiarCommands.delete(client.sessionId);
     client.send('familiarSummoned', { kind });
     this.sendSpace(p.dgn || '', 'fx', { t:'familiarSummon', kind, x:p.x, y:p.y, z:p.z, sid:client.sessionId, dgn:p.dgn || '' });
   }
@@ -535,9 +608,119 @@ class DragonsMixin {
     const kind = p.familiar;
     p.familiar = '';
     p.familiarTier=0;
+    p.familiarMode='follow';p.familiarTarget='';this.familiarCommands.delete(client.sessionId);
     if (this.moteAcc) this.moteAcc.delete(client.sessionId);
     client.send('familiarDismissed', {});
     if (kind) this.sendSpace(p.dgn || '', 'fx', { t:'familiarDismiss', kind, x:p.x, y:p.y, z:p.z, sid:client.sessionId, dgn:p.dgn || '' });
+  }
+  setFamiliarCommandState(client, state) {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p) return false;
+    const mode = state && state.mode || 'follow';
+    if (mode === 'follow') this.familiarCommands.delete(client.sessionId);
+    else this.familiarCommands.set(client.sessionId, state);
+    p.familiarMode = mode;
+    p.familiarTarget = state && Number.isFinite(state.x)
+      ? JSON.stringify({ x: Math.round(state.x * 10) / 10, y: Math.round(state.y * 10) / 10, z: Math.round(state.z * 10) / 10, until: state.until || 0 })
+      : '';
+    return true;
+  }
+  handleFamiliarCommand(client, m) {
+    const p = client && this.state.players.get(client.sessionId), rec = client && this.profileFor(client);
+    const kind = p && p.familiar, care = ORDINARY_PET_CARE[kind];
+    const command = String(m && m.command || '').toLowerCase();
+    const allowed = new Set(['follow', 'stay', 'scout', 'retrieve', 'guard', 'play', 'feed', 'pet']);
+    const reject = (reason, extra = {}) => client && client.send('familiarCommandResult', { ok: false, reason, command, ...extra });
+    if (!p || !rec || !care || !this.hasFamiliarUnlock(client, kind)) return reject('pet');
+    if (!allowed.has(command)) return reject('command');
+    if (this.familiarMechanicsSuspended(client.sessionId)) return reject('unavailable');
+    if (this.rateLimited(client, 'familiarCommand', .3, 5)) return reject('rate');
+    const now = Date.now(), fx = -Math.sin(p.yaw || 0), fz = -Math.cos(p.yaw || 0);
+    const rewardCare = (action, xp) => {
+      const key = client.sessionId + ':' + action, ready = now >= (this.familiarCareCd.get(key) || 0);
+      if (ready) {
+        this.familiarCareCd.set(key, now + 30000);
+        this.awardFamiliarXp(client, kind, xp, 'companion_care');
+        this.awardPetTamerCare(client, 1, Math.max(2, xp), care.food);
+      }
+      return ready;
+    };
+    if (command === 'feed') {
+      const slot = Math.max(0, Math.min(35, m && m.slot | 0));
+      if (!this.consumeSlotItem(rec.prof, slot, care.food, 1)) return reject('food', { food: care.food, foodName: care.foodName });
+      const rewarded = rewardCare('feed', 6);
+      this.dirtyPlayers.add(rec.token); this.syncPlayerProfile(client, rec.prof);
+      client.send('familiarCommandResult', { ok: true, command, kind, slot, food: care.food, foodName: care.foodName, rewarded });
+      this.sendSpace(p.dgn || '', 'fx', { t: 'petCommand', action: 'feed', kind, x: p.x, y: p.y, z: p.z, sid: client.sessionId, dgn: p.dgn || '' });
+      return true;
+    }
+    if (command === 'pet') {
+      const rewarded = rewardCare('pet', 3);
+      client.send('familiarCommandResult', { ok: true, command, kind, rewarded });
+      this.sendSpace(p.dgn || '', 'fx', { t: 'petCommand', action: 'pet', kind, x: p.x, y: p.y, z: p.z, sid: client.sessionId, dgn: p.dgn || '' });
+      return true;
+    }
+    let x = p.x, y = p.y, z = p.z, until = 0, discovery = null;
+    if (command === 'scout') {
+      let best = null, bd = 30;
+      this.state.mobs.forEach((mob, id) => {
+        if ((mob.dgn || '') !== (p.dgn || '') || mob.hp <= 0) return;
+        const d = Math.hypot(mob.x - p.x, mob.z - p.z);
+        if (d < bd) { bd = d; best = { id: String(id), mob }; }
+      });
+      if (best) {
+        x = best.mob.x; y = best.mob.y; z = best.mob.z;
+        discovery = { kind: best.mob.kind, distance: Math.round(bd), hostile: !this.isAnimalKind(best.mob.kind) };
+      } else { x += fx * 12; z += fz * 12; }
+      until = now + 8000;
+    } else if (command === 'retrieve') {
+      x += fx * 8; z += fz * 8; until = now + 6500;
+    } else if (command === 'play') {
+      x += fx * 4; z += fz * 4; until = now + 5000;
+      rewardCare('play', 4);
+    }
+    const state = { mode: command, x, y, z, until, kind, nextGuardAt: 0 };
+    this.setFamiliarCommandState(client, command === 'follow' ? { mode: 'follow' } : state);
+    client.send('familiarCommandResult', { ok: true, command, kind, x, y, z, until, discovery });
+    this.sendSpace(p.dgn || '', 'fx', { t: 'petCommand', action: command, kind, x, y, z, sid: client.sessionId, dgn: p.dgn || '' });
+    return true;
+  }
+  tickFamiliarCommands(now) {
+    if (!this.familiarCommands) return;
+    for (const [sid, state] of this.familiarCommands) {
+      const p = this.state.players.get(sid), client = this.clients.find(c => c.sessionId === sid);
+      if (!p || !client || p.familiar !== state.kind || !ORDINARY_PET_CARE[state.kind]) {
+        this.familiarCommands.delete(sid); if (p) { p.familiarMode = 'follow'; p.familiarTarget = ''; } continue;
+      }
+      if (state.until && now >= state.until) {
+        const completed = state.mode;
+        this.setFamiliarCommandState(client, { mode: 'follow' });
+        const careKey = sid + ':' + completed;
+        const rewarded = (completed === 'retrieve' || completed === 'scout') && now >= (this.familiarCareCd.get(careKey) || 0);
+        if (rewarded) {
+          this.familiarCareCd.set(careKey, now + 30000);
+          this.awardFamiliarXp(client, state.kind, completed === 'scout' ? 4 : 3, 'companion_care');
+          this.awardPetTamerCare(client, 1, 3, ORDINARY_PET_CARE[state.kind].food);
+        }
+        client.send('familiarCommandResult', { ok: true, command: completed, kind: state.kind, complete: true, rewarded });
+        this.sendSpace(p.dgn || '', 'fx', { t: 'petCommand', action: 'return', kind: state.kind, x: p.x, y: p.y, z: p.z, sid, dgn: p.dgn || '' });
+        continue;
+      }
+      if (state.mode !== 'guard' || now < (state.nextGuardAt || 0)) continue;
+      state.nextGuardAt = now + 1800;
+      let best = null, bestId = '', bd = 9;
+      this.state.mobs.forEach((mob, id) => {
+        if ((mob.dgn || '') !== (p.dgn || '') || mob.hp <= 0 || this.isAnimalKind(mob.kind)) return;
+        const d = Math.hypot(mob.x - state.x, mob.z - state.z);
+        if (d < bd) { bd = d; best = mob; bestId = String(id); }
+      });
+      if (!best) continue;
+      const damage = ORDINARY_PET_CARE[state.kind].guardDamage;
+      if (damage > 0) this.damageMobByAbility(client, bestId, best, damage);
+      this.awardFamiliarXp(client, state.kind, damage || 1, 'companion_guard');
+      client.send('familiarTrait', { kind: state.kind, trait: 'pet_guard', damage, target: best.kind || 'mob' });
+      this.sendSpace(p.dgn || '', 'fx', { t: 'petCommand', action: 'guardHit', kind: state.kind, x: best.x, y: best.y, z: best.z, sid, dgn: p.dgn || '' });
+    }
   }
   dismissFamiliarFor(client, reason = 'dismissed') {
     const p = client && this.state.players.get(client.sessionId);
@@ -545,6 +728,7 @@ class DragonsMixin {
     const kind = p.familiar;
     p.familiar = '';
     p.familiarTier=0;
+    p.familiarMode='follow';p.familiarTarget='';this.familiarCommands.delete(client.sessionId);
     if (this.moteAcc) this.moteAcc.delete(client.sessionId);
     client.send('familiarDismissed', { reason });
     this.sendSpace(p.dgn || '', 'fx', { t:'familiarDismiss', kind, x:p.x, y:p.y, z:p.z, sid:client.sessionId, dgn:p.dgn || '' });
@@ -553,6 +737,10 @@ class DragonsMixin {
   clearFamiliarRuntime(sid) {
     for (const map of [this.fangCd, this.moteAcc, this.moteBurstCd, this.shadeStepCd]) if (map) map.delete(sid);
     if(this.familiarXpPace)for(const key of this.familiarXpPace.keys())if(key.startsWith(sid+':'))this.familiarXpPace.delete(key);
+    if(this.wildTaming)this.wildTaming.delete(sid);
+    if(this.familiarCommands)this.familiarCommands.delete(sid);
+    if(this.familiarCareCd)for(const key of this.familiarCareCd.keys())if(key.startsWith(sid+':'))this.familiarCareCd.delete(key);
+    if(this.mobMeta)for(const meta of Object.values(this.mobMeta))if(meta&&meta.tamingSid===sid)meta.tamingSid='';
   }
   familiarMechanicsSuspended(sid) {
     const hp = this.playerHp && this.playerHp.get(sid);

@@ -67,6 +67,7 @@ const {
 } = require('../rooms/dungeon-handoff');
 const { ADMISSION_TTL_MS, issueDungeonAdmission, peekDungeonAdmission, claimDungeonAdmission, clearDungeonAdmissions } = require('../rooms/dungeon-admission');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
+const { registerRoom, unregisterRoom } = require('../metrics-registry');
 const { Gate, Mob } = require('../schema');
 const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, TOOL_INFO, ARMOR_INFO, DEITY_LEVEL, DEITY_POWER_IDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
 const { createEconomyLedger, recordEconomyGold, summarizeEconomyGold } = require('../economy-telemetry');
@@ -3743,30 +3744,136 @@ test('familiar binding consumes the requested slot before fallback inventory sea
   assert.deepEqual(client.sent.at(-1), { type: 'familiarBound', msg: { kind: 'fang', slot: 1 } });
 });
 
-test('pet familiars bind from wildlife collars and persist Bond XP buckets', () => {
+test('pet collars cannot bypass the live-animal taming sequence', () => {
   const room = makeRoom();
   const client = makeClient('pet_binder');
   const { prof } = seedPlayer(room, client, {
-    inv: [
-      { id: I.CAT_COLLAR, count: 1 },
-      { id: I.DOG_COLLAR, count: 1 },
-      { id: I.WOLF_COLLAR, count: 1 },
-    ],
+    inv: [{ id: I.CAT_COLLAR, count: 1 }],
   });
-  room.clients = [client];
-  const p = room.state.players.get(client.sessionId);
-
   room.handleBindFamiliar(client, { kind: 'cat', slot: 0 });
-  room.handleBindFamiliar(client, { kind: 'dog', slot: 1 });
-  room.handleBindFamiliar(client, { kind: 'wolf', slot: 2 });
+  assert.deepEqual(prof.familiarUnlocks, []);
+  assert.equal(itemCount(prof, I.CAT_COLLAR), 1);
+  assert.deepEqual(client.sent.at(-1), { type: 'familiarReject', msg: { reason: 'tame', kind: 'cat' } });
+});
 
-  assert.deepEqual(prof.familiarUnlocks, ['cat', 'dog', 'wolf']);
+test('wild pets require approach food calm and collar before binding', () => {
+  const room = makeRoom(), client = makeClient('live_pet_tamer');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: I.RIVER_FISH, count: 1 }] });
+  room.clients = [client]; room.rateLimited = () => false;
+  const p = room.state.players.get(client.sessionId);
+  p.x = 100; p.y = 10; p.z = 100; p.dim = 'overworld'; p.dgn = '';
+  const mob = new Mob(); mob.x = 102; mob.y = 10; mob.z = 100; mob.kind = 'wild_cat'; mob.hp = mob.maxHp = 4;
+  room.state.mobs.set('wild_pet_1', mob); room.mobMeta.wild_pet_1 = room.freshMeta(102, 100, 0, 2.5, 'wild_cat', 0, false);
+
+  room.handleTameAnimal(client, { mobId: 'wild_pet_1', slot: 0 });
+  assert.equal(client.sent.at(-1).msg.stage, 'noticed');
+  room.wildTaming.get(client.sessionId).readyAt = 0;
+  room.handleTameAnimal(client, { mobId: 'wild_pet_1', slot: 0 });
+  assert.equal(client.sent.at(-1).msg.stage, 'fed');
+  assert.equal(itemCount(prof, I.RIVER_FISH), 0);
+  room.wildTaming.get(client.sessionId).readyAt = 0;
+  room.handleTameAnimal(client, { mobId: 'wild_pet_1', slot: 0 });
+  assert.equal(client.sent.at(-1).msg.stage, 'calmed');
+  const collarSlot = prof.inv.findIndex(s => s && s.id === I.CAT_COLLAR);
+  assert.notEqual(collarSlot, -1);
+  room.wildTaming.get(client.sessionId).readyAt = 0;
+  room.handleTameAnimal(client, { mobId: 'wild_pet_1', slot: collarSlot });
+
+  assert.deepEqual(prof.familiarUnlocks, ['cat']);
   assert.equal(itemCount(prof, I.CAT_COLLAR), 0);
-  assert.equal(itemCount(prof, I.DOG_COLLAR), 0);
-  assert.equal(itemCount(prof, I.WOLF_COLLAR), 0);
-  for (const kind of ['cat', 'dog', 'wolf']) assert.equal(prof.familiarXp[kind], 0);
-  room.handleSummonFamiliar(client, { kind: 'dog' });
-  assert.equal(p.familiar, 'dog');
+  assert.equal(room.state.mobs.has('wild_pet_1'), false);
+  assert.equal(client.sent.some(e => e.type === 'tameAnimalResult' && e.msg.stage === 'bound'), true);
+});
+
+test('wildlife herds share danger and wolves select living prey', () => {
+  const room = makeRoom();
+  const deerA = new Mob(); deerA.kind = 'deer'; deerA.x = 100; deerA.y = 10; deerA.z = 100; deerA.hp = deerA.maxHp = 7;
+  const deerB = new Mob(); deerB.kind = 'deer'; deerB.x = 104; deerB.y = 10; deerB.z = 101; deerB.hp = deerB.maxHp = 7;
+  const wolf = new Mob(); wolf.kind = 'wild_wolf'; wolf.x = 108; wolf.y = 10; wolf.z = 100; wolf.hp = wolf.maxHp = 9;
+  room.state.mobs.set('deer_a', deerA); room.state.mobs.set('deer_b', deerB); room.state.mobs.set('wolf_a', wolf);
+  room.mobMeta.deer_a = room.freshMeta(100, 100, 0, 2, 'deer', 0, false);
+  room.mobMeta.deer_b = room.freshMeta(104, 101, 0, 2, 'deer', 0, false);
+  room.mobMeta.wolf_a = room.freshMeta(108, 100, 0, 1.55, 'wild_wolf', 0, false);
+  room.mobMeta.deer_a.herdId = room.mobMeta.deer_b.herdId = 'deer:test';
+
+  room.alertWildlifeHerd('deer_a', deerA, room.mobMeta.deer_a, '', 'wolf_a');
+  assert.equal(room.mobMeta.deer_b.predatorThreatId, 'wolf_a');
+  assert.equal(deerB.state, 'alert');
+  assert.equal(room.nearestWildlifePrey('wolf_a', wolf, 18).id, 'deer_b');
+});
+
+test('provoked boars warn before a server-authoritative counter-charge', () => {
+  const room = makeRoom(), client = makeClient('boar_target');
+  seedPlayer(room, client, { x: 101, y: 10, z: 100 }); room.clients = [client];
+  const boar = new Mob(); boar.kind = 'boar'; boar.x = 100; boar.y = 10; boar.z = 100; boar.hp = boar.maxHp = 10;
+  room.state.mobs.set('boar_counter', boar);
+  const meta = room.freshMeta(100, 100, 0, 1.55, 'boar', 0, false); meta.herdId = 'boar:test'; meta.herdAlertCd = Date.now() + 5000;
+  room.mobMeta.boar_counter = meta;
+  const hits = []; room.hurtPlayer = (target, amount, reason) => hits.push({ target, amount, reason });
+  const spaces = { '': [{ p: room.state.players.get(client.sessionId), sid: client.sessionId }] };
+
+  room.provokeMob('boar_counter', client, 1);
+  room.simulateMob(boar, 'boar_counter', meta, .05, spaces);
+  assert.equal(boar.state, 'boarWarn');
+  assert.equal(hits.length, 0, 'the warning window cannot deal instant damage');
+  room.simulateMob(boar, 'boar_counter', meta, 1, spaces);
+  room.simulateMob(boar, 'boar_counter', meta, .05, spaces);
+  assert.deepEqual(hits.map(hit => [hit.amount, hit.reason]), [[3, 'boar_counterattack']]);
+});
+
+test('pursued rabbits enter a timed burrow escape state', () => {
+  const room = makeRoom(), client = makeClient('rabbit_threat');
+  seedPlayer(room, client, { x: 105, y: 10, z: 100 }); room.clients = [client];
+  const rabbit = new Mob(); rabbit.kind = 'rabbit'; rabbit.x = 100; rabbit.y = 10; rabbit.z = 100; rabbit.hp = rabbit.maxHp = 4;
+  room.state.mobs.set('rabbit_escape', rabbit);
+  const meta = room.freshMeta(100, 100, 0, 2.5, 'rabbit', 0, false);
+  meta.herdId = 'rabbit:test'; meta.herdAlertCd = Date.now() + 5000; meta.fleeT = 2.2;
+  room.mobMeta.rabbit_escape = meta;
+
+  room.simulateMob(rabbit, 'rabbit_escape', meta, .1, { '': [{ p: room.state.players.get(client.sessionId), sid: client.sessionId }] });
+  assert.equal(rabbit.state, 'burrow');
+  assert.ok(meta.burrowT > 3);
+});
+
+test('ordinary pet care consumes species food and records an interaction', () => {
+  const room = makeRoom(), client = makeClient('pet_care_owner');
+  const { prof } = seedPlayer(room, client, { x: 100, y: 10, z: 100, inv: [{ id: I.RIVER_FISH, count: 2 }] });
+  const p = room.state.players.get(client.sessionId);
+  room.clients = [client]; prof.familiarUnlocks = ['cat']; prof.familiarXp = { cat: 0 }; p.familiar = 'cat';
+
+  room.handleFamiliarCommand(client, { command: 'feed', slot: 0 });
+
+  assert.equal(itemCount(prof, I.RIVER_FISH), 1);
+  assert.ok(client.sent.some(e => e.type === 'familiarCommandResult' && e.msg.ok && e.msg.command === 'feed'));
+  assert.ok((prof.familiarXp.cat || 0) > 0, 'feeding awards rate-limited Bond XP');
+});
+
+test('ordinary pets replicate stay, scout, retrieve and guard commands', () => {
+  const room = makeRoom(), client = makeClient('pet_command_owner');
+  const { prof } = seedPlayer(room, client, { x: 100, y: 10, z: 100 });
+  const p = room.state.players.get(client.sessionId);
+  room.clients = [client]; prof.familiarUnlocks = ['dog']; prof.familiarXp = { dog: 0 }; p.familiar = 'dog';
+  const hostile = new Mob(); hostile.kind = 'zombie'; hostile.x = 104; hostile.y = 10; hostile.z = 100; hostile.hp = hostile.maxHp = 10;
+  room.state.mobs.set('pet_guard_target', hostile); room.mobMeta.pet_guard_target = room.freshMeta(104, 100, 2, 1.5, 'zombie', 0, true);
+
+  room.handleFamiliarCommand(client, { command: 'stay' });
+  assert.equal(p.familiarMode, 'stay');
+  assert.deepEqual(JSON.parse(p.familiarTarget), { x: 100, y: 10, z: 100, until: 0 });
+
+  room.handleFamiliarCommand(client, { command: 'scout' });
+  const scout = client.sent.find(e => e.type === 'familiarCommandResult' && e.msg.command === 'scout');
+  assert.deepEqual(scout.msg.discovery, { kind: 'zombie', distance: 4, hostile: true });
+
+  room.handleFamiliarCommand(client, { command: 'guard' });
+  room.tickFamiliarCommands(Date.now());
+  assert.equal(hostile.hp, 9, 'Dog guard damage is applied by the server');
+  assert.ok(client.sent.some(e => e.type === 'familiarTrait' && e.msg.trait === 'pet_guard'));
+
+  room.handleFamiliarCommand(client, { command: 'retrieve' });
+  const retrieve = room.familiarCommands.get(client.sessionId); retrieve.until = Date.now() - 1;
+  room.tickFamiliarCommands(Date.now());
+  assert.equal(p.familiarMode, 'follow');
+  assert.equal(p.familiarTarget, '');
 });
 
 test('shared familiar tuning drives server values and reaches the advertised final tier', () => {
@@ -3787,23 +3894,6 @@ test('shared familiar tuning drives server values and reaches the advertised fin
   assert.equal(FAMILIAR_SYSTEM.catFallMitigation(21), .60);
   assert.equal(FAMILIAR_SYSTEM.dogExtraMeatChance(21), .44);
   assert.equal(FAMILIAR_SYSTEM.wolfHostileXpBonus(21), .22);
-});
-
-test('pet familiar collars are rare wildlife drops and skip owned pets', () => {
-  const room = makeRoom();
-  const client = makeClient('pet_dropper');
-  const { prof } = seedPlayer(room, client);
-  const random = Math.random;
-  Math.random = () => 0;
-  try {
-    assert.deepEqual(room.rollPetFamiliarDrop(client, 'prairie_hare', 0), { id: I.CAT_COLLAR, count: 1 });
-    assert.deepEqual(room.rollPetFamiliarDrop(client, 'forest_stag', 0), { id: I.DOG_COLLAR, count: 1 });
-    assert.deepEqual(room.rollPetFamiliarDrop(client, 'ridge_boar', 0), { id: I.WOLF_COLLAR, count: 1 });
-    prof.familiarUnlocks.push('cat');
-    assert.equal(room.rollPetFamiliarDrop(client, 'rabbit', 0), null);
-  } finally {
-    Math.random = random;
-  }
 });
 
 test('familiar Bond XP is independent, server-owned, and requires an active matching familiar', () => {
@@ -4600,6 +4690,50 @@ test('crafting consumes persisted ingredients and grants the server recipe resul
   assert.equal(room.dirtyPlayers.has(room.tokens.get(client.sessionId)), true);
 });
 
+test('craft requests reject a full bag without consuming materials and identify the failed request',async()=>{
+  const room=makeRoom(),client=makeClient('full-craft');
+  const {prof}=seedPlayer(room,client,{inv:Array.from({length:36},(_,i)=>({id:i===0?W.B.LOG:W.B.DIRT,count:64}))});
+  await room.handleCraft(client,{requestId:'full-1',w:2,cells:[W.B.LOG,0,0,0]});
+  assert.equal(itemCount(prof,W.B.LOG),64);assert.equal(itemCount(prof,W.B.PLANKS),0);
+  assert.deepEqual(client.sent.at(-1),{type:'craftReject',msg:{reason:'full',requestId:'full-1'}});
+});
+
+test('craft retries during and after persistence grant output exactly once',async()=>{
+  const room=makeRoom(),client=makeClient('retry-craft');
+  const {prof}=seedPlayer(room,client,{inv:[{id:W.B.LOG,count:5}]});
+  let finishSave;room.savePlayerProfileNow=()=>new Promise(resolve=>{finishSave=resolve;});
+  const message={requestId:'same-intent',w:2,cells:[W.B.LOG,0,0,0]};
+  const first=room.handleCraft(client,message);
+  await new Promise(resolve=>setImmediate(resolve));
+  const duplicate=room.handleCraft(client,message);
+  await room.handleCraft(client,{...message,requestId:'different-intent'});
+  assert.equal(client.sent.at(-1).msg.reason,'busy');
+  assert.equal(itemCount(prof,W.B.LOG),4);assert.equal(itemCount(prof,W.B.PLANKS),4);
+  finishSave(true);await Promise.all([first,duplicate]);
+  await room.handleCraft(client,message);
+  assert.equal(itemCount(prof,W.B.LOG),4);assert.equal(itemCount(prof,W.B.PLANKS),4);
+  assert.equal(client.sent.filter(e=>e.type==='craftResult').length,3);
+});
+
+test('craft saving failure reports an already-created item without charging a retry',async()=>{
+  const room=makeRoom(),client=makeClient('save-pending-craft');
+  const {prof}=seedPlayer(room,client,{inv:[{id:W.B.LOG,count:2}]});
+  room.savePlayerProfileNow=async()=>false;
+  const message={requestId:'save-1',w:2,cells:[W.B.LOG,0,0,0]};
+  await room.handleCraft(client,message);await room.handleCraft(client,message);
+  assert.equal(client.sent.at(-1).msg.savePending,true);
+  assert.equal(itemCount(prof,W.B.LOG),1);assert.equal(itemCount(prof,W.B.PLANKS),4);
+});
+
+test('craft failure reasons distinguish rate, layout and ingredients',async()=>{
+  const room=makeRoom(),client=makeClient('craft-reasons');seedPlayer(room,client,{inv:[]});
+  for(const [reason,message] of [['payload',{w:2,cells:[]}],['recipe',{w:2,cells:[0,0,0,0]}],['ingredients',{w:2,cells:[W.B.LOG,0,0,0]}]]){
+    await room.handleCraft(client,{...message,requestId:reason});assert.equal(client.sent.at(-1).msg.reason,reason);
+  }
+  room.rateLimited=()=>true;
+  await room.handleCraft(client,{requestId:'rate',w:2,cells:[W.B.LOG,0,0,0]});assert.equal(client.sent.at(-1).msg.reason,'rate');
+});
+
 test('crafting is saved durably before its success result can be followed by a refresh', async () => {
   const room = makeRoom();
   const client = makeClient('durable-crafter');
@@ -5053,6 +5187,28 @@ test('bare-handed overworld attacks deal damage and pull aggro from a closer fri
   meta.aggroUntil=0;
   room.simulateMob(mob,'aggro_zombie',meta,.05,spaces);
   assert.equal(meta.combatTargetSid,friend.sessionId,'normal nearest-player targeting resumes after aggro expires');
+});
+
+test('co-op aggro releases dead, invisible and distant attackers to a reachable teammate',()=>{
+  for(const unavailable of ['dead','invisible','distant']){
+    const room=makeRoom(),attacker=makeClient('provoker'),friend=makeClient('reachable');
+    room.clients.push(attacker,friend);
+    seedPlayer(room,attacker,{x:23.5,y:10,z:20.5,lvl:1});
+    seedPlayer(room,friend,{x:21,y:10,z:20.5,lvl:1});
+    const mob={x:20.5,y:10,z:20.5,yaw:0,hp:30,maxHp:30,kind:'zombie',dgn:'',state:''};
+    room.state.mobs.set('mob',mob);
+    const meta=room.mobMeta.mob=room.freshMeta(mob.x,mob.z,3,1.5,mob.kind,0,true);
+    room.handleAttack(attacker,{id:'mob'});
+    const p=room.state.players.get(attacker.sessionId);
+    if(unavailable==='dead')room.playerHp.get(attacker.sessionId).hp=0;
+    if(unavailable==='invisible')p.invisible=true;
+    if(unavailable==='distant')p.x=100;
+    room.simulateMob(mob,'mob',meta,.05,{'':[
+      {p,sid:attacker.sessionId},
+      {p:room.state.players.get(friend.sessionId),sid:friend.sessionId},
+    ]});
+    assert.equal(meta.combatTargetSid,friend.sessionId,unavailable+' attacker cannot monopolize aggro');
+  }
 });
 
 test('axes hit harder but swing slower than swords (per-weapon feel)', () => {
@@ -7343,6 +7499,87 @@ test('town friendship rejects players outside town or out of proximity', async (
   assert.deepEqual(alice.sent.at(-1), { type: 'friendResult', msg: { ok: false, reason: 'range' } });
 });
 
+test('post-activity commendations verify shared participation, cap weekly karma, and unlock social titles', async () => {
+  const room = makeRoom(), alice = makeClient('activity_alice'), bob = makeClient('activity_bob'), outsider = makeClient('activity_outsider');
+  const { token: aToken, prof: aProf } = seedPlayer(room, alice, { name: 'Alice' });
+  const { token: bToken, prof: bProf } = seedPlayer(room, bob, { name: 'Bob' });
+  const { token: outsiderToken } = seedPlayer(room, outsider, { name: 'Outsider' });
+  room.clients = [alice, bob, outsider];
+
+  for (let i = 0; i < 6; i++) {
+    room.serverEvent = { id: 'social-event-' + i, kind: 'caravan', participants: new Map([[alice.sessionId, {}], [bob.sessionId, {}]]) };
+    await room.handlePostActivityAction(alice, { activityId: room.serverEvent.id, action: 'commend', targetToken: bToken });
+  }
+  assert.equal(bProf.commendationsReceived, 6);
+  assert.equal(bProf.commendationWeekKarma, 5);
+  assert.equal(bProf.karma, 5, 'commendation karma is capped at five per week');
+  assert.equal(bProf.socialTitle, 'Reliable Teammate');
+  assert.equal(aProf.commendationsGiven.length, 6);
+  assert.ok(bob.sent.some(entry => entry.type === 'commendationReceived' && entry.msg.titleUnlocked));
+  assert.equal(bob.sent.find(entry => entry.type === 'commendationReceived' && entry.msg.titleUnlocked).msg.karma, 5);
+
+  await room.handlePostActivityAction(alice, { activityId: room.serverEvent.id, action: 'commend', targetToken: bToken });
+  assert.equal(alice.sent.at(-1).type, 'postActivityResult');
+  assert.equal(alice.sent.at(-1).msg.reason, 'duplicate');
+
+  await room.handlePostActivityAction(alice, { activityId: room.serverEvent.id, action: 'commend', targetToken: outsiderToken });
+  assert.equal(alice.sent.at(-1).msg.reason, 'target');
+
+  room.rateBuckets.clear();
+  await room.handlePostActivityAction(alice, { activityId: room.serverEvent.id, action: 'friend', targetToken: bToken });
+  assert.deepEqual(aProf.sentFriendRequests, [bToken]);
+  assert.deepEqual(bProf.friendRequests, [aToken]);
+});
+
+test('shared activity records recent players once and announces it to their fellowship', async () => {
+  const room = makeRoom(), alice = makeClient('recent_alice'), bob = makeClient('recent_bob'), outsider = makeClient('recent_outsider');
+  const { token: aToken, prof: aProf } = seedPlayer(room, alice, { name: 'Alice' });
+  const { token: bToken, prof: bProf } = seedPlayer(room, bob, { name: 'Bob' });
+  seedPlayer(room, outsider, { name: 'Outsider' });
+  room.clients = [alice, bob, outsider];
+  room.guilds = new Map([['G1', { id: 'G1', name: 'Pathfinders', members: new Set([aToken, bToken]) }]]);
+
+  assert.equal(room.recordRecentActivityPlayers([alice.sessionId, bob.sessionId], 'gate-recent-1', 'Moonlit Gate'), true);
+  assert.equal(room.recordRecentActivityPlayers([alice.sessionId, bob.sessionId], 'gate-recent-1', 'Moonlit Gate'), false);
+  assert.equal(aProf.recentPlayers.length, 1);
+  assert.equal(aProf.recentPlayers[0].token, bToken);
+  assert.equal(bProf.recentPlayers[0].token, aToken);
+  assert.equal(outsider.sent.some(entry => entry.type === 'fellowshipActivity'), false);
+  assert.equal(alice.sent.filter(entry => entry.type === 'fellowshipActivity').length, 1);
+  assert.deepEqual(alice.sent.find(entry => entry.type === 'fellowshipActivity').msg.names, ['Alice', 'Bob']);
+
+  await room.sendSocialSnapshot(alice);
+  const snap = alice.sent.find(entry => entry.type === 'socialSnapshot').msg;
+  assert.equal(snap.recentPlayers[0].name, 'Bob');
+  assert.equal(snap.recentPlayers[0].activityKind, 'Moonlit Gate');
+});
+
+test('join friend validates friendship and target shard capacity before handoff', () => {
+  const origin = makeRoom(), destination = makeRoom();
+  origin.shardId = 'main';destination.shardId = 'shard-2';destination.maxClients = 2;
+  const alice = makeClient('join_friend_alice'), bob = makeClient('join_friend_bob'), outsider = makeClient('join_friend_outsider');
+  const { token: aToken, prof: aProf } = seedPlayer(origin, alice, { name: 'Alice' });
+  const { token: bToken } = seedPlayer(destination, bob, { name: 'Bob' });
+  seedPlayer(origin, outsider, { name: 'Outsider' });
+  origin.clients = [alice, outsider];destination.clients = [bob];
+  origin.guilds = new Map([['G1', { id: 'G1', name: 'Pathfinders', members: new Set([aToken, bToken]) }]]);
+  registerRoom(origin, 'overworld', { shardId: 'main' });registerRoom(destination, 'overworld', { shardId: 'shard-2' });
+  try {
+    origin.handleComms(alice, { mode: 'fellowship', phrase: 'hello' });
+    assert.ok(bob.sent.some(entry => entry.type === 'comms' && entry.msg.mode === 'fellowship'));
+    assert.equal(outsider.sent.some(entry => entry.type === 'comms' && entry.msg.mode === 'fellowship'), false);
+    origin.handleFriendJoin(outsider, { targetToken: bToken });
+    assert.equal(outsider.sent.at(-1).msg.reason, 'friend');
+    aProf.friends = [bToken];
+    origin.handleFriendJoin(alice, { targetToken: bToken });
+    assert.equal(alice.sent.at(-1).msg.shardId, 'shard-2');
+    destination.maxClients = 1;
+    origin.rateBuckets.clear();
+    origin.handleFriendJoin(alice, { targetToken: bToken });
+    assert.equal(alice.sent.at(-1).msg.reason, 'full');
+  } finally { unregisterRoom(origin);unregisterRoom(destination); }
+});
+
 test('player trade full inventory swap simulates outgoing slots before rejecting space', () => {
   const room = makeRoom(), alice = makeClient('full_alice'), bob = makeClient('full_bob');
   const aInv = Array.from({ length: 36 }, (_, i) => ({ id: I.BREAD + i, count: 1 }));
@@ -8906,6 +9143,130 @@ test('Gate matchmaking advertises nearby eligible parties and joins without bypa
   assert.equal(joined.canReady, false);
   assert.equal(joined.advertised, true);
   assert.deepEqual(joined.rally, { x: 20.5, y: 16, z: 20.5 });
+});
+
+test('random Gate queue groups distant opt-in hunters into a persistent team and remote ready lobby', async () => {
+  const room = makeRoom();
+  const gate = makeGate('g-random', 20.5, 20.5, 0);
+  room.state.gates.set(gate.id, gate);
+  const leader = makeClient('random-leader'), hunter = makeClient('random-hunter');
+  room.clients.push(leader, hunter);
+  seedPlayer(room, leader, { x: 300, z: 300, lvl: 3 });
+  seedPlayer(room, hunter, { x: 400, z: 400, lvl: 3 });
+
+  room.handleRandomGateQueue(leader, { action: 'join', rank: 0 });
+  assert.equal(leader.sent.at(-1).msg.queued, true);
+  room.handleRandomGateQueue(hunter, { action: 'join', rank: 0 });
+  const lobby = room.dungeonLobbies.get(gate.id);
+  assert.equal(lobby.randomQueue, true);
+  assert.equal(lobby.members.size, 2);
+  assert.equal(lobby.ready.size, 0, 'matchmaking does not auto-confirm dungeon entry');
+  const teamId = room.state.players.get(leader.sessionId).team;
+  assert.ok(teamId);
+  assert.equal(room.state.players.get(hunter.sessionId).team, teamId);
+  assert.equal(room.teamRecords.get(teamId).members.size, 2);
+  assert.equal(hunter.sent.filter(e => e.type === 'dungeonLobby').at(-1).msg.canReady, true);
+  await room.handleDungeonLobbyReady(leader, { gateId: gate.id, ready: true });
+  assert.equal(lobby.ready.has(leader.sessionId), true);
+  assert.equal(room.dungeonLobbies.has(gate.id), true, 'both players must confirm');
+  await room.handleDungeonLobbyReady(hunter, { gateId: gate.id, ready: true });
+  assert.equal(room.dungeonLobbies.has(gate.id), false);
+  assert.equal(leader.sent.some(e => e.type === 'dungeonLobbyStart'), true);
+  assert.equal(hunter.sent.some(e => e.type === 'dungeonLobbyStart'), true);
+});
+
+test('random Gate queue rejects locked ranks and supports cancellation without forming a team', () => {
+  const room = makeRoom(), gate = makeGate('g-random-locked', 20.5, 20.5, 1);
+  room.state.gates.set(gate.id, gate);
+  const client = makeClient('random-cancel');room.clients.push(client);
+  seedPlayer(room, client, { lvl: 1 });
+  room.handleRandomGateQueue(client, { action: 'join', rank: 1 });
+  assert.equal(client.sent.at(-1).msg.reason, 'rank');
+  room.state.gates.set('e-random', makeGate('e-random', 22.5, 22.5, 0));
+  room.handleRandomGateQueue(client, { action: 'join', rank: 0 });
+  assert.equal(room.randomGateQueue.has(client.sessionId), true);
+  room.handleRandomGateQueue(client, { action: 'leave' });
+  assert.equal(room.randomGateQueue.has(client.sessionId), false);
+  assert.equal(room.teamRecords.size, 0);
+});
+
+test('Elderheart expedition validates each landmark, camp clear, and one-time reward', () => {
+  const room = makeRoom(), client = makeClient('elderheart-solo');
+  room.clients.push(client);
+  const { prof } = seedPlayer(room, client, { lvl: 31 });
+  const p = room.state.players.get(client.sessionId);
+  Object.assign(p, { x: W.HUB.cartographer.x, y: W.TOWN.G + 1, z: W.HUB.cartographer.z });
+  room.startElderheartExpedition(client);
+  assert.equal(prof.elderheartExpedition.stage, 0);
+  const [tower, camp, tree] = room.elderheartRouteSites();
+  assert.equal(room.elderheartExpeditionPayload(prof).lead.id, camp.id, 'the signal puzzle exposes its camp marker');
+  assert.equal(sanitizeProfile(prof).elderheartExpedition.stage, 0, 'an active route survives profile reload');
+  room.chooseElderheartSignal(client, { id: tower.id, choice: room.elderheartBearing() });
+  assert.equal(prof.elderheartExpedition.stage, 0, 'remote signal cannot be forged');
+  Object.assign(p, { x: tower.x, y: tower.y + 1, z: tower.z });
+  room.interactElderheartExpedition(client, { id: tower.id });
+  assert.equal(client.sent.at(-1).type, 'elderheartExpeditionPrompt');
+  room.chooseElderheartSignal(client, { id: tower.id, choice: 'NW' });
+  assert.equal(prof.elderheartExpedition.stage, 0);
+  room.chooseElderheartSignal(client, { id: tower.id, choice: room.elderheartBearing() });
+  assert.equal(prof.elderheartExpedition.stage, 1);
+  Object.assign(p, { x: camp.x, y: camp.y + 1, z: camp.z });
+  room.interactElderheartExpedition(client, { id: camp.id });
+  assert.equal(client.sent.at(-1).msg.reason, 'camp');
+  room.banditCampStates = new Map([[camp.id, { phase: 'cleared', respawnAt: Date.now() + 60000 }]]);
+  room.interactElderheartExpedition(client, { id: camp.id });
+  assert.equal(prof.elderheartExpedition.stage, 2);
+  Object.assign(p, { x: tree.x, y: tree.y + 1, z: tree.z });
+  room.interactElderheartExpedition(client, { id: tree.id });
+  assert.equal(prof.elderheartExpedition.stage, 3);
+  Object.assign(p, { x: W.HUB.cartographer.x, y: W.TOWN.G + 1, z: W.HUB.cartographer.z });
+  const originalInventory = prof.inv;
+  prof.inv = Array.from({ length: 36 }, () => ({ id: C.I.COAL, count: 64 }));
+  const beforeClaimGold = prof.gold;
+  room.claimElderheartExpedition(client);
+  assert.equal(client.sent.at(-1).msg.reason, 'full');
+  assert.equal(prof.gold, beforeClaimGold, 'a full bag cannot consume the one-time reward');
+  assert.equal(prof.elderheartExpedition.stage, 3);
+  prof.inv = originalInventory;
+  room.claimElderheartExpedition(client);
+  assert.equal(prof.elderheartExpedition, null);
+  assert.equal(prof.elderheartExpeditionDone, true);
+  assert.equal(client.sent.some(e => e.type === 'elderheartExpeditionComplete'), true);
+  assert.equal(room.countItem(prof, C.I.HEARTWOOD_RESIN), 2);
+  const gold = prof.gold;
+  room.claimElderheartExpedition(client);
+  assert.equal(prof.gold, gold, 'claim is not repeatable');
+  room.startElderheartExpedition(client);
+  assert.equal(client.sent.at(-1).msg.reason, 'done');
+  const restored = sanitizeProfile(prof);
+  assert.equal(restored.elderheartExpeditionDone, true);
+});
+
+test('nearby team members share Elderheart expedition progress but distant members do not', () => {
+  const room = makeRoom(), a = makeClient('elderheart-a'), b = makeClient('elderheart-b');
+  room.clients.push(a, b);
+  const aa = seedPlayer(room, a, { lvl: 31 }), bb = seedPlayer(room, b, { lvl: 31 });
+  const pa = room.state.players.get(a.sessionId), pb = room.state.players.get(b.sessionId);
+  Object.assign(pa, { x: W.HUB.cartographer.x, y: W.TOWN.G + 1, z: W.HUB.cartographer.z });
+  Object.assign(pb, { x: W.HUB.cartographer.x + 2, y: W.TOWN.G + 1, z: W.HUB.cartographer.z });
+  const team = room.createPersistentTeam(a, 'Elderheart Test Team', false).team;
+  assert.ok(team);
+  assert.ok(room.joinPersistentTeam(b, team.id).team);
+  room.startElderheartExpedition(a);
+  assert.equal(aa.prof.elderheartExpedition.stage, 0);
+  assert.equal(bb.prof.elderheartExpedition.stage, 0);
+  const tower = room.elderheartRouteSites()[0];
+  Object.assign(pa, { x: tower.x, y: tower.y + 1, z: tower.z });
+  Object.assign(pb, { x: tower.x + 3, y: tower.y + 1, z: tower.z });
+  room.chooseElderheartSignal(a, { id: tower.id, choice: room.elderheartBearing() });
+  assert.equal(bb.prof.elderheartExpedition.stage, 1);
+  Object.assign(pb, { x: W.TOWN.TC, z: W.TOWN.TC });
+  Object.assign(pa, { x: tower.x, z: tower.z });
+  aa.prof.elderheartExpedition.stage = 0;
+  bb.prof.elderheartExpedition.stage = 0;
+  room.chooseElderheartSignal(a, { id: tower.id, choice: room.elderheartBearing() });
+  assert.equal(aa.prof.elderheartExpedition.stage, 1);
+  assert.equal(bb.prof.elderheartExpedition.stage, 0);
 });
 
 test('the tavern sells deterministic Gate food bundles only to nearby hunters', () => {
@@ -13026,13 +13387,17 @@ test('private fellowships require invites and officers can moderate members', ()
 
   room.handleGuildInvite(leader, { sid: officer.sessionId });
   assert.equal(officer.sent.some(e => e.type === 'guildInvite' && e.msg.id === guild.id), true);
+  room.state.players.get(officer.sessionId).x = 0;
+  room.state.players.get(officer.sessionId).z = 0;
   room.handleGuildJoin(officer, { id: guild.id });
-  assert.equal(guild.members.has(off.token), true);
+  assert.equal(guild.members.has(off.token), true, 'an invited player can accept directly without travelling back to reception');
 
   room.handleGuildRole(leader, { sid: officer.sessionId, role: 'officer' });
   assert.equal(guild.roles.get(off.token), 'officer');
 
   room.handleGuildInvite(officer, { sid: member.sessionId });
+  room.state.players.get(member.sessionId).x = 0;
+  room.state.players.get(member.sessionId).z = 0;
   room.handleGuildJoin(member, { id: guild.id });
   assert.equal(guild.members.has(mem.token), true);
 
@@ -13045,6 +13410,13 @@ test('private fellowships require invites and officers can moderate members', ()
   assert.deepEqual(officer.sent.at(-1), { type: 'guildReject', msg: { reason: 'officer' } });
   assert.equal(guild.members.has(lead.token), true);
   assert.equal(guild.members.has(bad.token), false);
+
+  room.rateBuckets.clear();
+  room.handleGuildInvite(officer, { sid: stranger.sessionId });
+  assert.equal(guild.invites.has(bad.token), true);
+  room.handleGuildInviteDecline(stranger, { id: guild.id });
+  assert.equal(guild.invites.has(bad.token), false);
+  assert.equal(stranger.sent.some(e => e.type === 'guildInviteDeclined' && e.msg.id === guild.id), true);
 });
 
 test('fellowship leadership can transfer and private mode can toggle', () => {

@@ -1,3 +1,5 @@
+import {api as menusApi} from './menus.mjs';
+
 export function createSocialSystem({
   network:NET,
   dragonTypes:DRAGON_TYPES,
@@ -60,15 +62,15 @@ function populateWhisperTargets(){
 function updateMuteButton(){const muted=mutedPlayers.has(chatTargetEl.value);chatMuteEl.textContent=muted?'UNMUTE':'MUTE';chatMuteEl.classList.toggle('muted',muted);}
 function chatModeLabel(){return chatMode==='party'?'TEAM':chatMode.toUpperCase();}
 function setChatMode(mode){
-  chatMode=['local','party','whisper'].includes(mode)?mode:'local';
+  chatMode=['local','party','fellowship','whisper'].includes(mode)?mode:'local';
   chatModeEl.textContent=chatModeLabel();
   document.body.classList.toggle('chat-whisper',chatMode==='whisper');
   if(chatMode==='whisper')populateWhisperTargets();
-  const label=chatMode==='local'?'Local quick phrase':chatMode==='party'?'Team quick phrase':'Whisper quick phrase';
+  const label=chatMode==='local'?'Local quick phrase':chatMode==='party'?'Team quick phrase':chatMode==='fellowship'?'Fellowship quick phrase':'Whisper quick phrase';
   chatInEl.setAttribute('aria-label',label);
   chatInEl.title=label+' - press Enter to send';
 }
-function cycleChatMode(){setChatMode(chatMode==='local'?'party':chatMode==='party'?'whisper':'local');}
+function cycleChatMode(){setChatMode(chatMode==='local'?'party':chatMode==='party'?'fellowship':chatMode==='fellowship'?'whisper':'local');}
 function quickChatContext(){
   if(typeof hp==='number'&&typeof maxHp==='function'&&hp<=maxHp()*.35)return 'danger';
   if(dim==='dungeon')return 'dungeon';
@@ -106,7 +108,7 @@ function renderQuickChatWheel(){
   chatWheelEl.classList.remove('dragonwheel');
   chatWheelItemsEl.innerHTML='';
   chatWheelModeEl.textContent=chatModeLabel();
-  const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Click a phrase - Tab again for Team / Whisper';
+  const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Click a phrase - Tab changes Local / Team / Fellowship / Whisper';
   const count=chatWheel.ids.length;
   chatWheel.ids.forEach((id,index)=>{
     const angle=-Math.PI/2+index*Math.PI*2/count,item=document.createElement('button');item.type='button';
@@ -341,7 +343,7 @@ function showChatBubble(sid,text,mode){
   if(!remote||!remote.grp)return;
   if(remote.chatBubble){remote.grp.remove(remote.chatBubble);if(remote.chatBubble.material.map)remote.chatBubble.material.map.dispose();remote.chatBubble.material.dispose();}
   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=512;canvas.height=128;
-  ctx.fillStyle=mode==='whisper'?'rgba(51,25,66,.94)':mode==='party'?'rgba(20,58,43,.94)':'rgba(12,20,32,.94)';ctx.strokeStyle=(COMMS_CHANNELS[mode]||COMMS_CHANNELS.local).color;ctx.lineWidth=4;
+  ctx.fillStyle=mode==='whisper'?'rgba(51,25,66,.94)':mode==='fellowship'?'rgba(55,28,72,.94)':mode==='party'?'rgba(20,58,43,.94)':'rgba(12,20,32,.94)';ctx.strokeStyle=(COMMS_CHANNELS[mode]||COMMS_CHANNELS.local).color;ctx.lineWidth=4;
   ctx.beginPath();ctx.roundRect(8,8,496,96,18);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(242,104);ctx.lineTo(256,124);ctx.lineTo(273,104);ctx.fill();
   ctx.fillStyle='#fff';ctx.font='bold 25px Courier New';ctx.textAlign='center';ctx.textBaseline='middle';
   const safe=String(text).slice(0,90),words=safe.split(/\s+/),lines=[''];
@@ -379,7 +381,7 @@ function applyBlockList(message){
   for(const entry of entries){mutedPlayers.add(entry.targetToken);const row=document.createElement('div');row.className='shoprow';row.innerHTML='<span><b>'+escHTML(entry.name||'Blocked Hunter')+'</b></span>';row.appendChild(qBtn('UNBLOCK',()=>NET.room.send('commsMute',{targetToken:entry.targetToken,muted:false}),true));qpanelEl.appendChild(row);}
   qpanelEl.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
-function playCommsCue(mode){if(!commsSound||typeof SFX==='undefined')return;if(mode==='whisper')SFX.quest();else if(mode==='party')SFX.success();else SFX.uiClick();}
+function playCommsCue(mode){if(!commsSound||typeof SFX==='undefined')return;if(mode==='whisper'||mode==='fellowship')SFX.quest();else if(mode==='party')SFX.success();else SFX.uiClick();}
 function adminChatAllowed(){
   const auth=globalThis.AUTH_UI||globalThis.BlockcraftAuthUI;
   if(auth&&auth.isAdminAccount&&auth.isAdminAccount())return true;
@@ -447,7 +449,7 @@ addEventListener('keydown',event=>{
 // ---- teams ----
 const TEAM_COLS=['#ffd24a','#6ee06a','#ff9a4a','#c08aff','#4fd8ff','#ff6a8a'];
 const pendingTeamInvites={};
-const socialState={tab:'nearby',snapshot:{friends:[],incomingFriendRequests:[],outgoingFriendRequests:[],teamInvites:[]}};
+const socialState={tab:'nearby',snapshot:{friends:[],recentPlayers:[],incomingFriendRequests:[],outgoingFriendRequests:[],teamInvites:[]}};
 function teamCol(id){
   let h=0;
   for(const ch of String(id)) h=(h*31+ch.charCodeAt(0))>>>0;
@@ -477,10 +479,12 @@ function netTeamHud(){
 function requestSocialSnapshot(){
   if(NET.on&&NET.room)NET.room.send('socialRequest',{});
 }
+setInterval(()=>{if(NET.on&&qOpen&&qpanelEl&&qpanelEl.dataset.modal==='social-hub')requestSocialSnapshot();},15000);
 function applySocialSnapshot(message){
   const src=message&&typeof message==='object'?message:{};
   socialState.snapshot={
     friends:Array.isArray(src.friends)?src.friends:[],
+    recentPlayers:Array.isArray(src.recentPlayers)?src.recentPlayers:[],
     incomingFriendRequests:Array.isArray(src.incomingFriendRequests)?src.incomingFriendRequests:[],
     outgoingFriendRequests:Array.isArray(src.outgoingFriendRequests)?src.outgoingFriendRequests:[],
     teamInvites:Array.isArray(src.teamInvites)?src.teamInvites:[],
@@ -507,7 +511,9 @@ function socialEmpty(text){
 function socialRow(person,status=''){
   const row=document.createElement('div');row.className='social-person-row'+(person&&person.online?' online':' offline');
   const avatar=document.createElement('i');avatar.className='social-avatar';avatar.textContent=String(person&&person.name||'H').trim().slice(0,1).toUpperCase()||'H';row.appendChild(avatar);
-  const identity=document.createElement('span');identity.innerHTML='<b>'+escHTML(person&&person.name||'Hunter')+'</b><small>'+(person&&person.online?'ONLINE'+(person.teamName?' · '+escHTML(person.teamName):''):(status||'OFFLINE'))+'</small>';row.appendChild(identity);
+  const onlineDetail=person&&person.status?person.status:'ONLINE';
+  const shardDetail=person&&person.shardId?' · '+escHTML(person.shardId.toUpperCase()):'';
+  const identity=document.createElement('span');identity.innerHTML='<b>'+escHTML(person&&person.name||'Hunter')+'</b><small>'+(person&&person.online?escHTML(onlineDetail)+shardDetail+(person.teamName?' · '+escHTML(person.teamName):''):(status||'OFFLINE'))+'</small>';row.appendChild(identity);
   const actions=document.createElement('div');actions.className='social-row-actions';row.appendChild(actions);
   qpanelEl.appendChild(row);
   return {row,actions};
@@ -568,12 +574,30 @@ function renderFriendsSocial(){
   if(!friends.length)socialEmpty('No friends yet. Use Nearby to send a request to a hunter beside you.');
   for(const person of friends){
     const ui=socialRow(person);
-    if(person.online&&person.sid){const teamAction=teamActionFor(person);if(teamAction)ui.actions.appendChild(qBtn(teamAction.label,teamAction.run));ui.actions.appendChild(qBtn('WHISPER',()=>whisperTo(person),true));}
+    if(person.online&&person.sid){if(person.joinable&&!person.sameShard)ui.actions.appendChild(qBtn('JOIN FRIEND',()=>NET.room.send('friendJoin',{targetToken:person.token})));const teamAction=person.sameShard?teamActionFor(person):null;if(teamAction)ui.actions.appendChild(qBtn(teamAction.label,teamAction.run));if(person.sameShard)ui.actions.appendChild(qBtn('WHISPER',()=>whisperTo(person),true));}
     ui.actions.appendChild(qBtn('REMOVE',()=>NET.room.send('friendRemove',{targetToken:person.token}),true));
   }
   if(state.outgoingFriendRequests.length){socialHeading('SENT REQUESTS');for(const person of state.outgoingFriendRequests)socialRow(person,'REQUEST PENDING');}
 }
+function recentPlayedText(person){
+  const age=Math.max(0,Date.now()-(Number(person&&person.lastPlayedAt)||0));
+  const when=age<60000?'JUST NOW':age<3600000?Math.max(1,Math.floor(age/60000))+'M AGO':age<86400000?Math.max(1,Math.floor(age/3600000))+'H AGO':Math.max(1,Math.floor(age/86400000))+'D AGO';
+  return String(person&&person.activityKind||'ACTIVITY').toUpperCase()+' · '+when;
+}
+function renderRecentSocial(){
+  socialHeading('RECENT PLAYERS');
+  const people=socialState.snapshot.recentPlayers;
+  if(!people.length){socialEmpty('Complete a dungeon or server event with other hunters to find them here.');return;}
+  for(const person of people){
+    const ui=socialRow(person,recentPlayedText(person));
+    if(person.friend&&person.joinable&&!person.sameShard)ui.actions.appendChild(qBtn('JOIN FRIEND',()=>NET.room.send('friendJoin',{targetToken:person.token})));
+    if(!person.friend)ui.actions.appendChild(qBtn('ADD FRIEND',()=>NET.room.send('recentFriendAdd',{targetToken:person.token})));
+  }
+}
 function renderTeamSocial(){
+  socialHeading('RANDOM GATE MATCHMAKING');
+  const gateMatch=document.createElement('p');gateMatch.className='qtext';gateMatch.textContent='Ready for a public Gate with other hunters in this shard. Signing up forms or recruits into a lasting team; everyone confirms before entry.';qpanelEl.appendChild(gateMatch);
+  qpanelEl.appendChild(qBtn('FIND RANDOM GATE',()=>menusApi.openRandomGateQueue()));
   const invites=socialState.snapshot.teamInvites;
   if(invites.length){
     socialHeading('TEAM INVITATIONS');
@@ -608,16 +632,16 @@ function renderTeamSocial(){
   const create=document.createElement('div');create.className='social-create-team';const inp=document.createElement('input');inp.maxLength=20;inp.placeholder='Team name';create.appendChild(inp);create.appendChild(qBtn('CREATE OPEN',()=>{const name=inp.value.trim();if(name)NET.room.send('teamCreate',{name});}));create.appendChild(qBtn('CREATE INVITE-ONLY',()=>{const name=inp.value.trim();if(name)NET.room.send('teamCreate',{name,private:true});},true));qpanelEl.appendChild(create);
 }
 function openTeamUI(tab='team',refresh=true){
-  socialState.tab=['nearby','friends','team'].includes(tab)?tab:'team';
+  socialState.tab=['nearby','recent','friends','team'].includes(tab)?tab:'team';
   openQWin('management');
   qpanelEl.innerHTML='';
   qpanelEl.dataset.modal='social-hub';
   const h=document.createElement('h2'); h.textContent='SOCIAL'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent='FRIENDS · NEARBY HUNTERS · TEAMS';
+  sub.textContent='FRIENDS · RECENT PLAYERS · NEARBY HUNTERS · TEAMS';
   qpanelEl.appendChild(sub);
   const tabs=document.createElement('div');tabs.className='social-tabs';
-  for(const id of ['nearby','friends','team']){const count=id==='friends'?socialState.snapshot.incomingFriendRequests.length:id==='team'?socialState.snapshot.teamInvites.length:0,button=document.createElement('button');button.type='button';button.className=id===socialState.tab?'active':'';button.textContent=id.toUpperCase()+(count?' ('+count+')':'');button.addEventListener('click',()=>openTeamUI(id,false));tabs.appendChild(button);}
+  for(const id of ['nearby','recent','friends','team']){const count=id==='friends'?socialState.snapshot.incomingFriendRequests.length:id==='team'?socialState.snapshot.teamInvites.length:0,button=document.createElement('button');button.type='button';button.className=id===socialState.tab?'active':'';button.textContent=id.toUpperCase()+(count?' ('+count+')':'');button.addEventListener('click',()=>openTeamUI(id,false));tabs.appendChild(button);}
   qpanelEl.appendChild(tabs);
   if(!NET.on){
     const p2=document.createElement('p'); p2.className='qtext';
@@ -627,6 +651,7 @@ function openTeamUI(tab='team',refresh=true){
     return;
   }
   if(socialState.tab==='nearby')renderNearbySocial();
+  else if(socialState.tab==='recent')renderRecentSocial();
   else if(socialState.tab==='friends')renderFriendsSocial();
   else renderTeamSocial();
   qpanelEl.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));

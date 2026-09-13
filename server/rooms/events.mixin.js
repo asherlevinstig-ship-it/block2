@@ -18,7 +18,7 @@ const D = require('../dungeon');
 const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 const EVENT_START_MS = 4000;
-const EVENT_RESULTS_MS = 7000;
+const EVENT_RESULTS_MS = 15000;
 const EVENT_READY_MS = 10000;
 const EVENT_QUEUE_RETRY_MS = 30000;
 const EVENT_QUEUE_EXTENSION_MS = 15000;
@@ -499,6 +499,7 @@ class EventsMixin {
   }
   eventResultPayload(ev, sid, outcome, reward, extra = {}) {
     const part = ev && ev.participants && ev.participants.get(sid);
+    if (ev) this.recordRecentActivityPlayers(ev.participants ? [...ev.participants.keys()] : [], ev.id, ev.name || ev.kind || 'Server Event', outcome);
     const leaderboard = this.eventLeaderboardPayload(ev);
     let placement = 0;
     if (ev && ev.kind === EVENT_PARKOUR.kind) {
@@ -522,6 +523,7 @@ class EventsMixin {
           : { label: 'Finish time', valueMs: part && part.finishedAt ? Math.max(0, part.finishedAt - (part.startedAt || ev.startsAt || part.finishedAt)) : 0, resets: part && part.resets | 0 },
       reward: reward || { xp: 0, tokens: 0 },
       leaderboard,
+      participants: this.postActivityParticipants({ sids: ev && ev.participants ? [...ev.participants.keys()] : [] }, sid),
       returnAt: part && part.returnAt || Date.now() + EVENT_RESULTS_MS,
       ...extra,
     };
@@ -884,9 +886,21 @@ class EventsMixin {
     return ev;
   }
   announceServerEvent(now, forcedKind) {
-    return forcedKind === EVENT_KING.kind ? this.announceKingEvent(now)
+    const ev = forcedKind === EVENT_KING.kind ? this.announceKingEvent(now)
       : forcedKind === EVENT_CARAVAN.kind ? this.announceCaravanEvent(now)
       : this.announceParkourEvent(now);
+    if (ev && ev.queue) {
+      for (const client of this.clients) {
+        const rec = this.profileFor(client), p = this.state.players.get(client.sessionId);
+        if (!rec || !p || p.dgn || rec.prof.eventReplayKind !== ev.kind || ev.queue.size >= EVENT_QUEUE_CAPACITY) continue;
+        rec.prof.eventReplayKind = '';
+        this.dirtyPlayers.add(rec.token);
+        ev.queue.add(client.sessionId);
+        client.send('eventJoined', { ...this.eventPayload(client), replay: true });
+      }
+      this.broadcastEventStatus(true);
+    }
+    return ev;
   }
   eventReturnPos(p) {
     if (!p) return { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 62.5 };
@@ -2088,6 +2102,7 @@ class EventsMixin {
       done: !!board.pinned.done,
     } : null;
     client.send('guildRenown', { id: guild.id, name: guild.name, amount, reason, renown: guild.renown | 0, totalRenown: guild.totalRenown | 0, weekRenown: guild.renownWeek | 0, weekGoal: 30, pinned });
+    this.broadcastFellowship(guild, 'fellowshipActivity', { activityKind: String(reason || 'activity').slice(0, 48), outcome: 'renown', names: [rec.prof.name || 'A member'], amount, at: Date.now() });
     this.broadcastGuildHallSync();
     return true;
   }
@@ -2178,11 +2193,12 @@ class EventsMixin {
   }
   handleGuildJoin(client, m) {
     const rec = this.profileFor(client);
-    if (!rec || !this.nearGuildReception(client)) return client.send('guildReject', { reason: 'range' });
-    if (this.rateLimited(client, 'guild', 1, 3)) return client.send('guildReject', { reason: 'rate' });
-    if (this.guildForToken(rec.token)) return client.send('guildReject', { reason: 'member' });
     const id = typeof (m && m.id) === 'string' ? m.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) : '';
     const guild = this.guilds.get(id);
+    const invited = !!(rec && guild && guild.invites && guild.invites.has(rec.token));
+    if (!rec || (!invited && !this.nearGuildReception(client))) return client.send('guildReject', { reason: 'range' });
+    if (this.rateLimited(client, 'guild', 1, 3)) return client.send('guildReject', { reason: 'rate' });
+    if (this.guildForToken(rec.token)) return client.send('guildReject', { reason: 'member' });
     if (!guild) return client.send('guildReject', { reason: 'missing' });
     if (guild.private && !(guild.invites && guild.invites.has(rec.token))) return client.send('guildReject', { reason: 'invite' });
     if (guild.members.size >= 50) return client.send('guildReject', { reason: 'full_members' });
@@ -2192,6 +2208,16 @@ class EventsMixin {
     client.send('guildJoined', { id: guild.id, name: guild.name, leaderName: guild.leaderName });
     this.broadcastGuildHallSync();
     this.broadcast('chat', { name: '[Fellowship]', text: this.fellowshipNameForToken(rec.token) + ' joined ' + guild.name });
+  }
+  handleGuildInviteDecline(client, m) {
+    const rec = this.profileFor(client);
+    const id = typeof (m && m.id) === 'string' ? m.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) : '';
+    const guild = id && this.guilds.get(id);
+    if (!rec || !guild || !guild.invites || !guild.invites.has(rec.token)) return client.send('guildReject', { reason: 'invite' });
+    guild.invites.delete(rec.token);
+    this.dirtyGuilds = true;
+    client.send('guildInviteDeclined', { id: guild.id, name: guild.name });
+    this.refreshSocialSnapshots(client);
   }
   handleGuildLeave(client) {
     const rec = this.profileFor(client);

@@ -9,6 +9,7 @@ const {
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
 const W = require('../world');
+const craftRequests = new WeakMap();
 const D = require('../dungeon');
 const AI = require('../ai');
 const GEAR_SYSTEM = require('../../shared/gear-system');
@@ -563,11 +564,36 @@ class EconomyMixin {
     return needs;
   }
   async handleCraft(client, m) {
+    if(!client)return;
+    const requestId=typeof m?.requestId==='string'?m.requestId.slice(0,96):'';
+    let ledger=craftRequests.get(client);
+    if(!ledger){ledger={pending:false,results:new Map()};craftRequests.set(client,ledger);}
+    const send=response=>{
+      if(!response)return;
+      const [type,payload]=response;
+      const inv=type==='craftResult'?this.profileFor(client)?.prof?.inv:undefined;
+      client.send(type,{...payload,...(inv?{inv}:{}),...(requestId?{requestId}:{})});
+    };
+    if(requestId&&ledger.results.has(requestId)){send(await ledger.results.get(requestId));return;}
+    if(ledger.pending)return client.send('craftReject',{reason:'busy',...(requestId?{requestId}:{})});
+    ledger.pending=true;
+    // Register before execution so retries during persistence share the same work.
+    const operation=Promise.resolve().then(async()=>{
+      let response;
+      try{await this.executeCraft(client,m,(type,payload)=>{response=[type,payload];});}
+      catch(_){response=['craftReject',{reason:'server'}];}
+      finally{ledger.pending=false;}
+      return response;
+    });
+    if(requestId){ledger.results.set(requestId,operation);if(ledger.results.size>64)ledger.results.delete(ledger.results.keys().next().value);}
+    send(await operation);
+  }
+  async executeCraft(client, m, reply) {
     const rec = this.profileFor(client);
-    if (!rec || !m) return;
-    if (this.rateLimited(client, 'craft', 8, 16)) return client.send('craftReject', {});
+    if (!rec || !m) return reply('craftReject', {reason:'profile'});
+    if (this.rateLimited(client, 'craft', 8, 16)) return reply('craftReject', {reason:'rate'});
     const w = m.w === 3 ? 3 : 2;
-    if (!Array.isArray(m.cells) || m.cells.length !== w * w) return client.send('craftReject', {});
+    if (!Array.isArray(m.cells) || m.cells.length !== w * w) return reply('craftReject', {reason:'payload'});
     const stackCounts = [];
     const cells = m.cells.map(v => {
       const raw = v && typeof v === 'object' ? v.id : v;
@@ -577,19 +603,22 @@ class EconomyMixin {
       return id >= 0 && id <= 999 ? id : 0;
     });
     const recipe = this.matchRecipe(cells, w);
-    if (!recipe) return client.send('craftReject', {});
+    if (!recipe) return reply('craftReject', {reason:'recipe'});
     if (recipe.hunterLevel && ((rec.prof.S && rec.prof.S.lvl) | 0) < (recipe.hunterLevel | 0)) {
-      return client.send('craftReject', { reason: 'hunter_level', level: recipe.hunterLevel | 0 });
+      return reply('craftReject', { reason: 'hunter_level', level: recipe.hunterLevel | 0 });
     }
     const needs = this.recipeNeeds(cells);
     let times = m.shift ? 64 : 1;
     for (let i = 0; i < cells.length; i++) if (cells[i]) times = Math.min(times, stackCounts[i]);
     for (const id in needs) times = Math.min(times, Math.floor(this.countItem(rec.prof, id | 0) / needs[id]));
     times = Math.max(0, Math.min(64, times));
-    if (!times) return client.send('craftReject', {});
-    for (const id in needs) this.consumeItem(rec.prof, id | 0, needs[id] * times);
+    if (!times) return reply('craftReject', {reason:'ingredients'});
     const [outId, outCount] = recipe.out;
     const finalCount = this.craftedOutputCount(rec.prof, outId, outCount * times);
+    const preview={...rec.prof,inv:rec.prof.inv.map(s=>s?{...s}:null)};
+    for(const id in needs)this.consumeItem(preview,id|0,needs[id]*times);
+    if(this.inventorySpaceFor(preview,outId,finalCount)<finalCount)return reply('craftReject',{reason:'full'});
+    for(const id in needs)this.consumeItem(rec.prof,id|0,needs[id]*times);
     this.addCraftedRewardItem(rec.prof, outId, finalCount);
     this.dirtyPlayers.add(rec.token);
     this.recordCraftProgress(client, outId, finalCount);
@@ -598,8 +627,10 @@ class EconomyMixin {
     if (finalCount !== outCount * times) msg.finalCount = finalCount;
     // Do not expose the crafted result until both the consumed ingredients and
     // output item are persisted. This closes the fast-refresh loss window.
-    await this.savePlayerProfileNow(rec.token, rec.prof);
-    client.send('craftResult', msg);
+    const saved=await this.savePlayerProfileNow(rec.token, rec.prof);
+    if(saved===false)msg.savePending=true;
+    msg.inv=rec.prof.inv;
+    reply('craftResult', msg);
   }
   findCatalogEntry(list, id) {
     return list.find(e => e[0] === id) || null;

@@ -1,3 +1,4 @@
+import {createCraftRequests,craftFailureText} from './craft-requests.mjs';
 import {atlasModelMaterials} from './model-atlas.mjs';
 import {batchStaticModelParts} from './model-batching.mjs';
 import {compareGearReward} from './gear-rewards.mjs';
@@ -228,6 +229,7 @@ function moveCursorItemTo(clientX,clientY){
 }
 addEventListener('pointermove', e=>{ if(cursorStack)moveCursorItemTo(e.clientX,e.clientY); }, {passive:true});
 
+const craftingRequests=createCraftRequests({room:()=>NET.on?NET.room:null,notify:text=>{showName(text);sysMsg(text);}});
 let craftCells=[], craftW=2; // crafting grid contents (stacks)
 let uiAccessors=[]; // for re-render
 
@@ -306,6 +308,7 @@ function takeOneFromInventory(id){
   return false;
 }
 function stageRecipe(recipe){
+  if(craftingRequests.pending){showName('WAITING FOR CRAFT CONFIRMATION');return;}
   if(recipe.hunterLevel && (S.lvl|0)<recipe.hunterLevel){sysMsg('Reach <b>Hunter Level '+recipe.hunterLevel+'</b> to craft that recipe');return;}
   if(!recipe || recipe.shapeless && recipe.shapeless.length>craftCells.length) return;
   if(cursorStack){ sysMsg('Place the held item before choosing a recipe'); return; }
@@ -745,10 +748,15 @@ function consumeCraftTimes(times){
   for(let k=0;k<times;k++) consumeCraft();
 }
 function requestServerCraft(shift){
-  if(!NET.on || !NET.room) return false;
-  NET.room.send('craft', { w: craftW, shift: !!shift, cells: craftCells.map(s=>s?{id:s.id,count:s.count}:null) });
-  return true;
+  if(cursorStack){showName('Place the held item before crafting.');return false;}
+  return craftingRequests.start({w:craftW,shift:!!shift,cells:craftCells.map(s=>s?{id:s.id,count:s.count}:null)},craftCells);
 }
+function craftingRejected(m){
+  if(!craftingRequests.settle(m))return;
+  const text=craftFailureText(m);SFX.error();showName(text);sysMsg(text);
+  renderUI();
+}
+
 function restoreInventorySnapshot(slots){
   if(!Array.isArray(slots)) return false;
   for(let i=0;i<36;i++){
@@ -773,19 +781,32 @@ function restoreInventorySnapshot(slots){
 }
 function applyServerCraft(m){
   if(!m || !m.out || !ITEMS[m.out.id]) return;
+  const request=craftingRequests.settle(m);if(!request)return false;
   const times=Math.max(1, Math.min(64, m.times|0));
-  consumeCraftTimes(times);
+  if(request.grid===craftCells)consumeCraftTimes(times);
   const made=m.finalCount || ((m.out.count||1)*times);
   const beforeContract=objectiveContractCraftSnapshot(m.out.id);
   if(!restoreInventorySnapshot(m.inv)) addCraftedItem(m.out.id, made);
+  else if(request.grid===craftCells){
+    // The server snapshot includes unspent ingredients. Reserve the cells still
+    // staged locally so they cannot also appear in the bag or be returned twice.
+    for(let i=0;i<craftCells.length;i++){
+      const stack=craftCells[i];if(!stack)continue;
+      let reserved=0;while(reserved<stack.count&&takeOneFromInventory(stack.id))reserved++;
+      if(reserved)stack.count=reserved;else craftCells[i]=null;
+    }
+  }
   awardJobForCraft(m.out.id, made);
   presentObjectiveCraftCompletion(m.out.id, made, 'craft', beforeContract);
   if(onboardingActive&&onboardingArrived&&onboardingKind()==='craft') onboardingFlags.crafted=true;
   SFX.success();
+  if(m.savePending){showName('CRAFTED · SAVING DELAYED');sysMsg('Item crafted, but saving is delayed. Keep this session open until the server saves your progress.');}
   renderUI(); renderCursor(); refreshHUD();
+  return true;
 }
 
 function slotInteract(acc, e, opts={}){
+  if(craftingRequests.pending){showName('WAITING FOR CRAFT CONFIRMATION');return;}
   // opts: {result, furnaceOutput, section}
   if(opts.result){
     const r=craftResult();
@@ -915,6 +936,7 @@ function inventoryArrangePayload(){
   return inv.slice(0,36).map(s=>s?{id:s.id,count:s.count,plus:s.plus,dur:s.dur,gearRank:s.gearRank,armorType:s.armorType,rarity:s.rarity,unique:s.unique,locked:s.locked,source:s.source}:null);
 }
 function sendInventoryArrange(){
+  if(craftingRequests.pending)return;
   // A staged crafting ingredient lives outside `inv`. Do not publish an incomplete
   // inventory layout while a craft is being assembled or awaiting its server result.
   if(!(NET.on&&NET.room&&['blockcraft','dungeon'].includes(NET.room.name))||cursorStack||craftCells.some(Boolean))return;
@@ -1063,12 +1085,13 @@ function renderSelectedBindingAction(){
   const kind=stack&&FAMILIAR_BY_SIGIL&&FAMILIAR_BY_SIGIL[stack.id];
   if(!kind||!FAMILIARS||!FAMILIARS[kind]) return null;
   const def=FAMILIARS[kind], bound=familiarUnlocks&&familiarUnlocks.includes(kind);
+  const wild=kind==='cat'||kind==='dog'||kind==='wolf';
   const panel=document.createElement('section');
   panel.className='gear-compare';
   panel.innerHTML='<header><div><small>FAMILIAR BINDING</small><h3>'+escHTML(def.name)+'</h3><b>'+escHTML((ITEMS[stack.id]&&ITEMS[stack.id].name)||'Binding item')+'</b></div><strong class="'+(bound?'equipped':'upgrade')+'">'+(bound?'BOUND':'READY')+'</strong></header>'+
-    '<div class="gear-traits"><span><b>USE</b>Bind this pet or familiar permanently, then summon or dismiss it from Companions or with K.</span><span><b>SLOT</b>Hotbar '+(slot+1)+'</span></div>';
+    '<div class="gear-traits"><span><b>USE</b>'+(wild?'Fasten this onto the matching wild animal after approaching, feeding, and calming it.':'Bind this familiar permanently, then summon or dismiss it from Companions or with K.')+'</span><span><b>SLOT</b>Hotbar '+(slot+1)+'</span></div>';
   const actions=document.createElement('div');actions.className='gear-actions';
-  actions.appendChild(qBtn(bound?'ALREADY BOUND':'BIND '+def.name.toUpperCase(),()=>{bindFamiliarItem(slot);renderUI();},bound));
+  actions.appendChild(qBtn(bound?'ALREADY BOUND':wild?'USE NEAR '+def.name.toUpperCase():'BIND '+def.name.toUpperCase(),()=>{bindFamiliarItem(slot);renderUI();},bound));
   actions.appendChild(qBtn('COMPANIONS',()=>openDragonBondUI()));
   panel.appendChild(actions);
   return panel;
@@ -2815,6 +2838,7 @@ let guildHallOpen=false;
 let dungeonLobbyOpen=false;
 let dungeonLobbyState=null;
 let dungeonMatchmakingState={listings:[]};
+let randomGateQueueState={queued:false,rank:-1,waiting:0};
 const pendingGuildInvites={};
 function openQWin(mode='dialog'){
   setTownMapMovementOverlay(false);
@@ -3052,6 +3076,29 @@ function requestDungeonLobbyLeave(){
 }
 function requestDungeonMatchmaking(active){if(NET.on&&NET.room)NET.room.send('dungeonMatchmakingAdvertise',{active:!!active});}
 function requestDungeonMatchmakingJoin(gateId){if(NET.on&&NET.room)NET.room.send('dungeonMatchmakingJoin',{gateId});}
+function applyRandomGateQueue(m){
+  randomGateQueueState=m&&typeof m==='object'?{queued:!!m.queued,rank:Number.isInteger(m.rank)?m.rank:-1,waiting:Math.max(0,m.waiting|0)}:{queued:false,rank:-1,waiting:0};
+  if(qOpen&&qpanelEl&&qpanelEl.dataset.modal==='random-gate-queue')openRandomGateQueueUI();
+}
+function openRandomGateQueueUI(){
+  openQWin('management');qpanelEl.innerHTML='';qpanelEl.dataset.modal='random-gate-queue';
+  const h=document.createElement('h2');h.textContent='RANDOM GATE';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='SIGN UP · MATCH WITH HUNTERS · READY TO ENTER';qpanelEl.appendChild(sub);
+  const intro=document.createElement('p');intro.className='qtext';
+  intro.textContent='Choose a Gate rank. Matchmaking finds an active public Gate in this shard and forms a real team with other signed-up hunters. The team remains after the dungeon. Everyone confirms Ready in the Gate Lobby before entry.';
+  qpanelEl.appendChild(intro);
+  if(randomGateQueueState.queued){
+    const status=document.createElement('p');status.className='qtext';status.innerHTML='<b>SEARCHING:</b> '+escHTML(RANKS[Math.max(0,Math.min(5,randomGateQueueState.rank))].n)+'-rank · '+randomGateQueueState.waiting+' hunter'+(randomGateQueueState.waiting===1?'':'s')+' waiting';qpanelEl.appendChild(status);
+    qpanelEl.appendChild(qBtn('CANCEL SEARCH',()=>NET.room.send('randomGateQueue',{action:'leave'}),true));
+  }else{
+    const maxRank=Math.max(0,Math.min(5,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));
+    const row=document.createElement('div');row.className='qrow';
+    for(let rank=0;rank<=maxRank;rank++)row.appendChild(qBtn(RANKS[rank].n+'-RANK',()=>{if(NET.on&&NET.room)NET.room.send('randomGateQueue',{action:'join',rank});}));
+    qpanelEl.appendChild(row);
+    const hint=document.createElement('p');hint.className='qtext';hint.textContent='Only unlocked ranks with an active public Gate can be queued. Team leaders may recruit; other team members should ask their leader to sign up.';qpanelEl.appendChild(hint);
+  }
+  qpanelEl.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
 const GATE_READINESS_REQUIREMENTS=[
   {weapon:1,armor:0,food:1,tool:1,health:.25},
   {weapon:3,armor:3,food:3,tool:3,health:.75},
@@ -3141,6 +3188,7 @@ function openGatePrepUI(rank=nextGatePrepRank()){
   row.appendChild(qBtn('SMITHY',()=>openQuestUI(villagers.find(v=>v.role==='smith')||NPC_ROLES.find(v=>v.role==='smith'))));
   row.appendChild(qBtn('TAVERN',()=>openTavernUI()));
   row.appendChild(qBtn(r.ready?'FIND GATE':'QUEST LOG',()=>r.ready?sysMsg('<b>Gate ready:</b> follow the Gate marker or join a nearby party.'):openQuestLogUI()));
+  row.appendChild(qBtn('RANDOM GATE',()=>openRandomGateQueueUI()));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   qpanelEl.appendChild(row);
 }
@@ -3158,7 +3206,7 @@ function openDungeonLobbyUI(){
   const ri=Math.max(0,Math.min(5,dungeonLobbyState.rank|0));
   const h=document.createElement('h2');h.textContent='GATE LOBBY';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.innerHTML=RANKS[ri].n+'-RANK '+gateKindLabel(dungeonLobbyState.kind||'public').toUpperCase()+' GATE &middot; READY '+((dungeonLobbyState.readyCount|0)||0)+'/'+((dungeonLobbyState.needed|0)||0);qpanelEl.appendChild(sub);
-  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='Gather at the portal, inspect your loadout, then step through together. Readiness advice never blocks entry; the gate opens when every hunter confirms.<br><br><b>Boss clear reward: '+Math.max(0,dungeonLobbyState.rewardXp|0).toLocaleString('en-US')+' Hunter XP</b> plus gold, materials, and key drops.';
+  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML=(dungeonLobbyState.randomQueue?'Random Gate team formed. Inspect your loadout, then confirm Ready to enter from anywhere in the overworld. Your team remains together after this Gate.':'Gather at the portal, inspect your loadout, then step through together.')+' Readiness advice never blocks entry; the gate opens when every hunter confirms.<br><br><b>Boss clear reward: '+Math.max(0,dungeonLobbyState.rewardXp|0).toLocaleString('en-US')+' Hunter XP</b> plus gold, materials, and key drops.';
   const mineSid=NET.room&&NET.room.sessionId;
   const members=Array.isArray(dungeonLobbyState.members)?dungeonLobbyState.members:[];
   let mineReady=false,mineReadiness=null;
@@ -4331,9 +4379,32 @@ function openCartographerUI(state=cartographerState){
   if(treasure){ancientCard.innerHTML='<span><small>ANCIENT CITY MAP</small><b>Finish your active map before starting another route</b></span><span>MAP ACTIVE</span>';}
   else{ancientCard.innerHTML='<span><small>ANCIENT CITY TREASURE MAP</small><b>Trace cave entrances into deep halls for ancient fragments, glyphs, and relic armor pieces</b></span><span>START ANCIENT MAP</span>';ancientCard.onclick=()=>NET.room.send('cartographer',{action:'ancient_treasure_start'});}
   qpanelEl.appendChild(ancientCard);
+  const expedition=globalThis.BlockcraftElderheartExpedition;
+  const route=document.createElement('div');route.className='quest-rank-summary treasure-card elderheart-expedition-card';
+  if(expedition&&expedition.active){
+    route.innerHTML='<span><small>ROADS OF THE ELDERHEART · STEP '+Math.min(4,(expedition.stage|0)+1)+'/4</small><b>'+escHTML(expedition.instruction||'Follow the expedition marker.')+'</b></span><span>'+(expedition.claimable?'CLAIM REWARD':'IN PROGRESS')+'</span>';
+    route.onclick=()=>{if(expedition.claimable)NET.room.send('elderheartExpeditionClaim',{});else{const t=expedition.target;sysMsg('<b>Expedition:</b> '+escHTML(expedition.instruction||'Follow the route.')+(t?'<br>'+escHTML(t.name||'Next stop')+' · '+Math.round(Math.hypot(t.x-player.pos.x,t.z-player.pos.z))+'m away':''));}};
+  }else if(expedition&&expedition.done){route.innerHTML='<span><small>ROADS OF THE ELDERHEART</small><b>Watchtower, road manifest, and Elderheart surveyed.</b></span><span>COMPLETE</span>';}
+  else{route.innerHTML='<span><small>OVERWORLD EXPEDITION · DANGEROUS ROAD</small><b>Align a watchtower beacon, clear a bandit camp, and trace the Elderheart.</b></span><span>START ROUTE</span>';route.onclick=()=>NET.room.send('elderheartExpeditionStart',{});}
+  qpanelEl.appendChild(route);
+  if(expedition&&expedition.active){const cancel=document.createElement('div');cancel.className='qrow';cancel.appendChild(qBtn('ABANDON EXPEDITION',()=>NET.room.send('elderheartExpeditionAbandon',{}),true));qpanelEl.appendChild(cancel);}
   const mantle=(state.cosmetics||[]).includes('cartographers_mantle'),worldComplete=(state.total|0)>0&&(state.totalFound|0)>=(state.total|0),prize=document.createElement('div');prize.className='quest-rank-summary';prize.innerHTML='<span><small>WORLD COMPLETION REWARD</small><b>Cartographer\'s Mantle</b></span><span>'+(mantle?'UNLOCKED':worldComplete?'READY TO CLAIM':'MAP EVERY LOCATION')+'</span>';if(worldComplete&&!mantle)prize.onclick=()=>NET.room.send('cartographer',{action:'claim_world'});qpanelEl.appendChild(prize);
   const leadCost=Math.max(0,(state.mapLeadCost|0)||25),leadLabel='BUY MAP LEAD · '+leadCost+' GOLD'+(state.mapTable?' · MAP TABLE':'');
   const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn(leadLabel,()=>NET.room.send('cartographer',{action:'hint'}),gold<leadCost));row.appendChild(qBtn('OPEN JOURNAL',()=>openDiscoveryJournalUI()));row.appendChild(qBtn('LEAVE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+}
+function applyElderheartExpedition(m){
+  globalThis.BlockcraftElderheartExpedition=m&&typeof m==='object'?m:null;
+  updateLandMinimap();
+  if(qOpen&&qpanelEl.querySelector('.elderheart-expedition-card'))openCartographerUI(cartographerState);
+}
+function openElderheartExpeditionPrompt(m){
+  if(!m||!Array.isArray(m.choices))return;
+  openQWin('dialog');qpanelEl.innerHTML='';
+  const h=document.createElement('h2');h.textContent=m.title||'WATCHTOWER SIGNAL';qpanelEl.appendChild(h);
+  const p=document.createElement('p');p.className='qtext';p.textContent=m.text||'Choose the direction of the next lead.';qpanelEl.appendChild(p);
+  const row=document.createElement('div');row.className='qrow';
+  for(const choice of m.choices)row.appendChild(qBtn(String(choice),()=>{if(NET.on&&NET.room)NET.room.send('elderheartExpeditionChoose',{id:m.targetId,choice});closeQWin();}));
+  qpanelEl.appendChild(row);qpanelEl.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function discoveryJournalEntries(){
   return [...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].map(s=>({...s,region:dangerRingAtClient(s.x,s.z),biome:biomeAt(s.x,s.z),found:discoveredIds.has(s.id),claimed:claimedDiscoveryIds.has(s.id)}));
@@ -4439,6 +4510,8 @@ function openQuestLogUI(){
   }
   const roadmap=document.createElement('div');roadmap.innerHTML=progressionRoadmapHTML();optional.appendChild(roadmap.firstElementChild);
   const explore=document.createElement('div');explore.className='qrow';
+  const expedition=globalThis.BlockcraftElderheartExpedition;
+  if(expedition&&expedition.active){const card=document.createElement('div');card.innerHTML=questLogCardHTML('Expedition','Roads of the Elderheart',expedition.instruction||'Follow the marked route.',expedition.target&&expedition.target.name||'Orin Mapwell',true,'',{progressHTML:questProgressHTML(Math.max(0,expedition.stage|0),3)});optional.appendChild(card.firstElementChild);}
   explore.appendChild(qBtn('CHOOSE STYLE',()=>openPlayerStyleGuideUI()));
   explore.appendChild(qBtn('RANK JOURNEY',()=>openRankJourneyUI()));
   explore.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
@@ -5042,14 +5115,16 @@ const FAMILIAR_UI_INFO={
   fang:{role:'HOUND',identity:'Bites nearby hostile mobs and helps finish hunts.',color:'#ffcf4a',source:'Pell Graywatch hunting quest or craft a Fang Totem.',verb:'fight mobs while Fang is active'},
   mote:{role:'HEALER',identity:'Restores health and blooms when danger gets close.',color:'#8fe06a',source:'Pippa Hearth cooking quest or craft a Mote Charm.',verb:'recover health while Mote is active'},
   sprite:{role:'FORAGER',identity:'Finds bonus drops while gathering and mining.',color:'#ffe27a',source:'Liss Barley farming quest or craft a Forage Charm.',verb:'gather resources while Sprite is active'},
-  cat:{role:'PET - SOFT PAWS',identity:'A quiet outdoor companion that softens fall damage.',color:'#9ad26b',source:'Rare Cat Collar from rabbits and hares outside town.',verb:'land from falls while Cat is active',wild:true},
-  dog:{role:'PET - TRAIL NOSE',identity:'A loyal hunting pet that can find extra meat from animals.',color:'#ff9a42',source:'Rare Dog Collar from deer and stags outside town.',verb:'hunt animals while Dog is active',wild:true},
-  wolf:{role:'PET - HUNTER HOWL',identity:'A wild partner that gives bonus XP from hostile kills.',color:'#8bd7ff',source:'Rare Wolf Collar from boars outside town.',verb:'defeat hostile mobs while Wolf is active',wild:true},
+  cat:{role:'PET - SOFT PAWS',identity:'A quiet outdoor companion that softens fall damage.',color:'#9ad26b',source:'Befriend a wild cat with River Fish, calm it, then fasten its collar.',verb:'land from falls while Cat is active',wild:true},
+  dog:{role:'PET - TRAIL NOSE',identity:'A loyal hunting pet that can find extra meat from animals.',color:'#ff9a42',source:'Befriend a wild dog with Cooked Meat, calm it, then fasten its collar.',verb:'hunt animals while Dog is active',wild:true},
+  wolf:{role:'PET - HUNTER HOWL',identity:'A wild partner that gives bonus XP from hostile kills.',color:'#8bd7ff',source:'Befriend a wild wolf with Raw Meat, calm it, then fasten its collar.',verb:'defeat hostile mobs while Wolf is active',wild:true},
 };
 function familiarBindingSlot(itemId){
   for(let i=0;i<inv.length;i++){const s=inv[i];if(s&&s.id===itemId)return i;}
   return -1;
 }
+function familiarCareFood(kind){return kind==='cat'?I.RIVER_FISH:kind==='dog'?I.COOKED_MEAT:kind==='wolf'?I.MONSTER_MEAT:0;}
+function familiarCareFoodSlot(kind){const id=familiarCareFood(kind);return id?inv.findIndex(stack=>stack&&stack.id===id):-1;}
 function familiarBondCard(id){
   const def=FAMILIARS[id],info=FAMILIAR_UI_INFO[id],xp=Math.max(0,(COMPANIONS.familiarXp[id]||0)|0);
   const lvl=BlockcraftFamiliarSystem.bondLevel(xp),tier=BlockcraftFamiliarSystem.tier(lvl),bound=familiarUnlocks.includes(id);
@@ -5116,7 +5191,7 @@ function openDragonBondUI(){
   sub.textContent='PETS - FAMILIARS - DRAGONS - CARE - SUMMON';
   qpanelEl.appendChild(sub);
   const overview=document.createElement('div'); overview.className='familiar-guide companion-guide';
-  overview.innerHTML='<span><b>PETS</b>found from collars and wild trails</span><span><b>FAMILIARS</b>magic companions with Bond XP</span><span><b>DRAGONS</b>hatch, care, ride, and train</span>';
+  overview.innerHTML='<span><b>PETS</b>approach, feed, calm, and bond</span><span><b>FAMILIARS</b>magic companions with Bond XP</span><span><b>DRAGONS</b>hatch, care, ride, and train</span>';
   qpanelEl.appendChild(overview);
   const dh=document.createElement('h2'); dh.textContent='DRAGON COMPANIONS'; qpanelEl.appendChild(dh);
   const intro=document.createElement('p'); intro.className='qtext';
@@ -5180,10 +5255,10 @@ function openDragonBondUI(){
   }
   const fh=document.createElement('h2'); fh.textContent='PET & FAMILIAR BONDS'; qpanelEl.appendChild(fh);
   const fint=document.createElement('p'); fint.className='qtext familiar-intro';
-  fint.innerHTML='<b>One pet or familiar can travel with you at a time.</b> Press <b>K</b> to call or cycle them. Pet collars can drop from animals outside town; put one on your hotbar and use it to bind that pet. Companions grow through <b>Bond XP</b> earned only while they are active.';
+  fint.innerHTML='<b>One pet or familiar can travel with you at a time.</b> Press <b>K</b> to call or cycle them. Ordinary pets can follow, stay, scout, retrieve, guard, play, feed, and be petted. Find a wild cat, dog, or wolf outside town; approach without attacking, feed its favourite food, calm it, then fasten the prepared collar. Companions grow through <b>Bond XP</b> earned only while they are active.';
   qpanelEl.appendChild(fint);
   const fguide=document.createElement('div'); fguide.className='familiar-guide';
-  fguide.innerHTML='<span><b>K</b> summon / cycle</span><span><b>COLLARS</b> hunt wildlife outside town</span><span><b>N</b> Shade Dark Passage</span><span><b>Bond XP</b> active companion only</span>';
+  fguide.innerHTML='<span><b>K</b> summon / cycle</span><span><b>TAMING</b> approach · feed · calm · collar</span><span><b>PET COMMANDS</b> follow · stay · scout · retrieve · guard</span><span><b>CARE</b> play · feed · pet</span><span><b>N</b> Shade Dark Passage</span><span><b>Bond XP</b> active companion only</span>';
   qpanelEl.appendChild(fguide);
   const fgrid=document.createElement('div'); fgrid.className='bondgrid familiargrid'; qpanelEl.appendChild(fgrid);
   const familiarCards=familiarBondCards();
@@ -5209,9 +5284,15 @@ function openDragonBondUI(){
     body.appendChild(xp);
     const actions=document.createElement('div'); actions.className='bondactions'; body.appendChild(actions);
     if(bound) actions.appendChild(qBtn(active?'DISMISS':'SUMMON',()=>{cycleFamiliar(active?'':f.id);openDragonBondUI();}));
+    else if(f.wild) actions.appendChild(qBtn(f.bindingSlot>=0?'FASTEN OUTSIDE':'FIND OUTSIDE',()=>sysMsg('<b>'+escHTML(def.name)+' taming:</b> '+escHTML(f.source)+' Look at the living animal and press <b>G</b> for each step.')));
     else if(f.bindingSlot>=0) actions.appendChild(qBtn('BIND '+def.name.toUpperCase(),()=>{bindFamiliarItem(f.bindingSlot);setTimeout(openDragonBondUI, NET.on?180:0);}));
-    else if(f.wild) actions.appendChild(qBtn('FIND OUTSIDE',()=>sysMsg('<b>'+escHTML(def.name)+' source:</b> '+escHTML(f.source)+'. Hunt the animal outside town, then use the collar from your hotbar and press <b>K</b>.')));
     else actions.appendChild(qBtn('VIEW RECIPE',()=>{closeQWin();openCraftingFromNpc('companions');}));
+    if(bound&&active&&f.wild){
+      for(const [command,label] of [['follow','FOLLOW'],['stay','STAY'],['scout','SCOUT'],['retrieve','RETRIEVE'],['guard','GUARD'],['play','PLAY']])actions.appendChild(qBtn(label,()=>{COMPANIONS.commandFamiliar(command);setTimeout(openDragonBondUI,NET.on?160:0);}));
+      const foodSlot=familiarCareFoodSlot(f.id),foodName=(ITEMS[familiarCareFood(f.id)]&&ITEMS[familiarCareFood(f.id)].name)||'favourite food';
+      actions.appendChild(qBtn('FEED',()=>{if(foodSlot<0)return sysMsg('You need <b>'+escHTML(foodName)+'</b>.');COMPANIONS.commandFamiliar('feed',foodSlot);setTimeout(openDragonBondUI,NET.on?180:0);},foodSlot<0));
+      actions.appendChild(qBtn('PET',()=>COMPANIONS.commandFamiliar('pet')));
+    }
     if(!bound) actions.appendChild(qBtn('FIND SOURCE',()=>sysMsg('<b>'+escHTML(def.name)+' source:</b> '+escHTML(f.source))));
     fgrid.appendChild(card);
   }
@@ -8613,6 +8694,7 @@ gameContext.registerState('menus', Object.freeze({
   get gold(){ return gold; },
 }));
 gameContext.registerModule('menus', Object.freeze({
+  craftingRejected,
   open:openUI,
   close:closeUI,
   render:renderUI,
@@ -8623,6 +8705,10 @@ gameContext.registerModule('menus', Object.freeze({
   openRegionalContracts:openRegionalContractsUI,
   openGuardian:openGuardianUI,
   openGatePrep:openGatePrepUI,
+  applyElderheartExpedition,
+  openElderheartExpeditionPrompt,
+  openRandomGateQueue:openRandomGateQueueUI,
+  applyRandomGateQueue,
   openPlayerStyleGuide:openPlayerStyleGuideUI,
   playerStyleGuide:currentPlayerStyleGuide,
   gateReadiness:gateReadinessLocal,

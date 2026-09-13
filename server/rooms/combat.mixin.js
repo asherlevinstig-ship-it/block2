@@ -4,7 +4,7 @@
 const {
   ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, ANIMAL_BASE_KIND, ANIMAL_LOOT, ARMOR_INFO, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
   DANGER_RINGS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_TYPE_SET,
-  I, KEY_LOOT, MINE_DROPS, PET_FAMILIAR_DROPS, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
+  I, KEY_LOOT, MINE_DROPS, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
   keyForRank, spriteForageChance, spriteBonusDrops, dogExtraMeatChance, wolfHostileXpBonus,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
@@ -842,16 +842,6 @@ class CombatMixin {
     mob.hp -= applied;
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
   }
-  rollPetFamiliarDrop(client, animalKind, ring = 0) {
-    const base = ANIMAL_BASE_KIND[animalKind] || animalKind;
-    const drop = PET_FAMILIAR_DROPS[base];
-    if (!drop) return null;
-    const rec = this.profileFor(client);
-    if (rec && Array.isArray(rec.prof.familiarUnlocks) && rec.prof.familiarUnlocks.includes(drop.familiar)) return null;
-    if (rec && this.profileItemCount(rec.prof, drop.item) > 0) return null;
-    const chance = Math.min(.16, drop.chance + Math.max(0, ring | 0) * .018);
-    return Math.random() < chance ? { id: drop.item, count: 1 } : null;
-  }
   // Tell the attacker the actual damage their hit dealt, so the client can float a
   // number over the mob. Server-authoritative — no client-side damage prediction.
   emitDamageNumber(client, mob, damage, crit, lethal=mob.hp-damage<=0) {
@@ -862,7 +852,15 @@ class CombatMixin {
   }
   provokeMob(mobId, client, damage=1) {
     const id=String(mobId||''),meta=this.mobMeta[id],mob=this.state.mobs.get(id);
-    if(!client||!meta||!mob||this.isAnimalKind(mob.kind)||meta.friendly)return;
+    if(!client||!meta||!mob||meta.friendly)return;
+    if(this.isAnimalKind(mob.kind)){
+      meta.aggroSid=client.sessionId;
+      meta.aggroUntil=Date.now()+7000;
+      meta.wildThreatSid=client.sessionId;
+      meta.herdAlertT=Math.max(meta.herdAlertT||0,.65);
+      if((ANIMAL_BASE_KIND[mob.kind]||mob.kind)==='boar')meta.boarProvoked=true;
+      return;
+    }
     meta.aggroSid=client.sessionId;
     // A landed hit must matter more than passive proximity. Strong hits hold the
     // creature slightly longer, while the cap still lets another hunter take over.
@@ -1042,6 +1040,7 @@ class CombatMixin {
     if(client)this.offerShadowSpirit(client,mob,killedMeta);
     this.state.mobs.delete(String(mobId));
     delete this.mobMeta[mobId];
+    if(this.wildTaming)for(const [sid,attempt] of this.wildTaming)if(attempt&&attempt.mobId===String(mobId))this.wildTaming.delete(sid);
     if (dgn) this.removeTransient(dgn, String(mobId));
     if (wasBoss && dgn) this.onBossDown(dgn);
     else if (wasBoss && !dgn && killedMeta.ancientWarden) {
@@ -1092,8 +1091,6 @@ class CombatMixin {
       let items = dgn ? [] : this.rollOverworldKeyDrops(ring);
       if (!dgn && this.isAnimalKind(kind)) {
         items = (ANIMAL_LOOT[kind] || [{ id: I.MONSTER_MEAT, count: 1 }]).map(it => ({ ...it }));
-        const petDrop = this.rollPetFamiliarDrop(client, kind, ring);
-        if (petDrop) items.push(petDrop);
         if (this.activeFamiliarIs && this.activeFamiliarIs(client, 'dog')) {
           const dogLevel = this.familiarPowerLevel(client, 'dog');
           if (Math.random() < dogExtraMeatChance(dogLevel)) {
@@ -1132,8 +1129,9 @@ class CombatMixin {
         }
       }
       const animal = this.isAnimalKind(kind);
+      const wildCompanion = kind === 'wild_cat' || kind === 'wild_dog' || kind === 'wild_wolf';
       const elite=!!killedMeta.elite||!!killedMeta.banditCaptain;
-      let xp = threatXpForRing(ring, { elite, animal });
+      let xp = wildCompanion ? 0 : threatXpForRing(ring, { elite, animal });
       if (!animal && this.activeFamiliarIs && this.activeFamiliarIs(client, 'wolf')) {
         const bonus = Math.max(1, Math.round(xp * wolfHostileXpBonus(this.familiarPowerLevel(client, 'wolf'))));
         xp += bonus;
@@ -1141,9 +1139,11 @@ class CombatMixin {
         this.awardFamiliarXp(client, 'wolf', 1, 'hunter_howl');
         client.send('familiarTrait', { kind: 'wolf', trait: 'hunter_howl', bonus });
       }
-      this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp, items, dangerRing: ring, elite });
-      if (animal) this.recordHuntProgress(client);
-      else this.recordKillProgress(client, true);
+      this.awardGrant(client, { source: wildCompanion ? 'wild_pet_harmed' : animal ? 'hunt' : 'mob', xp, items, dangerRing: ring, elite });
+      if (!wildCompanion) {
+        if (animal) this.recordHuntProgress(client);
+        else this.recordKillProgress(client, true);
+      }
       if (killedMeta.eventCaravan && typeof this.onCaravanEventMobKilled === 'function')
         this.onCaravanEventMobKilled(client, mobId, killedMeta);
       if(!dgn&&killedMeta.bandit&&['shield','scout','brute'].includes(killedMeta.banditRole))this.progressRegionalContract(client,'road_roles',{});

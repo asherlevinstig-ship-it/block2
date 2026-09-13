@@ -6104,7 +6104,7 @@ addEventListener('keydown', e=>{
   keys[e.code]=true;
   acknowledgeSmartSuggestionKeySafe(e.code);
   if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
-  if(String(e.key||'').toLowerCase()==='p'&&!e.repeat&&gameInput){
+  if((e.code==='KeyP'||String(e.key||'').toLowerCase()==='p')&&!e.repeat&&gameInput){
     e.preventDefault();
     if(dim==='questions'){startQuestionHallMeditationPose();releaseGameplayCursor();}
     globalThis.BlockcraftRecall.start(dim==='questions'?{source:'question_hall'}:undefined);
@@ -6854,7 +6854,7 @@ function activeJobContractPrompt(){
   if(['smith','repair','upgrade','salvage'].includes(c.type)&&near(HUB.smith,9))return {key:'G',title:titled('Forge Contract'),small:c.type==='repair'?'Repair damaged tools with kits':c.type==='upgrade'?'Improve eligible gear at Tobin':c.type==='salvage'?'Salvage unwanted gear':'Craft or smelt forge supplies',priority:101};
   if(c.type==='meditate'&&near(HUB.shrine,9))return {key:'G',title:titled('Meditation Contract'),small:'Meditate inside the hall circle to advance focus time',priority:101};
   if(['mine','cave_survey','ancient_map','treasure'].includes(c.type)&&near(HUB.quarry,14))return {key:c.type==='mine'?'LMB':'G',title:titled(c.type==='mine'?'Mining Contract':'Miner Route'),small:c.type==='mine'?'Mine stone or ore with a pickaxe':'Follow underground clues and investigate markers',priority:101};
-  if(['kill','hunt','tame'].includes(c.type)&&dim==='overworld'&&!isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return {key:c.type==='tame'?'K':'LMB',title:titled(c.type==='hunt'?'Hunting Contract':c.type==='tame'?'Taming Contract':'Combat Contract'),small:c.type==='hunt'?'Hunt wild animals outside town':c.type==='tame'?'Use a collar or sigil, then call your familiar':'Defeat hostile creatures outside town',priority:101};
+  if(['kill','hunt','tame'].includes(c.type)&&dim==='overworld'&&!isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return {key:c.type==='tame'?'G':'LMB',title:titled(c.type==='hunt'?'Hunting Contract':c.type==='tame'?'Taming Contract':'Combat Contract'),small:c.type==='hunt'?'Hunt wild animals outside town':c.type==='tame'?'Approach, feed, calm, then collar a wild companion':'Defeat hostile creatures outside town',priority:101};
   if(c.type==='pet_care'&&(near(HUB.roost,12)||nearTamingLandPortal()))return {key:'G',title:titled('Pet Care Contract'),small:'Feed dragons, craft treats, or care for companions',priority:101};
   return null;
 }
@@ -6898,6 +6898,12 @@ function nearbyInteractionPrompt(){
   }
   const readyClaim=claimReadyQuestAtServicePrompt();
   if(readyClaim)push(readyClaim,0);
+  const wildPet=mobUnderCrosshair(5.2);
+  if(wildPet&&wildPet.net&&['wild_cat','wild_dog','wild_wolf'].includes(wildPet.kind)){
+    const names={wild_cat:'Wild Cat',wild_dog:'Wild Dog',wild_wolf:'Wild Wolf'};
+    const held=inv[selected],heldName=held&&ITEMS[held.id]&&ITEMS[held.id].name;
+    push({key:'G',title:names[wildPet.kind],small:heldName?'Approach gently with '+heldName:'Approach gently - do not attack',priority:110},0);
+  }
   push(activeJobContractPrompt(),0);
   if(nearFellowshipWeeklyCache())push({key:'G',title:'Fellowship Weekly Cache',small:'Claim unlocked rewards',priority:104},0);
   if(nearFellowshipNoticeBoard())push({key:'G',title:'Fellowship Notice Board',small:'View pinned objectives',priority:102},0);
@@ -7132,6 +7138,12 @@ function secondaryAction(){
     : null;
   if(nearbyDragon&&nearbyDragon.type&&typeof openDragonInteractUI==='function'){ openDragonInteractUI(nearbyDragon.type); return; }
   const heldRC=inv[selected];
+  const wildPet=mobUnderCrosshair(5.2);
+  if(wildPet&&wildPet.net&&['wild_cat','wild_dog','wild_wolf'].includes(wildPet.kind)){
+    if(NET.on&&NET.room)NET.room.send('tameAnimal',{mobId:wildPet.netId,slot:selected});
+    else sysMsg('The wild animal watches you, but the server is reconnecting.');
+    return;
+  }
   if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
   if(heldRC && heldRC.id===I.TOWN_MAP && globalThis.BlockcraftTownMap){ globalThis.BlockcraftTownMap.open(); return; }
   if(heldRC && heldRC.id===I.APPEARANCE_MIRROR && globalThis.BlockcraftAppearancePreview&&globalThis.BlockcraftAppearancePreview.showMirror){
@@ -7178,6 +7190,13 @@ function secondaryAction(){
   }
   if(nearJobBoard()){ openJobsUI(); return; }
   if(nearDragonRoost()){ openDragonBondUI(); return; }
+  const expedition=globalThis.BlockcraftElderheartExpedition;
+  if(expedition&&expedition.active&&expedition.target&&dim==='overworld'&&
+    Math.hypot(player.pos.x-expedition.target.x,player.pos.z-expedition.target.z)<=(expedition.target.radius||11)+3&&
+    Math.abs(player.pos.y-(expedition.target.y+1))<=9){
+    if(NET.on&&NET.room)NET.room.send('elderheartExpeditionInteract',{id:expedition.target.id});
+    return;
+  }
   const treasureClue=nearbyTreasureClue();
   if(treasureClue){if(NET.on&&NET.room)NET.room.send('treasureMapAdvance',{id:treasureClue.id});return;}
   const knowledgeRuin=nearbyKnowledgeRuin();

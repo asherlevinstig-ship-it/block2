@@ -5,6 +5,15 @@ const W=require('../world');
 const { getAuthService }=require('../auth');
 
 class RecallMixin{
+  async loadRecallQuestionWithTimeout(store,account,input,timeoutMs=4000){
+    let timer;
+    try{
+      return await Promise.race([
+        Promise.resolve().then(()=>store.loadRecallQuestion(account,input)),
+        new Promise(resolve=>{timer=setTimeout(()=>resolve(null),timeoutMs);}),
+      ]);
+    }catch(_){return null;}finally{clearTimeout(timer);}
+  }
   initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallRecentQuestions=new Map();this.recallRecentPrompts=new Map();this.recallStartsPending=new Set();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
   cleanRecallSubject(value){return String(value||'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim().slice(0,96);}
   recallTutorialSpace(p){
@@ -101,7 +110,7 @@ class RecallMixin{
   }
   async handleRecallStart(client,message={}){
     if(!client)return;
-    const p=this.state.players.get(client.sessionId),now=Date.now();
+    const p=this.state.players.get(client.sessionId);let now=Date.now();
     if(!p)return;
     const rec=typeof this.profileFor==='function'&&this.profileFor(client);
     const active=this.recallChallenges.get(client.sessionId),questionHallRequest=message.source==='question_hall';
@@ -125,13 +134,17 @@ class RecallMixin{
     let q=null;
     if(this.recallStartsPending.has(client.sessionId))return client.send('recallReject',{reason:'pending'});
     this.recallStartsPending.add(client.sessionId);
+    const startDim=p.dim,startDungeon=p.dgn;
     try{
       const auth=getAuthService(),store=auth&&typeof auth.getGameQuestionStore==='function'?auth.getGameQuestionStore():null;
       if(store&&client&&client._account&&typeof store.loadRecallQuestion==='function'){
         const mastery=rec&&rec.prof&&rec.prof.recallMastery||{},recent=this.recallRecentQuestions.get(client.sessionId)||[],recentPrompts=this.recallRecentPrompts.get(client.sessionId)||[],avoid=this.recallAvoidance(mastery,recent,recentPrompts);
-        q=await store.loadRecallQuestion(client._account,{subject,fallbackSubject:'Computer Science',avoidQuestionIds:avoid.ids,avoidPrompts:avoid.prompts});
+        q=await this.loadRecallQuestionWithTimeout(store,client._account,{subject,fallbackSubject:'Computer Science',avoidQuestionIds:avoid.ids,avoidPrompts:avoid.prompts});
       }
     }catch(_){}finally{this.recallStartsPending.delete(client.sessionId);}
+    if(this.state.players.get(client.sessionId)!==p)return;
+    if(p.dim!==startDim||p.dgn!==startDungeon)return client.send('recallReject',{reason:'space_changed'});
+    now=Date.now();
     if(!q){
       const history=rec&&rec.prof.recallMastery||{},recent=this.recallRecentQuestions.get(client.sessionId)||[],recentPrompts=this.recallRecentPrompts.get(client.sessionId)||[],avoid=this.recallAvoidance(history,recent,recentPrompts);
       const avoidedPrompts=new Set(avoid.prompts);

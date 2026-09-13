@@ -29,6 +29,8 @@ class Player extends Schema {
     this.appearance = '';    // JSON public hunter appearance palette
     this.familiar = '';      // active familiar ('' = none, 'shade' = Shade manifested)
     this.familiarTier = 0;   // public visual tier of the active familiar
+    this.familiarMode = 'follow'; // ordinary pet command: follow/stay/scout/retrieve/guard/play
+    this.familiarTarget = ''; // compact JSON command target for remote pet rendering
     this.spirit = false;     // defeated inside a dungeon; fixed in place until the player quits
     this.invisible = false;  // Deity invisibility: clients fade the avatar/nameplate
   }
@@ -36,7 +38,7 @@ class Player extends Schema {
 defineTypes(Player, {
   x: 'float32', y: 'float32', z: 'float32', yaw: 'float32',
   name: 'string', schoolId: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
-  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', appearance: 'string', familiar: 'string', familiarTier:'uint8', spirit:'boolean', invisible:'boolean',
+  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', appearance: 'string', familiar: 'string', familiarTier:'uint8', familiarMode:'string', familiarTarget:'string', spirit:'boolean', invisible:'boolean',
 });
 
 class Team extends Schema {

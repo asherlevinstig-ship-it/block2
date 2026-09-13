@@ -273,6 +273,7 @@ class DungeonMixin {
     const looted = this.gateLootedChests.get(inst.id)?.size || 0;
     const def = inst.definition || {};
     const plus = inst.shardPlus | 0;
+    this.recordRecentActivityPlayers([...(inst.players || [])], inst.id, def.name || inst.dungeonId || 'Dungeon', outcome);
     return {
       outcome,
       reason: reason || '',
@@ -291,6 +292,7 @@ class DungeonMixin {
       chestTotal: inst.lootChestTotal | 0,
       bossAlive: !!status.bossAlive,
       mastery: this.dungeonMasteryResult(inst, null),
+      participants: this.postActivityParticipants({ sids: [...(inst.players || [])] }),
       shard: plus > 0 ? { plus, name: inst.shardName || '', mods: (inst.shardMods || '').split(',').filter(Boolean) } : null,
     };
   }
@@ -770,6 +772,7 @@ class DungeonMixin {
       needed: members.length,
       leader: lobby.leader || '',
       advertised: !!lobby.advertised,
+      randomQueue: !!lobby.randomQueue,
       canAdvertise: !viewerSid || viewerSid === lobby.leader,
     };
   }
@@ -820,7 +823,7 @@ class DungeonMixin {
         const p = this.state.players.get(sid), g = this.state.gates.get(lobby.gateId);
         const payload = this.dungeonLobbyPayload(lobby, sid);
         payload.youDistance = p && g ? Math.hypot(g.x - p.x, g.z - p.z) : Infinity;
-        payload.canReady = payload.youDistance <= GATE_INTERACT_RANGE;
+        payload.canReady = !!lobby.randomQueue || payload.youDistance <= GATE_INTERACT_RANGE;
         c.send('dungeonLobby', payload);
       }
     }
@@ -850,6 +853,107 @@ class DungeonMixin {
   }
   sendDungeonMatchmaking(client) { client.send('dungeonMatchmaking', { listings: this.dungeonMatchmakingPayload(client) }); }
   broadcastDungeonMatchmaking() { for (const client of this.clients) this.sendDungeonMatchmaking(client); }
+  randomGateQueuePayload(sid) {
+    const queue = this.randomGateQueue || new Map();
+    const mine = queue.get(sid);
+    return { queued: !!mine, rank: mine ? mine.rank : -1,
+      waiting: mine ? [...queue.values()].filter(entry => entry.rank === mine.rank).length : 0 };
+  }
+  sendRandomGateQueue(client) { client.send('randomGateQueue', this.randomGateQueuePayload(client.sessionId)); }
+  removeRandomGateQueue(sid) {
+    if (!this.randomGateQueue || !this.randomGateQueue.delete(sid)) return;
+    for (const client of this.clients) if (this.randomGateQueue.has(client.sessionId)) this.sendRandomGateQueue(client);
+  }
+  randomGateCandidates(client, rank) {
+    const out = [];
+    this.state.gates.forEach(g => {
+      if (g.active && g.kind === 'public' && (g.rank | 0) === rank &&
+          !this.dungeonLobbies?.has(g.id) && this.canEnterGate(client, g)) out.push(g);
+    });
+    return out;
+  }
+  randomGateJoinTeam(client, rec) {
+    if (!client || !rec || this.teamMgr.bySid.has(client.sessionId) || rec.members.size >= 4) return false;
+    const token = this.clientToken(client);
+    if (!token || rec.members.has(token)) return false;
+    // Queue signup is explicit consent to join the matched hunter's persistent team.
+    rec.members.add(token);
+    this.dirtyTeams = true;
+    this.attachTeamSession(client.sessionId, rec);
+    client.send('teamResult', { ok: true, action: 'joined', id: rec.id, name: rec.name, randomGate: true });
+    this.refreshTeamSocial(rec);
+    return true;
+  }
+  handleRandomGateQueue(client, m) {
+    if (!this.randomGateQueue) this.randomGateQueue = new Map();
+    if (m && m.action === 'leave') {
+      this.removeRandomGateQueue(client.sessionId);
+      return this.sendRandomGateQueue(client);
+    }
+    const rank = m && m.rank;
+    const p = this.state.players.get(client.sessionId);
+    if (!Number.isInteger(rank) || rank < 0 || rank > 5 || !p || p.dgn || p.dim !== 'overworld' || !this.clientToken(client))
+      return client.send('randomGateQueueReject', { reason: 'invalid' });
+    if (this.rateLimited(client, 'randomGateQueue', 4, 10)) return client.send('randomGateQueueReject', { reason: 'rate' });
+    if (!this.canAccessGateRank(client, rank)) return client.send('randomGateQueueReject', { reason: 'rank' });
+    if (this.dungeonLobbies && [...this.dungeonLobbies.values()].some(lobby => lobby.members.has(client.sessionId)))
+      return client.send('randomGateQueueReject', { reason: 'lobby' });
+    const rec = this.currentTeamRecordFor(client);
+    if (rec && (!this.isTeamLeader(client, rec) || rec.members.size >= 4))
+      return client.send('randomGateQueueReject', { reason: 'team' });
+    if (!this.randomGateCandidates(client, rank).length &&
+        ![...(this.dungeonLobbies || new Map()).values()].some(lobby => lobby.randomQueue && lobby.rank === rank && lobby.members.size < 4))
+      return client.send('randomGateQueueReject', { reason: 'gate' });
+    this.removeRandomGateQueue(client.sessionId);
+    // Fill an existing queue-made lobby first. Existing teams never get merged without consent.
+    if (!rec) for (const lobby of this.dungeonLobbies?.values() || []) {
+      const g = this.state.gates.get(lobby.gateId);
+      const team = this.teamRecords.get(lobby.teamId);
+      if (!lobby.randomQueue || lobby.rank !== rank || lobby.members.size >= 4 || !g || !g.active ||
+          !team || team.members.size >= 4 || !this.canEnterGate(client, g)) continue;
+      if (!this.randomGateJoinTeam(client, team)) break;
+      lobby.members.add(client.sessionId);
+      lobby.ready.delete(client.sessionId);
+      this.sendDungeonLobby(lobby);
+      this.sendRandomGateQueue(client);
+      return;
+    }
+    // The earliest compatible signup hosts the party and owns its team.
+    for (const [hostSid, entry] of this.randomGateQueue) {
+      if (entry.rank !== rank || hostSid === client.sessionId) continue;
+      const host = this.clients.find(c => c.sessionId === hostSid);
+      const hostPlayer = host && this.state.players.get(hostSid);
+      if (!host || !hostPlayer || hostPlayer.dgn || hostPlayer.dim !== 'overworld') { this.removeRandomGateQueue(hostSid); continue; }
+      const hostTeam = this.currentTeamRecordFor(host);
+      if (rec || (hostTeam && (hostTeam.members.size >= 4 || !this.isTeamLeader(host, hostTeam)))) continue;
+      const candidates = this.randomGateCandidates(host, rank).filter(g => this.canEnterGate(client, g));
+      if (!candidates.length) continue;
+      const g = candidates[Math.floor(Math.random() * candidates.length)];
+      let team = hostTeam;
+      if (!team) {
+        const preferred = (hostPlayer.name || 'Hunter') + "'s Gate Team";
+        const name = this.findTeamRecord(preferred) ? 'Gate Team ' + (this.teamMgr.seq + 1) : preferred;
+        const created = this.createPersistentTeam(host, name, true);
+        if (created.err) return client.send('randomGateQueueReject', { reason: 'team' });
+        team = this.currentTeamRecordFor(host);
+        host.send('teamResult', { ok: true, action: 'created', id: team.id, name: team.name, randomGate: true });
+      }
+      if (!this.randomGateJoinTeam(client, team)) return client.send('randomGateQueueReject', { reason: 'team' });
+      this.removeRandomGateQueue(hostSid);
+      const lobby = { id: g.id + ':lobby', gateId: g.id, rank, kind: 'public', leader: hostSid,
+        members: new Set([hostSid, client.sessionId]), ready: new Set(), createdAt: Date.now(),
+        advertised: false, randomQueue: true, teamId: team.id };
+      if (!this.dungeonLobbies) this.dungeonLobbies = new Map();
+      this.dungeonLobbies.set(g.id, lobby);
+      this.sendRandomGateQueue(host);
+      this.sendRandomGateQueue(client);
+      this.sendTeamNotice(team, 'Random Gate party formed. Ready up in the Gate Lobby when you are prepared.');
+      this.sendDungeonLobby(lobby);
+      return;
+    }
+    this.randomGateQueue.set(client.sessionId, { rank, at: Date.now() });
+    for (const waiting of this.clients) if (this.randomGateQueue.has(waiting.sessionId)) this.sendRandomGateQueue(waiting);
+  }
   handleDungeonMatchmakingAdvertise(client, m) {
     let lobby = null;
     for (const value of this.dungeonLobbies.values()) if (value.members.has(client.sessionId)) { lobby = value; break; }
@@ -864,6 +968,7 @@ class DungeonMixin {
     if (!p || p.dgn || !this.canEnterGate(client, g)) return client.send('gateReject', { reason: 'locked' });
     if (Math.hypot(g.x - p.x, g.z - p.z) > 120) return client.send('gateReject', { reason: 'range' });
     if (lobby.members.size >= 4) return client.send('gateReject', { reason: 'full' });
+    this.removeRandomGateQueue(client.sessionId);
     this.leaveDungeonLobby(client.sessionId, false);
     lobby.members.add(client.sessionId);
     lobby.ready.delete(client.sessionId);
@@ -1074,7 +1179,7 @@ class DungeonMixin {
     for (const sid of members) {
       const c = this.clients.find(cl => cl.sessionId === sid);
       const p = this.state.players.get(sid);
-      if (!c || !p || p.dgn || !this.canEnterGate(c, g) || Math.hypot(g.x - p.x, g.z - p.z) > 7) {
+      if (!c || !p || p.dgn || p.dim !== 'overworld' || !this.canEnterGate(c, g) || (!lobby.randomQueue && Math.hypot(g.x - p.x, g.z - p.z) > 7)) {
         if (c) c.send('dungeonLobbyClosed', { gateId: g.id, reason: 'range' });
         continue;
       }
@@ -1143,6 +1248,7 @@ class DungeonMixin {
     const g = found.gate;
     if (!p || !g) return client.send('gateReject', { reason: found.reason || 'locked' });
     if (this.rateLimited(client, 'dungeonReady', 5, 10)) return client.send('gateReject', { reason: 'rate' });
+    this.removeRandomGateQueue(client.sessionId);
     if (!this.dungeonLobbies) this.dungeonLobbies = new Map();
     this.leaveDungeonLobby(client.sessionId, false);
     let lobby = this.dungeonLobbies.get(g.id);
@@ -1166,7 +1272,7 @@ class DungeonMixin {
   }
   async handleDungeonLobbyReady(client, m) {
     const p = this.state.players.get(client.sessionId);
-    if (!p || p.dgn) return client.send('gateReject', { reason: 'invalid' });
+    if (!p || p.dgn || p.dim !== 'overworld') return client.send('gateReject', { reason: 'invalid' });
     if (this.rateLimited(client, 'action', 5, 10)) return client.send('gateReject', { reason: 'rate' });
     if (process.env.BLOCKCRAFT_E2E === '1' && p && m && typeof m.gateId === 'string') {
       const e2eGate = this.state.gates.get(m.gateId);
@@ -1183,7 +1289,7 @@ class DungeonMixin {
     if (!lobby || !lobby.members.has(client.sessionId)) return client.send('gateReject', { reason: 'lobby' });
     const g = this.state.gates.get(lobby.gateId);
     if (!g || !g.active) return this.disbandDungeonLobby(lobby.gateId, 'gone');
-    if (!this.canEnterGate(client, g) || Math.hypot(g.x - p.x, g.z - p.z) > GATE_INTERACT_RANGE) {
+    if (!this.canEnterGate(client, g) || (!lobby.randomQueue && Math.hypot(g.x - p.x, g.z - p.z) > GATE_INTERACT_RANGE)) {
       this.leaveDungeonLobby(client.sessionId, true);
       return client.send('gateReject', { reason: 'range' });
     }

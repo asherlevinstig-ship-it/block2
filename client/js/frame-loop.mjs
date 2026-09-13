@@ -1364,6 +1364,15 @@ function idleObjectiveLine(){
   if(inTown)return objectiveLine('progression','Next','Choose Work','Open your Quest Log or visit the Guild Hall for the clearest task',{type:'questlog',label:'OPEN QUEST LOG'});
   return objectiveLine('progression','Next','Find A Lead','Return to town, follow a landmark, or open your Quest Log',{type:'questlog',label:'OPEN QUEST LOG'});
 }
+function elderheartExpeditionObjectiveLine(){
+  const expedition=globalThis.BlockcraftElderheartExpedition;
+  if(!expedition||!expedition.active||dim!=='overworld')return null;
+  const stage=Math.max(0,Math.min(3,expedition.stage|0));
+  const site=expedition.target;
+  return objectiveLine('expedition','Expedition','Roads of the Elderheart',expedition.instruction||'Follow the expedition route.',
+    {type:'questlog',label:stage===3?'RETURN TO ORIN':'VIEW ROUTE'},objectiveProgressParts(stage,3),
+    {target:site?{label:site.name||'Expedition stop',x:site.x,z:site.z}:{label:'Orin Mapwell',x:HUB.cartographer.x,z:HUB.cartographer.z}});
+}
 function tutorialRoomHudSuppressed(){
   return dim!=='overworld'||dimensionsState.kind!=='overworld'||(combatState.jobTutorialActive&&combatState.jobTutorialJob);
 }
@@ -1400,6 +1409,8 @@ function nextBestObjectiveLine(){
     const tutorial=tutorialObjective();
     if(tutorial)return objectiveLine('tutorial','Guide',tutorial.label,tutorial.text,{type:'follow_marker',label:'FOLLOW MARKER'});
   }
+  const expedition=elderheartExpeditionObjectiveLine();
+  if(expedition)return expedition;
   if(chapterProgression)return chapterProgression;
   if(localJob)return localJob;
   const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
@@ -1429,6 +1440,8 @@ function unifiedObjectiveList(){
   const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus);
   if(chapterProgression)lines.push(chapterProgression);
   if(story&&!baseChapter)lines.push(story);
+  const expedition=elderheartExpeditionObjectiveLine();
+  if(expedition)lines.push(expedition);
   const prep=gatePrepObjectiveLine();
   if(prep)lines.push(prep);
   const aegis=!story||story.kind!=='aegis'?serverObjectiveLine(serverObjectiveBySource('aegis'),'Aegis'):null;
@@ -1445,7 +1458,7 @@ function unifiedObjectiveList(){
   if(progressionFocus==='e_rank_climb'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'||progressionFocus==='s_rank_climb'||progressionFocus==='s_rank_complete'){
     const climbTitle=progressionFocus==='e_rank_climb'?'E-rank Climb':progressionFocus==='c_rank_climb'?'C-rank Climb':progressionFocus==='b_rank_pressure'?'Gate Pressure':progressionFocus==='a_rank_climb'?'A-rank Climb':progressionFocus==='s_rank_climb'?'S-rank Climb':'S-rank Complete';
     const climb=unique.find(line=>line.title===climbTitle);
-    const activity=unique.find(line=>line!==climb&&['story','guild','aegis'].includes(line.kind));
+    const activity=unique.find(line=>line!==climb&&['expedition','story','guild','aegis'].includes(line.kind));
     return [climb,activity].filter(Boolean);
   }
   return unique.slice(0,6);

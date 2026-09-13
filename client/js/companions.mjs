@@ -1874,6 +1874,8 @@ let familiarUnlocks=[];          // bound familiar kinds (persisted in the profi
 let familiarXp={...DEFAULT_FAMILIAR_XP};
 let familiarChallenges={};
 let activeFamiliar='';           // currently summoned familiar kind ('' = none)
+let familiarCommandState={mode:'follow',x:0,y:0,z:0,until:0};
+function familiarTarget(raw){try{const v=typeof raw==='string'?JSON.parse(raw):raw;return v&&Number.isFinite(+v.x)?{x:+v.x,y:+v.y||0,z:+v.z,until:+v.until||0}:null;}catch(_){return null;}}
 function familiarPowerLevel(kind){return FAMILIAR_SYSTEM.bondLevel(familiarXp[kind]||0);}
 function applyFamiliarBond(m){if(!m||!FAMILIARS[m.kind])return;familiarXp[m.kind]=Math.max(0,m.xp|0);if(m.challenge)familiarChallenges[m.kind]=m.challenge;famHudSig='';if(m.challenge&&m.challenge.justCompleted)sysMsg('<b>Bond Challenge complete:</b> '+m.challenge.title+' · +'+FAMILIAR_SYSTEM.DAILY_CHALLENGE_REWARD+' Bond XP');}
 const famTier=FAMILIAR_SYSTEM.tier;
@@ -2031,10 +2033,10 @@ function nearestHostile(x,z,range){
 }
 function tickFamiliars(now, dt){
   const want={};
-  if(activeFamiliar) want.local={kind:activeFamiliar, x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw, lvl:familiarPowerLevel(activeFamiliar)};
+  if(activeFamiliar) want.local={kind:activeFamiliar, x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw, lvl:familiarPowerLevel(activeFamiliar),mode:familiarCommandState.mode,target:familiarCommandState};
   for(const sid in NET.remotes){
     const r=NET.remotes[sid], ref=r.ref;
-    if(ref && FAMILIARS[ref.familiar] && (ref.dgn||'')===NET.dgn) want[sid]={kind:ref.familiar, x:r.grp.position.x, y:r.grp.position.y, z:r.grp.position.z, yaw:ref.yaw||0, lvl:FAMILIAR_SYSTEM.TIER_LEVELS[Math.max(0,Math.min(4,ref.familiarTier|0))]};
+    if(ref && FAMILIARS[ref.familiar] && (ref.dgn||'')===NET.dgn) want[sid]={kind:ref.familiar, x:r.grp.position.x, y:r.grp.position.y, z:r.grp.position.z, yaw:ref.yaw||0, lvl:FAMILIAR_SYSTEM.TIER_LEVELS[Math.max(0,Math.min(4,ref.familiarTier|0))],mode:ref.familiarMode||'follow',target:familiarTarget(ref.familiarTarget)};
   }
   for(const k in familiarRender) if(!want[k]) clearFamiliarRender(k);
   const t=now/1000, sdt=Math.min(0.05, dt||0.016);
@@ -2170,7 +2172,13 @@ function tickPetFollow(s,o,n,dt,t,local){
     const b=s.bodies[i], p=b.mesh.position, petKind=b.mesh.userData&&b.mesh.userData.petKind||s.kind;
     const side=petKind==='cat'?.75:petKind==='wolf'?-1.0:-.75;
     const back=petKind==='cat'?1.0:petKind==='wolf'?1.75:1.35;
-    const tx=o.x - fwx*back + rgx*side, tz=o.z - fwz*back + rgz*side, ty=o.y;
+    const mode=o.mode||'follow',target=o.target&&Number.isFinite(+o.target.x)?o.target:null,returning=target&&target.until&&target.until-Date.now()<1800;
+    let tx=o.x - fwx*back + rgx*side, tz=o.z - fwz*back + rgz*side, ty=o.y;
+    if(target&&!returning&&mode!=='follow'){
+      tx=target.x;tz=target.z;ty=target.y||o.y;
+      if(mode==='play'){const a=t*2.8+b.phase;tx+=Math.cos(a)*1.15;tz+=Math.sin(a)*1.15;}
+      else if(mode==='guard'){const a=t*.7+b.phase;tx+=Math.cos(a)*.7;tz+=Math.sin(a)*.7;}
+    }
     if(Math.hypot(tx-p.x,tz-p.z)>14){ p.set(tx,ty,tz); b.gy=ty; }
     const dx=tx-p.x,dz=tz-p.z,dist=Math.hypot(dx,dz),speed=dist>2.4?7.2:dist>0.6?3.0:0;
     let moved=0;
@@ -2182,7 +2190,13 @@ function tickPetFollow(s,o,n,dt,t,local){
     const fcx=moved>1e-3?dx:-fwx, fcz=moved>1e-3?dz:-fwz;
     if(Math.abs(fcx)+Math.abs(fcz)>1e-3){ const want=Math.atan2(fcx,fcz); b.mesh.rotation.y += angDiff(want,b.mesh.rotation.y)*Math.min(1,dt*10); }
     b.gait=(b.gait||0)+spd*dt*3.5;
-    animateFang(b,Math.min(1,spd/5.5),t,false,dt);
+    const guarding=mode==='guard'&&!!nearestHostile(tx,tz,9);
+    animateFang(b,Math.min(1,spd/5.5),t,guarding,dt);
+    if((b.petActionUntil||0)>performance.now()){
+      const action=b.petAction||'pet';
+      if(b.mesh.userData.head)b.mesh.userData.head.rotation.x+=action==='feed'?.28:-.18;
+      if(b.mesh.userData.tail)b.mesh.userData.tail.rotation.y=Math.sin(t*18+b.phase)*.75;
+    }
     if(local && petKind==='cat' && Math.random()<dt*.08) spawnParticle({x:p.x,y:p.y+.55,z:p.z,vx:(Math.random()-.5)*.08,vy:.18,vz:(Math.random()-.5)*.08,life:.55,grav:-.2,r:.6,g:.85,b:.42});
   }
 }
@@ -2359,10 +2373,30 @@ function setFamiliar(kind){
   if(kind && !familiarUnlocks.includes(kind)){ sysMsg('You have not bound that familiar'); return; }
   const previous=activeFamiliar;
   activeFamiliar=kind||'';
+  familiarCommandState={mode:'follow',x:0,y:0,z:0,until:0};
   if(NET.on&&NET.room) NET.room.send(kind?'summonFamiliar':'dismissFamiliar', kind?{kind}:{});
   if(kind) familiarSummonFx(kind);
   else { familiarDismissFx(previous); sysMsg('Your familiar fades away.'); }
   if(kind)finishFamiliarTutorial(kind);
+}
+function commandFamiliar(command,slot=-1){
+  const ordinary=activeFamiliar==='cat'||activeFamiliar==='dog'||activeFamiliar==='wolf';
+  if(!ordinary){sysMsg('Call a bonded <b>Cat, Dog, or Wolf</b> first.');return false;}
+  if(NET.on&&NET.room){NET.room.send('familiarCommand',{command,slot});return true;}
+  const fx=-Math.sin(player.yaw||0),fz=-Math.cos(player.yaw||0),distance=command==='scout'?12:command==='retrieve'?8:command==='play'?4:0;
+  applyFamiliarCommand({ok:true,command,kind:activeFamiliar,x:player.pos.x+fx*distance,y:player.pos.y,z:player.pos.z+fz*distance,until:distance?Date.now()+6000:0});
+  return true;
+}
+function applyFamiliarCommand(m){
+  if(!m||!m.ok)return false;
+  if(m.complete)familiarCommandState={mode:'follow',x:0,y:0,z:0,until:0};
+  else if(['follow','stay','scout','retrieve','guard','play'].includes(m.command))familiarCommandState={mode:m.command,x:+m.x||player.pos.x,y:+m.y||player.pos.y,z:+m.z||player.pos.z,until:+m.until||0};
+  if(m.command==='feed'||m.command==='pet'){
+    const render=familiarRender.local;
+    if(render)for(const body of render.bodies){body.petAction=m.command;body.petActionUntil=performance.now()+1100;body.idle=0;}
+  }
+  famHudSig='';
+  return true;
 }
 function cycleFamiliar(target){                  // K cycles; menus may request one bound familiar directly
   if(typeof target==='string') return setFamiliar(target);
@@ -2392,6 +2426,7 @@ function updateFamiliarHUD(){
   if(k==='cat'){ rank='pet'; stat='Fall damage -'+Math.round(FAMILIAR_SYSTEM.catFallMitigation(lvl)*100)+'%'; }
   else if(k==='dog'){ rank='pet'; stat='Extra meat '+Math.round(FAMILIAR_SYSTEM.dogExtraMeatChance(lvl)*100)+'%'; }
   else if(k==='wolf'){ rank='pet'; stat='Hostile XP +'+Math.round(FAMILIAR_SYSTEM.wolfHostileXpBonus(lvl)*100)+'%'; }
+  if(k==='cat'||k==='dog'||k==='wolf')stat+=' · '+String(familiarCommandState.mode||'follow').toUpperCase();
   const multi=familiarUnlocks.filter(x=>FAMILIARS[x]).length>1;
   const sig=k+'|'+rank+'|'+stat+'|'+multi+'|'+xp;
   el.classList.remove('hidden');
@@ -2445,6 +2480,10 @@ function bindFamiliarItem(slot=selected){
   const s=inv[slot], kind=s&&FAMILIAR_BY_SIGIL[s.id];
   if(!kind) return false;
   if(familiarUnlocks.includes(kind)){ sysMsg('<b>'+FAMILIARS[kind].name+'</b> is already bound to you'); return true; }
+  if(kind==='cat'||kind==='dog'||kind==='wolf'){
+    sysMsg('This collar belongs on a living, calmed <b>'+FAMILIARS[kind].name+'</b>. Find one outside town, look at it, and press <b>G</b>.');
+    return true;
+  }
   if(NET.on&&NET.room){ NET.room.send('bindFamiliar',{kind,slot}); return true; }   // server consumes + replies
   s.count--; if(s.count<=0) inv[slot]=null; refreshHUD(); if(uiOpen) renderUI();
   familiarBoundLocal(kind);
@@ -3485,6 +3524,8 @@ function netRemoveRemote(sid){
     tickWatchfulShade,
     setFamiliar,
     cycleFamiliar,
+    commandFamiliar,
+    applyFamiliarCommand,
     updateFamiliarHUD,
     shadowStep,
     applyShadeStepResult,

@@ -26,7 +26,7 @@ const { gateReadinessForProfile } = require('./gate-readiness');
 const { DUNGEON_POOLS, dungeonDefinition } = require('../../shared/dungeon-pools');
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
 const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
-const { registerRoom, unregisterRoom } = require('../metrics-registry');
+const { registerRoom, unregisterRoom, getActiveRooms } = require('../metrics-registry');
 const { registerProfileResetHandler, registerProfileUpdateHandler } = require('../profile-reset');
 const { accountSummary, recordIdentityTrace, shortHash } = require('../identity-trace');
 const { recordRoomLifecycleTrace } = require('../room-lifecycle-trace');
@@ -532,6 +532,7 @@ class GameRoom extends Room {
     this.onMessage('dragonLoanReturn', (client, m) => this.handleDragonLoanReturn(client, m));
     this.onMessage('petTamerService', (client, m) => this.handlePetTamerService(client, m));
     this.onMessage('tamingTrack', (client, m) => this.handleTamingTrack(client, m));
+    this.onMessage('tameAnimal', (client, m) => this.handleTameAnimal(client, m));
     this.onMessage('perchDragon', (client, m) => this.handlePerchDragon(client, m));
     this.onMessage('recallDragon', (client, m) => this.handleRecallDragon(client, m));
     this.onMessage('feedDragon', (client, m) => this.handleFeedDragon(client, m));
@@ -540,6 +541,7 @@ class GameRoom extends Room {
     this.onMessage('bindFamiliar', (client, m) => this.handleBindFamiliar(client, m));
     this.onMessage('summonFamiliar', (client, m) => this.handleSummonFamiliar(client, m));
     this.onMessage('dismissFamiliar', (client) => this.handleDismissFamiliar(client));
+    this.onMessage('familiarCommand', (client, m) => this.handleFamiliarCommand(client, m));
     this.onMessage('shadeStep', (client, m) => this.handleShadeStep(client, m));
     this.onMessage('feedMountedDragon', (client, m) => this.handleFeedMountedDragon(client, m));
     this.onMessage('skyshipSyncRequest', (client) => this.sendSkyshipSync(client));
@@ -605,8 +607,11 @@ class GameRoom extends Room {
     this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
     this.onMessage('socialRequest', client => this.sendSocialSnapshot(client));
     this.onMessage('friendAdd', (client, m) => this.handleFriendAdd(client, m));
+    this.onMessage('recentFriendAdd', (client, m) => this.handleRecentFriendAdd(client, m));
     this.onMessage('friendRespond', (client, m) => this.handleFriendRespond(client, m));
     this.onMessage('friendRemove', (client, m) => this.handleFriendRemove(client, m));
+    this.onMessage('friendJoin', (client, m) => this.handleFriendJoin(client, m));
+    this.onMessage('postActivityAction', (client, m) => this.handlePostActivityAction(client, m));
     this.onMessage('robPlayer', (client, m) => this.handleRobPlayer(client, m));
     this.onMessage('bugReport', (client, m) => this.handleBugReport(client, m));
     this.onMessage('stuckRescue', (client, m) => this.handleStuckRescue(client, m));
@@ -740,6 +745,7 @@ class GameRoom extends Room {
     this.onMessage('guildLeave', (client) => this.handleGuildLeave(client));
     this.onMessage('guildPrivacy', (client, m) => this.handleGuildPrivacy(client, m));
     this.onMessage('guildInvite', (client, m) => this.handleGuildInvite(client, m));
+    this.onMessage('guildInviteDecline', (client, m) => this.handleGuildInviteDecline(client, m));
     this.onMessage('guildKick', (client, m) => this.handleGuildKick(client, m));
     this.onMessage('guildRole', (client, m) => this.handleGuildRole(client, m));
     this.onMessage('guildProjectFund', (client, m) => this.handleGuildProjectFund(client, m));
@@ -757,42 +763,7 @@ class GameRoom extends Room {
         if (c) c.send('tchat', { name: p.name, text });
       }
     });
-    this.onMessage('comms', (client, m) => {
-      const p = this.state.players.get(client.sessionId);
-      if (!p || !m) return;
-      const text = QUICK_CHAT[m.phrase];
-      const mode = ['local', 'party', 'whisper'].includes(m.mode) ? m.mode : 'local';
-      if (!text) return client.send('commsReject', { reason: 'phrase' });
-      const now = Date.now(), signature = mode + ':' + String(m.target || '') + ':' + m.phrase;
-      if (now - (client._lastCommsAt || 0) < COMMS_RULES.rapidCooldownMs) return client.send('commsReject', { reason: 'rate' });
-      if (client._lastCommsSignature === signature && now - (client._lastCommsSignatureAt || 0) < COMMS_RULES.duplicateCooldownMs) return client.send('commsReject', { reason: 'duplicate' });
-      client._lastCommsAt = now; client._lastCommsSignature = signature; client._lastCommsSignatureAt = now;
-      const senderToken = this.tokens.get(client.sessionId) || '';
-      this.recentApprovedComms.push({ at: now, from: senderToken, phrase: m.phrase, mode });
-      if (this.recentApprovedComms.length > 200) this.recentApprovedComms.splice(0, this.recentApprovedComms.length - 200);
-      const send = c => { if (c === client || !(c._mutedComms instanceof Set) || !c._mutedComms.has(senderToken)) c.send('comms', { mode, fromSid: client.sessionId, name: p.name || 'Hunter', text }); };
-      if (mode === 'party') {
-        const team = this.teamMgr.teamOf(client.sessionId);
-        if (!team) return client.send('commsReject', { reason: 'party' });
-        for (const sid of team.members) { const c = this.clients.find(other => other.sessionId === sid); if (c) send(c); }
-        return;
-      }
-      if (mode === 'whisper') {
-        const targetKey = typeof m.target === 'string' ? m.target.trim().toLowerCase() : '';
-        const target = this.clients.find(other => {
-          const q = this.state.players.get(other.sessionId);
-          return other.sessionId.toLowerCase() === targetKey || (q && String(q.name).toLowerCase() === targetKey);
-        });
-        if (!target) return client.send('commsReject', { reason: 'target' });
-        if (target !== client && target._mutedComms instanceof Set && target._mutedComms.has(senderToken)) return client.send('commsReject', { reason: 'muted' });
-        send(client); if (target !== client) send(target);
-        return;
-      }
-      for (const c of this.clients) {
-        const q = this.state.players.get(c.sessionId);
-        if (q && (q.dim || 'overworld') === (p.dim || 'overworld') && (q.dgn || '') === (p.dgn || '') && Math.hypot(q.x - p.x, q.z - p.z) <= COMMS_RULES.localRange) send(c);
-      }
-    });
+    this.onMessage('comms', (client, m) => this.handleComms(client, m));
     this.onMessage('commsMute', (client, m) => {
       const target = m && typeof m.target === 'string' ? m.target : '';
       const targetClient = this.clients.find(other => other.sessionId === target);
@@ -827,6 +798,7 @@ class GameRoom extends Room {
     this.onMessage('dungeonMatchmakingAdvertise', (client, m) => this.handleDungeonMatchmakingAdvertise(client, m));
     this.onMessage('dungeonMatchmakingRequest', client => this.sendDungeonMatchmaking(client));
     this.onMessage('dungeonMatchmakingJoin', (client, m) => this.handleDungeonMatchmakingJoin(client, m));
+    this.onMessage('randomGateQueue', (client, m) => this.handleRandomGateQueue(client, m));
     this.onMessage('requestDungeonStatus', client => this.handleDungeonStatusRequest(client));
     this.onMessage('dungeonPing', (client, m) => this.handleDungeonPing(client, m));
     this.onMessage('exitGate', (client) => this.leaveInstance(client.sessionId));
@@ -851,6 +823,11 @@ class GameRoom extends Room {
     this.onMessage('discoveryInteract', (client, m) => this.handleDiscoveryInteract(client, m));
     this.onMessage('discoverySight', (client, m) => this.handleDiscoverySight(client, m));
     this.onMessage('cartographer', (client, m) => this.handleCartographer(client, m));
+    this.onMessage('elderheartExpeditionStart', client => this.startElderheartExpedition(client));
+    this.onMessage('elderheartExpeditionInteract', (client, m) => this.interactElderheartExpedition(client, m));
+    this.onMessage('elderheartExpeditionChoose', (client, m) => this.chooseElderheartSignal(client, m));
+    this.onMessage('elderheartExpeditionClaim', client => this.claimElderheartExpedition(client));
+    this.onMessage('elderheartExpeditionAbandon', client => this.abandonElderheartExpedition(client));
     this.onMessage('treasureMapAdvance', (client, m) => this.handleTreasureMapAdvance(client, m));
     this.onMessage('regionalContracts', (client) => this.sendRegionalContracts(client));
     this.onMessage('regionalContractAccept', (client, m) => this.handleRegionalContractAccept(client, m));
@@ -1325,7 +1302,9 @@ class GameRoom extends Room {
       this.sendDayCycleSync(client);
       this.sendWeather(client);
       this.sendGuildHallSync(client);
+      Promise.resolve(this.processPostActivityReturn(client)).catch(() => {});
       this.sendSocialSnapshot(client);
+      this.sendElderheartExpedition(client);
       this.broadcast('chat', { name: '[System]', text: joined.name + (prof ? ' has returned' : ' has entered the world') });
       logRoomLifecycle('overworld.join.ready', {
         roomId: this.roomId || '',
@@ -1408,6 +1387,7 @@ class GameRoom extends Room {
     const p = this.state.players.get(client.sessionId);
     const wasInDungeon = !!(p && p.dgn);
     this.leaveDungeonLobby(client.sessionId, false);
+    this.removeRandomGateQueue(client.sessionId);
     this.leaveInstance(client.sessionId);
     const token = this.tokens.get(client.sessionId);
     if (token) {
@@ -5229,9 +5209,32 @@ class GameRoom extends Room {
   socialPlayersCloseInTown(a, b, range = 8) {
     return this.tradePlayersClose(a, b, range);
   }
+  socialPresenceForToken(token) {
+    const clean = cleanToken(token);
+    if (!clean) return null;
+    for (const room of new Set([this, ...getActiveRooms()])) {
+      if (!room || !room.tokens || !room.clients) continue;
+      for (const client of room.clients) {
+        if (room.tokens.get(client.sessionId) !== clean) continue;
+        const player = room.state && room.state.players && room.state.players.get(client.sessionId);
+        const inDungeon = room.isDungeonRoom === true;
+        const dimension = player && player.dim || 'overworld';
+        return {
+          room, client, player,
+          shardId: inDungeon ? '' : cleanShardId(room.shardId || 'main'),
+          status: inDungeon ? 'IN DUNGEON' : dimension === 'event' ? 'IN EVENT' : dimension === 'overworld' ? 'IN OVERWORLD' : 'IN PRIVATE ACTIVITY',
+          joinable: !inDungeon && dimension === 'overworld' && room.__restartLocked !== true && room.clients.length < (room.maxClients || 24),
+        };
+      }
+    }
+    return null;
+  }
   async socialProfileForToken(token) {
     const clean = cleanToken(token);
     if (!clean) return null;
+    const presence = this.socialPresenceForToken(clean);
+    const live = presence && presence.room && presence.room.profiles && presence.room.profiles.get(clean);
+    if (live) return live;
     const cached = this.profiles && this.profiles.get(clean);
     if (cached) return cached;
     if (!this.store || typeof this.store.loadPlayer !== 'function') return null;
@@ -5244,25 +5247,288 @@ class GameRoom extends Room {
     }
   }
   socialClientForToken(token) {
-    const sid = this.onlineSidForToken(cleanToken(token));
-    return sid ? (this.clients || []).find(c => c.sessionId === sid) || null : null;
+    const presence = this.socialPresenceForToken(token);
+    return presence && presence.client || null;
+  }
+  fellowshipGuildForToken(token) {
+    const clean = cleanToken(token);
+    if (!clean) return null;
+    for (const room of new Set([this, ...getActiveRooms()])) {
+      if (!room || !room.guilds) continue;
+      for (const guild of room.guilds.values()) if (guild && guild.members && guild.members.has(clean)) return guild;
+    }
+    return null;
+  }
+  broadcastFellowship(guild, type, payload = {}) {
+    if (!guild || !guild.members) return 0;
+    let sent = 0;
+    for (const room of new Set([this, ...getActiveRooms()])) for (const client of room && room.clients || []) {
+      const token = room.tokens && room.tokens.get(client.sessionId);
+      if (!token || !guild.members.has(token)) continue;
+      client.send(type, { guildId: guild.id, guildName: guild.name, ...payload });sent++;
+    }
+    return sent;
+  }
+  handleComms(client, m = {}) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !m) return;
+    const text = QUICK_CHAT[m.phrase];
+    const mode = ['local', 'party', 'fellowship', 'whisper'].includes(m.mode) ? m.mode : 'local';
+    if (!text) return client.send('commsReject', { reason: 'phrase' });
+    const now = Date.now(), signature = mode + ':' + String(m.target || '') + ':' + m.phrase;
+    if (now - (client._lastCommsAt || 0) < COMMS_RULES.rapidCooldownMs) return client.send('commsReject', { reason: 'rate' });
+    if (client._lastCommsSignature === signature && now - (client._lastCommsSignatureAt || 0) < COMMS_RULES.duplicateCooldownMs) return client.send('commsReject', { reason: 'duplicate' });
+    client._lastCommsAt = now;client._lastCommsSignature = signature;client._lastCommsSignatureAt = now;
+    const senderToken = this.tokens.get(client.sessionId) || '';
+    if (!this.recentApprovedComms) this.recentApprovedComms = [];
+    this.recentApprovedComms.push({ at: now, from: senderToken, phrase: m.phrase, mode });
+    if (this.recentApprovedComms.length > 200) this.recentApprovedComms.splice(0, this.recentApprovedComms.length - 200);
+    const send = c => { if (c === client || !(c._mutedComms instanceof Set) || !c._mutedComms.has(senderToken)) c.send('comms', { mode, fromSid: client.sessionId, name: p.name || 'Hunter', text }); };
+    if (mode === 'fellowship') {
+      const guild = this.fellowshipGuildForToken(senderToken);
+      if (!guild) return client.send('commsReject', { reason: 'fellowship' });
+      for (const room of new Set([this, ...getActiveRooms()])) for (const member of room && room.clients || []) {
+        const token = room.tokens && room.tokens.get(member.sessionId);
+        if (token && guild.members.has(token)) send(member);
+      }
+      return;
+    }
+    if (mode === 'party') {
+      const team = this.teamMgr && this.teamMgr.teamOf(client.sessionId);
+      if (!team) return client.send('commsReject', { reason: 'party' });
+      for (const sid of team.members) { const c = this.clients.find(other => other.sessionId === sid); if (c) send(c); }
+      return;
+    }
+    if (mode === 'whisper') {
+      const targetKey = typeof m.target === 'string' ? m.target.trim().toLowerCase() : '';
+      const target = this.clients.find(other => {
+        const q = this.state.players.get(other.sessionId);
+        return other.sessionId.toLowerCase() === targetKey || (q && String(q.name).toLowerCase() === targetKey);
+      });
+      if (!target) return client.send('commsReject', { reason: 'target' });
+      if (target !== client && target._mutedComms instanceof Set && target._mutedComms.has(senderToken)) return client.send('commsReject', { reason: 'muted' });
+      send(client);if (target !== client) send(target);return;
+    }
+    for (const c of this.clients) {
+      const q = this.state.players.get(c.sessionId);
+      if (q && (q.dim || 'overworld') === (p.dim || 'overworld') && (q.dgn || '') === (p.dgn || '') && Math.hypot(q.x - p.x, q.z - p.z) <= COMMS_RULES.localRange) send(c);
+    }
   }
   async socialPerson(token) {
     const clean = cleanToken(token);
     if (!clean) return null;
-    const onlineClient = this.socialClientForToken(clean);
+    const presence = this.socialPresenceForToken(clean), onlineClient = presence && presence.client;
     const prof = await this.socialProfileForToken(clean);
-    const player = onlineClient && this.state.players.get(onlineClient.sessionId);
+    const player = presence && presence.player;
     const teamId = player && player.team || '';
-    const team = teamId && this.state.teams.get(teamId);
+    const team = teamId && presence && presence.room.state.teams && presence.room.state.teams.get(teamId);
     return {
       token: clean,
       sid: onlineClient ? onlineClient.sessionId : '',
       name: String(player && player.name || prof && prof.name || 'Hunter').slice(0, 24),
       online: !!onlineClient,
+      status: presence && presence.status || 'OFFLINE',
+      shardId: presence && presence.shardId || '',
+      joinable: !!(presence && presence.joinable),
+      sameShard: !!(presence && !presence.room.isDungeonRoom && presence.room === this),
       teamId,
       teamName: team && team.name || '',
     };
+  }
+  recordRecentActivityPlayers(sids, activityId, activityKind, outcome = 'complete') {
+    const id = String(activityId || '').slice(0, 64);
+    if (!id) return false;
+    if (!this.socialActivityRecords) this.socialActivityRecords = new Set();
+    if (this.socialActivityRecords.has(id)) return false;
+    this.socialActivityRecords.add(id);
+    const now = Date.now(), people = [...new Set(sids || [])].map(sid => {
+      const token = this.clientToken({ sessionId: sid }), player = this.state.players.get(sid), prof = token && this.profiles.get(token);
+      return token && prof ? { sid, token, name: String(player && player.name || prof.name || 'Hunter').slice(0, 24), prof } : null;
+    }).filter(Boolean);
+    for (const person of people) {
+      const recent = Array.isArray(person.prof.recentPlayers) ? person.prof.recentPlayers.filter(entry => entry && entry.token !== person.token) : [];
+      for (const other of people) if (other.token !== person.token) {
+        const at = recent.findIndex(entry => entry && entry.token === other.token);
+        if (at >= 0) recent.splice(at, 1);
+        recent.unshift({ token: other.token, name: other.name, lastPlayedAt: now, activityKind: String(activityKind || 'activity').slice(0, 48) });
+      }
+      person.prof.recentPlayers = recent.slice(0, 20);
+      this.dirtyPlayers.add(person.token);
+    }
+    const byGuild = new Map();
+    for (const person of people) {
+      const guild = this.fellowshipGuildForToken(person.token);
+      if (!guild) continue;
+      if (!byGuild.has(guild.id)) byGuild.set(guild.id, { guild, names: [] });
+      byGuild.get(guild.id).names.push(person.name);
+    }
+    for (const { guild, names } of byGuild.values()) this.broadcastFellowship(guild, 'fellowshipActivity', {
+      activityId: id, activityKind: String(activityKind || 'activity').slice(0, 48), outcome: String(outcome || 'complete').slice(0, 24), names: [...new Set(names)].slice(0, 8), at: now,
+    });
+    return true;
+  }
+  postActivityContext(activityId) {
+    const id = String(activityId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+    if (!id) return null;
+    if (this.instance && (this.instance.id === id || this.instance.dungeonId === id)) {
+      return { id: this.instance.id, kind: 'dungeon', activityKind: this.instance.dungeonId || 'dungeon', rank: this.instance.rank | 0, gateKind: this.instance.kind || 'public', sids: [...(this.instance.players || [])] };
+    }
+    let event = this.eventInstances && this.eventInstances.get(id);
+    if (!event && this.serverEvent && this.serverEvent.id === id) event = this.serverEvent;
+    if (!event || !event.participants) return null;
+    return { id: event.id, kind: 'event', activityKind: event.kind || 'event', sids: [...event.participants.keys()] };
+  }
+  postActivityParticipants(context, viewerSid = '') {
+    if (!context) return [];
+    return context.sids.map(sid => {
+      const token = this.clientToken({ sessionId: sid });
+      const player = this.state.players.get(sid);
+      const profile = token && this.profiles.get(token);
+      return token ? { sid, token, name: String(player && player.name || profile && profile.name || 'Hunter').slice(0, 24), self: sid === viewerSid } : null;
+    }).filter(Boolean);
+  }
+  postActivityTitle(total) {
+    return total >= 50 ? 'Legendary Ally' : total >= 20 ? 'Party Hero' : total >= 5 ? 'Reliable Teammate' : '';
+  }
+  queuePostActivityIntent(rec, action, targetToken, context) {
+    if (!rec || !rec.prof) return false;
+    const intents = Array.isArray(rec.prof.postActivityIntents) ? rec.prof.postActivityIntents : [];
+    const key = action + '|' + targetToken + '|' + context.id;
+    if (!intents.some(intent => intent && intent.key === key)) intents.push({ key, action, targetToken, activityId: context.id, at: Date.now() });
+    rec.prof.postActivityIntents = intents.slice(-12);
+    this.dirtyPlayers.add(rec.token);
+    return true;
+  }
+  async processPostActivityReturn(client) {
+    if (this.isDungeonRoom) return false;
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof) return false;
+    const intents = Array.isArray(rec.prof.postActivityIntents) ? rec.prof.postActivityIntents.splice(0, 12) : [];
+    for (const intent of intents) {
+      const targetToken = cleanToken(intent && intent.targetToken);
+      if (!targetToken) continue;
+      const targetClient = this.socialClientForToken(targetToken);
+      if (intent.action === 'team') {
+        const team = this.currentTeamRecordFor(client);
+        if (!team || !this.isTeamLeader(client, team) || team.members.size >= this.teamMgr.max || [...this.teamRecords.values()].some(other => other.members.has(targetToken))) {
+          client.send('postActivityResult', { ok: false, action: 'team', targetToken, reason: !team ? 'team' : 'unavailable' });
+          continue;
+        }
+        if (!team.invites) team.invites = new Set();
+        team.invites.add(targetToken);this.dirtyTeams = true;
+        if (targetClient) targetClient.send('teamInvite', { id: team.id, name: team.name, from: rec.prof.name || 'Team leader', private: !!team.private });
+        client.send('postActivityResult', { ok: true, action: 'team', targetToken, queued: false });
+      } else if (intent.action === 'fellowship') {
+        const guild = this.guildForToken(rec.token);
+        if (!guild || !this.guildCanInvite(guild, rec.token) || guild.members.size >= 50 || [...this.guilds.values()].some(other => other.members.has(targetToken))) {
+          client.send('postActivityResult', { ok: false, action: 'fellowship', targetToken, reason: !guild ? 'fellowship' : 'unavailable' });
+          continue;
+        }
+        if (!guild.invites) guild.invites = new Set();
+        guild.invites.add(targetToken);this.dirtyGuilds = true;
+        if (targetClient) targetClient.send('guildInvite', { id: guild.id, name: guild.name, from: rec.prof.name || 'An officer', private: !!guild.private });
+        client.send('postActivityResult', { ok: true, action: 'fellowship', targetToken, queued: false });
+      }
+      this.refreshSocialSnapshots(targetClient);
+    }
+    const replay = rec.prof.dungeonReplay;
+    if (replay) {
+      rec.prof.dungeonReplay = null;
+      const wantedKind = replay.kind === 'team' ? 'team' : 'solo';
+      const slot = (rec.prof.inv || []).findIndex(stack => {
+        const info = stack && this.keyGateInfo(stack.id | 0);
+        return info && info.rank === (replay.rank | 0) && info.kind === wantedKind;
+      });
+      if (slot >= 0) {
+        this.handleUseGateKey(client, { slot });
+        client.send('postActivityReplayResult', { ok: true, kind: 'dungeon', rank: replay.rank | 0 });
+      } else client.send('postActivityReplayResult', { ok: false, kind: 'dungeon', rank: replay.rank | 0, reason: 'key' });
+    }
+    if (intents.length || replay) {
+      this.dirtyPlayers.add(rec.token);
+      await this.persistSocialProfile(rec.token, rec.prof);
+    }
+    return true;
+  }
+  async handlePostActivityAction(client, m = {}) {
+    const rec = this.profileFor(client), context = this.postActivityContext(m.activityId);
+    const action = String(m.action || '');
+    const reject = reason => client.send('postActivityResult', { ok: false, action, targetToken: String(m.targetToken || ''), reason });
+    if (!rec || !context || !context.sids.includes(client.sessionId)) return reject('activity');
+    if (this.rateLimited(client, 'postActivity', 8, 12)) return reject('rate');
+    if (action === 'play_again') {
+      if (context.kind === 'event') {
+        rec.prof.eventReplayKind = context.activityKind;
+        this.dirtyPlayers.add(rec.token);
+        return client.send('postActivityResult', { ok: true, action, queued: true, activityKind: context.activityKind });
+      }
+      rec.prof.dungeonReplay = { rank: context.rank | 0, kind: context.gateKind || 'public', dungeonId: context.activityKind || '' };
+      this.dirtyPlayers.add(rec.token);
+      return client.send('postActivityResult', { ok: true, action, queued: true, activityKind: 'dungeon' });
+    }
+    const targetToken = cleanToken(m.targetToken);
+    const participants = this.postActivityParticipants(context, client.sessionId);
+    const target = participants.find(person => person.token === targetToken && !person.self);
+    if (!target) return reject('target');
+    const targetClient = this.socialClientForToken(targetToken);
+    const targetProf = await this.socialProfileForToken(targetToken);
+    if (!targetProf) return reject('target');
+    if (action === 'commend') {
+      const week = Math.floor(Date.now() / 604800000);
+      const given = Array.isArray(rec.prof.commendationsGiven) ? rec.prof.commendationsGiven : [];
+      const key = context.id + '|' + targetToken;
+      if (given.includes(key)) return reject('duplicate');
+      rec.prof.commendationsGiven = [...given, key].slice(-128);
+      if ((targetProf.commendationWeek | 0) !== week) { targetProf.commendationWeek = week; targetProf.commendationWeekKarma = 0; }
+      targetProf.commendationsReceived = Math.max(0, targetProf.commendationsReceived | 0) + 1;
+      const beforeTitle = String(targetProf.socialTitle || '');
+      targetProf.socialTitle = this.postActivityTitle(targetProf.commendationsReceived);
+      let karmaDelta = 0;
+      if ((targetProf.commendationWeekKarma | 0) < 5) {
+        const adjusted = this.adjustKarma({ prof: targetProf }, 1);
+        karmaDelta = adjusted.delta;
+        if (karmaDelta) targetProf.commendationWeekKarma = (targetProf.commendationWeekKarma | 0) + 1;
+      }
+      await Promise.all([this.persistSocialProfile(rec.token, rec.prof), this.persistSocialProfile(targetToken, targetProf)]);
+      client.send('postActivityResult', { ok: true, action, targetToken, targetName: target.name, karmaDelta, title: targetProf.socialTitle || '', titleUnlocked: targetProf.socialTitle && targetProf.socialTitle !== beforeTitle });
+      if (targetClient) targetClient.send('commendationReceived', { fromName: rec.prof.name || 'A teammate', karma: targetProf.karma | 0, karmaDelta, total: targetProf.commendationsReceived, title: targetProf.socialTitle || '', titleUnlocked: targetProf.socialTitle && targetProf.socialTitle !== beforeTitle });
+      return;
+    }
+    if (action === 'friend') {
+      this.normalizeFriendState(rec.prof);this.normalizeFriendState(targetProf);
+      if (rec.prof.friends.includes(targetToken)) return client.send('postActivityResult', { ok: true, action, targetToken, targetName: target.name, already: true });
+      if (rec.prof.friendRequests.includes(targetToken)) {
+        await this.completeFriendship(client, targetClient, rec, { token: targetToken, prof: targetProf }, 'accepted');
+        return client.send('postActivityResult', { ok: true, action, targetToken, targetName: target.name, accepted: true });
+      }
+      if (!rec.prof.sentFriendRequests.includes(targetToken)) rec.prof.sentFriendRequests.push(targetToken);
+      if (!targetProf.friendRequests.includes(rec.token)) targetProf.friendRequests.push(rec.token);
+      await Promise.all([this.persistSocialProfile(rec.token, rec.prof), this.persistSocialProfile(targetToken, targetProf)]);
+      if (targetClient) targetClient.send('friendRequest', { fromSid: client.sessionId, fromToken: rec.token, fromName: rec.prof.name || 'Hunter' });
+      this.refreshSocialSnapshots(client, targetClient);
+      return client.send('postActivityResult', { ok: true, action, targetToken, targetName: target.name });
+    }
+    if (action === 'team' || action === 'fellowship') {
+      if (this.isDungeonRoom) {
+        this.queuePostActivityIntent(rec, action, targetToken, context);
+        await this.persistSocialProfile(rec.token, rec.prof);
+        return client.send('postActivityResult', { ok: true, action, targetToken, targetName: target.name, queued: true });
+      }
+      if (!targetClient) return reject('offline');
+      if (action === 'team') {
+        const team = this.currentTeamRecordFor(client);
+        if (!team) return reject('team');
+        if (!this.isTeamLeader(client, team)) return reject('leader');
+        this.handleTeamInvite(client, { sid: targetClient.sessionId });
+      } else {
+        const guild = this.guildForToken(rec.token);
+        if (!guild) return reject('fellowship');
+        if (!this.guildCanInvite(guild, rec.token)) return reject('officer');
+        this.handleGuildInvite(client, { sid: targetClient.sessionId });
+      }
+      return client.send('postActivityResult', { ok: true, action, targetToken, targetName: target.name });
+    }
+    return reject('action');
   }
   async sendSocialSnapshot(client) {
     const rec = this.profileFor(client);
@@ -5272,22 +5538,39 @@ class GameRoom extends Room {
     const incoming = [...new Set((prof.friendRequests || []).map(cleanToken).filter(Boolean))].filter(token => !friends.includes(token));
     const outgoing = [...new Set((prof.sentFriendRequests || []).map(cleanToken).filter(Boolean))].filter(token => !friends.includes(token));
     const mapPeople = async tokens => (await Promise.all(tokens.map(token => this.socialPerson(token)))).filter(Boolean);
+    const recentPlayers = (await Promise.all((prof.recentPlayers || []).slice(0, 20).map(async recent => {
+      const person = await this.socialPerson(recent && recent.token);
+      return person ? { ...person, lastPlayedAt: Math.max(0, Number(recent.lastPlayedAt) || 0), activityKind: String(recent.activityKind || 'Activity').slice(0, 48), friend: friends.includes(person.token) } : null;
+    }))).filter(Boolean);
     const teamInvites = [];
     for (const team of (this.teamRecords || new Map()).values()) {
       if (!team.invites || !team.invites.has(rec.token) || team.members.has(rec.token)) continue;
       const leader = await this.socialPerson(team.leader);
       teamInvites.push({ id: team.id, name: team.name, from: leader && leader.name || 'Team leader', private: !!team.private, memberCount: team.members.size });
     }
+    const guildInvites = [];
+    for (const guild of (this.guilds || new Map()).values()) {
+      if (!guild.invites || !guild.invites.has(rec.token) || guild.members.has(rec.token)) continue;
+      guildInvites.push({ id: guild.id, name: guild.name, from: guild.leaderName || 'A fellowship officer', private: !!guild.private, memberCount: guild.members.size });
+    }
     client.send('socialSnapshot', {
       friends: await mapPeople(friends),
       incomingFriendRequests: await mapPeople(incoming),
       outgoingFriendRequests: await mapPeople(outgoing),
+      recentPlayers,
+      currentShardId: this.isDungeonRoom ? '' : cleanShardId(this.shardId || 'main'),
       teamInvites,
+      guildInvites,
     });
     return true;
   }
   refreshSocialSnapshots(...clients) {
-    for (const client of clients.flat().filter(Boolean)) Promise.resolve(this.sendSocialSnapshot(client)).catch(() => {});
+    const pending = [];
+    for (const client of clients.flat().filter(Boolean)) {
+      const owner = [this, ...getActiveRooms()].find(room => room && room.clients && room.clients.includes(client));
+      if (owner && typeof owner.sendSocialSnapshot === 'function') pending.push(Promise.resolve(owner.sendSocialSnapshot(client)).catch(() => {}));
+    }
+    return Promise.all(pending);
   }
   async persistSocialProfile(token, prof) {
     const clean = cleanToken(token);
@@ -5322,7 +5605,7 @@ class GameRoom extends Room {
     const targetName = target ? (this.state.players.get(target.sessionId) || {}).name || targetRec.prof.name || 'Hunter' : targetRec.prof.name || 'Hunter';
     client.send('friendResult', { ok: true, action, targetSid: target && target.sessionId || '', targetToken: targetRec.token, targetName, karma: fromKarma.value, karmaDelta: fromKarma.delta });
     if (target) target.send('friendResult', { ok: true, action, targetSid: client.sessionId, targetToken: rec.token, targetName: fromName, karma: targetKarma.value, karmaDelta: targetKarma.delta });
-    this.refreshSocialSnapshots(client, target);
+    await this.refreshSocialSnapshots(client, target);
   }
   async handleFriendAdd(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');
@@ -5358,6 +5641,40 @@ class GameRoom extends Room {
     client.send('friendResult', { ok: true, action: 'requested', targetSid, targetToken: targetRec.token, targetName, karma: rec.prof.karma | 0, karmaDelta: 0 });
     target.send('friendRequest', { fromSid: client.sessionId, fromToken: rec.token, fromName });
     this.refreshSocialSnapshots(client, target);
+  }
+  async handleRecentFriendAdd(client, m = {}) {
+    const rec = this.profileFor(client), targetToken = cleanToken(m.targetToken);
+    const reject = reason => client.send('friendResult', { ok: false, reason });
+    const recent = rec && Array.isArray(rec.prof.recentPlayers) ? rec.prof.recentPlayers : [];
+    if (!rec || !targetToken || targetToken === rec.token || !recent.some(entry => entry && entry.token === targetToken)) return reject('recent');
+    if (this.rateLimited(client, 'recentFriendAdd', 4, 12)) return reject('rate');
+    const targetClient = this.socialClientForToken(targetToken), targetProf = await this.socialProfileForToken(targetToken);
+    if (!targetProf) return reject('target');
+    const targetRec = { token: targetToken, prof: targetProf };
+    this.normalizeFriendState(rec.prof);this.normalizeFriendState(targetProf);
+    if (rec.prof.friends.includes(targetToken)) return client.send('friendResult', { ok: true, action: 'already', targetToken, targetName: targetProf.name || 'Hunter', karma: rec.prof.karma | 0, karmaDelta: 0 });
+    if (rec.prof.friendRequests.includes(targetToken)) return this.completeFriendship(client, targetClient, rec, targetRec, 'accepted');
+    if (!rec.prof.sentFriendRequests.includes(targetToken)) rec.prof.sentFriendRequests.push(targetToken);
+    if (!targetProf.friendRequests.includes(rec.token)) targetProf.friendRequests.push(rec.token);
+    this.normalizeFriendState(rec.prof);this.normalizeFriendState(targetProf);
+    await Promise.all([this.persistSocialProfile(rec.token, rec.prof), this.persistSocialProfile(targetToken, targetProf)]);
+    const targetName = targetProf.name || 'Hunter';
+    client.send('friendResult', { ok: true, action: 'requested', targetToken, targetName, karma: rec.prof.karma | 0, karmaDelta: 0 });
+    if (targetClient) targetClient.send('friendRequest', { fromSid: client.sessionId, fromToken: rec.token, fromName: rec.prof.name || 'Hunter' });
+    this.refreshSocialSnapshots(client, targetClient);
+  }
+  handleFriendJoin(client, m = {}) {
+    const rec = this.profileFor(client), targetToken = cleanToken(m.targetToken);
+    const reject = reason => client.send('friendJoinResult', { ok: false, reason, targetToken });
+    if (!rec || !targetToken || !Array.isArray(rec.prof.friends) || !rec.prof.friends.includes(targetToken)) return reject('friend');
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.dim !== 'overworld' || player.dgn) return reject('activity');
+    if (this.rateLimited(client, 'friendJoin', 2, 10)) return reject('rate');
+    const presence = this.socialPresenceForToken(targetToken);
+    if (!presence) return reject('offline');
+    if (presence.room === this) return reject('same_shard');
+    if (!presence.joinable || !presence.shardId) return reject('full');
+    client.send('friendJoinResult', { ok: true, targetToken, targetName: presence.player && presence.player.name || 'Friend', shardId: presence.shardId });
   }
   async handleFriendRespond(client, m = {}) {
     const rec = this.profileFor(client), requesterToken = cleanToken(m.targetToken);
@@ -8860,6 +9177,40 @@ class GameRoom extends Room {
   isAnimalKind(kind) {
     return ANIMAL_KINDS.has(String(kind || ''));
   }
+  wildlifeHerdMembers(id, m, meta, radius = 20) {
+    const members = [];
+    if (!meta || !meta.herdId) return members;
+    this.state.mobs.forEach((other, otherId) => {
+      if (String(otherId) === String(id) || !this.isAnimalKind(other.kind)) return;
+      const otherMeta = this.mobMeta[String(otherId)];
+      if (!otherMeta || otherMeta.herdId !== meta.herdId) return;
+      if (Math.hypot(other.x - m.x, other.z - m.z) <= radius) members.push({ id: String(otherId), m: other, meta: otherMeta });
+    });
+    return members;
+  }
+  alertWildlifeHerd(id, m, meta, threatSid = '', predatorId = '') {
+    const now = Date.now();
+    const alert = member => {
+      member.meta.herdAlertT = Math.max(member.meta.herdAlertT || 0, .7);
+      member.meta.wildThreatSid = threatSid || member.meta.wildThreatSid || '';
+      member.meta.predatorThreatId = predatorId || member.meta.predatorThreatId || '';
+      member.meta.herdAlertCd = now + 3500;
+      if (member.m.state !== 'burrow' && member.m.state !== 'calm') member.m.state = 'alert';
+    };
+    alert({ m, meta });
+    for (const member of this.wildlifeHerdMembers(id, m, meta, 24)) alert(member);
+  }
+  nearestWildlifePrey(predatorId, predator, radius = 18) {
+    let found = null, best = radius;
+    this.state.mobs.forEach((prey, preyId) => {
+      if (String(preyId) === String(predatorId) || !this.isAnimalKind(prey.kind)) return;
+      const base = ANIMAL_BASE_KIND[prey.kind] || prey.kind;
+      if (base !== 'rabbit' && base !== 'deer') return;
+      const d = Math.hypot(prey.x - predator.x, prey.z - predator.z);
+      if (d < best) { best = d; found = { id: String(preyId), m: prey, meta: this.mobMeta[String(preyId)], d }; }
+    });
+    return found && found.meta ? found : null;
+  }
   applyBiomeStatus(client,behavior){
     if(!client||!['frost','venom','sturdy'].includes(behavior))return;
     const now=Date.now(),kind=behavior==='sturdy'?'root':behavior,durationMs=kind==='root'?1100:kind==='frost'?4200:5000;
@@ -8891,6 +9242,7 @@ class GameRoom extends Room {
     this.tickDragonGuards(Date.now());
     if (typeof this.tickDragonTraining === 'function') this.tickDragonTraining(Date.now(), dt);
     this.tickFangCombat(Date.now());
+    this.tickFamiliarCommands(Date.now());
     this.tickShadowSoldiers(Date.now(), dt);
     this.tickMote(dt);
     this.tickServerEvent(Date.now());
@@ -9289,20 +9641,141 @@ class GameRoom extends Room {
       if (this.isAnimalKind(m.kind)) {
         const animalBase = ANIMAL_BASE_KIND[m.kind] || m.kind;
         let tx = meta.tx, tz = meta.tz, moveMul = .55;
-        if (best && bd < (animalBase === 'rabbit' ? 9 : 7)) {
-          const dx = m.x - best.p.x, dz = m.z - best.p.z, len = Math.hypot(dx, dz) || 1;
-          tx = m.x + dx / len * 9;
-          tz = m.z + dz / len * 9;
-          moveMul = animalBase === 'boar' ? 1.15 : 1.6;
-          m.state = 'flee';
-        } else {
-          meta.patrolT -= dt;
-          if (meta.patrolT <= 0) {
-            meta.patrolT = 2.5 + Math.random() * 4;
-            meta.tx = meta.sx + (Math.random() * 2 - 1) * 10;
-            meta.tz = meta.sz + (Math.random() * 2 - 1) * 10;
+        const calmingPlayer = meta.tamingSid && candidates.find(s => s.sid === meta.tamingSid && Math.hypot(s.p.x - m.x, s.p.z - m.z) < 8);
+        meta.behaviorT = (meta.behaviorT || 0) - dt;
+        meta.wildlifeScanT = (meta.wildlifeScanT || 0) - dt;
+        meta.predatorBiteCd = Math.max(0, (meta.predatorBiteCd || 0) - dt);
+        meta.herdAlertT = Math.max(0, (meta.herdAlertT || 0) - dt);
+        if (animalBase === 'boar' && meta.boarProvoked && !meta.aggroSid) meta.boarProvoked = false;
+
+        // Rabbits can break pursuit by diving into a burrow. They reappear near
+        // their home range rather than being silently deleted from the world.
+        if ((meta.burrowT || 0) > 0) {
+          meta.burrowT -= dt;
+          m.state = 'burrow';
+          if (meta.burrowT <= 0) {
+            const a = Math.random() * Math.PI * 2, d = 4 + Math.random() * 4;
+            const nx = meta.sx + Math.cos(a) * d, nz = meta.sz + Math.sin(a) * d;
+            const gy = ground(nx, nz, m.y + 4);
+            if (gy > 0 && !solid(Math.floor(nx), Math.floor(gy), Math.floor(nz))) setReplicatedMobPose(m, nx, gy, nz, m.yaw || 0);
+            meta.fleeT = 0; meta.behaviorT = 2 + Math.random() * 3; m.state = '';
+            this.sendSpace('', 'fx', { t: 'rabbitBurrow', action: 'emerge', x: m.x, y: m.y, z: m.z, dgn: '' });
           }
-          tx = meta.tx; tz = meta.tz; m.state = '';
+          return;
+        }
+
+        // Wolves hunt small prey when players are not pressuring or taming them.
+        let prey = null;
+        if (animalBase === 'wolf' && !calmingPlayer && (!best || bd >= 8)) {
+          if (meta.wildlifeScanT <= 0) {
+            meta.wildlifeScanT = .65 + Math.random() * .45;
+            const next = this.nearestWildlifePrey(id, m, 18);
+            meta.preyId = next ? next.id : '';
+          }
+          if (meta.preyId) {
+            const preyMob = this.state.mobs.get(meta.preyId), preyMeta = this.mobMeta[meta.preyId];
+            if (preyMob && preyMeta && Math.hypot(preyMob.x - m.x, preyMob.z - m.z) < 22) prey = { id: meta.preyId, m: preyMob, meta: preyMeta };
+            else meta.preyId = '';
+          }
+        }
+
+        // A predator's chosen prey gets an actual warning and shares it with its
+        // herd. This produces coordinated flight instead of unrelated wandering.
+        let predator = null;
+        if (meta.predatorThreatId) {
+          const pm = this.state.mobs.get(meta.predatorThreatId), pmeta = this.mobMeta[meta.predatorThreatId];
+          if (pm && pmeta && Math.hypot(pm.x - m.x, pm.z - m.z) < 26) predator = { id: meta.predatorThreatId, m: pm };
+          else meta.predatorThreatId = '';
+        }
+        if (prey) {
+          const pd = Math.hypot(prey.m.x - m.x, prey.m.z - m.z);
+          if (!prey.meta.predatorThreatId || prey.meta.predatorThreatId !== String(id)) {
+            prey.meta.predatorThreatId = String(id);
+            this.alertWildlifeHerd(prey.id, prey.m, prey.meta, '', String(id));
+            this.sendSpace('', 'fx', { t: 'wildlifeAlert', kind: 'predator', x: prey.m.x, y: prey.m.y, z: prey.m.z, dgn: '' });
+          }
+          tx = prey.m.x; tz = prey.m.z; moveMul = pd < 4 ? 1.75 : 1.12; m.state = pd < 3 ? 'pounce' : 'hunt';
+          if (pd < 1.35 && meta.predatorBiteCd <= 0) {
+            meta.predatorBiteCd = 7 + Math.random() * 3;
+            prey.m.hp = Math.max(1, prey.m.hp - 1);
+            prey.meta.herdAlertT = Math.max(prey.meta.herdAlertT || 0, 1.2);
+            this.sendSpace('', 'fx', { t: 'wildlifeSnap', x: prey.m.x, y: prey.m.y, z: prey.m.z, dgn: '' });
+          }
+        } else if (calmingPlayer) {
+          tx = m.x; tz = m.z; moveMul = 0; m.state = 'calm';
+        } else if (animalBase === 'boar' && (meta.boarWarnT > 0 || meta.boarChargeT > 0)) {
+          const target = candidates.find(s => s.sid === meta.aggroSid);
+          if (!target) { meta.boarWarnT = 0; meta.boarChargeT = 0; meta.boarProvoked = false; }
+          else if (meta.boarWarnT > 0) {
+            meta.boarWarnT -= dt; tx = m.x; tz = m.z; moveMul = 0; m.state = 'boarWarn';
+            if (Math.hypot(target.p.x - m.x, target.p.z - m.z) > 9) { meta.boarWarnT = 0; meta.boarProvoked = false; }
+            else if (meta.boarWarnT <= 0) { meta.boarChargeT = 1.25; m.state = 'boarCharge'; }
+          } else {
+            meta.boarChargeT -= dt; tx = target.p.x; tz = target.p.z; moveMul = 2.45; m.state = 'boarCharge';
+            const chargeDistance = Math.hypot(target.p.x - m.x, target.p.z - m.z);
+            if (chargeDistance < 1.45 && meta.atkCd <= 0) {
+              const client = this.clients.find(c => c.sessionId === target.sid);
+              if (client) this.hurtPlayer(client, 3, 'boar_counterattack', { attack: 'Boar Charge' });
+              meta.atkCd = 3.5; meta.boarChargeT = 0; meta.boarProvoked = false; meta.herdAlertT = 1;
+              this.sendSpace('', 'fx', { t: 'wildlifeSnap', kind: 'boar', x: m.x, y: m.y, z: m.z, dgn: '' });
+            } else if (meta.boarChargeT <= 0) { meta.boarProvoked = false; meta.herdAlertT = 1; }
+          }
+        } else {
+          const fleeRange = animalBase === 'rabbit' ? 10 : animalBase === 'deer' ? 8 : 7;
+          const directThreat = best && bd < fleeRange;
+          if (animalBase === 'boar' && meta.boarProvoked && best && bd < 9 && meta.atkCd <= 0) {
+            this.alertWildlifeHerd(id, m, meta, best.sid, '');
+            meta.boarWarnT = .9; m.state = 'boarWarn'; tx = m.x; tz = m.z; moveMul = 0;
+            this.sendSpace('', 'fx', { t: 'boarWarn', x: m.x, y: m.y, z: m.z, radius: 2.1, durationMs: 900, dgn: '' });
+          } else if (directThreat || predator || meta.herdAlertT > 0) {
+            let threatX = directThreat ? best.p.x : predator ? predator.m.x : null;
+            let threatZ = directThreat ? best.p.z : predator ? predator.m.z : null;
+            if (threatX == null && meta.wildThreatSid) {
+              const shared = candidates.find(s => s.sid === meta.wildThreatSid);
+              if (shared) { threatX = shared.p.x; threatZ = shared.p.z; }
+            }
+            if (threatX == null) { threatX = meta.sx - (m.x - meta.sx || 1); threatZ = meta.sz - (m.z - meta.sz || 1); }
+            if (directThreat && (!meta.herdAlertCd || meta.herdAlertCd <= Date.now())) {
+              this.alertWildlifeHerd(id, m, meta, best.sid, '');
+              this.sendSpace('', 'fx', { t: 'wildlifeAlert', kind: animalBase, x: m.x, y: m.y, z: m.z, dgn: '' });
+            }
+            if (meta.herdAlertT > .18) { tx = m.x; tz = m.z; moveMul = 0; m.state = 'alert'; }
+            else {
+              const dx = m.x - threatX, dz = m.z - threatZ, len = Math.hypot(dx, dz) || 1;
+              tx = m.x + dx / len * 10; tz = m.z + dz / len * 10;
+              moveMul = animalBase === 'boar' ? 1.2 : animalBase === 'rabbit' ? 1.75 : 1.55;
+              m.state = 'flee'; meta.fleeT = (meta.fleeT || 0) + dt;
+              if (animalBase === 'rabbit' && meta.fleeT > 2.2 && (!best || bd > 4)) {
+                meta.burrowT = 3.5 + Math.random() * 2; meta.fleeT = 0; m.state = 'burrow';
+                this.sendSpace('', 'fx', { t: 'rabbitBurrow', action: 'hide', x: m.x, y: m.y, z: m.z, dgn: '' });
+                return;
+              }
+            }
+          } else {
+            meta.fleeT = Math.max(0, (meta.fleeT || 0) - dt * 2);
+            if (meta.behaviorT <= 0) {
+              const roll = Math.random();
+              meta.idleMode = night && roll < .48 ? 'sleep' : roll < .64 ? 'graze' : 'wander';
+              meta.behaviorT = meta.idleMode === 'sleep' ? 5 + Math.random() * 6 : meta.idleMode === 'graze' ? 2.5 + Math.random() * 4 : 3 + Math.random() * 4;
+            }
+            if (meta.idleMode === 'sleep' || meta.idleMode === 'graze') {
+              tx = m.x; tz = m.z; moveMul = 0; m.state = meta.idleMode;
+            } else {
+              meta.patrolT -= dt;
+              if (meta.patrolT <= 0) {
+                meta.patrolT = 2.5 + Math.random() * 4;
+                const herd = this.wildlifeHerdMembers(id, m, meta, 22);
+                if (herd.length) {
+                  const cx = herd.reduce((sum, member) => sum + member.m.x, m.x) / (herd.length + 1);
+                  const cz = herd.reduce((sum, member) => sum + member.m.z, m.z) / (herd.length + 1);
+                  meta.tx = cx + (Math.random() * 2 - 1) * 5; meta.tz = cz + (Math.random() * 2 - 1) * 5;
+                } else {
+                  meta.tx = meta.sx + (Math.random() * 2 - 1) * 10; meta.tz = meta.sz + (Math.random() * 2 - 1) * 10;
+                }
+              }
+              tx = meta.tx; tz = meta.tz; m.state = 'wander';
+            }
+          }
         }
         const dx = tx - m.x, dz = tz - m.z, dist = Math.hypot(dx, dz);
         if (dist > .15) {
@@ -9592,6 +10065,7 @@ applyMixin(GameRoom, require('./teams.mixin'));
 applyMixin(GameRoom, require('./metrics.mixin'));
 applyMixin(GameRoom, require('./recall.mixin'));
 applyMixin(GameRoom, require('./knowledge-challenge.mixin'));
+applyMixin(GameRoom, require('./expedition.mixin'));
 
 
 module.exports = {

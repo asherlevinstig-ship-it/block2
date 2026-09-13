@@ -288,5 +288,27 @@ export function createNetworkController(options) {
     return switchRoom(primaryRoomName, { ...primaryJoinOptions, shardId: state.shardId || primaryJoinOptions.shardId || 'main' });
   }
 
-  return { state, connect, reconnect, pauseReconnect, shutdown, switchRoom, returnToPrimary };
+  async function switchPrimaryShard(shardId) {
+    const target=String(shardId||'').trim().toLowerCase();
+    if(!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(target)||!activeClient||stopped)return null;
+    if(state.roomName===primaryRoomName&&state.shardId===target)return state.room;
+    const client=activeClient,previous={...primaryJoinOptions,shardId:state.shardId||primaryJoinOptions.shardId||'main'},cur=state.room;
+    const authToken=options.authToken?String(options.authToken()||'').trim():'',authOptions=authToken?{authToken}:{};
+    switching=true;state.room=null;state.on=false;state.connecting=true;
+    if(cur){try{await cur.leave();}catch(_){}}
+    try{
+      const room=await client.joinOrCreate(primaryRoomName,{name:currentName,shardId:target,...authOptions});
+      primaryJoinOptions={...primaryJoinOptions,shardId:target};state.shardId=target;state.roomName=primaryRoomName;
+      if(options.onPrimaryJoinOptions)options.onPrimaryJoinOptions(primaryJoinOptions);
+      switching=false;state.connecting=false;attach(room,currentName,client);return room;
+    }catch(error){
+      try{
+        const room=await client.joinOrCreate(primaryRoomName,{name:currentName,...previous,...authOptions});
+        primaryJoinOptions=previous;state.shardId=previous.shardId;state.roomName=primaryRoomName;switching=false;state.connecting=false;attach(room,currentName,client);
+      }catch(restoreError){switching=false;state.connecting=false;fail(restoreError);}
+      throw error;
+    }
+  }
+
+  return { state, connect, reconnect, pauseReconnect, shutdown, switchRoom, returnToPrimary, switchPrimaryShard };
 }
