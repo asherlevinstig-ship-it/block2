@@ -38,7 +38,7 @@ const {createOnboardingUI,isOnboardingBuildPlacement,countOnboardingBuildBlocks,
 
 // ---------------- texture atlas ----------------
 const TS = 16;
-const ATLAS_COLS = 8, ATLAS_ROWS = 6;
+const ATLAS_COLS = 8, ATLAS_ROWS = 8;
 const atlasCanvas = document.createElement('canvas');
 atlasCanvas.width = ATLAS_COLS*TS; atlasCanvas.height = ATLAS_ROWS*TS;
 const actx = atlasCanvas.getContext('2d', { willReadFrequently: true });
@@ -185,6 +185,62 @@ paintTile(7,5,(x,y,r)=>{ // damp mossy dungeon trim
   if((x+y*2)%19<2)c=[28,48,34];
   return vary(c,7,r);
 });
+
+// row 6 - quiet overworld variants. These are deliberately sparse 16px
+// details, selected per block coordinate so chunk rebuilds never shimmer.
+paintTile(0,6,(x,y,r)=>{ // grass top with clover and tiny bare flecks
+  let c=r()<.18?[88,148,64]:r()>.86?[124,184,88]:[106,168,76];
+  if((x===4&&y===5)||(x===11&&y===12))c=[70,126,54];
+  if((x===5&&y===5)||(x===10&&y===12))c=[152,188,94];
+  return vary(c,7,r);
+});
+paintTile(1,6,(x,y,r)=>{ // irregular grass-to-dirt side transition
+  const edge=2+((x*5+3)%4);
+  if(y<edge)return vary(r()<.22?[82,140,58]:[102,160,70],7,r);
+  let c=r()<.2?[112,80,54]:r()>.88?[150,110,76]:[132,96,65];
+  if(y<edge+3&&((x*3+y)%7===0))c=[72,118,52];
+  return vary(c,8,r);
+});
+paintTile(2,6,(x,y,r)=>{ // dirt with pebbles
+  let c=r()<.2?[112,80,54]:r()>.86?[150,110,76]:[132,96,65];
+  if((x===3&&y===11)||(x===12&&y===5)||(x===8&&y===14))c=[104,104,98];
+  return vary(c,8,r);
+});
+paintTile(3,6,(x,y,r)=>{ // hairline cracked stone
+  const crack=(x===7&&y>=4&&y<=11)||(y===8&&x>=7&&x<=12)||(x===5&&y>=2&&y<=5);
+  return crack?vary([76,78,82],4,r):stonePixel(x,y,r);
+});
+paintTile(4,6,(x,y,r)=>{ // sand with scattered warm pebbles
+  let c=r()<.2?[204,190,142]:r()>.88?[231,219,176]:[219,206,160];
+  if((x===4&&y===6)||(x===11&&y===12)||(x===13&&y===3))c=[164,146,108];
+  return vary(c,5,r);
+});
+paintTile(5,6,(x,y,r)=>{ // rooted dirt for exposed side faces
+  let c=r()<.22?[112,80,54]:r()>.86?[150,110,76]:[132,96,65];
+  const root=(x===4&&y<11)||(x===10&&y>4&&y<14)||(y===10&&x>=4&&x<=10);
+  if(root)c=[88,62,39];
+  return vary(c,7,r);
+});
+paintTile(6,6,(x,y,r)=>{ // moss-touched stone
+  let c=stonePixel(x,y,r);
+  if((y<4&&((x+y*3)%5<2))||(x===13&&y<8))c=r()<.35?[72,91,63]:[91,111,72];
+  return c;
+});
+paintTile(7,6,(x,y,r)=>{ // wind-rippled sand
+  const ridge=(y===4&&x>2&&x<12)||(y===11&&x>5&&x<15);
+  return vary(ridge?[196,180,132]:[220,207,161],ridge?4:6,r);
+});
+
+// row 7 - authored dungeon wear variants. Local lighting supplies colour;
+// the atlas supplies readable age, damp and material transitions.
+paintTile(0,7,(x,y,r)=>{const crack=(x===6&&y>2&&y<13)||(y===9&&x>5&&x<12);return crack?vary([38,41,48],4,r):vary(r()<.2?[61,65,73]:[79,83,91],7,r);});
+paintTile(1,7,(x,y,r)=>{let c=vary(r()<.2?[59,64,70]:[78,82,88],7,r);if(y<5&&((x*3+y)%6<2))c=vary([65,88,65],6,r);return c;});
+paintTile(2,7,(x,y,r)=>{const seam=x%8===0||y%8===0,chip=(x===7&&y===7)||(x===8&&y===8);return vary(chip?[31,33,38]:seam?[42,44,50]:[87,89,95],6,r);});
+paintTile(3,7,(x,y,r)=>{const mortar=y%4===3||(x+(Math.floor(y/4)%2?4:0))%8===7,crack=(x===5&&y>4&&y<12)||(y===6&&x>5&&x<10);return vary(crack?[29,31,36]:mortar?[38,40,46]:[82,76,72],6,r);});
+paintTile(4,7,(x,y,r)=>{const mortar=y%4===3||(x+(Math.floor(y/4)%2?4:0))%8===7;let c=mortar?[35,39,42]:[76,75,67];if(y<6&&((x+y*2)%5<2))c=[55,83,56];return vary(c,6,r);});
+paintTile(5,7,(x,y,r)=>{let c=(y%4===3)?[37,39,44]:[79,73,69];const root=(x===4&&y<13)||(x===11&&y>2&&y<10)||(y===9&&x>4&&x<12);if(root)c=[49,37,28];return vary(c,6,r);});
+paintTile(6,7,(x,y,r)=>{const vein=((x*7+y*13)%19)<2;return vary(vein?[19,21,27]:r()>.82?[57,59,67]:[39,41,47],6,r);});
+paintTile(7,7,(x,y,r)=>{const mortar=y%4===3||(x+(Math.floor(y/4)%2?4:0))%8===7;let c=mortar?[31,35,37]:[61,72,61];if((x*5+y*3)%17<2)c=[83,98,72];return vary(c,7,r);});
 
 const atlasTex = new THREE.CanvasTexture(atlasCanvas);
 atlasTex.encoding = THREE.sRGBEncoding;
@@ -2502,15 +2558,43 @@ const DUNGEON_TILES={
   [B.IRON_ORE]:[[5,5],[5,5],[5,5]],
   [B.DIAMOND_ORE]:[[6,5],[6,5],[6,5]],
 };
-function blockFaceTile(id, faceIndex, x, y, z){
+function blockFaceTile(id, faceIndex, x, y, z, columnBiome=BIO.PLAINS){
   let tiles=BLOCKS[id].tiles;
   if(dim==='dungeon' && DUNGEON_TILES[id]){
     tiles=DUNGEON_TILES[id];
-    if(id===B.BRICK && faceIndex!==2 && hash2(x*17+y*5,z*23-y)<.08) return [7,5];
+    const wear=hash2(x*17+y*5+id*31,z*23-y+faceIndex*47);
+    if(id===B.STONE && wear<.08)return [faceIndex===3?1:0,7];
+    if(id===B.COBBLE && wear<.11)return [2,7];
+    if(id===B.BRICK && faceIndex!==2){
+      if(wear<.035)return [5,7];
+      if(wear<.09)return [4,7];
+      if(wear<.17)return [3,7];
+    }
+    if(id===B.BEDROCK && wear<.12)return [6,7];
+    if((id===B.STONE||id===B.COBBLE||id===B.BRICK) && wear>.94)return [7,7];
+  } else if(dim==='overworld'){
+    const wear=hash2(x*29+y*7+id*41,z*31-y*11+faceIndex*53);
+    if(id===B.GRASS){
+      if(faceIndex===3&&wear<.18)return [0,6];
+      if(faceIndex!==2&&faceIndex!==3&&wear<.22)return [1,6];
+    } else if(id===B.DIRT){
+      if(faceIndex===3&&wear<.16)return [2,6];
+      if(faceIndex!==2&&faceIndex!==3&&wear<.14)return [5,6];
+    } else if(id===B.STONE){
+      const damp=columnBiome===BIO.FOREST||columnBiome===BIO.SWAMP;
+      if(damp&&faceIndex!==2&&wear<.07)return [6,6];
+      if(wear<.17)return [3,6];
+    } else if(id===B.SAND){
+      if(faceIndex===3&&wear<.13)return [7,6];
+      if(wear<.22)return [4,6];
+    }
   }
   return tiles[ faceIndex===3?0 : faceIndex===2?2 : 1 ];
 }
 const foliagePalette=[[.96,1,.88],[.78,.94,.84],[1,.95,.78],[1,.85,.7],[.86,.95,1],[.78,.88,.72]];
+// Scale the baked face-value gap without adding lights or draw calls. Desert
+// reads crisp, while snow lifts its side faces like a bright diffuse reflector.
+const BIOME_FACE_CONTRAST=[1.0,1.04,1.14,1.10,.72,.90];
 const NATURAL_VARIANTS=new Set([B.GRASS,B.DIRT,B.STONE,B.SAND,B.LOG,B.LEAVES,B.COBBLE,B.SNOW,B.RED_SAND,B.TERRACOTTA]);
 function blockSurfaceVariation(id,x,y,z){
   // Large surfaces need quiet macro variation as well as 16px grain. Keep it
@@ -2521,10 +2605,12 @@ function blockSurfaceVariation(id,x,y,z){
 function buildChunkGeometry(cx, cz, translucentPass){
   const pos=[], nor=[], col=[], uv=[], ind=[];
   const x0=cx*CHUNK, z0=cz*CHUNK;
-  const foliageColumns=[];
+  const biomeColumns=[],foliageColumns=[];
   if(dim==='overworld' && !translucentPass){
-    for(let x=x0;x<x0+CHUNK;x++)for(let z=z0;z<z0+CHUNK;z++)
-      foliageColumns[(x-x0)*CHUNK+z-z0]=foliagePalette[biomeAt(x,z)];
+    for(let x=x0;x<x0+CHUNK;x++)for(let z=z0;z<z0+CHUNK;z++){
+      const column=(x-x0)*CHUNK+z-z0,biome=biomeAt(x,z);
+      biomeColumns[column]=biome;foliageColumns[column]=foliagePalette[biome];
+    }
   }
   const b=worldBounds();
   for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++)
@@ -2536,7 +2622,8 @@ function buildChunkGeometry(cx, cz, translucentPass){
     if(def.noMesh) continue;
     const trans = !!def.translucent;
     if(trans !== translucentPass) continue;
-    const foliage=(id===B.GRASS||id===B.LEAVES) && foliageColumns[(x-x0)*CHUNK+z-z0];
+    const column=(x-x0)*CHUNK+z-z0,biome=biomeColumns[column]??BIO.PLAINS;
+    const foliage=(id===B.GRASS||id===B.LEAVES) && foliageColumns[column];
     for(let f=0; f<6; f++){
       const face=FACES[f];
       const nb = getB(x+face.dir[0], y+face.dir[1], z+face.dir[2]);
@@ -2544,7 +2631,7 @@ function buildChunkGeometry(cx, cz, translucentPass){
       if(trans) visible = (nb===B.AIR) || (!BLOCKS[nb]) || (BLOCKS[nb].translucent && nb!==id);
       else visible = !isOpaque(nb);
       if(!visible) continue;
-      const tile = blockFaceTile(id, f, x, y, z);
+      const tile = blockFaceTile(id, f, x, y, z, biome);
       const u0=(tile[0]+EPS)*tileU, v0=(tile[1]+EPS)*tileV;
       const uw=(1-2*EPS)*tileU, vw=(1-2*EPS)*tileV;
       const base=pos.length/3;
@@ -2556,7 +2643,9 @@ function buildChunkGeometry(cx, cz, translucentPass){
         uv.push(u0 + c.uv[0]*uw, 1 - (v0 + (1-c.uv[1])*vw));
         const ao = trans ? 1 : vertexAO(x,y,z,face.dir,c.p);
         aos.push(ao);
-        const s = Math.min(1,face.shade * ao * variation);
+        const contrast=dim==='overworld'&&!trans?BIOME_FACE_CONTRAST[biome]:1;
+        const directional=Math.max(.35,1-(1-face.shade)*contrast);
+        const s = Math.min(1,directional * ao * variation);
         col.push(s*(foliage?foliage[0]:1),s*(foliage?foliage[1]:1),s*(foliage?foliage[2]:1));
       }
       // Choose the less-visible diagonal so AO does not draw a bright seam
@@ -7812,14 +7901,14 @@ function updateDayNight(dt){
     const tint=palette.tint;
     matOpaque.color.copy(tint);
     matTrans.color.copy(tint);
-    scene.fog.near=8;
-    scene.fog.far=dungeonTheme==='mine'?34:dungeonTheme==='crypt'?26:dungeonTheme==='overgrown'?29:30;
+    scene.fog.near=palette.fogNear;
+    scene.fog.far=palette.fogFar;
     scene.fog.color.copy(mood);
     SKY.copy(mood);
-    hemi.intensity=.6; hemi.color.copy(palette.sky);
+    hemi.intensity=palette.ambient; hemi.color.copy(palette.sky);
     hemi.groundColor.copy(palette.ground);
     sun.color.copy(palette.key);
-    sun.intensity=.08;
+    sun.intensity=palette.sun;
   }
   else if(dim==='gatecutscene'){
     const mood=new THREE.Color(0x151022);
