@@ -3802,6 +3802,24 @@ test('wildlife herds share danger and wolves select living prey', () => {
   assert.equal(room.nearestWildlifePrey('wolf_a', wolf, 18).id, 'deer_b');
 });
 
+test('idle overworld wildlife can choose nighttime behavior without leaking update locals', () => {
+  const room = makeRoom();
+  room.state.tod = .79;
+  const deer = new Mob(); deer.kind = 'deer'; deer.x = 100; deer.y = 10; deer.z = 100; deer.hp = deer.maxHp = 7;
+  room.state.mobs.set('night_deer', deer);
+  const meta = room.freshMeta(100, 100, 0, 2, 'deer', 0, false);
+  meta.behaviorT = 0;
+  room.mobMeta.night_deer = meta;
+  const originalRandom = Math.random;
+  Math.random = () => .1;
+  try {
+    assert.doesNotThrow(() => room.simulateMob(deer, 'night_deer', meta, .1, { '': [] }));
+  } finally {
+    Math.random = originalRandom;
+  }
+  assert.equal(deer.state, 'sleep');
+});
+
 test('provoked boars warn before a server-authoritative counter-charge', () => {
   const room = makeRoom(), client = makeClient('boar_target');
   seedPlayer(room, client, { x: 101, y: 10, z: 100 }); room.clients = [client];

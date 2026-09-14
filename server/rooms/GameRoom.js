@@ -9555,6 +9555,8 @@ class GameRoom extends Room {
   // loop so a DungeonInstance can drive its own mobs through the same code path; behaviour is
   // unchanged. `spaces` maps dgn -> [{p,sid}] players, as built in update().
   simulateMob(m, id, meta, dt, spaces) {
+      const th = this.state.tod * Math.PI * 2, sy = -Math.cos(th);
+      const night = sstep(-0.12, 0.20, sy / Math.hypot(Math.sin(th), sy, .22)) < .18;
       const inst = m.dgn ? this.activeDungeonInstance(m.dgn) : null;
       if (m.dgn && !inst) return;
       const ground = (x, z, fromY) => inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, fromY)) : (this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, fromY) : -1);
