@@ -71,7 +71,9 @@ export function initTeacherDashboardLink() {
   const logout = byId('logoutbtn');
   if (play) play.addEventListener('click', () => setTimeout(() => checkTeacherAccess(button), 900));
   if (logout) logout.addEventListener('click', () => setTimeout(() => checkTeacherAccess(button), 300));
-  setInterval(() => checkTeacherAccess(button), 5000);
+  // Account roles do not change while a session is open. Polling /auth/me every
+  // five seconds made an idle player continuously read their Firestore profile.
+  // Login/logout already refresh this state, and callers can request one explicitly.
   return { refresh: () => checkTeacherAccess(button) };
 }
 

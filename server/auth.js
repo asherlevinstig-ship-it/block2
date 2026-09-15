@@ -16,6 +16,7 @@ const GEAR_SYSTEM = require('../shared/gear-system');
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const SWEEP_MS = 10 * 60 * 1000;   // reclaim expired sessions and stale rate-limit rows
+const PROFILE_CACHE_MS = 60 * 1000;
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const DEFAULT_CURRICULUM_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
@@ -319,6 +320,9 @@ class AuthService {
     this.profileStore = Object.prototype.hasOwnProperty.call(options, 'profileStore') ? options.profileStore : null;
     this.gameQuestionStore = Object.prototype.hasOwnProperty.call(options, 'gameQuestionStore') ? options.gameQuestionStore : null;
     this.env = options.env || process.env;
+    this.gameProfileCache = new Map();
+    this.gameProfileLoads = new Map();
+    this.profileCacheMs = Math.max(1000, Math.min(5 * 60 * 1000, Number(options.profileCacheMs) || PROFILE_CACHE_MS));
     this.curriculumUploadDir = options.curriculumUploadDir || path.join(this.dir, 'curriculum-uploads');
     this.curriculumMailBridgeFetch = options.curriculumMailBridgeFetch || null;
     this.bugReportMailBridgeFetch = options.bugReportMailBridgeFetch || null;
@@ -338,6 +342,7 @@ class AuthService {
     // expired rows on boot, so a stale row never outlives a restart anyway.
     for (const [sid, session] of this.sessions) if (session.expiresAt <= now) this.sessions.delete(sid);
     for (const [ip, row] of this.attempts) if (row.resetAt <= now) this.attempts.delete(ip);
+    for (const [id, row] of this.gameProfileCache) if (row.expiresAt <= now) this.gameProfileCache.delete(id);
   }
 
   stop() {
@@ -719,6 +724,29 @@ class AuthService {
   async publicGameProfile(account) {
     const id = account && account.id;
     if (!id) return { name: '', nameSet: false, path: '', appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
+    const cached = this.gameProfileCache.get(id);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    if (cached) this.gameProfileCache.delete(id);
+    if (this.gameProfileLoads.has(id)) return this.gameProfileLoads.get(id);
+    const load = this.loadPublicGameProfile(account, id);
+    this.gameProfileLoads.set(id, load);
+    try {
+      const value = await load;
+      // Do not cache storage failures (null): a recovered Firestore connection
+      // must be retried immediately. Successful missing-profile lookups are safe
+      // to cache and are invalidated by every profile mutation below.
+      if (value !== null) this.gameProfileCache.set(id, { value, expiresAt: Date.now() + this.profileCacheMs });
+      return value;
+    } finally {
+      this.gameProfileLoads.delete(id);
+    }
+  }
+
+  invalidateGameProfile(id) {
+    if (id) this.gameProfileCache.delete(String(id));
+  }
+
+  async loadPublicGameProfile(account, id) {
     try {
       const raw = await this.getProfileStore().loadPlayer(id);
       if (!raw) {
@@ -771,6 +799,7 @@ class AuthService {
     const store = this.getProfileStore();
     if (typeof store.deletePlayer === 'function') await store.deletePlayer(account.id);
     else await store.savePlayer(account.id, null);
+    this.invalidateGameProfile(account.id);
     const liveRoomsReset = await resetLivePlayerProfiles(account.id);
     for (const [key, session] of [...this.sessions]) {
       if (session && session.accountId === account.id) this.sessions.delete(key);
@@ -826,6 +855,7 @@ class AuthService {
     profile.name = clean;
     profile.nameSet = true;
     await store.savePlayer(account.id, profile);
+    this.invalidateGameProfile(account.id);
     await updateLivePlayerProfiles(account.id, { name: clean, nameSet: true });
     return {
       account,
@@ -884,6 +914,7 @@ class AuthService {
     profile.vitalsSavedAt = Date.now();
     profile.pos = [64.5, 20, 71.5];
     await store.savePlayer(account.id, profile);
+    this.invalidateGameProfile(account.id);
     const liveRoomsUpdated = await updateLivePlayerProfiles(account.id, { replaceProfile: profile });
     return {
       account,
@@ -961,6 +992,7 @@ class AuthService {
 
     profile = sanitizeProfile(profile);
     await store.savePlayer(account.id, profile);
+    this.invalidateGameProfile(account.id);
     const liveRoomsUpdated = await updateLivePlayerProfiles(account.id, { replaceProfile: profile });
     return {
       account,
@@ -986,6 +1018,7 @@ class AuthService {
     profile.name = clean;
     profile.nameSet = true;
     await store.savePlayer(publicAccount.id, profile);
+    this.invalidateGameProfile(publicAccount.id);
     await updateLivePlayerProfiles(publicAccount.id, { name: clean, nameSet: true });
     return { name: clean, nameSet: true, path: profile.S && profile.S.path || '', appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
   }
@@ -1003,6 +1036,7 @@ class AuthService {
     catch (e) { throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' }); }
     profile.appearance = nextAppearance;
     await store.savePlayer(publicAccount.id, profile);
+    this.invalidateGameProfile(publicAccount.id);
     await updateLivePlayerProfiles(publicAccount.id, { appearance: nextAppearance });
     return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, path: profile.S && profile.S.path || '', appearance: nextAppearance };
   }
@@ -1029,6 +1063,7 @@ class AuthService {
     profile.S.path = nextPath;
     profile.tutorials.ability = Math.max(profile.tutorials.ability | 0, TUTORIAL_VERSIONS.ability);
     await store.savePlayer(publicAccount.id, profile);
+    this.invalidateGameProfile(publicAccount.id);
     await updateLivePlayerProfiles(publicAccount.id, { path: nextPath });
     console.warn('[bc-path:server]', JSON.stringify({ event: 'auth.path.save.complete', account: shortHash(publicAccount.id), path: nextPath }));
     return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, path: nextPath, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
@@ -1051,6 +1086,7 @@ class AuthService {
     profile.nameSet = true;
     profile.appearance = nextAppearance;
     await store.savePlayer(publicAccount.id, profile);
+    this.invalidateGameProfile(publicAccount.id);
     await updateLivePlayerProfiles(publicAccount.id, { name: clean, nameSet: true, appearance: nextAppearance });
     return { name: clean, nameSet: true, path: profile.S && profile.S.path || '', appearance: nextAppearance };
   }
