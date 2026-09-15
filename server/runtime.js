@@ -7,7 +7,9 @@ const { validateStartup } = require('./startup-config');
 const { securityHeaders } = require('./security-headers');
 const { metricsHttpHandler, readinessHttpHandler } = require('./metrics-registry');
 
-Encoder.BUFFER_SIZE = 256 * 1024;
+// The generated overworld plus filtered entity views can exceed Schema's
+// default encoder allocation during a client's initial state sync.
+Encoder.BUFFER_SIZE = 2 * 1024 * 1024;
 
 async function prepareRuntime(env = process.env) {
   const config = await validateStartup(env);
