@@ -315,7 +315,6 @@ class GameRoom extends Room {
 
     // ---- persistence ----
     this.store = this.monitorStore(createStore({ shardId: this.shardId }));
-    this.startTownMapBackfill();
     this.initPersistenceState();   // dirty-tracking + profile/save bookkeeping (defined below)
     this.unregisterProfileResetHandler = registerProfileResetHandler(token => this.resetLivePlayerProfile(token));
     this.unregisterProfileUpdateHandler = registerProfileUpdateHandler((token, patch) => this.updateLivePlayerProfile(token, patch));
@@ -856,6 +855,10 @@ class GameRoom extends Room {
       this.recordTick(performance.now() - t0);
     }, 100); // 10 Hz
     registerRoom(this, 'overworld', { shardId: this.shardId || 'main' });
+    // This migration may scan the full players collection. Start it only after
+    // the room has loaded successfully so a failed creation does not spend more
+    // persistence quota while Colyseus is tearing the half-built room down.
+    this.startTownMapBackfill();
     logRoomLifecycle('overworld.create.ready', {
       roomId: this.roomId || '',
       shardId: this.shardId || 'main',
@@ -873,7 +876,14 @@ class GameRoom extends Room {
         elapsedMs: elapsedMs(createStartedAt),
         error: e && e.message || String(e),
       });
+      this.createFailed = true;
       releaseGlobalWorld(this);
+      // Core 0.17.50 does not dispose a Room when onCreate() rejects. Emit the
+      // room's normal one-shot disposal event ourselves so its clock, timers,
+      // serializer, generated world, and partial handlers are released now.
+      // This remains safe once the upstream fix lands because the listener is
+      // registered with once().
+      if (this._events && typeof this._events.emit === 'function') this._events.emit('dispose');
       throw e;
     }
   }
@@ -1760,7 +1770,7 @@ class GameRoom extends Room {
       clients: this.clients ? this.clients.length : 0,
       players: this.state && this.state.players ? this.state.players.size : 0,
     });
-    try { await this.flush(); }
+    try { if (!this.createFailed) await this.flush(); }
     finally {
       if (this.unregisterProfileResetHandler) {
         this.unregisterProfileResetHandler();
