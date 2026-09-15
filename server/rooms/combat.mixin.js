@@ -1282,18 +1282,19 @@ class CombatMixin {
   }
   async setPath(client, path) {
     const rec = this.profileFor(client);
-    console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: rec&&rec.token?String(rec.token).slice(0,12):'', requestedPath:path, currentPath:rec&&rec.prof&&rec.prof.S&&rec.prof.S.path||'' }));
     if (!rec || !rec.prof) {
       client.send('pathResult', { ok: false, path, reason: 'profile' });
       return false;
     }
     if (!ABILITY_PATHS[path]) {
+      console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: String(rec.token).slice(0,12), requestedPath:path, currentPath:rec.prof.S.path||'' }));
       client.send('pathResult', { ok: false, path, reason: 'invalid' });
       return false;
     }
     if (rec.prof.S.path) {
       const ok=rec.prof.S.path===path;
       if (!ok) {
+        console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: String(rec.token).slice(0,12), requestedPath:path, currentPath:rec.prof.S.path }));
         client.send('pathResult', { ok: false, path: rec.prof.S.path, reason: 'locked' });
         return false;
       }
@@ -1308,6 +1309,7 @@ class CombatMixin {
       client.send('pathResult', { ok: saved, path: rec.prof.S.path, reason: saved ? 'already' : 'save' });
       return saved;
     }
+    console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: String(rec.token).slice(0,12), requestedPath:path, currentPath:'' }));
     rec.prof.S.path = path;
     rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
     this.syncPlayerProfile(client, rec.prof);

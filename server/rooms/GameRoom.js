@@ -81,6 +81,8 @@ function compactBugValue(value, depth = 0) {
 // same world persistence. Keep a process-local lease so overflow fails closed
 // instead of starting a second, divergent world writer.
 const activeGlobalRooms = new Map();
+const pendingColdJoinSessions = new Map();
+const coldJoinSalt = crypto.randomBytes(32);
 let townMapBackfillPromise = null;
 const IMMEDIATE_INVENTORY_MESSAGE_TYPES = new Set([
   'craftResult', 'craftLegendaryResult', 'shopResult',
@@ -100,7 +102,25 @@ function claimGlobalWorld(room, shardId = 'main') {
   activeGlobalRooms.set(id, room);
 }
 function releaseGlobalWorld(room) {
-  for (const [id, active] of activeGlobalRooms) if (active === room) activeGlobalRooms.delete(id);
+  for (const [id, active] of activeGlobalRooms) {
+    if (active !== room) continue;
+    activeGlobalRooms.delete(id);
+    clearColdJoinSessions(id);
+  }
+}
+function coldJoinSessionId(shardId, accountId) {
+  const shard = cleanShardId(shardId);
+  const key = shard + ':' + String(accountId || '');
+  let sessionId = pendingColdJoinSessions.get(key);
+  if (!sessionId) {
+    sessionId = 'cold_' + crypto.createHmac('sha256', coldJoinSalt).update(key).digest('hex').slice(0, 24);
+    pendingColdJoinSessions.set(key, sessionId);
+  }
+  return sessionId;
+}
+function clearColdJoinSessions(shardId) {
+  const prefix = cleanShardId(shardId) + ':';
+  for (const key of pendingColdJoinSessions.keys()) if (key.startsWith(prefix)) pendingColdJoinSessions.delete(key);
 }
 
 function elapsedMs(start) {
@@ -303,7 +323,19 @@ class GameRoom extends Room {
       ok: !!account,
     });
     if (!account) throw new Error('authentication required');
+    const shardId = cleanShardId(options && options.shardId);
+    const activeRoom = activeGlobalRooms.get(shardId);
+    if (roomName === 'overworld' && (!activeRoom || !activeRoom.creationReady)) {
+      return { ...account, sessionId: coldJoinSessionId(shardId, account.id) };
+    }
     return account;
+  }
+
+  async _reserveSeat(sessionId, joinOptions = true, authData, seconds = this.seatReservationTimeout, allowReconnection = false, devModeReconnectionToken) {
+    if (!allowReconnection && (this._reservedSeats[sessionId] || this.clients.some(client => client.sessionId === sessionId))) {
+      return true;
+    }
+    return super._reserveSeat(sessionId, joinOptions, authData, seconds, allowReconnection, devModeReconnectionToken);
   }
 
   async onCreate(options = {}) {
@@ -313,6 +345,8 @@ class GameRoom extends Room {
     logRoomLifecycle('overworld.create.start', { shardId: this.shardId || 'main' });
     try {
     claimGlobalWorld(this, this.shardId);
+    this.creationReady = false;
+    if (this.presence && typeof this.presence.setMaxListeners === 'function') this.presence.setMaxListeners(0);
     logRoomLifecycle('overworld.create.claimed', { shardId: this.shardId || 'main', elapsedMs: elapsedMs(createStartedAt) });
     this.maxClients = Math.max(1, Math.min(64, Number(process.env.BLOCKCRAFT_SHARD_MAX_CLIENTS || 24) | 0));
     if (typeof this.setMetadata === 'function') this.setMetadata({ shardId: this.shardId });
@@ -872,6 +906,8 @@ class GameRoom extends Room {
     // the room has loaded successfully so a failed creation does not spend more
     // persistence quota while Colyseus is tearing the half-built room down.
     this.startTownMapBackfill();
+    this.creationReady = true;
+    clearColdJoinSessions(this.shardId);
     logRoomLifecycle('overworld.create.ready', {
       roomId: this.roomId || '',
       shardId: this.shardId || 'main',

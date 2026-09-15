@@ -21,3 +21,12 @@ test('browser join timeout covers a production cold world restore', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'network.mjs'), 'utf8');
   assert.match(source, /options\.joinTimeout \| 0 \|\| 45000/);
 });
+
+test('cold-start retries share one reservation per account until the overworld is ready', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  assert.match(source, /pendingColdJoinSessions/);
+  assert.match(source, /sessionId: coldJoinSessionId\(shardId, account\.id\)/);
+  assert.match(source, /this\._reservedSeats\[sessionId\].*this\.clients\.some/);
+  assert.match(source, /this\.creationReady = true;\s+clearColdJoinSessions\(this\.shardId\)/);
+  assert.match(source, /this\.presence\.setMaxListeners\(0\)/);
+});
