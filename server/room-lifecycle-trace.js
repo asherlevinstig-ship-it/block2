@@ -1,6 +1,10 @@
 const MAX_EVENTS = Math.max(25, Math.min(500, Number(process.env.ROOM_LIFECYCLE_TRACE_MAX || 200) | 0));
 const events = [];
 
+function consoleTraceEnabled() {
+  return /^(1|true|yes|on)$/i.test(String(process.env.BLOCKCRAFT_ROOM_TRACE_LOG || process.env.BLOCKCRAFT_TRACE_LOG || ''));
+}
+
 function recordRoomLifecycleTrace(type, detail = {}) {
   const entry = {
     at: new Date().toISOString(),
@@ -9,10 +13,12 @@ function recordRoomLifecycleTrace(type, detail = {}) {
   };
   events.push(entry);
   while (events.length > MAX_EVENTS) events.shift();
-  try {
-    console.log('[room-lifecycle] ' + JSON.stringify(entry));
-  } catch (_) {
-    console.log('[room-lifecycle] ' + entry.type);
+  if (consoleTraceEnabled()) {
+    try {
+      console.log('[room-lifecycle] ' + JSON.stringify(entry));
+    } catch (_) {
+      console.log('[room-lifecycle] ' + entry.type);
+    }
   }
   return entry;
 }

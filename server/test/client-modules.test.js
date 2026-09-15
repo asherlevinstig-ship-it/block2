@@ -812,7 +812,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   const registerHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.html'), 'utf8');
   const registerJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.js'), 'utf8');
   const splashAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'splash-cinematic.png');
-  const loginBgAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'bggame.png');
+  const loginBgAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'bggame-0ded2d310665.webp');
   const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');
   const authSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'auth.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
@@ -849,10 +849,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(html, /id="authpassshow" class="password-toggle" type="button"/);
   assert.match(html, /id="forgotpass" class="forgot-password-link" href="mailto:asherlevin85@gmail.com\?subject=Blockcraft%20password%20reset"/);
   assert.match(html, /class="password-wrap"[\s\S]*id="authpass"/);
-  assert.match(html, /<div class="splash-shot" aria-hidden="true"><img src="\/assets\/bggame\.png"/);
+  assert.match(html, /<div class="splash-shot" aria-hidden="true"><img src="\/assets\/bggame-[0-9a-f]{12}\.webp"/);
   assert.ok(fs.statSync(splashAsset).size > 10_000, 'splash cinematic asset is packaged with the client');
   assert.ok(fs.statSync(loginBgAsset).size > 10_000, 'login background asset is packaged with the client');
-  assert.match(styles, /url\('\/assets\/bggame\.png'\) center\/cover no-repeat/);
+  assert.match(styles, /url\('\/assets\/bggame-[0-9a-f]{12}\.webp'\) center\/cover no-repeat/);
   assert.match(styles, /\.password-wrap #authpass\{width:100%;padding-right:70px\}/);
   assert.match(styles, /\.forgot-password-link\{/);
   assert.match(combatSource, /authpassshow\.addEventListener\('click'/);
@@ -864,7 +864,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(registerHtml, /id="registerForm"/);
   assert.match(registerHtml, /name="yearGroup"/);
   assert.match(registerHtml, /id="passwordToggle" class="password-toggle" type="button"/);
-  assert.match(registerHtml, /url\('\/assets\/bggame\.png'\) center\/cover no-repeat/);
+  assert.match(registerHtml, /url\('\/assets\/bggame-[0-9a-f]{12}\.webp'\) center\/cover no-repeat/);
   assert.doesNotMatch(registerHtml, /name="school"/);
   assert.match(registerHtml, /find your school from your email address/);
   assert.match(registerJs, /\/auth\/student\/register/);
@@ -3944,8 +3944,8 @@ test('all cutscene entry points are disabled while their assets remain dormant',
   assert.match(networking, /function startGateUnlockCutscene\(replay=false\)\{\s*if\(!CUTSCENES_ENABLED\) return false;/);
   assert.match(networking, /function startIntroCutscene\(replay, previewPath\)\{\s*if\(!CUTSCENES_ENABLED\) return false;/);
   assert.match(index, /id="introcinematic"/);
-  assert.match(index, /id="introvideo" playsinline muted preload="auto"/);
-  assert.match(index, /id="introaudio" src="\/assets\/intro\/opening\.mp3" preload="auto"/);
+  assert.match(index, /id="introvideo" playsinline muted preload="none"/);
+  assert.match(index, /id="introaudio" src="\/assets\/intro\/opening\.mp3" preload="none"/);
   assert.ok(index.indexOf('/js/opening-cinematic.mjs') > -1 && index.indexOf('/js/opening-cinematic.mjs') < index.indexOf('/js/boot.mjs'));
   assert.match(opening, /const sources = \['\/assets\/intro\/vid1\.mp4', '\/assets\/intro\/vid2\.mp4'\]/);
   assert.match(opening, /globalThis\.BlockcraftOpeningReady = createOpeningReady\(\)/);

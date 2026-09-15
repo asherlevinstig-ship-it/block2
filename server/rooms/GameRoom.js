@@ -35,6 +35,7 @@ const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
 const DEFAULT_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
 const BUG_REPORT_MAIL_TIMEOUT_MS = Math.max(2000, Math.min(15000, Number(process.env.BUG_REPORT_MAIL_TIMEOUT_MS || 8000) | 0));
+const QUEST_TRACE_LOG = /^(1|true|yes|on)$/i.test(String(process.env.BLOCKCRAFT_QUEST_TRACE_LOG || process.env.BLOCKCRAFT_TRACE_LOG || ''));
 const TREE_REGROW_MS = Math.max(30000, Math.min(60 * 60 * 1000, Number(process.env.BLOCKCRAFT_TREE_REGROW_MS || 5 * 60 * 1000) | 0));
 const TREE_REGROW_RETRY_MS = Math.max(10000, Math.min(5 * 60 * 1000, Number(process.env.BLOCKCRAFT_TREE_REGROW_RETRY_MS || 30000) | 0));
 const TREE_REGROW_PLAYER_CLEARANCE = 7;
@@ -4922,6 +4923,7 @@ class GameRoom extends Room {
     return true;
   }
   profileQuestTrace(client, event, prof, extra = {}) {
+    if (!QUEST_TRACE_LOG) return;
     try {
       const q = prof && prof.activeNpcQuest;
       const objectives = typeof this.activeQuestObjectives === 'function' ? this.activeQuestObjectives(client, prof) : [];

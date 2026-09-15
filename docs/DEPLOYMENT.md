@@ -25,9 +25,18 @@ unsafe or incomplete.
 | `STORE` | `json` or `firebase`; defaults to `json` outside production |
 | `PORT` | Internal listen port; defaults to `2567` |
 | `BLOCKCRAFT_RESTART_WARNING_MS` | Optional player restart countdown; defaults to `8000`, capped at `15000` |
+| `BLOCKCRAFT_WS_MAX_PAYLOAD_BYTES` | Optional WebSocket message limit; defaults to `24576` (24 KiB), clamped to 4-64 KiB |
 
 `DEV_CHEATS`, `BLOCKCRAFT_BETA_TEST`, and `BLOCKCRAFT_E2E` must be unset in
 production. Never commit credentials or include them in a backup archive.
+
+Identity and room lifecycle events remain available through their bounded in-memory
+trace buffers. Set `BLOCKCRAFT_TRACE_LOG=1` temporarily to mirror both traces to
+stdout, or enable only `BLOCKCRAFT_IDENTITY_TRACE_LOG` or
+`BLOCKCRAFT_ROOM_TRACE_LOG`. Rejected edit messages are logged by default; use
+`BLOCKCRAFT_QUEST_TRACE_LOG=1` for verbose profile/quest snapshots. Use
+`BLOCKCRAFT_EDIT_TRACE=all` only for short investigations because accepted edits and
+quest snapshots can be high volume.
 
 For `STORE=firebase`, install `firebase-admin` and provide exactly one supported
 credential source:

@@ -7,6 +7,7 @@ const { prepareRuntime, attachHttpRoutes } = require('./runtime');
 const { prewarmOverworldRoom } = require('./room-prewarm');
 const { getActiveRooms } = require('./metrics-registry');
 const { restartWarningDelay, warnForRestart } = require('./restart-warning');
+const { websocketTransportOptions } = require('./websocket-transport');
 
 async function main() {
   const config = await prepareRuntime();
@@ -21,7 +22,7 @@ async function main() {
 
   const server = http.createServer(app);
   gameServer = new Server({
-    transport: new WebSocketTransport({ server }),
+    transport: new WebSocketTransport(websocketTransportOptions(process.env, { server })),
     gracefullyShutdown: process.env.BLOCKCRAFT_E2E !== '1',
   });
 
