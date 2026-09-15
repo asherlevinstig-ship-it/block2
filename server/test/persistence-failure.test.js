@@ -14,7 +14,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
 };
 
 const { JsonStore } = require('../store');
-const { GameRoom } = require('../rooms/GameRoom');
+const { GameRoom, claimGlobalWorld, releaseGlobalWorld } = require('../rooms/GameRoom');
 Module._load = originalLoad;
 
 const tempStore = () => new JsonStore(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-persist-')));
@@ -126,4 +126,29 @@ test('concurrent room flushes execute serially and persist every dirty profile',
   assert.equal(maxActive, 1);
   assert.deepEqual(saved.sort(), ['one', 'two']);
   assert.equal(room.dirtyPlayers.size, 0);
+});
+
+test('failed overworld creation disposes without flushing partial persistence state', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  assert.match(source, /this\.createFailed\s*=\s*true;[\s\S]*this\._events\.emit\('dispose'\)/,
+    'a rejected room creation must trigger immediate core cleanup');
+  assert.ok(source.indexOf('registerRoom(this') < source.indexOf('this.startTownMapBackfill();'),
+    'the full-player migration must not start until room creation has succeeded');
+
+  const room = Object.create(GameRoom.prototype);
+  room.roomId = 'failed-room';
+  room.shardId = 'failed-shard';
+  room.clients = [];
+  room.state = null;
+  room.createFailed = true;
+  let flushed = false;
+  room.flush = async () => { flushed = true; };
+
+  claimGlobalWorld(room, room.shardId);
+  await room.onDispose();
+
+  assert.equal(flushed, false, 'a half-built room must not write incomplete state');
+  const successor = {};
+  assert.doesNotThrow(() => claimGlobalWorld(successor, room.shardId), 'disposing the failed room releases its shard lease');
+  releaseGlobalWorld(successor);
 });
