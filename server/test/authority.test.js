@@ -332,6 +332,7 @@ function makeRoom() {
   room._timers = [];
   room.clock = { setTimeout(fn) { room._timers.push(fn); } };
   room.dirtyPlayers = new Set();
+  room.persistedWorldEditChunks = new Map();
   room.persistedInventorySignatures = new Map();
   room.dirtyWorld = false;
   room.dirtyWorldProgress = false;
@@ -4780,34 +4781,78 @@ test('crafting is saved durably before its success result can be followed by a r
   assert.equal(client.sent.at(-1).type, 'craftResult');
 });
 
-test('every rewarded or discovered inventory change is durable before its next player message', async () => {
+test('routine inventory rewards coalesce into one profile save', async () => {
   const room = makeRoom();
   const client = makeClient('durable-discovery');
   const { token, prof } = seedPlayer(room, client, { inv: [] });
   room.clients = [client];
   room.persistedInventorySignatures.set(token, room.inventoryPersistenceSignature(prof));
-  let finishSave;
-  let saved = null;
+  const saved = [];
   room.store = {
     savePlayer(savedToken, profile) {
-      saved = { token: savedToken, profile: JSON.parse(JSON.stringify(profile)) };
-      return new Promise(resolve => { finishSave = resolve; });
+      saved.push({ token: savedToken, profile: JSON.parse(JSON.stringify(profile)) });
+      return Promise.resolve();
     },
   };
   room.protectDurableInventoryMessages(client);
 
   room.addRewardItem(prof, I.GEODE, 1);
-  room.dirtyPlayers.add(token);
-  const reply = client.send('discoveryResult', { id: 'test-discovery', items: [{ id: I.GEODE, count: 1 }] });
+  client.send('discoveryResult', { id: 'test-discovery', items: [{ id: I.GEODE, count: 1 }] });
+  room.addRewardItem(prof, I.GEODE, 1);
+  client.send('grant', { source: 'mine', items: [{ id: I.GEODE, count: 1 }] });
+
+  assert.equal(client.sent.length, 2, 'routine rewards are not blocked on Firestore');
+  assert.equal(saved.length, 0);
+  await room.flushDirtyPlayers();
+  assert.equal(saved.length, 1, 'multiple rewards share the next profile snapshot');
+  assert.equal(saved[0].token, token);
+  assert.equal(itemCount(saved[0].profile, I.GEODE), 2);
+  assert.equal(client.sent.at(-1).type, 'grant');
+});
+
+test('transaction results still wait for their durable profile snapshot', async () => {
+  const room = makeRoom();
+  const client = makeClient('durable-shopper');
+  const { token, prof } = seedPlayer(room, client, { inv: [] });
+  room.clients = [client];
+  room.persistedInventorySignatures.set(token, room.inventoryPersistenceSignature(prof));
+  let finishSave;
+  room.store = {
+    savePlayer() { return new Promise(resolve => { finishSave = resolve; }); },
+  };
+  room.protectDurableInventoryMessages(client);
+
+  room.addRewardItem(prof, I.GEODE, 1);
+  const reply = client.send('shopResult', { action: 'buy', id: I.GEODE, count: 1 });
   await new Promise(resolve => setImmediate(resolve));
 
-  assert.equal(saved.token, token);
-  assert.equal(itemCount(saved.profile, I.GEODE), 1);
-  assert.equal(client.sent.length, 0, 'discovery notification waits for the durable inventory snapshot');
-
+  assert.equal(client.sent.length, 0);
   finishSave();
   await reply;
-  assert.equal(client.sent.at(-1).type, 'discoveryResult');
+  assert.equal(client.sent.at(-1).type, 'shopResult');
+});
+
+test('world persistence writes only chunks whose edit snapshot changed', async () => {
+  const room = makeRoom();
+  room.completeFurnaces = () => {};
+  room.state.edits.set('1,20,1', W.B.STONE);
+  room.state.edits.set('20,20,1', W.B.LOG);
+  room.persistedWorldEditChunks = room.worldEditChunkSnapshots({
+    '1,20,1': W.B.STONE,
+    '20,20,1': W.B.DIRT,
+    '40,20,1': W.B.PLANKS,
+  });
+  const writes = [];
+  room.store = { saveWorldEditChunks: async chunks => writes.push(chunks) };
+  room.dirtyWorld = true;
+
+  await room.flush();
+
+  assert.deepEqual(writes, [{
+    '1_0': { '20,20,1': W.B.LOG },
+    '2_0': {},
+  }]);
+  assert.equal(room.persistedWorldEditChunks.get('0_0').edits['1,20,1'], W.B.STONE);
 });
 
 test('DungeonRoom registers normal crafting and inventory arrangement', () => {

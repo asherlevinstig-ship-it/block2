@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createStore, JsonStore, FIRESTORE_FAST_RETRY_CONFIG, cleanShardId, sanitizeProfile } = require('../store');
+const { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, cleanShardId, sanitizeProfile } = require('../store');
 
 test('Recall mastery preserves complete built-in and database question IDs',()=>{
   const builtIn='it_ns_hex_bin_003',db='db-recall-123456';
@@ -20,6 +20,29 @@ test('Firestore quota exhaustion fails fast instead of occupying gameplay queues
   assert.equal(service.methods.GetDocument.retry_params_name, 'blockcraft_fast');
   assert.equal(service.methods.Commit.retry_params_name, 'blockcraft_fast');
   assert.equal(service.methods.BatchWrite.retry_params_name, 'blockcraft_fast');
+});
+
+test('Firestore world delta writes only the supplied chunk documents', async () => {
+  const writes = [];
+  let closed = false;
+  const store = Object.create(FirebaseStore.prototype);
+  store._worldDoc = () => ({ collection: () => ({ doc: id => ({ id }) }) });
+  store._bulkWriter = () => ({
+    set(ref, value) { writes.push({ ref, value }); },
+    async close() { closed = true; },
+  });
+
+  await store.saveWorldEditChunks({
+    '0_0': { '1,20,1': 2 },
+    '1_0': {},
+    '../invalid': { '20,20,1': 3 },
+  });
+
+  assert.deepEqual(writes.map(write => ({ id: write.ref.id, edits: write.value.edits })), [
+    { id: '0_0', edits: { '1,20,1': 2 } },
+    { id: '1_0', edits: {} },
+  ]);
+  assert.equal(closed, true);
 });
 
 class BrokenFirebaseStore {

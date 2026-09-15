@@ -1805,9 +1805,16 @@ class FirebaseStore {
       const c = this._chunkKey(k);
       (byChunk[c] = byChunk[c] || {})[k] = edits[k];
     }
+    await this.saveWorldEditChunks(byChunk);
+  }
+  async saveWorldEditChunks(chunks) {
     const col = this._worldDoc().collection('chunks');
     const writer = this._bulkWriter();
-    for (const c in byChunk) writer.set(col.doc(c), { edits: byChunk[c], savedAt: Date.now() });
+    const savedAt = Date.now();
+    for (const c in chunks) {
+      if (!/^-?\d+_-?\d+$/.test(c)) continue;
+      writer.set(col.doc(c), { edits: chunks[c] || {}, savedAt });
+    }
     await writer.close();
   }
   async loadWorldProgress() {

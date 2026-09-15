@@ -81,6 +81,15 @@ function compactBugValue(value, depth = 0) {
 // instead of starting a second, divergent world writer.
 const activeGlobalRooms = new Map();
 let townMapBackfillPromise = null;
+const IMMEDIATE_INVENTORY_MESSAGE_TYPES = new Set([
+  'craftResult', 'craftLegendaryResult', 'shopResult',
+  'chestState', 'chestBatchResult', 'chestTx',
+  'furnaceStarted', 'furnaceResult', 'tradeResult',
+  'gateKeyResult', 'firstQuestReward', 'lootRecoveryResult',
+]);
+const IMMEDIATE_REWARD_SOURCES = new Set([
+  'boss', 'event', 'ancient_warden', 'breed', 'wild_taming',
+]);
 function claimGlobalWorld(room, shardId = 'main') {
   const id = cleanShardId(shardId);
   const active = activeGlobalRooms.get(id);
@@ -362,15 +371,18 @@ class GameRoom extends Room {
     const saved = await this.store.loadWorldEdits();
     this.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now(), cropKinds: {} };
     let applied = 0, skippedCentralCourt = 0;
+    const loadedPersistedEdits = {};
     for (const k in saved) {
       const [x, y, z] = k.split(',').map(Number);
       const id = saved[k] | 0;
       if (!W.inWorld(x, y, z) || id < 0 || id > W.MAX_BLOCK_ID) continue;
+      loadedPersistedEdits[k] = id;
       if (W.isCentralCourtProtectedEdit(x, y, z)) { skippedCentralCourt++; continue; }
       this.world.setB(x, y, z, id);
       this.state.edits.set(k, id);
       applied++;
     }
+    this.persistedWorldEditChunks = this.worldEditChunkSnapshots(loadedPersistedEdits);
     try {
       this.worldProgress = await this.store.loadWorldProgress();
       for (const [key, kind] of Object.entries(this.worldProgress.cropKinds || {})) this.cropMeta.set(key, { kind, level: 1 });
@@ -1523,6 +1535,7 @@ class GameRoom extends Room {
     this.dirtyNests = false;
     this.dirtyPlayers = new Set();
     this.lastSaveMsg = new Map();
+    this.persistedWorldEditChunks = new Map();
     this.persistedInventorySignatures = new Map();
     this.playerSaveQueues = new Map();
   }
@@ -1544,10 +1557,15 @@ class GameRoom extends Room {
     return JSON.parse(JSON.stringify(prof));
   }
 
-  // Any server-owned inventory change must reach durable storage before the
-  // next player-facing message. This protects every acquisition path (loot,
-  // mining, discoveries, quests, shops, fishing, furnaces, trades, etc.)
-  // without relying on each feature remembering its own save barrier.
+  inventoryMessageRequiresImmediatePersistence(type, payload) {
+    if (IMMEDIATE_INVENTORY_MESSAGE_TYPES.has(type)) return true;
+    if ((type === 'grant' || type === 'loot') && payload && IMMEDIATE_REWARD_SOURCES.has(payload.source)) return true;
+    return false;
+  }
+
+  // Routine rewards are coalesced by the periodic/departure/shutdown flushes.
+  // Transactional results and major rewards retain the save-before-message
+  // barrier so a fast refresh cannot replay or lose a valuable transition.
   protectDurableInventoryMessages(client) {
     if (!client || client.__durableInventorySendWrapped || typeof client.send !== 'function') return;
     const original = client.send.bind(client);
@@ -1558,16 +1576,22 @@ class GameRoom extends Room {
       const signature = prof && this.inventoryPersistenceSignature(prof);
       const durable = token && this.persistedInventorySignatures && this.persistedInventorySignatures.get(token);
       const pending = client.__durableInventorySendQueue || null;
-      if (!pending && (!token || !prof || !signature || signature === durable)) return original(type, payload);
+      const changed = !!(token && prof && signature && signature !== durable);
+      if (changed && this.dirtyPlayers) this.dirtyPlayers.add(token);
+      const needsPersistence = changed || !!(token && this.dirtyPlayers && this.dirtyPlayers.has(token));
+      const immediate = needsPersistence && this.inventoryMessageRequiresImmediatePersistence(type, payload);
+      if (!pending && !immediate) return original(type, payload);
       const task = (pending || Promise.resolve()).catch(() => {}).then(async () => {
-        const currentToken = this.tokens && this.tokens.get(client.sessionId);
-        const currentProf = currentToken && this.profiles && this.profiles.get(currentToken);
-        if (currentToken && currentProf) {
-          const currentSignature = this.inventoryPersistenceSignature(currentProf);
-          const currentDurable = this.persistedInventorySignatures && this.persistedInventorySignatures.get(currentToken);
-          if (currentSignature && currentSignature !== currentDurable) {
-            this.dirtyPlayers.add(currentToken);
-            await this.flush();
+        if (immediate) {
+          const currentToken = this.tokens && this.tokens.get(client.sessionId);
+          const currentProf = currentToken && this.profiles && this.profiles.get(currentToken);
+          if (currentToken && currentProf) {
+            const currentSignature = this.inventoryPersistenceSignature(currentProf);
+            const currentDurable = this.persistedInventorySignatures && this.persistedInventorySignatures.get(currentToken);
+            if (currentSignature && currentSignature !== currentDurable) {
+              this.dirtyPlayers.add(currentToken);
+              await this.flush();
+            }
           }
         }
         return original(type, payload);
@@ -1581,6 +1605,50 @@ class GameRoom extends Room {
     client.__durableInventorySendWrapped = true;
   }
 
+  worldEditChunkSnapshots(edits) {
+    const grouped = new Map();
+    const entries = edits instanceof Map ? edits.entries() : Object.entries(edits || {});
+    for (const [rawKey, rawValue] of entries) {
+      const key = String(rawKey);
+      const [x, , z] = key.split(',').map(Number);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+      const chunkId = (x >> 4) + '_' + (z >> 4);
+      if (!grouped.has(chunkId)) grouped.set(chunkId, []);
+      grouped.get(chunkId).push([key, rawValue | 0]);
+    }
+    const snapshots = new Map();
+    for (const [chunkId, chunkEntries] of grouped) {
+      const chunk = {};
+      chunkEntries.sort(([a], [b]) => a.localeCompare(b));
+      for (const [key, value] of chunkEntries) chunk[key] = value;
+      snapshots.set(chunkId, { edits: chunk, signature: JSON.stringify(chunk) });
+    }
+    return snapshots;
+  }
+
+  currentWorldEditChunks() {
+    const edits = {};
+    this.state.edits.forEach((value, key) => {
+      if (this.eventTransientEditKeys && this.eventTransientEditKeys.has(key)) return;
+      if (this.treeRestoredEditKeys && this.treeRestoredEditKeys.has(key)) return;
+      edits[key] = value;
+    });
+    return this.worldEditChunkSnapshots(edits);
+  }
+
+  changedWorldEditChunks(next) {
+    const prior = this.persistedWorldEditChunks || new Map();
+    const changed = {};
+    const ids = new Set([...prior.keys(), ...next.keys()]);
+    for (const id of ids) {
+      const before = prior.get(id);
+      const after = next.get(id);
+      if ((before && before.signature) === (after && after.signature)) continue;
+      changed[id] = after ? after.edits : {};
+    }
+    return changed;
+  }
+
   flush() {
     const prior = this.flushQueue || Promise.resolve();
     const next = prior.catch(() => {}).then(() => this.flushOnce());
@@ -1592,14 +1660,18 @@ class GameRoom extends Room {
     this.completeFurnaces();
     if (this.dirtyWorld) {
       this.dirtyWorld = false;
-      const obj = {};
-      this.state.edits.forEach((v, k) => {
-        if (this.eventTransientEditKeys && this.eventTransientEditKeys.has(k)) return;
-        if (this.treeRestoredEditKeys && this.treeRestoredEditKeys.has(k)) return;
-        const [x, , z] = k.split(',').map(Number);
-        obj[k] = v;
-      });
-      try { await this.store.saveWorldEdits(obj); }
+      const nextChunks = this.currentWorldEditChunks();
+      const changedChunks = this.changedWorldEditChunks(nextChunks);
+      try {
+        if (typeof this.store.saveWorldEditChunks === 'function') {
+          if (Object.keys(changedChunks).length) await this.store.saveWorldEditChunks(changedChunks);
+        } else {
+          const obj = {};
+          for (const snapshot of nextChunks.values()) Object.assign(obj, snapshot.edits);
+          await this.store.saveWorldEdits(obj);
+        }
+        this.persistedWorldEditChunks = nextChunks;
+      }
       catch (e) { console.warn('[persist] world save failed:', e.message); this.dirtyWorld = true; }
     }
     if (this.dirtyWorldProgress) {
