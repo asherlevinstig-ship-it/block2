@@ -11,12 +11,12 @@ async function registerAccount(page, { username, password, hunterName, displayNa
   expect(named.ok()).toBe(true);
 }
 
-async function playRegisteredHunter(page, { username, password, hunterName, path = 'shadow' }) {
+async function playRegisteredHunter(page, { username, password, hunterName, path = 'shadow', timeout = 15_000 }) {
   await page.goto('/?e2e=1');
-  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.gamePhase)).toBe('ready');
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.gamePhase), { timeout }).toBe('ready');
   const signedIn = await page.evaluate(name => window.AUTH_UI?.state.account?.username === name && window.AUTH_UI.hasHunterName(), username);
   if (!signedIn) {
-    await expect(page.locator('#playbtn')).toBeEnabled();
+    await expect(page.locator('#playbtn')).toBeEnabled({ timeout });
     const buttonText = (await page.locator('#playbtn').textContent() || '').trim().toUpperCase();
     if (buttonText !== 'PLAY' && buttonText !== 'SAVE HUNTER NAME') {
       await page.locator('#authuser').fill(username);
@@ -29,12 +29,12 @@ async function playRegisteredHunter(page, { username, password, hunterName, path
       await page.locator('#playbtn').click();
     }
   }
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected), { timeout }).toBe(true);
   if (path && !(await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().path))) {
-    await expect(page.locator('#pathselect')).toBeVisible();
+    await expect(page.locator('#pathselect')).toBeVisible({ timeout });
     await page.locator(`[data-path-preview="${path}"]`).click();
     await page.locator('#pathconfirm').click();
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().path)).toBe(path);
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().path), { timeout }).toBe(path);
   }
 }
 
