@@ -134,6 +134,16 @@ test('Firestore packed world saves overwrite complete dirty regional packs', asy
   assert.equal(getFirestoreUsageSnapshot().daily.writes, 1);
 });
 
+test('Firestore maintenance work has an application-level timeout', async () => {
+  const store = Object.create(FirebaseStore.prototype);
+  const started = Date.now();
+  await assert.rejects(
+    () => store._boundedFirestore(() => new Promise(() => {}), 'test write', 20),
+    /test write timed out after 20ms/,
+  );
+  assert.ok(Date.now() - started < 500, 'timeout should release the caller promptly');
+});
+
 class BrokenFirebaseStore {
   constructor() { throw new Error('invalid credentials'); }
 }

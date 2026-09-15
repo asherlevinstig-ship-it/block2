@@ -1903,6 +1903,19 @@ class FirebaseStore {
       throw error;
     }
   }
+  async _boundedFirestore(action, label, timeoutMs = 12000) {
+    let timer = null;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(action),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(label + ' timed out after ' + timeoutMs + 'ms')), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
   _bulkWriter() {
     const writer = this.db.bulkWriter();
     // BulkWriter otherwise adds its own RESOURCE_EXHAUSTED retry loop on top of
@@ -1956,7 +1969,10 @@ class FirebaseStore {
       Object.assign(out, edits);
     });
     try {
-      await this._migrateWorldEditChunksToPacks(chunks, markerRef);
+      await this._boundedFirestore(
+        () => this._migrateWorldEditChunksToPacks(chunks, markerRef),
+        'regional world edit migration',
+      );
     } catch (error) {
       console.warn('[persist] regional world edit migration deferred:', error.message);
     }
@@ -1980,7 +1996,8 @@ class FirebaseStore {
       });
     }
     const packCount = Object.keys(packs).length;
-    await this._trackUsage('migrateWorldEditPacks', 'world', { writes: packCount }, () => batch.commit());
+    await this._trackUsage('migrateWorldEditPacks', 'world', { writes: packCount },
+      () => this._boundedFirestore(() => batch.commit(), 'regional world edit pack commit'));
     await this._trackUsage('saveWorldEditStorageMarker', 'world', { writes: 1 }, () => markerRef.set({
       format: FIRESTORE_WORLD_EDIT_PACK_FORMAT, generation, packCount, migratedAt: savedAt,
     }));
@@ -2024,7 +2041,8 @@ class FirebaseStore {
         this.worldEditPacks[packId] = packChunks;
         writes++;
       }
-      await this._trackUsage('saveWorldEditPacks', 'world', { writes }, () => batch.commit());
+      await this._trackUsage('saveWorldEditPacks', 'world', { writes },
+        () => this._boundedFirestore(() => batch.commit(), 'regional world edit save'));
       return;
     }
     const col = this._worldDoc().collection('chunks');
