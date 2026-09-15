@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const {
   createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG,
+  FIRESTORE_WORLD_EDIT_PACK_FORMAT, packWorldEditChunks,
   getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, sanitizeProfile,
 } = require('../store');
 
@@ -91,6 +92,46 @@ test('Firestore daily observations roll over at midnight Pacific', async () => {
   const nextDay = getFirestoreUsageSnapshot(startedAt + 36 * 60 * 60 * 1000);
   assert.equal(nextDay.daily.writes, 0);
   assert.equal(nextDay.process.writes, 1);
+});
+
+test('Firestore regional packing bounds a 1000-block world to at most 64 startup reads', () => {
+  const chunks = {};
+  for (let cx = 0; cx < 63; cx++) for (let cz = 0; cz < 63; cz++) {
+    chunks[cx + '_' + cz] = { [cx * 16 + ',20,' + cz * 16]: 3 };
+  }
+  const packs = packWorldEditChunks(chunks);
+  assert.equal(Object.keys(packs).length, 64);
+  assert.deepEqual(packs['0_0']['0_0'], { '0,20,0': 3 });
+  assert.deepEqual(packs['7_7']['62_62'], { '992,20,992': 3 });
+});
+
+test('Firestore packed world saves overwrite complete dirty regional packs', async () => {
+  resetFirestoreUsageForTests();
+  const writes = [];
+  const store = Object.create(FirebaseStore.prototype);
+  store.worldEditStorageFormat = FIRESTORE_WORLD_EDIT_PACK_FORMAT;
+  store.worldEditPackGeneration = 'generation-1';
+  store.worldEditPacks = {
+    '0_0': {
+      '0_0': { '1,20,1': 3, '2,20,2': 4 },
+      '1_0': { '20,20,1': 5 },
+    },
+  };
+  store._worldDoc = () => ({ collection: () => ({ doc: id => ({ id }) }) });
+  store._bulkWriter = () => ({
+    set(ref, value) { writes.push({ ref, value }); },
+    async close() {},
+  });
+
+  await store.saveWorldEditChunks({ '0_0': { '1,20,1': 6 } });
+
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].ref.id, 'generation-1__0_0');
+  assert.deepEqual(writes[0].value.chunks, {
+    '0_0': { '1,20,1': 6 },
+    '1_0': { '20,20,1': 5 },
+  });
+  assert.equal(getFirestoreUsageSnapshot().daily.writes, 1);
 });
 
 class BrokenFirebaseStore {

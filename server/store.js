@@ -1763,6 +1763,26 @@ const FIRESTORE_FAST_RETRY_CONFIG = {
 };
 let firestoreFastRetryConfigured = false;
 const FIRESTORE_FREE_DAILY_QUOTA = Object.freeze({ reads: 50000, writes: 20000, deletes: 20000 });
+const FIRESTORE_WORLD_EDIT_PACK_FORMAT = 'regional-packs-v1';
+const FIRESTORE_WORLD_EDIT_PACK_CHUNKS = 8;
+const FIRESTORE_WORLD_EDIT_PACK_MAX_JSON_BYTES = 800 * 1024;
+
+function worldEditPackId(chunkId) {
+  const match = String(chunkId || '').match(/^(-?\d+)_(-?\d+)$/);
+  if (!match) return '';
+  const cx = Number(match[1]), cz = Number(match[2]);
+  return Math.floor(cx / FIRESTORE_WORLD_EDIT_PACK_CHUNKS) + '_' + Math.floor(cz / FIRESTORE_WORLD_EDIT_PACK_CHUNKS);
+}
+
+function packWorldEditChunks(chunks) {
+  const packs = {};
+  for (const [chunkId, edits] of Object.entries(chunks || {})) {
+    const packId = worldEditPackId(chunkId);
+    if (!packId) continue;
+    (packs[packId] || (packs[packId] = {}))[chunkId] = edits && typeof edits === 'object' ? edits : {};
+  }
+  return packs;
+}
 
 function pacificDayKey(now = Date.now()) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -1867,6 +1887,9 @@ class FirebaseStore {
       firestoreFastRetryConfigured = true;
     }
     this.shardId = cleanShardId(options.shardId);
+    this.worldEditStorageFormat = '';
+    this.worldEditPackGeneration = '';
+    this.worldEditPacks = {};
     firestoreUsage.active = true;
   }
   async _trackUsage(operation, category, estimate, action) {
@@ -1895,12 +1918,76 @@ class FirebaseStore {
     return (x >> 4) + '_' + (z >> 4);
   }
   async loadWorldEdits() {
-    const snap = await this._trackUsage('loadWorldEdits', 'world', result => ({
+    const markerRef = this._worldDoc().collection('meta').doc('worldEditStorage');
+    const marker = await this._trackUsage('loadWorldEditStorageMarker', 'world', { reads: 1 }, () => markerRef.get());
+    const markerData = marker.exists ? marker.data() || {} : {};
+    if (markerData.format === FIRESTORE_WORLD_EDIT_PACK_FORMAT && markerData.generation) {
+      const generation = String(markerData.generation);
+      const snap = await this._trackUsage('loadWorldEditPacks', 'world', result => ({
+        reads: Math.max(1, Number(result && result.size) || (result && result.docs && result.docs.length) || 0),
+      }), () => this._worldDoc().collection('editPacks').where('generation', '==', generation).get());
+      const expected = Math.max(0, Number(markerData.packCount) || 0);
+      const actual = Number(snap && snap.size) || (snap && snap.docs && snap.docs.length) || 0;
+      if (actual < expected) throw new Error('world edit pack generation is incomplete (' + actual + '/' + expected + ')');
+      const out = {};
+      const loadedPacks = {};
+      snap.forEach(doc => {
+        const data = doc.data() || {};
+        const chunks = data.chunks || {};
+        const packId = String(data.packId || '');
+        if (packId) loadedPacks[packId] = chunks;
+        for (const edits of Object.values(chunks)) Object.assign(out, edits || {});
+      });
+      this.worldEditStorageFormat = FIRESTORE_WORLD_EDIT_PACK_FORMAT;
+      this.worldEditPackGeneration = generation;
+      this.worldEditPacks = loadedPacks;
+      console.log('[persist] loaded ' + actual + ' regional world edit packs');
+      return out;
+    }
+
+    const snap = await this._trackUsage('loadLegacyWorldEditChunks', 'world', result => ({
       reads: Math.max(1, Number(result && result.size) || (result && result.docs && result.docs.length) || 0),
     }), () => this._worldDoc().collection('chunks').get());
     const out = {};
-    snap.forEach(doc => Object.assign(out, doc.data().edits || {}));
+    const chunks = {};
+    snap.forEach(doc => {
+      const edits = doc.data().edits || {};
+      chunks[doc.id] = edits;
+      Object.assign(out, edits);
+    });
+    try {
+      await this._migrateWorldEditChunksToPacks(chunks, markerRef);
+    } catch (error) {
+      console.warn('[persist] regional world edit migration deferred:', error.message);
+    }
     return out;
+  }
+  async _migrateWorldEditChunksToPacks(chunks, markerRef) {
+    const packs = packWorldEditChunks(chunks);
+    for (const [packId, packChunks] of Object.entries(packs)) {
+      const bytes = Buffer.byteLength(JSON.stringify({ chunks: packChunks }));
+      if (bytes > FIRESTORE_WORLD_EDIT_PACK_MAX_JSON_BYTES) {
+        throw new Error('regional pack ' + packId + ' is too large (' + bytes + ' bytes)');
+      }
+    }
+    const generation = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    const writer = this._bulkWriter();
+    const collection = this._worldDoc().collection('editPacks');
+    const savedAt = Date.now();
+    for (const [packId, packChunks] of Object.entries(packs)) {
+      writer.set(collection.doc(generation + '__' + packId), {
+        format: FIRESTORE_WORLD_EDIT_PACK_FORMAT, generation, packId, chunks: packChunks, savedAt,
+      });
+    }
+    const packCount = Object.keys(packs).length;
+    await this._trackUsage('migrateWorldEditPacks', 'world', { writes: packCount }, () => writer.close());
+    await this._trackUsage('saveWorldEditStorageMarker', 'world', { writes: 1 }, () => markerRef.set({
+      format: FIRESTORE_WORLD_EDIT_PACK_FORMAT, generation, packCount, migratedAt: savedAt,
+    }));
+    this.worldEditStorageFormat = FIRESTORE_WORLD_EDIT_PACK_FORMAT;
+    this.worldEditPackGeneration = generation;
+    this.worldEditPacks = packs;
+    console.log('[persist] migrated ' + Object.keys(chunks || {}).length + ' chunk documents into ' + packCount + ' regional packs');
   }
   async saveWorldEdits(edits) {
     const byChunk = {};
@@ -1911,6 +1998,35 @@ class FirebaseStore {
     await this.saveWorldEditChunks(byChunk);
   }
   async saveWorldEditChunks(chunks) {
+    if (this.worldEditStorageFormat === FIRESTORE_WORLD_EDIT_PACK_FORMAT && this.worldEditPackGeneration) {
+      const changedPacks = packWorldEditChunks(chunks);
+      const collection = this._worldDoc().collection('editPacks');
+      const writer = this._bulkWriter();
+      const savedAt = Date.now();
+      let writes = 0;
+      for (const [packId, changedChunks] of Object.entries(changedPacks)) {
+        const packChunks = { ...(this.worldEditPacks[packId] || {}) };
+        for (const [chunkId, edits] of Object.entries(changedChunks)) {
+          if (edits && Object.keys(edits).length) packChunks[chunkId] = edits;
+          else delete packChunks[chunkId];
+        }
+        const bytes = Buffer.byteLength(JSON.stringify({ chunks: packChunks }));
+        if (bytes > FIRESTORE_WORLD_EDIT_PACK_MAX_JSON_BYTES) {
+          throw new Error('regional pack ' + packId + ' is too large (' + bytes + ' bytes)');
+        }
+        writer.set(collection.doc(this.worldEditPackGeneration + '__' + packId), {
+          format: FIRESTORE_WORLD_EDIT_PACK_FORMAT,
+          generation: this.worldEditPackGeneration,
+          packId,
+          chunks: packChunks,
+          savedAt,
+        });
+        this.worldEditPacks[packId] = packChunks;
+        writes++;
+      }
+      await this._trackUsage('saveWorldEditPacks', 'world', { writes }, () => writer.close());
+      return;
+    }
     const col = this._worldDoc().collection('chunks');
     const writer = this._bulkWriter();
     const savedAt = Date.now();
@@ -2089,4 +2205,4 @@ function createStore(options = {}) {
   return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, FIRESTORE_FREE_DAILY_QUOTA, getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
+module.exports = { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, FIRESTORE_FREE_DAILY_QUOTA, FIRESTORE_WORLD_EDIT_PACK_FORMAT, FIRESTORE_WORLD_EDIT_PACK_CHUNKS, packWorldEditChunks, getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
