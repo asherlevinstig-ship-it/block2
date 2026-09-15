@@ -2905,8 +2905,8 @@ test('first quest bonus requires authoritative Mara completion and is single-cla
 test('combat path is chosen once after town arrival while abilities still unlock by level', async () => {
   const room = makeRoom(), client = makeClient('path_owner');
   const { prof } = seedPlayer(room, client);
-  let savedPath = '';
-  room.savePlayerProfileNow = (_token, saved) => { savedPath = saved.S.path; return Promise.resolve(true); };
+  let savedPath = '', saveCalls = 0;
+  room.savePlayerProfileNow = (_token, saved) => { saveCalls++; savedPath = saved.S.path; room.dirtyPlayers.clear(); return Promise.resolve(true); };
   await room.setPath(client, 'shadow');
   assert.equal(prof.S.path, 'shadow', 'a new player can define a hunter path before onboarding');
   assert.equal(prof.tutorials.ability, TUTORIAL_VERSIONS.ability, 'retired ability training is treated as complete');
@@ -2914,6 +2914,7 @@ test('combat path is chosen once after town arrival while abilities still unlock
   assert.equal(client.sent.some(e => e.type === 'pathResult' && e.msg.path === 'shadow'), true);
   assert.equal(await room.setPath(client, 'shadow'), true, 'retrying the same selection is idempotent');
   assert.equal(client.sent.at(-1).msg.reason, 'already');
+  assert.equal(saveCalls, 1, 'an already-durable path does not spend another persistence write');
   await room.setPath(client, 'mage');
   assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
   assert.equal(client.sent.at(-1).msg.reason, 'locked');

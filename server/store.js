@@ -1733,6 +1733,36 @@ class JsonStore {
 // Firestore's 1MB limit, and saves touch only dirty regions of the map.
 // Authentication is handled before this adapter; the verified account ID is
 // used as the player document key for both storage backends.
+const FIRESTORE_FAST_RETRY_CONFIG = {
+  interfaces: {
+    'google.firestore.v1.Firestore': {
+      // A spent quota is not transient. The stock client retries
+      // RESOURCE_EXHAUSTED for ten minutes, which can fill every Colyseus seat
+      // with half-joined clients and hold gameplay reward messages behind the
+      // same persistence queue. Keep short retries for actual transport faults,
+      // but surface quota exhaustion immediately so the room can degrade safely.
+      retry_codes: { blockcraft_fast: ['DEADLINE_EXCEEDED', 'UNAVAILABLE'] },
+      retry_params: {
+        blockcraft_fast: {
+          initial_retry_delay_millis: 100,
+          retry_delay_multiplier: 1.3,
+          max_retry_delay_millis: 1000,
+          initial_rpc_timeout_millis: 5000,
+          rpc_timeout_multiplier: 1,
+          max_rpc_timeout_millis: 5000,
+          total_timeout_millis: 8000,
+        },
+      },
+      methods: Object.fromEntries([
+        'GetDocument', 'ListDocuments', 'UpdateDocument', 'DeleteDocument',
+        'BatchGetDocuments', 'Commit', 'RunQuery', 'RunAggregationQuery',
+        'PartitionQuery', 'BatchWrite', 'CreateDocument',
+      ].map(name => [name, { retry_codes_name: 'blockcraft_fast', retry_params_name: 'blockcraft_fast' }])),
+    },
+  },
+};
+let firestoreFastRetryConfigured = false;
+
 class FirebaseStore {
   constructor(options = {}) {
     const admin = require('firebase-admin');
@@ -1743,7 +1773,18 @@ class FirebaseStore {
         : {});                                  // falls back to application-default creds
     }
     this.db = admin.firestore();
+    if (!firestoreFastRetryConfigured) {
+      this.db.settings({ clientConfig: FIRESTORE_FAST_RETRY_CONFIG });
+      firestoreFastRetryConfigured = true;
+    }
     this.shardId = cleanShardId(options.shardId);
+  }
+  _bulkWriter() {
+    const writer = this.db.bulkWriter();
+    // BulkWriter otherwise adds its own RESOURCE_EXHAUSTED retry loop on top of
+    // the GAPIC policy above.
+    writer.onWriteError(() => false);
+    return writer;
   }
   _worldDoc() {
     return this.db.collection('worlds').doc(this.shardId);
@@ -1765,7 +1806,7 @@ class FirebaseStore {
       (byChunk[c] = byChunk[c] || {})[k] = edits[k];
     }
     const col = this._worldDoc().collection('chunks');
-    const writer = this.db.bulkWriter();
+    const writer = this._bulkWriter();
     for (const c in byChunk) writer.set(col.doc(c), { edits: byChunk[c], savedAt: Date.now() });
     await writer.close();
   }
@@ -1850,7 +1891,7 @@ class FirebaseStore {
     if (marker.exists && !dryRun) return { ok: true, skipped: true, reason: 'already-ran', ...(marker.data() || {}) };
 
     const snap = await this.db.collection('players').get();
-    const writer = dryRun ? null : this.db.bulkWriter();
+    const writer = dryRun ? null : this._bulkWriter();
     let scanned = 0, updated = 0, alreadyHad = 0, full = 0;
 
     function hasMap(inv) {
@@ -1920,4 +1961,4 @@ function createStore(options = {}) {
   return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
+module.exports = { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };

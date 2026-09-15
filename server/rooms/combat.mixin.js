@@ -1297,8 +1297,14 @@ class CombatMixin {
         client.send('pathResult', { ok: false, path: rec.prof.S.path, reason: 'locked' });
         return false;
       }
-      const saved=await this.savePlayerProfileNow(rec.token, rec.prof);
-      console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.resave', account: String(rec.token).slice(0,12), path: rec.prof.S.path, saved }));
+      // Repeated clicks and reconnect retries must not create another Firestore
+      // write for a path that is already durable. If the original save is still
+      // running, share that one promise instead of appending duplicate writes.
+      const pending=this.playerSaveQueues&&this.playerSaveQueues.get(rec.token);
+      const needsSave=this.dirtyPlayers&&this.dirtyPlayers.has(rec.token);
+      const saved=pending
+        ? await pending.then(()=>true,()=>false)
+        : needsSave ? await this.savePlayerProfileNow(rec.token, rec.prof) : true;
       client.send('pathResult', { ok: saved, path: rec.prof.S.path, reason: saved ? 'already' : 'save' });
       return saved;
     }

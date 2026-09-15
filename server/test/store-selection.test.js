@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createStore, JsonStore, cleanShardId, sanitizeProfile } = require('../store');
+const { createStore, JsonStore, FIRESTORE_FAST_RETRY_CONFIG, cleanShardId, sanitizeProfile } = require('../store');
 
 test('Recall mastery preserves complete built-in and database question IDs',()=>{
   const builtIn='it_ns_hex_bin_003',db='db-recall-123456';
@@ -11,6 +11,15 @@ test('Recall mastery preserves complete built-in and database question IDs',()=>
   assert.equal(clean.recallMastery.lastQuestionId,builtIn);
   assert.ok(clean.recallMastery.items[builtIn]);
   assert.ok(clean.recallMastery.items[db]);
+});
+
+test('Firestore quota exhaustion fails fast instead of occupying gameplay queues for ten minutes', () => {
+  const service = FIRESTORE_FAST_RETRY_CONFIG.interfaces['google.firestore.v1.Firestore'];
+  assert.equal(service.retry_codes.blockcraft_fast.includes('RESOURCE_EXHAUSTED'), false);
+  assert.equal(service.retry_params.blockcraft_fast.total_timeout_millis, 8000);
+  assert.equal(service.methods.GetDocument.retry_params_name, 'blockcraft_fast');
+  assert.equal(service.methods.Commit.retry_params_name, 'blockcraft_fast');
+  assert.equal(service.methods.BatchWrite.retry_params_name, 'blockcraft_fast');
 });
 
 class BrokenFirebaseStore {
