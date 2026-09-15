@@ -251,7 +251,7 @@ class DungeonRoom extends GameRoom {
     // to the durable teardown. Mirrors GameRoom.onLeave's reconnection path, minus the tutorial/
     // event resumes a single-instance raid room can't have. Holding the seat also keeps the room
     // alive across the window (Colyseus counts the reservation against autoDispose).
-    const unexpected = code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED);
+    const unexpected = this.shouldAttemptReconnection(code);
     if (unexpected) {
       const reconnectStartedAt = Date.now();
       this.recordReconnectAttempt(code);

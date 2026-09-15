@@ -338,6 +338,14 @@ class GameRoom extends Room {
     return super._reserveSeat(sessionId, joinOptions, authData, seconds, allowReconnection, devModeReconnectionToken);
   }
 
+  shouldAttemptReconnection(code) {
+    return code === false || (typeof code === 'number'
+      && code !== CloseCode.CONSENTED
+      && code !== CloseCode.NORMAL_CLOSURE
+      && code !== CloseCode.GOING_AWAY
+      && code !== CloseCode.SERVER_SHUTDOWN);
+  }
+
   async onCreate(options = {}) {
     const createStartedAt = performance.now();
     this.shardId = cleanShardId(options.shardId);
@@ -1411,7 +1419,7 @@ class GameRoom extends Room {
     // A process shutdown is not a voluntary dungeon exit. Keep the live
     // attempt marker intact so onDispose can flush it for next-boot recovery.
     if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
-    const unexpected = code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED);
+    const unexpected = this.shouldAttemptReconnection(code);
     if (unexpected) {
       const reconnectStartedAt = Date.now();
       this.recordReconnectAttempt(code);

@@ -32,7 +32,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
         broadcast() {}
       },
       matchMaker: { state: 1, MatchMakerState: { SHUTTING_DOWN: 2 } },
-      CloseCode: { CONSENTED: 4000 },
+      CloseCode: { NORMAL_CLOSURE: 1000, GOING_AWAY: 1001, CONSENTED: 4000, SERVER_SHUTDOWN: 4001 },
     };
   }
   if (request === '@colyseus/schema') {
@@ -6516,6 +6516,23 @@ test('a consented DungeonRoom leave tears down immediately without a reconnect w
   assert.equal(waited, false, 'a voluntary leave does not hold a reconnect seat');
   assert.deepEqual(saved, [token], 'it flushes immediately');
   assert.ok(takeHandoff(token), 'and hands off to the overworld room');
+});
+
+test('a browser going-away close tears down immediately without holding a ghost reconnect seat', async () => {
+  const room = makeDungeonRoom();
+  const client = makeClient('dungeon-going-away');
+  const { token } = seedPlayer(room, client, { dgn: 'dr-going-away' });
+  room.instance = { removePlayer() {} };
+  let waited = false;
+  room.allowReconnection = async () => { waited = true; };
+  const saved = [];
+  room.store = { savePlayer: async (t) => { saved.push(t); } };
+
+  await room.onLeave(client, 1001);
+
+  assert.equal(waited, false, 'navigation and tab-close events do not hold a reconnect reservation');
+  assert.deepEqual(saved, [token], 'the departing profile flushes immediately');
+  assert.ok(takeHandoff(token), 'dungeon progress remains available to a replacement session');
 });
 
 test('King of the Hill scores time only for the crown-holding team', () => {
