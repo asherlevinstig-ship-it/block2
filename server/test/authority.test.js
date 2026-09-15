@@ -8053,6 +8053,37 @@ test('furnace smelting consumes inputs, completes lazily, and grants output on t
   assert.equal(client.sent.some(e => e.type === 'furnaceResult' && e.msg.out.id === W.B.GLASS), true);
 });
 
+test('iron ore and coal smelt into an iron ingot', () => {
+  const room = makeRoom();
+  const client = makeClient('iron-smith');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.IRON_ORE, count: 1 }, { id: I.COAL, count: 1 }] });
+  room.world.setB(20, 10, 20, W.B.FURNACE);
+
+  room.handleFurnaceSmelt(client, { x: 20, y: 10, z: 20, input: W.B.IRON_ORE, fuel: I.COAL });
+  const f = room.getFurnaceState('overworld:20,10,20');
+  assert.equal(itemCount(prof, W.B.IRON_ORE), 0);
+  assert.equal(itemCount(prof, I.COAL), 0);
+  assert.equal(client.sent.some(e => e.type === 'furnaceStarted'), true);
+
+  f.finishAt = Date.now() - 1;
+  room.handleFurnaceTake(client, { x: 20, y: 10, z: 20 });
+  assert.equal(itemCount(prof, I.IRON_INGOT), 1);
+});
+
+test('furnace rejects the wrong input or fuel with an actionable reason', () => {
+  const room = makeRoom();
+  const client = makeClient('confused-smith');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_INGOT, count: 1 }, { id: W.B.IRON_ORE, count: 1 }, { id: W.B.DIRT, count: 1 }] });
+  room.world.setB(20, 10, 20, W.B.FURNACE);
+
+  room.handleFurnaceSmelt(client, { x: 20, y: 10, z: 20, input: I.IRON_INGOT, fuel: W.B.DIRT });
+  assert.equal(client.sent.at(-1).msg.reason, 'recipe');
+  room.handleFurnaceSmelt(client, { x: 20, y: 10, z: 20, input: W.B.IRON_ORE, fuel: W.B.DIRT });
+  assert.equal(client.sent.at(-1).msg.reason, 'fuel_type');
+  assert.equal(itemCount(prof, I.IRON_INGOT), 1);
+  assert.equal(itemCount(prof, W.B.IRON_ORE), 1);
+});
+
 test('placement rejects town edits and overwrites, and owns placed chests', () => {
   const room = makeRoom();
   const client = makeClient('builder');

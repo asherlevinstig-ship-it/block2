@@ -3168,7 +3168,7 @@ test('online craft result restores the authoritative inventory snapshot',()=>{
 test('inventory layout sync waits while crafting ingredients are staged',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   assert.match(menus,/\['blockcraft','dungeon'\]\.includes\(NET\.room\.name\)/);
-  assert.match(menus,/\|\|craftCells\.some\(Boolean\)\)return;/);
+  assert.match(menus,/\|\|craftCells\.some\(Boolean\)\|\|\(stagedFurnace/);
 });
 
 test('quick chat uses Tab then click to send instead of hold and release',()=>{
@@ -4954,6 +4954,16 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(combat,/Claiming Job Reward/);
   assert.match(combat,/Claiming Guild Contract/);
   assert.match(menus,/Stand beside a <b>Furnace<\/b>/);
+  assert.match(menus,/Use Iron Ore.not an Iron Ingot.for iron/);
+  assert.match(menus,/f\.input=m\.input/);
+  assert.match(menus,/f\.fuel=m\.fuel/);
+  assert.match(menus,/if\(uiMode==='furnace'&&uiFurnaceKey\)/);
+  assert.match(menus,/stagedFurnace&&!stagedFurnace\.finishAt/);
+  assert.match(menus,/locked:\(\)=>!!f\.finishAt/);
+  assert.match(networking,/function bugReportWebSocketPayload\(payload\)/);
+  assert.match(networking,/while\(compact\.trace\.length&&bytes\(compact\)>3500\)compact\.trace\.shift\(\)/);
+  assert.match(networking,/while\(compact\.message\.length>256&&bytes\(compact\)>3500\)/);
+  assert.match(networking,/if\(token\)sendBugReportHttp\(payload,pendingId\)/);
   assert.match(onboarding,/actionHTML/);
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(styles,/\.qaction/);

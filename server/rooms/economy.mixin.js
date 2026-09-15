@@ -16,6 +16,7 @@ const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
 const JOB_SYSTEM = require('../../shared/job-system');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { shortHash } = require('../identity-trace');
 
 class EconomyMixin {
   rollWeaponDrop(rank=0,rarityBonus=0,archetype='sword'){
@@ -951,24 +952,38 @@ class EconomyMixin {
   }
   handleFurnaceOpen(client, m) {
     const key = this.furnaceKeyForPlayer(client, m);
-    if (!key) return client.send('furnaceReject', {});
+    if (!key) return this.rejectFurnace(client, 'near');
     this.sendFurnace(client, key);
+  }
+  rejectFurnace(client, reason, key = '', details = {}) {
+    const payload = { reason, ...(key ? { key } : {}) };
+    client.send('furnaceReject', payload);
+    console.log('[furnace]', JSON.stringify({
+      event: 'rejected',
+      sidHash: shortHash(client && client.sessionId),
+      reason,
+      key,
+      ...details,
+    }));
+    return false;
   }
   handleFurnaceSmelt(client, m) {
     const rec = this.profileFor(client);
     const key = this.furnaceKeyForPlayer(client, m);
-    if (!rec || !key) return client.send('furnaceReject', {});
-    if (this.rateLimited(client, 'furnace', 10, 20)) return client.send('furnaceReject', { reason: 'rate' });
+    if (!rec) return this.rejectFurnace(client, 'profile');
+    if (!key) return this.rejectFurnace(client, 'near');
+    if (this.rateLimited(client, 'furnace', 10, 20)) return this.rejectFurnace(client, 'rate', key);
     this.completeFurnaces();
     const f = this.getFurnaceState(key);
-    if (f.finishAt || f.output) return client.send('furnaceReject', { reason: 'busy' });
+    if (f.finishAt || f.output) return this.rejectFurnace(client, 'busy', key, { finishAt: f.finishAt || 0, hasOutput: !!f.output });
     const input = m.input | 0, fuel = m.fuel | 0;
     const recipe = SMELT[input];
-    if (!recipe || !FUEL.has(fuel)) return client.send('furnaceReject', {});
-    if (!this.consumeItem(rec.prof, input, 1)) return client.send('furnaceReject', { reason: 'input' });
+    if (!recipe) return this.rejectFurnace(client, 'recipe', key, { input, fuel });
+    if (!FUEL.has(fuel)) return this.rejectFurnace(client, 'fuel_type', key, { input, fuel });
+    if (!this.consumeItem(rec.prof, input, 1)) return this.rejectFurnace(client, 'input', key, { input, fuel });
     if (!this.consumeItem(rec.prof, fuel, 1)) {
       this.addRewardItem(rec.prof, input, 1);
-      return client.send('furnaceReject', { reason: 'fuel' });
+      return this.rejectFurnace(client, 'fuel', key, { input, fuel });
     }
     f.input = { id: input, count: 1 };
     f.fuel = { id: fuel, count: 1 };
@@ -977,22 +992,24 @@ class EconomyMixin {
     f.finishAt = f.startedAt + SMELT_MS;
     this.dirtyPlayers.add(rec.token);
     this.dirtyFurnaces = true;
-    client.send('furnaceStarted', { input, fuel });
+    console.log('[furnace]', JSON.stringify({ event: 'started', sidHash: shortHash(client.sessionId), key, input, fuel, finishAt: f.finishAt }));
+    client.send('furnaceStarted', { key, input, fuel });
     this.sendFurnace(client, key);
   }
   handleFurnaceTake(client, m) {
     const rec = this.profileFor(client);
     const key = this.furnaceKeyForPlayer(client, m);
-    if (!rec || !key) return client.send('furnaceReject', {});
-    if (this.rateLimited(client, 'furnace', 10, 20)) return client.send('furnaceReject', { reason: 'rate' });
+    if (!rec) return this.rejectFurnace(client, 'profile');
+    if (!key) return this.rejectFurnace(client, 'near');
+    if (this.rateLimited(client, 'furnace', 10, 20)) return this.rejectFurnace(client, 'rate', key);
     this.completeFurnaces();
     const f = this.getFurnaceState(key);
-    if (!f.output) return client.send('furnaceReject', { reason: 'empty' });
+    if (!f.output) return this.rejectFurnace(client, 'empty', key);
     const out = f.output;
     const finalCount = this.craftedOutputCount(rec.prof, out.id, out.count);
     // leave the output in the furnace if it can't all fit — don't null it then lose it
     if (this.inventorySpaceFor(rec.prof, out.id, finalCount) < finalCount) {
-      return client.send('furnaceReject', { reason: 'full' });
+      return this.rejectFurnace(client, 'full', key, { output: out.id, count: finalCount });
     }
     f.output = null;
     this.addRewardItem(rec.prof, out.id, finalCount);
@@ -1000,6 +1017,7 @@ class EconomyMixin {
     this.dirtyFurnaces = true;
     const msg = { out: { id: out.id, count: out.count } };
     if (finalCount !== out.count) msg.finalCount = finalCount;
+    console.log('[furnace]', JSON.stringify({ event: 'taken', sidHash: shortHash(client.sessionId), key, output: out.id, count: finalCount }));
     client.send('furnaceResult', msg);
     this.sendFurnace(client, key);
   }

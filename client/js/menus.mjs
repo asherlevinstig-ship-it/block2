@@ -33,6 +33,7 @@ const legacyMenuBindings={
   "applyDungeonStatus":{get:()=>applyDungeonStatus},
   "applyFirstQuestRewardResult":{get:()=>applyFirstQuestRewardResult},
   "applyFoodResult":{get:()=>applyFoodResult},
+  "applyFurnaceReject":{get:()=>applyFurnaceReject},
   "applyFurnaceResult":{get:()=>applyFurnaceResult},
   "applyFurnaceStarted":{get:()=>applyFurnaceStarted},
   "applyFurnaceState":{get:()=>applyFurnaceState},
@@ -256,6 +257,14 @@ function closeUI(relock=true){
   if(uiOpen) SFX.uiClose();
   // return crafting grid + cursor to inventory
   for(let i=0;i<craftCells.length;i++){ const s=craftCells[i]; if(s) addItem(s.id,s.count); craftCells[i]=null; }
+  if(uiMode==='furnace'&&uiFurnaceKey){
+    const f=getFurnace(uiFurnaceKey);
+    // Input/fuel are only local staging before the server starts a smelt. Return
+    // uncommitted stacks when the window closes so they never appear to vanish.
+    if(!f.finishAt){
+      for(const field of ['input','fuel'])if(f[field]){addItem(f[field].id,f[field].count);f[field]=null;}
+    }
+  }
   if(cursorStack){ addItem(cursorStack.id,cursorStack.count); cursorStack=null; renderCursor(); }
   flushInventoryArrangeSync();
   uiOpen=false; uiMode=null; uiFurnaceKey=null;
@@ -807,6 +816,11 @@ function applyServerCraft(m){
 
 function slotInteract(acc, e, opts={}){
   if(craftingRequests.pending){showName('WAITING FOR CRAFT CONFIRMATION');return;}
+  if(opts.locked&&opts.locked()){
+    sysMsg(opts.lockedText||'That slot is locked while the action is in progress.');
+    SFX.error();
+    return;
+  }
   // opts: {result, furnaceOutput, section}
   if(opts.result){
     const r=craftResult();
@@ -887,6 +901,11 @@ function slotInteract(acc, e, opts={}){
     awardJobForCraft(taken.id,taken.count);
     renderUI(); renderCursor(); return;
   }
+  if(cursorStack && opts.accept && !opts.accept(cursorStack)){
+    sysMsg(opts.rejectText||'That item does not belong in this slot.');
+    SFX.error();
+    return;
+  }
   if(e.shiftKey && s && opts.section){
     // quick move: into the open chest from inventory, out of it back to inventory,
     // otherwise between hotbar and backpack (or out of craft/furnace)
@@ -939,7 +958,8 @@ function sendInventoryArrange(){
   if(craftingRequests.pending)return;
   // A staged crafting ingredient lives outside `inv`. Do not publish an incomplete
   // inventory layout while a craft is being assembled or awaiting its server result.
-  if(!(NET.on&&NET.room&&['blockcraft','dungeon'].includes(NET.room.name))||cursorStack||craftCells.some(Boolean))return;
+  const stagedFurnace=uiOpen&&uiMode==='furnace'&&uiFurnaceKey?getFurnace(uiFurnaceKey):null;
+  if(!(NET.on&&NET.room&&['blockcraft','dungeon'].includes(NET.room.name))||cursorStack||craftCells.some(Boolean)||(stagedFurnace&&!stagedFurnace.finishAt&&(stagedFurnace.input||stagedFurnace.fuel)))return;
   const payload=inventoryArrangePayload(),json=JSON.stringify(payload);
   if(json===lastSentInvArrange)return;
   lastSentInvArrange=json;
@@ -1296,7 +1316,13 @@ function renderUI(){
     const wrap=document.createElement('div'); wrap.className='craftwrap';
     const area=document.createElement('div'); area.id='craftarea';
     const col=document.createElement('div');
-    col.appendChild(makeSlotEl({get:()=>f.input, set:v=>f.input=v}, {section:'craft'}));
+    col.appendChild(makeSlotEl({get:()=>f.input, set:v=>f.input=v}, {
+      section:'craft',
+      locked:()=>!!f.finishAt,
+      lockedText:'The input is locked while this furnace is smelting.',
+      accept:stack=>!!(stack&&SMELT[stack.id]),
+      rejectText:'The top slot needs a smeltable input, such as <b>Iron Ore</b>.',
+    }));
     // flame indicator
     const flame=document.createElement('div'); flame.id='flame';
     flame.innerHTML='<svg class="flameicon fbg" viewBox="0 0 16 16"><path d="M8 1 C10 4 13 6 13 10 a5 5 0 0 1 -10 0 C3 7 6 5 8 1z" fill="#888"/></svg>';
@@ -1304,7 +1330,13 @@ function renderUI(){
     ff.innerHTML='<svg class="flameicon" style="position:absolute;bottom:0;left:0" viewBox="0 0 16 16"><path d="M8 1 C10 4 13 6 13 10 a5 5 0 0 1 -10 0 C3 7 6 5 8 1z" fill="#ff7b1c"/></svg>';
     flame.appendChild(ff); flameFill=ff;
     col.appendChild(flame);
-    col.appendChild(makeSlotEl({get:()=>f.fuel, set:v=>f.fuel=v}, {section:'craft'}));
+    col.appendChild(makeSlotEl({get:()=>f.fuel, set:v=>f.fuel=v}, {
+      section:'craft',
+      locked:()=>!!f.finishAt,
+      lockedText:'The fuel is locked while this furnace is smelting.',
+      accept:stack=>!!(stack&&FUEL[stack.id]),
+      rejectText:'The bottom slot needs fuel, such as <b>Coal</b> or Charcoal.',
+    }));
     area.appendChild(col);
     const bar=document.createElement('div'); bar.id='smeltbar'; const bi=document.createElement('i'); bar.appendChild(bi); smeltFill=bi;
     area.appendChild(bar);
@@ -2170,6 +2202,7 @@ function requestFurnaceSmelt(){
   const f=getFurnace(uiFurnaceKey);
   if(!f.input || !f.fuel){ sysMsg('Add input and fuel first'); return true; }
   const c=chestCoords(); if(!c) return true;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('furnace.smelt.request',{key:uiFurnaceKey,input:f.input.id,fuel:f.fuel.id});
   NET.room.send('furnaceSmelt', {...c, input:f.input.id, fuel:f.fuel.id});
   return true;
 }
@@ -2185,6 +2218,8 @@ function applyFurnaceState(m){
   if(!m || !m.key) return;
   const key=m.key.split(':').pop();
   const f=getFurnace(key);
+  f.input=m.input?{id:m.input.id,count:m.input.count}:null;
+  f.fuel=m.fuel?{id:m.fuel.id,count:m.fuel.count}:null;
   f.output=m.output?{id:m.output.id,count:m.output.count}:null;
   const localNow=Date.now();
   if(m.finishAt && m.now){
@@ -2194,6 +2229,25 @@ function applyFurnaceState(m){
     f.finishAt=localNow+left;
   } else { f.startedAt=0; f.finishAt=0; }
   if(uiOpen && uiMode==='furnace' && uiFurnaceKey===key) renderUI();
+}
+function applyFurnaceReject(m){
+  const reason=String(m&&m.reason||'failed');
+  const messages={
+    near:'Stand closer to the furnace and try again.',
+    profile:'Your inventory is still loading. Try again in a moment.',
+    rate:'Too many furnace actions. Wait a moment and try again.',
+    busy:'This furnace is already smelting or has output waiting. Take the output first.',
+    recipe:'That input cannot be smelted. Use Iron Ore—not an Iron Ingot—for iron.',
+    fuel_type:'That item is not fuel. Put Coal or Charcoal in the bottom slot.',
+    input:'The input is no longer in your backpack. Reopen the furnace and try again.',
+    fuel:'The fuel is no longer in your backpack. Reopen the furnace and try again.',
+    empty:'This furnace has no finished output yet.',
+    full:'Your backpack is full. Free a slot before taking the output.',
+  };
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('furnace.reject',{reason,key:String(m&&m.key||uiFurnaceKey||'')});
+  SFX.error();
+  sysMsg('<b>Furnace:</b> '+(messages[reason]||'The furnace action failed. Reopen it and try again.'));
+  if(NET.on&&uiOpen&&uiMode==='furnace')requestFurnaceOpen();
 }
 function applyFurnaceStarted(m){
   const f=getFurnace(uiFurnaceKey);

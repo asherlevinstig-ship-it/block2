@@ -1157,19 +1157,44 @@ function sendBugReport(){
   if(bugReportSend)bugReportSend.disabled=true;
   clearTimeout(bugReportPendingTimer);
   clearTimeout(bugReportFallbackTimer);
-  bugReportFallbackTimer=setTimeout(()=>sendBugReportHttpFallback(payload,pendingId),2500);
   bugReportPendingTimer=setTimeout(()=>{
     if(bugReportSend)bugReportSend.disabled=false;
-    bugReportSetStatus('Server is taking too long. Trying backup route...', 'bad');
+    bugReportSetStatus('Report is taking longer than expected. Please try again if it does not finish.', 'bad');
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.timeout');
   },12000);
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.send', { hasMessage:!!message, trace:trace.length });
-  NET.room.send('bugReport', payload);
+  const token=currentAuthSessionToken();
+  if(token)sendBugReportHttp(payload,pendingId);
+  else sendBugReportWebSocket(payload,pendingId);
 }
-async function sendBugReportHttpFallback(payload,pendingId){
+function bugReportWebSocketPayload(payload){
+  const context=payload&&payload.clientContext||{};
+  const compact={
+    message:String(payload&&payload.message||'').slice(0,2000),
+    clientContext:{
+      url:String(context.url||'').slice(0,400),viewport:context.viewport||null,
+      roomName:String(context.roomName||'').slice(0,80),profileReady:context.profileReady===true,
+      dimension:String(context.dimension||'').slice(0,40),dungeonId:String(context.dungeonId||'').slice(0,80),
+      position:context.position||null,snapshot:null,
+    },
+    trace:Array.isArray(payload&&payload.trace)?payload.trace.slice(-16):[],
+  };
+  const bytes=value=>new TextEncoder().encode(JSON.stringify(value)).length;
+  while(compact.trace.length&&bytes(compact)>3500)compact.trace.shift();
+  while(compact.message.length>256&&bytes(compact)>3500)compact.message=compact.message.slice(0,Math.max(256,Math.floor(compact.message.length*.75)));
+  if(bytes(compact)>3500)compact.clientContext={roomName:compact.clientContext.roomName,dimension:compact.clientContext.dimension,dungeonId:compact.clientContext.dungeonId,position:compact.clientContext.position};
+  return compact;
+}
+function sendBugReportWebSocket(payload,pendingId){
+  if(pendingId!==bugReportPendingId||!NET||!NET.on||!NET.room)return false;
+  const compact=bugReportWebSocketPayload(payload);
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.websocket',{bytes:new TextEncoder().encode(JSON.stringify(compact)).length,trace:compact.trace.length});
+  try{NET.room.send('bugReport',compact);return true;}catch(e){applyBugReportResult({ok:false,reason:'send_failed'});return false;}
+}
+async function sendBugReportHttp(payload,pendingId){
   if(pendingId!==bugReportPendingId)return;
   const token=currentAuthSessionToken();
-  if(!token){globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.skip',{reason:'auth'});return;}
+  if(!token)return sendBugReportWebSocket(payload,pendingId);
   try{
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.start');
     const res=await fetch(apiUrl('/auth/bug-report'),{
@@ -1181,10 +1206,11 @@ async function sendBugReportHttpFallback(payload,pendingId){
     let data={};try{data=await res.json();}catch(_e){}
     if(pendingId!==bugReportPendingId)return;
     if(res.ok&&data&&data.ok)applyBugReportResult({...data,via:'http'});
-    else applyBugReportResult({ok:false,reason:data&&data.code||data&&data.error||'http_failed'});
+    else if(!sendBugReportWebSocket(payload,pendingId))applyBugReportResult({ok:false,reason:data&&data.code||data&&data.error||'http_failed'});
   }catch(e){
     if(pendingId!==bugReportPendingId)return;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.fail',{message:e&&e.message||String(e||'')});
+    if(!sendBugReportWebSocket(payload,pendingId))applyBugReportResult({ok:false,reason:'http_failed'});
   }
 }
 function applyBugReportResult(m){
@@ -3029,7 +3055,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('furnaceState', m=>applyFurnaceState(m));
     room.onMessage('furnaceStarted', m=>{applyFurnaceStarted(m);eventFeed('[Furnace]','Smelting started'+(m&&ITEMS[m.input]?' for '+feedItemName(m.input):'')+'.',{key:'furnace:start:'+String(m&&m.key||''),cooldown:2000});});
     room.onMessage('furnaceResult', m=>{applyFurnaceResult(m);if(m&&m.out&&ITEMS[m.out.id])eventFeed('[Furnace]','Smelted '+feedStackText(m.out.id,m.finalCount||m.out.count||1)+'.',{key:'furnace:result:'+String(m&&m.key||'')+':'+m.out.id,cooldown:1500});});
-    room.onMessage('furnaceReject', ()=>{ SFX.error(); sysMsg('Furnace transaction failed'); });
+    room.onMessage('furnaceReject', m=>applyFurnaceReject(m));
     room.onMessage('fx', m=>{
       if(m && (m.t==='dragonGuard'||m.t==='dragonRest'||m.t==='dragonRecall') && COMPANIONS.noteDragonRoleEvent) COMPANIONS.noteDragonRoleEvent(m.t==='dragonRest'?{...m,role:'rest'}:(m.t==='dragonRecall'?{...m,role:'recall'}:m));
       if(m && m.t==='dragonGuard' && m.role==='stay') updateLandMinimap();
