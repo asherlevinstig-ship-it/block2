@@ -151,8 +151,8 @@ clear every eligible hunter receives bonus loot and a Legendary Weapon Token.
 
 **Persistence.** The overworld is deliberately **one global world**, not one
 world per Colyseus room. Exactly one `GameRoom` may own its persistence lease
-in a server process. At the 24-player capacity, matchmaking fails closed
-instead of creating a second, unsynchronized writer. World state (edits,
+in a server process. The main room has no player-count matchmaking cap, while
+the persistence lease still prevents a second, unsynchronized writer. World state (edits,
 claims, containers, gates, teams, and guilds) lives in the single `main`
 namespace; profiles remain isolated by verified account ID. Run one
 game-server process; horizontal replicas require a shared simulation or
@@ -223,9 +223,9 @@ and the sim rate live in `GameRoom.js`.
   `KING_ACTIVE_MS`, `CARAVAN_ACTIVE_MS`, skyship `SKYSHIP_*`.
 - **Economy:** `SHOP_BUY` / `SHOP_SELL`, `TAVERN_BUY` / `TAVERN_SELL`, `LAND_BASE_PRICE`,
   `guildFloorPrice`, `RECIPES`, `SMELT`, `TOOL_INFO` (durability).
-- **Room size & sim rate:** the single global room defaults to `maxClients` 24
-  (`BLOCKCRAFT_SHARD_MAX_CLIENTS`, clamped to 1–64) and uses the
-  `setSimulationInterval(…, 100)` 10 Hz tick in `GameRoom.js`.
+- **Room size & sim rate:** the single global overworld has no hard player-count
+  cap and uses the `setSimulationInterval(…, 100)` 10 Hz tick in `GameRoom.js`.
+  Dungeon raid rooms remain capped at 8 players.
 
 > **Dev/test affordances** in `constants.js` — `BETA_LEGENDARY_TEST`, `BETA_FARM_TEST`, `BETA_EVENT_TEST`
 > (legendary `testWeapon` casts without owning the weapon, the auto-granted farm starter kit, and the

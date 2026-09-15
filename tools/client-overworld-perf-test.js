@@ -164,7 +164,7 @@ async function main() {
       DATA_DIR: dataDir,
       AUTH_SECRET: 'client-perf-only-secret',
       BLOCKCRAFT_E2E: '1',
-      BLOCKCRAFT_SHARD_MAX_CLIENTS: String(REMOTE_CLIENTS + 1),
+      BLOCKCRAFT_TEST_SHARD_MAX_CLIENTS: String(REMOTE_CLIENTS + 1),
     },
   });
 

@@ -176,7 +176,7 @@ async function main() {
   process.env.DATA_DIR = dataDir;
   process.env.PORT = String(PORT);
   process.env.BLOCKCRAFT_E2E = '1';
-  process.env.BLOCKCRAFT_SHARD_MAX_CLIENTS = String(SHARD_CAP);
+  process.env.BLOCKCRAFT_TEST_SHARD_MAX_CLIENTS = String(SHARD_CAP);
   require('../server/index.js');
   await wait(750);
 

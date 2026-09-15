@@ -1,11 +1,12 @@
 # Online Scaling Runbook
 
-Blockcraft scales online play by keeping each simulation room small and explicit:
+Blockcraft production uses one persistent global overworld simulation:
 
-- Overworld rooms are shards. The production default is `BLOCKCRAFT_SHARD_MAX_CLIENTS=24`; raise it only after a concentrated same-room load test proves additional headroom.
+- The `main` overworld has no player-count matchmaking cap. Its interest filtering keeps distant entities out of each client's replication view.
+- The single-writer persistence lease still blocks a second `main` room; removing the player cap does not permit competing world simulations.
 - Dungeon rooms are raid instances. They stay capped at 8 players.
-- Clients should join `blockcraft` with a `shardId` (`main`, `shard-2`, `shard-3`, ...). If a shard is full, try the next shard.
-- Dungeon transitions should return the player to the same overworld `shardId` they came from.
+- Clients join `blockcraft` with `shardId: main`, and dungeon transitions return them to that world.
+- Load tests may set `BLOCKCRAFT_TEST_SHARD_MAX_CLIENTS` while `BLOCKCRAFT_E2E=1` to exercise bounded-room overflow without imposing that policy in production.
 
 ## Release Checks
 

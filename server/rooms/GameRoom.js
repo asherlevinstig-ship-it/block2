@@ -356,7 +356,12 @@ class GameRoom extends Room {
     this.creationReady = false;
     if (this.presence && typeof this.presence.setMaxListeners === 'function') this.presence.setMaxListeners(0);
     logRoomLifecycle('overworld.create.claimed', { shardId: this.shardId || 'main', elapsedMs: elapsedMs(createStartedAt) });
-    this.maxClients = Math.max(1, Math.min(64, Number(process.env.BLOCKCRAFT_SHARD_MAX_CLIENTS || 24) | 0));
+    // The persistent main world is intentionally uncapped. Synthetic tests may
+    // still impose a small limit to exercise overflow and shard routing.
+    const testMaxClients = Number(process.env.BLOCKCRAFT_TEST_SHARD_MAX_CLIENTS);
+    if (process.env.BLOCKCRAFT_E2E === '1' && Number.isFinite(testMaxClients) && testMaxClients > 0) {
+      this.maxClients = Math.floor(testMaxClients);
+    }
     if (typeof this.setMetadata === 'function') this.setMetadata({ shardId: this.shardId });
     this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());
@@ -5358,7 +5363,7 @@ class GameRoom extends Room {
           room, client, player,
           shardId: inDungeon ? '' : cleanShardId(room.shardId || 'main'),
           status: inDungeon ? 'IN DUNGEON' : dimension === 'event' ? 'IN EVENT' : dimension === 'overworld' ? 'IN OVERWORLD' : 'IN PRIVATE ACTIVITY',
-          joinable: !inDungeon && dimension === 'overworld' && room.__restartLocked !== true && room.clients.length < (room.maxClients || 24),
+          joinable: !inDungeon && dimension === 'overworld' && room.__restartLocked !== true && room.clients.length < room.maxClients,
         };
       }
     }
