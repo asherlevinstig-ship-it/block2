@@ -118,10 +118,10 @@ test('Firestore packed world saves overwrite complete dirty regional packs', asy
     },
   };
   store._worldDoc = () => ({ collection: () => ({ doc: id => ({ id }) }) });
-  store._bulkWriter = () => ({
+  store.db = { batch: () => ({
     set(ref, value) { writes.push({ ref, value }); },
-    async close() {},
-  });
+    async commit() {},
+  }) };
 
   await store.saveWorldEditChunks({ '0_0': { '1,20,1': 6 } });
 

@@ -1971,16 +1971,16 @@ class FirebaseStore {
       }
     }
     const generation = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-    const writer = this._bulkWriter();
+    const batch = this.db.batch();
     const collection = this._worldDoc().collection('editPacks');
     const savedAt = Date.now();
     for (const [packId, packChunks] of Object.entries(packs)) {
-      writer.set(collection.doc(generation + '__' + packId), {
+      batch.set(collection.doc(generation + '__' + packId), {
         format: FIRESTORE_WORLD_EDIT_PACK_FORMAT, generation, packId, chunks: packChunks, savedAt,
       });
     }
     const packCount = Object.keys(packs).length;
-    await this._trackUsage('migrateWorldEditPacks', 'world', { writes: packCount }, () => writer.close());
+    await this._trackUsage('migrateWorldEditPacks', 'world', { writes: packCount }, () => batch.commit());
     await this._trackUsage('saveWorldEditStorageMarker', 'world', { writes: 1 }, () => markerRef.set({
       format: FIRESTORE_WORLD_EDIT_PACK_FORMAT, generation, packCount, migratedAt: savedAt,
     }));
@@ -2001,7 +2001,7 @@ class FirebaseStore {
     if (this.worldEditStorageFormat === FIRESTORE_WORLD_EDIT_PACK_FORMAT && this.worldEditPackGeneration) {
       const changedPacks = packWorldEditChunks(chunks);
       const collection = this._worldDoc().collection('editPacks');
-      const writer = this._bulkWriter();
+      const batch = this.db.batch();
       const savedAt = Date.now();
       let writes = 0;
       for (const [packId, changedChunks] of Object.entries(changedPacks)) {
@@ -2014,7 +2014,7 @@ class FirebaseStore {
         if (bytes > FIRESTORE_WORLD_EDIT_PACK_MAX_JSON_BYTES) {
           throw new Error('regional pack ' + packId + ' is too large (' + bytes + ' bytes)');
         }
-        writer.set(collection.doc(this.worldEditPackGeneration + '__' + packId), {
+        batch.set(collection.doc(this.worldEditPackGeneration + '__' + packId), {
           format: FIRESTORE_WORLD_EDIT_PACK_FORMAT,
           generation: this.worldEditPackGeneration,
           packId,
@@ -2024,7 +2024,7 @@ class FirebaseStore {
         this.worldEditPacks[packId] = packChunks;
         writes++;
       }
-      await this._trackUsage('saveWorldEditPacks', 'world', { writes }, () => writer.close());
+      await this._trackUsage('saveWorldEditPacks', 'world', { writes }, () => batch.commit());
       return;
     }
     const col = this._worldDoc().collection('chunks');
