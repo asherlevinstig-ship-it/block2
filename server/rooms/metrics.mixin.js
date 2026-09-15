@@ -34,6 +34,10 @@ class MetricsMixin {
       windowOutboundMessageBytesByType: {},
       disconnects: 0,
       unexpectedDisconnects: 0,
+      reconnectAttempts: 0,
+      reconnectRecovered: 0,
+      reconnectExpired: 0,
+      disconnectByCode: {},
     };
     if (this.__metricsOnMessageWrapped || typeof this.onMessage !== 'function') return;
     const original = this.onMessage.bind(this);
@@ -136,6 +140,20 @@ class MetricsMixin {
     const m = this.messageMetrics || (this.messageMetrics = {});
     m.disconnects = (m.disconnects || 0) + 1;
     if (unexpected) m.unexpectedDisconnects = (m.unexpectedDisconnects || 0) + 1;
+  }
+
+  recordReconnectAttempt(code) {
+    const m = this.messageMetrics || (this.messageMetrics = {});
+    const key = code === false ? 'false' : String(code === undefined ? 'unknown' : code);
+    m.reconnectAttempts = (m.reconnectAttempts || 0) + 1;
+    const byCode = m.disconnectByCode || (m.disconnectByCode = {});
+    byCode[key] = (byCode[key] || 0) + 1;
+  }
+
+  recordReconnectOutcome(outcome) {
+    const m = this.messageMetrics || (this.messageMetrics = {});
+    if (outcome === 'recovered') m.reconnectRecovered = (m.reconnectRecovered || 0) + 1;
+    if (outcome === 'expired') m.reconnectExpired = (m.reconnectExpired || 0) + 1;
   }
 
   // Roll a tick-duration sample into an EMA + running max. Cheap; called every tick.
@@ -279,6 +297,10 @@ class MetricsMixin {
       outboundMessageBytesPerSecondByType,
       disconnects: mm.disconnects || 0,
       unexpectedDisconnects: mm.unexpectedDisconnects || 0,
+      reconnectAttempts: mm.reconnectAttempts || 0,
+      reconnectRecovered: mm.reconnectRecovered || 0,
+      reconnectExpired: mm.reconnectExpired || 0,
+      disconnectByCode: { ...(mm.disconnectByCode || {}) },
     };
   }
 

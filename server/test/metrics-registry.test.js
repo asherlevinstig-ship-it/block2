@@ -46,7 +46,11 @@ function fakeRoom({ roomId = 'room-a', type = 'overworld', shardId = 'main', gat
         outboundBytesPerClientPerSecond: type === 'dungeon' ? 250 : 125,
         outboundPeakClientBytesPerSecond: type === 'dungeon' ? 400 : 175,
         disconnects: type === 'dungeon' ? 1 : 0,
-        unexpectedDisconnects: 0,
+        unexpectedDisconnects: type === 'dungeon' ? 1 : 0,
+        reconnectAttempts: type === 'dungeon' ? 2 : 1,
+        reconnectRecovered: 1,
+        reconnectExpired: type === 'dungeon' ? 1 : 0,
+        disconnectByCode: type === 'dungeon' ? { 1006: 2 } : { false: 1 },
         dungeonMobs: type === 'dungeon' ? mobs : 0,
         visibleMobLinks: type === 'dungeon' ? 40 : 0,
         avgVisibleMobsPerClient: type === 'dungeon' ? 5 : 0,
@@ -107,6 +111,11 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.totals.outboundBytesPerClientPerSecond, 181.82);
   assert.equal(snapshot.totals.outboundPeakClientBytesPerSecond, 400);
   assert.equal(snapshot.totals.disconnects, 1);
+  assert.equal(snapshot.totals.unexpectedDisconnects, 1);
+  assert.equal(snapshot.totals.reconnectAttempts, 4);
+  assert.equal(snapshot.totals.reconnectRecovered, 3);
+  assert.equal(snapshot.totals.reconnectExpired, 1);
+  assert.deepEqual(snapshot.totals.disconnectByCode, { false: 2, 1006: 2 });
   assert.equal(snapshot.totals.visibleMobLinks, 40);
   assert.equal(snapshot.totals.hiddenMobLinksAvoided, 120);
   assert.equal(snapshot.totals.dungeonClients, 8);
@@ -121,7 +130,7 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.firestore.serverObservedEstimate, true);
   assert.ok(snapshot.firestore.daily);
   assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients, s.inboundMessagesPerSecond, s.outboundBytesPerSecond, s.outboundBytesPerSecondByKind.statePatch, s.outboundMessageBytesPerSecondByType.shard]), [['main', 8, 5, 1000, 750, 100], ['shard-2', 6, 5, 1000, 750, 100]]);
-  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided, d.visiblePlayerLinks, d.hiddenPlayerLinksAvoided, d.dungeonFxSkipped, d.outboundBytesPerSecond, d.outboundBytesPerSecondByKind.statePatch, d.outboundMessageBytesPerSecondByType.dungeonPartyStatus]), [['gate-a', 8, 8, 1, 40, 120, 36, 28, 20, 2000, 1500, 300]]);
+  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.reconnectAttempts, d.reconnectRecovered, d.reconnectExpired, d.disconnectByCode['1006'], d.visibleMobLinks, d.hiddenMobLinksAvoided, d.visiblePlayerLinks, d.hiddenPlayerLinksAvoided, d.dungeonFxSkipped, d.outboundBytesPerSecond, d.outboundBytesPerSecondByKind.statePatch, d.outboundMessageBytesPerSecondByType.dungeonPartyStatus]), [['gate-a', 8, 8, 1, 2, 1, 1, 2, 40, 120, 36, 28, 20, 2000, 1500, 300]]);
 
   unregisterRoom(main);
   unregisterRoom(shard2);
@@ -163,6 +172,10 @@ test('readiness snapshot exposes compact live room health', () => {
   assert.equal(snapshot.ok, true);
   assert.equal(snapshot.totals.rooms, 2);
   assert.equal(snapshot.totals.clients, 6);
+  assert.equal(snapshot.totals.reconnectAttempts, 3);
+  assert.equal(snapshot.totals.reconnectRecovered, 2);
+  assert.equal(snapshot.totals.reconnectExpired, 1);
+  assert.deepEqual(snapshot.totals.disconnectByCode, { false: 1, 1006: 2 });
   assert.equal(snapshot.firestore.serverObservedEstimate, true);
   assert.equal(snapshot.shards.length, 1);
   assert.equal(snapshot.shards[0].shardId, 'main');

@@ -3171,8 +3171,10 @@ function netRestoreProfile(m){
     if(m&&Array.isArray(m.activeObjectives))setActiveObjectives(m.activeObjectives,{announce:false});
     if(m&&Array.isArray(m.homeworkObjectives))applyHomeworkProgressList(m.homeworkObjectives);
     const authGameProfile=AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile;
+    const loginPath=authGameProfile&&authGameProfile.path&&PATHS[authGameProfile.path]?authGameProfile.path:'';
     const cachedPath=AUTH_UI&&typeof AUTH_UI.savedPath==='function'?AUTH_UI.savedPath():'';
-    const authPath=cachedPath&&PATHS[cachedPath]?cachedPath:'';
+    const cachedValidPath=cachedPath&&PATHS[cachedPath]?cachedPath:'';
+    const authPath=loginPath||cachedValidPath;
     const serverPath=m&&m.S&&m.S.path&&PATHS[m.S.path]?m.S.path:'';
     pathDebug('room.path.resolve', { roomPath:serverPath, recoveredPath:authPath, loginPath:authGameProfile&&authGameProfile.path||'' });
     if(m&&m.S){
@@ -3183,7 +3185,9 @@ function netRestoreProfile(m){
     pathDebug('room.path.applied', { path:S.path, source:serverPath?'room':authPath?'auth-or-cache':'none' });
     if(S.path&&combatApi.restoreHydratedPath)combatApi.restoreHydratedPath(S.path,serverPath?'room':'auth-or-cache');
     if(authGameProfile&&S.path)authGameProfile.path=S.path;
-    if(!serverPath&&authPath&&NET.on&&NET.room){
+    // A signed-in profile is already durable. Only repair the room from the local
+    // cache when the server and authenticated profile are both genuinely blank.
+    if(!serverPath&&!loginPath&&cachedValidPath&&NET.on&&NET.room){
       const healKey=String(NET.room.sessionId||'')+':'+authPath;
       if(NET.pathHealKey!==healKey){
         NET.pathHealKey=healKey;

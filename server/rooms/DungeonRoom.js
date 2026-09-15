@@ -253,8 +253,13 @@ class DungeonRoom extends GameRoom {
     // alive across the window (Colyseus counts the reservation against autoDispose).
     const unexpected = code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED);
     if (unexpected) {
+      const reconnectStartedAt = Date.now();
+      this.recordReconnectAttempt(code);
+      console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.start', roomType: 'dungeon', roomId: this.roomId || '', gateId: this.instance && this.instance.id || '', sidHash: shortHash(client && client.sessionId), code }));
       try {
         await this.allowReconnection(client, 15);
+        this.recordReconnectOutcome('recovered');
+        console.log('[disconnect] ' + JSON.stringify({ event: 'unexpected.recovered', roomType: 'dungeon', roomId: this.roomId || '', gateId: this.instance && this.instance.id || '', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt }));
         const token = this.tokens.get(client.sessionId);
         const profile = token && this.profiles.get(token);
         if (profile) client.send('profile', profile);
@@ -262,7 +267,9 @@ class DungeonRoom extends GameRoom {
         if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
         this.resumeDungeonInstance(client);
         return;
-      } catch (_) {
+      } catch (error) {
+        this.recordReconnectOutcome('expired');
+        console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.expired', roomType: 'dungeon', roomId: this.roomId || '', gateId: this.instance && this.instance.id || '', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt, reason: String(error && error.message || error || 'reconnect window expired').slice(0, 160) }));
         // The reconnect window elapsed — perform the durable teardown below.
       }
     }

@@ -1800,7 +1800,8 @@ test('path selection persists and returns directly to town without ability train
   assert.match(combat, /NET\.room\.send\('setPath',\{path\}\)/, 'path choice waits on a dedicated authoritative save request');
   assert.match(networking, /room\.onMessage\('pathResult',[\s\S]*combatApi\.confirmPathSelection\(m\)/, 'the client only completes selection after server confirmation');
   assert.match(networking, /S\.path=serverPath\|\|authPath\|\|'';/, 'login hydration preserves the signed-in profile path when a room snapshot is stale');
-  assert.match(networking, /NET\.room\.send\('setPath',\{path:authPath\}\)/, 'a stale room profile is healed from the durable signed-in profile');
+  assert.match(networking, /if\(!serverPath&&!loginPath&&cachedValidPath&&NET\.on&&NET\.room\)/, 'only a cache-only path heals a genuinely blank server and authenticated profile');
+  assert.match(networking, /NET\.room\.send\('setPath',\{path:authPath\}\)/, 'the cache-only fallback can still heal a genuinely blank durable profile');
   assert.match(combat, /AUTH_UI\.rememberPath\(path\)/, 'confirmed choices update the account-scoped pathway cache immediately');
   assert.match(combat, /AUTH_UI\.savePath\(path\)/, 'path choices also use authenticated profile storage instead of relying only on the room lifecycle');
   assert.match(combat, /result\.reason==='locked'/, 'a pre-existing server pathway is restored instead of reopening the picker');
