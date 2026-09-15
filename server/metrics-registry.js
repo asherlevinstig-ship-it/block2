@@ -1,4 +1,5 @@
 const { monitorEventLoopDelay } = require('node:perf_hooks');
+const { getFirestoreUsageSnapshot } = require('./store');
 
 const activeRooms = new Set();
 const loop = monitorEventLoopDelay({ resolution: 20 });
@@ -219,6 +220,7 @@ function metricsSnapshot() {
       maxMs: round2(loop.max / 1e6),
     },
     totals: summarizeRooms(rooms),
+    firestore: getFirestoreUsageSnapshot(),
     shards: groupByShard(rooms),
     dungeons: groupByDungeon(rooms),
     rooms,
@@ -234,6 +236,21 @@ function duplicateOverworldShards(shards) {
     seen.add(id);
   }
   return [...duplicates].sort();
+}
+
+function compactFirestoreUsage(firestore) {
+  const daily = firestore && firestore.daily || {};
+  return {
+    active: !!(firestore && firestore.active),
+    serverObservedEstimate: true,
+    dayPacific: firestore && firestore.dayPacific || '',
+    observedSince: daily.observedSince || '',
+    reads: daily.reads || 0,
+    writes: daily.writes || 0,
+    deletes: daily.deletes || 0,
+    failedCalls: daily.failedCalls || 0,
+    estimatedFreeQuotaRemaining: { ...(daily.estimatedFreeQuotaRemaining || {}) },
+  };
 }
 
 function readinessSnapshot({ maxEventLoopP99Ms = 500, maxHeapUsedMb = 850 } = {}) {
@@ -255,6 +272,7 @@ function readinessSnapshot({ maxEventLoopP99Ms = 500, maxHeapUsedMb = 850 } = {}
     issues,
     eventLoop: snapshot.eventLoop,
     memory: snapshot.memory,
+    firestore: compactFirestoreUsage(snapshot.firestore),
     totals: {
       rooms: snapshot.totals.rooms,
       clients: snapshot.totals.clients,

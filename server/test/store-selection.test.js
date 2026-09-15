@@ -3,7 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, cleanShardId, sanitizeProfile } = require('../store');
+const {
+  createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG,
+  getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, sanitizeProfile,
+} = require('../store');
 
 test('Recall mastery preserves complete built-in and database question IDs',()=>{
   const builtIn='it_ns_hex_bin_003',db='db-recall-123456';
@@ -23,6 +26,7 @@ test('Firestore quota exhaustion fails fast instead of occupying gameplay queues
 });
 
 test('Firestore world delta writes only the supplied chunk documents', async () => {
+  resetFirestoreUsageForTests();
   const writes = [];
   let closed = false;
   const store = Object.create(FirebaseStore.prototype);
@@ -43,6 +47,50 @@ test('Firestore world delta writes only the supplied chunk documents', async () 
     { id: '1_0', edits: {} },
   ]);
   assert.equal(closed, true);
+  const usage = getFirestoreUsageSnapshot();
+  assert.equal(usage.serverObservedEstimate, true);
+  assert.equal(usage.daily.writes, 2, 'each valid chunk document counts as one write');
+  assert.equal(usage.daily.byCategory.world.writes, 2);
+  assert.equal(usage.daily.byOperation.saveWorldEditChunks.calls, 1);
+});
+
+test('Firestore usage separates profile reads writes deletes and failures', async () => {
+  resetFirestoreUsageForTests();
+  const document = {
+    async get() { return { exists: true, data: () => ({ name: 'Counter' }) }; },
+    async set() {},
+    async delete() {},
+  };
+  const store = Object.create(FirebaseStore.prototype);
+  store.db = { collection: () => ({ doc: () => document }) };
+
+  await store.loadPlayer('counter');
+  await store.savePlayer('counter', { name: 'Counter' });
+  await store.deletePlayer('counter');
+  await assert.rejects(() => store._trackUsage('failedProfileSave', 'profiles', { writes: 1 }, async () => {
+    throw new Error('quota');
+  }), /quota/);
+
+  const usage = getFirestoreUsageSnapshot();
+  assert.deepEqual({
+    reads: usage.daily.reads,
+    writes: usage.daily.writes,
+    deletes: usage.daily.deletes,
+    failedCalls: usage.daily.failedCalls,
+  }, { reads: 1, writes: 1, deletes: 1, failedCalls: 1 });
+  assert.equal(usage.daily.byCategory.profiles.calls, 4);
+  assert.equal(usage.daily.byOperation.failedProfileSave.writes, 0, 'failed estimates are not presented as billed writes');
+});
+
+test('Firestore daily observations roll over at midnight Pacific', async () => {
+  const startedAt = Date.now();
+  resetFirestoreUsageForTests(startedAt);
+  const store = Object.create(FirebaseStore.prototype);
+  await store._trackUsage('savePlayer', 'profiles', { writes: 1 }, async () => {});
+
+  const nextDay = getFirestoreUsageSnapshot(startedAt + 36 * 60 * 60 * 1000);
+  assert.equal(nextDay.daily.writes, 0);
+  assert.equal(nextDay.process.writes, 1);
 });
 
 class BrokenFirebaseStore {

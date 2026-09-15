@@ -1762,6 +1762,95 @@ const FIRESTORE_FAST_RETRY_CONFIG = {
   },
 };
 let firestoreFastRetryConfigured = false;
+const FIRESTORE_FREE_DAILY_QUOTA = Object.freeze({ reads: 50000, writes: 20000, deletes: 20000 });
+
+function pacificDayKey(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(now));
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return value.year + '-' + value.month + '-' + value.day;
+}
+
+function emptyFirestoreUsageBucket(now = Date.now()) {
+  return {
+    observedSince: new Date(now).toISOString(),
+    calls: 0,
+    failedCalls: 0,
+    reads: 0,
+    writes: 0,
+    deletes: 0,
+    byCategory: {},
+    byOperation: {},
+  };
+}
+
+const firestoreUsage = {
+  active: false,
+  processStartedAt: new Date().toISOString(),
+  dayPacific: pacificDayKey(),
+  process: emptyFirestoreUsageBucket(),
+  daily: emptyFirestoreUsageBucket(),
+};
+
+function addFirestoreUsage(bucket, operation, category, counts, failed) {
+  bucket.calls++;
+  if (failed) bucket.failedCalls++;
+  for (const key of ['reads', 'writes', 'deletes']) bucket[key] += Math.max(0, Number(counts && counts[key]) || 0);
+  const addBreakdown = target => {
+    target.calls = (target.calls || 0) + 1;
+    if (failed) target.failedCalls = (target.failedCalls || 0) + 1;
+    for (const key of ['reads', 'writes', 'deletes']) target[key] = (target[key] || 0) + Math.max(0, Number(counts && counts[key]) || 0);
+  };
+  addBreakdown(bucket.byCategory[category] || (bucket.byCategory[category] = {}));
+  addBreakdown(bucket.byOperation[operation] || (bucket.byOperation[operation] = {}));
+}
+
+function recordFirestoreUsage(operation, category, counts = {}, failed = false, now = Date.now()) {
+  const day = pacificDayKey(now);
+  if (firestoreUsage.dayPacific !== day) {
+    firestoreUsage.dayPacific = day;
+    firestoreUsage.daily = emptyFirestoreUsageBucket(now);
+  }
+  addFirestoreUsage(firestoreUsage.process, operation, category, counts, failed);
+  addFirestoreUsage(firestoreUsage.daily, operation, category, counts, failed);
+}
+
+function copyFirestoreUsageBucket(bucket) {
+  return JSON.parse(JSON.stringify(bucket));
+}
+
+function getFirestoreUsageSnapshot(now = Date.now()) {
+  const day = pacificDayKey(now);
+  if (firestoreUsage.dayPacific !== day) {
+    firestoreUsage.dayPacific = day;
+    firestoreUsage.daily = emptyFirestoreUsageBucket(now);
+  }
+  const daily = copyFirestoreUsageBucket(firestoreUsage.daily);
+  daily.estimatedFreeQuotaRemaining = {
+    reads: Math.max(0, FIRESTORE_FREE_DAILY_QUOTA.reads - daily.reads),
+    writes: Math.max(0, FIRESTORE_FREE_DAILY_QUOTA.writes - daily.writes),
+    deletes: Math.max(0, FIRESTORE_FREE_DAILY_QUOTA.deletes - daily.deletes),
+  };
+  return {
+    active: firestoreUsage.active,
+    serverObservedEstimate: true,
+    note: 'Counts cover this server process only; Firebase Console Usage is authoritative.',
+    processStartedAt: firestoreUsage.processStartedAt,
+    dayPacific: firestoreUsage.dayPacific,
+    freeDailyQuota: { ...FIRESTORE_FREE_DAILY_QUOTA },
+    daily,
+    process: copyFirestoreUsageBucket(firestoreUsage.process),
+  };
+}
+
+function resetFirestoreUsageForTests(now = Date.now()) {
+  firestoreUsage.active = false;
+  firestoreUsage.processStartedAt = new Date(now).toISOString();
+  firestoreUsage.dayPacific = pacificDayKey(now);
+  firestoreUsage.process = emptyFirestoreUsageBucket(now);
+  firestoreUsage.daily = emptyFirestoreUsageBucket(now);
+}
 
 class FirebaseStore {
   constructor(options = {}) {
@@ -1778,6 +1867,18 @@ class FirebaseStore {
       firestoreFastRetryConfigured = true;
     }
     this.shardId = cleanShardId(options.shardId);
+    firestoreUsage.active = true;
+  }
+  async _trackUsage(operation, category, estimate, action) {
+    try {
+      const result = await action();
+      const counts = typeof estimate === 'function' ? estimate(result) : estimate;
+      recordFirestoreUsage(operation, category, counts || {});
+      return result;
+    } catch (error) {
+      recordFirestoreUsage(operation, category, {}, true);
+      throw error;
+    }
   }
   _bulkWriter() {
     const writer = this.db.bulkWriter();
@@ -1794,7 +1895,9 @@ class FirebaseStore {
     return (x >> 4) + '_' + (z >> 4);
   }
   async loadWorldEdits() {
-    const snap = await this._worldDoc().collection('chunks').get();
+    const snap = await this._trackUsage('loadWorldEdits', 'world', result => ({
+      reads: Math.max(1, Number(result && result.size) || (result && result.docs && result.docs.length) || 0),
+    }), () => this._worldDoc().collection('chunks').get());
     const out = {};
     snap.forEach(doc => Object.assign(out, doc.data().edits || {}));
     return out;
@@ -1811,93 +1914,106 @@ class FirebaseStore {
     const col = this._worldDoc().collection('chunks');
     const writer = this._bulkWriter();
     const savedAt = Date.now();
+    let writes = 0;
     for (const c in chunks) {
       if (!/^-?\d+_-?\d+$/.test(c)) continue;
       writer.set(col.doc(c), { edits: chunks[c] || {}, savedAt });
+      writes++;
     }
-    await writer.close();
+    await this._trackUsage('saveWorldEditChunks', 'world', { writes }, () => writer.close());
   }
   async loadWorldProgress() {
-    const d = await this._worldDoc().collection('meta').doc('progress').get();
+    const d = await this._trackUsage('loadWorldProgress', 'world', { reads: 1 },
+      () => this._worldDoc().collection('meta').doc('progress').get());
     return d.exists ? sanitizeWorldProgress(d.data()) : sanitizeWorldProgress();
   }
   async saveWorldProgress(progress) {
-    await this._worldDoc().collection('meta').doc('progress')
-      .set({ ...sanitizeWorldProgress(progress), savedAt: Date.now() });
+    await this._trackUsage('saveWorldProgress', 'world', { writes: 1 }, () => this._worldDoc().collection('meta').doc('progress')
+      .set({ ...sanitizeWorldProgress(progress), savedAt: Date.now() }));
   }
   async loadLandClaims() {
-    const d = await this._worldDoc().collection('meta').doc('landClaims').get();
+    const d = await this._trackUsage('loadLandClaims', 'world', { reads: 1 },
+      () => this._worldDoc().collection('meta').doc('landClaims').get());
     return d.exists ? sanitizeLandClaims(d.data().claims || {}) : {};
   }
   async saveLandClaims(claims) {
-    await this._worldDoc().collection('meta').doc('landClaims')
-      .set({ claims: sanitizeLandClaims(claims), savedAt: Date.now() });
+    await this._trackUsage('saveLandClaims', 'world', { writes: 1 }, () => this._worldDoc().collection('meta').doc('landClaims')
+      .set({ claims: sanitizeLandClaims(claims), savedAt: Date.now() }));
   }
   async loadChests() {
-    const d = await this._worldDoc().collection('containers').doc('chests').get();
+    const d = await this._trackUsage('loadChests', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('chests').get());
     return d.exists ? sanitizeChests(d.data().chests || {}) : {};
   }
   async saveChests(chests) {
-    await this._worldDoc().collection('containers').doc('chests')
-      .set({ chests: sanitizeChests(chests), savedAt: Date.now() });
+    await this._trackUsage('saveChests', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('chests')
+      .set({ chests: sanitizeChests(chests), savedAt: Date.now() }));
   }
   async loadFurnaces() {
-    const d = await this._worldDoc().collection('containers').doc('furnaces').get();
+    const d = await this._trackUsage('loadFurnaces', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('furnaces').get());
     return d.exists ? sanitizeFurnaces(d.data().furnaces || {}) : {};
   }
   async saveFurnaces(furnaces) {
-    await this._worldDoc().collection('containers').doc('furnaces')
-      .set({ furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() });
+    await this._trackUsage('saveFurnaces', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('furnaces')
+      .set({ furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() }));
   }
   async loadIncubations() {
-    const d = await this._worldDoc().collection('containers').doc('incubations').get();
+    const d = await this._trackUsage('loadIncubations', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('incubations').get());
     return d.exists ? sanitizeIncubations(d.data().incubations || {}) : {};
   }
   async saveIncubations(incubations) {
-    await this._worldDoc().collection('containers').doc('incubations')
-      .set({ incubations: sanitizeIncubations(incubations), savedAt: Date.now() });
+    await this._trackUsage('saveIncubations', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('incubations')
+      .set({ incubations: sanitizeIncubations(incubations), savedAt: Date.now() }));
   }
   async loadNestDragons() {
-    const d = await this._worldDoc().collection('containers').doc('nests').get();
+    const d = await this._trackUsage('loadNestDragons', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('nests').get());
     return d.exists ? sanitizeNestDragons(d.data().nests || {}) : {};
   }
   async saveNestDragons(nests) {
-    await this._worldDoc().collection('containers').doc('nests')
-      .set({ nests: sanitizeNestDragons(nests), savedAt: Date.now() });
+    await this._trackUsage('saveNestDragons', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('nests')
+      .set({ nests: sanitizeNestDragons(nests), savedAt: Date.now() }));
   }
   async loadGates() {
-    const d = await this._worldDoc().collection('containers').doc('gates').get();
+    const d = await this._trackUsage('loadGates', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('gates').get());
     return d.exists ? sanitizeGates(d.data().gates || {}) : {};
   }
   async saveGates(gates) {
-    await this._worldDoc().collection('containers').doc('gates')
-      .set({ gates: sanitizeGates(gates), savedAt: Date.now() });
+    await this._trackUsage('saveGates', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('gates')
+      .set({ gates: sanitizeGates(gates), savedAt: Date.now() }));
   }
   async loadTeams() {
-    const d = await this._worldDoc().collection('containers').doc('teams').get();
+    const d = await this._trackUsage('loadTeams', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('teams').get());
     return d.exists ? sanitizeTeams(d.data().teams || {}) : {};
   }
   async saveTeams(teams) {
-    await this._worldDoc().collection('containers').doc('teams')
-      .set({ teams: sanitizeTeams(teams), savedAt: Date.now() });
+    await this._trackUsage('saveTeams', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('teams')
+      .set({ teams: sanitizeTeams(teams), savedAt: Date.now() }));
   }
   async loadGuilds() {
-    const d = await this._worldDoc().collection('containers').doc('guilds').get();
+    const d = await this._trackUsage('loadGuilds', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('guilds').get());
     return d.exists ? sanitizeGuilds(d.data().guilds || {}) : {};
   }
   async saveGuilds(guilds) {
-    await this._worldDoc().collection('containers').doc('guilds')
-      .set({ guilds: sanitizeGuilds(guilds), savedAt: Date.now() });
+    await this._trackUsage('saveGuilds', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('guilds')
+      .set({ guilds: sanitizeGuilds(guilds), savedAt: Date.now() }));
   }
   async grantTownMapToAllPlayers(options = {}) {
     const itemId = Math.max(0, options.itemId | 0);
     const invMax = Math.max(1, Math.min(64, options.inventoryMax | 0 || INV_MAX));
     const dryRun = options.dryRun === true;
     const migrationRef = this._worldDoc().collection('meta').doc('migration_town_map_' + itemId);
-    const marker = await migrationRef.get();
+    const marker = await this._trackUsage('townMapMarkerRead', 'maintenance', { reads: 1 }, () => migrationRef.get());
     if (marker.exists && !dryRun) return { ok: true, skipped: true, reason: 'already-ran', ...(marker.data() || {}) };
 
-    const snap = await this.db.collection('players').get();
+    const snap = await this._trackUsage('townMapPlayerScan', 'maintenance', result => ({
+      reads: Math.max(1, Number(result && result.size) || (result && result.docs && result.docs.length) || 0),
+    }), () => this.db.collection('players').get());
     const writer = dryRun ? null : this._bulkWriter();
     let scanned = 0, updated = 0, alreadyHad = 0, full = 0;
 
@@ -1932,23 +2048,28 @@ class FirebaseStore {
     }
 
     if (!dryRun) {
-      await writer.close();
-      await migrationRef.set({ ok: true, itemId, scanned, updated, alreadyHad, full, savedAt: Date.now() });
+      await this._trackUsage('townMapPlayerUpdates', 'maintenance', { writes: updated }, () => writer.close());
+      await this._trackUsage('townMapMarkerWrite', 'maintenance', { writes: 1 },
+        () => migrationRef.set({ ok: true, itemId, scanned, updated, alreadyHad, full, savedAt: Date.now() }));
     }
     return { ok: true, dryRun, scanned, updated, alreadyHad, full };
   }
   async loadPlayer(token) {
-    const d = await this.db.collection('players').doc(token).get();
+    const d = await this._trackUsage('loadPlayer', 'profiles', { reads: 1 },
+      () => this.db.collection('players').doc(token).get());
     return d.exists ? d.data() : null;
   }
   async savePlayer(token, profile) {
-    await this.db.collection('players').doc(token).set({ ...profile, savedAt: Date.now() });
+    await this._trackUsage('savePlayer', 'profiles', { writes: 1 },
+      () => this.db.collection('players').doc(token).set({ ...profile, savedAt: Date.now() }));
   }
   async deletePlayer(token) {
-    await this.db.collection('players').doc(token).delete();
+    await this._trackUsage('deletePlayer', 'profiles', { deletes: 1 },
+      () => this.db.collection('players').doc(token).delete());
   }
   async saveModerationReport(report) {
-    await this.db.collection('moderationReports').doc(report.id).set(report);
+    await this._trackUsage('saveModerationReport', 'moderation', { writes: 1 },
+      () => this.db.collection('moderationReports').doc(report.id).set(report));
   }
 }
 
@@ -1968,4 +2089,4 @@ function createStore(options = {}) {
   return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
+module.exports = { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, FIRESTORE_FREE_DAILY_QUOTA, getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };

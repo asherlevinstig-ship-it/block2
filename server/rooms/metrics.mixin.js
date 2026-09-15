@@ -2,6 +2,8 @@
 // "is a DungeonRoom split or per-client state filtering ever worth it?" — with real
 // numbers instead of guesses, and never alters game state.
 //
+const { getFirestoreUsageSnapshot } = require('../store');
+
 // The three metrics that decide it:
 //   - instances / dgnPlayers : how much concurrent raiding a single room carries.
 //   - wastedMobSyncs         : dungeon-mob state syncs that per-instance @filter would
@@ -284,6 +286,8 @@ class MetricsMixin {
   logMetrics() {
     const s = this.metricsSnapshot();
     if (!s.players && !s.instances && !s.persistenceFailures && !s.rejectedMessages) return;
+    const firestore = getFirestoreUsageSnapshot();
+    const firestoreDaily = firestore.daily || {};
     console.log('[metrics] clients=' + s.connectedClients + ' players=' + s.players + ' (ow=' + s.owPlayers + ' dgn=' + s.dgnPlayers + ')'
       + ' instances=' + s.instances
       + ' mobs=' + s.mobs + ' (ow=' + s.owMobs + ' dgn=' + s.dgnMobs + ')'
@@ -293,6 +297,7 @@ class MetricsMixin {
       + ' statePatchKBps=' + Math.round(((s.outboundBytesPerSecondByKind && s.outboundBytesPerSecondByKind.statePatch || 0) / 1024) * 100) / 100
       + ' peakClientKBps=' + Math.round((s.outboundPeakClientBytesPerSecond || 0) / 1024 * 100) / 100
       + ' persistence ops=' + s.persistenceOperations + ' failures=' + s.persistenceFailures + ' avgMs=' + s.persistenceAvgMs + ' maxMs=' + s.persistenceMaxMs
+      + ' firestore(day=' + firestore.dayPacific + ') reads=' + (firestoreDaily.reads || 0) + ' writes=' + (firestoreDaily.writes || 0) + ' deletes=' + (firestoreDaily.deletes || 0) + ' failedCalls=' + (firestoreDaily.failedCalls || 0)
       + ' rejected=' + s.rejectedMessages);
   }
 }
