@@ -97,3 +97,8 @@ test('large filtered player patches decode for every client view', () => {
   assert.equal(secondDecoder.state.players.get('player-399').path, 'guardian');
   assert.equal(secondDecoder.state.players.get('player-399').job, 'farmer');
 });
+
+test('server runtime reserves enough schema encoder space for the overworld snapshot', () => {
+  require('../runtime');
+  assert.equal(Encoder.BUFFER_SIZE, 2 * 1024 * 1024);
+});
