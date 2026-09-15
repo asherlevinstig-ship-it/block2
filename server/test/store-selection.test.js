@@ -6,6 +6,7 @@ const path = require('path');
 const {
   createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG,
   FIRESTORE_WORLD_EDIT_PACK_FORMAT, packWorldEditChunks,
+  nextPacificQuotaResetDelay,
   getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, sanitizeProfile,
 } = require('../store');
 
@@ -142,6 +143,12 @@ test('Firestore maintenance work has an application-level timeout', async () => 
     /test write timed out after 20ms/,
   );
   assert.ok(Date.now() - started < 500, 'timeout should release the caller promptly');
+});
+
+test('Firestore migration retry waits until the next Pacific quota day', () => {
+  const beforeMidnightPacific = Date.parse('2026-09-15T06:58:00Z');
+  const delay = nextPacificQuotaResetDelay(beforeMidnightPacific);
+  assert.ok(delay >= 4 * 60 * 1000 && delay <= 9 * 60 * 1000);
 });
 
 class BrokenFirebaseStore {

@@ -1792,6 +1792,13 @@ function pacificDayKey(now = Date.now()) {
   return value.year + '-' + value.month + '-' + value.day;
 }
 
+function nextPacificQuotaResetDelay(now = Date.now()) {
+  const currentDay = pacificDayKey(now);
+  let next = now + 5 * 60 * 1000;
+  while (pacificDayKey(next) === currentDay && next - now < 27 * 60 * 60 * 1000) next += 5 * 60 * 1000;
+  return Math.max(60 * 1000, next - now + 2 * 60 * 1000);
+}
+
 function emptyFirestoreUsageBucket(now = Date.now()) {
   return {
     observedSince: new Date(now).toISOString(),
@@ -1890,6 +1897,9 @@ class FirebaseStore {
     this.worldEditStorageFormat = '';
     this.worldEditPackGeneration = '';
     this.worldEditPacks = {};
+    this.legacyWorldEditChunks = {};
+    this.worldEditMigrationPromise = null;
+    this.worldEditMigrationTimer = null;
     firestoreUsage.active = true;
   }
   async _trackUsage(operation, category, estimate, action) {
@@ -1968,15 +1978,38 @@ class FirebaseStore {
       chunks[doc.id] = edits;
       Object.assign(out, edits);
     });
+    this.legacyWorldEditChunks = chunks;
     try {
-      await this._boundedFirestore(
-        () => this._migrateWorldEditChunksToPacks(chunks, markerRef),
-        'regional world edit migration',
-      );
+      await this._runWorldEditPackMigration(markerRef);
     } catch (error) {
       console.warn('[persist] regional world edit migration deferred:', error.message);
+      this._scheduleWorldEditPackMigration(markerRef);
     }
     return out;
+  }
+  async _runWorldEditPackMigration(markerRef) {
+    if (this.worldEditMigrationPromise) return this.worldEditMigrationPromise;
+    const task = this._boundedFirestore(
+      () => this._migrateWorldEditChunksToPacks(this.legacyWorldEditChunks, markerRef),
+      'regional world edit migration',
+    );
+    this.worldEditMigrationPromise = task;
+    try { return await task; }
+    finally { if (this.worldEditMigrationPromise === task) this.worldEditMigrationPromise = null; }
+  }
+  _scheduleWorldEditPackMigration(markerRef) {
+    if (this.worldEditMigrationTimer || this.worldEditStorageFormat === FIRESTORE_WORLD_EDIT_PACK_FORMAT) return;
+    const delay = nextPacificQuotaResetDelay();
+    console.log('[persist] regional world edit migration will retry after the Pacific quota reset');
+    this.worldEditMigrationTimer = setTimeout(async () => {
+      this.worldEditMigrationTimer = null;
+      try { await this._runWorldEditPackMigration(markerRef); }
+      catch (error) {
+        console.warn('[persist] regional world edit migration retry deferred:', error.message);
+        this._scheduleWorldEditPackMigration(markerRef);
+      }
+    }, delay);
+    if (typeof this.worldEditMigrationTimer.unref === 'function') this.worldEditMigrationTimer.unref();
   }
   async _migrateWorldEditChunksToPacks(chunks, markerRef) {
     const packs = packWorldEditChunks(chunks);
@@ -2015,6 +2048,7 @@ class FirebaseStore {
     await this.saveWorldEditChunks(byChunk);
   }
   async saveWorldEditChunks(chunks) {
+    if (this.worldEditMigrationPromise) await this.worldEditMigrationPromise.catch(() => {});
     if (this.worldEditStorageFormat === FIRESTORE_WORLD_EDIT_PACK_FORMAT && this.worldEditPackGeneration) {
       const changedPacks = packWorldEditChunks(chunks);
       const collection = this._worldDoc().collection('editPacks');
@@ -2055,6 +2089,12 @@ class FirebaseStore {
       writes++;
     }
     await this._trackUsage('saveWorldEditChunks', 'world', { writes }, () => writer.close());
+    if (!this.legacyWorldEditChunks) this.legacyWorldEditChunks = {};
+    for (const [chunkId, edits] of Object.entries(chunks || {})) {
+      if (!/^-?\d+_-?\d+$/.test(chunkId)) continue;
+      if (edits && Object.keys(edits).length) this.legacyWorldEditChunks[chunkId] = edits;
+      else delete this.legacyWorldEditChunks[chunkId];
+    }
   }
   async loadWorldProgress() {
     const d = await this._trackUsage('loadWorldProgress', 'world', { reads: 1 },
@@ -2223,4 +2263,4 @@ function createStore(options = {}) {
   return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, FIRESTORE_FREE_DAILY_QUOTA, FIRESTORE_WORLD_EDIT_PACK_FORMAT, FIRESTORE_WORLD_EDIT_PACK_CHUNKS, packWorldEditChunks, getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
+module.exports = { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, FIRESTORE_FREE_DAILY_QUOTA, FIRESTORE_WORLD_EDIT_PACK_FORMAT, FIRESTORE_WORLD_EDIT_PACK_CHUNKS, packWorldEditChunks, nextPacificQuotaResetDelay, getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
