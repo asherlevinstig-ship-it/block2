@@ -4185,6 +4185,82 @@ Object.defineProperty(globalThis,'BlockcraftDragonWorld',{value:Object.freeze({
 }),configurable:true});
 Object.defineProperty(globalThis,'BlockcraftDragonCommandFx',{value:dragonCommandFx,configurable:true});
 const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,animateAvatarCape,animateHunterIdle,netAddRemote,netRefreshRemoteAvatar,triggerRemotePlayerAction,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
+const dragonEggGuide=document.createElement('aside');
+dragonEggGuide.id='dragoneggguide';
+dragonEggGuide.className='hidden';
+dragonEggGuide.setAttribute('role','status');
+dragonEggGuide.setAttribute('aria-live','polite');
+dragonEggGuide.setAttribute('aria-label','Dragon egg hatching instructions');
+dragonEggGuide.innerHTML='<button id="dragoneggguidedismiss" type="button" aria-label="Dismiss dragon egg instructions">&times;</button>'
+  +'<div class="dragoneggguide-head"><i aria-hidden="true">◆</i><span><small>DRAGON EGG ACQUIRED</small><b id="dragoneggguidetitle">How to hatch your egg</b></span></div>'
+  +'<p id="dragoneggguidenext">Move the egg to your hotbar to begin.</p><ol>'
+  +'<li id="dragoneggguidestep1"><em>1</em><span>Press <kbd>E</kbd> and move the egg to your hotbar.</span></li>'
+  +'<li id="dragoneggguidestep2"><em>2</em><span>Place an Egg Insulator with right-click or <kbd>G</kbd>.</span></li>'
+  +'<li id="dragoneggguidestep3"><em>3</em><span>Select the egg, look at the insulator, and press <kbd>G</kbd>.</span></li>'
+  +'<li id="dragoneggguidestep4"><em>4</em><span>When it says READY, press <kbd>G</kbd> again to hatch.</span></li></ol>'
+  +'<footer id="dragoneggguideinsulator">Mara gives the first Egg Insulator; Merchants sell replacements.</footer>';
+document.body.appendChild(dragonEggGuide);
+const dragonEggGuideTitle=document.getElementById('dragoneggguidetitle');
+const dragonEggGuideNext=document.getElementById('dragoneggguidenext');
+const dragonEggGuideDismiss=document.getElementById('dragoneggguidedismiss');
+const dragonEggGuideSteps=[1,2,3,4].map(n=>document.getElementById('dragoneggguidestep'+n));
+let dragonEggGuideDismissed=false;
+let dragonEggGuideHadEgg=false;
+let dragonEggGuidePrimed=false;
+function refreshDragonEggGuide(){
+  if(!dragonEggGuide)return;
+  const eggs=[];
+  for(let slot=0;slot<36;slot++){
+    const stack=inv[slot];
+    if(stack&&DRAGON_EGG_TO_TYPE[stack.id])eggs.push({slot,stack,type:DRAGON_EGG_TO_TYPE[stack.id]});
+  }
+  if(!eggs.length){
+    dragonEggGuide.classList.add('hidden');
+    if(dragonEggGuideHadEgg)dragonEggGuideDismissed=false;
+    dragonEggGuideHadEgg=false;
+    dragonEggGuidePrimed=true;
+    return;
+  }
+  const acquired=dragonEggGuidePrimed&&!dragonEggGuideHadEgg;
+  dragonEggGuideHadEgg=true;
+  dragonEggGuidePrimed=true;
+  if(dragonEggGuideDismissed){dragonEggGuide.classList.add('hidden');return;}
+  const hotbarEgg=eggs.find(entry=>entry.slot<9);
+  const egg=hotbarEgg||eggs[0];
+  const species=DRAGON_TYPES[egg.type];
+  const eggName=(ITEMS[egg.stack.id]&&ITEMS[egg.stack.id].name)||(species&&species.name?species.name+' Egg':'Dragon Egg');
+  const hasInsulator=inv.some(stack=>stack&&stack.id===B.EGG_INSULATOR);
+  const selectedEgg=!!hotbarEgg&&combatState.selectedSlot===hotbarEgg.slot;
+  if(dragonEggGuideTitle)dragonEggGuideTitle.textContent='How to hatch your '+eggName;
+  if(dragonEggGuideNext){
+    dragonEggGuideNext.textContent=!hotbarEgg
+      ? 'Next: Press E and move the egg to one of hotbar slots 1–9.'
+      : !hasInsulator
+        ? 'Next: Get an Egg Insulator from Mara or a Merchant.'
+        : !selectedEgg
+          ? 'Next: Press '+(hotbarEgg.slot+1)+' to select the egg after placing the insulator.'
+          : 'Next: Look at the placed Egg Insulator and press G.';
+  }
+  for(const step of dragonEggGuideSteps)if(step)step.classList.remove('ready','current');
+  if(hotbarEgg&&dragonEggGuideSteps[0])dragonEggGuideSteps[0].classList.add('ready');
+  if(hasInsulator&&dragonEggGuideSteps[1])dragonEggGuideSteps[1].classList.add('ready');
+  const currentStep=!hotbarEgg?0:!hasInsulator?1:2;
+  if(dragonEggGuideSteps[currentStep])dragonEggGuideSteps[currentStep].classList.add('current');
+  dragonEggGuide.classList.remove('hidden');
+  if(acquired){
+    dragonEggGuide.classList.remove('fresh');
+    void dragonEggGuide.offsetWidth;
+    dragonEggGuide.classList.add('fresh');
+    if(worldApi&&typeof worldApi.message==='function')worldApi.message('<b>Dragon Egg acquired!</b> Follow the hatching guide above your hotbar.',{tier:'major',title:'Dragon Egg'});
+    eventFeed('[Dragon]','Dragon Egg acquired. Use an Egg Insulator to begin hatching.',{key:'dragon-egg-guide:acquired',cooldown:0});
+  }
+}
+if(dragonEggGuideDismiss)dragonEggGuideDismiss.addEventListener('click',()=>{
+  dragonEggGuideDismissed=true;
+  dragonEggGuide.classList.add('hidden');
+});
+globalThis.BlockcraftRefreshDragonEggGuide=refreshDragonEggGuide;
+refreshDragonEggGuide();
 const ARRIVAL_VFX_COOLDOWN_MS=550;
 const arrivalVfxLastByKey=new Map();
 function schedulePlayerArrivalVfx(pos,opts={}){
