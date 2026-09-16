@@ -199,6 +199,7 @@ function refreshHUD(){
   refreshAppearanceDummy();
   renderAbilities();
   updateAbilityHUD();
+  if(typeof globalThis.BlockcraftRefreshDragonEggGuide==='function')globalThis.BlockcraftRefreshDragonEggGuide();
 }
 function showName(txt){
   nameEl.textContent=txt; nameEl.style.opacity=1;
