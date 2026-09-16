@@ -99,6 +99,67 @@ test('auth responses include the saved hunter-name and pathway state', { concurr
   } finally { await f.close(); }
 });
 
+test('Asher admin login safely adopts the named legacy profile under the current account id', async () => {
+  const legacyId = 'u_133eb7d687eaf6e515dedf845ac182e1';
+  const destinationId = 'teacher_85';
+  const profiles = new Map([[legacyId, {
+    name: 'levin',
+    S: { lvl: 6, xp: 321, pts: 2, str: 4, agi: 3, vit: 5, int: 2, path: 'mage' },
+    gold: 118,
+    inv: [{ id: 225, count: 1, source: 'admin' }],
+  }]]);
+  const writes = [];
+  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-legacy-merge-')), {
+    authBackend: null,
+    profileStore: {
+      async loadPlayer(id) { return profiles.get(id) || null; },
+      async savePlayer(id, profile) {
+        writes.push(id);
+        profiles.set(id, structuredClone(profile));
+      },
+    },
+  });
+  try {
+    const account = {
+      id: destinationId,
+      username: 'asherlevin85@gmail.com',
+      displayName: 'Asher Levin',
+      accountType: 'teacher',
+      role: 'admin',
+    };
+    const result = await auth.publicGameProfile(account);
+    assert.equal(result.name, 'levin');
+    assert.equal(result.nameSet, true);
+    assert.equal(result.path, 'mage');
+    assert.deepEqual(writes, [destinationId]);
+    assert.equal(profiles.get(destinationId).S.lvl, 6);
+    assert.equal(profiles.get(destinationId).gold, 118);
+    assert.equal(profiles.get(legacyId).S.lvl, 6, 'legacy source remains as a recovery copy');
+  } finally { auth.stop(); }
+});
+
+test('legacy admin merge never overwrites an established destination profile', async () => {
+  const legacyId = 'u_133eb7d687eaf6e515dedf845ac182e1';
+  const profiles = new Map([
+    [legacyId, { name: 'levin', nameSet: true, S: { lvl: 6 } }],
+    ['teacher_85', { name: 'Current Asher', nameSet: true, S: { lvl: 9, path: 'mage' }, inv: [{ id: 225, count: 1, source: 'admin' }] }],
+  ]);
+  let writes = 0;
+  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-legacy-keep-')), {
+    authBackend: null,
+    profileStore: {
+      async loadPlayer(id) { return profiles.get(id) || null; },
+      async savePlayer() { writes++; },
+    },
+  });
+  try {
+    const result = await auth.publicGameProfile({ id: 'teacher_85', username: 'asherlevin85@gmail.com' });
+    assert.equal(result.name, 'Current Asher');
+    assert.equal(result.path, 'mage');
+    assert.equal(writes, 0);
+  } finally { auth.stop(); }
+});
+
 test('teacher game-question endpoints require a teacher session and expose game questions', { concurrency: false }, async () => {
   const sentMail = [];
   let attachmentPath = '';

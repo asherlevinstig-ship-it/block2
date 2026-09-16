@@ -17,6 +17,8 @@ const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const SWEEP_MS = 10 * 60 * 1000;   // reclaim expired sessions and stale rate-limit rows
 const PROFILE_CACHE_MS = 60 * 1000;
+const ASHER_ADMIN_EMAIL = 'asherlevin85@gmail.com';
+const DEFAULT_ASHER_LEGACY_PROFILE_IDS = ['u_133eb7d687eaf6e515dedf845ac182e1'];
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const DEFAULT_CURRICULUM_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
@@ -746,9 +748,53 @@ class AuthService {
     if (id) this.gameProfileCache.delete(String(id));
   }
 
+  legacyProfileIdsForAccount(account) {
+    if (cleanUsername(account && (account.username || account.email)) !== ASHER_ADMIN_EMAIL) return [];
+    const configured = String(this.env && this.env.ASHER_LEGACY_PROFILE_IDS || '')
+      .split(',')
+      .map(value => String(value || '').trim())
+      .filter(Boolean);
+    return [...new Set([...configured, ...DEFAULT_ASHER_LEGACY_PROFILE_IDS])];
+  }
+
+  async mergeMissingLegacyProfile(account, accountId, currentRaw) {
+    // A real named destination always wins. This migration only repairs the
+    // legacy local-admin -> MySQL teacher identity split and keeps the source
+    // profile untouched as a recovery copy.
+    if (currentRaw && sanitizeProfile(currentRaw).nameSet === true) return currentRaw;
+    const store = this.getProfileStore();
+    for (const legacyId of this.legacyProfileIdsForAccount(account)) {
+      if (!legacyId || legacyId === accountId) continue;
+      const legacyRaw = await store.loadPlayer(legacyId);
+      if (!legacyRaw) continue;
+      const legacyProfile = sanitizeProfile(legacyRaw);
+      if (!legacyProfile.nameSet) continue;
+
+      // Recheck immediately before writing so two simultaneous login requests
+      // cannot replace a destination profile created during the migration.
+      const latestRaw = await store.loadPlayer(accountId);
+      if (latestRaw && sanitizeProfile(latestRaw).nameSet === true) return latestRaw;
+      await store.savePlayer(accountId, legacyProfile);
+      console.warn('[auth] merged legacy admin profile', legacyId, 'into', accountId);
+      recordIdentityTrace('auth.profile.legacy_merge', {
+        account: accountSummary(account),
+        sourceId: legacyId,
+        destinationId: accountId,
+        profile: {
+          name: legacyProfile.name,
+          nameSet: legacyProfile.nameSet === true,
+          level: legacyProfile.S && legacyProfile.S.lvl || 1,
+        },
+      });
+      return legacyProfile;
+    }
+    return currentRaw;
+  }
+
   async loadPublicGameProfile(account, id) {
     try {
-      const raw = await this.getProfileStore().loadPlayer(id);
+      let raw = await this.getProfileStore().loadPlayer(id);
+      raw = await this.mergeMissingLegacyProfile(account, id, raw);
       if (!raw) {
         recordIdentityTrace('auth.profile.lookup', {
           account: accountSummary(account),
