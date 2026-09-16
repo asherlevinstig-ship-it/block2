@@ -18,7 +18,10 @@ const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const SWEEP_MS = 10 * 60 * 1000;   // reclaim expired sessions and stale rate-limit rows
 const PROFILE_CACHE_MS = 60 * 1000;
 const ASHER_ADMIN_EMAIL = 'asherlevin85@gmail.com';
-const DEFAULT_ASHER_LEGACY_PROFILE_IDS = ['u_133eb7d687eaf6e515dedf845ac182e1'];
+const DEFAULT_ASHER_LEGACY_PROFILE_IDS = [
+  'teacher_1',
+  'u_133eb7d687eaf6e515dedf845ac182e1',
+];
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const DEFAULT_CURRICULUM_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
