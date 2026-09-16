@@ -99,9 +99,9 @@ test('auth responses include the saved hunter-name and pathway state', { concurr
   } finally { await f.close(); }
 });
 
-test('Asher admin login safely adopts the named legacy profile under the current account id', async () => {
-  const legacyId = 'u_133eb7d687eaf6e515dedf845ac182e1';
-  const destinationId = 'teacher_85';
+test('Asher admin login safely adopts the production teacher profile under the current account id', async () => {
+  const legacyId = 'teacher_1';
+  const destinationId = 'student_85';
   const profiles = new Map([[legacyId, {
     name: 'levin',
     S: { lvl: 6, xp: 321, pts: 2, str: 4, agi: 3, vit: 5, int: 2, path: 'mage' },
