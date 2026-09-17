@@ -1808,6 +1808,9 @@ test('browser and server share authoritative quest objective descriptors', () =>
   assert.deepEqual(normalized.progress, { current: 2, required: 2 });
   assert.deepEqual(normalized.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 1, total: 9 });
   assert.equal(questObjectives.normalizeObjective({ id:'progression:s', source:'progression', title:'S Gate', action:{ type:'find_gate', label:'FIND S GATE', rank:5 } }).action.rank, 5);
+  const fellowship = questObjectives.normalizeObjective({ id:'fellowship:join_noobs', source:'fellowship', title:'Join the Noobs', action:{ type:'guild_hall', label:'JOIN NOOBS' } });
+  assert.equal(fellowship.category, 'fellowship');
+  assert.equal(fellowship.action.type, 'guild_hall');
 });
 
 test('NPC story and manhunt quests come from one validated authoring registry', () => {
@@ -5458,7 +5461,7 @@ test('desktop social control opens the unified Social hub from the bottom-right'
   assert.match(html, /id="socialbtn"[\s\S]*social-chat-icon[\s\S]*socialbtn-label support-label">SOCIAL/);
   assert.match(styles, /body:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #socialbtn\{[\s\S]*right:18px;[\s\S]*bottom:18px;/);
   assert.match(combat, /if\(!tabletInputState\.tablet\)\{[\s\S]*el\.style\.left=''[\s\S]*el\.style\.top=''/);
-  assert.match(combat, /function openSocialFromHud\(\)[\s\S]*globalThis\.openSocialUI\('nearby'\)/);
+  assert.match(combat, /function openSocialFromHud\(\)[\s\S]*globalThis\.openSocialUI\('dungeon'\)/);
   assert.match(html, /Click for Social · Hold for quick chat/);
   assert.match(combat, /const SOCIAL_BUTTON_HOLD_MS=1200/);
   assert.match(combat, /function bindSocialHudButton\(btn\)[\s\S]*setTimeout\([\s\S]*openQuickChatFromSocialHud\(\)[\s\S]*SOCIAL_BUTTON_HOLD_MS/);
@@ -5528,6 +5531,23 @@ test('social hub exposes recent players, friend shard joins, and fellowship quic
   assert.match(networking, /friendJoinResult/);
   assert.match(networking, /fellowshipActivity/);
   assert.match(rules, /fellowship:Object\.freeze/);
+});
+
+test('social hub uses the full dungeon dashboard with live social panels', () => {
+  const social = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'social.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(social, /\['dungeon','nearby','recent','friends','team'\]/);
+  assert.match(social, /QUEUE FOR DUNGEON/);
+  assert.match(social, /function renderSocialDashboard\(/);
+  assert.match(social, /nearbySocialPlayers\(\)\.slice\(0,4\)/);
+  assert.match(social, /socialState\.snapshot\.recentPlayers\.slice\(0,4\)/);
+  assert.match(social, /socialState\.snapshot\.friends/);
+  assert.match(social, /function dashboardOpenTeams\(/);
+  assert.match(styles, /\.social-dungeon-hero/);
+  assert.match(styles, /\.social-dashboard-grid/);
+  assert.match(styles, /#qpanel\.management\[data-modal="social-hub"\][\s\S]*height:min\(900px/);
+  assert.match(networking, /globalThis\.openSocialUI=tab=>openTeamUI\(tab\|\|'dungeon'\)/);
 });
 
 test('desktop HUD is composed into identity, navigation, objective, feed, and support clusters', () => {
@@ -5707,12 +5727,24 @@ test('incubation broadcasts never consume another players egg slot',()=>{
 
 test('a dragon hatched outside the overworld appears immediately and follows its owner',()=>{
   const companions=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
   const complete=companions.slice(companions.indexOf('function applyDragonIncubationComplete(m){'),companions.indexOf('function dragonHatchRejected(',companions.indexOf('function applyDragonIncubationComplete(m){')));
+  const collect=companions.slice(companions.indexOf('function collectCompanionDragons(){'),companions.indexOf('function companionRowsForDimension(){'));
   const tick=companions.slice(companions.indexOf('function tickCompanionDragons('),companions.indexOf('// ---------------- dragon breeding:',companions.indexOf('function tickCompanionDragons(')));
   assert.match(complete,/companionDragonSig='';companionDragonNextRefresh=0/);
   assert.match(complete,/baby starts following you/);
   assert.match(companions,/function companionRowsForDimension\(\)[\s\S]*if\(dim==='overworld'\)return rows;[\s\S]*row\.sid==='local'\|\|row\.sid===ownSid/);
+  assert.match(collect,/if\(sid===NET\.room\.sessionId\)\{[\s\S]*dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles/);
   assert.match(tick,/const rows=companionRowsForDimension\(\)/);
+  assert.match(companions,/function companionGroundY\(x,z,hintY\)/);
+  assert.match(tick,/const ty=companionGroundY\(tx,tz,owner\.y\)/);
+  assert.match(tick,/if\(distance>18\)/);
+  assert.match(tick,/rotation\.y=Math\.atan2\(movedX,movedZ\)/);
+  assert.match(companions,/const walking=mode==='walk'&&moving>\.04/);
+  assert.match(companions,/motionMode=.*walking\?'walk':'idle'/);
+  assert.match(companions,/const lift=Math\.max\(0,stride\)\*\(walking\?\.18:\.11\)\*moving/);
+  assert.match(companions,/dragon\.rotation\.y=0/);
+  assert.match(networking,/groundHeight:\(x,z,y\)=>worldState\.standHeight\(x,z,y\)/);
   assert.doesNotMatch(tick,/if\(dim!=='overworld'\)[\s\S]*clearMissingCompanionDragons\(new Set\(\)\)/);
 });
 

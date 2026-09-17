@@ -3686,9 +3686,9 @@ function openGuildHallUI(focus=''){
     row.appendChild(qBtn('CREATE PRIVATE',()=>{const name=input.value.trim();if(name.length<3){sysMsg('Fellowship names need at least <b>3 characters</b>');return;}requestGuildCreate(name,true);},true));
     row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
     const listTitle=document.createElement('div');listTitle.className='sub2';listTitle.style.marginTop='14px';listTitle.textContent='JOIN A FELLOWSHIP';qpanelEl.appendChild(listTitle);
-    const fellowships=guildHallState.fellowships||[];
+    const fellowships=[...(guildHallState.fellowships||[])].sort((a,b)=>(b.starter===true)-(a.starter===true)||String(a.name||'').localeCompare(String(b.name||'')));
     if(!fellowships.length){const empty=document.createElement('p');empty.className='qtext';empty.textContent='No fellowships have been founded yet.';qpanelEl.appendChild(empty);}
-    for(const f of fellowships){const invited=!!pendingGuildInvites[f.id];const row2=document.createElement('div');row2.className='shoprow';row2.innerHTML='<span><b style="color:#f2c75c">'+escHTML(f.name)+'</b>'+(f.private?' <small style="opacity:.75">invite-only</small>':'')+'<br><small style="opacity:.72">Leader: '+escHTML(f.leaderName)+' · '+((f.memberCount|0)||1)+'/50 hunters'+(f.floor?' · Floor '+(f.floor|0):'')+'</small></span>';row2.appendChild(qBtn(f.private&&!invited?'INVITE ONLY':'JOIN',()=>{if(f.private&&!invited)return;requestGuildJoin(f.id);},f.private&&!invited));qpanelEl.appendChild(row2);}
+    for(const f of fellowships){const invited=!!pendingGuildInvites[f.id],starterGold=Math.max(0,f.starterRewardGold|0);const row2=document.createElement('div');row2.className='shoprow';row2.innerHTML='<span><b style="color:#f2c75c">'+escHTML(f.name)+'</b>'+(starterGold?' <small style="color:#9be76d">STARTER QUEST · +'+starterGold+' GOLD</small>':f.starter?' <small style="opacity:.75">STARTER FELLOWSHIP</small>':f.private?' <small style="opacity:.75">invite-only</small>':'')+'<br><small style="opacity:.72">Leader: '+escHTML(f.leaderName)+' · '+((f.memberCount|0)||1)+'/50 hunters'+(f.floor?' · Floor '+(f.floor|0):'')+'</small></span>';row2.appendChild(qBtn(f.private&&!invited?'INVITE ONLY':starterGold?'JOIN +'+starterGold+'G':'JOIN',()=>{if(f.private&&!invited)return;requestGuildJoin(f.id);},f.private&&!invited));qpanelEl.appendChild(row2);}
   }else{
     const status=document.createElement('p');status.className='qtext';
     const role=mine.role||'member';
@@ -3829,6 +3829,7 @@ function objectiveSourceLabel(source){
     aegis:'Aegis Trial',
     job:'Job Contract',
     guild:'Guild Contract',
+    fellowship:'Fellowship Quest',
     progression:'Progression',
     tutorial:'Tutorial Guide',
     event:'World Event',
@@ -4055,6 +4056,7 @@ function openServerObjectiveDestination(meta={}){
 function handleServerObjectiveAction(action,meta={}){
   if(action==='jobs'){openJobsUI();return;}
   if(action==='guild_contracts'){openRegionalContractsUI();return;}
+  if(action==='guild_hall'){openGuildHallUI('noobs');return;}
   if(action==='land'){openLandRecovery();return;}
   if(action==='cartographer'){
     if(NET.on&&NET.room)NET.room.send('cartographer',{action:'status'});
@@ -8942,6 +8944,7 @@ gameContext.registerModule('menus', Object.freeze({
   closeModal:closeQWin,
   openQuestLog:openQuestLogUI,
   openJobs:openJobsUI,
+  openGuildHall:openGuildHallUI,
   openRegionalContracts:openRegionalContractsUI,
   openGuardian:openGuardianUI,
   openGatePrep:openGatePrepUI,

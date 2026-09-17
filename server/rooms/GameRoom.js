@@ -603,6 +603,7 @@ class GameRoom extends Room {
       }
       for (const g of this.guilds.values()) if (g.floor > 0) this.buildGuildHallFloor(g.floor, false);
     } catch (e) { console.warn('[persist] guild load failed:', e.message); }
+    if (this.ensureStarterGuild && this.ensureStarterGuild()) this.dirtyGuilds = true;
     this.spawnAcc = 0;
     this.animalSpawnAcc = 0;
 
@@ -6653,6 +6654,23 @@ class GameRoom extends Room {
       }
       objectives.push(QUEST_OBJECTIVES.normalizeObjective(payload) || payload);
     };
+    const playerGuild = client ? this.guildForToken(this.clientToken(client)) : null;
+    if (!prof.noobsGuildJoinRewardClaimed && !playerGuild) add({
+      id: 'fellowship:join_noobs',
+      source: 'fellowship',
+      category: 'fellowship',
+      questType: 'guild_join',
+      title: 'Join the Noobs',
+      status: 'active',
+      text: 'Join the Noobs starter fellowship and meet other new hunters.',
+      hudText: 'Visit Lyra Pennant in the Fellowship Hall and join Noobs for 20 gold.',
+      location: 'Guild Hall',
+      action: { type: 'guild_hall', label: 'JOIN NOOBS' },
+      progress: { current: 0, required: 1 },
+      reward: { gold: 20, note: 'One-time starter fellowship reward' },
+      priority: 18,
+      lifecycle: lifecycleFor('active'),
+    });
     const bounty = this.aegisBounties && client ? this.aegisBounties.get(client.sessionId) : null;
     if (bounty) add({
       id: 'aegis:silent_bounty:active',

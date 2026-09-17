@@ -49,8 +49,35 @@ const FELLOWSHIP_WEEKLY_REWARDS = [
   { id: 'prestige_100', threshold: 100, name: 'Prestige Coffer', desc: 'A strong weekly capstone for organised fellowship work.', gold: 300, items: [{ id: I.FEAST_PLATTER, count: 1 }, { id: I.DIAMOND, count: 2 }] },
 ];
 const FELLOWSHIP_WEEKLY_REWARD_BY_ID = new Map(FELLOWSHIP_WEEKLY_REWARDS.map(r => [r.id, r]));
+const STARTER_GUILD_NAME = 'Noobs';
+const STARTER_GUILD_LEADER = 'npc_lyra_pennant';
+const STARTER_GUILD_REWARD_GOLD = 20;
 
 class EventsMixin {
+  ensureStarterGuild() {
+    let guild = [...this.guilds.values()].find(g => g && (g.starter === true || String(g.name || '').toLowerCase() === STARTER_GUILD_NAME.toLowerCase()));
+    if (guild) {
+      const changed = guild.starter !== true || guild.leader !== STARTER_GUILD_LEADER || guild.leaderName !== 'Lyra Pennant' || guild.private === true || !guild.members.has(STARTER_GUILD_LEADER);
+      guild.starter = true;
+      guild.members.add(STARTER_GUILD_LEADER);
+      if (guild.leader && guild.leader !== STARTER_GUILD_LEADER && guild.roles) guild.roles.set(guild.leader, 'officer');
+      guild.leader = STARTER_GUILD_LEADER;
+      guild.leaderName = 'Lyra Pennant';
+      guild.private = false;
+      return changed;
+    }
+    guild = {
+      id: 'G' + (++this.guildSeq), name: STARTER_GUILD_NAME,
+      leader: STARTER_GUILD_LEADER, leaderName: 'Lyra Pennant',
+      members: new Set([STARTER_GUILD_LEADER]), roles: new Map(), invites: new Set(),
+      starter: true, private: false, floor: 0, foundedAt: Date.now(), floorBoughtAt: 0,
+      renown: 0, totalRenown: 0, renownWeek: 0, contractsWeek: 0,
+      renownWeekStart: this.currentFellowshipWeek(), weeklyRewardClaims: { week: this.currentFellowshipWeek(), claims: {} },
+      projects: new Set(), notice: null,
+    };
+    this.guilds.set(guild.id, guild);
+    return true;
+  }
   // Server-event and day-cycle state, co-located with the mixin that owns it.
   // Called once from onCreate. serverEvent is seeded via the mixin's own helpers.
   initEventsState() {
@@ -2130,6 +2157,7 @@ class EventsMixin {
   }
   guildHallPayload(client) {
     const token = this.clientToken(client);
+    const rec = this.profileFor(client);
     const mine = this.guildForToken(token);
     const all = [...this.guilds.values()];
     const floors = all.filter(g => g.floor > 0).sort((a, b) => a.floor - b.floor).map(g => ({
@@ -2137,7 +2165,8 @@ class EventsMixin {
     }));
     const fellowships = all.sort((a, b) => a.name.localeCompare(b.name)).map(g => ({
       id: g.id, name: g.name, leaderName: g.leaderName, floor: g.floor,
-      memberCount: g.members.size, private: !!g.private,
+      memberCount: g.members.size, private: !!g.private, starter: g.starter === true,
+      starterRewardGold: g.starter === true && rec && rec.prof && !rec.prof.noobsGuildJoinRewardClaimed ? STARTER_GUILD_REWARD_GOLD : 0,
     }));
     const members = mine ? [...mine.members].map(t => {
       const sid = this.onlineSidForToken(t);
@@ -2200,6 +2229,7 @@ class EventsMixin {
     this.broadcast('chat', { name: '[Guild Hall]', text: guild.leaderName + ' founded ' + guild.name });
   }
   fellowshipNameForToken(token) {
+    if (token === STARTER_GUILD_LEADER) return 'Lyra Pennant';
     const sid = this.onlineSidForToken(token);
     const online = sid && this.state.players.get(sid);
     const profile = this.profiles.get(token);
@@ -2219,7 +2249,24 @@ class EventsMixin {
     guild.members.add(rec.token);
     if (guild.invites) guild.invites.delete(rec.token);
     this.dirtyGuilds = true;
-    client.send('guildJoined', { id: guild.id, name: guild.name, leaderName: guild.leaderName });
+    let rewardGold = 0;
+    if (guild.starter === true && !rec.prof.noobsGuildJoinRewardClaimed) {
+      rewardGold = STARTER_GUILD_REWARD_GOLD;
+      rec.prof.noobsGuildJoinRewardClaimed = true;
+      rec.prof.gold = Math.min(1e9, Math.max(0, rec.prof.gold | 0) + rewardGold);
+      this.dirtyPlayers.add(rec.token);
+      if (this.recordEconomyGold) this.recordEconomyGold(client, rewardGold, 'fellowship_faucet', 'join_noobs');
+      if (this.sendQuestRewardSummary) this.sendQuestRewardSummary(client, {
+        source: 'fellowship', questType: 'guild_join', title: 'Welcome to Noobs',
+        gold: rewardGold, claimLocation: 'Fellowship Hall',
+        nextStep: 'Meet your fellowship, take Guild Contracts, and build Renown together.',
+      });
+      this.sendProfile(client, rec.prof);
+      this.savePlayerProfileNow(rec.token, rec.prof);
+    } else if (this.activeQuestObjectives) {
+      client.send('progressionFocus', { focus: rec.prof.progressionFocus || '', activeObjectives: this.activeQuestObjectives(client, rec.prof) });
+    }
+    client.send('guildJoined', { id: guild.id, name: guild.name, leaderName: guild.leaderName, rewardGold, gold: rec.prof.gold | 0 });
     this.broadcastGuildHallSync();
     this.broadcast('chat', { name: '[Fellowship]', text: this.fellowshipNameForToken(rec.token) + ' joined ' + guild.name });
   }

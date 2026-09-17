@@ -1126,6 +1126,7 @@ function serverObjectiveHudAction(o){
   if(type==='find_gate')return {type:'find_gate',label:explicit.label||'FIND GATE',rank:explicit.rank};
   if(type==='jobs')return {type:'questlog',label:'OPEN QUEST LOG'};
   if(type==='guild_contracts')return {type:'guild_contracts',label:explicit.label||(o.status==='claimable'?'CLAIM GUILD CONTRACT':'OPEN GUILD CONTRACTS')};
+  if(type==='guild_hall')return {type:'guild_hall',label:explicit.label||'OPEN FELLOWSHIP HALL'};
   if(type==='land')return {type:'land',label:explicit.label||'CLAIM LAND'};
   if(type==='gate_prep')return {type:'gate_prep',label:explicit.label||'PREP CHECK',rank:explicit.rank==null?gatePrepTargetRank():explicit.rank|0};
   if(type==='choose_spec')return {type:'choose_spec',label:explicit.label||'CHOOSE SPEC'};
@@ -1730,6 +1731,7 @@ function handleObjectiveAction(action,btn){
   if(action==='craft'){menusApi.activateCraftShortcut&&menusApi.activateCraftShortcut(+(btn.dataset.outputId||0),btn.dataset.kind||'craft');return;}
   if(action==='jobs'){menusApi.openJobs&&menusApi.openJobs();return;}
   if(action==='guild_contracts'){menusApi.openRegionalContracts&&menusApi.openRegionalContracts();return;}
+  if(action==='guild_hall'){menusApi.openGuildHall&&menusApi.openGuildHall('noobs');return;}
   if(action==='claim_aegis'){menusApi.openGuardian&&menusApi.openGuardian();return;}
   if(action==='continue_panel'){
     const btn=['milestonecontinue','rewardclose','rankupcontinue','trainingcontinue','promotioncontinue','graduationcontinue']

@@ -759,7 +759,7 @@ function openQuestionsFromHud(){
 }
 function openSocialFromHud(){
   if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
-  if(typeof globalThis.openSocialUI==='function'){globalThis.openSocialUI('nearby');return true;}
+  if(typeof globalThis.openSocialUI==='function'){globalThis.openSocialUI('dungeon');return true;}
   if(typeof openChat==='function'){ openChat(); return true; }
   if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
   return false;

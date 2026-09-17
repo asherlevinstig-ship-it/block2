@@ -450,7 +450,7 @@ addEventListener('keydown',event=>{
 // ---- teams ----
 const TEAM_COLS=['#ffd24a','#6ee06a','#ff9a4a','#c08aff','#4fd8ff','#ff6a8a'];
 const pendingTeamInvites={};
-const socialState={tab:'nearby',snapshot:{friends:[],recentPlayers:[],incomingFriendRequests:[],outgoingFriendRequests:[],teamInvites:[]}};
+const socialState={tab:'dungeon',snapshot:{friends:[],recentPlayers:[],incomingFriendRequests:[],outgoingFriendRequests:[],teamInvites:[]}};
 function teamCol(id){
   let h=0;
   for(const ch of String(id)) h=(h*31+ch.charCodeAt(0))>>>0;
@@ -633,17 +633,77 @@ function renderTeamSocial(){
   socialHeading('CREATE A NAMED TEAM');
   const create=document.createElement('div');create.className='social-create-team';const inp=document.createElement('input');inp.maxLength=20;inp.placeholder='Team name';create.appendChild(inp);create.appendChild(qBtn('CREATE OPEN',()=>{const name=inp.value.trim();if(name)NET.room.send('teamCreate',{name});}));create.appendChild(qBtn('CREATE INVITE-ONLY',()=>{const name=inp.value.trim();if(name)NET.room.send('teamCreate',{name,private:true});},true));qpanelEl.appendChild(create);
 }
-function openTeamUI(tab='team',refresh=true){
-  socialState.tab=['nearby','recent','friends','team'].includes(tab)?tab:'team';
+function socialDashboardPerson(person,detail,action){
+  const row=document.createElement('div');row.className='social-dashboard-row';
+  const avatar=document.createElement('i');avatar.textContent=String(person&&person.name||'H').trim().slice(0,1).toUpperCase()||'H';row.appendChild(avatar);
+  const copy=document.createElement('span');copy.innerHTML='<b>'+escHTML(person&&person.name||'Hunter')+'</b><small>'+escHTML(detail||'')+'</small>';row.appendChild(copy);
+  if(action){const button=document.createElement('button');button.type='button';button.className='social-row-icon';button.textContent=action.label||'›';button.title=action.title||action.label||'Open';button.addEventListener('click',event=>{event.stopPropagation();action.run();});row.appendChild(button);}
+  return row;
+}
+function socialDashboardCard(title,subtitle,tab){
+  const card=document.createElement('section');card.className='social-dashboard-card';
+  const heading=document.createElement('header');heading.innerHTML='<span><b>'+escHTML(title)+'</b><small>'+escHTML(subtitle)+'</small></span>';card.appendChild(heading);
+  const body=document.createElement('div');body.className='social-dashboard-list';card.appendChild(body);
+  const more=document.createElement('button');more.type='button';more.className='social-card-more';more.textContent='VIEW '+title;more.addEventListener('click',()=>openTeamUI(tab,false));card.appendChild(more);
+  return {card,body};
+}
+function dashboardEmpty(root,text){const empty=document.createElement('p');empty.className='social-dashboard-empty';empty.textContent=text;root.appendChild(empty);}
+function dashboardOpenTeams(){
+  const out=[];
+  if(!NET.room||!NET.room.state||!NET.room.state.teams)return out;
+  NET.room.state.teams.forEach((team,id)=>{
+    let online=0;NET.room.state.players.forEach(pl=>{if(pl.connected!==false&&pl.team===id)online++;});
+    const total=(team.memberCount|0)||online,invited=!!pendingTeamInvites[id];
+    if((team.private&&!invited&&!team.lfg)||total>=5)return;
+    out.push({id,team,online,total,invited});
+  });
+  return out.sort((a,b)=>Number(!!b.team.lfg)-Number(!!a.team.lfg)||b.online-a.online).slice(0,4);
+}
+function renderSocialDashboard(){
+  const hero=document.createElement('section');hero.className='social-dungeon-hero';
+  const artwork=document.createElement('div');artwork.className='social-gate-art';artwork.innerHTML='<div class="social-gate-rune"><i></i><i></i><i></i></div><span>HUNT<br>TOGETHER<br>GO FURTHER</span>';hero.appendChild(artwork);
+  const main=document.createElement('div');main.className='social-dungeon-main';
+  main.innerHTML='<small>MATCHMAKE WITH OTHER HUNTERS</small><h3>DUNGEON QUEUE</h3><p>Brave an active public Gate with other hunters. Match automatically, confirm your team, and enter together.</p>';
+  const queue=document.createElement('button');queue.type='button';queue.className='social-queue-cta';queue.innerHTML='<i>⚔</i><b>QUEUE FOR DUNGEON</b>';queue.disabled=!NET.on;queue.addEventListener('click',()=>menusApi.openRandomGateQueue());main.appendChild(queue);
+  const queueMeta=document.createElement('div');queueMeta.className='social-queue-meta';queueMeta.innerHTML='<span>◷ &nbsp; ESTIMATED WAIT: <b>1–3 MIN</b></span><span>♟ &nbsp; MODE: <b>RANDOM PUBLIC GATE</b></span>';main.appendChild(queueMeta);hero.appendChild(main);
+  const ways=document.createElement('aside');ways.className='social-play-ways';ways.innerHTML='<h4>OTHER WAYS TO PLAY</h4>';
+  const way=(icon,title,copy,run)=>{const button=document.createElement('button');button.type='button';button.innerHTML='<i>'+icon+'</i><span><b>'+title+'</b><small>'+copy+'</small></span>';button.disabled=!NET.on;button.addEventListener('click',run);ways.appendChild(button);};
+  way('♙','SOLO QUEUE','Match with other hunters.',()=>menusApi.openRandomGateQueue());
+  way('♟','FIND PARTY','Browse open teams.',()=>openTeamUI('team',false));
+  way('+','CREATE TEAM','Name a team and invite others.',()=>{openTeamUI('team',false);setTimeout(()=>{const input=qpanelEl.querySelector('.social-create-team input');if(input){input.scrollIntoView({block:'center'});input.focus();}},0);});
+  hero.appendChild(ways);qpanelEl.appendChild(hero);
+
+  const grid=document.createElement('div');grid.className='social-dashboard-grid';
+  const nearby=socialDashboardCard('NEARBY HUNTERS','Players within 16 metres.','nearby'),nearbyPeople=nearbySocialPlayers().slice(0,4);
+  if(!nearbyPeople.length)dashboardEmpty(nearby.body,'No hunters are close by right now.');
+  for(const person of nearbyPeople)nearby.body.appendChild(socialDashboardPerson(person,Math.max(1,Math.round(person.distance))+' m away',{label:'☵',title:'Interact',run:()=>{closeQWin(false);if(typeof openPlayerSocialUI==='function')openPlayerSocialUI(person);}}));
+  grid.appendChild(nearby.card);
+
+  const recent=socialDashboardCard('RECENT PLAYERS','Hunters from recent activities.','recent'),recentPeople=socialState.snapshot.recentPlayers.slice(0,4);
+  if(!recentPeople.length)dashboardEmpty(recent.body,'Complete a shared activity to build your history.');
+  for(const person of recentPeople)recent.body.appendChild(socialDashboardPerson(person,recentPlayedText(person),{label:'+',title:'Add friend',run:()=>NET.room.send('recentFriendAdd',{targetToken:person.token})}));
+  grid.appendChild(recent.card);
+
+  const friends=socialDashboardCard('FRIENDS','Your friends across Blockcraft.','friends'),friendPeople=[...socialState.snapshot.friends].sort((a,b)=>Number(!!b.online)-Number(!!a.online)).slice(0,4);
+  if(!friendPeople.length)dashboardEmpty(friends.body,'Add nearby or recent hunters as friends.');
+  for(const person of friendPeople){const status=person.online?(person.status||'Online'):'Offline';friends.body.appendChild(socialDashboardPerson(person,status,{label:'☵',title:person.sameShard?'Whisper':'View friends',run:()=>person.sameShard?whisperTo(person):openTeamUI('friends',false)}));}
+  grid.appendChild(friends.card);
+
+  const teams=socialDashboardCard('OPEN TEAMS','Groups looking for more hunters.','team'),openTeams=dashboardOpenTeams();
+  if(!openTeams.length)dashboardEmpty(teams.body,'No open teams are recruiting yet.');
+  for(const entry of openTeams)teams.body.appendChild(socialDashboardPerson({name:entry.team.name},entry.total+'/5 members'+(entry.team.lfg?' · Finding dungeon':''),{label:'JOIN',title:'Join team',run:()=>NET.room.send('teamJoin',{key:entry.id})}));
+  grid.appendChild(teams.card);qpanelEl.appendChild(grid);
+}
+function openTeamUI(tab='dungeon',refresh=true){
+  socialState.tab=['dungeon','nearby','recent','friends','team'].includes(tab)?tab:'dungeon';
   openQWin('management');
   qpanelEl.innerHTML='';
   qpanelEl.dataset.modal='social-hub';
-  const h=document.createElement('h2'); h.textContent='SOCIAL'; qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent='FRIENDS · RECENT PLAYERS · NEARBY HUNTERS · TEAMS';
-  qpanelEl.appendChild(sub);
+  qpanelEl.classList.add('social-hub-panel');
+  const close=document.createElement('button');close.type='button';close.className='social-hub-close';close.setAttribute('aria-label','Close Social');close.textContent='×';close.addEventListener('click',()=>closeQWin());qpanelEl.appendChild(close);
+  const h=document.createElement('h2');h.className='social-hub-title';h.textContent='SOCIAL';qpanelEl.appendChild(h);
   const tabs=document.createElement('div');tabs.className='social-tabs';
-  for(const id of ['nearby','recent','friends','team']){const count=id==='friends'?socialState.snapshot.incomingFriendRequests.length:id==='team'?socialState.snapshot.teamInvites.length:0,button=document.createElement('button');button.type='button';button.className=id===socialState.tab?'active':'';button.textContent=id.toUpperCase()+(count?' ('+count+')':'');button.addEventListener('click',()=>openTeamUI(id,false));tabs.appendChild(button);}
+  for(const [id,label] of [['dungeon','DUNGEON QUEUE'],['nearby','NEARBY'],['recent','RECENT'],['friends','FRIENDS'],['team','TEAMS']]){const count=id==='friends'?socialState.snapshot.incomingFriendRequests.length:id==='team'?socialState.snapshot.teamInvites.length:0,button=document.createElement('button');button.type='button';button.className=id===socialState.tab?'active':'';button.textContent=label+(count?' ('+count+')':'');button.addEventListener('click',()=>openTeamUI(id,false));tabs.appendChild(button);}
   qpanelEl.appendChild(tabs);
   if(!NET.on){
     const p2=document.createElement('p'); p2.className='qtext';
@@ -652,11 +712,11 @@ function openTeamUI(tab='team',refresh=true){
     qpanelEl.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
     return;
   }
-  if(socialState.tab==='nearby')renderNearbySocial();
+  if(socialState.tab==='dungeon')renderSocialDashboard();
+  else if(socialState.tab==='nearby')renderNearbySocial();
   else if(socialState.tab==='recent')renderRecentSocial();
   else if(socialState.tab==='friends')renderFriendsSocial();
   else renderTeamSocial();
-  qpanelEl.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
   if(refresh)requestSocialSnapshot();
 }
 

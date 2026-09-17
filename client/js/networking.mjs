@@ -1865,6 +1865,7 @@ function netAttachRoom(room,name,client){
         manhunt:'Manhunt Quest',
         job:'Job Contract',
         guild:'Guild Contract',
+        fellowship:'Fellowship Quest',
         aegis:'Aegis Trial'
       })[m.source]||'Quest Reward';
       const where=m.claimLocation?' <small>Claimed at '+escHTML(m.claimLocation)+'</small>':'';
@@ -1999,7 +2000,7 @@ function netAttachRoom(room,name,client){
       if(guildHallOpen) openGuildHallUI();
     });
     room.onMessage('guildCreated',m=>{sysMsg('Guild founded: <b>'+escHTML(m&&m.name||'New Guild')+'</b>. You are its leader.');SFX.level();showFellowshipTutorial(m,'created');});
-    room.onMessage('guildJoined',m=>{if(m&&m.id){delete pendingGuildInvites[m.id];SOCIAL_NOTIFICATIONS.resolve('fellowship:'+String(m.id),'Fellowship joined');}sysMsg('Joined fellowship: <b>'+escHTML(m&&m.name||'Fellowship')+'</b>.');SFX.level();showFellowshipTutorial(m,'joined');});
+    room.onMessage('guildJoined',m=>{if(m&&m.id){delete pendingGuildInvites[m.id];SOCIAL_NOTIFICATIONS.resolve('fellowship:'+String(m.id),'Fellowship joined');}if(Number.isFinite(m&&m.gold))gold=Math.max(0,m.gold|0);sysMsg('Joined fellowship: <b>'+escHTML(m&&m.name||'Fellowship')+'</b>.'+(m&&m.rewardGold?'<br><b>Quest complete:</b> +'+(m.rewardGold|0)+' gold.':''));refreshHUD();SFX.level();showFellowshipTutorial(m,'joined');});
     room.onMessage('guildLeft',m=>{sysMsg((m&&m.kicked)?'You were removed from <b>'+escHTML(m.name||'your fellowship')+'</b>.':(m&&m.disbanded)?'<b>'+escHTML(m&&m.name||'Your fellowship')+'</b> disbanded.':'You left <b>'+escHTML(m&&m.name||'your fellowship')+'</b>.');SFX.uiClose();});
     room.onMessage('guildInvite',m=>{if(m&&m.id)pendingGuildInvites[m.id]=Date.now();SOCIAL_NOTIFICATIONS.fellowship(m);sysMsg('<b>'+escHTML(m&&m.from||'An officer')+'</b> invited you to <b>'+escHTML(m&&m.name||'a fellowship')+'</b>. Accept from the notification or review it at the Fellowship Hall.');SFX.level();});
     room.onMessage('guildInviteDeclined',m=>{if(m&&m.id){delete pendingGuildInvites[m.id];SOCIAL_NOTIFICATIONS.resolve('fellowship:'+String(m.id),'Invitation declined');}sysMsg('Fellowship invitation declined.',{tier:'minor',title:'Fellowship'});});
@@ -4350,6 +4351,7 @@ globalThis.BlockcraftAdminBossGallery=Object.freeze({
 const COMPANIONS=createCompanionSystem({
   NET,
   player,
+  groundHeight:(x,z,y)=>worldState.standHeight(x,z,y),
   inv,
   gearSystem:GEAR_SYSTEM,
   refreshHUD,
@@ -6028,7 +6030,7 @@ const SOCIAL=createSocialSystem({
 const SOCIAL_NOTIFICATIONS=createSocialNotifications({
   document,
   send:(type,message)=>{if(NET.on&&NET.room)NET.room.send(type,message);},
-  openSocial:tab=>openTeamUI(tab||'nearby'),
+  openSocial:tab=>openTeamUI(tab||'dungeon'),
   openFellowship:()=>{if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'notification'});menusApi.openGuildHallUI();},
   openDungeonLobby:()=>{if(dungeonLobbyState)openDungeonLobbyUI();},
   reviewTrade:offer=>menusApi.applyTradeOffer(offer),
@@ -6039,7 +6041,7 @@ globalThis.startQuickChatWheel=SOCIAL.startQuickChatWheel;
 globalThis.closeQuickChatWheel=SOCIAL.closeQuickChatWheel;
 globalThis.startDragonCommandWheel=SOCIAL.startDragonCommandWheel;
 const {chatLine,openChat,closeChat,openAdminChat,pendingTeamInvites,teamCol,teamName,myTeamId,isMyTeamLeader,netTeamHud,openTeamUI}=SOCIAL;
-globalThis.openSocialUI=tab=>openTeamUI(tab||'nearby');
+globalThis.openSocialUI=tab=>openTeamUI(tab||'dungeon');
 
 // ---- smart top-screen player suggestions ----
 const SMART_SUGGESTION_KEY='bc_smart_suggestions_v1';

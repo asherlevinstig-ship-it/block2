@@ -14114,6 +14114,42 @@ test('guild founder becomes leader and can purchase one appended hall floor', ()
   assert.deepEqual(leader.sent.at(-1), { type: 'guildReject', msg: { reason: 'owned' } });
 });
 
+test('Noobs is a permanent starter fellowship with a one-time 20 gold join quest', () => {
+  const room = makeRoom(), player = makeClient('starter_joiner');
+  room.clients.push(player);
+  const { token, prof } = seedPlayer(room, player, { ...GUILD_RECEPTION_PLAYER_POS, token: 'starter_joiner_token', name: 'New Hunter', gold: 100 });
+
+  assert.equal(room.ensureStarterGuild(), true);
+  assert.equal(room.ensureStarterGuild(), false, 'startup repair must not duplicate the starter fellowship');
+  const noobs = [...room.guilds.values()].find(g => g.name === 'Noobs');
+  assert.ok(noobs);
+  assert.equal(noobs.starter, true);
+  assert.equal(noobs.leaderName, 'Lyra Pennant');
+  assert.equal(room.guildHallPayload(player).fellowships.find(g => g.id === noobs.id).starterRewardGold, 20);
+
+  const before = room.activeQuestObjectives(player, prof).find(o => o.id === 'fellowship:join_noobs');
+  assert.ok(before);
+  assert.equal(before.reward.gold, 20);
+  assert.equal(before.action.type, 'guild_hall');
+
+  room.handleGuildJoin(player, { id: noobs.id });
+  assert.equal(noobs.members.has(token), true);
+  assert.equal(prof.gold, 120);
+  assert.equal(prof.noobsGuildJoinRewardClaimed, true);
+  assert.equal(sanitizeProfile(prof).noobsGuildJoinRewardClaimed, true, 'the one-time claim survives profile persistence');
+  assert.equal(room.activeQuestObjectives(player, prof).some(o => o.id === 'fellowship:join_noobs'), false);
+  assert.equal(player.sent.some(e => e.type === 'guildJoined' && e.msg.rewardGold === 20 && e.msg.gold === 120), true);
+  assert.equal(player.sent.some(e => e.type === 'questRewardSummary' && e.msg.title === 'Welcome to Noobs'), true);
+
+  room.rateBuckets.clear();
+  room.handleGuildLeave(player);
+  room.rateBuckets.clear();
+  room.handleGuildJoin(player, { id: noobs.id });
+  assert.equal(prof.gold, 120, 'leaving and rejoining cannot farm the starter reward');
+  assert.equal(player.sent.filter(e => e.type === 'guildJoined' && e.msg.rewardGold === 20).length, 1);
+  assert.equal(room.guildHallPayload(player).fellowships.find(g => g.id === noobs.id).starterRewardGold, 0);
+});
+
 test('guild hall purchase is leader-only and guild persistence sanitizes floor ownership', () => {
   const room = makeRoom(), leader = makeClient('leader'), member = makeClient('member');
   const pos = GUILD_RECEPTION_PLAYER_POS;
@@ -14132,6 +14168,7 @@ test('guild hall purchase is leader-only and guild persistence sanitizes floor o
   assert.deepEqual(clean.G1.roles, {});
   assert.equal(clean.G1.private, false);
   assert.deepEqual(clean.G1.invites, []);
+  assert.equal(sanitizeGuilds({ G1: { id: 'G1', name: 'Noobs', leader: 'npc_lyra_pennant', starter: true } }).G1.starter, true);
 });
 
 test('guild reception sells decor only to fellowships with claimed floors', () => {

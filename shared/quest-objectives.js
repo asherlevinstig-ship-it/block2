@@ -3,11 +3,11 @@
   else root.BlockcraftQuestObjectives=factory();
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   const CATEGORIES={
-    story:'story',manhunt:'manhunt',aegis:'aegis',job:'job',guild:'guild',
+    story:'story',manhunt:'manhunt',aegis:'aegis',job:'job',guild:'guild',fellowship:'fellowship',
     progression:'progression',tutorial:'tutorial',event:'event',discovery:'discovery'
   };
   const SOURCE_CATEGORY={
-    story:'story',npc:'story',manhunt:'manhunt',aegis:'aegis',job:'job',guild:'guild',
+    story:'story',npc:'story',manhunt:'manhunt',aegis:'aegis',job:'job',guild:'guild',fellowship:'fellowship',
     progression:'progression',tutorial:'tutorial',event:'event',discovery:'discovery'
   };
   function clean(value,fallback='',limit=80){

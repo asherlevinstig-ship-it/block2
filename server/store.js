@@ -399,6 +399,7 @@ function defaultProfile(name) {
     gold: 100,
     karma: 0,
     starterGoldGranted: true,
+    noobsGuildJoinRewardClaimed: false,
     firstQuestRewardClaimed: false,
     maraRoadReadySwordGranted: false,
     maraRoadReadyCraftRequired: false,
@@ -1007,6 +1008,7 @@ function sanitizeProfile(p) {
   // to reach 100, without refilling players who spend it afterward.
   out.starterGoldGranted = true;
   if (p.starterGoldGranted !== true) out.gold = Math.max(100, out.gold);
+  out.noobsGuildJoinRewardClaimed = p.noobsGuildJoinRewardClaimed === true;
   if (p.skyshipTransit && typeof p.skyshipTransit === 'object') {
     out.skyshipTransit = {
       route: p.skyshipTransit.route === 'western' ? 'western' : 'western',
@@ -1505,6 +1507,7 @@ function sanitizeGuilds(guilds) {
       leaderName: cleanTeamName(raw.leaderName) || 'Guild Leader',
       members,
       roles,
+      starter: raw.starter === true,
       private: !!raw.private,
       invites: Array.isArray(raw.invites)
         ? raw.invites.map(cleanToken).filter((t, i, a) => t && a.indexOf(t) === i && !members.includes(t)).slice(0, 100)

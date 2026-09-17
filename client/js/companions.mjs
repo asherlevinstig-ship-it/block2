@@ -4,6 +4,7 @@ const FAMILIAR_SYSTEM=globalThis.BlockcraftFamiliarSystem;
 export function createCompanionSystem({
   NET,
   player,
+  groundHeight,
   inv,
   gearSystem,
   refreshHUD,
@@ -361,14 +362,21 @@ function animateDragonMotion(obj, now, dt=0.016, mode='idle', speed=0, bank=0){
   const moving=Math.max(0,Math.min(1,Number(speed)||0));
   const flying=mode==='flight'||mode==='mountedFlight'||mode==='sky';
   const resting=mode==='rest';
+  const walking=mode==='walk'&&moving>.04;
   const wingClock=now*(flying?(1.05+moving*.65):(resting?.18:(moving>.08?.42:.24)))+phase*1000;
   animateMountWings(obj, wingClock);
   if(!anim)return;
   const t=now/1000+phase;
-  const walk=t*(6.8+moving*5.2);
-  const bob=flying?Math.sin(t*3.2)*(.04+moving*.035):(moving>.08?Math.abs(Math.sin(walk))*.07:(resting?Math.sin(t*.75)*.012:Math.sin(t*1.35)*.02));
-  const bodyPitch=flying?-.08-moving*.05+Math.sin(t*2.2)*.025:(moving>.08?Math.sin(walk)*.025:(resting?.055:0));
-  const bodyBank=Math.max(-.22,Math.min(.22,bank||0))+(flying?Math.sin(t*1.7)*.035:0);
+  const walk=t*(walking?8.2+moving*6.8:6.8+moving*5.2);
+  const bob=flying?Math.sin(t*3.2)*(.04+moving*.035):(walking?Math.abs(Math.sin(walk))*(.075+moving*.035):(resting?Math.sin(t*.75)*.012:Math.sin(t*1.35)*.02));
+  const bodyPitch=flying?-.08-moving*.05+Math.sin(t*2.2)*.025:(walking?Math.sin(walk)*(.035+moving*.02):(resting?.055:0));
+  const bodyBank=Math.max(-.22,Math.min(.22,bank||0))+(flying?Math.sin(t*1.7)*.035:(walking?Math.sin(walk*.5)*.025*moving:0));
+  if(obj.userData)obj.userData.motionMode=flying?'flight':(resting?'rest':(walking?'walk':'idle'));
+  if(walking&&obj.userData&&obj.userData.wings){
+    const wingStep=Math.sin(walk*.5)*.025*moving;
+    obj.userData.wings[0].rotation.z=-.2-wingStep;
+    obj.userData.wings[1].rotation.z=.2+wingStep;
+  }
   poseDragonPart(anim.body,bob,bodyPitch,0,bodyBank);
   poseDragonPart(anim.chest,bob*.75,bodyPitch*.65,0,bodyBank*.45);
   poseDragonPart(anim.neck,bob*.55,flying?.08+Math.sin(t*2.4)*.045:(moving>.08?Math.sin(walk+.4)*.035:Math.sin(t*1.25)*.025),0,0);
@@ -376,8 +384,8 @@ function animateDragonMotion(obj, now, dt=0.016, mode='idle', speed=0, bank=0){
   poseDragonPart(anim.snout,bob*.5,flying?.04+Math.sin(t*2.8)*.035:(moving>.08?Math.sin(walk+.9)*.035:Math.sin(t*1.45)*.022),0,0);
   if(anim.legs)for(const part of anim.legs){
     const stride=Math.sin(walk+part.phase);
-    const lift=Math.max(0,stride)*.11*moving;
-    const fold=flying?-.55+part.sz*.12:stride*.34*moving;
+    const lift=Math.max(0,stride)*(walking?.18:.11)*moving;
+    const fold=flying?-.55+part.sz*.12:stride*(walking?.48:.34)*moving;
     const tuck=flying?part.sz*.08:0;
     poseDragonPart(part.leg,lift,fold,0,part.sx*.035*moving,0,tuck);
     poseDragonPart(part.ankle,lift*.72,fold*.55,0,0,0,tuck*.85);
@@ -1375,11 +1383,15 @@ function collectRoostDragons(){
   if(NET.on&&NET.room&&NET.room.state&&NET.room.state.players){
     NET.room.state.players.forEach((p,sid)=>{
       if(p&&p.connected===false)return;
+      if(sid===NET.room.sessionId){
+        add(sid,p,roostNameForPlayer(p,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
+        return;
+      }
       const types=roostOwnedDragonTypes(p);
-      if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p),roostDragonGenders(p),roostDragonPersonalities(p),roostDragonRoles(p),roostDragonStaySpots(p),roostDragonHatchedAt(p),sid===NET.room.sessionId?dragonSpecializations:{});
+      if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p),roostDragonGenders(p),roostDragonPersonalities(p),roostDragonRoles(p),roostDragonStaySpots(p),roostDragonHatchedAt(p),{});
     });
     const me=NET.room.state.players.get(NET.room.sessionId);
-    if(!me || !roostOwnedDragonTypes(me).length)
+    if(!me)
       add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
   } else {
     add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
@@ -1405,11 +1417,15 @@ function collectCompanionDragons(){
   if(NET.on&&NET.room&&NET.room.state&&NET.room.state.players){
     NET.room.state.players.forEach((p,sid)=>{
       if(p&&p.connected===false)return;
+      if(sid===NET.room.sessionId){
+        add(sid,p,roostNameForPlayer(p,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
+        return;
+      }
       const types=roostOwnedDragonTypes(p);
-      if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p),roostDragonGenders(p),roostDragonPersonalities(p),roostDragonRoles(p),roostDragonStaySpots(p),roostDragonHatchedAt(p),sid===NET.room.sessionId?dragonSpecializations:{});
+      if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p),roostDragonGenders(p),roostDragonPersonalities(p),roostDragonRoles(p),roostDragonStaySpots(p),roostDragonHatchedAt(p),{});
     });
     const me=NET.room.state.players.get(NET.room.sessionId);
-    if(!me || !roostOwnedDragonTypes(me).length)
+    if(!me)
       add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
   } else {
     add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
@@ -1432,8 +1448,14 @@ function companionOwnerPose(row){
 }
 function companionDragonKey(row){ return row.sid+':'+row.type; }
 function companionDragonScale(stage, role){
-  const base=stage==='baby'?.24:(stage==='juvenile'?.34:.46);
+  const base=stage==='baby'?.3:(stage==='juvenile'?.43:.58);
   return role==='rest'?base*.94:base;
+}
+function companionGroundY(x,z,hintY){
+  const fallback=Number.isFinite(Number(hintY))?Number(hintY):0;
+  if(typeof groundHeight!=='function')return fallback;
+  const y=Number(groundHeight(x,z,fallback+.5));
+  return Number.isFinite(y)&&y>0?y:fallback;
 }
 function companionDragonTagY(stage){
   return stage==='baby'?1.02:(stage==='juvenile'?1.28:1.58);
@@ -1479,7 +1501,7 @@ function ensureCompanionDragon(row){
     const baseCompanionScale=companionDragonScale(row.stage,row.role);
     dragon.scale.multiplyScalar(baseCompanionScale);
     dragon.userData.baseCompanionScale=baseCompanionScale;
-    dragon.rotation.y=Math.PI;
+    dragon.rotation.y=0;
     group.add(dragon);
     const def=DRAGON_TYPES[row.type]||DRAGON_TYPES.ember;
     const roleText=row.role==='guard'?'Guard':(row.role==='stay'?'Stay':(row.role==='rest'?'Rest':'Follow'));
@@ -1488,6 +1510,14 @@ function ensureCompanionDragon(row){
     tag.position.set(0,companionDragonTagY(row.stage),0);
     tag.scale.set(...companionDragonTagScale(row.stage));
     group.add(tag);
+    const owner=companionOwnerPose(row);
+    if(owner){
+      const yaw=Number(owner.yaw)||0;
+      const spawnX=owner.x+Math.sin(yaw)*1.8+Math.cos(yaw)*.8;
+      const spawnZ=owner.z+Math.cos(yaw)*1.8-Math.sin(yaw)*.8;
+      group.position.set(spawnX,companionGroundY(spawnX,spawnZ,owner.y),spawnZ);
+      group.rotation.y=yaw;
+    }
     scene.add(group);
     rec={group,dragon,tag,type:row.type,role:row.role,stage:row.stage||'adult',sig,phase:Math.random()*8,row,reaction:null};
     companionDragons[key]=rec;
@@ -1663,14 +1693,26 @@ function tickCompanionDragons(now, dt){
     const sx=rec.role==='stay'?0:Math.cos(yaw)*side*sideReach, sz=rec.role==='stay'?0:-Math.sin(yaw)*side*sideReach;
     const bx=rec.role==='stay'?0:Math.sin(yaw)*restBack, bz=rec.role==='stay'?0:Math.cos(yaw)*restBack;
     const jitter=motion.jitter?Math.sin(now/260+rec.phase)*motion.jitter:0;
-    const tx=owner.x+sx+bx+Math.cos(yaw)*jitter, ty=owner.y, tz=owner.z+sz+bz-Math.sin(yaw)*jitter;
-    const moveRate=(resting?3.2:(young?6.5:5.5))*motion.move;
+    const tx=owner.x+sx+bx+Math.cos(yaw)*jitter, tz=owner.z+sz+bz-Math.sin(yaw)*jitter;
+    const ty=companionGroundY(tx,tz,owner.y);
     const prevX=rec.group.position.x, prevZ=rec.group.position.z;
-    rec.group.position.x+=(tx-rec.group.position.x)*Math.min(1,dt*moveRate);
-    rec.group.position.y+=(ty-rec.group.position.y)*Math.min(1,dt*7);
-    rec.group.position.z+=(tz-rec.group.position.z)*Math.min(1,dt*moveRate);
-    const dx=owner.x-rec.group.position.x, dz=owner.z-rec.group.position.z;
-    rec.group.rotation.y=rec.role==='stay'?yaw:Math.atan2(dx,dz);
+    const toX=tx-prevX, toZ=tz-prevZ, distance=Math.hypot(toX,toZ);
+    if(distance>18){
+      rec.group.position.set(tx,ty,tz);
+    }else if(distance>.08){
+      const catchup=Math.min(2.15,1+Math.max(0,distance-4)*.12);
+      const walkSpeed=(resting?2.1:(young?4.5:5.2))*motion.move*catchup;
+      const step=Math.min(distance,walkSpeed*Math.max(.001,dt));
+      rec.group.position.x+=toX/distance*step;
+      rec.group.position.z+=toZ/distance*step;
+      const ground=companionGroundY(rec.group.position.x,rec.group.position.z,Math.max(owner.y,rec.group.position.y));
+      rec.group.position.y+=(ground-rec.group.position.y)*Math.min(1,dt*14);
+    }else{
+      rec.group.position.y+=(ty-rec.group.position.y)*Math.min(1,dt*14);
+    }
+    const movedX=rec.group.position.x-prevX, movedZ=rec.group.position.z-prevZ;
+    if(rec.role==='stay')rec.group.rotation.y=yaw;
+    else if(Math.hypot(movedX,movedZ)>.002)rec.group.rotation.y=Math.atan2(movedX,movedZ);
     const dragonMoveSpeed=Math.min(1,Math.hypot(rec.group.position.x-prevX,rec.group.position.z-prevZ)/Math.max(.001,dt)/4.6);
     animateDragonMotion(rec.dragon, now*motion.wing+rec.phase*1000, dt, resting?'rest':(dragonMoveSpeed>.05?'walk':'idle'), dragonMoveSpeed, motion.tilt||0);
     const bob=(rec.stage==='baby' ? .115 : (rec.stage==='juvenile' ? .07 : (resting ? .018 : .045)))*motion.bob;
