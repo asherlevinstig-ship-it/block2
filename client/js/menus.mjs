@@ -2457,6 +2457,7 @@ function onlineBountyTargetCount(){
   let n=0;
   NET.room.state.players.forEach((p,sid)=>{
     if(sid===NET.room.sessionId) return;
+    if(p&&p.connected===false) return;
     if(p.dgn) return;
     if(myTeam && p.team && p.team===myTeam) return;
     n++;
@@ -3590,12 +3591,6 @@ function visibleRightHudElement(id){
 }
 function layoutRightHudStack(){
   const ids=['kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','powerhud'];
-  const elements=ids.map(id=>document.getElementById(id)).filter(Boolean);
-  if(innerWidth<=760||document.body.classList.contains('tablet-mode')||document.body.classList.contains('mobile-play-mode')){
-    for(const el of elements){el.style.removeProperty('top');el.classList.remove('hud-space-hidden');}
-    if(powerHud)powerHud.style.removeProperty('max-height');
-    return;
-  }
   let top=84;
   const map=visibleRightHudElement('landmap');
   if(map)top=Math.max(top,map.getBoundingClientRect().bottom+(map.classList.contains('worldmap')?32:RIGHT_HUD_GAP));
@@ -3775,6 +3770,7 @@ function openGuildHallUI(focus=''){
       let any=false;
       NET.room.state.players.forEach((pl,sid)=>{
         if(sid===NET.room.sessionId) return;
+        if(pl&&pl.connected===false) return;
         if(members.some(m=>m.sid===sid)) return;
         any=true;
         const r=document.createElement('div');r.className='shoprow';
@@ -5281,55 +5277,63 @@ function openDragonInteractUI(type){
   if(uiOpen) closeUI(false);
   openQWin('management');
   qpanelEl.innerHTML='';
+  qpanelEl.classList.add('dragon-command-panel');
+  qpanelEl.dataset.modal='dragon-companion';
   const d=DRAGON_TYPES[type]||DRAGON_TYPES.ember;
   const adult=dragonIsAdult(type), active=mounted&&mountKind==='dragon:'+type, spot=dragonStaySpot(type);
   const mountHere=!COMPANIONS.dragonMountRealmAllowed||COMPANIONS.dragonMountRealmAllowed();
-  const h=document.createElement('h2'); h.textContent=dragonDisplayName(type).toUpperCase(); qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent=(adult?'DRAGON COMPANION':'YOUNG DRAGON')+' - '+dragonRoleLabel(type).toUpperCase();
-  qpanelEl.appendChild(sub);
-  const meta=document.createElement('p'); meta.className='qtext';
-  meta.innerHTML='Age: <b>'+escHTML(dragonGrowthText(type))+'</b><br>'+
-    escHTML(dragonBondSummary(type))+'<br>'+
-    'Care: <b>'+escHTML(dragonBondStatus(type))+'</b> - happiness '+dragonHappiness(type)+'/100<br>'+
-    dragonRoleDetailHTML(type);
-  qpanelEl.appendChild(meta);
-  const actions=document.createElement('div'); actions.className='bondactions'; qpanelEl.appendChild(actions);
   const treatSlot=firstDragonTreatSlot();
   const recallClears=COMPANIONS.dragonRole&&COMPANIONS.dragonRole(type)==='stay'&&!!spot;
-  actions.appendChild(qBtn('RECALL', ()=>{
-    if(COMPANIONS.recallDragon) COMPANIONS.recallDragon(type,{clearStaySpot:recallClears});
-    setTimeout(()=>openDragonInteractUI(type), NET.on?180:0);
-  }, !adult));
-  actions.appendChild(qBtn('CARE TREAT', ()=>{
-    if(treatSlot<0){ sysMsg('Hold or carry a <b>Dragon Treat</b> to care for your dragon.'); return; }
-    if(globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.react==='function') globalThis.BlockcraftDragonWorld.react(type,'happy');
-    if(COMPANIONS.careDragon) COMPANIONS.careDragon(type,treatSlot);
-    setTimeout(()=>openDragonInteractUI(type), NET.on?180:0);
-  }, treatSlot<0));
-  actions.appendChild(qBtn(active?'DISMISS':(mountHere?'MOUNT':'RETURN TO TOWN TO MOUNT'), ()=>{
-    if(globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.react==='function') globalThis.BlockcraftDragonWorld.react(type,active?'rest':'happy');
-    applyMount(active?'':'dragon:'+type);
-    openDragonInteractUI(type);
-  }, (!adult||!mountHere) && !active));
-  actions.appendChild(qBtn('COMMAND WHEEL', ()=>{
-    closeQWin();
-    if(typeof startDragonCommandWheel==='function') startDragonCommandWheel();
-  }));
-  actions.appendChild(qBtn('TRAIN ROLE', ()=>{
-    if(COMPANIONS.startDragonTraining) COMPANIONS.startDragonTraining(type);
-    setTimeout(()=>openDragonInteractUI(type), NET.on?180:0);
-  }, !adult));
-  actions.appendChild(qBtn(spot?'RESET POST':'SET POST', ()=>{
-    resetDragonStayPost(type, ()=>openDragonInteractUI(type));
-  }, !adult));
-  actions.appendChild(qBtn('CLEAR POST', ()=>{
-    clearDragonStayPost(type, ()=>openDragonInteractUI(type));
-  }, !adult || !spot));
-  actions.appendChild(qBtn('SHOW MAP', ()=>showDragonStayPost(type), !adult || !spot));
-  actions.appendChild(qBtn('COMPANIONS', ()=>openDragonBondUI()));
-  actions.appendChild(qBtn('PROGRESSION', ()=>openDragonProgressionUI()));
-  actions.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
+  const role=COMPANIONS.dragonRole?COMPANIONS.dragonRole(type):'follow';
+  const roleStatus=dragonRoleStatus(type,role);
+  const bond=COMPANIONS.dragonBondProgress?COMPANIONS.dragonBondProgress(type):{level:1,xp:0,cur:0,next:40,pct:0};
+  const bondText=bond.next>bond.cur?(bond.xp-bond.cur)+' / '+(bond.next-bond.cur):'MAX';
+  const mastery=COMPANIONS.dragonRoleMasteryProgress?COMPANIONS.dragonRoleMasteryProgress(type,role):{level:1,xp:0,cur:0,next:12};
+  const masteryTitle=COMPANIONS.dragonRoleMasteryTitle?COMPANIONS.dragonRoleMasteryTitle(type,role):'Role Rookie';
+  const refresh=()=>setTimeout(()=>openDragonInteractUI(type),NET.on?180:0);
+  const shell=document.createElement('section');shell.className='dragon-command-shell';shell.style.setProperty('--dragon-accent',d.membrane[1]||'#ff8a3d');
+  shell.innerHTML=
+    '<div class="dragon-command-shade"></div>'+
+    '<button type="button" class="dragon-command-back" data-dragon-action="companions"><span>&lsaquo;</span> ALL COMPANIONS</button>'+
+    '<button type="button" class="dragon-command-close" data-dragon-action="close" aria-label="Close">&times;</button>'+
+    '<header class="dragon-command-title"><small>A LOYAL COMPANION &middot; A BRIGHTER HORIZON</small><h2>'+escHTML(dragonDisplayName(type).toUpperCase())+'</h2><p>'+escHTML(adult?'DRAGON COMPANION':'YOUNG DRAGON')+' &middot; '+escHTML(dragonRoleLabel(type).toUpperCase())+'</p></header>'+
+    '<div class="dragon-command-orbit dragon-command-orbit-left">'+
+      '<button type="button" class="dragon-command-medallion recall" data-dragon-action="recall"'+(!adult?' disabled':'')+'><i>&#8634;</i><b>RECALL</b><span>Return to you</span></button>'+
+      '<button type="button" class="dragon-command-medallion follow'+(role==='follow'?' active':'')+'" data-dragon-action="follow"><i>&#9822;</i><b>FOLLOW</b><span>Stay by your side</span></button>'+
+      '<button type="button" class="dragon-command-medallion hold'+(role==='stay'?' active':'')+'" data-dragon-action="stay"'+(!adult?' disabled':'')+'><i>&#9956;</i><b>HOLD POSITION</b><span>'+(spot?'Move saved post':'Stay here')+'</span></button>'+
+    '</div>'+
+    '<div class="dragon-command-orbit dragon-command-orbit-right">'+
+      '<button type="button" class="dragon-command-medallion guard'+(role==='guard'?' active':'')+'" data-dragon-action="guard"'+(!adult?' disabled':'')+'><i>&#10022;</i><b>GUARD</b><span>Protect your side</span></button>'+
+      '<button type="button" class="dragon-command-medallion mount'+(active?' active':'')+'" data-dragon-action="mount"'+(((!adult||!mountHere)&&!active)?' disabled':'')+'><i>&#9816;</i><b>'+(active?'DISMOUNT':'MOUNT')+'</b><span>'+(active?'Return to ground':mountHere?'Ride '+escHTML(dragonDisplayName(type)):'Return to town')+'</span></button>'+
+      '<button type="button" class="dragon-command-medallion dismiss'+(role==='rest'?' active':'')+'" data-dragon-action="dismiss"'+(!adult?' disabled':'')+'><i>&#8856;</i><b>DISMISS</b><span>Rest at the roost</span></button>'+
+    '</div>'+
+    '<div class="dragon-command-motto">STRENGTH IN COMPANIONSHIP</div>'+
+    '<div class="dragon-command-vitals">'+
+      '<div class="dragon-vital bond"><i>&#10070;</i><span><small>BOND LV. '+bond.level+'</small><b>'+escHTML(bondText)+'</b><em><u style="width:'+Math.max(0,Math.min(100,bond.pct|0))+'%"></u></em></span></div>'+
+      '<div class="dragon-vital mood"><i>&#9825;</i><span><small>MOOD</small><b>'+escHTML(dragonBondStatus(type))+'</b><em>'+dragonHappiness(type)+' / 100</em></span></div>'+
+      '<div class="dragon-vital role"><i>&#10023;</i><span><small>ROLE</small><b>'+escHTML(dragonRoleLabel(type))+'</b><em>'+escHTML(roleStatus)+'</em></span></div>'+
+      '<div class="dragon-vital mastery"><span><small>'+escHTML(masteryTitle)+'</small><b>'+(mastery.next>mastery.cur?escHTML((mastery.xp-mastery.cur)+' / '+(mastery.next-mastery.cur)):'MAX')+'</b><em>'+escHTML(dragonRoleMechanics(role))+'</em></span></div>'+
+    '</div>'+
+    '<footer class="dragon-command-footer">'+
+      '<button type="button" data-dragon-action="care"'+(treatSlot<0?' disabled':'')+'><i>&#10084;</i><span><b>CARE</b><small>'+(treatSlot<0?'Dragon Treat needed':'Treat &amp; feed')+'</small></span></button>'+
+      '<button type="button" data-dragon-action="training"'+(!adult?' disabled':'')+'><i>&#9650;</i><span><b>TRAINING</b><small>Unlock new abilities</small></span></button>'+
+      '<button type="button" data-dragon-action="progression"><i>&#9638;</i><span><b>PROGRESSION</b><small>View growth</small></span></button>'+
+      '<button type="button" data-dragon-action="map"'+(!adult||!spot?' disabled':'')+'><i>&#9635;</i><span><b>MAP</b><small>'+(spot?'Show saved post':'No saved post')+'</small></span></button>'+
+    '</footer>';
+  qpanelEl.appendChild(shell);
+  const action=(name,handler)=>{const button=shell.querySelector('[data-dragon-action="'+name+'"]');if(button)button.addEventListener('click',handler);};
+  action('close',()=>closeQWin());
+  action('companions',()=>openDragonBondUI());
+  action('recall',()=>{if(COMPANIONS.recallDragon)COMPANIONS.recallDragon(type,{clearStaySpot:recallClears});refresh();});
+  action('follow',()=>{if(COMPANIONS.setDragonRole)COMPANIONS.setDragonRole(type,'follow');refresh();});
+  action('stay',()=>resetDragonStayPost(type,()=>openDragonInteractUI(type)));
+  action('guard',()=>{if(COMPANIONS.setDragonRole)COMPANIONS.setDragonRole(type,'guard');refresh();});
+  action('mount',()=>{if(globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.react==='function')globalThis.BlockcraftDragonWorld.react(type,active?'rest':'happy');applyMount(active?'':'dragon:'+type);openDragonInteractUI(type);});
+  action('dismiss',()=>{if(active)applyMount('');if(COMPANIONS.setDragonRole)COMPANIONS.setDragonRole(type,'rest');refresh();});
+  action('care',()=>{if(treatSlot<0)return;if(globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.react==='function')globalThis.BlockcraftDragonWorld.react(type,'happy');if(COMPANIONS.careDragon)COMPANIONS.careDragon(type,treatSlot);refresh();});
+  action('training',()=>{if(COMPANIONS.startDragonTraining)COMPANIONS.startDragonTraining(type);refresh();});
+  action('progression',()=>openDragonProgressionUI());
+  action('map',()=>showDragonStayPost(type));
 }
 const FAMILIAR_UI_INFO={
   shade:{role:'GUARDIAN',identity:'Protects fragile hunters and unlocks shadow movement.',color:'#b86cff',source:'Mara Vale companion quest or craft a Shadow Sigil.',verb:'take damage while Shade is active'},

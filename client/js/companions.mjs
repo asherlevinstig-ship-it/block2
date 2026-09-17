@@ -1374,6 +1374,7 @@ function collectRoostDragons(){
   };
   if(NET.on&&NET.room&&NET.room.state&&NET.room.state.players){
     NET.room.state.players.forEach((p,sid)=>{
+      if(p&&p.connected===false)return;
       const types=roostOwnedDragonTypes(p);
       if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p),roostDragonGenders(p),roostDragonPersonalities(p),roostDragonRoles(p),roostDragonStaySpots(p),roostDragonHatchedAt(p),sid===NET.room.sessionId?dragonSpecializations:{});
     });
@@ -1403,6 +1404,7 @@ function collectCompanionDragons(){
   };
   if(NET.on&&NET.room&&NET.room.state&&NET.room.state.players){
     NET.room.state.players.forEach((p,sid)=>{
+      if(p&&p.connected===false)return;
       const types=roostOwnedDragonTypes(p);
       if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p),roostDragonGenders(p),roostDragonPersonalities(p),roostDragonRoles(p),roostDragonStaySpots(p),roostDragonHatchedAt(p),sid===NET.room.sessionId?dragonSpecializations:{});
     });

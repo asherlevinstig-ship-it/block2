@@ -5914,6 +5914,25 @@ test('overworld leave resolves only after the final profile flush', async () => 
   assert.equal(room.state.players.has(client.sessionId), false);
 });
 
+test('an overworld reconnect reservation is offline until its socket recovers', async () => {
+  const room = makeRoom();
+  const client = makeClient('overworld-reconnect-presence');
+  const { token } = seedPlayer(room, client, { x: 20.5, y: 16, z: 20.5 });
+  room.clients = [client];
+  room.allowReconnection = async () => {
+    assert.equal(client.__disconnectPending, true);
+    assert.equal(room.state.players.get(client.sessionId).connected, false);
+    assert.equal(room.socialPresenceForToken(token), null, 'reserved sockets are not advertised online');
+    assert.equal(room.isPlayerAlive(client), false, 'reserved sockets cannot act or be targeted as live players');
+  };
+
+  await room.onLeave(client, false);
+
+  assert.equal(client.__disconnectPending, false);
+  assert.equal(room.state.players.get(client.sessionId).connected, true);
+  assert.ok(room.socialPresenceForToken(token), 'presence returns when the socket recovers');
+});
+
 test('a lethal aegis bounty strike completes the contract and notifies both hunters', () => {
   const room = makeRoom();
   const attacker = makeClient('hunterA');
@@ -6750,11 +6769,15 @@ test('an unclean DungeonRoom disconnect that reconnects in time resumes the hunt
   inst.addPlayer(client.sessionId);
   prof.dungeonRecovery = { gateId: 'dr-recon', bootId: 'dr-boot', pos: [31.5, 16.5, 31], enteredAt: Date.now() };
   room.store = { savePlayer: async () => { throw new Error('the resume path must not flush'); } };
-  room.allowReconnection = async () => {};   // the client returned inside the window
+  room.allowReconnection = async () => {
+    assert.equal(client.__disconnectPending, true);
+    assert.equal(room.state.players.get(client.sessionId).connected, false, 'the reserved dungeon entity is hidden while its socket is absent');
+  };   // the client returned inside the window
 
   await room.onLeave(client, false);
 
   assert.ok(room.state.players.get(client.sessionId), 'the hunter entity was held live through the reconnect window');
+  assert.equal(room.state.players.get(client.sessionId).connected, true, 'the hunter becomes visible again after reconnecting');
   assert.ok(inst.hasPlayer(client.sessionId), 'and kept in the instance roster');
   assert.ok(prof.dungeonRecovery, 'crash-recovery stays armed while the hunter is still in the raid');
   assert.equal(takeHandoff(token), null, 'a resumed hunter is not handed off to the overworld room');

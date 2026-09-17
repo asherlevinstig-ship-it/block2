@@ -2982,6 +2982,7 @@ test('right-side HUD panels stack without hiding the quest-log shortcut',()=>{
   assert.match(menus,/\['kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','powerhud'\]/);
   assert.match(menus,/map\.getBoundingClientRect\(\)\.bottom/);
   assert.match(menus,/layoutRightHudStack\(\);/);
+  assert.doesNotMatch(menus,/innerWidth<=760\|\|document\.body\.classList\.contains\('tablet-mode'\)/);
   assert.match(styles,/#powerhud\.hud-space-hidden\{display:none!important\}/);
   assert.match(styles,/body\.presentation-combat:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #currentquest\{opacity:\.88;transform:none\}/);
   assert.doesNotMatch(styles,/body\.presentation-combat:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #currentquest,\s*body\.presentation-combat[^\{]+\{\s*opacity:0/);
@@ -5525,6 +5526,30 @@ test('desktop HUD is composed into identity, navigation, objective, feed, and su
   assert.match(styles, /#supportdock>button\{[\s\S]*border-radius:50%!important/);
   assert.match(styles, /#supportdock>#questionbtn\{display:none!important\}/);
   assert.match(combat, /function layoutRightHudStack\(\)[\s\S]*let top=narrow\?8:242/);
+});
+
+test('reconnect-reserved players are excluded from visible online UI', () => {
+  const pump = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'network-frame-pump.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const social = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'social.mjs'), 'utf8');
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  assert.match(pump, /r\.grp\.visible=ref\.connected!==false/);
+  assert.match(networking, /playerState\.connected!==false/);
+  assert.match(social, /p&&p\.connected===false/);
+  assert.match(world, /p&&p\.connected===false/);
+});
+
+test('dragon interaction uses the cinematic command screen with live controls', () => {
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const artwork = path.join(__dirname, '..', '..', 'client', 'assets', 'dragon-companion-ember.webp');
+  assert.equal(fs.existsSync(artwork), true, 'cinematic dragon artwork is shipped with the client');
+  assert.match(menus, /className='dragon-command-shell'/);
+  for (const action of ['recall','follow','stay','guard','mount','dismiss','care','training','progression','map']) {
+    assert.match(menus, new RegExp('data-dragon-action="'+action+'"'));
+  }
+  assert.match(styles, /\.dragon-command-medallion/);
+  assert.match(styles, /dragon-companion-ember\.webp/);
 });
 
 test('nearby player menu can finish rendering every core action', () => {

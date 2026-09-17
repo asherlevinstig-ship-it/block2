@@ -365,6 +365,7 @@ class GameRoom extends Room {
     let occupied = false;
     this.state.players.forEach((other, sid) => {
       if (occupied || sid === ignoreSid || !other) return;
+      if (other.connected === false) return;
       if (String(other.dgn || '') !== targetDgn) return;
       if (Math.abs((Number(other.y) || 0) - (Number(pos.y) || 0)) >= 2.4) return;
       if (Math.hypot((Number(other.x) || 0) - (Number(pos.x) || 0), (Number(other.z) || 0) - (Number(pos.z) || 0)) < 1.35) occupied = true;
@@ -1496,11 +1497,17 @@ class GameRoom extends Room {
     if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
     const unexpected = this.shouldAttemptReconnection(code);
     if (unexpected) {
+      const disconnectedPlayer = client && this.state.players.get(client.sessionId);
+      client.__disconnectPending = true;
+      if (disconnectedPlayer) disconnectedPlayer.connected = false;
       const reconnectStartedAt = Date.now();
       this.recordReconnectAttempt(code);
       console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.start', roomType: 'overworld', roomId: this.roomId || '', shardId: this.shardId || 'main', sidHash: shortHash(client && client.sessionId), code }));
       try {
         await this.allowReconnection(client, 15);
+        client.__disconnectPending = false;
+        const reconnectedPlayer = this.state.players.get(client.sessionId);
+        if (reconnectedPlayer) reconnectedPlayer.connected = true;
         this.recordReconnectOutcome('recovered');
         console.log('[disconnect] ' + JSON.stringify({ event: 'unexpected.recovered', roomType: 'overworld', roomId: this.roomId || '', shardId: this.shardId || 'main', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt }));
         const token = this.tokens.get(client.sessionId);
@@ -5649,8 +5656,10 @@ class GameRoom extends Room {
     for (const room of new Set([this, ...getActiveRooms()])) {
       if (!room || !room.tokens || !room.clients) continue;
       for (const client of room.clients) {
+        if (!client || client.__disconnectPending) continue;
         if (room.tokens.get(client.sessionId) !== clean) continue;
         const player = room.state && room.state.players && room.state.players.get(client.sessionId);
+        if (!player || player.connected === false) continue;
         const inDungeon = room.isDungeonRoom === true;
         const dimension = player && player.dim || 'overworld';
         return {
@@ -7835,6 +7844,7 @@ class GameRoom extends Room {
     if (client && h) client.send('hunger', { hunger: Math.ceil(h.hunger), maxHunger: h.max });
   }
   isPlayerAlive(client) {
+    if (!client || client.__disconnectPending) return false;
     const hp = this.ensurePlayerHp(client);
     return !!hp && hp.hp > 0;
   }
@@ -9774,7 +9784,8 @@ class GameRoom extends Room {
       const { crownTokens, ...ranking } = buildPowerRanking(profiles, guilds, this.tokens.get(client.sessionId));
       const winners = new Set(crownTokens), crownedSids = [];
       for (const room of new Set([this, ...getActiveRooms()])) for (const member of room.clients || []) {
-        if (room.tokens && winners.has(room.tokens.get(member.sessionId))) crownedSids.push(member.sessionId);
+        const player = room.state && room.state.players && room.state.players.get(member.sessionId);
+        if (!member.__disconnectPending && player && player.connected !== false && room.tokens && winners.has(room.tokens.get(member.sessionId))) crownedSids.push(member.sessionId);
       }
       client.send('powerRanking', { ok: true, ...ranking, crownedSids, updatedAt: Date.now(), eventDriven: true });
     } catch (error) {

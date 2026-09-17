@@ -57,6 +57,15 @@ test('hot replicated entity numeric fields use compact float32 encoding', () => 
   for (const field of ['x', 'y', 'z', 'yaw', 'hp', 'maxHp']) assert.equal(mob[field], 'float32', 'Mob.' + field);
 });
 
+test('player connection presence is replicated independently from the reserved entity', () => {
+  const fields = schemaTypes(Player);
+  const player = new Player();
+  assert.equal(fields.connected, 'boolean');
+  assert.equal(player.connected, true);
+  player.connected = false;
+  assert.equal(player.connected, false);
+});
+
 test('large filtered player patches decode for every client view', () => {
   const warnings = [];
   const originalWarn = console.warn;

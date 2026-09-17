@@ -257,11 +257,17 @@ class DungeonRoom extends GameRoom {
     // alive across the window (Colyseus counts the reservation against autoDispose).
     const unexpected = this.shouldAttemptReconnection(code);
     if (unexpected) {
+      const disconnectedPlayer = client && this.state.players.get(client.sessionId);
+      client.__disconnectPending = true;
+      if (disconnectedPlayer) disconnectedPlayer.connected = false;
       const reconnectStartedAt = Date.now();
       this.recordReconnectAttempt(code);
       console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.start', roomType: 'dungeon', roomId: this.roomId || '', gateId: this.instance && this.instance.id || '', sidHash: shortHash(client && client.sessionId), code }));
       try {
         await this.allowReconnection(client, 15);
+        client.__disconnectPending = false;
+        const reconnectedPlayer = this.state.players.get(client.sessionId);
+        if (reconnectedPlayer) reconnectedPlayer.connected = true;
         this.recordReconnectOutcome('recovered');
         console.log('[disconnect] ' + JSON.stringify({ event: 'unexpected.recovered', roomType: 'dungeon', roomId: this.roomId || '', gateId: this.instance && this.instance.id || '', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt }));
         const token = this.tokens.get(client.sessionId);

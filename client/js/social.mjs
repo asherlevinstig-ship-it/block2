@@ -54,6 +54,7 @@ function populateWhisperTargets(){
   const previous=chatTargetEl.value;chatTargetEl.innerHTML='';
   if(NET.room&&NET.room.state&&NET.room.state.players)NET.room.state.players.forEach((p,sid)=>{
     if(sid===NET.room.sessionId)return;
+    if(p&&p.connected===false)return;
     const option=document.createElement('option');option.value=sid;option.textContent=p.name||'Hunter';chatTargetEl.appendChild(option);
   });
   if([...chatTargetEl.options].some(option=>option.value===previous))chatTargetEl.value=previous;
@@ -473,7 +474,7 @@ function netTeamHud(){
   const id=myTeamId();
   if(!id) return '';
   let cnt=0;
-  NET.room.state.players.forEach(p=>{ if(p.team===id) cnt++; });
+  NET.room.state.players.forEach(p=>{ if(p.connected!==false&&p.team===id) cnt++; });
   return '<br>Team: <span style="color:'+teamCol(id)+'">'+teamName(id)+'</span> ('+cnt+'/5)';
 }
 function requestSocialSnapshot(){
@@ -523,6 +524,7 @@ function nearbySocialPlayers(){
   if(!NET.room||!NET.room.state||!NET.room.state.players)return out;
   NET.room.state.players.forEach((pl,sid)=>{
     if(sid===NET.room.sessionId)return;
+    if(pl&&pl.connected===false)return;
     const remote=NET.remotes&&NET.remotes[sid];
     if(!remote||!remote.grp||!remote.grp.visible)return;
     const distance=player&&player.pos?Math.hypot(remote.grp.position.x-player.pos.x,remote.grp.position.z-player.pos.z):999;
@@ -610,7 +612,7 @@ function renderTeamSocial(){
   const mine=myTeamId();
   if(mine){
     const t=NET.room.state.teams.get(mine),leader=isMyTeamLeader(t),members=[];
-    NET.room.state.players.forEach((pl,sid)=>{if(pl.team===mine)members.push({sid,name:pl.name,leader:t&&t.leader===sid,online:true});});
+    NET.room.state.players.forEach((pl,sid)=>{if(pl.connected!==false&&pl.team===mine)members.push({sid,name:pl.name,leader:t&&t.leader===sid,online:true});});
     socialHeading('YOUR TEAM');
     const summary=document.createElement('div');summary.className='social-team-summary';summary.innerHTML='<b style="color:'+teamCol(mine)+'">'+escHTML(t?t.name:'Your Team')+'</b><span>'+(t&&t.private?'INVITE-ONLY':'OPEN')+(t&&t.lfg?' · LOOKING FOR DUNGEON':'')+' · '+((t&&t.memberCount)|0)+'/5 MEMBERS</span>';qpanelEl.appendChild(summary);
     for(const member of members){const ui=socialRow(member,member.leader?'LEADER':'TEAM MEMBER');if(leader&&!member.leader){ui.actions.appendChild(qBtn('MAKE LEADER',()=>NET.room.send('teamTransfer',{sid:member.sid})));ui.actions.appendChild(qBtn('KICK',()=>NET.room.send('teamKick',{sid:member.sid}),true));}}
@@ -621,7 +623,7 @@ function renderTeamSocial(){
   socialHeading('FIND A TEAM');
   let any=false;
   NET.room.state.teams.forEach((t,id)=>{
-    let online=0;NET.room.state.players.forEach(pl=>{if(pl.team===id)online++;});
+    let online=0;NET.room.state.players.forEach(pl=>{if(pl.connected!==false&&pl.team===id)online++;});
     const total=(t.memberCount|0)||online,invited=!!pendingTeamInvites[id];
     if(t.private&&!invited&&!t.lfg)return;
     any=true;const row=document.createElement('div');row.className='social-team-listing';row.innerHTML='<span><b style="color:'+teamCol(id)+'">'+escHTML(t.name)+'</b><small>'+online+' online · '+total+'/5 members'+(t.lfg?' · FINDING DUNGEON':'')+(t.private?' · INVITED':'')+'</small></span>';

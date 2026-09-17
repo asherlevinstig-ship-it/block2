@@ -1319,7 +1319,12 @@ function stopOnlinePopulationNotices(){
 function showOnlinePopulationNotice(room){
   if(!room||NET.room!==room||room.name!=='blockcraft'||document.hidden)return;
   const players=room.state&&room.state.players;
-  const count=players&&Number.isFinite(players.size)?Math.max(1,players.size|0):1;
+  let count=1;
+  if(players&&typeof players.forEach==='function'){
+    count=0;
+    players.forEach(playerState=>{if(!playerState||playerState.connected!==false)count++;});
+    count=Math.max(1,count);
+  }
   chatLine('[Online]',count===1?'1 player is online.':count+' players are online.');
 }
 function startOnlinePopulationNotices(room){

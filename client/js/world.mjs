@@ -4277,6 +4277,7 @@ function currentOnlineHunters(){
   if(players && typeof players.forEach==='function'){
     players.forEach((p,sid)=>{
       if(!sid || sid===NET.room.sessionId) return;
+      if(p&&p.connected===false) return;
       const px=Number(p&&p.x), pz=Number(p&&p.z);
       const distance=Number.isFinite(px)&&Number.isFinite(pz)&&player?Math.round(Math.hypot(px-player.pos.x,pz-player.pos.z)):null;
       out.push({sid, name:String((p&&p.name)||'Hunter').slice(0,24), distance});
