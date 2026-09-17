@@ -24,6 +24,7 @@ const ABILITY_PROGRESSION = require('../shared/ability-progression');
 const FAMILIAR_SYSTEM = require('../shared/familiar-system');
 const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials');
 const WORLD = require('./world');
+const { updateSavedPowerProfile } = require('./power-ranking');
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
@@ -1720,6 +1721,7 @@ class JsonStore {
       if (tx.chests) await this._writeNow(this._worldFile('chests.json'), { chests: tx.chests, savedAt: Date.now() });
       for (const [token, profile] of Object.entries(tx.players)) {
         await this._writeNow(this._pfile(token), { ...profile, savedAt: Date.now() });
+        updateSavedPowerProfile(token, profile);
       }
       await fs.promises.unlink(file);
       return { committed: true, id: tx.id };
@@ -1782,12 +1784,25 @@ class JsonStore {
     try { return JSON.parse(txt); }
     catch (e) { throw new Error('corrupt profile file ' + file + ': ' + e.message); }
   }
-  async savePlayer(token, profile) { await this._write(this._pfile(token), { ...profile, savedAt: Date.now() }); }
+  async loadPowerProfiles() {
+    const rows = [];
+    for (const file of await fs.promises.readdir(path.join(this.dir, 'players'))) {
+      if (!file.endsWith('.json')) continue;
+      const token = file.slice(0, -5), profile = await this.loadPlayer(token);
+      if (profile) rows.push([token, profile]);
+    }
+    return rows;
+  }
+  async savePlayer(token, profile) {
+    await this._write(this._pfile(token), { ...profile, savedAt: Date.now() });
+    updateSavedPowerProfile(token, profile);
+  }
   async deletePlayer(token) {
     const file = this._pfile(token);
     await (fileWriteQueues.get(path.resolve(file)) || Promise.resolve()).catch(() => {});
     try { await fs.promises.unlink(file); }
     catch (e) { if (e.code !== 'ENOENT') throw e; }
+    updateSavedPowerProfile(token, null);
   }
   async saveModerationReport(report) {
     await this._enqueue(async () => {
@@ -2215,6 +2230,9 @@ class FirebaseStore {
       writes++;
     }
     await this._trackUsage('commitTransaction', 'transactions', { writes }, () => batch.commit());
+    for (const [token, profile] of Object.entries(input.players || {})) {
+      const clean = cleanToken(token); if (clean && profile) updateSavedPowerProfile(clean, profile);
+    }
     return { committed: true, id: cleanShortText(input.id, 'transaction', 80) };
   }
   async loadFurnaces() {
@@ -2330,10 +2348,24 @@ class FirebaseStore {
   async savePlayer(token, profile) {
     await this._trackUsage('savePlayer', 'profiles', { writes: 1 },
       () => this.db.collection('players').doc(token).set({ ...profile, savedAt: Date.now() }));
+    updateSavedPowerProfile(token, profile);
+  }
+  async loadPowerProfiles() {
+    const rows = [];
+    let cursor = null;
+    do {
+      let query = this.db.collection('players').orderBy('__name__').select('name', 'nameSet', 'S', 'gold').limit(500);
+      if (cursor) query = query.startAfter(cursor);
+      const page = await this._trackUsage('loadPowerProfiles', 'profiles', result => ({ reads: Math.max(1, result.docs.length) }), () => query.get());
+      for (const doc of page.docs) rows.push([doc.id, doc.data()]);
+      cursor = page.docs.length === 500 ? page.docs[page.docs.length - 1] : null;
+    } while (cursor);
+    return rows;
   }
   async deletePlayer(token) {
     await this._trackUsage('deletePlayer', 'profiles', { deletes: 1 },
       () => this.db.collection('players').doc(token).delete());
+    updateSavedPowerProfile(token, null);
   }
   async saveModerationReport(report) {
     await this._trackUsage('saveModerationReport', 'moderation', { writes: 1 },

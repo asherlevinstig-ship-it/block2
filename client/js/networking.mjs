@@ -1395,6 +1395,7 @@ function netAttachRoom(room,name,client){
       }
     };
     $(room.state).players.onAdd((p,sid)=>{
+      menusApi.invalidatePowerRanking();
       if(sid===room.sessionId)return;
       if(NET.remotes[sid])NET.remotes[sid].ref=p;
       else {
@@ -1402,7 +1403,7 @@ function netAttachRoom(room,name,client){
         schedulePlayerArrivalVfx(p,{key:'remote:'+sid,remote:true,delay:80});
       }
     });
-    $(room.state).players.onRemove((p,sid)=>netRemoveRemote(sid));
+    $(room.state).players.onRemove((p,sid)=>{netRemoveRemote(sid);menusApi.invalidatePowerRanking();});
     syncRemotePlayerSnapshot();
     $(room.state).mobs.onAdd((mb,id)=>netAddMob(id,mb));
     $(room.state).mobs.onRemove((mb,id)=>netRemoveMob(id));
@@ -2732,6 +2733,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('craftLegendaryResult', m=>applyLegendaryCraftResult(m));
     room.onMessage('craftLegendaryReject', m=>legendaryCraftRejected(m));
     room.onMessage('eventStatus', m=>applyEventStatus(m));
+    room.onMessage('powerRanking', m=>{if(room===NET.room)menusApi.applyPowerRanking(m);});
+    room.onMessage('powerRankingChanged', ()=>{if(room===NET.room)menusApi.invalidatePowerRanking();});
     room.onMessage('eventJoined', m=>{ applyEventStatus(m); sysMsg('Joined the <b>'+escHTML(m&&m.name||'server')+'</b> event queue. Watch the countdown banner.'); eventFeed('[Event]','Joined '+String(m&&m.name||'server event')+' queue.',{key:'event:joined:'+String(m&&m.id||m&&m.name||''),cooldown:0}); });
     room.onMessage('eventLeft', m=>{ applyEventStatus(m); sysMsg('Left the event queue. You can rejoin while the countdown is still open.'); eventFeed('[Event]','Left '+String(m&&m.name||'server event')+' queue.',{key:'event:left:'+String(m&&m.id||m&&m.name||''),cooldown:0}); });
     room.onMessage('eventReject', m=>eventRejected(m));

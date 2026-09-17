@@ -3581,9 +3581,76 @@ function openFellowshipPantryUI(rank=Math.max(0,Math.min(5,localPlayerHunterRank
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   qpanelEl.appendChild(row);
 }
+let powerRankingRequest=0;
+let powerHud=null,powerStandings=null,powerHudRoom=null,nextPowerRefreshAt=0,lastPowerRequestAt=-Infinity;
+function invalidatePowerRanking(){nextPowerRefreshAt=0;}
+function renderPowerHud(){
+  if(!powerHud){
+    powerHud=document.createElement('aside');powerHud.id='powerhud';powerHud.className='hidden';powerHud.setAttribute('aria-label','Most powerful hunters');
+    powerHud.addEventListener('pointerdown',e=>e.stopPropagation());
+    document.body.appendChild(powerHud);
+  }
+  powerHud.innerHTML='<button type="button" class="powerhud-title">♛ MOST POWERFUL</button>';
+  powerHud.firstChild.addEventListener('click',openPowerRanking);
+  if(!powerStandings){const note=document.createElement('p');note.textContent='Loading world standings…';powerHud.appendChild(note);return;}
+  for(const entry of (powerStandings.leaders||[]).slice(0,3)){
+    const row=document.createElement('div');row.className='powerhud-row'+(entry.place===1?' champion':'');
+    row.textContent=(entry.place===1?'♛ ':'#'+entry.place+' ')+entry.name+(entry.you?' (YOU)':'')+' · '+entry.score.toFixed(1);powerHud.appendChild(row);
+  }
+  const mine=document.createElement('p');mine.className='powerhud-yours';
+  mine.textContent=powerStandings.yours?'YOU · #'+powerStandings.yours.place+' · '+powerStandings.yours.score.toFixed(1)+' / 100':'Create a named hunter to enter the standings.';
+  powerHud.appendChild(mine);
+  const footer=document.createElement('small');footer.textContent='Stats · XP · Gold · Rank · Guild';powerHud.appendChild(footer);
+}
+function tickPowerHud(now){
+  const room=NET.on&&NET.room||null;
+  if(room!==powerHudRoom){powerHudRoom=room;powerStandings=null;nextPowerRefreshAt=0;renderPowerHud();}
+  const overlay=document.getElementById('overlay');
+  const live=!!(room&&(!overlay||overlay.classList.contains('hidden')));
+  if(powerHud)powerHud.classList.toggle('hidden',!live);
+  if(!live){worldApi.updatePowerCrowns([]);return;}
+  if(!powerHud)renderPowerHud();
+  if(now>=nextPowerRefreshAt&&now-lastPowerRequestAt>=5100&&document.visibilityState!=='hidden'){
+    nextPowerRefreshAt=Infinity;lastPowerRequestAt=now;room.send('powerRanking',{});
+  }
+  let top=84;
+  for(const id of ['currentquest','dungeonparty']){
+    const el=document.getElementById(id);if(el&&el.offsetParent!==null){const rect=el.getBoundingClientRect();top=Math.max(top,rect.bottom+10);}
+  }
+  powerHud.style.top=top+'px';
+  powerHud.style.maxHeight=Math.max(64,innerHeight-top-190)+'px';
+  worldApi.updatePowerCrowns(powerStandings&&powerStandings.crownedSids||[]);
+}
+function openPowerRanking(){
+  openQWin('commerce');qpanelEl.innerHTML='<h2>MOST POWERFUL HUNTERS</h2><p class="qtext">Loading world standings…</p>';
+  clearTimeout(powerRankingRequest);
+  powerRankingRequest=setTimeout(()=>{if(qpanelEl.querySelector('.power-ranking-loading'))applyPowerRanking({ok:false});},15000);
+  qpanelEl.firstElementChild.classList.add('power-ranking-loading');
+  if(NET.on&&NET.room)NET.room.send('powerRanking',{});else applyPowerRanking({ok:false});
+}
+function applyPowerRanking(data){
+  if(data&&data.ok){powerStandings=data;renderPowerHud();}
+  if(!qpanelEl.querySelector('.power-ranking-loading'))return;
+  clearTimeout(powerRankingRequest);powerRankingRequest=0;
+  qpanelEl.innerHTML='<h2>MOST POWERFUL HUNTERS</h2>';
+  const intro=document.createElement('p');intro.className='qtext';
+  intro.textContent=data&&data.ok?'Five equal categories, each worth up to 20 points: total STR/AGI/VIT/INT, progression XP, gold, level/rank, and Guild Level. Guild Level = 1 + floor(sqrt(lifetime Renown / 100)); no guild = 0. Standings refresh on rank-ups and player arrivals/departures. Saved profiles stay current through existing saves. Ties share a place.':'Standings could not be loaded. Please try again.';
+  qpanelEl.appendChild(intro);
+  if(data&&data.ok){
+    const rows=[...(data.leaders||[])];if(data.yours&&!rows.some(row=>row.you))rows.push(data.yours);
+    if(!rows.length){const empty=document.createElement('p');empty.className='qtext';empty.textContent='No named hunters have entered the standings yet.';qpanelEl.appendChild(empty);}
+    for(const entry of rows){
+      const row=document.createElement('div');row.className='qtext';const m=entry.metrics,p=entry.points;
+      row.innerHTML='<b style="color:#ffd24a">'+(entry.place===1?'♛ MOST POWERFUL · ':'#'+entry.place+' · ')+escHTML(entry.name)+(entry.you?' (YOU)':'')+' · '+entry.score.toFixed(2)+' / 100</b><br>'+escHTML(entry.rank)+'-rank · Lv '+m.level+' · '+(entry.guildName?escHTML(entry.guildName)+' · Guild Lv '+m.guild:'No guild')+'<br><small>Stats '+m.stats+' ('+p.stats+' pts) · XP '+Math.round(m.xp).toLocaleString()+' ('+p.xp+' pts) · Gold '+m.money.toLocaleString()+' ('+p.money+' pts) · Level '+p.level+' pts · Guild '+p.guild+' pts</small>';
+      qpanelEl.appendChild(row);
+    }
+  }
+  const actions=document.createElement('div');actions.className='qrow';actions.appendChild(qBtn('REFRESH',openPowerRanking));actions.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(actions);
+}
 function openGuildHallUI(focus=''){
   openQWin('commerce');guildHallOpen=true;qpanelEl.innerHTML='';
   const h=document.createElement('h2');h.textContent='HUNTERS FELLOWSHIP HALL';qpanelEl.appendChild(h);
+  qpanelEl.appendChild(qBtn('MOST POWERFUL HUNTERS',openPowerRanking));
   const sub=document.createElement('div');sub.className='sub2';sub.innerHTML='LYRA PENNANT, RECEPTIONIST &middot; YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>';qpanelEl.appendChild(sub);
   const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='"Every fellowship begins with a name, a fire to gather around, and enough ambition to need another floor."<br><br>Fellowships are long-term hunter communities. A leader may purchase one permanent hall floor bearing the fellowship name.';qpanelEl.appendChild(intro);
   const mine=guildHallState.guild;
@@ -8829,6 +8896,10 @@ gameContext.registerState('menus', Object.freeze({
   get gold(){ return gold; },
 }));
 gameContext.registerModule('menus', Object.freeze({
+  tickPowerHud,
+  invalidatePowerRanking,
+  applyPowerRanking,
+  openPowerRanking,
   craftingRejected,
   open:openUI,
   close:closeUI,

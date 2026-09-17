@@ -3354,7 +3354,7 @@ function tick(now){
     if(!cutscene && combatApi.shouldOpenLevel2JobChoice && combatApi.shouldOpenLevel2JobChoice())combatApi.openLevel2JobChoice();
     else if(shouldOpenLevel2PathChoice())showPathSelection();
     if(!cutscene)tryStartQueuedGateCutscene();
-    if(now>=nextEventHudAt){nextEventHudAt=now+100;renderEventHud();}
+    if(now>=nextEventHudAt){nextEventHudAt=now+100;renderEventHud();menusApi.tickPowerHud(now);}
     tickSmartSuggestions(now);
     updateDayNight(ambientStep);
     if(now-lavaAnimT>80){lavaAnimT=now;paintLavaTile(now*.0045);}

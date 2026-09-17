@@ -9046,6 +9046,23 @@ function clearKingWorldMarkers(){
     remote.kingMarker=null;remote.kingMarkerText='';
   }
 }
+const powerCrowns=new Map();
+function updatePowerCrowns(sids){
+  const wanted=new Set(sids),self=NET.room&&NET.room.sessionId;
+  for(const [sid,crown] of powerCrowns){
+    const remote=NET.remotes&&NET.remotes[sid],parent=sid===self?scene:remote&&remote.grp;
+    if(!wanted.has(sid)||!parent||crown.parent!==parent){disposeKingVisual(crown);powerCrowns.delete(sid);}
+  }
+  for(const sid of wanted){
+    const remote=NET.remotes&&NET.remotes[sid],local=sid===self,parent=local?scene:remote&&remote.grp;
+    if(!parent)continue;
+    let crown=powerCrowns.get(sid);
+    if(!crown){crown=crownMesh(.5);parent.add(crown);powerCrowns.set(sid,crown);}
+    const lift=3.55+Math.sin(performance.now()*.002)*.09;
+    if(local)crown.position.set(player.pos.x,player.pos.y+lift,player.pos.z);else crown.position.set(0,lift,0);
+    crown.rotation.y=performance.now()*.0005;
+  }
+}
 function crownMesh(scale=1){
   const root=new THREE.Group(), gold=0xffc933, pale=0xffef9a;
   const solid=(color)=>new THREE.MeshBasicMaterial({color,transparent:true,opacity:.96,depthTest:false,depthWrite:false});
@@ -12377,6 +12394,7 @@ gameContext.registerState('world', Object.freeze({
   get TRAINING_MEADOW_TOWN_PORTAL(){ return TRAINING_MEADOW_TOWN_PORTAL; },
 }));
 gameContext.registerModule('world', Object.freeze({
+  updatePowerCrowns,
   getBlock:getB,
   setBlock:setB,
   terrainHeight,

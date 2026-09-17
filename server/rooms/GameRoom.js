@@ -12,6 +12,7 @@ const AI = require('../ai');
 const { createStore, cleanSlot, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, sanitizeActiveRoom, sanitizeActiveRoomPosition, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS, ensureAsherAdminFishingRod } = require('../store');
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
+const { buildPowerRanking, savedPowerProfiles } = require('../power-ranking');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
 const JOB_SYSTEM = require('../../shared/job-system');
 const QUEST_OBJECTIVES = require('../../shared/quest-objectives');
@@ -607,6 +608,7 @@ class GameRoom extends Room {
     // ---- message handlers ----
     this.initMetrics();
     this.onMessage('move', (client, m) => this.handleMove(client, m));
+    this.onMessage('powerRanking', client => this.handlePowerRanking(client));
     this.onMessage('recallStart', (client, m) => this.handleRecallStart(client, m));
     this.onMessage('recallAnswer', (client, m) => this.handleRecallAnswer(client, m));
     this.onMessage('recallSubject', (client, m) => this.handleRecallSubject(client, m));
@@ -4153,6 +4155,7 @@ class GameRoom extends Room {
         source: String(source || 'activity').slice(0, 32),
       };
       if (rank > beforeRank) {
+        for (const room of new Set([this, ...getActiveRooms()])) room.broadcast('powerRankingChanged', { reason: 'rank_up' });
         const gateRank = Math.min(5, rank);
         client.send('rankUp', {
           ...baseLevelMessage,
@@ -9757,6 +9760,25 @@ class GameRoom extends Room {
 
   // Server-authoritative player movement: anti-teleport step clamp + velocity cap (used for
   // skeleton lead). Shared by GameRoom and DungeonRoom so a player moves identically in either.
+  async handlePowerRanking(client) {
+    if (this.rateLimited(client, 'powerRanking', 0.2, 1)) return client.send('powerRanking', { ok: false, reason: 'rate' });
+    try {
+      const profiles = await savedPowerProfiles(this.store), guilds = new Map();
+      for (const room of new Set([this, ...getActiveRooms()])) {
+        for (const [token, profile] of room.profiles || []) profiles.set(token, profile);
+        for (const [id, guild] of room.guilds || []) guilds.set(id, guild);
+      }
+      const { crownTokens, ...ranking } = buildPowerRanking(profiles, guilds, this.tokens.get(client.sessionId));
+      const winners = new Set(crownTokens), crownedSids = [];
+      for (const room of new Set([this, ...getActiveRooms()])) for (const member of room.clients || []) {
+        if (room.tokens && winners.has(room.tokens.get(member.sessionId))) crownedSids.push(member.sessionId);
+      }
+      client.send('powerRanking', { ok: true, ...ranking, crownedSids, updatedAt: Date.now(), eventDriven: true });
+    } catch (error) {
+      console.warn('[power-ranking] load failed:', error.message);
+      client.send('powerRanking', { ok: false });
+    }
+  }
   handleMove(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m) return;
