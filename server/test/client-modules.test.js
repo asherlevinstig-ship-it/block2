@@ -5652,6 +5652,75 @@ test('incubation broadcasts never consume another players egg slot',()=>{
   assert.equal(inv[0].count,1);
 });
 
+test('hatch requests distinguish session failures and route every realm to authoritative incubation',()=>{
+  const server=fs.readFileSync(path.join(__dirname,'../rooms/dragons.mixin.js'),'utf8');
+  const client=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');
+  const section=server.slice(server.indexOf('  handleHatchDragonEgg(client, m) {'),server.indexOf('// ---------------- dragon breeding:'));
+  assert.match(section,/if \(!p \|\| !rec\).*reason: 'profile'/);
+  assert.match(section,/p\.dim !== 'overworld' \|\| p\.dgn/);
+  assert.match(section,/return this\.handlePortableDragonHatch\(client,m,p,rec\)/);
+  assert.match(client,/dragon\.hatch\.rejected/);
+  assert.match(client,/else if\(r==='dimension'\)/);
+  assert.match(client,/else if\(r==='invalid'\)/);
+  assert.doesNotMatch(client,/The egg will not hatch here/);
+});
+
+test('portable nests hatch real dragons across realms without losing or duplicating eggs',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'../rooms/dragons.mixin.js'),'utf8');
+  const start=source.indexOf('  handlePortableInsulatorSync(client'),end=source.indexOf('  handleHatchDragonEgg(client',start);
+  const portable=require('../../shared/portable-incubation');
+  const PortableHarness=vm.runInNewContext('(class PortableHarness {'+source.slice(start,end)+'})',{
+    require:()=>portable,W,DRAGON_TYPE_BY_EGG:{200:'ember'},dragonIncubationMs:()=>100,
+  });
+  const sent=[],p={dim:'dungeon',dgn:'dgn-a'},prof={name:'Hunter',S:{lvl:1},inv:[{id:34,count:2},{id:200,count:1}],mountUnlocks:[]};
+  const rec={token:'owner',prof},client={sessionId:'me',send:(type,msg)=>sent.push({type,msg})};
+  const room=Object.assign(new PortableHarness(),{state:{players:new Map([['me',p]])},profileFor:()=>rec,isPlayerAlive:()=>true,
+    rateLimited:()=>false,spaceSolid:()=>()=>false,editTargetInReach:()=>true,dirtyPlayers:new Set(),
+    randomDragonGender:()=> 'female',randomDragonPersonality:()=> 'bold',
+    consumeSlotItem(profile,slot,id){const s=profile.inv[slot];if(!s||s.id!==id||s.count<1)return false;s.count--;return true;},
+    findInventoryItemSlot:(profile,predicate)=>profile.inv.findIndex(s=>s&&s.count>0&&predicate(s)),
+    ensureDragonGender(){},ensureDragonPersonality:(_profile,_type,value)=>value,
+    ensureDragonHatchedAt:(_profile,_type,value)=>value,syncPlayerProfile(){},
+  });
+  const nest={x:20,y:20,z:20,slot:0};
+  room.handlePortableDragonHatch(client,{x:21,y:20,z:20,slot:1},p,rec);
+  assert.equal(sent.at(-1).msg.reason,'insulator');
+  assert.equal(prof.inv[1].count,1,'invalid nests cannot consume the egg');
+  room.handlePlacePortableInsulator(client,nest);
+  assert.equal(prof.inv[0].count,1);
+  room.handlePortableDragonHatch(client,{...nest,slot:1},p,rec);
+  assert.equal(prof.inv[1].count,0,'only the server consumes the egg');
+  assert.equal(sent.at(-1).type,'dragonIncubationStart');
+  room.handlePortableDragonHatch(client,{...nest,slot:1},p,rec);
+  assert.equal(sent.at(-1).msg.reason,'waiting');
+  prof.portableDragonEgg=portable.sanitizePortableEgg(JSON.parse(JSON.stringify(prof.portableDragonEgg)));
+  prof.portableInsulators=portable.sanitizePortableNests(JSON.parse(JSON.stringify(prof.portableInsulators)));
+  assert.equal(prof.portableDragonEgg.type,'ember','pending egg survives profile persistence');
+  p.dim='tutorial';p.dgn='tutorial-questions-session';prof.activeRoom={dim:'questions'};
+  room.handlePlacePortableInsulator(client,nest);
+  assert.equal(prof.portableInsulators.length,2,'identical coordinates in different realms are separate nests');
+  prof.portableDragonEgg.finishAt=0;
+  room.handlePortableDragonHatch(client,{...nest,slot:1},p,rec);
+  assert.equal(prof.mountUnlocks[0],'dragon:ember');
+  assert.equal(prof.portableDragonEgg,null);
+  assert.equal(sent.at(-1).type,'dragonIncubationComplete');
+  room.handlePortableDragonHatch(client,{...nest,slot:1},p,rec);
+  assert.equal(prof.mountUnlocks.length,1,'repeating the claim cannot grant a second dragon');
+  assert.equal(prof.inv[1].count,0);
+});
+
+test('built-in Taming Land nests are authoritative without a placed inventory station',()=>{
+  const {builtInPortableNests}=require('../../shared/portable-incubation');
+  const p={dim:'tutorial',dgn:'tutorial-taming_land-session'},prof={activeRoom:{dim:'taming_land'}};
+  const nests=builtInPortableNests(p,prof);
+  assert.equal(nests.length,5);
+  assert.ok(nests.some(n=>n.x===420&&n.y===21&&n.z===931));
+  p.dgn='tutorial-taming_land-new-session';
+  assert.equal(builtInPortableNests(p,prof)[0].realm,nests[0].realm);
+  p.dim='dungeon';
+  assert.equal(builtInPortableNests(p,prof).length,0,'a saved tutorial cannot authorize nests in another realm');
+});
+
 test('admin grants accept the incubator and ordinary blocks but reject protected and unknown IDs',()=>{
   const source=fs.readFileSync(path.join(__dirname,'../auth.js'),'utf8');
   const known=source.slice(source.indexOf('const KNOWN_ITEM_IDS ='),source.indexOf('const JOB_XP_MAX'));

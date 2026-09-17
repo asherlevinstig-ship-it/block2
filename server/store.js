@@ -24,6 +24,7 @@ const ABILITY_PROGRESSION = require('../shared/ability-progression');
 const FAMILIAR_SYSTEM = require('../shared/familiar-system');
 const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials');
 const WORLD = require('./world');
+const { sanitizePortableNests, sanitizePortableEgg } = require('../shared/portable-incubation');
 const { updateSavedPowerProfile } = require('./power-ranking');
 
 // ---------------- validation ----------------
@@ -953,6 +954,8 @@ function sanitizeProfile(p) {
   const out = {};
   out.name = cleanName(p.name);
   out.appearance = APPEARANCE_SYSTEM.sanitizeAppearance(p.appearance);
+  out.portableInsulators = sanitizePortableNests(p.portableInsulators);
+  out.portableDragonEgg = sanitizePortableEgg(p.portableDragonEgg);
   const S = p.S || {};
   out.S = {
     lvl: clampI(S.lvl, 1, 999),

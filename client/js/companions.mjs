@@ -1048,13 +1048,22 @@ function applyDragonIncubationComplete(m){
 }
 function dragonHatchRejected(m){
   const r=m&&m.reason;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('dragon.hatch.rejected',{
+    reason:r||'unknown',clientDimension:dim,serverDimension:m&&m.dimension,serverRoom:m&&m.room,
+  });
   if(r==='insulator') sysMsg('Use the egg on an <b>Egg Insulator</b>');
+  else if(r==='dimension') sysMsg(dim==='overworld'
+    ? 'The server still has you in another room. Reconnect before hatching; your egg has not been used.'
+    : 'Dragon eggs hatch in the <b>overworld or town</b>. Return there and place the insulator; your egg has not been used.');
+  else if(r==='profile') sysMsg('Your character is not ready on the server. Reconnect and try again; your egg has not been used.');
+  else if(r==='payload') sysMsg('The hatch request could not be read. Reconnect and try again.');
+  else if(r==='invalid') sysMsg('The server rejected your session or room. Try in the overworld; if already there, reconnect.');
   else if(r==='range') sysMsg('Stand closer to the <b>Egg Insulator</b>');
   else if(r==='owned') sysMsg('You have already bonded with that dragon species');
   else if(r==='busy') sysMsg('That <b>Egg Insulator</b> is already warming an egg');
   else if(r==='waiting') sysMsg('That egg is still incubating');
   else if(r==='egg') sysMsg('Hold a valid <b>Dragon Egg</b>');
-  else sysMsg('The egg will not hatch here');
+  else sysMsg('Dragon hatching was rejected ('+escHTML(String(r||'unknown'))+'). Please report this message.');
 }
 function applyDragonRenameResult(m){
   if(!m || !DRAGON_TYPES[m.type]) return;

@@ -131,6 +131,9 @@ class DungeonRoom extends GameRoom {
   registerRaidHandlers() {
     this.onMessage('move', (c, m) => this.handleMove(c, m));
     this.onMessage('powerRanking', c => this.handlePowerRanking(c));
+    this.onMessage('hatchDragonEgg',(c,m)=>this.handleHatchDragonEgg(c,m));
+    this.onMessage('placePortableInsulator',(c,m)=>this.handlePlacePortableInsulator(c,m));
+    this.onMessage('portableInsulatorSync',(c,m)=>this.handlePortableInsulatorSync(c,m));
     this.onMessage('recallStart', (c, m) => this.handleRecallStart(c, m));
     this.onMessage('recallAnswer', (c, m) => this.handleRecallAnswer(c, m));
     this.onMessage('recallSubject', (c, m) => this.handleRecallSubject(c, m));

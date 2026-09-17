@@ -447,6 +447,11 @@ function meleeSwingTime(){
   return (tool && tool.cls==='axe') ? .55 : .35;   // axes swing slower (matches the server cadence); everything else standard
 }
 function startMine(hit){
+  if(NET.on&&(dim!=='overworld'||NET.dgn)&&hit.id===B.EGG_INSULATOR){
+    mining=null;
+    sysMsg('This portable nest is saved to your character. Leave it here to reuse it when you return.');
+    return;
+  }
   if(dim==='dungeon'){
     mining=null;
     sysMsg('Dungeon blocks are sealed by the Gate.');
@@ -6742,7 +6747,7 @@ function buildPlacementPreview(){
   if(!hit || (s.id!==B.EGG_INSULATOR&&isPlacementInteractionHit(hit))) return null;
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2], placeId=s.id;
   const cur=inWorld(px,py,pz)?getB(px,py,pz):B.BEDROCK;
-  const valid=dim!=='dungeon' && dim!=='fishing_lake'
+  const valid=(s.id===B.EGG_INSULATOR||(dim!=='dungeon' && dim!=='fishing_lake'))
     && inWorld(px,py,pz)
     && (cur===B.AIR || cur===B.WATER)
     && !(dim==='overworld' && !canBuildHere(px,pz,py,placeId))
@@ -7361,11 +7366,11 @@ function placeSelectedBlockAtHit(hit){
   const s=inv[selected];
   if(!s || ITEMS[s.id].place===undefined) return false;
   if(s.id!==B.EGG_INSULATOR&&isPlacementInteractionHit(hit))return false;
-  if(dim==='dungeon'){
+  if(dim==='dungeon'&&s.id!==B.EGG_INSULATOR){
     sysMsg('Dungeon blocks are sealed by the Gate.');
     return false;
   }
-  if(dim==='fishing_lake'){
+  if(dim==='fishing_lake'&&s.id!==B.EGG_INSULATOR){
     sysMsg('The fishing lake is a protected sanctuary — you can\'t place blocks here.');
     return false;
   }
@@ -7374,6 +7379,10 @@ function placeSelectedBlockAtHit(hit){
   const cur=getB(px,py,pz);
   if(cur!==B.AIR && cur!==B.WATER) return false;
   const placeId=s.id;
+  if(placeId===B.EGG_INSULATOR&&(dim!=='overworld'||NET.dgn)&&NET.on&&NET.room){
+    NET.room.send('placePortableInsulator',{x:px,y:py,z:pz,slot:selected,clientDimension:dim,clientSpace:NET.dgn||''});
+    return true;
+  }
   if(dim==='overworld' && !canBuildHere(px,pz,py,placeId)){
     showLandEditDenied(px,pz,'build',py,placeId);
     return false;

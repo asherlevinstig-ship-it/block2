@@ -884,10 +884,73 @@ class DragonsMixin {
     this.syncPlayerProfile(client, rec.prof);
     client.send('dragonRenameResult', { type, name });
   }
+  handlePortableInsulatorSync(client,m={}) {
+    const p=this.state.players.get(client.sessionId),rec=this.profileFor(client);
+    if(!p||!rec)return;
+    const {portableRealm,sanitizePortableNests,builtInPortableNests}=require('../../shared/portable-incubation');
+    const realm=portableRealm(p,rec.prof),nests=[...builtInPortableNests(p,rec.prof),...sanitizePortableNests(rec.prof.portableInsulators).filter(n=>n.realm===realm)];
+    client.send('portableInsulators',{realm,clientDimension:m.clientDimension,clientSpace:m.clientSpace,nests,incubation:rec.prof.portableDragonEgg||null});
+    if(realm==='overworld')this.sendDragonIncubations(client);
+  }
+  handlePlacePortableInsulator(client,m) {
+    const p=this.state.players.get(client.sessionId),rec=this.profileFor(client);
+    const reject=reason=>client.send('portableInsulatorResult',{ok:false,reason});
+    if(!p||!rec||!m||!this.isPlayerAlive(client))return reject('profile');
+    if(!p.dgn&&p.dim==='overworld')return reject('overworld');
+    if(this.rateLimited(client,'portableInsulator',1,2))return reject('rate');
+    const {portableRealm,sanitizePortableNests}=require('../../shared/portable-incubation');
+    const {x,y,z}=m;
+    if(![x,y,z].every(Number.isInteger)||!W.inWorld(x,y,z)||!this.editTargetInReach(p,x,y,z))return reject('range');
+    const solid=this.spaceSolid(p.dgn||'');if(solid(x,y,z))return reject('occupied');
+    const nests=sanitizePortableNests(rec.prof.portableInsulators),realm=portableRealm(p,rec.prof);
+    if(nests.some(n=>n.realm===realm&&n.x===x&&n.y===y&&n.z===z))return reject('occupied');
+    if(nests.length>=32)return reject('full');
+    const slot=m.slot|0;
+    if(slot<0||slot>=36||!this.consumeSlotItem(rec.prof,slot,W.B.EGG_INSULATOR,1))return reject('inventory');
+    const nest={realm,x,y,z};nests.push(nest);rec.prof.portableInsulators=nests;this.dirtyPlayers.add(rec.token);
+    client.send('portableInsulatorResult',{ok:true,...nest,slot});
+    this.handlePortableInsulatorSync(client,m);
+  }
+  handlePortableDragonHatch(client,m,p,rec) {
+    if(!this.isPlayerAlive(client))return client.send('hatchDragonReject',{reason:'profile'});
+    const {portableRealm,sanitizePortableNests,builtInPortableNests}=require('../../shared/portable-incubation');
+    const realm=portableRealm(p,rec.prof),nest=realm==='overworld'&&W.inWorld(m.x,m.y,m.z)&&this.world.getB(m.x,m.y,m.z)===W.B.EGG_INSULATOR
+      ? {realm,x:m.x,y:m.y,z:m.z}
+      : [...builtInPortableNests(p,rec.prof),...sanitizePortableNests(rec.prof.portableInsulators)].find(n=>n.realm===realm&&n.x===m.x&&n.y===m.y&&n.z===m.z);
+    const reject=reason=>client.send('hatchDragonReject',{reason});
+    if(!nest)return reject('insulator');
+    if(!this.editTargetInReach(p,nest.x,nest.y,nest.z))return reject('range');
+    const existing=rec.prof.portableDragonEgg;
+    if(existing){
+      if(Date.now()<existing.finishAt)return reject('waiting');
+      const kind='dragon:'+existing.type;
+      rec.prof.mountUnlocks ||= [];
+      if(rec.prof.mountUnlocks.includes(kind))return reject('owned');
+      rec.prof.mountUnlocks.push(kind);
+      this.ensureDragonGender(rec.prof,existing.type,existing.gender);
+      const personality=this.ensureDragonPersonality(rec.prof,existing.type,existing.personality);
+      const hatchedAt=this.ensureDragonHatchedAt(rec.prof,existing.type,Date.now());
+      rec.prof.portableDragonEgg=null;this.dirtyPlayers.add(rec.token);this.syncPlayerProfile(client,rec.prof);
+      client.send('dragonIncubationComplete',{...nest,...existing,kind,personality,hatchedAt,ownerSid:client.sessionId,portable:true});
+      if(this.refreshNpcQuestReadiness)this.refreshNpcQuestReadiness(client);
+      return;
+    }
+    let slot=m.slot|0,egg=rec.prof.inv&&rec.prof.inv[slot],type=egg&&DRAGON_TYPE_BY_EGG[egg.id];
+    if(!type){slot=this.findInventoryItemSlot(rec.prof,s=>!!DRAGON_TYPE_BY_EGG[s.id]);egg=rec.prof.inv&&rec.prof.inv[slot];type=egg&&DRAGON_TYPE_BY_EGG[egg.id];}
+    if(!type)return reject('egg');
+    if((rec.prof.mountUnlocks||[]).includes('dragon:'+type))return reject('owned');
+    const eggId=egg.id;
+    if(!this.consumeSlotItem(rec.prof,slot,eggId,1))return reject('egg');
+    const startedAt=Date.now(),inc={type,eggId,startedAt,finishAt:startedAt+dragonIncubationMs(type),gender:this.randomDragonGender(),personality:this.randomDragonPersonality()};
+    rec.prof.portableDragonEgg=inc;this.dirtyPlayers.add(rec.token);
+    client.send('dragonIncubationStart',{...nest,...inc,slot,ownerSid:client.sessionId});
+  }
   handleHatchDragonEgg(client, m) {
     const p = this.state.players.get(client.sessionId);
     const rec = this.profileFor(client);
-    if (!p || !rec || !m || p.dim !== 'overworld') return client.send('hatchDragonReject', { reason: 'invalid' });
+    if (!p || !rec) return client.send('hatchDragonReject', { reason: 'profile' });
+    if (!m) return client.send('hatchDragonReject', { reason: 'payload' });
+    if (p.dim !== 'overworld' || p.dgn) return this.handlePortableDragonHatch(client,m,p,rec);
     const x = m.x | 0, y = m.y | 0, z = m.z | 0;
     if (!W.inWorld(x, y, z) || this.world.getB(x, y, z) !== W.B.EGG_INSULATOR) {
       return client.send('hatchDragonReject', { reason: 'insulator' });
@@ -897,6 +960,7 @@ class DragonsMixin {
     const incubations = this.ensureDragonIncubations();
     const existing = incubations.get(key);
     if (existing) return this.claimDragonIncubation(client, key, existing);
+    if(rec.prof.portableDragonEgg)return this.handlePortableDragonHatch(client,m,p,rec);
     let slot = Math.max(0, Math.min(35, m.slot | 0));
     let egg = Array.isArray(rec.prof.inv) ? rec.prof.inv[slot] : null;
     let type = egg ? DRAGON_TYPE_BY_EGG[egg.id | 0] : '';

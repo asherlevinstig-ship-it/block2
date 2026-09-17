@@ -639,6 +639,8 @@ class GameRoom extends Room {
     this.onMessage('mount', (client, m) => this.handleMount(client, m));
     this.onMessage('dismount', (client) => this.handleDismount(client));
     this.onMessage('hatchDragonEgg', (client, m) => this.handleHatchDragonEgg(client, m));
+    this.onMessage('placePortableInsulator', (client,m)=>this.handlePlacePortableInsulator(client,m));
+    this.onMessage('portableInsulatorSync', (client,m)=>this.handlePortableInsulatorSync(client,m));
     this.onMessage('renameDragon', (client, m) => this.handleRenameDragon(client, m));
     this.onMessage('setDragonRole', (client, m) => this.handleSetDragonRole(client, m));
     this.onMessage('chooseDragonSpecialization', (client, m) => this.handleChooseDragonSpecialization(client, m));

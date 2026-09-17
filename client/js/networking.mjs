@@ -2899,10 +2899,25 @@ function netAttachRoom(room,name,client){
     room.onMessage('gearLockResult',m=>{applyGearLockResult(m);if(m&&m.ok)eventFeed('[Gear]',m.locked?'Protected selected gear from salvage.':'Removed gear protection.',{key:'gear:lock:'+String(m&&m.slot||0)+':'+m.locked,cooldown:0});});
     room.onMessage('blacksmithReject', m=>blacksmithServiceRejected(m));
     room.onMessage('hatchDragonReject', m=>dragonHatchRejected(m));
+    room.onMessage('portableInsulatorResult',m=>{
+      if(room!==NET.room)return;
+      if(!m||!m.ok){sysMsg('Insulator placement rejected: '+escHTML(String(m&&m.reason||'unknown')));return;}
+      const stack=inv[m.slot];if(stack&&stack.id===B.EGG_INSULATOR){stack.count--;if(stack.count<=0)inv[m.slot]=null;}
+      refreshHUD();
+    });
+    room.onMessage('portableInsulators',m=>{
+      if(room!==NET.room||!m||(m.clientDimension&&m.clientDimension!==dim)||(m.clientSpace!=null&&m.clientSpace!==(NET.dgn||''))||(dim==='overworld'&&!NET.dgn))return;
+      clearPortableIncubationMeshes();
+      for(const nest of m.nests||[]){
+        if(getB(nest.x,nest.y,nest.z)===B.AIR||getB(nest.x,nest.y,nest.z)===B.WATER){setB(nest.x,nest.y,nest.z,B.EGG_INSULATOR);worldApi.ensureInsulatorMesh(nest.x,nest.y,nest.z);rebuildAround(nest.x,nest.z);}
+      }
+      const nest=m.nests&&m.nests[0];
+      if(nest&&m.incubation)applyDragonIncubationStart({...nest,...m.incubation,ownerSid:room.sessionId});
+    });
     room.onMessage('dragonIncubationStart', m=>{applyDragonIncubationStart(m);eventFeed('[Dragon]','Dragon egg placed in the nest.',{key:'dragon:incubation:start:'+String(m&&m.key||''),cooldown:0});});
     room.onMessage('dragonIncubationReady', m=>{applyDragonIncubationReady(m);eventFeed('[Dragon]','A dragon egg is ready to hatch.',{key:'dragon:incubation:ready:'+String(m&&m.key||''),cooldown:0});});
     room.onMessage('dragonIncubationRemove', m=>{ if(m) removeDragonIncubationMesh(m.x|0,m.y|0,m.z|0); });
-    room.onMessage('dragonIncubationComplete', m=>{applyDragonIncubationComplete(m);eventFeed('[Dragon]',((m&&DRAGON_TYPES[m.type]&&DRAGON_TYPES[m.type].name)||'Dragon')+' hatched.',{key:'dragon:incubation:complete:'+String(m&&m.key||m&&m.type||''),cooldown:0});});
+    room.onMessage('dragonIncubationComplete', m=>{if(m&&m.portable)clearPortableIncubationMeshes();applyDragonIncubationComplete(m);eventFeed('[Dragon]',((m&&DRAGON_TYPES[m.type]&&DRAGON_TYPES[m.type].name)||'Dragon')+' hatched.',{key:'dragon:incubation:complete:'+String(m&&m.key||m&&m.type||''),cooldown:0});});
     room.onMessage('dragonRenameResult', m=>{applyDragonRenameResult(m);eventFeed('[Dragon]','Dragon renamed to '+String((m&&m.name)||'a new name')+'.',{key:'dragon:rename:'+String(m&&m.type||''),cooldown:0});});
     room.onMessage('dragonRenameReject', m=>dragonRenameRejected(m));
     room.onMessage('dragonPerchAdd', m=>{ if(m) addPerchedDragon(m.key, m.x|0, m.y|0, m.z|0, m.slot|0, m.type, m.gender, m.loveUntil||0); });
@@ -6228,7 +6243,24 @@ gameContext.registerState('networking', Object.freeze({
   get journeyResult(){ return e2eJourneyResult; },
   get restartRecovery(){ return dungeonRestartRecovery; },
 }));
+let portableSyncRoom=null,portableSyncDimension=null,portableSyncSpace=null;
+function clearPortableIncubationMeshes(){
+  for(const key of Object.keys(worldState.dragonIncubationMeshes||{})){
+    const [x,y,z]=key.split(',').map(Number);worldApi.removeDragonIncubationMesh(x,y,z);
+  }
+}
+function tickPortableInsulatorSync(){
+  const room=NET.on&&NET.room;
+  if(!room){portableSyncRoom=null;portableSyncDimension=null;return;}
+  if(!NET.profileReady)return;
+  const space=NET.dgn||'';
+  if(room===portableSyncRoom&&dim===portableSyncDimension&&space===portableSyncSpace)return;
+  portableSyncRoom=room;portableSyncDimension=dim;portableSyncSpace=space;
+  clearPortableIncubationMeshes();
+  room.send('portableInsulatorSync',{clientDimension:dim,clientSpace:space});
+}
 gameContext.registerModule('networking', Object.freeze({
+  tickPortableInsulatorSync,
   connect:netConnect,
   tick:netTick,
   tickCompanionDragons,
