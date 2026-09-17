@@ -3978,10 +3978,20 @@ function netFlushSave(reason='flush'){
     return true;
   }catch(e){return false;}
 }
+function netReleaseBrowserSession(reason='page-exit'){
+  netFlushSave(reason);
+  // A browser close/navigation must be a deliberate Colyseus leave. Saving alone
+  // leaves the socket to disappear as an abnormal disconnect, so the server keeps
+  // the player entity visible during its reconnection window.
+  try{void NETWORK.shutdown();}catch(e){}
+}
 if(typeof window!=='undefined'&&!window.__blockcraftVitalFlushBound){
   window.__blockcraftVitalFlushBound=true;
-  window.addEventListener('pagehide',()=>netFlushSave('pagehide'));
-  window.addEventListener('beforeunload',()=>netFlushSave('beforeunload'));
+  window.addEventListener('pagehide',event=>{
+    if(event&&event.persisted)netFlushSave('pagehide-bfcache');
+    else netReleaseBrowserSession('pagehide');
+  });
+  window.addEventListener('beforeunload',()=>netReleaseBrowserSession('beforeunload'));
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')netFlushSave('visibility-hidden');});
 }
 

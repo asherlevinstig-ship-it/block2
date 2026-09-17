@@ -4227,6 +4227,15 @@ test('network controller shutdown leaves deliberately without starting reconnect
   assert.equal(controller.state.on, false);
 });
 
+test('browser exit deliberately releases the multiplayer session instead of leaving a reconnect ghost', () => {
+  const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(networkingSource, /function netReleaseBrowserSession\(reason='page-exit'\)/);
+  assert.match(networkingSource, /netFlushSave\(reason\);[\s\S]*void NETWORK\.shutdown\(\)/);
+  assert.match(networkingSource, /addEventListener\('pagehide',event=>\{[\s\S]*netReleaseBrowserSession\('pagehide'\)/);
+  assert.match(networkingSource, /addEventListener\('beforeunload',\(\)=>netReleaseBrowserSession\('beforeunload'\)\)/);
+  assert.match(networkingSource, /event&&event\.persisted\)netFlushSave\('pagehide-bfcache'\)/);
+});
+
 test('network controller falls back when a stored session resume never settles', async () => {
   const { createNetworkController } = await clientModule('network.mjs');
   const storage = new Map([['resume', 'stale:token']]), attached = [], events = [];
