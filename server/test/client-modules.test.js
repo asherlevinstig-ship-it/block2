@@ -14,7 +14,7 @@ const questObjectives = require('../../shared/quest-objectives');
 const npcQuestChains = require('../../shared/npc-quest-chains');
 const { I, RECIPES: SERVER_RECIPES, SMELT: SERVER_SMELT } = require('../rooms/constants');
 
-test('dragon eggs surface a persistent, state-aware hatching guide in the game UI',()=>{
+test('dragon eggs surface a hotbar-only, state-aware hatching guide in the game UI',()=>{
   const css=fs.readFileSync(path.join(__dirname,'../../client/styles.css'),'utf8');
   const hud=fs.readFileSync(path.join(__dirname,'../../client/js/hud.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
@@ -24,6 +24,9 @@ test('dragon eggs surface a persistent, state-aware hatching guide in the game U
   assert.match(networking,/When it says READY, press <kbd>G<\/kbd> again to hatch/);
   assert.match(networking,/function refreshDragonEggGuide\(\)/);
   assert.match(networking,/DRAGON_EGG_TO_TYPE\[stack\.id\]/);
+  assert.match(networking,/const hotbarEgg=eggs\.find\(entry=>entry\.slot<9\)/);
+  assert.match(networking,/if\(!hotbarEgg\)\{\s*dragonEggGuide\.classList\.add\('hidden'\)/);
+  assert.doesNotMatch(networking,/Move the egg to your hotbar to begin/);
   assert.match(networking,/Get an Egg Insulator from Mara or a Merchant/);
   assert.match(networking,/Look at the placed Egg Insulator and press G/);
 });
