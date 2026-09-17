@@ -2985,6 +2985,8 @@ test('right-side HUD panels stack without hiding the quest-log shortcut',()=>{
   assert.match(menus,/\['kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','powerhud'\]/);
   assert.match(menus,/map\.getBoundingClientRect\(\)\.bottom/);
   assert.match(menus,/Math\.max\(top\+el\.offsetHeight,rect\.bottom\)\+RIGHT_HUD_GAP/);
+  assert.doesNotMatch(menus,/offsetParent===null/);
+  assert.match(menus,/getComputedStyle\(el\)/);
   assert.match(menus,/layoutRightHudStack\(\);/);
   assert.doesNotMatch(menus,/innerWidth<=760\|\|document\.body\.classList\.contains\('tablet-mode'\)/);
   assert.match(styles,/#powerhud\.hud-space-hidden\{display:none!important\}/);
@@ -2994,10 +2996,10 @@ test('right-side HUD panels stack without hiding the quest-log shortcut',()=>{
   const start=menus.indexOf('const RIGHT_HUD_GAP=');
   const end=menus.indexOf('function invalidatePowerRanking',start);
   const classList=()=>({contains:()=>false,remove(){},add(){}});
-  const quest={offsetParent:{},offsetHeight:140,classList:classList(),style:{removeProperty(){}},getBoundingClientRect:()=>({bottom:420})};
-  const power={offsetParent:{},offsetHeight:100,classList:classList(),style:{removeProperty(){}},getBoundingClientRect(){return{bottom:(parseInt(this.style.top,10)||0)+this.offsetHeight};}};
+  const quest={offsetParent:null,offsetHeight:140,classList:classList(),style:{removeProperty(){}},getBoundingClientRect:()=>({bottom:420})};
+  const power={offsetParent:null,offsetHeight:100,classList:classList(),style:{removeProperty(){}},getBoundingClientRect(){return{bottom:(parseInt(this.style.top,10)||0)+this.offsetHeight};}};
   const elements={currentquest:quest,powerhud:power};
-  const ctx={innerHeight:1000,document:{getElementById:id=>elements[id]||null}};
+  const ctx={innerHeight:1000,getComputedStyle:()=>({display:'block',visibility:'visible'}),document:{getElementById:id=>elements[id]||null}};
   vm.createContext(ctx);vm.runInContext(menus.slice(start,end),ctx);ctx.layoutRightHudStack();
   assert.equal(power.style.top,'430px','the next panel starts after the quest actual painted bottom, even when responsive CSS overrides its requested top');
 });

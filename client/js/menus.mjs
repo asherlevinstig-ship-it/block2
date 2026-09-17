@@ -3587,7 +3587,9 @@ let powerHud=null,powerStandings=null,powerHudRoom=null,nextPowerRefreshAt=0,las
 const RIGHT_HUD_GAP=10;
 function visibleRightHudElement(id){
   const el=document.getElementById(id);
-  return el&&el.offsetParent!==null&&!el.classList.contains('hidden')?el:null;
+  if(!el||el.classList.contains('hidden'))return null;
+  const style=getComputedStyle(el);
+  return style.display!=='none'&&style.visibility!=='hidden'?el:null;
 }
 function layoutRightHudStack(){
   const ids=['kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','powerhud'];
@@ -3598,7 +3600,7 @@ function layoutRightHudStack(){
     const el=document.getElementById(id);
     if(!el)continue;
     el.classList.remove('hud-space-hidden');
-    if(el.offsetParent===null||el.classList.contains('hidden')){el.style.removeProperty('top');continue;}
+    if(!visibleRightHudElement(id)){el.style.removeProperty('top');continue;}
     if(id==='powerhud'&&top>innerHeight-96){
       el.classList.add('hud-space-hidden');el.style.removeProperty('top');continue;
     }
