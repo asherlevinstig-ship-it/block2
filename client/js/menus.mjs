@@ -3604,7 +3604,10 @@ function layoutRightHudStack(){
     }
     el.style.top=Math.round(top)+'px';
     if(id==='powerhud')el.style.maxHeight=Math.max(64,innerHeight-top-100)+'px';
-    top+=el.offsetHeight+RIGHT_HUD_GAP;
+    // Responsive rules may override `top` with !important. Advance from the
+    // element's real painted edge so a later panel can never occupy its space.
+    const rect=el.getBoundingClientRect();
+    top=Math.max(top+el.offsetHeight,rect.bottom)+RIGHT_HUD_GAP;
   }
 }
 function invalidatePowerRanking(){nextPowerRefreshAt=0;}
