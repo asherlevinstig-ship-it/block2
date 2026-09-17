@@ -6739,7 +6739,7 @@ function buildPlacementPreview(){
   const s=inv[selected];
   if(!s || ITEMS[s.id].place===undefined) return null;
   const hit=raycast(BLOCK_PLACE_REACH);
-  if(!hit || isPlacementInteractionHit(hit)) return null;
+  if(!hit || (s.id!==B.EGG_INSULATOR&&isPlacementInteractionHit(hit))) return null;
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2], placeId=s.id;
   const cur=inWorld(px,py,pz)?getB(px,py,pz):B.BEDROCK;
   const valid=dim!=='dungeon' && dim!=='fishing_lake'
@@ -7166,6 +7166,19 @@ function interactAncientCityDiscovery(s){
   return true;
 }
 function secondaryAction(){
+  // Explicitly using an egg on a nest takes priority over nearby NPCs/portals.
+  const eggTarget=raycast(6);
+  if(eggTarget&&eggTarget.id===B.EGG_INSULATOR){
+    const incubation=dragonIncubationMeshes[incubationKey(eggTarget.x,eggTarget.y,eggTarget.z)];
+    if(incubation){
+      if(NET.on&&NET.room)NET.room.send('hatchDragonEgg',{slot:selected,x:eggTarget.x,y:eggTarget.y,z:eggTarget.z});
+      else claimLocalIncubation(eggTarget.x,eggTarget.y,eggTarget.z);
+      return;
+    }
+    const egg=inv[selected];
+    if(egg&&DRAGON_EGG_TO_TYPE[egg.id]){hatchDragonEgg(selected,eggTarget);return;}
+  }
+  if(inv[selected]&&inv[selected].id===B.EGG_INSULATOR){placeSelectedBlockAtHit(eggTarget);return;}
   if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<=6){ enterDungeon(); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
   if(nearTamingLandPortal()){ enterTamingLand(); return; }
@@ -7344,9 +7357,10 @@ function secondaryAction(){
   placeSelectedBlockAtHit(hit);
 }
 function placeSelectedBlockAtHit(hit){
-  if(!hit || isPlacementInteractionHit(hit)) return false;
+  if(!hit) return false;
   const s=inv[selected];
   if(!s || ITEMS[s.id].place===undefined) return false;
+  if(s.id!==B.EGG_INSULATOR&&isPlacementInteractionHit(hit))return false;
   if(dim==='dungeon'){
     sysMsg('Dungeon blocks are sealed by the Gate.');
     return false;

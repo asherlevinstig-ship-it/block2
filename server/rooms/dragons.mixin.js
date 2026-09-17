@@ -916,7 +916,8 @@ class DragonsMixin {
     const inc = { x, y, z, type, eggId: egg.id | 0, gender: this.randomDragonGender(), personality: this.randomDragonPersonality(), token: rec.token, ownerSid: client.sessionId, slot, startedAt: now, finishAt: now + incubationMs };
     incubations.set(key, inc);
     this.dirtyIncubations = true;
-    this.broadcast('dragonIncubationStart', { x, y, z, type, eggId: inc.eggId, gender: inc.gender, slot, startedAt: inc.startedAt, finishAt: inc.finishAt, incubationMs, now });
+    client.send('dragonIncubationStart', { x, y, z, type, eggId: inc.eggId, gender: inc.gender, ownerSid: client.sessionId, slot, startedAt: inc.startedAt, finishAt: inc.finishAt, incubationMs, now });
+    this.broadcast('dragonIncubationStart', { x, y, z, type, eggId: inc.eggId, gender: inc.gender, ownerSid: client.sessionId, startedAt: inc.startedAt, finishAt: inc.finishAt, incubationMs, now }, { except: client });
   }
 
   // ---------------- dragon breeding: perch two dragons at a nest, feed treats, lay an egg ----------------

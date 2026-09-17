@@ -5624,6 +5624,34 @@ test('parkour checkpoint movement collides with the private course, not overworl
   assert.equal(replacement(21,10,30),true);
 });
 
+test('dragon eggs target nests before nearby services and incubators bypass only placement permissions',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'../../client/js/combat.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'../rooms/GameRoom.js'),'utf8');
+  const action=combat.slice(combat.indexOf('function secondaryAction(){'),combat.indexOf('function placeSelectedBlockAtHit(hit){'));
+  assert.ok(action.indexOf('const eggTarget=raycast(6)')<action.indexOf('if(gate '));
+  assert.match(action,/hatchDragonEgg\(selected,eggTarget\)/);
+  assert.match(world,/if\(placeId===B\.EGG_INSULATOR\)return true/);
+  assert.match(room,/const portableInsulator = id === W\.B\.EGG_INSULATOR/);
+  assert.match(room,/!portableInsulator && !this\.canEditLand/);
+  assert.match(room,/id !== W\.B\.AIR && prev !== W\.B\.AIR && prev !== W\.B\.WATER/);
+});
+
+test('incubation broadcasts never consume another players egg slot',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');
+  const start=source.indexOf('function applyDragonIncubationStart(m){'),end=source.indexOf('function applyDragonIncubationReady(',start);
+  const inv=[{id:200,count:2}],sync=[];
+  const apply=vm.runInNewContext(source.slice(start,end)+'\napplyDragonIncubationStart',{
+    DRAGON_TYPES:{ember:{name:'Ember'}},NET:{on:true,room:{sessionId:'me'}},inv,
+    refreshHUD(){},uiOpen:false,renderUI(){},syncDragonIncubationMesh:m=>sync.push(m),sysMsg(){},
+  });
+  apply({type:'ember',eggId:200,slot:0,ownerSid:'someone-else'});
+  assert.equal(inv[0].count,2);
+  assert.equal(sync.length,1,'observers still see the warming egg');
+  apply({type:'ember',eggId:200,slot:0,ownerSid:'me'});
+  assert.equal(inv[0].count,1);
+});
+
 test('admin grants accept the incubator and ordinary blocks but reject protected and unknown IDs',()=>{
   const source=fs.readFileSync(path.join(__dirname,'../auth.js'),'utf8');
   const known=source.slice(source.indexOf('const KNOWN_ITEM_IDS ='),source.indexOf('const JOB_XP_MAX'));

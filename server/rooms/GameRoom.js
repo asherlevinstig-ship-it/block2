@@ -3808,9 +3808,10 @@ class GameRoom extends Room {
     if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'reach', slot: m.slot });
     if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'world_border', slot: m.slot });
     const guildFloorEdit = this.canEditGuildFloor && this.canEditGuildFloor(client, x, y, z, id, prev);
-    if (this.isTownProtected(x, z) && !guildFloorEdit) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'town_buffer', slot: m.slot });
+    const portableInsulator = id === W.B.EGG_INSULATOR;
+    if (this.isTownProtected(x, z) && !guildFloorEdit && !portableInsulator) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'town_buffer', slot: m.slot });
     if (this.isEventProtectedBlock(x, y, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'event_protected', slot: m.slot });
-    if (!this.canEditLand(client, x, z, { allowTown: guildFloorEdit })) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'land_permission', slot: m.slot });
+    if (!portableInsulator && !this.canEditLand(client, x, z, { allowTown: guildFloorEdit })) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'land_permission', slot: m.slot });
     if (id !== W.B.AIR && prev !== W.B.AIR && prev !== W.B.WATER) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'occupied', slot: m.slot });
     if (prev === W.B.CHEST && id === W.B.AIR && !this.canBreakChest(client, 'overworld:' + x + ',' + y + ',' + z)) {
       return this.rejectEdit(client, x, y, z, prev, id, { reason: 'chest_permission', slot: m.slot });

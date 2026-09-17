@@ -3476,6 +3476,7 @@ function guildFloorInteriorForLocal(x,y,z){
 }
 function canBuildHere(x,z,y,placeId){
   if(isLavaBorderLand(x|0,z|0)) return false;
+  if(placeId===B.EGG_INSULATOR)return true;
   if(isTownLand(x,z)) return guildFloorInteriorForLocal(x|0,y|0,z|0) && GUILD_DECOR_BLOCKS_C.has(placeId|0);
   const c=landClaims.get(landKey(x,z));
   return !c || c.status==='abandoned' || c.canEdit || c.own;

@@ -947,9 +947,15 @@ function hatchDragonEgg(slot=selected, target=null){
   }
   if(!type) return false;
   const d=DRAGON_TYPES[type];
-  if(dragonUnlocks.includes(type)){ sysMsg('You have already bonded with a <b>'+d.name+'</b>'); return true; }
   target=target||dragonHatchTarget();
   if(!target){ sysMsg('Place an <b>Egg Insulator</b>, then use the egg on top of it'); return true; }
+  const existing=dragonIncubationMeshes[incubationKey(target.x,target.y,target.z)];
+  if(existing){
+    if(NET.on&&NET.room)NET.room.send('hatchDragonEgg',{slot,x:target.x,y:target.y,z:target.z});
+    else claimLocalIncubation(target.x,target.y,target.z);
+    return true;
+  }
+  if(dragonUnlocks.includes(type)){ sysMsg('You have already bonded with a <b>'+d.name+'</b>'); return true; }
   if(NET.on&&NET.room){
     NET.room.send('hatchDragonEgg', {slot, x:target.x, y:target.y, z:target.z});
     return true;
@@ -995,13 +1001,14 @@ function claimLocalIncubation(x,y,z){
 }
 function applyDragonIncubationStart(m){
   if(!m || !DRAGON_TYPES[m.type]) return;
-  if(m.slot!=null){
+  const ownSlot=m.slot!=null&&(!NET.on||!m.ownerSid||(NET.room&&m.ownerSid===NET.room.sessionId));
+  if(ownSlot){
     const i=m.slot|0, s=inv[i];
     if(s && s.id===(m.eggId|0)){ s.count--; if(s.count<=0) inv[i]=null; }
     refreshHUD(); if(uiOpen) renderUI();
   }
   syncDragonIncubationMesh(m);
-  if(m.slot!=null){
+  if(ownSlot){
     const d=DRAGON_TYPES[m.type];
     sysMsg('The <b>'+d.name+' Egg</b> settles onto the insulator. Incubation started.');
   }
