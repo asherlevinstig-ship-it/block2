@@ -503,7 +503,7 @@ test('Onboarding dimension exit clears stale tutorial state before reconnect', (
   assert.match(networking, /if\(dim==='tutorial'&&onboardingActive\)cancelOnboardingForProfileRestore\(\);/);
 });
 
-test('bug reports use HTTP without sending oversized Colyseus messages', () => {
+test('bug reports prefer HTTP and bound the WebSocket fallback payload', () => {
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   const start = networking.indexOf('function sendBugReport()');
   const end = networking.indexOf('function applyBugReportResult(', start);
@@ -512,7 +512,9 @@ test('bug reports use HTTP without sending oversized Colyseus messages', () => {
   assert.ok(start >= 0 && end > start);
   assert.match(section, /sendBugReportHttp\(payload,pendingId\)/);
   assert.match(section, /fetch\(apiUrl\('\/auth\/bug-report'\)/);
-  assert.doesNotMatch(section, /NET\.room\.send\('bugReport'/);
+  assert.match(section, /if\(token\)sendBugReportHttp\(payload,pendingId\)/);
+  assert.match(section, /NET\.room\.send\('bugReport',compact\)/);
+  assert.match(section, /while\(compact\.trace\.length&&bytes\(compact\)>3500\)compact\.trace\.shift\(\)/);
   assert.doesNotMatch(networking, /bugReportFallbackTimer|sendBugReportHttpFallback/);
 });
 
@@ -5177,6 +5179,10 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/if\(uiMode==='furnace'&&uiFurnaceKey\)/);
   assert.match(menus,/stagedFurnace&&!stagedFurnace\.finishAt/);
   assert.match(menus,/locked:\(\)=>!!f\.finishAt/);
+  assert.match(networking,/function bugReportWebSocketPayload\(payload\)/);
+  assert.match(networking,/while\(compact\.trace\.length&&bytes\(compact\)>3500\)compact\.trace\.shift\(\)/);
+  assert.match(networking,/while\(compact\.message\.length>256&&bytes\(compact\)>3500\)/);
+  assert.match(networking,/if\(token\)sendBugReportHttp\(payload,pendingId\)/);
   assert.match(onboarding,/actionHTML/);
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(styles,/\.qaction/);
