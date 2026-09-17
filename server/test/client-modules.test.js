@@ -5675,6 +5675,36 @@ test('a dragon hatched outside the overworld appears immediately and follows its
   assert.doesNotMatch(tick,/if\(dim!=='overworld'\)[\s\S]*clearMissingCompanionDragons\(new Set\(\)\)/);
 });
 
+test('Taming Land supports mounting and mount failures are visible to the player',()=>{
+  const companions=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
+  const dragons=fs.readFileSync(path.join(__dirname,'../rooms/dragons.mixin.js'),'utf8');
+  assert.match(companions,/function dragonMountRealmAllowed\(\)\{ return dim==='overworld'\|\|dim==='taming_land'; \}/);
+  assert.match(dragons,/active\.dim==='taming_land'/);
+  assert.match(dragons,/client\.send\('mountResult',\{ok:true,kind\}\)/);
+  assert.match(networking,/room\.onMessage\('mountResult'/);
+  assert.match(networking,/overworld<\/b> and <b>Taming Land/);
+  assert.match(menus,/RETURN TO TOWN TO MOUNT/);
+
+  const start=dragons.indexOf('  dragonMountRealmAllowed(player'),end=dragons.indexOf('  dragonIncubationKey(',start);
+  const Harness=vm.runInNewContext('(class Harness {'+dragons.slice(start,end)+'})',{
+    isValidMount:kind=>kind==='horse'||kind==='dragon:ember',isUnlockableMount:kind=>kind!=='horse',
+  });
+  const sent=[],player={dim:'tutorial',dgn:'tutorial-taming_land-test',mount:''},prof={activeRoom:{dim:'taming_land'}};
+  const room=Object.assign(new Harness(),{state:{players:new Map([['me',player]])},profileFor:()=>({prof}),hasMountUnlock:()=>true,refreshNpcQuestReadiness(){}});
+  const client={sessionId:'me',send:(type,msg)=>sent.push({type,msg})};
+  room.handleMount(client,{kind:'dragon:ember'});
+  assert.equal(player.mount,'dragon:ember');
+  assert.equal(sent.at(-1).type,'mountResult');
+  assert.equal(sent.at(-1).msg.ok,true);
+  assert.equal(sent.at(-1).msg.kind,'dragon:ember');
+  player.mount='';player.dim='dungeon';prof.activeRoom=null;
+  room.handleMount(client,{kind:'dragon:ember'});
+  assert.equal(player.mount,'');
+  assert.equal(sent.at(-1).msg.reason,'realm');
+});
+
 test('hatch requests distinguish session failures and route every realm to authoritative incubation',()=>{
   const server=fs.readFileSync(path.join(__dirname,'../rooms/dragons.mixin.js'),'utf8');
   const client=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');

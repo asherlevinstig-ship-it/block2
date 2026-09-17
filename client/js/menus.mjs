@@ -5283,6 +5283,7 @@ function openDragonInteractUI(type){
   qpanelEl.innerHTML='';
   const d=DRAGON_TYPES[type]||DRAGON_TYPES.ember;
   const adult=dragonIsAdult(type), active=mounted&&mountKind==='dragon:'+type, spot=dragonStaySpot(type);
+  const mountHere=!COMPANIONS.dragonMountRealmAllowed||COMPANIONS.dragonMountRealmAllowed();
   const h=document.createElement('h2'); h.textContent=dragonDisplayName(type).toUpperCase(); qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
   sub.textContent=(adult?'DRAGON COMPANION':'YOUNG DRAGON')+' - '+dragonRoleLabel(type).toUpperCase();
@@ -5306,11 +5307,11 @@ function openDragonInteractUI(type){
     if(COMPANIONS.careDragon) COMPANIONS.careDragon(type,treatSlot);
     setTimeout(()=>openDragonInteractUI(type), NET.on?180:0);
   }, treatSlot<0));
-  actions.appendChild(qBtn(active?'DISMISS':'MOUNT', ()=>{
+  actions.appendChild(qBtn(active?'DISMISS':(mountHere?'MOUNT':'RETURN TO TOWN TO MOUNT'), ()=>{
     if(globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.react==='function') globalThis.BlockcraftDragonWorld.react(type,active?'rest':'happy');
     applyMount(active?'':'dragon:'+type);
     openDragonInteractUI(type);
-  }, !adult && !active));
+  }, (!adult||!mountHere) && !active));
   actions.appendChild(qBtn('COMMAND WHEEL', ()=>{
     closeQWin();
     if(typeof startDragonCommandWheel==='function') startDragonCommandWheel();

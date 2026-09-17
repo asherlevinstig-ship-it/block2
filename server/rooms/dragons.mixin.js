@@ -801,14 +801,23 @@ class DragonsMixin {
     const arr = fresh.length ? fresh : pool;
     return arr[(Math.random() * arr.length) | 0];
   }
+  dragonMountRealmAllowed(player, prof) {
+    if(!player)return false;
+    if((player.dim||'overworld')==='overworld'&&!player.dgn)return true;
+    const active=prof&&prof.activeRoom;
+    return player.dim==='tutorial'&&active&&active.dim==='taming_land';
+  }
   handleMount(client, m) {
     const p = this.state.players.get(client.sessionId);
-    if (!p) return;
-    if (p.dim !== 'overworld') return;          // mounts are overworld-only
+    const rec=this.profileFor(client);
+    const reject=reason=>client.send('mountResult',{ok:false,reason,dimension:p&&p.dim||'',room:p&&p.dgn||''});
+    if (!p||!rec) return reject('profile');
     const kind = m && typeof m.kind === 'string' ? m.kind : 'horse';
-    if (!isValidMount(kind)) return;
-    if (isUnlockableMount(kind) && !this.hasMountUnlock(client, kind)) return;  // must be earned
+    if (!isValidMount(kind)) return reject('kind');
+    if (!this.dragonMountRealmAllowed(p,rec.prof))return reject('realm');
+    if (isUnlockableMount(kind) && !this.hasMountUnlock(client, kind)) return reject('locked');
     p.mount = kind;
+    client.send('mountResult',{ok:true,kind});
     if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
   }
   handleDismount(client) {
@@ -1043,7 +1052,7 @@ class DragonsMixin {
     if (!DRAGON_TYPE_SET.has(type) || !access)
       return client.send('dragonRecallReject', { reason: 'unowned' });
     if (!this.isDragonAdult(access.prof, type)) return client.send('dragonRecallReject', { reason: 'young', type, stage: this.dragonStage(access.prof, type) });
-    if ((p.dim || 'overworld') !== 'overworld' || (p.dgn || '')) return client.send('dragonRecallReject', { reason: 'overworld' });
+    if (!this.dragonMountRealmAllowed(p,rec.prof)) return client.send('dragonRecallReject', { reason: 'realm' });
     if (this.dragonIsNested(access.token, type)) return client.send('dragonRecallReject', { reason: 'nested', type });
     const role = this.ensureDragonRole(access.prof, type);
     const hasPost = !!(access.prof.dragonStaySpots && access.prof.dragonStaySpots[type]);

@@ -767,6 +767,7 @@ function noteDragonRoleEvent(m){
   else if(role==='follow') addDragonActivity(type,'Follow travel bond','Overworld travel');
   else if(role==='recall') addDragonActivity(type,'Dragon recalled',m.clearedStaySpot?'Stay post cleared':'Whistled to your side');
 }
+function dragonMountRealmAllowed(){ return dim==='overworld'||dim==='taming_land'; }
 function applyMount(kind){       // kind '' dismounts
   if(!kind){
     mountKind=''; mounted=false;
@@ -774,7 +775,11 @@ function applyMount(kind){       // kind '' dismounts
     showName('Dismounted');
     return;
   }
-  if(dim!=='overworld'){ showName('You can only ride in the overworld'); return; }
+  if(!dragonMountRealmAllowed()){
+    showName('Return to town or Taming Land to ride');
+    sysMsg('Dragons can be mounted in the <b>overworld</b> and <b>Taming Land</b>.');
+    return;
+  }
   if(isDragon(kind) && !dragonIsAdult(dragonType(kind))){
     showName((DRAGON_TYPES[dragonType(kind)]||{}).name+' is still growing');
     sysMsg('Your '+dragonStageLabel(dragonType(kind)).toLowerCase()+' dragon will be rideable in <b>'+dragonGrowthLeftSeconds(dragonType(kind))+'s</b>');
@@ -3520,6 +3525,7 @@ function netRemoveRemote(sid){
     dragonRenameRejected,
     perchRejected,
     tickLocalMount,
+    dragonMountRealmAllowed,
     tickDragonRoost,
     tickCompanionDragons,
     tickPetTamerTutorialDragons,

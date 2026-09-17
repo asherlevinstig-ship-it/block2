@@ -3625,6 +3625,14 @@ test('dragon mounts are server-gated per species; horse is always allowed', () =
   room.state.players.get(client.sessionId).dim = 'dungeon';
   room.handleMount(client, { kind: 'dragon:frost' });
   assert.equal(room.state.players.get(client.sessionId).mount, '');
+
+  // Taming Land is explicitly a dragon-use realm even though it is hosted as a tutorial space.
+  room.state.players.get(client.sessionId).dim = 'tutorial';
+  room.state.players.get(client.sessionId).dgn = 'tutorial-taming_land-rider';
+  prof.activeRoom = { dim: 'taming_land' };
+  room.handleMount(client, { kind: 'dragon:frost' });
+  assert.equal(room.state.players.get(client.sessionId).mount, 'dragon:frost');
+  assert.equal(client.sent.some(e=>e.type==='mountResult'&&e.msg.ok&&e.msg.kind==='dragon:frost'),true);
 });
 
 test('dragon eggs hatch only on an egg insulator and consume the egg', () => {

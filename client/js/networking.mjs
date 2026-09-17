@@ -3071,6 +3071,13 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonSpecializationReject', m=>dragonSpecializationRejected(m));
     room.onMessage('dragonRoleResult', m=>applyDragonRoleResult(m));
     room.onMessage('dragonRoleReject', m=>dragonRoleRejected(m));
+    room.onMessage('mountResult',m=>{
+      if(m&&m.ok)return;
+      COMPANIONS.mounted=false;COMPANIONS.mountKind='';
+      if(COMPANIONS.localMountObj)COMPANIONS.localMountObj.visible=false;
+      const reason=m&&m.reason;
+      sysMsg(reason==='realm'?'Dragons can be mounted in the <b>overworld</b> and <b>Taming Land</b>.':reason==='locked'?'That dragon is not available to ride yet.':'Could not mount that dragon.');
+    });
     room.onMessage('dragonRecallResult', m=>applyDragonRecallResult(m));
     room.onMessage('dragonRecallReject', m=>dragonRecallRejected(m));
     room.onMessage('dragonTrainingUpdate', m=>applyDragonTrainingUpdate(m));
@@ -3770,7 +3777,7 @@ function dragonRecallRejected(m){
   const r=(m&&m.reason)||'invalid';
   if(r==='stay') sysMsg('That dragon is holding a stay post. Use <b>Recall</b> from the dragon wheel to clear the post and call it.');
   else if(r==='young') sysMsg('Young dragons need to grow before recall.');
-  else if(r==='overworld') sysMsg('Dragons can only be recalled in the overworld.');
+  else if(r==='realm'||r==='overworld') sysMsg('Dragons can be recalled in the <b>overworld</b> and <b>Taming Land</b>.');
   else if(r==='nested') sysMsg('That dragon is nesting. Recall it from the nest first.');
   else if(r==='unowned') sysMsg('That dragon is not bonded to you.');
   else sysMsg('Could not recall that dragon.');
