@@ -1040,31 +1040,13 @@ class CombatMixin {
     if(client)this.offerShadowSpirit(client,mob,killedMeta);
     this.state.mobs.delete(String(mobId));
     delete this.mobMeta[mobId];
+    if(!dgn&&killedMeta.fantasyStructure&&this.onFantasyStructureMobKilled)this.onFantasyStructureMobKilled(client,mobId,killedMeta);
     if(this.wildTaming)for(const [sid,attempt] of this.wildTaming)if(attempt&&attempt.mobId===String(mobId))this.wildTaming.delete(sid);
     if (dgn) this.removeTransient(dgn, String(mobId));
     if (wasBoss && dgn) this.onBossDown(dgn);
     else if (wasBoss && !dgn && killedMeta.ancientWarden) {
       if (this.ancientWardenAlarms && killedMeta.cityId) this.ancientWardenAlarms.delete(killedMeta.cityId);
-      if (client) {
-        const rec = this.profileFor(client);
-        const claimKey = this.ancientWardenDefeatKey ? this.ancientWardenDefeatKey(killedMeta.coreId) : String(killedMeta.coreId || '') + '_warden_defeated';
-        if (rec) {
-          if (!Array.isArray(rec.prof.claimedDiscoveries)) rec.prof.claimedDiscoveries = [];
-          if (claimKey && !rec.prof.claimedDiscoveries.includes(claimKey)) rec.prof.claimedDiscoveries.push(claimKey);
-          this.dirtyPlayers.add(rec.token);
-        }
-        const ring = Math.max(0, Math.min(3, killedMeta.dangerRing | 0));
-        const items = [
-          { id: I.WARDEN_CLEAVER, count: 1, rarity: 'mythic', locked: true, gear: true, source: 'ancient_warden' },
-          { id: I.LEGEND_TOKEN, count: 1 + Math.floor(ring / 2) },
-          { id: I.GEODE, count: 2 + ring },
-          { id: I.ANCIENT_FRAGMENT, count: 4 + ring },
-          { id: I.ECHO_GLYPH, count: 1 + Math.floor(ring / 2) },
-          { id: I.RELIC_ARMOR_PIECE, count: 1 },
-        ];
-        this.awardGrant(client, { source: 'ancient_warden', xp: 220 + ring * 90, items, dangerRing: ring, elite: true });
-        client.send('wardenDefeated', { cityId: killedMeta.cityId || '', coreId: killedMeta.coreId || '', ability: 'Warden Cleaver', items });
-      }
+      this.finishAncientWardenForParty(client, killedMeta, dx, dy, dz);
       this.sendSpace('', 'fx', { t: 'wardenDefeated', x: dx, y: dy, z: dz, cityId: killedMeta.cityId || '', dgn: '' });
       this.broadcast('chat', { name: '[Ancient City]', text: 'The Warden falls. The sealed echo answers.' });
     }
@@ -1215,20 +1197,33 @@ class CombatMixin {
       this.grantHunterXp(rec.prof, loot.xp, client, loot.source || 'gate');
       rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + (loot.gold | 0)));
       if (this.recordEconomyGold) this.recordEconomyGold(client, loot.gold | 0, 'loot_faucet', loot.source || 'gate', { rank: loot.rank | 0, kind: loot.kind || '' });
-      if (loot.coal) this.addRewardItem(rec.prof, REWARD_ITEMS.coal, loot.coal);
-      if (loot.iron) this.addRewardItem(rec.prof, REWARD_ITEMS.iron, loot.iron);
-      if (loot.dia) this.addRewardItem(rec.prof, REWARD_ITEMS.dia, loot.dia);
+      const reserved=[];
+      for (const [field, id] of [['coal', REWARD_ITEMS.coal], ['iron', REWARD_ITEMS.iron], ['dia', REWARD_ITEMS.dia]]) {
+        const count = Math.max(0, loot[field] | 0);
+        if (!count) continue;
+        const left = this.addRewardItem(rec.prof, id, count);
+        if (left) {
+          this.queuePendingReward(rec.prof, { id, count: left }, loot.source || 'loot');
+          reserved.push({ id, count: left, source: loot.source || 'loot' });
+        }
+        loot = { ...loot, [field]: count - left };
+      }
       const delivered=[];
       for (const item of loot.items || []) {
         const rewardItem=item&&item.gear?{...item,source:item.source||loot.source||'gate'}:item;
         const left=rewardItem&&rewardItem.gear?this.addGearRewardItem(rec.prof,rewardItem):this.addRewardItem(rec.prof,rewardItem.id,rewardItem.count);
-        if(!rewardItem.gear||!left)delivered.push(rewardItem&&rewardItem.gear?{...rewardItem,locked:!!(rewardItem.locked||rewardItem.rarity==='mythic')}:rewardItem);
+        if(rewardItem.gear&&!left)delivered.push({...rewardItem,locked:!!(rewardItem.locked||rewardItem.rarity==='mythic')});
+        else if(!rewardItem.gear){
+          const placed=Math.max(0,(rewardItem.count|0)-left);
+          if(placed)delivered.push({...rewardItem,count:placed});
+          if(left){this.queuePendingReward(rec.prof,{id:rewardItem.id,count:left},loot.source||'loot');reserved.push({id:rewardItem.id,count:left,source:loot.source||'loot'});}
+        }
         else {
           const recovered=this.queueGearRecovery(rec.prof,rewardItem,loot.source||'loot');
-          if(recovered)client.send('lootRecoveryState',{items:rec.prof.lootRecovery,queued:recovered});
+          if(recovered)client.send('lootRecoveryState',this.lootRecoveryPayload(rec.prof,{queued:recovered}));
         }
       }
-      loot={...loot,items:delivered};
+      loot={...loot,items:delivered,pendingItems:reserved};
       this.syncPlayerProfile(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
     }
@@ -1282,26 +1277,34 @@ class CombatMixin {
   }
   async setPath(client, path) {
     const rec = this.profileFor(client);
-    console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: rec&&rec.token?String(rec.token).slice(0,12):'', requestedPath:path, currentPath:rec&&rec.prof&&rec.prof.S&&rec.prof.S.path||'' }));
     if (!rec || !rec.prof) {
       client.send('pathResult', { ok: false, path, reason: 'profile' });
       return false;
     }
     if (!ABILITY_PATHS[path]) {
+      console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: String(rec.token).slice(0,12), requestedPath:path, currentPath:rec.prof.S.path||'' }));
       client.send('pathResult', { ok: false, path, reason: 'invalid' });
       return false;
     }
     if (rec.prof.S.path) {
       const ok=rec.prof.S.path===path;
       if (!ok) {
+        console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: String(rec.token).slice(0,12), requestedPath:path, currentPath:rec.prof.S.path }));
         client.send('pathResult', { ok: false, path: rec.prof.S.path, reason: 'locked' });
         return false;
       }
-      const saved=await this.savePlayerProfileNow(rec.token, rec.prof);
-      console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.resave', account: String(rec.token).slice(0,12), path: rec.prof.S.path, saved }));
+      // Repeated clicks and reconnect retries must not create another Firestore
+      // write for a path that is already durable. If the original save is still
+      // running, share that one promise instead of appending duplicate writes.
+      const pending=this.playerSaveQueues&&this.playerSaveQueues.get(rec.token);
+      const needsSave=this.dirtyPlayers&&this.dirtyPlayers.has(rec.token);
+      const saved=pending
+        ? await pending.then(()=>true,()=>false)
+        : needsSave ? await this.savePlayerProfileNow(rec.token, rec.prof) : true;
       client.send('pathResult', { ok: saved, path: rec.prof.S.path, reason: saved ? 'already' : 'save' });
       return saved;
     }
+    console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: String(rec.token).slice(0,12), requestedPath:path, currentPath:'' }));
     rec.prof.S.path = path;
     rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
     this.syncPlayerProfile(client, rec.prof);

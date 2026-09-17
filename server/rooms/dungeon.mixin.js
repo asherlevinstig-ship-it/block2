@@ -34,7 +34,7 @@ class DungeonMixin {
     this.dungeonPingAt = new Map();
     this.dungeonStatusRequestAt = new Map();
     this.dungeonPartyStatusState = new Map();
-    this.gateTimer = 40;       // countdown to the next public gate spawn (sim-loop driven)
+    this.gateTimer = 0;        // spawn the level-1 public gate on the first eligible surface tick
     this.gateTtl = 0;
   }
 
@@ -1003,15 +1003,17 @@ class DungeonMixin {
       return;
     }
   }
-  dungeonSafeSpawn(inst, preferred = null) {
+  dungeonSafeSpawn(inst, preferred = null, options = null) {
     const world = inst && inst.world;
     const fallback = (inst && (inst.entrance || inst.bossRoom)) || { x: 22, z: 22 };
     const base = preferred || fallback;
     const candidates = [];
     const solid = world ? AI.makeSolid(world) : null;
+    const avoidPlayers = !!(options && options.avoidPlayers);
+    const ignoreSid = options && options.ignoreSid || '';
     const finish = hit => {
       const safe = hit || { x: Math.floor(fallback.x) + .5, y: 9.01, z: Math.floor(fallback.z) + .5 };
-      if (inst) {
+      if (inst && !avoidPlayers) {
         inst.safeSpawn = { x: safe.x, y: safe.y, z: safe.z };
         inst.spawnSafeRadius = this.dungeonSpawnSafeRadius ? this.dungeonSpawnSafeRadius(inst) : 9;
       }
@@ -1032,7 +1034,9 @@ class DungeonMixin {
       const bx = Math.floor(pt.x), bz = Math.floor(pt.z);
       if (solid(bx, Math.floor(y + .2), bz)) return null;
       if (solid(bx, Math.floor(y + 1.5), bz)) return null;
-      return { x: pt.x, y: y + .01, z: pt.z };
+      const hit = { x: pt.x, y: y + .01, z: pt.z };
+      if (avoidPlayers && this.playerSpawnOccupied(hit, inst && inst.id, ignoreSid)) return null;
+      return hit;
     };
     for (const pt of candidates) {
       const hit = tryPoint(pt);
@@ -1055,9 +1059,9 @@ class DungeonMixin {
     }
     return finish(null);
   }
-  gateEntryPayload(g, inst) {
+  gateEntryPayload(g, inst, playerSpawn = null) {
     const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
-    const spawn = this.dungeonSafeSpawn(inst, ex);
+    const spawn = playerSpawn || this.dungeonSafeSpawn(inst, ex);
     return {
       id: inst.id, seed: inst.seed, dungeonId: inst.dungeonId || canonicalDungeonId(inst.rank, inst.seed), rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public',
       edits: inst.edits,
@@ -1141,7 +1145,7 @@ class DungeonMixin {
       p.dim = 'overworld';
       return false;
     }
-    client.send('enterDungeon', this.gateEntryPayload(null, inst));
+    client.send('enterDungeon', this.gateEntryPayload(null, inst, p));
     if (typeof this.sendDungeonPartyStatus === 'function') this.sendDungeonPartyStatus(inst.id);
     return true;
   }
@@ -1156,12 +1160,12 @@ class DungeonMixin {
     const hp = this.ensurePlayerHp(client);
     hp.hp = hp.max;
     const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
-    const spawn = this.dungeonSafeSpawn(inst, ex);
+    const spawn = this.dungeonSafeSpawn(inst, ex, { avoidPlayers: true, ignoreSid: client.sessionId });
     p.x = spawn.x;
     p.y = spawn.y;
     p.z = spawn.z;
     p.yaw = 0;
-    client.send('enterDungeon', this.gateEntryPayload(g, inst));
+    client.send('enterDungeon', this.gateEntryPayload(g, inst, spawn));
     return true;
   }
   async startDungeonLobby(lobby) {

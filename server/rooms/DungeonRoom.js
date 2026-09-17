@@ -43,7 +43,7 @@ class DungeonRoom extends GameRoom {
     if (!admittedGate || admittedGate.id !== (options && options.gateId)) throw new Error('invalid dungeon admission');
     this.admissionTicket = options.ticket;
     this.isDungeonRoom = true;
-    this.maxClients = 8;                 // a raid party, not the 24-player overworld
+    this.maxClients = 8;                 // raid parties stay bounded even though the overworld is uncapped
     // Same shape as GameRoom.bootId — a per-process stamp for the crash-recovery marker
     // armDungeonRecovery writes. A future overworld room (this or the next boot) compares
     // it against its own bootId to tell a genuine restart from a same-boot rejoin.
@@ -218,7 +218,7 @@ class DungeonRoom extends GameRoom {
     });
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
-    const spawn = this.dungeonSafeSpawn(inst, ex);
+    const spawn = this.dungeonSafeSpawn(inst, ex, { avoidPlayers: true, ignoreSid: client.sessionId });
     p.x = spawn.x; p.y = spawn.y; p.z = spawn.z;
     p.dim = 'dungeon';
     p.dgn = inst.id;
@@ -234,7 +234,7 @@ class DungeonRoom extends GameRoom {
     this.armDungeonRecovery(client, { id: inst.id, x: inst.gateX, y: inst.gateY, z: inst.gateZ });
     this.initDungeonInterestView(client);
     this.updateClientDungeonInterestView(client);
-    client.send('enterDungeon', this.gateEntryPayload(null, inst));
+    client.send('enterDungeon', this.gateEntryPayload(null, inst, spawn));
     const status = this.dungeonPartyStatusPayloadForClient(inst, client.sessionId);
     if (status) client.send('dungeonPartyStatus', status);
   }
@@ -251,10 +251,15 @@ class DungeonRoom extends GameRoom {
     // to the durable teardown. Mirrors GameRoom.onLeave's reconnection path, minus the tutorial/
     // event resumes a single-instance raid room can't have. Holding the seat also keeps the room
     // alive across the window (Colyseus counts the reservation against autoDispose).
-    const unexpected = code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED);
+    const unexpected = this.shouldAttemptReconnection(code);
     if (unexpected) {
+      const reconnectStartedAt = Date.now();
+      this.recordReconnectAttempt(code);
+      console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.start', roomType: 'dungeon', roomId: this.roomId || '', gateId: this.instance && this.instance.id || '', sidHash: shortHash(client && client.sessionId), code }));
       try {
         await this.allowReconnection(client, 15);
+        this.recordReconnectOutcome('recovered');
+        console.log('[disconnect] ' + JSON.stringify({ event: 'unexpected.recovered', roomType: 'dungeon', roomId: this.roomId || '', gateId: this.instance && this.instance.id || '', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt }));
         const token = this.tokens.get(client.sessionId);
         const profile = token && this.profiles.get(token);
         if (profile) client.send('profile', profile);
@@ -262,7 +267,9 @@ class DungeonRoom extends GameRoom {
         if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
         this.resumeDungeonInstance(client);
         return;
-      } catch (_) {
+      } catch (error) {
+        this.recordReconnectOutcome('expired');
+        console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.expired', roomType: 'dungeon', roomId: this.roomId || '', gateId: this.instance && this.instance.id || '', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt, reason: String(error && error.message || error || 'reconnect window expired').slice(0, 160) }));
         // The reconnect window elapsed — perform the durable teardown below.
       }
     }

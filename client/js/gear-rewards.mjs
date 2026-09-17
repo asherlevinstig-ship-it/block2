@@ -69,7 +69,7 @@ export function createGearRewardPresenter({
   };
   function show(entry){
     active=entry;
-    const {stack,slot,recovered=false}=entry,item=items[stack.id];
+    const {stack,slot,recovered=false,recoveryOverflowed=false}=entry,item=items[stack.id];
     if(!item||(!item.tool&&!item.armor)){close();return;}
     const baselineStack=Object.prototype.hasOwnProperty.call(entry,'baseline')?entry.baseline:(item.armor?getArmor():getWeapon());
     const baseline=baselineStack&&items[baselineStack.id]?{stack:baselineStack,item:items[baselineStack.id]}:null;
@@ -107,7 +107,9 @@ export function createGearRewardPresenter({
     if(baseline){const note=document.createElement('p');note.className='gr-recovery';note.textContent=verdict==='SIDEGRADE'?'Compare tradeoffs and perks: more protection can cost movement or stamina; different weapons change how you fight.':'Compared with your equipped gear. Durability shows current condition / maximum.';panel.appendChild(note);}
     if(recovered){
       const notice=document.createElement('p');notice.className='gr-recovery';
-      notice.textContent='Inventory full. Tobin secured this item; make space and claim it from Loot Recovery.';
+      notice.textContent=recoveryOverflowed
+        ?'Inventory and the 12-slot recovery counter are full. Tobin secured this item in the backlog; it will appear when a recovery slot opens.'
+        :'Inventory full. Tobin secured this item; make space and claim it from Loot Recovery.';
       panel.appendChild(notice);
     }
     const actions=document.createElement('div');actions.className='gr-actions';

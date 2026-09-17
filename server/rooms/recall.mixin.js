@@ -174,7 +174,7 @@ class RecallMixin{
         this.dirtyPlayers.add(rec.token);
       }
     }
-    const challenge={id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source};
+    const challenge={id,questionId:q.id,databaseQuestionId:Number(q.questionId)||0,subjectId:Number(q.subjectId)||0,scopeSchoolId:Number(q.scopeSchoolId)||0,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source};
     this.recallChallenges.set(client.sessionId,challenge);
     this.sendRecallQuestion(client,challenge,rec,p);
   }
@@ -186,6 +186,9 @@ class RecallMixin{
     if(!store||typeof store.recordRecallAttempt!=='function')return;
     const durationMs=Math.max(0,now-(challenge.startedAt||now));
     Promise.resolve(store.recordRecallAttempt(account,{
+      questionId:challenge.databaseQuestionId,
+      subjectId:challenge.subjectId,
+      scopeSchoolId:challenge.scopeSchoolId,
       subject:challenge.subject,
       stage:challenge.stage,
       topic:challenge.topic,

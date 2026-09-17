@@ -777,6 +777,45 @@ test('MySQL game question store records Recall attempts for student analytics', 
   assert.equal(inserts[1].params[6], 0);
 });
 
+test('MySQL Recall records an already-selected database question without looking it up again', async () => {
+  const calls = [];
+  const pool = {
+    async execute(sql, params = []) {
+      calls.push({ sql, params });
+      if (/CREATE TABLE IF NOT EXISTS/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/^INSERT INTO game_question_attempt/i.test(sql)) return [{ insertId: 88 }];
+      if (/SELECT class_id FROM/i.test(sql)) return [[]];
+      if (/FROM game_homework gh/i.test(sql)) return [[]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const result = await store.recordRecallAttempt(
+    { id: 'student_9', accountType: 'student', role: 'student', schoolId: '12' },
+    {
+      questionId: 91,
+      subjectId: 5,
+      scopeSchoolId: 12,
+      subject: 'Computer Science',
+      stage: 'KS3',
+      topic: 'Binary',
+      prompt: 'What is binary?',
+      answers: ['Base two', 'Base ten', 'A wire', 'A password'],
+      correctIndex: 0,
+      answerIndex: 0,
+      correct: true,
+      durationMs: 1800,
+      source: 'recall',
+    },
+  );
+  assert.equal(result.recorded, true);
+  assert.equal(result.questionId, 91);
+  assert.equal(calls.some(call => /SELECT id, school_id FROM subjects/i.test(call.sql)), false);
+  assert.equal(calls.some(call => /SELECT id FROM game_question/i.test(call.sql)), false);
+  const attempt = calls.find(call => /^INSERT INTO game_question_attempt/i.test(call.sql));
+  assert.equal(attempt.params[2], 91);
+});
+
 test('MySQL game question store counts Recall attempts toward active homework', async () => {
   const progressWrites = [];
   const pool = {
@@ -920,7 +959,7 @@ test('MySQL game question store credits active homework when tutorial Recall sub
     },
   );
   assert.equal(result.recorded, true);
-  assert.equal(homeworkQueries >= 3, true);
+  assert.equal(homeworkQueries, 2);
   assert.equal(progressWrites.length, 1);
   assert.equal(progressWrites[0].params[0], 12);
   assert.equal(progressWrites[0].params[2], 5);
@@ -1149,6 +1188,7 @@ test('MySQL game question store always includes Computer Science for students', 
 
 test('MySQL game question store limits Computer Science Recall to number systems', async () => {
   let recallSql = '';
+  let recallQueries = 0;
   const pool = {
     async execute(sql, params = []) {
       if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
@@ -1165,6 +1205,7 @@ test('MySQL game question store limits Computer Science Recall to number systems
         return [[{ n: 1 }]];
       }
       if (/SELECT id, prompt, answers, correct_index/i.test(sql)) {
+        recallQueries++;
         recallSql = sql;
         assert.match(sql, /number-systems-base2-base10-base16/);
         assert.deepEqual(params, [5]);
@@ -1192,6 +1233,12 @@ test('MySQL game question store limits Computer Science Recall to number systems
   assert.equal(question.topic, 'Number systems');
   assert.equal(question.spec, 'number-systems-base2-base10-base16');
   assert.match(recallSql, /number-systems-base2-base10-base16/);
+  const cached = await store.loadRecallQuestion(
+    { id: 'student_10', accountType: 'student', role: 'student', schoolId: '12' },
+    { subject: 'Computer Science' },
+  );
+  assert.equal(cached.questionId, 91);
+  assert.equal(recallQueries, 1, 'the approved Recall bank is shared from the bounded cache');
 });
 
 test('MySQL Recall avoids recently served questions when alternatives exist', async () => {

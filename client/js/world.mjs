@@ -1,5 +1,6 @@
 import {atlasModelMaterials} from './model-atlas.mjs';
 const {treeBlocks,clearLandmarkApproach,carveCaveApproach}=globalThis.BlockcraftVegetation;
+const {selectFantasyStructureSpecs,buildFantasyStructures}=globalThis.BlockcraftOverworldStructures;
 import {createEnvironmentIdentity} from './environment-identity.mjs';
 import {batchStaticModelParts} from './model-batching.mjs';
 import {createTownLandmarks} from './town-landmarks.mjs';
@@ -902,6 +903,10 @@ const RECIPES = [
   {shape:["LLL","PPP"], keys:{L:B.LEAVES, P:B.PLANKS}, out:[B.BED,1]},
   {shape:["PPP","P P","PPP"], keys:{P:B.PLANKS}, out:[B.CHEST,1]},
   {shape:["..s",".sW","s.."], keys:{s:I.STICK, W:I.WHEAT}, out:[I.FISHING_ROD,1]},
+  {shapeless:[I.BREAD,I.COOKED_RIVER_FISH], out:[I.HEARTY_SANDWICH,1]},
+  {shapeless:[I.COOKED_SMALL_FISH,I.COOKED_SMALL_FISH,I.WHEAT], out:[I.GOLDEN_BROTH,1], hunterLevel:3},
+  {shapeless:[I.COOKED_PRIZED_FISH,I.BREAD,I.WHEAT], out:[I.TRAIL_RATION,1], hunterLevel:8},
+  {shapeless:[I.COOKED_TROPHY_FISH,I.GOLDEN_WHEAT,I.BREAD], out:[I.FEAST_PLATTER,1], hunterLevel:15},
 ];
 const TOOL_MAT_ITEMS = { WOOD:B.PLANKS, STONE:B.COBBLE, IRON:I.IRON_INGOT, DIA:I.DIAMOND };
 for(const m in TOOL_MAT_ITEMS){
@@ -943,7 +948,7 @@ RECIPES.push({shapeless:[I.MIRE_BLOOM,I.COOKED_MEAT,I.CHARCOAL], out:[I.DRAGON_T
 RECIPES.push({shapeless:[I.RAINWAKE_PETAL,I.WHEAT,I.COOKED_MEAT], out:[I.GOLDEN_BROTH,2]});
 RECIPES.push({shapeless:[I.STORMGLASS,I.IRON_INGOT,I.COAL], out:[I.REPAIR_KIT,3]});
 RECIPES.push({shapeless:[I.SOLAR_GLYPH,I.SUNSHARD,B.GLASS], out:[I.SUNSHARD,3]});
-const SMELT = { [B.SAND]:[B.GLASS,1], [B.RED_SAND]:[B.GLASS,1], [B.COBBLE]:[B.STONE,1], [B.IRON_ORE]:[I.IRON_INGOT,1], [B.LOG]:[I.CHARCOAL,1], [I.MONSTER_MEAT]:[I.COOKED_MEAT,1], [I.RIVER_FISH]:[I.COOKED_MEAT,1] };
+const SMELT = { [B.SAND]:[B.GLASS,1], [B.RED_SAND]:[B.GLASS,1], [B.COBBLE]:[B.STONE,1], [B.IRON_ORE]:[I.IRON_INGOT,1], [B.LOG]:[I.CHARCOAL,1], [I.MONSTER_MEAT]:[I.COOKED_MEAT,1], [I.SMALL_FISH]:[I.COOKED_SMALL_FISH,1], [I.RIVER_FISH]:[I.COOKED_RIVER_FISH,1], [I.PRIZED_FISH]:[I.COOKED_PRIZED_FISH,1], [I.TROPHY_FISH]:[I.COOKED_TROPHY_FISH,1] };
 const FUEL  = { [I.COAL]:8, [I.CHARCOAL]:8, [B.PLANKS]:1.5, [B.LOG]:1.5, [I.STICK]:0.5, [B.TABLE]:1.5, [B.LEAVES]:0.25 };
 const SMELT_TIME = 5; // seconds per item
 
@@ -1761,7 +1766,10 @@ function dangerRingAtClient(x,z){
 const MINOR_LANDMARK_TYPES=['ruins','shrine','hunter_camp','bandit_camp','graveyard'];
 const MAJOR_LANDMARK_TYPES=['abandoned_tower','cave','giant_tree','crashed_airship'];
 const LANDMARK_NAMES={ruins:'Weathered Ruins',shrine:'Wayside Shrine',hunter_camp:'Hunter Camp',bandit_camp:'Bandit Camp',graveyard:'Forgotten Graveyard',abandoned_tower:'Abandoned Watchtower',cave:'Deepmouth Cave',giant_tree:'Elderheart Tree',crashed_airship:'Fallen Airship'};
-function regionalLandmarkSpecs(){
+function fantasyStructureSpecs(){
+  return selectFantasyStructureSpecs({worldSize:WX,townCenter:WORLD_TC,townHalfSize:WORLD_TOWN_HS,sea:SEA,biomeAt,terrainHeight,hash:hash2,avoid:legacyRegionalLandmarkSpecs()});
+}
+function legacyRegionalLandmarkSpecs(){
   const majors=[],minors=[],tc0=WX/2,hs0=42; let n=0;
   for(let gx=125;gx<WX-100;gx+=250)for(let gz=125;gz<WX-100;gz+=250){
     const x=Math.round(gx+(hash2(gx+1701,gz+913)-.5)*70),z=Math.round(gz+(hash2(gx+2719,gz+1877)-.5)*70),y=terrainHeight(x,z),r=8;
@@ -1780,10 +1788,13 @@ function regionalLandmarkSpecs(){
   }
   return majors.concat(minors);
 }
+function regionalLandmarkSpecs(){
+  return legacyRegionalLandmarkSpecs().concat(fantasyStructureSpecs());
+}
 function roadNetworkSpecs(){
   const majors=regionalLandmarkSpecs().filter(s=>s.major);
   const connected=[{id:'town',x:WORLD_TC,y:WORLD_TOWN_G,z:WORLD_TC}],roads=[];
-  for(const node of majors){let best=connected[0],bd=Infinity;for(const other of connected){const d=Math.hypot(node.x-other.x,node.z-other.z);if(d<bd){bd=d;best=other;}}roads.push({id:'road_'+best.id+'_'+node.id,a:best,b:node,length:bd});connected.push(node);}
+  for(const node of majors){const destination=node.entrance?{...node,x:node.entrance.x,y:node.y,z:node.entrance.z}:node;let best=connected[0],bd=node.entrance?Math.hypot(destination.x-best.x,destination.z-best.z):Infinity;for(const other of node.entrance?[]:connected){const d=Math.hypot(destination.x-other.x,destination.z-other.z);if(d<bd){bd=d;best=other;}}roads.push({id:'road_'+best.id+'_'+node.id,a:best,b:destination,length:bd});connected.push(destination);}
   return roads;
 }
 function roadBreadcrumbSpecs(){
@@ -1825,7 +1836,7 @@ function treasureCacheSpecs(){
     const x=Math.round(gx+(hash2(gx+9401,gz+1723)-.5)*58),z=Math.round(gz+(hash2(gx+5527,gz+8831)-.5)*58),y=terrainHeight(x,z),ring=Math.min(3,Math.floor(Math.hypot(x-WORLD_TC,z-WORLD_TC)/100));
     if(x<LAVA_BORDER_WIDTH+18||z<LAVA_BORDER_WIDTH+18||x>=WX-LAVA_BORDER_WIDTH-18||z>=WX-LAVA_BORDER_WIDTH-18||y<=SEA+1||y>40)continue;
     if(Math.hypot(x-WORLD_TC,z-WORLD_TC)<WORLD_TOWN_HS+90||isTrainingMeadowLand(x,z,24))continue;
-    if(landmarks.some(s=>Math.hypot(x-s.x,z-s.z)<30)||discoveries.some(s=>Math.hypot(x-s.x,z-s.z)<22)||roads.some(r=>segDist(x,z,r)<14))continue;
+    if(landmarks.some(s=>Math.hypot(x-s.x,z-s.z)<30)||discoveries.some(s=>Math.hypot(x-s.x,z-s.z)<22)||roads.some(r=>segDist(x,z,r)<(r.b.id.startsWith('major_fantasy_')?7:14)))continue;
     const hs=[terrainHeight(x-2,z-2),terrainHeight(x+2,z-2),terrainHeight(x-2,z+2),terrainHeight(x+2,z+2),y];
     if(Math.max(...hs)-Math.min(...hs)>3)continue;
     out.push({id:'cache_'+gx+'_'+gz,type:'treasure_cache',x,y,z,ring,radius:4});
@@ -1870,6 +1881,7 @@ function buildCaveNetworks(setBlock,getBlock=getB){
   const layFloor=(cx,cy,cz,radius=1)=>{const fy=Math.max(1,Math.floor(cy-2));for(let ox=-radius;ox<=radius;ox++)for(let oz=-radius;oz<=radius;oz++){const x=Math.round(cx+ox),z=Math.round(cz+oz);if(safeColumn(x,z)&&fy<terrainHeight(x,z)-1)setBlock(x,fy,z,Math.abs(ox)+Math.abs(oz)<=1?B.COBBLE:B.STONE);}};
   const lightRoute=(cx,cy,cz,salt)=>{const x=Math.round(cx+(hash2(cx+salt,cz)>.5?2:-2)),y=Math.max(2,Math.floor(cy-1)),z=Math.round(cz);if(safeColumn(x,z)&&getBlock(x,y,z)!==B.CHEST){setBlock(x,y,z,B.COBBLE);setBlock(x,y+1,z,salt%3===0?B.LANTERN:B.TORCH);}};
   const carveTunnel=(a,b,salt)=>{const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,steps=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)*1.2));for(let i=0;i<=steps;i++){const t=i/steps,wobble=Math.sin((t+salt)*Math.PI*2)*.7,cx=a.x+dx*t+wobble,cy=a.y+dy*t,cz=a.z+dz*t-wobble*.35,r=1.8+hash2(Math.round(cx)+salt,Math.round(cz)-salt)*.8;carveEllipsoid(cx,cy,cz,r,1.75,r);if(i%5===0)layFloor(cx,cy,cz,1);if(i>0&&i%18===0)lightRoute(cx,cy,cz,salt+i);if(i>0&&i%13===0)placeOreSeam(Math.round(cx+(hash2(i+salt,salt)>.5?r+1:-r-1)),Math.round(cy),Math.round(cz),salt+i);}};
+  const layWalkableRoute=(a,b)=>{const steps=Math.max(1,Math.abs(b.x-a.x),Math.abs(b.z-a.z)),route=[];for(let i=0;i<=steps;i++)route.push({x:Math.round(a.x+(b.x-a.x)*i/steps),y:Math.round(a.y+(b.y-a.y)*i/steps),z:Math.round(a.z+(b.z-a.z)*i/steps)});for(const cell of route)for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++)for(let h=0;h<=3;h++)putAir(cell.x+ox,cell.y+h,cell.z+oz);for(const cell of route)if(safeColumn(cell.x,cell.z))setBlock(cell.x,cell.y-1,cell.z,B.COBBLE);};
   for(const net of caveNetworkSpecs()){
     const entry=net.entrance;carveEllipsoid(entry.x,entry.y+2,entry.z-2,3.2,2.4,5.5,true);layFloor(entry.x,entry.y+2,entry.z-2,2);lightRoute(entry.x,entry.y+3,entry.z-4,101);
     for(let i=1;i<net.points.length;i++)carveTunnel(net.points[i-1],net.points[i],i*101+entry.x);
@@ -1879,6 +1891,7 @@ function buildCaveNetworks(setBlock,getBlock=getB){
       for(const [ox,oz]of[[-c.rx+1,0],[c.rx-1,0],[0,-c.rz+1],[0,c.rz-1]]){const x=c.x+ox,z=c.z+oz;setBlock(x,floorY+1,z,B.LOG);setBlock(x,floorY+2,z,B.LOG);setBlock(x,floorY+3,z,B.LANTERN);}
       placeOreSeam(c.x-c.rx+1,c.y,c.z,i*211+3);placeOreSeam(c.x+c.rx-1,c.y-1,c.z+1,i*211+7);placeOreSeam(c.x,c.y-1,c.z-c.rz+1,i*211+11);
     }
+    layWalkableRoute({x:entry.x,y:entry.y+4,z:entry.z-18},net.points[0]);for(let i=1;i<net.points.length;i++)layWalkableRoute(net.points[i-1],net.points[i]);
   }
   return caveNetworkSpecs();
 }
@@ -1922,18 +1935,38 @@ function buildAncientCities(setBlock,getBlock=getB){
   const inBounds=(x,y,z)=>x>=0&&x<WX&&y>=0&&y<WH&&z>=0&&z<WX;
   const box=(x1,y1,z1,x2,y2,z2,id)=>{for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++)for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++)for(let z=Math.min(z1,z2);z<=Math.max(z1,z2);z++)if(inBounds(x,y,z))setBlock(x,y,z,id);};
   const room=(cx,cy,cz,rx,rz,salt)=>{for(let x=cx-rx;x<=cx+rx;x++)for(let z=cz-rz;z<=cz+rz;z++)for(let y=cy-1;y<=cy+5;y++){const wall=x===cx-rx||x===cx+rx||z===cz-rz||z===cz+rz||y===cy-1||y===cy+5;if(wall){const cracked=hash2(x+salt*17+y,z-salt*23)>.82;setBlock(x,y,z,cracked?B.COBBLE:B.BRICK);}else setBlock(x,y,z,B.AIR);}};
-  const hall=(x1,y,z1,x2,z2,salt)=>{const steps=Math.max(Math.abs(x2-x1),Math.abs(z2-z1),1);for(let i=0;i<=steps;i++){const cx=Math.round(x1+(x2-x1)*i/steps),cz=Math.round(z1+(z2-z1)*i/steps);for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++){const side=Math.abs(ox)===2||Math.abs(oz)===2,x=cx+ox,z=cz+oz;setBlock(x,y-1,z,side?B.BRICK:(hash2(x+salt,z-salt)>.75?B.COBBLE:B.BRICK));for(let h=0;h<=4;h++)setBlock(x,y+h,z,side&&h>0&&hash2(x+h*31+salt,z-h*17)>.28?B.BRICK:B.AIR);}if(i>0&&i%10===0){setBlock(cx+2,y,cz,B.COBBLE);setBlock(cx+2,y+1,cz,B.LANTERN);setBlock(cx-2,y,cz,B.COBBLE);setBlock(cx-2,y+1,cz,B.TORCH);}}};
+  const hall=(x1,y1,z1,x2,y2,z2,salt)=>{const steps=Math.max(Math.abs(x2-x1),Math.abs(z2-z1),1);for(let i=0;i<=steps;i++){const cx=Math.round(x1+(x2-x1)*i/steps),y=Math.round(y1+(y2-y1)*i/steps),cz=Math.round(z1+(z2-z1)*i/steps);for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++){const side=Math.abs(ox)===2||Math.abs(oz)===2,x=cx+ox,z=cz+oz;setBlock(x,y-1,z,side?B.BRICK:(hash2(x+salt,z-salt)>.75?B.COBBLE:B.BRICK));for(let h=0;h<=4;h++)setBlock(x,y+h,z,side&&h>0&&hash2(x+h*31+salt,z-h*17)>.28?B.BRICK:B.AIR);}if(i>0&&i%10===0){setBlock(cx+2,y,cz,B.COBBLE);setBlock(cx+2,y+1,cz,B.LANTERN);setBlock(cx-2,y,cz,B.COBBLE);setBlock(cx-2,y+1,cz,B.TORCH);}}};
   const tablet=t=>{setBlock(t.x,t.y-1,t.z,B.BRICK);setBlock(t.x,t.y,t.z,B.BRICK);setBlock(t.x,t.y+1,t.z,B.BRICK);setBlock(t.x,t.y+2,t.z,B.LANTERN);for(const [ox,oz]of[[1,0],[-1,0]])setBlock(t.x+ox,t.y-1,t.z+oz,B.COBBLE);};
+  const carveWalkway=(from,to)=>{const cells=[{x:from.x,z:from.z}];let cx=from.x,cz=from.z;while(cx!==to.x){cx+=Math.sign(to.x-cx);cells.push({x:cx,z:cz});}while(cz!==to.z){cz+=Math.sign(to.z-cz);cells.push({x:cx,z:cz});}const route=cells.map((cell,index)=>({...cell,y:Math.round(from.y+(to.y-from.y)*index/Math.max(1,cells.length-1))}));for(const cell of route)for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++)for(let h=0;h<=3;h++)setBlock(cell.x+ox,cell.y+h,cell.z+oz,B.AIR);for(const cell of route)setBlock(cell.x,cell.y-1,cell.z,B.BRICK);};
   for(const city of ancientCitySpecs()){
-    const {x,y,z}=city;hall(city.entrance.x,city.entrance.y,city.entrance.z,x,z,x+z);room(x,y,z,9,9,300+x);
-    for(const v of city.vaults){hall(x,y,z,v.x,v.z,v.x+v.z);room(v.x,v.y,v.z,6,5,700+v.x);box(v.x-2,v.y,v.z-2,v.x+2,v.y+2,v.z+2,B.AIR);setBlock(v.x,v.y,v.z,B.BRICK);setBlock(v.x,v.y+1,v.z,B.CHEST);setBlock(v.x-3,v.y+1,v.z-3,B.LANTERN);setBlock(v.x+3,v.y+1,v.z+3,B.LANTERN);}
+    const {x,y,z}=city;hall(city.entrance.x,city.entrance.y,city.entrance.z,x,y,z,x+z);room(x,y,z,9,9,300+x);
+    for(const v of city.vaults){hall(x,y,z,v.x,v.y,v.z,v.x+v.z);room(v.x,v.y,v.z,6,5,700+v.x);box(v.x-2,v.y,v.z-2,v.x+2,v.y+2,v.z+2,B.AIR);setBlock(v.x,v.y,v.z,B.BRICK);setBlock(v.x,v.y+1,v.z,B.CHEST);setBlock(v.x-3,v.y+1,v.z-3,B.LANTERN);setBlock(v.x+3,v.y+1,v.z+3,B.LANTERN);}
     room(x,y-1,z,7,7,1100+x);
+    // Keep the lowered core chamber reachable from every approach direction.
+    for(const [dx,dz]of[[0,-7],[7,0],[0,7],[-7,0]])for(let side=-1;side<=1;side++)for(let h=0;h<=3;h++)setBlock(x+dx+(dz?side:0),y-1+h,z+dz+(dx?side:0),B.AIR);
     for(const [ox,oz]of[[-5,-5],[5,-5],[-5,5],[5,5]]){box(x+ox,y-1,z+oz,x+ox,y+3,z+oz,B.BRICK);setBlock(x+ox,y+4,z+oz,B.LANTERN);}
     setBlock(x,y-1,z,B.DIAMOND_ORE);setBlock(x,y,z,B.GLASS);setBlock(x,y+1,z,B.LANTERN);setBlock(x,y+2,z,B.DIAMOND_ORE);
     for(const t of city.tablets)tablet(t);
     for(const [ox,oz]of[[0,-8],[8,0],[0,8],[-8,0]]){setBlock(x+ox,y,z+oz,B.BRICK);setBlock(x+ox,y+1,z+oz,B.TORCH);}
+    const network=caveNetworkSpecs().find(candidate=>candidate.id===city.caveNetworkId);carveWalkway(network.points[network.points.length-2],city.entrance);const approachZ=z===city.entrance.z?z:z-Math.sign(z-city.entrance.z)*2;carveWalkway(city.entrance,{x,y:y-1,z:approachZ});for(const vault of city.vaults){const dx=vault.x-x,dz=vault.z-z,alongX=Math.abs(dx)>=Math.abs(dz),from=alongX?{x:x+Math.sign(dx)*7,y:y-1,z}:{x,y:y-1,z:z+Math.sign(dz)*7},to=alongX?{x:vault.x-Math.sign(dx)*3,y:vault.y,z:vault.z}:{x:vault.x,y:vault.y,z:vault.z-Math.sign(dz)*3};carveWalkway(from,to);}
   }
   return ancientCitySpecs();
+}
+function ancientCityTraversalAudit(){
+  const cities=ancientCitySpecs(),networks=caveNetworkSpecs(),caves=regionalLandmarkSpecs().filter(site=>site.type==='cave');
+  const storedOverworld=gameContext.requireState('dimensions')?.overworldGrid,readBlock=storedOverworld&&typeof storedOverworld.getB==='function'?(x,y,z)=>storedOverworld.getB(x,y,z):getB;
+  const standable=(x,y,z)=>isSolid(readBlock(x,y-1,z))&&!isSolid(readBlock(x,y,z))&&!isSolid(readBlock(x,y+1,z));
+  const standingOptions=(point,radius=3)=>{const out=[];for(let x=Math.floor(point.x)-radius;x<=Math.floor(point.x)+radius;x++)for(let z=Math.floor(point.z)-radius;z<=Math.floor(point.z)+radius;z++)for(let y=Math.max(2,Math.floor(point.y)-4);y<=Math.min(WH-3,Math.floor(point.y)+5);y++)if(standable(x,y,z)&&Math.hypot(x+.5-point.x,z+.5-point.z)<=radius)out.push({x,y,z});return out;};
+  return cities.map(city=>{
+    const networkIndex=networks.findIndex(row=>row.id===city.caveNetworkId),network=networks[networkIndex],cave=caves[networkIndex];
+    const routePoints=[cave,{x:cave.x,y:cave.y,z:cave.z-28},...network.points,...network.caverns,city,...city.tablets,...city.vaults];
+    const bounds={minX:Math.min(...routePoints.map(p=>p.x))-12,maxX:Math.max(...routePoints.map(p=>p.x))+12,minZ:Math.min(...routePoints.map(p=>p.z))-12,maxZ:Math.max(...routePoints.map(p=>p.z))+12,minY:2,maxY:Math.max(...routePoints.map(p=>p.y))+8};
+    const mouth={x:cave.x,y:cave.y+1,z:cave.z-7},queue=standingOptions(mouth),visited=new Set(queue.map(cell=>`${cell.x},${cell.y},${cell.z}`));
+    for(let head=0;head<queue.length;head++){const cur=queue[head];for(const[dx,dz]of[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]){const x=cur.x+dx,z=cur.z+dz;if(x<bounds.minX||x>bounds.maxX||z<bounds.minZ||z>bounds.maxZ)continue;for(const dy of[0,1,-1]){const y=cur.y+dy,key=`${x},${y},${z}`;if(y<bounds.minY||y>bounds.maxY||visited.has(key)||!standable(x,y,z))continue;visited.add(key);queue.push({x,y,z});break;}}}
+    const reachable=(point,radius)=>{for(const key of visited){const[x,y,z]=key.split(',').map(Number);if(Math.hypot(x+.5-point.x,y-point.y,z+.5-point.z)<=radius)return true;}return false;};
+    const entrance=visited.has(`${city.entrance.x},${city.entrance.y},${city.entrance.z}`),core=reachable(city.core,7);
+    return {id:city.id,mouth:queue.length>0,caveRoute:network.points.every(point=>visited.has(`${point.x},${point.y},${point.z}`)),entrance,tablet:reachable(city.tablets[0],5),vaults:city.vaults.map(vault=>reachable(vault,6)),core,returnPath:entrance&&core,visited:visited.size};
+  });
 }
 let smallDiscoveries=[];
 let treasureCaches=[];
@@ -1945,9 +1978,11 @@ const claimedDiscoveryIds=new Set();
 const hintedDiscoveryIds=new Set();
 function buildRegionalLandmarks(setBlock,getBlock){
   const specs=regionalLandmarkSpecs();
+  buildFantasyStructures({specs:specs.filter(s=>s.id.startsWith('major_fantasy_')),setBlock,B,worldHeight:WH,terrainHeight});
   const box=(x1,y1,z1,x2,y2,z2,id)=>{for(let x=x1;x<=x2;x++)for(let y=y1;y<=y2;y++)for(let z=z1;z<=z2;z++)setBlock(x,y,z,id);};
   const prep=(s,r,floor=B.COBBLE)=>{for(let x=s.x-r;x<=s.x+r;x++)for(let z=s.z-r;z<=s.z+r;z++){for(let y=Math.max(1,s.y-3);y<s.y;y++)setBlock(x,y,z,B.DIRT);setBlock(x,s.y,z,floor);for(let y=s.y+1;y<=Math.min(WH-1,s.y+20);y++)setBlock(x,y,z,B.AIR);}};
   for(const s of specs){const x=s.x,y=s.y,z=s.z;
+    if(s.id.startsWith('major_fantasy_'))continue;
     if(s.type==='ruins'){prep(s,5);for(let i=-4;i<=4;i++){if(i!==1)setBlock(x+i,y+1,z-4,B.BRICK);if(i!==-2)setBlock(x-4,y+1,z+i,B.COBBLE);}for(const [ox,oz,h] of [[-4,-4,4],[4,-4,3],[-4,4,2],[4,4,4]])for(let k=1;k<=h;k++)setBlock(x+ox,y+k,z+oz,k===h?B.COBBLE:B.BRICK);setBlock(x,y+1,z,B.LANTERN);
     }else if(s.type==='shrine'){prep(s,4,B.BRICK);for(const [ox,oz] of [[-3,-3],[3,-3],[-3,3],[3,3]])for(let k=1;k<=4;k++)setBlock(x+ox,y+k,z+oz,B.LOG);box(x-3,y+4,z-3,x+3,y+4,z+3,B.PLANKS);box(x-1,y+1,z-1,x+1,y+1,z+1,B.COBBLE);setBlock(x,y+2,z,B.LANTERN);
     }else if(s.type==='hunter_camp'){prep(s,5,B.GRASS);setBlock(x,y+1,z,B.CAMPFIRE);for(const ox of [-3,3]){box(x+ox-1,y+1,z-2,x+ox+1,y+1,z+2,B.PLANKS);box(x+ox,y+2,z-1,x+ox,y+3,z+1,B.LOG);}for(const [ox,oz] of [[-4,-4],[4,-4],[-4,4],[4,4]]){setBlock(x+ox,y+1,z+oz,B.LOG);setBlock(x+ox,y+2,z+oz,B.TORCH);}setBlock(x,y+1,z+3,B.CHEST);
@@ -3805,13 +3840,13 @@ function updateLandMinimap(force=true){
     landMapCtx.strokeStyle='rgba(160,174,190,.9)';landMapCtx.strokeRect(x-2,z-2,size+4,size+4);
     landMapCtx.restore();
   };
-  const marker=(s,col,size)=>{
-    if(!discoveredOrHinted(s))return;
+  const marker=(s,col,size,force=false)=>{
+    if(!force&&!discoveredOrHinted(s))return;
     if(miniMap&&!worldMap&&!hintedDiscoveryIds.has(s.id)&&!nearMapMarker(s))return;
-    const x=mapPx(s.x),z=mapPz(s.z),hinted=hintedDiscoveryIds.has(s.id)&&!discoveredIds.has(s.id);
+    const x=mapPx(s.x),z=mapPz(s.z),hinted=hintedDiscoveryIds.has(s.id)&&!discoveredIds.has(s.id),emphasis=force||hinted;
     if(isWeatherDiscovery(s)){drawWeatherMarker(s,col,size,hinted);return;}
-    landMapCtx.fillStyle=hinted?'#ffd24a':col;landMapCtx.fillRect(x,z,size,size);
-    if(hinted){landMapCtx.strokeStyle='rgba(255,210,74,.85)';landMapCtx.strokeRect(x-2,z-2,size+4,size+4);}
+    landMapCtx.fillStyle=emphasis?'#ffd24a':col;landMapCtx.fillRect(x,z,size,size);
+    if(emphasis){const pulse=1+Math.floor((now/320)%2);landMapCtx.strokeStyle='rgba(255,210,74,.9)';landMapCtx.strokeRect(x-2-pulse,z-2-pulse,size+4+pulse*2,size+4+pulse*2);}
   };
   const leadMarker=(s,col,size=2)=>{
     if(!mapUtility||worldMap||claimMode||!miniMap||!nearMapMarker(s)||discoveredOrHinted(s)||claimedDiscoveryIds.has(s.id))return;
@@ -3858,7 +3893,11 @@ function updateLandMinimap(force=true){
     landMapCtx.restore();
     return true;
   };
-  for(const s of regionalLandmarks){if(caveMarker(s))continue;marker(s,s.major?'#ffd24a':'#e8c77b',s.major?3:2);}
+  for(const s of regionalLandmarks){
+    if(caveMarker(s))continue;
+    const fantasy=s.id&&s.id.startsWith('major_fantasy_'),complete=fantasy&&globalThis.BlockcraftFantasyStructureClears&&globalThis.BlockcraftFantasyStructureClears.has(s.id),daily=globalThis.BlockcraftFantasyStructureDaily,featured=!!(fantasy&&daily&&!daily.claimed&&daily.siteId===s.id);
+    marker(s,featured?'#ffd24a':complete?'#7ee06a':fantasy?'#d596ff':s.major?'#ffd24a':'#e8c77b',featured?5:fantasy?4:s.major?3:2,featured);
+  }
   for(const s of ancientCities)if(discoveredOrHinted(s))marker(s,'#7dd3fc',3);
   const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8',rain_bloom:'#67d6ff',storm_crystal:'#b79cff',sun_dial:'#ffd24a'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);
@@ -3891,11 +3930,15 @@ function updateLandMinimap(force=true){
     const expedition=globalThis.BlockcraftElderheartExpedition;
     if(expedition&&expedition.active&&expedition.target)cartographerMapTarget(expedition.target,'#75e89a','E');
     if(expedition&&expedition.active&&expedition.lead)cartographerMapTarget(expedition.lead,'#ffb66f','B');
+    const ancientRun=globalThis.BlockcraftAncientCityRun;
+    if(ancientRun&&ancientRun.active)for(const site of ancientRun.targets||[])cartographerMapTarget(site,'#8dd9ff',ancientRun.stage===2?'V':'A');
   }
   if(mapUtility&&overworldActivity){
     const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z)||miniMap&&!worldMap&&!nearPlayer(s))return;const x=mapPx(s.x),z=mapPz(s.z);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
     const expedition=globalThis.BlockcraftElderheartExpedition;
     if(expedition&&expedition.active)dynamic(expedition.target,'#75e89a',6);
+    const ancientRun=globalThis.BlockcraftAncientCityRun;
+    if(ancientRun&&ancientRun.active)for(const site of ancientRun.targets||[])dynamic(site,'#8dd9ff',6);
     const jobTarget=jobContractGuidanceTarget();
     if(jobTarget)dynamic(jobTarget.target,jobTarget.colorHex||'#9fd7ff',jobTarget.ready?7:5);
     dynamic(overworldActivity.caravan,overworldActivity.caravan&&overworldActivity.caravan.state==='ambushed'?'#ff5d48':'#f6c764',4);
@@ -5531,19 +5574,19 @@ function petTamerContractTarget(c){
 }
 function jobContractTarget(c){
   if(!c)return null;
-  if((c.targetX||c.targetZ)&&Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))return {label:jobContractTargetLabel(c),x:Number(c.targetX),z:Number(c.targetZ)};
+  if(Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))return {label:jobContractTargetLabel(c),x:Number(c.targetX),y:Number.isFinite(c.targetY)?Number(c.targetY):undefined,z:Number(c.targetZ),dimension:c.targetDimension||'overworld',exact:true};
   const type=String(c.type||'');
-  if(type==='farm')return {label:'Town Farm',x:HUB.farm.x,z:HUB.farm.z};
-  if(type==='cook')return {label:'Kitchen / Crafting',x:HUB.tavern.x,z:HUB.tavern.z};
+  if(type==='farm')return {label:'Town Farm',x:HUB.farm.x,z:HUB.farm.z,exact:true};
+  if(type==='cook')return {label:'Kitchen / Crafting',x:HUB.tavern.x,z:HUB.tavern.z,exact:true};
   if(type==='sell'){
     const p=tavernGuidanceTarget();
     return {label:'Tavern Counter',x:p.x,z:p.z};
   }
   if(type==='smith'||type==='repair'||type==='upgrade'||type==='salvage')return {label:'Smithy',x:HUB.smith.x,z:HUB.smith.z};
   if(type==='meditate')return {label:'Meditation Hall',x:HUB.shrine.x,z:HUB.shrine.z};
-  if(type==='mine'||type==='cave_survey'||type==='ancient_map'||type==='treasure')return {label:jobContractTargetLabel(c),x:HUB.quarry.x,z:HUB.quarry.z};
-  if(type==='gate')return gate?{label:'Active Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
-  if(type==='kill'||type==='hunt')return {label:jobContractTargetLabel(c),x:HUB.northGate.x,z:HUB.northGate.z-15};
+  if(type==='mine'||type==='cave_survey'||type==='ancient_map'||type==='treasure')return {label:jobContractTargetLabel(c)+' search area',x:HUB.quarry.x,z:HUB.quarry.z,approximate:true};
+  if(type==='gate')return gate?{label:'Active Gate',x:Number.isFinite(gate.x)?gate.x:TOWN.TC,z:Number.isFinite(gate.z)?gate.z:TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  if(type==='kill'||type==='hunt')return {label:jobContractTargetLabel(c)+' search area',x:HUB.northGate.x,z:HUB.northGate.z-15,approximate:true};
   const petTarget=petTamerContractTarget(c);
   if(petTarget)return petTarget;
   return null;
@@ -5583,7 +5626,7 @@ function jobContractGuidanceTarget(){
   const target=jobContractTarget(c);
   if(!target)return null;
   const col=jobContractColor(c,false);
-  return {kind:'job-'+c.type,color:col.rgb,colorHex:col.hex,target,route:jobContractRouteTo(target),label:target.label||jobContractTargetLabel(c)};
+  return {kind:'job-'+c.type,color:col.rgb,colorHex:col.hex,target,route:jobContractRouteTo(target),label:target.label||jobContractTargetLabel(c),approximate:!!target.approximate};
 }
 function maraQuestGuidanceTarget(q){
   if(!q || q.source==='guardian') return null;
@@ -5621,6 +5664,17 @@ function activeServerObjectiveForGuidance(){
 }
 function serverObjectiveGuidanceTarget(o){
   if(!o)return null;
+  const direct=o.guidance&&o.guidance.target||o.target||null;
+  const targetX=direct&&direct.x!=null&&Number.isFinite(Number(direct.x))?Number(direct.x):o.targetX!=null&&Number.isFinite(Number(o.targetX))?Number(o.targetX):null;
+  const targetZ=direct&&direct.z!=null&&Number.isFinite(Number(direct.z))?Number(direct.z):o.targetZ!=null&&Number.isFinite(Number(o.targetZ))?Number(o.targetZ):null;
+  const targetDimension=String(direct&&direct.dimension||o.targetDimension||o.dimension||'overworld');
+  if(targetX!=null&&targetZ!=null){
+    if(targetDimension&&targetDimension!==dim)return null;
+    const target={label:String(direct&&direct.label||o.targetName||o.location||o.title||'Objective'),x:targetX,z:targetZ,dimension:targetDimension,exact:true};
+    const targetY=direct&&direct.y!=null&&Number.isFinite(Number(direct.y))?Number(direct.y):o.targetY!=null&&Number.isFinite(Number(o.targetY))?Number(o.targetY):null;
+    if(targetY!=null)target.y=targetY;
+    return {kind:'server-explicit',color:0x7dd3fc,target,route:guidanceRouteToTarget(target)};
+  }
   const action=o.action&&o.action.type||o.hudAction&&o.hudAction.type||o.questLogAction&&o.questLogAction.type||'';
   const source=String(o.source||'');
   const loc=String(o.location||'').toLowerCase();
@@ -5682,7 +5736,8 @@ function serverObjectiveGuidanceTarget(o){
     return {kind:'server-mara',color,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},target]};
   }
   if(source==='story'||source==='manhunt'){
-    return {kind:'server-story',color:0x7dd3fc,target:gate,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate]};
+    const target={...gate,label:'Wilderness search area',approximate:true};
+    return {kind:'server-story',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate],approximate:true};
   }
   return null;
 }
@@ -5800,6 +5855,33 @@ Object.defineProperty(globalThis,'BlockcraftTownArrivalGuide',{value:Object.free
   stage:()=>townArrivalStage(),
   objective:()=>townArrivalObjective(),
 }),configurable:true});
+function guidanceRouteToTarget(target){
+  if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.z))return [];
+  const start={x:player.pos.x,y:player.pos.y,z:player.pos.z};
+  const playerInTown=isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
+  const targetInTown=isTownLand(Math.floor(target.x),Math.floor(target.z));
+  if(playerInTown&&targetInTown)return townRouteTo(target,target.z>TOWN.TC?'south':'north');
+  const gatePoint={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  if(playerInTown&&!targetInTown)return [start,{x:TOWN.TC,z:TOWN.TC-5},gatePoint,target];
+  if(!playerInTown&&targetInTown)return [start,gatePoint,{x:TOWN.TC,z:TOWN.TC-5},target];
+  return [start,target];
+}
+function trackerObjectiveGuidanceInfo(){
+  const api=globalThis.BlockcraftObjectiveTrackerGuide;
+  const line=api&&typeof api.current==='function'?api.current():null;
+  if(!line)return null;
+  if(line.target&&Number.isFinite(Number(line.target.x))&&Number.isFinite(Number(line.target.z))){
+    const target={...line.target,x:Number(line.target.x),z:Number(line.target.z)};
+    if(target.dimension&&target.dimension!==dim)return null;
+    return {kind:'tracked-'+String(line.kind||'objective'),color:line.color||0x7dd3fc,target,route:guidanceRouteToTarget(target),approximate:!!target.approximate};
+  }
+  if(line.serverObjective){
+    const server=serverObjectiveGuidanceTarget(line.serverObjective);
+    if(server)return server;
+  }
+  if(line.kind==='job')return jobContractGuidanceTarget();
+  return null;
+}
 function guidanceTargetInfo(){
   if(dim!=='overworld') return null;
   if(coachTrail){
@@ -5817,6 +5899,8 @@ function guidanceTargetInfo(){
   if(manualTarget)return manualTarget;
   const arrivalTarget=townArrivalGuidanceInfo();
   if(arrivalTarget)return arrivalTarget;
+  const trackerTarget=trackerObjectiveGuidanceInfo();
+  if(trackerTarget)return trackerTarget;
   if(quest){
     if(questDone()){
       const p=(quest.source==='guardian') ? HUB.aegisApproach : guidanceNpcPosition(quest.giver);
@@ -5908,11 +5992,15 @@ function routePoints(route, spacing=1.35){
     const steps=Math.max(1, Math.ceil(len/spacing));
     for(let s=1;s<=steps;s++){
       const t=s/steps;
-      pts.push({x:a.x+dx*t, z:a.z+dz*t});
-      if(pts.length>=GUIDE_PATH_MAX) return pts;
+      const point={x:a.x+dx*t,z:a.z+dz*t};
+      if(Number.isFinite(a.y)&&Number.isFinite(b.y))point.y=a.y+(b.y-a.y)*t;
+      pts.push(point);
     }
   }
-  return pts.slice(0,GUIDE_PATH_MAX);
+  if(pts.length<=GUIDE_PATH_MAX)return pts;
+  const sampled=[];
+  for(let i=0;i<GUIDE_PATH_MAX;i++)sampled.push(pts[Math.round(i*(pts.length-1)/(GUIDE_PATH_MAX-1))]);
+  return sampled;
 }
 function guidanceGroundY(x,z){
   const bx=Math.floor(x),bz=Math.floor(z);
@@ -5928,8 +6016,15 @@ function setGuideMarkerOpacity(marker,value){
   marker.core.material.opacity=value*.72;
   marker.group.visible=value>.02;
 }
+let lastGuidanceStatus=null;
 function tickGuidancePath(dt, now){
   const info=guidanceTargetInfo();
+  lastGuidanceStatus=info?{
+    kind:String(info.kind||''),
+    approximate:!!info.approximate,
+    target:{label:String(info.target&&info.target.label||''),x:Number(info.target&&info.target.x),y:Number.isFinite(info.target&&info.target.y)?Number(info.target.y):null,z:Number(info.target&&info.target.z),dimension:String(info.target&&info.target.dimension||dim)},
+    routeEnd:Array.isArray(info.route)&&info.route.length?{x:Number(info.route.at(-1).x),z:Number(info.route.at(-1).z)}:null,
+  }:null;
   const visible=!!(info && !qOpen && !uiOpen && !statOpen && !document.body.classList.contains('presentation-combat'));
   guidePathGroup.visible=dim==='overworld';
   if(!visible){
@@ -5956,7 +6051,7 @@ function tickGuidancePath(dt, now){
       marker.halo.material.color.setHex(info.color);
       marker.core.material.color.setHex(info.color);
       marker.wisp.material.color.setHex(info.color);
-      marker.group.position.set(p.x,guidanceGroundY(p.x,p.z),p.z);
+      marker.group.position.set(p.x,Number.isFinite(p.y)?p.y:guidanceGroundY(p.x,p.z),p.z);
       marker.group.rotation.y=Math.atan2(-dx,-dz);
       marker.chevron.scale.set(.9+forwardPulse*.16,1.12+forwardPulse*.2,1);
       marker.core.scale.setScalar(.82+forwardPulse*.28);
@@ -5974,7 +6069,7 @@ function tickGuidancePath(dt, now){
       marker.wisp.material.opacity=opacity*.25;
     }
   }
-  const baseY=guidanceGroundY(info.target.x,info.target.z);
+  const baseY=Number.isFinite(info.target.y)?info.target.y:guidanceGroundY(info.target.x,info.target.z);
   const beaconPulse=.85+.15*Math.sin(now/420);
   setGuideBeaconColor(info.color);
   guideBeaconGroup.position.set(info.target.x,baseY,info.target.z);
@@ -5983,7 +6078,10 @@ function tickGuidancePath(dt, now){
   guideBeaconCore.rotation.y=-now*.00034;
   guideBeaconHalo.position.y=4.3+Math.sin(now/520)*.28;
   guideBeaconRing.rotation.z=now*.001;
-  guideBeaconRing.scale.setScalar(1+.12*Math.sin(now/320));
+  guideBeaconBeam.visible=!info.approximate;
+  guideBeaconCore.visible=!info.approximate;
+  guideBeaconHalo.scale.setScalar(info.approximate?7.5:5.5);
+  guideBeaconRing.scale.setScalar((info.approximate?2.15:1)+.12*Math.sin(now/320));
   setGuideBeaconOpacity(currentGuideBeaconOpacity()+(.95-currentGuideBeaconOpacity())*Math.min(1,dt*8));
 }
 
@@ -6919,6 +7017,29 @@ function makeMiniProjectLabel(text,color='#f2c75c'){
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:.92,depthWrite:false,depthTest:true}));
   sp.scale.set(2.2,.55,1);
   return sp;
+}
+function craftingWorldEffect(pos,options={}){
+  if(!pos||!Number.isFinite(pos.x)||!Number.isFinite(pos.y)||!Number.isFinite(pos.z))return false;
+  const major=options.major===true,label=String(options.label||'Crafted').slice(0,28);
+  const rgb=Array.isArray(options.rgb)&&options.rgb.length>=3?options.rgb:[.95,.72,.25];
+  const css=typeof options.color==='string'?options.color:(major?'#ffe083':'#9de7ff');
+  burst(pos.x,pos.y,pos.z,rgb,major?46:20,major?3.4:2.1,major?3.8:2.5,major?1.05:.72,major?3:2);
+  const marker=makeMiniProjectLabel((major?'RARE CRAFT · ':'CRAFTED · ')+label,css);
+  marker.position.set(pos.x,pos.y+(major?1.25:.95),pos.z);
+  if(major)marker.scale.multiplyScalar(1.28);
+  scene.add(marker);
+  const started=performance.now(),duration=major?1900:1250,baseY=marker.position.y;
+  const animate=now=>{
+    const t=Math.min(1,(now-started)/duration);
+    marker.position.y=baseY+t*(major?1.15:.7);
+    marker.material.opacity=Math.max(0,.96-Math.pow(t,2));
+    if(t<1){requestAnimationFrame(animate);return;}
+    scene.remove(marker);
+    if(marker.material.map)marker.material.map.dispose();
+    marker.material.dispose();
+  };
+  requestAnimationFrame(animate);
+  return true;
 }
 let fellowshipWeeklyCacheProp=null,fellowshipWeeklyCacheKey='';
 function fellowshipClaimableWeeklyRewards(){
@@ -8127,7 +8248,7 @@ function nextHunterRankText(rank=localPlayerHunterRankIndex()){
   return level ? hunterRankLevelText(level)+' begins' : 'Top Hunter rank';
 }
 function currentRankProgress(){ return rankProgressForLevel(S.lvl,S.xp); }
-function gateSystemUnlocked(){ return ((S&&S.lvl)|0) >= 3; }
+function gateSystemUnlocked(){ return ((S&&S.lvl)|0) >= 1; }
 function gateCutsceneSeen(){ try{ return serverTutorials.gate>=1||localStorage.getItem('bc_gatecut_v1')==='1'; }catch(e){ return serverTutorials.gate>=1; } }
 function markGateCutsceneSeen(){ try{ localStorage.setItem('bc_gatecut_v1','1'); }catch(e){} markTutorialComplete('gate',1); }
 function resetGateCutsceneSeen(){ try{ localStorage.removeItem('bc_gatecut_v1'); }catch(e){} }
@@ -10088,6 +10209,20 @@ function defaultDeathRespawnDestination(kind='town'){
   if(kind==='gate')return null;
   return {x:TOWN_RETURN_SPAWN.x,y:TOWN_RETURN_SPAWN.y,z:TOWN_RETURN_SPAWN.z};
 }
+function completeDeathRespawnUi(opts={}){
+  clearPendingServerDeathOutcome();
+  const btn=deathEl&&deathEl.querySelector?deathEl.querySelector('#deathrespawn'):null;
+  if(btn&&document.activeElement===btn){
+    try{btn.blur();}catch(_e){}
+  }
+  if(deathEl)deathEl.classList.remove('show');
+  document.body.classList.remove('death-active');
+  deathRespawnHandler=null;
+  refreshPlayUi();
+  const resumed=opts.resume===true?resumeGameplayCamera():false;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('death.respawn-ui.complete',{source:String(opts.source||'unknown'),resumed:!!resumed});
+  return true;
+}
 function showDeathScreen(cause,sub,recap='',opts={}){
   clearPendingServerDeathOutcome();
   if(!deathEl){
@@ -10121,11 +10256,7 @@ function showDeathScreen(cause,sub,recap='',opts={}){
       if(player.vel)player.vel.set(0,0,0);
     }
     if(typeof opts.onRespawn==='function')opts.onRespawn();
-    deathEl.classList.remove('show');
-    document.body.classList.remove('death-active');
-    deathRespawnHandler=null;
-    refreshPlayUi();
-    if(needsClick)resumeGameplayCamera();
+    completeDeathRespawnUi({resume:needsClick,source:'button'});
   };
   try{if(document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock();}catch(_e){}
   document.body.classList.add('death-active');
@@ -10710,7 +10841,10 @@ function remoteUnderCrosshair(range=4.4){
     const t=v.dot(dir);
     if(t<0||t>range) continue;
     const perp=Math.sqrt(Math.max(0,v.lengthSq()-t*t));
-    if(perp<.8 && t<bd){ bd=t; best={sid, remote:r}; }
+    // Match ordinary mob melee's forgiving one-block aim cylinder. Remote
+    // hunters are blocky animated models too, and a narrower cone allowed the
+    // block behind a visible hunter to become a mining target instead.
+    if(perp<1.0 && t<bd){ bd=t; best={sid, remote:r}; }
   }
   return best;
 }
@@ -12252,6 +12386,7 @@ gameContext.registerModule('world', Object.freeze({
   pendingChunkCount:()=>chunkWork.size,
   chunkProfile:()=>({...chunkProfile,meshP95Ms:chunkProfilePercentile(chunkProfileSamples.mesh,.95),totalP95Ms:chunkProfilePercentile(chunkProfileSamples.total,.95)}),
   resetChunkProfile:()=>{for(const key in chunkProfile)chunkProfile[key]=0;chunkProfileSamples.mesh.length=0;chunkProfileSamples.total.length=0;},
+  guidanceStatus:()=>lastGuidanceStatus?JSON.parse(JSON.stringify(lastGuidanceStatus)):null,
   prepareEvent:prepareEventDimension,
   leaveEvent:leaveEventDimension,
   isParkourEventActive,
@@ -12270,11 +12405,14 @@ gameContext.registerModule('world', Object.freeze({
   setBuildGhostPreview,
   setTargetBlockHighlight,
   ancientCityDiscoverySpecs,
+  ancientCityTraversalAudit,
   inOverworldBattle,
   inVisualBattle,
   resetParticleBudget,
   particleBudgetStats,
+  craftingWorldEffect,
   karmaPulseVfx,
+  completeDeathRespawnUi,
   buildTamingLand,
   isOverworldGrid,
   activateOverworldGrid,
@@ -12321,6 +12459,7 @@ const legacyWorldBindings={
   "armorSlot":{get:()=>armorSlot,set:value=>{armorSlot=value;}},
   "ancientCities":{get:()=>ancientCities,set:value=>{ancientCities=Array.isArray(value)?value:[];}},
   "ancientCityDiscoverySpecs":{get:()=>ancientCityDiscoverySpecs},
+  "ancientCityTraversalAudit":{get:()=>ancientCityTraversalAudit},
   "atlasTex":{get:()=>atlasTex},
   "attachNpcNameplate":{get:()=>attachNpcNameplate},
   "attackCd":{get:()=>attackCd,set:value=>{attackCd=value;}},
@@ -12686,6 +12825,7 @@ const legacyWorldBindings={
   "overworldActivity":{get:()=>overworldActivity,set:value=>{overworldActivity=value;}},
   "showDeathScreen":{get:()=>showDeathScreen},
   "applyDeathRespawnVitals":{get:()=>applyDeathRespawnVitals},
+  "completeDeathRespawnUi":{get:()=>completeDeathRespawnUi},
   "villagers":{get:()=>villagers},
   "weather":{get:()=>weather},
   "weatherBoltFx":{get:()=>weatherBoltFx},

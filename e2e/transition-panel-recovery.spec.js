@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay, resumeAfterReload, completeTownArrival } = require('./helpers/auth-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -25,12 +25,11 @@ async function finishTraining(page) {
   }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);
   await page.locator('#trainingcontinue').click();
+  await completeTownArrival(page);
 }
 
 async function reloadAndPlay(page) {
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await resumeAfterReload(page);
 }
 
 async function expectAction(page, label, type) {
@@ -65,18 +64,6 @@ async function clickRecoveryHub(page, buttonText) {
   await page.locator('#qpanel .recovery-hub button').click();
 }
 
-async function openPathFromTrackerIfNeeded(page) {
-  const pathOpen = await page.locator('#pathselect').evaluate(el => !el.classList.contains('hidden'));
-  if (!pathOpen) await clickTrackerAction(page, 'CHOOSE PATH', 'choose_path');
-  await expect(page.locator('#pathselect')).toBeVisible();
-}
-
-async function startAwakeningFromPanelOrTracker(page) {
-  const awakeningOpen = await page.locator('#awakeningwin').evaluate(el => !el.classList.contains('hidden'));
-  if (awakeningOpen) await page.locator('#awakeningbegin').click();
-  else await clickTrackerAction(page, 'START AWAKENING', 'start_awakening');
-}
-
 async function completeFirstHandsToReward(page) {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'accept', giver: 'Mara Vale', role: 'guide' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('First Hands');
@@ -102,39 +89,20 @@ test('first-session transition panels recover after reload and tracker clicks', 
     await openQuestLog(page);
     await expectRecoveryHub(page, 'Reward Pending', 'CONTINUE');
     await clickRecoveryHub(page, 'CONTINUE');
-    await expect.poll(() => page.evaluate(() => {
-      const s = window.__BLOCKCRAFT_E2E__.status();
-      return s.transitionPanels.pathOpen || s.objectiveAction?.type === 'choose_path';
-    })).toBe(true);
+    await expectAction(page, 'TALK TO MARA', 'track_npc');
   });
 
-  await test.step('path choice can be reopened from the tracker after reload', async () => {
-    await openPathFromTrackerIfNeeded(page);
+  await test.step('the next Mara objective remains recoverable after reload', async () => {
     await reloadAndPlay(page);
-    await openQuestLog(page);
-    await expectRecoveryHub(page, 'Choose Path', 'CHOOSE PATH');
-    await clickRecoveryHub(page, 'CHOOSE PATH');
-    await page.locator('.pathselect-card[data-path="shadow"]').click();
-    await expect(page.locator('#overlay')).toBeHidden();
+    expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToMara())).toBe(true);
+    await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'accept', giver: 'Mara Vale', role: 'guide' }));
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('Road Ready');
+    await expect(page.locator('#currentquest .activequest-open')).toBeVisible();
   });
 
-  await test.step('awakening can be resumed and started after reload', async () => {
-    await expect.poll(() => page.evaluate(() => {
-      const s = window.__BLOCKCRAFT_E2E__.status();
-      return s.transitionPanels.awakeningOpen || s.objectiveAction?.type === 'start_awakening';
-    })).toBe(true);
+  await test.step('the accepted Road Ready objective survives reload', async () => {
     await reloadAndPlay(page);
-    await openQuestLog(page);
-    await expectRecoveryHub(page, 'Start Awakening', 'START AWAKENING');
-    await clickRecoveryHub(page, 'START AWAKENING');
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
-  });
-
-  await test.step('ability training remains recoverable after reload', async () => {
-    await reloadAndPlay(page);
-    await expect.poll(() => page.evaluate(() => {
-      const s = window.__BLOCKCRAFT_E2E__.status();
-      return s.abilityTraining || ['start_awakening', 'use_ability'].includes(s.objectiveAction?.type);
-    })).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('Road Ready');
+    await expect(page.locator('#currentquest .activequest-open')).toBeVisible();
   });
 });

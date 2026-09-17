@@ -38,7 +38,7 @@ const CLUSTERS = {
   initPersistenceState: [
     'profiles', 'tokens', 'dirtyWorld', 'dirtyWorldProgress', 'dirtyLandClaims', 'dirtyChests',
     'dirtyFurnaces', 'dirtyIncubations', 'dirtyGates', 'dirtyTeams', 'dirtyGuilds', 'dirtyNests',
-    'dirtyPlayers', 'lastSaveMsg', 'persistedInventorySignatures', 'playerSaveQueues',
+    'dirtyPlayers', 'playerMutationRevisions', 'lastSaveMsg', 'persistedWorldEditChunks', 'persistedInventorySignatures', 'playerSaveQueues',
   ],
   initDragonState: ['dragonFollowBondTravel', 'dragonIncubations', 'dragonLoanOffers', 'dragonLoanSeq', 'dragonTraining', 'familiarCareCd', 'familiarCommands', 'nestDragons', 'petTamerServices', 'wildTaming'],
 };

@@ -1065,7 +1065,6 @@ const bugReportSend=document.getElementById('bugreportsend');
 const bugReportCancel=document.getElementById('bugreportcancel');
 const bugReportStatus=document.getElementById('bugreportstatus');
 let bugReportPendingTimer=0;
-let bugReportFallbackTimer=0;
 let bugReportPendingId=0;
 function bugReportPositionText(){
   const snap=typeof globalThis.BlockcraftDebugSnapshot==='function'?globalThis.BlockcraftDebugSnapshot():null;
@@ -1134,9 +1133,7 @@ function openBugReport(){
 function closeBugReport(){
   if(!bugReportWin)return;
   clearTimeout(bugReportPendingTimer);
-  clearTimeout(bugReportFallbackTimer);
   bugReportPendingTimer=0;
-  bugReportFallbackTimer=0;
   if(bugReportSend)bugReportSend.disabled=false;
   if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.close)globalThis.BlockcraftModal.close(bugReportWin,{relock:true,reason:'bug-report'});
   else{
@@ -1156,26 +1153,25 @@ function sendBugReport(){
   bugReportSetStatus('Sending report...', '');
   if(bugReportSend)bugReportSend.disabled=true;
   clearTimeout(bugReportPendingTimer);
-  clearTimeout(bugReportFallbackTimer);
-  bugReportFallbackTimer=setTimeout(()=>sendBugReportHttpFallback(payload,pendingId),2500);
   bugReportPendingTimer=setTimeout(()=>{
     if(bugReportSend)bugReportSend.disabled=false;
-    bugReportSetStatus('Server is taking too long. Trying backup route...', 'bad');
+    bugReportSetStatus('Report is taking too long. Please try again.', 'bad');
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.timeout');
   },12000);
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.send', { hasMessage:!!message, trace:trace.length });
-  NET.room.send('bugReport', payload);
+  sendBugReportHttp(payload,pendingId);
 }
-async function sendBugReportHttpFallback(payload,pendingId){
+async function sendBugReportHttp(payload,pendingId){
   if(pendingId!==bugReportPendingId)return;
   const token=currentAuthSessionToken();
-  if(!token){globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.skip',{reason:'auth'});return;}
   try{
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.start');
+    const headers={'Content-Type':'application/json'};
+    if(token)headers.Authorization='Bearer '+token;
     const res=await fetch(apiUrl('/auth/bug-report'),{
       method:'POST',
       credentials:'include',
-      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+      headers,
       body:JSON.stringify(payload),
     });
     let data={};try{data=await res.json();}catch(_e){}
@@ -1185,13 +1181,12 @@ async function sendBugReportHttpFallback(payload,pendingId){
   }catch(e){
     if(pendingId!==bugReportPendingId)return;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.fail',{message:e&&e.message||String(e||'')});
+    applyBugReportResult({ok:false,reason:'http_failed'});
   }
 }
 function applyBugReportResult(m){
   clearTimeout(bugReportPendingTimer);
-  clearTimeout(bugReportFallbackTimer);
   bugReportPendingTimer=0;
-  bugReportFallbackTimer=0;
   bugReportPendingId++;
   if(bugReportSend)bugReportSend.disabled=false;
   if(m&&m.ok){
@@ -1321,6 +1316,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('*',()=>{});
     menusApi.applyRandomGateQueue({queued:false,rank:-1,waiting:0});
     menusApi.applyElderheartExpedition(null);
+    menusApi.applyAncientCityRun(null);
     room.onMessage('serverRestartWarning',showServerRestartWarning);
     room.onMessage('e2eJourneyResult',m=>{e2eJourneyResult=m||null;});
     room.onMessage('familiarTelemetry',renderFamiliarTelemetry);
@@ -1389,8 +1385,11 @@ function netAttachRoom(room,name,client){
       if(m&&m.active){
         const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability')||(m.kind==='job'&&dim==='job')||(m.kind==='questions'&&dim==='questions')||(m.kind==='taming_land'&&dim==='taming_land')||(m.kind==='fishing_lake'&&dim==='fishing_lake');
         if(matching&&m.spaceId) NET.dgn=String(m.spaceId);
+        if(m.kind==='questions'&&dimensionsApi.enterQuestionRoom)dimensionsApi.enterQuestionRoom({...m,resume:true,serverSynced:true});
       }else if(dim==='tutorial'||dim==='ability'||dim==='job'||dim==='questions'||dim==='taming_land'||dim==='fishing_lake'){
         NET.dgn='';
+        if(dim==='tutorial'&&onboardingActive)cancelOnboardingForProfileRestore();
+        else if(dim==='questions'&&dimensionsApi.exitQuestionRoom)dimensionsApi.exitQuestionRoom({serverSynced:true});
       }
     });
     room.onMessage('profile', m=>{
@@ -2289,6 +2288,7 @@ function netAttachRoom(room,name,client){
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
       if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
       else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
+      if(worldApi&&typeof worldApi.completeDeathRespawnUi==='function')worldApi.completeDeathRespawnUi({resume:true,source:'worldRespawn'});
       titleFlashNet('Respawned','Returned safely',{kind:'blue',duration:1200});
       sysMsg('<b>Respawned.</b> You returned safely to the Town of Beginnings.');
     });
@@ -2416,6 +2416,82 @@ function netAttachRoom(room,name,client){
       if(fresh)sysMsg((m.shared?'Team mapped':'Mapped')+': <b>'+escHTML(String(m.name||'new discovery').replace(/_/g,' '))+'</b>'+(m.shared&&m.by?' via '+escHTML(m.by):''));
       if(fresh)eventFeed('[Map]',(m.shared?'Team mapped ':'Mapped ')+String(m.name||'new discovery').replace(/_/g,' ')+(m.shared&&m.by?' via '+String(m.by):'')+'.',{key:'mapped:'+String(m.id),cooldown:0});
     });
+    room.onMessage('fantasyStructureStatus',m=>{
+      if(!m||!m.id)return;
+      if(!globalThis.BlockcraftFantasyStructureRuns)globalThis.BlockcraftFantasyStructureRuns=new Map();
+      if(m.phase==='complete'){
+        globalThis.BlockcraftFantasyStructureRuns.delete(m.id);
+        if(!globalThis.BlockcraftFantasyStructureClears)globalThis.BlockcraftFantasyStructureClears=new Set();
+        globalThis.BlockcraftFantasyStructureClears.add(m.id);
+        sysMsg('<b>'+escHTML(m.name||'Fantasy structure')+':</b> already complete. Its reward chest is unlocked.');
+      }else if(m.phase==='locked'){
+        sysMsg('<b>SEALED REWARD:</b> '+escHTML(m.name||'This structure')+' must be cleared first. Return to its heart and press <b>G</b>.');
+      }else if(m.phase==='cooldown'){
+        const seconds=Math.max(1,Math.ceil(((m.resetAt||Date.now())-Date.now())/1000));
+        sysMsg('<b>STRUCTURE RECOVERING:</b> The public encounter at '+escHTML(m.name||'this structure')+' can be replayed in about '+Math.ceil(seconds/60)+' minute'+(seconds>60?'s':'')+'.');
+      }else if(m.phase==='objective'){
+        globalThis.BlockcraftFantasyStructureRuns.set(m.id,m);
+        const next=Array.isArray(m.objectives)&&m.objectives[0];
+        showName((m.objectivesDone|0)?'OBJECTIVE UPDATED':'MINI-ADVENTURE BEGINS');
+        sysMsg('<b>'+escHTML(m.name||'Fantasy structure')+':</b> '+escHTML(m.intro||m.objective||'Explore the interior.')+(m.daily?'<br><b>DAILY MODIFIER · '+escHTML(m.daily.modifier.name)+':</b> '+escHTML(m.daily.modifier.description):'')+'<br><small>'+(next?'<b>Next:</b> '+escHTML(next.hint||next.label)+' · Press <b>G</b> at the marked station.':'Search the interior for the remaining stations.')+'</small>');
+        eventFeed('[Objective]',String(m.name||'Structure')+' · '+(next?String(next.label):String(m.objective||'Explore the interior'))+' · '+(m.objectivesDone|0)+'/'+(m.objectiveTotal|0),{key:'structure:objective:'+String(m.id),cooldown:600});
+      }else{
+        globalThis.BlockcraftFantasyStructureRuns.set(m.id,m);
+        showName('STRUCTURE AWAKENED');
+        sysMsg('<b>'+escHTML(m.name||'Fantasy structure')+':</b> Defeat the awakened defenders.<br><small>'+Math.max(0,m.remaining|0)+' defender'+((m.remaining|0)===1?'':'s')+' remain.</small>');
+        eventFeed('[Structure]',String(m.name||'Structure')+' awakened · '+Math.max(0,m.remaining|0)+' defenders remain.',{key:'structure:start:'+String(m.id),cooldown:1500});
+      }
+    });
+    room.onMessage('fantasyStructureObjective',m=>{
+      if(!m||!m.id)return;
+      if(m.type==='ruined_keep')SFX.place();else if(m.type==='overgrown_temple'||m.type==='arcane_tower')SFX.cast();else if(m.type==='giant_hall')SFX.boom();else SFX.breakBlk(null);
+      if(globalThis.BlockcraftExplorationFx&&globalThis.BlockcraftExplorationFx.structureObjective)globalThis.BlockcraftExplorationFx.structureObjective(m);
+      showName(String(m.label||'OBJECTIVE').toUpperCase()+' COMPLETE');
+      sysMsg('<b>OBJECTIVE COMPLETE:</b> '+escHTML(m.label||'Interior mechanism')+' <b>'+Math.max(0,m.done|0)+'/'+Math.max(0,m.total|0)+'</b>');
+      eventFeed('[Objective]',String(m.label||'Interior mechanism')+' complete · '+(m.done|0)+'/'+(m.total|0),{key:'structure:step:'+String(m.id)+':'+String(m.objectiveId),cooldown:0});
+    });
+    room.onMessage('fantasyStructureCombat',m=>{
+      if(!m||!m.id)return;
+      SFX.slamWarn();showName('THE DEFENDERS ANSWER');
+      sysMsg('<b>INTERIOR OBJECTIVE COMPLETE!</b> '+escHTML(m.name||'The structure')+' awakens. Defeat '+Math.max(1,m.remaining|0)+' guardians to draw out its master.');
+      eventFeed('[Structure]','The defenders of '+String(m.name||'the structure')+' awaken.',{key:'structure:combat:'+String(m.id),cooldown:0});
+    });
+    room.onMessage('fantasyStructureComplete',m=>{
+      if(!m||!m.id)return;
+      if(globalThis.BlockcraftFantasyStructureRuns)globalThis.BlockcraftFantasyStructureRuns.delete(m.id);
+      if(!globalThis.BlockcraftFantasyStructureClears)globalThis.BlockcraftFantasyStructureClears=new Set();
+      globalThis.BlockcraftFantasyStructureClears.add(m.id);
+      if(Number.isFinite(m.totalGold))gold=m.totalGold|0;refreshHUD();
+      SFX.level();SFX.treasure();showName('LEGENDARY SITE CLEARED');
+      sysMsg('<b>'+escHTML(m.name||'Fantasy structure')+' CLEARED!</b><br>Reward chest unlocked · '+(m.gold|0)+' gold · '+(m.xp|0)+' XP');
+      eventFeed('[Structure]',String(m.name||'Fantasy structure')+' cleared. Reward chest unlocked.',{key:'structure:complete:'+String(m.id),cooldown:0});
+    });
+    room.onMessage('fantasyStructureBoss',m=>{
+      if(!m||!m.id)return;
+      SFX.slamWarn();showName(String(m.boss||'STRUCTURE GUARDIAN').toUpperCase()+' AWAKENS');
+      sysMsg('<b>BOSS AWAKENED:</b> '+escHTML(m.boss||'Structure Guardian')+' now guards the heart of '+escHTML(m.name||'the structure')+'.');
+      eventFeed('[Structure]',String(m.boss||'Structure Guardian')+' has awakened.',{key:'structure:boss:'+String(m.id),cooldown:0});
+    });
+    room.onMessage('fantasyStructureMastery',m=>{
+      if(!m)return;
+      if(Number.isFinite(m.totalGold))gold=m.totalGold|0;refreshHUD();
+      SFX.level();SFX.treasure();showName('ALL LEGENDARY SITES CONQUERED');
+      sysMsg('<b>MYTHIC CARTOGRAPHER!</b><br>Every fantasy structure has been conquered. Collection reward: '+(m.gold|0)+' gold and two Legend Tokens.');
+      eventFeed('[Legend]',String(m.title||'Mythic Cartographer')+' earned for clearing every fantasy structure.',{key:'structure:mastery',cooldown:0});
+    });
+    room.onMessage('fantasyStructureDailyComplete',m=>{
+      if(!m)return;
+      if(Number.isFinite(m.totalGold))gold=m.totalGold|0;
+      if(globalThis.BlockcraftFantasyStructureDaily)globalThis.BlockcraftFantasyStructureDaily={...globalThis.BlockcraftFantasyStructureDaily,claimed:true};
+      refreshHUD();updateLandMinimap();SFX.level();SFX.treasure();showName('DAILY LEGEND CONQUERED');
+      sysMsg('<b>FEATURED STRUCTURE COMPLETE!</b><br>'+escHTML(m.name||'Legendary site')+' · '+escHTML(m.modifier&&m.modifier.name||'Daily challenge')+'<br>Repeat reward: '+(m.gold|0)+' gold · '+(m.xp|0)+' XP · '+escHTML(m.reward&&m.reward.name||'regional treasure'));
+      eventFeed('[Daily Legend]',String(m.name||'Featured structure')+' daily reward claimed.',{key:'structure:daily:'+String(m.day||''),cooldown:0});
+    });
+    room.onMessage('fantasyStructureReject',m=>{
+      if(m&&m.reason==='range')sysMsg('Move into the heart of the structure to begin its encounter.');
+      else if(m&&m.reason==='objective_range')sysMsg('Move closer to the marked interior station.');
+      else if(m&&m.reason==='sequence')sysMsg('The mechanism resists. Complete <b>'+escHTML(m.expected||'the earlier step')+'</b> first.');
+    });
     room.onMessage('explorationMilestone',m=>{
       if(!m)return;if(Number.isFinite(m.totalGold))gold=m.totalGold|0;refreshHUD();
       sysMsg('<b>'+escHTML(m.title||'Exploration milestone')+'</b> reached at '+(m.count|0)+' discoveries.<br>'+economyRecapHTML(m.gold|0,gold,'Exploration milestone'));
@@ -2457,7 +2533,35 @@ function netAttachRoom(room,name,client){
       eventFeed('[Expedition]','Roads of the Elderheart complete. Orin recorded the route.',{key:'elderheart:complete',cooldown:0});
       OVERWORLD_RESULTS.show({title:'EXPEDITION COMPLETE',summary:'Beacon aligned · manifest recovered · Elderheart traced',grant:{gold:m.gold,xp:m.xp,items:m.items},next:next||'Choose another regional contract or treasure map at Orin.'});
     });
-    room.onMessage('cartographerUpdate',m=>{if(m&&Number.isFinite(m.gold))gold=m.gold|0;if(m){const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m.treasure||null;if(m.treasure&&m.treasure.targetId)hintedDiscoveryIds.add(m.treasure.targetId);}refreshHUD();updateLandMinimap();if(document.querySelector('#qpanel .fellowship-map-table-marker')&&typeof openFellowshipMapTableUI==='function')openFellowshipMapTableUI(m);else openCartographerUI(m);});
+    room.onMessage('ancientCityRun',m=>{
+      const prior=globalThis.BlockcraftAncientCityRun;
+      menusApi.applyAncientCityRun(m);
+      if(m&&m.active&&(!prior||!prior.active||prior.stage!==m.stage||prior.pending!==m.pending)){
+        showName(m.stage===0?'ANCIENT EXPEDITION STARTED':m.stage===5?'ANCIENT CITY SURVIVED':'ANCIENT EXPEDITION · STEP '+((m.stage|0)+1));
+        sysMsg('<b>Ancient City:</b> '+escHTML(m.instruction||'Follow the lantern route.')+(m.target?'<br><b>Next:</b> '+escHTML(m.target.name||'marked location')+' is marked A on your map.':''));
+        eventFeed('[Ancient]',String(m.instruction||'Follow the route.'),{key:'ancient:stage:'+String(m.stage)+':'+String(!!m.pending),cooldown:0});
+      }
+    });
+    room.onMessage('ancientCityRunReject',m=>{
+      const reason=m&&m.reason;
+      sysMsg(reason==='full'?'Make inventory space before claiming your Ancient City reward.'
+        :reason==='map'?'Finish your current treasure map before starting an Ancient City expedition.'
+        :reason==='done'?'Both Ancient City expeditions are already complete.'
+        :reason==='warden'?'Defeat the Ancient Warden before leaving the core.'
+        :reason==='pending'?'Your Warden reward is reserved at the core. Return there with inventory space.'
+        :reason==='range'?'Move to the marked Ancient City step and press <b>G</b>.'
+        :'No Ancient City expedition is active. Ask Orin Mapwell for a route.');
+    });
+    room.onMessage('ancientWardenRewardPending',m=>sysMsg('<b>Warden reward reserved.</b> '+(m&&m.reason==='collect'?'Return to the Ancient Core and press <b>G</b> to collect it.':'Make inventory space, then press <b>G</b> at the Ancient Core.')+' Your claim survives reconnecting.'));
+    room.onMessage('ancientCityRunComplete',m=>{
+      if(!m)return;
+      showName('ANCIENT CITY EXPEDITION COMPLETE');
+      const minutes=Math.max(1,Math.round((m.durationMs||0)/60000));
+      sysMsg('<b>Ancient City survived!</b> Returned through the cave after '+minutes+' minutes. +'+(m.gold|0)+' gold and relic materials.');
+      eventFeed('[Ancient]','Expedition complete. The party escaped with its finds.',{key:'ancient:complete:'+String(m.cityId||''),cooldown:0});
+      OVERWORLD_RESULTS.show({title:'ANCIENT CITY SURVIVED',summary:'Tablet read · '+(m.vaultId==='vault_b'?'western':'eastern')+' vault opened · Warden defeated · route escaped',grant:{gold:m.gold,items:m.items},next:'Bring the relic materials to town, or ask Orin about the other city.'});
+    });
+    room.onMessage('cartographerUpdate',m=>{if(m&&Number.isFinite(m.gold))gold=m.gold|0;if(m){const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m.treasure||null;if(m.treasure&&m.treasure.targetId)hintedDiscoveryIds.add(m.treasure.targetId);if(m.ancientRun)menusApi.applyAncientCityRun(m.ancientRun);}refreshHUD();updateLandMinimap();if(document.querySelector('#qpanel .fellowship-map-table-marker')&&typeof openFellowshipMapTableUI==='function')openFellowshipMapTableUI(m);else openCartographerUI(m);});
     room.onMessage('cartographerHint',m=>{
       if(!m||!m.id)return;hintedDiscoveryIds.add(m.id);if(Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();
       sysMsg('<b>Map lead purchased:</b> '+escHTML(m.name||'Uncharted site')+' is marked in gold on your map.<br>'+economyRecapHTML(-Math.abs(m.cost|0),gold,'Cartographer hint'));
@@ -2755,7 +2859,7 @@ function netAttachRoom(room,name,client){
       applyLootRecoveryState(m);
       if(m&&m.queued){
         const stack=rewardGearStack(m.queued);
-        if(stack)presentGear({stack,slot:-1,recovered:true,baseline:ITEMS[stack.id].armor?armorSlot:(()=>{
+        if(stack)presentGear({stack,slot:-1,recovered:true,recoveryOverflowed:m.queued.overflowed===true,baseline:ITEMS[stack.id].armor?armorSlot:(()=>{
           const selected=inv[combatState.selectedSlot],selectedItem=selected&&ITEMS[selected.id];
           return selectedItem&&selectedItem.tool&&['sword','axe'].includes(selectedItem.tool.cls)?selected:null;
         })()});
@@ -3013,6 +3117,7 @@ function netAttachRoom(room,name,client){
         supply_owner:'Only the owner can withdraw from Homestead Supply.',
         owner:'Only the chest owner can do that.',
         full:'That chest has no room for those items.',
+        unsupported_item:'Chests store stackable supplies only. Gear stays in your bag.',
         no_matching:'No backpack stacks match items already in that chest.',
         no_materials:'No deposit-safe materials found in your backpack.',
         empty:'That chest slot is empty.',
@@ -3029,7 +3134,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('furnaceState', m=>applyFurnaceState(m));
     room.onMessage('furnaceStarted', m=>{applyFurnaceStarted(m);eventFeed('[Furnace]','Smelting started'+(m&&ITEMS[m.input]?' for '+feedItemName(m.input):'')+'.',{key:'furnace:start:'+String(m&&m.key||''),cooldown:2000});});
     room.onMessage('furnaceResult', m=>{applyFurnaceResult(m);if(m&&m.out&&ITEMS[m.out.id])eventFeed('[Furnace]','Smelted '+feedStackText(m.out.id,m.finalCount||m.out.count||1)+'.',{key:'furnace:result:'+String(m&&m.key||'')+':'+m.out.id,cooldown:1500});});
-    room.onMessage('furnaceReject', ()=>{ SFX.error(); sysMsg('Furnace transaction failed'); });
+    room.onMessage('furnaceReject', m=>applyFurnaceReject(m));
     room.onMessage('fx', m=>{
       if(m && (m.t==='dragonGuard'||m.t==='dragonRest'||m.t==='dragonRecall') && COMPANIONS.noteDragonRoleEvent) COMPANIONS.noteDragonRoleEvent(m.t==='dragonRest'?{...m,role:'rest'}:(m.t==='dragonRecall'?{...m,role:'recall'}:m));
       if(m && m.t==='dragonGuard' && m.role==='stay') updateLandMinimap();
@@ -3130,9 +3235,13 @@ function netAttachRoom(room,name,client){
       SOCIAL.requestSocialSnapshot();
       if(qOpen&&qpanelEl&&qpanelEl.dataset.modal==='social-hub') openTeamUI('team',false);
     });
-    if(onboardingActive){
+    if(onboardingActive&&dim==='tutorial'){
       resetTrainingMeadowLocal();
       room.send('tutorialEnter',{kind:'onboarding'});
+    }else if(onboardingActive){
+      // Never let a stale tutorial controller claim a new server room while the
+      // player is already back in the overworld.
+      cancelOnboardingForProfileRestore();
     }else if(abilityTrainingActive&&dim==='ability'){
       room.send('tutorialEnter',{kind:'ability'});
     }
@@ -3171,8 +3280,10 @@ function netRestoreProfile(m){
     if(m&&Array.isArray(m.activeObjectives))setActiveObjectives(m.activeObjectives,{announce:false});
     if(m&&Array.isArray(m.homeworkObjectives))applyHomeworkProgressList(m.homeworkObjectives);
     const authGameProfile=AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile;
+    const loginPath=authGameProfile&&authGameProfile.path&&PATHS[authGameProfile.path]?authGameProfile.path:'';
     const cachedPath=AUTH_UI&&typeof AUTH_UI.savedPath==='function'?AUTH_UI.savedPath():'';
-    const authPath=cachedPath&&PATHS[cachedPath]?cachedPath:'';
+    const cachedValidPath=cachedPath&&PATHS[cachedPath]?cachedPath:'';
+    const authPath=loginPath||cachedValidPath;
     const serverPath=m&&m.S&&m.S.path&&PATHS[m.S.path]?m.S.path:'';
     pathDebug('room.path.resolve', { roomPath:serverPath, recoveredPath:authPath, loginPath:authGameProfile&&authGameProfile.path||'' });
     if(m&&m.S){
@@ -3183,7 +3294,9 @@ function netRestoreProfile(m){
     pathDebug('room.path.applied', { path:S.path, source:serverPath?'room':authPath?'auth-or-cache':'none' });
     if(S.path&&combatApi.restoreHydratedPath)combatApi.restoreHydratedPath(S.path,serverPath?'room':'auth-or-cache');
     if(authGameProfile&&S.path)authGameProfile.path=S.path;
-    if(!serverPath&&authPath&&NET.on&&NET.room){
+    // A signed-in profile is already durable. Only repair the room from the local
+    // cache when the server and authenticated profile are both genuinely blank.
+    if(!serverPath&&!loginPath&&cachedValidPath&&NET.on&&NET.room){
       const healKey=String(NET.room.sessionId||'')+':'+authPath;
       if(NET.pathHealKey!==healKey){
         NET.pathHealKey=healKey;
@@ -3315,6 +3428,9 @@ function netRestoreProfile(m){
     if(m.e2eSkipFirstQuestRewardPresentation&&typeof markFirstQuestRewardPresentationSeen==='function') markFirstQuestRewardPresentationSeen();
     if(typeof m.highestGateRankCleared==='number') highestGateRankCleared=Math.max(-1,Math.min(5,m.highestGateRankCleared|0));
     discoveredIds.clear();if(Array.isArray(m.discoveries))for(const id of m.discoveries)if(typeof id==='string')discoveredIds.add(id);
+    globalThis.BlockcraftFantasyStructureClears=new Set(Array.isArray(m.fantasyStructureClears)?m.fantasyStructureClears.filter(id=>typeof id==='string'):[]);
+    globalThis.BlockcraftFantasyStructureRuns=new Map();
+    globalThis.BlockcraftFantasyStructureDaily=m.fantasyStructureDaily&&m.fantasyStructureDaily.siteId?m.fantasyStructureDaily:null;
     claimedDiscoveryIds.clear();if(Array.isArray(m.claimedDiscoveries))for(const id of m.claimedDiscoveries)if(typeof id==='string')claimedDiscoveryIds.add(id);
     hintedDiscoveryIds.clear();if(Array.isArray(m.cartographerHints))for(const id of m.cartographerHints)if(typeof id==='string')hintedDiscoveryIds.add(id);
     cosmeticUnlocks=Array.isArray(m.cosmeticUnlocks)?m.cosmeticUnlocks.filter(v=>v==='cartographers_mantle'):[];
@@ -3342,6 +3458,7 @@ function netRestoreProfile(m){
     const restoreJobRoom=JOBS_ENABLED&&mergedActiveRoom&&mergedActiveRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[mergedActiveRoom.job]?mergedActiveRoom:null;
     const restoreTamingLand=mergedActiveRoom&&mergedActiveRoom.dim==='taming_land'?mergedActiveRoom:null;
     const restoreFishingLake=mergedActiveRoom&&mergedActiveRoom.dim==='fishing_lake'?mergedActiveRoom:null;
+    const restoreQuestions=mergedActiveRoom&&mergedActiveRoom.dim==='questions'?mergedActiveRoom:null;
     if(restoreJobRoom){
       if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job,{serverSynced:!!serverActiveRoom});
       else if(!serverHasActiveRoom&&NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'job',job:restoreJobRoom.job});
@@ -3351,6 +3468,9 @@ function netRestoreProfile(m){
     }else if(restoreFishingLake){
       if(dim!=='fishing_lake'&&dimensionsApi.enterFishingLake) dimensionsApi.enterFishingLake({resume:true,serverSynced:serverHasActiveRoom});
       else if(!serverHasActiveRoom&&NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'fishing_lake'});
+    }else if(restoreQuestions){
+      if(dim!=='questions'&&dimensionsApi.enterQuestionRoom)dimensionsApi.enterQuestionRoom({resume:true,serverSynced:serverHasActiveRoom,...restoreQuestions});
+      else if(dimensionsApi.repairQuestionRoomPosition)dimensionsApi.repairQuestionRoomPosition('profile-restore',restoreQuestions);
     }else if(serverHasActiveRoom&&dim==='job'&&dimensionsApi.exitJobTutorialRoom){
       dimensionsApi.exitJobTutorialRoom();
     }else if(serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi.exitTamingLand){
@@ -3358,9 +3478,9 @@ function netRestoreProfile(m){
     }else if(serverHasActiveRoom&&dim==='fishing_lake'&&dimensionsApi.exitFishingLake){
       dimensionsApi.exitFishingLake();
     }
-    const forceJobHandoffTownReturn=jobTutorialCompletionPanelOpen()&&!restoreJobRoom&&!restoreTamingLand&&!restoreFishingLake;
+    const forceJobHandoffTownReturn=jobTutorialCompletionPanelOpen()&&!restoreJobRoom&&!restoreTamingLand&&!restoreFishingLake&&!restoreQuestions;
     const townReturn=forceJobHandoffTownReturn&&dimensionsApi.townReturnPoint?dimensionsApi.townReturnPoint():null;
-    const restorePos=restoreFishingLake?null:(townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos);
+    const restorePos=(restoreFishingLake||restoreQuestions||dim==='questions')?null:(townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos);
     if(Array.isArray(restorePos) && !onboardingActive){
       player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2]);
       player.vel.set(0,0,0);
@@ -3882,6 +4002,11 @@ function readJobTutorialResume(){
   }catch(e){return null;}
 }
 function currentRuntimeActiveRoom(){
+  if(dimensionsState.kind==='questions'){
+    const room={dim:'questions'};
+    if(player&&player.pos)room.pos=[player.pos.x,player.pos.y,player.pos.z];
+    return room;
+  }
   if(JOBS_ENABLED&&dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob){
     const room={
       dim:'job',
@@ -3948,10 +4073,20 @@ function netFlushSave(reason='flush'){
     return true;
   }catch(e){return false;}
 }
+function netReleaseBrowserSession(reason='page-exit'){
+  netFlushSave(reason);
+  // A browser close/navigation must be a deliberate Colyseus leave. Saving alone
+  // leaves the socket to disappear as an abnormal disconnect, so the server keeps
+  // the player entity visible during its reconnection window.
+  try{void NETWORK.shutdown();}catch(e){}
+}
 if(typeof window!=='undefined'&&!window.__blockcraftVitalFlushBound){
   window.__blockcraftVitalFlushBound=true;
-  window.addEventListener('pagehide',()=>netFlushSave('pagehide'));
-  window.addEventListener('beforeunload',()=>netFlushSave('beforeunload'));
+  window.addEventListener('pagehide',event=>{
+    if(event&&event.persisted)netFlushSave('pagehide-bfcache');
+    else netReleaseBrowserSession('pagehide');
+  });
+  window.addEventListener('beforeunload',()=>netReleaseBrowserSession('beforeunload'));
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')netFlushSave('visibility-hidden');});
 }
 
@@ -4314,6 +4449,15 @@ Object.defineProperty(globalThis,'BlockcraftPlayerArrivalVfx',{value:(pos,opts)=
 var appearanceDummy=null, appearanceBackDummy=null;
 let mirrorPreviewPrompt=null;
 let mirrorPreviewMode=false;
+const mirrorBreakPrompt=document.createElement('div');
+mirrorBreakPrompt.id='mirrorbreakprompt';
+mirrorBreakPrompt.className='hidden';
+mirrorBreakPrompt.setAttribute('role','dialog');
+mirrorBreakPrompt.setAttribute('aria-modal','true');
+mirrorBreakPrompt.setAttribute('aria-labelledby','mirrorbreaktitle');
+mirrorBreakPrompt.innerHTML='<div class="mirrorbreak-copy"><small>HUNTER MIRROR</small><b id="mirrorbreaktitle">BREAK THE REFLECTION TO CONTINUE</b><span>Click the reflection, press Escape, or use the button. Your mirror item is permanent.</span></div><button id="mirrorbreak" type="button">BREAK REFLECTION</button>';
+document.body.appendChild(mirrorBreakPrompt);
+const mirrorBreakButton=mirrorBreakPrompt.querySelector('#mirrorbreak');
 let appearancePreviewActive=false, meditationOwnedAppearance=false;
 let playerCustomAppearance=APPEARANCE_SYSTEM&&APPEARANCE_SYSTEM.sanitizeAppearance?APPEARANCE_SYSTEM.sanitizeAppearance(null):null;
 let appearancePreviewSnapshot=null;
@@ -4451,13 +4595,20 @@ function updateMirrorPreviewPrompt(){
   else if(a)prompt.position.set(a.x,a.y+3.65,a.z);
   prompt.visible=true;
 }
+function setMirrorBreakPromptVisible(visible){
+  if(mirrorBreakPrompt)mirrorBreakPrompt.classList.toggle('hidden',!visible);
+  document.body.classList.toggle('mirror-preview-open',!!visible);
+}
 function showMirrorAppearancePreview(){
   showAppearanceInspectionStand(true);
   mirrorPreviewMode=true;
+  setMirrorBreakPromptVisible(true);
+  if(globalThis.BlockcraftReleaseMovementInput)globalThis.BlockcraftReleaseMovementInput('mirror-preview');
+  if(combatApi.releaseGameplayCursor)combatApi.releaseGameplayCursor();
   ensureMirrorPreviewPrompt();
   updateMirrorPreviewPrompt();
   showName('MIRROR PREVIEW');
-  sysMsg('<b>Hunter Mirror:</b> previewing your current look.<br>Press <b>C</b> to customize. Press <b>Escape</b> to dismiss the mirror image.');
+  sysMsg('<b>Hunter Mirror:</b> previewing your current look.<br>Press <b>C</b> to customize. Click the reflection, press <b>Escape</b>, or choose <b>BREAK REFLECTION</b> to move again.');
   return true;
 }
 function mirrorPreviewActive(){
@@ -4478,15 +4629,16 @@ function dismissMirrorAppearancePreview(){
   clearMirrorPreviewPrompt();
   mirrorPreviewMode=false;
   appearancePreviewActive=false;
+  setMirrorBreakPromptVisible(false);
   disposeAppearanceDummy();
   showName('MIRROR IMAGE DISMISSED');
   sysMsg('<b>Hunter Mirror:</b> the reflection fades.');
+  if(combatApi.resumeGameplayCamera)combatApi.resumeGameplayCamera();
   return true;
 }
 function customizeMirrorAppearancePreview(){
   if(!mirrorPreviewActive())return false;
   clearMirrorPreviewPrompt();
-  mirrorPreviewMode=false;
   releasePointerLockWithoutCameraFallback(false);
   refreshPlayUi();
   AUTH_UI.openAppearanceEditor('mirror');
@@ -4495,12 +4647,18 @@ function customizeMirrorAppearancePreview(){
 function disposeAppearanceDummy(){
   clearMirrorPreviewPrompt();
   mirrorPreviewMode=false;
+  setMirrorBreakPromptVisible(false);
   if(appearanceDummy) scene.remove(appearanceDummy.grp);
   if(appearanceBackDummy) scene.remove(appearanceBackDummy.grp);
   appearanceDummy=null;
   appearanceBackDummy=null;
   meditationOwnedAppearance=false;
 }
+if(mirrorBreakButton)mirrorBreakButton.addEventListener('click',e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  dismissMirrorAppearancePreview();
+});
 function toggleAppearanceDummy(){
   if(appearanceDummy){
     mirrorPreviewMode=false;
@@ -4525,11 +4683,14 @@ function previewAppearanceDraft(value){
   return true;
 }
 function finishAppearanceDraftPreview(commit=false){
+  const wasActive=!!(appearancePreviewActive||mirrorPreviewMode||appearanceDummy||appearanceBackDummy);
   if(!commit&&appearancePreviewSnapshot){
     playerCustomAppearance=appearancePreviewSnapshot;
-    refreshAppearanceDummy();
   }
   appearancePreviewSnapshot=null;
+  appearancePreviewActive=false;
+  disposeAppearanceDummy();
+  if(wasActive&&combatApi.resumeGameplayCamera)combatApi.resumeGameplayCamera();
   return true;
 }
 Object.defineProperty(globalThis,'BlockcraftAppearancePreview',{value:Object.freeze({

@@ -389,6 +389,21 @@ class SpawningMixin {
     }
 
     const st = m.state || '';
+    if (st === 'wardenSonicWind') {
+      faceBest();
+      if (meta.stateT <= 0) {
+        const innerRadius = 2.8, outerRadius = 8;
+        this.sendSpace(m.dgn, 'fx', { t: 'wardenSonicBurst', x: m.x, y: m.y, z: m.z, innerRadius, outerRadius, dgn: m.dgn || '' });
+        for (const s of candidates) {
+          const distance = Math.hypot(s.p.x - m.x, s.p.z - m.z);
+          if (distance < innerRadius || distance > outerRadius || Math.abs(s.p.y - m.y) > 4) continue;
+          const c = this.clients.find(client => client.sessionId === s.sid);
+          if (c) this.hurtPlayer(c, 5 + Math.max(1, meta.rank | 0), 'warden_sonic', { attack: 'Sonic Resonance' });
+        }
+        this.bossRecover(m, meta, .9, 3.4, haste);
+      }
+      return true;
+    }
     if (st === 'eldritchLeapWind') {
       faceBest();
       if (meta.stateT <= 0) {
@@ -723,6 +738,7 @@ class SpawningMixin {
       if (rank >= 1 && meta.bossStyle === 'ossuary' && bd < 16) picks.push('ossuary');
       if (rank >= 1 && meta.bossStyle === 'blight' && bd < 15) picks.push('blight');
       if (rank >= 1 && meta.bossStyle === 'watcher' && bd > 5 && bd < 20) picks.push('watcher');
+      if (meta.ancientWarden && bd < 15) picks.push('wardenSonic', 'wardenSonic');
       if (rank >= 2 && meta.bossStyle === 'cinder_smith' && bd < 15) picks.push('cinder');
       if (rank >= 2 && meta.bossStyle === 'castellan' && bd < 16) picks.push('castellan');
       if (rank >= 2 && meta.bossStyle === 'choir' && bd > 5 && bd < 20) picks.push('choir');
@@ -746,6 +762,7 @@ class SpawningMixin {
           ossuary: ['volley', 'ossuary', 'charge', 'slam'],
           blight: ['blight', 'graveRing', 'charge', 'slam'],
           watcher: ['watcher', 'charge', 'volley', 'slam'],
+          ancient_warden: ['wardenSonic', 'charge', 'slam', 'graveRing'],
           cinder_smith: ['cinder', 'slam', 'spikes', 'charge'],
           castellan: ['castellan', 'volley', 'charge', 'slam'],
           choir: ['choir', 'graveRing', 'volley', 'slam'],
@@ -775,7 +792,10 @@ class SpawningMixin {
         this.bossMaybeLayer(meta, pat);
         const bd2 = bd || 1;
         meta.cdx = (best.p.x - m.x) / bd2; meta.cdz = (best.p.z - m.z) / bd2;
-        if (pat === 'slam') {
+        if (pat === 'wardenSonic') {
+          m.state = 'wardenSonicWind'; meta.stateT = 1.45 * haste;
+          this.sendSpace(m.dgn, 'fx', { t: 'wardenSonicWarn', durationMs: meta.stateT * 1000, x: m.x, y: m.y, z: m.z, innerRadius: 2.8, outerRadius: 8, label: 'SONIC RESONANCE', dgn: m.dgn || '' });
+        } else if (pat === 'slam') {
           m.state = 'slamWind'; meta.stateT = 1.1 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'slamWarn', durationMs: meta.stateT*1000, x: m.x, y: m.y, z: m.z, radius: 4.6, dgn: m.dgn || '' });
         } else if (pat === 'eldritchLeap') {

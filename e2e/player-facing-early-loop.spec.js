@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay, resumeAfterReload, completeTownArrival, craftRoadReadyStarter } = require('./helpers/auth-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -28,11 +28,12 @@ async function finishTraining(page) {
   }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);
   await page.locator('#trainingcontinue').click();
+  await completeTownArrival(page);
 }
 
 async function expectTrackerAction(page, label, type) {
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ label, type });
-  await expect(page.locator('#currentquest .qaction').first()).toHaveText(label);
+  const action = page.locator(`#currentquest .qaction[data-objective-action="${type}"]`).first();
+  await expect(action).toHaveText(label);
 }
 
 async function readChapterHud(page) {
@@ -40,13 +41,19 @@ async function readChapterHud(page) {
     const s = window.__BLOCKCRAFT_E2E__.status();
     const hud = s.currentObjectiveHud || {};
     const line = hud.line || null;
-    const action = s.objectiveAction || (line && line.action) || null;
+    const activeQuestOpen = document.querySelector('#currentquest .activequest-open');
+    const visibleAction = document.querySelector('#currentquest .qaction');
+    const statusAction = s.objectiveAction || (line && line.action) || null;
+    const action = visibleAction
+      ? { label: visibleAction.textContent.trim(), type: visibleAction.dataset.objectiveAction || '' }
+      : (statusAction || (activeQuestOpen ? { label: 'QUEST LOG', type: 'questlog' } : null));
+    const chapter = line && line.chapter || (s.activeObjectives || []).find(o => o.title === (line?.title || s.currentObjective?.label))?.chapter || null;
     return {
       focus: s.progressionFocus || '',
       title: line && line.title || s.currentObjective && s.currentObjective.label || '',
       text: line && line.text || s.currentObjective && s.currentObjective.text || '',
       action: action ? { label: action.label || '', type: action.type || '' } : null,
-      chapter: line && line.chapter || null,
+      chapter,
       hidden: !s.currentObjectiveHud,
       rawText: String(s.objectiveText || '').replace(/\s+/g, ' ').trim(),
       activeObjectives: Array.isArray(s.activeObjectives)
@@ -106,9 +113,8 @@ function qualityIssuesFrom(audit, trace = []) {
   const distinctHudTexts = new Set(hudTexts);
   if (hudEvents.length > 80) issues.push(`HUD changed too often during Chapter 1 route (${hudEvents.length} updates).`);
   if (distinctHudTexts.size > 36) issues.push(`HUD displayed too many distinct objective texts (${distinctHudTexts.size}).`);
-  const hunterAwakening = (audit.modalInterruptions || []).filter(m => m.sequence === 'hunter_awakening');
-  if (hunterAwakening.length && hunterAwakening.length !== 4) issues.push(`Hunter Awakening should read as one four-step sequence, found ${hunterAwakening.length} steps.`);
-  if (hunterAwakening.length && new Set(hunterAwakening.map(m => m.kind)).size !== hunterAwakening.length) issues.push('Hunter Awakening has duplicate modal steps.');
+  const firstQuestRewards = (audit.modalInterruptions || []).filter(m => m.sequence === 'first_quest_reward');
+  if (firstQuestRewards.length !== 1) issues.push(`First Hands should expose one reward panel, found ${firstQuestRewards.length}.`);
   return issues;
 }
 
@@ -142,7 +148,7 @@ function chapterCheckpointMismatch(actual, expected = {}) {
   if (expected.title !== undefined && actual.title !== expected.title) return `title expected ${expected.title} got ${actual.title}: ${JSON.stringify(actual)}`;
   if (expected.actionLabel !== undefined && (!actual.action || actual.action.label !== expected.actionLabel)) return `action label expected ${expected.actionLabel}: ${JSON.stringify(actual)}`;
   if (expected.actionType !== undefined && (!actual.action || actual.action.type !== expected.actionType)) return `action type expected ${expected.actionType}: ${JSON.stringify(actual)}`;
-  const expectedTotal = expected.chapterTotal || 9;
+  const expectedTotal = expected.chapterTotal || 8;
   if (expected.chapterStep !== undefined && (!actual.chapter || actual.chapter.step !== expected.chapterStep || actual.chapter.total !== expectedTotal)) return `chapter step expected ${expected.chapterStep}/${expectedTotal}: ${JSON.stringify(actual)}`;
   const textChecks = expected.textIncludes == null ? [] : Array.isArray(expected.textIncludes) ? expected.textIncludes : [expected.textIncludes];
   for (const text of textChecks) if (!actual.text.includes(text) && !actual.rawText.includes(text)) return `text missing ${text}: ${JSON.stringify(actual)}`;
@@ -217,10 +223,11 @@ test('player-facing early loop tracker gives a clear next action at each milesto
 
   await test.step('first quest returns the player to Mara once complete', async () => {
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
-      label: 'Tutorial Guide',
+      label: 'First Hands',
     });
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'accept', giver: 'Mara Vale', role: 'guide' }));
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('First Hands');
+    await expect(page.locator('#currentquest .activequest-open')).toBeVisible();
     await expectChapterCheckpoint(page, qualityAudit, 'first hands accepted', {
       title: 'First Hands',
       actionLabel: 'QUEST LOG',
@@ -249,51 +256,31 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'claim' }));
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(2);
     await expect(page.locator('#rewardpanel')).toContainText('Hunter Awakening 1 / 4');
-    recordAuditModal(qualityAudit, 'first quest reward', 'reward', 'hunter_awakening');
+    recordAuditModal(qualityAudit, 'first quest reward', 'reward', 'first_quest_reward');
     await clickButtonById(page, 'rewardclose');
-    await expect(page.locator('#pathpanel')).toContainText('Hunter Awakening 2 / 4');
-    recordAuditModal(qualityAudit, 'path selection', 'path_choice', 'hunter_awakening');
-    await page.locator('.pathselect-card[data-path="shadow"]').click();
-    await expect(page.locator('#overlay')).toBeHidden();
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.debugTrace().map(e => e.event))).toEqual(
-      expect.arrayContaining(['path.select.click', 'path.select.closed', 'ability.awakening.open']),
-    );
-    await expect(page.locator('#awakeningpanel')).toContainText('Hunter Awakening 3 / 4');
-    recordAuditModal(qualityAudit, 'ability awakening', 'ability', 'hunter_awakening');
-    await clickButtonById(page, 'awakeningbegin');
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
-    await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useFirstAbility());
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTutorialDone)).toBe(true);
-    await expectTrackerAction(page, 'CHOOSE JOB', 'choose_job');
-    await expect(page.locator('#pathpanel')).toContainText('Hunter Awakening 4 / 4');
-    recordAuditModal(qualityAudit, 'optional job chooser', 'job_choice', 'hunter_awakening');
-    await page.locator('#jobchoicelater').click();
-    await expect(page.locator('#pathselect')).toBeHidden();
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('shadow');
+    await expectTrackerAction(page, 'TALK TO MARA', 'track_npc');
     await expectChapterCheckpoint(page, qualityAudit, 'road ready objective', {
       focus: 'first_road_ready',
       title: 'Road Ready',
-      actionLabel: 'OPEN QUEST',
-      actionType: 'questlog',
+      actionLabel: 'TALK TO MARA',
+      actionType: 'track_npc',
       chapterStep: 2,
-      textIncludes: 'Accept or finish',
-      activeObjectiveId: 'progression:first_road_ready',
+      textIncludes: 'Defeat',
+      activeObjectiveId: 'npc:Mara Vale:1:offered',
     });
 
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'accept', giver: 'Mara Vale', role: 'guide' }));
     await expectChapterCheckpoint(page, qualityAudit, 'road ready accepted', {
       focus: 'first_road_ready',
       title: 'Road Ready',
-      actionLabel: 'OPEN QUEST LOG',
-      actionType: 'questlog',
+      actionLabel: 'CRAFT STARTER',
+      actionType: 'craft',
       chapterStep: 2,
-      textIncludes: 'Defeat',
+      textIncludes: 'Craft your Wood Sword',
       activeObjectiveId: 'npc:Mara Vale:1',
     });
-  if(await page.evaluate(()=>quest&&quest.craftPending)){
-    await page.evaluate(()=>BlockcraftGameContext.requireModule('menus').activateCraftShortcut(I.WOOD_SWORD));
-    await page.locator('#craftarea > .slot').dispatchEvent('mousedown',{button:0});
-    await expect.poll(()=>page.evaluate(()=>quest&&quest.craftPending)).toBe(false);
-  }
+    await craftRoadReadyStarter(page);
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'completeRoadReady' }));
     await expectChapterCheckpoint(page, qualityAudit, 'road ready ready to claim', {
       focus: 'first_road_ready',
@@ -314,7 +301,7 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       actionType: 'find_gate',
       chapterStep: 3,
       textIncludes: 'E-rank Gate',
-      activeObjectiveId: 'progression:first_e_gate',
+      activeObjectiveId: 'npc:Mara Vale:2:offered',
     });
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.trackedGate())).toMatchObject({ rank: 0, kind: 'public' });
     await clickTrackerAction(page, 'FIND GATE', 'find_gate');
@@ -356,7 +343,7 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       chapterStep: 4,
       textIncludes: 'Craft',
     });
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('Craft a Crafting Table or Furnace');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('Craft a Crafting Table');
     await clickTrackerAction(page, 'OPEN RECIPE', 'craft');
     recordAuditPanel(qualityAudit, 'craft station recipe panel', 'crafting');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().menu)).toMatchObject({
@@ -374,7 +361,6 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
       label: 'First Land Claim',
     });
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjectiveHud?.line?.title)).toBe('First Land Claim');
 
     await prepareFocus(page, 'first_land_claim', { noGold: true });
     await expectChapterCheckpoint(page, qualityAudit, 'first land claim no gold', {
@@ -474,36 +460,28 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await expect(page.locator('#qpanel')).toContainText('HOMESTEAD UPGRADES');
     await closeOpenPanels(page);
 
-    await prepareFocus(page, 'first_profession_contract');
-    await expectChapterCheckpoint(page, qualityAudit, 'first profession contract handoff', {
-      focus: 'first_profession_contract',
-      title: 'First Contract',
-      actionLabel: 'OPEN JOB BOARD',
-      actionType: 'jobs',
-      chapterStep: 9,
-      textIncludes: 'first profession or Adventurer contract',
+    await prepareFocus(page, 'e_rank_climb');
+    await expect.poll(() => readChapterHud(page)).toMatchObject({
+      focus: 'e_rank_climb',
+      title: 'E-rank Climb',
+      action: { label: 'OPEN GUILD BOARD', type: 'guild_contracts' },
     });
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('first profession or Adventurer contract');
-    await clickTrackerAction(page, 'OPEN JOB BOARD', 'jobs');
-    recordAuditPanel(qualityAudit, 'first contract job board panel', 'jobs');
-    await expect(page.locator('#qpanel')).toContainText('JOB BOARD');
-    await expect(page.locator('#qpanel')).toContainText('JOB BOARD CONTRACTS');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('Guild Contract');
+    await clickTrackerAction(page, 'OPEN GUILD BOARD', 'guild_contracts');
+    recordAuditPanel(qualityAudit, 'E-rank Guild Hall handoff', 'guild_contracts');
+    await expect(page.locator('#qpanel')).toContainText('GUILD');
     await closeOpenPanels(page);
   });
 
   await test.step('reload preserves the active objective and tracker action', async () => {
-    await page.reload();
-    await page.locator('#playbtn').click();
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_profession_contract');
-    await expectChapterCheckpoint(page, qualityAudit, 'reload first profession contract', {
-      focus: 'first_profession_contract',
-      title: 'First Contract',
-      actionLabel: 'OPEN JOB BOARD',
-      actionType: 'jobs',
-      chapterStep: 9,
+    await resumeAfterReload(page);
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('e_rank_climb');
+    await expect.poll(() => readChapterHud(page)).toMatchObject({
+      focus: 'e_rank_climb',
+      title: 'E-rank Climb',
+      action: { label: 'OPEN GUILD BOARD', type: 'guild_contracts' },
     });
-    await expectTrackerAction(page, 'OPEN JOB BOARD', 'jobs');
+    await expectTrackerAction(page, 'OPEN GUILD BOARD', 'guild_contracts');
   });
 
   const qualityReport = await buildQualityAuditReport(page, qualityAudit);

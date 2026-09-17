@@ -1475,7 +1475,21 @@ class EventsMixin {
   }
   eventSpaceSolid(dgn) {
     const ev = this.currentEventInstance() || this.serverEvent;
-    if (!dgn || !ev || ev.id !== dgn || ev.kind !== EVENT_CARAVAN.kind || !ev.arena) return null;
+    if (!dgn || !ev || ev.id !== dgn) return null;
+    if (ev.kind === EVENT_PARKOUR.kind && ev.course) {
+      // Parkour is a private course, not the terrain at these overworld coordinates.
+      // Otherwise invisible overworld blocks reject moves onto checkpoint platforms.
+      if (ev.parkourSolidCourse !== ev.course) {
+        ev.parkourSolidCourse = ev.course;
+        ev.parkourSolidBlocks = new Set();
+        for (const block of ev.course.blocks || []) {
+          const [x, y, z, id] = block.split(',').map(Number);
+          if (W.isSolid(id)) ev.parkourSolidBlocks.add(x + ',' + y + ',' + z);
+        }
+      }
+      return (x, y, z) => ev.parkourSolidBlocks.has(x + ',' + y + ',' + z);
+    }
+    if (ev.kind !== EVENT_CARAVAN.kind || !ev.arena) return null;
     return (x, y, z) => y <= W.TOWN.G
       || x <= ev.arena.minX || x >= ev.arena.maxX
       || z <= ev.arena.minZ || z >= ev.arena.maxZ;
@@ -2355,6 +2369,8 @@ class EventsMixin {
     const claimedBy = Array.isArray(claims[id]) ? claims[id] : (claims[id] = []);
     if (claimedBy.includes(rec.token)) return client.send('guildReject', { reason: 'reward_claimed' });
     if (this.rateLimited(client, 'guildReward', 1, 2)) return client.send('guildReject', { reason: 'rate' });
+    const rewardDraft={...rec.prof,inv:(rec.prof.inv||[]).map(slot=>slot?{...slot}:null)};
+    if(!(reward.items||[]).every(item=>this.addRewardItem(rewardDraft,item.id,item.count)===0))return client.send('guildReject',{reason:'full'});
     claimedBy.push(rec.token);
     if (claimedBy.length > 200) claims[id] = claimedBy.slice(-200);
     const rewardGold = Math.max(0, reward.gold | 0);
@@ -2364,8 +2380,8 @@ class EventsMixin {
     }
     const items = [];
     for (const item of reward.items || []) {
-      const left = this.addRewardItem(rec.prof, item.id, item.count);
-      items.push({ id: item.id, count: Math.max(0, (item.count | 0) - left), requested: item.count | 0, overflow: Math.max(0, left | 0) });
+      this.addRewardItem(rec.prof, item.id, item.count);
+      items.push({ id: item.id, count: item.count | 0, requested: item.count | 0, overflow: 0 });
     }
     this.dirtyGuilds = true;
     this.dirtyPlayers.add(rec.token);

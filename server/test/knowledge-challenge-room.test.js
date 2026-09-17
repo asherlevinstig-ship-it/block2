@@ -68,6 +68,65 @@ test('starting a shift debits the entry stake and serves the first case', async 
   assert.ok(caseMsg);
   assert.equal(caseMsg.msg.questionId, 8);
   assert.equal(caseMsg.msg.answers.length, 4);
+  assert.equal(caseMsg.msg.attemptToken, '77:1:8');
+});
+
+test('concurrent shift starts reserve the session and debit the stake once', async () => {
+  let releaseSubject;
+  let subjectLookupStarted;
+  const subjectGate = new Promise(resolve => { releaseSubject = resolve; });
+  const subjectStarted = new Promise(resolve => { subjectLookupStarted = resolve; });
+  const store = fakeStore({
+    async resolvePlaySubject() {
+      subjectLookupStarted();
+      await subjectGate;
+      return { subjectId: 5, scopeSchoolId: 0 };
+    },
+  });
+  const prof = { gold: 100 };
+  const room = makeRoom(store, prof);
+  const client = makeClient();
+
+  const first = room.handleKcStart(client, { shiftType: 'quick' });
+  await subjectStarted;
+  const second = room.handleKcStart(client, { shiftType: 'quick' });
+  releaseSubject();
+  await Promise.all([first, second]);
+
+  assert.equal(prof.gold, 80, 'only one entry stake was debited');
+  assert.equal(store._calls.startShift.length, 1, 'only one durable shift was opened');
+  assert.equal(client.sent.filter(s => s.type === 'kcShiftStarted').length, 1);
+  assert.equal(client.sent.filter(s => s.type === 'kcReject' && s.msg.reason === 'active').length, 1);
+});
+
+test('disconnect during shift creation refunds a committed entry stake', async () => {
+  let releaseStart;
+  let durableStartBegan;
+  const startGate = new Promise(resolve => { releaseStart = resolve; });
+  const startBegan = new Promise(resolve => { durableStartBegan = resolve; });
+  const store = fakeStore({
+    async startShift(_account, input) {
+      store._calls.startShift.push(input);
+      durableStartBegan();
+      await startGate;
+      return { id: 77 };
+    },
+  });
+  const prof = { gold: 100 };
+  const room = makeRoom(store, prof);
+  const client = makeClient();
+
+  const starting = room.handleKcStart(client, { shiftType: 'quick' });
+  await startBegan;
+  assert.equal(prof.gold, 80, 'stake committed before durable start returns');
+  room.kcAbandon(client);
+  releaseStart();
+  await starting;
+
+  assert.equal(prof.gold, 100, 'cancelled start was refunded');
+  assert.equal(room.kcShifts.has('s1'), false);
+  assert.equal(store._calls.endShift[0].status, 'abandoned');
+  assert.deepEqual(room._econ.map(call => call[1]), [-20, 20]);
 });
 
 test('a shift cannot start without the entry stake', async () => {
@@ -109,6 +168,58 @@ test('answering correctly reviews the atom and accumulates fluency totals', asyn
   assert.equal(shift.totals.completedCases, 1);
   assert.equal(shift.totals.firstAttemptCorrect, 1);
   assert.equal(shift.totals.stagesAdvanced, 1, 'engine reported an advance');
+});
+
+test('concurrent answers claim a case once before durable writes', async () => {
+  let releaseReview;
+  let reviewBegan;
+  const reviewGate = new Promise(resolve => { releaseReview = resolve; });
+  const reviewStarted = new Promise(resolve => { reviewBegan = resolve; });
+  const store = fakeStore({
+    async recordAtomReview(_account, input) {
+      store._calls.review.push(input);
+      reviewBegan();
+      await reviewGate;
+      return { recorded: true, advanced: true, reachedMaintain: false, state: { stage: 1 } };
+    },
+  });
+  const room = makeRoom(store, { gold: 100 });
+  const client = makeClient();
+  await room.handleKcStart(client, { shiftType: 'quick' });
+  const pending = room.kcShifts.get('s1').pending;
+  const answer = { questionId: pending.questionId, attemptToken: pending.attemptToken, index: pending.correctIndex, responseMs: 1200 };
+  client.sent.length = 0;
+
+  const first = room.handleKcAnswer(client, answer);
+  await reviewStarted;
+  const second = room.handleKcAnswer(client, answer);
+  releaseReview();
+  await Promise.all([first, second]);
+
+  assert.equal(store._calls.review.length, 1);
+  assert.equal(store._calls.shiftCase.length, 1);
+  assert.equal(store._calls.attempt.length, 1);
+  assert.equal(room.kcShifts.get('s1').totals.completedCases, 1);
+  assert.equal(client.sent.filter(s => s.type === 'kcResult').length, 1);
+  assert.equal(client.sent.filter(s => s.type === 'kcReject' && s.msg.reason === 'no_case').length, 1);
+});
+
+test('an old attempt token cannot consume a repeated question in a later case', async () => {
+  const store = fakeStore();
+  const room = makeRoom(store, { gold: 100 });
+  const client = makeClient();
+  room.kcShifts.set('s1', {
+    id: 77, subjectId: 5, type: 'quick', entry: 20, planned: 10, ordinal: 2, lastAtomId: 1,
+    confusionPairs: [], remediation: [], totals: totals(), corrective: null,
+    pending: { atomId: 1, questionId: 8, attemptToken: '77:2:8', format: 'multiple_choice', correctIndex: 0, reason: 'weakness', explanation: 'x', confusionPairId: null, startedAt: Date.now() },
+  });
+
+  await room.handleKcAnswer(client, { questionId: 8, attemptToken: '77:1:8', index: 0, responseMs: 500 });
+
+  assert.equal(client.sent[0].type, 'kcReject');
+  assert.equal(client.sent[0].msg.reason, 'stale');
+  assert.equal(room.kcShifts.get('s1').pending.attemptToken, '77:2:8', 'current case remains available');
+  assert.equal(store._calls.review.length, 0);
 });
 
 test('a wrong answer opens remediation and breaks the streak', async () => {
@@ -308,6 +419,49 @@ test('answering the corrective records it open and continues the shift', async (
   assert.ok(client.sent.find(s => s.type === 'kcCorrectiveResult'));
   assert.equal(room.kcShifts.get('s1').corrective, null);
   assert.ok(client.sent.find(s => s.type === 'kcCase'), 'next case served after the corrective');
+});
+
+test('a corrective remains mandatory through wrong, wrong, correct answers', async () => {
+  const store = fakeStore();
+  const resolved = [];
+  store.resolveRemediation = async (id, patch) => { resolved.push({ id, patch }); return { updated: true }; };
+  const room = makeRoom(store, { gold: 100 });
+  const client = makeClient();
+  const corrective = {
+    remId: 55, atomId: 1, correctIndex: 1, attemptToken: '77:corrective:3:8',
+    consequence: 'FIFO breaks the stack.', decisive: 'Stacks are LIFO.',
+    prompt: 'Which order?', answers: ['FIFO', 'LIFO'],
+  };
+  room.kcShifts.set('s1', {
+    id: 77, subjectId: 5, type: 'standard', entry: 40, planned: 20, ordinal: 3, lastAtomId: 1,
+    confusionPairs: [], remediation: [], pending: null, totals: totals({ completedCases: 3 }), corrective,
+  });
+
+  await room.handleKcCorrective(client, { attemptToken: corrective.attemptToken, index: 0 });
+  await room.handleKcCorrective(client, { attemptToken: corrective.attemptToken, index: 0 });
+  assert.equal(room.kcShifts.get('s1').corrective, corrective, 'wrong answers retain the corrective');
+  assert.equal(client.sent.filter(s => s.type === 'kcCase').length, 0, 'no later case is served after a miss');
+  assert.equal(client.sent.filter(s => s.type === 'kcCorrective' && s.msg.retry).length, 2);
+
+  await room.handleKcCorrective(client, { attemptToken: corrective.attemptToken, index: 1 });
+  assert.equal(room.kcShifts.get('s1').corrective, null);
+  assert.equal(client.sent.filter(s => s.type === 'kcCase').length, 1, 'correct answer releases the next case');
+  assert.deepEqual(resolved.map(entry => entry.patch.correctivePassed), [false, false, true]);
+});
+
+test('a stale corrective token cannot answer the current corrective', async () => {
+  const room = makeRoom(fakeStore(), { gold: 100 });
+  const client = makeClient();
+  room.kcShifts.set('s1', {
+    id: 77, subjectId: 5, type: 'standard', entry: 40, planned: 20, ordinal: 3,
+    confusionPairs: [], remediation: [], pending: null, totals: totals(),
+    corrective: { correctIndex: 1, attemptToken: 'current', answers: ['a', 'b'] },
+  });
+
+  await room.handleKcCorrective(client, { attemptToken: 'old', index: 1 });
+  assert.equal(client.sent[0].type, 'kcReject');
+  assert.equal(client.sent[0].msg.reason, 'stale');
+  assert.equal(room.kcShifts.get('s1').corrective.attemptToken, 'current');
 });
 
 test('a corrective answer with nothing pending is rejected', async () => {

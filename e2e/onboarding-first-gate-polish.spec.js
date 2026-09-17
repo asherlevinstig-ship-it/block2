@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const { registerAndPlay, completeTownArrival, craftRoadReadyStarter } = require('./helpers/auth-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -35,43 +35,35 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await expect(page.locator('#rewardpanel')).toContainText('TRAINING COMPLETE');
   await expect(page.locator('#rewardpanel')).toContainText('MARA VALE');
   await clickButtonById(page, 'trainingcontinue');
+  await completeTownArrival(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
-    label:'Tutorial Guide',
-    text:'Accept Mara’s first quest',
+    label:'First Hands',
   });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text?.toLowerCase())).toContain('gather 6 logs');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().guidance?.target?.label)).toBe('Mara Vale');
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'accept',giver:'Mara Vale',role:'guide'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('First Hands');
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('gather logs');
+  await expect(page.locator('#currentquest .activequest-open')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text?.toLowerCase())).toContain('gather 6 logs');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().guidance)).toMatchObject({
+    kind:'tracked-story',
+    approximate:false,
+    target:{label:'North Gate',dimension:'overworld'},
+  });
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney',{action:'prepareFirstQuest'}));
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'claim'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(2);
 
   await expect(page.locator('#rewardwin')).toBeVisible();
   await clickButtonById(page, 'rewardclose');
-  await expect(page.locator('#pathselect')).toBeVisible();
-  await page.locator('.pathselect-card[data-path="shadow"]').click();
-  await expect(page.locator('#awakeningwin')).toBeVisible();
-  await clickButtonById(page, 'awakeningbegin');
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
-  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useFirstAbility());
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTutorialDone)).toBe(true);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({
-    label:'CHOOSE JOB',
-    type:'choose_job',
-  });
-  await page.locator('#jobchoicelater').click();
-  await expect(page.locator('#pathselect')).toBeHidden();
-
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('shadow');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({label:'TALK TO MARA',type:'track_npc'});
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'accept',giver:'Mara Vale',role:'guide'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('Road Ready');
-  if(await page.evaluate(()=>quest&&quest.craftPending)){
-    await page.evaluate(()=>BlockcraftGameContext.requireModule('menus').activateCraftShortcut(I.WOOD_SWORD));
-    await page.locator('#craftarea > .slot').dispatchEvent('mousedown',{button:0});
-    await expect.poll(()=>page.evaluate(()=>quest&&quest.craftPending)).toBe(false);
-  }
+  await craftRoadReadyStarter(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(122))).toBe(1);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('defeat 3 monsters');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text?.toLowerCase())).toContain('defeat 3 monsters');
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney',{action:'completeRoadReady'}));
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'claim'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(3);
@@ -86,4 +78,8 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().compassTarget)).toMatchObject({
     label:'First E-rank Gate',
   });
+  await expect.poll(() => page.evaluate(() => {
+    const status=window.__BLOCKCRAFT_E2E__.status(),guide=status.guidance?.target,compass=status.compassTarget;
+    return guide&&compass&&guide.x===compass.x&&guide.z===compass.z?'match':JSON.stringify({guide,compass,guidance:status.guidance,current:status.currentObjectiveHud});
+  })).toBe('match');
 });

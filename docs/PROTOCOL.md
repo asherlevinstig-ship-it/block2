@@ -130,7 +130,7 @@ handler — they're short and grouped by system in `rooms/*.mixin.js`.
 | `blacksmithReforge` / `blacksmithSalvage` | reforge modifiers and salvage returns |
 | `prospect` | Hunter-level ore survey (level-gated, on cooldown) |
 | `jobContract` | retired compatibility route; active requests are rejected while jobs are disabled |
-| `lootRecovery` | reclaim gear banked when the inventory was full |
+| `lootRecovery` | list or reclaim gear banked when the inventory was full; state reports the 12-slot counter and persisted backlog count |
 
 ---
 

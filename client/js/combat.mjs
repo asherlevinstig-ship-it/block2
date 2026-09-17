@@ -1434,8 +1434,7 @@ function syncLocalTutorialsToServer(){
     markTutorialComplete(key,TUTORIAL_VERSIONS[key]);
   }
 }
-function cancelOnboardingForProfileRestore(){
-  if(dim==='tutorial') exitOnboardingRoom(false);
+function clearOnboardingClientState(){
   onboardingActive=false;
   onboardingArrived=false;
   document.body.classList.remove('onboarding');
@@ -1446,6 +1445,10 @@ function cancelOnboardingForProfileRestore(){
   tutorialDummyGroup.visible=false;
   if(tutorialSuccessTimer){clearTimeout(tutorialSuccessTimer);tutorialSuccessTimer=0;}
   if(tutorialSuccessEl)tutorialSuccessEl.classList.add('hidden');
+}
+function cancelOnboardingForProfileRestore(){
+  if(dim==='tutorial') exitOnboardingRoom(false);
+  clearOnboardingClientState();
 }
 let pathChoiceOpen=false,pathChoiceDismissedThisSession=false,pendingPathConfirmation='';
 let jobChoiceOpen=false;
@@ -5316,6 +5319,12 @@ function requestPointerLockSafe(onFail=enterPlayFallback){
     return false;
   }
 }
+function upgradeFallbackPointerLock(reason='input'){
+  if(!lockFallback||cursorReleased||pointerLockRequestPending||document.pointerLockElement===renderer.domElement||isTouchGameplayDevice())return false;
+  gameplayInputDebug('pointerlock.upgrade-fallback',{reason});
+  requestPointerLockSafe(null);
+  return true;
+}
 const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,questionsPlay:questionsplaybtn,register:registerbtn,logout:logoutbtn,apiUrl});
 const AUTH=AUTH_UI.state;
 const openingCinematicReady=globalThis.BlockcraftOpeningReady&&typeof globalThis.BlockcraftOpeningReady.then==='function'?globalThis.BlockcraftOpeningReady:Promise.resolve();
@@ -5438,7 +5447,7 @@ function populateAdminItemOptions(){
   }
   const rows=Object.entries(ITEMS||{})
     .map(([id,item])=>({id:Number(id)||0,name:String(item&&item.name||'Item '+id)}))
-    .filter(row=>row.id>0&&row.name)
+    .filter(row=>row.id>0&&row.name&&![B.BEDROCK,B.BARRIER].includes(row.id))
     .sort((a,b)=>a.name.localeCompare(b.name)||a.id-b.id);
   for(const row of rows){
     const opt=document.createElement('option');
@@ -5819,8 +5828,12 @@ function gameplayInputActive(){
 function isWorldPointerTarget(target){
   return target===renderer.domElement||target===document.body||target===document.documentElement;
 }
+function mirrorPreviewBlocksMovement(){
+  const preview=globalThis.BlockcraftAppearancePreview;
+  return !!(preview&&preview.active&&preview.active());
+}
 function gameplayCameraInputAllowed(){
-  if(worldLoading)return false;
+  if(worldLoading||mirrorPreviewBlocksMovement())return false;
   const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
@@ -5829,7 +5842,7 @@ function gameplayCameraInputAllowed(){
   return !!(locked&&!cursorReleased&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
 }
 function gameplayCameraResumeAllowed(){
-  if(worldLoading)return false;
+  if(worldLoading||mirrorPreviewBlocksMovement())return false;
   const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
@@ -6032,6 +6045,12 @@ addEventListener('keydown', e=>{
     return;
   }
   const gameInput=gameplayInputActive();
+  // Key presses also carry browser user activation. This recovers full 360°
+  // mouse-look after automatic login or a question modal even when the player
+  // starts moving before clicking the world again.
+  if(!e.repeat&&gameInput&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){
+    upgradeFallbackPointerLock('keydown:'+e.code);
+  }
   if(!e.repeat&&gameInput&&AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()&&globalThis.BlockcraftDirectorCamera){
     const director=globalThis.BlockcraftDirectorCamera;
     if(e.code==='F10'){
@@ -6308,9 +6327,18 @@ function primaryAction(){
       }
       attackMob(mob); mouseL=true; return;
     }
-    const rival=remoteUnderCrosshair();
+    // Acquire hunters slightly beyond authoritative melee reach so an intended
+    // player strike never falls through to mining the block behind them. The
+    // server still owns range, line-of-sight, team, and safe-zone validation.
+    const rival=remoteUnderCrosshair(6);
     if(rival){
       attackCd=.45; suppressMine=true; mouseL=true;
+      const rivalPos=rival.remote&&rival.remote.grp&&rival.remote.grp.position;
+      if(dim==='overworld'&&!NET.dgn&&(isTownLand(player.pos.x,player.pos.z)||
+        rivalPos&&isTownLand(rivalPos.x,rivalPos.z))){
+        showName('Town is a combat safe zone');
+        return;
+      }
       const p=rival.remote.grp.position;
       burst(p.x, p.y+1.1, p.z, [1,.82,.18], 6, 1.5, 1.1, .3);
       if(activeAegisBounty()) NET.room.send('pvpBountyHit',{sid:rival.sid});
@@ -6978,6 +7006,14 @@ function nearbyInteractionPrompt(){
   if(discovery&&['rare_plant','lore_tablet','fishing_pool','puzzle_shrine','rain_bloom','storm_crystal','sun_dial','traveling_merchant'].includes(discovery.type)){
     push({key:'G',title:String(discovery.name||discovery.type||'Discovery').replace(/_/g,' '),small:'Investigate nearby discovery',priority:78},0);
   }
+  const fantasyObjective=nearbyFantasyStructureObjective(5);
+  if(fantasyObjective)push({key:'G',title:fantasyObjective.label,small:fantasyObjective.verb+' · '+fantasyObjective.progress,priority:86},fantasyObjective.distance);
+  const fantasyStructure=nearbyFantasyStructure(7);
+  if(fantasyStructure){
+    const completed=globalThis.BlockcraftFantasyStructureClears&&globalThis.BlockcraftFantasyStructureClears.has(fantasyStructure.id);
+    const daily=globalThis.BlockcraftFantasyStructureDaily,dailyReplay=completed&&daily&&!daily.claimed&&daily.siteId===fantasyStructure.id;
+    push({key:'G',title:dailyReplay?'DAILY · '+fantasyStructure.name:fantasyStructure.name,small:dailyReplay?daily.modifier.name+' · Replay for '+daily.reward.name:completed?'Structure complete · reward chest unlocked':'Begin mini-adventure · '+fantasyStructure.activity,priority:dailyReplay?87:79},0);
+  }
   const knowledgeRuin=nearbyKnowledgeRuin();
   if(knowledgeRuin)push({key:'G',title:'Knowledge Ruin',small:'Start a Recall challenge from the inscription',priority:76},0);
   const hit=raycast(BLOCK_PLACE_REACH);
@@ -7070,6 +7106,27 @@ function nearbyKnowledgeRuin(range=14){
   for(const s of regionalLandmarks)if(s.type==='ruins'){const d=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);if(d<bd){bd=d;best=s;}}
   return best;
 }
+function nearbyFantasyStructure(range=7){
+  if(dim!=='overworld')return null;let best=null,bd=range;
+  for(const s of regionalLandmarks){
+    if(!s.id||!s.id.startsWith('major_fantasy_'))continue;
+    const point=s.interior||s,d=Math.hypot(player.pos.x-point.x,player.pos.z-point.z);
+    if(d<bd&&Math.abs(player.pos.y-(point.y||player.pos.y))<10){bd=d;best=s;}
+  }
+  return best;
+}
+function nearbyFantasyStructureObjective(range=5){
+  if(dim!=='overworld'||!player||!globalThis.BlockcraftFantasyStructureRuns)return null;
+  let best=null,bd=range;
+  for(const [structureId,run] of globalThis.BlockcraftFantasyStructureRuns){
+    if(!run||run.phase!=='objective'||!Array.isArray(run.objectives))continue;
+    for(const objective of run.objectives){
+      const d=Math.hypot(player.pos.x-objective.x,player.pos.y-objective.y,player.pos.z-objective.z);
+      if(d<bd){bd=d;best={...objective,structureId,distance:d,progress:(run.objectivesDone|0)+'/'+(run.objectiveTotal|0)};}
+    }
+  }
+  return best;
+}
 function nearbyTreasureClue(range=18){
   const map=globalThis.BlockcraftTreasureMap;if(!map||!map.targetId||dim!=='overworld')return null;
   const s=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(v=>v.id===map.targetId);return s&&Math.hypot(player.pos.x-s.x,player.pos.z-s.z)<Math.max(range,(s.radius||8)+4)?s:null;
@@ -7116,7 +7173,13 @@ function secondaryAction(){
   if(nearFishingLakePortal()){ if(typeof enterFishingLake==='function')enterFishingLake(); return; }
   if(nearTamingLandExit()){ exitTamingLand(); return; }
   if(nearFishingLakeExit()){ if(typeof exitFishingLake==='function')exitFishingLake(); return; }
-  if(nearTrainingMeadowTownPortal()){ if(typeof exitOnboardingToTown==='function')exitOnboardingToTown(); return; }
+  if(nearTrainingMeadowTownPortal()){
+    // Reaching the departure portal is the final onboarding action. Persist
+    // completion before changing dimensions so a quick reload cannot replay it.
+    if(onboardingActive)completeOnboarding();
+    else if(typeof exitOnboardingToTown==='function')exitOnboardingToTown();
+    return;
+  }
   if(nearQuestionHallTownPortal()){ if(typeof exitQuestionRoomToTown==='function')exitQuestionRoomToTown(); return; }
   if(tryMinerTutorialTrade()) return;
   if(tryFarmerTutorialTrade()) return;
@@ -7197,8 +7260,24 @@ function secondaryAction(){
     if(NET.on&&NET.room)NET.room.send('elderheartExpeditionInteract',{id:expedition.target.id});
     return;
   }
+  const ancientRun=globalThis.BlockcraftAncientCityRun;
+  if(ancientRun&&ancientRun.active&&ancientRun.stage!==4&&dim==='overworld'){
+    const site=(ancientRun.targets||[]).find(t=>Math.hypot(player.pos.x-t.x,player.pos.z-t.z)<=(t.radius||6)&&Math.abs(player.pos.y-t.y)<=8);
+    if(site){if(NET.on&&NET.room)NET.room.send('ancientCityRunInteract',{id:site.id});return;}
+  }
   const treasureClue=nearbyTreasureClue();
   if(treasureClue){if(NET.on&&NET.room)NET.room.send('treasureMapAdvance',{id:treasureClue.id});return;}
+  const fantasyObjective=nearbyFantasyStructureObjective(5);
+  if(fantasyObjective){
+    if(NET.on&&NET.room)NET.room.send('fantasyStructureInteract',{id:fantasyObjective.structureId,objectiveId:fantasyObjective.id});
+    return;
+  }
+  const fantasyStructure=nearbyFantasyStructure(8);
+  if(fantasyStructure){
+    if(NET.on&&NET.room)NET.room.send('fantasyStructureInteract',{id:fantasyStructure.id});
+    else sysMsg('Structure encounters require a connection to the realm.');
+    return;
+  }
   const knowledgeRuin=nearbyKnowledgeRuin();
   if(knowledgeRuin){
     if(NET.on&&NET.room)NET.room.send('recallStart',{yaw:player.yaw,subject:'Computer Science',ruinId:knowledgeRuin.id});
@@ -7229,7 +7308,7 @@ function secondaryAction(){
   if(isOutfitterCounterHit(hit)){ openShopUI('outfitter'); return; }
   if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX && hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6){ openShopUI(); return; }
   if(hit.id===B.CHEST){ openUI('chest', hit.x+','+hit.y+','+hit.z); return; }
-  if(hit.id===B.TABLE){ openUI('table'); return; }
+  if(hit.id===B.TABLE){ openUI('table', hit.x+','+hit.y+','+hit.z); return; }
   if(hit.id===B.FURNACE){ openUI('furnace', hit.x+','+hit.y+','+hit.z); return; }
   if(hit.id===B.EGG_INSULATOR){
     // 1. ride a dragon up to the nest, interact to perch it there
@@ -7361,6 +7440,12 @@ function interactWithVillager(vill){
 addEventListener('mousedown', e=>{
   if(globalThis.chatTyping) return;
   if(!isWorldPointerTarget(e.target)) return;
+  const mirrorPreview=globalThis.BlockcraftAppearancePreview;
+  if((e.button===0||e.button===2)&&mirrorPreview&&mirrorPreview.active&&mirrorPreview.active()&&mirrorPreview.dismiss){
+    e.preventDefault();
+    mirrorPreview.dismiss();
+    return;
+  }
   if(claimMode){
     if(e.button===0) requestLandClaim();
     return;
@@ -7384,8 +7469,7 @@ addEventListener('mousedown', e=>{
   // mouse-look. Upgrade on the next genuine world click while user activation
   // is available; otherwise the hidden cursor eventually reaches a screen edge.
   if(lockFallback&&document.pointerLockElement!==renderer.domElement&&!isTouchGameplayDevice()){
-    gameplayInputDebug('pointerlock.upgrade-fallback');
-    requestPointerLockSafe(null);
+    upgradeFallbackPointerLock('world-click');
   }
   if(e.button===0){
     primaryAction();
@@ -7446,6 +7530,7 @@ gameContext.registerModule('combat', Object.freeze({
   updateBuildPreview,
   consumeMouseLookDelta,
   suppressMouseLook,
+  clearOnboardingClientState,
   gameplayCameraInputAllowed,
   gameplayMovementAllowed,
   gameplayInputDebug,

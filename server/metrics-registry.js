@@ -1,4 +1,5 @@
 const { monitorEventLoopDelay } = require('node:perf_hooks');
+const { getFirestoreUsageSnapshot } = require('./store');
 
 const activeRooms = new Set();
 const loop = monitorEventLoopDelay({ resolution: 20 });
@@ -69,6 +70,10 @@ function summarizeRooms(rooms) {
     outboundPeakClientBytesPerSecond: 0,
     disconnects: 0,
     unexpectedDisconnects: 0,
+    reconnectAttempts: 0,
+    reconnectRecovered: 0,
+    reconnectExpired: 0,
+    disconnectByCode: {},
     persistenceOperations: 0,
     persistenceFailures: 0,
     tickOverBudget: 0,
@@ -106,6 +111,10 @@ function summarizeRooms(rooms) {
     totals.outboundPeakClientBytesPerSecond = Math.max(totals.outboundPeakClientBytesPerSecond, room.outboundPeakClientBytesPerSecond || 0);
     totals.disconnects += room.disconnects || 0;
     totals.unexpectedDisconnects += room.unexpectedDisconnects || 0;
+    totals.reconnectAttempts += room.reconnectAttempts || 0;
+    totals.reconnectRecovered += room.reconnectRecovered || 0;
+    totals.reconnectExpired += room.reconnectExpired || 0;
+    addMetricTotals(totals.disconnectByCode, room.disconnectByCode);
     totals.persistenceOperations += room.persistenceOperations || 0;
     totals.persistenceFailures += room.persistenceFailures || 0;
     totals.tickOverBudget += room.tickOverBudget || 0;
@@ -153,6 +162,10 @@ function groupByShard(rooms) {
     outboundPeakClientBytesPerSecond: room.outboundPeakClientBytesPerSecond || 0,
     disconnects: room.disconnects || 0,
     unexpectedDisconnects: room.unexpectedDisconnects || 0,
+    reconnectAttempts: room.reconnectAttempts || 0,
+    reconnectRecovered: room.reconnectRecovered || 0,
+    reconnectExpired: room.reconnectExpired || 0,
+    disconnectByCode: { ...(room.disconnectByCode || {}) },
   })).sort((a, b) => a.shardId.localeCompare(b.shardId));
 }
 
@@ -178,6 +191,10 @@ function groupByDungeon(rooms) {
     outboundPeakClientBytesPerSecond: room.outboundPeakClientBytesPerSecond || 0,
     disconnects: room.disconnects || 0,
     unexpectedDisconnects: room.unexpectedDisconnects || 0,
+    reconnectAttempts: room.reconnectAttempts || 0,
+    reconnectRecovered: room.reconnectRecovered || 0,
+    reconnectExpired: room.reconnectExpired || 0,
+    disconnectByCode: { ...(room.disconnectByCode || {}) },
     dungeonMobs: room.dungeonMobs || 0,
     visibleMobLinks: room.visibleMobLinks || 0,
     avgVisibleMobsPerClient: room.avgVisibleMobsPerClient || 0,
@@ -219,6 +236,7 @@ function metricsSnapshot() {
       maxMs: round2(loop.max / 1e6),
     },
     totals: summarizeRooms(rooms),
+    firestore: getFirestoreUsageSnapshot(),
     shards: groupByShard(rooms),
     dungeons: groupByDungeon(rooms),
     rooms,
@@ -234,6 +252,21 @@ function duplicateOverworldShards(shards) {
     seen.add(id);
   }
   return [...duplicates].sort();
+}
+
+function compactFirestoreUsage(firestore) {
+  const daily = firestore && firestore.daily || {};
+  return {
+    active: !!(firestore && firestore.active),
+    serverObservedEstimate: true,
+    dayPacific: firestore && firestore.dayPacific || '',
+    observedSince: daily.observedSince || '',
+    reads: daily.reads || 0,
+    writes: daily.writes || 0,
+    deletes: daily.deletes || 0,
+    failedCalls: daily.failedCalls || 0,
+    estimatedFreeQuotaRemaining: { ...(daily.estimatedFreeQuotaRemaining || {}) },
+  };
 }
 
 function readinessSnapshot({ maxEventLoopP99Ms = 500, maxHeapUsedMb = 850 } = {}) {
@@ -255,6 +288,7 @@ function readinessSnapshot({ maxEventLoopP99Ms = 500, maxHeapUsedMb = 850 } = {}
     issues,
     eventLoop: snapshot.eventLoop,
     memory: snapshot.memory,
+    firestore: compactFirestoreUsage(snapshot.firestore),
     totals: {
       rooms: snapshot.totals.rooms,
       clients: snapshot.totals.clients,
@@ -263,6 +297,10 @@ function readinessSnapshot({ maxEventLoopP99Ms = 500, maxHeapUsedMb = 850 } = {}
       persistenceFailures: snapshot.totals.persistenceFailures,
       tickOverBudget: snapshot.totals.tickOverBudget,
       unexpectedDisconnects: snapshot.totals.unexpectedDisconnects,
+      reconnectAttempts: snapshot.totals.reconnectAttempts,
+      reconnectRecovered: snapshot.totals.reconnectRecovered,
+      reconnectExpired: snapshot.totals.reconnectExpired,
+      disconnectByCode: snapshot.totals.disconnectByCode,
       outboundBytesPerClientPerSecond: snapshot.totals.outboundBytesPerClientPerSecond,
     },
     shards: snapshot.shards.map(shard => ({
@@ -275,6 +313,10 @@ function readinessSnapshot({ maxEventLoopP99Ms = 500, maxHeapUsedMb = 850 } = {}
       tickMaxMs: shard.tickMaxMs,
       persistenceFailures: shard.persistenceFailures,
       unexpectedDisconnects: shard.unexpectedDisconnects,
+      reconnectAttempts: shard.reconnectAttempts,
+      reconnectRecovered: shard.reconnectRecovered,
+      reconnectExpired: shard.reconnectExpired,
+      disconnectByCode: shard.disconnectByCode,
     })),
     dungeons: snapshot.dungeons.map(dungeon => ({
       gateId: dungeon.gateId,
@@ -286,6 +328,10 @@ function readinessSnapshot({ maxEventLoopP99Ms = 500, maxHeapUsedMb = 850 } = {}
       tickMaxMs: dungeon.tickMaxMs,
       persistenceFailures: dungeon.persistenceFailures,
       unexpectedDisconnects: dungeon.unexpectedDisconnects,
+      reconnectAttempts: dungeon.reconnectAttempts,
+      reconnectRecovered: dungeon.reconnectRecovered,
+      reconnectExpired: dungeon.reconnectExpired,
+      disconnectByCode: dungeon.disconnectByCode,
     })),
   };
 }

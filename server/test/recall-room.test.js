@@ -108,6 +108,20 @@ test('Recall database lookup falls back on timeout, failure and an empty bank',a
   assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>question},{},{},50),question);
 });
 
+test('Recall carries selected database identifiers into asynchronous attempt analytics',()=>{
+  const room=Object.create(recall),calls=[];
+  room.profileFor=()=>null;
+  const original=require('../auth').getAuthService().getGameQuestionStore;
+  require('../auth').getAuthService().getGameQuestionStore=()=>({recordRecallAttempt:(_account,input)=>{calls.push(input);return Promise.resolve({recorded:true});}});
+  try{
+    room.recordRecallAnalytics({_account:{id:'student_9',role:'student'}},{databaseQuestionId:91,subjectId:5,scopeSchoolId:12,subject:'Computer Science',stage:'KS3',topic:'Binary',difficulty:1,spec:'number-systems',prompt:'Question?',answers:['A','B','C','D'],correct:0,startedAt:Date.now(),source:'recall'},0,true);
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].questionId,91);
+    assert.equal(calls[0].subjectId,5);
+    assert.equal(calls[0].scopeSchoolId,12);
+  }finally{require('../auth').getAuthService().getGameQuestionStore=original;}
+});
+
 function recallClientHarness(){
   const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
   const timers=new Map(),sent=[],messages=[],nodes=new Map();let seq=0;

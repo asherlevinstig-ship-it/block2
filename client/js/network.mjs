@@ -17,7 +17,10 @@ export function createNetworkController(options) {
   // or a reconnect-after-reload abandons itself and never reaches `connected`. A successful
   // connect still resolves in ~1-2s regardless of these ceilings.
   const resumeTimeout = Math.max(1, options.resumeTimeout | 0 || 7000);
-  const joinTimeout = Math.max(1, options.joinTimeout | 0 || 10000);
+  // A production cold start may spend tens of seconds restoring the persisted
+  // world. Do not abandon the seat request while matchmaking correctly waits for
+  // that single room creation to finish.
+  const joinTimeout = Math.max(1, options.joinTimeout | 0 || 45000);
   const joinAttempts = Math.max(1, options.joinAttempts | 0 || 6);
   const liveReconnectTimeout = Math.max(1, options.liveReconnectTimeout | 0 || 4000);
   const reconnectAttempts = Math.max(1, options.reconnectAttempts | 0 || 2);

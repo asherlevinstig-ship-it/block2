@@ -24,6 +24,7 @@ function safeKcValue(v) {
 class KnowledgeChallengeMixin {
   initKnowledgeChallengeState() {
     this.kcShifts = new Map(); // sessionId -> shift state
+    this.kcStarting = new Map(); // sessionId -> synchronous start reservation
   }
   kcConfig() { return this._kcConfig || KC_CONFIG; }
   kcAccountFor(client) { return (client && client._account) || null; }
@@ -114,7 +115,7 @@ class KnowledgeChallengeMixin {
   async handleKcStart(client, m = {}) {
     if (!client) return;
     if (typeof this.rateLimited === 'function' && this.rateLimited(client, 'kcStart', 3, 6)) return client.send('kcReject', { reason: 'rate' });
-    if (this.kcShifts.has(client.sessionId)) return client.send('kcReject', { reason: 'active' });
+    if (this.kcShifts.has(client.sessionId) || this.kcStarting.has(client.sessionId)) return client.send('kcReject', { reason: 'active' });
     const store = this.kcStore(), account = this.kcAccountFor(client);
     const rec = typeof this.profileFor === 'function' ? this.profileFor(client) : null;
     if (!store || !account || !rec || !rec.prof) {
@@ -129,8 +130,9 @@ class KnowledgeChallengeMixin {
     const entry = Math.max(0, this.kcConfig().entry[type] | 0);
     if ((rec.prof.gold | 0) < entry) return client.send('kcReject', { reason: 'gold', gold: rec.prof.gold | 0, entry });
 
-    let subject = null;
     const subjectQuery = { subject: m.subject, subjectId: m.subjectId, fallbackSubject: m.fallbackSubject || 'Computer Science' };
+    const reservation = { cancelled: false };
+    this.kcStarting.set(client.sessionId, reservation);
     this.kcTrace(client, 'start.request', {
       accountId: account && account.id,
       schoolId: account && account.schoolId,
@@ -140,79 +142,100 @@ class KnowledgeChallengeMixin {
       fallbackSubject: subjectQuery.fallbackSubject,
     });
     try {
-      subject = typeof store.findPlayableChallengeSubject === 'function'
-        ? await store.findPlayableChallengeSubject(account, subjectQuery)
-        : await store.resolvePlaySubject(account, subjectQuery);
-    } catch (e) {
-      this.kcTrace(client, 'start.subject-error', { message: e && e.message || String(e) });
-    }
-    if (!subject) {
-      let debug = null;
-      try { if (typeof store.debugChallengeSubjects === 'function') debug = await store.debugChallengeSubjects(account, subjectQuery); } catch (e) { debug = { error: e && e.message || String(e) }; }
-      this.kcTrace(client, 'start.no-subject', { query: subjectQuery, debug });
-      return client.send('kcReject', { reason: 'subject', requestedSubject: subjectQuery.subject || '', fallbackSubject: subjectQuery.fallbackSubject, debug });
-    }
-    let atoms = [];
-    try { atoms = (await store.loadStudentAtoms(account, { subjectId: subject.subjectId, playableOnly: true })).atoms; } catch (e) {
-      this.kcTrace(client, 'start.atoms-error', { subject, message: e && e.message || String(e) });
-    }
-    let contentDebug = null;
-    try { if (typeof store.debugChallengeSubjects === 'function') contentDebug = await store.debugChallengeSubjects(account, subjectQuery); } catch (e) { contentDebug = { error: e && e.message || String(e) }; }
-    this.kcTrace(client, 'start.resolved', {
-      subject,
-      playableAtoms: atoms && atoms.length || 0,
-      debug: contentDebug,
-    });
-    if (!atoms || !atoms.length) {
-      return client.send('kcReject', {
-        reason: 'no_content',
-        subjectId: subject.subjectId,
-        subjectName: subject.subjectName || m.subject || '',
-        requestedSubject: m.subject || '',
-        fallbackSubject: m.fallbackSubject || 'Computer Science',
+      let subject = null;
+      try {
+        subject = typeof store.findPlayableChallengeSubject === 'function'
+          ? await store.findPlayableChallengeSubject(account, subjectQuery)
+          : await store.resolvePlaySubject(account, subjectQuery);
+      } catch (e) {
+        this.kcTrace(client, 'start.subject-error', { message: e && e.message || String(e) });
+      }
+      if (reservation.cancelled) return;
+      if (!subject) {
+        let debug = null;
+        try { if (typeof store.debugChallengeSubjects === 'function') debug = await store.debugChallengeSubjects(account, subjectQuery); } catch (e) { debug = { error: e && e.message || String(e) }; }
+        this.kcTrace(client, 'start.no-subject', { query: subjectQuery, debug });
+        return client.send('kcReject', { reason: 'subject', requestedSubject: subjectQuery.subject || '', fallbackSubject: subjectQuery.fallbackSubject, debug });
+      }
+      let atoms = [];
+      try { atoms = (await store.loadStudentAtoms(account, { subjectId: subject.subjectId, playableOnly: true })).atoms; } catch (e) {
+        this.kcTrace(client, 'start.atoms-error', { subject, message: e && e.message || String(e) });
+      }
+      if (reservation.cancelled) return;
+      let contentDebug = null;
+      try { if (typeof store.debugChallengeSubjects === 'function') contentDebug = await store.debugChallengeSubjects(account, subjectQuery); } catch (e) { contentDebug = { error: e && e.message || String(e) }; }
+      this.kcTrace(client, 'start.resolved', {
+        subject,
+        playableAtoms: atoms && atoms.length || 0,
         debug: contentDebug,
       });
-    }
+      if (!atoms || !atoms.length) {
+        return client.send('kcReject', {
+          reason: 'no_content',
+          subjectId: subject.subjectId,
+          subjectName: subject.subjectName || m.subject || '',
+          requestedSubject: m.subject || '',
+          fallbackSubject: m.fallbackSubject || 'Computer Science',
+          debug: contentDebug,
+        });
+      }
 
-    // Debit the stake before serving anything.
-    rec.prof.gold = Math.max(0, (rec.prof.gold | 0) - entry);
-    if (typeof this.recordEconomyGold === 'function') this.recordEconomyGold(client, -entry, 'knowledge_challenge', 'shift_entry', { shiftType: type });
-    if (this.dirtyPlayers) this.dirtyPlayers.add(rec.token);
-    this.kcSyncGold(client, rec.prof);
+      let confusionPairs = [];
+      try { confusionPairs = await store.loadConfusionPairs(subject.subjectId); } catch (_) {}
+      if (reservation.cancelled) return;
 
-    let shiftId = 0;
-    try {
-      const started = await store.startShift(account, {
-        subjectId: subject.subjectId, shiftType: type,
-        plannedCases: KC.SHIFT_TYPES[type].cases, entryCostGold: entry,
+      // Re-resolve the authoritative profile at commitment time. The reservation
+      // prevents a second start from crossing this debit while content loads.
+      const commitRec = typeof this.profileFor === 'function' ? this.profileFor(client) : null;
+      if (!commitRec || !commitRec.prof || commitRec.token !== rec.token) return client.send('kcReject', { reason: 'unavailable' });
+      if ((commitRec.prof.gold | 0) < entry) return client.send('kcReject', { reason: 'gold', gold: commitRec.prof.gold | 0, entry });
+      commitRec.prof.gold = Math.max(0, (commitRec.prof.gold | 0) - entry);
+      if (typeof this.recordEconomyGold === 'function') this.recordEconomyGold(client, -entry, 'knowledge_challenge', 'shift_entry', { shiftType: type });
+      if (this.dirtyPlayers) this.dirtyPlayers.add(commitRec.token);
+      this.kcSyncGold(client, commitRec.prof);
+
+      let shiftId = 0;
+      try {
+        const started = await store.startShift(account, {
+          subjectId: subject.subjectId, shiftType: type,
+          plannedCases: KC.SHIFT_TYPES[type].cases, entryCostGold: entry,
+        });
+        shiftId = started && started.id || 0;
+      } catch (_) {}
+      if (reservation.cancelled || this.kcStarting.get(client.sessionId) !== reservation) {
+        commitRec.prof.gold = Math.min(this.kcConfig().maxGold, (commitRec.prof.gold | 0) + entry);
+        if (typeof this.recordEconomyGold === 'function') this.recordEconomyGold(client, entry, 'knowledge_challenge', 'shift_entry_refund', { shiftType: type });
+        if (this.dirtyPlayers) this.dirtyPlayers.add(commitRec.token);
+        this.kcSyncGold(client, commitRec.prof);
+        if (shiftId) { try { await store.endShift(shiftId, { status: 'abandoned', payoutGold: 0, totals: freshTotals() }); } catch (_) {} }
+        return;
+      }
+
+      const shift = {
+        id: shiftId, subjectId: subject.subjectId, type, entry,
+        planned: KC.SHIFT_TYPES[type].cases, ordinal: 0, lastAtomId: null,
+        pending: null, corrective: null, confusionPairs, remediation: [], totals: freshTotals(),
+      };
+      this.kcShifts.set(client.sessionId, shift);
+      this.kcTrace(client, 'start.shift-created', {
+        shiftId,
+        subjectId: shift.subjectId,
+        subjectName: subject.subjectName || '',
+        playableAtoms: atoms.length,
+        shiftType: type,
+        entry,
       });
-      shiftId = started && started.id || 0;
-    } catch (_) {}
-    let confusionPairs = [];
-    try { confusionPairs = await store.loadConfusionPairs(subject.subjectId); } catch (_) {}
-
-    const shift = {
-      id: shiftId, subjectId: subject.subjectId, type, entry,
-      planned: KC.SHIFT_TYPES[type].cases, ordinal: 0, lastAtomId: null,
-      pending: null, corrective: null, confusionPairs, remediation: [], totals: freshTotals(),
-    };
-    this.kcShifts.set(client.sessionId, shift);
-    this.kcTrace(client, 'start.shift-created', {
-      shiftId,
-      subjectId: shift.subjectId,
-      subjectName: subject.subjectName || '',
-      playableAtoms: atoms.length,
-      shiftType: type,
-      entry,
-    });
-    client.send('kcShiftStarted', {
-      shiftId, shiftType: type, planned: shift.planned, entry, gold: rec.prof.gold | 0,
-      subjectId: subject.subjectId,
-      subjectName: subject.subjectName || '',
-      requestedSubject: subject.requestedSubject || m.subject || '',
-      subjectFallback: !!subject.subjectFallback,
-    });
-    await this.kcServeNextCase(client, shift);
+      client.send('kcShiftStarted', {
+        shiftId, shiftType: type, planned: shift.planned, entry, gold: commitRec.prof.gold | 0,
+        subjectId: subject.subjectId,
+        subjectName: subject.subjectName || '',
+        requestedSubject: subject.requestedSubject || m.subject || '',
+        subjectFallback: !!subject.subjectFallback,
+      });
+      await this.kcServeNextCase(client, shift);
+    } finally {
+      if (this.kcStarting.get(client.sessionId) === reservation) this.kcStarting.delete(client.sessionId);
+    }
   }
 
   async kcServeNextCase(client, shift) {
@@ -246,6 +269,7 @@ class KnowledgeChallengeMixin {
     const built = this.kcBuildCase(challenge);
     shift.pending = {
       atomId: pick.atomId, questionId: challenge.questionId, format: challenge.format,
+      attemptToken: `${shift.id}:${shift.ordinal}:${challenge.questionId}`,
       correctIndex: built.correctIndex, grade: built.grade, reason: pick.reason, startedAt: Date.now(),
       explanation: challenge.explanation, confusionPairId: challenge.confusionPairId,
       isRecovery: !!recovery, remId: recovery ? recovery.remId : null,
@@ -255,6 +279,7 @@ class KnowledgeChallengeMixin {
     client.send('kcCase', {
       shiftId: shift.id, ordinal: shift.ordinal, planned: shift.planned,
       atomId: pick.atomId, questionId: challenge.questionId, format: challenge.format,
+      attemptToken: shift.pending.attemptToken,
       prompt: challenge.prompt, answers: built.answers, payload: built.payload,
       reason: pick.reason, recovery: !!recovery,
     });
@@ -295,6 +320,10 @@ class KnowledgeChallengeMixin {
     if (typeof this.rateLimited === 'function' && this.rateLimited(client, 'kcAnswer', 8, 12)) return client.send('kcReject', { reason: 'rate' });
     const pending = shift.pending;
     if (m.questionId != null && (m.questionId | 0) !== pending.questionId) return client.send('kcReject', { reason: 'stale' });
+    if (m.attemptToken != null && String(m.attemptToken) !== pending.attemptToken) return client.send('kcReject', { reason: 'stale' });
+    // Claim the case before the first await so concurrent packets cannot both
+    // grade or persist the same answer.
+    shift.pending = null;
     const store = this.kcStore(), account = this.kcAccountFor(client);
     const answerIndex = m.index | 0;
     const correct = this.kcGrade(pending, m);
@@ -371,7 +400,6 @@ class KnowledgeChallengeMixin {
       }
     }
 
-    shift.pending = null;
     client.send('kcResult', {
       shiftId: shift.id, correct, correctIndex: pending.correctIndex, explanation: pending.explanation,
       atomId: pending.atomId, stage: verdict.state ? verdict.state.stage : null,
@@ -383,10 +411,15 @@ class KnowledgeChallengeMixin {
     // make the player pass a reduced-load question before continuing (template steps 1-3).
     const corrective = correct ? null : this.kcBuildCorrective(pending, answerIndex);
     if (corrective) {
-      shift.corrective = { remId: scheduledRemId, atomId: pending.atomId, correctIndex: corrective.correctIndex };
+      shift.corrective = {
+        remId: scheduledRemId, atomId: pending.atomId, correctIndex: corrective.correctIndex,
+        attemptToken: `${shift.id}:corrective:${shift.ordinal}:${pending.questionId}`,
+        consequence: pending.consequence || '', decisive: pending.explanation || '',
+        prompt: corrective.prompt, answers: corrective.answers,
+      };
       client.send('kcCorrective', {
         shiftId: shift.id, consequence: pending.consequence || '', decisive: pending.explanation || '',
-        prompt: corrective.prompt, answers: corrective.answers,
+        prompt: corrective.prompt, answers: corrective.answers, attemptToken: shift.corrective.attemptToken,
       });
       return;
     }
@@ -402,11 +435,21 @@ class KnowledgeChallengeMixin {
     if (!shift || !shift.corrective) return client && client.send('kcReject', { reason: 'no_corrective' });
     if (typeof this.rateLimited === 'function' && this.rateLimited(client, 'kcAnswer', 8, 12)) return client.send('kcReject', { reason: 'rate' });
     const c = shift.corrective;
+    if (m.attemptToken != null && String(m.attemptToken) !== c.attemptToken) return client.send('kcReject', { reason: 'stale' });
     shift.corrective = null;
     const correct = (m.index | 0) === (c.correctIndex | 0);
     const store = this.kcStore();
     if (store && c.remId) { try { await store.resolveRemediation(c.remId, { status: 'open', stageOfLoop: 1, correctivePassed: correct }); } catch (_) {} }
     client.send('kcCorrectiveResult', { shiftId: shift.id, correct, correctIndex: c.correctIndex });
+    if (!correct) {
+      shift.corrective = c;
+      client.send('kcCorrective', {
+        shiftId: shift.id, attemptToken: c.attemptToken, retry: true,
+        consequence: c.consequence || '', decisive: c.decisive || '',
+        prompt: c.prompt || 'Which is correct?', answers: c.answers || [],
+      });
+      return;
+    }
     if (shift.planned > 0 && shift.totals.completedCases >= shift.planned) return this.kcEndShift(client, 'complete');
     await this.kcServeNextCase(client, shift);
   }
@@ -454,6 +497,11 @@ class KnowledgeChallengeMixin {
 
   // Called on disconnect: forfeit an in-progress shift (the stake was already spent).
   kcAbandon(client) {
+    const starting = client && this.kcStarting && this.kcStarting.get(client.sessionId);
+    if (starting) {
+      starting.cancelled = true;
+      this.kcStarting.delete(client.sessionId);
+    }
     if (client && this.kcShifts && this.kcShifts.has(client.sessionId)) return this.kcEndShift(client, 'abandoned');
   }
 }

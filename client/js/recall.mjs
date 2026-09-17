@@ -4,6 +4,9 @@ const questionHallMarks=[];
 let requestTimer=0,recallRoom=null,recallDim=null;
 function finishRequest(){if(requestTimer)clearTimeout(requestTimer);requestTimer=0;}
 const colors=[0x38bdf8,0xa78bfa,0xfbbf24,0x34d399],QUESTION_HALL_GOAL=10;
+// The server accepts answers within 2.65 blocks so movement replication has some
+// slack. Keep the client activation area large enough to cover the visible pillar.
+const RECALL_PILLAR_TRIGGER_RADIUS=2.25,RECALL_DUNGEON_PILLAR_TRIGGER_RADIUS=1.45;
 
 function clearMeshes(){if(!group)return;scene.remove(group);group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});group=null;}
 function labelColor(i){return '#'+colors[i].toString(16).padStart(6,'0');}
@@ -151,6 +154,15 @@ function reject(m){
   else if(r==='position'){answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Run fully inside the correct pillar to answer.');}
   else {clearRecall();sysMsg(r==='ruin_claimed'?'You have already deciphered this ruin.':r==='ruin_range'?'Move closer to the ancient ruins.':r==='space_changed'?'Location changed while preparing Recall. Press P to try again.':'Recall is no longer available. Press P for a question.');}
 }
+function answerPillarAtPlayer(question){
+  const radius=question&&question.dungeonRecall?RECALL_DUNGEON_PILLAR_TRIGGER_RADIUS:RECALL_PILLAR_TRIGGER_RADIUS;
+  let nearest=null,nearestDistance=radius;
+  for(const pillar of question&&question.pillars||[]){
+    const distance=Math.hypot(player.pos.x-pillar.x,player.pos.z-pillar.z);
+    if(distance<=nearestDistance){nearest=pillar;nearestDistance=distance;}
+  }
+  return nearest;
+}
 function tick(now=performance.now()){
   tickQuestionHallMarks(now);
   if((active||requestTimer||questionHallOpen)&&(!NET.on||recallRoom!==NET.room||recallDim!==dim)){clearRecall();return;}
@@ -159,7 +171,8 @@ function tick(now=performance.now()){
   if(!active)return;
   if(group)group.children.forEach((p,i)=>{p.children[0].material.opacity=.34+Math.sin(now*.004+i)*.12;p.children[1].rotation.z+=.012;p.children[2].intensity=1.5+Math.sin(now*.006+i)*.45;});
   if(answerPending||active.fallback||active.questionHall)return;
-  for(const p of active.pillars)if(Math.hypot(player.pos.x-p.x,player.pos.z-p.z)<1.15){submitAnswer(p.index);break;}
+  const pillar=answerPillarAtPlayer(active);
+  if(pillar)submitAnswer(pillar.index);
 }
 function setMastery(value){if(value&&typeof value==='object')masterySummary=value;}
 if(closeEl)closeEl.addEventListener('click',closeQuestionHall);

@@ -712,6 +712,7 @@ const TOOL_INFO = {
   [I.IRON_SHOVEL]: { cls: 'shovel', tier: 3, dur: 251 }, [I.DIA_SHOVEL]: { cls: 'shovel', tier: 4, dur: 1562 },
   [I.WOOD_SWORD]: { cls: 'sword', tier: 1, dur: 60 }, [I.STONE_SWORD]: { cls: 'sword', tier: 2, dur: 132 },
   [I.IRON_SWORD]: { cls: 'sword', tier: 3, dur: 251 }, [I.DIA_SWORD]: { cls: 'sword', tier: 4, dur: 1562 },
+  [I.WARDEN_CLEAVER]: { cls: 'sword', tier: 5, dur: 2100 },
   [I.WOOD_HOE]: { cls: 'hoe', tier: 1, dur: 60 }, [I.STONE_HOE]: { cls: 'hoe', tier: 2, dur: 132 },
   [I.IRON_HOE]: { cls: 'hoe', tier: 3, dur: 251 }, [I.DIA_HOE]: { cls: 'hoe', tier: 4, dur: 1562 },
 };

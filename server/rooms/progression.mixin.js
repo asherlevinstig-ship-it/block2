@@ -895,12 +895,18 @@ class ProgressionMixin {
     if (!sites.length) return null;
     const idx = Math.floor(W.hash2((salt | 0) + 7109, sites.length * 3571 + (type === 'ancient_map' ? 19 : 7)) * sites.length) % sites.length;
     const s = sites[idx];
+    const network = type === 'ancient_map' && typeof W.caveNetworkSpecs === 'function'
+      ? W.caveNetworkSpecs().find(candidate => candidate.id === s.caveNetworkId)
+      : null;
+    const destination = network && network.entrance || s.entrance || s;
     return {
       targetId: s.id,
       targetType: type === 'ancient_map' ? 'ancient_city' : 'cave',
-      targetName: s.name || (type === 'ancient_map' ? 'Ancient City' : 'Deepmouth Cave'),
-      targetX: s.x | 0,
-      targetZ: s.z | 0,
+      targetName: type === 'ancient_map' ? 'Ancient City Entrance' : (s.name || 'Deepmouth Cave'),
+      targetX: destination.x | 0,
+      targetY: Number.isFinite(destination.y) ? destination.y | 0 : undefined,
+      targetZ: destination.z | 0,
+      targetDimension: 'overworld',
     };
   }
 

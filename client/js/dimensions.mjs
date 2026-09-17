@@ -2219,6 +2219,13 @@ function exitOnboardingRoom(notify=true){
   const toTown=opts.destination==='town'||opts.town===true;
   notify=opts.notify!==false;
   if(dim!=='tutorial') return;
+  // Dimension teardown must also stop the tutorial controller. Previously the
+  // world changed to overworld while onboardingActive remained true, allowing
+  // the tutorial HUD and reconnect handler to restart training in town.
+  try{
+    const combat=gameContext&&gameContext.requireModule&&gameContext.requireModule('combat');
+    if(combat&&combat.clearOnboardingClientState)combat.clearOnboardingClientState();
+  }catch(e){}
   clearOnboardingCropMeshes();
   if(onboardingTownPortal){scene.remove(onboardingTownPortal);onboardingTownPortal=null;}
   const ret=onboardingRoomReturn;
@@ -2404,9 +2411,37 @@ function ensureQuestionHallTownPortal(){
   questionHallTownPortal.add(label);
   scene.add(questionHallTownPortal);
 }
-function enterQuestionRoom(){
+function questionRoomPositionSafe(pos){
+  return !!(pos&&Number.isFinite(+pos.x)&&Number.isFinite(+pos.y)&&Number.isFinite(+pos.z)
+    &&Math.hypot(+pos.x-QUESTION_ROOM.x,+pos.z-QUESTION_ROOM.z)<=QUESTION_ROOM.R+6
+    &&+pos.y>=QUESTION_ROOM.G-3&&+pos.y<=QUESTION_ROOM.G+36);
+}
+function repairQuestionRoomPosition(reason='safety',candidate=null){
+  if(dim!=='questions'||!player||!player.pos)return false;
+  if(questionRoomPositionSafe(player.pos))return false;
+  const before=dimDebugPos(player.pos);
+  const target=questionRoomPositionSafe(candidate)?candidate:{x:QUESTION_ROOM.x+.5,y:QUESTION_ROOM.G+2,z:QUESTION_ROOM.z+3.5};
+  player.pos.set(+target.x,+target.y,+target.z);
+  player.vel.set(0,0,0);
+  player.yaw=Number.isFinite(+target.yaw)?+target.yaw:Math.PI;
+  player.pitch=0;
+  dimDebug('questions.position.recovered',{reason,before,after:dimDebugPos(player.pos),candidate:dimDebugPos(candidate)});
+  if(NET.on&&NET.room)NET.room.send('questionRoomRecovery',{reason,before,after:dimDebugPos(player.pos)});
+  return true;
+}
+let nextQuestionRoomSafetyAt=0;
+function tickQuestionRoomSafety(now=performance.now()){
+  if(dim!=='questions'||now<nextQuestionRoomSafetyAt)return false;
+  nextQuestionRoomSafetyAt=now+750;
+  return repairQuestionRoomPosition('bounds-watchdog');
+}
+function enterQuestionRoom(opts={}){
   dimDebug('questions.enter.request',{allowed:dim==='overworld'});
-  if(dim==='questions')return true;
+  if(dim==='questions'){
+    if(opts.spaceId)NET.dgn=String(opts.spaceId);
+    repairQuestionRoomPosition(opts.resume?'server-resume':'already-active',opts);
+    return true;
+  }
   if(dim!=='overworld'){
     dimDebug('questions.enter.blocked',{reason:'not_overworld'});
     return false;
@@ -2422,17 +2457,18 @@ function enterQuestionRoom(){
   world.id=NET.dgn;
   rebuildAllChunks();refreshTorchMeshes();applyDim();ensureQuestionHallTownPortal();
   // Start well inside the hall, clear of the return portal's automatic trigger.
-  player.pos.set(QUESTION_ROOM.x+.5,QUESTION_ROOM.G+2,QUESTION_ROOM.z+3.5);
+  const spawn=questionRoomPositionSafe(opts)?opts:{x:QUESTION_ROOM.x+.5,y:QUESTION_ROOM.G+2,z:QUESTION_ROOM.z+3.5};
+  player.pos.set(+spawn.x,+spawn.y,+spawn.z);
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
   triggerPlayerArrivalVfx('questions',130);
-  if(NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'questions'});
+  if(NET.on&&NET.room&&!opts.serverSynced)NET.room.send('tutorialEnter',{kind:'questions'});
   dimDebug('questions.enter.complete',{spawn:dimDebugPos(player.pos),questionGrid:dimDebugGrid(world)});
   announceArrivalTitle('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare');
   return true;
 }
-function exitQuestionRoom(){
+function exitQuestionRoom(opts={}){
   dimDebug('questions.exit.request',{allowed:dim==='questions',returnGrid:dimDebugGrid(questionRoomReturn&&questionRoomReturn.world),returnPos:dimDebugPos(questionRoomReturn&&questionRoomReturn.pos)});
   if(dim!=='questions'){
     dimDebug('questions.exit.blocked',{reason:'not_questions'});
@@ -2448,7 +2484,7 @@ function exitQuestionRoom(){
   placePlayerAtTownReturn();
   questionRoomReturn=null;
   triggerPlayerArrivalVfx('town:from-questions',130);
-  if(NET.on&&NET.room)NET.room.send('tutorialExit',{destination:'town'});
+  if(NET.on&&NET.room&&!opts.serverSynced)NET.room.send('tutorialExit',{destination:'town'});
   dimDebug('questions.exit.complete',{after:dimDebugPos(player&&player.pos),world:dimDebugGrid(world)});
   announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   return true;
@@ -2847,6 +2883,7 @@ function gateCompass(){
   return Math.round(Math.hypot(dx,dz))+'m '+COMPASS[(Math.round(a/(Math.PI/4))+8)%8];
 }
 function tickGates(dt, now){
+  tickQuestionRoomSafety(now);
   if(NET.on) netMirrorGate();
   else if(dim==='overworld' && gateSystemUnlocked() && !gate && !dungeon){
     gateTimer-=dt;
@@ -2890,6 +2927,7 @@ gameContext.registerModule('dimensions', Object.freeze({
   townReturnPoint,
   placePlayerAtTownReturn,
   enterQuestionRoom,
+  repairQuestionRoomPosition,
   exitQuestionRoom,
   exitQuestionRoomToTown,
   questionHallTownPortalPoint,

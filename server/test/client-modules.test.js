@@ -12,9 +12,73 @@ const sharedJobs = require('../../shared/job-system');
 const sharedGear = require('../../shared/gear-system');
 const questObjectives = require('../../shared/quest-objectives');
 const npcQuestChains = require('../../shared/npc-quest-chains');
-const { I } = require('../rooms/constants');
+const { I, RECIPES: SERVER_RECIPES, SMELT: SERVER_SMELT } = require('../rooms/constants');
+
+test('dragon eggs surface a persistent, state-aware hatching guide in the game UI',()=>{
+  const css=fs.readFileSync(path.join(__dirname,'../../client/styles.css'),'utf8');
+  const hud=fs.readFileSync(path.join(__dirname,'../../client/js/hud.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
+  assert.match(css,/#dragoneggguide\{/);
+  assert.match(hud,/BlockcraftRefreshDragonEggGuide/);
+  assert.match(networking,/dragonEggGuide\.id='dragoneggguide'/);
+  assert.match(networking,/When it says READY, press <kbd>G<\/kbd> again to hatch/);
+  assert.match(networking,/function refreshDragonEggGuide\(\)/);
+  assert.match(networking,/DRAGON_EGG_TO_TYPE\[stack\.id\]/);
+  assert.match(networking,/Get an Egg Insulator from Mara or a Merchant/);
+  assert.match(networking,/Look at the placed Egg Insulator and press G/);
+});
+
+test('event feed stays readable during combat and guided HUD presentation',()=>{
+  const styles=fs.readFileSync(path.join(__dirname,'../../client/styles.css'),'utf8');
+  assert.match(styles,/#chatlog \.chatline\{[^}]*color:#f3f7fb/);
+  assert.match(styles,/body\.presentation-combat:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #chatlog\{\s*opacity:\.94;pointer-events:auto;transform:none;/);
+  assert.match(styles,/body\.tutorial-hud-active:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #chatlog\{opacity:\.94;pointer-events:auto\}/);
+  assert.doesNotMatch(styles,/body\.presentation-combat[^\{]*#chatlog\{\s*opacity:\.12/);
+});
+
+test('new level 1 hunters can see and use the gate system',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  assert.match(world,/function gateSystemUnlocked\(\)\{ return \(\(S&&S\.lvl\)\|0\) >= 1; \}/);
+});
+
+test('client and server expose the same crafting and smelting catalogue',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8'),start=source.indexOf('const RECIPES = ['),end=source.indexOf('const FUEL',start);
+  assert.ok(start>=0&&end>start);
+  const ctx={B:W.B,I};vm.createContext(ctx);vm.runInContext(source.slice(start,end)+'\nglobalThis.__recipes=RECIPES;globalThis.__smelt=SMELT;',ctx);
+  const signature=recipe=>JSON.stringify({shape:recipe.shape||null,shapeless:recipe.shapeless||null,keys:recipe.keys?Object.entries(recipe.keys).sort():null,out:recipe.out,mirror:!!recipe.mirror,hunterLevel:recipe.hunterLevel||0});
+  assert.equal(JSON.stringify(Array.from(ctx.__recipes,signature).sort()),JSON.stringify(SERVER_RECIPES.map(signature).sort()));
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.__smelt)),JSON.parse(JSON.stringify(SERVER_SMELT)));
+});
+
+test('fantasy objective guidance uses emissive pooled geometry without dynamic point lights',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'../../client/js/frame-loop.mjs'),'utf8');
+  const start=source.indexOf('function makeFantasyObjectiveFx('),end=source.indexOf('function tickExplorationPresentation(',start),section=source.slice(start,end);
+  assert.ok(start>=0&&end>start);
+  assert.match(section,/CylinderGeometry/);
+  assert.match(section,/TorusGeometry/);
+  assert.match(section,/completedObjectiveIds/);
+  assert.doesNotMatch(section,/PointLight/);
+});
 
 const clientModule = name => import(pathToFileURL(path.join(__dirname, '..', '..', 'client', 'js', name)).href);
+
+test('chest controls disable unsupported gear deposits and explain server rejections', () => {
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(menus, /function chestGearStorageUnsupported\(stack\)/);
+  assert.match(menus, /btn\.disabled=gearHeld/);
+  assert.match(menus, /if\(chestGearStorageUnsupported\(s\)\).*Gear stays in your bag/);
+  assert.match(networking, /unsupported_item:'Chests store stackable supplies only\. Gear stays in your bag\.'/);
+});
+
+test('Loot Recovery explains its claim counter, persisted backlog, and expiry policy', () => {
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const rewards = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'gear-rewards.mjs'), 'utf8');
+  assert.match(menus, /lootRecoveryOverflowCount/);
+  assert.match(menus, /Ordinary unlocked drops expire after 7 days/);
+  assert.match(menus, /12-slot counter is full/);
+  assert.match(rewards, /secured this item in the backlog/);
+});
 
 test('renderer uses an sRGB ACES colour pipeline without a post-process pass',async()=>{
   const {configureRendererColorPipeline}=await clientModule('rendering.mjs');
@@ -419,12 +483,37 @@ test('Tutorial meadow has a Town of Beginnings portal arch', () => {
   assert.match(dimensions, /function ensureOnboardingTownPortal\(\)/);
   assert.match(dimensions, /makeTextSprite\('ENTER TOWN','#bfeaff'\)/);
   assert.match(dimensions, /function exitOnboardingToTown\(\)/);
+  assert.match(dimensions, /combat&&combat\.clearOnboardingClientState/);
   assert.match(dimensions, /NET\.room\.send\('tutorialExit',\{destination:'town'\}\)/);
   assert.match(combat, /function nearTrainingMeadowTownPortal\(range=5\.8\)/);
   assert.match(combat, /title:'Town Portal',small:'Enter the Town of Beginnings'/);
-  assert.match(combat, /if\(nearTrainingMeadowTownPortal\(\)\)\{ if\(typeof exitOnboardingToTown==='function'\)exitOnboardingToTown\(\); return; \}/);
+  assert.match(combat, /if\(nearTrainingMeadowTownPortal\(\)\)\{[\s\S]*if\(onboardingActive\)completeOnboarding\(\);[\s\S]*else if\(typeof exitOnboardingToTown==='function'\)exitOnboardingToTown\(\);[\s\S]*return;/);
   assert.match(room, /this\.onMessage\('tutorialExit', \(client, m\) => this\.handleTutorialExit\(client, m\)\)/);
   assert.match(room, /return this\.leaveTutorialDimension\(client, townReturnArray\(\)\)/);
+});
+
+test('Onboarding dimension exit clears stale tutorial state before reconnect', () => {
+  const dimensions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+
+  assert.match(combat, /function clearOnboardingClientState\(\)[\s\S]*onboardingActive=false;[\s\S]*onboardingArrived=false;/);
+  assert.match(dimensions, /function exitOnboardingRoom\(notify=true\)[\s\S]*combat&&combat\.clearOnboardingClientState[\s\S]*dim='overworld';/);
+  assert.match(networking, /if\(onboardingActive&&dim==='tutorial'\)[\s\S]*room\.send\('tutorialEnter',\{kind:'onboarding'\}\);[\s\S]*else if\(onboardingActive\)[\s\S]*cancelOnboardingForProfileRestore\(\);/);
+  assert.match(networking, /if\(dim==='tutorial'&&onboardingActive\)cancelOnboardingForProfileRestore\(\);/);
+});
+
+test('bug reports use HTTP without sending oversized Colyseus messages', () => {
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const start = networking.indexOf('function sendBugReport()');
+  const end = networking.indexOf('function applyBugReportResult(', start);
+  const section = networking.slice(start, end);
+
+  assert.ok(start >= 0 && end > start);
+  assert.match(section, /sendBugReportHttp\(payload,pendingId\)/);
+  assert.match(section, /fetch\(apiUrl\('\/auth\/bug-report'\)/);
+  assert.doesNotMatch(section, /NET\.room\.send\('bugReport'/);
+  assert.doesNotMatch(networking, /bugReportFallbackTimer|sendBugReportHttpFallback/);
 });
 
 test('Town of Beginnings has explainer NPC helpers for major areas', () => {
@@ -759,6 +848,66 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
       assert.equal(world.getB(tablet.x, tablet.y + 2, tablet.z), W.B.LANTERN, `${tablet.id} has a recall/lore marker`);
     }
   }
+  const standable = (x, y, z) => W.isSolid(world.getB(x, y - 1, z)) &&
+    !W.isSolid(world.getB(x, y, z)) && !W.isSolid(world.getB(x, y + 1, z));
+  const standingOptions = (point, radius = 3) => {
+    const out = [];
+    for (let x = Math.floor(point.x) - radius; x <= Math.floor(point.x) + radius; x++)
+      for (let z = Math.floor(point.z) - radius; z <= Math.floor(point.z) + radius; z++)
+        for (let y = Math.max(2, Math.floor(point.y) - 4); y <= Math.min(W.WH - 3, Math.floor(point.y) + 5); y++)
+          if (standable(x, y, z) && Math.hypot(x + .5 - point.x, z + .5 - point.z) <= radius) out.push({ x, y, z });
+    return out;
+  };
+  for (const city of cities) {
+    const net = W.caveNetworkSpecs().find(row => row.id === city.caveNetworkId);
+    const caveIndex = W.caveNetworkSpecs().findIndex(row => row.id === city.caveNetworkId);
+    const cave = W.regionalLandmarkSpecs().filter(site => site.type === 'cave')[caveIndex];
+    const routePoints = [cave, { x: cave.x, y: cave.y, z: cave.z - 28 }, ...net.points, ...net.caverns, city, ...city.tablets, ...city.vaults];
+    const bounds = {
+      minX: Math.min(...routePoints.map(p => p.x)) - 12, maxX: Math.max(...routePoints.map(p => p.x)) + 12,
+      minZ: Math.min(...routePoints.map(p => p.z)) - 12, maxZ: Math.max(...routePoints.map(p => p.z)) + 12,
+      minY: 2, maxY: Math.max(...routePoints.map(p => p.y)) + 8,
+    };
+    const mouth = { x: cave.x, y: cave.y + 1, z: cave.z - 7 };
+    const starts = standingOptions(mouth);
+    assert.ok(starts.length, `${city.id} cave mouth has player standing room`);
+    const queue = [...starts], visited = new Set(starts.map(start => `${start.x},${start.y},${start.z}`));
+    for (let head = 0; head < queue.length; head++) {
+      const cur = queue[head];
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const x = cur.x + dx, z = cur.z + dz;
+        if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) continue;
+        for (const dy of [0, 1, -1]) {
+          const y = cur.y + dy, key = `${x},${y},${z}`;
+          if (y < bounds.minY || y > bounds.maxY || visited.has(key) || !standable(x, y, z)) continue;
+          visited.add(key); queue.push({ x, y, z }); break;
+        }
+      }
+    }
+    const reachable = (point, radius = 4) => {
+      let closest = Infinity, closestCell = null;
+      for (const key of visited) {
+        const [x, y, z] = key.split(',').map(Number);
+        const distance = Math.hypot(x + .5 - point.x, y - point.y, z + .5 - point.z);
+        if (distance < closest) { closest = distance; closestCell = { x, y, z }; }
+        if (distance <= radius) return true;
+      }
+      const cells = [...visited].map(key => key.split(',').map(Number));
+      return { closest, closestCell, visited: visited.size, x: [Math.min(...cells.map(v => v[0])), Math.max(...cells.map(v => v[0]))],
+        y: [Math.min(...cells.map(v => v[1])), Math.max(...cells.map(v => v[1]))], z: [Math.min(...cells.map(v => v[2])), Math.max(...cells.map(v => v[2]))] };
+    };
+    const tabletReachable = reachable(city.tablets[0], 5);
+    for (const [routeIndex, routePoint] of net.points.entries()) {
+      const routeReachable = reachable(routePoint, 5);
+      assert.equal(routeReachable, true, `${city.id} cave route point ${routeIndex} is reachable: ${JSON.stringify(routeReachable)}`);
+      assert.ok(visited.has(`${routePoint.x},${routePoint.y},${routePoint.z}`), `${city.id} exact cave route point ${routeIndex} is connected`);
+    }
+    const cityEntranceKey = `${city.entrance.x},${city.entrance.y},${city.entrance.z}`;
+    assert.ok(visited.has(cityEntranceKey), `${city.id} exact city entrance standing cell ${cityEntranceKey} is connected`);
+    assert.equal(tabletReachable, true, `${city.id} Origin Tablet is reachable by a player-sized body: ${JSON.stringify(tabletReachable)}`);
+    assert.ok(city.vaults.every(vault => reachable(vault, 6) === true), `${city.id} both optional vaults are reachable`);
+    assert.equal(reachable(city.core, 7), true, `${city.id} Ancient Core is reachable from the surface entrance`);
+  }
   const clientWorld = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
@@ -768,6 +917,7 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
   const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   const combatMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'combat.mixin.js'), 'utf8');
   const spawningMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'spawning.mixin.js'), 'utf8');
+  const ancientRunMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'ancient-city-run.mixin.js'), 'utf8');
   const progressionMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'progression.mixin.js'), 'utf8');
   assert.match(clientWorld, /function ancientCitySpecs\(\)/);
   assert.match(clientWorld, /function ancientCityLootTable\(\)/);
@@ -795,7 +945,10 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
   assert.match(spawningMixin, /meta\.underground/);
   assert.match(progressionMixin, /caveSurveySites = new Map/);
   assert.match(room, /treasureMapReject',\{reason:'full'\}/);
-  assert.match(room, /new Map\(\(ancient&&cities\.length \? basePool\.concat\(cities\) : basePool\)\.map\(s=>\[s\.id,s\]\)\)\.values\(\)/);
+  assert.match(room, /action==='ancient_treasure_start'/);
+  assert.match(ancientRunMixin, /Origin Tablet/);
+  assert.match(ancientRunMixin, /finishAncientWardenForParty/);
+  assert.match(ancientRunMixin, /ancientWardenPending/);
   assert.match(networking, /Make room in your inventory before claiming this treasure route/);
   assert.match(menus, /wardenAlarm\(level=1\)/);
   assert.match(networking, /room\.onMessage\('wardenAlarm'/);
@@ -812,7 +965,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   const registerHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.html'), 'utf8');
   const registerJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.js'), 'utf8');
   const splashAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'splash-cinematic.png');
-  const loginBgAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'bggame.png');
+  const loginBgAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'bggame-0ded2d310665.webp');
   const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');
   const authSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'auth.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
@@ -843,16 +996,16 @@ test('client dimensions and server consume the shared grid contract', () => {
     assert.ok(offset > previousModule, `${name} is loaded in runtime order`);
     previousModule = offset;
   }
-  assert.ok(Buffer.byteLength(html) < 26_000, 'index.html remains a small markup and bootstrap shell');
+  assert.ok(Buffer.byteLength(html) < 27_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
   assert.match(html, /id="authpassshow" class="password-toggle" type="button"/);
   assert.match(html, /id="forgotpass" class="forgot-password-link" href="mailto:asherlevin85@gmail.com\?subject=Blockcraft%20password%20reset"/);
   assert.match(html, /class="password-wrap"[\s\S]*id="authpass"/);
-  assert.match(html, /<div class="splash-shot" aria-hidden="true"><img src="\/assets\/bggame\.png"/);
+  assert.match(html, /<div class="splash-shot" aria-hidden="true"><img src="\/assets\/bggame-[0-9a-f]{12}\.webp"/);
   assert.ok(fs.statSync(splashAsset).size > 10_000, 'splash cinematic asset is packaged with the client');
   assert.ok(fs.statSync(loginBgAsset).size > 10_000, 'login background asset is packaged with the client');
-  assert.match(styles, /url\('\/assets\/bggame\.png'\) center\/cover no-repeat/);
+  assert.match(styles, /url\('\/assets\/bggame-[0-9a-f]{12}\.webp'\) center\/cover no-repeat/);
   assert.match(styles, /\.password-wrap #authpass\{width:100%;padding-right:70px\}/);
   assert.match(styles, /\.forgot-password-link\{/);
   assert.match(combatSource, /authpassshow\.addEventListener\('click'/);
@@ -864,7 +1017,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(registerHtml, /id="registerForm"/);
   assert.match(registerHtml, /name="yearGroup"/);
   assert.match(registerHtml, /id="passwordToggle" class="password-toggle" type="button"/);
-  assert.match(registerHtml, /url\('\/assets\/bggame\.png'\) center\/cover no-repeat/);
+  assert.match(registerHtml, /url\('\/assets\/bggame-[0-9a-f]{12}\.webp'\) center\/cover no-repeat/);
   assert.doesNotMatch(registerHtml, /name="school"/);
   assert.match(registerHtml, /find your school from your email address/);
   assert.match(registerJs, /\/auth\/student\/register/);
@@ -1345,6 +1498,14 @@ test('Recall pillars explicitly tell players to run towards the correct answer',
   assert.match(styles, /#recallinstruction/);
 });
 
+test('Recall answer pillars activate across their visible footprint', () => {
+  const recall = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'recall.mjs'), 'utf8');
+  assert.match(recall, /RECALL_PILLAR_TRIGGER_RADIUS=2\.25,RECALL_DUNGEON_PILLAR_TRIGGER_RADIUS=1\.45/);
+  assert.match(recall, /function answerPillarAtPlayer\(question\)[\s\S]*distance<=nearestDistance[\s\S]*return nearest/);
+  assert.match(recall, /const pillar=answerPillarAtPlayer\(active\);\s*if\(pillar\)submitAnswer\(pillar\.index\)/);
+  assert.doesNotMatch(recall, /Math\.hypot\(player\.pos\.x-p\.x,player\.pos\.z-p\.z\)<1\.15/);
+});
+
 test('onboarding resource manifest restores every tutorial log and mature crop', async () => {
   const { onboardingResourceCells, onboardingTreeTarget, isOnboardingTreeLog } = await clientModule('onboarding.mjs');
   const meadow = { x: 100, z: 200, G: 12 };
@@ -1800,7 +1961,8 @@ test('path selection persists and returns directly to town without ability train
   assert.match(combat, /NET\.room\.send\('setPath',\{path\}\)/, 'path choice waits on a dedicated authoritative save request');
   assert.match(networking, /room\.onMessage\('pathResult',[\s\S]*combatApi\.confirmPathSelection\(m\)/, 'the client only completes selection after server confirmation');
   assert.match(networking, /S\.path=serverPath\|\|authPath\|\|'';/, 'login hydration preserves the signed-in profile path when a room snapshot is stale');
-  assert.match(networking, /NET\.room\.send\('setPath',\{path:authPath\}\)/, 'a stale room profile is healed from the durable signed-in profile');
+  assert.match(networking, /if\(!serverPath&&!loginPath&&cachedValidPath&&NET\.on&&NET\.room\)/, 'only a cache-only path heals a genuinely blank server and authenticated profile');
+  assert.match(networking, /NET\.room\.send\('setPath',\{path:authPath\}\)/, 'the cache-only fallback can still heal a genuinely blank durable profile');
   assert.match(combat, /AUTH_UI\.rememberPath\(path\)/, 'confirmed choices update the account-scoped pathway cache immediately');
   assert.match(combat, /AUTH_UI\.savePath\(path\)/, 'path choices also use authenticated profile storage instead of relying only on the room lifecycle');
   assert.match(combat, /result\.reason==='locked'/, 'a pre-existing server pathway is restored instead of reopening the picker');
@@ -1963,6 +2125,7 @@ test('remote player tags receive team helpers without crashing the frame loop',(
 
 test('Recall Cast uses the dedicated P practice hotkey',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
@@ -1972,6 +2135,7 @@ test('Recall Cast uses the dedicated P practice hotkey',()=>{
   assert.doesNotMatch(html,/id="recallanswers"/);
   assert.match(recall,/const source=opts&&opts\.source==='lectern'\?'lectern':\(opts&&opts\.source==='question_hall'\?'question_hall':''\)/);
   assert.doesNotMatch(room,/recallCooldowns|reason:'cooldown'/);
+  assert.match(menus,/if\(action==='recall'\)\{\s*closeQWin\(\);\s*if\(globalThis\.BlockcraftRecall&&typeof globalThis\.BlockcraftRecall\.start==='function'\)globalThis\.BlockcraftRecall\.start\(\);/);
 });
 
 test('Question Hall opens Recall as a modal loop with progress and close',()=>{
@@ -2655,12 +2819,23 @@ test('first town arrival stages the fountain and Question Portal',()=>{
   assert.match(dimensions,/restoreOverworldReturnGrid\(ret,'questions'\)/);
   assert.doesNotMatch(dimensions,/world=\(ret&&ret\.world\)\|\|owWorld\|\|world/);
   assert.match(dimensions,/function exitQuestionRoomToTown\(\)/);
-  assert.match(dimensions,/function enterQuestionRoom\(\)/);
+  assert.match(dimensions,/function enterQuestionRoom\(opts=\{\}\)/);
+  assert.match(dimensions,/function repairQuestionRoomPosition\(reason='safety',candidate=null\)/);
+  assert.match(dimensions,/dimDebug\('questions\.position\.recovered'/);
+  assert.match(dimensions,/NET\.room\.send\('questionRoomRecovery'/);
+  assert.match(dimensions,/tickQuestionRoomSafety\(now\)/);
   assert.match(dimensions,/tutorialEnter',\{kind:'questions'\}/);
   assert.match(dimensions,/tutorialExit',\{destination:'town'\}/);
   assert.match(networking,/m\.kind==='questions'&&dim==='questions'/);
+  assert.match(networking,/const restorePos=\(restoreFishingLake\|\|restoreQuestions\|\|dim==='questions'\)\?null/);
+  assert.match(networking,/dimensionsApi\.enterQuestionRoom\(\{\.\.\.m,resume:true,serverSynced:true\}\)/);
   assert.match(dimensions,/announceArrivalTitle\('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare'\)/);
-  assert.match(dimensions,/enterQuestionRoom,\s*\n {2}exitQuestionRoom,\s*\n {2}exitQuestionRoomToTown,/);
+  assert.match(dimensions,/enterQuestionRoom,\s*\n {2}repairQuestionRoomPosition,\s*\n {2}exitQuestionRoom,\s*\n {2}exitQuestionRoomToTown,/);
+});
+
+test('fresh server joins restore the persisted Question Hall dimension',()=>{
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
+  assert.match(room,/prof\.activeRoom && prof\.activeRoom\.dim === 'questions'[\s\S]*p\.dim = 'tutorial';[\s\S]*this\.tutorialSpaceId\(client, 'questions'\)/);
 });
 
 test('town arrival offers every path with preview and permanent confirmation',()=>{
@@ -2874,10 +3049,14 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.doesNotMatch(world,/onRespawn:\(\)=>\{hp=maxHp\(\);sp=maxSp\(\);hunger=maxHunger\(\);renderBars\(\);\}/);
   assert.match(world,/deathRespawnHandler=\(\)=>\{/);
   assert.match(world,/document\.body\.classList\.add\('death-active'\)/);
+  assert.match(world,/function completeDeathRespawnUi\(opts=\{\}\)[\s\S]*btn\.blur\(\)[\s\S]*document\.body\.classList\.remove\('death-active'\)[\s\S]*resumeGameplayCamera\(\)/);
+  assert.match(world,/completeDeathRespawnUi\(\{resume:needsClick,source:'button'\}\)/);
+  assert.match(world,/gameContext\.registerModule\('world',[\s\S]*completeDeathRespawnUi/);
   assert.match(networking,/Stay as a floating spirit/);
   assert.match(networking,/floating orb-ghost/);
   assert.match(networking,/hp=0; renderBars\(\);[\s\S]*buttonLabel:'RESPAWN IN TOWN'/);
   assert.match(networking,/applyDeathRespawnVitals\(m\)/);
+  assert.match(networking,/worldRespawn[\s\S]*worldApi\.completeDeathRespawnUi\(\{resume:true,source:'worldRespawn'\}\)/);
   assert.doesNotMatch(networking,/worldRespawn[\s\S]*else hp=maxHp\(\)/);
   assert.match(networking,/dungeonSpiritQuit[\s\S]*NETWORK\.returnToPrimary\(\)\.then\(finishReturn\)\.catch\(finishReturn\)/);
   assert.doesNotMatch(networking,/RESPAWN AT GATE/);
@@ -2895,6 +3074,15 @@ test('empty-hand melee uses the full server reach and forgiving block-character 
   assert.match(world,/function mobUnderCrosshair\(range=4\.1\)/);
   assert.match(world,/perp<\(m\.boss\?1\.45:1\.0\)/);
   assert.match(world,/NET\.room\.send\('attack', \{id:mob\.netId\}\)/);
+});
+
+test('player melee targeting cannot fall through to a misleading wrong-tool mining action',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(combat,/const rival=remoteUnderCrosshair\(6\);/);
+  assert.match(combat,/if\(rival\)\{\s*attackCd=\.45; suppressMine=true; mouseL=true;/);
+  assert.match(combat,/isTownLand\(player\.pos\.x,player\.pos\.z\)[\s\S]*showName\('Town is a combat safe zone'\);/);
+  assert.match(world,/function remoteUnderCrosshair\(range=4\.4\)[\s\S]*if\(perp<1\.0 && t<bd\)/);
 });
 
 test('admin quick gate opens a ranked dungeon picker instead of auto-cycling',()=>{
@@ -2976,6 +3164,10 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(world,/serviceObjectiveFor\(type/);
   assert.match(world,/function activeServerObjectiveForGuidance\(\)/);
   assert.match(world,/function serverObjectiveGuidanceTarget\(o\)/);
+  assert.match(frame,/function primaryObjectiveGuideLine\(obj\)/);
+  assert.match(frame,/BlockcraftObjectiveTrackerGuide/);
+  assert.match(world,/function trackerObjectiveGuidanceInfo\(\)/);
+  assert.match(world,/const trackerTarget=trackerObjectiveGuidanceInfo\(\);\s*if\(trackerTarget\)return trackerTarget;/);
   assert.match(world,/function playerStyleGuidanceTargetInfo\(\)/);
   assert.match(world,/playerStyleGuidanceTargetInfo\(\);\s*if\(styleTarget\)return styleTarget;/);
   assert.match(world,/title\.includes\('road ready'\)/);
@@ -2997,11 +3189,13 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(world,/new THREE\.CylinderGeometry\(\.44,\.82,13\.5,18,1,true\)/);
   assert.match(world,/const guideBeaconRing=new THREE\.Mesh\(new THREE\.TorusGeometry/);
   assert.match(world,/guideBeaconBeam\.renderOrder=28/);
-  assert.match(world,/const baseY=guidanceGroundY\(info\.target\.x,info\.target\.z\)/);
+  assert.match(world,/const baseY=Number\.isFinite\(info\.target\.y\)\?info\.target\.y:guidanceGroundY\(info\.target\.x,info\.target\.z\)/);
   assert.match(world,/const guideChevronShape=new THREE\.Shape\(\)/);
   assert.match(world,/const halo=new THREE\.Mesh\(new THREE\.PlaneGeometry\(1\.18,1\.46\)/);
   assert.match(world,/function roundedGuidanceRoute\(route\)/);
   assert.match(world,/function routePoints\(route, spacing=1\.35\)/);
+  assert.match(world,/i\*\(pts\.length-1\)\/\(GUIDE_PATH_MAX-1\)/);
+  assert.doesNotMatch(world,/if\(pts\.length>=GUIDE_PATH_MAX\) return pts/);
   assert.match(world,/const travel=now\/500/);
   assert.match(world,/marker\.group\.rotation\.y=Math\.atan2\(-dx,-dz\)/);
   assert.match(world,/marker\.wisp\.position\.y=\.2\+rise\*\.4/);
@@ -3047,7 +3241,7 @@ test('First Hands guides the player through the first real objective',()=>{
   assert.match(world,/HUB\.northGate\.z\+1\.2/);
   assert.match(world,/function guidanceGroundY\(x,z\)/);
   assert.match(world,/if\(isTownLand\(bx,bz\)\) return TOWN\.G\+1\.08/);
-  assert.match(world,/marker\.group\.position\.set\(p\.x,guidanceGroundY\(p\.x,p\.z\),p\.z\)/);
+  assert.match(world,/marker\.group\.position\.set\(p\.x,Number\.isFinite\(p\.y\)\?p\.y:guidanceGroundY\(p\.x,p\.z\),p\.z\)/);
   assert.match(menus,/Quest accepted: First Hands[\s\S]*north gate/);
   assert.match(menus,/First Hands complete[\s\S]*gold trail back/);
   assert.match(networking,/Quest accepted: First Hands[\s\S]*north gate/);
@@ -3167,7 +3361,7 @@ test('online craft result restores the authoritative inventory snapshot',()=>{
 test('inventory layout sync waits while crafting ingredients are staged',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   assert.match(menus,/\['blockcraft','dungeon'\]\.includes\(NET\.room\.name\)/);
-  assert.match(menus,/\|\|craftCells\.some\(Boolean\)\)return;/);
+  assert.match(menus,/\|\|craftCells\.some\(Boolean\)\|\|\(stagedFurnace/);
 });
 
 test('quick chat uses Tab then click to send instead of hold and release',()=>{
@@ -3762,6 +3956,10 @@ test('quest and job model calculates progress without page globals', async () =>
   const jobs = await clientModule('quests-jobs.mjs');
   assert.equal(jobs.jobLevelFromXp(jobs.jobXpNeed(1)), 2);
   assert.deepEqual(jobs.clampJobContract({ job: 'miner', type: 'mine', need: 2, have: 99, rewardGold: 4, title: 'Stone' }, { miner: {} }).have, 2);
+  const untargeted=jobs.clampJobContract({job:'miner',type:'mine',need:1},{miner:{}});
+  assert.equal(untargeted.targetX,undefined,'an untargeted quest is not silently guided to world origin');
+  const targeted=jobs.clampJobContract({job:'miner',type:'cave_survey',need:1,targetX:0,targetY:-22,targetZ:0,targetDimension:'overworld'},{miner:{}});
+  assert.deepEqual({x:targeted.targetX,y:targeted.targetY,z:targeted.targetZ,dimension:targeted.targetDimension},{x:0,y:-22,z:0,dimension:'overworld'},'exact zero and vertical coordinates survive client normalization');
   const model = jobs.createQuestModel({
     countItem: id => id === 5 ? 3 : 0, utilityUnlocked: () => false, utilityUnlocks: () => [],
     familiarUnlocks: () => [], dragonUnlocks: () => [], mounted: () => false, mountKind: () => '', isDragon: () => false,
@@ -3849,6 +4047,7 @@ test('mirror appearance editor stays mounted outside the login setup flow', () =
 test('Hunter Mirror opens a model preview before customization', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(combat, /heldRC && heldRC\.id===I\.APPEARANCE_MIRROR && globalThis\.BlockcraftAppearancePreview&&globalThis\.BlockcraftAppearancePreview\.showMirror/);
   assert.match(combat, /globalThis\.BlockcraftAppearancePreview\.showMirror\(\);/);
   assert.match(combat, /if\(mirrorPreview&&mirrorPreview\.active&&mirrorPreview\.active\(\)&&mirrorPreview\.dismiss\)\{[\s\S]*mirrorPreview\.dismiss\(\);/);
@@ -3862,7 +4061,15 @@ test('Hunter Mirror opens a model preview before customization', () => {
   assert.match(networking, /updateMirrorPreviewPrompt\(\);/);
   assert.match(networking, /let mirrorPreviewMode=false;/);
   assert.match(networking, /return !!\(mirrorPreviewMode&&appearancePreviewActive&&appearanceDummy\);/);
-  assert.match(networking, /Press <b>C<\/b> to customize\. Press <b>Escape<\/b> to dismiss the mirror image\./);
+  assert.match(networking, /Click the reflection, press <b>Escape<\/b>, or choose <b>BREAK REFLECTION<\/b> to move again\./);
+  assert.match(networking, /mirrorBreakPrompt\.innerHTML='[^']*id="mirrorbreak"[^']*>BREAK REFLECTION<\/button>'/);
+  assert.match(styles, /#mirrorbreakprompt\{/);
+  assert.match(networking, /mirrorBreakButton\.addEventListener\('click',e=>\{[\s\S]*e\.preventDefault\(\);[\s\S]*e\.stopPropagation\(\);[\s\S]*dismissMirrorAppearancePreview\(\)/);
+  assert.match(networking, /BlockcraftReleaseMovementInput\('mirror-preview'\)/);
+  assert.match(networking, /combatApi\.releaseGameplayCursor\(\)/);
+  assert.match(networking, /combatApi\.resumeGameplayCamera\(\)/);
+  assert.match(combat, /function mirrorPreviewBlocksMovement\(\)/);
+  assert.match(combat, /if\(worldLoading\|\|mirrorPreviewBlocksMovement\(\)\)return false;/);
   assert.match(networking, /function dismissMirrorAppearancePreview\(\)\{/);
   assert.match(networking, /mirrorPreviewSparkle\(\);/);
   assert.match(networking, /clearMirrorPreviewPrompt\(\);/);
@@ -3870,6 +4077,8 @@ test('Hunter Mirror opens a model preview before customization', () => {
   assert.match(networking, /showMirror:showMirrorAppearancePreview/);
   assert.match(networking, /customize:customizeMirrorAppearancePreview/);
   assert.match(networking, /dismiss:dismissMirrorAppearancePreview/);
+  assert.match(networking, /function finishAppearanceDraftPreview\(commit=false\)\{[\s\S]*appearancePreviewActive=false;[\s\S]*disposeAppearanceDummy\(\);[\s\S]*combatApi\.resumeGameplayCamera/);
+  assert.match(combat, /if\(\(e\.button===0\|\|e\.button===2\)&&mirrorPreview&&mirrorPreview\.active&&mirrorPreview\.active\(\)&&mirrorPreview\.dismiss\)\{[\s\S]*mirrorPreview\.dismiss\(\);/);
 });
 
 test('appearance creator exposes style presets and avatar style dimensions', () => {
@@ -3944,8 +4153,8 @@ test('all cutscene entry points are disabled while their assets remain dormant',
   assert.match(networking, /function startGateUnlockCutscene\(replay=false\)\{\s*if\(!CUTSCENES_ENABLED\) return false;/);
   assert.match(networking, /function startIntroCutscene\(replay, previewPath\)\{\s*if\(!CUTSCENES_ENABLED\) return false;/);
   assert.match(index, /id="introcinematic"/);
-  assert.match(index, /id="introvideo" playsinline muted preload="auto"/);
-  assert.match(index, /id="introaudio" src="\/assets\/intro\/opening\.mp3" preload="auto"/);
+  assert.match(index, /id="introvideo" playsinline muted preload="none"/);
+  assert.match(index, /id="introaudio" src="\/assets\/intro\/opening\.mp3" preload="none"/);
   assert.ok(index.indexOf('/js/opening-cinematic.mjs') > -1 && index.indexOf('/js/opening-cinematic.mjs') < index.indexOf('/js/boot.mjs'));
   assert.match(opening, /const sources = \['\/assets\/intro\/vid1\.mp4', '\/assets\/intro\/vid2\.mp4'\]/);
   assert.match(opening, /globalThis\.BlockcraftOpeningReady = createOpeningReady\(\)/);
@@ -4046,7 +4255,7 @@ test('Asher can choose the Question Hall or the full game before entering', () =
   assert.match(combat, /CHOOSE HOW YOU WANT TO ENTER BLOCKCRAFT/);
   assert.match(networking, /BlockcraftRequestedStartMode==='questions'/);
   assert.match(networking, /dimensionsApi\.enterQuestionRoom\(\)/);
-  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /player\.pos\.set\(QUESTION_ROOM\.x\+\.5,QUESTION_ROOM\.G\+2,QUESTION_ROOM\.z\+3\.5\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /\{x:QUESTION_ROOM\.x\+\.5,y:QUESTION_ROOM\.G\+2,z:QUESTION_ROOM\.z\+3\.5\}/);
 });
 
 test('rendering runtime owns renderer initialization resize and draw', async () => {
@@ -4224,6 +4433,15 @@ test('network controller shutdown leaves deliberately without starting reconnect
   assert.equal(reconnects, 0);
   assert.equal(controller.state.room, null);
   assert.equal(controller.state.on, false);
+});
+
+test('browser exit deliberately releases the multiplayer session instead of leaving a reconnect ghost', () => {
+  const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(networkingSource, /function netReleaseBrowserSession\(reason='page-exit'\)/);
+  assert.match(networkingSource, /netFlushSave\(reason\);[\s\S]*void NETWORK\.shutdown\(\)/);
+  assert.match(networkingSource, /addEventListener\('pagehide',event=>\{[\s\S]*netReleaseBrowserSession\('pagehide'\)/);
+  assert.match(networkingSource, /addEventListener\('beforeunload',\(\)=>netReleaseBrowserSession\('beforeunload'\)\)/);
+  assert.match(networkingSource, /event&&event\.persisted\)netFlushSave\('pagehide-bfcache'\)/);
 });
 
 test('network controller falls back when a stored session resume never settles', async () => {
@@ -4953,6 +5171,12 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(combat,/Claiming Job Reward/);
   assert.match(combat,/Claiming Guild Contract/);
   assert.match(menus,/Stand beside a <b>Furnace<\/b>/);
+  assert.match(menus,/Use Iron Ore.not an Iron Ingot.for iron/);
+  assert.match(menus,/f\.input=m\.input/);
+  assert.match(menus,/f\.fuel=m\.fuel/);
+  assert.match(menus,/if\(uiMode==='furnace'&&uiFurnaceKey\)/);
+  assert.match(menus,/stagedFurnace&&!stagedFurnace\.finishAt/);
+  assert.match(menus,/locked:\(\)=>!!f\.finishAt/);
   assert.match(onboarding,/actionHTML/);
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(styles,/\.qaction/);
@@ -5128,15 +5352,16 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(earlyLoopE2E,/OPEN RECIPE/);
   assert.match(earlyLoopE2E,/noGold: true/);
   assert.match(earlyLoopE2E,/Shortfall/);
-  assert.match(earlyLoopE2E,/first_profession_contract/);
-  assert.match(earlyLoopE2E,/OPEN JOB BOARD/);
+  assert.match(earlyLoopE2E,/e_rank_climb/);
+  assert.match(earlyLoopE2E,/OPEN GUILD BOARD/);
   const transitionE2E=fs.readFileSync(path.join(__dirname,'..','..','e2e','transition-panel-recovery.spec.js'),'utf8');
   assert.match(transitionE2E,/transition panels recover after reload/);
   assert.match(transitionE2E,/expectRecoveryHub/);
   assert.match(transitionE2E,/Recovery Hub/);
-  assert.match(transitionE2E,/CHOOSE PATH/);
-  assert.match(transitionE2E,/START AWAKENING/);
-  assert.match(transitionE2E,/abilityTraining/);
+  assert.match(transitionE2E,/TALK TO MARA/);
+  assert.match(transitionE2E,/Road Ready objective survives reload/);
+  assert.match(menus,/find\(el=>el&&el\.offsetParent!==null\)/);
+  assert.match(frame,/activequest-action/);
 });
 
 test('parkour event has a client-side fall recovery request', () => {
@@ -5301,7 +5526,14 @@ test('nearby player menu can finish rendering every core action', () => {
 test('a desktop world click upgrades finite fallback mouse-look to native pointer lock', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   assert.match(combat, /if\(lockFallback&&document\.pointerLockElement!==renderer\.domElement&&!isTouchGameplayDevice\(\)\)/);
-  assert.match(combat, /gameplayInputDebug\('pointerlock\.upgrade-fallback'\);\s*requestPointerLockSafe\(null\)/);
+  assert.match(combat, /upgradeFallbackPointerLock\('world-click'\)/);
+});
+
+test('movement keys recover unlimited desktop mouse-look after modal fallback', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  assert.match(combat, /function upgradeFallbackPointerLock\(reason='input'\)/);
+  assert.match(combat, /upgradeFallbackPointerLock\('keydown:'\+e\.code\)/);
+  assert.match(combat, /pointerLockRequestPending/);
 });
 
 test('job system is disabled while ordinary work activities remain available', () => {
@@ -5355,5 +5587,50 @@ test('craft requests correlate replies, prevent double clicks and retry the same
   assert.match(craftFailureText({reason:'full'}),/bag/);
   assert.match(craftFailureText({reason:'rate'}),/Too many/);
   assert.match(craftFailureText({reason:'hunter_level',level:8}),/Level 8/);
+  assert.equal(craftFailureText({reason:'ingredients',missing:[{id:102,short:2}]},id=>id===102?'Iron Ingot':'Item'),'Missing Iron Ingot x2. Gather them and try again.');
   assert.doesNotMatch(craftFailureText({reason:'server'}),/ingredients/);
+});
+
+test('opening a crafting table preserves its coordinates for authoritative 3x3 crafting',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(combat,/if\(hit\.id===B\.TABLE\)\{ openUI\('table', hit\.x\+','\+hit\.y\+','\+hit\.z\); return; \}/);
+  assert.match(menus,/const table=craftW===3\?chestCoords\(\):null;/);
+  assert.match(menus,/\.\.\.\(table\?\{table\}:\{\}\)/);
+});
+
+test('parkour checkpoint movement collides with the private course, not overworld terrain',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'../rooms/events.mixin.js'),'utf8');
+  // Extract the complete method up to its next sibling rather than loading room dependencies.
+  const start=source.indexOf('  eventSpaceSolid(dgn) {');
+  const end=source.indexOf('\n  }',start)+4;
+  const {eventSpaceSolid}=vm.runInNewContext('({'+source.slice(start,end)+'})',{W,EVENT_PARKOUR:{kind:'parkour'},EVENT_CARAVAN:{kind:'caravan'},Set});
+  const ev={id:'event-test',kind:'parkour',course:{blocks:['20,10,30,'+W.B.PLANKS,'20,11,30,'+W.B.TORCH]}};
+  const room={currentEventInstance:()=>ev};
+  const solid=eventSpaceSolid.call(room,ev.id);
+  assert.equal(solid(20,10,30),true,'checkpoint platform remains solid');
+  assert.equal(solid(20,11,30),false,'checkpoint marker does not obstruct the player');
+  assert.equal(solid(21,10,30),false,'course air never falls back to overworld blocks');
+  assert.equal(eventSpaceSolid.call(room,'another-event'),null);
+  ev.course={blocks:['21,10,30,'+W.B.COBBLE]};
+  const replacement=eventSpaceSolid.call(room,ev.id);
+  assert.equal(replacement(20,10,30),false,'a new course invalidates the cached platforms');
+  assert.equal(replacement(21,10,30),true);
+});
+
+test('admin grants accept the incubator and ordinary blocks but reject protected and unknown IDs',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'../auth.js'),'utf8');
+  const known=source.slice(source.indexOf('const KNOWN_ITEM_IDS ='),source.indexOf('const JOB_XP_MAX'));
+  const start=source.indexOf('function adminGearStack(raw) {');
+  const end=source.indexOf('\n}',start)+2;
+  const constants=require('../rooms/constants');
+  const grant=vm.runInNewContext(known+'\n'+source.slice(start,end)+'\nadminGearStack',{
+    B:W.B,I:constants.I,ITEM_NAMES:constants.ITEM_NAMES,ARMOR_INFO:constants.ARMOR_INFO,
+    TOOL_INFO:constants.TOOL_INFO,GEAR_SYSTEM:sharedGear,
+  });
+  assert.equal(grant({id:W.B.EGG_INSULATOR,count:1}).id,34);
+  assert.equal(grant({id:W.B.TABLE,count:2}).count,2);
+  assert.throws(()=>grant({id:W.B.BEDROCK}),/Unknown item/);
+  assert.throws(()=>grant({id:W.B.BARRIER}),/Unknown item/);
+  assert.throws(()=>grant({id:9999}),/Unknown item/);
 });

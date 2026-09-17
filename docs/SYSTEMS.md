@@ -154,8 +154,10 @@ into a power score (`rank×10 + rarity`). The tables and profiles live in
 - **Blacksmith services:** classic repair/upgrade plus **reforging** (e.g. Keen = +damage,
   Swift = faster swings) and, at blacksmith level 20, **Masterwork** perfection — which
   also lifts the piece to S-rank. Items can be **locked** against accidental salvage.
-- **Loot recovery:** gear that would drop into a full inventory is banked server-side and
-  reclaimable later — nothing is ever lost (`lootRecovery*` messages).
+- **Loot recovery:** gear that would drop into a full inventory is banked server-side.
+  Tobin exposes 12 claimable slots; additional gear waits in a persisted backlog and moves
+  forward automatically as slots open. Ordinary unlocked drops expire after seven days;
+  locked, Mythic, and S-rank gear does not expire (`lootRecovery*` messages).
 - **Balance harness:** `npm run balance:loot` runs a deterministic simulator
   ([`tools/loot-progression-sim.js`](../tools/loot-progression-sim.js)) reporting the
   rarity distribution, weapon mix, and full-inventory recovery safety; the

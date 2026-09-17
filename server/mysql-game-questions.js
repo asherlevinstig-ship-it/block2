@@ -417,6 +417,34 @@ class MySqlGameQuestionStore {
     this.pool = options.pool || null;
     this.env = options.env || process.env;
     this.ready = false;
+    this.recallCacheTtlMs = Math.max(30_000, Math.min(30 * 60_000, Number(options.recallCacheTtlMs || this.env.GAME_QUESTION_RECALL_CACHE_MS || 5 * 60_000) || 5 * 60_000));
+    this.recallSubjectCache = new Map();
+    this.recallQuestionCache = new Map();
+  }
+
+  recallCacheRead(cache, key, now = Date.now()) {
+    const hit = cache.get(key);
+    if (!hit || hit.expiresAt <= now) {
+      if (hit) cache.delete(key);
+      return null;
+    }
+    return hit.value;
+  }
+
+  recallCacheWrite(cache, key, value, now = Date.now()) {
+    cache.set(key, { value, expiresAt: now + this.recallCacheTtlMs });
+    return value;
+  }
+
+  clearRecallQuestionCache(subjectId = 0) {
+    const id = clampInt(subjectId, 0, 2147483647);
+    if (!id) {
+      this.recallSubjectCache.clear();
+      this.recallQuestionCache.clear();
+      return;
+    }
+    this.recallSubjectCache.clear();
+    for (const key of this.recallQuestionCache.keys()) if (key.startsWith(id + ':')) this.recallQuestionCache.delete(key);
   }
 
   getPool() {
@@ -1351,6 +1379,7 @@ class MySqlGameQuestionStore {
         knowledgeLink.payloadJson,
       ],
     );
+    this.clearRecallQuestionCache(subjectId);
     return this.getQuestion(account, Number(result.insertId || 0));
   }
 
@@ -1389,6 +1418,7 @@ class MySqlGameQuestionStore {
        WHERE id = ?`,
       [next.topic, next.stage, next.difficulty, next.spec, next.prompt, JSON.stringify(next.answers), next.correct, next.explanation, next.reviewStatus, next.active ? 1 : 0, next.modes.recall ? 1 : 0, next.modes.scholar ? 1 : 0, next.modes.meditation ? 1 : 0, knowledgeLink.format, knowledgeLink.entityId, knowledgeLink.primaryAtomId, knowledgeLink.confusionPairId, knowledgeLink.payloadJson, existing.id],
     );
+    this.clearRecallQuestionCache(existing.subjectId);
     return this.getQuestion(account, existing.id);
   }
 
@@ -1593,7 +1623,11 @@ class MySqlGameQuestionStore {
     const subjectId = clampInt(query.subjectId || query.subject_id, 0, 2147483647);
     const now = new Date();
     const { studentId, rows } = await this.activeHomeworkRowsForStudent(account, subjectId);
-    if (!studentId || !rows.length) return [];
+    return this.homeworkProgressFromRows(studentId, rows, now);
+  }
+
+  async homeworkProgressFromRows(studentId, rows, now = new Date()) {
+    if (!studentId || !Array.isArray(rows) || !rows.length) return [];
     const keys = rows.map(row => homeworkPeriodKey(row, now));
     const ids = rows.map(row => Number(row.id) || 0).filter(Boolean);
     const progressBy = new Map();
@@ -1652,7 +1686,9 @@ class MySqlGameQuestionStore {
         ],
       );
     }
-    return this.homeworkProgressForStudent(account, {});
+    // Reuse the homework rows and class lookup already completed above. Only
+    // re-read their compact progress rows after the atomic increments.
+    return this.homeworkProgressFromRows(studentId, rows, now);
   }
 
   async createCurriculumRequest(account, input = {}) {
@@ -1843,38 +1879,47 @@ class MySqlGameQuestionStore {
     const subjectName = cleanText(input.subject, 96);
     if (!subjectName) return { recorded: false, reason: 'subject' };
     const pool = this.getPool();
-    const [subjectRows] = await pool.execute(
-      `SELECT id, school_id FROM subjects
-       WHERE is_active = 1
-         AND (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?))
-         AND (school_id IS NULL OR ? = 0 OR school_id = ?)
-       ORDER BY CASE WHEN school_id = ? THEN 0 ELSE 1 END, id ASC
-       LIMIT 1`,
-      [subjectName, subjectName, schoolId, schoolId, schoolId],
-    );
-    const subject = subjectRows && subjectRows[0];
-    if (!subject) return { recorded: false, reason: 'subject' };
-    const subjectId = Number(subject.id) || 0;
+    let subjectId = clampInt(input.subjectId, 0, 2147483647);
+    let scopeSchoolId = clampInt(input.scopeSchoolId, 0, 2147483647);
+    let questionId = clampInt(input.questionId, 0, 2147483647);
+    const selectedDatabaseQuestion = !!(subjectId && questionId);
+    let subject = null;
+    if (!selectedDatabaseQuestion) {
+      const [subjectRows] = await pool.execute(
+        `SELECT id, school_id FROM subjects
+         WHERE is_active = 1
+           AND (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?))
+           AND (school_id IS NULL OR ? = 0 OR school_id = ?)
+         ORDER BY CASE WHEN school_id = ? THEN 0 ELSE 1 END, id ASC
+         LIMIT 1`,
+        [subjectName, subjectName, schoolId, schoolId, schoolId],
+      );
+      subject = subjectRows && subjectRows[0];
+      if (!subject) return { recorded: false, reason: 'subject' };
+      subjectId = Number(subject.id) || 0;
+      scopeSchoolId = subject.school_id == null ? schoolId : Number(subject.school_id);
+    }
     const prompt = cleanText(input.prompt, 500);
     const answers = Array.isArray(input.answers) ? input.answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4) : [];
     if (!subjectId || prompt.length < 3 || answers.length !== 4) return { recorded: false, reason: 'question' };
-    const scopeSchoolId = subject.school_id == null ? schoolId : Number(subject.school_id);
-    const [questionRows] = await pool.execute(
-      `SELECT id FROM game_question
-       WHERE subject_id = ? AND prompt = ?
-         AND (school_id IS NULL OR ? = 0 OR school_id = ?)
-       ORDER BY id ASC
-       LIMIT 1`,
-      [subjectId, prompt, scopeSchoolId, scopeSchoolId],
-    );
-    let questionId = questionRows && questionRows[0] && Number(questionRows[0].id) || 0;
+    if (!questionId) {
+      const [questionRows] = await pool.execute(
+        `SELECT id FROM game_question
+         WHERE subject_id = ? AND prompt = ?
+           AND (school_id IS NULL OR ? = 0 OR school_id = ?)
+         ORDER BY id ASC
+         LIMIT 1`,
+        [subjectId, prompt, scopeSchoolId, scopeSchoolId],
+      );
+      questionId = questionRows && questionRows[0] && Number(questionRows[0].id) || 0;
+    }
     if (!questionId) {
       const [result] = await pool.execute(
         `INSERT INTO game_question
          (school_id, subject_id, teacher_id, topic, stage, difficulty, spec, prompt, answers, correct_index, explanation, review_status, is_active)
          VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1)`,
         [
-          subject.school_id == null ? (schoolId || null) : subject.school_id,
+          subject && subject.school_id == null ? (schoolId || null) : (subject && subject.school_id) || scopeSchoolId || null,
           subjectId,
           cleanText(input.topic, 96),
           cleanText(input.stage, 32),
@@ -1887,6 +1932,7 @@ class MySqlGameQuestionStore {
         ],
       );
       questionId = Number(result && result.insertId) || 0;
+      this.clearRecallQuestionCache(subjectId);
     }
     if (!questionId) return { recorded: false, reason: 'question' };
     await pool.execute(
@@ -1894,7 +1940,7 @@ class MySqlGameQuestionStore {
        (school_id, subject_id, class_id, question_id, student_id, account_id, answer_index, correct, duration_ms, source)
        VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        subject.school_id == null ? (schoolId || null) : subject.school_id,
+        scopeSchoolId || schoolId || null,
         subjectId,
         questionId,
         studentId,
@@ -2293,11 +2339,21 @@ class MySqlGameQuestionStore {
     return null;
   }
 
-  async loadRecallQuestion(account, input = {}) {
-    await this.ensureSchema();
+  async cachedPlayableRecallSubject(account, input = {}) {
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const key = [schoolId, cleanText(input.subject, 96).toLowerCase(), cleanText(input.fallbackSubject, 96).toLowerCase()].join(':');
+    const cached = this.recallCacheRead(this.recallSubjectCache, key);
+    if (cached) return cached;
     const subject = await this.findPlayableRecallSubject(account, input);
-    if (!subject || !subject.subjectId) return null;
-    const numberSystemsOnly = /^(computer\s*science|cs|computer_science)$/i.test(cleanText(input.subject || subject.subjectName || subject.subjectCode, 96));
+    return subject ? this.recallCacheWrite(this.recallSubjectCache, key, subject) : null;
+  }
+
+  async cachedRecallQuestions(subject, numberSystemsOnly) {
+    const subjectId = clampInt(subject && subject.subjectId, 0, 2147483647);
+    if (!subjectId) return [];
+    const key = subjectId + ':' + (numberSystemsOnly ? 'number-systems' : 'all');
+    const cached = this.recallCacheRead(this.recallQuestionCache, key);
+    if (cached) return cached;
     const extraWhere = numberSystemsOnly ? " AND (spec = 'number-systems-base2-base10-base16' OR LOWER(topic) IN ('number systems','binary denary hex','binary, denary and hex'))" : '';
     const [rows] = await this.getPool().execute(
       `SELECT id, prompt, answers, correct_index, explanation, topic, stage, difficulty, spec
@@ -2306,18 +2362,9 @@ class MySqlGameQuestionStore {
          AND COALESCE(use_recall, 1) = 1
          AND review_status IN ('approved', 'teacher-reviewed')
          ${extraWhere}
-       ORDER BY RAND()
-       LIMIT 25`,
-      [subject.subjectId],
-    );
-    const avoidInput = (Array.isArray(input.avoidQuestionIds) ? input.avoidQuestionIds : [input.avoidQuestionId])
-      .filter(v => v != null && v !== '');
-    const avoided = new Set(avoidInput.flatMap(v => { const raw = String(v); return [raw, raw.replace(/^db-recall-/, '')]; }));
-    const normalizedRecallPrompt = value => cleanText(value, 500).toLowerCase().replace(/\s+/g, ' ');
-    const avoidedPrompts = new Set(
-      (Array.isArray(input.avoidPrompts) ? input.avoidPrompts : [input.avoidPrompt])
-        .map(normalizedRecallPrompt)
-        .filter(Boolean),
+       ORDER BY id ASC
+       LIMIT 500`,
+      [subjectId],
     );
     const candidates = [];
     for (const row of rows || []) {
@@ -2329,7 +2376,9 @@ class MySqlGameQuestionStore {
       candidates.push({
         id: 'db-recall-' + (Number(row.id) || 0),
         questionId: Number(row.id) || 0,
-        subject: subject.subjectName || cleanText(input.subject, 96) || 'General',
+        subjectId,
+        scopeSchoolId: clampInt(subject.scopeSchoolId, 0, 2147483647),
+        subject: subject.subjectName || '',
         topic: row.topic || '',
         stage: row.stage || '',
         difficulty: Number(row.difficulty) || 1,
@@ -2340,11 +2389,29 @@ class MySqlGameQuestionStore {
         explanation: row.explanation || '',
       });
     }
+    return this.recallCacheWrite(this.recallQuestionCache, key, candidates);
+  }
+
+  async loadRecallQuestion(account, input = {}) {
+    await this.ensureSchema();
+    const subject = await this.cachedPlayableRecallSubject(account, input);
+    if (!subject || !subject.subjectId) return null;
+    const numberSystemsOnly = /^(computer\s*science|cs|computer_science)$/i.test(cleanText(input.subject || subject.subjectName || subject.subjectCode, 96));
+    const candidates = await this.cachedRecallQuestions(subject, numberSystemsOnly);
+    const avoidInput = (Array.isArray(input.avoidQuestionIds) ? input.avoidQuestionIds : [input.avoidQuestionId])
+      .filter(v => v != null && v !== '');
+    const avoided = new Set(avoidInput.flatMap(v => { const raw = String(v); return [raw, raw.replace(/^db-recall-/, '')]; }));
+    const normalizedRecallPrompt = value => cleanText(value, 500).toLowerCase().replace(/\s+/g, ' ');
+    const avoidedPrompts = new Set(
+      (Array.isArray(input.avoidPrompts) ? input.avoidPrompts : [input.avoidPrompt])
+        .map(normalizedRecallPrompt)
+        .filter(Boolean),
+    );
     // Returning an avoided question here traps a newly-created question bank at
     // one item: the first built-in Recall question recorded for analytics becomes
     // the only DB candidate and is then served forever. Let the room use its full
     // built-in bank until the live bank has a genuinely fresh alternative.
-    return candidates.find(q => !avoided.has(String(q.id))
+    return shuffleList(candidates).find(q => !avoided.has(String(q.id))
       && !avoided.has(String(q.questionId))
       && !avoidedPrompts.has(normalizedRecallPrompt(q.prompt))) || null;
   }

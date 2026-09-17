@@ -5,6 +5,7 @@ const { DungeonRoom } = require('./rooms/DungeonRoom');
 const { prepareRuntime, attachHttpRoutes } = require('./runtime');
 const { getActiveRooms } = require('./metrics-registry');
 const { restartWarningDelay, warnForRestart } = require('./restart-warning');
+const { websocketTransportOptions } = require('./websocket-transport');
 const runtime = prepareRuntime();
 
 const server = defineServer({
@@ -12,7 +13,7 @@ const server = defineServer({
     blockcraft: defineRoom(GameRoom).filterBy(['shardId']),
     dungeon: defineRoom(DungeonRoom).filterBy(['gateId']),
   },
-  transport: new WebSocketTransport(),
+  transport: new WebSocketTransport(websocketTransportOptions()),
   express: async app => {
     attachHttpRoutes(app, await runtime);
   },

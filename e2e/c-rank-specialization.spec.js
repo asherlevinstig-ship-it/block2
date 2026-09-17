@@ -22,11 +22,30 @@ async function enterGate(page, gateId) {
 }
 
 async function dismissGateLoot(page) {
+  let sawGear = false;
+  let sawResult = false;
   await expect.poll(async () => {
+    const gear = page.locator('#gearrewardwin');
     const keep = page.getByRole('button', { name: 'KEEP', exact: true });
-    if (await keep.isVisible()) await keep.click();
-    return page.locator('#gearrewardwin').evaluate(el => el.classList.contains('hidden'));
-  }).toBe(true);
+    if (await gear.isVisible()) {
+      sawGear = true;
+      if (await keep.isVisible()) await keep.click();
+      return false;
+    }
+    const result = page.locator('#rewardwin');
+    if (await result.isVisible()) {
+      sawResult = true;
+      await page.evaluate(() => {
+        const button = ['promotioncontinue', 'milestonecontinue', 'rankupcontinue', 'rewardclose']
+          .map(id => document.getElementById(id))
+          .find(el => el && el.offsetParent !== null);
+        if (button) button.click();
+      });
+      return false;
+    }
+    const action = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction?.type);
+    return sawGear && sawResult && action !== 'continue_panel';
+  }, { timeout: 15_000 }).toBe(true);
 }
 
 async function clearDeathLimbo(page) {

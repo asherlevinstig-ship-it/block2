@@ -2,6 +2,8 @@
 // "is a DungeonRoom split or per-client state filtering ever worth it?" — with real
 // numbers instead of guesses, and never alters game state.
 //
+const { getFirestoreUsageSnapshot } = require('../store');
+
 // The three metrics that decide it:
 //   - instances / dgnPlayers : how much concurrent raiding a single room carries.
 //   - wastedMobSyncs         : dungeon-mob state syncs that per-instance @filter would
@@ -32,6 +34,10 @@ class MetricsMixin {
       windowOutboundMessageBytesByType: {},
       disconnects: 0,
       unexpectedDisconnects: 0,
+      reconnectAttempts: 0,
+      reconnectRecovered: 0,
+      reconnectExpired: 0,
+      disconnectByCode: {},
     };
     if (this.__metricsOnMessageWrapped || typeof this.onMessage !== 'function') return;
     const original = this.onMessage.bind(this);
@@ -136,6 +142,20 @@ class MetricsMixin {
     if (unexpected) m.unexpectedDisconnects = (m.unexpectedDisconnects || 0) + 1;
   }
 
+  recordReconnectAttempt(code) {
+    const m = this.messageMetrics || (this.messageMetrics = {});
+    const key = code === false ? 'false' : String(code === undefined ? 'unknown' : code);
+    m.reconnectAttempts = (m.reconnectAttempts || 0) + 1;
+    const byCode = m.disconnectByCode || (m.disconnectByCode = {});
+    byCode[key] = (byCode[key] || 0) + 1;
+  }
+
+  recordReconnectOutcome(outcome) {
+    const m = this.messageMetrics || (this.messageMetrics = {});
+    if (outcome === 'recovered') m.reconnectRecovered = (m.reconnectRecovered || 0) + 1;
+    if (outcome === 'expired') m.reconnectExpired = (m.reconnectExpired || 0) + 1;
+  }
+
   // Roll a tick-duration sample into an EMA + running max. Cheap; called every tick.
   recordTick(ms) {
     const m = this.tickMetrics || (this.tickMetrics = { lastMs: 0, avgMs: 0, maxMs: 0, samples: 0, overBudget: 0 });
@@ -165,7 +185,7 @@ class MetricsMixin {
       get(target, key, receiver) {
         if (key === '__monitored') return true;
         const value = Reflect.get(target, key, receiver);
-        if (typeof value !== 'function' || !String(key).startsWith('save')) return value;
+        if (typeof value !== 'function' || !/^(save|commit)/.test(String(key))) return value;
         return async (...args) => {
           const started = performance.now();
           try {
@@ -277,6 +297,10 @@ class MetricsMixin {
       outboundMessageBytesPerSecondByType,
       disconnects: mm.disconnects || 0,
       unexpectedDisconnects: mm.unexpectedDisconnects || 0,
+      reconnectAttempts: mm.reconnectAttempts || 0,
+      reconnectRecovered: mm.reconnectRecovered || 0,
+      reconnectExpired: mm.reconnectExpired || 0,
+      disconnectByCode: { ...(mm.disconnectByCode || {}) },
     };
   }
 
@@ -284,6 +308,8 @@ class MetricsMixin {
   logMetrics() {
     const s = this.metricsSnapshot();
     if (!s.players && !s.instances && !s.persistenceFailures && !s.rejectedMessages) return;
+    const firestore = getFirestoreUsageSnapshot();
+    const firestoreDaily = firestore.daily || {};
     console.log('[metrics] clients=' + s.connectedClients + ' players=' + s.players + ' (ow=' + s.owPlayers + ' dgn=' + s.dgnPlayers + ')'
       + ' instances=' + s.instances
       + ' mobs=' + s.mobs + ' (ow=' + s.owMobs + ' dgn=' + s.dgnMobs + ')'
@@ -293,6 +319,7 @@ class MetricsMixin {
       + ' statePatchKBps=' + Math.round(((s.outboundBytesPerSecondByKind && s.outboundBytesPerSecondByKind.statePatch || 0) / 1024) * 100) / 100
       + ' peakClientKBps=' + Math.round((s.outboundPeakClientBytesPerSecond || 0) / 1024 * 100) / 100
       + ' persistence ops=' + s.persistenceOperations + ' failures=' + s.persistenceFailures + ' avgMs=' + s.persistenceAvgMs + ' maxMs=' + s.persistenceMaxMs
+      + ' firestore(day=' + firestore.dayPacific + ') reads=' + (firestoreDaily.reads || 0) + ' writes=' + (firestoreDaily.writes || 0) + ' deletes=' + (firestoreDaily.deletes || 0) + ' failedCalls=' + (firestoreDaily.failedCalls || 0)
       + ' rejected=' + s.rejectedMessages);
   }
 }

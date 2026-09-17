@@ -20,6 +20,7 @@ const FORMAT_INSTRUCTION = {
 
 let overlay = null, panel = null, shift = null, pending = null, caseAt = 0, busy = false;
 let awaitingContinue = false, buffered = null;
+let correctiveAttempt = null;
 let tableHeat = 0, lastStreak = 0;
 
 function now() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
@@ -262,7 +263,7 @@ function submit(index) {
   busy = true;
   const rt = Math.round(now() - caseAt);
   Array.prototype.forEach.call(panel.querySelectorAll('.kc-answer'), b => { b.disabled = true; });
-  send('kcAnswer', { shiftId: shift ? shift.id : 0, questionId: pending.questionId, index, responseMs: rt, handbookUsed: false });
+  send('kcAnswer', { shiftId: shift ? shift.id : 0, questionId: pending.questionId, attemptToken: pending.attemptToken, index, responseMs: rt, handbookUsed: false });
 }
 
 function submitAssembly(extra, buttons, submitBtn) {
@@ -271,7 +272,7 @@ function submitAssembly(extra, buttons, submitBtn) {
   if (buttons) Array.prototype.forEach.call(buttons, b => { b.disabled = true; });
   if (submitBtn) submitBtn.disabled = true;
   const rt = Math.round(now() - caseAt);
-  send('kcAnswer', Object.assign({ shiftId: shift ? shift.id : 0, questionId: pending.questionId, responseMs: rt, handbookUsed: false }, extra));
+  send('kcAnswer', Object.assign({ shiftId: shift ? shift.id : 0, questionId: pending.questionId, attemptToken: pending.attemptToken, responseMs: rt, handbookUsed: false }, extra));
 }
 
 function proceed() {
@@ -380,6 +381,11 @@ function onTrace(m) {
 function onCorrective(m) {
   busy = false;
   if (!panel) return;
+  correctiveAttempt = m && m.attemptToken || null;
+  if (m && m.retry) {
+    panel.querySelectorAll('.kc-corrective,.kc-feedback,.kc-continue').forEach(node => node.remove());
+    awaitingContinue = false;
+  }
   const cont = panel.querySelector('.kc-continue'); if (cont) cont.remove(); // must answer this first
   const box = el('div', 'kc-corrective');
   if (m && m.consequence) box.appendChild(el('p', 'kc-consequence', '<b>Consequence:</b> ' + esc(m.consequence)));
@@ -398,7 +404,7 @@ function onCorrective(m) {
 function submitCorrective(index) {
   if (busy) return; busy = true;
   if (panel) Array.prototype.forEach.call(panel.querySelectorAll('.kc-corrective-opt'), b => { b.disabled = true; });
-  send('kcCorrective', { shiftId: shift ? shift.id : 0, index });
+  send('kcCorrective', { shiftId: shift ? shift.id : 0, attemptToken: correctiveAttempt, index });
 }
 function onCorrectiveResult(m) {
   busy = false;
@@ -408,6 +414,8 @@ function onCorrectiveResult(m) {
   fb.innerHTML = m.correct ? '<b>Right — that is the distinction.</b>' : '<b>Not quite — hold onto that distinction.</b>';
   if (panel) panel.appendChild(fb);
   sfx(m.correct ? 'coin' : 'error');
+  if (!m.correct) return;
+  correctiveAttempt = null;
   awaitingContinue = true;
   const cont = el('button', 'kc-btn kc-continue', 'CONTINUE'); cont.type = 'button'; cont.disabled = !buffered;
   cont.onclick = () => proceed();

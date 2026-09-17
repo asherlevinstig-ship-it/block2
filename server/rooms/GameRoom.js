@@ -35,6 +35,7 @@ const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
 const DEFAULT_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
 const BUG_REPORT_MAIL_TIMEOUT_MS = Math.max(2000, Math.min(15000, Number(process.env.BUG_REPORT_MAIL_TIMEOUT_MS || 8000) | 0));
+const QUEST_TRACE_LOG = /^(1|true|yes|on)$/i.test(String(process.env.BLOCKCRAFT_QUEST_TRACE_LOG || process.env.BLOCKCRAFT_TRACE_LOG || ''));
 const TREE_REGROW_MS = Math.max(30000, Math.min(60 * 60 * 1000, Number(process.env.BLOCKCRAFT_TREE_REGROW_MS || 5 * 60 * 1000) | 0));
 const TREE_REGROW_RETRY_MS = Math.max(10000, Math.min(5 * 60 * 1000, Number(process.env.BLOCKCRAFT_TREE_REGROW_RETRY_MS || 30000) | 0));
 const TREE_REGROW_PLAYER_CLEARANCE = 7;
@@ -80,7 +81,30 @@ function compactBugValue(value, depth = 0) {
 // same world persistence. Keep a process-local lease so overflow fails closed
 // instead of starting a second, divergent world writer.
 const activeGlobalRooms = new Map();
+const pendingColdJoinSessions = new Map();
+const coldJoinSalt = crypto.randomBytes(32);
 let townMapBackfillPromise = null;
+const IMMEDIATE_INVENTORY_MESSAGE_TYPES = new Set([
+  'craftResult', 'craftLegendaryResult', 'shopResult',
+  'chestState', 'chestBatchResult', 'chestTx',
+  'furnaceStarted', 'furnaceResult', 'tradeResult',
+  'gateKeyResult', 'firstQuestReward', 'lootRecoveryResult',
+]);
+const IMMEDIATE_REWARD_SOURCES = new Set([
+  'boss', 'event', 'ancient_warden', 'breed', 'wild_taming',
+]);
+
+class DirtyPlayerSet extends Set {
+  constructor(onAdd) {
+    super();
+    this.onAdd = onAdd;
+  }
+  add(token) {
+    super.add(token);
+    if (this.onAdd) this.onAdd(token);
+    return this;
+  }
+}
 function claimGlobalWorld(room, shardId = 'main') {
   const id = cleanShardId(shardId);
   const active = activeGlobalRooms.get(id);
@@ -90,7 +114,25 @@ function claimGlobalWorld(room, shardId = 'main') {
   activeGlobalRooms.set(id, room);
 }
 function releaseGlobalWorld(room) {
-  for (const [id, active] of activeGlobalRooms) if (active === room) activeGlobalRooms.delete(id);
+  for (const [id, active] of activeGlobalRooms) {
+    if (active !== room) continue;
+    activeGlobalRooms.delete(id);
+    clearColdJoinSessions(id);
+  }
+}
+function coldJoinSessionId(shardId, accountId) {
+  const shard = cleanShardId(shardId);
+  const key = shard + ':' + String(accountId || '');
+  let sessionId = pendingColdJoinSessions.get(key);
+  if (!sessionId) {
+    sessionId = 'cold_' + crypto.createHmac('sha256', coldJoinSalt).update(key).digest('hex').slice(0, 24);
+    pendingColdJoinSessions.set(key, sessionId);
+  }
+  return sessionId;
+}
+function clearColdJoinSessions(shardId) {
+  const prefix = cleanShardId(shardId) + ':';
+  for (const key of pendingColdJoinSessions.keys()) if (key.startsWith(prefix)) pendingColdJoinSessions.delete(key);
 }
 
 function elapsedMs(start) {
@@ -293,7 +335,65 @@ class GameRoom extends Room {
       ok: !!account,
     });
     if (!account) throw new Error('authentication required');
+    const shardId = cleanShardId(options && options.shardId);
+    const activeRoom = activeGlobalRooms.get(shardId);
+    if (roomName === 'overworld' && (!activeRoom || !activeRoom.creationReady)) {
+      return { ...account, sessionId: coldJoinSessionId(shardId, account.id) };
+    }
     return account;
+  }
+
+  async _reserveSeat(sessionId, joinOptions = true, authData, seconds = this.seatReservationTimeout, allowReconnection = false, devModeReconnectionToken) {
+    if (!allowReconnection && (this._reservedSeats[sessionId] || this.clients.some(client => client.sessionId === sessionId))) {
+      return true;
+    }
+    return super._reserveSeat(sessionId, joinOptions, authData, seconds, allowReconnection, devModeReconnectionToken);
+  }
+
+  shouldAttemptReconnection(code) {
+    return code === false || (typeof code === 'number'
+      && code !== CloseCode.CONSENTED
+      && code !== CloseCode.NORMAL_CLOSURE
+      && code !== CloseCode.GOING_AWAY
+      && code !== CloseCode.SERVER_SHUTDOWN);
+  }
+
+  playerSpawnOccupied(pos, dgn = '', ignoreSid = '') {
+    if (!pos || !this.state || !this.state.players) return false;
+    const targetDgn = String(dgn || '');
+    let occupied = false;
+    this.state.players.forEach((other, sid) => {
+      if (occupied || sid === ignoreSid || !other) return;
+      if (String(other.dgn || '') !== targetDgn) return;
+      if (Math.abs((Number(other.y) || 0) - (Number(pos.y) || 0)) >= 2.4) return;
+      if (Math.hypot((Number(other.x) || 0) - (Number(pos.x) || 0), (Number(other.z) || 0) - (Number(pos.z) || 0)) < 1.35) occupied = true;
+    });
+    return occupied;
+  }
+
+  openOverworldPlayerSpawn(pos, ignoreSid = '') {
+    const base = safeOverworldJoinPosition(this.world, pos);
+    const seen = new Set();
+    const tryOffset = (dx, dz) => {
+      const candidate = safeOverworldJoinPosition(this.world, [base[0] + dx, base[1], base[2] + dz]);
+      const key = candidate.map(n => Math.round(Number(n) * 100)).join(',');
+      if (seen.has(key)) return null;
+      seen.add(key);
+      const point = { x: candidate[0], y: candidate[1], z: candidate[2] };
+      return this.playerSpawnOccupied(point, '', ignoreSid) ? null : candidate;
+    };
+    const original = tryOffset(0, 0);
+    if (original) return original;
+    // Search a deterministic square spiral. The occupancy check naturally gives
+    // simultaneous arrivals distinct safe tiles without random teleporting.
+    for (let ring = 1; ring <= 8; ring++) {
+      for (let dx = -ring; dx <= ring; dx++) for (let dz = -ring; dz <= ring; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== ring) continue;
+        const hit = tryOffset(dx * 1.5, dz * 1.5);
+        if (hit) return hit;
+      }
+    }
+    return base;
   }
 
   async onCreate(options = {}) {
@@ -303,8 +403,17 @@ class GameRoom extends Room {
     logRoomLifecycle('overworld.create.start', { shardId: this.shardId || 'main' });
     try {
     claimGlobalWorld(this, this.shardId);
+    this.creationReady = false;
+    if (this.presence && typeof this.presence.setMaxListeners === 'function') this.presence.setMaxListeners(0);
     logRoomLifecycle('overworld.create.claimed', { shardId: this.shardId || 'main', elapsedMs: elapsedMs(createStartedAt) });
-    this.maxClients = Math.max(1, Math.min(64, Number(process.env.BLOCKCRAFT_SHARD_MAX_CLIENTS || 24) | 0));
+    // The persistent main world is intentionally uncapped. Synthetic tests may
+    // still impose a small limit to exercise overflow and shard routing.
+    const testMaxClients = Number(process.env.BLOCKCRAFT_TEST_SHARD_MAX_CLIENTS);
+    if (process.env.BLOCKCRAFT_E2E === '1' && Number.isFinite(testMaxClients) && testMaxClients > 0) {
+      this.maxClients = Math.floor(testMaxClients);
+    } else {
+      this.maxClients = Infinity;
+    }
     if (typeof this.setMetadata === 'function') this.setMetadata({ shardId: this.shardId });
     this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());
@@ -316,6 +425,10 @@ class GameRoom extends Room {
     // ---- persistence ----
     this.store = this.monitorStore(createStore({ shardId: this.shardId }));
     this.initPersistenceState();   // dirty-tracking + profile/save bookkeeping (defined below)
+    if (typeof this.store.recoverTransactions === 'function') {
+      const recovered = await this.store.recoverTransactions();
+      if (recovered) console.warn('[persist] recovered an interrupted inventory transaction');
+    }
     this.unregisterProfileResetHandler = registerProfileResetHandler(token => this.resetLivePlayerProfile(token));
     this.unregisterProfileUpdateHandler = registerProfileUpdateHandler((token, patch) => this.updateLivePlayerProfile(token, patch));
 
@@ -362,15 +475,18 @@ class GameRoom extends Room {
     const saved = await this.store.loadWorldEdits();
     this.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now(), cropKinds: {} };
     let applied = 0, skippedCentralCourt = 0;
+    const loadedPersistedEdits = {};
     for (const k in saved) {
       const [x, y, z] = k.split(',').map(Number);
       const id = saved[k] | 0;
       if (!W.inWorld(x, y, z) || id < 0 || id > W.MAX_BLOCK_ID) continue;
+      loadedPersistedEdits[k] = id;
       if (W.isCentralCourtProtectedEdit(x, y, z)) { skippedCentralCourt++; continue; }
       this.world.setB(x, y, z, id);
       this.state.edits.set(k, id);
       applied++;
     }
+    this.persistedWorldEditChunks = this.worldEditChunkSnapshots(loadedPersistedEdits);
     try {
       this.worldProgress = await this.store.loadWorldProgress();
       for (const [key, kind] of Object.entries(this.worldProgress.cropKinds || {})) this.cropMeta.set(key, { kind, level: 1 });
@@ -586,6 +702,7 @@ class GameRoom extends Room {
     this.onMessage('trainingReset', (client) => this.handleTutorialEnter(client, { kind: 'onboarding' }));
     this.onMessage('tutorialEnter', (client, m) => this.handleTutorialEnter(client, m));
     this.onMessage('tutorialExit', (client, m) => this.handleTutorialExit(client, m));
+    this.onMessage('questionRoomRecovery', (client, m) => this.handleQuestionRoomRecovery(client, m));
     this.onMessage('jobTutorialProgress', (client, m) => this.handleJobTutorialProgress(client, m));
     this.onMessage('landClaimBuy', (client, m) => this.handleLandClaimBuy(client, m));
     this.onMessage('landClaimRename', (client, m) => this.handleLandClaimRename(client, m));
@@ -821,12 +938,15 @@ class GameRoom extends Room {
     this.onMessage('chestMode', (client, m) => this.handleChestMode(client, m));
     this.onMessage('discoveryInteract', (client, m) => this.handleDiscoveryInteract(client, m));
     this.onMessage('discoverySight', (client, m) => this.handleDiscoverySight(client, m));
+    this.onMessage('fantasyStructureInteract', (client, m) => this.handleFantasyStructureInteract(client, m));
     this.onMessage('cartographer', (client, m) => this.handleCartographer(client, m));
     this.onMessage('elderheartExpeditionStart', client => this.startElderheartExpedition(client));
     this.onMessage('elderheartExpeditionInteract', (client, m) => this.interactElderheartExpedition(client, m));
     this.onMessage('elderheartExpeditionChoose', (client, m) => this.chooseElderheartSignal(client, m));
     this.onMessage('elderheartExpeditionClaim', client => this.claimElderheartExpedition(client));
     this.onMessage('elderheartExpeditionAbandon', client => this.abandonElderheartExpedition(client));
+    this.onMessage('ancientCityRunInteract', (client, m) => this.interactAncientCityRun(client, m));
+    this.onMessage('ancientCityRunAbandon', client => this.abandonAncientCityRun(client));
     this.onMessage('treasureMapAdvance', (client, m) => this.handleTreasureMapAdvance(client, m));
     this.onMessage('regionalContracts', (client) => this.sendRegionalContracts(client));
     this.onMessage('regionalContractAccept', (client, m) => this.handleRegionalContractAccept(client, m));
@@ -859,6 +979,8 @@ class GameRoom extends Room {
     // the room has loaded successfully so a failed creation does not spend more
     // persistence quota while Colyseus is tearing the half-built room down.
     this.startTownMapBackfill();
+    this.creationReady = true;
+    clearColdJoinSessions(this.shardId);
     logRoomLifecycle('overworld.create.ready', {
       roomId: this.roomId || '',
       shardId: this.shardId || 'main',
@@ -1170,7 +1292,7 @@ class GameRoom extends Room {
       client._mutedComms = new Set(prof.mutedPlayers || []);
       if (!prof.activeRoom) {
         const beforePos = Array.isArray(prof.pos) ? prof.pos.slice(0, 3) : null;
-        const safePos = safeOverworldJoinPosition(this.world, prof.pos);
+        const safePos = this.openOverworldPlayerSpawn(prof.pos, client.sessionId);
         const changed = !beforePos || Math.hypot((beforePos[0] || 0) - safePos[0], (beforePos[2] || 0) - safePos[2]) > .05 || Math.abs((beforePos[1] || 0) - safePos[1]) > .2;
         if (changed) {
           prof.pos = safePos;
@@ -1238,11 +1360,16 @@ class GameRoom extends Room {
         p.x = 345.5; p.y = 19.001; p.z = 902.5;
         prof.pos = [p.x, p.y, p.z];
         this.dirtyPlayers.add(token);
+      } else if (prof.activeRoom && prof.activeRoom.dim === 'questions') {
+        p.dim = 'tutorial';
+        p.dgn = this.tutorialSpaceId(client, 'questions');
       }
     } else {
       p.x = TOWN_RETURN_SPAWN.x + (Math.random() * 4 - 2);
       p.y = TOWN_RETURN_SPAWN.y;
       p.z = TOWN_RETURN_SPAWN.z + (Math.random() * 2 - 1);
+      const openSpawn = this.openOverworldPlayerSpawn([p.x, p.y, p.z], client.sessionId);
+      p.x = openSpawn[0]; p.y = openSpawn[1]; p.z = openSpawn[2];
     }
     this.state.players.set(client.sessionId, p);
     logRoomLifecycle('overworld.join.profile_applied', {
@@ -1315,6 +1442,7 @@ class GameRoom extends Room {
       Promise.resolve(this.processPostActivityReturn(client)).catch(() => {});
       this.sendSocialSnapshot(client);
       this.sendElderheartExpedition(client);
+      this.sendAncientCityRun(client);
       this.broadcast('chat', { name: '[System]', text: joined.name + (prof ? ' has returned' : ' has entered the world') });
       logRoomLifecycle('overworld.join.ready', {
         roomId: this.roomId || '',
@@ -1362,10 +1490,15 @@ class GameRoom extends Room {
     // A process shutdown is not a voluntary dungeon exit. Keep the live
     // attempt marker intact so onDispose can flush it for next-boot recovery.
     if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
-    const unexpected = code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED);
+    const unexpected = this.shouldAttemptReconnection(code);
     if (unexpected) {
+      const reconnectStartedAt = Date.now();
+      this.recordReconnectAttempt(code);
+      console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.start', roomType: 'overworld', roomId: this.roomId || '', shardId: this.shardId || 'main', sidHash: shortHash(client && client.sessionId), code }));
       try {
         await this.allowReconnection(client, 15);
+        this.recordReconnectOutcome('recovered');
+        console.log('[disconnect] ' + JSON.stringify({ event: 'unexpected.recovered', roomType: 'overworld', roomId: this.roomId || '', shardId: this.shardId || 'main', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt }));
         const token = this.tokens.get(client.sessionId);
         const profile = token && this.profiles.get(token);
         if (profile) {
@@ -1376,7 +1509,9 @@ class GameRoom extends Room {
         if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
         if (!this.resumeTutorialDimension(client) && !this.resumeEventParticipant(client)) this.resumeDungeonInstance(client);
         return;
-      } catch (_) {
+      } catch (error) {
+        this.recordReconnectOutcome('expired');
+        console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.expired', roomType: 'overworld', roomId: this.roomId || '', shardId: this.shardId || 'main', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt, reason: String(error && error.message || error || 'reconnect window expired').slice(0, 160) }));
         // The reconnect window elapsed; perform the normal durable cleanup.
       }
     }
@@ -1521,8 +1656,12 @@ class GameRoom extends Room {
     this.dirtyTeams = false;
     this.dirtyGuilds = false;
     this.dirtyNests = false;
-    this.dirtyPlayers = new Set();
+    this.playerMutationRevisions = new Map();
+    this.dirtyPlayers = new DirtyPlayerSet(token => {
+      this.playerMutationRevisions.set(token, (this.playerMutationRevisions.get(token) || 0) + 1);
+    });
     this.lastSaveMsg = new Map();
+    this.persistedWorldEditChunks = new Map();
     this.persistedInventorySignatures = new Map();
     this.playerSaveQueues = new Map();
   }
@@ -1544,10 +1683,15 @@ class GameRoom extends Room {
     return JSON.parse(JSON.stringify(prof));
   }
 
-  // Any server-owned inventory change must reach durable storage before the
-  // next player-facing message. This protects every acquisition path (loot,
-  // mining, discoveries, quests, shops, fishing, furnaces, trades, etc.)
-  // without relying on each feature remembering its own save barrier.
+  inventoryMessageRequiresImmediatePersistence(type, payload) {
+    if (IMMEDIATE_INVENTORY_MESSAGE_TYPES.has(type)) return true;
+    if ((type === 'grant' || type === 'loot') && payload && IMMEDIATE_REWARD_SOURCES.has(payload.source)) return true;
+    return false;
+  }
+
+  // Routine rewards are coalesced by the periodic/departure/shutdown flushes.
+  // Transactional results and major rewards retain the save-before-message
+  // barrier so a fast refresh cannot replay or lose a valuable transition.
   protectDurableInventoryMessages(client) {
     if (!client || client.__durableInventorySendWrapped || typeof client.send !== 'function') return;
     const original = client.send.bind(client);
@@ -1558,16 +1702,27 @@ class GameRoom extends Room {
       const signature = prof && this.inventoryPersistenceSignature(prof);
       const durable = token && this.persistedInventorySignatures && this.persistedInventorySignatures.get(token);
       const pending = client.__durableInventorySendQueue || null;
-      if (!pending && (!token || !prof || !signature || signature === durable)) return original(type, payload);
+      const changed = !!(token && prof && signature && signature !== durable);
+      if (changed && this.dirtyPlayers) this.dirtyPlayers.add(token);
+      const needsPersistence = changed || !!(token && this.dirtyPlayers && this.dirtyPlayers.has(token));
+      const immediate = needsPersistence && this.inventoryMessageRequiresImmediatePersistence(type, payload);
+      if (!pending && !immediate) return original(type, payload);
       const task = (pending || Promise.resolve()).catch(() => {}).then(async () => {
-        const currentToken = this.tokens && this.tokens.get(client.sessionId);
-        const currentProf = currentToken && this.profiles && this.profiles.get(currentToken);
-        if (currentToken && currentProf) {
-          const currentSignature = this.inventoryPersistenceSignature(currentProf);
-          const currentDurable = this.persistedInventorySignatures && this.persistedInventorySignatures.get(currentToken);
-          if (currentSignature && currentSignature !== currentDurable) {
-            this.dirtyPlayers.add(currentToken);
-            await this.flush();
+        if (immediate) {
+          const currentToken = this.tokens && this.tokens.get(client.sessionId);
+          const currentProf = currentToken && this.profiles && this.profiles.get(currentToken);
+          if (currentToken && currentProf) {
+            const currentSignature = this.inventoryPersistenceSignature(currentProf);
+            const currentDurable = this.persistedInventorySignatures && this.persistedInventorySignatures.get(currentToken);
+            const currentDirty = this.dirtyPlayers && this.dirtyPlayers.has(currentToken);
+            if (currentDirty || (currentSignature && currentSignature !== currentDurable)) {
+              if (!currentDirty) this.dirtyPlayers.add(currentToken);
+              try {
+                await this.flush();
+              } catch (_) {
+                return original(type, Object.assign({}, payload, { ok: false, savePending: true, reason: 'persistence' }));
+              }
+            }
           }
         }
         return original(type, payload);
@@ -1581,6 +1736,50 @@ class GameRoom extends Room {
     client.__durableInventorySendWrapped = true;
   }
 
+  worldEditChunkSnapshots(edits) {
+    const grouped = new Map();
+    const entries = edits instanceof Map ? edits.entries() : Object.entries(edits || {});
+    for (const [rawKey, rawValue] of entries) {
+      const key = String(rawKey);
+      const [x, , z] = key.split(',').map(Number);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+      const chunkId = (x >> 4) + '_' + (z >> 4);
+      if (!grouped.has(chunkId)) grouped.set(chunkId, []);
+      grouped.get(chunkId).push([key, rawValue | 0]);
+    }
+    const snapshots = new Map();
+    for (const [chunkId, chunkEntries] of grouped) {
+      const chunk = {};
+      chunkEntries.sort(([a], [b]) => a.localeCompare(b));
+      for (const [key, value] of chunkEntries) chunk[key] = value;
+      snapshots.set(chunkId, { edits: chunk, signature: JSON.stringify(chunk) });
+    }
+    return snapshots;
+  }
+
+  currentWorldEditChunks() {
+    const edits = {};
+    this.state.edits.forEach((value, key) => {
+      if (this.eventTransientEditKeys && this.eventTransientEditKeys.has(key)) return;
+      if (this.treeRestoredEditKeys && this.treeRestoredEditKeys.has(key)) return;
+      edits[key] = value;
+    });
+    return this.worldEditChunkSnapshots(edits);
+  }
+
+  changedWorldEditChunks(next) {
+    const prior = this.persistedWorldEditChunks || new Map();
+    const changed = {};
+    const ids = new Set([...prior.keys(), ...next.keys()]);
+    for (const id of ids) {
+      const before = prior.get(id);
+      const after = next.get(id);
+      if ((before && before.signature) === (after && after.signature)) continue;
+      changed[id] = after ? after.edits : {};
+    }
+    return changed;
+  }
+
   flush() {
     const prior = this.flushQueue || Promise.resolve();
     const next = prior.catch(() => {}).then(() => this.flushOnce());
@@ -1589,58 +1788,69 @@ class GameRoom extends Room {
   }
 
   async flushOnce() {
+    const persistenceErrors = [];
     this.completeFurnaces();
+    let atomicChestPlayers = false;
+    if (this.dirtyChests && this.dirtyPlayers.size && typeof this.store.commitTransaction === 'function') {
+      atomicChestPlayers = true;
+      try { await this.flushChestPlayerTransaction(); }
+      catch (e) { persistenceErrors.push(e); }
+    }
     if (this.dirtyWorld) {
       this.dirtyWorld = false;
-      const obj = {};
-      this.state.edits.forEach((v, k) => {
-        if (this.eventTransientEditKeys && this.eventTransientEditKeys.has(k)) return;
-        if (this.treeRestoredEditKeys && this.treeRestoredEditKeys.has(k)) return;
-        const [x, , z] = k.split(',').map(Number);
-        obj[k] = v;
-      });
-      try { await this.store.saveWorldEdits(obj); }
-      catch (e) { console.warn('[persist] world save failed:', e.message); this.dirtyWorld = true; }
+      const nextChunks = this.currentWorldEditChunks();
+      const changedChunks = this.changedWorldEditChunks(nextChunks);
+      try {
+        if (typeof this.store.saveWorldEditChunks === 'function') {
+          if (Object.keys(changedChunks).length) await this.store.saveWorldEditChunks(changedChunks);
+        } else {
+          const obj = {};
+          for (const snapshot of nextChunks.values()) Object.assign(obj, snapshot.edits);
+          await this.store.saveWorldEdits(obj);
+        }
+        this.persistedWorldEditChunks = nextChunks;
+      }
+      catch (e) { console.warn('[persist] world save failed:', e.message); this.dirtyWorld = true; persistenceErrors.push(e); }
     }
     if (this.dirtyWorldProgress) {
       this.dirtyWorldProgress = false;
       try { await this.store.saveWorldProgress(this.worldProgress); }
-      catch (e) { console.warn('[persist] world progress save failed:', e.message); this.dirtyWorldProgress = true; }
+      catch (e) { console.warn('[persist] world progress save failed:', e.message); this.dirtyWorldProgress = true; persistenceErrors.push(e); }
     }
     if (this.dirtyLandClaims) {
       this.dirtyLandClaims = false;
       const obj = {};
       this.landClaims.forEach((v, k) => { obj[k] = v; });
       try { await this.store.saveLandClaims(obj); }
-      catch (e) { console.warn('[persist] land claim save failed:', e.message); this.dirtyLandClaims = true; }
+      catch (e) { console.warn('[persist] land claim save failed:', e.message); this.dirtyLandClaims = true; persistenceErrors.push(e); }
     }
-    if (this.dirtyChests) {
+    if (this.dirtyChests && !atomicChestPlayers) {
       this.dirtyChests = false;
       const obj = {};
       this.chests.forEach((v, k) => { if (k.startsWith('overworld:')) obj[k] = v; });
       try { await this.store.saveChests(obj); }
-      catch (e) { console.warn('[persist] chest save failed:', e.message); this.dirtyChests = true; }
+      catch (e) { console.warn('[persist] chest save failed:', e.message); this.dirtyChests = true; persistenceErrors.push(e); }
     }
     if (this.dirtyFurnaces) {
       this.dirtyFurnaces = false;
       const obj = {};
       this.furnaces.forEach((v, k) => { obj[k] = v; });
       try { await this.store.saveFurnaces(obj); }
-      catch (e) { console.warn('[persist] furnace save failed:', e.message); this.dirtyFurnaces = true; }
+      catch (e) { console.warn('[persist] furnace save failed:', e.message); this.dirtyFurnaces = true; persistenceErrors.push(e); }
     }
     if (this.dirtyIncubations) {
       this.dirtyIncubations = false;
       const obj = {};
       this.dragonIncubations.forEach((v, k) => { obj[k] = v; });
       try { await this.store.saveIncubations(obj); }
-      catch (e) { console.warn('[persist] incubation save failed:', e.message); this.dirtyIncubations = true; }
+      catch (e) { console.warn('[persist] incubation save failed:', e.message); this.dirtyIncubations = true; persistenceErrors.push(e); }
     }
     if (this.dirtyNests) {
       this.dirtyNests = false;
       const obj = {};
       this.nestDragons.forEach((v, k) => { obj[k] = v; });
       try { await this.store.saveNestDragons(obj); }
-      catch (e) { console.warn('[persist] nest save failed:', e.message); this.dirtyNests = true; }
+      catch (e) { console.warn('[persist] nest save failed:', e.message); this.dirtyNests = true; persistenceErrors.push(e); }
     }
     if (this.dirtyGates) {
       this.dirtyGates = false;
@@ -1670,7 +1880,7 @@ class GameRoom extends Room {
         };
       });
       try { await this.store.saveGates(obj); }
-      catch (e) { console.warn('[persist] gate save failed:', e.message); this.dirtyGates = true; }
+      catch (e) { console.warn('[persist] gate save failed:', e.message); this.dirtyGates = true; persistenceErrors.push(e); }
     }
     if (this.dirtyTeams) {
       this.dirtyTeams = false;
@@ -1685,7 +1895,7 @@ class GameRoom extends Room {
         };
       });
       try { await this.store.saveTeams(obj); }
-      catch (e) { console.warn('[persist] team save failed:', e.message); this.dirtyTeams = true; }
+      catch (e) { console.warn('[persist] team save failed:', e.message); this.dirtyTeams = true; persistenceErrors.push(e); }
     }
     if (this.dirtyGuilds) {
       this.dirtyGuilds = false;
@@ -1702,9 +1912,39 @@ class GameRoom extends Room {
         };
       });
       try { await this.store.saveGuilds(obj); }
-      catch (e) { console.warn('[persist] guild save failed:', e.message); this.dirtyGuilds = true; }
+      catch (e) { console.warn('[persist] guild save failed:', e.message); this.dirtyGuilds = true; persistenceErrors.push(e); }
     }
-    await this.flushDirtyPlayers();
+    if (!atomicChestPlayers) {
+      try { await this.flushDirtyPlayers(); } catch (e) { persistenceErrors.push(e); }
+    }
+    if (persistenceErrors.length) throw new AggregateError(persistenceErrors, 'persistence flush failed');
+  }
+
+  async flushChestPlayerTransaction() {
+    const tokens = [...this.dirtyPlayers];
+    const players = {};
+    this.dirtyPlayers.clear();
+    this.dirtyChests = false;
+    for (const token of tokens) {
+      const prof = this.profiles.get(token);
+      if (!prof || prof.noPersist) continue;
+      const live = (this.clients || []).find(client => this.tokens.get(client.sessionId) === token);
+      if (live) this.syncProfileVitals(live, prof);
+      players[token] = this.playerProfileSnapshot(prof);
+    }
+    const chests = {};
+    this.chests.forEach((value, key) => { if (key.startsWith('overworld:')) chests[key] = value; });
+    try {
+      await this.store.commitTransaction({ id: 'chest-' + Date.now().toString(36), players, chests });
+      for (const [token, snapshot] of Object.entries(players)) {
+        if (this.persistedInventorySignatures) this.persistedInventorySignatures.set(token, this.inventoryPersistenceSignature(snapshot));
+      }
+    } catch (error) {
+      this.dirtyChests = true;
+      for (const token of tokens) this.dirtyPlayers.add(token);
+      console.warn('[persist] chest/player transaction failed:', error.message);
+      throw error;
+    }
   }
 
   // Split out of flush() so DungeonRoom (which has no world/chests/furnaces/
@@ -1712,8 +1952,30 @@ class GameRoom extends Room {
   // without inheriting flush()'s other, overworld-only side effects.
   async flushDirtyPlayers() {
     if (!this.dirtyPlayers.size) return;
+    const persistenceErrors = [];
     const toks = [...this.dirtyPlayers];
     this.dirtyPlayers.clear();
+    if (toks.length > 1 && typeof this.store.commitTransaction === 'function') {
+      const players = {};
+      for (const t of toks) {
+        const prof = this.profiles.get(t);
+        if (!prof || prof.noPersist) continue;
+        const live = (this.clients || []).find(c => this.tokens.get(c.sessionId) === t);
+        if (live) this.syncProfileVitals(live, prof);
+        players[t] = this.playerProfileSnapshot(prof);
+      }
+      try {
+        await this.store.commitTransaction({ id: 'players-' + Date.now().toString(36), players });
+        for (const [token, snapshot] of Object.entries(players)) {
+          if (this.persistedInventorySignatures) this.persistedInventorySignatures.set(token, this.inventoryPersistenceSignature(snapshot));
+        }
+        return;
+      } catch (e) {
+        console.warn('[persist] multi-player transaction failed:', e.message);
+        for (const t of toks) this.dirtyPlayers.add(t);
+        throw new AggregateError([e], 'player persistence failed');
+      }
+    }
     for (const t of toks) {
       const prof = this.profiles.get(t);
       if (!prof || prof.noPersist) continue;   // never overwrite a save we couldn't load
@@ -1725,8 +1987,9 @@ class GameRoom extends Room {
         await this.queuePlayerProfileSnapshot(t, snapshot);
         if (this.persistedInventorySignatures) this.persistedInventorySignatures.set(t, inventorySignature);
       }
-      catch (e) { console.warn('[persist] player save failed:', e.message); this.dirtyPlayers.add(t); }
+      catch (e) { console.warn('[persist] player save failed:', e.message); this.dirtyPlayers.add(t); persistenceErrors.push(e); }
     }
+    if (persistenceErrors.length) throw new AggregateError(persistenceErrors, 'player persistence failed');
   }
 
   queuePlayerProfileSnapshot(token, snapshot) {
@@ -1748,11 +2011,15 @@ class GameRoom extends Room {
     if (live) this.syncProfileVitals(live, prof);
     const snapshot = this.playerProfileSnapshot(prof);
     const inventorySignature = this.inventoryPersistenceSignature(snapshot);
+    const profileSignature = JSON.stringify(snapshot);
+    const savedRevision = this.playerMutationRevisions ? (this.playerMutationRevisions.get(t) || 0) : 0;
     try {
       await this.queuePlayerProfileSnapshot(t, snapshot);
       if (this.persistedInventorySignatures) this.persistedInventorySignatures.set(t, inventorySignature);
       if (this.dirtyPlayers) {
-        if (this.inventoryPersistenceSignature(prof) === inventorySignature) this.dirtyPlayers.delete(t);
+        const currentRevision = this.playerMutationRevisions ? (this.playerMutationRevisions.get(t) || 0) : savedRevision;
+        const profileUnchanged = JSON.stringify(this.playerProfileSnapshot(prof)) === profileSignature;
+        if (currentRevision === savedRevision && profileUnchanged) this.dirtyPlayers.delete(t);
         else this.dirtyPlayers.add(t);
       }
       return true;
@@ -1962,6 +2229,9 @@ class GameRoom extends Room {
       ? this.seedFirstTutorialJobContract(client, starterJob)
       : null;
     this.dirtyPlayers.add(rec.token);
+    // profilePayload performs final normalization; include those mutations in
+    // the immediate snapshot instead of making them race the save.
+    this.sendProfile(client, rec.prof);
     this.savePlayerProfileNow(rec.token, rec.prof);
     client.send('tutorialProgress', {
       ok: true,
@@ -1970,7 +2240,6 @@ class GameRoom extends Room {
       tutorials: { ...rec.prof.tutorials },
       starterContract,
     });
-    this.sendProfile(client, rec.prof);
     return true;
   }
 
@@ -2036,6 +2305,9 @@ class GameRoom extends Room {
     if (activeRoom.dim === 'fishing_lake') {
       kind = 'fishing_lake';
       fallback = [345.5, 19.001, 902.5];
+    } else if (activeRoom.dim === 'questions') {
+      kind = 'questions';
+      fallback = [930.5, 20, 858.5];
     } else if (activeRoom.dim === 'taming_land') {
       kind = 'taming_land';
       fallback = [420.5, 21.05, 907.5];
@@ -2203,6 +2475,11 @@ class GameRoom extends Room {
     p.dgn = spaceId;
     p.mount = '';
     p.x = spawn.x; p.y = spawn.y; p.z = spawn.z;
+    if (kind === 'questions') {
+      rec.prof.activeRoom = sanitizeActiveRoom({ dim: 'questions' });
+      rec.prof.pos = [spawn.x, spawn.y, spawn.z];
+      this.dirtyPlayers.add(rec.token);
+    }
     client.send('tutorialDimension', { active: true, kind, spaceId, ...spawn });
     return true;
   }
@@ -2253,6 +2530,27 @@ class GameRoom extends Room {
     return this.leaveTutorialDimension(client, townReturnArray());
   }
 
+  handleQuestionRoomRecovery(client, m) {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || this.rateLimited(client, 'questionRoomRecovery', 1, 4)) return false;
+    const point = value => {
+      const x = Number(value && value.x), y = Number(value && value.y), z = Number(value && value.z);
+      return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+        ? { x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000, z: Math.round(z * 1000) / 1000 }
+        : null;
+    };
+    logRoomLifecycle('question_room.position.recovered', {
+      shardId: this.shardId || 'main',
+      sidHash: shortHash(client.sessionId),
+      playerName: p.name || '',
+      reason: String(m && m.reason || 'client-safety').replace(/[^a-z0-9_.-]/gi, '').slice(0, 48),
+      before: point(m && m.before),
+      after: point(m && m.after),
+      server: { x: p.x, y: p.y, z: p.z, dim: p.dim, dgn: p.dgn },
+    });
+    return true;
+  }
+
   resumeTutorialDimension(client) {
     const p = client && this.state.players.get(client.sessionId);
     if (!p || p.dim !== 'tutorial' || !p.dgn) return false;
@@ -2294,6 +2592,50 @@ class GameRoom extends Room {
       for (const id of old) this.expireGate(id);
       return this.ensurePublicGateRank(rank);
     };
+    if (action === 'prepareAncientWardenProfile') {
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+      rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
+      rec.prof.tutorials.intro = TUTORIAL_VERSIONS.intro;
+      rec.prof.tutorials.gate = TUTORIAL_VERSIONS.gate;
+      rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      this.dirtyPlayers.add(rec.token);
+      const saved = await this.savePlayerProfileNow(rec.token, rec.prof);
+      this.sendProfile(client, rec.prof);
+      client.send('e2eJourneyResult', { action, requestId, ok: saved, level: rec.prof.S.lvl | 0 });
+      return saved;
+    }
+    if (action === 'prepareAncientWardenCoop') {
+      const p = this.state.players.get(client.sessionId), requestId = String(m && m.requestId || '').slice(0, 32);
+      if (p && p.dim === 'tutorial') this.leaveTutorialDimension(client);
+      const route = this.ancientCityRoute('ancient_city_0');
+      if (!p || !route || p.dgn) { client.send('e2eJourneyResult', { action, requestId, ok: false }); return false; }
+      const role = m && m.role === 'safe' ? 'safe' : 'danger';
+      p.x = route.core.x + (role === 'safe' ? 4 : 8); p.y = route.city.core.y - 1; p.z = route.core.z;
+      p.dim = 'overworld'; p.dgn = '';
+      rec.prof.ancientCityRun = { cityId: route.city.id, stage: 4, vaultId: 'vault_a', startedAt: Date.now() };
+      rec.prof.pos = [p.x, p.y, p.z]; this.dirtyPlayers.add(rec.token);
+      const hp = this.playerHp.get(client.sessionId);
+      if (hp) hp.hp = hp.max;
+      this.sendAncientCityRun(client);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, role, x: p.x, y: p.y, z: p.z, hp: hp ? hp.hp : 20 });
+      return true;
+    }
+    if (action === 'exerciseAncientWarden') {
+      const requestId = String(m && m.requestId || '').slice(0, 32), route = this.ancientCityRoute('ancient_city_0');
+      let live = route && this.activeAncientWarden(route.city.id);
+      if (route && !live) {
+        const spec = this.discoverySpec(route.core.id), id = this.spawnAncientWarden(client, spec, 2, { level: 3, last: Date.now(), mobId: '' });
+        live = this.activeAncientWarden(route.city.id) || { id, mob: this.state.mobs.get(id), meta: this.mobMeta[id] };
+      }
+      if (!live || !live.mob || !live.meta) { client.send('e2eJourneyResult', { action, requestId, ok: false }); return false; }
+      live.mob.x = route.core.x + 3; live.mob.y = route.city.core.y - 1; live.mob.z = route.core.z;
+      live.mob.state = 'wardenSonicWind'; live.meta.stateT = 1.45; live.meta.gcd = 4; live.meta.woke = true; live.meta.enraged = false;
+      this.sendSpace('', 'fx', { t: 'wardenSonicWarn', durationMs: 1450, x: live.mob.x, y: live.mob.y, z: live.mob.z, innerRadius: 2.8, outerRadius: 8, label: 'SONIC RESONANCE', dgn: '' });
+      client.send('e2eJourneyResult', { action, requestId, ok: true, id: live.id, hp: live.mob.hp, maxHp: live.mob.maxHp, damage: 8, windupMs: 1450 });
+      return true;
+    }
     if (action === 'prepareERankDungeon') {
       const dungeonId = String(m && m.dungeonId || '');
       const allowed = ['abandoned_mine', 'sunken_crypt', 'mossbound_cellar'];
@@ -2391,6 +2733,19 @@ class GameRoom extends Room {
         return false;
       }
       p.x = W.TOWN.TC + 8.5; p.y = W.TOWN.G + 1; p.z = W.TOWN.TC - 4.5;
+      p.dim = 'overworld'; p.dgn = '';
+      rec.prof.pos = [p.x, p.y, p.z]; this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, x: p.x, y: p.y, z: p.z });
+      return true;
+    }
+    if (action === 'positionAtSmith') {
+      const p = this.state.players.get(client.sessionId);
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      if (!p) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      p.x = W.HUB.smith.x; p.y = W.TOWN.G + 1; p.z = W.HUB.smith.z;
       p.dim = 'overworld'; p.dgn = '';
       rec.prof.pos = [p.x, p.y, p.z]; this.dirtyPlayers.add(rec.token);
       client.send('e2eJourneyResult', { action, requestId, ok: true, x: p.x, y: p.y, z: p.z });
@@ -3437,31 +3792,39 @@ class GameRoom extends Room {
   }
   handleWorldEdit(client, m) {
     const p = this.state.players.get(client.sessionId);
-    if (!p || !m || p.dgn) return;
+    if (!p || !m) return;
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, id = m.id | 0;
-    if (!W.inWorld(x, y, z)) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z));
-    if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.BARRIER) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z), id);
+    if (p.dgn) {
+      this.recordEditTrace(client, 'edit.ignored', { target: { x, y, z }, requested: id, reason: 'wrong_space', slot: m.slot });
+      return;
+    }
+    if (!W.inWorld(x, y, z)) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z), id, { reason: 'bounds', slot: m.slot });
+    if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.BARRIER) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z), id, { reason: 'invalid_block', slot: m.slot });
     const prev = this.world.getB(x, y, z);
-    if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (prev === W.B.BEDROCK || prev === W.B.BARRIER || prev === W.B.LAVA || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, prev, id);
-    if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id);
+    if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'rate', slot: m.slot });
+    if (prev === W.B.BEDROCK || prev === W.B.BARRIER || prev === W.B.LAVA || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'protected_block', slot: m.slot });
+    if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'reach', slot: m.slot });
+    if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'world_border', slot: m.slot });
     const guildFloorEdit = this.canEditGuildFloor && this.canEditGuildFloor(client, x, y, z, id, prev);
-    if (this.isTownProtected(x, z) && !guildFloorEdit) return this.rejectEdit(client, x, y, z, prev, id);
-    if (this.isEventProtectedBlock(x, y, z)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (!this.canEditLand(client, x, z, { allowTown: guildFloorEdit })) return this.rejectEdit(client, x, y, z, prev, id);
-    if (id !== W.B.AIR && prev !== W.B.AIR && prev !== W.B.WATER) return this.rejectEdit(client, x, y, z, prev, id);
+    if (this.isTownProtected(x, z) && !guildFloorEdit) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'town_buffer', slot: m.slot });
+    if (this.isEventProtectedBlock(x, y, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'event_protected', slot: m.slot });
+    if (!this.canEditLand(client, x, z, { allowTown: guildFloorEdit })) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'land_permission', slot: m.slot });
+    if (id !== W.B.AIR && prev !== W.B.AIR && prev !== W.B.WATER) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'occupied', slot: m.slot });
     if (prev === W.B.CHEST && id === W.B.AIR && !this.canBreakChest(client, 'overworld:' + x + ',' + y + ',' + z)) {
-      return this.rejectEdit(client, x, y, z, prev, id);
+      return this.rejectEdit(client, x, y, z, prev, id, { reason: 'chest_permission', slot: m.slot });
     }
     const editKey = x + ',' + y + ',' + z;
     const naturalHarvest = id === W.B.AIR && !this.state.edits.has(editKey);
-    if (id !== W.B.AIR && !this.consumeForPlacement(client, id)) return this.rejectEdit(client, x, y, z, prev, id);
+    if (id !== W.B.AIR && !this.consumeForPlacement(client, id)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'inventory', slot: m.slot });
     if (id === W.B.AIR && (prev === W.B.LOG || prev === W.B.LEAVES)) this.queueNaturalTreeRegrowth(x, y, z);
     if (this.treeRestoredEditKeys) this.treeRestoredEditKeys.delete(editKey);
     this.world.setB(x, y, z, id);
     this.state.edits.set(editKey, id);
     this.dirtyWorld = true;
+    this.recordEditTrace(client, id === W.B.AIR ? 'break.accepted' : 'place.accepted', {
+      target: { x, y, z }, actual: prev, requested: id,
+      reason: 'accepted', slot: m.slot,
+    });
     if (prev === W.B.EGG_INSULATOR && id !== W.B.EGG_INSULATOR) { this.cancelDragonIncubationAt(x, y, z); this.cancelNestDragonsAt(x, y, z); }
     if (prev === W.B.CHEST && id === W.B.AIR) this.deleteChest('overworld:' + x + ',' + y + ',' + z);
     if (id === W.B.CHEST) this.createPlacedChest(client, 'overworld:' + x + ',' + y + ',' + z, 'personal');
@@ -3476,10 +3839,10 @@ class GameRoom extends Room {
     if (!p || !m || !p.dgn) return;
     const inst = this.instances[p.dgn]; if (!inst) return;
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, id = m.id | 0;
-    if (!inst.inBounds(x, y, z)) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
+    if (!inst.inBounds(x, y, z)) return this.rejectEdit(client, x, y, z, W.B.AIR, id, { reason: 'dungeon_bounds', slot: m.slot });
     // Dungeon layouts are authored encounters. Letting players mine/place here
     // causes missing floors, invalid routes, and spawn traps in live Gates.
-    return this.rejectEdit(client, x, y, z, inst.getB(x, y, z), id, { reason: 'dungeon_locked' });
+    return this.rejectEdit(client, x, y, z, inst.getB(x, y, z), id, { reason: 'dungeon_locked', slot: m.slot });
   }
   sendSpace(dgn, type, msg) {
     for (const c of this.clients) {
@@ -3527,6 +3890,27 @@ class GameRoom extends Room {
     }
     const inst = dgn ? this.activeDungeonInstance(dgn) : null;
     return AI.makeSolid(inst ? inst.world : null, this.world || null);
+  }
+  canInteractAt(player, x, y, z, range) {
+    if (!player || ![x, y, z, range].every(Number.isFinite) || range <= 0) return false;
+    const eyeY = Number(player.y) + 1.2;
+    const px = Number(player.x), pz = Number(player.z);
+    const distance = Math.hypot(px - x, eyeY - y, pz - z);
+    if (distance > range) return false;
+    const solid = this.spaceSolid(player.dgn || '');
+    const steps = Math.ceil(distance / .6);
+    const tx = Math.floor(x), ty = Math.floor(y), tz = Math.floor(z);
+    for (let step = 1; step < steps; step++) {
+      const t = step / steps;
+      const bx = Math.floor(px + (x - px) * t);
+      const by = Math.floor(eyeY + (y - eyeY) * t);
+      const bz = Math.floor(pz + (z - pz) * t);
+      // Physical interactions terminate inside the target block. It is not an
+      // obstruction, but any other solid voxel along the ray still is.
+      if (bx === tx && by === ty && bz === tz) continue;
+      if (solid(bx, by, bz)) return false;
+    }
+    return true;
   }
   serverDamageFor(p, sid) {
     const lvl = Math.max(1, Math.min(999, p.lvl | 0));
@@ -4149,7 +4533,7 @@ class GameRoom extends Room {
     return rec ? this.maxUnlockedGateRankForProfile(rec.prof) : 0;
   }
   gateSystemUnlockedForProfile(prof) {
-    return !!(prof && prof.S && (prof.S.lvl | 0) >= 3);
+    return !!(prof && prof.S && (prof.S.lvl | 0) >= 1);
   }
   publicGateSpawningUnlocked(surface = []) {
     for (const entry of surface || []) {
@@ -4838,6 +5222,7 @@ class GameRoom extends Room {
   }
   sendProfile(client, prof) {
     if (!client || !prof) return false;
+    this.deliverPendingRewards(client, prof);
     const payload = this.profilePayload(client, prof);
     this.emitVitalsDebug(client, 'profile.send', {
       profile: payload.vitals,
@@ -4849,7 +5234,39 @@ class GameRoom extends Room {
     client.send('profile', payload);
     return true;
   }
+  queuePendingReward(prof, item, source = 'reward') {
+    const id = item && (item.id | 0), count = Math.max(0, item && (item.count | 0));
+    if (!prof || id <= 0 || count <= 0) return null;
+    if (!Array.isArray(prof.pendingRewards)) prof.pendingRewards = [];
+    let pending = prof.pendingRewards.find(entry => entry && (entry.id | 0) === id);
+    if (pending) pending.count = Math.min(1e9, (pending.count | 0) + count);
+    else {
+      pending = { id, count, source: String(source || 'reward').slice(0, 32) };
+      prof.pendingRewards.push(pending);
+    }
+    return { ...pending };
+  }
+  deliverPendingRewards(client, prof) {
+    if (!prof || !Array.isArray(prof.pendingRewards) || !prof.pendingRewards.length) return [];
+    const remaining = [], delivered = [];
+    for (const pending of prof.pendingRewards) {
+      if (!pending || (pending.id | 0) <= 0 || (pending.count | 0) <= 0) continue;
+      const count = pending.count | 0;
+      const left = this.addRewardItem(prof, pending.id | 0, count);
+      const placed = Math.max(0, count - left);
+      if (placed) delivered.push({ id: pending.id | 0, count: placed, source: pending.source || 'reward' });
+      if (left) remaining.push({ ...pending, count: left });
+    }
+    prof.pendingRewards = remaining;
+    if (delivered.length) {
+      const token = client && this.tokens && this.tokens.get(client.sessionId);
+      if (token && this.dirtyPlayers) this.dirtyPlayers.add(token);
+      if (client) client.send('pendingRewardState', { delivered, items: remaining });
+    }
+    return delivered;
+  }
   profileQuestTrace(client, event, prof, extra = {}) {
+    if (!QUEST_TRACE_LOG) return;
     try {
       const q = prof && prof.activeNpcQuest;
       const objectives = typeof this.activeQuestObjectives === 'function' ? this.activeQuestObjectives(client, prof) : [];
@@ -4942,6 +5359,7 @@ class GameRoom extends Room {
       deity: this.deityPayloadFor(client, prof),
       e2eSkipFirstQuestRewardPresentation: prof.e2eSkipFirstQuestRewardPresentation === true,
       activeObjectives: this.activeQuestObjectives(client, prof),
+      fantasyStructureDaily: this.fantasyStructureDaily ? this.fantasyStructureDailyForProfile(prof) : null,
     };
   }
   tradeItemName(id) {
@@ -5233,7 +5651,7 @@ class GameRoom extends Room {
           room, client, player,
           shardId: inDungeon ? '' : cleanShardId(room.shardId || 'main'),
           status: inDungeon ? 'IN DUNGEON' : dimension === 'event' ? 'IN EVENT' : dimension === 'overworld' ? 'IN OVERWORLD' : 'IN PRIVATE ACTIVITY',
-          joinable: !inDungeon && dimension === 'overworld' && room.__restartLocked !== true && room.clients.length < (room.maxClients || 24),
+          joinable: !inDungeon && dimension === 'overworld' && room.__restartLocked !== true && room.clients.length < room.maxClients,
         };
       }
     }
@@ -6210,7 +6628,9 @@ class GameRoom extends Room {
           location: String(c.location || objective.location || '').slice(0, 80),
           targetName: String(c.targetName || '').slice(0, 64),
           targetX: Number.isFinite(c.targetX) ? c.targetX : undefined,
+          targetY: Number.isFinite(c.targetY) ? c.targetY : undefined,
           targetZ: Number.isFinite(c.targetZ) ? c.targetZ : undefined,
+          targetDimension: String(c.targetDimension || 'overworld').slice(0, 32),
           target: Number.isFinite(c.target) ? c.target : 0,
           need: Math.max(1, Math.min(999999, c.need | 0 || 1)),
           have: Math.max(0, Math.min(999999, c.have | 0)),
@@ -7799,16 +8219,16 @@ class GameRoom extends Room {
     if(!this.blacksmithNear(client))return client.send('lootRecoveryResult',{ok:false,reason:'range'});
     if(this.rateLimited(client,'lootRecovery',8,16))return client.send('lootRecoveryResult',{ok:false,reason:'rate'});
     const queue=this.pruneLootRecovery(rec.prof);
-    if(!m||m.action==='list')return client.send('lootRecoveryState',{items:queue});
+    if(!m||m.action==='list')return client.send('lootRecoveryState',this.lootRecoveryPayload(rec.prof));
     if(m.action!=='claim')return;
     const index=Math.max(0,Math.min(11,m.index|0)),item=queue[index];
-    if(!item)return client.send('lootRecoveryResult',{ok:false,reason:'item',items:queue});
+    if(!item)return client.send('lootRecoveryResult',{ok:false,reason:'item',...this.lootRecoveryPayload(rec.prof)});
     const slot=(rec.prof.inv||[]).findIndex(s=>!s);
     const target=slot>=0?slot:(rec.prof.inv||[]).length<36?(rec.prof.inv||[]).length:-1;
-    if(target<0)return client.send('lootRecoveryResult',{ok:false,reason:'full',items:queue});
-    if(this.addGearRewardItem(rec.prof,item))return client.send('lootRecoveryResult',{ok:false,reason:'full',items:queue});
+    if(target<0)return client.send('lootRecoveryResult',{ok:false,reason:'full',...this.lootRecoveryPayload(rec.prof)});
+    if(this.addGearRewardItem(rec.prof,item))return client.send('lootRecoveryResult',{ok:false,reason:'full',...this.lootRecoveryPayload(rec.prof)});
     queue.splice(index,1);this.dirtyPlayers.add(rec.token);this.syncPlayerProfile(client,rec.prof);
-    client.send('lootRecoveryResult',{ok:true,slot:target,item:{...rec.prof.inv[target],gear:true},items:queue});
+    client.send('lootRecoveryResult',{ok:true,slot:target,item:{...rec.prof.inv[target],gear:true},...this.lootRecoveryPayload(rec.prof)});
   }
   handleUseRepairKit(client, m) {
     const rec = this.profileFor(client);
@@ -8161,6 +8581,8 @@ class GameRoom extends Room {
     }
     const claimedKey = this.ancientWardenDefeatKey(s.id);
     const rec = this.profileFor(client);
+    if (rec && (rec.prof.ancientWardenPending || []).some(v => v.coreId === s.id))
+      return this.claimAncientWardenPending(client, { id: s.id, x: s.x, y: s.y, z: s.z, radius: s.radius });
     if (rec && Array.isArray(rec.prof.claimedDiscoveries) && rec.prof.claimedDiscoveries.includes(claimedKey)) {
       client.send('discoveryReject', { reason: 'claimed' });
       return true;
@@ -8193,22 +8615,22 @@ class GameRoom extends Room {
   }
   spawnAncientWarden(client, s, ring = 0, alarm = null) {
     const id = String(++this.mobSeq), mob = new Mob();
-    const gy = this.world.standHeight(s.x, s.z, s.y + 1);
-    mob.x = s.x; mob.y = gy > 0 ? gy : s.y; mob.z = s.z;
+    const spawnX = s.x + 3, spawnZ = s.z, gy = this.world.standHeight(spawnX, spawnZ, s.y + 3);
+    mob.x = spawnX; mob.y = gy > 0 ? gy : s.y; mob.z = spawnZ;
     mob.kind = 'boss';
     mob.displayName = 'Ancient Warden';
     mob.bossStyle = 'ancient_warden';
-    mob.maxHp = mob.hp = 180 + ring * 70;
-    mob.enraged = true;
+    mob.maxHp = mob.hp = 160 + ring * 55;
+    mob.enraged = false;
     this.state.mobs.set(id, mob);
-    const meta = this.freshMeta(mob.x, mob.z, 10 + ring * 3, 1.05 + ring * .08, 'boss', Math.max(1, ring + 1), true);
+    const meta = this.freshMeta(mob.x, mob.z, 7 + ring * 2, 1.05 + ring * .08, 'boss', Math.max(1, ring + 1), true);
     meta.ancientWarden = true;
     meta.cityId = String(s.cityId || '');
     meta.coreId = String(s.id || '');
-    meta.bossStyle = 'watcher';
-    meta.slamDmg = 10 + ring * 4;
-    meta.gcd = 1.4;
-    meta.enraged = true;
+    meta.bossStyle = 'ancient_warden';
+    meta.slamDmg = 7 + ring * 2;
+    meta.gcd = 2.1;
+    meta.enraged = false;
     meta.woke = true;
     meta.sum1 = true;
     meta.sum2 = true;
@@ -8544,7 +8966,7 @@ class GameRoom extends Room {
     const entries=this.cartographerEntries(prof),regions=DANGER_RINGS.map((r,i)=>{const all=entries.filter(e=>e.region===i);return {index:i,name:r.name,found:all.filter(e=>e.found).length,total:all.length,claimed:(prof.cartographerRegionClaims||[]).includes(i)};});
     const mapTable=!!(client&&this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table')),mapLeadCost=mapTable?15:25;
     const hasTownMap=this.profileItemCount(prof,I.TOWN_MAP)>0;
-    return {regions,hints:prof.cartographerHints||[],contract:prof.cartographerContract||null,treasure:this.publicTreasureMap(prof.treasureMap,mapTable),cosmetics:prof.cosmeticUnlocks||[],equippedCosmetics:prof.equippedCosmetics||[],gold:prof.gold|0,totalFound:entries.filter(e=>e.found).length,total:entries.length,introSeen:!!prof.cartographerIntroSeen,mapTable,mapLeadCost,hasTownMap,townMapClaimed:!!prof.townMapClaimed||hasTownMap,townMapObjective:prof.progressionFocus==='first_town_map'};
+    return {regions,hints:prof.cartographerHints||[],contract:prof.cartographerContract||null,treasure:this.publicTreasureMap(prof.treasureMap,mapTable),ancientRun:this.ancientCityRunPayload(prof),cosmetics:prof.cosmeticUnlocks||[],equippedCosmetics:prof.equippedCosmetics||[],gold:prof.gold|0,totalFound:entries.filter(e=>e.found).length,total:entries.length,introSeen:!!prof.cartographerIntroSeen,mapTable,mapLeadCost,hasTownMap,townMapClaimed:!!prof.townMapClaimed||hasTownMap,townMapObjective:prof.progressionFocus==='first_town_map'};
   }
   publicCosmetics(prof) {
     return Array.isArray(prof && prof.equippedCosmetics)
@@ -8595,18 +9017,14 @@ class GameRoom extends Room {
       prof.gold-=cost;prof.cartographerHints.push(pick.s.id);this.dirtyPlayers.add(rec.token);
       this.recordEconomyGold(client,-cost,'cartographer_sink','hint',{ id: pick.s.id, mapTable });
       client.send('cartographerHint',{id:pick.s.id,name:pick.s.name||pick.s.type.replace(/_/g,' '),cost,gold:prof.gold|0,mapTable});
-    }else if(action==='treasure_start'||action==='ancient_treasure_start'){
-      if(prof.treasureMap)return client.send('cartographerReject',{reason:'treasure_active'});
-      const ancient=action==='ancient_treasure_start';
-      const basePool=ancient
-        ? entries.map(e=>e.s).filter(s=>s.type==='ancient_city'||s.type==='cave')
-        : entries.map(e=>e.s).filter(s=>s.type!=='traveling_merchant'&&!['rain_bloom','storm_crystal','sun_dial'].includes(s.type));
-      const cities=W.ancientCitySpecs();
-      const pool=Array.from(new Map((ancient&&cities.length ? basePool.concat(cities) : basePool).map(s=>[s.id,s])).values());
+    }else if(action==='ancient_treasure_start'){
+      this.startAncientCityRun(client);
+    }else if(action==='treasure_start'){
+      if(prof.treasureMap||prof.ancientCityRun)return client.send('cartographerReject',{reason:'treasure_active'});
+      const pool=entries.map(e=>e.s).filter(s=>s.type!=='traveling_merchant'&&!['rain_bloom','storm_crystal','sun_dial'].includes(s.type));
       if(pool.length<3)return client.send('cartographerReject',{reason:'complete'});
-      const day=Math.floor(Date.now()/DAY_MS),targets=[];for(let i=0;i<3;i++){let pick=pool[(day*(ancient?11:7)+i*(ancient?17:13))%pool.length],guard=0;while(targets.includes(pick.id)&&guard++<pool.length)pick=pool[(pool.indexOf(pick)+1)%pool.length];targets.push(pick.id);}
-      if(ancient&&cities.length&&!targets.some(id=>String(id).indexOf('ancient_city_')===0))targets[targets.length-1]=cities[day%cities.length].id;
-      prof.treasureMap={id:(ancient?'ancient_map_':'treasure_')+day+'_'+Date.now().toString(36),kind:ancient?'ancient_city':'treasure',stage:0,targets,rewardGold:ancient?260:180};this.dirtyPlayers.add(rec.token);
+      const day=Math.floor(Date.now()/DAY_MS),targets=[];for(let i=0;i<3;i++){let pick=pool[(day*7+i*13)%pool.length],guard=0;while(targets.includes(pick.id)&&guard++<pool.length)pick=pool[(pool.indexOf(pick)+1)%pool.length];targets.push(pick.id);}
+      prof.treasureMap={id:'treasure_'+day+'_'+Date.now().toString(36),kind:'treasure',stage:0,targets,rewardGold:180};this.dirtyPlayers.add(rec.token);
       client.send('treasureMapStarted',this.publicTreasureMap(prof.treasureMap,!!(this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'))));
     }else if(action==='claim_region'){
       const region=Math.max(0,Math.min(3,m.region|0)),all=entries.filter(e=>e.region===region);
@@ -8642,11 +9060,12 @@ class GameRoom extends Room {
     const rec=this.profileFor(client),p=client&&this.state.players.get(client.sessionId),map=rec&&rec.prof.treasureMap;
     if(!rec||!p||p.dgn||!map||!Array.isArray(map.targets))return client&&client.send('treasureMapReject',{reason:'inactive'});
     const target=this.explorationSpec(map.targets[map.stage|0]);
-    if(!target||m.id!==target.id||Math.hypot(p.x-target.x,p.z-target.z)>(target.radius||8)+4)return client.send('treasureMapReject',{reason:'range'});
+    if(!target||m.id!==target.id||Math.hypot(p.x-target.x,p.z-target.z)>(target.radius||8)+4||
+      map.kind==='ancient_city'&&Math.abs(p.y-target.y)>5)return client.send('treasureMapReject',{reason:'range'});
     map.stage=(map.stage|0)+1;this.dirtyPlayers.add(rec.token);
     if(map.stage>=map.targets.length){
       const ancient=map.kind==='ancient_city';
-      const rewardGold=map.rewardGold|0;rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+rewardGold);
+      const rewardGold=map.rewardGold|0;
       const rewardItems=ancient
         ? [{id:I.ANCIENT_FRAGMENT,count:3},{id:I.ECHO_GLYPH,count:1},{id:I.RELIC_ARMOR_PIECE,count:1},{id:I.DIAMOND,count:1}]
         : [{id:I.DIAMOND,count:2}];
@@ -8654,6 +9073,7 @@ class GameRoom extends Room {
       const fits = rewardItems.every(it => this.addRewardItem(draft, it.id, it.count) === 0);
       if (!fits) { map.stage--; this.dirtyPlayers.add(rec.token); return client.send('treasureMapReject',{reason:'full'}); }
       for(const it of rewardItems)this.addRewardItem(rec.prof,it.id,it.count);
+      rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+rewardGold);
       rec.prof.treasureMap=null;
       this.recordEconomyGold(client,rewardGold,'cartographer_faucet',ancient?'ancient_treasure_map':'treasure_map',{ id: map.id || '' });
       const fellowshipRenown = this.awardGuildRenownForProject ? this.awardGuildRenownForProject(client, 'map_table', 2, 'Treasure route') : 0;
@@ -8733,7 +9153,7 @@ class GameRoom extends Room {
   }
   handleDiscoveryInteract(client, m) {
     const p = this.state.players.get(client.sessionId), s = m && this.discoverySpec(m.id);
-    if (!p || p.dgn || !s || Math.hypot(p.x - s.x, p.z - s.z) > s.radius + 2) return client.send('discoveryReject', { reason: 'range' });
+    if (!p || p.dgn || !s || !this.canInteractAt(p, s.x, s.y + .8, s.z, s.radius + 2)) return client.send('discoveryReject', { reason: 'range' });
     if (s.type === 'puzzle_shrine' && (!s.target || (m.x | 0) !== s.target.x || (m.y | 0) !== s.target.y || (m.z | 0) !== s.target.z))
       return client.send('discoveryReject', { reason: 'pattern', hint: 'Two flames agree. Touch the one that does not.' });
     if (!['rare_plant', 'lore_tablet', 'fishing_pool', 'puzzle_shrine', 'buried_chest','rain_bloom','storm_crystal','sun_dial','ancient_tablet','ancient_vault','ancient_core'].includes(s.type)) return client.send('discoveryReject', { reason: 'inactive' });
@@ -8748,8 +9168,8 @@ class GameRoom extends Room {
     const ring = dangerRingAt(s.x, s.z), regional = BIOME_COLLECTIBLE[W.biomeAt(s.x, s.z)];
     if (s.type === 'ancient_core' && this.triggerAncientWardenAlarm(client, s, ring)) return;
     if ((s.type==='fishing_pool'?claims.has(claimKey):rec.prof.claimedDiscoveries.includes(s.id))) return client.send('discoveryReject', { reason: s.type==='fishing_pool'?'cooldown':'claimed' });
-    if(s.type==='fishing_pool'){claims.add(claimKey);this.discoveryClaims.set(token,claims);}else{rec.prof.claimedDiscoveries.push(s.id);this.dirtyPlayers.add(rec.token);}
     let name = 'Small Discovery', text = '', xp = 5, items = [];
+    let treasureProgress = false, puzzleProgress = false;
     if (s.cityId) {
       const city = this.explorationSpec(s.cityId);
       if (city) this.markDiscovery(client, city);
@@ -8772,8 +9192,7 @@ class GameRoom extends Room {
     } else if (s.type === 'buried_chest') {
       name = 'Buried Cache'; text = 'You recover the cache before the wilds swallow it.'; xp = 8 + ring * 3;
       items.push({ id: ring >= 2 ? I.IRON_INGOT : I.COAL, count: 2 + ring });
-      this.progressRegionalContract(client, 'recover_buried_cache', { targetId: s.id });
-      this.recordTreasureProgress(client);
+      treasureProgress = true;
     } else if(s.type==='rain_bloom'){
       name='Rainwake Bloom';text='Rainwake petals can be cooked into strong restorative broth.';xp=18+ring*4;items.push({id:I.RAINWAKE_PETAL,count:1+ring});
     } else if(s.type==='storm_crystal'){
@@ -8795,14 +9214,23 @@ class GameRoom extends Room {
         {id:I.DIAMOND,count:1+Math.floor(ring/2)}
       );
       if(ring>=2)items.push({id:I.RELIC_ARMOR_PIECE,count:1});
-      this.recordTreasureProgress(client);
+      treasureProgress = true;
     } else if(s.type==='ancient_core'){
       name='Ancient Core';text='The core is quiet. The Warden seal has already been answered.';xp=20+ring*6;
     } else {
       name = 'Odd-Flame Shrine'; text = 'The mismatched flame sinks. A hidden compartment opens.'; xp = 15 + ring * 5;
       items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + Math.max(0, ring - 1) });
-      this.progressRegionalContract(client, 'solve_puzzle_shrine', { targetId: s.id });
+      puzzleProgress = true;
     }
+    const rewardDraft={...rec.prof,inv:(rec.prof.inv||[]).map(slot=>slot?{...slot}:null)};
+    if(!items.every(item=>this.addRewardItem(rewardDraft,item.id,item.count)===0))return client.send('discoveryReject',{reason:'full'});
+    if(s.type==='fishing_pool'){claims.add(claimKey);this.discoveryClaims.set(token,claims);}
+    else{rec.prof.claimedDiscoveries.push(s.id);this.dirtyPlayers.add(rec.token);}
+    if(treasureProgress){
+      if(s.type==='buried_chest')this.progressRegionalContract(client,'recover_buried_cache',{targetId:s.id});
+      this.recordTreasureProgress(client);
+    }
+    if(puzzleProgress)this.progressRegionalContract(client,'solve_puzzle_shrine',{targetId:s.id});
     const weatherRenown = required && this.awardGuildRenownForProject ? this.awardGuildRenownForProject(client, 'weather_vane', 1, 'Weather site harvest') : 0;
     const weatherEvents=this.applyWeatherDiscoveryMilestones(client,rec);
     this.awardGrant(client, { source: 'discovery', discovery: s.type, xp, items });
@@ -8813,7 +9241,7 @@ class GameRoom extends Room {
     const rec = this.profileFor(client);
     if (rec) {
       this.grantHunterXp(rec.prof, grant.xp, client, grant.source || 'grant');
-      const delivered=[];
+      const delivered=[],reserved=[];
       for (const item of grant.items || []) {
         const rewardItem=item&&item.gear?{...item,source:item.source||grant.source||'grant'}:item;
         const left=rewardItem&&rewardItem.gear?this.addGearRewardItem(rec.prof,rewardItem):this.addRewardItem(rec.prof,rewardItem.id,rewardItem.count);
@@ -8822,15 +9250,19 @@ class GameRoom extends Room {
         else if(!rewardItem.gear){
           placed = Math.max(0, Math.max(0, rewardItem.count | 0) - left);
           if (placed > 0) delivered.push({...rewardItem,count:placed});
+          if (left > 0) {
+            const pending=this.queuePendingReward(rec.prof,{id:rewardItem.id,count:left},grant.source||'grant');
+            if(pending)reserved.push({id:rewardItem.id,count:left,source:pending.source});
+          }
         }
         else {
           const recovered=this.queueGearRecovery(rec.prof,rewardItem,grant.source||'grant');
-          if(recovered)client.send('lootRecoveryState',{items:rec.prof.lootRecovery,queued:recovered});
+          if(recovered)client.send('lootRecoveryState',this.lootRecoveryPayload(rec.prof,{queued:recovered}));
         }
         if (item && item.id && ((rewardItem.gear && !left) || placed > 0)) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: rewardItem.gear ? 1 : placed });
       }
       if (delivered.length && this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
-      grant={...grant,items:delivered};
+      grant={...grant,items:delivered,pendingItems:reserved};
       this.syncPlayerProfile(client, rec.prof);
       this.sendTradeInventory(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
@@ -9565,6 +9997,8 @@ class GameRoom extends Room {
   // loop so a DungeonInstance can drive its own mobs through the same code path; behaviour is
   // unchanged. `spaces` maps dgn -> [{p,sid}] players, as built in update().
   simulateMob(m, id, meta, dt, spaces) {
+      const th = this.state.tod * Math.PI * 2, sy = -Math.cos(th);
+      const night = sstep(-0.12, 0.20, sy / Math.hypot(Math.sin(th), sy, .22)) < .18;
       const inst = m.dgn ? this.activeDungeonInstance(m.dgn) : null;
       if (m.dgn && !inst) return;
       const ground = (x, z, fromY) => inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, fromY)) : (this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, fromY) : -1);
@@ -10043,8 +10477,10 @@ class GameRoom extends Room {
     // were already TTL-expired or never existed here (public gates keyed by roomId).
     for (const id of drainConsumedGates()) this.expireGate(id);
     for (const rank of drainRequestedPublicGateRanks()) this.ensurePublicGateRank(rank);
-    for (const client of surface) {
-      const rec = this.profileFor(client);
+    for (const entry of surface) {
+      const token = entry && entry.sid && this.tokens.get(entry.sid);
+      const prof = token && this.profiles.get(token);
+      const rec = prof ? { token, prof } : null;
       const quest = rec && rec.prof && rec.prof.activeNpcQuest;
       if (quest && quest.type === 'gate' && (quest.gateRank | 0) >= 0) this.ensurePublicGateRank(quest.gateRank);
       else if (rec && rec.prof && rec.prof.progressionFocus === 'first_d_gate') this.ensurePublicGateRank(1);
@@ -10076,6 +10512,8 @@ applyMixin(GameRoom, require('./metrics.mixin'));
 applyMixin(GameRoom, require('./recall.mixin'));
 applyMixin(GameRoom, require('./knowledge-challenge.mixin'));
 applyMixin(GameRoom, require('./expedition.mixin'));
+applyMixin(GameRoom, require('./ancient-city-run.mixin'));
+applyMixin(GameRoom, require('./overworld-structures.mixin'));
 
 
 module.exports = {

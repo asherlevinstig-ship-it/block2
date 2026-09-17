@@ -76,6 +76,7 @@ const JOB_TUTORIAL_ROOMS = Object.freeze({
 });
 const TAMING_LAND_ROOM = Object.freeze({ x: 420, z: 925, g: 20, r: 68, spawnDx: 0, spawnDz: -18 });
 const FISHING_LAKE_ROOM = Object.freeze({ x: 345, z: 925, g: 18, r: 62, spawnDx: 0, spawnDz: -23 });
+const QUESTION_HALL_ROOM = Object.freeze({ x: 930, z: 855, g: 18, r: 28, spawnDx: 0, spawnDz: 3 });
 function sanitizeMountUnlocks(list) {
   const out = [];
   if (Array.isArray(list)) for (let k of list) {
@@ -407,6 +408,8 @@ function defaultProfile(name) {
     aegisTrial: null,
     inv: [{ id: APPEARANCE_MIRROR_ID, count: 1, locked: true, source: 'starter' }],
     lootRecovery: [],
+    lootRecoveryOverflow: [],
+    pendingRewards: [],
     armor: null,
     mountUnlocks: [],
     familiarUnlocks: [],
@@ -430,11 +433,17 @@ function defaultProfile(name) {
     dragonLoans: [],
     discoveries: [],
     claimedDiscoveries: [],
+    fantasyStructureClears: [],
+    fantasyStructureMastery: false,
+    fantasyStructureDailyDay: -1,
     explorationMilestones: [],
     cartographerRegionClaims: [],
     cartographerHints: [],
     cartographerContract: null,
     treasureMap: null,
+    ancientCityRun: null,
+    ancientCityClears: [],
+    ancientWardenPending: [],
     elderheartExpedition: null,
     elderheartExpeditionDone: false,
     cartographerIntroSeen: false,
@@ -547,6 +556,7 @@ function cleanShortText(v, fallback, max) {
 function sanitizeActiveRoom(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const dim = typeof raw.dim === 'string' ? raw.dim : '';
+  if (dim === 'questions') return { dim: 'questions' };
   if (dim === 'taming_land') return { dim: 'taming_land' };
   if (dim === 'fishing_lake') return { dim: 'fishing_lake' };
   const job = typeof raw.job === 'string' ? raw.job : '';
@@ -588,9 +598,9 @@ function sanitizeActiveRoom(raw) {
 
 function sanitizeActiveRoomPosition(activeRoom, pos) {
   if (!activeRoom || !Array.isArray(pos) || pos.length !== 3 || pos.some(v => !isFinite(+v))) return null;
-  const room = activeRoom.dim === 'taming_land' ? TAMING_LAND_ROOM : activeRoom.dim === 'fishing_lake' ? FISHING_LAKE_ROOM : JOB_TUTORIAL_ROOMS[activeRoom.job];
+  const room = activeRoom.dim === 'questions' ? QUESTION_HALL_ROOM : activeRoom.dim === 'taming_land' ? TAMING_LAND_ROOM : activeRoom.dim === 'fishing_lake' ? FISHING_LAKE_ROOM : JOB_TUTORIAL_ROOMS[activeRoom.job];
   if (!room) return null;
-  const standOffset = activeRoom.dim === 'fishing_lake' ? 1.001 : 1.05;
+  const standOffset = activeRoom.dim === 'questions' ? 2 : activeRoom.dim === 'fishing_lake' ? 1.001 : 1.05;
   const spawn = [room.x + (room.spawnDx || 0) + .5, room.g + standOffset, room.z + (room.spawnDz == null ? 14 : room.spawnDz) + .5];
   if (activeRoom.dim === 'fishing_lake') return spawn;
   const x = clampF(pos[0], room.x - room.r - 6, room.x + room.r + 6);
@@ -1031,6 +1041,7 @@ function sanitizeProfile(p) {
   }
   mirrorBackfillDisplacedItem = ensureAppearanceMirrorInventory(out);
   out.lootRecovery = [];
+  out.lootRecoveryOverflow = [];
   const now = Date.now();
   if (mirrorBackfillDisplacedItem) {
     const item = {
@@ -1051,8 +1062,12 @@ function sanitizeProfile(p) {
     if (mirrorBackfillDisplacedItem.locked === true) item.locked=true;
     out.lootRecovery.push(item);
   }
-  if (Array.isArray(p.lootRecovery)) {
-    for (const s of p.lootRecovery.slice(0, 12)) {
+  const recoveryItems = [
+    ...(Array.isArray(p.lootRecovery) ? p.lootRecovery : []),
+    ...(Array.isArray(p.lootRecoveryOverflow) ? p.lootRecoveryOverflow : []),
+  ];
+  if (recoveryItems.length) {
+    for (const s of recoveryItems) {
       if (!s || typeof s !== 'object') continue;
       const expiresAt = clampI(s.expiresAt, 0, 4102444800000);
       if (expiresAt && expiresAt <= now) continue;
@@ -1072,7 +1087,19 @@ function sanitizeProfile(p) {
       if (s.masterwork === true && item.forge) item.masterwork=true;
       if (GEAR_SYSTEM.uniqueFor(s)) item.unique=s.unique;
       if (s.locked === true) item.locked=true;
-      out.lootRecovery.push(item);
+      if (out.lootRecovery.length < 12) out.lootRecovery.push(item);
+      else out.lootRecoveryOverflow.push(item);
+    }
+  }
+  out.pendingRewards = [];
+  if (Array.isArray(p.pendingRewards)) {
+    for (const raw of p.pendingRewards) {
+      if (!raw || typeof raw !== 'object') continue;
+      const id = clampI(raw.id, 1, 999);
+      const count = clampI(raw.count, 1, 1000000000);
+      const existing = out.pendingRewards.find(item => item.id === id);
+      if (existing) existing.count = Math.min(1000000000, existing.count + count);
+      else out.pendingRewards.push({ id, count, source: cleanShortText(raw.source, 'reward', 32) });
     }
   }
   out.mountUnlocks = sanitizeMountUnlocks(p.mountUnlocks);
@@ -1101,6 +1128,9 @@ function sanitizeProfile(p) {
   const cleanDiscoveryList = list => Array.isArray(list) ? [...new Set(list.filter(v => typeof v === 'string' && /^(discovery|major|minor)_[A-Za-z0-9_]+$/.test(v)).slice(0, 512))] : [];
   out.discoveries = cleanDiscoveryList(p.discoveries);
   out.claimedDiscoveries = cleanDiscoveryList(p.claimedDiscoveries);
+  out.fantasyStructureClears = cleanDiscoveryList(p.fantasyStructureClears).filter(id => id.startsWith('major_fantasy_')).slice(0, 5);
+  out.fantasyStructureMastery = p.fantasyStructureMastery === true && out.fantasyStructureClears.length >= 5;
+  out.fantasyStructureDailyDay = clampI(p.fantasyStructureDailyDay, -1, 100000);
   out.explorationMilestones = Array.isArray(p.explorationMilestones)
     ? [...new Set(p.explorationMilestones.map(v => clampI(v, 0, 999)).filter(v => v > 0))].slice(0, 32) : [];
   out.cartographerRegionClaims = Array.isArray(p.cartographerRegionClaims)
@@ -1112,9 +1142,18 @@ function sanitizeProfile(p) {
     rewardGold: clampI(p.cartographerContract.rewardGold, 0, 9999), day: clampI(p.cartographerContract.day, 0, 100000),
   } : null;
   out.treasureMap = p.treasureMap && typeof p.treasureMap === 'object' ? {
-    id: cleanShortText(p.treasureMap.id, '', 48), stage: clampI(p.treasureMap.stage, 0, 3),
+    id: cleanShortText(p.treasureMap.id, '', 48), kind: p.treasureMap.kind === 'ancient_city' ? 'ancient_city' : 'treasure', stage: clampI(p.treasureMap.stage, 0, 3),
     targets: cleanDiscoveryList(p.treasureMap.targets).slice(0, 3), rewardGold: clampI(p.treasureMap.rewardGold, 0, 9999),
   } : null;
+  out.ancientCityRun = p.ancientCityRun && /^ancient_city_[01]$/.test(String(p.ancientCityRun.cityId || ''))
+    ? { cityId: p.ancientCityRun.cityId, stage: clampI(p.ancientCityRun.stage, 0, 5),
+      vaultId: /^vault_[ab]$/.test(String(p.ancientCityRun.vaultId || '')) ? p.ancientCityRun.vaultId : '',
+      startedAt: Math.max(0, Math.min(1e13, Number(p.ancientCityRun.startedAt) || 0)) }
+    : null;
+  out.ancientCityClears = cleanDiscoveryList(p.ancientCityClears).filter(id => /^ancient_city_[01]$/.test(id)).slice(0, 2);
+  out.ancientWardenPending = (Array.isArray(p.ancientWardenPending) ? p.ancientWardenPending : [])
+    .filter(v => v && /^ancient_city_[01]$/.test(String(v.cityId || '')) && String(v.coreId || '') === v.cityId + '_core')
+    .slice(0, 2).map(v => ({ cityId: v.cityId, coreId: v.coreId, ring: clampI(v.ring, 0, 3) }));
   out.elderheartExpedition = p.elderheartExpedition && p.elderheartExpedition.id === 'elderheart_road'
     ? { id: 'elderheart_road', stage: clampI(p.elderheartExpedition.stage, 0, 3), startedAt: Math.max(0, Math.min(1e13, Number(p.elderheartExpedition.startedAt) || 0)) }
     : null;
@@ -1648,6 +1687,44 @@ class JsonStore {
   async saveChests(chests) {
     await this._write(this._worldFile('chests.json'), { chests: sanitizeChests(chests), savedAt: Date.now() });
   }
+  async _recoverTransactionNow() {
+    const file = this._worldFile('transaction-journal.json');
+    const tx = await this._readNow(file);
+    if (!tx || !tx.id) return false;
+    if (tx.chests) await this._writeNow(this._worldFile('chests.json'), { chests: sanitizeChests(tx.chests), savedAt: Date.now() });
+    for (const [token, profile] of Object.entries(tx.players || {})) {
+      const clean = cleanToken(token);
+      if (clean) await this._writeNow(this._pfile(clean), { ...profile, savedAt: Date.now() });
+    }
+    await fs.promises.unlink(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    return true;
+  }
+  async recoverTransactions() {
+    return this._enqueue(() => this._recoverTransactionNow());
+  }
+  async commitTransaction(input = {}) {
+    return this._enqueue(async () => {
+      await this._recoverTransactionNow();
+      const tx = {
+        id: cleanShortText(input.id, 'transaction', 80),
+        players: {},
+        createdAt: Date.now(),
+      };
+      for (const [token, profile] of Object.entries(input.players || {})) {
+        const clean = cleanToken(token);
+        if (clean && profile) tx.players[clean] = JSON.parse(JSON.stringify(profile));
+      }
+      if (input.chests) tx.chests = sanitizeChests(input.chests);
+      const file = this._worldFile('transaction-journal.json');
+      await this._writeNow(file, tx);
+      if (tx.chests) await this._writeNow(this._worldFile('chests.json'), { chests: tx.chests, savedAt: Date.now() });
+      for (const [token, profile] of Object.entries(tx.players)) {
+        await this._writeNow(this._pfile(token), { ...profile, savedAt: Date.now() });
+      }
+      await fs.promises.unlink(file);
+      return { committed: true, id: tx.id };
+    });
+  }
   async loadFurnaces() {
     const d = await this._read(this._worldFile('furnaces.json'));
     return sanitizeFurnaces((d && d.furnaces) || {});
@@ -1733,6 +1810,152 @@ class JsonStore {
 // Firestore's 1MB limit, and saves touch only dirty regions of the map.
 // Authentication is handled before this adapter; the verified account ID is
 // used as the player document key for both storage backends.
+const FIRESTORE_FAST_RETRY_CONFIG = {
+  interfaces: {
+    'google.firestore.v1.Firestore': {
+      // A spent quota is not transient. The stock client retries
+      // RESOURCE_EXHAUSTED for ten minutes, which can fill every Colyseus seat
+      // with half-joined clients and hold gameplay reward messages behind the
+      // same persistence queue. Keep short retries for actual transport faults,
+      // but surface quota exhaustion immediately so the room can degrade safely.
+      retry_codes: { blockcraft_fast: ['DEADLINE_EXCEEDED', 'UNAVAILABLE'] },
+      retry_params: {
+        blockcraft_fast: {
+          initial_retry_delay_millis: 100,
+          retry_delay_multiplier: 1.3,
+          max_retry_delay_millis: 1000,
+          initial_rpc_timeout_millis: 5000,
+          rpc_timeout_multiplier: 1,
+          max_rpc_timeout_millis: 5000,
+          total_timeout_millis: 8000,
+        },
+      },
+      methods: Object.fromEntries([
+        'GetDocument', 'ListDocuments', 'UpdateDocument', 'DeleteDocument',
+        'BatchGetDocuments', 'Commit', 'RunQuery', 'RunAggregationQuery',
+        'PartitionQuery', 'BatchWrite', 'CreateDocument',
+      ].map(name => [name, { retry_codes_name: 'blockcraft_fast', retry_params_name: 'blockcraft_fast' }])),
+    },
+  },
+};
+let firestoreFastRetryConfigured = false;
+const FIRESTORE_FREE_DAILY_QUOTA = Object.freeze({ reads: 50000, writes: 20000, deletes: 20000 });
+const FIRESTORE_WORLD_EDIT_PACK_FORMAT = 'regional-packs-v1';
+const FIRESTORE_WORLD_EDIT_PACK_CHUNKS = 8;
+const FIRESTORE_WORLD_EDIT_PACK_MAX_JSON_BYTES = 800 * 1024;
+
+function worldEditPackId(chunkId) {
+  const match = String(chunkId || '').match(/^(-?\d+)_(-?\d+)$/);
+  if (!match) return '';
+  const cx = Number(match[1]), cz = Number(match[2]);
+  return Math.floor(cx / FIRESTORE_WORLD_EDIT_PACK_CHUNKS) + '_' + Math.floor(cz / FIRESTORE_WORLD_EDIT_PACK_CHUNKS);
+}
+
+function packWorldEditChunks(chunks) {
+  const packs = {};
+  for (const [chunkId, edits] of Object.entries(chunks || {})) {
+    const packId = worldEditPackId(chunkId);
+    if (!packId) continue;
+    (packs[packId] || (packs[packId] = {}))[chunkId] = edits && typeof edits === 'object' ? edits : {};
+  }
+  return packs;
+}
+
+function pacificDayKey(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(now));
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return value.year + '-' + value.month + '-' + value.day;
+}
+
+function nextPacificQuotaResetDelay(now = Date.now()) {
+  const currentDay = pacificDayKey(now);
+  let next = now + 5 * 60 * 1000;
+  while (pacificDayKey(next) === currentDay && next - now < 27 * 60 * 60 * 1000) next += 5 * 60 * 1000;
+  return Math.max(60 * 1000, next - now + 2 * 60 * 1000);
+}
+
+function emptyFirestoreUsageBucket(now = Date.now()) {
+  return {
+    observedSince: new Date(now).toISOString(),
+    calls: 0,
+    failedCalls: 0,
+    reads: 0,
+    writes: 0,
+    deletes: 0,
+    byCategory: {},
+    byOperation: {},
+  };
+}
+
+const firestoreUsage = {
+  active: false,
+  processStartedAt: new Date().toISOString(),
+  dayPacific: pacificDayKey(),
+  process: emptyFirestoreUsageBucket(),
+  daily: emptyFirestoreUsageBucket(),
+};
+
+function addFirestoreUsage(bucket, operation, category, counts, failed) {
+  bucket.calls++;
+  if (failed) bucket.failedCalls++;
+  for (const key of ['reads', 'writes', 'deletes']) bucket[key] += Math.max(0, Number(counts && counts[key]) || 0);
+  const addBreakdown = target => {
+    target.calls = (target.calls || 0) + 1;
+    if (failed) target.failedCalls = (target.failedCalls || 0) + 1;
+    for (const key of ['reads', 'writes', 'deletes']) target[key] = (target[key] || 0) + Math.max(0, Number(counts && counts[key]) || 0);
+  };
+  addBreakdown(bucket.byCategory[category] || (bucket.byCategory[category] = {}));
+  addBreakdown(bucket.byOperation[operation] || (bucket.byOperation[operation] = {}));
+}
+
+function recordFirestoreUsage(operation, category, counts = {}, failed = false, now = Date.now()) {
+  const day = pacificDayKey(now);
+  if (firestoreUsage.dayPacific !== day) {
+    firestoreUsage.dayPacific = day;
+    firestoreUsage.daily = emptyFirestoreUsageBucket(now);
+  }
+  addFirestoreUsage(firestoreUsage.process, operation, category, counts, failed);
+  addFirestoreUsage(firestoreUsage.daily, operation, category, counts, failed);
+}
+
+function copyFirestoreUsageBucket(bucket) {
+  return JSON.parse(JSON.stringify(bucket));
+}
+
+function getFirestoreUsageSnapshot(now = Date.now()) {
+  const day = pacificDayKey(now);
+  if (firestoreUsage.dayPacific !== day) {
+    firestoreUsage.dayPacific = day;
+    firestoreUsage.daily = emptyFirestoreUsageBucket(now);
+  }
+  const daily = copyFirestoreUsageBucket(firestoreUsage.daily);
+  daily.estimatedFreeQuotaRemaining = {
+    reads: Math.max(0, FIRESTORE_FREE_DAILY_QUOTA.reads - daily.reads),
+    writes: Math.max(0, FIRESTORE_FREE_DAILY_QUOTA.writes - daily.writes),
+    deletes: Math.max(0, FIRESTORE_FREE_DAILY_QUOTA.deletes - daily.deletes),
+  };
+  return {
+    active: firestoreUsage.active,
+    serverObservedEstimate: true,
+    note: 'Counts cover this server process only; Firebase Console Usage is authoritative.',
+    processStartedAt: firestoreUsage.processStartedAt,
+    dayPacific: firestoreUsage.dayPacific,
+    freeDailyQuota: { ...FIRESTORE_FREE_DAILY_QUOTA },
+    daily,
+    process: copyFirestoreUsageBucket(firestoreUsage.process),
+  };
+}
+
+function resetFirestoreUsageForTests(now = Date.now()) {
+  firestoreUsage.active = false;
+  firestoreUsage.processStartedAt = new Date(now).toISOString();
+  firestoreUsage.dayPacific = pacificDayKey(now);
+  firestoreUsage.process = emptyFirestoreUsageBucket(now);
+  firestoreUsage.daily = emptyFirestoreUsageBucket(now);
+}
+
 class FirebaseStore {
   constructor(options = {}) {
     const admin = require('firebase-admin');
@@ -1743,7 +1966,49 @@ class FirebaseStore {
         : {});                                  // falls back to application-default creds
     }
     this.db = admin.firestore();
+    if (!firestoreFastRetryConfigured) {
+      this.db.settings({ clientConfig: FIRESTORE_FAST_RETRY_CONFIG });
+      firestoreFastRetryConfigured = true;
+    }
     this.shardId = cleanShardId(options.shardId);
+    this.worldEditStorageFormat = '';
+    this.worldEditPackGeneration = '';
+    this.worldEditPacks = {};
+    this.legacyWorldEditChunks = {};
+    this.worldEditMigrationPromise = null;
+    this.worldEditMigrationTimer = null;
+    firestoreUsage.active = true;
+  }
+  async _trackUsage(operation, category, estimate, action) {
+    try {
+      const result = await action();
+      const counts = typeof estimate === 'function' ? estimate(result) : estimate;
+      recordFirestoreUsage(operation, category, counts || {});
+      return result;
+    } catch (error) {
+      recordFirestoreUsage(operation, category, {}, true);
+      throw error;
+    }
+  }
+  async _boundedFirestore(action, label, timeoutMs = 12000) {
+    let timer = null;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(action),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(label + ' timed out after ' + timeoutMs + 'ms')), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  _bulkWriter() {
+    const writer = this.db.bulkWriter();
+    // BulkWriter otherwise adds its own RESOURCE_EXHAUSTED retry loop on top of
+    // the GAPIC policy above.
+    writer.onWriteError(() => false);
+    return writer;
   }
   _worldDoc() {
     return this.db.collection('worlds').doc(this.shardId);
@@ -1753,10 +2018,103 @@ class FirebaseStore {
     return (x >> 4) + '_' + (z >> 4);
   }
   async loadWorldEdits() {
-    const snap = await this._worldDoc().collection('chunks').get();
+    const markerRef = this._worldDoc().collection('meta').doc('worldEditStorage');
+    const marker = await this._trackUsage('loadWorldEditStorageMarker', 'world', { reads: 1 }, () => markerRef.get());
+    const markerData = marker.exists ? marker.data() || {} : {};
+    if (markerData.format === FIRESTORE_WORLD_EDIT_PACK_FORMAT && markerData.generation) {
+      const generation = String(markerData.generation);
+      const snap = await this._trackUsage('loadWorldEditPacks', 'world', result => ({
+        reads: Math.max(1, Number(result && result.size) || (result && result.docs && result.docs.length) || 0),
+      }), () => this._worldDoc().collection('editPacks').where('generation', '==', generation).get());
+      const expected = Math.max(0, Number(markerData.packCount) || 0);
+      const actual = Number(snap && snap.size) || (snap && snap.docs && snap.docs.length) || 0;
+      if (actual < expected) throw new Error('world edit pack generation is incomplete (' + actual + '/' + expected + ')');
+      const out = {};
+      const loadedPacks = {};
+      snap.forEach(doc => {
+        const data = doc.data() || {};
+        const chunks = data.chunks || {};
+        const packId = String(data.packId || '');
+        if (packId) loadedPacks[packId] = chunks;
+        for (const edits of Object.values(chunks)) Object.assign(out, edits || {});
+      });
+      this.worldEditStorageFormat = FIRESTORE_WORLD_EDIT_PACK_FORMAT;
+      this.worldEditPackGeneration = generation;
+      this.worldEditPacks = loadedPacks;
+      console.log('[persist] loaded ' + actual + ' regional world edit packs');
+      return out;
+    }
+
+    const snap = await this._trackUsage('loadLegacyWorldEditChunks', 'world', result => ({
+      reads: Math.max(1, Number(result && result.size) || (result && result.docs && result.docs.length) || 0),
+    }), () => this._worldDoc().collection('chunks').get());
     const out = {};
-    snap.forEach(doc => Object.assign(out, doc.data().edits || {}));
+    const chunks = {};
+    snap.forEach(doc => {
+      const edits = doc.data().edits || {};
+      chunks[doc.id] = edits;
+      Object.assign(out, edits);
+    });
+    this.legacyWorldEditChunks = chunks;
+    try {
+      await this._runWorldEditPackMigration(markerRef);
+    } catch (error) {
+      console.warn('[persist] regional world edit migration deferred:', error.message);
+      this._scheduleWorldEditPackMigration(markerRef);
+    }
     return out;
+  }
+  async _runWorldEditPackMigration(markerRef) {
+    if (this.worldEditMigrationPromise) return this.worldEditMigrationPromise;
+    const task = this._boundedFirestore(
+      () => this._migrateWorldEditChunksToPacks(this.legacyWorldEditChunks, markerRef),
+      'regional world edit migration',
+    );
+    this.worldEditMigrationPromise = task;
+    try { return await task; }
+    finally { if (this.worldEditMigrationPromise === task) this.worldEditMigrationPromise = null; }
+  }
+  _scheduleWorldEditPackMigration(markerRef) {
+    if (this.worldEditMigrationTimer || this.worldEditStorageFormat === FIRESTORE_WORLD_EDIT_PACK_FORMAT) return;
+    const delay = nextPacificQuotaResetDelay();
+    console.log('[persist] regional world edit migration will retry after the Pacific quota reset');
+    this.worldEditMigrationTimer = setTimeout(async () => {
+      this.worldEditMigrationTimer = null;
+      try { await this._runWorldEditPackMigration(markerRef); }
+      catch (error) {
+        console.warn('[persist] regional world edit migration retry deferred:', error.message);
+        this._scheduleWorldEditPackMigration(markerRef);
+      }
+    }, delay);
+    if (typeof this.worldEditMigrationTimer.unref === 'function') this.worldEditMigrationTimer.unref();
+  }
+  async _migrateWorldEditChunksToPacks(chunks, markerRef) {
+    const packs = packWorldEditChunks(chunks);
+    for (const [packId, packChunks] of Object.entries(packs)) {
+      const bytes = Buffer.byteLength(JSON.stringify({ chunks: packChunks }));
+      if (bytes > FIRESTORE_WORLD_EDIT_PACK_MAX_JSON_BYTES) {
+        throw new Error('regional pack ' + packId + ' is too large (' + bytes + ' bytes)');
+      }
+    }
+    const generation = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    const batch = this.db.batch();
+    const collection = this._worldDoc().collection('editPacks');
+    const savedAt = Date.now();
+    for (const [packId, packChunks] of Object.entries(packs)) {
+      batch.set(collection.doc(generation + '__' + packId), {
+        format: FIRESTORE_WORLD_EDIT_PACK_FORMAT, generation, packId, chunks: packChunks, savedAt,
+      });
+    }
+    const packCount = Object.keys(packs).length;
+    await this._trackUsage('migrateWorldEditPacks', 'world', { writes: packCount },
+      () => this._boundedFirestore(() => batch.commit(), 'regional world edit pack commit'));
+    await this._trackUsage('saveWorldEditStorageMarker', 'world', { writes: 1 }, () => markerRef.set({
+      format: FIRESTORE_WORLD_EDIT_PACK_FORMAT, generation, packCount, migratedAt: savedAt,
+    }));
+    this.worldEditStorageFormat = FIRESTORE_WORLD_EDIT_PACK_FORMAT;
+    this.worldEditPackGeneration = generation;
+    this.worldEditPacks = packs;
+    console.log('[persist] migrated ' + Object.keys(chunks || {}).length + ' chunk documents into ' + packCount + ' regional packs');
   }
   async saveWorldEdits(edits) {
     const byChunk = {};
@@ -1764,93 +2122,167 @@ class FirebaseStore {
       const c = this._chunkKey(k);
       (byChunk[c] = byChunk[c] || {})[k] = edits[k];
     }
+    await this.saveWorldEditChunks(byChunk);
+  }
+  async saveWorldEditChunks(chunks) {
+    if (this.worldEditMigrationPromise) await this.worldEditMigrationPromise.catch(() => {});
+    if (this.worldEditStorageFormat === FIRESTORE_WORLD_EDIT_PACK_FORMAT && this.worldEditPackGeneration) {
+      const changedPacks = packWorldEditChunks(chunks);
+      const collection = this._worldDoc().collection('editPacks');
+      const batch = this.db.batch();
+      const savedAt = Date.now();
+      let writes = 0;
+      for (const [packId, changedChunks] of Object.entries(changedPacks)) {
+        const packChunks = { ...(this.worldEditPacks[packId] || {}) };
+        for (const [chunkId, edits] of Object.entries(changedChunks)) {
+          if (edits && Object.keys(edits).length) packChunks[chunkId] = edits;
+          else delete packChunks[chunkId];
+        }
+        const bytes = Buffer.byteLength(JSON.stringify({ chunks: packChunks }));
+        if (bytes > FIRESTORE_WORLD_EDIT_PACK_MAX_JSON_BYTES) {
+          throw new Error('regional pack ' + packId + ' is too large (' + bytes + ' bytes)');
+        }
+        batch.set(collection.doc(this.worldEditPackGeneration + '__' + packId), {
+          format: FIRESTORE_WORLD_EDIT_PACK_FORMAT,
+          generation: this.worldEditPackGeneration,
+          packId,
+          chunks: packChunks,
+          savedAt,
+        });
+        this.worldEditPacks[packId] = packChunks;
+        writes++;
+      }
+      await this._trackUsage('saveWorldEditPacks', 'world', { writes },
+        () => this._boundedFirestore(() => batch.commit(), 'regional world edit save'));
+      return;
+    }
     const col = this._worldDoc().collection('chunks');
-    const writer = this.db.bulkWriter();
-    for (const c in byChunk) writer.set(col.doc(c), { edits: byChunk[c], savedAt: Date.now() });
-    await writer.close();
+    const writer = this._bulkWriter();
+    const savedAt = Date.now();
+    let writes = 0;
+    for (const c in chunks) {
+      if (!/^-?\d+_-?\d+$/.test(c)) continue;
+      writer.set(col.doc(c), { edits: chunks[c] || {}, savedAt });
+      writes++;
+    }
+    await this._trackUsage('saveWorldEditChunks', 'world', { writes }, () => writer.close());
+    if (!this.legacyWorldEditChunks) this.legacyWorldEditChunks = {};
+    for (const [chunkId, edits] of Object.entries(chunks || {})) {
+      if (!/^-?\d+_-?\d+$/.test(chunkId)) continue;
+      if (edits && Object.keys(edits).length) this.legacyWorldEditChunks[chunkId] = edits;
+      else delete this.legacyWorldEditChunks[chunkId];
+    }
   }
   async loadWorldProgress() {
-    const d = await this._worldDoc().collection('meta').doc('progress').get();
+    const d = await this._trackUsage('loadWorldProgress', 'world', { reads: 1 },
+      () => this._worldDoc().collection('meta').doc('progress').get());
     return d.exists ? sanitizeWorldProgress(d.data()) : sanitizeWorldProgress();
   }
   async saveWorldProgress(progress) {
-    await this._worldDoc().collection('meta').doc('progress')
-      .set({ ...sanitizeWorldProgress(progress), savedAt: Date.now() });
+    await this._trackUsage('saveWorldProgress', 'world', { writes: 1 }, () => this._worldDoc().collection('meta').doc('progress')
+      .set({ ...sanitizeWorldProgress(progress), savedAt: Date.now() }));
   }
   async loadLandClaims() {
-    const d = await this._worldDoc().collection('meta').doc('landClaims').get();
+    const d = await this._trackUsage('loadLandClaims', 'world', { reads: 1 },
+      () => this._worldDoc().collection('meta').doc('landClaims').get());
     return d.exists ? sanitizeLandClaims(d.data().claims || {}) : {};
   }
   async saveLandClaims(claims) {
-    await this._worldDoc().collection('meta').doc('landClaims')
-      .set({ claims: sanitizeLandClaims(claims), savedAt: Date.now() });
+    await this._trackUsage('saveLandClaims', 'world', { writes: 1 }, () => this._worldDoc().collection('meta').doc('landClaims')
+      .set({ claims: sanitizeLandClaims(claims), savedAt: Date.now() }));
   }
   async loadChests() {
-    const d = await this._worldDoc().collection('containers').doc('chests').get();
+    const d = await this._trackUsage('loadChests', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('chests').get());
     return d.exists ? sanitizeChests(d.data().chests || {}) : {};
   }
   async saveChests(chests) {
-    await this._worldDoc().collection('containers').doc('chests')
-      .set({ chests: sanitizeChests(chests), savedAt: Date.now() });
+    await this._trackUsage('saveChests', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('chests')
+      .set({ chests: sanitizeChests(chests), savedAt: Date.now() }));
+  }
+  async recoverTransactions() { return false; }
+  async commitTransaction(input = {}) {
+    const batch = this.db.batch();
+    let writes = 0;
+    if (input.chests) {
+      batch.set(this._worldDoc().collection('containers').doc('chests'), { chests: sanitizeChests(input.chests), savedAt: Date.now() });
+      writes++;
+    }
+    for (const [token, profile] of Object.entries(input.players || {})) {
+      const clean = cleanToken(token);
+      if (!clean || !profile) continue;
+      batch.set(this.db.collection('players').doc(clean), { ...profile, savedAt: Date.now() });
+      writes++;
+    }
+    await this._trackUsage('commitTransaction', 'transactions', { writes }, () => batch.commit());
+    return { committed: true, id: cleanShortText(input.id, 'transaction', 80) };
   }
   async loadFurnaces() {
-    const d = await this._worldDoc().collection('containers').doc('furnaces').get();
+    const d = await this._trackUsage('loadFurnaces', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('furnaces').get());
     return d.exists ? sanitizeFurnaces(d.data().furnaces || {}) : {};
   }
   async saveFurnaces(furnaces) {
-    await this._worldDoc().collection('containers').doc('furnaces')
-      .set({ furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() });
+    await this._trackUsage('saveFurnaces', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('furnaces')
+      .set({ furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() }));
   }
   async loadIncubations() {
-    const d = await this._worldDoc().collection('containers').doc('incubations').get();
+    const d = await this._trackUsage('loadIncubations', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('incubations').get());
     return d.exists ? sanitizeIncubations(d.data().incubations || {}) : {};
   }
   async saveIncubations(incubations) {
-    await this._worldDoc().collection('containers').doc('incubations')
-      .set({ incubations: sanitizeIncubations(incubations), savedAt: Date.now() });
+    await this._trackUsage('saveIncubations', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('incubations')
+      .set({ incubations: sanitizeIncubations(incubations), savedAt: Date.now() }));
   }
   async loadNestDragons() {
-    const d = await this._worldDoc().collection('containers').doc('nests').get();
+    const d = await this._trackUsage('loadNestDragons', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('nests').get());
     return d.exists ? sanitizeNestDragons(d.data().nests || {}) : {};
   }
   async saveNestDragons(nests) {
-    await this._worldDoc().collection('containers').doc('nests')
-      .set({ nests: sanitizeNestDragons(nests), savedAt: Date.now() });
+    await this._trackUsage('saveNestDragons', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('nests')
+      .set({ nests: sanitizeNestDragons(nests), savedAt: Date.now() }));
   }
   async loadGates() {
-    const d = await this._worldDoc().collection('containers').doc('gates').get();
+    const d = await this._trackUsage('loadGates', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('gates').get());
     return d.exists ? sanitizeGates(d.data().gates || {}) : {};
   }
   async saveGates(gates) {
-    await this._worldDoc().collection('containers').doc('gates')
-      .set({ gates: sanitizeGates(gates), savedAt: Date.now() });
+    await this._trackUsage('saveGates', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('gates')
+      .set({ gates: sanitizeGates(gates), savedAt: Date.now() }));
   }
   async loadTeams() {
-    const d = await this._worldDoc().collection('containers').doc('teams').get();
+    const d = await this._trackUsage('loadTeams', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('teams').get());
     return d.exists ? sanitizeTeams(d.data().teams || {}) : {};
   }
   async saveTeams(teams) {
-    await this._worldDoc().collection('containers').doc('teams')
-      .set({ teams: sanitizeTeams(teams), savedAt: Date.now() });
+    await this._trackUsage('saveTeams', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('teams')
+      .set({ teams: sanitizeTeams(teams), savedAt: Date.now() }));
   }
   async loadGuilds() {
-    const d = await this._worldDoc().collection('containers').doc('guilds').get();
+    const d = await this._trackUsage('loadGuilds', 'world', { reads: 1 },
+      () => this._worldDoc().collection('containers').doc('guilds').get());
     return d.exists ? sanitizeGuilds(d.data().guilds || {}) : {};
   }
   async saveGuilds(guilds) {
-    await this._worldDoc().collection('containers').doc('guilds')
-      .set({ guilds: sanitizeGuilds(guilds), savedAt: Date.now() });
+    await this._trackUsage('saveGuilds', 'world', { writes: 1 }, () => this._worldDoc().collection('containers').doc('guilds')
+      .set({ guilds: sanitizeGuilds(guilds), savedAt: Date.now() }));
   }
   async grantTownMapToAllPlayers(options = {}) {
     const itemId = Math.max(0, options.itemId | 0);
     const invMax = Math.max(1, Math.min(64, options.inventoryMax | 0 || INV_MAX));
     const dryRun = options.dryRun === true;
     const migrationRef = this._worldDoc().collection('meta').doc('migration_town_map_' + itemId);
-    const marker = await migrationRef.get();
+    const marker = await this._trackUsage('townMapMarkerRead', 'maintenance', { reads: 1 }, () => migrationRef.get());
     if (marker.exists && !dryRun) return { ok: true, skipped: true, reason: 'already-ran', ...(marker.data() || {}) };
 
-    const snap = await this.db.collection('players').get();
-    const writer = dryRun ? null : this.db.bulkWriter();
+    const snap = await this._trackUsage('townMapPlayerScan', 'maintenance', result => ({
+      reads: Math.max(1, Number(result && result.size) || (result && result.docs && result.docs.length) || 0),
+    }), () => this.db.collection('players').get());
+    const writer = dryRun ? null : this._bulkWriter();
     let scanned = 0, updated = 0, alreadyHad = 0, full = 0;
 
     function hasMap(inv) {
@@ -1884,23 +2316,28 @@ class FirebaseStore {
     }
 
     if (!dryRun) {
-      await writer.close();
-      await migrationRef.set({ ok: true, itemId, scanned, updated, alreadyHad, full, savedAt: Date.now() });
+      await this._trackUsage('townMapPlayerUpdates', 'maintenance', { writes: updated }, () => writer.close());
+      await this._trackUsage('townMapMarkerWrite', 'maintenance', { writes: 1 },
+        () => migrationRef.set({ ok: true, itemId, scanned, updated, alreadyHad, full, savedAt: Date.now() }));
     }
     return { ok: true, dryRun, scanned, updated, alreadyHad, full };
   }
   async loadPlayer(token) {
-    const d = await this.db.collection('players').doc(token).get();
+    const d = await this._trackUsage('loadPlayer', 'profiles', { reads: 1 },
+      () => this.db.collection('players').doc(token).get());
     return d.exists ? d.data() : null;
   }
   async savePlayer(token, profile) {
-    await this.db.collection('players').doc(token).set({ ...profile, savedAt: Date.now() });
+    await this._trackUsage('savePlayer', 'profiles', { writes: 1 },
+      () => this.db.collection('players').doc(token).set({ ...profile, savedAt: Date.now() }));
   }
   async deletePlayer(token) {
-    await this.db.collection('players').doc(token).delete();
+    await this._trackUsage('deletePlayer', 'profiles', { deletes: 1 },
+      () => this.db.collection('players').doc(token).delete());
   }
   async saveModerationReport(report) {
-    await this.db.collection('moderationReports').doc(report.id).set(report);
+    await this._trackUsage('saveModerationReport', 'moderation', { writes: 1 },
+      () => this.db.collection('moderationReports').doc(report.id).set(report));
   }
 }
 
@@ -1908,6 +2345,10 @@ function createStore(options = {}) {
   const env = options.env || process.env;
   const Firebase = options.FirebaseStoreClass || FirebaseStore;
   const Json = options.JsonStoreClass || JsonStore;
+  if (env.BLOCKCRAFT_FIRESTORE_COST_SIM === '1' && String(env.NODE_ENV || '').toLowerCase() !== 'production') {
+    const { CountingStore } = require('./counting-store');
+    return new CountingStore(env.DATA_DIR, { shardId: options.shardId });
+  }
   if ((env.STORE || '').toLowerCase() === 'firebase') {
       try { return new Firebase({ shardId: options.shardId }); }
     catch (e) {
@@ -1920,4 +2361,4 @@ function createStore(options = {}) {
   return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
+module.exports = { createStore, JsonStore, FirebaseStore, FIRESTORE_FAST_RETRY_CONFIG, FIRESTORE_FREE_DAILY_QUOTA, FIRESTORE_WORLD_EDIT_PACK_FORMAT, FIRESTORE_WORLD_EDIT_PACK_CHUNKS, packWorldEditChunks, nextPacificQuotaResetDelay, getFirestoreUsageSnapshot, resetFirestoreUsageForTests, cleanShardId, cleanSlot, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };

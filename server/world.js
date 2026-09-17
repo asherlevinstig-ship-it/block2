@@ -1,4 +1,5 @@
 const {treeHeight,treeBlocks,clearLandmarkApproach,carveCaveApproach}=require('../shared/vegetation-identity');
+const {selectFantasyStructureSpecs,buildFantasyStructures}=require('../shared/overworld-structures');
 // Deterministic world model, mirroring the client's generator.
 // The same seeded hash-noise means client and server agree on terrain
 // without ever shipping the 1MB world array — only edits are synced.
@@ -307,7 +308,13 @@ const LANDMARK_NAMES = {
   ruins: 'Weathered Ruins', shrine: 'Wayside Shrine', hunter_camp: 'Hunter Camp', bandit_camp: 'Bandit Camp', graveyard: 'Forgotten Graveyard',
   abandoned_tower: 'Abandoned Watchtower', cave: 'Deepmouth Cave', giant_tree: 'Elderheart Tree', crashed_airship: 'Fallen Airship',
 };
-function regionalLandmarkSpecs() {
+function fantasyStructureSpecs() {
+  return selectFantasyStructureSpecs({
+    worldSize: WX, townCenter: TOWN.TC, townHalfSize: TOWN.HS, sea: SEA,
+    biomeAt, terrainHeight, hash: hash2, avoid: legacyRegionalLandmarkSpecs(),
+  });
+}
+function legacyRegionalLandmarkSpecs() {
   const majors = [], minors = [];
   let n = 0;
   for (let gx = 125; gx < WX - 100; gx += 250) for (let gz = 125; gz < WX - 100; gz += 250) {
@@ -333,17 +340,21 @@ function regionalLandmarkSpecs() {
   }
   return majors.concat(minors);
 }
+function regionalLandmarkSpecs() {
+  return legacyRegionalLandmarkSpecs().concat(fantasyStructureSpecs());
+}
 function roadNetworkSpecs() {
   const majors = regionalLandmarkSpecs().filter(s => s.major);
   const connected = [{ id: 'town', x: TOWN.TC, y: TOWN.G, z: TOWN.TC }], roads = [];
   for (const node of majors) {
-    let best = connected[0], bd = Infinity;
-    for (const other of connected) {
-      const d = Math.hypot(node.x - other.x, node.z - other.z);
+    const destination = node.entrance ? { ...node, x:node.entrance.x, y:node.y, z:node.entrance.z } : node;
+    let best = connected[0], bd = node.entrance ? Math.hypot(destination.x-best.x,destination.z-best.z) : Infinity;
+    for (const other of node.entrance ? [] : connected) {
+      const d = Math.hypot(destination.x - other.x, destination.z - other.z);
       if (d < bd) { bd = d; best = other; }
     }
-    roads.push({ id: 'road_' + best.id + '_' + node.id, a: best, b: node, length: bd });
-    connected.push(node);
+    roads.push({ id: 'road_' + best.id + '_' + node.id, a: best, b: destination, length: bd });
+    connected.push(destination);
   }
   return roads;
 }
@@ -452,7 +463,7 @@ function treasureCacheSpecs() {
     const y = terrainHeight(x, z), ring = Math.min(3, Math.floor(Math.hypot(x - TOWN.TC, z - TOWN.TC) / 100));
     if (x < LAVA_BORDER_WIDTH + 18 || z < LAVA_BORDER_WIDTH + 18 || x >= WX - LAVA_BORDER_WIDTH - 18 || z >= WX - LAVA_BORDER_WIDTH - 18 || y <= SEA + 1 || y > 40) continue;
     if (Math.hypot(x - TOWN.TC, z - TOWN.TC) < TOWN.HS + 90 || isTrainingMeadowLand(x, z, 24)) continue;
-    if (landmarks.some(s => Math.hypot(x - s.x, z - s.z) < 30) || discoveries.some(s => Math.hypot(x - s.x, z - s.z) < 22) || roads.some(r => segDist(x, z, r) < 14)) continue;
+    if (landmarks.some(s => Math.hypot(x - s.x, z - s.z) < 30) || discoveries.some(s => Math.hypot(x - s.x, z - s.z) < 22) || roads.some(r => segDist(x, z, r) < (r.b.id.startsWith('major_fantasy_') ? 7 : 14))) continue;
     const hs = [terrainHeight(x - 2, z - 2), terrainHeight(x + 2, z - 2), terrainHeight(x - 2, z + 2), terrainHeight(x + 2, z + 2), y];
     if (Math.max(...hs) - Math.min(...hs) > 3) continue;
     out.push({ id: 'cache_' + gx + '_' + gz, type: 'treasure_cache', x, y, z, ring, radius: 4 });
@@ -555,6 +566,18 @@ function buildCaveNetworks(setBlock, getBlock = getB) {
       if (i > 0 && i % 13 === 0) placeOreSeam(Math.round(cx + (hash2(i + salt, salt) > .5 ? r + 1 : -r - 1)), Math.round(cy), Math.round(cz), salt + i);
     }
   };
+  const layWalkableRoute = (a, b) => {
+    const steps = Math.max(1, Math.abs(b.x - a.x), Math.abs(b.z - a.z));
+    const route = [];
+    for (let i = 0; i <= steps; i++) route.push({
+      x: Math.round(a.x + (b.x - a.x) * i / steps),
+      y: Math.round(a.y + (b.y - a.y) * i / steps),
+      z: Math.round(a.z + (b.z - a.z) * i / steps),
+    });
+    for (const cell of route) for (let ox = -1; ox <= 1; ox++) for (let oz = -1; oz <= 1; oz++)
+      for (let h = 0; h <= 3; h++) putAir(cell.x + ox, cell.y + h, cell.z + oz);
+    for (const cell of route) if (safeColumn(cell.x, cell.z)) setBlock(cell.x, cell.y - 1, cell.z, B.COBBLE);
+  };
   for (const net of caveNetworkSpecs()) {
     const entry = net.entrance;
     carveEllipsoid(entry.x, entry.y + 2, entry.z - 2, 3.2, 2.4, 5.5, true);
@@ -575,6 +598,10 @@ function buildCaveNetworks(setBlock, getBlock = getB) {
       placeOreSeam(c.x + c.rx - 1, c.y - 1, c.z + 1, i * 211 + 7);
       placeOreSeam(c.x, c.y - 1, c.z - c.rz + 1, i * 211 + 11);
     }
+    // Cave dressing remains irregular, but the centreline is always a valid
+    // two-block-tall walking route with no jumps higher than one voxel.
+    layWalkableRoute({ x: entry.x, y: entry.y + 4, z: entry.z - 18 }, net.points[0]);
+    for (let i = 1; i < net.points.length; i++) layWalkableRoute(net.points[i - 1], net.points[i]);
   }
   return caveNetworkSpecs();
 }
@@ -659,10 +686,10 @@ function buildAncientCities(setBlock, getBlock = getB) {
       }
     }
   };
-  const hall = (x1, y, z1, x2, z2, salt) => {
+  const hall = (x1, y1, z1, x2, y2, z2, salt) => {
     const steps = Math.max(Math.abs(x2 - x1), Math.abs(z2 - z1), 1);
     for (let i = 0; i <= steps; i++) {
-      const cx = Math.round(x1 + (x2 - x1) * i / steps), cz = Math.round(z1 + (z2 - z1) * i / steps);
+      const cx = Math.round(x1 + (x2 - x1) * i / steps), y = Math.round(y1 + (y2 - y1) * i / steps), cz = Math.round(z1 + (z2 - z1) * i / steps);
       for (let ox = -2; ox <= 2; ox++) for (let oz = -2; oz <= 2; oz++) {
         const side = Math.abs(ox) === 2 || Math.abs(oz) === 2;
         const x = cx + ox, z = cz + oz;
@@ -682,12 +709,22 @@ function buildAncientCities(setBlock, getBlock = getB) {
     setBlock(t.x, t.y + 2, t.z, B.LANTERN);
     for (const [ox, oz] of [[1, 0], [-1, 0]]) setBlock(t.x + ox, t.y - 1, t.z + oz, B.COBBLE);
   };
+  const carveWalkway = (from, to) => {
+    const cells = [{ x: from.x, z: from.z }];
+    let cx = from.x, cz = from.z;
+    while (cx !== to.x) { cx += Math.sign(to.x - cx); cells.push({ x: cx, z: cz }); }
+    while (cz !== to.z) { cz += Math.sign(to.z - cz); cells.push({ x: cx, z: cz }); }
+    const route = cells.map((cell, index) => ({ ...cell, y: Math.round(from.y + (to.y - from.y) * index / Math.max(1, cells.length - 1)) }));
+    for (const cell of route) for (let ox = -1; ox <= 1; ox++) for (let oz = -1; oz <= 1; oz++)
+      for (let h = 0; h <= 3; h++) setBlock(cell.x + ox, cell.y + h, cell.z + oz, B.AIR);
+    for (const cell of route) setBlock(cell.x, cell.y - 1, cell.z, B.BRICK);
+  };
   for (const city of ancientCitySpecs()) {
     const { x, y, z } = city;
-    hall(city.entrance.x, city.entrance.y, city.entrance.z, x, z, x + z);
+    hall(city.entrance.x, city.entrance.y, city.entrance.z, x, y, z, x + z);
     room(x, y, z, 9, 9, 300 + x);
     for (const v of city.vaults) {
-      hall(x, y, z, v.x, v.z, v.x + v.z);
+      hall(x, y, z, v.x, v.y, v.z, v.x + v.z);
       room(v.x, v.y, v.z, 6, 5, 700 + v.x);
       box(v.x - 2, v.y, v.z - 2, v.x + 2, v.y + 2, v.z + 2, B.AIR);
       setBlock(v.x, v.y, v.z, B.BRICK);
@@ -696,6 +733,14 @@ function buildAncientCities(setBlock, getBlock = getB) {
       setBlock(v.x + 3, v.y + 1, v.z + 3, B.LANTERN);
     }
     room(x, y - 1, z, 7, 7, 1100 + x);
+    // The lowered core room is nested inside the main hall. Give it explicit,
+    // player-sized entrances; otherwise its generated perimeter can seal the
+    // tablets and core away from the approach hall for some city orientations.
+    for (const [dx, dz] of [[0, -7], [7, 0], [0, 7], [-7, 0]]) {
+      for (let side = -1; side <= 1; side++) for (let h = 0; h <= 3; h++) {
+        setBlock(x + dx + (dz ? side : 0), y - 1 + h, z + dz + (dx ? side : 0), B.AIR);
+      }
+    }
     for (const [ox, oz] of [[-5, -5], [5, -5], [-5, 5], [5, 5]]) {
       box(x + ox, y - 1, z + oz, x + ox, y + 3, z + oz, B.BRICK);
       setBlock(x + ox, y + 4, z + oz, B.LANTERN);
@@ -709,11 +754,25 @@ function buildAncientCities(setBlock, getBlock = getB) {
       setBlock(x + ox, y, z + oz, B.BRICK);
       setBlock(x + ox, y + 1, z + oz, B.TORCH);
     }
+    // Carve this last so later room shells cannot sever the playable route.
+    // It finishes beside the core, preserving the monument while guaranteeing
+    // a one-block-at-a-time ascent from the cave network into the city.
+    const network = caveNetworkSpecs().find(candidate => candidate.id === city.caveNetworkId);
+    carveWalkway(network.points[network.points.length - 2], city.entrance);
+    const approachZ = z === city.entrance.z ? z : z - Math.sign(z - city.entrance.z) * 2;
+    carveWalkway(city.entrance, { x, y: y - 1, z: approachZ });
+    for (const vault of city.vaults) {
+      const dx = vault.x - x, dz = vault.z - z, alongX = Math.abs(dx) >= Math.abs(dz);
+      const from = alongX ? { x: x + Math.sign(dx) * 7, y: y - 1, z } : { x, y: y - 1, z: z + Math.sign(dz) * 7 };
+      const to = alongX ? { x: vault.x - Math.sign(dx) * 3, y: vault.y, z: vault.z } : { x: vault.x, y: vault.y, z: vault.z - Math.sign(dz) * 3 };
+      carveWalkway(from, to);
+    }
   }
   return ancientCitySpecs();
 }
 function buildRegionalLandmarks(setBlock,getBlock) {
   const specs = regionalLandmarkSpecs();
+  buildFantasyStructures({ specs:specs.filter(s=>s.id.startsWith('major_fantasy_')), setBlock, B, worldHeight:WH, terrainHeight });
   const box = (x1,y1,z1,x2,y2,z2,id) => { for(let x=x1;x<=x2;x++) for(let y=y1;y<=y2;y++) for(let z=z1;z<=z2;z++) setBlock(x,y,z,id); };
   const prep = (s,r,floor=B.COBBLE) => {
     for(let x=s.x-r;x<=s.x+r;x++) for(let z=s.z-r;z<=s.z+r;z++) {
@@ -723,6 +782,7 @@ function buildRegionalLandmarks(setBlock,getBlock) {
     }
   };
   for(const s of specs){ const x=s.x,y=s.y,z=s.z;
+    if(s.id.startsWith('major_fantasy_')) continue;
     if(s.type==='ruins'){
       prep(s,5); for(let i=-4;i<=4;i++){ if(i!==1) setBlock(x+i,y+1,z-4,B.BRICK); if(i!==-2)setBlock(x-4,y+1,z+i,B.COBBLE); }
       for(const [ox,oz,h] of [[-4,-4,4],[4,-4,3],[-4,4,2],[4,4,4]]) for(let k=1;k<=h;k++) setBlock(x+ox,y+k,z+oz,k===h?B.COBBLE:B.BRICK);
@@ -1278,7 +1338,7 @@ module.exports = {
   WX, WH, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, TRAINING_MEADOW_TOWN_PORTAL, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
   townPos, townBlockPos,
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
-  biomeAt, naturalTreeSpecAt, naturalTreeForBlock, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
+  biomeAt, naturalTreeSpecAt, naturalTreeForBlock, fantasyStructureSpecs, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
   ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, trainingMeadowTownPortalPoint, buildTrainingMeadow,
   buildGuildHallBase, buildMeditationHall, buildSmithy, isCentralCourtProtectedEdit, isTownFarmWorksite,

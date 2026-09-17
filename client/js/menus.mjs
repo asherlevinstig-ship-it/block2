@@ -17,7 +17,7 @@ const NPC_QUEST_REGISTRY=globalThis.BlockcraftNpcQuestChains;
 const uiShellState=gameContext.requireState('uiShell');
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
-const refreshHUD=hudApi.refresh,showName=hudApi.showName,fillSlotEl=hudApi.fillSlot;
+const refreshHUD=hudApi.refresh,showName=hudApi.showName,showArrivalTitle=hudApi.showArrivalTitle,fillSlotEl=hudApi.fillSlot;
 
 const legacyMenuBindings={
   "acceptAegisBounty":{get:()=>acceptAegisBounty},
@@ -33,6 +33,7 @@ const legacyMenuBindings={
   "applyDungeonStatus":{get:()=>applyDungeonStatus},
   "applyFirstQuestRewardResult":{get:()=>applyFirstQuestRewardResult},
   "applyFoodResult":{get:()=>applyFoodResult},
+  "applyFurnaceReject":{get:()=>applyFurnaceReject},
   "applyFurnaceResult":{get:()=>applyFurnaceResult},
   "applyFurnaceStarted":{get:()=>applyFurnaceStarted},
   "applyFurnaceState":{get:()=>applyFurnaceState},
@@ -256,6 +257,14 @@ function closeUI(relock=true){
   if(uiOpen) SFX.uiClose();
   // return crafting grid + cursor to inventory
   for(let i=0;i<craftCells.length;i++){ const s=craftCells[i]; if(s) addItem(s.id,s.count); craftCells[i]=null; }
+  if(uiMode==='furnace'&&uiFurnaceKey){
+    const f=getFurnace(uiFurnaceKey);
+    // Input/fuel are only local staging before the server starts a smelt. Return
+    // uncommitted stacks when the window closes so they never appear to vanish.
+    if(!f.finishAt){
+      for(const field of ['input','fuel'])if(f[field]){addItem(f[field].id,f[field].count);f[field]=null;}
+    }
+  }
   if(cursorStack){ addItem(cursorStack.id,cursorStack.count); cursorStack=null; renderCursor(); }
   flushInventoryArrangeSync();
   uiOpen=false; uiMode=null; uiFurnaceKey=null;
@@ -315,9 +324,12 @@ function stageRecipe(recipe){
   if(craftCells.some(Boolean)){ sysMsg('Clear the crafting grid before choosing a recipe'); return; }
   if(recipeFootprint(recipe)>craftW){ sysMsg('Use a <b>Crafting Table</b> for that recipe'); return; }
   const need=recipeNeedCounts(recipe);
+  const missing=[];
   for(const [id,n] of need){
-    if(countItem(id)<n){ sysMsg('Need <b>'+itemLabel(id)+'</b> x'+n); return; }
+    const have=countItem(id);
+    if(have<n)missing.push(itemLabel(id)+' x'+(n-have));
   }
+  if(missing.length){const text='Missing '+missing.join(', ')+'.';showName(text);sysMsg('<b>Missing materials:</b> '+escHTML(missing.join(', '))+'.');return;}
   if(recipe.shapeless){
     recipe.shapeless.forEach((id,i)=>{ if(takeOneFromInventory(id)) craftCells[i]=newStack(id,1); });
   } else {
@@ -749,11 +761,12 @@ function consumeCraftTimes(times){
 }
 function requestServerCraft(shift){
   if(cursorStack){showName('Place the held item before crafting.');return false;}
-  return craftingRequests.start({w:craftW,shift:!!shift,cells:craftCells.map(s=>s?{id:s.id,count:s.count}:null)},craftCells);
+  const table=craftW===3?chestCoords():null;
+  return craftingRequests.start({w:craftW,shift:!!shift,cells:craftCells.map(s=>s?{id:s.id,count:s.count}:null),...(table?{table}:{})},craftCells);
 }
 function craftingRejected(m){
   if(!craftingRequests.settle(m))return;
-  const text=craftFailureText(m);SFX.error();showName(text);sysMsg(text);
+  const text=craftFailureText(m,itemLabel);SFX.error();showName(text);sysMsg(text);
   renderUI();
 }
 
@@ -779,6 +792,31 @@ function restoreInventorySnapshot(slots){
   }
   return true;
 }
+function craftFeedbackSpec(id){
+  const item=ITEMS[id]||{},gear=item.tool||item.armor,tier=gear?(gear.tier|0):0;
+  const major=!!item.legendary||tier>=3||[
+    I.DIAMOND,I.DIA_ARMOR,I.STORMGLASS_ARMOR,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER,
+    I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,
+  ].includes(id);
+  const rgb=BLOCK_COLORS[id]||((item.tool||item.armor)?(tier>=4?[.35,.88,1]:[1,.72,.24]):[.62,.9,1]);
+  return {major,rgb,color:major?'#ffe083':'#9de7ff'};
+}
+function presentCraftFeedback(id,count,table=null){
+  const name=itemLabel(id),qty=Math.max(1,count|0),spec=craftFeedbackSpec(id);
+  const point=table&&Number.isFinite(table.x)&&Number.isFinite(table.y)&&Number.isFinite(table.z)
+    ? {x:table.x+.5,y:table.y+1.25,z:table.z+.5}
+    : {x:player.pos.x,y:player.pos.y+1.15,z:player.pos.z};
+  if(worldApi.craftingWorldEffect)worldApi.craftingWorldEffect(point,{label:name,rgb:spec.rgb,color:spec.color,major:spec.major});
+  if(spec.major){
+    SFX.level();
+    showArrivalTitle({kicker:'HIGH-VALUE CRAFT',title:name.toUpperCase(),subtitle:(qty>1?'Created x'+qty:'Craft complete')+' · secured in your inventory',duration:3200});
+    sysMsg('<b style="color:'+spec.color+'">High-value craft: '+escHTML(name)+(qty>1?' x'+qty:'')+'</b> is ready.');
+  }else{
+    SFX.success();
+    showName('CRAFTED · '+name+(qty>1?' x'+qty:''));
+    sysMsg('Crafted <b>'+escHTML(name)+(qty>1?' x'+qty:'')+'</b>.');
+  }
+}
 function applyServerCraft(m){
   if(!m || !m.out || !ITEMS[m.out.id]) return;
   const request=craftingRequests.settle(m);if(!request)return false;
@@ -799,7 +837,7 @@ function applyServerCraft(m){
   awardJobForCraft(m.out.id, made);
   presentObjectiveCraftCompletion(m.out.id, made, 'craft', beforeContract);
   if(onboardingActive&&onboardingArrived&&onboardingKind()==='craft') onboardingFlags.crafted=true;
-  SFX.success();
+  presentCraftFeedback(m.out.id,made,request.payload&&request.payload.table);
   if(m.savePending){showName('CRAFTED · SAVING DELAYED');sysMsg('Item crafted, but saving is delayed. Keep this session open until the server saves your progress.');}
   renderUI(); renderCursor(); refreshHUD();
   return true;
@@ -807,6 +845,11 @@ function applyServerCraft(m){
 
 function slotInteract(acc, e, opts={}){
   if(craftingRequests.pending){showName('WAITING FOR CRAFT CONFIRMATION');return;}
+  if(opts.locked&&opts.locked()){
+    sysMsg(opts.lockedText||'That slot is locked while the action is in progress.');
+    SFX.error();
+    return;
+  }
   // opts: {result, furnaceOutput, section}
   if(opts.result){
     const r=craftResult();
@@ -826,6 +869,7 @@ function slotInteract(acc, e, opts={}){
       consumeCraft();
       awardJobForCraft(id,n);
       presentObjectiveCraftCompletion(id,outN,'craft',beforeContract);
+      presentCraftFeedback(id,outN,uiMode==='table'?chestCoords():null);
       return true;
     };
     let crafted=false;
@@ -845,10 +889,10 @@ function slotInteract(acc, e, opts={}){
       }
       if(batchId&&batchCount>0) awardJobForCraft(batchId,batchCount,{recapOnly:true});
       if(batchId&&batchCount>0) presentObjectiveCraftCompletion(batchId,batchCount,'craft',beforeContract);
+      if(batchId&&batchCount>0) presentCraftFeedback(batchId,batchCount,uiMode==='table'?chestCoords():null);
     } else crafted=!!make();
     if(crafted){
       if(onboardingActive&&onboardingArrived&&onboardingKind()==='craft') onboardingFlags.crafted=true;
-      SFX.success();
     }
     renderUI(); renderCursor(); return;
   }
@@ -886,6 +930,11 @@ function slotInteract(acc, e, opts={}){
     if(!took) return;
     awardJobForCraft(taken.id,taken.count);
     renderUI(); renderCursor(); return;
+  }
+  if(cursorStack && opts.accept && !opts.accept(cursorStack)){
+    sysMsg(opts.rejectText||'That item does not belong in this slot.');
+    SFX.error();
+    return;
   }
   if(e.shiftKey && s && opts.section){
     // quick move: into the open chest from inventory, out of it back to inventory,
@@ -939,7 +988,8 @@ function sendInventoryArrange(){
   if(craftingRequests.pending)return;
   // A staged crafting ingredient lives outside `inv`. Do not publish an incomplete
   // inventory layout while a craft is being assembled or awaiting its server result.
-  if(!(NET.on&&NET.room&&['blockcraft','dungeon'].includes(NET.room.name))||cursorStack||craftCells.some(Boolean))return;
+  const stagedFurnace=uiOpen&&uiMode==='furnace'&&uiFurnaceKey?getFurnace(uiFurnaceKey):null;
+  if(!(NET.on&&NET.room&&['blockcraft','dungeon'].includes(NET.room.name))||cursorStack||craftCells.some(Boolean)||(stagedFurnace&&!stagedFurnace.finishAt&&(stagedFurnace.input||stagedFurnace.fuel)))return;
   const payload=inventoryArrangePayload(),json=JSON.stringify(payload);
   if(json===lastSentInvArrange)return;
   lastSentInvArrange=json;
@@ -1278,8 +1328,15 @@ function renderUI(){
         : (c.canToggleSupply?'Personal chest storage. Mark Supply to let trusted helpers deposit for Work Orders.':'Personal chest storage. '+chestSupplyModeHint(c.supplyModeReason));
       area.appendChild(status);
       const row=document.createElement('div'); row.className='qrow';
-      row.appendChild(qBtn('DEPOSIT HELD', ()=>requestChestDeposit(false)));
-      row.appendChild(qBtn('DEPOSIT STACK', ()=>requestChestDeposit(true), true));
+      const held=inv[combatState.selectedSlot],gearHeld=chestGearStorageUnsupported(held);
+      const heldBtn=qBtn('DEPOSIT HELD', ()=>requestChestDeposit(false));
+      const stackBtn=qBtn('DEPOSIT STACK', ()=>requestChestDeposit(true), true);
+      for(const btn of [heldBtn,stackBtn]){
+        btn.disabled=gearHeld;
+        if(gearHeld)btn.title='Chests store stackable supplies only. Gear stays in your bag.';
+      }
+      row.appendChild(heldBtn);
+      row.appendChild(stackBtn);
       row.appendChild(qBtn('DEPOSIT MATCHING', ()=>requestChestBatchDeposit('matching'), true));
       row.appendChild(qBtn('DEPOSIT MATERIALS', ()=>requestChestBatchDeposit('materials'), true));
       if(c.canToggleSupply) row.appendChild(qBtn(c.supply?'PERSONAL MODE':'MARK SUPPLY', ()=>requestChestMode(!c.supply)));
@@ -1296,7 +1353,13 @@ function renderUI(){
     const wrap=document.createElement('div'); wrap.className='craftwrap';
     const area=document.createElement('div'); area.id='craftarea';
     const col=document.createElement('div');
-    col.appendChild(makeSlotEl({get:()=>f.input, set:v=>f.input=v}, {section:'craft'}));
+    col.appendChild(makeSlotEl({get:()=>f.input, set:v=>f.input=v}, {
+      section:'craft',
+      locked:()=>!!f.finishAt,
+      lockedText:'The input is locked while this furnace is smelting.',
+      accept:stack=>!!(stack&&SMELT[stack.id]),
+      rejectText:'The top slot needs a smeltable input, such as <b>Iron Ore</b>.',
+    }));
     // flame indicator
     const flame=document.createElement('div'); flame.id='flame';
     flame.innerHTML='<svg class="flameicon fbg" viewBox="0 0 16 16"><path d="M8 1 C10 4 13 6 13 10 a5 5 0 0 1 -10 0 C3 7 6 5 8 1z" fill="#888"/></svg>';
@@ -1304,7 +1367,13 @@ function renderUI(){
     ff.innerHTML='<svg class="flameicon" style="position:absolute;bottom:0;left:0" viewBox="0 0 16 16"><path d="M8 1 C10 4 13 6 13 10 a5 5 0 0 1 -10 0 C3 7 6 5 8 1z" fill="#ff7b1c"/></svg>';
     flame.appendChild(ff); flameFill=ff;
     col.appendChild(flame);
-    col.appendChild(makeSlotEl({get:()=>f.fuel, set:v=>f.fuel=v}, {section:'craft'}));
+    col.appendChild(makeSlotEl({get:()=>f.fuel, set:v=>f.fuel=v}, {
+      section:'craft',
+      locked:()=>!!f.finishAt,
+      lockedText:'The fuel is locked while this furnace is smelting.',
+      accept:stack=>!!(stack&&FUEL[stack.id]),
+      rejectText:'The bottom slot needs fuel, such as <b>Coal</b> or Charcoal.',
+    }));
     area.appendChild(col);
     const bar=document.createElement('div'); bar.id='smeltbar'; const bi=document.createElement('i'); bar.appendChild(bi); smeltFill=bi;
     area.appendChild(bar);
@@ -1974,7 +2043,17 @@ function applyShopResult(m){
 function chestCoords(){
   if(!uiFurnaceKey) return null;
   const a=uiFurnaceKey.split(',').map(Number);
-  return {x:a[0], y:a[1], z:a[2]};
+  return a.length===3&&a.every(Number.isFinite)?{x:a[0], y:a[1], z:a[2]}:null;
+}
+function nearestCraftingTableKey(range=6){
+  const px=Math.floor(player.pos.x),py=Math.floor(player.pos.y),pz=Math.floor(player.pos.z);
+  let best=null,bestDist=range;
+  for(let y=py-4;y<=py+4;y++)for(let x=px-range;x<=px+range;x++)for(let z=pz-range;z<=pz+range;z++){
+    if(getB(x,y,z)!==B.TABLE)continue;
+    const distance=Math.hypot(x+.5-player.pos.x,y+.5-player.pos.y,z+.5-player.pos.z);
+    if(distance<=bestDist){best=x+','+y+','+z;bestDist=distance;}
+  }
+  return best;
 }
 function simpleChestBulkStack(stack){
   const item=stack&&ITEMS[stack.id];
@@ -2043,10 +2122,15 @@ function requestChestOpen(){
   if(!NET.on || uiMode!=='chest') return;
   const c=chestCoords(); if(c) NET.room.send('chestOpen', c);
 }
+function chestGearStorageUnsupported(stack){
+  const item=stack&&ITEMS[stack.id|0];
+  return !!(stack&&(stack.dur!=null||(item&&(item.tool||item.armor))));
+}
 function requestChestDeposit(stack){
   if(!NET.on || uiMode!=='chest') return;
   const s=inv[combatState.selectedSlot];
   if(!s){ sysMsg('Hold an item to deposit'); return; }
+  if(chestGearStorageUnsupported(s)){sysMsg('Chests store stackable supplies only. Gear stays in your bag.');SFX.error();return;}
   const c=chestCoords(); if(!c) return;
   NET.room.send('chestDeposit', {...c, id:s.id, count:stack?s.count:1});
 }
@@ -2170,6 +2254,7 @@ function requestFurnaceSmelt(){
   const f=getFurnace(uiFurnaceKey);
   if(!f.input || !f.fuel){ sysMsg('Add input and fuel first'); return true; }
   const c=chestCoords(); if(!c) return true;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('furnace.smelt.request',{key:uiFurnaceKey,input:f.input.id,fuel:f.fuel.id});
   NET.room.send('furnaceSmelt', {...c, input:f.input.id, fuel:f.fuel.id});
   return true;
 }
@@ -2185,6 +2270,8 @@ function applyFurnaceState(m){
   if(!m || !m.key) return;
   const key=m.key.split(':').pop();
   const f=getFurnace(key);
+  f.input=m.input?{id:m.input.id,count:m.input.count}:null;
+  f.fuel=m.fuel?{id:m.fuel.id,count:m.fuel.count}:null;
   f.output=m.output?{id:m.output.id,count:m.output.count}:null;
   const localNow=Date.now();
   if(m.finishAt && m.now){
@@ -2194,6 +2281,25 @@ function applyFurnaceState(m){
     f.finishAt=localNow+left;
   } else { f.startedAt=0; f.finishAt=0; }
   if(uiOpen && uiMode==='furnace' && uiFurnaceKey===key) renderUI();
+}
+function applyFurnaceReject(m){
+  const reason=String(m&&m.reason||'failed');
+  const messages={
+    near:'Stand closer to the furnace and try again.',
+    profile:'Your inventory is still loading. Try again in a moment.',
+    rate:'Too many furnace actions. Wait a moment and try again.',
+    busy:'This furnace is already smelting or has output waiting. Take the output first.',
+    recipe:'That input cannot be smelted. Use Iron Ore—not an Iron Ingot—for iron.',
+    fuel_type:'That item is not fuel. Put Coal or Charcoal in the bottom slot.',
+    input:'The input is no longer in your backpack. Reopen the furnace and try again.',
+    fuel:'The fuel is no longer in your backpack. Reopen the furnace and try again.',
+    empty:'This furnace has no finished output yet.',
+    full:'Your backpack is full. Free a slot before taking the output.',
+  };
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('furnace.reject',{reason,key:String(m&&m.key||uiFurnaceKey||'')});
+  SFX.error();
+  sysMsg('<b>Furnace:</b> '+(messages[reason]||'The furnace action failed. Reopen it and try again.'));
+  if(NET.on&&uiOpen&&uiMode==='furnace')requestFurnaceOpen();
 }
 function applyFurnaceStarted(m){
   const f=getFurnace(uiFurnaceKey);
@@ -3296,7 +3402,7 @@ function openFellowshipMapTableUI(state=cartographerState){
     const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('REFRESH TABLE',()=>NET.room&&NET.room.send('cartographer',{action:'status',source:'map_table'})));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
     return;
   }
-  const found=state.totalFound|0,total=state.total|0,leadCost=Math.max(0,(state.mapLeadCost|0)||15),treasure=state.treasure;
+  const found=state.totalFound|0,total=state.total|0,leadCost=Math.max(0,(state.mapLeadCost|0)||15),treasure=state.treasure,ancient=globalThis.BlockcraftAncientCityRun||state.ancientRun;
   const summary=document.createElement('div');summary.className='quest-rank-summary treasure-card';
   summary.innerHTML='<span><small>FELLOWSHIP ATLAS</small><b>'+found+' / '+total+' discoveries mapped</b></span><span>'+(state.mapTable?'MAP TABLE BONUS':'NO BONUS')+'</span>';
   qpanelEl.appendChild(summary);
@@ -3313,9 +3419,11 @@ function openFellowshipMapTableUI(state=cartographerState){
     treasureCard.onclick=()=>mapTableAction('treasure_start',{},'TREASURE ROUTE');
   }
   qpanelEl.appendChild(treasureCard);
-  const ancientCard=document.createElement('div');ancientCard.className='quest-rank-summary treasure-card';
-  if(treasure)ancientCard.innerHTML='<span><small>ANCIENT CITY MAP</small><b>Finish the active map route first</b></span><span>MAP ACTIVE</span>';
-  else{ancientCard.innerHTML='<span><small>ANCIENT CITY MAP</small><b>Start a deep route toward cave entrances, old halls, and relic loot</b></span><span>START ANCIENT</span>';ancientCard.onclick=()=>mapTableAction('ancient_treasure_start',{},'ANCIENT ROUTE');}
+  const ancientCard=document.createElement('div');ancientCard.className='quest-rank-summary treasure-card ancient-city-run-card';
+  if(ancient&&ancient.active){ancientCard.innerHTML='<span><small>ANCIENT CITY EXPEDITION · STEP '+Math.min(6,(ancient.stage|0)+1)+'/6</small><b>'+escHTML(ancient.instruction||'Follow the lantern route.')+'</b></span><span>IN PROGRESS</span>';}
+  else if(treasure)ancientCard.innerHTML='<span><small>ANCIENT CITY EXPEDITION</small><b>Finish the active treasure route first</b></span><span>MAP ACTIVE</span>';
+  else if(ancient&&ancient.clears&&ancient.clears.length>=2)ancientCard.innerHTML='<span><small>ANCIENT CITY EXPEDITION</small><b>Both deep cities have been mapped and survived.</b></span><span>COMPLETE</span>';
+  else{ancientCard.innerHTML='<span><small>ANCIENT CITY EXPEDITION · HIGH RISK</small><b>Descend, read the Origin Tablet, choose a vault, defeat the Warden, and escape.</b></span><span>START EXPEDITION</span>';ancientCard.onclick=()=>mapTableAction('ancient_treasure_start',{},'ANCIENT EXPEDITION');}
   qpanelEl.appendChild(ancientCard);
   const c=state.contract,contract=document.createElement('div');contract.className='quest-rank-summary';
   if(c){
@@ -3872,6 +3980,12 @@ function handleServerObjectiveAction(action,meta={}){
     sysMsg('<b>Craft objective:</b> open Crafting and follow the highlighted recipe.');
     return;
   }
+  if(action==='recall'){
+    closeQWin();
+    if(globalThis.BlockcraftRecall&&typeof globalThis.BlockcraftRecall.start==='function')globalThis.BlockcraftRecall.start();
+    else sysMsg('<b>Recall:</b> press P to answer a question and restore mana and stamina.');
+    return;
+  }
   if(action==='turn_in'){
     if(openServerObjectiveDestination(meta))return;
     sysMsg('<b>Turn in:</b> return to the listed quest giver to claim the reward.');
@@ -3918,7 +4032,8 @@ function pathChoicePanelVisible(){
   return !!(el&&!el.classList.contains('hidden')&&!el.classList.contains('jobselect'));
 }
 function continueOpenTransitionPanel(){
-  const button=document.getElementById('milestonecontinue')||document.getElementById('rewardclose')||document.getElementById('trainingcontinue')||document.getElementById('promotioncontinue')||document.getElementById('graduationcontinue');
+  const button=['milestonecontinue','rewardclose','rankupcontinue','trainingcontinue','promotioncontinue','graduationcontinue']
+    .map(id=>document.getElementById(id)).find(el=>el&&el.offsetParent!==null);
   if(button)button.click();
   setTimeout(()=>{
     if(panelVisible('rewardwin')){
@@ -4375,10 +4490,14 @@ function openCartographerUI(state=cartographerState){
   else{mapCard.innerHTML='<span><small>MULTI-STAGE TREASURE MAP</small><b>Three landmark clues lead to a hidden cache</b></span><span>TAKE MAP</span>';mapCard.onclick=()=>NET.room.send('cartographer',{action:'treasure_start'});}qpanelEl.appendChild(mapCard);
   if(treasure){mapCard.innerHTML='<span><small>ACTIVE TREASURE MAP - CLUE '+((treasure.stage|0)+1)+' / '+(treasure.total|0)+'</small><b>'+escHTML(treasure.clue||'Follow the ink.')+'</b></span><span>VIEW CLUE</span>';mapCard.onclick=()=>showTreasureParchment(treasure);}
   else{mapCard.innerHTML='<span><small>MULTI-STAGE TREASURE MAP</small><b>Start a three-clue hunt ending in gold and diamonds</b></span><span>START TREASURE MAP</span>';mapCard.onclick=()=>NET.room.send('cartographer',{action:'treasure_start'});}
-  const ancientCard=document.createElement('div');ancientCard.className='quest-rank-summary treasure-card';
-  if(treasure){ancientCard.innerHTML='<span><small>ANCIENT CITY MAP</small><b>Finish your active map before starting another route</b></span><span>MAP ACTIVE</span>';}
-  else{ancientCard.innerHTML='<span><small>ANCIENT CITY TREASURE MAP</small><b>Trace cave entrances into deep halls for ancient fragments, glyphs, and relic armor pieces</b></span><span>START ANCIENT MAP</span>';ancientCard.onclick=()=>NET.room.send('cartographer',{action:'ancient_treasure_start'});}
+  const ancient=globalThis.BlockcraftAncientCityRun||state.ancientRun;
+  const ancientCard=document.createElement('div');ancientCard.className='quest-rank-summary treasure-card ancient-city-run-card';
+  if(ancient&&ancient.active){ancientCard.innerHTML='<span><small>ANCIENT CITY EXPEDITION · STEP '+Math.min(6,(ancient.stage|0)+1)+'/6</small><b>'+escHTML(ancient.instruction||'Follow the lantern route.')+'</b></span><span>IN PROGRESS</span>';ancientCard.onclick=()=>sysMsg('<b>Ancient City:</b> '+escHTML(ancient.instruction||'Follow the route.'));}
+  else if(treasure){ancientCard.innerHTML='<span><small>ANCIENT CITY EXPEDITION</small><b>Finish your active map before starting another route</b></span><span>MAP ACTIVE</span>';}
+  else if(ancient&&ancient.clears&&ancient.clears.length>=2){ancientCard.innerHTML='<span><small>ANCIENT CITY EXPEDITION</small><b>Both deep cities have been mapped and survived.</b></span><span>COMPLETE</span>';}
+  else{ancientCard.innerHTML='<span><small>ANCIENT CITY EXPEDITION · HIGH RISK</small><b>Descend through a cave, read the Origin Tablet, choose a vault, face the Warden, and find your way out.</b></span><span>START EXPEDITION</span>';ancientCard.onclick=()=>NET.room.send('cartographer',{action:'ancient_treasure_start'});}
   qpanelEl.appendChild(ancientCard);
+  if(ancient&&ancient.active){const cancel=document.createElement('div');cancel.className='qrow';cancel.appendChild(qBtn('ABANDON ANCIENT EXPEDITION',()=>NET.room.send('ancientCityRunAbandon',{}),true));qpanelEl.appendChild(cancel);}
   const expedition=globalThis.BlockcraftElderheartExpedition;
   const route=document.createElement('div');route.className='quest-rank-summary treasure-card elderheart-expedition-card';
   if(expedition&&expedition.active){
@@ -4396,6 +4515,14 @@ function applyElderheartExpedition(m){
   globalThis.BlockcraftElderheartExpedition=m&&typeof m==='object'?m:null;
   updateLandMinimap();
   if(qOpen&&qpanelEl.querySelector('.elderheart-expedition-card'))openCartographerUI(cartographerState);
+}
+function applyAncientCityRun(m){
+  globalThis.BlockcraftAncientCityRun=m&&typeof m==='object'?m:null;
+  updateLandMinimap();
+  if(qOpen&&qpanelEl.querySelector('.ancient-city-run-card')){
+    if(qpanelEl.querySelector('.fellowship-map-table-marker'))openFellowshipMapTableUI(cartographerState);
+    else openCartographerUI(cartographerState);
+  }
 }
 function openElderheartExpeditionPrompt(m){
   if(!m||!Array.isArray(m.choices))return;
@@ -4512,6 +4639,8 @@ function openQuestLogUI(){
   const explore=document.createElement('div');explore.className='qrow';
   const expedition=globalThis.BlockcraftElderheartExpedition;
   if(expedition&&expedition.active){const card=document.createElement('div');card.innerHTML=questLogCardHTML('Expedition','Roads of the Elderheart',expedition.instruction||'Follow the marked route.',expedition.target&&expedition.target.name||'Orin Mapwell',true,'',{progressHTML:questProgressHTML(Math.max(0,expedition.stage|0),3)});optional.appendChild(card.firstElementChild);}
+  const ancientRun=globalThis.BlockcraftAncientCityRun;
+  if(ancientRun&&ancientRun.active){const card=document.createElement('div');card.innerHTML=questLogCardHTML('Ancient Expedition','Into the Ancient City',ancientRun.instruction||'Follow the lantern route.',ancientRun.target&&ancientRun.target.name||'Deepmouth Cave',true,'',{progressHTML:questProgressHTML(Math.max(0,ancientRun.stage|0),5)});optional.appendChild(card.firstElementChild);}
   explore.appendChild(qBtn('CHOOSE STYLE',()=>openPlayerStyleGuideUI()));
   explore.appendChild(qBtn('RANK JOURNEY',()=>openRankJourneyUI()));
   explore.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
@@ -6526,7 +6655,9 @@ function openCraftingFromNpc(tab='all'){
   qOpen=false;
   qwinEl.classList.add('hidden');
   if(RECIPE_TABS.some(t=>t[0]===tab)) recipeBookTab=tab;
-  openUI('table');
+  const table=nearestCraftingTableKey();
+  openUI(table?'table':'inv',table);
+  if(!table)sysMsg('You can view and make 2x2 recipes here. Stand beside a <b>crafting table</b> for larger recipes.');
 }
 function blacksmithRepairCost(target){
   if(!target) return 0;
@@ -6599,7 +6730,7 @@ function requestBlacksmithSalvage(slot=combatState.selectedSlot){
   if(!NET.on||!NET.room){sysMsg('Salvaging requires the authoritative game server.');return false;}
   NET.room.send('blacksmithSalvage',{slot});return true;
 }
-let lootRecovery=[];
+let lootRecovery=[],lootRecoveryOverflowCount=0,lootRecoveryCapacity=12;
 function cleanRecoveredGear(item){
   if(!item||!ITEMS[item.id]||(!ITEMS[item.id].tool&&!ITEMS[item.id].armor))return null;
   return {id:item.id,count:1,dur:item.dur,plus:Math.max(0,Math.min(3,item.plus|0)),
@@ -6613,9 +6744,11 @@ function cleanRecoveredGear(item){
 function applyLootRecoveryState(m,silent=false){
   const raw=Array.isArray(m)?m:Array.isArray(m&&m.items)?m.items:[];
   lootRecovery=raw.map(cleanRecoveredGear).filter(Boolean);
+  lootRecoveryOverflowCount=Math.max(0,m&&m.overflowCount|0);
+  lootRecoveryCapacity=Math.max(1,m&&m.capacity|0||12);
   if(m&&m.queued&&!silent){
     const item=cleanRecoveredGear(m.queued),gear=item&&GEAR_SYSTEM.profile(ITEMS[item.id].tool||ITEMS[item.id].armor,item);
-    if(item&&gear)sysMsg('Inventory full: <b style="color:'+gear.rarity.color+'">'+escHTML(gear.rank.name+' '+gear.rarity.name+' '+itemNameWithPlus(item))+'</b> was secured by Tobin. Free a slot and claim it from Loot Recovery.');
+    if(item&&gear)sysMsg('Inventory full: <b style="color:'+gear.rarity.color+'">'+escHTML(gear.rank.name+' '+gear.rarity.name+' '+itemNameWithPlus(item))+'</b> was secured by Tobin. '+(m.queued.overflowed?'The 12-slot counter is full, so it is waiting in the recovery backlog.':'Free a slot and claim it from Loot Recovery.'));
   }
   if(qModalIs('blacksmith'))openBlacksmithServicesUI();
 }
@@ -6722,7 +6855,8 @@ function openBlacksmithServicesUI(){
   const salvageGear=selInfo&&((selItem&&selItem.armor)||['sword','axe'].includes(selInfo.cls))&&selInfo.tier<5?GEAR_SYSTEM.profile(selInfo,sel):null;
   if(selInfo)addService(sel&&sel.locked?'LOCK':'SAFE','Gear protection',sel&&sel.locked?'This item cannot be salvaged until you unlock it.':'Lock this item against accidental salvage.',sel&&sel.locked?'UNLOCK':'LOCK',()=>requestGearLock(combatState.selectedSlot,!(sel&&sel.locked)));
   addService('S','Salvage gear',salvageGear?escHTML(salvageGear.rank.name+' '+salvageGear.rarity.name+' '+itemNameWithPlus(sel))+' into forge materials.<br>'+salvageDecisionLine(sel,selItem,selInfo,salvageGear):'Select non-Legendary armor, sword, or axe.','SALVAGE',()=>requestBlacksmithSalvage(combatState.selectedSlot),!salvageGear||!!(sel&&sel.locked));
-  const recoveryTitle=document.createElement('h3');recoveryTitle.textContent='LOOT RECOVERY ('+lootRecovery.length+'/12)';qpanelEl.appendChild(recoveryTitle);
+  const recoveryTitle=document.createElement('h3');recoveryTitle.textContent='LOOT RECOVERY ('+lootRecovery.length+'/'+lootRecoveryCapacity+(lootRecoveryOverflowCount?' · '+lootRecoveryOverflowCount+' BACKLOG':'')+')';qpanelEl.appendChild(recoveryTitle);
+  const recoveryPolicy=document.createElement('p');recoveryPolicy.className='qtext';recoveryPolicy.textContent='The counter holds 12 claimable items; backlog gear moves in automatically. Ordinary unlocked drops expire after 7 days. Locked, Mythic, and S-rank gear never expires.';qpanelEl.appendChild(recoveryPolicy);
   if(!lootRecovery.length){
     const empty=document.createElement('p');empty.className='qtext';empty.textContent='No recovered weapons. Gear found with a full inventory will be secured here.';qpanelEl.appendChild(empty);
   }else lootRecovery.forEach((item,index)=>{
@@ -8685,6 +8819,7 @@ gameContext.registerState('menus', Object.freeze({
   get mode(){ return uiMode; },
   get open(){ return uiOpen; },
   get modalOpen(){ return uiShellState.qOpen; },
+  get craftGrid(){ return craftCells.filter(Boolean).map(s=>({id:s.id|0,count:Math.max(1,s.count|0)})); },
   get craftResult(){
     const r=craftResult();
     return r ? {out:[r.out[0]|0,r.out[1]|0]} : null;
@@ -8706,6 +8841,7 @@ gameContext.registerModule('menus', Object.freeze({
   openGuardian:openGuardianUI,
   openGatePrep:openGatePrepUI,
   applyElderheartExpedition,
+  applyAncientCityRun,
   openElderheartExpeditionPrompt,
   openRandomGateQueue:openRandomGateQueueUI,
   applyRandomGateQueue,

@@ -128,6 +128,81 @@ test('concurrent room flushes execute serially and persist every dirty profile',
   assert.equal(room.dirtyPlayers.size, 0);
 });
 
+test('an immediate save cannot clear newer whole-profile mutations', async () => {
+  for (const [label, mutate, expected] of [
+    ['gold', prof => { prof.gold = 200; }, prof => prof.gold === 200],
+    ['xp', prof => { prof.xp = 900; }, prof => prof.xp === 900],
+    ['quest', prof => { prof.quests = { gate: 'complete' }; }, prof => prof.quests.gate === 'complete'],
+    ['position', prof => { prof.pos = [10, 20, 30]; }, prof => prof.pos[0] === 10],
+  ]) {
+    const room = Object.create(GameRoom.prototype);
+    room.initPersistenceState();
+    room.clients = [];
+    const token = 'revision_' + label;
+    const prof = { gold: 100, xp: 1, quests: {}, pos: [0, 0, 0], inv: [] };
+    room.profiles.set(token, prof);
+    room.dirtyPlayers.add(token);
+    let finishFirst;
+    let firstSnapshot;
+    room.store = {
+      savePlayer(_token, snapshot) {
+        if (!firstSnapshot) {
+          firstSnapshot = JSON.parse(JSON.stringify(snapshot));
+          return new Promise(resolve => { finishFirst = resolve; });
+        }
+        firstSnapshot = JSON.parse(JSON.stringify(snapshot));
+        return Promise.resolve();
+      },
+    };
+
+    const first = room.savePlayerProfileNow(token, prof);
+    await new Promise(resolve => setImmediate(resolve));
+    mutate(prof);
+    room.dirtyPlayers.add(token);
+    finishFirst();
+    assert.equal(await first, true);
+    assert.equal(room.dirtyPlayers.has(token), true, label + ' mutation remains dirty after the stale save');
+    assert.equal(expected(firstSnapshot), false, label + ' was not present in the stale snapshot');
+
+    await room.flushDirtyPlayers();
+    assert.equal(expected(firstSnapshot), true, label + ' is written by the follow-up flush');
+    assert.equal(room.dirtyPlayers.has(token), false);
+  }
+});
+
+test('JSON transaction journal rolls forward an interrupted chest/player transfer', async () => {
+  const store = tempStore();
+  await store.savePlayer('journal_a', { name: 'A', gold: 10, inv: [{ id: 1, count: 2 }] });
+  await store.savePlayer('journal_b', { name: 'B', gold: 20, inv: [] });
+  await store.saveChests({ 'overworld:1,2,3': { slots: [{ id: 2, count: 3 }] } });
+
+  const originalWrite = store._writeNow.bind(store);
+  let interrupted = false;
+  store._writeNow = async (file, value) => {
+    if (!interrupted && file.endsWith(path.join('players', 'journal_b.json'))) {
+      interrupted = true;
+      throw new Error('simulated crash between transaction records');
+    }
+    return originalWrite(file, value);
+  };
+
+  await assert.rejects(() => store.commitTransaction({
+    id: 'transfer_1',
+    players: {
+      journal_a: { name: 'A', gold: 5, inv: [{ id: 1, count: 1 }] },
+      journal_b: { name: 'B', gold: 25, inv: [{ id: 1, count: 1 }] },
+    },
+    chests: { 'overworld:1,2,3': { slots: [{ id: 2, count: 2 }] } },
+  }), /simulated crash/);
+
+  const restarted = new JsonStore(store.dir);
+  assert.equal(await restarted.recoverTransactions(), true);
+  assert.equal((await restarted.loadPlayer('journal_a')).gold, 5);
+  assert.equal((await restarted.loadPlayer('journal_b')).gold, 25);
+  assert.equal((await restarted.loadChests())['overworld:1,2,3'].slots[0].count, 2);
+  assert.equal(await restarted.recoverTransactions(), false, 'completed journal is not replayed twice');
+});
+
 test('failed overworld creation disposes without flushing partial persistence state', async () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   assert.match(source, /this\.createFailed\s*=\s*true;[\s\S]*this\._events\.emit\('dispose'\)/,

@@ -1104,6 +1104,21 @@ function netFx(m){
     showName('WARDEN DEFEATED');
     return;
   }
+  if(m.t==='wardenSonicWarn'){
+    const duration=Math.max(.6,Math.min(3,(Number(m.durationMs)||1450)/1000)),inner=Number(m.innerRadius)||2.8,outer=Number(m.outerRadius)||8;
+    ringPulse(m.x,m.y+.08,m.z,outer,0x35d0c8,duration);ringPulse(m.x,m.y+.1,m.z,inner,0x78fff2,duration);
+    burst(m.x,m.y+.7,m.z,[.12,.85,.8],24,3.2,3.4,.72);SFX.wardenAlarm?SFX.wardenAlarm(2):SFX.slamWarn();
+    showName('SONIC RESONANCE — GET CLOSE OR CLEAR THE OUTER RING!');
+    const audit=globalThis.__BLOCKCRAFT_WARDEN_FX__||(globalThis.__BLOCKCRAFT_WARDEN_FX__={warns:0,bursts:0});audit.warns++;audit.lastWarn={durationMs:Math.round(duration*1000),innerRadius:inner,outerRadius:outer};
+    return;
+  }
+  if(m.t==='wardenSonicBurst'){
+    const inner=Number(m.innerRadius)||2.8,outer=Number(m.outerRadius)||8;
+    for(const radius of[inner,(inner+outer)*.5,outer])ringPulse(m.x,m.y+.08,m.z,radius,0x78fff2,.5);
+    burst(m.x,m.y+1,m.z,[.3,1,.95],58,7.5,4.4,.82);SFX.boom();camShake=Math.max(camShake,.52);showName('SONIC RESONANCE');
+    const audit=globalThis.__BLOCKCRAFT_WARDEN_FX__||(globalThis.__BLOCKCRAFT_WARDEN_FX__={warns:0,bursts:0});audit.bursts++;audit.lastBurst={innerRadius:inner,outerRadius:outer};
+    return;
+  }
   if(m.t==='slam'){
     SFX.boom(); camShake=Math.max(camShake,.6);
     burst(m.x, m.y+.3, m.z, [.7,.5,.3], 26, 4.5, 2.5, .6);

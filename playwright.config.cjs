@@ -1,27 +1,24 @@
 const { defineConfig } = require('@playwright/test');
 
 const PORT = 2607;
+const RUN_TERRAIN_PERF = process.env.TERRAIN_PERF === '1';
 
 module.exports = defineConfig({
   testDir: './e2e',
   // The profession/job feature is intentionally disabled for this release.
-  // Keep its full browser coverage in the repository (and the dedicated
-  // test:tutorial-jobs command), but do not make the live-release gate wait
-  // for flows that players cannot enter.
+  // Only retired job-only journeys are excluded. Fresh-account onboarding,
+  // reconnect, persistence, early-loop, and transition recovery remain part
+  // of the default release browser gate.
   testIgnore: [
     '**/blacksmith-tutorial.spec.js',
     '**/cook-tutorial.spec.js',
     '**/farmer-tutorial.spec.js',
     '**/job-contract-loop.spec.js',
     '**/miner-monk-tutorial.spec.js',
-    '**/mara-opening.spec.js',
-    '**/onboarding-first-gate-polish.spec.js',
-    '**/onboarding-journey.spec.js',
     '**/pet-tamer-tutorial.spec.js',
-    '**/player-facing-early-loop.spec.js',
-    '**/progression-reconnect.spec.js',
-    '**/town-tutorial-persistence.spec.js',
-    '**/transition-panel-recovery.spec.js',
+    // This measures renderer timing, not functional behavior. Keep it out of
+    // the blocking release gate unless the benchmark is explicitly requested.
+    ...(RUN_TERRAIN_PERF ? [] : ['**/terrain-performance.spec.js']),
   ],
   timeout: 45_000,
   // Connection-readiness polls (`status().connected`) flake under the cumulative

@@ -82,10 +82,12 @@ test('local and cloud servers install the graceful restart warning hook', () => 
   }
 });
 
-test('overworld defaults to the validated 24-player capacity', () => {
+test('production overworld has no player-count matchmaking cap', () => {
   const gameRoom = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   const loadTest = fs.readFileSync(path.join(__dirname, '..', '..', 'tools', 'load-test.js'), 'utf8');
-  assert.match(gameRoom, /BLOCKCRAFT_SHARD_MAX_CLIENTS \|\| 24/);
-  assert.match(gameRoom, /Math\.min\(64,/);
+  assert.doesNotMatch(gameRoom, /BLOCKCRAFT_SHARD_MAX_CLIENTS/);
+  assert.match(gameRoom, /else\s*\{\s*this\.maxClients\s*=\s*Infinity;/);
+  assert.match(gameRoom, /BLOCKCRAFT_E2E === '1'/);
+  assert.match(gameRoom, /BLOCKCRAFT_TEST_SHARD_MAX_CLIENTS/);
   assert.match(loadTest, /LOAD_CLIENTS \|\| 24/);
 });

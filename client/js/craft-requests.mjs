@@ -1,5 +1,9 @@
-export function craftFailureText(m={}){
-  const reasons={rate:'Too many crafting requests. Wait a moment and try again.',busy:'Another craft is still being processed.',recipe:'That arrangement does not match a recipe.',payload:'The crafting grid could not be read. Clear it and choose a recipe again.',ingredients:'You no longer have enough ingredients. Check your inventory.',full:'Your bag cannot hold the crafted items. Free some space first.',profile:'Your inventory is not ready. Wait for the connection to finish.',server:'Crafting could not be confirmed. Reconnect to refresh your inventory.'};
+export function craftFailureText(m={},itemName=id=>'Item '+id){
+  const reasons={rate:'Too many crafting requests. Wait a moment and try again.',busy:'Another craft is still being processed.',recipe:'That arrangement does not match a recipe.',payload:'The crafting grid could not be read. Clear it and choose a recipe again.',table:'Stand beside a crafting table to use the 3x3 grid.',ingredients:'You no longer have enough ingredients. Check your inventory.',full:'Your bag cannot hold the crafted items. Free some space first.',profile:'Your inventory is not ready. Wait for the connection to finish.',server:'Crafting could not be confirmed. Reconnect to refresh your inventory.'};
+  if(m.reason==='ingredients'&&Array.isArray(m.missing)&&m.missing.length){
+    const parts=m.missing.slice(0,4).map(entry=>String(itemName(entry.id|0))+' x'+Math.max(1,entry.short|0));
+    return 'Missing '+parts.join(parts.length>1?', ':'')+'. Gather them and try again.';
+  }
   return m.reason==='hunter_level'?'Reach Hunter Level '+Math.max(1,m.level|0)+' for that recipe.':reasons[m.reason]||'Crafting could not be completed. Check your connection and inventory.';
 }
 

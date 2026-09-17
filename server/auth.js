@@ -12,6 +12,7 @@ const { I, JOB_IDS, ITEM_NAMES, ABILITY_SYSTEM, UTILITY_IDS, ARMOR_INFO, TOOL_IN
 const APPEARANCE_SYSTEM = require('../shared/appearance-system');
 const ABILITY_PROGRESSION = require('../shared/ability-progression');
 const GEAR_SYSTEM = require('../shared/gear-system');
+const { B } = require('./world');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -35,7 +36,10 @@ const cleanUsername = value => String(value || '').trim().toLowerCase();
 const validUsername = value => /^[a-z0-9_]{3,24}$/.test(value);
 const cleanDisplayName = value => String(value || 'Hunter').replace(/[<>]/g, '').trim().slice(0, 16) || 'Hunter';
 const INV_MAX = 36;
-const KNOWN_ITEM_IDS = new Set(Object.values(I).filter(Number.isFinite));
+const KNOWN_ITEM_IDS = new Set([
+  ...Object.values(I),
+  ...Object.values(B).filter(id => ![B.AIR, B.BEDROCK, B.BARRIER].includes(id)),
+].filter(Number.isFinite));
 const JOB_XP_MAX = 1000000000;
 const JOB_XP_IDS = [...JOB_IDS].filter(Boolean);
 const cleanAdminId = value => String(value || '').trim().toLowerCase();

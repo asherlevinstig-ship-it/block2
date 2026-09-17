@@ -527,6 +527,9 @@ const weatherDiscoveryReq={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'cle
 const weatherDiscoveryName={rain_bloom:'RAINWAKE BLOOM',storm_crystal:'STORMGLASS',sun_dial:'SUN DIAL'};
 const weatherDiscoveryItem={rain_bloom:'Rainwake Petals',storm_crystal:'Stormglass Shards',sun_dial:'Solar Glyphs'};
 const weatherDiscoveryAction={rain_bloom:'gather',storm_crystal:'harvest',sun_dial:'read'};
+const fantasyObjectiveFx=new Map();
+const fantasyObjectiveColors={ruined_keep:0xffb454,overgrown_temple:0x7ee06a,arcane_tower:0x7dd3fc,giant_hall:0xa8ddff,witch_enclave:0xd596ff};
+const fantasyObjectiveCompleteLabels={ruined_keep:'SECURED',overgrown_temple:'CLEANSED',arcane_tower:'ALIGNED',giant_hall:'LIT',witch_enclave:'DISRUPTED'};
 let weatherDiscoveryQuietUntil=0;
 function weatherLabelFor(kind,active){return active?weatherDiscoveryName[kind]:'DORMANT: '+weatherDiscoveryReq[kind].toUpperCase();}
 function makeWeatherDiscoveryFx(s){
@@ -552,6 +555,37 @@ function disposeWeatherDiscoveryFx(){
   });
   weatherDiscoveryFx.clear();
 }
+function makeFantasyObjectiveFx(site,objective){
+  const color=fantasyObjectiveColors[site.type]||0xd596ff,group=new THREE.Group();
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.16,.42,7.5,12,1,true),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.22,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.05,.075,8,42),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.88,depthWrite:false,blending:THREE.AdditiveBlending}));
+  const core=new THREE.Mesh(new THREE.OctahedronGeometry(.32,0),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.9,depthWrite:false,blending:THREE.AdditiveBlending}));
+  const label=makeHudSprite(String(objective.verb||objective.label||'INTERACT').toUpperCase(),'#ffffff','rgba(9,7,18,.8)');
+  beam.position.y=3.75;ring.rotation.x=Math.PI/2;ring.position.y=.14;core.position.y=1.35;label.position.y=2.65;
+  group.add(beam,ring,core,label);group.position.set(objective.x+.5,objective.y+.05,objective.z+.5);group.userData={beam,ring,core,label,phase:Math.random()*10,status:'active',siteType:site.type};
+  scene.add(group);fantasyObjectiveFx.set(site.id+':'+objective.id,group);return group;
+}
+function tickFantasyObjectiveFx(now,dt){
+  const sites=regionalLandmarks.filter(s=>s.id&&s.id.startsWith('major_fantasy_')),runs=globalThis.BlockcraftFantasyStructureRuns,clears=globalThis.BlockcraftFantasyStructureClears;
+  const visibleKeys=new Set();
+  if(dim==='overworld')for(const site of sites){
+    const run=runs&&runs.get(site.id),cleared=!!(clears&&clears.has(site.id)),activeIds=new Set(run&&Array.isArray(run.objectives)?run.objectives.map(o=>o.id):[]),doneIds=new Set(run&&Array.isArray(run.completedObjectiveIds)?run.completedObjectiveIds:[]);
+    if(run&&['guards','boss'].includes(run.phase))for(const objective of site.objectives||[])doneIds.add(objective.id);
+    for(const objective of site.objectives||[]){
+      const complete=cleared||doneIds.has(objective.id),active=!complete&&activeIds.has(objective.id);
+      if(!active&&!complete)continue;
+      const dist=Math.hypot(player.pos.x-objective.x,player.pos.z-objective.z);if(dist>85)continue;
+      const key=site.id+':'+objective.id,g=fantasyObjectiveFx.get(key)||makeFantasyObjectiveFx(site,objective),ud=g.userData,pulse=.5+.5*Math.sin(now*.005+ud.phase);
+      visibleKeys.add(key);g.visible=true;ud.status=complete?'complete':'active';
+      ud.beam.visible=active;ud.label.visible=active||dist<8;ud.ring.rotation.z+=dt*(active?2.2:.8);ud.ring.scale.setScalar((active?1:0.72)+pulse*(active?.2:.08));
+      ud.ring.material.opacity=active?.56+pulse*.34:.28+pulse*.2;ud.beam.material.opacity=active?.16+pulse*.18:0;ud.core.position.y=(active?1.3:.62)+pulse*(active?.28:.12);ud.core.rotation.y+=dt*2.1;ud.core.rotation.x+=dt*.7;ud.core.material.opacity=active?.68+pulse*.3:.55+pulse*.25;
+      retitleSprite(ud.label,active?String(objective.verb||'INTERACT').toUpperCase():'\u2713 '+(fantasyObjectiveCompleteLabels[site.type]||'COMPLETE'),active?'#ffffff':'#bfffb5');
+      if(Math.random()<dt*(active?8:2)){const c=new THREE.Color(fantasyObjectiveColors[site.type]||0xd596ff);spawnParticle({x:objective.x+.5+(Math.random()-.5)*1.3,y:objective.y+.4+Math.random()*(active?3.4:1.5),z:objective.z+.5+(Math.random()-.5)*1.3,vx:(Math.random()-.5)*.2,vy:.3+Math.random()*.55,vz:(Math.random()-.5)*.2,life:.65,grav:-.08,r:c.r,g:c.g,b:c.b});}
+    }
+  }
+  fantasyObjectiveFx.forEach((g,key)=>{if(!visibleKeys.has(key))g.visible=false;});
+  globalThis.__BLOCKCRAFT_FANTASY_OBJECTIVE_FX__={visible:visibleKeys.size,total:fantasyObjectiveFx.size};
+}
 function tickExplorationPresentation(now,dt){
   const map=globalThis.BlockcraftTreasureMap,site=map&&map.targetId?[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===map.targetId):null;
   treasureClueGroup.visible=!!(dim==='overworld'&&site);
@@ -565,6 +599,7 @@ function tickExplorationPresentation(now,dt){
     retitleSprite(treasureLabel,dist<(site.radius||8)+5?'PRESS G TO SOLVE':'TREASURE CLUE','#ffd24a');
     if(dist<70&&Math.random()<dt*13)spawnParticle({x:site.x+.5+(Math.random()-.5)*2.8,y:y+.4+Math.random()*7,z:site.z+.5+(Math.random()-.5)*2.8,vx:(Math.random()-.5)*.25,vy:.6+Math.random()*.6,vz:(Math.random()-.5)*.25,life:.8,grav:-.15,r:1,g:.78,b:.22});
   }
+  tickFantasyObjectiveFx(now,dt);
   if(dim!=='overworld'||now<weatherDiscoveryQuietUntil){
     weatherDiscoveryFx.forEach(g=>g.visible=false);
     return;
@@ -589,6 +624,12 @@ function tickExplorationPresentation(now,dt){
   }
 }
 globalThis.BlockcraftExplorationFx={
+  structureObjective(m){
+    if(!m||!Number.isFinite(m.x)||!Number.isFinite(m.y)||!Number.isFinite(m.z))return;
+    const hex=fantasyObjectiveColors[m.type]||0xd596ff,c=new THREE.Color(hex);
+    ringPulse(m.x+.5,m.y+.12,m.z+.5,2.4,hex,.58);glowFlash(m.x+.5,m.y+1,m.z+.5,hex,4.2,.42);
+    burst(m.x+.5,m.y+.8,m.z+.5,[c.r,c.g,c.b],30,3.8,3.2,.72);
+  },
   treasureSolved(site){
     if(!site)return;const y=surfaceY(site.x,site.z);
     burst(site.x+.5,y+.8,site.z+.5,[1,.82,.22],28,4.2,3.6,.8);
@@ -803,7 +844,11 @@ function currentLocationInfo(){
     }
     let found=null, best=Infinity;
     for(const lm of regionalLandmarks){ const d=Math.hypot(player.pos.x-lm.x,player.pos.z-lm.z); if(d<(lm.radius||12)&&d<best){found=lm;best=d;} }
-    if(found) return {cls:(found.major?'event':'wild')+' danger'+ring,name:found.name,meta:(found.type==='ruins'?'Press G to decipher the ruins for a knowledge bonus':(found.major?'Major landmark':'Discovery')+' - '+danger.name+' / '+danger.threat)};
+    if(found){
+      const fantasy=found.id&&found.id.startsWith('major_fantasy_');
+      const detail=fantasy?((found.rarity==='legendary'?'Legendary':'Rare')+' '+found.theme+' structure · '+found.state+' · '+found.activity):(found.type==='ruins'?'Press G to decipher the ruins for a knowledge bonus':(found.major?'Major landmark':'Discovery')+' - '+danger.name+' / '+danger.threat);
+      return {cls:(found.major?'event':'wild')+' danger'+ring,name:found.name,meta:detail};
+    }
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.skyport.x, player.pos.z-HUB.skyport.z)<12){
     return { cls:'town', name:'Westwind Skyport', meta:'G to board - requires S-Rank and 1,000 gold' };
@@ -960,13 +1005,13 @@ function jobContractActionText(c){
 function jobContractCompassTarget(c=clampJobContract(jobContract)){
   if(!c || (c.job!=='adventurer'&&c.job!==playerJob))return null;
   if(jobContractReady())return {label:'Quest Log',x:HUB.guide.x,z:HUB.guide.z};
-  if((c.targetX||c.targetZ)&&Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))return {label:jobContractDestinationLabel(c),x:c.targetX,z:c.targetZ};
+  if(Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))return {label:jobContractDestinationLabel(c),x:c.targetX,y:Number.isFinite(c.targetY)?c.targetY:undefined,z:c.targetZ,dimension:c.targetDimension||'overworld'};
   if(c.type==='farm')return {label:'Town Farm',x:HUB.farm.x,z:HUB.farm.z};
   if(c.type==='cook'||c.type==='sell')return {label:c.type==='sell'?'Tavern counter':'Kitchen',x:HUB.tavern.x,z:HUB.tavern.z};
   if(c.type==='smith'||c.type==='repair'||c.type==='upgrade'||c.type==='salvage')return {label:'Smithy',x:HUB.smith.x,z:HUB.smith.z};
   if(c.type==='meditate')return {label:'Meditation Hall',x:HUB.shrine.x,z:HUB.shrine.z};
   if(c.type==='mine'||c.type==='cave_survey'||c.type==='ancient_map'||c.type==='treasure')return {label:jobContractDestinationLabel(c),x:HUB.quarry.x,z:HUB.quarry.z};
-  if(c.type==='gate')return gate?{label:'Active Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  if(c.type==='gate')return gate?{label:'Active Gate',x:Number.isFinite(gate.x)?gate.x:TOWN.TC,z:Number.isFinite(gate.z)?gate.z:TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
   if(c.type==='kill'||c.type==='hunt')return {label:jobContractDestinationLabel(c),x:HUB.northGate.x,z:HUB.northGate.z-15};
   if(c.type==='tame')return {label:'Wild pet trails',x:HUB.northGate.x+12,z:HUB.northGate.z-18};
   if(c.type==='pet_care')return {label:'Dragon Roost',x:HUB.roost.x,z:HUB.roost.z};
@@ -1271,7 +1316,7 @@ function localStoryObjectiveLine(){
   else if(quest.giver==='Mara Vale'&&quest.title==='First Hands')target=isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))
     ? {label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2}
     : {label:'Logging Area',x:HUB.northGate.x,z:HUB.northGate.z-15};
-  else if(quest.type==='gate')target=gate?{label:'Active Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  else if(quest.type==='gate')target=utilityCompassTarget()||{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
   else if(quest.type==='kill'||quest.type==='fetch'||quest.type==='mine'||quest.type==='pvp_bounty')target={label:'Wilderness',x:HUB.northGate.x,z:HUB.northGate.z-15};
   return objectiveLine(isAegis?'aegis':'story',isAegis?'Aegis':'Story',story.label,story.text,action,progress,{chapter,target});
 }
@@ -1345,7 +1390,7 @@ function midgameObjectiveLine(){
     return objectiveLine('midgame','Next','Sharpen '+rankName+'-Rank Kit',rankName+'-Rank Gates are open. '+prep.status+' '+prep.score+'/'+prep.total+' - fix '+missing,{type:'gate_prep',label:'PREP CHECK',rank},objectiveProgressParts(prep.score,prep.total),{target:{label:'Gate Prep',x:HUB.smith.x,z:HUB.smith.z}});
   }
   if(gate&&((gate.rank|0)<=rank||!prep)){
-    return objectiveLine('midgame','Next','Clear a '+(RANKS[gate.rank]&&RANKS[gate.rank].n||rankName)+'-Rank Gate','You are between contracts. Inspect the nearby Gate, rally if needed, then clear the boss for loot and Hunter XP',{type:'find_gate',label:'FIND GATE'},null,{target:{label:'Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}});
+    return objectiveLine('midgame','Next','Clear a '+(RANKS[gate.rank]&&RANKS[gate.rank].n||rankName)+'-Rank Gate','You are between contracts. Inspect the nearby Gate, rally if needed, then clear the boss for loot and Hunter XP',{type:'find_gate',label:'FIND GATE'},null,{target:{label:'Gate',x:Number.isFinite(gate.x)?gate.x:TOWN.TC,z:Number.isFinite(gate.z)?gate.z:TOWN.TC}});
   }
   const opportunity=typeof nearbyRegionalOpportunity==='function'?nearbyRegionalOpportunity():null;
   if(opportunity&&opportunity.distance<120){
@@ -1372,6 +1417,14 @@ function elderheartExpeditionObjectiveLine(){
   return objectiveLine('expedition','Expedition','Roads of the Elderheart',expedition.instruction||'Follow the expedition route.',
     {type:'questlog',label:stage===3?'RETURN TO ORIN':'VIEW ROUTE'},objectiveProgressParts(stage,3),
     {target:site?{label:site.name||'Expedition stop',x:site.x,z:site.z}:{label:'Orin Mapwell',x:HUB.cartographer.x,z:HUB.cartographer.z}});
+}
+function ancientCityRunObjectiveLine(){
+  const run=globalThis.BlockcraftAncientCityRun;
+  if(!run||!run.active||dim!=='overworld')return null;
+  const stage=Math.max(0,Math.min(5,run.stage|0)),site=run.target;
+  return objectiveLine('ancient','Ancient','Into the Ancient City',run.instruction||'Follow the lantern route.',
+    {type:'questlog',label:'VIEW EXPEDITION'},objectiveProgressParts(stage,5),
+    site?{target:{label:site.name||'Ancient City step',x:site.x,z:site.z}}:null);
 }
 function tutorialRoomHudSuppressed(){
   return dim!=='overworld'||dimensionsState.kind!=='overworld'||(combatState.jobTutorialActive&&combatState.jobTutorialJob);
@@ -1409,6 +1462,8 @@ function nextBestObjectiveLine(){
     const tutorial=tutorialObjective();
     if(tutorial)return objectiveLine('tutorial','Guide',tutorial.label,tutorial.text,{type:'follow_marker',label:'FOLLOW MARKER'});
   }
+  const ancient=ancientCityRunObjectiveLine();
+  if(ancient)return ancient;
   const expedition=elderheartExpeditionObjectiveLine();
   if(expedition)return expedition;
   if(chapterProgression)return chapterProgression;
@@ -1440,6 +1495,8 @@ function unifiedObjectiveList(){
   const baseChapter=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus);
   if(chapterProgression)lines.push(chapterProgression);
   if(story&&!baseChapter)lines.push(story);
+  const ancient=ancientCityRunObjectiveLine();
+  if(ancient)lines.push(ancient);
   const expedition=elderheartExpeditionObjectiveLine();
   if(expedition)lines.push(expedition);
   const prep=gatePrepObjectiveLine();
@@ -1458,7 +1515,7 @@ function unifiedObjectiveList(){
   if(progressionFocus==='e_rank_climb'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='a_rank_climb'||progressionFocus==='s_rank_climb'||progressionFocus==='s_rank_complete'){
     const climbTitle=progressionFocus==='e_rank_climb'?'E-rank Climb':progressionFocus==='c_rank_climb'?'C-rank Climb':progressionFocus==='b_rank_pressure'?'Gate Pressure':progressionFocus==='a_rank_climb'?'A-rank Climb':progressionFocus==='s_rank_climb'?'S-rank Climb':'S-rank Complete';
     const climb=unique.find(line=>line.title===climbTitle);
-    const activity=unique.find(line=>line!==climb&&['expedition','story','guild','aegis'].includes(line.kind));
+    const activity=unique.find(line=>line!==climb&&['ancient','expedition','story','guild','aegis'].includes(line.kind));
     return [climb,activity].filter(Boolean);
   }
   return unique.slice(0,6);
@@ -1469,6 +1526,16 @@ function unifiedObjectiveHud(){
   const line=nextBestObjectiveLine();
   return line?{label:'Next Best Action',text:line.title||line.text||'Choose your next step',nextBest:true,line}:null;
 }
+function primaryObjectiveGuideLine(obj){
+  if(!obj)return null;
+  if(obj.nextBest&&obj.line)return obj.line;
+  if(obj.unified&&Array.isArray(obj.lines))return obj.lines[0]||null;
+  return obj.serverObjective?{kind:obj.serverObjective.source||'server',title:obj.serverObjective.title||obj.label||'Objective',serverObjective:obj.serverObjective}:null;
+}
+let objectiveTrackerGuideLine=null;
+Object.defineProperty(globalThis,'BlockcraftObjectiveTrackerGuide',{value:Object.freeze({
+  current:()=>primaryObjectiveGuideLine(currentObjectiveHud())||objectiveTrackerGuideLine,
+}),configurable:true});
 function trackerActionButton(action){
   if(!action) return '';
   const attrs=['type="button"','class="qaction"','data-objective-action="'+escHTML(action.type||'')+'"'];
@@ -1575,6 +1642,7 @@ function objectiveHudHTML(obj){
       '<h3>'+escHTML(line&&line.title||line&&line.label||'Current Quest')+'</h3>'+
       '<p>'+escHTML(objective)+'</p>'+
       progressBar+
+      (line&&line.action?'<div class="activequest-action">'+trackerActionButton(line.action)+'</div>':'')+
       '</div>';
   };
   if(obj.nextBest&&obj.line){
@@ -1641,6 +1709,7 @@ function refreshObjectiveTracker(){
     if(obj)html=objectiveHudHTML(obj);
     else hidden=true;
   }
+  objectiveTrackerGuideLine=hidden?null:primaryObjectiveGuideLine(obj);
   if(html!==lastObjectiveHudHTML||hidden!==lastObjectiveHudHidden){
     lastObjectiveHudHTML=html;lastObjectiveHudHidden=hidden;
     currentQuestEl.classList.toggle('hidden',hidden);
@@ -1663,7 +1732,8 @@ function handleObjectiveAction(action,btn){
   if(action==='guild_contracts'){menusApi.openRegionalContracts&&menusApi.openRegionalContracts();return;}
   if(action==='claim_aegis'){menusApi.openGuardian&&menusApi.openGuardian();return;}
   if(action==='continue_panel'){
-    const btn=document.getElementById('milestonecontinue')||document.getElementById('rewardclose')||document.getElementById('trainingcontinue')||document.getElementById('promotioncontinue')||document.getElementById('graduationcontinue');
+    const btn=['milestonecontinue','rewardclose','rankupcontinue','trainingcontinue','promotioncontinue','graduationcontinue']
+      .map(id=>document.getElementById(id)).find(el=>el&&el.offsetParent!==null);
     if(btn){ btn.click(); return; }
     sysMsg('<b>Continue:</b> close the open reward panel to resume the next objective.');
     return;
@@ -1968,6 +2038,8 @@ function utilityCompassTarget(){
     });
     if(target)return {label:target.label,x:target.x,z:target.z};
   }
+  const ancientRun=globalThis.BlockcraftAncientCityRun;
+  if(dim==='overworld'&&ancientRun&&ancientRun.active&&ancientRun.target)return {label:ancientRun.target.name||'Ancient City',x:ancientRun.target.x,z:ancientRun.target.z};
   const trail=dim==='overworld'&&overworldActivity&&overworldActivity.trailSense;
   if(trail&&Number.isFinite(trail.x)&&Number.isFinite(trail.z)&&(!trail.expiresAt||trail.expiresAt>Date.now())){
     return {label:trail.kind==='breach'?'Breach Trail':'Trail Sense',x:trail.x,z:trail.z};
@@ -2004,7 +2076,7 @@ function utilityCompassTarget(){
       if(prep.next.id==='key')return {label:'B Prep · Market',x:HUB.market.x,z:HUB.market.z};
       return {label:'B Prep · Smithy',x:HUB.smith.x,z:HUB.smith.z};
     }
-    if(gate)return {label:'B-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
+    if(gate)return {label:'B-rank Gate',x:Number.isFinite(gate.x)?gate.x:TOWN.TC,z:Number.isFinite(gate.z)?gate.z:TOWN.TC};
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
   if(progressionFocus==='a_rank_climb'){
@@ -2018,7 +2090,7 @@ function utilityCompassTarget(){
       if(prep.next.id==='armor')return {label:'A Prep · Aegis',x:HUB.aegisApproach.x,z:HUB.aegisApproach.z};
       return {label:'A Prep · Smithy',x:HUB.smith.x,z:HUB.smith.z};
     }
-    if(gate)return {label:'A-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
+    if(gate)return {label:'A-rank Gate',x:Number.isFinite(gate.x)?gate.x:TOWN.TC,z:Number.isFinite(gate.z)?gate.z:TOWN.TC};
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
   if(progressionFocus==='s_rank_climb'){
@@ -2032,7 +2104,7 @@ function utilityCompassTarget(){
       if(prep.next.id==='weapon'||prep.next.id==='armor')return {label:'S Prep · Aegis',x:HUB.aegisApproach.x,z:HUB.aegisApproach.z};
       return {label:'S Prep · Smithy',x:HUB.smith.x,z:HUB.smith.z};
     }
-    if(gate)return {label:'S-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
+    if(gate)return {label:'S-rank Gate',x:Number.isFinite(gate.x)?gate.x:TOWN.TC,z:Number.isFinite(gate.z)?gate.z:TOWN.TC};
     return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
   }
   if(progressionFocus==='c_rank_climb'){
@@ -2043,7 +2115,7 @@ function utilityCompassTarget(){
       if(prep.next.id==='key')return {label:'C Prep · Market',x:HUB.market.x,z:HUB.market.z};
       return {label:'C Prep · Crafting',x:HUB.smith.x,z:HUB.smith.z};
     }
-    if(gate)return {label:'C-rank Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
+    if(gate)return {label:'C-rank Gate',x:Number.isFinite(gate.x)?gate.x:TOWN.TC,z:Number.isFinite(gate.z)?gate.z:TOWN.TC};
   }
   if(progressionFocus==='e_rank_climb'||progressionFocus==='s_rank_complete'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     return {label:'Guild Hall',x:HUB.guild.x,z:HUB.guild.z};
@@ -2075,7 +2147,7 @@ function utilityCompassTarget(){
   }
   if(rc && rc.ready) return {label:'Board', x:HUB.jobs.x, z:HUB.jobs.z};
   if(trackedRegionalOpportunity)return {label:trackedRegionalOpportunity.label,x:trackedRegionalOpportunity.x,z:trackedRegionalOpportunity.z};
-  if(gate) return {label:'Gate', x:gate.x||TOWN.TC, z:gate.z||TOWN.TC};
+  if(gate) return {label:'Gate', x:Number.isFinite(gate.x)?gate.x:TOWN.TC, z:Number.isFinite(gate.z)?gate.z:TOWN.TC};
   if(dim==='overworld') return {label:'Town', x:TOWN.TC, z:TOWN.TC};
   return null;
 }
@@ -3903,6 +3975,17 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     }
     return false;
   };
+  const e2ePositionAtSmith=async()=>{
+    if(!NET.on||!NET.room) return false;
+    const requestId='smith-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+    NET.room.send('e2eJourney',{action:'positionAtSmith',requestId});
+    for(let settle=0;settle<50;settle++){
+      await new Promise(resolve=>setTimeout(resolve,100));
+      const ack=networkingState.journeyResult;
+      if(ack&&ack.requestId===requestId&&ack.ok){player.pos.set(ack.x,ack.y,ack.z);return true;}
+    }
+    return false;
+  };
   const e2eUseDungeonExit=()=>{
     if(dim!=='dungeon'||!dungeon||!dungeon.cleared||!exitPortal) return false;
     player.pos.set(exitPortal.position.x,exitPortal.position.y+.5,exitPortal.position.z);
@@ -3961,7 +4044,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
   window.__BLOCKCRAFT_E2E__={
     resetFrameProfile:()=>perfDiagnostics.resetProfile(),
     frameProfile:()=>perfDiagnostics.profile(),
-    status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.sessionId&&NET.room.state.players.get(NET.room.sessionId);let bossState='';const dungeonMobs=[];if(NET.room&&NET.room.state&&NET.room.state.mobs)NET.room.state.mobs.forEach((m,id)=>{if(m.dgn===NET.dgn){dungeonMobs.push({id:String(id),kind:m.kind||'',variant:m.variant||'',bossStyle:m.bossStyle||'',displayName:m.displayName||'',elite:!!m.elite,state:m.state||''});if(m.kind==='boss')bossState=m.state||'';}});return {connected:NET.on&&NET.profileReady===true,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,jobContractOffers:Array.isArray(jobContractOffers)?jobContractOffers.map(c=>JSON.parse(JSON.stringify(c))):[],jobContractOffersJob,jobContractRefreshAt,lastProgressionReject:String(globalThis.__BLOCKCRAFT_LAST_PROGRESSION_REJECT__||''),progressionFocus,activeObjectives:Array.isArray(activeObjectives)?JSON.parse(JSON.stringify(activeObjectives)):[],firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),currentObjectiveHud:currentObjectiveHud(),objectiveText:currentQuestEl&&currentQuestEl.textContent||'',objectiveAction:e2eCurrentObjectiveAction(),transitionPanels:transitionPanelState(),menu:{open:menusState.open,mode:menusState.mode,modalOpen:menusState.modalOpen,craftResult:menusState.craftResult?JSON.parse(JSON.stringify(menusState.craftResult)):null},landClaimOverlay:!!worldState.landClaimOverlay,baseSetup:worldApi.baseSetupStatus?worldApi.baseSetupStatus():null,dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),partyCompassTarget:partyCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTrainingUsed:combatState.abilityTrainingUsed,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonContentId:dungeon&&dungeon.dungeonId||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonBossState:bossState,dungeonMobs,dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
+    status:()=>{const self=NET.room&&NET.room.state&&NET.room.sessionId&&NET.room.state.players&&NET.room.sessionId&&NET.room.state.players.get(NET.room.sessionId);let bossState='';const dungeonMobs=[];if(NET.room&&NET.room.state&&NET.room.state.mobs)NET.room.state.mobs.forEach((m,id)=>{if(m.dgn===NET.dgn){dungeonMobs.push({id:String(id),kind:m.kind||'',variant:m.variant||'',bossStyle:m.bossStyle||'',displayName:m.displayName||'',elite:!!m.elite,state:m.state||''});if(m.kind==='boss')bossState=m.state||'';}});return {connected:NET.on&&NET.profileReady===true,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',hp:Math.round(hp*10)/10,maxHp:maxHp(),wardenFx:globalThis.__BLOCKCRAFT_WARDEN_FX__?JSON.parse(JSON.stringify(globalThis.__BLOCKCRAFT_WARDEN_FX__)):null,job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,jobContractOffers:Array.isArray(jobContractOffers)?jobContractOffers.map(c=>JSON.parse(JSON.stringify(c))):[],jobContractOffersJob,jobContractRefreshAt,lastProgressionReject:String(globalThis.__BLOCKCRAFT_LAST_PROGRESSION_REJECT__||''),progressionFocus,activeObjectives:Array.isArray(activeObjectives)?JSON.parse(JSON.stringify(activeObjectives)):[],firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),currentObjectiveHud:currentObjectiveHud(),objectiveText:currentQuestEl&&currentQuestEl.textContent||'',objectiveAction:e2eCurrentObjectiveAction(),guidance:worldApi.guidanceStatus?worldApi.guidanceStatus():null,transitionPanels:transitionPanelState(),menu:{open:menusState.open,mode:menusState.mode,modalOpen:menusState.modalOpen,craftResult:menusState.craftResult?JSON.parse(JSON.stringify(menusState.craftResult)):null},landClaimOverlay:!!worldState.landClaimOverlay,baseSetup:worldApi.baseSetupStatus?worldApi.baseSetupStatus():null,dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),partyCompassTarget:partyCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTrainingUsed:combatState.abilityTrainingUsed,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonContentId:dungeon&&dungeon.dungeonId||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonBossState:bossState,dungeonMobs,dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
     abilitySpec:()=>globalThis.BlockcraftAbilityProgressionState&&globalThis.BlockcraftAbilityProgressionState.get()||'',
     petTamerVisualDebug:()=>combatApi.petTamerVisualDebug?combatApi.petTamerVisualDebug():null,
     inventoryCount:id=>inventoryModel.count(id),
@@ -4008,6 +4091,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     walkToFirstGate:e2eWalkToFirstGate,
     walkToGate:e2eWalkToGate,
     walkToMara:e2ePositionAtMara,
+    walkToSmith:e2ePositionAtSmith,
     walkToTavern:()=>e2eWalkTo({x:HUB.tavern.x,y:TOWN.G+1,z:HUB.tavern.z},7.5),
     walkToJobs:()=>e2eWalkTo({x:HUB.jobs.x,y:TOWN.G+1,z:HUB.jobs.z}),
     walkToFarm:()=>e2eWalkTo({x:HUB.farm.x,y:TOWN.G+1,z:HUB.farm.z},3),

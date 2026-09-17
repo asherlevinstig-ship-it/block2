@@ -32,7 +32,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
         broadcast() {}
       },
       matchMaker: { state: 1, MatchMakerState: { SHUTTING_DOWN: 2 } },
-      CloseCode: { CONSENTED: 4000 },
+      CloseCode: { NORMAL_CLOSURE: 1000, GOING_AWAY: 1001, CONSENTED: 4000, SERVER_SHUTDOWN: 4001 },
     };
   }
   if (request === '@colyseus/schema') {
@@ -71,7 +71,7 @@ const { registerRoom, unregisterRoom } = require('../metrics-registry');
 const { Gate, Mob } = require('../schema');
 const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, TOOL_INFO, ARMOR_INFO, DEITY_LEVEL, DEITY_POWER_IDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
 const { createEconomyLedger, recordEconomyGold, summarizeEconomyGold } = require('../economy-telemetry');
-const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
+const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeActiveRoom, sanitizeActiveRoomPosition, JsonStore, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
 const SMITH_POS = W.townPos(78.5, 50, 'forge');
 const GUILD_RECEPTION_POS = W.townPos(54.5, 26.5, 'guild');
@@ -129,6 +129,9 @@ const I = {
   HIDE_ARMOR: 211,
   CHAIN_ARMOR: 212,
   STORMGLASS_ARMOR: 213,
+  ANCIENT_FRAGMENT: 214,
+  ECHO_GLYPH: 215,
+  RELIC_ARMOR_PIECE: 216,
   APPRENTICE_ROBE: 222,
   ARCWEAVE_ROBE: 223,
   STORMWEAVE_ROBE: 224,
@@ -332,6 +335,7 @@ function makeRoom() {
   room._timers = [];
   room.clock = { setTimeout(fn) { room._timers.push(fn); } };
   room.dirtyPlayers = new Set();
+  room.persistedWorldEditChunks = new Map();
   room.persistedInventorySignatures = new Map();
   room.dirtyWorld = false;
   room.dirtyWorldProgress = false;
@@ -340,6 +344,7 @@ function makeRoom() {
   room.dirtyGates = false;
   room.dirtyTeams = false;
   room.dirtyGuilds = false;
+  room.blockEditTraceEnabled = false;
   room.gateSeq = 0;
   room.gateTtls = new Map();
   room.gateLootedChests = new Map();
@@ -425,6 +430,42 @@ function seedPlayer(room, client, opts = {}) {
   room.playerHp.set(client.sessionId, { hp: opts.hp ?? 20, max: 20 });
   room.playerHunger.set(client.sessionId, { hunger: opts.hunger ?? 100, max: 100, acc: 0, syncAcc: 0 });
   return { token, prof };
+}
+
+test('overworld joins keep a returning position unless another player occupies it', () => {
+  const room = makeRoom();
+  const requested = [W.TOWN.TC + 20.5, 16.01, W.TOWN.TC + 20.5];
+  const clear = room.openOverworldPlayerSpawn(requested, 'joining');
+  assert.ok(Math.hypot(clear[0] - requested[0], clear[2] - requested[2]) < .05, 'an open saved position is preserved');
+
+  seedPlayer(room, makeClient('already_here'), { x: clear[0], y: clear[1], z: clear[2] });
+  const separated = room.openOverworldPlayerSpawn(requested, 'joining');
+  assert.ok(Math.hypot(separated[0] - clear[0], separated[2] - clear[2]) >= 1.35, 'the next join receives nearby personal space');
+});
+
+test('dungeon party spawns use distinct safe entrance positions', () => {
+  const room = makeDungeonRoom();
+  const layout = D.generateDungeon(0, 0x5eed1234, 'abandoned_mine');
+  const inst = { id: 'party_gate', world: layout.world, entrance: layout.entrance, bossRoom: layout.bossRoom, rooms: layout.rooms };
+  const first = room.dungeonSafeSpawn(inst, inst.entrance, { avoidPlayers: true, ignoreSid: 'first' });
+  seedPlayer(room, makeClient('first'), { x: first.x, y: first.y, z: first.z, dgn: inst.id });
+  const second = room.dungeonSafeSpawn(inst, inst.entrance, { avoidPlayers: true, ignoreSid: 'second' });
+  assert.ok(Math.hypot(second.x - first.x, second.z - first.z) >= 1.35, 'party members do not stack at the dungeon entrance');
+  assert.ok(D.safeStandHeightIn(layout.world, second.x, second.z) > 0, 'the separated position remains walkable');
+});
+
+function placeCraftingTable(room, client, coords = {}) {
+  const p = room.state.players.get(client.sessionId);
+  const table = {
+    x: coords.x ?? Math.floor(p.x),
+    y: coords.y ?? Math.floor(p.y),
+    z: coords.z ?? Math.floor(p.z) + 1,
+  };
+  const space = p.dgn
+    ? ((room.instance && room.instance.id === p.dgn && room.instance) || room.instances[p.dgn])
+    : room.world;
+  space.setB(table.x, table.y, table.z, W.B.TABLE);
+  return table;
 }
 
 test('bug reports attach authoritative player location and sanitize client traces', async () => {
@@ -1919,6 +1960,39 @@ test('full-inventory weapon drops persist in Loot Recovery and Mythic gear is pr
   assert.equal(stored.lootRecovery.find(s=>s.id===I.IRON_SWORD).locked,true);
 });
 
+test('a full protected Loot Recovery counter persists overflow and promotes it after a claim',()=>{
+  const room=makeRoom(),client=makeClient('recovery_overflow');
+  const full=Array.from({length:36},()=>({id:I.COAL,count:64}));
+  full[0]={id:I.APPEARANCE_MIRROR,count:1,locked:true,source:'starter'};
+  const {prof}=seedPlayer(room,client,{x:SMITH_POS.x,z:SMITH_POS.z,inv:full});
+  for(let i=0;i<12;i++){
+    const queued=room.queueGearRecovery(prof,{id:I.IRON_SWORD,count:1,rarity:'mythic',gear:true,plus:i%4},'protected_'+i);
+    assert.ok(queued);
+  }
+
+  room.awardGrant(client,{source:'overflow_boss',items:[{id:I.IRON_SWORD,count:1,rarity:'mythic',gear:true,plus:3}]});
+
+  assert.equal(prof.lootRecovery.length,12);
+  assert.equal(prof.lootRecoveryOverflow.length,1);
+  assert.equal(prof.lootRecoveryOverflow[0].source,'overflow_boss');
+  assert.equal(prof.lootRecoveryOverflow[0].expiresAt,0);
+  const state=client.sent.findLast(e=>e.type==='lootRecoveryState');
+  assert.equal(state.msg.queued.overflowed,true);
+  assert.equal(state.msg.overflowCount,1);
+  const stored=sanitizeProfile(prof);
+  assert.equal(stored.lootRecovery.length,12);
+  assert.equal(stored.lootRecoveryOverflow.length,1);
+  assert.equal(stored.lootRecoveryOverflow[0].source,'overflow_boss');
+
+  prof.inv[1]=null;
+  room.handleLootRecovery(client,{action:'claim',index:0});
+  assert.equal(client.sent.at(-1).msg.ok,true);
+  assert.equal(client.sent.at(-1).msg.overflowCount,0);
+  assert.equal(prof.lootRecovery.length,12);
+  assert.equal(prof.lootRecoveryOverflow.length,0);
+  assert.equal(prof.lootRecovery.some(item=>item.source==='overflow_boss'),true);
+});
+
 test('Tobin claims recovered weapons only into real free inventory slots',()=>{
   const room=makeRoom(),client=makeClient('recovery_claim');
   const full=Array.from({length:36},()=>({id:I.COAL,count:64}));
@@ -2022,6 +2096,23 @@ test('new adventurers receive Mara field work first, then level-gated random con
     assert.equal(room.makeServerJobContract(prof).type, 'gate');
   } finally {
     Math.random = random;
+  }
+});
+
+test('underground contracts guide to the reachable cave entrance with vertical metadata', () => {
+  const room=makeRoom();
+  for(const type of ['cave_survey','ancient_map']){
+    const target=room.minerUndergroundTarget(type,17);
+    assert.equal(target.targetDimension,'overworld');
+    assert.equal(Number.isFinite(target.targetX),true);
+    assert.equal(Number.isFinite(target.targetY),true);
+    assert.equal(Number.isFinite(target.targetZ),true);
+    if(type==='ancient_map'){
+      const city=W.ancientCitySpecs().find(candidate=>candidate.id===target.targetId);
+      const network=W.caveNetworkSpecs().find(candidate=>candidate.id===city.caveNetworkId);
+      assert.deepEqual([target.targetX,target.targetY,target.targetZ],[network.entrance.x|0,network.entrance.y|0,network.entrance.z|0]);
+      assert.notDeepEqual([target.targetX,target.targetY,target.targetZ],[city.x|0,city.y|0,city.z|0],'the trail must not send a surface player straight through rock to the city core');
+    }
   }
 });
 
@@ -2549,7 +2640,8 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
 
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
   assert.equal(prof.progressionFocus, 'first_road_ready');
-  await room.handleCraft(client,{w:3,cells:[W.B.PLANKS,0,0,W.B.PLANKS,0,0,I.STICK,0,0]});
+  const table = placeCraftingTable(room, client);
+  await room.handleCraft(client,{w:3,table,cells:[W.B.PLANKS,0,0,W.B.PLANKS,0,0,I.STICK,0,0]});
   for (let i = 0; i < 3; i++) room.recordKillProgress(client);
   room.handleNpcQuest(client, { action: 'claim' });
   assert.equal(prof.progressionFocus, 'first_e_gate');
@@ -2855,7 +2947,8 @@ test('Mara quests guarantee crafting, an upgrade and levels 2 and 3 before the f
   assert.equal(sanitizeProfile(prof).maraRoadReadyCraftRequired, true);
   prof.activeNpcQuest = room.rehydrateNpcQuestFromAuthoring(sanitizeProfile(prof), prof.activeNpcQuest);
   assert.equal(prof.activeNpcQuest.craftPending, true, 'crafting stage survives reload');
-  await room.handleCraft(client, {w:3,cells:[W.B.PLANKS,0,0,W.B.PLANKS,0,0,I.STICK,0,0]});
+  const table = placeCraftingTable(room, client);
+  await room.handleCraft(client, {w:3,table,cells:[W.B.PLANKS,0,0,W.B.PLANKS,0,0,I.STICK,0,0]});
   assert.equal(itemCount(prof,I.WOOD_SWORD),1);
   assert.equal(prof.activeNpcQuest.craftPending,false);
   assert.equal(sanitizeProfile(prof).maraRoadReadyCrafted,true);
@@ -2905,8 +2998,8 @@ test('first quest bonus requires authoritative Mara completion and is single-cla
 test('combat path is chosen once after town arrival while abilities still unlock by level', async () => {
   const room = makeRoom(), client = makeClient('path_owner');
   const { prof } = seedPlayer(room, client);
-  let savedPath = '';
-  room.savePlayerProfileNow = (_token, saved) => { savedPath = saved.S.path; return Promise.resolve(true); };
+  let savedPath = '', saveCalls = 0;
+  room.savePlayerProfileNow = (_token, saved) => { saveCalls++; savedPath = saved.S.path; room.dirtyPlayers.clear(); return Promise.resolve(true); };
   await room.setPath(client, 'shadow');
   assert.equal(prof.S.path, 'shadow', 'a new player can define a hunter path before onboarding');
   assert.equal(prof.tutorials.ability, TUTORIAL_VERSIONS.ability, 'retired ability training is treated as complete');
@@ -2914,6 +3007,7 @@ test('combat path is chosen once after town arrival while abilities still unlock
   assert.equal(client.sent.some(e => e.type === 'pathResult' && e.msg.path === 'shadow'), true);
   assert.equal(await room.setPath(client, 'shadow'), true, 'retrying the same selection is idempotent');
   assert.equal(client.sent.at(-1).msg.reason, 'already');
+  assert.equal(saveCalls, 1, 'an already-durable path does not spend another persistence write');
   await room.setPath(client, 'mage');
   assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
   assert.equal(client.sent.at(-1).msg.reason, 'locked');
@@ -3638,6 +3732,33 @@ test('two in-love nesting dragons of the same owner lay a laddered egg; void pai
   assert.equal(itemCount(prof2, I.EGG_VOID), 0);
 });
 
+test('a full inventory leaves a breeding egg pending without consuming love or cooldown', () => {
+  const room = makeRoom();
+  room.nestDragons = new Map();
+  const client = makeClient('packed_breeder');
+  room.broadcast = (type, msg) => client.sent.push({ type, msg });
+  const { prof, token } = seedPlayer(room, client, {
+    inv: Array.from({ length: 36 }, () => ({ id: I.COAL, count: 64 })),
+  });
+  room.clients = [client];
+  const future = Date.now() + 60000;
+  room.nestDragons.set('5,10,5#0', { type: 'ember', gender: 'male', token, loveUntil: future, breedCdUntil: 0, breedStart: 1 });
+  room.nestDragons.set('5,10,5#1', { type: 'frost', gender: 'female', token, loveUntil: future, breedCdUntil: 0, breedStart: 1 });
+
+  room.tickNestBreeding();
+  assert.equal(itemCount(prof, I.EGG_STORM), 0);
+  assert.equal(room.nestDragons.get('5,10,5#0').loveUntil, future);
+  assert.equal(room.nestDragons.get('5,10,5#0').breedCdUntil, 0);
+  assert.equal(client.sent.some(e => e.type === 'dragonPerchBreedPending' && e.msg.reason === 'full'), true);
+
+  prof.inv[0] = null;
+  room.tickNestBreeding();
+  assert.equal(itemCount(prof, I.EGG_STORM), 1);
+  assert.equal(room.nestDragons.get('5,10,5#0').loveUntil, 0);
+  assert.equal(room.nestDragons.get('5,10,5#0').breedCdUntil > Date.now(), true);
+  assert.equal(client.sent.some(e => e.type === 'dragonPerchBreed'), true);
+});
+
 test('cross-species nesting dragons need opposite genders to breed', () => {
   const room = makeRoom();
   room.nestDragons = new Map();
@@ -3800,6 +3921,24 @@ test('wildlife herds share danger and wolves select living prey', () => {
   assert.equal(room.mobMeta.deer_b.predatorThreatId, 'wolf_a');
   assert.equal(deerB.state, 'alert');
   assert.equal(room.nearestWildlifePrey('wolf_a', wolf, 18).id, 'deer_b');
+});
+
+test('idle overworld wildlife can choose nighttime behavior without leaking update locals', () => {
+  const room = makeRoom();
+  room.state.tod = .79;
+  const deer = new Mob(); deer.kind = 'deer'; deer.x = 100; deer.y = 10; deer.z = 100; deer.hp = deer.maxHp = 7;
+  room.state.mobs.set('night_deer', deer);
+  const meta = room.freshMeta(100, 100, 0, 2, 'deer', 0, false);
+  meta.behaviorT = 0;
+  room.mobMeta.night_deer = meta;
+  const originalRandom = Math.random;
+  Math.random = () => .1;
+  try {
+    assert.doesNotThrow(() => room.simulateMob(deer, 'night_deer', meta, .1, { '': [] }));
+  } finally {
+    Math.random = originalRandom;
+  }
+  assert.equal(deer.state, 'sleep');
 });
 
 test('provoked boars warn before a server-authoritative counter-charge', () => {
@@ -4690,6 +4829,51 @@ test('crafting consumes persisted ingredients and grants the server recipe resul
   assert.equal(room.dirtyPlayers.has(room.tokens.get(client.sessionId)), true);
 });
 
+test('3x3 crafting requires the claimed table to exist beside the player', async () => {
+  const cells = [W.B.PLANKS, 0, 0, W.B.PLANKS, 0, 0, I.STICK, 0, 0];
+
+  {
+    const room = makeRoom(), client = makeClient('remote-table-crafter');
+    const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.PLANKS, count: 2 }, { id: I.STICK, count: 1 }] });
+    room.world.setB(100, 10, 100, W.B.TABLE);
+    await room.handleCraft(client, { w: 3, table: { x: 100, y: 10, z: 100 }, cells });
+    assert.deepEqual(client.sent.at(-1), { type: 'craftReject', msg: { reason: 'table' } });
+    assert.equal(itemCount(prof, W.B.PLANKS), 2, 'a remote request cannot consume ingredients');
+    assert.equal(itemCount(prof, I.WOOD_SWORD), 0);
+  }
+
+  {
+    const room = makeRoom(), client = makeClient('near-table-crafter');
+    const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.PLANKS, count: 2 }, { id: I.STICK, count: 1 }] });
+    const table = placeCraftingTable(room, client);
+    await room.handleCraft(client, { w: 3, table, cells });
+    assert.equal(client.sent.at(-1).type, 'craftResult');
+    assert.equal(itemCount(prof, I.WOOD_SWORD), 1);
+  }
+
+  {
+    const room = makeRoom(), client = makeClient('stale-table-crafter');
+    const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.PLANKS, count: 2 }, { id: I.STICK, count: 1 }] });
+    const table = placeCraftingTable(room, client);
+    room.world.setB(table.x, table.y, table.z, W.B.AIR);
+    await room.handleCraft(client, { w: 3, table, cells });
+    assert.equal(client.sent.at(-1).msg.reason, 'table');
+    assert.equal(itemCount(prof, W.B.PLANKS), 2, 'a removed table invalidates an already-open grid');
+  }
+});
+
+test('3x3 crafting resolves tables from the active dungeon instance', async () => {
+  const room = makeRoom(), client = makeClient('dungeon-table-crafter');
+  const { prof } = seedPlayer(room, client, { dgn: 'raid-table', inv: [{ id: W.B.PLANKS, count: 2 }, { id: I.STICK, count: 1 }] });
+  const instance = fakeWorld();
+  instance.id = 'raid-table';
+  room.instance = instance;
+  const table = placeCraftingTable(room, client);
+  await room.handleCraft(client, { w: 3, table, cells: [W.B.PLANKS, 0, 0, W.B.PLANKS, 0, 0, I.STICK, 0, 0] });
+  assert.equal(client.sent.at(-1).type, 'craftResult');
+  assert.equal(itemCount(prof, I.WOOD_SWORD), 1);
+});
+
 test('craft requests reject a full bag without consuming materials and identify the failed request',async()=>{
   const room=makeRoom(),client=makeClient('full-craft');
   const {prof}=seedPlayer(room,client,{inv:Array.from({length:36},(_,i)=>({id:i===0?W.B.LOG:W.B.DIRT,count:64}))});
@@ -4730,6 +4914,7 @@ test('craft failure reasons distinguish rate, layout and ingredients',async()=>{
   for(const [reason,message] of [['payload',{w:2,cells:[]}],['recipe',{w:2,cells:[0,0,0,0]}],['ingredients',{w:2,cells:[W.B.LOG,0,0,0]}]]){
     await room.handleCraft(client,{...message,requestId:reason});assert.equal(client.sent.at(-1).msg.reason,reason);
   }
+  assert.deepEqual(client.sent.find(entry=>entry.msg.requestId==='ingredients').msg.missing,[{id:W.B.LOG,need:1,have:0,short:1}]);
   room.rateLimited=()=>true;
   await room.handleCraft(client,{requestId:'rate',w:2,cells:[W.B.LOG,0,0,0]});assert.equal(client.sent.at(-1).msg.reason,'rate');
 });
@@ -4761,34 +4946,184 @@ test('crafting is saved durably before its success result can be followed by a r
   assert.equal(client.sent.at(-1).type, 'craftResult');
 });
 
-test('every rewarded or discovered inventory change is durable before its next player message', async () => {
+test('routine inventory rewards coalesce into one profile save', async () => {
   const room = makeRoom();
   const client = makeClient('durable-discovery');
   const { token, prof } = seedPlayer(room, client, { inv: [] });
   room.clients = [client];
   room.persistedInventorySignatures.set(token, room.inventoryPersistenceSignature(prof));
-  let finishSave;
-  let saved = null;
+  const saved = [];
   room.store = {
     savePlayer(savedToken, profile) {
-      saved = { token: savedToken, profile: JSON.parse(JSON.stringify(profile)) };
-      return new Promise(resolve => { finishSave = resolve; });
+      saved.push({ token: savedToken, profile: JSON.parse(JSON.stringify(profile)) });
+      return Promise.resolve();
     },
   };
   room.protectDurableInventoryMessages(client);
 
   room.addRewardItem(prof, I.GEODE, 1);
-  room.dirtyPlayers.add(token);
-  const reply = client.send('discoveryResult', { id: 'test-discovery', items: [{ id: I.GEODE, count: 1 }] });
+  client.send('discoveryResult', { id: 'test-discovery', items: [{ id: I.GEODE, count: 1 }] });
+  room.addRewardItem(prof, I.GEODE, 1);
+  client.send('grant', { source: 'mine', items: [{ id: I.GEODE, count: 1 }] });
+
+  assert.equal(client.sent.length, 2, 'routine rewards are not blocked on Firestore');
+  assert.equal(saved.length, 0);
+  await room.flushDirtyPlayers();
+  assert.equal(saved.length, 1, 'multiple rewards share the next profile snapshot');
+  assert.equal(saved[0].token, token);
+  assert.equal(itemCount(saved[0].profile, I.GEODE), 2);
+  assert.equal(client.sent.at(-1).type, 'grant');
+});
+
+test('transaction results still wait for their durable profile snapshot', async () => {
+  const room = makeRoom();
+  const client = makeClient('durable-shopper');
+  const { token, prof } = seedPlayer(room, client, { inv: [] });
+  room.clients = [client];
+  room.persistedInventorySignatures.set(token, room.inventoryPersistenceSignature(prof));
+  let finishSave;
+  room.store = {
+    savePlayer() { return new Promise(resolve => { finishSave = resolve; }); },
+  };
+  room.protectDurableInventoryMessages(client);
+
+  room.addRewardItem(prof, I.GEODE, 1);
+  const reply = client.send('shopResult', { action: 'buy', id: I.GEODE, count: 1 });
   await new Promise(resolve => setImmediate(resolve));
 
-  assert.equal(saved.token, token);
-  assert.equal(itemCount(saved.profile, I.GEODE), 1);
-  assert.equal(client.sent.length, 0, 'discovery notification waits for the durable inventory snapshot');
-
+  assert.equal(client.sent.length, 0);
   finishSave();
   await reply;
-  assert.equal(client.sent.at(-1).type, 'discoveryResult');
+  assert.equal(client.sent.at(-1).type, 'shopResult');
+});
+
+test('gold-only transaction results cross the durable save barrier', async () => {
+  const room = makeRoom();
+  const client = makeClient('durable-gold-trader');
+  const { token, prof } = seedPlayer(room, client, { inv: [], gold: 100 });
+  room.clients = [client];
+  room.persistedInventorySignatures.set(token, room.inventoryPersistenceSignature(prof));
+  const saved = [];
+  room.store = {
+    async savePlayer(savedToken, profile) { saved.push({ token: savedToken, profile: JSON.parse(JSON.stringify(profile)) }); },
+  };
+  room.protectDurableInventoryMessages(client);
+
+  prof.gold = 75;
+  room.dirtyPlayers.add(token);
+  await client.send('tradeResult', { ok: true, id: 'gold-only' });
+
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].profile.gold, 75);
+  assert.equal(client.sent.at(-1).msg.ok, true);
+});
+
+test('a failed profile save reports persistence pending instead of transaction success', async () => {
+  const room = makeRoom();
+  const client = makeClient('failed-durable-trader');
+  const { token, prof } = seedPlayer(room, client, { inv: [], gold: 100 });
+  room.clients = [client];
+  room.persistedInventorySignatures.set(token, room.inventoryPersistenceSignature(prof));
+  let saves = 0;
+  room.store = {
+    async savePlayer() { saves++; throw new Error('injected player write failure'); },
+  };
+  room.protectDurableInventoryMessages(client);
+
+  prof.gold = 75;
+  room.dirtyPlayers.add(token);
+  await client.send('tradeResult', { ok: true, id: 'failed-save' });
+
+  assert.equal(saves, 1);
+  assert.equal(room.dirtyPlayers.has(token), true, 'failed profile remains dirty for retry');
+  assert.deepEqual(client.sent.at(-1), {
+    type: 'tradeResult',
+    msg: { ok: false, id: 'failed-save', savePending: true, reason: 'persistence' },
+  });
+});
+
+test('a failed chest save prevents a durable chest success acknowledgement', async () => {
+  const room = makeRoom();
+  const client = makeClient('failed-durable-chest');
+  const { token, prof } = seedPlayer(room, client, { inv: [{ id: I.GEODE, count: 1 }] });
+  room.clients = [client];
+  room.persistedInventorySignatures.set(token, room.inventoryPersistenceSignature(prof));
+  room.dirtyChests = true;
+  room.store = {
+    async saveChests() { throw new Error('injected chest write failure'); },
+    async savePlayer() {},
+  };
+  room.protectDurableInventoryMessages(client);
+
+  room.dirtyPlayers.add(token);
+  await client.send('chestTx', { ok: true, action: 'deposit' });
+
+  assert.equal(room.dirtyChests, true, 'failed chest record remains dirty for retry');
+  assert.equal(client.sent.at(-1).msg.ok, false);
+  assert.equal(client.sent.at(-1).msg.savePending, true);
+});
+
+test('multi-player profile flushes use one atomic store transaction', async () => {
+  const room = makeRoom();
+  const alice = makeClient('atomic-trade-a'), bob = makeClient('atomic-trade-b');
+  const a = seedPlayer(room, alice, { gold: 80, inv: [{ id: I.BREAD, count: 1 }] });
+  const b = seedPlayer(room, bob, { gold: 120, inv: [] });
+  room.clients = [alice, bob];
+  const commits = [];
+  room.store = { async commitTransaction(input) { commits.push(input); } };
+  room.dirtyPlayers.add(a.token);
+  room.dirtyPlayers.add(b.token);
+
+  await room.flushDirtyPlayers();
+
+  assert.equal(commits.length, 1);
+  assert.deepEqual(Object.keys(commits[0].players).sort(), [a.token, b.token].sort());
+  assert.equal(commits[0].players[a.token].gold, 80);
+  assert.equal(commits[0].players[b.token].gold, 120);
+  assert.equal(room.dirtyPlayers.size, 0);
+});
+
+test('chest and player snapshots share one atomic store transaction', async () => {
+  const room = makeRoom();
+  const client = makeClient('atomic-chest-player');
+  const { token } = seedPlayer(room, client, { inv: [{ id: I.DIAMOND, count: 2 }] });
+  room.clients = [client];
+  room.chests.set('overworld:4,5,6', { slots: [{ id: I.DIAMOND, count: 3 }] });
+  room.dirtyChests = true;
+  room.dirtyPlayers.add(token);
+  const commits = [];
+  room.store = { async commitTransaction(input) { commits.push(input); } };
+
+  await room.flushOnce();
+
+  assert.equal(commits.length, 1);
+  assert.equal(commits[0].players[token].inv[0].count, 2);
+  assert.equal(commits[0].chests['overworld:4,5,6'].slots[0].count, 3);
+  assert.equal(room.dirtyChests, false);
+  assert.equal(room.dirtyPlayers.size, 0);
+});
+
+test('world persistence writes only chunks whose edit snapshot changed', async () => {
+  const room = makeRoom();
+  room.completeFurnaces = () => {};
+  room.state.edits.set('1,20,1', W.B.STONE);
+  room.state.edits.set('20,20,1', W.B.LOG);
+  room.persistedWorldEditChunks = room.worldEditChunkSnapshots({
+    '1,20,1': W.B.STONE,
+    '20,20,1': W.B.DIRT,
+    '40,20,1': W.B.PLANKS,
+  });
+  const writes = [];
+  room.store = { saveWorldEditChunks: async chunks => writes.push(chunks) };
+  room.dirtyWorld = true;
+
+  await room.flush();
+
+  assert.deepEqual(writes, [{
+    '1_0': { '20,20,1': W.B.LOG },
+    '2_0': {},
+  }]);
+  assert.equal(room.persistedWorldEditChunks.get('0_0').edits['1,20,1'], W.B.STONE);
 });
 
 test('DungeonRoom registers normal crafting and inventory arrangement', () => {
@@ -4871,8 +5206,9 @@ test('normal armor crafts from ingots and diamonds', async () => {
   const room = makeRoom();
   const client = makeClient('armorer');
   const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_INGOT, count: 8 }, { id: I.DIAMOND, count: 8 }] });
+  const table = placeCraftingTable(room, client);
 
-  await room.handleCraft(client, { w: 3, cells: [
+  await room.handleCraft(client, { w: 3, table, cells: [
     { id: I.IRON_INGOT, count: 1 }, 0, { id: I.IRON_INGOT, count: 1 },
     { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 },
     { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 },
@@ -4884,7 +5220,7 @@ test('normal armor crafts from ingots and diamonds', async () => {
   assert.equal(client.sent.at(-1).msg.times, 1);
   assert.deepEqual(client.sent.at(-1).msg.inv, prof.inv);
 
-  await room.handleCraft(client, { w: 3, cells: [
+  await room.handleCraft(client, { w: 3, table, cells: [
     { id: I.DIAMOND, count: 1 }, 0, { id: I.DIAMOND, count: 1 },
     { id: I.DIAMOND, count: 1 }, { id: I.DIAMOND, count: 1 }, { id: I.DIAMOND, count: 1 },
     { id: I.DIAMOND, count: 1 }, { id: I.DIAMOND, count: 1 }, { id: I.DIAMOND, count: 1 },
@@ -4897,7 +5233,8 @@ test('expanded armor bases craft from monster hides chain and stormglass', async
   {
     const room = makeRoom(), client = makeClient('hide_armorer');
     const { prof } = seedPlayer(room, client, { inv: [{ id: I.MONSTER_MEAT, count: 8 }] });
-    await room.handleCraft(client, { w: 3, cells: [
+    const table = placeCraftingTable(room, client);
+    await room.handleCraft(client, { w: 3, table, cells: [
       { id: I.MONSTER_MEAT, count: 1 }, 0, { id: I.MONSTER_MEAT, count: 1 },
       { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 },
       { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 },
@@ -4907,7 +5244,8 @@ test('expanded armor bases craft from monster hides chain and stormglass', async
   {
     const room = makeRoom(), client = makeClient('chain_armorer');
     const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_INGOT, count: 7 }, { id: I.COAL, count: 1 }] });
-    await room.handleCraft(client, { w: 3, cells: [
+    const table = placeCraftingTable(room, client);
+    await room.handleCraft(client, { w: 3, table, cells: [
       { id: I.IRON_INGOT, count: 1 }, 0, { id: I.IRON_INGOT, count: 1 },
       { id: I.IRON_INGOT, count: 1 }, { id: I.COAL, count: 1 }, { id: I.IRON_INGOT, count: 1 },
       { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 },
@@ -4917,7 +5255,8 @@ test('expanded armor bases craft from monster hides chain and stormglass', async
   {
     const room = makeRoom(), client = makeClient('stormglass_armorer');
     const { prof } = seedPlayer(room, client, { inv: [{ id: I.STORMGLASS, count: 7 }, { id: I.DIAMOND, count: 1 }] });
-    await room.handleCraft(client, { w: 3, cells: [
+    const table = placeCraftingTable(room, client);
+    await room.handleCraft(client, { w: 3, table, cells: [
       { id: I.STORMGLASS, count: 1 }, 0, { id: I.STORMGLASS, count: 1 },
       { id: I.STORMGLASS, count: 1 }, { id: I.DIAMOND, count: 1 }, { id: I.STORMGLASS, count: 1 },
       { id: I.STORMGLASS, count: 1 }, { id: I.STORMGLASS, count: 1 }, { id: I.STORMGLASS, count: 1 },
@@ -6454,6 +6793,23 @@ test('a consented DungeonRoom leave tears down immediately without a reconnect w
   assert.ok(takeHandoff(token), 'and hands off to the overworld room');
 });
 
+test('a browser going-away close tears down immediately without holding a ghost reconnect seat', async () => {
+  const room = makeDungeonRoom();
+  const client = makeClient('dungeon-going-away');
+  const { token } = seedPlayer(room, client, { dgn: 'dr-going-away' });
+  room.instance = { removePlayer() {} };
+  let waited = false;
+  room.allowReconnection = async () => { waited = true; };
+  const saved = [];
+  room.store = { savePlayer: async (t) => { saved.push(t); } };
+
+  await room.onLeave(client, 1001);
+
+  assert.equal(waited, false, 'navigation and tab-close events do not hold a reconnect reservation');
+  assert.deepEqual(saved, [token], 'the departing profile flushes immediately');
+  assert.ok(takeHandoff(token), 'dungeon progress remains available to a replacement session');
+});
+
 test('King of the Hill scores time only for the crown-holding team', () => {
   const T = 1_000_000;
   const room = makeRoom();
@@ -6630,6 +6986,33 @@ test('the E-rank boss grave ring telegraphs before damaging only its marked band
   assert.equal(room.playerHp.get(ring.sessionId).hp, 16, 'the marked ring takes damage');
   assert.equal(room.playerHp.get(far.sessionId).hp, 20, 'space beyond the ring is safe');
   assert.equal(m.state, 'recover');
+});
+
+test('Ancient Warden uses a readable sonic signature with safe inner and outer co-op zones', () => {
+  const room = makeRoom();
+  const close = makeClient('warden-close'), ring = makeClient('warden-ring'), far = makeClient('warden-far');
+  room.clients.push(close, ring, far);
+  seedPlayer(room, close, { x: 101, y: 9, z: 100, hp: 20 });
+  seedPlayer(room, ring, { x: 105, y: 9, z: 100, hp: 20 });
+  seedPlayer(room, far, { x: 109, y: 9, z: 100, hp: 20 });
+  const candidates = [close, ring, far].map(client => ({ sid: client.sessionId, p: room.state.players.get(client.sessionId) }));
+  const mob = { x: 100, y: 9, z: 100, yaw: 0, hp: 270, maxHp: 270, kind: 'boss', dgn: '', state: 'chase', enraged: false };
+  const meta = room.freshMeta(100, 100, 11, 1.2, 'boss', 3, true);
+  meta.ancientWarden = true; meta.bossStyle = 'ancient_warden'; meta.woke = true; meta.sum1 = true; meta.sum2 = true; meta.gcd = 0;
+
+  room.bossBrain(mob, 'warden', meta, .1, candidates[1], 5, candidates, () => 9, () => false);
+  assert.equal(mob.state, 'wardenSonicWind');
+  const warning = close.sent.find(entry => entry.type === 'fx' && entry.msg.t === 'wardenSonicWarn');
+  assert.ok(warning);
+  assert.equal(warning.msg.durationMs, 1450);
+  assert.equal(room.playerHp.get(ring.sessionId).hp, 20, 'the warning itself is harmless');
+
+  meta.stateT = .05;
+  room.bossBrain(mob, 'warden', meta, .1, candidates[1], 5, candidates, () => 9, () => false);
+  assert.equal(room.playerHp.get(close.sessionId).hp, 20, 'the close teamwork pocket is safe');
+  assert.equal(room.playerHp.get(ring.sessionId).hp, 12, 'the resonance band takes one survivable hit');
+  assert.equal(room.playerHp.get(far.sessionId).hp, 20, 'clearing the outer ring is safe');
+  assert.equal(mob.state, 'recover');
 });
 
 test('E-rank bosses stay on a simple learnable kit before low-health ring checks', () => {
@@ -7057,6 +7440,43 @@ test('addRewardItem treats weapons and armor as individual durable gear', () => 
   assert.equal(room.addRewardItem(full, I.IRON_SWORD, 1), 1, 'legacy weapon stack is not free space');
   assert.equal(full.inv.length, 36);
   assert.equal(full.inv[0].count, 1);
+});
+
+test('full-bag event tokens are reserved durably and delivered after space opens', () => {
+  const room = makeRoom(), client = makeClient('pending-event-reward');
+  const full = Array.from({ length: 36 }, (_, i) => ({ id: 700 + i, count: 64 }));
+  const { prof, token } = seedPlayer(room, client, { inv: full });
+
+  room.awardGrant(client, { source: 'event', xp: 10, items: [{ id: I.LEGEND_TOKEN, count: 2 }] });
+
+  assert.equal(itemCount(prof, I.LEGEND_TOKEN), 0);
+  assert.deepEqual(prof.pendingRewards, [{ id: I.LEGEND_TOKEN, count: 2, source: 'event' }]);
+  const grant = client.sent.find(entry => entry.type === 'grant');
+  assert.deepEqual(grant.msg.items, []);
+  assert.deepEqual(grant.msg.pendingItems, [{ id: I.LEGEND_TOKEN, count: 2, source: 'event' }]);
+  assert.deepEqual(sanitizeProfile(prof).pendingRewards, prof.pendingRewards, 'reservation survives persistence sanitization');
+
+  prof.inv[5] = null;
+  room.sendProfile(client, prof);
+  assert.equal(itemCount(prof, I.LEGEND_TOKEN), 2);
+  assert.deepEqual(prof.pendingRewards, []);
+  assert.equal(room.dirtyPlayers.has(token), true);
+  assert.ok(client.sent.some(entry => entry.type === 'pendingRewardState' && entry.msg.delivered[0].count === 2));
+});
+
+test('boss loot reports actual delivery and reserves partial ordinary overflow', () => {
+  const room = makeRoom(), client = makeClient('pending-boss-reward');
+  const full = Array.from({ length: 36 }, (_, i) => ({ id: 700 + i, count: 64 }));
+  full[0] = { id: I.DIAMOND, count: 63 };
+  const { prof } = seedPlayer(room, client, { inv: full });
+
+  room.awardLoot(client, { source: 'boss', xp: 0, gold: 0, items: [{ id: I.DIAMOND, count: 2 }] });
+
+  assert.equal(itemCount(prof, I.DIAMOND), 64);
+  assert.deepEqual(prof.pendingRewards, [{ id: I.DIAMOND, count: 1, source: 'boss' }]);
+  const loot = client.sent.find(entry => entry.type === 'loot');
+  assert.deepEqual(loot.msg.items, [{ id: I.DIAMOND, count: 1 }]);
+  assert.deepEqual(loot.msg.pendingItems, [{ id: I.DIAMOND, count: 1, source: 'boss' }]);
 });
 
 test('player trade transfers an offered item for responder gold', () => {
@@ -7658,6 +8078,70 @@ test('chest deposit consumes only what the chest accepts (no overflow dupe)', ()
   assert.equal(owner.sent.at(-1).msg.count, 2, 'the tx reports the 2 actually deposited');
 });
 
+test('chest deposit clearly rejects gear without treating an empty chest as full', () => {
+  const room = makeRoom();
+  const owner = makeClient('gear-owner');
+  const sword = { id: I.IRON_SWORD, count: 1, dur: 251, rarity: 'rare' };
+  const { prof } = seedPlayer(room, owner, { token: 'gear_owner_token_123', inv: [sword] });
+  room.world.setB(20, 10, 20, W.B.CHEST);
+  room.createPlacedChest(owner, 'overworld:20,10,20', 'personal');
+
+  room.handleChestDeposit(owner, { x: 20, y: 10, z: 20, id: I.IRON_SWORD, count: 1 });
+
+  assert.deepEqual(owner.sent.at(-1), { type: 'chestReject', msg: { reason: 'unsupported_item' } });
+  assert.deepEqual(prof.inv[0], sword, 'gear and all of its metadata stay in the bag');
+  assert.equal(room.getChestState('overworld:20,10,20').every(slot => slot == null), true);
+});
+
+test('chests and furnaces reject different-floor and through-wall interactions', () => {
+  const room = makeRoom(), client = makeClient('vertical-container-range');
+  seedPlayer(room, client, { x: 20.5, y: 40, z: 20.5 });
+  room.world.setB(20, 10, 20, W.B.CHEST);
+  assert.equal(room.chestKeyForPlayer(client, { x: 20, y: 10, z: 20 }), null, 'same X/Z thirty blocks above cannot open a chest');
+
+  room.world.setB(20, 10, 20, W.B.FURNACE);
+  assert.equal(room.furnaceOkForPlayer(client, { x: 20, y: 10, z: 20 }), false, 'same X/Z thirty blocks above cannot use a furnace');
+
+  const p = room.state.players.get(client.sessionId);
+  p.x = 20.5; p.y = 10; p.z = 20.5;
+  room.world.setB(25, 10, 20, W.B.CHEST);
+  room.world.setB(23, 10, 20, W.B.STONE);
+  room.world.setB(23, 11, 20, W.B.STONE);
+  assert.equal(room.chestKeyForPlayer(client, { x: 25, y: 10, z: 20 }), null, 'a solid wall blocks chest interaction');
+
+  room.world.setB(25, 10, 20, W.B.FURNACE);
+  assert.equal(room.furnaceOkForPlayer(client, { x: 25, y: 10, z: 20 }), false, 'a solid wall blocks furnace interaction');
+});
+
+test('chest withdrawal conserves items with full and partially full inventories', () => {
+  const room = makeRoom();
+  const owner = makeClient('withdraw_owner');
+  const { prof } = seedPlayer(room, owner, {
+    token: 'withdraw_owner_token',
+    inv: Array.from({ length: 36 }, () => ({ id: I.COAL, count: 64 })),
+  });
+  room.world.setB(20, 10, 20, W.B.CHEST);
+  room.createPlacedChest(owner, 'overworld:20,10,20', 'personal');
+  const slots = room.getChestState('overworld:20,10,20');
+  slots[0] = { id: I.DIAMOND, count: 5 };
+
+  room.handleChestWithdraw(owner, { x: 20, y: 10, z: 20, slot: 0, count: 5 });
+  assert.deepEqual(room.getChestState('overworld:20,10,20')[0], { id: I.DIAMOND, count: 5 });
+  assert.equal(itemCount(prof, I.DIAMOND), 0);
+  assert.deepEqual(owner.sent.at(-1), { type: 'chestReject', msg: { reason: 'full' } });
+
+  prof.inv[0] = { id: I.DIAMOND, count: 62 };
+  room.handleChestWithdraw(owner, { x: 20, y: 10, z: 20, slot: 0, count: 5 });
+  assert.equal(itemCount(prof, I.DIAMOND), 64, 'only the two available spaces are filled');
+  assert.deepEqual(room.getChestState('overworld:20,10,20')[0], { id: I.DIAMOND, count: 3 }, 'the undelivered remainder stays in the chest');
+  assert.deepEqual(owner.sent.at(-1), { type: 'chestTx', msg: { action: 'withdraw', id: I.DIAMOND, count: 2 } });
+
+  room.handleChestWithdraw(owner, { x: 20, y: 10, z: 20, slot: 0, count: 3 });
+  assert.equal(itemCount(prof, I.DIAMOND), 64, 'a repeated request cannot overfill or duplicate the stack');
+  assert.deepEqual(room.getChestState('overworld:20,10,20')[0], { id: I.DIAMOND, count: 3 });
+  assert.deepEqual(owner.sent.at(-1), { type: 'chestReject', msg: { reason: 'full' } });
+});
+
 test('chest batch deposit matching preserves hotbar and protected valuables', () => {
   const room = makeRoom();
   const owner = makeClient('owner');
@@ -7970,6 +8454,37 @@ test('furnace smelting consumes inputs, completes lazily, and grants output on t
   assert.equal(itemCount(prof, W.B.GLASS), 1);
   assert.equal(room.getFurnaceState('overworld:20,10,20').output, null);
   assert.equal(client.sent.some(e => e.type === 'furnaceResult' && e.msg.out.id === W.B.GLASS), true);
+});
+
+test('iron ore and coal smelt into an iron ingot', () => {
+  const room = makeRoom();
+  const client = makeClient('iron-smith');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.IRON_ORE, count: 1 }, { id: I.COAL, count: 1 }] });
+  room.world.setB(20, 10, 20, W.B.FURNACE);
+
+  room.handleFurnaceSmelt(client, { x: 20, y: 10, z: 20, input: W.B.IRON_ORE, fuel: I.COAL });
+  const f = room.getFurnaceState('overworld:20,10,20');
+  assert.equal(itemCount(prof, W.B.IRON_ORE), 0);
+  assert.equal(itemCount(prof, I.COAL), 0);
+  assert.equal(client.sent.some(e => e.type === 'furnaceStarted'), true);
+
+  f.finishAt = Date.now() - 1;
+  room.handleFurnaceTake(client, { x: 20, y: 10, z: 20 });
+  assert.equal(itemCount(prof, I.IRON_INGOT), 1);
+});
+
+test('furnace rejects the wrong input or fuel with an actionable reason', () => {
+  const room = makeRoom();
+  const client = makeClient('confused-smith');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_INGOT, count: 1 }, { id: W.B.IRON_ORE, count: 1 }, { id: W.B.DIRT, count: 1 }] });
+  room.world.setB(20, 10, 20, W.B.FURNACE);
+
+  room.handleFurnaceSmelt(client, { x: 20, y: 10, z: 20, input: I.IRON_INGOT, fuel: W.B.DIRT });
+  assert.equal(client.sent.at(-1).msg.reason, 'recipe');
+  room.handleFurnaceSmelt(client, { x: 20, y: 10, z: 20, input: W.B.IRON_ORE, fuel: W.B.DIRT });
+  assert.equal(client.sent.at(-1).msg.reason, 'fuel_type');
+  assert.equal(itemCount(prof, I.IRON_INGOT), 1);
+  assert.equal(itemCount(prof, W.B.IRON_ORE), 1);
 });
 
 test('placement rejects town edits and overwrites, and owns placed chests', () => {
@@ -8901,6 +9416,38 @@ test('mining requires server-known tool tier and damages the persisted tool', ()
   assert.equal(weak.sent.some(e => e.type === 'mineNoDrop' && e.msg.reason === 'tool'), true);
 });
 
+test('block edit telemetry records accepted mining and exact rejection context', () => {
+  const room = makeRoom();
+  const client = makeClient('trace-miner');
+  seedPlayer(room, client, { x: 30.5, y: 10, z: 30.5, inv: [{ id: I.IRON_PICK, count: 1, dur: 4 }] });
+  room.blockEditTraceEnabled = true;
+  room.world.setB(30, 10, 30, W.B.STONE);
+  const entries = [];
+  const originalLog = console.log;
+  console.log = (prefix, raw) => {
+    if (prefix === '[edit-trace]') entries.push(JSON.parse(raw));
+  };
+  try {
+    room.handleWorldEdit(client, { x: 30, y: 10, z: 30, id: W.B.AIR, slot: 0 });
+    room.state.players.get(client.sessionId).x = W.TOWN.TC + W.TOWN.HS + 2.5;
+    room.state.players.get(client.sessionId).y = W.TOWN.G;
+    room.state.players.get(client.sessionId).z = W.TOWN.TC + .5;
+    room.handleWorldEdit(client, { x: W.TOWN.TC + W.TOWN.HS + 2, y: W.TOWN.G, z: W.TOWN.TC, id: W.B.AIR, slot: 0 });
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].event, 'break.accepted');
+  assert.equal(entries[0].reason, 'accepted');
+  assert.equal(entries[0].land.kind, 'unclaimed');
+  assert.equal(entries[1].event, 'edit.rejected');
+  assert.equal(entries[1].reason, 'town_buffer');
+  assert.equal(entries[1].land.kind, 'town_buffer');
+  assert.equal(entries[1].sidHash.length > 0, true);
+  assert.equal(client.sent.at(-1).msg.reason, 'town_buffer');
+});
+
 test('Hunter surveys reveal nearby ore with level-based range and cooldown', () => {
   const room=makeRoom(),client=makeClient('prospector');
   const {prof}=seedPlayer(room,client,{x:30.5,y:10,z:30.5,lvl:10});
@@ -9267,6 +9814,95 @@ test('nearby team members share Elderheart expedition progress but distant membe
   room.chooseElderheartSignal(a, { id: tower.id, choice: room.elderheartBearing() });
   assert.equal(aa.prof.elderheartExpedition.stage, 1);
   assert.equal(bb.prof.elderheartExpedition.stage, 0);
+});
+
+test('ancient treasure-map reward remains atomic when the inventory is full', () => {
+  const room = makeRoom(), client = makeClient('ancient-legacy-map');
+  room.clients.push(client);
+  const { prof } = seedPlayer(room, client, { gold: 40 });
+  const city = W.ancientCitySpecs()[0], p = room.state.players.get(client.sessionId);
+  prof.treasureMap = { id: 'legacy_ancient_map', kind: 'ancient_city', stage: 0, targets: [city.id], rewardGold: 260 };
+  assert.equal(sanitizeProfile(prof).treasureMap.kind, 'ancient_city', 'legacy map type survives reconnect');
+  Object.assign(p, { x: city.x, y: city.y + 10, z: city.z });
+  room.handleTreasureMapAdvance(client, { id: city.id });
+  assert.equal(client.sent.at(-1).msg.reason, 'range', 'the deep target cannot be claimed from the surface');
+  p.y = city.y + 1;
+  prof.inv = Array.from({ length: 36 }, () => ({ id: C.I.COAL, count: 64 }));
+  room.handleTreasureMapAdvance(client, { id: city.id });
+  assert.equal(client.sent.at(-1).msg.reason, 'full');
+  assert.equal(prof.gold, 40, 'rejected claims never add gold');
+  assert.equal(prof.treasureMap.stage, 0);
+  prof.inv = [];
+  room.handleTreasureMapAdvance(client, { id: city.id });
+  assert.equal(prof.gold, 300);
+  assert.equal(prof.treasureMap, null);
+});
+
+test('ancient city expedition persists, validates each site, reserves full-bag Warden loot, and escapes once', () => {
+  const room = makeRoom(), client = makeClient('ancient-runner');
+  room.clients.push(client);
+  room.ancientWardenAlarms = new Map();
+  room.mobSeq = 0;
+  const { prof } = seedPlayer(room, client, { lvl: 31 });
+  const p = room.state.players.get(client.sessionId);
+  Object.assign(p, { x: W.HUB.cartographer.x, y: W.TOWN.G + 1, z: W.HUB.cartographer.z });
+  room.handleCartographer(client, { action: 'ancient_treasure_start' });
+  assert.equal(prof.ancientCityRun.stage, 0);
+  assert.equal(prof.treasureMap, null, 'new ancient routes do not compete with old clue maps');
+  const route = room.ancientCityRoute(prof.ancientCityRun.cityId);
+  assert.equal(sanitizeProfile(prof).ancientCityRun.cityId, route.city.id);
+  room.interactAncientCityRun(client, { id: route.mouth.id });
+  assert.equal(prof.ancientCityRun.stage, 0, 'the cave cannot be triggered remotely');
+  Object.assign(p, { x: route.mouth.x, y: route.mouth.y, z: route.mouth.z });
+  room.interactAncientCityRun(client, { id: route.mouth.id });
+  assert.equal(prof.ancientCityRun.stage, 1);
+  Object.assign(p, { x: route.tablet.x, y: route.tablet.y, z: route.tablet.z });
+  room.interactAncientCityRun(client, { id: route.tablet.id });
+  assert.equal(prof.ancientCityRun.stage, 2);
+  const vault = route.vaults[0];
+  Object.assign(p, { x: vault.x, y: vault.y, z: vault.z });
+  room.interactAncientCityRun(client, { id: vault.id });
+  assert.equal(prof.ancientCityRun.stage, 3);
+  Object.assign(p, { x: route.core.x, y: route.core.y, z: route.core.z });
+  for (let i = 0; i < 3; i++) room.interactAncientCityRun(client, { id: route.core.id });
+  assert.equal(prof.ancientCityRun.stage, 4);
+  assert.ok(room.activeAncientWarden(route.city.id));
+  prof.inv = Array.from({ length: 36 }, () => ({ id: C.I.COAL, count: 64 }));
+  room.finishAncientWardenForParty(client, { cityId: route.city.id, dangerRing: 2 }, route.core.x, route.core.y, route.core.z);
+  assert.equal(prof.ancientCityRun.stage, 5);
+  assert.equal(prof.ancientWardenPending.length, 1, 'a full-bag boss reward remains claimable');
+  assert.equal(prof.inv.some(s => s && s.id === C.I.WARDEN_CLEAVER), false);
+  prof.inv = [];
+  room.interactAncientCityRun(client, { id: route.core.id });
+  assert.equal(prof.ancientWardenPending.length, 0);
+  assert.equal(prof.inv.filter(s => s && s.id === C.I.WARDEN_CLEAVER).length, 1);
+  Object.assign(p, { x: route.mouth.x, y: route.mouth.y, z: route.mouth.z });
+  room.interactAncientCityRun(client, { id: route.mouth.id });
+  assert.equal(prof.ancientCityRun, null);
+  assert.deepEqual(prof.ancientCityClears, [route.city.id]);
+  const gold = prof.gold;
+  room.finishAncientCityRun(client);
+  assert.equal(prof.gold, gold, 'route completion cannot be repeated');
+});
+
+test('nearby Ancient City expedition participants share Warden credit; distant players do not', () => {
+  const room = makeRoom(), killer = makeClient('ancient-killer'), mate = makeClient('ancient-mate'), distant = makeClient('ancient-distant');
+  room.clients.push(killer, mate, distant);
+  const a = seedPlayer(room, killer), b = seedPlayer(room, mate), c = seedPlayer(room, distant);
+  const city = W.ancientCitySpecs()[0], route = room.ancientCityRoute(city.id);
+  for (const rec of [a, b, c]) rec.prof.ancientCityRun = { cityId: city.id, stage: 4, vaultId: 'vault_a', startedAt: Date.now() };
+  Object.assign(room.state.players.get(killer.sessionId), { x: route.core.x, y: route.core.y, z: route.core.z });
+  Object.assign(room.state.players.get(mate.sessionId), { x: route.core.x + 2, y: route.core.y, z: route.core.z });
+  Object.assign(room.state.players.get(distant.sessionId), { x: W.TOWN.TC, y: W.TOWN.G + 1, z: W.TOWN.TC });
+  room.finishAncientWardenForParty(killer, { cityId: city.id, dangerRing: 2 }, route.core.x, route.core.y, route.core.z);
+  assert.equal(a.prof.ancientCityRun.stage, 5);
+  assert.equal(b.prof.ancientCityRun.stage, 5);
+  assert.equal(c.prof.ancientCityRun.stage, 4);
+  assert.equal(a.prof.inv.filter(s => s && s.id === C.I.WARDEN_CLEAVER).length, 1);
+  assert.equal(b.prof.inv.filter(s => s && s.id === C.I.WARDEN_CLEAVER).length, 1);
+  assert.equal(c.prof.inv.some(s => s && s.id === C.I.WARDEN_CLEAVER), false);
+  room.finishAncientWardenForParty(killer, { cityId: city.id, dangerRing: 2 }, route.core.x, route.core.y, route.core.z);
+  assert.equal(a.prof.inv.filter(s => s && s.id === C.I.WARDEN_CLEAVER).length, 1, 'repeat kill cannot duplicate one-time boss loot');
 });
 
 test('the tavern sells deterministic Gate food bundles only to nearby hunters', () => {
@@ -9787,7 +10423,7 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   assert.deepEqual([ap.x, ap.y, ap.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 
   const questionRoom = makeRoom(), scholar = makeClient('question-scholar');
-  seedPlayer(questionRoom, scholar, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5 });
+  const { prof: questionProfile } = seedPlayer(questionRoom, scholar, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5 });
   questionRoom.clients = [scholar];
   assert.equal(questionRoom.handleTutorialEnter(scholar, { kind: 'questions' }), true);
   const qp = questionRoom.state.players.get(scholar.sessionId);
@@ -9797,6 +10433,11 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   assert.ok(Math.hypot(qp.x-930.5,qp.z-867.5)>2.35,'Question Hall spawn is outside the automatic town-portal trigger');
   assert.equal(questionRoom.spaceSolid(qp.dgn)(qp.x,qp.y,qp.z), false, 'Question Hall never collides against the overworld map');
   assert.equal(scholar.sent.some(e=>e.type==='tutorialDimension'&&e.msg.active&&e.msg.kind==='questions'),true);
+  assert.deepEqual(questionProfile.activeRoom,{dim:'questions'},'Question Hall remains authoritative across a reconnect');
+  assert.deepEqual(questionProfile.pos,[930.5,20,858.5]);
+  assert.deepEqual(sanitizeActiveRoom({dim:'questions'}),{dim:'questions'});
+  assert.deepEqual(sanitizeActiveRoomPosition({dim:'questions'},[500.5,16,562.5]),[930.5,20,858.5],'an overworld pose cannot be restored inside the Question Hall');
+  assert.equal(questionRoom.handleQuestionRoomRecovery(scholar,{reason:'bounds-watchdog',before:{x:500.5,y:16,z:562.5},after:{x:930.5,y:20,z:858.5}}),true);
   assert.equal(questionRoom.leaveTutorialDimension(scholar),true);
   assert.equal(qp.dim,'overworld');
   assert.equal(qp.dgn,'');
@@ -11617,15 +12258,27 @@ test('the promised E-rank gate has a deterministic placement fallback', () => {
   assert.equal(room.ensurePublicGateRank(0), gate, 'an active E-rank gate is reused');
 });
 
-test('public gate spawning unlocks only once a surface player reaches level 3', () => {
+test('public gate spawning is available to level 1 surface players', () => {
   const room = makeRoom();
-  const novice = makeClient('novice'), pathfinder = makeClient('pathfinder');
-  seedPlayer(room, novice, { token: 'novice_token_123', lvl: 2 });
-  seedPlayer(room, pathfinder, { token: 'pathfinder_token_123', lvl: 3 });
+  const novice = makeClient('novice');
+  seedPlayer(room, novice, { token: 'novice_token_123', lvl: 1 });
 
-  assert.equal(room.publicGateSpawningUnlocked([{ sid: novice.sessionId }]), false);
-  assert.equal(room.publicGateSpawningUnlocked([{ sid: novice.sessionId }, { sid: pathfinder.sessionId }]), true);
+  assert.equal(room.publicGateSpawningUnlocked([{ sid: novice.sessionId }]), true);
   assert.equal(room.publicGateSpawningUnlocked([]), false);
+});
+
+test('gate lifecycle resolves surface session entries when ensuring a quest gate', () => {
+  const room = makeRoom();
+  const client = makeClient('gate_quest_surface');
+  const { prof } = seedPlayer(room, client, { token: 'gate_quest_surface_token', lvl: 1 });
+  prof.activeNpcQuest = { type: 'gate', gateRank: 0 };
+  const ensured = [];
+  room.ensurePublicGateRank = rank => { ensured.push(rank); return true; };
+  room.gateTimer = 20;
+
+  room.tickGateLifecycle(.1, [{ sid: client.sessionId, p: room.state.players.get(client.sessionId) }]);
+
+  assert.deepEqual(ensured, [0]);
 });
 
 test('public gate availability comes from online Hunter XP rank, not clear records', () => {
@@ -12872,10 +13525,128 @@ test('overworld treasure caches scatter visible public loot chests around the ma
   assert.ok(chest.slots.some(s => s && [I.GEODE, I.STORMGLASS, I.SOLAR_GLYPH, I.LEGEND_TOKEN].includes(s.id)));
 });
 
+test('fantasy structures awaken defenders, share completion, and unlock persistent rewards', () => {
+  const room=makeRoom(),client=makeClient('structure-hunter'),mate=makeClient('structure-mate');room.clients.push(client,mate);
+  const {prof}=seedPlayer(room,client,{lvl:12}),mateRecord=seedPlayer(room,mate,{lvl:12}),site=W.fantasyStructureSpecs()[0],p=room.state.players.get(client.sessionId),mp=room.state.players.get(mate.sessionId);
+  Object.assign(p,{x:site.x,y:site.y+1,z:site.z,dgn:'',dim:'overworld'});
+  Object.assign(mp,{x:site.x+2,y:site.y+1,z:site.z,dgn:'',dim:'overworld'});
+  room.handleFantasyStructureInteract(client,{id:site.id});
+  const state=room.fantasyStructureStates.get(site.id);
+  assert.equal(state.phase,'objective');
+  assert.equal(room.livingFantasyDefenders(state).length,0);
+  for(const objective of site.objectives){
+    Object.assign(p,{x:objective.x+1,y:objective.y,z:objective.z});
+    room.handleFantasyStructureInteract(client,{id:site.id,objectiveId:objective.id});
+  }
+  assert.equal(state.phase,'guards');
+  assert.ok(state.required>=3);
+  assert.equal(room.livingFantasyDefenders(state).length,state.required);
+  for(const id of [...state.mobIds]){
+    const meta=room.mobMeta[id];
+    room.state.mobs.delete(id);delete room.mobMeta[id];
+    room.onFantasyStructureMobKilled(client,id,meta);
+  }
+  assert.equal(state.killed,state.required);
+  assert.equal(state.phase,'boss');
+  const bossId=room.livingFantasyDefenders(state)[0];
+  assert.equal(room.state.mobs.get(bossId).displayName,'Oathbound Captain');
+  const bossMeta=room.mobMeta[bossId];room.state.mobs.delete(bossId);delete room.mobMeta[bossId];
+  room.onFantasyStructureMobKilled(client,bossId,bossMeta);
+  assert.equal(state.phase,'cleared');
+  assert.equal(prof.fantasyStructureClears.includes(site.id),true);
+  assert.equal(mateRecord.prof.fantasyStructureClears.includes(site.id),true);
+  assert.equal(client.sent.some(e=>e.type==='fantasyStructureComplete'&&e.msg.id===site.id),true);
+  assert.equal(mate.sent.some(e=>e.type==='fantasyStructureComplete'&&e.msg.id===site.id),true);
+  const clean=sanitizeProfile(prof);
+  assert.deepEqual(clean.fantasyStructureClears,[site.id]);
+  const key='overworld:'+site.rewardChest.x+','+site.rewardChest.y+','+site.rewardChest.z;
+  room.world.setB(site.rewardChest.x,site.rewardChest.y,site.rewardChest.z,W.B.CHEST);
+  assert.equal(room.canAccessChest(client,key),true);
+});
+
+test('fantasy structure interior objectives enforce proximity, sequence, and shared progress',()=>{
+  const room=makeRoom(),client=makeClient('structure-puzzler'),mate=makeClient('structure-helper');room.clients.push(client,mate);
+  seedPlayer(room,client,{lvl:10});seedPlayer(room,mate,{lvl:10});
+  const site=W.fantasyStructureSpecs().find(s=>s.type==='arcane_tower'),p=room.state.players.get(client.sessionId),mp=room.state.players.get(mate.sessionId);
+  Object.assign(p,{x:site.x,y:site.y+1,z:site.z,dgn:'',dim:'overworld'});Object.assign(mp,{x:site.x,y:site.y+1,z:site.z,dgn:'',dim:'overworld'});
+  room.handleFantasyStructureInteract(client,{id:site.id});
+  const state=room.fantasyStructureStates.get(site.id),[first,second]=site.objectives;
+  assert.equal(client.sent.at(-1).msg.phase,'objective');
+  Object.assign(p,{x:site.x+site.radius,y:site.y+1,z:site.z});
+  room.handleFantasyStructureInteract(client,{id:site.id,objectiveId:first.id});
+  assert.equal(client.sent.at(-1).msg.reason,'objective_range');
+  Object.assign(p,{x:second.x+1,y:second.y,z:second.z});
+  room.handleFantasyStructureInteract(client,{id:site.id,objectiveId:second.id});
+  assert.equal(client.sent.at(-1).msg.reason,'sequence');
+  Object.assign(p,{x:first.x+1,y:first.y,z:first.z});
+  room.handleFantasyStructureInteract(client,{id:site.id,objectiveId:first.id});
+  assert.deepEqual(state.objectivesDone,[first.id]);
+  const sharedObjective=mate.sent.find(e=>e.type==='fantasyStructureObjective'&&e.msg.objectiveId===first.id);
+  assert.ok(sharedObjective);
+  assert.deepEqual({x:sharedObjective.msg.x,y:sharedObjective.msg.y,z:sharedObjective.msg.z},{x:first.x,y:first.y,z:first.z});
+  const status=mate.sent.filter(e=>e.type==='fantasyStructureStatus').at(-1).msg;
+  assert.equal(status.objectives[0].id,second.id);
+  assert.deepEqual(status.completedObjectiveIds,[first.id]);
+  assert.equal(status.objectivesDone,1);
+});
+
+test('clearing all fantasy structures awards the one-time Mythic Cartographer reward', () => {
+  const room=makeRoom(),client=makeClient('structure-master');room.clients.push(client);
+  const {prof}=seedPlayer(room,client,{lvl:20}),sites=W.fantasyStructureSpecs();
+  prof.fantasyStructureClears=sites.slice(0,-1).map(s=>s.id);
+  const before=prof.gold|0;
+  assert.equal(room.completeFantasyStructureForClient(client,sites.at(-1)),true);
+  assert.equal(prof.fantasyStructureMastery,true);
+  assert.equal(prof.gold>=before+300,true);
+  assert.equal(client.sent.some(e=>e.type==='fantasyStructureMastery'),true);
+  assert.equal(room.completeFantasyStructureForClient(client,sites.at(-1)),false);
+  assert.equal(client.sent.filter(e=>e.type==='fantasyStructureMastery').length,1);
+});
+
+test('featured fantasy structures rotate daily with distinct combat modifiers',()=>{
+  const room=makeRoom(),baseDay=22000,sites=new Set(),modifiers=new Set();
+  for(let offset=0;offset<5;offset++){
+    const daily=room.fantasyStructureDaily((baseDay+offset)*86400000);
+    sites.add(daily.siteId);modifiers.add(daily.modifier.id);
+    assert.equal(daily.resetsAt,(baseDay+offset+1)*86400000);
+    assert.ok(daily.reward.id>0);
+  }
+  assert.equal(sites.size,5);
+  assert.equal(modifiers.size,5);
+});
+
+test('a completed featured structure grants one meaningful repeat reward per day',()=>{
+  const room=makeRoom(),client=makeClient('daily-legend');room.clients.push(client);
+  const {prof}=seedPlayer(room,client,{lvl:18}),daily=room.fantasyStructureDaily(),site=room.fantasyStructureSite(daily.siteId),p=room.state.players.get(client.sessionId);
+  prof.fantasyStructureClears=[site.id];prof.fantasyStructureDailyDay=-1;
+  Object.assign(p,{x:site.x,y:site.y+1,z:site.z,dgn:'',dim:'overworld'});
+  room.handleFantasyStructureInteract(client,{id:site.id});
+  const state=room.fantasyStructureStates.get(site.id);
+  assert.equal(state.phase,'objective');assert.equal(state.daily.day,daily.day);assert.equal(state.daily.modifier.id,daily.modifier.id);
+  for(const objective of site.objectives){Object.assign(p,{x:objective.x+1,y:objective.y,z:objective.z});room.handleFantasyStructureInteract(client,{id:site.id,objectiveId:objective.id});}
+  for(const id of [...state.mobIds]){const meta=room.mobMeta[id];room.state.mobs.delete(id);delete room.mobMeta[id];room.onFantasyStructureMobKilled(client,id,meta);}
+  const bossId=room.livingFantasyDefenders(state)[0],bossMeta=room.mobMeta[bossId];room.state.mobs.delete(bossId);delete room.mobMeta[bossId];room.onFantasyStructureMobKilled(client,bossId,bossMeta);
+  assert.equal(prof.fantasyStructureDailyDay,daily.day);
+  assert.equal(client.sent.filter(e=>e.type==='fantasyStructureDailyComplete').length,1);
+  assert.equal(prof.inv.some(stack=>stack&&stack.id===daily.reward.id),true);
+  room.completeFantasyStructureDailyForClient(client,site,state);
+  assert.equal(client.sent.filter(e=>e.type==='fantasyStructureDailyComplete').length,1);
+});
+
+test('fantasy structure reward chests remain sealed before encounter completion', () => {
+  const room=makeRoom(),client=makeClient('structure-newcomer');room.clients.push(client);
+  seedPlayer(room,client,{lvl:5});
+  const site=W.fantasyStructureSpecs()[1],key='overworld:'+site.rewardChest.x+','+site.rewardChest.y+','+site.rewardChest.z;
+  room.world.setB(site.rewardChest.x,site.rewardChest.y,site.rewardChest.z,W.B.CHEST);
+  assert.equal(room.canAccessChest(client,key),false);
+  assert.equal(client.sent.at(-1).type,'fantasyStructureStatus');
+  assert.equal(client.sent.at(-1).msg.phase,'locked');
+});
+
 test('discovery rewards are one-time and odd-flame puzzles validate the correct pedestal', () => {
   const room = makeRoom(), client = makeClient('explorer');
   const pool = W.smallDiscoverySpecs().find(s => s.type === 'fishing_pool');
-  seedPlayer(room, client, { x: pool.x, z: pool.z });
+  seedPlayer(room, client, { x: pool.x, y: pool.y, z: pool.z });
   room.handleDiscoveryInteract(client, { id: pool.id });
   assert.equal(room.profileFor(client).prof.inv.some(s => s && s.id === I.RIVER_FISH), true);
   room.handleDiscoveryInteract(client, { id: pool.id });
@@ -12884,12 +13655,53 @@ test('discovery rewards are one-time and odd-flame puzzles validate the correct 
 
   const shrine = W.smallDiscoverySpecs().find(s => s.type === 'puzzle_shrine');
   room.state.players.get(client.sessionId).x = shrine.x;
+  room.state.players.get(client.sessionId).y = shrine.y;
   room.state.players.get(client.sessionId).z = shrine.z;
   const wrongX=[shrine.x-2,shrine.x,shrine.x+2].find(x=>x!==shrine.target.x);
   room.handleDiscoveryInteract(client, { id: shrine.id, x: wrongX, y: shrine.y + 2, z: shrine.z });
   assert.equal(client.sent.at(-1).msg.reason, 'pattern');
   room.handleDiscoveryInteract(client, { id: shrine.id, ...shrine.target });
   assert.equal(client.sent.at(-1).type, 'discoveryResult');
+});
+
+test('discovery interaction rejects the same X/Z from another floor', () => {
+  const room = makeRoom(), client = makeClient('vertical-vault-range');
+  const vault = W.ancientCityDiscoverySpecs().find(s => s.type === 'ancient_vault');
+  const { prof } = seedPlayer(room, client, { x: vault.x, y: vault.y + 30, z: vault.z });
+
+  room.handleDiscoveryInteract(client, { id: vault.id });
+
+  assert.deepEqual(client.sent.at(-1), { type: 'discoveryReject', msg: { reason: 'range' } });
+  assert.equal(prof.claimedDiscoveries.includes(vault.id), false);
+});
+
+test('one-time Ancient Vault claims remain available until the whole reward fits', () => {
+  const room = makeRoom(), client = makeClient('vault-capacity');
+  const vault = W.ancientCityDiscoverySpecs().find(s => s.type === 'ancient_vault');
+  const { prof } = seedPlayer(room, client, {
+    x: vault.x, y: vault.y, z: vault.z,
+    inv: Array.from({ length: 36 }, () => ({ id: I.COAL, count: 64 })),
+  });
+
+  room.handleDiscoveryInteract(client, { id: vault.id });
+  assert.deepEqual(client.sent.at(-1), { type: 'discoveryReject', msg: { reason: 'full' } });
+  assert.equal(prof.claimedDiscoveries.includes(vault.id), false, 'a rejected vault remains claimable');
+  assert.equal(itemCount(prof, I.ANCIENT_FRAGMENT), 0);
+
+  for (let i = 0; i < 6; i++) prof.inv[i] = null;
+  room.handleDiscoveryInteract(client, { id: vault.id });
+  assert.equal(client.sent.at(-1).type, 'discoveryResult');
+  assert.equal(prof.claimedDiscoveries.includes(vault.id), true);
+  const granted = client.sent.findLast(e => e.type === 'grant');
+  assert.ok(granted && granted.msg.items.length >= 5, 'the result is built from the delivered bundle');
+
+  const counts = new Map(granted.msg.items.map(item => [item.id, item.count]));
+  assert.equal(itemCount(prof, I.ANCIENT_FRAGMENT), counts.get(I.ANCIENT_FRAGMENT));
+  assert.equal(itemCount(prof, I.ECHO_GLYPH), counts.get(I.ECHO_GLYPH));
+  assert.equal(itemCount(prof, I.DIAMOND), counts.get(I.DIAMOND));
+
+  room.handleDiscoveryInteract(client, { id: vault.id });
+  assert.deepEqual(client.sent.at(-1), { type: 'discoveryReject', msg: { reason: 'claimed' } });
 });
 
 test('ground mobs cannot target or melee players far above them', () => {
@@ -13523,6 +14335,31 @@ test('weekly fellowship rewards unlock by Renown and are claimed once per member
   room.handleGuildWeeklyRewardClaim(member, { id: 'supply_10' });
   assert.equal(member.sent.some(e => e.type === 'guildWeeklyRewardResult' && e.msg.id === 'supply_10'), true);
   assert.equal(mate.prof.gold, 25);
+});
+
+test('weekly fellowship reward claims wait for capacity without consuming gold or claim state', () => {
+  const room = makeRoom(), client = makeClient('fellowship_full_reward');
+  room.clients = [client];
+  const pos = GUILD_RECEPTION_PLAYER_POS;
+  const { token, prof } = seedPlayer(room, client, {
+    ...pos, token: 'weekly_full_token', name: 'Packed Hunter', gold: 0,
+    inv: Array.from({ length: 36 }, () => ({ id: I.DIAMOND, count: 64 })),
+  });
+  const guild = { id: 'G1', name: 'Packed Wardens', leader: token, leaderName: 'Packed Hunter', members: new Set([token]), roles: new Map(), invites: new Set(), private: false, floor: 0, foundedAt: 1, floorBoughtAt: 0, renown: 0, totalRenown: 0, renownWeek: 10, contractsWeek: 0, renownWeekStart: room.currentFellowshipWeek(), projects: new Set(), notice: null };
+  room.guilds.set(guild.id, guild);
+
+  room.handleGuildWeeklyRewardClaim(client, { id: 'supply_10' });
+  assert.deepEqual(client.sent.at(-1), { type: 'guildReject', msg: { reason: 'full' } });
+  assert.equal(prof.gold, 0);
+  assert.equal(room.fellowshipWeeklyRewardsFor(guild, token).find(r => r.id === 'supply_10').claimed, false);
+
+  prof.inv[0] = null; prof.inv[1] = null;
+  room.handleGuildWeeklyRewardClaim(client, { id: 'supply_10' });
+  assert.equal(client.sent.some(e => e.type === 'guildWeeklyRewardResult' && e.msg.id === 'supply_10'), true);
+  assert.equal(prof.gold, 25);
+  assert.equal(itemCount(prof, I.BREAD), 2);
+  assert.equal(itemCount(prof, I.COAL), 2);
+  assert.equal(room.fellowshipWeeklyRewardsFor(guild, token).find(r => r.id === 'supply_10').claimed, true);
 });
 
 test('Recall Lectern study can earn paced fellowship renown', () => {

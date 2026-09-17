@@ -16,6 +16,7 @@ const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
 const JOB_SYSTEM = require('../../shared/job-system');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { shortHash } = require('../identity-trace');
 
 class EconomyMixin {
   rollWeaponDrop(rank=0,rarityBonus=0,archetype='sword'){
@@ -111,20 +112,24 @@ class EconomyMixin {
   }
   pruneLootRecovery(prof,now=Date.now()){
     if(!prof)return [];
-    prof.lootRecovery=(Array.isArray(prof.lootRecovery)?prof.lootRecovery:[])
-      .filter(item=>item&&(!item.expiresAt||item.expiresAt>now)).slice(0,12);
+    const live=item=>item&&(!item.expiresAt||item.expiresAt>now);
+    prof.lootRecovery=(Array.isArray(prof.lootRecovery)?prof.lootRecovery:[]).filter(live);
+    prof.lootRecoveryOverflow=(Array.isArray(prof.lootRecoveryOverflow)?prof.lootRecoveryOverflow:[]).filter(live);
+    if(prof.lootRecovery.length>12)prof.lootRecoveryOverflow.unshift(...prof.lootRecovery.splice(12));
+    while(prof.lootRecovery.length<12&&prof.lootRecoveryOverflow.length)prof.lootRecovery.push(prof.lootRecoveryOverflow.shift());
     return prof.lootRecovery;
+  }
+  lootRecoveryPayload(prof,extra={}){
+    const items=this.pruneLootRecovery(prof);
+    return {items,capacity:12,overflowCount:prof&&Array.isArray(prof.lootRecoveryOverflow)?prof.lootRecoveryOverflow.length:0,...extra};
   }
   queueGearRecovery(prof,item,source='loot'){
     const info=item&&(TOOL_INFO[item.id]||ARMOR_INFO[item.id]),stack=this.gearRewardStack(item,info);if(!prof||!stack)return null;
     const queue=this.pruneLootRecovery(prof),now=Date.now(),protectedItem=stack.locked||stack.rarity==='mythic'||(info.tier|0)>=5;
     const entry={...stack,source:String(source||'loot').slice(0,32),acquiredAt:now,expiresAt:protectedItem?0:now+7*24*60*60*1000};
     if(queue.length<12){queue.push(entry);return entry;}
-    const score=s=>GEAR_SYSTEM.profile(TOOL_INFO[s.id]||ARMOR_INFO[s.id]||{},s).powerScore;
-    let weakest=-1;
-    for(let i=0;i<queue.length;i++)if(!queue[i].locked&&(weakest<0||score(queue[i])<score(queue[weakest])))weakest=i;
-    if(weakest>=0&&score(entry)>score(queue[weakest])){queue[weakest]=entry;return entry;}
-    return null;
+    prof.lootRecoveryOverflow.push(entry);
+    return {...entry,overflowed:true};
   }
   parseChestKey(key) {
     if (typeof key !== 'string') return null;
@@ -198,6 +203,7 @@ class EconomyMixin {
       for (const s of W.regionalLandmarkSpecs()) {
         if (s.type === 'hunter_camp') this.landmarkCampChests.set(s.x + ',' + (s.y + 1) + ',' + (s.z + 3), s);
         if (s.type === 'bandit_camp') this.landmarkCampChests.set(s.x + ',' + (s.y + 1) + ',' + (s.z + 2), s);
+        if (s.rewardChest) this.landmarkCampChests.set(s.rewardChest.x + ',' + s.rewardChest.y + ',' + s.rewardChest.z, s);
       }
     }
     let site = this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z), discovery = false, cache = false;
@@ -266,6 +272,13 @@ class EconomyMixin {
     if (!info) return false;
     const rec = this.getChestRecord(key);
     const camp = this.landmarkCampChests && this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z);
+    if(camp&&camp.rewardChest){
+      const profile=this.profileFor(client);
+      if(!profile||!this.fantasyStructureCleared(profile.prof,camp.id)){
+        client.send('fantasyStructureStatus',{id:camp.id,name:camp.name,phase:'locked',remaining:0,objective:camp.activity});
+        return false;
+      }
+    }
     if (camp && camp.type === 'bandit_camp') {
       const state = this.banditCampStates && this.banditCampStates.get(camp.id);
       if (!state || state.phase !== 'cleared' || Date.now() >= state.respawnAt) return false;
@@ -504,9 +517,54 @@ class EconomyMixin {
     }
     return -1;
   }
+  editTraceLand(client, x, z) {
+    if (W.isLavaBorderLand(x | 0, z | 0)) return { kind: 'world_border', canEdit: false };
+    if (this.isTownProtected && this.isTownProtected(x, z)) return { kind: 'town_buffer', canEdit: false };
+    const claim = this.landClaimFor ? this.landClaimFor(x, z) : null;
+    if (!claim) return { kind: 'unclaimed', canEdit: true };
+    const abandoned = !!(this.isLandClaimAbandoned && this.isLandClaimAbandoned(claim));
+    return {
+      kind: abandoned ? 'abandoned_claim' : 'claimed',
+      canEdit: abandoned || !!(this.hasLandPermission && this.hasLandPermission(client, claim)),
+      ownerHash: claim.owner ? shortHash(claim.owner) : '',
+    };
+  }
+  recordEditTrace(client, event, details = {}) {
+    const traceMode = String(process.env.BLOCKCRAFT_EDIT_TRACE || 'rejects').toLowerCase();
+    if (this.blockEditTraceEnabled === false || traceMode === '0' || traceMode === 'off') return null;
+    if (event === 'edit.accepted' && traceMode !== '1' && traceMode !== 'all') return null;
+    const p = client && this.state && this.state.players && this.state.players.get(client.sessionId);
+    const round = value => Number.isFinite(Number(value)) ? Math.round(Number(value) * 1000) / 1000 : null;
+    const target = details.target || {};
+    const payload = {
+      at: new Date().toISOString(),
+      event: String(event || 'edit'),
+      room: this.roomName || 'blockcraft',
+      shardId: this.shardId || 'main',
+      sidHash: shortHash(client && client.sessionId),
+      player: p ? {
+        name: String(p.name || '').slice(0, 32),
+        x: round(p.x), y: round(p.y), z: round(p.z),
+        dim: String(p.dim || ''), dgn: String(p.dgn || ''),
+      } : null,
+      target: { x: target.x | 0, y: target.y | 0, z: target.z | 0 },
+      actual: details.actual == null ? null : details.actual | 0,
+      requested: details.requested == null ? null : details.requested | 0,
+      reason: String(details.reason || ''),
+      slot: details.slot == null ? null : details.slot | 0,
+      land: details.land || this.editTraceLand(client, target.x, target.z),
+    };
+    console.log('[edit-trace]', JSON.stringify(payload));
+    return payload;
+  }
   rejectEdit(client, x, y, z, actual, requested, extra = null) {
     const msg = { x, y, z, id: actual | 0, requested: requested == null ? null : requested | 0 };
     if (extra && typeof extra === 'object') Object.assign(msg, extra);
+    this.recordEditTrace(client, 'edit.rejected', {
+      target: { x, y, z }, actual, requested,
+      reason: msg.reason || 'unspecified',
+      slot: extra && extra.slot,
+    });
     client.send('editReject', msg);
   }
   trimGrid(cells, w) {
@@ -563,6 +621,20 @@ class EconomyMixin {
     for (const id of cells) if (id) needs[id] = (needs[id] || 0) + 1;
     return needs;
   }
+  craftingTableOkForPlayer(client, m) {
+    const p = this.state.players.get(client.sessionId);
+    const table = m && m.table;
+    if (!p || !table || !Number.isFinite(table.x) || !Number.isFinite(table.y) || !Number.isFinite(table.z)) return false;
+    const x = Math.trunc(table.x), y = Math.trunc(table.y), z = Math.trunc(table.z);
+    if (!p.dgn && !W.inWorld(x, y, z)) return false;
+    const space = p.dgn
+      ? ((this.instance && this.instance.id === p.dgn && this.instance) || (this.instances && this.instances[p.dgn]))
+      : this.world;
+    if (!space || typeof space.getB !== 'function') return false;
+    let block;
+    try { block = space.getB(x, y, z); } catch (_) { return false; }
+    return block === W.B.TABLE && Math.hypot(x + .5 - p.x, y + .5 - p.y, z + .5 - p.z) <= 6;
+  }
   async handleCraft(client, m) {
     if(!client)return;
     const requestId=typeof m?.requestId==='string'?m.requestId.slice(0,96):'';
@@ -594,6 +666,7 @@ class EconomyMixin {
     if (this.rateLimited(client, 'craft', 8, 16)) return reply('craftReject', {reason:'rate'});
     const w = m.w === 3 ? 3 : 2;
     if (!Array.isArray(m.cells) || m.cells.length !== w * w) return reply('craftReject', {reason:'payload'});
+    if (w === 3 && !this.craftingTableOkForPlayer(client, m)) return reply('craftReject', {reason:'table'});
     const stackCounts = [];
     const cells = m.cells.map(v => {
       const raw = v && typeof v === 'object' ? v.id : v;
@@ -612,7 +685,13 @@ class EconomyMixin {
     for (let i = 0; i < cells.length; i++) if (cells[i]) times = Math.min(times, stackCounts[i]);
     for (const id in needs) times = Math.min(times, Math.floor(this.countItem(rec.prof, id | 0) / needs[id]));
     times = Math.max(0, Math.min(64, times));
-    if (!times) return reply('craftReject', {reason:'ingredients'});
+    if (!times) {
+      const missing = Object.entries(needs).map(([id, need]) => {
+        const have = this.countItem(rec.prof, id | 0);
+        return have < need ? { id: id | 0, need, have, short: need - have } : null;
+      }).filter(Boolean);
+      return reply('craftReject', {reason:'ingredients', ...(missing.length ? {missing} : {})});
+    }
     const [outId, outCount] = recipe.out;
     const finalCount = this.craftedOutputCount(rec.prof, outId, outCount * times);
     const preview={...rec.prof,inv:rec.prof.inv.map(s=>s?{...s}:null)};
@@ -704,7 +783,7 @@ class EconomyMixin {
     if (!W.inWorld(x, y, z)) return null;
     const block = p.dgn ? (this.instances[p.dgn] && this.instances[p.dgn].getB(x, y, z)) : this.world.getB(x, y, z);
     if (block !== W.B.CHEST) return null;
-    if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 6) return null;
+    if (!this.canInteractAt(p, x + .5, y + .5, z + .5, 6)) return null;
     return (p.dgn || 'overworld') + ':' + x + ',' + y + ',' + z;
   }
   getChestState(key) {
@@ -845,6 +924,10 @@ class EconomyMixin {
     if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: this.chestAccessRejectReason(client, key) });
     if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', { reason: 'rate' });
     const id = m.id | 0, count = Math.max(1, Math.min(64, m.count | 0 || 1));
+    const matching = (rec.prof.inv || []).filter(stack => stack && (stack.id | 0) === id);
+    if (matching.length > 0 && matching.some(stack => !this.isSimpleChestBulkStack(stack))) {
+      return client.send('chestReject', { reason: 'unsupported_item' });
+    }
     this.ensureHomesteadChestCapacity(client, key);
     const slots = this.getChestState(key);
     // place into the chest first, then consume exactly what it accepted — never refund a
@@ -853,6 +936,7 @@ class EconomyMixin {
     const placed = want > 0 ? this.addChestItem(slots, id, want) : 0;
     if (placed <= 0) return client.send('chestReject', { reason: 'full' });
     this.consumeItem(rec.prof, id, placed);
+    if (typeof this.deliverPendingRewards === 'function') this.deliverPendingRewards(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
     if (key.startsWith('overworld:')) this.dirtyChests = true;
     this.sendChest(client, key);
@@ -867,13 +951,27 @@ class EconomyMixin {
     }
     if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', { reason: 'rate' });
     const slots = this.getChestState(key);
-    const item = this.removeChestItem(slots, m.slot, m.count);
+    const slotIndex = Math.max(0, Math.min(slots.length - 1, m.slot | 0));
+    const source = slots[slotIndex];
+    if (!source) return client.send('chestReject', { reason: 'empty' });
+    const requested = Math.max(1, Math.min(source.count, m.count | 0 || source.count));
+    const capacity = this.inventorySpaceFor(rec.prof, source.id, requested);
+    if (capacity <= 0) return client.send('chestReject', { reason: 'full' });
+
+    // Build the receiving side first. Only remove the quantity demonstrably added
+    // to the draft inventory, so partial capacity cannot destroy the remainder.
+    const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(stack => stack ? { ...stack } : null) };
+    const before = this.countItem(draft, source.id);
+    this.addRewardItem(draft, source.id, Math.min(requested, capacity));
+    const delivered = Math.max(0, Math.min(requested, this.countItem(draft, source.id) - before));
+    if (delivered <= 0) return client.send('chestReject', { reason: 'full' });
+    const item = this.removeChestItem(slots, slotIndex, delivered);
     if (!item) return client.send('chestReject', { reason: 'empty' });
-    this.addRewardItem(rec.prof, item.id, item.count);
+    rec.prof.inv = draft.inv;
     this.dirtyPlayers.add(rec.token);
     if (key.startsWith('overworld:')) this.dirtyChests = true;
     this.sendChest(client, key);
-    client.send('chestTx', { action: 'withdraw', id: item.id, count: item.count });
+    client.send('chestTx', { action: 'withdraw', id: item.id, count: delivered });
   }
   handleChestMode(client, m) {
     const key = this.chestKeyForPlayer(client, m);
@@ -897,7 +995,7 @@ class EconomyMixin {
     const x = m.x | 0, y = m.y | 0, z = m.z | 0;
     if (!W.inWorld(x, y, z)) return false;
     const block = p.dgn ? (this.instances[p.dgn] && this.instances[p.dgn].getB(x, y, z)) : this.world.getB(x, y, z);
-    return block === W.B.FURNACE && Math.hypot(x + .5 - p.x, z + .5 - p.z) <= 6;
+    return block === W.B.FURNACE && this.canInteractAt(p, x + .5, y + .5, z + .5, 6);
   }
   furnaceKeyForPlayer(client, m) {
     if (!this.furnaceOkForPlayer(client, m)) return null;
@@ -951,24 +1049,38 @@ class EconomyMixin {
   }
   handleFurnaceOpen(client, m) {
     const key = this.furnaceKeyForPlayer(client, m);
-    if (!key) return client.send('furnaceReject', {});
+    if (!key) return this.rejectFurnace(client, 'near');
     this.sendFurnace(client, key);
+  }
+  rejectFurnace(client, reason, key = '', details = {}) {
+    const payload = { reason, ...(key ? { key } : {}) };
+    client.send('furnaceReject', payload);
+    console.log('[furnace]', JSON.stringify({
+      event: 'rejected',
+      sidHash: shortHash(client && client.sessionId),
+      reason,
+      key,
+      ...details,
+    }));
+    return false;
   }
   handleFurnaceSmelt(client, m) {
     const rec = this.profileFor(client);
     const key = this.furnaceKeyForPlayer(client, m);
-    if (!rec || !key) return client.send('furnaceReject', {});
-    if (this.rateLimited(client, 'furnace', 10, 20)) return client.send('furnaceReject', { reason: 'rate' });
+    if (!rec) return this.rejectFurnace(client, 'profile');
+    if (!key) return this.rejectFurnace(client, 'near');
+    if (this.rateLimited(client, 'furnace', 10, 20)) return this.rejectFurnace(client, 'rate', key);
     this.completeFurnaces();
     const f = this.getFurnaceState(key);
-    if (f.finishAt || f.output) return client.send('furnaceReject', { reason: 'busy' });
+    if (f.finishAt || f.output) return this.rejectFurnace(client, 'busy', key, { finishAt: f.finishAt || 0, hasOutput: !!f.output });
     const input = m.input | 0, fuel = m.fuel | 0;
     const recipe = SMELT[input];
-    if (!recipe || !FUEL.has(fuel)) return client.send('furnaceReject', {});
-    if (!this.consumeItem(rec.prof, input, 1)) return client.send('furnaceReject', { reason: 'input' });
+    if (!recipe) return this.rejectFurnace(client, 'recipe', key, { input, fuel });
+    if (!FUEL.has(fuel)) return this.rejectFurnace(client, 'fuel_type', key, { input, fuel });
+    if (!this.consumeItem(rec.prof, input, 1)) return this.rejectFurnace(client, 'input', key, { input, fuel });
     if (!this.consumeItem(rec.prof, fuel, 1)) {
       this.addRewardItem(rec.prof, input, 1);
-      return client.send('furnaceReject', { reason: 'fuel' });
+      return this.rejectFurnace(client, 'fuel', key, { input, fuel });
     }
     f.input = { id: input, count: 1 };
     f.fuel = { id: fuel, count: 1 };
@@ -977,22 +1089,24 @@ class EconomyMixin {
     f.finishAt = f.startedAt + SMELT_MS;
     this.dirtyPlayers.add(rec.token);
     this.dirtyFurnaces = true;
-    client.send('furnaceStarted', { input, fuel });
+    console.log('[furnace]', JSON.stringify({ event: 'started', sidHash: shortHash(client.sessionId), key, input, fuel, finishAt: f.finishAt }));
+    client.send('furnaceStarted', { key, input, fuel });
     this.sendFurnace(client, key);
   }
   handleFurnaceTake(client, m) {
     const rec = this.profileFor(client);
     const key = this.furnaceKeyForPlayer(client, m);
-    if (!rec || !key) return client.send('furnaceReject', {});
-    if (this.rateLimited(client, 'furnace', 10, 20)) return client.send('furnaceReject', { reason: 'rate' });
+    if (!rec) return this.rejectFurnace(client, 'profile');
+    if (!key) return this.rejectFurnace(client, 'near');
+    if (this.rateLimited(client, 'furnace', 10, 20)) return this.rejectFurnace(client, 'rate', key);
     this.completeFurnaces();
     const f = this.getFurnaceState(key);
-    if (!f.output) return client.send('furnaceReject', { reason: 'empty' });
+    if (!f.output) return this.rejectFurnace(client, 'empty', key);
     const out = f.output;
     const finalCount = this.craftedOutputCount(rec.prof, out.id, out.count);
     // leave the output in the furnace if it can't all fit — don't null it then lose it
     if (this.inventorySpaceFor(rec.prof, out.id, finalCount) < finalCount) {
-      return client.send('furnaceReject', { reason: 'full' });
+      return this.rejectFurnace(client, 'full', key, { output: out.id, count: finalCount });
     }
     f.output = null;
     this.addRewardItem(rec.prof, out.id, finalCount);
@@ -1000,6 +1114,7 @@ class EconomyMixin {
     this.dirtyFurnaces = true;
     const msg = { out: { id: out.id, count: out.count } };
     if (finalCount !== out.count) msg.finalCount = finalCount;
+    console.log('[furnace]', JSON.stringify({ event: 'taken', sidHash: shortHash(client.sessionId), key, output: out.id, count: finalCount }));
     client.send('furnaceResult', msg);
     this.sendFurnace(client, key);
   }

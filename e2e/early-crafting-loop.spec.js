@@ -15,8 +15,9 @@ test('Road Ready stages the starter recipe and awards an upgrade after combat',a
   await page.evaluate(()=>__BLOCKCRAFT_E2E__.send('npcQuest',{action:'accept',giver:'Mara Vale',role:'guide'}));
   await expect.poll(()=>page.evaluate(()=>quest?.craftPending)).toBe(true);
   const before=await page.evaluate(()=>inv.filter(s=>s&&s.id===I.WOOD_SWORD).reduce((n,s)=>n+s.count,0));
+  expect(await page.evaluate(()=>__BLOCKCRAFT_E2E__.walkToSmith())).toBe(true);
   await page.evaluate(()=>BlockcraftGameContext.requireModule('menus').activateCraftShortcut(I.WOOD_SWORD));
-  await expect.poll(()=>page.evaluate(()=>craftResult()?.out[0])).toBe(122);
+  await expect.poll(()=>page.evaluate(()=>BlockcraftGameContext.requireState('menus').craftResult?.out[0])).toBe(122);
   await page.locator('#craftarea > .slot').dispatchEvent('mousedown',{button:0});
   await expect.poll(()=>page.evaluate(()=>quest?.craftPending)).toBe(false);
   await expect.poll(()=>page.evaluate(()=>inv.filter(s=>s&&s.id===I.WOOD_SWORD).reduce((n,s)=>n+s.count,0))).toBe(before+1);

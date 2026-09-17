@@ -1350,9 +1350,16 @@ class DragonsMixin {
       // lay the egg into the owner's inventory
       const token = a.token, eggId = DRAGON_EGG_OF(offspring);
       const c = this.clients.find(cl => this.tokens.get(cl.sessionId) === token);
+      const prof = c ? this.profileFor(c)?.prof : this.profiles.get(token);
+      if (!prof || this.inventorySpaceFor(prof, eggId, 1) < 1) {
+        if(c&&!a.breedBlockedNotified)c.send('dragonPerchBreedPending',{reason:'full',eggId,offspring});
+        a.breedBlockedNotified=b.breedBlockedNotified=true;
+        continue;
+      }
       if (c) this.awardGrant(c, { source: 'breed', items: [{ id: eggId, count: 1 }] });
-      else { const prof = this.profiles.get(token); if (prof) { this.addRewardItem(prof, eggId, 1); this.dirtyPlayers.add(token); } }
+      else { this.addRewardItem(prof, eggId, 1); this.dirtyPlayers.add(token); }
       a.loveUntil = 0; b.loveUntil = 0; a.breedStart = 0; b.breedStart = 0;
+      delete a.breedBlockedNotified;delete b.breedBlockedNotified;
       a.breedCdUntil = now + DRAGON_BREED_CD_MS; b.breedCdUntil = now + DRAGON_BREED_CD_MS;
       this.dirtyNests = true;
       const [x, y, z] = coord.split(',').map(Number);

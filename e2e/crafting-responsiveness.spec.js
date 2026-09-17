@@ -34,13 +34,13 @@ test('delayed craft retries once and duplicate results cannot consume a new grid
     const menu=BlockcraftGameContext.requireModule('menus');menu.close(false);menu.open('inv');
     menu.activateCraftShortcut(B.PLANKS);
   });
-  expect(await page.evaluate(()=>craftCells.some(Boolean))).toBe(false,'staging is blocked until confirmation');
+  expect(await page.evaluate(()=>BlockcraftGameContext.requireState('menus').craftGrid.length>0)).toBe(false,'staging is blocked until confirmation');
   await expect.poll(()=>page.evaluate(()=>craftReplies.length),{timeout:20000}).toBeGreaterThanOrEqual(1);
   expect(await page.evaluate(()=>countItem(B.PLANKS))).toBe(before.planks+4);
   expect(await page.evaluate(()=>countItem(B.LOG))).toBe(before.logs-1);
   await page.evaluate(()=>BlockcraftGameContext.requireModule('menus').activateCraftShortcut(B.PLANKS));
   await expect.poll(()=>page.evaluate(()=>craftReplies.length),{timeout:15000}).toBeGreaterThanOrEqual(2);
-  const after=await page.evaluate(()=>({sends:craftSends,logs:countItem(B.LOG),planks:countItem(B.PLANKS),grid:craftCells.filter(Boolean).map(s=>({id:s.id,count:s.count}))}));
+  const after=await page.evaluate(()=>({sends:craftSends,logs:countItem(B.LOG),planks:countItem(B.PLANKS),grid:BlockcraftGameContext.requireState('menus').craftGrid}));
   expect(after.sends).toHaveLength(2);expect(after.sends[0].requestId).toBe(after.sends[1].requestId);
   expect(after.planks).toBe(before.planks+4);
   expect(after.grid).toEqual([{id:5,count:1}]);

@@ -58,3 +58,31 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  performance:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install browser test runtime
+        run: npx playwright install --with-deps chromium
+      - name: Server simulation and bandwidth budgets
+        run: npm run test:perf
+      - name: Static delivery budgets
+        run: npm run test:perf:assets
+      - name: Sixteen-player browser work budgets
+        run: npm run test:perf:client
+        env:
+          # Shared software rendering and hosted CPU contention can make update
+          # work about 6x slower than a player device. CI still rejects gross
+          # regressions; local runs retain the strict 28 FPS / 15ms update gate.
+          CLIENT_PERF_MIN_FPS: 5
+          CLIENT_PERF_MAX_UPDATE_MS: 100
+          CLIENT_PERF_MAX_RENDER_MS: 20
