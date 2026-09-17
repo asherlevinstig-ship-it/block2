@@ -2975,6 +2975,18 @@ test('objective tracker shows only the active quest with an all-quests shortcut'
   assert.ok(frame.indexOf('guide.dataset.guideX!=null') < frame.indexOf('guide.dataset.guideId)ok=api.setObjective'));
 });
 
+test('right-side HUD panels stack without hiding the quest-log shortcut',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(menus,/function layoutRightHudStack\(\)/);
+  assert.match(menus,/\['kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','powerhud'\]/);
+  assert.match(menus,/map\.getBoundingClientRect\(\)\.bottom/);
+  assert.match(menus,/layoutRightHudStack\(\);/);
+  assert.match(styles,/#powerhud\.hud-space-hidden\{display:none!important\}/);
+  assert.match(styles,/body\.presentation-combat:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #currentquest\{opacity:\.88;transform:none\}/);
+  assert.doesNotMatch(styles,/body\.presentation-combat:not\(\.tablet-mode\):not\(\.mobile-play-mode\) #currentquest,\s*body\.presentation-combat[^\{]+\{\s*opacity:0/);
+});
+
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
@@ -5650,6 +5662,17 @@ test('incubation broadcasts never consume another players egg slot',()=>{
   assert.equal(sync.length,1,'observers still see the warming egg');
   apply({type:'ember',eggId:200,slot:0,ownerSid:'me'});
   assert.equal(inv[0].count,1);
+});
+
+test('a dragon hatched outside the overworld appears immediately and follows its owner',()=>{
+  const companions=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');
+  const complete=companions.slice(companions.indexOf('function applyDragonIncubationComplete(m){'),companions.indexOf('function dragonHatchRejected(',companions.indexOf('function applyDragonIncubationComplete(m){')));
+  const tick=companions.slice(companions.indexOf('function tickCompanionDragons('),companions.indexOf('// ---------------- dragon breeding:',companions.indexOf('function tickCompanionDragons(')));
+  assert.match(complete,/companionDragonSig='';companionDragonNextRefresh=0/);
+  assert.match(complete,/baby starts following you/);
+  assert.match(companions,/function companionRowsForDimension\(\)[\s\S]*if\(dim==='overworld'\)return rows;[\s\S]*row\.sid==='local'\|\|row\.sid===ownSid/);
+  assert.match(tick,/const rows=companionRowsForDimension\(\)/);
+  assert.doesNotMatch(tick,/if\(dim!=='overworld'\)[\s\S]*clearMissingCompanionDragons\(new Set\(\)\)/);
 });
 
 test('hatch requests distinguish session failures and route every realm to authoritative incubation',()=>{

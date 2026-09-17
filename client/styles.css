@@ -1372,7 +1372,7 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   #homeworkhud.complete button{border-color:rgba(250,204,21,.55);background:linear-gradient(135deg,rgba(24,20,6,.9),rgba(18,34,18,.84))}
   #homeworkhud.complete span{color:#fde68a}
   #homeworkhud.complete i em{background:linear-gradient(90deg,#facc15,#86efac)}
-  #powerhud{position:fixed;right:18px;top:340px;width:294px;max-width:calc(100vw - 36px);box-sizing:border-box;padding:10px 12px;background:linear-gradient(180deg,rgba(19,17,28,.96),rgba(7,10,16,.93));border:1px solid #b99442;border-radius:7px;color:#eef3ff;z-index:7;overflow:auto;text-shadow:1px 1px #000;font-size:11px;pointer-events:auto}#powerhud .powerhud-title{display:block;width:100%;padding:0 0 7px;background:none;border:0;border-bottom:1px solid #66542f;color:#ffe08a;text-align:left;cursor:pointer;font:700 11px/1.4 inherit;letter-spacing:1px}#powerhud .powerhud-row{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.08);overflow-wrap:anywhere}#powerhud .champion{color:#ffe08a;font-weight:bold}#powerhud p{margin:7px 0;font-size:10px}#powerhud small{color:#b8c8dd;font-size:9px}body.game-modal-open #powerhud,body.onboarding #powerhud,body.path-selecting #powerhud{display:none!important}@media(max-width:760px){#powerhud{right:8px;width:200px;font-size:10px}#powerhud .powerhud-row:nth-of-type(n+2){display:none}}
+  #powerhud{position:fixed;right:18px;top:340px;width:294px;max-width:calc(100vw - 36px);box-sizing:border-box;padding:10px 12px;background:linear-gradient(180deg,rgba(19,17,28,.96),rgba(7,10,16,.93));border:1px solid #b99442;border-radius:7px;color:#eef3ff;z-index:7;overflow:auto;text-shadow:1px 1px #000;font-size:11px;pointer-events:auto}#powerhud .powerhud-title{display:block;width:100%;padding:0 0 7px;background:none;border:0;border-bottom:1px solid #66542f;color:#ffe08a;text-align:left;cursor:pointer;font:700 11px/1.4 inherit;letter-spacing:1px}#powerhud .powerhud-row{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.08);overflow-wrap:anywhere}#powerhud .champion{color:#ffe08a;font-weight:bold}#powerhud p{margin:7px 0;font-size:10px}#powerhud small{color:#b8c8dd;font-size:9px}#powerhud.hud-space-hidden{display:none!important}body.game-modal-open #powerhud,body.onboarding #powerhud,body.path-selecting #powerhud{display:none!important}@media(max-width:760px){#powerhud{right:8px;width:200px;font-size:10px}#powerhud .powerhud-row:nth-of-type(n+2){display:none}}
   #currentquest{position:fixed;right:18px;top:76px;width:294px;max-width:calc(100vw - 28px);z-index:7;pointer-events:auto;color:#f7ecbf;text-shadow:1px 1px 0 #000;background:linear-gradient(180deg,rgba(15,15,20,.88),rgba(7,10,16,.8));border:1px solid rgba(242,199,92,.44);box-shadow:0 8px 24px rgba(0,0,0,.38), inset 0 0 18px rgba(242,199,92,.035);border-radius:7px;padding:12px 13px}
   #currentquest .qt{font-size:12px;letter-spacing:1.8px;color:#ffd24a;text-transform:uppercase;margin-bottom:6px;font-weight:bold}
   #currentquest .qv{font-size:13px;line-height:1.38;color:#fff3c4}
@@ -2770,7 +2770,6 @@ body.presentation-combat #traininggroundstitle{opacity:0!important;pointer-event
   body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #coords{
     opacity:.16;filter:saturate(.6);transform:translateX(-10px);
   }
-  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest,
   body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #homeworkhud,
   body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #activitytracker,
   body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #tutorialhud,
@@ -2778,6 +2777,13 @@ body.presentation-combat #traininggroundstitle{opacity:0!important;pointer-event
   body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #townchoices{
     opacity:0;pointer-events:none;transform:translateX(24px);
   }
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest{opacity:.88;transform:none}
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest .activequest-card>h3,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest .activequest-card>p,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest .activequest-progress,
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest .activequest-action{display:none}
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest .activequest-card{padding:9px 11px}
+  body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #currentquest .activequest-head{margin:0}
   body.presentation-combat:not(.tablet-mode):not(.mobile-play-mode) #eventhud{
     opacity:.12;pointer-events:none;filter:saturate(.55);transform:translateX(-50%) translateY(-8px) scale(.96);
   }

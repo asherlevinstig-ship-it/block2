@@ -3583,6 +3583,35 @@ function openFellowshipPantryUI(rank=Math.max(0,Math.min(5,localPlayerHunterRank
 }
 let powerRankingRequest=0;
 let powerHud=null,powerStandings=null,powerHudRoom=null,nextPowerRefreshAt=0,lastPowerRequestAt=-Infinity;
+const RIGHT_HUD_GAP=10;
+function visibleRightHudElement(id){
+  const el=document.getElementById(id);
+  return el&&el.offsetParent!==null&&!el.classList.contains('hidden')?el:null;
+}
+function layoutRightHudStack(){
+  const ids=['kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','powerhud'];
+  const elements=ids.map(id=>document.getElementById(id)).filter(Boolean);
+  if(innerWidth<=760||document.body.classList.contains('tablet-mode')||document.body.classList.contains('mobile-play-mode')){
+    for(const el of elements){el.style.removeProperty('top');el.classList.remove('hud-space-hidden');}
+    if(powerHud)powerHud.style.removeProperty('max-height');
+    return;
+  }
+  let top=84;
+  const map=visibleRightHudElement('landmap');
+  if(map)top=Math.max(top,map.getBoundingClientRect().bottom+(map.classList.contains('worldmap')?32:RIGHT_HUD_GAP));
+  for(const id of ids){
+    const el=document.getElementById(id);
+    if(!el)continue;
+    el.classList.remove('hud-space-hidden');
+    if(el.offsetParent===null||el.classList.contains('hidden')){el.style.removeProperty('top');continue;}
+    if(id==='powerhud'&&top>innerHeight-96){
+      el.classList.add('hud-space-hidden');el.style.removeProperty('top');continue;
+    }
+    el.style.top=Math.round(top)+'px';
+    if(id==='powerhud')el.style.maxHeight=Math.max(64,innerHeight-top-100)+'px';
+    top+=el.offsetHeight+RIGHT_HUD_GAP;
+  }
+}
 function invalidatePowerRanking(){nextPowerRefreshAt=0;}
 function renderPowerHud(){
   if(!powerHud){
@@ -3613,12 +3642,7 @@ function tickPowerHud(now){
   if(now>=nextPowerRefreshAt&&now-lastPowerRequestAt>=5100&&document.visibilityState!=='hidden'){
     nextPowerRefreshAt=Infinity;lastPowerRequestAt=now;room.send('powerRanking',{});
   }
-  let top=84;
-  for(const id of ['currentquest','dungeonparty']){
-    const el=document.getElementById(id);if(el&&el.offsetParent!==null){const rect=el.getBoundingClientRect();top=Math.max(top,rect.bottom+10);}
-  }
-  powerHud.style.top=top+'px';
-  powerHud.style.maxHeight=Math.max(64,innerHeight-top-190)+'px';
+  layoutRightHudStack();
   worldApi.updatePowerCrowns(powerStandings&&powerStandings.crownedSids||[]);
 }
 function openPowerRanking(){

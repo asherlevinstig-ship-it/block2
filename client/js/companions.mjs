@@ -1035,14 +1035,17 @@ function applyDragonIncubationComplete(m){
     dragonPersonalities[m.type]=DRAGON_PERSONALITIES_C.includes(m.personality)?m.personality:defaultDragonPersonality(m.type);
     dragonHatchedAt[m.type]=Number.isFinite(+m.hatchedAt)?+m.hatchedAt:Date.now();
   }
-  if(isOwner){ refreshHUD(); if(uiOpen) renderUI(); }
+  if(isOwner){
+    companionDragonSig='';companionDragonNextRefresh=0;dragonHudSig='';dragonHudNextRefresh=0;
+    refreshHUD(); if(uiOpen) renderUI();
+  }
   const d=DRAGON_TYPES[m.type];
   if(typeof SFX!=='undefined' && SFX.boom) SFX.boom();
   const n=parseInt(d.membrane[1].slice(1),16);
   const x=(m.x|0)+.5, y=(m.y|0)+1.2, z=(m.z|0)+.5;
   burst(x, y, z, [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255], 40, 3.2, 3.4, .8);
   sysMsg(isOwner
-    ? 'The <b>'+d.name+' Egg</b> hatches as a baby and bonds to you. It will become rideable soon.'
+    ? 'The <b>'+d.name+' Egg</b> hatches and the baby starts following you. Press <b>B</b> for care and growth; in about <b>2 minutes</b>, return to the overworld and press <b>X</b> to ride it.'
     : 'A <b>'+d.name+' Egg</b> hatches nearby.');
   if(isOwner) questSystemCheck();
 }
@@ -1406,6 +1409,13 @@ function collectCompanionDragons(){
   }
   return rows.slice(0,12);
 }
+function companionRowsForDimension(){
+  const rows=collectCompanionDragons();
+  if(dim==='overworld')return rows;
+  const ownSid=NET.room&&NET.room.sessionId;
+  return rows.filter(row=>row.sid==='local'||row.sid===ownSid)
+    .map(row=>({...row,role:'follow',staySpot:null}));
+}
 function companionOwnerPose(row){
   if(row&&row.role==='stay'&&row.staySpot) return row.staySpot;
   if(row.sid==='local' || (NET.room&&row.sid===NET.room.sessionId)) return {x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw||0};
@@ -1571,7 +1581,7 @@ function dragonHudRoleState(type, mountedHere, moving){
 function updateDragonRoleHUD(now){
   const el=document.getElementById('dragonhud');
   if(!el) return;
-  if(dim!=='overworld' || !dragonUnlocks.length){
+  if(!dragonUnlocks.length){
     if(!el.classList.contains('hidden')) el.classList.add('hidden');
     dragonHudSig='';
     return;
@@ -1616,17 +1626,11 @@ function updateDragonRoleHUD(now){
     '<div class="dlist">'+rows.map(r=>'<div class="drow'+(r.spec?' specialized':'')+'"><span class="dname">'+dragonHudEscape(r.name)+(r.spec?' <b class="dspec" style="color:'+dragonSpecializationColor(r.spec)+'">'+dragonHudEscape(dragonSpecializationName(r.spec))+'</b>':'')+'</span><span class="dmeta">'+dragonHudEscape(r.meta)+'</span></div>').join('')+'</div>';
 }
 function tickCompanionDragons(now, dt){
-  if(dim!=='overworld'){
-    clearMissingCompanionDragons(new Set());
-    companionDragonSig='';
-    updateDragonRoleHUD(now);
-    return;
-  }
   updateDragonRoleHUD(now);
   dragonTrainingFx(now, dt);
   if(now>=companionDragonNextRefresh){
     companionDragonNextRefresh=now+700;
-    const rows=collectCompanionDragons();
+    const rows=companionRowsForDimension();
     const sig=rows.map(r=>companionDragonKey(r)+':'+r.role+':'+r.name+':'+r.owner+':'+(r.stage||'adult')+':'+(r.personality||'')+':'+(r.spec||'')+':' +(r.staySpot?Math.round(r.staySpot.x*10)+','+Math.round(r.staySpot.y*10)+','+Math.round(r.staySpot.z*10):'')).join('|')+'|'+mountKind;
     if(sig!==companionDragonSig){
       companionDragonSig=sig;
