@@ -1724,6 +1724,27 @@ test('stuck rescue candidates near town exits ignore overhead arch blocks',()=>{
   assert.equal(candidate.y < 17,true,'rescue stays on the walkway instead of lifting to the arch');
 });
 
+test('stuck rescue relocation keeps an active Recall question reachable',()=>{
+  const room=makeRoom(),client=makeClient('recall_rescue_hunter');
+  room.initRecallState();
+  seedPlayer(room,client,{x:140,y:16,z:140,yaw:.5});
+  const challenge={
+    id:'recall-before-rescue',questionId:'binary',subject:'Computer Science',stage:'KS3',topic:'Binary',difficulty:1,
+    prompt:'Which value is binary?',answers:['2','10','G','Z'],correct:1,explanation:'Binary uses zero and one.',
+    pillars:[{index:0,x:150,y:16,z:140},{index:1,x:151,y:16,z:140},{index:2,x:152,y:16,z:140},{index:3,x:153,y:16,z:140}],
+    fallback:false,expiresAt:Date.now()+30000,startedAt:Date.now(),ruinId:'',source:''
+  };
+  room.recallChallenges.set(client.sessionId,challenge);
+  const p=room.state.players.get(client.sessionId);
+  p.x=220;p.z=230;
+  assert.equal(room.relocateRecallChallenge(client,p,1.2),true);
+  const moved=room.recallChallenges.get(client.sessionId);
+  assert.equal(moved.id,challenge.id,'the same question remains active');
+  assert.equal(moved.pillars.every(pillar=>Math.hypot(pillar.x-p.x,pillar.z-p.z)<24),true,'all answers move around the rescued player');
+  assert.equal(client.sent.at(-1).type,'recallQuestion');
+  assert.deepEqual(client.sent.at(-1).msg.pillars,moved.pillars);
+});
+
 test('movement cannot tunnel through a thin wall between valid air cells',()=>{
   const room=makeRoom(),client=makeClient('wall_tunnel_hunter');
   room.lastMoveMsg=new Map();

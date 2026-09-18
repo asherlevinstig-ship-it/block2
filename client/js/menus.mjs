@@ -836,7 +836,7 @@ function applyServerCraft(m){
   }
   awardJobForCraft(m.out.id, made);
   presentObjectiveCraftCompletion(m.out.id, made, 'craft', beforeContract);
-  if(onboardingActive&&onboardingArrived&&onboardingKind()==='craft') onboardingFlags.crafted=true;
+  if(onboardingActive&&m.out.id===B.PLANKS) onboardingFlags.crafted=true;
   presentCraftFeedback(m.out.id,made,request.payload&&request.payload.table);
   if(m.savePending){showName('CRAFTED · SAVING DELAYED');sysMsg('Item crafted, but saving is delayed. Keep this session open until the server saves your progress.');}
   renderUI(); renderCursor(); refreshHUD();
@@ -892,7 +892,7 @@ function slotInteract(acc, e, opts={}){
       if(batchId&&batchCount>0) presentCraftFeedback(batchId,batchCount,uiMode==='table'?chestCoords():null);
     } else crafted=!!make();
     if(crafted){
-      if(onboardingActive&&onboardingArrived&&onboardingKind()==='craft') onboardingFlags.crafted=true;
+      if(onboardingActive&&r.out[0]===B.PLANKS) onboardingFlags.crafted=true;
     }
     renderUI(); renderCursor(); return;
   }

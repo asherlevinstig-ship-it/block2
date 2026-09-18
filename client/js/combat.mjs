@@ -1880,7 +1880,9 @@ function prepareOnboardingStep(){
   if(entering&&kind==='arrows') onboardingArrowTurn=0;
   if(kind==='tree') selectItemForOnboarding(I.WOOD_AXE);
   else if(kind==='craft'){
-    if(countItem(B.LOG)+countCraftCellItem(B.LOG)+countHeldCursorItem(B.LOG)<=0 && countItem(B.PLANKS)+countHeldCursorItem(B.PLANKS)<=0) ensureOnboardingItem(B.LOG,1);
+    const planks=countItem(B.PLANKS)+countCraftCellItem(B.PLANKS)+countHeldCursorItem(B.PLANKS);
+    if(planks>0) onboardingFlags.crafted=true;
+    else if(countItem(B.LOG)+countCraftCellItem(B.LOG)+countHeldCursorItem(B.LOG)<=0) ensureOnboardingItem(B.LOG,1);
   }
   else if(kind==='build'){
     repairOnboardingBuildPad();
@@ -6049,11 +6051,20 @@ addEventListener('keydown', e=>{
     e.preventDefault();
     return;
   }
+  const movementKey=['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code);
+  // Escape deliberately frees the cursor, but a player who immediately tries
+  // to move clearly intends to return to the game. Reclaim control on that
+  // same keydown so the cursor lesson and support-button clicks cannot leave
+  // WASD looking permanently frozen.
+  if(!e.repeat&&movementKey&&cursorReleased&&gameplayCameraResumeAllowed()){
+    resumeGameplayCamera();
+    gameplayInputDebug('movement.resume:'+e.code);
+  }
   const gameInput=gameplayInputActive();
   // Key presses also carry browser user activation. This recovers full 360°
   // mouse-look after automatic login or a question modal even when the player
   // starts moving before clicking the world again.
-  if(!e.repeat&&gameInput&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){
+  if(!e.repeat&&gameInput&&movementKey){
     upgradeFallbackPointerLock('keydown:'+e.code);
   }
   if(!e.repeat&&gameInput&&AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()&&globalThis.BlockcraftDirectorCamera){
@@ -6072,7 +6083,7 @@ addEventListener('keydown', e=>{
       if(e.code==='Equal'||e.code==='NumpadAdd'){e.preventDefault();director.height(.35);return;}
     }
   }
-  if(!e.repeat&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)&&!gameplayMovementAllowed())gameplayInputDebug('keydown:'+e.code);
+  if(!e.repeat&&movementKey&&!gameplayMovementAllowed())gameplayInputDebug('keydown:'+e.code);
   if(e.code==='Digit0'&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()){
     e.preventDefault();
     const gallery=globalThis.BlockcraftAdminBossGallery;

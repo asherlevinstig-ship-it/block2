@@ -40,6 +40,16 @@ class RecallMixin{
     client.send('recallQuestion',{id:challenge.id,questionId:challenge.questionId,subject:challenge.subject,stage:challenge.stage,topic:challenge.topic,difficulty:challenge.difficulty,prompt:challenge.prompt,answers:challenge.answers,pillars:challenge.pillars,fallback:challenge.fallback,expiresAt:challenge.expiresAt,ruinBonus:!!challenge.ruinId,lectern:challenge.source==='lectern',questionHall:challenge.source==='question_hall',dungeonRecall:this.recallDungeonSpace(p),mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},'Computer Science')});
     return true;
   }
+  relocateRecallChallenge(client,p,yaw=null){
+    if(!client||!p||!this.recallChallenges)return false;
+    const challenge=this.recallChallenges.get(client.sessionId);
+    if(!challenge||challenge.expiresAt<=Date.now())return false;
+    challenge.pillars=this.recallPositions(p,Number.isFinite(yaw)?yaw:p.yaw);
+    challenge.fallback=challenge.source==='question_hall'||challenge.pillars.some(value=>value.blocked);
+    const rec=typeof this.profileFor==='function'&&this.profileFor(client);
+    this.sendRecallQuestion(client,challenge,rec,p);
+    return true;
+  }
   handleRecallSubject(client,message={}){
     const subject='Computer Science';
     if(!client)return;

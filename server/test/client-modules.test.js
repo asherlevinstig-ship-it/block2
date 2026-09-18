@@ -3286,15 +3286,31 @@ test('First Hands guides the player through the first real objective',()=>{
 test('onboarding teaches Escape cursor release after jumping and shows a large arrow-turn counter',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   assert.match(combat,/jumped:false,cursor:false,tree:false/);
   assert.match(combat,/kind:'jump'[\s\S]*kind:'cursor'[\s\S]*kind:'tree'/);
   assert.match(combat,/Lesson 5 \/ 13 - Cursor/);
   assert.match(combat,/key:'ESCAPE'/);
   assert.match(combat,/Press Escape to free the cursor/);
   assert.match(combat,/onboardingActive&&onboardingArrived&&onboardingKind\(\)==='cursor'[\s\S]*onboardingFlags\.cursor=true/);
+  assert.match(combat,/movementKey&&cursorReleased&&gameplayCameraResumeAllowed\(\)[\s\S]*resumeGameplayCamera\(\)[\s\S]*movement\.resume:/);
+  assert.match(html,/Press WASD, Escape, or click the world to control your character again\./);
   assert.doesNotMatch(combat,/ONBOARDING_STEPS\.splice\(11,0|kind:'subject'/);
   assert.match(combat,/tutprogress/);
   assert.match(styles,/#tutorialhud \.tutprogress b\{font-size:42px/);
+});
+
+test('unstuck keeps Recall answer controls usable after moving the player',()=>{
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
+  const recall=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
+  assert.match(room,/relocateRecallChallenge\(client, p, yaw\)/);
+  assert.match(room,/recallRelocated/);
+  assert.match(recall,/relocateRecallChallenge\(client,p,yaw=null\)/);
+  assert.match(recall,/challenge\.pillars=this\.recallPositions\(p/);
+  assert.match(recall,/this\.sendRecallQuestion\(client,challenge,rec,p\)/);
+  assert.match(networking,/activeRecall\.fallback\|\|activeRecall\.questionHall/);
+  assert.match(networking,/if\(!recallNeedsCursor\)setTimeout\(\(\)=>\{refreshPlayUi\(\);resumeGameplayCamera\(\);\},0\)/);
 });
 
 test('onboarding teaches Shift sprinting after basic movement',()=>{
@@ -3318,6 +3334,16 @@ test('onboarding gathering pillar and completion both use the training tree',()=
   assert.match(combat,/isOnboardingTreeLog\(m\.x,m\.y,m\.z,TRAINING_MEADOW\)/);
   assert.match(world,/"onboardingTreeTarget":\{get:\(\)=>onboardingTreeTarget\}/);
   assert.match(world,/"isOnboardingTreeLog":\{get:\(\)=>isOnboardingTreeLog\}/);
+});
+
+test('onboarding accepts planks crafted before the crafting lesson',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(combat,/const planks=countItem\(B\.PLANKS\)\+countCraftCellItem\(B\.PLANKS\)\+countHeldCursorItem\(B\.PLANKS\)/);
+  assert.match(combat,/if\(planks>0\) onboardingFlags\.crafted=true/);
+  assert.match(menus,/if\(onboardingActive&&m\.out\.id===B\.PLANKS\) onboardingFlags\.crafted=true/);
+  assert.match(menus,/if\(onboardingActive&&r\.out\[0\]===B\.PLANKS\) onboardingFlags\.crafted=true/);
+  assert.doesNotMatch(menus,/onboardingActive&&onboardingArrived&&onboardingKind\(\)==='craft'\) onboardingFlags\.crafted=true/);
 });
 
 test('onboarding farming uses the G action inside the tutorial meadow',()=>{

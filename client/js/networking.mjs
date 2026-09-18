@@ -2782,7 +2782,10 @@ function netAttachRoom(room,name,client){
         const reason=String(m.reason||'nearby');
         const text=reason==='already_safe'?'You already look clear, but I nudged you onto safe ground.':reason==='dungeon_spawn'?'Moved to the dungeon safe zone.':reason==='town_fallback'?'Moved to Town of Beginnings safe spawn.':'Moved to the nearest safe space.';
         showName('Stuck rescue');
-        if(typeof sysMsg==='function')sysMsg('<b>Stuck rescue:</b> '+escHTML(text));
+        if(typeof sysMsg==='function')sysMsg('<b>Stuck rescue:</b> '+escHTML(text)+(m.recallRelocated?' Your Recall answers moved with you.':''));
+        const recall=globalThis.BlockcraftRecall,activeRecall=recall&&recall.active;
+        const recallNeedsCursor=!!(activeRecall&&(activeRecall.fallback||activeRecall.questionHall));
+        if(!recallNeedsCursor)setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
       }else{
         const r=String(m&&m.reason||'failed');
         const text=r==='rate'?'Please wait a moment before trying rescue again.':r==='dead'?'Use the death respawn button.':r==='combat'?'Move away from combat first, then try rescue.':'Could not find a safe nearby spot.';

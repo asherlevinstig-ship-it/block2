@@ -8462,7 +8462,8 @@ class GameRoom extends Room {
       if (!p.dgn) rec.prof.pos = [p.x, p.y, p.z];
       this.dirtyPlayers.add(rec.token);
     }
-    client.send('stuckRescueResult', { ok: true, x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: chosen.reason, dgn: space.rawDgn });
+    const recallRelocated = typeof this.relocateRecallChallenge === 'function' && this.relocateRecallChallenge(client, p, yaw);
+    client.send('stuckRescueResult', { ok: true, x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: chosen.reason, dgn: space.rawDgn, recallRelocated });
     return true;
   }
   handleRespawnTown(client, m = {}) {
