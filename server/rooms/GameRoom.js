@@ -436,6 +436,7 @@ class GameRoom extends Room {
 
     // ---- per-session bookkeeping (rate limiting, PvP, vitals) ----
     this.lastMoveMsg = new Map();
+    this.worldBountyMoveAt = new Map();
     this.lastAttackMsg = new Map();
     this.rateBuckets = new Map();   // sessionId -> Map(bucket -> {tokens,last}) for handler flood control
     this.playerLastHit = new Map();
@@ -1378,6 +1379,7 @@ class GameRoom extends Room {
       p.x = openSpawn[0]; p.y = openSpawn[1]; p.z = openSpawn[2];
     }
     this.state.players.set(client.sessionId, p);
+    if (token && prof && (prof.karma | 0) < 0) this.broadcastWorldBountyForToken(token);
     logRoomLifecycle('overworld.join.profile_applied', {
       roomId: this.roomId || '',
       shardId: this.shardId || 'main',
@@ -1447,6 +1449,7 @@ class GameRoom extends Room {
       this.sendGuildHallSync(client);
       Promise.resolve(this.processPostActivityReturn(client)).catch(() => {});
       this.sendSocialSnapshot(client);
+      this.sendWorldBountySnapshot(client);
       this.sendElderheartExpedition(client);
       this.sendAncientCityRun(client);
       this.broadcast('chat', { name: '[System]', text: joined.name + (prof ? ' has returned' : ' has entered the world') });
@@ -1501,6 +1504,7 @@ class GameRoom extends Room {
       const disconnectedPlayer = client && this.state.players.get(client.sessionId);
       client.__disconnectPending = true;
       if (disconnectedPlayer) disconnectedPlayer.connected = false;
+      if (client) this.broadcast('worldBountyUpdate', { sid: client.sessionId, active: false });
       const reconnectStartedAt = Date.now();
       this.recordReconnectAttempt(code);
       console.warn('[disconnect] ' + JSON.stringify({ event: 'unexpected.start', roomType: 'overworld', roomId: this.roomId || '', shardId: this.shardId || 'main', sidHash: shortHash(client && client.sessionId), code }));
@@ -1513,6 +1517,7 @@ class GameRoom extends Room {
         console.log('[disconnect] ' + JSON.stringify({ event: 'unexpected.recovered', roomType: 'overworld', roomId: this.roomId || '', shardId: this.shardId || 'main', sidHash: shortHash(client && client.sessionId), code, elapsedMs: Date.now() - reconnectStartedAt }));
         const token = this.tokens.get(client.sessionId);
         const profile = token && this.profiles.get(token);
+        if (token && profile && (profile.karma | 0) < 0) this.broadcastWorldBountyForToken(token);
         if (profile) {
           this.sendProfile(client, profile);
           if (typeof this.refreshHomeworkObjectives === 'function') this.refreshHomeworkObjectives(client, profile);
@@ -1567,6 +1572,7 @@ class GameRoom extends Room {
     }
     this.lastSaveMsg.delete(client.sessionId);
     this.lastMoveMsg.delete(client.sessionId);
+    if (this.worldBountyMoveAt) this.worldBountyMoveAt.delete(client.sessionId);
     this.lastAttackMsg.delete(client.sessionId);
     this.rateBuckets.delete(client.sessionId);
     if (this.playerLastHit) {
@@ -1636,6 +1642,7 @@ class GameRoom extends Room {
     this.bossContrib.forEach(byPlayer => byPlayer.delete(client.sessionId));
     this.pvel.delete(client.sessionId);
     if (p) this.broadcast('chat', { name: '[System]', text: p.name + ' has left' });
+    this.broadcast('worldBountyUpdate', { sid: client.sessionId, active: false });
     this.state.players.delete('admin_test_player:' + client.sessionId);
     this.state.players.delete(client.sessionId);
     try { await this.flush(); }   // persist the departing player's final state now (README: flush on each departure)
@@ -5583,7 +5590,72 @@ class GameRoom extends Room {
     const before = Math.max(-1000, Math.min(1000, rec.prof.karma | 0));
     const next = Math.max(-1000, Math.min(1000, before + (delta | 0)));
     rec.prof.karma = next;
+    if (next !== before && rec.token) {
+      this.broadcastWorldBountyForToken(rec.token);
+      if (before >= 0 && next < 0) this.broadcastWorldBountyEvent(rec.token, 'placed', Math.abs(next), next);
+      else if (before < 0 && next < 0) this.broadcastWorldBountyEvent(rec.token, 'updated', Math.abs(next), next);
+      else if (before < 0 && next >= 0) this.broadcastWorldBountyEvent(rec.token, 'cleared', 0, next);
+    }
     return { value: next, delta: next - before };
+  }
+  worldBountyPayload(sid) {
+    const client = (this.clients || []).find(c => c && c.sessionId === sid);
+    const p = this.state && this.state.players && this.state.players.get(sid);
+    const token = this.tokens && this.tokens.get(sid);
+    const prof = token && this.profiles && this.profiles.get(token);
+    const karma = prof ? Math.max(-1000, Math.min(1000, prof.karma | 0)) : 0;
+    if (!client || client.__disconnectPending || !p || p.connected === false || !token || karma >= 0) return null;
+    return {
+      sid,
+      name: cleanName(p.name || prof.name || 'Hunter'),
+      karma,
+      value: Math.abs(karma),
+      x: Number(p.x) || 0,
+      y: Number(p.y) || 0,
+      z: Number(p.z) || 0,
+      dgn: String(p.dgn || ''),
+    };
+  }
+  worldBountySnapshot() {
+    const bounties = [];
+    for (const client of this.clients || []) {
+      const row = client && this.worldBountyPayload(client.sessionId);
+      if (row) bounties.push(row);
+    }
+    return bounties;
+  }
+  sendWorldBountySnapshot(client) {
+    if (client) client.send('worldBountySnapshot', { bounties: this.worldBountySnapshot() });
+  }
+  broadcastWorldBountyForToken(token) {
+    if (!token || !this.tokens) return;
+    for (const [sid, currentToken] of this.tokens) {
+      if (currentToken !== token) continue;
+      const row = this.worldBountyPayload(sid);
+      this.broadcast('worldBountyUpdate', row ? { active: true, ...row } : { sid, active: false });
+    }
+  }
+  broadcastWorldBountyEvent(token, kind, value = 0, karma = 0, extra = {}) {
+    if (!token || !this.tokens) return;
+    const sid = [...this.tokens.entries()].find(([, currentToken]) => currentToken === token)?.[0] || '';
+    const p = sid && this.state && this.state.players && this.state.players.get(sid);
+    const prof = this.profiles && this.profiles.get(token);
+    this.broadcast('worldBountyEvent', {
+      kind: String(kind || '').slice(0, 16),
+      sid,
+      name: cleanName(p && p.name || prof && prof.name || 'Hunter'),
+      value: Math.max(0, value | 0),
+      karma: Math.max(-1000, Math.min(1000, karma | 0)),
+      ...extra,
+    });
+  }
+  broadcastWorldBountyPosition(sid, now = Date.now()) {
+    const row = this.worldBountyPayload(sid);
+    if (!row) return;
+    if (!this.worldBountyMoveAt) this.worldBountyMoveAt = new Map();
+    if (now - (this.worldBountyMoveAt.get(sid) || 0) < 1000) return;
+    this.worldBountyMoveAt.set(sid, now);
+    this.broadcast('worldBountyUpdate', { active: true, ...row });
   }
   tradeOfferHasGiftValue(offer) {
     return !!(offer && (offer.stack || (offer.gold | 0) > 0));
@@ -8316,6 +8388,7 @@ class GameRoom extends Room {
     this.dismissFamiliarFor(client, 'death');
     if (p && this.handleKingPlayerDeath(client, p, hp)) return;
     if (p) this.handleAegisBountyPlayerDeath(client, p);
+    if (p) this.handleWorldBountyPlayerDeath(client, p);
     const hunger = this.ensurePlayerHunger(client);
     hunger.acc = 0;
     hunger.syncAcc = 0;
@@ -8334,6 +8407,47 @@ class GameRoom extends Room {
       const death = { x: p && p.x, y: p && p.y, z: p && p.z, dgn: '', cause: reason, recentHits: this.recentHitSummary(client) };
       if (!this.beginDeathLimbo(client, rec, death)) client.send('worldDeath', {reason:'death',cause:reason,lastHit:this.combatReasonLabel(reason),recentHits:this.recentHitSummary(client)});
     }
+  }
+  handleWorldBountyPlayerDeath(client, p) {
+    if (!client || !this.playerLastHit) return false;
+    const hit = this.playerLastHit.get(client.sessionId);
+    if (!hit || !['pvp', 'aegis_bounty'].includes(hit.kind) || Date.now() - (hit.at || 0) >= 8000) return false;
+    const killer = (this.clients || []).find(c => c && c.sessionId === hit.attackerSid);
+    const targetRec = this.profileFor(client);
+    const killerRec = killer && this.profileFor(killer);
+    const karma = targetRec && targetRec.prof ? Math.max(-1000, Math.min(1000, targetRec.prof.karma | 0)) : 0;
+    if (!killer || !killerRec || !targetRec || killer === client || killerRec.token === targetRec.token || karma >= 0) return false;
+    const value = Math.abs(karma);
+    killerRec.prof.gold = Math.min(1e9, Math.max(0, killerRec.prof.gold | 0) + value);
+    targetRec.prof.karma = 0;
+    this.dirtyPlayers.add(killerRec.token);
+    this.dirtyPlayers.add(targetRec.token);
+    this.recordEconomyGold(killer, value, 'bounty_faucet', 'negative_karma_bounty', {
+      targetSid: client.sessionId,
+      targetName: p && p.name || targetRec.prof.name || 'Hunter',
+      karma,
+    });
+    this.sendProfile(killer, killerRec.prof);
+    this.sendProfile(client, targetRec.prof);
+    this.broadcastWorldBountyForToken(targetRec.token);
+    this.broadcastWorldBountyEvent(targetRec.token, 'claimed', value, 0, {
+      hunterSid: killer.sessionId,
+      hunterName: (this.state.players.get(killer.sessionId) || {}).name || killerRec.prof.name || 'Hunter',
+    });
+    killer.send('worldBountyClaimed', {
+      targetSid: client.sessionId,
+      targetName: p && p.name || targetRec.prof.name || 'Hunter',
+      value,
+      gold: killerRec.prof.gold | 0,
+    });
+    client.send('worldBountySlain', {
+      hunterSid: killer.sessionId,
+      hunterName: (this.state.players.get(killer.sessionId) || {}).name || killerRec.prof.name || 'Hunter',
+      value,
+    });
+    this.broadcast('chat', { name: '[Bounty]', text: ((this.state.players.get(killer.sessionId) || {}).name || 'A hunter') + ' claimed ' + value + ' gold for defeating ' + (p && p.name || 'a wanted player') + '.' });
+    this.playerLastHit.delete(client.sessionId);
+    return true;
   }
   handleQuitDungeonSpirit(client) {
     const p = client && this.state.players.get(client.sessionId);
@@ -9965,6 +10079,7 @@ class GameRoom extends Room {
     const fromY = p.y;
     const yaw = normalizeYaw(m.yaw, p.yaw);
     setReplicatedPlayerPose(p, sx, sy, sz, yaw);
+    this.broadcastWorldBountyPosition(client.sessionId, now);
     if (corrected) client.send('positionCorrection', {
       x: sx, y: sy, z: sz, yaw,
       reason: townFloorStrict ? 'town_floor' : activeDgn ? 'dungeon_floor' : 'floor',

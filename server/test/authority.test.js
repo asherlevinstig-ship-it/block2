@@ -5707,6 +5707,66 @@ test('ordinary pvp melee damages a nearby player outside protected town', () => 
   assert.equal(room.playerLastHit.get(target.sessionId).attackerSid, attacker.sessionId, 'the attacker is recorded for death attribution');
 });
 
+test('negative karma publishes a world bounty whose gold value matches the karma debt', () => {
+  const room = makeRoom();
+  const wanted = makeClient('wanted_hunter');
+  const { token, prof } = seedPlayer(room, wanted, { x: 41.5, y: 16, z: 72.5, name: 'Red Jack' });
+  room.clients = [wanted];
+  const broadcasts = [];
+  room.broadcast = (type, msg) => broadcasts.push({ type, msg });
+  room.adjustKarma({ token, prof }, -37);
+
+  assert.deepEqual(room.worldBountySnapshot(), [{
+    sid: wanted.sessionId,
+    name: 'Red Jack',
+    karma: -37,
+    value: 37,
+    x: 41.5,
+    y: 16,
+    z: 72.5,
+    dgn: '',
+  }]);
+  assert.equal(broadcasts.some(e => e.type === 'worldBountyEvent' && e.msg.kind === 'placed' && e.msg.value === 37), true, 'placing the bounty is announced to the global event log');
+
+  room.adjustKarma({ token, prof }, 37);
+  assert.deepEqual(room.worldBountySnapshot(), [], 'non-negative players are never advertised as bounties');
+  assert.equal(broadcasts.some(e => e.type === 'worldBountyEvent' && e.msg.kind === 'cleared'), true, 'clearing the bounty is also announced');
+});
+
+test('a server-attributed pvp kill pays and clears a negative-karma bounty exactly once', () => {
+  const room = makeRoom();
+  const hunter = makeClient('bounty_hunter');
+  const wanted = makeClient('wanted_target');
+  const hunterRec = seedPlayer(room, hunter, { gold: 12, name: 'Tracker' });
+  const wantedRec = seedPlayer(room, wanted, { name: 'Outlaw' });
+  wantedRec.prof.karma = -45;
+  room.clients = [hunter, wanted];
+  room.playerLastHit.set(wanted.sessionId, { attackerSid: hunter.sessionId, at: Date.now(), kind: 'pvp' });
+
+  assert.equal(room.handleWorldBountyPlayerDeath(wanted, room.state.players.get(wanted.sessionId)), true);
+  assert.equal(hunterRec.prof.gold, 57, 'the payout is the absolute value of the target karma');
+  assert.equal(wantedRec.prof.karma, 0, 'the collected bounty clears the karma debt so it cannot be farmed');
+  assert.equal(hunter.sent.some(e => e.type === 'worldBountyClaimed' && e.msg.value === 45), true);
+  assert.equal(wanted.sent.some(e => e.type === 'worldBountySlain' && e.msg.value === 45), true);
+  assert.equal(room.handleWorldBountyPlayerDeath(wanted, room.state.players.get(wanted.sessionId)), false, 'the same death attribution cannot pay twice');
+  assert.equal(hunterRec.prof.gold, 57);
+});
+
+test('a stale or same-account pvp attribution cannot collect a world bounty', () => {
+  const room = makeRoom();
+  const hunter = makeClient('same_account_a');
+  const wanted = makeClient('same_account_b');
+  const sharedToken = 'shared_account_token';
+  const hunterRec = seedPlayer(room, hunter, { token: sharedToken, gold: 2 });
+  const wantedRec = seedPlayer(room, wanted, { token: sharedToken });
+  wantedRec.prof.karma = -80;
+  room.clients = [hunter, wanted];
+  room.playerLastHit.set(wanted.sessionId, { attackerSid: hunter.sessionId, at: Date.now(), kind: 'pvp' });
+
+  assert.equal(room.handleWorldBountyPlayerDeath(wanted, room.state.players.get(wanted.sessionId)), false);
+  assert.equal(hunterRec.prof.gold, 2);
+});
+
 test('ordinary pvp melee respects teams, walls, and town protection', () => {
   const room = makeRoom();
   const attacker = makeClient('guardA');

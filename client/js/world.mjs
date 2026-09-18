@@ -3327,6 +3327,8 @@ const claimHud = document.getElementById('claimhud');
 const landMapEl = document.getElementById('landmap');
 const landMapCanvas = document.getElementById('landmapcanvas');
 const landMapCtx = landMapCanvas.getContext('2d');
+const worldBounties = new Map();
+let worldBountyRevision = 0;
 let lastLandMinimapSig='';
 const claimGroup = new THREE.Group();
 claimGroup.visible = false;
@@ -3757,7 +3759,7 @@ function updateLandMinimap(force=true){
     overworldActivity&&overworldActivity.gateBreach&&overworldActivity.gateBreach.id||'',
     overworldActivity&&overworldActivity.gateScar&&overworldActivity.gateScar.id||'',
     overworldActivity&&overworldActivity.meteor&&overworldActivity.meteor.id||'',
-    activeTrail&&activeTrail.id||'',dragonMarkers.length,treasureCaches.length,Math.floor(now/250)
+    activeTrail&&activeTrail.id||'',dragonMarkers.length,treasureCaches.length,worldBountyRevision,Math.floor(now/250)
   ].join(',');
   if(!force&&mapSig===lastLandMinimapSig)return;
   lastLandMinimapSig=mapSig;
@@ -3970,6 +3972,30 @@ function updateLandMinimap(force=true){
       landMapCtx.beginPath();landMapCtx.moveTo(mx-8,mz-8);landMapCtx.lineTo(mx+8,mz+8);landMapCtx.moveTo(mx+8,mz-8);landMapCtx.lineTo(mx-8,mz+8);landMapCtx.stroke();
     }
     dynamic(overworldActivity.patrol,'#e85b4d',3);dynamic(overworldActivity.camp,'#ff8b52',3);
+  }
+  if(mapUtility&&!claimMode&&worldBounties.size){
+    for(const bounty of worldBounties.values()){
+      if(!bounty||bounty.dgn||!Number.isFinite(bounty.x)||!Number.isFinite(bounty.z))continue;
+      const x=mapPx(bounty.x),z=mapPz(bounty.z),pulse=1+Math.floor((now/240)%3);
+      landMapCtx.save();
+      landMapCtx.fillStyle='#ff3038';
+      landMapCtx.strokeStyle='rgba(255,48,56,.98)';
+      landMapCtx.lineWidth=2;
+      landMapCtx.beginPath();
+      landMapCtx.moveTo(x,z+6);
+      landMapCtx.lineTo(x-5,z-3);
+      landMapCtx.lineTo(x+5,z-3);
+      landMapCtx.closePath();
+      landMapCtx.fill();landMapCtx.stroke();
+      landMapCtx.strokeStyle='rgba(255,205,82,.9)';
+      landMapCtx.strokeRect(x-7-pulse,z-7-pulse,14+pulse*2,14+pulse*2);
+      if(worldMap){
+        landMapCtx.font='bold 8px Courier New';
+        landMapCtx.fillStyle='#ff6b70';
+        landMapCtx.fillText('BOUNTY '+String(bounty.name||'Hunter').slice(0,12)+' · '+Math.max(1,bounty.value|0)+'g',x+8,z+3);
+      }
+      landMapCtx.restore();
+    }
   }
   if(mapUtility && dragonMarkers.length){
     for(const m of dragonMarkers){
@@ -9049,7 +9075,50 @@ function clearKingWorldMarkers(){
   }
 }
 const powerCrowns=new Map();
+const worldBountyArrows=new Map();
+function bountyArrowMesh(){
+  const root=new THREE.Group();
+  const red=new THREE.MeshBasicMaterial({color:0xff2430,transparent:true,opacity:.98,depthTest:false,depthWrite:false});
+  const dark=new THREE.MeshBasicMaterial({color:0x7d0710,transparent:true,opacity:.98,depthTest:false,depthWrite:false});
+  const shaft=new THREE.Mesh(new THREE.BoxGeometry(.18,.7,.18),dark);
+  shaft.position.y=.34;shaft.renderOrder=34;root.add(shaft);
+  const head=new THREE.Mesh(new THREE.ConeGeometry(.42,.72,6),red);
+  head.rotation.z=Math.PI;head.position.y=-.25;head.renderOrder=35;root.add(head);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(.48,.61,24),new THREE.MeshBasicMaterial({color:0xff5a61,transparent:true,opacity:.75,side:THREE.DoubleSide,depthTest:false,depthWrite:false}));
+  ring.rotation.x=-Math.PI/2;ring.position.y=.75;ring.renderOrder=33;root.add(ring);
+  return root;
+}
+function updateWorldBounties(entries=[]){
+  const next=new Map();
+  for(const raw of entries||[]){
+    const sid=String(raw&&raw.sid||'');
+    const karma=Math.max(-1000,Math.min(1000,raw&&raw.karma|0));
+    if(!sid||!raw||raw.active===false||!(karma<0))continue;
+    next.set(sid,{sid,name:String(raw.name||'Hunter'),karma,value:Math.max(1,raw.value|0||Math.abs(karma)),x:Number(raw.x)||0,y:Number(raw.y)||0,z:Number(raw.z)||0,dgn:String(raw.dgn||'')});
+  }
+  worldBounties.clear();for(const [sid,row] of next)worldBounties.set(sid,row);
+  worldBountyRevision++;
+  tickWorldBountyMarkers();
+  updateLandMinimap(true);
+}
+function tickWorldBountyMarkers(){
+  const self=NET.room&&NET.room.sessionId;
+  for(const [sid,arrow] of worldBountyArrows){
+    const remote=NET.remotes&&NET.remotes[sid],parent=sid===self?scene:remote&&remote.grp;
+    if(!worldBounties.has(sid)||!parent||arrow.parent!==parent){disposeKingVisual(arrow);worldBountyArrows.delete(sid);}
+  }
+  for(const [sid] of worldBounties){
+    const remote=NET.remotes&&NET.remotes[sid],local=sid===self,parent=local?scene:remote&&remote.grp;
+    if(!parent)continue;
+    let arrow=worldBountyArrows.get(sid);
+    if(!arrow){arrow=bountyArrowMesh();parent.add(arrow);worldBountyArrows.set(sid,arrow);}
+    const lift=3.8+Math.sin(performance.now()*.006)*.13;
+    if(local)arrow.position.set(player.pos.x,player.pos.y+lift,player.pos.z);else arrow.position.set(0,lift,0);
+    arrow.rotation.y=performance.now()*.0015;
+  }
+}
 function updatePowerCrowns(sids){
+  tickWorldBountyMarkers();
   const wanted=new Set(sids),self=NET.room&&NET.room.sessionId;
   for(const [sid,crown] of powerCrowns){
     const remote=NET.remotes&&NET.remotes[sid],parent=sid===self?scene:remote&&remote.grp;
@@ -12397,6 +12466,7 @@ gameContext.registerState('world', Object.freeze({
 }));
 gameContext.registerModule('world', Object.freeze({
   updatePowerCrowns,
+  updateWorldBounties,
   getBlock:getB,
   setBlock:setB,
   terrainHeight,

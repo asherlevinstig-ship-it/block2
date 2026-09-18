@@ -1349,6 +1349,9 @@ function netAttachRoom(room,name,client){
     menusApi.applyRandomGateQueue({queued:false,rank:-1,waiting:0});
     menusApi.applyElderheartExpedition(null);
     menusApi.applyAncientCityRun(null);
+    const worldBountyRows=new Map();
+    const renderWorldBounties=()=>worldApi.updateWorldBounties([...worldBountyRows.values()]);
+    worldApi.updateWorldBounties([]);
     room.onMessage('serverRestartWarning',showServerRestartWarning);
     room.onMessage('e2eJourneyResult',m=>{e2eJourneyResult=m||null;});
     room.onMessage('familiarTelemetry',renderFamiliarTelemetry);
@@ -1489,6 +1492,48 @@ function netAttachRoom(room,name,client){
       showName('KARMA SOLDIERS');
       sysMsg('<b>Karma soldiers are hunting you.</b><br>Defeat them or redeem your reputation through generous trades.',{tier:'danger',title:'Karma'});
       eventFeed('[Karma]',count+' karma soldier'+(count===1?' is':'s are')+' hunting you.',{key:'karma:hunter:'+String(Date.now()),cooldown:0});
+    });
+    room.onMessage('worldBountySnapshot',m=>{
+      worldBountyRows.clear();
+      for(const row of Array.isArray(m&&m.bounties)?m.bounties:[])if(row&&row.sid&&(row.karma|0)<0)worldBountyRows.set(String(row.sid),row);
+      renderWorldBounties();
+      const mine=worldBountyRows.get(room.sessionId);
+      if(mine)eventFeed('[Bounty]','You are wanted. Your live bounty is '+Math.max(1,mine.value|0)+' gold.',{key:'bounty:self:snapshot',cooldown:0});
+    });
+    room.onMessage('worldBountyUpdate',m=>{
+      const sid=String(m&&m.sid||'');
+      if(!sid)return;
+      const wasWanted=worldBountyRows.has(sid);
+      if(m.active===false||(m.karma|0)>=0)worldBountyRows.delete(sid);else worldBountyRows.set(sid,m);
+      renderWorldBounties();
+      if(sid===room.sessionId&&!wasWanted&&worldBountyRows.has(sid)){
+        const value=Math.max(1,m&&m.value|0);
+        sysMsg('Your karma has made you <b>WANTED</b>. A <b>'+value+' gold bounty</b> now tracks you on every hunter\'s map.',{tier:'danger',title:'Bounty Placed'});
+      }
+    });
+    room.onMessage('worldBountyEvent',m=>{
+      const kind=String(m&&m.kind||''),name=String(m&&m.name||'Hunter'),value=Math.max(0,m&&m.value|0);
+      const text=kind==='placed'
+        ?name+' is WANTED · '+value+' gold bounty.'
+        :kind==='updated'
+          ?name+'\'s bounty is now '+value+' gold.'
+          :kind==='cleared'
+            ?name+' is no longer wanted.'
+            :kind==='claimed'
+              ?String(m&&m.hunterName||'A hunter')+' claimed '+value+' gold for defeating '+name+'.'
+              :'';
+      if(text)eventFeed('[Bounty]',text,{key:'world-bounty:'+kind+':'+String(m&&m.sid||'')+':'+value+':'+String(Date.now()),cooldown:0});
+    });
+    room.onMessage('worldBountyClaimed',m=>{
+      if(typeof (m&&m.gold)==='number'){gold=Math.max(0,m.gold|0);refreshHUD();refreshPlayUi();}
+      const value=Math.max(1,m&&m.value|0),target=String(m&&m.targetName||'wanted hunter');
+      sysMsg('Bounty claimed on <b>'+escHTML(target)+'</b>: <b>+'+value+' gold</b>.',{tier:'major',title:'Bounty Claimed'});
+      eventFeed('[Bounty]','You claimed '+value+' gold for defeating '+target+'.',{key:'bounty:claim:'+String(Date.now()),cooldown:0});
+    });
+    room.onMessage('worldBountySlain',m=>{
+      const value=Math.max(1,m&&m.value|0),hunter=String(m&&m.hunterName||'A hunter');
+      sysMsg('<b>'+escHTML(hunter)+'</b> claimed your <b>'+value+' gold bounty</b>. Your karma has been reset.',{tier:'danger',title:'Bounty Collected'});
+      eventFeed('[Bounty]',hunter+' collected your '+value+' gold bounty.',{key:'bounty:slain:'+String(Date.now()),cooldown:0});
     });
     room.onMessage('tradeReject', m=>applyTradeReject(m));
     room.onMessage('tradeCancel', m=>{SOCIAL_NOTIFICATIONS.resolve('trade:'+String(m&&m.id||''),'Trade cancelled');applyTradeCancel(m);});

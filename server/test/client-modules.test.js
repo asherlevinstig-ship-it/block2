@@ -39,6 +39,18 @@ test('event feed stays readable during combat and guided HUD presentation',()=>{
   assert.doesNotMatch(styles,/body\.presentation-combat[^\{]*#chatlog\{\s*opacity:\.12/);
 });
 
+test('negative-karma bounties render a red world marker and tracked overhead arrow',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
+  assert.match(networking,/worldBountySnapshot/);
+  assert.match(networking,/worldBountyUpdate/);
+  assert.match(networking,/worldBountyEvent/);
+  assert.match(networking,/worldBountyClaimed/);
+  assert.match(world,/function bountyArrowMesh\(\)/);
+  assert.match(world,/BOUNTY '\+String\(bounty\.name\|\|'Hunter'\)/);
+  assert.match(world,/updateWorldBounties/);
+});
+
 test('new level 1 hunters can see and use the gate system',()=>{
   const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
   assert.match(world,/function gateSystemUnlocked\(\)\{ return \(\(S&&S\.lvl\)\|0\) >= 1; \}/);
