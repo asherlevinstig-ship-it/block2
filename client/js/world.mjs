@@ -1,4 +1,5 @@
 import {atlasModelMaterials} from './model-atlas.mjs';
+import {renderBountyStatus} from './bounty-status.mjs';
 const {treeBlocks,clearLandmarkApproach,carveCaveApproach}=globalThis.BlockcraftVegetation;
 const {selectFantasyStructureSpecs,buildFantasyStructures}=globalThis.BlockcraftOverworldStructures;
 import {createEnvironmentIdentity} from './environment-identity.mjs';
@@ -9123,6 +9124,8 @@ function updateWorldBounties(entries=[]){
     next.set(sid,{sid,name:String(raw.name||'Hunter'),karma,value:Math.max(1,raw.value|0||Math.abs(karma)),x:Number(raw.x)||0,y:Number(raw.y)||0,z:Number(raw.z)||0,dgn:String(raw.dgn||'')});
   }
   worldBounties.clear();for(const [sid,row] of next)worldBounties.set(sid,row);
+  renderBountyStatus(document.getElementById('bountystatus'),worldBounties.get(NET.room&&NET.room.sessionId));
+  globalThis.BlockcraftLayoutRightHud&&globalThis.BlockcraftLayoutRightHud();
   worldBountyRevision++;
   tickWorldBountyMarkers();
   updateLandMinimap(true);

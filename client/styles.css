@@ -162,6 +162,7 @@
   #dragonhud .dcontrols b{overflow:hidden;color:#f5fbff;font:900 8px/1 system-ui;letter-spacing:.8px;white-space:nowrap;text-overflow:ellipsis}
   #dragonhud .dcontrols small{overflow:hidden;color:#8fa8bd;font:7px/1.1 system-ui;white-space:nowrap;text-overflow:ellipsis}
   #dragonhud .dlist{display:grid;gap:3px;margin-top:5px}
+  #dragonhud .dsummon{margin-top:6px;padding:7px 8px;border:1px solid rgba(255,210,74,.6);border-radius:5px;background:rgba(255,210,74,.12);color:#ffe493;font:800 11px/1.4 system-ui;white-space:normal;overflow-wrap:anywhere}
   #dragonhud .drow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:15px;font-size:10px;letter-spacing:.35px;color:#d8edff}
   #dragonhud .dname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #dragonhud .dspec{display:inline-block;margin-left:4px;font-size:7px;letter-spacing:1px;text-transform:uppercase;text-shadow:0 0 7px currentColor;vertical-align:middle}
@@ -803,6 +804,9 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   .social-notification-settings{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 10px;padding:8px;border:1px solid rgba(125,211,252,.14);border-radius:7px;background:rgba(12,31,47,.58)}.social-notification-settings button{padding:5px 7px;border:1px solid rgba(125,211,252,.2);border-radius:4px;background:#0a1927;color:#7990a3;font:800 8px system-ui;letter-spacing:.8px;cursor:pointer}.social-notification-settings button.selected{border-color:#78e49a;background:#183a30;color:#dffff0}
   #socialbtn{position:relative}#socialnotificationbadge{position:absolute;right:-6px;top:-7px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 3px;border:2px solid #07131f;border-radius:10px;background:#e34f4f;color:#fff;font:900 9px system-ui;box-shadow:0 0 10px rgba(227,79,79,.5)}#socialnotificationbadge.hidden{display:none}
   body.presentation-combat #socialnotificationstack,body.cutscene #socialnotificationstack,body.presentation-combat #socialnotificationbell,body.cutscene #socialnotificationbell{display:none!important}
+  body.control-focus-paused #socialnotificationstack{display:grid!important}
+  body.control-focus-paused #socialnotificationbell:not(.hidden){display:grid!important}
+  body.control-focus-paused #socialnotificationstack,body.control-focus-paused #socialnotificationbell,body.control-focus-paused #socialnotificationpanel{z-index:180;cursor:auto}
   @keyframes social-notification-in{from{opacity:0;transform:translateX(18px) scale(.98)}to{opacity:1;transform:none}}
   @media(max-width:700px){#socialnotificationstack{top:58px;right:8px;width:min(380px,calc(100vw - 16px))}.social-notification{padding:9px;grid-template-columns:34px minmax(0,1fr)}.social-notification-icon{width:31px;height:31px}.social-notification b{font-size:12px}.social-notification-actions button{padding:6px 8px}#socialnotificationbell{top:56px;right:8px}#socialnotificationpanel{top:98px;right:8px;width:calc(100vw - 16px);max-height:calc(100vh - 106px)}}
   #qpanel.questlog{width:min(820px,calc(100vw - 36px));background:linear-gradient(160deg, rgba(16,24,38,.98), rgba(8,12,22,.98));border-color:#ffd24a;box-shadow:0 0 28px rgba(255,210,74,.24), inset 0 0 34px rgba(255,210,74,.05);color:#d8e8ff}
@@ -1554,8 +1558,12 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   body.status-frost #stats .spb{box-shadow:0 0 10px rgba(142,234,255,.9),inset 0 0 7px rgba(185,244,255,.5)}body.status-frost #stats .spb i{filter:hue-rotate(155deg) brightness(1.35);animation:chilledStamina .8s ease-in-out infinite alternate}
   body.venom-damage #stats .hpb{animation:venomHealth .42s ease-out}
   @keyframes frostBreathe{50%{filter:brightness(1.18);opacity:.78}}@keyframes venomBreathe{50%{opacity:.34}}@keyframes chilledStamina{to{opacity:.58}}@keyframes venomHealth{30%{box-shadow:0 0 18px #8fbd42;filter:hue-rotate(70deg)}100%{box-shadow:none;filter:none}}
-  #townchoices{position:fixed;right:14px;top:390px;width:330px;max-width:calc(100vw - 28px);z-index:7;color:#d8e8ff;background:linear-gradient(155deg,rgba(11,25,40,.94),rgba(7,13,23,.94));border:1px solid rgba(79,216,255,.55);box-shadow:0 0 20px rgba(79,216,255,.18);border-radius:8px;padding:11px;pointer-events:auto}
+  #townchoices{position:fixed;right:14px;top:390px;width:330px;max-width:calc(100vw - 28px);z-index:7;color:#d8e8ff;background:linear-gradient(155deg,rgba(11,25,40,.94),rgba(7,13,23,.94));border:1px solid rgba(79,216,255,.55);box-shadow:0 0 20px rgba(79,216,255,.18);border-radius:8px;padding:11px;pointer-events:auto;box-sizing:border-box}
+  #kinghud.hud-space-hidden,#parkourhud.hud-space-hidden,#caravanhud.hud-space-hidden,#dungeonparty.hud-space-hidden,#claimhud.hud-space-hidden,#currentquest.hud-space-hidden,#activitytracker.hud-space-hidden,#townchoices.hud-space-hidden{display:none!important}
+  #kinghud,#parkourhud,#caravanhud,#dungeonparty,#claimhud,#currentquest,#activitytracker,#townchoices{box-sizing:border-box}
   #townchoices .tct{font-size:11px;letter-spacing:2px;color:#4fd8ff;margin-bottom:3px}
+  #bountystatus{position:fixed;right:18px;top:84px;width:310px;max-width:calc(100vw - 36px);box-sizing:border-box;padding:11px 12px;z-index:8;border:1px solid #ff6565;border-left:4px solid #ff4040;border-radius:7px;background:linear-gradient(135deg,rgba(65,8,14,.97),rgba(20,7,12,.97));color:#ffb2a6;font:800 12px/1.5 system-ui;box-shadow:0 0 16px rgba(255,50,50,.15);pointer-events:none}
+  #bountystatus.hud-space-hidden,body.game-modal-open #bountystatus,body.onboarding #bountystatus,body.path-selecting #bountystatus{display:none!important}
   #townchoices .tcs{font-size:9px;letter-spacing:1.5px;color:#8fb8d8;margin-bottom:8px}
   #townchoices .tcrow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px;border-top:1px solid rgba(79,216,255,.14)}
   #townchoices .tcrow.active{background:rgba(79,216,255,.08);border-left:2px solid #4fd8ff}

@@ -1050,18 +1050,10 @@ function bindSocialHudButton(btn){
 }
 bindHudActionButton(questionBtn,openQuestionsFromHud,'questions');
 bindSocialHudButton(socialBtn);
-const rightHudStackIds=['currentquest','activitytracker','townchoices'];
 function layoutRightHudStack(){
-  const narrow=window.innerWidth<=760;
-  let top=narrow?8:242;
-  for(const id of rightHudStackIds){
-    const el=document.getElementById(id);
-    if(!el) continue;
-    const visible=!el.classList.contains('hidden')&&getComputedStyle(el).display!=='none';
-    if(!visible){ el.style.top=''; continue; }
-    el.style.top=top+'px';
-    top+=Math.ceil(el.getBoundingClientRect().height)+(narrow?8:10);
-  }
+  // Menus owns the complete stack, including rankings and town guidance.
+  // Never independently reposition a subset of those panels.
+  globalThis.BlockcraftLayoutRightHud&&globalThis.BlockcraftLayoutRightHud();
 }
 function layoutLeftHudExtras(){
   const coords=document.getElementById('coords'),homework=document.getElementById('homeworkhud'),bug=document.getElementById('bugreportbtn'),stuck=document.getElementById('stuckrescuebtn'),chat=document.getElementById('chatlog');

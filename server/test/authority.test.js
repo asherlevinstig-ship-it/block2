@@ -8601,6 +8601,31 @@ test('iron ore and coal smelt into an iron ingot', () => {
   assert.equal(itemCount(prof, I.IRON_INGOT), 1);
 });
 
+test('furnace batch smelting preserves unused fuel and produces every queued ingot', () => {
+  const room = makeRoom();
+  const client = makeClient('batch-smith');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.IRON_ORE, count: 22 }, { id: I.COAL, count: 20 }] });
+  room.world.setB(20, 10, 20, W.B.FURNACE);
+
+  room.handleFurnaceSmelt(client, {
+    x: 20, y: 10, z: 20,
+    input: W.B.IRON_ORE, inputCount: 22,
+    fuel: I.COAL, fuelCount: 20,
+  });
+
+  const f = room.getFurnaceState('overworld:20,10,20');
+  assert.equal(f.input.count, 22, 'the full staged ore stack is queued');
+  assert.equal(f.fuel.count, 3, 'three coal cover 22 smelts at eight items each');
+  assert.equal(itemCount(prof, W.B.IRON_ORE), 0);
+  assert.equal(itemCount(prof, I.COAL), 17, 'unused coal remains in the player inventory');
+  assert.equal(client.sent.some(e => e.type === 'furnaceStarted' && e.msg.inputCount === 22 && e.msg.fuelCount === 3), true, 'the client can restore unused staged fuel exactly');
+
+  f.finishAt = Date.now() - 1;
+  room.handleFurnaceTake(client, { x: 20, y: 10, z: 20 });
+  assert.equal(itemCount(prof, I.IRON_INGOT), 22);
+  assert.equal(itemCount(prof, I.COAL), 17);
+});
+
 test('furnace rejects the wrong input or fuel with an actionable reason', () => {
   const room = makeRoom();
   const client = makeClient('confused-smith');

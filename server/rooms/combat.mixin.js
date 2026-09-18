@@ -868,7 +868,14 @@ class CombatMixin {
     meta.alert=true;
   }
   handleAttack(client, m) {
-    const reject = () => {};
+    const reject = (reason,extra={}) => {
+      if(!['target','range','sight'].includes(reason))return;
+      if(!this.lastAttackReject)this.lastAttackReject=new Map();
+      const now=Date.now();
+      if(now-(this.lastAttackReject.get(client.sessionId)||0)<1000)return;
+      this.lastAttackReject.set(client.sessionId,now);
+      client.send('attackReject',{reason,...extra});
+    };
     if (!m) return reject('payload');
     const mobId = String(m.id);
     const mob = this.state.mobs.get(mobId);

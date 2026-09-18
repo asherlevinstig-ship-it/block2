@@ -478,6 +478,10 @@ function makeAnimal(kind){
   return {grp,mats,legs,arms:[],head:null,animal:true,baseCol};
 }
 function netAddMob(id, ref){
+  id=String(id);
+  for(let i=mobs.length-1;i>=0;i--){
+    if(mobs[i].net&&String(mobs[i].netId)===id){disposeObjectTree(mobs[i].grp);mobs.splice(i,1);}
+  }
   if(ref.kind==='caravan_wagon'||ref.kind==='caravan_wreck'){
     const m={...makeCaravanWagon(ref.kind==='caravan_wreck'),net:true,netId:id,ref,hp:ref.hp,kind:ref.kind,kb:new THREE.Vector3(),phase:0,hitT:0,slowT:0,aT:0,lastState:''};
     decorateEncounter(m,ref);m.grp.position.set(ref.x,ref.y,ref.z);scene.add(m.grp);mobs.push(m);return;

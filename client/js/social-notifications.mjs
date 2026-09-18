@@ -40,6 +40,9 @@ export function createSocialNotifications({
   const panel=document.createElement('section');
   panel.id='socialnotificationpanel';panel.className='hidden';panel.setAttribute('aria-label','Notification history');
   document.body.append(stack,bell,panel);
+  for(const surface of [stack,bell,panel]){
+    for(const type of ['pointerdown','mousedown','click'])surface.addEventListener(type,event=>event.stopPropagation());
+  }
 
   const socialButton=document.getElementById('socialbtn');
   let socialBadge=document.getElementById('socialnotificationbadge');
@@ -84,7 +87,13 @@ export function createSocialNotifications({
     }
     return card;
   }
+  let lastRenderSignature='';
   function render(){
+    // Gameplay changes body classes frequently. Keep actionable nodes stable
+    // between pointerdown and click unless the notification content changes.
+    const signature=JSON.stringify({blocked:blocked(),panelOpen,preferences,items:[...items.values()].map(item=>({id:item.id,type:item.type,kicker:item.kicker,title:item.title,detail:item.detail,icon:item.icon,pending:item.pending,expiresAt:item.expiresAt,actions:(item.actions||[]).map(action=>({label:action.label,primary:action.primary}))})),history});
+    if(signature===lastRenderSignature)return;
+    lastRenderSignature=signature;
     const pending=pendingCount();
     bell.classList.toggle('hidden',!pending&&!history.length);
     bell.classList.toggle('has-pending',pending>0);bell.querySelector('b').textContent=String(Math.min(99,pending));

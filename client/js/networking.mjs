@@ -1339,7 +1339,9 @@ function netAttachRoom(room,name,client){
     bugReportRefreshVisible();
     setWorldLoadingStatus('Syncing hunter profile...');
     let staleLocalMobs=0;
-    for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net){ removeMob(i); staleLocalMobs++; }
+    // A new room owns a new set of schema references, even when IDs are reused.
+    // Old replicated actors otherwise survive reconnect as frozen, unhittable ghosts.
+    for(let i=mobs.length-1;i>=0;i--){ removeMob(i); staleLocalMobs++; }
     eventLog('Connected as '+name);
     startOnlinePopulationNotices(room);
     // Colyseus can deliver startup sync messages before this large attach
@@ -1413,8 +1415,15 @@ function netAttachRoom(room,name,client){
     });
     $(room.state).players.onRemove((p,sid)=>{netRemoveRemote(sid);menusApi.invalidatePowerRanking();});
     syncRemotePlayerSnapshot();
-    $(room.state).mobs.onAdd((mb,id)=>netAddMob(id,mb));
-    $(room.state).mobs.onRemove((mb,id)=>netRemoveMob(id));
+    $(room.state).mobs.onAdd((mb,id)=>{if(NET.room===room)netAddMob(id,mb);});
+    $(room.state).mobs.onRemove((mb,id)=>{if(NET.room===room)netRemoveMob(id);});
+    room.onMessage('attackReject',m=>{
+      if(m.reason==='target'){
+        netRemoveMob(String(m.id));
+        showName('That enemy is no longer here');
+      }else if(m.reason==='range')showName('Move closer to hit the enemy');
+      else if(m.reason==='sight')showName('Your attack is blocked · find a clear angle');
+    });
 
     room.onMessage('trainingReset', ()=>{if(dim==='tutorial')resetTrainingMeadowLocal();});
     room.onMessage('tutorialDimension', m=>{
@@ -6099,7 +6108,7 @@ const SOCIAL_NOTIFICATIONS=createSocialNotifications({
   openDungeonLobby:()=>{if(dungeonLobbyState)openDungeonLobbyUI();},
   reviewTrade:offer=>menusApi.applyTradeOffer(offer),
   playSound:()=>{if(SFX.level)SFX.level();},
-  isPresentationBlocked:()=>document.body.classList.contains('presentation-combat')||document.body.classList.contains('cutscene'),
+  isPresentationBlocked:()=>!document.body.classList.contains('control-focus-paused')&&(document.body.classList.contains('presentation-combat')||document.body.classList.contains('cutscene')),
 });
 globalThis.startQuickChatWheel=SOCIAL.startQuickChatWheel;
 globalThis.closeQuickChatWheel=SOCIAL.closeQuickChatWheel;

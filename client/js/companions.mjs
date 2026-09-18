@@ -1,4 +1,5 @@
 import {disposeObjectTree} from './three-disposal.mjs';
+import {dragonSummonHint} from './dragon-summon-hint.mjs';
 const FAMILIAR_SYSTEM=globalThis.BlockcraftFamiliarSystem;
 
 export function createCompanionSystem({
@@ -1667,8 +1668,9 @@ function updateDragonRoleHUD(now){
   }
   rows.sort((a,b)=>(b.active?1:0)-(a.active?1:0));
   const headline=active?dragonHudName(active):rows[0].meta.split(' - ')[0];
+  const summonHint=dragonSummonHint({owned:rows.length>0,adult:dragonUnlocks.some(dragonIsAdult),realmAllowed:dragonMountRealmAllowed(),mountedDragon:!!active});
   const trainingText=dragonTrainingLabel();
-  const sig=rows.map(r=>r.type+':'+r.name+':'+r.meta+':'+(r.active?1:0)+':'+(r.spec||'')).join('|')+'|'+headline+'|'+trainingText;
+  const sig=rows.map(r=>r.type+':'+r.name+':'+r.meta+':'+(r.active?1:0)+':'+(r.spec||'')).join('|')+'|'+headline+'|'+trainingText+'|'+summonHint;
   el.classList.remove('hidden');
   el.classList.toggle('mounted-dragon',!!active);
   if(sig===dragonHudSig){layoutDragonHud(el,!!active);return;}
@@ -1676,6 +1678,7 @@ function updateDragonRoleHUD(now){
   const color=(DRAGON_TYPES[(dragonTrainingState&&dragonTrainingState.type)||active]||DRAGON_TYPES[rows[0].type]||DRAGON_TYPES.ember).membrane[1];
   el.style.borderColor=color+'88';
   el.innerHTML='<div class="dhead"><span class="ddot" style="background:'+color+';color:'+color+'"></span>DRAGONS<span class="drole">'+dragonHudEscape(headline)+'</span></div>'+
+    (summonHint?'<div class="dsummon" aria-label="Dragon summon controls">'+dragonHudEscape(summonHint)+'</div>':'')+
     (active?'<div class="dcontrols" aria-label="Mounted dragon controls"><span><kbd>SHIFT</kbd><b>FLY</b><small>Hold to climb</small></span><span><kbd>Z</kbd><b>DISMOUNT</b><small>Return to ground</small></span></div>':'')+
     (trainingText?'<div class="dtraining"><b>TRAINING</b><span>'+dragonHudEscape(trainingText)+'</span><i style="width:'+Math.max(0,Math.min(100,Math.round((dragonTrainingState.progress||0)/Math.max(1,dragonTrainingState.need||1)*100)))+'%"></i></div>':'')+
     '<div class="dlist">'+rows.map(r=>'<div class="drow'+(r.spec?' specialized':'')+'"><span class="dname">'+dragonHudEscape(r.name)+(r.spec?' <b class="dspec" style="color:'+dragonSpecializationColor(r.spec)+'">'+dragonHudEscape(dragonSpecializationName(r.spec))+'</b>':'')+'</span><span class="dmeta">'+dragonHudEscape(r.meta)+'</span></div>').join('')+'</div>';

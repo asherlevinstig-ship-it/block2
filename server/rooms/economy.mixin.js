@@ -2,7 +2,7 @@
 // furnaces. Lifted verbatim out of GameRoom.js and mixed into its prototype.
 const {
   ARMOR_INFO, BIOME_COLLECTIBLE, CHEST_REWARD_BY_RANK, DUNGEON_BOSS_BONUS_LOOT, DUNGEON_CHEST_BONUS_LOOT, DRAGON_DROP_POOL, DRAGON_EGG_CHEST_CHANCE,
-  DRAGON_EGG_OF, FUEL, GUARDIAN_POS, GUILD_DECOR_BUY, I, KEY_LOOT, LEGENDARY_CRAFTS, RECIPES, REWARD_ITEMS,
+  DRAGON_EGG_OF, FUEL, FUEL_SMELTS, GUARDIAN_POS, GUILD_DECOR_BUY, I, KEY_LOOT, LEGENDARY_CRAFTS, RECIPES, REWARD_ITEMS,
   OUTFITTER_BUY, ROAD_MERCHANT_BUY, SHARD_ITEM_IDS, SHOP_BUY, SHOP_SELL, SMELT, SMELT_MS, SOLO_KEYS, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TOOL_INFO,
   dangerRingAt, jobLevelFor, jobPerkChance, jobPerkTier, keyForRank,
 } = require('./constants');
@@ -1036,8 +1036,10 @@ class EconomyMixin {
       const recipe = SMELT[f.input.id];
       if (!recipe) { f.input = null; f.fuel = null; f.startedAt = 0; f.finishAt = 0; this.dirtyFurnaces = true; continue; }
       const [outId, outCount] = recipe;
-      if (!f.output) f.output = { id: outId, count: outCount };
-      else if (f.output.id === outId) f.output.count = Math.min(64, f.output.count + outCount);
+      const completedCount = Math.max(1, Math.min(64, f.input.count | 0 || 1));
+      const made = Math.min(64, completedCount * outCount);
+      if (!f.output) f.output = { id: outId, count: made };
+      else if (f.output.id === outId) f.output.count = Math.min(64, f.output.count + made);
       f.input = null; f.fuel = null; f.startedAt = 0; f.finishAt = 0;
       this.dirtyFurnaces = true;
       if (notify) this.notifyFurnace(key);
@@ -1074,23 +1076,32 @@ class EconomyMixin {
     const f = this.getFurnaceState(key);
     if (f.finishAt || f.output) return this.rejectFurnace(client, 'busy', key, { finishAt: f.finishAt || 0, hasOutput: !!f.output });
     const input = m.input | 0, fuel = m.fuel | 0;
+    const inputOffered = Math.max(1, Math.min(64, m.inputCount | 0 || 1));
+    const fuelOffered = Math.max(1, Math.min(64, m.fuelCount | 0 || 1));
     const recipe = SMELT[input];
     if (!recipe) return this.rejectFurnace(client, 'recipe', key, { input, fuel });
     if (!FUEL.has(fuel)) return this.rejectFurnace(client, 'fuel_type', key, { input, fuel });
-    if (!this.consumeItem(rec.prof, input, 1)) return this.rejectFurnace(client, 'input', key, { input, fuel });
-    if (!this.consumeItem(rec.prof, fuel, 1)) {
-      this.addRewardItem(rec.prof, input, 1);
+    const fuelValue = Math.max(0.25, Number(FUEL_SMELTS[fuel]) || 0);
+    const maxByFuel = Math.floor(fuelOffered * fuelValue + 1e-6);
+    const maxByOutput = Math.max(1, Math.floor(64 / Math.max(1, recipe[1] | 0)));
+    const batchCount = Math.min(inputOffered, maxByFuel, maxByOutput);
+    if (batchCount < 1) return this.rejectFurnace(client, 'fuel', key, { input, fuel });
+    const fuelUsed = Math.max(1, Math.ceil(batchCount / fuelValue - 1e-6));
+    if (!this.consumeItem(rec.prof, input, batchCount)) return this.rejectFurnace(client, 'input', key, { input, fuel, inputOffered });
+    if (!this.consumeItem(rec.prof, fuel, fuelUsed)) {
+      this.addRewardItem(rec.prof, input, batchCount);
       return this.rejectFurnace(client, 'fuel', key, { input, fuel });
     }
-    f.input = { id: input, count: 1 };
-    f.fuel = { id: fuel, count: 1 };
+    f.input = { id: input, count: batchCount };
+    f.fuel = { id: fuel, count: fuelUsed };
     f.output = null;
     f.startedAt = Date.now();
-    f.finishAt = f.startedAt + SMELT_MS;
+    f.finishAt = f.startedAt + SMELT_MS * batchCount;
     this.dirtyPlayers.add(rec.token);
     this.dirtyFurnaces = true;
-    console.log('[furnace]', JSON.stringify({ event: 'started', sidHash: shortHash(client.sessionId), key, input, fuel, finishAt: f.finishAt }));
-    client.send('furnaceStarted', { key, input, fuel });
+    this.syncPlayerProfile(client, rec.prof);
+    console.log('[furnace]', JSON.stringify({ event: 'started', sidHash: shortHash(client.sessionId), key, input, inputCount: batchCount, fuel, fuelCount: fuelUsed, finishAt: f.finishAt }));
+    client.send('furnaceStarted', { key, input, inputCount: batchCount, fuel, fuelCount: fuelUsed });
     this.sendFurnace(client, key);
   }
   handleFurnaceTake(client, m) {

@@ -79,6 +79,15 @@ test('client and server expose the same crafting and smelting catalogue',()=>{
   assert.deepEqual(JSON.parse(JSON.stringify(ctx.__smelt)),JSON.parse(JSON.stringify(SERVER_SMELT)));
 });
 
+test('multiplayer furnace sends staged counts and restores every unused item',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  assert.match(menus,/inputCount=Math\.max\(1,f\.input\.count\|0\),fuelCount=Math\.max\(1,f\.fuel\.count\|0\)/);
+  assert.match(menus,/NET\.room\.send\('furnaceSmelt', \{\.\.\.c, input:f\.input\.id, inputCount, fuel:f\.fuel\.id, fuelCount\}\)/);
+  assert.match(menus,/const unusedInput=Math\.max\(0,stagedInput-Math\.max\(0,m&&m\.inputCount\|0\)\)/);
+  assert.match(menus,/const unusedFuel=Math\.max\(0,stagedFuel-Math\.max\(0,m&&m\.fuelCount\|0\)\)/);
+  assert.match(menus,/if\(unusedFuel\)addItem\(m\.fuel,unusedFuel\)/);
+});
+
 test('fantasy objective guidance uses emissive pooled geometry without dynamic point lights',()=>{
   const source=fs.readFileSync(path.join(__dirname,'../../client/js/frame-loop.mjs'),'utf8');
   const start=source.indexOf('function makeFantasyObjectiveFx('),end=source.indexOf('function tickExplorationPresentation(',start),section=source.slice(start,end);
@@ -2465,7 +2474,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
-  assert.match(combat,/const rightHudStackIds=\['currentquest','activitytracker','townchoices'\]/);
+  assert.match(combat,/globalThis\.BlockcraftLayoutRightHud&&globalThis\.BlockcraftLayoutRightHud\(\)/);
   assert.match(combat,/function layoutRightHudStack\(\)\{/);
   assert.match(combat,/function layoutLeftHudExtras\(\)\{/);
   assert.match(combat,/const coords=document\.getElementById\('coords'\),homework=document\.getElementById\('homeworkhud'\),bug=document\.getElementById\('bugreportbtn'\),stuck=document\.getElementById\('stuckrescuebtn'\),chat=document\.getElementById\('chatlog'\);/);
@@ -3020,7 +3029,7 @@ test('right-side HUD panels stack without hiding the quest-log shortcut',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(menus,/function layoutRightHudStack\(\)/);
-  assert.match(menus,/\['kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','powerhud'\]/);
+  assert.match(menus,/\['bountystatus','kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','townchoices','powerhud'\]/);
   assert.match(menus,/map\.getBoundingClientRect\(\)\.bottom/);
   assert.match(menus,/Math\.max\(top\+el\.offsetHeight,rect\.bottom\)\+RIGHT_HUD_GAP/);
   assert.doesNotMatch(menus,/offsetParent===null/);
@@ -3034,12 +3043,17 @@ test('right-side HUD panels stack without hiding the quest-log shortcut',()=>{
   const start=menus.indexOf('const RIGHT_HUD_GAP=');
   const end=menus.indexOf('function invalidatePowerRanking',start);
   const classList=()=>({contains:()=>false,remove(){},add(){}});
-  const quest={offsetParent:null,offsetHeight:140,classList:classList(),style:{removeProperty(){}},getBoundingClientRect:()=>({bottom:420})};
-  const power={offsetParent:null,offsetHeight:100,classList:classList(),style:{removeProperty(){}},getBoundingClientRect(){return{bottom:(parseInt(this.style.top,10)||0)+this.offsetHeight};}};
-  const elements={currentquest:quest,powerhud:power};
+  const style=()=>({removeProperty(){},setProperty(key,value){this[key]=value;}});
+  const quest={offsetParent:null,offsetHeight:140,classList:classList(),style:style(),getBoundingClientRect:()=>({bottom:420})};
+  const power={offsetParent:null,offsetHeight:100,classList:classList(),style:style(),getBoundingClientRect(){return{bottom:(parseInt(this.style.top,10)||0)+this.offsetHeight};}};
+  const town={offsetHeight:200,classList:classList(),style:style(),getBoundingClientRect(){return{bottom:(parseInt(this.style.top,10)||0)+this.offsetHeight};}};
+  const elements={currentquest:quest,townchoices:town,powerhud:power};
   const ctx={innerHeight:1000,getComputedStyle:()=>({display:'block',visibility:'visible'}),document:{getElementById:id=>elements[id]||null}};
   vm.createContext(ctx);vm.runInContext(menus.slice(start,end),ctx);ctx.layoutRightHudStack();
-  assert.equal(power.style.top,'430px','the next panel starts after the quest actual painted bottom, even when responsive CSS overrides its requested top');
+  assert.equal(town.style.top,'430px','town guidance starts below the quest');
+  assert.equal(power.style.top,'640px','rankings start below town guidance, not on top of it');
+  ctx.layoutRightHudStack();
+  assert.equal(power.style.top,'640px','repeated layout calls preserve the same non-overlapping order');
 });
 
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{
@@ -5622,7 +5636,7 @@ test('desktop HUD is composed into identity, navigation, objective, feed, and su
   assert.match(styles, /#chatlog:before\{content:'EVENT FEED[ ]{2}·[ ]{2}SCROLL FOR HISTORY'/);
   assert.match(styles, /#supportdock>button\{[\s\S]*border-radius:50%!important/);
   assert.match(styles, /#supportdock>#questionbtn\{display:none!important\}/);
-  assert.match(combat, /function layoutRightHudStack\(\)[\s\S]*let top=narrow\?8:242/);
+  assert.match(combat, /function layoutRightHudStack\(\)[\s\S]*globalThis\.BlockcraftLayoutRightHud/);
 });
 
 test('reconnect-reserved players are excluded from visible online UI', () => {

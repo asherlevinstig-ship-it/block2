@@ -2254,8 +2254,9 @@ function requestFurnaceSmelt(){
   const f=getFurnace(uiFurnaceKey);
   if(!f.input || !f.fuel){ sysMsg('Add input and fuel first'); return true; }
   const c=chestCoords(); if(!c) return true;
-  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('furnace.smelt.request',{key:uiFurnaceKey,input:f.input.id,fuel:f.fuel.id});
-  NET.room.send('furnaceSmelt', {...c, input:f.input.id, fuel:f.fuel.id});
+  const inputCount=Math.max(1,f.input.count|0),fuelCount=Math.max(1,f.fuel.count|0);
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('furnace.smelt.request',{key:uiFurnaceKey,input:f.input.id,inputCount,fuel:f.fuel.id,fuelCount});
+  NET.room.send('furnaceSmelt', {...c, input:f.input.id, inputCount, fuel:f.fuel.id, fuelCount});
   return true;
 }
 function requestFurnaceOpen(){
@@ -2303,8 +2304,19 @@ function applyFurnaceReject(m){
 }
 function applyFurnaceStarted(m){
   const f=getFurnace(uiFurnaceKey);
-  if(m && f.input && f.input.id===m.input){ f.input.count--; if(f.input.count<=0) f.input=null; }
-  if(m && f.fuel && f.fuel.id===m.fuel){ f.fuel.count--; if(f.fuel.count<=0) f.fuel=null; }
+  // Staging a furnace stack removes it from the local backpack, while the
+  // server consumes only the accepted batch and the fuel actually required.
+  // Return every unused staged item locally; the next profile sync has the
+  // same authoritative counts, so nothing vanishes or duplicates.
+  const stagedInput=f.input&&m&&f.input.id===m.input?Math.max(0,f.input.count|0):0;
+  const stagedFuel=f.fuel&&m&&f.fuel.id===m.fuel?Math.max(0,f.fuel.count|0):0;
+  const unusedInput=Math.max(0,stagedInput-Math.max(0,m&&m.inputCount|0));
+  const unusedFuel=Math.max(0,stagedFuel-Math.max(0,m&&m.fuelCount|0));
+  f.input=null;
+  f.fuel=null;
+  if(unusedInput)addItem(m.input,unusedInput);
+  if(unusedFuel)addItem(m.fuel,unusedFuel);
+  if(m&&m.inputCount)sysMsg('<b>Furnace:</b> Smelting '+(m.inputCount|0)+' item'+((m.inputCount|0)===1?'':'s')+'.');
   if(uiOpen && uiMode==='furnace') renderUI();
 }
 function applyFurnaceResult(m){
@@ -3592,26 +3604,35 @@ function visibleRightHudElement(id){
   return style.display!=='none'&&style.visibility!=='hidden'?el:null;
 }
 function layoutRightHudStack(){
-  const ids=['kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','powerhud'];
+  const ids=['bountystatus','kinghud','parkourhud','caravanhud','dungeonparty','claimhud','currentquest','activitytracker','townchoices','powerhud'];
   let top=84;
   const map=visibleRightHudElement('landmap');
   if(map)top=Math.max(top,map.getBoundingClientRect().bottom+(map.classList.contains('worldmap')?32:RIGHT_HUD_GAP));
+  let bottom=innerHeight-100;
+  for(const id of ['supportdock','dragonhud','familiarhud','dragonmountcontrols']){
+    const blocker=visibleRightHudElement(id);
+    if(!blocker)continue;
+    const rect=blocker.getBoundingClientRect();
+    if(rect.height>0&&rect.top>top)bottom=Math.min(bottom,rect.top-RIGHT_HUD_GAP);
+  }
   for(const id of ids){
     const el=document.getElementById(id);
     if(!el)continue;
     el.classList.remove('hud-space-hidden');
     if(!visibleRightHudElement(id)){el.style.removeProperty('top');continue;}
-    if(id==='powerhud'&&top>innerHeight-96){
+    if(top>bottom-64){
       el.classList.add('hud-space-hidden');el.style.removeProperty('top');continue;
     }
-    el.style.top=Math.round(top)+'px';
-    if(id==='powerhud')el.style.maxHeight=Math.max(64,innerHeight-top-100)+'px';
+    el.style.setProperty('top',Math.round(top)+'px','important');
+    el.style.maxHeight=Math.max(64,bottom-top)+'px';
+    el.style.overflowY='auto';
     // Responsive rules may override `top` with !important. Advance from the
     // element's real painted edge so a later panel can never occupy its space.
     const rect=el.getBoundingClientRect();
     top=Math.max(top+el.offsetHeight,rect.bottom)+RIGHT_HUD_GAP;
   }
 }
+globalThis.BlockcraftLayoutRightHud=layoutRightHudStack;
 function invalidatePowerRanking(){nextPowerRefreshAt=0;}
 function renderPowerHud(){
   if(!powerHud){
