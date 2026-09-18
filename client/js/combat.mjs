@@ -6946,7 +6946,18 @@ function nearbyInteractionPrompt(){
   if(wildPet&&wildPet.net&&['wild_cat','wild_dog','wild_wolf'].includes(wildPet.kind)){
     const names={wild_cat:'Wild Cat',wild_dog:'Wild Dog',wild_wolf:'Wild Wolf'};
     const held=inv[selected],heldName=held&&ITEMS[held.id]&&ITEMS[held.id].name;
-    push({key:'G',title:names[wildPet.kind],small:heldName?'Approach gently with '+heldName:'Approach gently - do not attack',priority:110},0);
+    const guide=globalThis.BlockcraftWildTamingGuide;
+    const same=guide&&String(guide.mobId||'')===String(wildPet.netId||'');
+    const stage=same?String(guide.stage||''):'';
+    const steps=stage==='calmed'
+      ? '1 Approach ✓ · 2 Feed ✓ · 3 Calm ✓ · 4 Collar NOW'
+      : stage==='fed'
+        ? '1 Approach ✓ · 2 Feed ✓ · 3 Calm NOW · 4 Collar'
+        : stage==='noticed'
+          ? '1 Approach ✓ · 2 Feed NOW · 3 Calm · 4 Collar'
+          : '1 Approach NOW · 2 Feed · 3 Calm · 4 Collar';
+    const next=stage==='calmed'?'Select the granted collar':stage==='fed'?'Wait, then press G':stage==='noticed'?'Select '+(guide.foodName||heldName||'its favourite food'):'Approach gently - do not attack';
+    push({key:'G',title:names[wildPet.kind],small:steps+' · '+next,priority:110},0);
   }
   push(activeJobContractPrompt(),0);
   if(nearFellowshipWeeklyCache())push({key:'G',title:'Fellowship Weekly Cache',small:'Claim unlocked rewards',priority:104},0);
@@ -7182,6 +7193,12 @@ function interactAncientCityDiscovery(s){
   return true;
 }
 function secondaryAction(){
+  const shrine=globalThis.BlockcraftDragonShrineWorld;
+  if(shrine&&shrine.nearby()&&quest&&quest.title==='First Bonded Mount'&&!quest.shrineEggClaimed&&!questDone()){
+    if(NET.on&&NET.room)NET.room.send('claimDragonShrineEgg');
+    else sysMsg('Reconnect to retrieve the shrine egg.');
+    return;
+  }
   // Explicitly using an egg on a nest takes priority over nearby NPCs/portals.
   const eggTarget=raycast(6);
   if(eggTarget&&eggTarget.id===B.EGG_INSULATOR){

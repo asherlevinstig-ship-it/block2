@@ -1040,6 +1040,7 @@ class CombatMixin {
     if(client)this.offerShadowSpirit(client,mob,killedMeta);
     this.state.mobs.delete(String(mobId));
     delete this.mobMeta[mobId];
+    if (killedMeta.dragonShrineToken && this.onDragonShrineGuardKilled) this.onDragonShrineGuardKilled(killedMeta);
     if(!dgn&&killedMeta.fantasyStructure&&this.onFantasyStructureMobKilled)this.onFantasyStructureMobKilled(client,mobId,killedMeta);
     if(this.wildTaming)for(const [sid,attempt] of this.wildTaming)if(attempt&&attempt.mobId===String(mobId))this.wildTaming.delete(sid);
     if (dgn) this.removeTransient(dgn, String(mobId));

@@ -1359,8 +1359,10 @@ class ProgressionMixin {
     if (!NPC_QUEST_REGISTRY.runtimeQuestMatchesDefinition(q, def, giver, step, chain.length)) return null;
     const rebuilt = this.buildNpcQuest(prof, giver, q.role || 'town');
     if (!rebuilt) return null;
-    return {
+    const restored = {
       ...rebuilt,
+      shrineEggClaimed: q.shrineEggClaimed === true,
+      shrineGuardKills: Math.max(0, Math.min(3, q.shrineGuardKills | 0)),
       have: Math.max(0, Math.min(rebuilt.need | 0, q.have | 0)),
       lifecycleState: ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(q.lifecycleState) ? q.lifecycleState : 'active',
       offeredAt: Math.max(0, Number(q.offeredAt) || 0),
@@ -1369,6 +1371,8 @@ class ProgressionMixin {
       completedAt: Math.max(0, Number(q.completedAt) || 0),
       expiresAt: Math.max(0, Number(q.expiresAt) || 0),
     };
+    if (restored.title === 'First Bonded Mount' && restored.shrineEggClaimed) restored.desc = 'Egg recovered! Place your Egg Insulator anywhere, select the egg and press G on it. After 30 seconds press G again. Let the hatchling grow, then press X to ride.';
+    return restored;
   }
 
   npcQuestReady(client, quest) {

@@ -3909,6 +3909,7 @@ test('pet collars cannot bypass the live-animal taming sequence', () => {
 test('wild pets require approach food calm and collar before binding', () => {
   const room = makeRoom(), client = makeClient('live_pet_tamer');
   const { prof } = seedPlayer(room, client, { inv: [{ id: I.RIVER_FISH, count: 1 }] });
+  const startingGold = prof.gold | 0;
   room.clients = [client]; room.rateLimited = () => false;
   const p = room.state.players.get(client.sessionId);
   p.x = 100; p.y = 10; p.z = 100; p.dim = 'overworld'; p.dgn = '';
@@ -3933,6 +3934,21 @@ test('wild pets require approach food calm and collar before binding', () => {
   assert.equal(itemCount(prof, I.CAT_COLLAR), 0);
   assert.equal(room.state.mobs.has('wild_pet_1'), false);
   assert.equal(client.sent.some(e => e.type === 'tameAnimalResult' && e.msg.stage === 'bound'), true);
+  assert.equal(prof.gold, startingGold + 20, 'the first ordinary pet awards the onboarding bounty');
+  assert.equal(prof.progressionMilestoneRewards.includes('first_pet_reward'), true);
+});
+
+test('the first-pet objective starts after Road Ready without renumbering Mara quests', () => {
+  const room = makeRoom(), client = makeClient('first_pet_objective');
+  const { prof } = seedPlayer(room, client);
+  prof.npcQuestChains['Mara Vale'] = 2;
+  let objective = room.activeQuestObjectives(client, prof).find(o => o.id === 'companion:first_pet');
+  assert.ok(objective);
+  assert.equal(objective.reward.gold, 20);
+  assert.equal(objective.checklist.length, 4);
+  prof.familiarUnlocks = ['dog'];
+  objective = room.activeQuestObjectives(client, prof).find(o => o.id === 'companion:first_pet');
+  assert.equal(objective, undefined);
 });
 
 test('wildlife herds share danger and wolves select living prey', () => {

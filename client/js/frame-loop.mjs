@@ -958,7 +958,7 @@ function questObjective(){
     const def=FAMILIARS&&FAMILIARS[quest.familiar], item=def&&ITEMS[def.sigil]&&ITEMS[def.sigil].name||'binding item';
     return {label:qLabel, text:familiarUnlocks.includes(quest.familiar)?'Return to '+quest.giver:'Use '+item+' from your hotbar, then press K'};
   }
-  if(quest.type==='mount') return {label:qLabel, text:dragonUnlocks.length?'Return to '+quest.giver:'Follow the trail, place the Egg Insulator, then use the Dragon Egg'};
+  if(quest.type==='mount') return {label:qLabel, text:dragonUnlocks.length?'Return to '+quest.giver:quest.title==='First Bonded Mount'&&!quest.shrineEggClaimed?'Reach Emberwatch Shrine · Guardians '+Math.min(3,quest.shrineGuardKills||0)+'/3 · press G at the egg podium':'Place your Egg Insulator, select the egg, press G; after 30 seconds press G again'};
   if(quest.type==='mount_use') return {label:qLabel, text:(mounted&&isDragon(mountKind))?'Return to '+quest.giver:'Press X to summon your dragon and mount up'};
   return {label:qLabel, text:questTypeLabel(quest)+' for '+quest.giver};
 }
@@ -1318,6 +1318,7 @@ function localStoryObjectiveLine(){
     ? {label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2}
     : {label:'Logging Area',x:HUB.northGate.x,z:HUB.northGate.z-15};
   else if(quest.type==='gate')target=utilityCompassTarget()||{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  else if(quest.title==='First Bonded Mount'&&!quest.shrineEggClaimed)target={...globalThis.BlockcraftDragonShrine.site,label:'Emberwatch Shrine'};
   else if(quest.type==='kill'||quest.type==='fetch'||quest.type==='mine'||quest.type==='pvp_bounty')target={label:'Wilderness',x:HUB.northGate.x,z:HUB.northGate.z-15};
   return objectiveLine(isAegis?'aegis':'story',isAegis?'Aegis':'Story',story.label,story.text,action,progress,{chapter,target});
 }
@@ -1339,6 +1340,9 @@ function serverObjectiveLine(o,labelOverride=''){
   let target=null;
   if(source==='story'&&(loc.includes('mara')||title.includes('mara')||text.includes('mara'))&&(o.status==='offered'||o.status==='claimable'||o.status==='complete'||['track_npc','quest_log','turn_in'].includes(action.type))){
     target={label:'Mara Vale',x:HUB.guide.x,z:HUB.guide.z};
+  }
+  if(source==='companion'&&String(o.id||'')==='companion:first_pet'){
+    target={label:'Wild Pet Trails',x:HUB.northGate.x+12,z:HUB.northGate.z-18,approximate:true};
   }
   return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),action,serverObjectiveProgressParts(o),{chapter:o.chapter||null,checklist:Array.isArray(o.checklist)?o.checklist:null,serverObjective:o,target});
 }
@@ -1477,6 +1481,8 @@ function nextBestObjectiveLine(){
   if(aegis)return aegis;
   const job=serverObjectiveLine(serverObjectiveBySource('job'),'Job');
   if(job)return job;
+  const companion=serverObjectiveLine(serverObjectiveBySource('companion'),'Companion');
+  if(companion)return companion;
   const guild=localGuildObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('guild'),'Guild');
   if(guild)return guild;
   const midgame=midgameObjectiveLine();
@@ -1505,6 +1511,8 @@ function unifiedObjectiveList(){
   const aegis=!story||story.kind!=='aegis'?serverObjectiveLine(serverObjectiveBySource('aegis'),'Aegis'):null;
   if(aegis)lines.push(aegis);
   if(job)lines.push(job);
+  const companion=serverObjectiveLine(serverObjectiveBySource('companion'),'Companion');
+  if(companion)lines.push(companion);
   const guild=localGuildObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('guild'),'Guild');
   if(guild)lines.push(guild);
   const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
@@ -3362,6 +3370,7 @@ function tick(now){
     if(now-lavaAnimT>80){lavaAnimT=now;paintLavaTile(now*.0045);}
     tickTorches(now/1000,ambientStep);
     tickDragonIncubationMeshes(now);
+    globalThis.BlockcraftDragonShrineWorld&&globalThis.BlockcraftDragonShrineWorld.tick(now);
     tickPerchedDragons(now,ambientStep);
     tickFamiliars(now,ambientStep);
     tickPetTamerTutorialVisuals(now,ambientStep);

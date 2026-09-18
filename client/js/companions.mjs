@@ -797,11 +797,11 @@ function applyMount(kind){       // kind '' dismounts
   if(NET.room) NET.room.send('mount', {kind});
   if(isDragon(kind)){
     const d=DRAGON_TYPES[dragonType(kind)];
-    showName((d?d.name:'Dragon')+' — Shift climbs, release to glide down'+(dragonUnlocks.length>1?', X to cycle':', X to dismiss'));
+    showName((d?d.name:'Dragon')+' — Shift climbs, release to glide down'+(dragonUnlocks.length>1?', X cycles dragons, Z dismounts':', Z dismounts'));
   } else showName('Mounted up — press Z to dismount');
   questSystemCheck();
 }
-function toggleMount(){ applyMount(mountKind==='horse' ? '' : 'horse'); }     // Z
+function toggleMount(){ applyMount(mounted ? '' : 'horse'); }                 // Z dismounts any active ride
 function cycleDragon(){                                                       // X: cycle owned dragons, then off
   if(!dragonUnlocks.length){ sysMsg('You need to hatch a <b>Dragon Egg</b> first'); return; }
   const rideable=dragonUnlocks.filter(dragonIsAdult);
@@ -1068,6 +1068,7 @@ function dragonHatchRejected(m){
     reason:r||'unknown',clientDimension:dim,serverDimension:m&&m.dimension,serverRoom:m&&m.room,
   });
   if(r==='insulator') sysMsg('Use the egg on an <b>Egg Insulator</b>');
+  else if(r==='shrine') sysMsg('First retrieve your egg from <b>Emberwatch Shrine</b>: defeat its 3 guardians, then press <b>G</b> at the podium.');
   else if(r==='dimension') sysMsg(dim==='overworld'
     ? 'The server still has you in another room. Reconnect before hatching; your egg has not been used.'
     : 'Dragon eggs hatch in the <b>overworld or town</b>. Return there and place the insulator; your egg has not been used.');
@@ -1615,6 +1616,21 @@ function dragonHudRoleState(type, mountedHere, moving){
   }
   return dragonRoleLabel(type);
 }
+function layoutDragonHud(el, mountedHere){
+  if(!el)return;
+  el.style.removeProperty('right');
+  if(!mountedHere||innerWidth<1100)return;
+  let own=el.getBoundingClientRect(),right=18;
+  const blockers=['landmap','currentquest','powerhud','activitytracker','townchoices']
+    .map(id=>document.getElementById(id))
+    .filter(node=>node&&!node.classList.contains('hidden')&&node.offsetParent!==null);
+  for(const node of blockers){
+    const r=node.getBoundingClientRect();
+    const overlaps=own.left<r.right+10&&own.right>r.left-10&&own.top<r.bottom+10&&own.bottom>r.top-10;
+    if(overlaps)right=Math.max(right,innerWidth-r.left+14);
+  }
+  if(right>18){el.style.right=Math.round(right)+'px';own=el.getBoundingClientRect();}
+}
 function updateDragonRoleHUD(now){
   const el=document.getElementById('dragonhud');
   if(!el) return;
@@ -1654,13 +1670,16 @@ function updateDragonRoleHUD(now){
   const trainingText=dragonTrainingLabel();
   const sig=rows.map(r=>r.type+':'+r.name+':'+r.meta+':'+(r.active?1:0)+':'+(r.spec||'')).join('|')+'|'+headline+'|'+trainingText;
   el.classList.remove('hidden');
-  if(sig===dragonHudSig) return;
+  el.classList.toggle('mounted-dragon',!!active);
+  if(sig===dragonHudSig){layoutDragonHud(el,!!active);return;}
   dragonHudSig=sig;
   const color=(DRAGON_TYPES[(dragonTrainingState&&dragonTrainingState.type)||active]||DRAGON_TYPES[rows[0].type]||DRAGON_TYPES.ember).membrane[1];
   el.style.borderColor=color+'88';
   el.innerHTML='<div class="dhead"><span class="ddot" style="background:'+color+';color:'+color+'"></span>DRAGONS<span class="drole">'+dragonHudEscape(headline)+'</span></div>'+
+    (active?'<div class="dcontrols" aria-label="Mounted dragon controls"><span><kbd>SHIFT</kbd><b>FLY</b><small>Hold to climb</small></span><span><kbd>Z</kbd><b>DISMOUNT</b><small>Return to ground</small></span></div>':'')+
     (trainingText?'<div class="dtraining"><b>TRAINING</b><span>'+dragonHudEscape(trainingText)+'</span><i style="width:'+Math.max(0,Math.min(100,Math.round((dragonTrainingState.progress||0)/Math.max(1,dragonTrainingState.need||1)*100)))+'%"></i></div>':'')+
     '<div class="dlist">'+rows.map(r=>'<div class="drow'+(r.spec?' specialized':'')+'"><span class="dname">'+dragonHudEscape(r.name)+(r.spec?' <b class="dspec" style="color:'+dragonSpecializationColor(r.spec)+'">'+dragonHudEscape(dragonSpecializationName(r.spec))+'</b>':'')+'</span><span class="dmeta">'+dragonHudEscape(r.meta)+'</span></div>').join('')+'</div>';
+  layoutDragonHud(el,!!active);
 }
 function tickCompanionDragons(now, dt){
   updateDragonRoleHUD(now);

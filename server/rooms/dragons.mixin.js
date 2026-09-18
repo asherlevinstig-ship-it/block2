@@ -16,6 +16,7 @@ const D = require('../dungeon');
 const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout, DRAGON_GROW_MS } = require('../store');
 const FAMILIAR_SYSTEM = require('../../shared/familiar-system');
+const DRAGON_SHRINE = require('../../shared/dragon-shrine').site;
 const DRAGON_LOAN_MS = 12 * 60 * 60 * 1000;
 const DRAGON_LOAN_MAX_FEE = 1000000;
 const WILD_PET_TAMING = Object.freeze({
@@ -30,6 +31,55 @@ const ORDINARY_PET_CARE = Object.freeze({
 });
 
 class DragonsMixin {
+  dragonShrineQuest(prof) {
+    const q = prof && prof.activeNpcQuest;
+    return q && q.giver === 'Mara Vale' && q.title === 'First Bonded Mount' ? q : null;
+  }
+  tickDragonShrine() {
+    for (const client of this.clients || []) {
+      const rec = this.profileFor(client), p = this.state.players.get(client.sessionId);
+      const q = rec && this.dragonShrineQuest(rec.prof);
+      if (!q || q.shrineEggClaimed || (rec.prof.mountUnlocks || []).some(k => String(k).startsWith('dragon:')) || !p || p.dim !== 'overworld' || p.dgn || Math.hypot(p.x-DRAGON_SHRINE.x,p.z-DRAGON_SHRINE.z)>35) continue;
+      let alive = 0;
+      this.state.mobs.forEach((mob,id) => { if (mob.hp>0 && this.mobMeta[id] && this.mobMeta[id].dragonShrineToken === rec.token) alive++; });
+      const missing = DRAGON_SHRINE.guards - (q.shrineGuardKills | 0) - alive;
+      for (let i=0;i<missing;i++) {
+        const angle=(alive+i)*Math.PI*2/3, mob=new Mob(), id='shrine_'+(++this.mobSeq);
+        mob.kind='zombie'; mob.x=DRAGON_SHRINE.x+Math.cos(angle)*5; mob.z=DRAGON_SHRINE.z+Math.sin(angle)*5;
+        mob.y=DRAGON_SHRINE.y; mob.hp=mob.maxHp=24; mob.dgn='';
+        this.state.mobs.set(id,mob);
+        const meta=this.freshMeta(mob.x,mob.z,3,1.1,mob.kind,0,false);
+        meta.dragonShrineToken=rec.token; meta.dayActive=true; this.mobMeta[id]=meta;
+      }
+    }
+  }
+  onDragonShrineGuardKilled(meta) {
+    for (const client of this.clients || []) {
+      const rec=this.profileFor(client), q=rec && this.dragonShrineQuest(rec.prof);
+      if (!q || q.shrineEggClaimed || rec.token !== meta.dragonShrineToken) continue;
+      q.shrineGuardKills=Math.min(3,(q.shrineGuardKills|0)+1);
+      this.dirtyPlayers.add(rec.token);
+      client.send('npcQuest',{action:'progress',quest:q});
+      client.send('dragonShrineResult',{ok:true,stage:'guard',remaining:3-q.shrineGuardKills});
+    }
+  }
+  handleClaimDragonShrineEgg(client) {
+    const rec=this.profileFor(client), p=this.state.players.get(client.sessionId), q=rec && this.dragonShrineQuest(rec.prof);
+    const reject=reason=>client.send('dragonShrineResult',{ok:false,reason});
+    if (!p || !q || !this.isPlayerAlive(client)) return reject('quest');
+    if (p.dim!=='overworld' || p.dgn || Math.hypot(p.x-DRAGON_SHRINE.x,p.z-DRAGON_SHRINE.z)>4.5 || Math.abs(p.y-DRAGON_SHRINE.y)>4) return reject('range');
+    if (this.rateLimited(client,'dragonShrine',2,4)) return reject('rate');
+    if (q.shrineEggClaimed) return reject('claimed');
+    this.tickDragonShrine();
+    if ((q.shrineGuardKills|0)<3) return reject('guards');
+    const draft={...rec.prof,inv:(rec.prof.inv||[]).map(s=>s?{...s}:null)};
+    if (this.addRewardItem(draft,I.DRAGON_EGG,1)) return reject('full');
+    rec.prof.inv=draft.inv; q.shrineEggClaimed=true;
+    q.desc='Egg recovered! Place your Egg Insulator anywhere, select the egg and press G on it. After 30 seconds press G again. Let the hatchling grow, then press X to ride.';
+    this.dirtyPlayers.add(rec.token); this.syncPlayerProfile(client,rec.prof);
+    client.send('npcQuest',{action:'progress',quest:q});
+    client.send('dragonShrineResult',{ok:true,stage:'claimed'});
+  }
   // Dragon incubation and nesting state, co-located with the mixin that owns it.
   // Called once from onCreate, before the incubation/nest restore loaders run.
   initDragonState() {
@@ -89,6 +139,21 @@ class DragonsMixin {
     if (!this.consumeSlotItem(rec.prof, slot, def.collar, 1)) return reject('collar', { collar: def.collar, familiar: def.familiar });
     if (!Array.isArray(rec.prof.familiarUnlocks)) rec.prof.familiarUnlocks = [];
     rec.prof.familiarUnlocks.push(def.familiar); this.ensureFamiliarXpBag(rec.prof);
+    if (!Array.isArray(rec.prof.progressionMilestoneRewards)) rec.prof.progressionMilestoneRewards = [];
+    if (!rec.prof.progressionMilestoneRewards.includes('first_pet_reward')) {
+      rec.prof.progressionMilestoneRewards.push('first_pet_reward');
+      rec.prof.gold = Math.min(1e9, Math.max(0, rec.prof.gold | 0) + 20);
+      if (this.recordEconomyGold) this.recordEconomyGold(client, 20, 'companion_faucet', 'first_pet');
+      if (this.recordQuestHistory) this.recordQuestHistory(client, {
+        id: 'companion:first_pet', source: 'companion', questType: 'tame', title: 'Your First Pet',
+        outcome: 'completed', gold: 20, completedAt: Date.now(), location: 'Wild Pet Trails',
+      });
+      if (this.sendQuestRewardSummary) this.sendQuestRewardSummary(client, {
+        source: 'companion', questType: 'tame', title: 'Your First Pet', gold: 20,
+        claimLocation: 'Wild Pet Trails', nextStep: 'Press K to summon or cycle your companions.',
+      });
+      this.broadcast('chat', { name: '[Companions]', text: (rec.prof.name || 'A hunter') + ' bonded their first pet and earned 20 gold.' });
+    }
     if (rec.prof.job === 'pet_tamer' && typeof this.grantJobXp === 'function') {
       this.grantJobXp(client, 'pet_tamer', 24);
       if (typeof this.progressJobContract === 'function') this.progressJobContract(client, 'tame', 1, 0);
@@ -959,6 +1024,9 @@ class DragonsMixin {
     const rec = this.profileFor(client);
     if (!p || !rec) return client.send('hatchDragonReject', { reason: 'profile' });
     if (!m) return client.send('hatchDragonReject', { reason: 'payload' });
+    const shrineQuest=this.dragonShrineQuest(rec.prof);
+    // Existing incubations and already-bonded dragons remain usable after migration.
+    if (shrineQuest && !shrineQuest.shrineEggClaimed && !(rec.prof.mountUnlocks||[]).length && !rec.prof.portableDragonEgg && ![...this.ensureDragonIncubations().values()].some(inc=>inc.token===rec.token)) return client.send('hatchDragonReject',{reason:'shrine'});
     if (p.dim !== 'overworld' || p.dgn) return this.handlePortableDragonHatch(client,m,p,rec);
     const x = m.x | 0, y = m.y | 0, z = m.z | 0;
     if (!W.inWorld(x, y, z) || this.world.getB(x, y, z) !== W.B.EGG_INSULATOR) {

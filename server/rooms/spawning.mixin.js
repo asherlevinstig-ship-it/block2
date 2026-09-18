@@ -987,7 +987,14 @@ class SpawningMixin {
       const acc = (this.animalSpawnAccByCluster.get(c.key) || 0) + dt;
       if (acc < ANIMAL_SPAWN_INTERVAL) { this.animalSpawnAccByCluster.set(c.key, acc); continue; }
       this.animalSpawnAccByCluster.set(c.key, 0);
-      this.trySpawnAnimal({ x: c.x, z: c.z }, c);
+      const firstPetLesson = c.players.some(entry => {
+        const token = entry && entry.sid && this.tokens.get(entry.sid), prof = token && this.profiles.get(token);
+        const maraStep = Math.max(0, prof && prof.npcQuestChains && prof.npcQuestChains['Mara Vale'] | 0);
+        const pets = prof && Array.isArray(prof.familiarUnlocks) ? prof.familiarUnlocks : [];
+        const rewarded = prof && Array.isArray(prof.progressionMilestoneRewards) && prof.progressionMilestoneRewards.includes('first_pet_reward');
+        return maraStep >= 2 && !rewarded && !['cat', 'dog', 'wolf'].some(kind => pets.includes(kind));
+      });
+      this.trySpawnAnimal({ x: c.x, z: c.z }, c, firstPetLesson);
     }
   }
 
@@ -1684,7 +1691,7 @@ class SpawningMixin {
     }
     return false;
   }
-  trySpawnAnimal(near, cluster = null) {
+  trySpawnAnimal(near, cluster = null, firstPetLesson = false) {
     for (let i = 0; i < 16; i++) {
       const a = Math.random() * Math.PI * 2, d = 18 + Math.random() * 34;
       const x = near.x + Math.cos(a) * d, z = near.z + Math.sin(a) * d;
@@ -1695,7 +1702,9 @@ class SpawningMixin {
       const ground = this.world.getB(Math.floor(x), gy - 1, Math.floor(z));
       const biome = W.biomeAt(x, z);
       const ambientKind = BIOME_ANIMAL[biome], wildPetKind = BIOME_WILD_PET[biome];
-      const kind = wildPetKind && Math.random() < .22 ? wildPetKind : ambientKind;
+      // Road Ready supplies Cooked Meat, so the guided lesson preferentially
+      // surfaces a dog while leaving ordinary wildlife distribution unchanged.
+      const kind = firstPetLesson && Math.random() < .72 ? 'wild_dog' : wildPetKind && Math.random() < .22 ? wildPetKind : ambientKind;
       const allowed = biome === W.BIO.DESERT ? ground === W.B.SAND
         : biome === W.BIO.MESA ? (ground === W.B.RED_SAND || ground === W.B.TERRACOTTA)
           : biome === W.BIO.SNOWY ? (ground === W.B.SNOW || ground === W.B.ICE) : ground === W.B.GRASS;

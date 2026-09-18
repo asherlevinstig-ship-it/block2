@@ -766,6 +766,8 @@ function sanitizeActiveNpcQuest(q) {
   const lifecycleState = ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(q.lifecycleState) ? q.lifecycleState : 'active';
   return {
     craftPending: q.craftPending === true,
+    shrineEggClaimed: q.shrineEggClaimed === true,
+    shrineGuardKills: clampI(q.shrineGuardKills, 0, 3),
     source: 'npc', giver, role: cleanShortText(q.role, 'town', 32),
     chainKey: giver, chainStep: clampI(q.chainStep, 0, 99), chainTotal: clampI(q.chainTotal, 1, 99),
     chainTitle: cleanShortText(q.chainTitle, 'Town Work', 64), title: cleanShortText(q.title, 'Town Work', 64),

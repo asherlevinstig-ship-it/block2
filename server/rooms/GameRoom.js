@@ -642,6 +642,7 @@ class GameRoom extends Room {
     this.onMessage('mount', (client, m) => this.handleMount(client, m));
     this.onMessage('dismount', (client) => this.handleDismount(client));
     this.onMessage('hatchDragonEgg', (client, m) => this.handleHatchDragonEgg(client, m));
+    this.onMessage('claimDragonShrineEgg', client => this.handleClaimDragonShrineEgg(client));
     this.onMessage('placePortableInsulator', (client,m)=>this.handlePlacePortableInsulator(client,m));
     this.onMessage('portableInsulatorSync', (client,m)=>this.handlePortableInsulatorSync(client,m));
     this.onMessage('renameDragon', (client, m) => this.handleRenameDragon(client, m));
@@ -6727,6 +6728,33 @@ class GameRoom extends Room {
       objectives.push(QUEST_OBJECTIVES.normalizeObjective(payload) || payload);
     };
     const playerGuild = client ? this.guildForToken(this.clientToken(client)) : null;
+    const familiarUnlocks = Array.isArray(prof.familiarUnlocks) ? prof.familiarUnlocks : [];
+    const milestoneRewards = new Set(Array.isArray(prof.progressionMilestoneRewards) ? prof.progressionMilestoneRewards : []);
+    const maraStep = Math.max(0, prof.npcQuestChains && prof.npcQuestChains['Mara Vale'] | 0);
+    const firstPetKinds = ['cat', 'dog', 'wolf'];
+    const hasFirstPet = firstPetKinds.some(kind => familiarUnlocks.includes(kind));
+    if (maraStep >= 2 && !hasFirstPet && !milestoneRewards.has('first_pet_reward')) add({
+      id: 'companion:first_pet',
+      source: 'companion',
+      category: 'companion',
+      questType: 'tame',
+      title: 'Your First Pet',
+      status: 'active',
+      text: 'Follow the paw marker beyond the north gate. Approach a wild pet without attacking, feed its favourite food, calm it, then fasten the collar.',
+      hudText: 'Find a wild pet beyond the north gate. Look at it and press G: Approach · Feed · Calm · Collar.',
+      location: 'Wild Pet Trails',
+      action: { type: 'follow_marker', label: 'FIND A PET' },
+      checklist: [
+        { id: 'approach', label: 'Approach without attacking', done: false, hint: 'Look at a wild cat, dog, or wolf and press G.' },
+        { id: 'feed', label: 'Feed its favourite food', done: false, hint: 'Dog: Cooked Meat · Cat: River Fish · Wolf: Raw Meat.' },
+        { id: 'calm', label: 'Wait, then press G to calm it', done: false, hint: 'Stay nearby while it settles.' },
+        { id: 'collar', label: 'Select the granted collar and press G', done: false, hint: 'The collar is prepared automatically after calming.' },
+      ],
+      progress: { current: 0, required: 1 },
+      reward: { gold: 20, note: 'One-time first companion reward' },
+      priority: 16,
+      lifecycle: lifecycleFor('active'),
+    });
     if (!prof.noobsGuildJoinRewardClaimed && !playerGuild) add({
       id: 'fellowship:join_noobs',
       source: 'fellowship',
@@ -9884,6 +9912,7 @@ class GameRoom extends Room {
     if (night) this.tickLocalHostileSpawns(dt, surfaceClusters,'night');
     else if(dayF>.5)this.tickLocalHostileSpawns(dt,surfaceClusters,'day');
     this.tickGateBreaches();
+    this.tickDragonShrine();
 
     // ---- projectiles (3 substeps for dodgeable flight) ----
     this.stepProjectiles(dt, spaces);

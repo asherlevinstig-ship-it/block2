@@ -51,6 +51,20 @@ test('negative-karma bounties render a red world marker and tracked overhead arr
   assert.match(world,/updateWorldBounties/);
 });
 
+test('mounted dragons show accurate non-overlapping flight and dismount controls',()=>{
+  const companions=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'../../client/styles.css'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'../../client/index.html'),'utf8');
+  assert.match(companions,/function toggleMount\(\)\{ applyMount\(mounted \? '' : 'horse'\); \}/);
+  assert.match(companions,/class="dcontrols" aria-label="Mounted dragon controls"/);
+  assert.match(companions,/<kbd>SHIFT<\/kbd><b>FLY<\/b>/);
+  assert.match(companions,/<kbd>Z<\/kbd><b>DISMOUNT<\/b>/);
+  assert.match(companions,/function layoutDragonHud\(el, mountedHere\)/);
+  assert.match(companions,/\['landmap','currentquest','powerhud','activitytracker','townchoices'\]/);
+  assert.match(styles,/#dragonhud \.dcontrols\{/);
+  assert.match(html,/dismount any active horse or dragon/);
+});
+
 test('new level 1 hunters can see and use the gate system',()=>{
   const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
   assert.match(world,/function gateSystemUnlocked\(\)\{ return \(\(S&&S\.lvl\)\|0\) >= 1; \}/);
@@ -595,6 +609,9 @@ test('marketplace has a dedicated recipe-based common outfitter', () => {
 test('wild pet familiar discovery teaches the live taming sequence', () => {
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const jobs = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'job-system.js'), 'utf8');
   assert.match(networking, /teachWildTamingFromHunt/);
   assert.match(networking, /wild cats, dogs, and wolves live outside town/);
@@ -602,6 +619,12 @@ test('wild pet familiar discovery teaches the live taming sequence', () => {
   assert.match(menus, /approach without attacking, feed its favourite food, calm it/);
   assert.match(menus, /TAMING<\/b> approach · feed · calm · collar/);
   assert.match(jobs, /approach a wild cat, dog, or wolf, feed its favourite food, calm it/);
+  assert.match(networking, /BlockcraftWildTamingGuide/);
+  assert.match(networking, /YOUR HORSE IS READY · PRESS Z/);
+  assert.match(combat, /1 Approach ✓ · 2 Feed NOW · 3 Calm · 4 Collar/);
+  assert.match(combat, /1 Approach ✓ · 2 Feed ✓ · 3 Calm ✓ · 4 Collar NOW/);
+  assert.match(frame, /companion:first_pet/);
+  assert.match(world, /server-first-pet/);
 });
 
 test('ordinary pet commands expose care controls and state-driven movement', () => {

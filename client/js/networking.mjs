@@ -1953,6 +1953,7 @@ function netAttachRoom(room,name,client){
       quest=m.quest||null;
       if(m.completed){
         const completedFirstHands=m.completed.giver==='Mara Vale'&&m.completed.title==='First Hands';
+        const completedRoadReady=m.completed.giver==='Mara Vale'&&m.completed.title==='Road Ready';
         SFX.coin();SFX.level();
         if(m.completed.gold)rewardGain('gold',m.completed.gold,'Gold');
         if(m.completed.xp)rewardGain('xp',m.completed.xp,'Hunter XP');
@@ -1966,6 +1967,11 @@ function netAttachRoom(room,name,client){
         // can run. Start the one-time milestone reward from the authoritative
         // completion message so Level 2 never skips straight past its reward.
         if(completedFirstHands) townGuidanceSequenceHold=true;
+        if(completedRoadReady){
+          showName('YOUR HORSE IS READY · PRESS Z');
+          sysMsg('<b>Your first mount is already available.</b><br>Close menus and press <b>Z</b> to mount your horse. Press <b>Z</b> again to dismount.',{tier:'major',title:'Mount Unlocked'});
+          eventFeed('[Mounts]','Your horse is ready. Press Z to mount or dismount.',{key:'mount:horse-intro',cooldown:0});
+        }
       }
       else if(m.action==='accept'&&quest){
         if(townGuidanceActive&&townGuidanceStep==='quest') clearTownGuidance();
@@ -2953,6 +2959,11 @@ function netAttachRoom(room,name,client){
     room.onMessage('gearLockResult',m=>{applyGearLockResult(m);if(m&&m.ok)eventFeed('[Gear]',m.locked?'Protected selected gear from salvage.':'Removed gear protection.',{key:'gear:lock:'+String(m&&m.slot||0)+':'+m.locked,cooldown:0});});
     room.onMessage('blacksmithReject', m=>blacksmithServiceRejected(m));
     room.onMessage('hatchDragonReject', m=>dragonHatchRejected(m));
+    room.onMessage('dragonShrineResult',m=>{
+      if(m.ok&&m.stage==='claimed'){sysMsg('<b>Dragon egg recovered!</b> Place the Egg Insulator, select the egg and press <b>G</b> on it. After 30 seconds press G again to hatch.');eventFeed('[Dragon]','Emberwatch egg recovered.',{key:'shrine:claimed',cooldown:0});}
+      else if(m.ok&&m.stage==='guard')showName(m.remaining?m.remaining+' shrine guardians remain':'Guardians defeated · press G at the egg podium');
+      else sysMsg(m.reason==='guards'?'Defeat all 3 shrine guardians before claiming the egg.':m.reason==='full'?'Make room in your inventory for the egg.':m.reason==='claimed'?'You already recovered this egg.':'Accept First Bonded Mount from Mara and stand beside the shrine podium.');
+    });
     room.onMessage('portableInsulatorResult',m=>{
       if(room!==NET.room)return;
       if(!m||!m.ok){sysMsg('Insulator placement rejected: '+escHTML(String(m&&m.reason||'unknown')));return;}
@@ -3018,6 +3029,7 @@ function netAttachRoom(room,name,client){
       if(!(m&&m.ok)){
         const r=m&&m.reason, food=(m&&m.foodName)||'the food it trusts';
         if(r==='rate'||r==='patience')return;
+        if(r==='hurt'||r==='owned')globalThis.BlockcraftWildTamingGuide=null;
         if(r==='range')sysMsg('Move slowly and get a little closer to the wild animal.');
         else if(r==='food')sysMsg('It is interested, but cautious. Select <b>'+escHTML(food)+'</b> and press <b>G</b> while looking at it.');
         else if(r==='collar')sysMsg('The animal trusts you now. Select its <b>collar</b> and press <b>G</b> to complete the bond.');
@@ -3027,6 +3039,10 @@ function netAttachRoom(room,name,client){
         return;
       }
       const name=escHTML(m.name||'Wild animal');
+      globalThis.BlockcraftWildTamingGuide=m.stage==='bound'?null:{
+        mobId:String(m.mobId||''), stage:String(m.stage||''), familiar:String(m.familiar||''),
+        name:String(m.name||'Wild animal'), foodName:String(m.foodName||''), updatedAt:Date.now(),
+      };
       if(m.stage==='noticed'){
         SFX.success(); showName('A WILD ANIMAL NOTICES YOU');
         sysMsg('<b>'+name+' noticed you.</b><br>Do not attack. Select <b>'+escHTML(m.foodName||'its favourite food')+'</b>, then look at it and press <b>G</b>.',{tier:'major',title:'Taming · Approach'});

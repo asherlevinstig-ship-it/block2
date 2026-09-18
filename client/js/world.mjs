@@ -2055,6 +2055,7 @@ function generateWorld(){
   buildCaveNetworks(setB,getB);
   ancientCities=buildAncientCities(setB,getB);
   treasureCaches=buildTreasureCaches(setB);
+  globalThis.BlockcraftDragonShrine.build(setB,B,terrainHeight);
   buildLavaBorder();
 }
 function isLavaBorderLand(x,z){
@@ -2749,6 +2750,17 @@ function buildChunkGeometry(cx, cz, translucentPass, lightField=null){
 // ---------------- three.js ----------------
 const rendering=createRenderingRuntime({THREE,mount:document.getElementById('game'),width:innerWidth,height:innerHeight,pixelRatio:devicePixelRatio});
 const {scene,camera,renderer}=rendering;
+const dragonShrineSite=globalThis.BlockcraftDragonShrine.site;
+const dragonShrineVisual=new THREE.Group();
+dragonShrineVisual.position.set(dragonShrineSite.x,dragonShrineSite.y+1,dragonShrineSite.z);
+const shrineEgg=new THREE.Mesh(new THREE.IcosahedronGeometry(.58,1),new THREE.MeshLambertMaterial({color:0xff8647,emissive:0x8a2608}));
+shrineEgg.scale.y=1.4; shrineEgg.position.y=.6; dragonShrineVisual.add(shrineEgg);
+scene.add(dragonShrineVisual);
+globalThis.BlockcraftDragonShrineWorld={
+  site:dragonShrineSite,
+  nearby:()=>dim==='overworld'&&Math.hypot(player.pos.x-dragonShrineSite.x,player.pos.z-dragonShrineSite.z)<4.5&&Math.abs(player.pos.y-dragonShrineSite.y)<4,
+  tick(now){dragonShrineVisual.visible=dim==='overworld';shrineEgg.visible=!(quest&&quest.title==='First Bonded Mount'&&quest.shrineEggClaimed);shrineEgg.rotation.y=now*.0007;}
+};
 const townGroup = new THREE.Group();   // overworld-only visuals, hidden inside dungeons
 scene.add(townGroup);
 const SKY = new THREE.Color(0x8fc4e8);
@@ -3904,6 +3916,7 @@ function updateLandMinimap(force=true){
   for(const s of ancientCities)if(discoveredOrHinted(s))marker(s,'#7dd3fc',3);
   const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8',rain_bloom:'#67d6ff',storm_crystal:'#b79cff',sun_dial:'#ffd24a'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);
+  if(quest&&quest.title==='First Bonded Mount'&&!quest.shrineEggClaimed&&!questDone())marker({...dragonShrineSite,id:'dragon_shrine'},'#ff8647',4,true);
   if(mapUtility&&miniMap&&!worldMap&&!claimMode){
     for(const s of regionalLandmarks){
       if(s.type==='cave')continue;
@@ -3944,6 +3957,9 @@ function updateLandMinimap(force=true){
     if(ancientRun&&ancientRun.active)for(const site of ancientRun.targets||[])dynamic(site,'#8dd9ff',6);
     const jobTarget=jobContractGuidanceTarget();
     if(jobTarget)dynamic(jobTarget.target,jobTarget.colorHex||'#9fd7ff',jobTarget.ready?7:5);
+    const firstPetObjective=Array.isArray(activeObjectives)?activeObjectives.find(o=>o&&o.id==='companion:first_pet'&&o.status!=='failed'):null;
+    const firstPetTarget=firstPetObjective&&serverObjectiveGuidanceTarget(firstPetObjective);
+    if(firstPetTarget)dynamic(firstPetTarget.target,firstPetTarget.colorHex||'#f9a8d4',6);
     dynamic(overworldActivity.caravan,overworldActivity.caravan&&overworldActivity.caravan.state==='ambushed'?'#ff5d48':'#f6c764',4);
     dynamic(overworldActivity.encounter,overworldActivity.encounter&&overworldActivity.encounter.type==='wounded_hunter'?'#7edc9a':'#ff7b57',4);
     dynamic(overworldActivity.gateBreach,'#ff2f2f',5);
@@ -5659,6 +5675,10 @@ function jobContractGuidanceTarget(){
 function maraQuestGuidanceTarget(q){
   if(!q || q.source==='guardian') return null;
   const northGate={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  if(q.title==='First Bonded Mount'&&!q.shrineEggClaimed){
+    const target={...dragonShrineSite,label:dragonShrineSite.name};
+    return {kind:'dragon-shrine',color:0xff8647,target,route:isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))?jobContractRouteTo(target):[{x:player.pos.x,z:player.pos.z},target]};
+  }
   if(q.giver==='Mara Vale'&&q.title==='First Hands'){
     const have=Math.min(q.need||6,countItem(q.item||B.LOG));
     if(have>=(q.need||6)) return {kind:'mara-first-hands-return', color:0xffd24a, target:HUB.guide, route:[{x:player.pos.x,z:player.pos.z},{x:HUB.northGate.x,z:HUB.northGate.z+1.2},{x:TOWN.TC,z:TOWN.TC-5},HUB.guide]};
@@ -5725,6 +5745,12 @@ function serverObjectiveGuidanceTarget(o){
     if(!firstHandsLoggingStage()) return {kind:'server-first-hands-gate',color:0x7dd3fc,target:gate,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate]};
     const target=firstHandsLoggingTarget();
     return {kind:'server-first-hands-logs',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},target]};
+  }
+  if(source==='companion'&&String(o.id||'')==='companion:first_pet'){
+    const target=wildPetTrailsTarget();
+    target.label='Wild Pet Trails';
+    target.approximate=true;
+    return {kind:'server-first-pet',color:0xf9a8d4,colorHex:'#f9a8d4',target,route:guidanceRouteToTarget(target),approximate:true};
   }
   if(source==='job'&&o.status!=='claimable'&&o.status!=='complete'){
     const contract=o.jobContract&&typeof o.jobContract==='object'?o.jobContract:null;
@@ -5938,7 +5964,7 @@ function guidanceTargetInfo(){
         : [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},p];
       return {kind:'turnin', color:0xffd24a, target:p, route};
     }
-    if(quest.giver==='Mara Vale'&&quest.title==='First Hands'){
+    if(quest.giver==='Mara Vale'&&(quest.title==='First Hands'||quest.title==='First Bonded Mount')){
       const maraTarget=maraQuestGuidanceTarget(quest);
       if(maraTarget) return maraTarget;
     }

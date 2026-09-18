@@ -8,6 +8,7 @@ const {selectFantasyStructureSpecs,buildFantasyStructures}=require('../shared/ov
 // and validating block edits. Building interiors are approximated as
 // solid footprints (mobs never need to path inside them).
 const { DimensionGrid } = require('../shared/dimension-grid');
+const DRAGON_SHRINE = require('../shared/dragon-shrine');
 
 const CHUNK = 16, WORLD_SIZE = 1000, WORLD_CH = Math.ceil(WORLD_SIZE / CHUNK);
 const WX = WORLD_SIZE, WH = 64, SEA = 13;
@@ -927,6 +928,7 @@ function generate() {
   buildCaveNetworks(setB, getB);
   buildAncientCities(setB, getB);
   buildTreasureCaches(setB);
+  DRAGON_SHRINE.build(setB,B,terrainHeight);
   buildLavaBorder();
   buildTown();
 }
@@ -1309,6 +1311,7 @@ function createWorld() {
     buildCaveNetworks(setLocal, getLocal);
     buildAncientCities(setLocal, getLocal);
     buildTreasureCaches(setLocal);
+    DRAGON_SHRINE.build(setLocal,B,terrainHeight);
     buildLavaBorderLocal();
     buildTownLocal();
   };
