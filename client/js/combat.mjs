@@ -395,7 +395,7 @@ function countHeldCursorItem(id){
 }
 function cookingOutputCount(id, n){
   const level=Math.max(1,S&&S.lvl|0),tier=JOB_SYSTEM.perkTierFromLevel(level);
-  if(![I.BREAD,I.HEARTY_SANDWICH,I.COOKED_MEAT,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION].includes(id) || level<JOB_SYSTEM.COOK_RULES.batchLevel) return n;
+  if(![I.BREAD,I.HEARTY_SANDWICH,I.COOKED_MEAT,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(id) || level<JOB_SYSTEM.COOK_RULES.batchLevel) return n;
   const extra=Math.random()<JOB_SYSTEM.perkChance(tier,.08) ? Math.max(1, Math.floor(n*.25)) : 0;
   if(extra) showName('Batch cooking: +'+extra+' food');
   return n+extra;

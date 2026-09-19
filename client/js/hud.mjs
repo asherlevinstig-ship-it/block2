@@ -132,7 +132,8 @@ function itemTriageTags(stack){
   if(id===I.LEGEND_TOKEN){tags.push('Legendary');tags.push('Protected');}
   if([I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.DRAGON_TREAT].includes(id)){tags.push('Dragon');tags.push('Protected');}
   if([I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR].includes(id)){tags.push('Familiar');tags.push('Protected');}
-  if([I.REPAIR_KIT,I.CHARCOAL,B.PLANKS,B.TABLE,B.FURNACE,B.CHEST,B.TORCH,B.LANTERN,B.CAMPFIRE,B.EGG_INSULATOR].includes(id))tags.push('Crafting');
+  if([I.REPAIR_KIT,I.CHARCOAL,B.PLANKS,B.TABLE,B.FURNACE,B.CHEST,B.TORCH,B.LANTERN,B.CAMPFIRE].includes(id))tags.push('Crafting');
+  if(id===B.EGG_INSULATOR){tags.push('Dragon');tags.push('Hatching Station');}
   return [...new Set(tags)];
 }
 function itemStorageTriageLine(stack){

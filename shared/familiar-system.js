@@ -5,6 +5,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function familiarSystemFactory(){
   'use strict';
   const TIER_LEVELS=Object.freeze([1,6,11,16,21]);
+  const BIND_LEVELS=Object.freeze({shade:5,mote:8,sprite:8,fang:10});
   const BOND_XP_THRESHOLDS=Object.freeze([0,100,300,700,1400]);
   const DAILY_CHALLENGES=Object.freeze({
     shade:Object.freeze([{title:'Unbroken Shadow',reason:'damage_prevented',need:100,metric:'value'},{title:'Road Between Shadows',reason:'shadow_jump',need:10,metric:'count'}]),
@@ -48,7 +49,7 @@
   function dailyChallenge(kind,day=dayKey()){const list=DAILY_CHALLENGES[kind]||[];return list.length?list[Math.abs(day|0)%list.length]:null;}
   const at=(values,level)=>values[tier(level)];
   return Object.freeze({
-    TIER_LEVELS,BOND_XP_THRESHOLDS,DAILY_CHALLENGES,DAILY_CHALLENGE_REWARD,SHADE_MITIGATION,FANG_DAMAGE,MOTE_REGEN,MOTE_BURST,SPRITE_CHANCE,
+    TIER_LEVELS,BIND_LEVELS,BOND_XP_THRESHOLDS,DAILY_CHALLENGES,DAILY_CHALLENGE_REWARD,SHADE_MITIGATION,FANG_DAMAGE,MOTE_REGEN,MOTE_BURST,SPRITE_CHANCE,
     CAT_FALL_MITIGATION,DOG_EXTRA_MEAT_CHANCE,WOLF_HOSTILE_XP_BONUS,
     FANG_COOLDOWNS,FANG_STRIKES,MOTE_BURST_COOLDOWNS,SPRITE_BONUS_DROPS,SHADE_STEP_CHARGES,SHADE_STEP_DISTANCES,TIER_ABILITIES,
     FANG_CD_MS,FANG_RANGE,MOTE_BURST_MIN_TIER,MOTE_BURST_CD_MS,MOTE_BURST_RANGE,

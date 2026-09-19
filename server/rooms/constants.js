@@ -3,6 +3,7 @@
 // methods can now be split into separate files without losing these constants.
 const W = require('../world');
 const FAMILIAR_SYSTEM = require('../../shared/familiar-system');
+const RECIPE_SYSTEM = require('../../shared/recipe-system');
 const DAY_LEN = 600;
 const DAY_MS = DAY_LEN * 1000;
 function dayTimeAt(epoch, now = Date.now()) {
@@ -114,6 +115,7 @@ const I = {
   SMALL_FISH: 226, PRIZED_FISH: 227, COOKED_SMALL_FISH: 228, COOKED_RIVER_FISH: 229, COOKED_PRIZED_FISH: 230,
   TROPHY_FISH: 231, COOKED_TROPHY_FISH: 232,
   SOLO_KEY_S: 233, TEAM_KEY_S: 234,
+  EMPTY_BOTTLE: 235, WOODEN_BOWL: 236,
 };
 // Familiars. Quest familiars are stronger; pet familiars are rare wildlife finds.
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
@@ -602,6 +604,7 @@ const ITEM_NAMES = {
   [I.SHADOW_SIGIL]: 'Shadow Sigil', [I.FANG_TOTEM]: 'Fang Totem',
   [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
   [I.CAT_COLLAR]: 'Cat Collar', [I.DOG_COLLAR]: 'Dog Collar', [I.WOLF_COLLAR]: 'Wolf Collar',
+  [I.EMPTY_BOTTLE]: 'Empty Bottle', [I.WOODEN_BOWL]: 'Wooden Bowl',
 };
 const GUILD_BOARD_POS = { x: W.HUB.guildNoticeBoard.x, z: W.HUB.guildNoticeBoard.z };
 const REGIONAL_CONTRACT_TYPES = ['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles'];
@@ -622,6 +625,13 @@ const FOOD_VALUES = {
   [I.TRAIL_RATION]: { hunger: 70, heal: 7, buff: 'ration' },
   [I.FEAST_PLATTER]: { hunger: 100, heal: 12, buff: 'feast' },
 };
+const POTION_VALUES = {
+  [I.POT_ALE]: { stamina: 40, tipsyMs: 10000, container: I.EMPTY_BOTTLE },
+  [I.POT_STEW]: { regenMs: 10000, container: I.WOODEN_BOWL },
+  [I.POT_MANA]: { mana: 40, container: I.EMPTY_BOTTLE },
+  [I.POT_SWIFT]: { speedMs: 60000, container: I.EMPTY_BOTTLE },
+  [I.POT_STONE]: { stoneMs: 60000, mitigation: 0.35, container: I.EMPTY_BOTTLE },
+};
 const MAX_HUNGER = 100;
 const SMELT = { [W.B.SAND]: [W.B.GLASS, 1], [W.B.RED_SAND]: [W.B.GLASS, 1], [W.B.COBBLE]: [W.B.STONE, 1], [W.B.IRON_ORE]: [I.IRON_INGOT, 1], [W.B.LOG]: [I.CHARCOAL, 1], [I.MONSTER_MEAT]: [I.COOKED_MEAT, 1], [I.SMALL_FISH]: [I.COOKED_SMALL_FISH, 1], [I.RIVER_FISH]: [I.COOKED_RIVER_FISH, 1], [I.PRIZED_FISH]: [I.COOKED_PRIZED_FISH, 1], [I.TROPHY_FISH]: [I.COOKED_TROPHY_FISH, 1] };
 // Number of items a single fuel item can smelt. Keep this aligned with the
@@ -638,70 +648,8 @@ const FUEL_SMELTS = Object.freeze({
 });
 const FUEL = new Set(Object.keys(FUEL_SMELTS).map(Number));
 const SMELT_MS = 5000;
-const RECIPES = [
-  { shapeless: [W.B.LOG], out: [W.B.PLANKS, 4] },
-  { shape: ['P', 'P'], keys: { P: W.B.PLANKS }, out: [I.STICK, 4] },
-  { shape: ['PP', 'PP'], keys: { P: W.B.PLANKS }, out: [W.B.TABLE, 1] },
-  { shape: ['CCC', 'C.C', 'CCC'], keys: { C: W.B.COBBLE }, out: [W.B.FURNACE, 1] },
-  { shape: ['SS', 'SS'], keys: { S: W.B.STONE }, out: [W.B.BRICK, 4] },
-  { shapeless: [W.B.SAND, W.B.SAND, W.B.COBBLE, W.B.COBBLE], out: [W.B.CONCRETE, 4] },
-  { shapeless: [W.B.RED_SAND, W.B.RED_SAND, W.B.COBBLE, W.B.COBBLE], out: [W.B.TERRACOTTA, 4] },
-  { shape: ['SS', 'SS'], keys: { S: W.B.SNOW }, out: [W.B.ICE, 1] },
-  { shape: ['c', 's'], keys: { c: I.COAL, s: I.STICK }, out: [W.B.TORCH, 8] },
-  { shape: ['c', 's'], keys: { c: I.CHARCOAL, s: I.STICK }, out: [W.B.TORCH, 8] },
-  { shapeless: [W.B.TORCH, I.IRON_INGOT], out: [W.B.LANTERN, 1] },
-  { shapeless: [W.B.GLASS, I.IRON_INGOT], out: [I.APPEARANCE_MIRROR, 1] },
-  { shapeless: [I.STICK, I.STICK, W.B.LOG, I.COAL], out: [W.B.CAMPFIRE, 1] },
-  { shapeless: [I.STICK, I.STICK, W.B.LOG, I.CHARCOAL], out: [W.B.CAMPFIRE, 1] },
-  { shapeless: [I.IRON_INGOT, I.STICK, W.B.PLANKS], out: [I.REPAIR_KIT, 1] },
-  { shape: ['LLL', 'PPP'], keys: { L: W.B.LEAVES, P: W.B.PLANKS }, out: [W.B.BED, 1] },
-  { shape: ['PPP', 'P P', 'PPP'], keys: { P: W.B.PLANKS }, out: [W.B.CHEST, 1] },
-  { shape: ['..s', '.sW', 's..'], keys: { s: I.STICK, W: I.WHEAT }, out: [I.FISHING_ROD, 1] },
-  { shapeless: [I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 1] },
-  { shapeless: [I.BREAD, I.COOKED_RIVER_FISH], out: [I.HEARTY_SANDWICH, 1] },
-  { shapeless: [I.COOKED_SMALL_FISH, I.COOKED_SMALL_FISH, I.WHEAT], out: [I.GOLDEN_BROTH, 1], hunterLevel: 3 },
-  { shapeless: [I.COOKED_PRIZED_FISH, I.BREAD, I.WHEAT], out: [I.TRAIL_RATION, 1], hunterLevel: 8 },
-  { shapeless: [I.COOKED_TROPHY_FISH, I.GOLDEN_WHEAT, I.BREAD], out: [I.FEAST_PLATTER, 1], hunterLevel: 15 },
-  { shape: ['WWW'], keys: { W: I.WHEAT }, out: [I.BREAD, 1] },
-  { shapeless: [I.COOKED_MEAT, I.COOKED_MEAT, I.COAL], out: [I.DRAGON_TREAT, 2] },
-  { shapeless: [I.COAL, I.COAL, I.COAL, I.DIAMOND], out: [I.SHADOW_SIGIL, 1] },
-  { shapeless: [I.MONSTER_MEAT, I.MONSTER_MEAT, I.IRON_INGOT, I.STICK], out: [I.FANG_TOTEM, 1] },
-  { shapeless: [I.BREAD, I.WHEAT, I.WHEAT, I.DIAMOND], out: [I.MOTE_CHARM, 1] },
-  { shapeless: [I.WHEAT, I.WHEAT, I.COAL, I.IRON_INGOT], out: [I.FORAGE_CHARM, 1] },
-  { shapeless: [I.WHEAT, I.WHEAT, I.COOKED_MEAT, I.CHARCOAL], out: [I.DRAGON_TREAT, 3] },
-  { shapeless: [I.WINDSEED, I.WHEAT, I.WHEAT], out: [I.BREAD, 2] },
-  { shapeless: [I.HEARTWOOD_RESIN, I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 2] },
-  { shapeless: [I.SUNSHARD, W.B.SAND, W.B.SAND], out: [W.B.GLASS, 4] },
-  { shapeless: [I.MESA_AMBER, I.IRON_INGOT, I.STICK], out: [I.REPAIR_KIT, 2] },
-  { shapeless: [I.FROST_CRYSTAL, W.B.SNOW, W.B.SNOW], out: [W.B.ICE, 4] },
-  { shapeless: [I.MIRE_BLOOM, I.COOKED_MEAT, I.CHARCOAL], out: [I.DRAGON_TREAT, 2] },
-  { shapeless: [I.RAINWAKE_PETAL, I.WHEAT, I.COOKED_MEAT], out: [I.GOLDEN_BROTH, 2] },
-  { shapeless: [I.STORMGLASS, I.IRON_INGOT, I.COAL], out: [I.REPAIR_KIT, 3] },
-  { shapeless: [I.SOLAR_GLYPH, I.SUNSHARD, W.B.GLASS], out: [I.SUNSHARD, 3] },
-  { shapeless: [W.B.LEAVES, I.WHEAT, I.CHARCOAL], out: [I.COMPOST, 2] },
-  { shapeless: [I.GOLDEN_WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 3] },
-  { shapeless: [I.WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.GOLDEN_BROTH, 1], hunterLevel: 5 },
-  { shapeless: [I.WINDSEED, I.HEARTY_SANDWICH, I.COOKED_MEAT], out: [I.TRAIL_RATION, 2], hunterLevel: 10 },
-  { shapeless: [I.GOLDEN_WHEAT, I.GOLDEN_BROTH, I.TRAIL_RATION, I.HEARTY_SANDWICH], out: [I.FEAST_PLATTER, 1], hunterLevel: 20 },
-  { shapeless: [I.GEODE], out: [I.DIAMOND, 1] },
-];
+const RECIPES = RECIPE_SYSTEM.createRecipeCatalog(W.B,I);
 const TOOL_MAT_ITEMS = { WOOD: W.B.PLANKS, STONE: W.B.COBBLE, IRON: I.IRON_INGOT, DIA: I.DIAMOND };
-for (const m in TOOL_MAT_ITEMS) {
-  const M = TOOL_MAT_ITEMS[m], s = I.STICK;
-  RECIPES.push({ shape: ['MMM', '.s.', '.s.'], keys: { M, s }, out: [I[m + '_PICK'], 1] });
-  RECIPES.push({ shape: ['MM', 'Ms', '.s'], keys: { M, s }, out: [I[m + '_AXE'], 1], mirror: true });
-  RECIPES.push({ shape: ['M', 's', 's'], keys: { M, s }, out: [I[m + '_SHOVEL'], 1] });
-  RECIPES.push({ shape: ['M', 'M', 's'], keys: { M, s }, out: [I[m + '_SWORD'], 1] });
-  RECIPES.push({ shape: ['MM', '.s', '.s'], keys: { M, s }, out: [I[m + '_HOE'], 1], mirror: true });
-}
-RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.MONSTER_MEAT }, out: [I.HIDE_ARMOR, 1] });
-RECIPES.push({ shape: ['W.W', 'WWW', 'WWW'], keys: { W: I.WHEAT }, out: [I.APPRENTICE_ROBE, 1] });
-RECIPES.push({ shape: ['I.I', 'ICI', 'III'], keys: { I: I.IRON_INGOT, C: I.COAL }, out: [I.CHAIN_ARMOR, 1] });
-RECIPES.push({ shape: ['W.W', 'WGW', 'WWW'], keys: { W: I.WHEAT, G: I.GEODE }, out: [I.ARCWEAVE_ROBE, 1] });
-RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.IRON_INGOT }, out: [I.IRON_ARMOR, 1] });
-RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.DIAMOND }, out: [I.DIA_ARMOR, 1] });
-RECIPES.push({ shape: ['S.S', 'SDS', 'SSS'], keys: { S: I.STORMGLASS, D: I.DIAMOND }, out: [I.STORMGLASS_ARMOR, 1] });
-RECIPES.push({ shape: ['S.S', 'SGS', 'SSS'], keys: { S: I.STORMGLASS, G: I.SOLAR_GLYPH }, out: [I.STORMWEAVE_ROBE, 1] });
 const MINE_DROPS = {
   [W.B.GRASS]: { item: W.B.DIRT, count: 1 },
   [W.B.GLASS]: null,
@@ -757,6 +705,7 @@ module.exports = {
 };
 module.exports.BREACH_CLEANUP_REWARD_BY_RANK = BREACH_CLEANUP_REWARD_BY_RANK;
 module.exports.OUTFITTER_BUY = OUTFITTER_BUY;
+module.exports.POTION_VALUES = POTION_VALUES;
 module.exports.DUNGEON_BOSS_BONUS_LOOT = DUNGEON_BOSS_BONUS_LOOT;
 module.exports.DUNGEON_CHEST_BONUS_LOOT = DUNGEON_CHEST_BONUS_LOOT;
 module.exports.BIOME_HOSTILE = BIOME_HOSTILE;

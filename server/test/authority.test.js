@@ -159,6 +159,13 @@ const I = {
   SOLO_KEY_D: 151,
   TEAM_KEY_E: 155,
   TEAM_KEY_D: 156,
+  POT_ALE: 140,
+  POT_STEW: 141,
+  POT_MANA: 142,
+  POT_SWIFT: 143,
+  POT_STONE: 144,
+  EMPTY_BOTTLE: 235,
+  WOODEN_BOWL: 236,
 };
 
 function key(x, y, z) {
@@ -546,6 +553,7 @@ function readClientModule(rel) {
 }
 
 test('profiles always receive one Hunter Mirror in inventory', () => {
+  assert.equal(C.RECIPES.some(recipe => recipe.out[0] === I.APPEARANCE_MIRROR), false, 'the one-per-profile mirror is not redundantly craftable');
   const fresh = defaultProfile('Mirror Hunter');
   assert.equal(itemCount(fresh, I.APPEARANCE_MIRROR), 1);
   assert.equal(fresh.inv[0].locked, true);
@@ -2870,7 +2878,7 @@ test('state-backed NPC quests refresh from utility familiar mount and ride actio
 
   {
     const room = makeRoom(), client = makeClient('familiar_story_progress');
-    const { prof } = seedPlayer(room, client, { inv: [{ id: I.SHADOW_SIGIL, count: 1 }] });
+    const { prof } = seedPlayer(room, client, { inv: [{ id: I.SHADOW_SIGIL, count: 1 }], lvl: 5 });
     prof.npcQuestChains['Mara Vale'] = 5;
     assert.equal(room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' }), true);
     client.sent.length = 0;
@@ -3840,7 +3848,7 @@ test('mounted dragon breath spawns a species projectile, respects cooldown, dama
 test('Shade familiar: a sigil binds it, summon is gated on the bind, and Guarding Shade soaks damage', () => {
   const room = makeRoom();
   const client = makeClient('shadeuser');
-  const { prof } = seedPlayer(room, client, { inv: [{ id: I.SHADOW_SIGIL, count: 1 }] });
+  const { prof } = seedPlayer(room, client, { inv: [{ id: I.SHADOW_SIGIL, count: 1 }], lvl: 5 });
   room.clients = [client];
   const p = room.state.players.get(client.sessionId);
 
@@ -3880,6 +3888,7 @@ test('familiar binding consumes the requested slot before fallback inventory sea
   const room = makeRoom();
   const client = makeClient('slotbinder');
   const { prof } = seedPlayer(room, client, {
+    lvl: 10,
     inv: [
       { id: I.SHADOW_SIGIL, count: 1 },
       { id: I.FANG_TOTEM, count: 2 },
@@ -3892,6 +3901,30 @@ test('familiar binding consumes the requested slot before fallback inventory sea
   assert.equal(prof.inv[0].count, 1, 'other binding items are untouched');
   assert.equal(prof.inv[1].count, 1, 'the selected totem stack is consumed');
   assert.deepEqual(client.sent.at(-1), { type: 'familiarBound', msg: { kind: 'fang', slot: 1 } });
+});
+
+test('crafted familiars require their story-tier Hunter level before binding', () => {
+  const itemForKind={shade:I.SHADOW_SIGIL,fang:I.FANG_TOTEM,mote:I.MOTE_CHARM,sprite:I.FORAGE_CHARM};
+  for(const [kind,level] of Object.entries(FAMILIAR_SYSTEM.BIND_LEVELS)){
+    const recipe=C.RECIPES.find(entry=>entry.out[0]===itemForKind[kind]);
+    assert.equal(recipe.hunterLevel,level,kind+' recipe and binding unlock agree');
+
+    const room=makeRoom(),client=makeClient('gated_'+kind);
+    const {prof}=seedPlayer(room,client,{lvl:Math.max(1,level-1),inv:[{id:itemForKind[kind],count:1}]});
+    room.handleBindFamiliar(client,{kind,slot:0});
+    assert.deepEqual(client.sent.at(-1),{type:'familiarReject',msg:{reason:'level',kind,level}});
+    assert.equal(itemCount(prof,itemForKind[kind]),1,'a rejected bind consumes nothing');
+    prof.S.lvl=level;
+    room.handleBindFamiliar(client,{kind,slot:0});
+    assert.equal(prof.familiarUnlocks.includes(kind),true);
+    assert.equal(itemCount(prof,itemForKind[kind]),0);
+  }
+});
+
+test('diamond and Stormglass equipment use rank-entry Hunter level gates', () => {
+  const diamondIds=[C.I.DIA_PICK,C.I.DIA_AXE,C.I.DIA_SHOVEL,C.I.DIA_SWORD,C.I.DIA_HOE,C.I.DIA_ARMOR];
+  for(const id of diamondIds)assert.equal(C.RECIPES.find(recipe=>recipe.out[0]===id).hunterLevel,21);
+  for(const id of [C.I.STORMGLASS_ARMOR,C.I.STORMWEAVE_ROBE])assert.equal(C.RECIPES.find(recipe=>recipe.out[0]===id).hunterLevel,31);
 });
 
 test('pet collars cannot bypass the live-animal taming sequence', () => {
@@ -4181,7 +4214,7 @@ test('Mote familiar: a charm binds it, summon is gated, and it regenerates the o
 test('Sprite familiar: a charm binds it and summon is gated on the bind', () => {
   const room = makeRoom();
   const client = makeClient('forager');
-  const { prof } = seedPlayer(room, client, { inv: [{ id: I.FORAGE_CHARM, count: 1 }] });
+  const { prof } = seedPlayer(room, client, { inv: [{ id: I.FORAGE_CHARM, count: 1 }], lvl: 8 });
   room.clients = [client];
   const p = room.state.players.get(client.sessionId);
 
@@ -4198,7 +4231,7 @@ test('Sprite familiar: a charm binds it and summon is gated on the bind', () => 
   room.awardGrant = (_client, value) => { grant = value; };
   const random = Math.random; Math.random = () => 0;
   try { room.awardMine(client, W.B.DIRT, 0, p.x, p.y, p.z); } finally { Math.random = random; }
-  assert.equal(grant.items[0].count, 2);
+  assert.equal(grant.items[0].count, 2+FAMILIAR_SYSTEM.spriteBonusDrops(8),'level-8 ore sense and Sprite both contribute under a guaranteed roll');
 
   room.handleDismissFamiliar(client);
   assert.equal(p.familiar, '');
@@ -5185,24 +5218,28 @@ test('server crafting accepts familiar binding recipes advertised by the client'
   const cases = [
     {
       name: 'shade',
+      level: 5,
       inv: [{ id: I.COAL, count: 3 }, { id: I.DIAMOND, count: 1 }],
       cells: [{ id: I.COAL, count: 1 }, { id: I.COAL, count: 1 }, { id: I.COAL, count: 1 }, { id: I.DIAMOND, count: 1 }],
       out: I.SHADOW_SIGIL,
     },
     {
       name: 'fang',
+      level: 10,
       inv: [{ id: I.MONSTER_MEAT, count: 2 }, { id: I.IRON_INGOT, count: 1 }, { id: I.STICK, count: 1 }],
       cells: [{ id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 }, { id: I.IRON_INGOT, count: 1 }, { id: I.STICK, count: 1 }],
       out: I.FANG_TOTEM,
     },
     {
       name: 'mote',
+      level: 8,
       inv: [{ id: I.BREAD, count: 1 }, { id: I.WHEAT, count: 2 }, { id: I.DIAMOND, count: 1 }],
       cells: [{ id: I.BREAD, count: 1 }, { id: I.WHEAT, count: 1 }, { id: I.WHEAT, count: 1 }, { id: I.DIAMOND, count: 1 }],
       out: I.MOTE_CHARM,
     },
     {
       name: 'sprite',
+      level: 8,
       inv: [{ id: I.WHEAT, count: 2 }, { id: I.COAL, count: 1 }, { id: I.IRON_INGOT, count: 1 }],
       cells: [{ id: I.WHEAT, count: 1 }, { id: I.WHEAT, count: 1 }, { id: I.COAL, count: 1 }, { id: I.IRON_INGOT, count: 1 }],
       out: I.FORAGE_CHARM,
@@ -5212,7 +5249,7 @@ test('server crafting accepts familiar binding recipes advertised by the client'
   for (const spec of cases) {
     const room = makeRoom();
     const client = makeClient('crafter_' + spec.name);
-    const { prof } = seedPlayer(room, client, { inv: spec.inv });
+    const { prof } = seedPlayer(room, client, { inv: spec.inv, lvl: spec.level });
 
     await room.handleCraft(client, { w: 2, cells: spec.cells });
 
@@ -5222,6 +5259,30 @@ test('server crafting accepts familiar binding recipes advertised by the client'
     assert.equal(client.sent.at(-1).msg.times, 1);
     assert.deepEqual(client.sent.at(-1).msg.inv, prof.inv);
   }
+});
+
+test('expanded regional recipes craft authoritatively and preserve their Hunter gates', async () => {
+  const room=makeRoom(),client=makeClient('expanded_crafter');
+  const {prof}=seedPlayer(room,client,{inv:[{id:C.I.HEARTWOOD_RESIN,count:1},{id:W.B.PLANKS,count:4}]});
+  const table=placeCraftingTable(room,client);
+  await room.handleCraft(client,{w:3,table,cells:[
+    {id:C.I.HEARTWOOD_RESIN,count:1},{id:W.B.PLANKS,count:1},{id:W.B.PLANKS,count:1},
+    {id:W.B.PLANKS,count:1},{id:W.B.PLANKS,count:1},null,null,null,null,
+  ]});
+  assert.equal(itemCount(prof,W.B.CHEST),1);
+  assert.equal(client.sent.at(-1).type,'craftResult');
+
+  prof.inv=[{id:C.I.GEODE,count:1},{id:C.I.STORMGLASS,count:1}];
+  prof.S.lvl=20;client.sent.length=0;
+  const cells=[{id:C.I.GEODE,count:1},{id:C.I.STORMGLASS,count:1},null,null];
+  await room.handleCraft(client,{w:2,cells});
+  assert.deepEqual(client.sent.at(-1),{type:'craftReject',msg:{reason:'hunter_level',level:21}});
+  assert.equal(itemCount(prof,C.I.GEODE),1,'a locked conversion consumes nothing');
+
+  prof.S.lvl=21;
+  await room.handleCraft(client,{w:2,cells});
+  assert.equal(itemCount(prof,C.I.DIAMOND),2);
+  assert.equal(client.sent.at(-1).type,'craftResult');
 });
 
 test('guardian legendary crafting consumes tokens and grants one selected item', async () => {
@@ -5250,7 +5311,7 @@ test('guardian legendary crafting consumes tokens and grants one selected item',
 test('normal armor crafts from ingots and diamonds', async () => {
   const room = makeRoom();
   const client = makeClient('armorer');
-  const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_INGOT, count: 8 }, { id: I.DIAMOND, count: 8 }] });
+  const { prof } = seedPlayer(room, client, { lvl:21, inv: [{ id: I.IRON_INGOT, count: 8 }, { id: I.DIAMOND, count: 8 }] });
   const table = placeCraftingTable(room, client);
 
   await room.handleCraft(client, { w: 3, table, cells: [
@@ -5299,7 +5360,7 @@ test('expanded armor bases craft from monster hides chain and stormglass', async
   }
   {
     const room = makeRoom(), client = makeClient('stormglass_armorer');
-    const { prof } = seedPlayer(room, client, { inv: [{ id: I.STORMGLASS, count: 7 }, { id: I.DIAMOND, count: 1 }] });
+    const { prof } = seedPlayer(room, client, { lvl:31, inv: [{ id: I.STORMGLASS, count: 7 }, { id: I.DIAMOND, count: 1 }] });
     const table = placeCraftingTable(room, client);
     await room.handleCraft(client, { w: 3, table, cells: [
       { id: I.STORMGLASS, count: 1 }, 0, { id: I.STORMGLASS, count: 1 },
@@ -7570,6 +7631,36 @@ test('addRewardItem treats weapons and armor as individual durable gear', () => 
   assert.equal(full.inv[0].count, 1);
 });
 
+test('authoritative inventory, chest, and persistence paths enforce item stack caps', () => {
+  const {itemStackLimit}=require('../../shared/item-stack-limits');
+  const room=makeRoom(),prof={inv:[]};
+  assert.equal(itemStackLimit(I.FEAST_PLATTER),8);
+  assert.equal(itemStackLimit(I.BREAD),16);
+  assert.equal(itemStackLimit(I.COOKED_MEAT),32);
+  assert.equal(itemStackLimit(I.EMPTY_BOTTLE),32);
+  assert.equal(itemStackLimit(I.WOODEN_BOWL),32);
+  assert.equal(itemStackLimit(I.SHADOW_SIGIL),1);
+  assert.equal(itemStackLimit(I.IRON_INGOT),64);
+
+  assert.equal(room.addRewardItem(prof,I.FEAST_PLATTER,20),0);
+  assert.deepEqual(prof.inv,[{id:I.FEAST_PLATTER,count:8},{id:I.FEAST_PLATTER,count:8},{id:I.FEAST_PLATTER,count:4}]);
+  assert.equal(room.inventorySpaceFor({inv:[{id:I.BREAD,count:15}]},I.BREAD,2),2);
+
+  const chest=new Array(18).fill(null);
+  assert.equal(room.addChestItem(chest,I.BREAD,20),20);
+  assert.deepEqual(chest.slice(0,2),[{id:I.BREAD,count:16},{id:I.BREAD,count:4}]);
+
+  const clean=sanitizeProfile({inv:[{id:I.FEAST_PLATTER,count:64},{id:I.SHADOW_SIGIL,count:64},{id:I.COOKED_MEAT,count:64}]});
+  assert.deepEqual(clean.inv.slice(0,3),[{id:I.FEAST_PLATTER,count:8},{id:I.SHADOW_SIGIL,count:1},{id:I.COOKED_MEAT,count:32}]);
+  assert.deepEqual(clean.pendingRewards.filter(item=>item.source==='stack_limit_migration'),[
+    {id:I.FEAST_PLATTER,count:56,source:'stack_limit_migration'},
+    {id:I.SHADOW_SIGIL,count:63,source:'stack_limit_migration'},
+    {id:I.COOKED_MEAT,count:32,source:'stack_limit_migration'},
+  ],'legacy oversized stacks keep their excess as claimable rewards instead of losing it');
+  const chests=sanitizeChests({'overworld:1,2,3':{slots:[{id:I.BREAD,count:20}]}});
+  assert.deepEqual(chests['overworld:1,2,3'].slots.slice(0,2),[{id:I.BREAD,count:16},{id:I.BREAD,count:4}]);
+});
+
 test('full-bag event tokens are reserved durably and delivered after space opens', () => {
   const room = makeRoom(), client = makeClient('pending-event-reward');
   const full = Array.from({ length: 36 }, (_, i) => ({ id: 700 + i, count: 64 }));
@@ -8497,6 +8588,53 @@ test('food use consumes edible items and heals server HP', () => {
   assert.equal(client.sent.at(-1).msg.reason, 'full');
 });
 
+test('potion use is authoritative, restores vitals, applies buffs, and returns containers', () => {
+  const room = makeRoom();
+  const client = makeClient('brewer');
+  const { prof } = seedPlayer(room, client, {
+    lvl: 12,
+    inv: [{ id: I.POT_MANA, count: 1 }, { id: I.POT_ALE, count: 1 }, { id: I.POT_STONE, count: 1 }],
+  });
+  const ability = room.ensureAbilityState(client);
+  ability.mp = 0;
+  ability.sp = 5;
+
+  room.handleUsePotion(client, { slot: 0 });
+  assert.equal(ability.mp, 20);
+  assert.equal(itemCount(prof, I.POT_MANA), 0);
+  assert.equal(itemCount(prof, I.EMPTY_BOTTLE), 1);
+  assert.equal(client.sent.at(-1).type, 'potionResult');
+  assert.ok(Array.isArray(client.sent.at(-1).msg.inv));
+
+  room.handleUsePotion(client, { slot: 1 });
+  assert.equal(ability.sp, 45);
+  assert.equal(itemCount(prof, I.EMPTY_BOTTLE), 2);
+
+  room.handleUsePotion(client, { slot: 2 });
+  assert.ok(room.abilityBuffs.get(client.sessionId).potionStoneUntil > Date.now());
+  assert.equal(itemCount(prof, I.EMPTY_BOTTLE), 3);
+  const reloaded = sanitizeProfile(JSON.parse(JSON.stringify(prof)));
+  assert.equal(itemCount(reloaded, I.EMPTY_BOTTLE), 3, 'returned bottles survive save and reload');
+  assert.equal(itemCount(reloaded, I.POT_MANA), 0, 'consumed potion stays consumed after reload');
+  assert.equal(reloaded.vitals.mp, 20, 'authoritative restored mana survives reload');
+  assert.equal(reloaded.vitals.sp, 45, 'authoritative restored stamina survives reload');
+});
+
+test('potion use refuses a full bag without consuming a stacked potion', () => {
+  const room = makeRoom(), client = makeClient('full-brewer');
+  const inv = Array.from({ length: 36 }, (_, i) => ({ id: 700 + i, count: 64 }));
+  inv[0] = { id: I.POT_STEW, count: 2 };
+  const { prof } = seedPlayer(room, client, { inv });
+  room.handleUsePotion(client, { slot: 0 });
+  assert.equal(client.sent.at(-1).type, 'potionReject');
+  assert.equal(client.sent.at(-1).msg.reason, 'container_full');
+  assert.equal(prof.inv[0].count, 2);
+  prof.inv[0].count = 1;
+  room.handleUsePotion(client, { slot: 0 });
+  assert.equal(client.sent.at(-1).type, 'potionResult');
+  assert.deepEqual(prof.inv[0], { id: I.WOODEN_BOWL, count: 1 });
+});
+
 test('hunger drains and empty hunger slows without damaging players', () => {
   const room = makeRoom();
   const client = makeClient('hungry');
@@ -8599,6 +8737,19 @@ test('iron ore and coal smelt into an iron ingot', () => {
   f.finishAt = Date.now() - 1;
   room.handleFurnaceTake(client, { x: 20, y: 10, z: 20 });
   assert.equal(itemCount(prof, I.IRON_INGOT), 1);
+});
+
+test('taking furnace output records authoritative crafting profession progress', () => {
+  const room=makeRoom(),client=makeClient('progress-smith');
+  seedPlayer(room,client,{x:20.5,z:20.5,inv:[]});
+  room.world.setB(20,10,20,W.B.FURNACE);
+  room.getFurnaceState('overworld:20,10,20').output={id:I.IRON_INGOT,count:3};
+  const progress=[];
+  room.recordCraftProgress=(who,id,count)=>progress.push({who,id,count});
+
+  room.handleFurnaceTake(client,{x:20,y:10,z:20});
+
+  assert.deepEqual(progress,[{who:client,id:I.IRON_INGOT,count:3}]);
 });
 
 test('furnace batch smelting preserves unused fuel and produces every queued ingot', () => {
@@ -9350,6 +9501,11 @@ test('farming tills plants grows and harvests through server transactions', () =
 });
 
 test('advanced food recipes are Hunter-level gated and batch through the authoritative craft transaction', async () => {
+  for(const [id,level] of [[I.GOLDEN_BROTH,5],[I.TRAIL_RATION,10],[I.FEAST_PLATTER,20]]){
+    const variants=C.RECIPES.filter(recipe=>recipe.out[0]===id);
+    assert.ok(variants.length>0);
+    assert.equal(variants.every(recipe=>recipe.hunterLevel===level),true,'every recipe variant uses the declared unlock level');
+  }
   const room = makeRoom(), client = makeClient('cook-craft');
   const { prof } = seedPlayer(room, client, { inv: [{ id: I.WHEAT, count: 2 }, { id: I.BREAD, count: 2 }, { id: I.COOKED_MEAT, count: 2 }] });
   const cells = [{ id: I.WHEAT, count: 1 }, { id: I.BREAD, count: 1 }, { id: I.COOKED_MEAT, count: 1 }, null];
@@ -9364,6 +9520,11 @@ test('advanced food recipes are Hunter-level gated and batch through the authori
   assert.equal(itemCount(prof, I.GOLDEN_BROTH), 1);
   assert.equal(itemCount(prof, I.WHEAT), 1);
   assert.equal(client.sent.at(-1).type, 'craftResult');
+
+  prof.S.lvl=20;
+  const random=Math.random;Math.random=()=>0;
+  try{assert.equal(room.craftedOutputCount(prof,I.FEAST_PLATTER,1),2,'Master Feast benefits from Batch Cooking');}
+  finally{Math.random=random;}
 });
 
 test('Master Feast feeds only nearby teammates and grants authoritative combat buffs', () => {

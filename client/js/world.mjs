@@ -335,6 +335,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   WOOD_HOE:172, STONE_HOE:173, IRON_HOE:174, DIA_HOE:175,
   WHEAT_SEEDS:176, WHEAT:177, BREAD:178, MONSTER_MEAT:179, COOKED_MEAT:180, HEARTY_SANDWICH:181, REPAIR_KIT:182,
   IRON_ARMOR:183, DIA_ARMOR:184,
+  POT_ALE:140, POT_STEW:141, POT_MANA:142, POT_SWIFT:143, POT_STONE:144,
   DRAGON_EGG:185, EGG_VERDANT:186, EGG_FROST:187, EGG_STORM:188, EGG_VOID:189, DRAGON_TREAT:190, SHADOW_SIGIL:191, FANG_TOTEM:192,
   WINDSEED:193, HEARTWOOD_RESIN:194, SUNSHARD:195, MESA_AMBER:196, FROST_CRYSTAL:197, MIRE_BLOOM:198,
   RIVER_FISH:199, MOTE_CHARM:200, FORAGE_CHARM:201, COMPOST:202, GOLDEN_WHEAT:203,
@@ -349,6 +350,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   SMALL_FISH:226, PRIZED_FISH:227, COOKED_SMALL_FISH:228, COOKED_RIVER_FISH:229, COOKED_PRIZED_FISH:230,
   TROPHY_FISH:231, COOKED_TROPHY_FISH:232,
   SOLO_KEY_S:233, TEAM_KEY_S:234,
+  EMPTY_BOTTLE:235, WOODEN_BOWL:236,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -814,6 +816,8 @@ ITEMS[I.COOKED_RIVER_FISH]={name:'Cooked River Fish',stack:64,icon:iconCanvas(ct
 ITEMS[I.COOKED_PRIZED_FISH]={name:'Cooked Prized Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_PRIZED,{b:'#5c2c12',B:'#c46f30',W:'#ffcf95',G:'#ffe08a'}))};
 ITEMS[I.TROPHY_FISH]={name:'Trophy Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_PRIZED,{b:'#7a5a12',B:'#f0c74a',W:'#fff4c0',G:'#fff6d0'}))};
 ITEMS[I.COOKED_TROPHY_FISH]={name:'Cooked Trophy Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_PRIZED,{b:'#7a3b12',B:'#e69a2e',W:'#ffe6a8',G:'#fff0c0'}))};
+ITEMS[I.EMPTY_BOTTLE]={name:'Empty Bottle',stack:32,icon:regionalIcon('#40515f','#9bdcf2','#f4ffff')};
+ITEMS[I.WOODEN_BOWL]={name:'Wooden Bowl',stack:32,icon:regionalIcon('#5b351d','#b8753b','#f1bd76')};
 ITEMS[I.FISHING_ROD]={name:'Fishing Rod',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
 ".............lll",
 "............l...",
@@ -885,70 +889,10 @@ const BREAK = {
 };
 
 // ---------------- recipes ----------------
-const RECIPES = [
-  {shapeless:[B.LOG], out:[B.PLANKS,4]},
-  {shape:["P","P"], keys:{P:B.PLANKS}, out:[I.STICK,4]},
-  {shape:["PP","PP"], keys:{P:B.PLANKS}, out:[B.TABLE,1]},
-  {shape:["CCC","C.C","CCC"], keys:{C:B.COBBLE}, out:[B.FURNACE,1]},
-  {shape:["SS","SS"], keys:{S:B.STONE}, out:[B.BRICK,4]},
-  {shapeless:[B.SAND,B.SAND,B.COBBLE,B.COBBLE], out:[B.CONCRETE,4]},
-  {shapeless:[B.RED_SAND,B.RED_SAND,B.COBBLE,B.COBBLE], out:[B.TERRACOTTA,4]},
-  {shape:["SS","SS"], keys:{S:B.SNOW}, out:[B.ICE,1]},
-  {shape:["c","s"], keys:{c:I.COAL, s:I.STICK}, out:[B.TORCH,8]},
-  {shape:["c","s"], keys:{c:I.CHARCOAL, s:I.STICK}, out:[B.TORCH,8]},
-  {shapeless:[B.TORCH,I.IRON_INGOT], out:[B.LANTERN,1]},
-  {shapeless:[B.GLASS,I.IRON_INGOT], out:[I.APPEARANCE_MIRROR,1]},
-  {shapeless:[I.STICK,I.STICK,B.LOG,I.COAL], out:[B.CAMPFIRE,1]},
-  {shapeless:[I.STICK,I.STICK,B.LOG,I.CHARCOAL], out:[B.CAMPFIRE,1]},
-  {shapeless:[I.IRON_INGOT,I.STICK,B.PLANKS], out:[I.REPAIR_KIT,1]},
-  {shape:["LLL","PPP"], keys:{L:B.LEAVES, P:B.PLANKS}, out:[B.BED,1]},
-  {shape:["PPP","P P","PPP"], keys:{P:B.PLANKS}, out:[B.CHEST,1]},
-  {shape:["..s",".sW","s.."], keys:{s:I.STICK, W:I.WHEAT}, out:[I.FISHING_ROD,1]},
-  {shapeless:[I.BREAD,I.COOKED_RIVER_FISH], out:[I.HEARTY_SANDWICH,1]},
-  {shapeless:[I.COOKED_SMALL_FISH,I.COOKED_SMALL_FISH,I.WHEAT], out:[I.GOLDEN_BROTH,1], hunterLevel:3},
-  {shapeless:[I.COOKED_PRIZED_FISH,I.BREAD,I.WHEAT], out:[I.TRAIL_RATION,1], hunterLevel:8},
-  {shapeless:[I.COOKED_TROPHY_FISH,I.GOLDEN_WHEAT,I.BREAD], out:[I.FEAST_PLATTER,1], hunterLevel:15},
-];
+const RECIPE_SYSTEM=globalThis.BlockcraftRecipeSystem;
+if(!RECIPE_SYSTEM)throw new Error('Shared recipe system failed to load');
+const RECIPES=RECIPE_SYSTEM.createRecipeCatalog(B,I);
 const TOOL_MAT_ITEMS = { WOOD:B.PLANKS, STONE:B.COBBLE, IRON:I.IRON_INGOT, DIA:I.DIAMOND };
-for(const m in TOOL_MAT_ITEMS){
-  const M=TOOL_MAT_ITEMS[m];
-  RECIPES.push({shape:["MMM",".s.",".s."], keys:{M, s:I.STICK}, out:[I[m+'_PICK'],1]});
-  RECIPES.push({shape:["MM","Ms",".s"],    keys:{M, s:I.STICK}, out:[I[m+'_AXE'],1], mirror:true});
-  RECIPES.push({shape:["M","s","s"],       keys:{M, s:I.STICK}, out:[I[m+'_SHOVEL'],1]});
-  RECIPES.push({shape:["M","M","s"],       keys:{M, s:I.STICK}, out:[I[m+'_SWORD'],1]});
-  RECIPES.push({shape:["MM",".s",".s"],     keys:{M, s:I.STICK}, out:[I[m+'_HOE'],1], mirror:true});
-}
-RECIPES.push({shape:["M.M","MMM","MMM"], keys:{M:I.MONSTER_MEAT}, out:[I.HIDE_ARMOR,1]});
-RECIPES.push({shape:["W.W","WWW","WWW"], keys:{W:I.WHEAT}, out:[I.APPRENTICE_ROBE,1]});
-RECIPES.push({shape:["I.I","ICI","III"], keys:{I:I.IRON_INGOT, C:I.COAL}, out:[I.CHAIN_ARMOR,1]});
-RECIPES.push({shape:["W.W","WGW","WWW"], keys:{W:I.WHEAT, G:I.GEODE}, out:[I.ARCWEAVE_ROBE,1]});
-RECIPES.push({shape:["M.M","MMM","MMM"], keys:{M:I.IRON_INGOT}, out:[I.IRON_ARMOR,1]});
-RECIPES.push({shape:["M.M","MMM","MMM"], keys:{M:I.DIAMOND}, out:[I.DIA_ARMOR,1]});
-RECIPES.push({shape:["S.S","SDS","SSS"], keys:{S:I.STORMGLASS, D:I.DIAMOND}, out:[I.STORMGLASS_ARMOR,1]});
-RECIPES.push({shape:["S.S","SGS","SSS"], keys:{S:I.STORMGLASS, G:I.SOLAR_GLYPH}, out:[I.STORMWEAVE_ROBE,1]});
-RECIPES.push({shape:["WWW"], keys:{W:I.WHEAT}, out:[I.BREAD,1]});
-RECIPES.push({shapeless:[I.BREAD,I.COOKED_MEAT], out:[I.HEARTY_SANDWICH,1]});
-RECIPES.push({shapeless:[I.COOKED_MEAT,I.COOKED_MEAT,I.COAL], out:[I.DRAGON_TREAT,2]});  // dragon breeding treat
-RECIPES.push({shapeless:[I.COAL,I.COAL,I.COAL,I.DIAMOND], out:[I.SHADOW_SIGIL,1]});       // binds the familiar Shade
-RECIPES.push({shapeless:[I.MONSTER_MEAT,I.MONSTER_MEAT,I.IRON_INGOT,I.STICK], out:[I.FANG_TOTEM,1]}); // binds the familiar Fang
-RECIPES.push({shapeless:[I.BREAD,I.WHEAT,I.WHEAT,I.DIAMOND], out:[I.MOTE_CHARM,1]});                  // binds the familiar Mote
-RECIPES.push({shapeless:[I.WHEAT,I.WHEAT,I.COAL,I.IRON_INGOT], out:[I.FORAGE_CHARM,1]});               // binds the familiar Sprite
-RECIPES.push({shapeless:[I.WHEAT,I.WHEAT,I.COOKED_MEAT,I.CHARCOAL], out:[I.DRAGON_TREAT,3]});  // farmer/cook care loop treat
-RECIPES.push({shapeless:[I.WINDSEED,I.WHEAT,I.WHEAT], out:[I.BREAD,2]});
-RECIPES.push({shapeless:[B.LEAVES,I.WHEAT,I.CHARCOAL], out:[I.COMPOST,2]});
-RECIPES.push({shapeless:[I.GOLDEN_WHEAT,I.BREAD,I.COOKED_MEAT], out:[I.HEARTY_SANDWICH,3]});
-RECIPES.push({shapeless:[I.WHEAT,I.BREAD,I.COOKED_MEAT], out:[I.GOLDEN_BROTH,1], hunterLevel:5});
-RECIPES.push({shapeless:[I.WINDSEED,I.HEARTY_SANDWICH,I.COOKED_MEAT], out:[I.TRAIL_RATION,2], hunterLevel:10});
-RECIPES.push({shapeless:[I.GOLDEN_WHEAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.HEARTY_SANDWICH], out:[I.FEAST_PLATTER,1], hunterLevel:20});
-RECIPES.push({shapeless:[I.GEODE], out:[I.DIAMOND,1]});
-RECIPES.push({shapeless:[I.HEARTWOOD_RESIN,I.BREAD,I.COOKED_MEAT], out:[I.HEARTY_SANDWICH,2]});
-RECIPES.push({shapeless:[I.SUNSHARD,B.SAND,B.SAND], out:[B.GLASS,4]});
-RECIPES.push({shapeless:[I.MESA_AMBER,I.IRON_INGOT,I.STICK], out:[I.REPAIR_KIT,2]});
-RECIPES.push({shapeless:[I.FROST_CRYSTAL,B.SNOW,B.SNOW], out:[B.ICE,4]});
-RECIPES.push({shapeless:[I.MIRE_BLOOM,I.COOKED_MEAT,I.CHARCOAL], out:[I.DRAGON_TREAT,2]});
-RECIPES.push({shapeless:[I.RAINWAKE_PETAL,I.WHEAT,I.COOKED_MEAT], out:[I.GOLDEN_BROTH,2]});
-RECIPES.push({shapeless:[I.STORMGLASS,I.IRON_INGOT,I.COAL], out:[I.REPAIR_KIT,3]});
-RECIPES.push({shapeless:[I.SOLAR_GLYPH,I.SUNSHARD,B.GLASS], out:[I.SUNSHARD,3]});
 const SMELT = { [B.SAND]:[B.GLASS,1], [B.RED_SAND]:[B.GLASS,1], [B.COBBLE]:[B.STONE,1], [B.IRON_ORE]:[I.IRON_INGOT,1], [B.LOG]:[I.CHARCOAL,1], [I.MONSTER_MEAT]:[I.COOKED_MEAT,1], [I.SMALL_FISH]:[I.COOKED_SMALL_FISH,1], [I.RIVER_FISH]:[I.COOKED_RIVER_FISH,1], [I.PRIZED_FISH]:[I.COOKED_PRIZED_FISH,1], [I.TROPHY_FISH]:[I.COOKED_TROPHY_FISH,1] };
 const FUEL  = { [I.COAL]:8, [I.CHARCOAL]:8, [B.PLANKS]:1.5, [B.LOG]:1.5, [I.STICK]:0.5, [B.TABLE]:1.5, [B.LEAVES]:0.25 };
 const SMELT_TIME = 5; // seconds per item

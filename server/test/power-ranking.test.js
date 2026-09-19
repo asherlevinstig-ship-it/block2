@@ -78,13 +78,15 @@ test('all tied champions are crowned, even beyond the top 20 display limit', () 
 test('crowns follow the correct remote and release their resources when leadership changes', () => {
   const source = fs.readFileSync(path.join(__dirname, '../../client/js/world.mjs'), 'utf8');
   const start = source.indexOf('const powerCrowns=new Map();');
+  const crownStart = source.indexOf('function updatePowerCrowns(', start);
   const end = source.indexOf('function crownMesh(', start);
   const disposed = [], crowns = [];
   const group = () => ({ add(crown) { crown.parent = this; }, position: {} });
   const scene = group(), remote = { grp: group() };
   const NET = { room: { sessionId: 'self' }, remotes: { other: remote } };
-  const update = vm.runInNewContext(source.slice(start, end) + '\nupdatePowerCrowns', {
+  const update = vm.runInNewContext(source.slice(start, source.indexOf('const worldBountyArrows=', start)) + source.slice(crownStart, end) + '\nupdatePowerCrowns', {
     NET, scene, player: { pos: { x: 1, y: 2, z: 3 } }, performance: { now: () => 0 },
+    tickWorldBountyMarkers() {},
     crownMesh() { const crown = { position: { set(...coords) { this.coords = coords; } }, rotation: {} }; crowns.push(crown); return crown; },
     disposeKingVisual(crown) { disposed.push(crown); crown.parent = null; },
   });

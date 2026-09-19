@@ -26,6 +26,7 @@ const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials')
 const WORLD = require('./world');
 const { sanitizePortableNests, sanitizePortableEgg } = require('../shared/portable-incubation');
 const { updateSavedPowerProfile } = require('./power-ranking');
+const { itemStackLimit } = require('../shared/item-stack-limits');
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
@@ -1029,11 +1030,13 @@ function sanitizeProfile(p) {
   out.aegisTrialReady = p.aegisTrialReady === true;
   out.aegisTrial = sanitizeAegisTrial(p.aegisTrial);
   out.inv = [];
+  const stackCapOverflow=[];
   let mirrorBackfillDisplacedItem = null;
   if (Array.isArray(p.inv)) {
     for (const s of p.inv.slice(0, INV_MAX)) {
       if (!s || typeof s !== 'object') { out.inv.push(null); continue; }
-      const slot = { id: clampI(s.id, 0, 999), count: clampI(s.count, 1, 64) };
+      const id=clampI(s.id,0,999),limit=itemStackLimit(id),rawCount=clampI(s.count,1,1000000);
+      const slot = { id, count: Math.min(rawCount,limit) };
       if (s.dur != null) slot.dur = clampI(s.dur, 0, 99999);
       if (s.plus != null) slot.plus = clampI(s.plus, 0, 3);
       if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) slot.gearRank=s.gearRank;
@@ -1045,6 +1048,8 @@ function sanitizeProfile(p) {
       if (s.locked === true) slot.locked = true;
       if (typeof s.source === 'string' && s.source) slot.source=cleanShortText(s.source, 'loot', 32);
       out.inv.push(slot);
+      const simple=!slot.dur&&!slot.plus&&!slot.gearRank&&!slot.armorType&&!slot.rarity&&!slot.forge&&!slot.masterwork&&!slot.unique;
+      if(simple&&rawCount>limit)stackCapOverflow.push({id,count:rawCount-limit});
     }
   }
   mirrorBackfillDisplacedItem = ensureAppearanceMirrorInventory(out);
@@ -1109,6 +1114,11 @@ function sanitizeProfile(p) {
       if (existing) existing.count = Math.min(1000000000, existing.count + count);
       else out.pendingRewards.push({ id, count, source: cleanShortText(raw.source, 'reward', 32) });
     }
+  }
+  for(const overflow of stackCapOverflow){
+    const existing=out.pendingRewards.find(item=>item.id===overflow.id&&item.source==='stack_limit_migration');
+    if(existing)existing.count=Math.min(1000000000,existing.count+overflow.count);
+    else out.pendingRewards.push({id:overflow.id,count:overflow.count,source:'stack_limit_migration'});
   }
   out.mountUnlocks = sanitizeMountUnlocks(p.mountUnlocks);
   out.familiarUnlocks = sanitizeFamiliarUnlocks(p.familiarUnlocks);
@@ -1322,10 +1332,13 @@ function cleanToken(t) {
 }
 
 function cleanChestSlots(slots) {
-  const out = (Array.isArray(slots) ? slots : []).slice(0, 18).map(s => {
-    if (!s || typeof s !== 'object') return null;
-    return { id: clampI(s.id, 0, 999), count: clampI(s.count, 1, 64) };
-  });
+  const out=[];
+  for(const s of (Array.isArray(slots)?slots:[]).slice(0,18)){
+    if(!s||typeof s!=='object'){out.push(null);continue;}
+    const id=clampI(s.id,0,999),limit=itemStackLimit(id);
+    let left=clampI(s.count,1,999);
+    while(left>0&&out.length<18){const count=Math.min(left,limit);out.push({id,count});left-=count;}
+  }
   while (out.length < 18) out.push(null);
   return out;
 }
@@ -1349,7 +1362,8 @@ function sanitizeChests(chests) {
 
 function cleanSlot(s) {
   if (!s || typeof s !== 'object') return null;
-  const out = { id: clampI(s.id, 0, 999), count: clampI(s.count, 1, 64) };
+  const id=clampI(s.id,0,999);
+  const out = { id, count: clampI(s.count,1,itemStackLimit(id)) };
   if (s.plus != null) out.plus = clampI(s.plus, 0, 3);
   if (s.dur != null) out.dur = clampI(s.dur, 0, 99999);
   if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) out.gearRank=s.gearRank;

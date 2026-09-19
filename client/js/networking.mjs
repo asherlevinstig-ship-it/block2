@@ -3088,7 +3088,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('familiarReject', m=>{
       const kind=(m&&m.kind)||'shade', def=FAMILIARS[kind]||FAMILIARS.shade, r=m&&m.reason;
       if(m&&m.action==='summon') COMPANIONS.activeFamiliar='';
-      sysMsg(r==='owned'?'<b>'+def.name+'</b> is already bound to you':r==='tame'?'Find a living <b>'+def.name+'</b> outside town, approach gently, feed and calm it, then fasten the collar':r==='item'?'You need a <b>'+((ITEMS[def.sigil]&&ITEMS[def.sigil].name)||'binding item')+'</b>':r==='locked'?'You have not bound <b>'+def.name+'</b> yet':'<b>'+def.name+'</b> will not answer that call');
+      sysMsg(r==='owned'?'<b>'+def.name+'</b> is already bound to you':r==='tame'?'Find a living <b>'+def.name+'</b> outside town, approach gently, feed and calm it, then fasten the collar':r==='level'?'Reach <b>Hunter Level '+Math.max(1,m.level|0)+'</b> before binding '+def.name:r==='item'?'You need a <b>'+((ITEMS[def.sigil]&&ITEMS[def.sigil].name)||'binding item')+'</b>':r==='locked'?'You have not bound <b>'+def.name+'</b> yet':'<b>'+def.name+'</b> will not answer that call');
     });
     room.onMessage('shadeStepResult', m=>{applyShadeStepResult(m);eventFeed('[Familiar]','Shade carried you through Dark Passage.',{key:'shade:step',cooldown:2500});});
     room.onMessage('shadeStepReject', m=>{
@@ -3185,6 +3185,8 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('farmReject', m=>farmRejected(m));
     room.onMessage('foodResult', m=>{applyFoodResult(m);if(m&&ITEMS[m.id])eventFeed('[Food]','Ate '+feedItemName(m.id)+(m.buff?'. Well Fed active.':'.'),{key:'food:'+m.id,cooldown:2500});});
+    room.onMessage('potionResult', m=>{if(m&&m.inv)updateServerInventorySnapshot(m.inv);applyPotionResult(m);if(m&&ITEMS[m.id])eventFeed('[Potion]','Used '+feedItemName(m.id)+'.',{key:'potion:'+m.id,cooldown:2500});});
+    room.onMessage('potionReject', m=>potionRejected(m));
     room.onMessage('foodBuff', m=>{
       const secs=Math.max(1,Math.round(((m&&m.durationMs)||0)/1000));buffs.dmg=Math.max(buffs.dmg,secs);buffs.gather=Math.max(buffs.gather||0,secs);
       if(typeof m.hp==='number')hp=Math.min(maxHp(),Math.max(0,m.hp));if(typeof m.hunger==='number')hunger=Math.min(maxHunger(),Math.max(0,m.hunger));renderBars();

@@ -15,6 +15,7 @@ const AI = require('../ai');
 const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
 const JOB_SYSTEM = require('../../shared/job-system');
+const { itemStackLimit } = require('../../shared/item-stack-limits');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 const { shortHash } = require('../identity-trace');
 
@@ -361,21 +362,22 @@ class EconomyMixin {
     prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
     const gearLike = !!(TOOL_INFO[id] || ARMOR_INFO[id]);
     if (gearLike) return this.addCraftedRewardItem(prof, id, left);
+    const stackLimit = itemStackLimit(id);
     for (const slot of prof.inv) {
       if (!slot || slot.id !== id || slot.dur != null) continue;
-      const add = Math.min(left, 64 - slot.count);
+      const add = Math.min(left, stackLimit - slot.count);
       if (add > 0) { slot.count += add; left -= add; }
       if (!left) return 0;
     }
     // reuse null holes left by consumed stacks before growing the array (mirrors addChestItem)
     for (let i = 0; i < prof.inv.length && left > 0; i++) {
       if (prof.inv[i]) continue;
-      const add = Math.min(left, 64);
+      const add = Math.min(left, stackLimit);
       prof.inv[i] = { id, count: add };
       left -= add;
     }
     while (left > 0 && prof.inv.length < 36) {
-      const add = Math.min(left, 64);
+      const add = Math.min(left, stackLimit);
       prof.inv.push({ id, count: add });
       left -= add;
     }
@@ -389,19 +391,20 @@ class EconomyMixin {
       const empty = inv.reduce((n, slot) => n + (slot ? 0 : 1), 0) + Math.max(0, 36 - inv.length);
       return Math.min(requested, empty);
     }
+    const stackLimit = itemStackLimit(id);
     let room = 0;
     for (const slot of inv) {
-      if (slot && slot.id === id && slot.dur == null) room += Math.max(0, 64 - slot.count);
-      else if (!slot) room += 64;
+      if (slot && slot.id === id && slot.dur == null) room += Math.max(0, stackLimit - slot.count);
+      else if (!slot) room += stackLimit;
     }
-    room += Math.max(0, 36 - inv.length) * 64;
+    room += Math.max(0, 36 - inv.length) * stackLimit;
     return Math.min(requested, room);
   }
   craftedOutputCount(prof, id, count) {
     let out = Math.max(1, count | 0);
     const hunterLevel = Math.max(1, prof && prof.S ? prof.S.lvl | 0 : 1);
     const cookingChance = JOB_SYSTEM.perkChance(JOB_SYSTEM.perkTierFromLevel(hunterLevel), 0.08);
-    if ((id === I.BREAD || id === I.HEARTY_SANDWICH || id === I.COOKED_MEAT || id === I.DRAGON_TREAT || id === I.GOLDEN_BROTH || id === I.TRAIL_RATION) && hunterLevel >= JOB_SYSTEM.COOK_RULES.batchLevel && Math.random() < cookingChance) {
+    if ((id === I.BREAD || id === I.HEARTY_SANDWICH || id === I.COOKED_MEAT || id === I.DRAGON_TREAT || id === I.GOLDEN_BROTH || id === I.TRAIL_RATION || id === I.FEAST_PLATTER) && hunterLevel >= JOB_SYSTEM.COOK_RULES.batchLevel && Math.random() < cookingChance) {
       out += Math.max(1, Math.floor(out * 0.25));
     }
     return out;
@@ -827,15 +830,16 @@ class EconomyMixin {
   addChestItem(slots, id, count) {
     const want = Math.max(0, Math.min(999, count | 0));
     let left = want;
+    const stackLimit = itemStackLimit(id);
     for (const slot of slots) {
       if (!slot || slot.id !== id || slot.dur != null) continue;
-      const add = Math.min(left, 64 - slot.count);
+      const add = Math.min(left, stackLimit - slot.count);
       if (add > 0) { slot.count += add; left -= add; }
       if (!left) return want;
     }
     for (let i = 0; i < slots.length && left > 0; i++) {
       if (!slots[i]) {
-        const add = Math.min(left, 64);
+        const add = Math.min(left, stackLimit);
         slots[i] = { id, count: add };
         left -= add;
       }
@@ -1083,7 +1087,7 @@ class EconomyMixin {
     if (!FUEL.has(fuel)) return this.rejectFurnace(client, 'fuel_type', key, { input, fuel });
     const fuelValue = Math.max(0.25, Number(FUEL_SMELTS[fuel]) || 0);
     const maxByFuel = Math.floor(fuelOffered * fuelValue + 1e-6);
-    const maxByOutput = Math.max(1, Math.floor(64 / Math.max(1, recipe[1] | 0)));
+    const maxByOutput = Math.max(1, Math.floor(itemStackLimit(recipe[0]) / Math.max(1, recipe[1] | 0)));
     const batchCount = Math.min(inputOffered, maxByFuel, maxByOutput);
     if (batchCount < 1) return this.rejectFurnace(client, 'fuel', key, { input, fuel });
     const fuelUsed = Math.max(1, Math.ceil(batchCount / fuelValue - 1e-6));
@@ -1121,6 +1125,7 @@ class EconomyMixin {
     }
     f.output = null;
     this.addRewardItem(rec.prof, out.id, finalCount);
+    this.recordCraftProgress(client, out.id, finalCount);
     this.dirtyPlayers.add(rec.token);
     this.dirtyFurnaces = true;
     const msg = { out: { id: out.id, count: out.count } };

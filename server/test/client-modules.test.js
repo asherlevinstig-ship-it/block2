@@ -71,12 +71,67 @@ test('new level 1 hunters can see and use the gate system',()=>{
 });
 
 test('client and server expose the same crafting and smelting catalogue',()=>{
-  const source=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8'),start=source.indexOf('const RECIPES = ['),end=source.indexOf('const FUEL',start);
-  assert.ok(start>=0&&end>start);
-  const ctx={B:W.B,I};vm.createContext(ctx);vm.runInContext(source.slice(start,end)+'\nglobalThis.__recipes=RECIPES;globalThis.__smelt=SMELT;',ctx);
-  const signature=recipe=>JSON.stringify({shape:recipe.shape||null,shapeless:recipe.shapeless||null,keys:recipe.keys?Object.entries(recipe.keys).sort():null,out:recipe.out,mirror:!!recipe.mirror,hunterLevel:recipe.hunterLevel||0});
-  assert.equal(JSON.stringify(Array.from(ctx.__recipes,signature).sort()),JSON.stringify(SERVER_RECIPES.map(signature).sort()));
-  assert.deepEqual(JSON.parse(JSON.stringify(ctx.__smelt)),JSON.parse(JSON.stringify(SERVER_SMELT)));
+  const worldSource=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const recipeSource=fs.readFileSync(path.join(__dirname,'../../shared/recipe-system.js'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'../../client/index.html'),'utf8');
+  const ctx={};ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(recipeSource,ctx);
+  const clientRecipes=ctx.BlockcraftRecipeSystem.createRecipeCatalog(W.B,I);
+  const signature=recipe=>JSON.stringify({recipeId:recipe.recipeId,shape:recipe.shape||null,shapeless:recipe.shapeless||null,keys:recipe.keys?Object.entries(recipe.keys).sort():null,out:recipe.out,mirror:!!recipe.mirror,hunterLevel:recipe.hunterLevel||0,station:recipe.station,category:recipe.category,profession:recipe.profession,source:recipe.source,tags:recipe.tags});
+  assert.equal(JSON.stringify(Array.from(clientRecipes,signature).sort()),JSON.stringify(SERVER_RECIPES.map(signature).sort()));
+  assert.match(worldSource,/BlockcraftRecipeSystem/);
+  assert.match(worldSource,/createRecipeCatalog\(B,I\)/);
+  assert.ok(html.indexOf('/shared/recipe-system.js')<html.indexOf('type="module"'),'the shared catalogue loads before the client modules');
+  const smeltStart=worldSource.indexOf('const SMELT = {'),smeltEnd=worldSource.indexOf('const FUEL',smeltStart),smeltCtx={B:W.B,I};
+  vm.createContext(smeltCtx);vm.runInContext(worldSource.slice(smeltStart,smeltEnd)+'\nglobalThis.__smelt=SMELT;',smeltCtx);
+  assert.deepEqual(JSON.parse(JSON.stringify(smeltCtx.__smelt)),JSON.parse(JSON.stringify(SERVER_SMELT)));
+});
+
+test('expanded recipes cover fishing farming regional building and Ancient City paths',()=>{
+  const expected=['small_fish_sandwich','prized_fish_sandwiches','river_rainwake_broth','meat_trail_ration','prized_windseed_rations','trophy_master_feast','fish_dragon_treats','green_compost','heartwood_chest','amber_lanterns','sunshard_torches','stormglass_geode','ancient_stormglass_armor','ancient_stormweave_robe'];
+  const ids=new Set(SERVER_RECIPES.map(recipe=>recipe.recipeId));
+  for(const id of expected)assert.equal(ids.has(id),true,id+' is present');
+  assert.equal(SERVER_RECIPES.length,93);
+  for(const recipe of SERVER_RECIPES){
+    assert.ok(recipe.recipeId);
+    assert.ok(recipe.station);
+    assert.ok(recipe.category);
+    assert.ok(recipe.source);
+    assert.ok(Array.isArray(recipe.tags));
+    assert.equal(recipe.unlock.hunterLevel||0,recipe.hunterLevel||0);
+  }
+});
+
+test('brewing recipes use reusable containers and authoritative potion messages',()=>{
+  const ids=new Set(SERVER_RECIPES.map(recipe=>recipe.recipeId));
+  for(const id of ['empty_bottles','wooden_bowls','frothy_ale','hearty_stew','mana_draught','swiftness_tonic','stoneskin_brew'])assert.equal(ids.has(id),true,id+' is present');
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
+  assert.match(menus,/NET\.room\.send\('usePotion',\{slot:combatState\.selectedSlot\}\)/);
+  assert.match(menus,/function applyPotionResult\(m\)/);
+  assert.match(networking,/room\.onMessage\('potionResult'/);
+  assert.match(networking,/room\.onMessage\('potionReject'/);
+});
+
+test('objective recipe selection prefers a usable alternative and preserves a staged match',async()=>{
+  const {selectRecipeForOutput}=await clientModule('crafting-domain.mjs');
+  const locked={shapeless:[1],out:[9,1]},missing={shapeless:[2],out:[9,1]},ready={shapeless:[3],out:[9,2]};
+  const states=new Map([
+    [locked,{locked:true,missing:[],missingCount:0,needsTable:false,ready:false}],
+    [missing,{locked:false,missing:['Coal x2'],missingCount:2,needsTable:false,ready:false}],
+    [ready,{locked:false,missing:[],missingCount:0,needsTable:false,ready:true}],
+  ]);
+  assert.equal(selectRecipeForOutput([locked,missing,ready],9,recipe=>states.get(recipe)),ready);
+  assert.equal(selectRecipeForOutput([locked,missing,ready],9,recipe=>states.get(recipe),missing),missing,'the exact recipe already staged remains selected');
+});
+
+test('Egg Insulator is acquisition guidance, not a phantom crafting recipe',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  const hud=fs.readFileSync(path.join(__dirname,'../../client/js/hud.mjs'),'utf8');
+  const objectiveStart=menus.indexOf("function objectiveCraftCandidates(");
+  const objectiveEnd=menus.indexOf('function objectiveCraftState(',objectiveStart);
+  assert.doesNotMatch(menus.slice(objectiveStart,objectiveEnd),/EGG_INSULATOR/);
+  assert.match(hud,/id===B\.EGG_INSULATOR\)\{tags\.push\('Dragon'\);tags\.push\('Hatching Station'\);\}/);
+  assert.equal(SERVER_RECIPES.some(recipe=>recipe.out[0]===W.B.EGG_INSULATOR),false);
 });
 
 test('multiplayer furnace sends staged counts and restores every unused item',()=>{
@@ -3490,8 +3545,8 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(social,/Tab changes Local \/ Team \/ Fellowship \/ Whisper/);
   assert.match(social,/chatWheelCloseEl\.addEventListener\('click',event=>\{event\.preventDefault\(\);closeAnyWheel\(true\);\}\);/);
   assert.match(social,/Tab changes Local \/ Team \/ Fellowship \/ Whisper/);
-  assert.match(social,/FRIENDS · RECENT PLAYERS · NEARBY HUNTERS · TEAMS/);
-  assert.match(social,/function openTeamUI\(tab='team',refresh=true\)/);
+  assert.match(social,/\['dungeon','DUNGEON QUEUE'\],\['nearby','NEARBY'\],\['recent','RECENT'\],\['friends','FRIENDS'\],\['team','TEAMS'\]/);
+  assert.match(social,/function openTeamUI\(tab='dungeon',refresh=true\)/);
   assert.match(social,/function applySocialSnapshot\(message\)/);
   assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
   assert.match(social,/function openChat\(mode\)\{[\s\S]*releasePointerLockWithoutCameraFallback\(false\);/);
@@ -3516,7 +3571,8 @@ test('overworld periodically reports the live player count in chat',()=>{
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   assert.match(networking,/ONLINE_POPULATION_NOTICE_INTERVAL_MS=3\*60\*1000/);
   assert.match(networking,/NET\.room!==room\|\|room\.name!=='blockcraft'\|\|document\.hidden/);
-  assert.match(networking,/players\.size\)\?Math\.max\(1,players\.size\|0\):1/);
+  assert.match(networking,/players\.forEach\(playerState=>\{if\(!playerState\|\|playerState\.connected!==false\)count\+\+;\}\)/);
+  assert.match(networking,/count=Math\.max\(1,count\)/);
   assert.match(networking,/chatLine\('\[Online\]',count===1\?'1 player is online\.':count\+' players are online\.'\)/);
   assert.match(networking,/onlinePopulationNoticeIntroTimer=setTimeout\(\(\)=>showOnlinePopulationNotice\(room\),8000\)/);
   assert.match(networking,/onlinePopulationNoticeTimer=setInterval\(\(\)=>showOnlinePopulationNotice\(room\),ONLINE_POPULATION_NOTICE_INTERVAL_MS\)/);
@@ -5507,7 +5563,7 @@ test('releasing the gameplay cursor explains how Escape restores character contr
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(html, /id="controlpauseprompt"/);
-  assert.match(html, /Press Escape to go back into the game and control your character\./);
+  assert.match(html, /Press WASD, Escape, or click the world to control your character again\./);
   assert.match(combat, /const controlPaused=!!\(cursorReleased/);
   assert.match(combat, /controlPausePrompt\.classList\.toggle\('hidden',!controlPaused\)/);
   assert.match(combat, /if\(cursorReleased\)[\s\S]*resumeGameplayCamera\(\)/);
@@ -5745,6 +5801,16 @@ test('craft requests correlate replies, prevent double clicks and retry the same
   assert.doesNotMatch(craftFailureText({reason:'server'}),/ingredients/);
 });
 
+test('crafting stations provide a lossless way to return staged materials',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(menus,/function returnCraftMaterials\(announce=true\)/);
+  assert.match(menus,/left>0\)\{craftCells\[i\]=\{\.\.\.stack,count:left\};remaining\+=left;/);
+  assert.match(menus,/RETURN MATERIALS/);
+  assert.match(menus,/No crafting items were discarded/);
+  assert.match(menus,/Click the result to craft it\. The finished item is placed in your bag\./);
+  assert.match(menus,/uiOpen&&craftCells\.some\(Boolean\)&&!returnCraftMaterials\(false\)/);
+});
+
 test('opening a crafting table preserves its coordinates for authoritative 3x3 crafting',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
@@ -5833,7 +5899,7 @@ test('Taming Land supports mounting and mount failures are visible to the player
   assert.match(dragons,/client\.send\('mountResult',\{ok:true,kind\}\)/);
   assert.match(networking,/room\.onMessage\('mountResult'/);
   assert.match(networking,/overworld<\/b> and <b>Taming Land/);
-  assert.match(menus,/RETURN TO TOWN TO MOUNT/);
+  assert.match(menus,/mountHere\?'Ride '\+escHTML\(dragonDisplayName\(type\)\):'Return to town'/);
 
   const start=dragons.indexOf('  dragonMountRealmAllowed(player'),end=dragons.indexOf('  dragonIncubationKey(',start);
   const Harness=vm.runInNewContext('(class Harness {'+dragons.slice(start,end)+'})',{

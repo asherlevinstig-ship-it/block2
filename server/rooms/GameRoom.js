@@ -160,7 +160,7 @@ function authRequestFromColyseus(options, context) {
 const {
   ABILITY_PATHS, ANIMAL_BASE_KIND, ANIMAL_KINDS, ARMOR_INFO, BETA_FARM_TEST, BIOME_COLLECTIBLE, BOSS_CONTRIB_MS,
   BOSS_REWARD_BY_RANK, BOSS_REWARD_RANGE, CROP_GROW_MS, DANGER_RINGS, DAY_MS, DRAGON_EGG_OF, DRAGON_TYPE_SET, EVENT_FIRST_DELAY_MS,
-  EVENT_KING, FOOD_VALUES, GUILD_BOARD_POS, HUNTER_RANK_LEVELS, DEITY_LEVEL, DEITY_POWER_IDS, I, JOB_IDS, LAND_BASE_PRICE, LAND_FREE_RADIUS,
+  EVENT_KING, FOOD_VALUES, POTION_VALUES, GUILD_BOARD_POS, HUNTER_RANK_LEVELS, DEITY_LEVEL, DEITY_POWER_IDS, I, JOB_IDS, LAND_BASE_PRICE, LAND_FREE_RADIUS,
   ITEM_NAMES, LAND_ABANDONED_MS, LAND_DORMANT_MS, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, LAND_VISIT_REFRESH_MS, MAX_HUNGER, MINE_REQUIRE, RANGED_ENEMY_KINDS, SHARD_ITEM_IDS,
   PROGRESSION_FOCUS_STATES, SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
   SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, REGIONAL_CONTRACT_TYPES, dangerRingAt, dayTimeAt, dragonMountType,
@@ -716,6 +716,7 @@ class GameRoom extends Room {
     this.onMessage('landClaimRename', (client, m) => this.handleLandClaimRename(client, m));
     this.onMessage('landClaimTrust', (client, m) => this.handleLandClaimTrust(client, m));
     this.onMessage('useFood', (client, m) => this.handleUseFood(client, m));
+    this.onMessage('usePotion', (client, m) => this.handleUsePotion(client, m));
     this.onMessage('useRepairKit', (client, m) => this.handleUseRepairKit(client, m));
     this.onMessage('blacksmithRepair', (client, m) => this.handleBlacksmithRepair(client, m));
     this.onMessage('blacksmithUpgrade', (client, m) => this.handleBlacksmithUpgrade(client, m));
@@ -8013,6 +8014,7 @@ class GameRoom extends Room {
     if (buffs && buffs.ironUntil > Date.now()) amount *= .5;
     if (buffs && buffs.pantherUntil > Date.now()) amount *= .85;
     if (buffs && buffs.monkStoneUntil > Date.now()) amount *= (1 - JOB_SYSTEM.MONK_RULES.stoneMitigation);
+    if (buffs && buffs.potionStoneUntil > Date.now()) amount *= 0.65;
     const rec = this.profileFor(client);
     const armorStack = rec && rec.prof && rec.prof.armor;
     const armor = armorStack ? ARMOR_INFO[armorStack.id] : null;
@@ -8194,6 +8196,38 @@ class GameRoom extends Room {
     }
     this.dirtyPlayers.add(rec.token);
     client.send('foodResult', { slot, id, heal: food.heal, hungerGain: food.hunger, hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max, hp: Math.ceil(hp.hp), maxHp: hp.max, buff: food.buff || '', durationMs: timedMeal ? duration : 0, partyCount: targets.length });
+  }
+  handleUsePotion(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec || !m || !this.isPlayerAlive(client)) return client.send('potionReject', { reason: 'invalid' });
+    const slot = Math.max(0, Math.min(35, m.slot | 0));
+    const stack = Array.isArray(rec.prof.inv) ? rec.prof.inv[slot] : null;
+    const id = stack && (stack.id | 0), potion = POTION_VALUES[id];
+    if (!potion) return client.send('potionReject', { reason: 'item' });
+    const canReturnContainer = this.inventorySpaceFor(rec.prof, potion.container, 1) > 0 || (stack.count | 0) === 1;
+    if (!canReturnContainer) return client.send('potionReject', { reason: 'container_full' });
+    const ability = this.ensureAbilityState(client), now = Date.now();
+    const buffs = this.abilityBuffs.get(client.sessionId) || {};
+    if (!this.consumeSlotItem(rec.prof, slot, id, 1)) return client.send('potionReject', { reason: 'item' });
+    if (this.addRewardItem(rec.prof, potion.container, 1)) {
+      this.addRewardItem(rec.prof, id, 1);
+      return client.send('potionReject', { reason: 'container_full' });
+    }
+    if (potion.mana) ability.mp = Math.min(ability.maxMp, ability.mp + potion.mana);
+    if (potion.stamina) ability.sp = Math.min(ability.maxSp, ability.sp + potion.stamina);
+    if (potion.regenMs) buffs.potionRegenUntil = Math.max(buffs.potionRegenUntil || 0, now + potion.regenMs);
+    if (potion.speedMs) buffs.potionSpeedUntil = Math.max(buffs.potionSpeedUntil || 0, now + potion.speedMs);
+    if (potion.stoneMs) buffs.potionStoneUntil = Math.max(buffs.potionStoneUntil || 0, now + potion.stoneMs);
+    if (potion.tipsyMs) buffs.potionTipsyUntil = Math.max(buffs.potionTipsyUntil || 0, now + potion.tipsyMs);
+    this.abilityBuffs.set(client.sessionId, buffs);
+    this.syncProfileVitals(client, rec.prof);
+    this.dirtyPlayers.add(rec.token);
+    client.send('potionResult', {
+      slot, id, container: potion.container, inv: rec.prof.inv,
+      mp: Math.floor(ability.mp), maxMp: ability.maxMp, sp: Math.floor(ability.sp), maxSp: ability.maxSp,
+      mana: potion.mana || 0, stamina: potion.stamina || 0,
+      regenMs: potion.regenMs || 0, speedMs: potion.speedMs || 0, stoneMs: potion.stoneMs || 0, tipsyMs: potion.tipsyMs || 0,
+    });
   }
   toolPlus(slot) {
     return Math.max(0, Math.min(3, slot && slot.plus ? slot.plus | 0 : 0));
@@ -8656,6 +8690,7 @@ class GameRoom extends Room {
       if (hp.hp <= 0) continue;
       const focus = this.abilityBuffs.get(client.sessionId);
       if (focus && focus.monkRegenUntil > Date.now() && hp.hp < hp.max) hp.hp = Math.min(hp.max, hp.hp + JOB_SYSTEM.MONK_RULES.regenPerSecond * dt);
+      if (focus && focus.potionRegenUntil > Date.now() && hp.hp < hp.max) hp.hp = Math.min(hp.max, hp.hp + 2 * dt);
       if (focus && focus.verdantRegenUntil > Date.now() && hp.hp < hp.max) hp.hp = Math.min(hp.max, hp.hp + 1.5 * dt);
       const rec = this.profileFor(client);
       if (rec && this.hungerProtectedForProfile(rec.prof)) {
@@ -9884,7 +9919,7 @@ class GameRoom extends Room {
       if (c) this.regenAbilityState(c, abilityNow);
     });
     this.abilityBuffs.forEach((b, sid) => {
-      if ((b.umbralUntil || 0) <= abilityNow && (b.shadowBurstUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.pantherUntil || 0) <= abilityNow && (b.verdantRegenUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
+      if ((b.umbralUntil || 0) <= abilityNow && (b.shadowBurstUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.pantherUntil || 0) <= abilityNow && (b.verdantRegenUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow && (b.potionRegenUntil || 0) <= abilityNow && (b.potionSpeedUntil || 0) <= abilityNow && (b.potionStoneUntil || 0) <= abilityNow && (b.potionTipsyUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
     });
     this.updatePlayerHunger(dt);
     this.tickBiomeStatuses(dt);
@@ -9992,8 +10027,9 @@ class GameRoom extends Room {
     const parkourEventPlayer = typeof this.isParkourEventPlayer === 'function' && this.isParkourEventPlayer(client);
     const hungerState = !parkourEventPlayer && !mounted && this.playerHunger && this.playerHunger.get(client.sessionId);
     const hungerMove = hungerState && hungerState.hunger <= 0 ? 0.62 : 1;
-    const maxStep = (deityFlight ? 19 : mounted ? 20 : 12*armorMove*hungerMove) * dt + 1.25;
-    const velCap = deityFlight ? 15 : mounted ? 16 : 9*armorMove*hungerMove;
+    const moveBuffs=this.abilityBuffs.get(client.sessionId),potionSpeed=!mounted&&moveBuffs&&moveBuffs.potionSpeedUntil>now?1.25:1;
+    const maxStep = (deityFlight ? 19 : mounted ? 20 : 12*armorMove*hungerMove*potionSpeed) * dt + 1.25;
+    const velCap = deityFlight ? 15 : mounted ? 16 : 9*armorMove*hungerMove*potionSpeed;
     let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
     let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
     const borderMin = W.LAVA_BORDER_WIDTH + 1.35;

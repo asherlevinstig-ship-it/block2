@@ -6,7 +6,7 @@ import {api as worldApi,state as worldState} from './world.mjs';
 import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
 import {api as combatApi,state as combatState} from './combat.mjs';
 import {api as hudApi,state as hudState} from './hud.mjs';
-import {recipeFootprint,shapedIngredientIds,recipeNeedCounts} from './crafting-domain.mjs';
+import {recipeFootprint,shapedIngredientIds,recipeNeedCounts,selectRecipeForOutput} from './crafting-domain.mjs';
 import {hunterRankLevelForGlobalLevel,hunterRankLevelLabel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
@@ -33,6 +33,7 @@ const legacyMenuBindings={
   "applyDungeonStatus":{get:()=>applyDungeonStatus},
   "applyFirstQuestRewardResult":{get:()=>applyFirstQuestRewardResult},
   "applyFoodResult":{get:()=>applyFoodResult},
+  "applyPotionResult":{get:()=>applyPotionResult},
   "applyFurnaceReject":{get:()=>applyFurnaceReject},
   "applyFurnaceResult":{get:()=>applyFurnaceResult},
   "applyFurnaceStarted":{get:()=>applyFurnaceStarted},
@@ -92,6 +93,7 @@ const legacyMenuBindings={
   "firstQuestRewardRequestPending":{get:()=>firstQuestRewardRequestPending,set:value=>{firstQuestRewardRequestPending=value;}},
   "fmtTimeLeft":{get:()=>fmtTimeLeft},
   "foodRejected":{get:()=>foodRejected},
+  "potionRejected":{get:()=>potionRejected},
   "gateKeyRejected":{get:()=>gateKeyRejected},
   "gatePreviewLocal":{get:()=>gatePreviewLocal},
   "gateReadinessLocal":{get:()=>gateReadinessLocal},
@@ -235,6 +237,12 @@ let craftCells=[], craftW=2; // crafting grid contents (stacks)
 let uiAccessors=[]; // for re-render
 
 function openUI(mode, furnaceKey){
+  // Re-opening or switching an already-open station must not overwrite items
+  // that are still staged in its crafting grid.
+  if(uiOpen&&craftCells.some(Boolean)&&!returnCraftMaterials(false)){
+    showName('FREE BAG SPACE TO RECOVER CRAFTING MATERIALS');
+    return false;
+  }
   if(!uiOpen) SFX.uiOpen();
   uiOpen=true; uiMode=mode; uiFurnaceKey=furnaceKey||null;
   craftW = mode==='table' ? 3 : 2;
@@ -252,20 +260,82 @@ function openUI(mode, furnaceKey){
   renderUI();
   if(mode==='chest') requestChestOpen();
   if(mode==='furnace') requestFurnaceOpen();
+  return true;
+}
+function returnCraftMaterials(announce=true){
+  let returned=0,remaining=0;
+  for(let i=0;i<craftCells.length;i++){
+    const stack=craftCells[i];
+    if(!stack)continue;
+    const left=addItem(stack.id,stack.count);
+    returned+=stack.count-left;
+    if(left>0){craftCells[i]={...stack,count:left};remaining+=left;}
+    else craftCells[i]=null;
+  }
+  if(announce){
+    if(remaining){
+      SFX.error();
+      showName('BAG FULL · SOME MATERIALS REMAIN IN THE TABLE');
+      sysMsg('Free bag space, then press <b>RETURN MATERIALS</b> again. Nothing was discarded.');
+    }else if(returned){
+      SFX.uiClick();
+      showName('CRAFTING MATERIALS RETURNED');
+      sysMsg('Unused crafting materials were returned to your bag.');
+    }
+  }
+  if(uiOpen)renderUI();
+  renderCursor();refreshHUD();
+  if(!remaining)scheduleInventoryArrangeSync();
+  return remaining===0;
+}
+function returnCursorToInventory(announce=true){
+  if(!cursorStack)return true;
+  const left=addItem(cursorStack.id,cursorStack.count);
+  if(left>0){
+    cursorStack={...cursorStack,count:left};
+    if(announce){SFX.error();showName('BAG FULL · ITEM STILL HELD');sysMsg('Free bag space before closing. The held item was not discarded.');}
+    renderCursor();
+    return false;
+  }
+  cursorStack=null;renderCursor();
+  return true;
+}
+function appendCraftRecoveryControls(parent){
+  const row=document.createElement('div');row.className='qrow craft-recovery-row';
+  const button=qBtn(craftingRequests.pending?'RETURN MATERIALS (CRAFT CONFIRMING)':'RETURN MATERIALS',()=>returnCraftMaterials(true),true);
+  button.disabled=!craftCells.some(Boolean);
+  row.appendChild(button);
+  const hint=document.createElement('div');hint.className='hint';
+  hint.textContent=craftingRequests.pending
+    ? 'Server confirmation is delayed. You can safely return the staged materials; the final result will still be reconciled.'
+    : (NET.on?'Click the result to craft it. The finished item is placed in your bag.':'Click the result to pick it up.');
+  row.appendChild(hint);parent.appendChild(row);
 }
 function closeUI(relock=true){
-  if(uiOpen) SFX.uiClose();
   // return crafting grid + cursor to inventory
-  for(let i=0;i<craftCells.length;i++){ const s=craftCells[i]; if(s) addItem(s.id,s.count); craftCells[i]=null; }
+  const craftReturned=returnCraftMaterials(false);
+  let furnaceReturned=true;
   if(uiMode==='furnace'&&uiFurnaceKey){
     const f=getFurnace(uiFurnaceKey);
     // Input/fuel are only local staging before the server starts a smelt. Return
     // uncommitted stacks when the window closes so they never appear to vanish.
     if(!f.finishAt){
-      for(const field of ['input','fuel'])if(f[field]){addItem(f[field].id,f[field].count);f[field]=null;}
+      for(const field of ['input','fuel'])if(f[field]){
+        const left=addItem(f[field].id,f[field].count);
+        if(left>0){f[field]={...f[field],count:left};furnaceReturned=false;}
+        else f[field]=null;
+      }
     }
   }
-  if(cursorStack){ addItem(cursorStack.id,cursorStack.count); cursorStack=null; renderCursor(); }
+  const cursorReturned=returnCursorToInventory(false);
+  if(!craftReturned||!furnaceReturned||!cursorReturned){
+    SFX.error();
+    showName('BAG FULL · ITEMS KEPT SAFE IN THIS WINDOW');
+    sysMsg('Free bag space before closing. No crafting items were discarded.');
+    renderUI();renderCursor();
+    return false;
+  }
+  if(uiOpen) SFX.uiClose();
   flushInventoryArrangeSync();
   uiOpen=false; uiMode=null; uiFurnaceKey=null;
   uiEl.classList.remove('open');
@@ -276,6 +346,7 @@ function closeUI(relock=true){
     overlay.classList.remove('hidden');
     for(const id of ['hotbar','stats','abilities','locationhud','coords','landmap']) document.getElementById(id).classList.add('hidden');
   }
+  return true;
 }
 
 function makeAccessor(getArr, i){
@@ -352,24 +423,29 @@ const RECIPE_TABS=[
   ['companions','Companions'],
 ];
 function recipeCategory(recipe){
+  if(recipe&&recipe.category)return recipe.category;
   const out=recipe.out[0];
   if(FAMILIAR_BY_SIGIL && FAMILIAR_BY_SIGIL[out]) return 'companions';
   if(out===I.DRAGON_TREAT) return 'companions';
   if((ITEMS[out]&&(ITEMS[out].tool||ITEMS[out].armor))||out===I.REPAIR_KIT) return 'tools';
   if(out===I.BREAD||out===I.COOKED_MEAT||FOOD_VALUES[out]) return 'food';
-  if(out===B.PLANKS||out===I.STICK||out===B.TABLE||out===B.TORCH||out===B.LANTERN||out===B.CAMPFIRE||out===B.EGG_INSULATOR) return 'basics';
+  if(out===B.PLANKS||out===I.STICK||out===B.TABLE||out===B.TORCH||out===B.LANTERN||out===B.CAMPFIRE) return 'basics';
   return 'building';
 }
 function recipePurposeTags(entry){
   const out=entry&&entry.out&&entry.out[0],recipe=entry&&entry.recipe,item=ITEMS[out],tags=[];
   if(entry&&entry.smelt)tags.push('Smelt');
   if(recipe&&recipe.hunterLevel)tags.push('Hunter Recipe');
-  if([B.TABLE,B.FURNACE,B.CHEST,B.TORCH,B.LANTERN,B.CAMPFIRE,B.BED,B.EGG_INSULATOR].includes(out))tags.push('Base');
+  if([B.TABLE,B.FURNACE,B.CHEST,B.TORCH,B.LANTERN,B.CAMPFIRE,B.BED].includes(out))tags.push('Base');
   if(item&&(item.tool||item.armor)||out===I.REPAIR_KIT)tags.push('Gear');
   if(FOOD_VALUES[out]||[I.BREAD,I.COOKED_MEAT,I.HEARTY_SANDWICH,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(out))tags.push('Food');
   if([I.BREAD,I.COOKED_MEAT,I.HEARTY_SANDWICH,I.TRAIL_RATION,I.FEAST_PLATTER,I.REPAIR_KIT,B.TORCH,B.LANTERN].includes(out))tags.push('Gate Prep');
-  if([I.DRAGON_TREAT,B.EGG_INSULATOR].includes(out))tags.push('Dragon');
+  if(out===I.DRAGON_TREAT)tags.push('Dragon');
   if(FAMILIAR_BY_SIGIL&&FAMILIAR_BY_SIGIL[out])tags.push('Familiar');
+  if(recipe&&Array.isArray(recipe.tags)){
+    const labels={fishing:'Fishing',regional:'Regional',alternative:'Alternative',farming:'Farming',companion:'Companion',gate_prep:'Gate Prep',master:'Master',efficient:'Efficient',lighting:'Lighting',conversion:'Conversion',ancient_city:'Ancient City'};
+    for(const tag of recipe.tags)if(labels[tag])tags.push(labels[tag]);
+  }
   if(item&&item.place!=null&&!tags.includes('Base'))tags.push('Building');
   if(!tags.length)tags.push(recipeCategory(recipe||{out:[out]})==='building'?'Building':'Crafting');
   return [...new Set(tags)];
@@ -384,7 +460,6 @@ function recipeUsedForHint(entry,state){
   if(out===B.FURNACE)return 'Used for ingots, cooked food, and blacksmith/cook progress.';
   if(out===B.CHEST)return 'Used for base setup, storage, and Homestead Supply.';
   if(out===B.TORCH||out===B.LANTERN)return 'Used for base setup and safer dungeon prep.';
-  if(out===B.EGG_INSULATOR)return 'Used to hatch and breed dragons.';
   if(out===I.DRAGON_TREAT)return 'Used for dragon care, bonding, breeding, and happiness.';
   if(FAMILIAR_BY_SIGIL&&FAMILIAR_BY_SIGIL[out])return 'Use from hotbar to bind a familiar permanently.';
   if(out===I.REPAIR_KIT)return 'Keep for damaged gear before long Gate runs.';
@@ -402,7 +477,7 @@ function recipeProgressionFocus(entry){
     if(type==='smith'&&((ITEMS[out]&&(ITEMS[out].tool||ITEMS[out].armor))||out===I.REPAIR_KIT||out===I.IRON_INGOT))return 'Contract';
     if(type==='cook'&&recipeCategory(recipe)==='food')return 'Contract';
   }
-  if(out===I.DRAGON_TREAT||out===B.EGG_INSULATOR)return 'Dragon';
+  if(out===I.DRAGON_TREAT)return 'Dragon';
   if(FAMILIAR_BY_SIGIL&&FAMILIAR_BY_SIGIL[out])return 'Familiar';
   return '';
 }
@@ -486,22 +561,24 @@ function recipeProfessionHint(entry,state){
   if(missing) return [tag,missing].filter(Boolean).join(' - ');
   return tag || recipeIngredients(recipe);
 }
-function craftStateForRecipe(recipe){
+function craftStateForRecipe(recipe,current=craftResult()){
   const lockReason=recipeJobLockText(recipe);
   const locked=!!lockReason;
-  const current=craftResult();
-  if(current && current.out && recipe.out && current.out[0]===recipe.out[0]){
-    return { missing:[], needsTable:false, ready:!locked, current:true, locked, lockReason };
+  if(current===recipe){
+    return { missing:[], missingCount:0, needsTable:false, ready:!locked, current:true, locked, lockReason };
   }
-  const missing=missingForCounts(recipeNeedCounts(recipe));
+  const counts=recipeNeedCounts(recipe),missing=missingForCounts(counts);
+  let missingCount=0;
+  for(const [id,n] of counts)missingCount+=Math.max(0,n-countItem(id));
   const needsTable=recipeFootprint(recipe)>craftW;
-  return { missing, needsTable, ready: !locked && missing.length===0 && !needsTable, locked, lockReason };
+  return { missing, missingCount, needsTable, ready: !locked && missing.length===0 && !needsTable, locked, lockReason };
 }
 function hasFurnaceFuel(){
   return Object.keys(FUEL).some(id=>countItem(+id)>0);
 }
 function recipeForOutput(id){
-  return RECIPES.find(recipe=>recipe.out&&recipe.out[0]===id) || null;
+  const current=craftResult();
+  return selectRecipeForOutput(RECIPES,id,recipe=>craftStateForRecipe(recipe,current),current);
 }
 function smeltEntryForOutput(id){
   const found=Object.entries(SMELT).find(([,out])=>out&&out[0]===id);
@@ -561,7 +638,6 @@ function objectiveCraftCandidates(scope='what_next'){
   const next=progressionRoadmap().find(entry=>!entry.introduced);
   const dragonQuest=quest&&['familiar','mount','mount_use'].includes(quest.type);
   if(dragonQuest||next&&['familiars','mounts','dragon_mastery'].includes(next.id)){
-    pushObjectiveCraftCandidate(list,seen,B.EGG_INSULATOR,'Companion path');
     pushObjectiveCraftCandidate(list,seen,I.DRAGON_TREAT,'Dragon care');
   }
   if(quest&&!questDone()&&quest.item){
@@ -775,7 +851,7 @@ function restoreInventorySnapshot(slots){
   for(let i=0;i<36;i++){
     const s=slots[i];
     if(!s || !ITEMS[s.id]){ inv[i]=null; continue; }
-    inv[i]=newStack(s.id,Math.max(1,Math.min(64,s.count|0)));
+    inv[i]=newStack(s.id,Math.max(1,Math.min(stackMax(s.id),s.count|0)));
     if(ITEMS[s.id].tool) inv[i].dur=(s.dur!=null)?s.dur:ITEMS[s.id].tool.dur;
     if(ITEMS[s.id].armor){
       inv[i].dur=(s.dur!=null)?s.dur:ITEMS[s.id].armor.dur;
@@ -844,7 +920,10 @@ function applyServerCraft(m){
 }
 
 function slotInteract(acc, e, opts={}){
-  if(craftingRequests.pending){showName('WAITING FOR CRAFT CONFIRMATION');return;}
+  if(craftingRequests.pending){
+    showName('WAITING FOR CRAFT CONFIRMATION · USE RETURN MATERIALS IF NEEDED');
+    return;
+  }
   if(opts.locked&&opts.locked()){
     sysMsg(opts.lockedText||'That slot is locked while the action is in progress.');
     SFX.error();
@@ -1273,6 +1352,7 @@ function renderUI(){
     const r=craftResult();
     craftArea.appendChild(makeSlotEl({get:()=> r?newStack(r.out[0],r.out[1]):null, set:()=>{}}, {result:true}));
     recipePanel.appendChild(craftArea);
+    appendCraftRecoveryControls(recipePanel);
     recipePanel.appendChild(renderRecipeBook('craft'));
     shell.appendChild(recipePanel);
     uipanel.appendChild(shell);
@@ -1402,6 +1482,7 @@ function renderUI(){
     const resEl=makeSlotEl({get:()=> r?newStack(r.out[0],r.out[1]):null, set:()=>{}}, {result:true});
     area.appendChild(resEl);
     wrap.appendChild(area);
+    appendCraftRecoveryControls(wrap);
     wrap.appendChild(renderRecipeBook('craft'));
     uipanel.appendChild(wrap);
   }
@@ -8385,7 +8466,6 @@ function seedChest(x,y,z,items){
 }
 
 // ---- drinkable potions ----
-I.POT_ALE=140; I.POT_STEW=141; I.POT_MANA=142; I.POT_SWIFT=143; I.POT_STONE=144;
 let tipsyT=0;
 const BOTTLE_ROWS=[
 "................",
@@ -8424,12 +8504,35 @@ for(const pid in POTIONS){
 function drinkPotion(id){
   const P=POTIONS[id];
   const s=inv[combatState.selectedSlot];
+  if(!P||!s||s.id!==id)return false;
+  if(NET.on&&NET.room){NET.room.send('usePotion',{slot:combatState.selectedSlot});return true;}
   P.fx();
   s.count--; if(s.count<=0) inv[combatState.selectedSlot]=null;
+  addCraftedItem(id===I.POT_STEW?I.WOODEN_BOWL:I.EMPTY_BOTTLE,1);
   refreshHUD(); renderBars();
   SFX.drink();
   burst(player.pos.x, player.pos.y+1.4, player.pos.z, hex01(parseInt(P.col.slice(1),16)), 8, 1.6, 1.6, .4);
   sysMsg('You drink the <b>'+P.name+'</b> \u2014 '+P.desc);
+  return true;
+}
+function applyPotionResult(m){
+  if(!m||!POTIONS[m.id])return;
+  restoreInventorySnapshot(m.inv);
+  if(Number.isFinite(+m.mp))mp=Math.max(0,Math.min(maxMp(),+m.mp));
+  if(Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));
+  if(m.regenMs)buffs.regen=Math.max(buffs.regen,Math.ceil(m.regenMs/1000));
+  if(m.speedMs)buffs.spd=Math.max(buffs.spd,Math.ceil(m.speedMs/1000));
+  if(m.stoneMs)buffs.stone=Math.max(buffs.stone,Math.ceil(m.stoneMs/1000));
+  if(m.tipsyMs)tipsyT=Math.max(tipsyT,m.tipsyMs/1000);
+  const P=POTIONS[m.id];
+  refreshHUD();renderBars();SFX.drink();
+  burst(player.pos.x,player.pos.y+1.4,player.pos.z,hex01(parseInt(P.col.slice(1),16)),8,1.6,1.6,.4);
+  sysMsg('You drink the <b>'+P.name+'</b> \u2014 '+P.desc+'. Your '+(ITEMS[m.container]&&ITEMS[m.container].name||'container')+' was returned.');
+}
+function potionRejected(m){
+  SFX.error();
+  if(m&&m.reason==='container_full')sysMsg('Make room for the empty potion container first.');
+  else sysMsg('That potion could not be used.');
 }
 function foodVfxColor(id){
   if(id===I.MONSTER_MEAT) return [.72,.18,.12];

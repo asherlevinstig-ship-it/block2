@@ -638,6 +638,8 @@ class DragonsMixin {
     if (kind === 'cat' || kind === 'dog' || kind === 'wolf') return client.send('familiarReject', { reason: 'tame', kind });
     if (!Array.isArray(rec.prof.familiarUnlocks)) rec.prof.familiarUnlocks = [];
     if (rec.prof.familiarUnlocks.includes(kind)) return client.send('familiarReject', { reason: 'owned' });
+    const bindLevel=FAMILIAR_SYSTEM.BIND_LEVELS[kind]||1;
+    if(((rec.prof.S&&rec.prof.S.lvl)|0)<bindLevel)return client.send('familiarReject',{reason:'level',kind,level:bindLevel});
     const itemId = FAMILIAR_BIND_ITEM[kind];
     const slot = Math.max(0, Math.min(35, m && m.slot | 0));
     const usedSlot = this.consumeSlotItem(rec.prof, slot, itemId, 1);

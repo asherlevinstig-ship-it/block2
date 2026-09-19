@@ -159,6 +159,7 @@ class DungeonRoom extends GameRoom {
     this.onMessage('spendStat', (c, m) => this.handleSpendStat(c, m));
     this.onMessage('equipArmor', (c, m) => this.handleEquipArmor(c, m));
     this.onMessage('useFood', (c, m) => this.handleUseFood(c, m));
+    this.onMessage('usePotion', (c, m) => this.handleUsePotion(c, m));
     this.onMessage('quitDungeonSpirit', c => this.handleQuitDungeonSpirit(c));
     this.onMessage('respawnTown', (c, m) => this.handleRespawnTown(c, m));
     this.onMessage('stuckRescue', (c, m) => this.handleStuckRescue(c, m));
