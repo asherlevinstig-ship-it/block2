@@ -1641,15 +1641,17 @@ function trackerGuideButton(line,index){
 }
 function objectiveHudHTML(obj){
   if(!obj) return '';
+  const inputText=value=>combatApi.instructionText?combatApi.instructionText(value):value;
+  const touch=!!(combatState.tabletInput&&combatState.tabletInput.gameplayTouch);
   const checklistHTML=line=>Array.isArray(line&&line.checklist)?'<div class="prepchecklist">'+line.checklist.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'&#10003;':'&#9675;')+'</b><span>'+escHTML(c.label||'Check')+'</span></div>').join('')+'</div>':'';
   const activeQuestCard=line=>{
     const progress=line&&line.progress?line.progress:null;
     const progressBar=progress?'<div class="activequest-progress"><b>'+progress.current+' / '+progress.required+' '+escHTML(progress.label||'')+'</b><i><em style="width:'+progress.pct+'%"></em></i></div>':'';
     const objective=line&&line.text?line.text:'Continue the active objective.';
     return '<div class="activequest-card '+escHTML(line&&line.kind||'objective')+'">'+
-      '<div class="activequest-head"><span>Active Quest</span><button type="button" class="activequest-open" data-objective-action="questlog" title="View all quests (O)" aria-label="View all quests">✦<b>O</b></button></div>'+
+      '<div class="activequest-head"><span>Active Quest</span><button type="button" class="activequest-open" data-objective-action="questlog" title="View all quests" aria-label="View all quests">✦<b>'+(touch?'LOG':'O')+'</b></button></div>'+
       '<h3>'+escHTML(line&&line.title||line&&line.label||'Current Quest')+'</h3>'+
-      '<p>'+escHTML(objective)+'</p>'+
+      '<p>'+escHTML(inputText(objective))+'</p>'+
       progressBar+
       (line&&line.action?'<div class="activequest-action">'+trackerActionButton(line.action)+'</div>':'')+
       '</div>';
@@ -1662,7 +1664,7 @@ function objectiveHudHTML(obj){
     return '<div class="qt">Next Best Action</div><div class="objective-list next-best-list">'+
       '<div class="objective-line next-best '+escHTML(line.kind||'objective')+'">'+
         '<div class="olabel">'+escHTML(line.label||'Next')+'</div>'+
-        '<div class="obody">'+chapter+'<b>'+escHTML(line.title||'Next Step')+'</b><span>'+escHTML(line.text||'')+'</span>'+checklistHTML(line)+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
+        '<div class="obody">'+chapter+'<b>'+escHTML(line.title||'Next Step')+'</b><span>'+escHTML(inputText(line.text||''))+'</span>'+checklistHTML(line)+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
         '<div class="oact">'+progressText+trackerActionButton(line.action)+'</div>'+
       '</div>'+
     '</div>';
@@ -1950,7 +1952,7 @@ function announceLocationEnter(loc){
   const key=locationFeedKey(loc), now=performance.now();
   if(!key||key===lastLocationFeedKey||now-lastLocationFeedAt<2800)return;
   lastLocationFeedKey=key;lastLocationFeedAt=now;
-  if(typeof eventLog==='function')eventLog('Entered '+String(loc.name||'new area')+(loc.meta?' - '+String(loc.meta):''),locationFeedLabel(loc));
+  if(typeof eventLog==='function')eventLog('Entered '+String(loc.name||'new area')+(loc.meta?' - '+String(combatApi.instructionText?combatApi.instructionText(loc.meta):loc.meta):''),locationFeedLabel(loc));
 }
 function updateDiscoverySight(){
   const now=performance.now();if(dim!=='overworld'||now<nextDiscoverySightAt)return;nextDiscoverySightAt=now+900;
@@ -2469,11 +2471,13 @@ function nearbyQuestClaimPrompt(){
 }
 function updateEncounterPrompt(){
   if(!encounterPromptEl)return;
+  const inputKey=value=>combatApi.instructionKey?combatApi.instructionKey(value):value;
+  const inputText=value=>combatApi.instructionText?combatApi.instructionText(value):value;
   encounterPromptEl.classList.remove('player-interaction');
   const claimPrompt=nearbyQuestClaimPrompt();
   if(claimPrompt){
     encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(claimPrompt.title)+'</b><small>'+escHTML(claimPrompt.small)+'</small>';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>'+escHTML(claimPrompt.title)+'</b><small>'+escHTML(inputText(claimPrompt.small))+'</small>';
     return;
   }
   const interactionPrompt=combatApi.nearbyInteractionPrompt&&combatApi.nearbyInteractionPrompt();
@@ -2484,49 +2488,50 @@ function updateEncounterPrompt(){
     const actions=Array.isArray(interactionPrompt.actions)&&interactionPrompt.actions.length
       ? '<span class="interaction-actions">'+interactionPrompt.actions.map(action=>'<i>'+escHTML(action)+'</i>').join('')+'</span>'
       : '';
-    encounterPromptEl.innerHTML='<span class="key">'+escHTML(interactionPrompt.key||'G')+'</span><span class="interaction-copy"><b>'+escHTML(interactionPrompt.title||'Interact')+'</b><small>'+escHTML(interactionPrompt.small||'Press G to interact')+'</small>'+actions+'</span>';
+    const playerTouch=interactionPrompt.kind==='player'&&document.body.classList.contains('mobile-play-mode');
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(playerTouch?'MENU · PLAYER ACTIONS':inputKey(interactionPrompt.key||'G'))+'</span><span class="interaction-copy"><b>'+escHTML(interactionPrompt.title||'Interact')+'</b><small>'+escHTML(playerTouch?'Open Menu · Player Actions to interact':inputText(interactionPrompt.small||'Press G to interact'))+'</small>'+actions+'</span>';
     return;
   }
   const weeklyCache=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipWeeklyCache&&combatApi.nearFellowshipWeeklyCache();
   if(weeklyCache){
     encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Weekly Cache</b><small>Press G to claim unlocked rewards</small>';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>Fellowship Weekly Cache</b><small>'+escHTML(inputText('Press G to claim unlocked rewards'))+'</small>';
     return;
   }
   const noticeBoard=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipNoticeBoard&&combatApi.nearFellowshipNoticeBoard();
   if(noticeBoard){
     encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Notice Board</b><small>Press G to view pinned objectives</small>';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>Fellowship Notice Board</b><small>'+escHTML(inputText('Press G to view pinned objectives'))+'</small>';
     return;
   }
   const recallLectern=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearRecallLectern&&combatApi.nearRecallLectern();
     if(recallLectern){
       encounterPromptEl.classList.remove('danger','hidden');
-      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Study Lectern</b><small>Press G for Recall mastery and practice</small>';
+      encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>Fellowship Study Lectern</b><small>'+escHTML(inputText('Press G for Recall mastery and practice'))+'</small>';
       return;
     }
     const fellowshipMapTable=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipMapTable&&combatApi.nearFellowshipMapTable();
     if(fellowshipMapTable){
       encounterPromptEl.classList.remove('danger','hidden');
-      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Map Table</b><small>Press G to plan leads, treasure and discoveries</small>';
+      encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>Fellowship Map Table</b><small>'+escHTML(inputText('Press G to plan leads, treasure and discoveries'))+'</small>';
       return;
     }
     const fellowshipArmory=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipArmoryRack&&combatApi.nearFellowshipArmoryRack();
     if(fellowshipArmory){
       encounterPromptEl.classList.remove('danger','hidden');
-      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Armory Rack</b><small>Press G for Gate readiness, repairs and loadout checks</small>';
+      encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>Fellowship Armory Rack</b><small>'+escHTML(inputText('Press G for Gate readiness, repairs and loadout checks'))+'</small>';
       return;
     }
     const fellowshipPantry=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipPantryShelf&&combatApi.nearFellowshipPantryShelf();
     if(fellowshipPantry){
       encounterPromptEl.classList.remove('danger','hidden');
-      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Pantry Shelf</b><small>Press G for hunger, rations and Cook prep</small>';
+      encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>Fellowship Pantry Shelf</b><small>'+escHTML(inputText('Press G for hunger, rations and Cook prep'))+'</small>';
       return;
     }
     const fellowshipWeather=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipWeatherVane&&combatApi.nearFellowshipWeatherVane();
     if(fellowshipWeather){
       encounterPromptEl.classList.remove('danger','hidden');
-      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Weather Vane</b><small>Press G for active weather sites and sky planning</small>';
+      encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>Fellowship Weather Vane</b><small>'+escHTML(inputText('Press G for active weather sites and sky planning'))+'</small>';
       return;
     }
   const ancient=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearbyAncientCityInteractable&&combatApi.nearbyAncientCityInteractable(6.5);
@@ -2537,7 +2542,7 @@ function updateEncounterPrompt(){
         ? ['Ancient Core','Press G to inspect the Warden seal']
         : ['Lore Tablet','Press G to read and trigger Recall'];
     encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(prompt[0])+'</b><small>'+escHTML(prompt[1])+'</small>';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>'+escHTML(prompt[0])+'</b><small>'+escHTML(inputText(prompt[1]))+'</small>';
     return;
   }
   const dragon=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
@@ -2545,19 +2550,19 @@ function updateEncounterPrompt(){
     : null;
   if(dragon){
     encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML((dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase())+'</small>';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML((dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase())+'</small>';
     return;
   }
   const wildTrack=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.nearby&&globalThis.BlockcraftTamingLandTracks.nearby();
   if(wildTrack){
     encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">G</span><b>Wild Pet Tracks</b><small>'+escHTML(wildTrack.label||'Read tracks')+' - press G to inspect</small>';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>Wild Pet Tracks</b><small>'+escHTML(inputText((wildTrack.label||'Read tracks')+' - press G to inspect'))+'</small>';
     return;
   }
   const fishingPrompt=nearbyFishingWaterPrompt();
   if(fishingPrompt){
     encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">'+escHTML(fishingPrompt.key)+'</span><b>'+escHTML(fishingPrompt.title)+'</b><small>'+escHTML(fishingPrompt.small)+'</small>';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey(fishingPrompt.key))+'</span><b>'+escHTML(fishingPrompt.title)+'</b><small>'+escHTML(inputText(fishingPrompt.small))+'</small>';
     return;
   }
   if(dim!=='overworld'||!overworldActivity){encounterPromptEl.classList.add('hidden');encounterPromptEl.innerHTML='';return;}

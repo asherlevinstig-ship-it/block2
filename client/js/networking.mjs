@@ -4442,7 +4442,7 @@ globalThis.BlockcraftAdminBossGallery=Object.freeze({
 const COMPANIONS=createCompanionSystem({
   NET,
   player,
-  groundHeight:(x,z,y)=>worldState.standHeight(x,z,y),
+  groundHeight:(x,z,y)=>typeof worldApi.standHeight==='function'?worldApi.standHeight(x,z,y):y,
   inv,
   gearSystem:GEAR_SYSTEM,
   refreshHUD,
@@ -4526,13 +4526,17 @@ function refreshDragonEggGuide(){
   const eggName=(ITEMS[egg.stack.id]&&ITEMS[egg.stack.id].name)||(species&&species.name?species.name+' Egg':'Dragon Egg');
   const hasInsulator=inv.some(stack=>stack&&stack.id===B.EGG_INSULATOR);
   const selectedEgg=!!hotbarEgg&&combatState.selectedSlot===hotbarEgg.slot;
+  const touch=document.body.classList.contains('mobile-play-mode');
+  if(dragonEggGuideSteps[1])dragonEggGuideSteps[1].querySelector('span').textContent=touch?'Place an Egg Insulator with the Interact button.':'Place an Egg Insulator with right-click or G.';
+  if(dragonEggGuideSteps[2])dragonEggGuideSteps[2].querySelector('span').textContent=touch?'Select the egg, look at the insulator, and tap Interact.':'Select the egg, look at the insulator, and press G.';
+  if(dragonEggGuideSteps[3])dragonEggGuideSteps[3].querySelector('span').textContent=touch?'When it says READY, tap Interact again to hatch.':'When it says READY, press G again to hatch.';
   if(dragonEggGuideTitle)dragonEggGuideTitle.textContent='How to hatch your '+eggName;
   if(dragonEggGuideNext){
     dragonEggGuideNext.textContent=!hasInsulator
       ? 'Next: Get an Egg Insulator from Mara or a Merchant.'
       : !selectedEgg
-        ? 'Next: Press '+(hotbarEgg.slot+1)+' to select the egg after placing the insulator.'
-        : 'Next: Look at the placed Egg Insulator and press G.';
+        ? (touch?'Next: Use the slot arrows to select the egg after placing the insulator.':'Next: Press '+(hotbarEgg.slot+1)+' to select the egg after placing the insulator.')
+        : (touch?'Next: Look at the placed Egg Insulator and tap Interact.':'Next: Look at the placed Egg Insulator and press G.');
   }
   for(const step of dragonEggGuideSteps)if(step)step.classList.remove('ready','current');
   if(dragonEggGuideSteps[0])dragonEggGuideSteps[0].classList.add('ready');

@@ -62,7 +62,40 @@ test('mounted dragons show accurate non-overlapping flight and dismount controls
   assert.match(companions,/function layoutDragonHud\(el, mountedHere\)/);
   assert.match(companions,/\['landmap','currentquest','powerhud','activitytracker','townchoices'\]/);
   assert.match(styles,/#dragonhud \.dcontrols\{/);
-  assert.match(html,/dismount any active horse or dragon/);
+  assert.match(html,/Z mounts or dismounts the active ride/);
+});
+
+test('controls screen groups live player controls and hides internal beta shortcuts',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'../../client/index.html'),'utf8');
+  for(const heading of ['Essential controls','Inventory and progress','Social controls','Companions and world'])assert.match(html,new RegExp(heading));
+  assert.match(html,/Hold Shift to climb, release to glide down/);
+  assert.match(html,/Stand beside a Hunter and press E to team up, trade, or add them as a friend/);
+  assert.doesNotMatch(html,/Beta Tools|legendary test weapon|ability demo bot|Space up, Shift down/);
+});
+
+test('touch players receive touch-specific help and every world action has a touch route',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'../../client/index.html'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'../../client/styles.css'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'../../client/js/combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'../../client/js/frame-loop.mjs'),'utf8');
+  assert.match(html,/class="touch-control-help"/);
+  assert.match(html,/Drag the left stick to move/);
+  assert.match(html,/Call Dragon[\s\S]*Mount \/ Dismount[\s\S]*Call Familiar[\s\S]*Claim Land/);
+  assert.match(html,/id="starthelpbtn"/);
+  assert.match(styles,/body\.mobile-play-mode \.desktop-control-help\{display:none\}/);
+  assert.match(styles,/body\.mobile-play-mode \.touch-control-help\{display:block\}/);
+  for(const action of ['player','dragons','call-dragon','mount','dragon-ability','familiar','land'])assert.match(combat,new RegExp('data-mobile-menu-action="'+action+'"'));
+  assert.match(combat,/function tapVirtualKey\(code\)\{[\s\S]*dispatchVirtualKey\(code,'keydown'\);[\s\S]*dispatchVirtualKey\(code,'keyup'\);/);
+  assert.match(combat,/onboardingKind\(\)==='cursor'\)[\s\S]*onboardingFlags\.cursor=true/);
+  assert.match(combat,/function instructionKey\(value\)/);
+  assert.match(combat,/function instructionText\(value\)/);
+  assert.match(combat,/instructionKey\(near\?info\.nearKey:info\.farKey\)/);
+  assert.match(combat,/instructionKey\(key\)[\s\S]*instructionText\(lockedText\)/);
+  assert.match(frame,/combatApi\.instructionKey\?combatApi\.instructionKey\(value\)/);
+  assert.match(frame,/combatApi\.instructionText\?combatApi\.instructionText\(value\)/);
+  assert.match(frame,/MENU · PLAYER ACTIONS/);
+  const companions=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');
+  assert.match(companions,/touchControls\s*\? '<div class="dcontrols"[\s\S]*Tap to climb; tap again to glide/);
 });
 
 test('new level 1 hunters can see and use the gate system',()=>{
@@ -772,7 +805,7 @@ test('Town systems use district anchors instead of stale compact-town coordinate
   assert.match(room, /W\.townPos\(78\.5, 50, 'forge'\)/);
   assert.match(room, /W\.townPos\(54\.5,26\.5,'guild'\)/);
   assert.match(progression, /const sx = W\.HUB\.meditate\.x, sz = W\.HUB\.meditate\.z/);
-  assert.match(combat, /globalThis\.TOWN_INTERACTION_ZONES&&globalThis\.TOWN_INTERACTION_ZONES\.meditation/);
+  assert.match(combat, /worldState\.TOWN_INTERACTION_ZONES\|\|globalThis\.TOWN_INTERACTION_ZONES/);
   assert.match(frameLoop, /HUB\.tavernHearth\.x/);
   assert.match(frameLoop, /HUB\.forgeFire\.x/);
   assert.match(world, /const district=townPropDistrict\(x,z\)/);
@@ -1100,7 +1133,7 @@ test('client dimensions and server consume the shared grid contract', () => {
     assert.ok(offset > previousModule, `${name} is loaded in runtime order`);
     previousModule = offset;
   }
-  assert.ok(Buffer.byteLength(html) < 27_000, 'index.html remains a small markup and bootstrap shell');
+  assert.ok(Buffer.byteLength(html) < 28_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
   assert.match(html, /id="authpassshow" class="password-toggle" type="button"/);
@@ -3088,7 +3121,8 @@ test('objective tracker shows only the active quest with an all-quests shortcut'
   assert.match(frame,/return unique\.slice\(0,6\)/);
   assert.match(frame,/if\(lines\.length\)return \{label:'Objective Tracker',text:'Active quest categories',unified:true,lines\};/);
   assert.match(frame,/const activeQuestCard=line=>\{/);
-  assert.match(frame,/class="activequest-open" data-objective-action="questlog" title="View all quests \(O\)"/);
+  assert.match(frame,/class="activequest-open" data-objective-action="questlog" title="View all quests"/);
+  assert.match(frame,/touch\?'LOG':'O'/);
   assert.match(frame,/return primary\?activeQuestCard\(primary\):'';/);
   assert.doesNotMatch(frame,/data-objective-toggle/);
   assert.doesNotMatch(frame,/class="activequest-current"/);
@@ -3352,11 +3386,18 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(combat,/FIND LIGHT/);
   assert.match(combat,/Follow the pillar of light to the Guild Hall notice board/);
   assert.doesNotMatch(combat,/JOB PATHS/);
-  for(const activity of ['activity_farm','activity_cook','activity_smith','activity_meditate']){
+  for(const activity of ['activity_farm','activity_cook','activity_smith','activity_meditate','activity_guild','activity_social','activity_question_portal','activity_taming_portal','activity_fishing_portal','activity_dragons','activity_recall','activity_market','activity_outfitter']){
     assert.match(combat,new RegExp(`step:'${activity}'`));
   }
   assert.match(combat,/WHAT CAN I DO IN TOWN\?/);
   assert.match(combat,/const activity=TOWN_ACTIVITY_GUIDES\.find\(guide=>guide\.step===step\)/);
+  assert.match(combat,/lastActivityGroup=''/);
+  assert.match(combat,/activity\.group!==lastActivityGroup/);
+  assert.match(combat,/BlockcraftGuideObjective\)globalThis\.BlockcraftGuideObjective\.clear\(\)/);
+  assert.match(world,/townGuidanceActive&&String\(townGuidanceStep\|\|''\)\.startsWith\('activity_'\)/);
+  assert.match(world,/kind:townGuidanceStep,color:0x7dd3fc,target:info\.target,route:guidanceRouteToTarget\(info\.target\)/);
+  assert.ok(world.indexOf("townGuidanceActive&&String(townGuidanceStep||'').startsWith('activity_')")<world.indexOf('const trackerTarget=trackerObjectiveGuidanceInfo();'));
+  assert.match(menus,/Find work, guilds, friends, portals, dragons, Recall practice, and vendors/);
   assert.match(menus,/WHAT CAN I DO IN TOWN\?/);
   assert.match(menus,/function openNpcDialogueShell\(v,context=''\)/);
   assert.match(menus,/npc-dialogue-shell/);
@@ -3579,7 +3620,8 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   assert.match(html,/Click a phrase to send/);
   assert.match(html,/id="chatwheelclose"[^>]+aria-label="Close quick chat"/);
-  assert.match(html,/Teams, quick comms, and closing open panels\./);
+  assert.match(html,/Open Social for chat, nearby player actions, invitations, friends, teams, and dungeon queue\./);
+  assert.match(html,/Tab opens safe quick-chat phrases; press Tab again to change channel\./);
   assert.match(html,/aria-label="Quick comms phrase"/);
   assert.doesNotMatch(html,/chat commands/);
   assert.match(social,/Local quick phrase/);
@@ -5727,7 +5769,15 @@ test('social hub uses the full dungeon dashboard with live social panels', () =>
   assert.match(social, /socialState\.snapshot\.recentPlayers\.slice\(0,4\)/);
   assert.match(social, /socialState\.snapshot\.friends/);
   assert.match(social, /function dashboardOpenTeams\(/);
+  assert.match(social, /function renderSocialShortcuts\(/);
+  assert.match(social, /action\('QUICK CHAT'[^\n]*startQuickChatWheel\(\)/);
+  assert.match(social, /action\('CHAT & WHISPER'[^\n]*openChat\('local'\)/);
+  assert.match(social, /action\('PLAYER ACTIONS'/);
+  assert.match(social, /action\('INVITATIONS'/);
+  assert.match(social, /renderSocialShortcuts\(\);/);
+  assert.match(social, /interact\.disabled=!inReach/);
   assert.match(styles, /\.social-dungeon-hero/);
+  assert.match(styles, /\.social-shortcuts\{display:grid/);
   assert.match(styles, /\.social-dashboard-grid/);
   assert.match(styles, /#qpanel\.management\[data-modal="social-hub"\][\s\S]*height:min\(900px/);
   assert.match(networking, /globalThis\.openSocialUI=tab=>openTeamUI\(tab\|\|'dungeon'\)/);
@@ -5921,6 +5971,7 @@ test('incubation broadcasts never consume another players egg slot',()=>{
 test('a dragon hatched outside the overworld appears immediately and follows its owner',()=>{
   const companions=fs.readFileSync(path.join(__dirname,'../../client/js/companions.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
   const complete=companions.slice(companions.indexOf('function applyDragonIncubationComplete(m){'),companions.indexOf('function dragonHatchRejected(',companions.indexOf('function applyDragonIncubationComplete(m){')));
   const collect=companions.slice(companions.indexOf('function collectCompanionDragons(){'),companions.indexOf('function companionRowsForDimension(){'));
   const tick=companions.slice(companions.indexOf('function tickCompanionDragons('),companions.indexOf('// ---------------- dragon breeding:',companions.indexOf('function tickCompanionDragons(')));
@@ -5937,7 +5988,9 @@ test('a dragon hatched outside the overworld appears immediately and follows its
   assert.match(companions,/motionMode=.*walking\?'walk':'idle'/);
   assert.match(companions,/const lift=Math\.max\(0,stride\)\*\(walking\?\.18:\.11\)\*moving/);
   assert.match(companions,/dragon\.rotation\.y=0/);
-  assert.match(networking,/groundHeight:\(x,z,y\)=>worldState\.standHeight\(x,z,y\)/);
+  assert.match(world,/gameContext\.registerModule\('world',[\s\S]*?standHeight,/);
+  assert.match(networking,/groundHeight:\(x,z,y\)=>typeof worldApi\.standHeight==='function'\?worldApi\.standHeight\(x,z,y\):y/);
+  assert.doesNotMatch(networking,/worldState\.standHeight/);
   assert.doesNotMatch(tick,/if\(dim!=='overworld'\)[\s\S]*clearMissingCompanionDragons\(new Set\(\)\)/);
 });
 

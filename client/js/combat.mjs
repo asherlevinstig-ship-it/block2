@@ -704,6 +704,57 @@ function detectTabletInput(){
 function isTouchGameplayDevice(){
   return !!(tabletInputState.gameplayTouch||tabletInputState.phone||(navigator.maxTouchPoints>0&&typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches));
 }
+function instructionKey(value){
+  const key=String(value||'').trim();
+  if(!tabletInputState.gameplayTouch)return key;
+  const upper=key.toUpperCase();
+  if(upper==='W A S D'||upper==='WASD')return 'MOVE STICK';
+  if(upper.includes('ARROW')||/[←→↑↓]/.test(upper))return 'SWIPE TO LOOK';
+  if(upper.includes('SHIFT')&&upper.includes('W'))return 'SPRINT + MOVE';
+  if(upper==='SHIFT')return 'SPRINT / CLIMB';
+  if(upper==='SPACE')return 'JUMP';
+  if(upper==='LEFT CLICK'||upper==='LMB'||upper.includes('LEFT CLICK / F'))return 'ATTACK';
+  if(upper==='F'||upper==='HOLD F')return 'ATTACK';
+  if(upper.includes('G / F'))return 'INTERACT / ATTACK';
+  if(upper.includes('HOE')&&upper.includes('G'))return 'HOE + INTERACT';
+  if(upper==='G'||upper.includes('RIGHT CLICK')||upper.includes('PRESS G'))return 'INTERACT';
+  if(upper==='E')return 'MENU · BAG';
+  if(upper==='ESCAPE'||upper==='ESC')return 'MENU';
+  if(upper==='P')return 'MENU · QUESTIONS';
+  if(upper==='O')return 'MENU · QUESTS';
+  if(upper==='X')return 'MENU · CALL DRAGON';
+  if(upper==='Z')return 'MENU · MOUNT';
+  if(upper==='B')return 'MENU · DRAGONS';
+  if(upper==='J')return 'MENU · DRAGON ABILITY';
+  if(upper==='K')return 'MENU · FAMILIAR';
+  if(upper==='L'||upper==='PRESS L')return 'MENU · LAND';
+  return key;
+}
+function instructionText(value){
+  let text=String(value||'');
+  if(!tabletInputState.gameplayTouch)return text;
+  text=text
+    .replace(/Hold Shift while moving/gi,'Tap Sprint, then move with the stick')
+    .replace(/Use the arrow keys whenever you want to turn or tilt the camera/gi,'Swipe on the right side to turn or tilt the camera')
+    .replace(/with the arrow keys/gi,'by swiping across the right side')
+    .replace(/Press Escape to free the cursor/gi,'Tap Menu to open touch actions')
+    .replace(/Click the world to look around again/gi,'Close the menu to look around again')
+    .replace(/press\s+G\b/gi,'tap Interact')
+    .replace(/right[ -]?click/gi,'tap Interact')
+    .replace(/left[ -]?click/gi,'tap Attack')
+    .replace(/press\s+F\b/gi,'tap Attack')
+    .replace(/press\s+E\b/gi,'open Menu · Bag')
+    .replace(/press\s+P\b/gi,'open Menu · Questions')
+    .replace(/press\s+O\b/gi,'open Menu · Quests')
+    .replace(/press\s+X\b/gi,'open Menu · Call Dragon')
+    .replace(/press\s+Z\b/gi,'open Menu · Mount')
+    .replace(/press\s+K\b/gi,'open Menu · Familiar')
+    .replace(/press\s+L\b/gi,'open Menu · Land')
+    .replace(/move the target with WASD/gi,'move the target with the move stick')
+    .replace(/with\s+WASD/gi,'with the move stick')
+    .replace(/use Escape/gi,'open Menu and choose Free Cursor');
+  return text;
+}
 function tryLockLandscapeOrientation(){
   if(!isTouchGameplayDevice())return;
   try{
@@ -712,9 +763,13 @@ function tryLockLandscapeOrientation(){
   }catch{}
 }
 function dispatchVirtualKey(code,type='keydown'){
-  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyE:'e',KeyF:'f',KeyG:'g',KeyH:'h',KeyI:'i',KeyJ:'j',KeyO:'o',KeyP:'p',KeyQ:'q',KeyR:'r',Tab:'Tab',ShiftLeft:'Shift',Space:' ',Escape:'Escape'};
+  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyB:'b',KeyC:'c',KeyE:'e',KeyF:'f',KeyG:'g',KeyH:'h',KeyI:'i',KeyJ:'j',KeyK:'k',KeyL:'l',KeyO:'o',KeyP:'p',KeyQ:'q',KeyR:'r',KeyT:'t',KeyX:'x',KeyZ:'z',Tab:'Tab',ShiftLeft:'Shift',Space:' ',Escape:'Escape'};
   const event=new KeyboardEvent(type,{code,key:keyMap[code]||code,bubbles:true,cancelable:true});
   window.dispatchEvent(event);
+}
+function tapVirtualKey(code){
+  dispatchVirtualKey(code,'keydown');
+  dispatchVirtualKey(code,'keyup');
 }
 function tabletSetKey(code,on){
   keys[code]=!!on;
@@ -749,12 +804,14 @@ function tabletSetSprintToggle(on){
     btn.classList.toggle('active',tabletInputState.sprintToggled);
     btn.setAttribute('aria-pressed',tabletInputState.sprintToggled?'true':'false');
     const label=btn.querySelector('span');
-    if(label)label.textContent=tabletInputState.sprintToggled?'Sprint On':'Sprint';
+    if(label){
+      const dragonRide=mounted&&isDragon(mountKind);
+      label.textContent=dragonRide?(tabletInputState.sprintToggled?'Climb On':'Glide'):(tabletInputState.sprintToggled?'Sprint On':'Sprint');
+    }
   }
 }
 function openQuestionsFromHud(){
-  dispatchVirtualKey('KeyP');
-  dispatchVirtualKey('KeyP','keyup');
+  tapVirtualKey('KeyP');
   return true;
 }
 function openSocialFromHud(){
@@ -815,6 +872,13 @@ function ensureTabletControls(){
       '<button data-mobile-menu-action="questions">Questions</button>'+
       '<button data-mobile-menu-action="utilities">Utilities</button>'+
       '<button data-mobile-menu-action="social">Social</button>'+
+      '<button data-mobile-menu-action="player">Player Actions</button>'+
+      '<button data-mobile-menu-action="dragons">Dragon Bonds</button>'+
+      '<button data-mobile-menu-action="call-dragon">Call Dragon</button>'+
+      '<button data-mobile-menu-action="mount">Mount / Dismount</button>'+
+      '<button data-mobile-menu-action="dragon-ability">Dragon Ability</button>'+
+      '<button data-mobile-menu-action="familiar">Call Familiar</button>'+
+      '<button data-mobile-menu-action="land">Claim Land</button>'+
       '<button data-mobile-menu-action="stuck">I’m Stuck</button>'+
       '<button data-mobile-menu-action="bug">Report Bug</button>'+
       '<button data-mobile-menu-action="free">Free Cursor</button>'+
@@ -897,17 +961,27 @@ function ensureTabletControls(){
   root.querySelectorAll('[data-tablet-menu]').forEach(btn=>btn.addEventListener('pointerdown',e=>{
     e.preventDefault();e.stopPropagation();
     mobileQuickMenu.classList.toggle('hidden');
+    if(onboardingActive&&onboardingArrived&&onboardingKind()==='cursor'){
+      onboardingFlags.cursor=true;
+      updateOnboardingHud();
+    }
   }));
   root.querySelectorAll('[data-mobile-menu-action]').forEach(btn=>btn.addEventListener('pointerdown',e=>{
     e.preventDefault();e.stopPropagation();
     const action=btn.dataset.mobileMenuAction||'';
-    if(action==='bag')dispatchVirtualKey('KeyE');
-    else if(action==='stats')dispatchVirtualKey('KeyC');
-    else if(action==='quests')dispatchVirtualKey('KeyO');
-    else if(action==='questions')dispatchVirtualKey('KeyP');
-    else if(action==='utilities'){ if(typeof openUtilitiesUI==='function')openUtilitiesUI(); else dispatchVirtualKey('KeyI'); }
+    if(action==='bag'||action==='player')tapVirtualKey('KeyE');
+    else if(action==='stats')tapVirtualKey('KeyC');
+    else if(action==='quests')tapVirtualKey('KeyO');
+    else if(action==='questions')tapVirtualKey('KeyP');
+    else if(action==='utilities'){ if(typeof openUtilitiesUI==='function')openUtilitiesUI(); else tapVirtualKey('KeyI'); }
     else if(action==='social')openSocialFromHud();
-    else if(action==='free')dispatchVirtualKey('Escape');
+    else if(action==='dragons')tapVirtualKey('KeyB');
+    else if(action==='call-dragon')tapVirtualKey('KeyX');
+    else if(action==='mount')tapVirtualKey('KeyZ');
+    else if(action==='dragon-ability')tapVirtualKey('KeyJ');
+    else if(action==='familiar')tapVirtualKey('KeyK');
+    else if(action==='land')tapVirtualKey('KeyL');
+    else if(action==='free')tapVirtualKey('Escape');
     else if(action==='bug')document.getElementById('bugreportbtn')?.click();
     else if(action==='stuck')document.getElementById('stuckrescuebtn')?.click();
     else if(action==='close')closeDismissibleGamePanel(true,'tablet-menu');
@@ -945,6 +1019,11 @@ function refreshTabletMode(){
   controls.classList.toggle('landscape',innerWidth>=innerHeight);
   const slotLabel=controls.querySelector('.tablet-slot-controls span');
   if(slotLabel)slotLabel.textContent='Slot '+(selected+1);
+  const sprintLabel=controls.querySelector('[data-tablet-sprint] span');
+  if(sprintLabel){
+    const dragonRide=mounted&&isDragon(mountKind);
+    sprintLabel.textContent=dragonRide?(tabletInputState.sprintToggled?'Climb On':'Glide'):(tabletInputState.sprintToggled?'Sprint On':'Sprint');
+  }
   refreshMobileHotbarWindow();
   controls.classList.toggle('hidden',!shouldShow);
   if(!shouldShow){
@@ -1573,6 +1652,7 @@ for(const step of ONBOARDING_STEPS){
 function showStartHelp(){
   overlay.classList.remove('compact');
 }
+document.getElementById('starthelpbtn')?.addEventListener('click',showStartHelp);
 function onboardingDone(){
   if(NET.on) return serverTutorials.onboarding>=7;
   try{return serverTutorials.onboarding>=7||localStorage.getItem('bc_onboarding_done_v7')==='1';}catch(e){return serverTutorials.onboarding>=7;}
@@ -4146,10 +4226,10 @@ function updateJobTutorialHud(){
   const subText=nearReturn?(minerBlockedReturn?'The mining loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farming loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current farming lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cooking loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current cooking station.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'The forge loop is: craft gear -> sell or equip it -> improve the party.':'Follow the green pillar back to the forge bench.'):monkBlockedReturn?'The meditation loop is: enter a calm space -> answer or hold focus -> restore and support.':'Activity complete. Continue through quests, Gates, and town services.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tuthead"><div><div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div><div class="tutroom">'+escHTML((JOB_TUTORIAL_STEPS[jobTutorialJob]&&JOB_TUTORIAL_STEPS[jobTutorialJob].room)||'Private Lesson')+'</div></div><div class="tutdistance">'+escHTML(distanceText)+'</div></div>'
-    +'<div class="tutkey">'+escHTML(keyText)+'</div>'
+    +'<div class="tutkey">'+escHTML(instructionKey(keyText))+'</div>'
     +jobTutorialChipsHTML(jobTutorialJob)
-    +'<div class="tuttext">'+escHTML(mainText)+'</div>'
-    +'<div class="tutsub">'+escHTML(subText)+'</div>';
+    +'<div class="tuttext">'+escHTML(instructionText(mainText))+'</div>'
+    +'<div class="tutsub">'+escHTML(instructionText(subText))+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
@@ -4466,9 +4546,9 @@ function updateTownGuidanceHud(){
   const near=player&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<(info.near||4.2);
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tutpill">'+escHTML(info.pill)+'</div>'
-    +'<div class="tutkey">'+escHTML(near?info.nearKey:info.farKey)+'</div>'
-    +'<div class="tuttext">'+escHTML(near?info.nearText:info.farText)+'</div>'
-    +'<div class="tutsub">'+escHTML(near?info.nearSub:info.farSub)+'</div>';
+    +'<div class="tutkey">'+escHTML(instructionKey(near?info.nearKey:info.farKey))+'</div>'
+    +'<div class="tuttext">'+escHTML(instructionText(near?info.nearText:info.farText))+'</div>'
+    +'<div class="tutsub">'+escHTML(instructionText(near?info.nearSub:info.farSub))+'</div>';
 }
 let cachedLandTutorialTarget=null;
 function landTutorialTarget(){
@@ -4493,10 +4573,19 @@ function landTutorialRoute(target){
   return [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC+s*(TOWN.HS-3)},{x:TOWN.TC,z:TOWN.TC+s*(TOWN.HS+4)},target];
 }
 const TOWN_ACTIVITY_GUIDES=[
-  {step:'activity_farm',title:'FARM & HARVEST',summary:'Grow crops at the town plots. Speak to Liss for Fieldcraft or work the soil with a hoe.',target:()=>HUB.farm,nearKey:'G / F',nearText:'Speak to Liss for FIELDCRAFT, or use a hoe and seeds on the plots.',nearSub:'Till, plant, then harvest. Liss also offers farming quests.'},
-  {step:'activity_cook',title:'COOK & PREPARE',summary:'Visit Greta at the tavern, open KITCHEN, and make food for travel.',target:()=>HUB.tavern,nearText:'Talk to Greta, then choose KITCHEN.',nearSub:'Bring ingredients or use the recipe book to see what you can make.'},
-  {step:'activity_smith',title:'SMITH & REPAIR',summary:'Visit Tobin for crafting, gear repair, upgrades, and recovered loot.',target:()=>HUB.smith,nearText:'Talk to Tobin, then choose SERVICES.',nearSub:'Craft gear, repair worn equipment, or inspect forge upgrades.'},
-  {step:'activity_meditate',title:'MEDITATE',summary:'Focus in the Meditation Hall to restore and grow your resources. Unlocks at Level 4.',target:()=>HUB.meditate,nearText:'Step into the focus circle and press G.',nearSub:'Meditation unlocks at Level 4. Hold still once focus begins.',minLevel:()=>MEDITATION_UNLOCK_LEVEL},
+  {group:'WORK & RECOVERY',step:'activity_farm',title:'FARM & HARVEST',summary:'Grow crops at the town plots. Speak to Liss or work the soil with a hoe.',target:()=>HUB.farm,nearKey:'G / F',nearText:'Speak to Liss, or use a hoe and seeds on the plots.',nearSub:'Till, plant, then harvest. Liss also offers farming quests.'},
+  {group:'WORK & RECOVERY',step:'activity_cook',title:'COOK & PREPARE',summary:'Visit Greta at the tavern and make food for travel.',target:()=>HUB.tavern,nearText:'Talk to Greta, then choose KITCHEN.',nearSub:'Bring ingredients or use the recipe book to see what you can make.'},
+  {group:'WORK & RECOVERY',step:'activity_smith',title:'SMITH & REPAIR',summary:'Visit Tobin for crafting, repairs, upgrades, and recovered loot.',target:()=>HUB.smith,nearText:'Talk to Tobin, then choose SERVICES.',nearSub:'Craft gear, repair worn equipment, or inspect forge upgrades.'},
+  {group:'WORK & RECOVERY',step:'activity_meditate',title:'MEDITATE',summary:'Restore mana and stamina at the Meditation Hall. Long-term growth unlocks at Level 4.',target:()=>HUB.meditate,nearText:'Step into the focus circle and press G.',nearSub:'Answer the focus question, then hold still to complete the session.'},
+  {group:'PEOPLE & GROUPS',step:'activity_guild',title:'GUILD HALL',summary:'Browse Guild Contracts and fellowship options at the notice board.',target:()=>HUB.guildNoticeBoard,nearText:'Open the Guild Hall notice board or speak to the receptionist.',nearSub:'Choose a contract, or explore fellowships and shared goals.'},
+  {group:'PEOPLE & GROUPS',step:'activity_social',title:'SOCIAL PLAY',summary:'Meet Aelin to learn nearby players, friends, teams, and dungeon queues.',target:()=>HUB.socialMentor,nearText:'Speak to Aelin, or open the Social hub.',nearSub:'Find nearby Hunters, make friends, form a team, or join a dungeon queue.'},
+  {group:'PORTALS & COMPANIONS',step:'activity_question_portal',title:'QUESTION HALL PORTAL',summary:'Enter the blue study portal for question practice.',target:()=>HUB.questionPortal,nearText:'Press G at the blue Question Hall portal.',nearSub:'Practice questions, then use the return portal to come back to town.'},
+  {group:'PORTALS & COMPANIONS',step:'activity_taming_portal',title:'TAMING LAND PORTAL',summary:'Visit the dragon and familiar sanctuary.',target:()=>HUB.tamingPortal,nearText:'Press G at the green Taming Land portal.',nearSub:'Explore companions, dragon care, and taming activities.'},
+  {group:'PORTALS & COMPANIONS',step:'activity_fishing_portal',title:'FISHING LAKE PORTAL',summary:'Travel to the lake for fishing and quiet exploration.',target:()=>HUB.fishingPortal,nearText:'Press G at the blue Fishing Lake portal.',nearSub:'Bring a fishing rod in your hotbar, or visit the outfitter first.'},
+  {group:'PORTALS & COMPANIONS',step:'activity_dragons',title:'DRAGON ROOST',summary:'Visit your dragons, inspect bonds, and manage care or commands.',target:()=>HUB.roost,nearText:'Press G at the Roost to open Dragon Bonds.',nearSub:'View growth and roles; use the dragon controls to call a rideable companion.'},
+  {group:'SUPPLIES & STUDY',step:'activity_recall',title:'RECALL PRACTICE',summary:'Practice Recall at Question Hall; cast Recall with P wherever you are.',target:()=>HUB.questionPortal,nearText:'Press G to enter Question Hall, or press P to cast Recall now.',nearSub:'Correct answers restore mana and stamina. You can practice without risking gear.'},
+  {group:'SUPPLIES & STUDY',step:'activity_market',title:'MARKET VENDORS',summary:'Browse general supplies at the market stalls.',target:()=>HUB.market,nearText:'Press G at a market stall to browse supplies.',nearSub:'Compare prices before buying; the tavern and outfitter stock different goods.'},
+  {group:'SUPPLIES & STUDY',step:'activity_outfitter',title:'RIVER & TRAIL OUTFITTER',summary:'Buy fishing gear and common travel supplies.',target:()=>HUB.outfitter,nearText:'Press G at the outfitter counter to browse gear.',nearSub:'Look here for a fishing rod before visiting the lake.'},
 ];
 function townTutorialInfo(step){
   const activity=TOWN_ACTIVITY_GUIDES.find(guide=>guide.step===step);
@@ -4587,7 +4676,7 @@ function openTownTutorialsUI(){
   style.appendChild(qBtn('CHOOSE',()=>{ if(globalThis.BlockcraftPlayerStyleGuide)globalThis.BlockcraftPlayerStyleGuide.open(); }));
   qpanelEl.appendChild(style);
   const activitiesTitle=document.createElement('div');activitiesTitle.className='sub2';activitiesTitle.textContent='WHAT CAN I DO IN TOWN?';qpanelEl.appendChild(activitiesTitle);
-  const activitiesIntro=document.createElement('p');activitiesIntro.className='qtext';activitiesIntro.textContent='Pick an activity. A light will guide you to its real station; no profession choice is required.';qpanelEl.appendChild(activitiesIntro);
+  const activitiesIntro=document.createElement('p');activitiesIntro.className='qtext';activitiesIntro.textContent='Pick an activity. A light and route will guide you to the right person, station, or portal.';qpanelEl.appendChild(activitiesIntro);
   if(townGuidanceActive&&TOWN_ACTIVITY_GUIDES.some(guide=>guide.step===townGuidanceStep)){
     qpanelEl.appendChild(qBtn('STOP CURRENT GUIDE',()=>{
       townGuidanceActive=false;townGuidanceStep='';tutorialPillarGroup.visible=false;tutorialEl.classList.add('hidden');
@@ -4595,7 +4684,12 @@ function openTownTutorialsUI(){
       closeQWin(true);
     },true));
   }
+  let lastActivityGroup='';
   for(const activity of TOWN_ACTIVITY_GUIDES){
+    if(activity.group!==lastActivityGroup){
+      const group=document.createElement('div');group.className='sub2';group.textContent=activity.group;qpanelEl.appendChild(group);
+      lastActivityGroup=activity.group;
+    }
     const minLevel=activity.minLevel?activity.minLevel():0,unlocked=!minLevel||(S&&S.lvl|0)>=minLevel;
     const row=document.createElement('div');row.className='shoprow';
     const copy=document.createElement('span');copy.innerHTML='<b>'+escHTML(activity.title)+'</b><br><small>'+escHTML(activity.summary)+'</small>';row.appendChild(copy);
@@ -4630,6 +4724,7 @@ function guideTownTutorialChoice(step, ready=true){
     return;
   }
   if(uiShellState.qOpen) closeQWin(true);
+  if(globalThis.BlockcraftGuideObjective)globalThis.BlockcraftGuideObjective.clear();
   setTownTutorialChoice(step);
   townGuidanceActive=true;
   const info=townTutorialInfo(step);
@@ -5153,7 +5248,7 @@ function updateOnboardingHud(){
     const pct=Math.min(100,Math.floor(onboardingArrowTurn/ONBOARDING_FULL_TURN*100));
     progress='<div class="tutprogress"><b>'+pct+'%</b><span>TURNED</span></div>';
   }
-  tutorialEl.innerHTML='<div class="tutpill">'+escHTML(s.pillar)+'</div><div class="tutkey">'+escHTML(key)+'</div>'+progress+'<div class="tuttext">'+escHTML(lockedText)+'</div><div class="tutsub">'+escHTML(sub)+'</div>';
+  tutorialEl.innerHTML='<div class="tutpill">'+escHTML(s.pillar)+'</div><div class="tutkey">'+escHTML(instructionKey(key))+'</div>'+progress+'<div class="tuttext">'+escHTML(instructionText(lockedText))+'</div><div class="tutsub">'+escHTML(instructionText(sub))+'</div>';
 }
 function updateOnboardingPillar(now){
   if(abilityTrainingActive) return;
@@ -6380,7 +6475,7 @@ function primaryAction(){
   }
   mouseL=true;
 }
-const MEDITATION_UNLOCK_LEVEL=4;
+const MEDITATION_GROWTH_LEVEL=4;
 const MEDITATION_COMPLETE_SECONDS=8;
 let isMeditating=false, meditateStartedAt=0, meditationPrevView=null, meditationFocusReady=false, meditationChallenge=null, meditationSortOrder=[];
 const meditationHud=document.getElementById('recallhud');
@@ -6391,12 +6486,10 @@ const meditationFallbackEl=document.getElementById('recallfallback');
 const meditationFeedbackEl=document.getElementById('recallfeedback');
 function inMeditationSpot(){
   const x=player.pos.x, z=player.pos.z;
-  const zone=globalThis.TOWN_INTERACTION_ZONES&&globalThis.TOWN_INTERACTION_ZONES.meditation || (globalThis.HUB&&globalThis.HUB.meditate);
+  const zones=worldState.TOWN_INTERACTION_ZONES||globalThis.TOWN_INTERACTION_ZONES;
+  const zone=zones&&zones.meditation || (globalThis.HUB&&globalThis.HUB.meditate);
   return dim==='overworld' && Math.abs(player.pos.y-(TOWN.G+1))<2.5 &&
     !!zone && Math.hypot(x-zone.x,z-zone.z)<=((zone.radius||8.6)+.35);
-}
-function meditationUnlocked(){
-  return (S&&S.lvl|0)>=MEDITATION_UNLOCK_LEVEL;
 }
 function normalizeMeditationGrowth(raw=meditationGrowth){
   const src=raw&&typeof raw==='object'?raw:{};
@@ -6424,7 +6517,7 @@ function applyMeditationGrowthPayload(m){
   if(m.ok===false){
     const r=String(m.reason||'');
     SFX.error&&SFX.error();
-    if(r==='level')sysMsg('Meditation unlocks at <b>'+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL,{long:true})+'</b>.',{tier:'minor',title:'Meditation'});
+    if(r==='level')sysMsg('Long-term meditation growth unlocks at <b>'+hunterRankLevelLabel(MEDITATION_GROWTH_LEVEL,{long:true})+'</b>.',{tier:'minor',title:'Meditation'});
     else if(r==='range')sysMsg('Meditation only works inside the <b>Meditation Hall</b>.',{tier:'minor',title:'Meditation'});
     else if(r==='short')sysMsg('Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds to complete meditation.',{tier:'minor',title:'Meditation'});
     else if(r==='question')sysMsg('Answer the <b>focus question</b> before completing meditation.',{tier:'minor',title:'Meditation'});
@@ -6432,6 +6525,11 @@ function applyMeditationGrowthPayload(m){
   }
   if(!m.growth)return;
   meditationGrowth=normalizeMeditationGrowth(m.growth);
+  if(m.restored){
+    if(Number.isFinite(+m.mp))mp=Math.max(0,Math.min(maxMp(),+m.mp));
+    if(Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));
+    renderBars();refreshHUD();
+  }
   if(m.award&&m.award.stat){
     const labels={hp:'Max HP',mp:'Max MP',sp:'Max SP',hunger:'Max Food'};
     const amount=Math.max(1,m.award.amount|0),label=labels[m.award.stat]||'Body';
@@ -6445,6 +6543,8 @@ function applyMeditationGrowthPayload(m){
     sysMsg('<b>Meditation breakthrough!</b> '+escHTML(label)+' increased by <b>+'+amount+'</b>. Next benchmark: '+meditationGrowth.next+' complete focus sessions.',{tier:'major',title:'Meditation'});
   }else if(m.capped){
     sysMsg('Your meditation growth is capped for this Hunter rank. Rank up to grow further.',{tier:'minor',title:'Meditation'});
+  }else if(m.growthLocked&&m.completed){
+    sysMsg('Meditation complete. Mana and stamina restored. Long-term mana growth unlocks at <b>'+hunterRankLevelLabel(MEDITATION_GROWTH_LEVEL,{long:true})+'</b>.',{tier:'minor',title:'Meditation'});
   }else if(m.completed){
     sysMsg('Meditation recorded: <b>'+meditationGrowth.completed+'</b> / '+meditationGrowth.next+' toward your next mana-pool breakthrough.',{tier:'minor',title:'Meditation'});
   }
@@ -6624,11 +6724,6 @@ function applyMeditationCamera(){
 function toggleMeditation(){
   if(isMeditating){ stopMeditation(); return true; }
   if(!inMeditationSpot()) return false;
-  if(!meditationUnlocked()){
-    SFX.error&&SFX.error();
-    sysMsg('Meditation unlocks at <b>'+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL,{long:true})+'</b>. Return to the Meditation Hall after more training.',{tier:'minor',title:'Meditation'});
-    return true;
-  }
   startMeditation();
   return true;
 }
@@ -6938,7 +7033,7 @@ function nearbyInteractionPrompt(){
   if(nearQuestionHallTownPortal())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(dim==='questions')push({key:'P',title:'Question Hall',small:'Answer Computer Science questions',priority:118},0);
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
-  if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at '+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL)),priority:112},0);
+  if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':'Begin focus meditation',priority:112},0);
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
   const robberyTargets=globalThis.BlockcraftRobberyTargets;
   const robberyTarget=!socialTarget&&robberyTargets&&robberyTargets.near?robberyTargets.near(4.8):null;
@@ -7604,6 +7699,8 @@ gameContext.registerModule('combat', Object.freeze({
   releasePointerLockWithoutCameraFallback,
   resumeGameplayCamera,
   refreshTabletMode,
+  instructionKey,
+  instructionText,
   setTabletSprintToggle:tabletSetSprintToggle,
   openBlockingGameModal,
   closeBlockingGameModal,

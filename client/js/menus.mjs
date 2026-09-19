@@ -4892,7 +4892,7 @@ function openQuestLogUI(){
   const p=document.createElement('p'); p.className='qtext'; p.textContent=earlyJourneyActive()?'Follow Mara: gather → craft → fight → upgrade → first Gate. Your current objective is below.':'All active objectives are grouped by source so you know what kind of work you are doing and where to go next.'; qpanelEl.appendChild(p);
   if(dim==='overworld'&&player&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))){
     const town=document.createElement('div');town.className='cartographer-briefing fresh';
-    town.innerHTML='<small>TOWN OF BEGINNINGS</small><p>Want a change of pace? Farm, cook, smith, or meditate without choosing a profession.</p>';
+    town.innerHTML='<small>TOWN OF BEGINNINGS</small><p>Want a change of pace? Find work, guilds, friends, portals, dragons, Recall practice, and vendors.</p>';
     town.appendChild(qBtn('WHAT CAN I DO IN TOWN?',()=>openTownTutorialsUI()));qpanelEl.appendChild(town);
   }
   const journey=document.createElement('div');journey.className='quest-rank-summary';

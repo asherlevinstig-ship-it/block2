@@ -555,10 +555,14 @@ function teamActionFor(person){
 function renderNearbySocial(){
   socialHeading('NEARBY HUNTERS');
   const people=nearbySocialPlayers();
-  if(!people.length){socialEmpty('No hunters are within 16 metres. Walk beside someone to add them or team up.');return;}
+  if(!people.length){socialEmpty('No hunters are within 16 metres. Walk beside someone, then use Interact for trade, friends, and team actions.');return;}
   for(const person of people){
     const ui=socialRow({...person,online:true},Math.round(person.distance)+'m away');
-    const interact=qBtn('INTERACT',()=>{closeQWin(false);if(typeof openPlayerSocialUI==='function')openPlayerSocialUI(person);});ui.actions.appendChild(interact);
+    const inReach=person.distance<=4.8;
+    const interact=qBtn(inReach?'INTERACT':'MOVE CLOSER',()=>{if(!inReach)return;closeQWin(false);if(typeof openPlayerSocialUI==='function')openPlayerSocialUI(person);});
+    interact.disabled=!inReach;
+    interact.title=inReach?'Trade, friend, team up, or train a pet':'Move within 5 metres to interact';
+    ui.actions.appendChild(interact);
     if(person.distance<=8){
       const teamAction=teamActionFor(person);if(teamAction)ui.actions.appendChild(qBtn(teamAction.label,teamAction.run));
       ui.actions.appendChild(qBtn('ADD FRIEND',()=>NET.room.send('friendAdd',{targetSid:person.sid}),true));
@@ -659,6 +663,20 @@ function dashboardOpenTeams(){
   });
   return out.sort((a,b)=>Number(!!b.team.lfg)-Number(!!a.team.lfg)||b.online-a.online).slice(0,4);
 }
+function renderSocialShortcuts(){
+  const shortcuts=document.createElement('nav');shortcuts.className='social-shortcuts';shortcuts.setAttribute('aria-label','Social actions');
+  const action=(title,detail,run)=>{const button=document.createElement('button');button.type='button';button.innerHTML='<b>'+escHTML(title)+'</b><small>'+escHTML(detail)+'</small>';button.addEventListener('click',run);shortcuts.appendChild(button);};
+  action('QUICK CHAT','Safe phrases · Tab shortcut',()=>{closeQWin(false);startQuickChatWheel();});
+  action('CHAT & WHISPER','Choose a channel · / shortcut',()=>{closeQWin(false);openChat('local');});
+  action('PLAYER ACTIONS','Trade or team up · E nearby',()=>{
+    const person=nearbySocialPlayers().find(entry=>entry.distance<=4.8);
+    if(person&&typeof openPlayerSocialUI==='function'){closeQWin(false);openPlayerSocialUI(person);}
+    else openTeamUI('nearby',false);
+  });
+  const friendCount=socialState.snapshot.incomingFriendRequests.length,teamCount=socialState.snapshot.teamInvites.length;
+  action('INVITATIONS',friendCount+teamCount?'Accept or decline · '+(friendCount+teamCount)+' waiting':'Friend and team requests',()=>openTeamUI(teamCount?'team':'friends',false));
+  qpanelEl.appendChild(shortcuts);
+}
 function renderSocialDashboard(){
   const hero=document.createElement('section');hero.className='social-dungeon-hero';
   const artwork=document.createElement('div');artwork.className='social-gate-art';artwork.innerHTML='<div class="social-gate-rune"><i></i><i></i><i></i></div><span>HUNT<br>TOGETHER<br>GO FURTHER</span>';hero.appendChild(artwork);
@@ -676,7 +694,7 @@ function renderSocialDashboard(){
   const grid=document.createElement('div');grid.className='social-dashboard-grid';
   const nearby=socialDashboardCard('NEARBY HUNTERS','Players within 16 metres.','nearby'),nearbyPeople=nearbySocialPlayers().slice(0,4);
   if(!nearbyPeople.length)dashboardEmpty(nearby.body,'No hunters are close by right now.');
-  for(const person of nearbyPeople)nearby.body.appendChild(socialDashboardPerson(person,Math.max(1,Math.round(person.distance))+' m away',{label:'☵',title:'Interact',run:()=>{closeQWin(false);if(typeof openPlayerSocialUI==='function')openPlayerSocialUI(person);}}));
+  for(const person of nearbyPeople)nearby.body.appendChild(socialDashboardPerson(person,Math.max(1,Math.round(person.distance))+' m away',{label:'☵',title:person.distance<=4.8?'Interact':'Move within 5 metres for player actions',run:()=>{if(person.distance>4.8){openTeamUI('nearby',false);return;}closeQWin(false);if(typeof openPlayerSocialUI==='function')openPlayerSocialUI(person);}}));
   grid.appendChild(nearby.card);
 
   const recent=socialDashboardCard('RECENT PLAYERS','Hunters from recent activities.','recent'),recentPeople=socialState.snapshot.recentPlayers.slice(0,4);
@@ -705,6 +723,7 @@ function openTeamUI(tab='dungeon',refresh=true){
   const tabs=document.createElement('div');tabs.className='social-tabs';
   for(const [id,label] of [['dungeon','DUNGEON QUEUE'],['nearby','NEARBY'],['recent','RECENT'],['friends','FRIENDS'],['team','TEAMS']]){const count=id==='friends'?socialState.snapshot.incomingFriendRequests.length:id==='team'?socialState.snapshot.teamInvites.length:0,button=document.createElement('button');button.type='button';button.className=id===socialState.tab?'active':'';button.textContent=label+(count?' ('+count+')':'');button.addEventListener('click',()=>openTeamUI(id,false));tabs.appendChild(button);}
   qpanelEl.appendChild(tabs);
+  renderSocialShortcuts();
   if(!NET.on){
     const p2=document.createElement('p'); p2.className='qtext';
     p2.textContent='Teams are a multiplayer feature \u2014 connect to a server first.';

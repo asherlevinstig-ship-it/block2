@@ -5896,6 +5896,10 @@ function guidanceTargetInfo(){
   }
   const manualTarget=manualGuidanceTargetInfo();
   if(manualTarget)return manualTarget;
+  if(townGuidanceActive&&String(townGuidanceStep||'').startsWith('activity_')){
+    const info=townTutorialInfo(townGuidanceStep);
+    return {kind:townGuidanceStep,color:0x7dd3fc,target:info.target,route:guidanceRouteToTarget(info.target)};
+  }
   const arrivalTarget=townArrivalGuidanceInfo();
   if(arrivalTarget)return arrivalTarget;
   const trackerTarget=trackerObjectiveGuidanceInfo();
@@ -12443,6 +12447,7 @@ gameContext.registerModule('world', Object.freeze({
   updateWorldBounties,
   getBlock:getB,
   setBlock:setB,
+  standHeight,
   terrainHeight,
   biomeAt,
   clearChunks:clearChunkMeshes,

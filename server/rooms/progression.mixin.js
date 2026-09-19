@@ -1133,7 +1133,6 @@ class ProgressionMixin {
     const rec = this.profileFor(client);
     const p = this.state.players.get(client.sessionId);
     if (!rec || !p || p.dgn) return this.progressionReject(client, 'meditate', 'invalid');
-    if (((rec.prof.S && rec.prof.S.lvl) | 0) < 4) return this.progressionReject(client, 'meditate', 'level');
     if (this.rateLimited(client, 'meditate', 1, 2)) return this.progressionReject(client, 'meditate', 'rate');
     const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
     if (Math.hypot(p.x - sx, p.z - sz) > 9) return this.progressionReject(client, 'meditate', 'range');
@@ -1192,7 +1191,6 @@ class ProgressionMixin {
     const rec = this.profileFor(client);
     const p = this.state.players.get(client.sessionId);
     if (!rec || !p || p.dgn) return 'invalid';
-    if (((rec.prof.S && rec.prof.S.lvl) | 0) < 4) return 'level';
     const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
     if (Math.hypot(p.x - sx, p.z - sz) > 9) return 'range';
     return '';
@@ -1261,7 +1259,6 @@ class ProgressionMixin {
     const rec = this.profileFor(client);
     const p = this.state.players.get(client.sessionId);
     if (!rec || !p || p.dgn) return client.send('meditationGrowth', { ok: false, reason: 'invalid' });
-    if (((rec.prof.S && rec.prof.S.lvl) | 0) < 4) return client.send('meditationGrowth', { ok: false, reason: 'level' });
     const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
     if (Math.hypot(p.x - sx, p.z - sz) > 9) return client.send('meditationGrowth', { ok: false, reason: 'range' });
     const seconds = Math.max(0, Math.min(120, message && message.seconds | 0));
@@ -1271,9 +1268,11 @@ class ProgressionMixin {
     if (!challenge || !challenge.acceptedAt || Date.now() - challenge.acceptedAt > 90000) return client.send('meditationGrowth', { ok: false, reason: 'question' });
     const prof = rec.prof;
     const before = sanitizeMeditationGrowth(prof.meditationGrowth, prof.S && prof.S.lvl || 1);
-    const growth = { ...before, completed: before.completed + 1 };
+    const level = Math.max(1, prof.S && prof.S.lvl | 0);
+    const growthUnlocked = level >= 4;
+    const growth = { ...before, completed: before.completed + (growthUnlocked ? 1 : 0) };
     let award = null, capped = false;
-    if (growth.completed >= growth.next) {
+    if (growthUnlocked && growth.completed >= growth.next) {
       const caps = meditationGrowthCapsForLevel(prof.S && prof.S.lvl || 1);
       const choices = [];
       if (growth.mp < caps.mp) choices.push({ stat: 'mp', amount: 1 });
@@ -1285,14 +1284,27 @@ class ProgressionMixin {
       growth.next = growth.completed < 8 ? 8 : growth.completed < 15 ? 15 : growth.completed < 25 ? 25 : Math.ceil((growth.completed + 1) / 15) * 15;
     }
     prof.meditationGrowth = sanitizeMeditationGrowth(growth, prof.S && prof.S.lvl || 1);
+    const st = typeof this.ensureAbilityState === 'function' ? this.ensureAbilityState(client) : null;
+    const maxSp = typeof this.maxStaminaForProfile === 'function' ? this.maxStaminaForProfile(prof) : 100;
+    const vitals = this.cleanProfileVitals ? this.cleanProfileVitals(prof) : prof.vitals || {};
+    if (st) {
+      st.mp = Math.min(st.maxMp, st.mp + Math.max(2, Math.ceil(st.maxMp * .2)));
+      if (typeof this.sendAbilitySync === 'function') this.sendAbilitySync(client, st);
+    }
+    const currentSp = Number.isFinite(st && +st.sp) ? +st.sp : (Number.isFinite(+vitals.sp) ? +vitals.sp : maxSp);
+    const restoredSp = Math.min(maxSp, currentSp + Math.max(5, Math.ceil(maxSp * .2)));
+    if (st) { st.sp = restoredSp; st.maxSp = maxSp; }
+    prof.vitals = { ...vitals, mp: st ? st.mp : vitals.mp, sp: restoredSp };
+    prof.vitalsSavedAt = Date.now();
+    if (typeof this.syncProfileVitals === 'function') this.syncProfileVitals(client, prof);
     if (award) {
-      const vitals = this.cleanProfileVitals ? this.cleanProfileVitals(prof) : prof.vitals || {};
+      const rewardVitals = this.cleanProfileVitals ? this.cleanProfileVitals(prof) : prof.vitals || {};
       prof.vitals = {
-        ...vitals,
-        hp: Math.min(this.maxHpForProfile(prof), (vitals.hp || this.maxHpForProfile(prof)) + (award.stat === 'hp' ? award.amount : 0)),
-        mp: Math.min(this.maxMpForProfile(prof), (vitals.mp || this.maxMpForProfile(prof)) + (award.stat === 'mp' ? award.amount : 0)),
-        sp: Math.min(this.maxStaminaForProfile(prof), (vitals.sp || this.maxStaminaForProfile(prof)) + (award.stat === 'sp' ? award.amount : 0)),
-        hunger: Math.min(this.maxHungerForProfile(prof), (vitals.hunger || this.maxHungerForProfile(prof)) + (award.stat === 'hunger' ? award.amount : 0)),
+        ...rewardVitals,
+        hp: Math.min(this.maxHpForProfile(prof), (rewardVitals.hp || this.maxHpForProfile(prof)) + (award.stat === 'hp' ? award.amount : 0)),
+        mp: Math.min(this.maxMpForProfile(prof), (rewardVitals.mp || this.maxMpForProfile(prof)) + (award.stat === 'mp' ? award.amount : 0)),
+        sp: Math.min(this.maxStaminaForProfile(prof), (rewardVitals.sp || this.maxStaminaForProfile(prof)) + (award.stat === 'sp' ? award.amount : 0)),
+        hunger: Math.min(this.maxHungerForProfile(prof), (rewardVitals.hunger || this.maxHungerForProfile(prof)) + (award.stat === 'hunger' ? award.amount : 0)),
       };
       prof.vitalsSavedAt = Date.now();
       if (typeof this.ensurePlayerHp === 'function') this.ensurePlayerHp(client);
@@ -1301,7 +1313,7 @@ class ProgressionMixin {
     }
     this.ensureMeditationChallenges().delete(client.sessionId);
     this.dirtyPlayers.add(rec.token);
-    client.send('meditationGrowth', { ok: true, completed: true, growth: prof.meditationGrowth, award, capped });
+    client.send('meditationGrowth', { ok: true, completed: true, restored: true, growthLocked: !growthUnlocked, growth: prof.meditationGrowth, award, capped, mp: st ? st.mp : prof.vitals.mp, sp: prof.vitals.sp });
     this.sendProfile ? this.sendProfile(client, prof) : client.send('profile', prof);
     if (typeof this.recordHomeworkActivity === 'function') {
       this.recordHomeworkActivity(client, 0, { source: 'meditation' });

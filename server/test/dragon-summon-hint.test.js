@@ -9,4 +9,6 @@ test('dragon summon prompt only advertises X for a rideable owned dragon in an a
   assert.equal(dragonSummonHint({...ready,mountedDragon:true}),'');
   assert.match(dragonSummonHint({...ready,adult:false}),/growing.*Press B/);
   assert.match(dragonSummonHint({...ready,realmAllowed:false}),/Return to the overworld or Taming Land/);
+  assert.match(dragonSummonHint({...ready,touch:true}),/Menu → Call Dragon/);
+  assert.match(dragonSummonHint({...ready,adult:false,touch:true}),/Menu → Dragon Bonds/);
 });
