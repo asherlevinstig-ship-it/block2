@@ -413,6 +413,8 @@ function defaultProfile(name) {
     inv: [{ id: APPEARANCE_MIRROR_ID, count: 1, locked: true, source: 'starter' }],
     lootRecovery: [],
     lootRecoveryOverflow: [],
+    deathLimbo: null,
+    deathDrops: [],
     pendingRewards: [],
     armor: null,
     mountUnlocks: [],
@@ -437,6 +439,7 @@ function defaultProfile(name) {
     dragonLoans: [],
     discoveries: [],
     claimedDiscoveries: [],
+    treasureCacheClaims: {},
     fantasyStructureClears: [],
     fantasyStructureMastery: false,
     fantasyStructureDailyDay: -1,
@@ -861,6 +864,68 @@ function sanitizeDungeonRecovery(raw) {
   };
 }
 
+function sanitizeDeathQuestion(raw) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.answers) || raw.answers.length !== 4) return null;
+  const prompt = cleanShortText(raw.prompt, '', 600);
+  const answers = raw.answers.map(answer => cleanShortText(answer, '', 180));
+  if (!prompt || answers.some(answer => !answer)) return null;
+  return {
+    id: cleanShortText(raw.id, 'recall', 96),
+    topic: cleanShortText(raw.topic, 'Recall', 96),
+    difficulty: cleanShortText(raw.difficulty, 'practice', 32),
+    subject: cleanShortText(raw.subject, 'Computer Science', 96),
+    stage: cleanShortText(raw.stage, 'practice', 48),
+    prompt,
+    answers,
+    correct: clampI(raw.correct, 0, 3),
+    explanation: cleanShortText(raw.explanation, 'Review the answer and try again.', 600),
+  };
+}
+
+function sanitizeDeathLimbo(raw) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.items)) return null;
+  const items = [];
+  for (const entry of raw.items.slice(0, 37)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const item = cleanSlot(entry.item), question = sanitizeDeathQuestion(entry.question);
+    const source = entry.source === 'armor' ? 'armor' : 'inventory';
+    const slot = source === 'armor' ? -1 : clampI(entry.slot, 0, INV_MAX - 1);
+    if (!item || !item.id || !question) continue;
+    items.push({ source, slot, item, label: cleanShortText(entry.label, 'Recovered item', 80), question });
+  }
+  if (!items.length) return null;
+  const death = raw.death && typeof raw.death === 'object' ? raw.death : {};
+  const index = clampI(raw.index, 0, items.length);
+  if (index >= items.length) return null;
+  return {
+    id: cleanShortText(raw.id, 'death-recall', 96),
+    index,
+    items,
+    death: {
+      x: clampF(death.x, 0, WORLD.WX), y: clampF(death.y, -20, WORLD.WH + 10), z: clampF(death.z, 0, WORLD.WX),
+      dgn: '', cause: cleanShortText(death.cause, 'death', 48), recentHits: cleanShortText(death.recentHits, '', 600),
+    },
+    startedAt: clampI(raw.startedAt, 0, 4102444800000),
+  };
+}
+
+function sanitizeDeathDrops(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const entry of raw.slice(0, 72)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const item = cleanSlot(entry.item);
+    if (!item || !item.id) continue;
+    out.push({
+      id: cleanShortText(entry.id, 'death-drop', 96), item,
+      label: cleanShortText(entry.label, 'Recovered item', 80),
+      x: clampF(entry.x, 0, WORLD.WX), y: clampF(entry.y, -20, WORLD.WH + 10), z: clampF(entry.z, 0, WORLD.WX),
+      dgn: '', ownerName: cleanName(entry.ownerName), expiresAt: 0,
+    });
+  }
+  return out;
+}
+
 function sanitizeTutorials(raw, profile) {
   const out = { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0 };
   const S = profile && profile.S || {};
@@ -1104,6 +1169,8 @@ function sanitizeProfile(p) {
       else out.lootRecoveryOverflow.push(item);
     }
   }
+  out.deathLimbo = sanitizeDeathLimbo(p.deathLimbo);
+  out.deathDrops = sanitizeDeathDrops(p.deathDrops);
   out.pendingRewards = [];
   if (Array.isArray(p.pendingRewards)) {
     for (const raw of p.pendingRewards) {
@@ -1143,9 +1210,16 @@ function sanitizeProfile(p) {
   out.dragonStaySpots = sanitizeDragonStaySpots(p.dragonStaySpots, out.mountUnlocks);
   out.dragonHatchedAt = sanitizeDragonHatchedAt(p.dragonHatchedAt, out.mountUnlocks);
   out.dragonLoans = sanitizeDragonLoans(p.dragonLoans);
-  const cleanDiscoveryList = list => Array.isArray(list) ? [...new Set(list.filter(v => typeof v === 'string' && /^(discovery|major|minor)_[A-Za-z0-9_]+$/.test(v)).slice(0, 512))] : [];
+  const cleanDiscoveryList = list => Array.isArray(list) ? [...new Set(list.filter(v => typeof v === 'string' && /^(discovery|major|minor|cache)_[A-Za-z0-9_]+$/.test(v)).slice(0, 512))] : [];
   out.discoveries = cleanDiscoveryList(p.discoveries);
   out.claimedDiscoveries = cleanDiscoveryList(p.claimedDiscoveries);
+  out.treasureCacheClaims = {};
+  if (p.treasureCacheClaims && typeof p.treasureCacheClaims === 'object' && !Array.isArray(p.treasureCacheClaims)) {
+    for (const [id, counts] of Object.entries(p.treasureCacheClaims).slice(0, 256)) {
+      if (!/^cache_[0-9]+_[0-9]+$/.test(id) || !Array.isArray(counts)) continue;
+      out.treasureCacheClaims[id] = Array.from({ length: 18 }, (_, i) => clampI(counts[i], 0, 64));
+    }
+  }
   out.fantasyStructureClears = cleanDiscoveryList(p.fantasyStructureClears).filter(id => id.startsWith('major_fantasy_')).slice(0, 5);
   out.fantasyStructureMastery = p.fantasyStructureMastery === true && out.fantasyStructureClears.length >= 5;
   out.fantasyStructureDailyDay = clampI(p.fantasyStructureDailyDay, -1, 100000);
@@ -1543,7 +1617,19 @@ function sanitizeGuilds(guilds) {
           const tokens = rawClaims[rewardId].map(cleanToken).filter((t, i, a) => t && members.includes(t) && a.indexOf(t) === i).slice(0, 200);
           if (tokens.length) claims[cleanId] = tokens;
         }
-        return { week: clampI(src.week, 0, 4102444800000), claims };
+        const banked = {};
+        const rawBanked = src.banked && typeof src.banked === 'object' && !Array.isArray(src.banked) ? src.banked : {};
+        for (const token of members) {
+          const account = rawBanked[token];
+          if (!account || typeof account !== 'object' || Array.isArray(account)) continue;
+          const saved = {};
+          for (const rewardId of ['supply_10', 'chest_30', 'banner_60', 'prestige_100']) {
+            const count = clampI(account[rewardId], 0, 1000000);
+            if (count) saved[rewardId] = count;
+          }
+          if (Object.keys(saved).length) banked[token] = saved;
+        }
+        return { week: clampI(src.week, 0, 4102444800000), claims, banked };
       })(),
       projects: Array.isArray(raw.projects)
         ? raw.projects.map(v => cleanShortText(v, '', 40)).filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 32)

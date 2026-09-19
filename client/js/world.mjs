@@ -9513,6 +9513,7 @@ let rewardMomentActive=null,rewardMomentTimer=0,rewardMomentRetry=0;
 let titleFlashTimer=0;
 function rewardMomentBlocked(){
   if(document.body.dataset.presentation==='combat')return true;
+  if(document.body.classList.contains('game-modal-open'))return true;
   const telegraph=document.getElementById('enemytelegraph');
   return !!(telegraph&&!telegraph.classList.contains('hidden'));
 }

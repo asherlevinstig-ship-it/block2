@@ -20,7 +20,7 @@ export function rewardMomentCopy(kind,amount,label,opts={}){
     icon:String(opts.icon||(tier==='legendary'?'★':tier==='major'?'◆':'◇')).slice(0,4),
     kicker:String(opts.kicker||(tier==='major'?'HUNTER MILESTONE':tier==='legendary'?'EXCEPTIONAL DROP':'VALUABLE FIND')).slice(0,40),
     title,
-    detail:String(opts.detail||'+'+count.toLocaleString('en-US')+' '+label).slice(0,90),
+    detail:String(opts.detail||'+'+count.toLocaleString('en-US')+' '+label).slice(0,150),
     hint:String(opts.hint||'Added to your inventory').slice(0,100),
     label:String(label||'Reward').slice(0,48),
     customDetail:!!opts.detail,
@@ -35,4 +35,26 @@ export function mergeRewardMoment(current,incoming){
   const amount=current.amount+incoming.amount;
   const detail=incoming.customDetail?amount+'× '+incoming.detail:'+'+amount.toLocaleString('en-US')+' '+incoming.label;
   return {...current,amount,detail,duration:Math.max(current.duration,incoming.duration)};
+}
+
+export function questCompletionMoment(summary){
+  const source=String(summary&&summary.source||'quest');
+  const title=String(summary&&summary.title||'Quest complete');
+  const sourceLabel={story:'Story quest',manhunt:'Manhunt',job:'Job contract',guild:'Guild contract',fellowship:'Fellowship quest',aegis:'Aegis trial',companion:'Companion quest'}[source]||'Quest';
+  const parts=[];
+  if(summary&&summary.gear&&summary.gear.name)parts.push(String(summary.gear.name)+(summary.gear.recovered?' (in recovery)':''));
+  const items=Array.isArray(summary&&summary.items)?summary.items.filter(item=>item&&item.name):[];
+  for(const item of items.slice(0,2))parts.push(String(item.name)+' ×'+Math.max(1,item.count|0||1));
+  if(items.length>2)parts.push('+'+(items.length-2)+' more items');
+  if(summary&&summary.xp)parts.push('+'+(summary.xp|0)+' Hunter XP');
+  if(summary&&summary.jobXp)parts.push('+'+(summary.jobXp|0)+' Job XP');
+  if(summary&&summary.gold)parts.push('+'+(summary.gold|0)+' gold');
+  const major=['story','manhunt','aegis'].includes(source);
+  return {kind:'item',amount:1,label:title,options:{
+    key:'quest:'+source+':'+title,
+    tier:major?'major':'important',icon:'✓',kicker:sourceLabel.toUpperCase()+' COMPLETE',title,
+    detail:parts.join(' · ')||'Reward claimed',
+    hint:summary&&summary.nextStep?'NEXT: '+String(summary.nextStep):'Open the Quest Log for your next objective',
+    duration:major?3800:3200,
+  }};
 }

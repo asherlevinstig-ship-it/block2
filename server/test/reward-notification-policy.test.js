@@ -23,3 +23,22 @@ test('duplicate reward moments aggregate without losing priority',async()=>{
   assert.equal(merged.tier,'important');
   assert.equal(mergeRewardMoment(first,rewardMomentCopy('rare',1,'Mire Bloom')),null);
 });
+
+test('quest completion has one achievement-first moment with grouped rewards',async()=>{
+  const {questCompletionMoment}=await import('../../client/js/reward-notification-policy.mjs');
+  const story=questCompletionMoment({source:'story',title:'Road Ready',gold:25,xp:80,items:[{name:'Stone Sword',count:1},{name:'Bread',count:3}],nextStep:'Find the first Gate.'});
+  assert.equal(story.options.title,'Road Ready');
+  assert.equal(story.options.kicker,'STORY QUEST COMPLETE');
+  assert.equal(story.options.tier,'major');
+  assert.match(story.options.detail,/Stone Sword ×1 · Bread ×3 · \+80 Hunter XP · \+25 gold/);
+  assert.equal(story.options.hint,'NEXT: Find the first Gate.');
+  const routine=questCompletionMoment({source:'guild',title:'Road Patrol',gold:12,items:[{name:'Coal',count:2},{name:'Iron',count:1},{name:'Bread',count:1}]});
+  assert.equal(routine.options.tier,'important');
+  assert.match(routine.options.detail,/\+1 more items/);
+});
+
+test('reward moments wait for modal panels instead of being hidden behind them',()=>{
+  const fs=require('node:fs'),path=require('node:path');
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  assert.match(world,/function rewardMomentBlocked\(\)\{[\s\S]*classList\.contains\('game-modal-open'\)/);
+});

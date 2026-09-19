@@ -1130,6 +1130,7 @@ function gearSourceLabel(stack,item){
   if(source==='gate')return 'Gate clear';
   if(source==='unique_gate')return 'Unique Gate drop';
   if(source==='captain')return 'Bandit captain';
+  if(source==='chest')return 'Dungeon chest';
   if(source==='bandit')return 'Bandit';
   if(source==='boss')return 'Boss reward';
   if(source==='crafted')return 'Crafted';
@@ -1278,7 +1279,7 @@ function renderUI(){
   const chestTitleState=uiMode==='chest' ? getChest(uiFurnaceKey) : null;
   const head=document.createElement('div');head.className='inventory-modal-head';
   const title=document.createElement('h2');
-  title.textContent = uiMode==='table' ? 'CRAFTING TABLE' : uiMode==='furnace' ? 'FURNACE' : uiMode==='chest' ? (chestTitleState.supply?'HOMESTEAD SUPPLY':'CHEST') : 'INVENTORY';
+  title.textContent = uiMode==='table' ? 'CRAFTING TABLE' : uiMode==='furnace' ? 'FURNACE' : uiMode==='chest' ? (chestTitleState.scope==='personal_cache'?'TREASURE CACHE':chestTitleState.scope==='dungeon_personal'?'DUNGEON LOOT':chestTitleState.supply?'HOMESTEAD SUPPLY':'CHEST') : 'INVENTORY';
   head.appendChild(title);
   if(uiMode==='inv'){
     const bond=qBtn('COMPANIONS',()=>openDragonBondUI());
@@ -1389,13 +1390,49 @@ function renderUI(){
   if(uiMode==='chest'){
     const c=getChest(uiFurnaceKey);
     const area=document.createElement('div'); area.className='uisec';
-    const grid=document.createElement('div'); grid.className='grid';
+    if(NET.on&&c.scope==='dungeon_personal'){
+      const briefing=document.createElement('section');briefing.className='dungeon-loot-briefing';
+      const gearSlots=c.slots.map((stack,slot)=>({stack,slot})).filter(({stack})=>stack&&ITEMS[stack.id]&&(ITEMS[stack.id].tool||ITEMS[stack.id].armor));
+      const headline=document.createElement('div');headline.className='dungeon-loot-headline';
+      headline.innerHTML='<div><small>YOUR DUNGEON REWARDS</small><b>'+(c.firstPersonalChest?'First chest of this run':'Bonus loot chest')+'</b></div><span>'+(gearSlots.length?gearSlots.length+' GEAR FIND'+(gearSlots.length===1?'':'S'):c.firstPersonalChest?'GEAR CLAIMED':'SUPPLIES FOUND')+'</span>';
+      briefing.appendChild(headline);
+      const promise=document.createElement('p');promise.textContent=c.firstPersonalChest
+        ?'Your first chest in each dungeon run guarantees one dungeon-scaled weapon or armor. Every party member gets their own rewards.'
+        :'Materials are guaranteed; equipment is a bonus. Every party member gets their own chest.';
+      briefing.appendChild(promise);
+      const odds=document.createElement('div');odds.className='dungeon-loot-odds';
+      const weaponOdds=Math.max(0,Math.min(100,(c.gearOdds&&c.gearOdds.weapon)||0));
+      const armorOdds=Math.max(0,Math.min(100,(c.gearOdds&&c.gearOdds.armor)||0));
+      const anyGearOdds=Math.round((1-(1-weaponOdds/100)*(1-armorOdds/100))*1000)/10;
+      odds.textContent=(c.firstPersonalChest?'First-chest gear: guaranteed. ':'Bonus gear odds: ')
+        +'Base rolls: '+weaponOdds+'% weapon · '+armorOdds+'% armor · '+anyGearOdds+'% chance of any gear.'
+        +(c.firstPersonalChest?' If both rolls miss, you still receive one gear item.':' Rolls are separate; supplies-only chests are possible.');
+      briefing.appendChild(odds);
+      if(gearSlots.length){
+        const finds=document.createElement('div');finds.className='dungeon-loot-finds';
+        for(const {stack,slot} of gearSlots){
+          const item=ITEMS[stack.id],info=item.tool||item.armor,quality=GEAR_SYSTEM.profile({tier:info.tier,legendary:!!item.legendary||!!info.legendary},stack);
+          const row=document.createElement('div');row.className='dungeon-loot-find';row.style.setProperty('--loot-color',quality.rarity.color);
+          const icon=document.createElement('canvas');icon.width=TS;icon.height=TS;icon.getContext('2d').drawImage(item.icon,0,0);
+          const text=document.createElement('div');text.innerHTML='<b>'+escHTML(itemNameWithPlus(stack))+'</b><small>'+escHTML(quality.rank.name+' · '+quality.rarity.name+(stack.unique?' · Unique':''))+'</small>';
+          row.append(icon,text,qBtn('CLAIM',()=>requestChestWithdraw(slot)));finds.appendChild(row);
+        }
+        briefing.appendChild(finds);
+      }
+      area.appendChild(briefing);
+    }
+    const grid=document.createElement('div'); grid.className='grid chest-loot-grid';
     grid.style.gridTemplateColumns='repeat(9, 48px)';
     for(let i=0;i<c.slots.length;i++) {
       const acc=makeAccessor(()=>c.slots,i);
       if(NET.on) {
-        const el=makeSlotEl({get:acc.get,set:()=>{}}, {});
-        if(c.canWithdraw!==false) el.addEventListener('dblclick', e=>{ e.preventDefault(); requestChestWithdraw(i); });
+        const el=document.createElement('div');el.className='slot';fillSlotEl(el,acc.get());
+        if(c.canWithdraw!==false&&acc.get()){
+          el.setAttribute('role','button');el.tabIndex=0;el.setAttribute('aria-label','Take '+ITEMS[acc.get().id].name+' from chest');
+          el.addEventListener('pointerdown',e=>e.stopPropagation());
+          el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();requestChestWithdraw(i);});
+          el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();requestChestWithdraw(i);}});
+        }
         grid.appendChild(el);
       } else grid.appendChild(makeSlotEl(acc, {section:'chest'}));
     }
@@ -1403,24 +1440,28 @@ function renderUI(){
     if(NET.on){
       const status=document.createElement('div');
       status.className='hint';
-      status.textContent=c.supply
+      status.textContent=['personal_cache','dungeon_personal'].includes(c.scope)
+        ? (c.scope==='dungeon_personal'?'Click CLAIM above for gear, or click any chest slot to take it.':'Personal treasure: only you can claim these rewards, and your progress is saved. Click a slot to take it.')
+        : c.supply
         ? (c.canWithdraw===false?'Homestead Supply: deposit-only for trusted helpers.':'Homestead Supply: Work Orders use this chest first.')
         : (c.canToggleSupply?'Personal chest storage. Mark Supply to let trusted helpers deposit for Work Orders.':'Personal chest storage. '+chestSupplyModeHint(c.supplyModeReason));
       area.appendChild(status);
-      const row=document.createElement('div'); row.className='qrow';
-      const held=inv[combatState.selectedSlot],gearHeld=chestGearStorageUnsupported(held);
-      const heldBtn=qBtn('DEPOSIT HELD', ()=>requestChestDeposit(false));
-      const stackBtn=qBtn('DEPOSIT STACK', ()=>requestChestDeposit(true), true);
-      for(const btn of [heldBtn,stackBtn]){
-        btn.disabled=gearHeld;
-        if(gearHeld)btn.title='Chests store stackable supplies only. Gear stays in your bag.';
+      if(!['personal_cache','dungeon_personal'].includes(c.scope)){
+        const row=document.createElement('div'); row.className='qrow';
+        const held=inv[combatState.selectedSlot],gearHeld=chestGearStorageUnsupported(held);
+        const heldBtn=qBtn('DEPOSIT HELD', ()=>requestChestDeposit(false));
+        const stackBtn=qBtn('DEPOSIT STACK', ()=>requestChestDeposit(true), true);
+        for(const btn of [heldBtn,stackBtn]){
+          btn.disabled=gearHeld;
+          if(gearHeld)btn.title='Chests store stackable supplies only. Gear stays in your bag.';
+        }
+        row.appendChild(heldBtn);
+        row.appendChild(stackBtn);
+        row.appendChild(qBtn('DEPOSIT MATCHING', ()=>requestChestBatchDeposit('matching'), true));
+        row.appendChild(qBtn('DEPOSIT MATERIALS', ()=>requestChestBatchDeposit('materials'), true));
+        if(c.canToggleSupply) row.appendChild(qBtn(c.supply?'PERSONAL MODE':'MARK SUPPLY', ()=>requestChestMode(!c.supply)));
+        area.appendChild(row);
       }
-      row.appendChild(heldBtn);
-      row.appendChild(stackBtn);
-      row.appendChild(qBtn('DEPOSIT MATCHING', ()=>requestChestBatchDeposit('matching'), true));
-      row.appendChild(qBtn('DEPOSIT MATERIALS', ()=>requestChestBatchDeposit('materials'), true));
-      if(c.canToggleSupply) row.appendChild(qBtn(c.supply?'PERSONAL MODE':'MARK SUPPLY', ()=>requestChestMode(!c.supply)));
-      area.appendChild(row);
     } else {
       const row=document.createElement('div'); row.className='qrow';
       row.appendChild(qBtn('DEPOSIT MATCHING', ()=>requestChestBatchDeposit('matching'), true));
@@ -2246,9 +2287,11 @@ function ensureTreasureRevealStyles(){
     .treasure-reveal p{margin:8px 0 12px;color:#d7e7f6;font-size:15px}
     .treasure-reveal-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
     .treasure-reveal-item{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid rgba(255,214,90,.35);background:rgba(255,255,255,.07);border-radius:6px;text-align:left}
+    .treasure-reveal-item.gear-loot{border-color:var(--loot-color);box-shadow:inset 0 0 12px color-mix(in srgb,var(--loot-color) 25%,transparent),0 0 14px color-mix(in srgb,var(--loot-color) 34%,transparent)}
     .treasure-reveal-item canvas{width:32px;height:32px;image-rendering:pixelated;flex:0 0 auto}
     .treasure-reveal-item b{display:block;font-size:13px;line-height:1.1;color:#ffffff}
     .treasure-reveal-item span{display:block;font-size:12px;color:#ffd65a}
+    .treasure-reveal-item.gear-loot span{color:var(--loot-color)}
     .treasure-spark{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff2a8;box-shadow:0 0 12px #ffd65a;animation:treasure-spark 900ms ease-out forwards}
     @keyframes treasure-spark{from{opacity:1;transform:translate(0,0) scale(1)}to{opacity:0;transform:translate(var(--tx),var(--ty)) scale(.2)}}
     @media (prefers-reduced-motion:reduce){.treasure-reveal,.treasure-spark{transition:none;animation:none}}
@@ -2257,6 +2300,8 @@ function ensureTreasureRevealStyles(){
 }
 function treasureItemScore(stack){
   const id=stack&&stack.id|0;
+  const item=ITEMS[id],info=item&&(item.tool||item.armor);
+  if(info){const quality=GEAR_SYSTEM.profile({tier:info.tier,legendary:!!item.legendary||!!info.legendary},stack);return 60+quality.rarityIndex*12+quality.rankIndex*2+(stack.unique?15:0);}
   if(id===I.LEGEND_TOKEN)return 100;
   if(id===I.SOLAR_GLYPH||id===I.STORMGLASS)return 90;
   if(id===I.GEODE)return 80;
@@ -2266,13 +2311,18 @@ function treasureItemScore(stack){
   return 20;
 }
 function showTreasureChestReveal(key, chest){
-  if(!key||!chest||chest.scope!=='public'||treasureChestRevealSeen.has(key))return;
-  const items=(chest.slots||[]).filter(s=>s&&ITEMS[s.id]).map(s=>({id:s.id|0,count:Math.max(1,s.count|0||1)}));
+  if(!key||!chest||!['public','personal_cache','dungeon_personal'].includes(chest.scope)||treasureChestRevealSeen.has(key))return;
+  const items=(chest.slots||[]).filter(s=>s&&ITEMS[s.id]).map(s=>({...s,id:s.id|0,count:Math.max(1,s.count|0||1)}));
   if(!items.length)return;
   treasureChestRevealSeen.add(key);
   const grouped=new Map();
-  for(const it of items)grouped.set(it.id,(grouped.get(it.id)||0)+it.count);
-  const top=[...grouped].map(([id,count])=>({id,count})).sort((a,b)=>treasureItemScore(b)-treasureItemScore(a)||((ITEMS[a.id].name||'').localeCompare(ITEMS[b.id].name||''))).slice(0,4);
+  for(const [index,it] of items.entries()){
+    const item=ITEMS[it.id],gear=!!(item.tool||item.armor),groupKey=gear?'gear-'+index:'item-'+it.id;
+    if(gear)grouped.set(groupKey,it);
+    else if(grouped.has(groupKey))grouped.get(groupKey).count+=it.count;
+    else grouped.set(groupKey,{...it});
+  }
+  const top=[...grouped.values()].sort((a,b)=>treasureItemScore(b)-treasureItemScore(a)||((ITEMS[a.id].name||'').localeCompare(ITEMS[b.id].name||''))).slice(0,4);
   ensureTreasureRevealStyles();
   const card=document.createElement('div');card.className='treasure-reveal';card.setAttribute('role','status');card.setAttribute('aria-live','polite');
   card.innerHTML='<small>TREASURE FOUND</small><h3>Chest Opened!</h3><p>Choose your rewards from the glowing chest slots.</p><div class="treasure-reveal-items"></div>';
@@ -2280,7 +2330,10 @@ function showTreasureChestReveal(key, chest){
   for(const it of top){
     const row=document.createElement('div');row.className='treasure-reveal-item';
     const icon=document.createElement('canvas');icon.width=TS;icon.height=TS;icon.getContext('2d').drawImage(ITEMS[it.id].icon,0,0);
-    const label=document.createElement('div');label.innerHTML='<b>'+escHTML(ITEMS[it.id].name)+'</b><span>x'+it.count+'</span>';
+    const item=ITEMS[it.id],info=item.tool||item.armor;
+    const quality=info?GEAR_SYSTEM.profile({tier:info.tier,legendary:!!item.legendary||!!info.legendary},it):null;
+    if(quality){row.classList.add('gear-loot');row.style.setProperty('--loot-color',quality.rarity.color);}
+    const label=document.createElement('div');label.innerHTML='<b>'+escHTML(item.name)+'</b><span>'+(quality?escHTML(quality.rank.id+' · '+quality.rarity.name+(it.unique?' · Unique':'')):'x'+it.count)+'</span>';
     row.appendChild(icon);row.appendChild(label);list.appendChild(row);
   }
   for(let i=0;i<14;i++){
@@ -2301,8 +2354,10 @@ function applyChestState(m){
   if(!m || !m.key) return;
   const key=m.key.split(':').pop();
   const c=getChest(key);
-  c.slots=(m.slots||[]).map(s=>s?{id:s.id,count:s.count}:null);
+  c.slots=(m.slots||[]).map(s=>s?{...s}:null);
   c.scope=typeof m.scope==='string'?m.scope:'';
+  c.firstPersonalChest=m.firstPersonalChest===true;
+  c.gearOdds=m.gearOdds&&typeof m.gearOdds==='object'?{weapon:m.gearOdds.weapon|0,armor:m.gearOdds.armor|0}:null;
   c.supply=m.supply===true;
   c.canToggleSupply=m.canToggleSupply===true;
   c.supplyModeReason=typeof m.supplyModeReason==='string'?m.supplyModeReason:'';
@@ -2313,6 +2368,7 @@ function applyChestState(m){
 function applyChestTx(m){
   if(!m || !ITEMS[m.id]) return;
   if(m.action==='deposit') removeItems(m.id, m.count||1);
+  else if(m.action==='withdraw'&&m.item&&m.item.gear){const slot=inv.findIndex(s=>!s);if(slot>=0)inv[slot]={...m.item,count:1};refreshHUD();if(uiOpen)renderUI();}
   else if(m.action==='withdraw') addItem(m.id, m.count||1);
 }
 function applyChestBatchResult(m){
@@ -2694,8 +2750,6 @@ function applyFirstQuestRewardResult(m){
   refreshHUD();
   if(m.ok){
     SFX.coin();
-    rewardGain('gold',100,'Gold');
-    sysMsg('<b>First quest bonus:</b> '+economyRecapHTML(100,gold,'Opening land fund'),{tier:'major',title:'Gold Reward'});
     eventLog('First villager quest complete — server reward: +100 gold.');
     const next=pendingFirstQuestRewardContinue;
     pendingFirstQuestRewardContinue=null;
@@ -3221,13 +3275,13 @@ function appendFellowshipWeeklyRewards(mine){
   if(!rewards.length)return;
   const week=Math.max(0,(mine.noticeBoard&&mine.noticeBoard.weekRenown)|0),max=Math.max(1,...rewards.map(r=>Math.max(1,r.threshold|0)));
   const title=document.createElement('div');title.className='sub2';title.id='fellowship-weekly-rewards';title.style.marginTop='14px';title.textContent='WEEKLY FELLOWSHIP REWARDS';qpanelEl.appendChild(title);
-  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='Weekly rewards are <b>per member</b>. Earn Renown together, then each hunter can claim unlocked tiers before the weekly reset.<span class="fellowship-renown-progress"><i style="width:'+Math.max(0,Math.min(100,Math.round(week/max*100)))+'%"></i></span>This week: <b>'+week+'</b> / '+max+' Renown';qpanelEl.appendChild(intro);
+  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='Weekly rewards are <b>per member</b>. Earn Renown together. Unclaimed unlocked rewards are saved for later; missing a week does not erase them.<span class="fellowship-renown-progress"><i style="width:'+Math.max(0,Math.min(100,Math.round(week/max*100)))+'%"></i></span>This week: <b>'+week+'</b> / '+max+' Renown';qpanelEl.appendChild(intro);
   for(const r of rewards){
-    const unlocked=!!r.unlocked,claimed=!!r.claimed,claimable=!!r.claimable;
+    const unlocked=!!r.unlocked,claimed=!!r.claimed,claimable=!!r.claimable,banked=Math.max(0,r.banked|0);
     const items=Array.isArray(r.items)?r.items.filter(it=>it&&ITEMS[it.id]).map(it=>ITEMS[it.id].name+' x'+Math.max(1,it.count|0)).join(' · '):'';
     const row=document.createElement('div');row.className='shoprow fellowship-weekly-reward '+(claimed?'done':unlocked?'ready':'locked');
-    row.innerHTML='<span><b style="color:'+(claimable?'#9be76d':unlocked?'#f2c75c':'#ffad66')+'">'+Math.max(0,r.threshold|0)+' Renown · '+escHTML(r.name||'Weekly Cache')+'</b>'+(claimed?' <small style="opacity:.75">claimed</small>':!unlocked?' <small style="opacity:.75">locked</small>':'')+'<br><small style="opacity:.78">'+escHTML(r.desc||'Weekly fellowship reward.')+'</small><br><small style="opacity:.64">'+Math.max(0,r.gold|0)+' gold'+(items?' · '+escHTML(items):'')+'</small></span>';
-    row.appendChild(qBtn(claimed?'CLAIMED':claimable?'CLAIM':'LOCKED',()=>requestGuildWeeklyReward(r.id),!claimable));
+    row.innerHTML='<span><b style="color:'+(claimable?'#9be76d':unlocked?'#f2c75c':'#ffad66')+'">'+Math.max(0,r.threshold|0)+' Renown · '+escHTML(r.name||'Weekly Cache')+'</b>'+(banked?' <small style="opacity:.75">'+banked+' saved</small>':claimed?' <small style="opacity:.75">claimed this week</small>':!unlocked?' <small style="opacity:.75">locked</small>':'')+'<br><small style="opacity:.78">'+escHTML(r.desc||'Weekly fellowship reward.')+'</small><br><small style="opacity:.64">'+Math.max(0,r.gold|0)+' gold'+(items?' · '+escHTML(items):'')+'</small></span>';
+    row.appendChild(qBtn(claimable?'CLAIM':claimed?'CLAIMED':'LOCKED',()=>requestGuildWeeklyReward(r.id),!claimable));
     qpanelEl.appendChild(row);
   }
 }
@@ -5479,11 +5533,12 @@ function familiarTierHTML(f){
   return '<div class="familiar-tiers">'+list.map((ability,i)=>'<span class="'+(i===f.tier?'current':'')+'"><b>T'+(i+1)+'</b>'+escHTML(ability)+'</span>').join('')+'</div>';
 }
 function familiarDailyHTML(f){
-  const day=BlockcraftFamiliarSystem.dayKey(),daily=BlockcraftFamiliarSystem.dailyChallenge(f.id,day),saved=COMPANIONS.familiarChallenges[f.id];
+  const today=BlockcraftFamiliarSystem.dayKey(),saved=COMPANIONS.familiarChallenges[f.id];
+  const day=saved&&!saved.claimed?saved.day:today,daily=BlockcraftFamiliarSystem.dailyChallenge(f.id,day);
   if(!daily)return '';
   const progress=saved&&saved.day===day?Math.min(daily.need,saved.progress|0):0,done=saved&&saved.day===day&&saved.claimed;
   const pct=done?100:Math.max(0,Math.min(100,Math.round(progress/Math.max(1,daily.need)*100)));
-  return '<div class="familiar-daily"><b>Daily Bond: '+escHTML(daily.title)+'</b><span>'+escHTML(done?'Complete':progress+' / '+daily.need)+' - +'+BlockcraftFamiliarSystem.DAILY_CHALLENGE_REWARD+' XP</span><i><em style="width:'+pct+'%"></em></i></div>';
+  return '<div class="familiar-daily"><b>Bond Exercise: '+escHTML(daily.title)+'</b><span>'+escHTML(done?'Complete':progress+' / '+daily.need)+' - +'+BlockcraftFamiliarSystem.DAILY_CHALLENGE_REWARD+' XP · Progress does not expire</span><i><em style="width:'+pct+'%"></em></i></div>';
 }
 function familiarBondCards(){
   return ['cat','dog','wolf','shade','fang','mote','sprite'].map(familiarBondCard);
@@ -8458,7 +8513,7 @@ function townPz(z,district){return tp(z)+menuTownDistrictOffset(district).z;}
 function townCx(x,district){return tc(x)+menuTownDistrictOffset(district).x;}
 function townCz(z,district){return tc(z)+menuTownDistrictOffset(district).z;}
 function getChest(key){
-  return chests[key] || (chests[key]={slots:new Array(18).fill(null),scope:'',supply:false,canToggleSupply:false,supplyModeReason:'',canWithdraw:true});
+  return chests[key] || (chests[key]={slots:new Array(18).fill(null),scope:'',firstPersonalChest:false,gearOdds:null,supply:false,canToggleSupply:false,supplyModeReason:'',canWithdraw:true});
 }
 function seedChest(x,y,z,items){
   const c=getChest(x+','+y+','+z);

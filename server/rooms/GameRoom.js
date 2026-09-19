@@ -90,6 +90,7 @@ const IMMEDIATE_INVENTORY_MESSAGE_TYPES = new Set([
   'chestState', 'chestBatchResult', 'chestTx',
   'furnaceStarted', 'furnaceResult', 'tradeResult',
   'gateKeyResult', 'firstQuestReward', 'lootRecoveryResult',
+  'deathLimboStart', 'deathLimboResult', 'deathLimboComplete', 'deathDropCreated', 'deathDropTaken',
 ]);
 const IMMEDIATE_REWARD_SOURCES = new Set([
   'boss', 'event', 'ancient_warden', 'breed', 'wild_taming',
@@ -595,8 +596,8 @@ class GameRoom extends Room {
         g.totalRenown = Math.max(0, g.totalRenown | 0);
         g.renownWeek = Math.max(0, g.renownWeek | 0);
         g.contractsWeek = Math.max(0, g.contractsWeek | 0);
-        g.renownWeekStart = Math.max(0, g.renownWeekStart | 0);
-        g.weeklyRewardClaims = g.weeklyRewardClaims && typeof g.weeklyRewardClaims === 'object' ? g.weeklyRewardClaims : { week: g.renownWeekStart | 0, claims: {} };
+        g.renownWeekStart = Number.isFinite(Number(g.renownWeekStart)) ? Math.max(0, Number(g.renownWeekStart)) : 0;
+        g.weeklyRewardClaims = g.weeklyRewardClaims && typeof g.weeklyRewardClaims === 'object' ? g.weeklyRewardClaims : { week: g.renownWeekStart, claims: {}, banked: {} };
         g.notice = g.notice && typeof g.notice === 'object' ? g.notice : null;
         this.guilds.set(id, g);
         const seq = id.match(/^G(\d+)$/);
@@ -1381,6 +1382,7 @@ class GameRoom extends Room {
       p.x = openSpawn[0]; p.y = openSpawn[1]; p.z = openSpawn[2];
     }
     this.state.players.set(client.sessionId, p);
+    this.restoreDeathRecoveryState(client, prof, p);
     if (token && prof && (prof.karma | 0) < 0) this.broadcastWorldBountyForToken(token);
     logRoomLifecycle('overworld.join.profile_applied', {
       roomId: this.roomId || '',
@@ -1438,7 +1440,7 @@ class GameRoom extends Room {
       const liveHunger = this.playerHunger.get(client.sessionId) || hunger;
       if (liveHunger) client.send('hunger', { hunger: Math.ceil(liveHunger.hunger), maxHunger: liveHunger.max });
       this.sendLandClaims(client);
-      const visibleDeathDrops = [...this.deathDrops.values()].filter(drop => drop.expiresAt > Date.now() && (drop.dgn || '') === (joined.dgn || '')).map(drop => this.publicDeathDrop(drop));
+      const visibleDeathDrops = [...this.deathDrops.values()].filter(drop => drop.ownerToken === token && (!drop.expiresAt || drop.expiresAt > Date.now()) && (drop.dgn || '') === (joined.dgn || '')).map(drop => this.publicDeathDrop(drop));
       if (visibleDeathDrops.length) client.send('deathDropSnapshot', { drops: visibleDeathDrops });
       this.sendDragonIncubations(client);
       this.sendNestDragons(client);
@@ -1612,6 +1614,11 @@ class GameRoom extends Room {
     this.biomeStatuses.delete(client.sessionId);
     this.abilityState.delete(client.sessionId);
     if(typeof this.clearRecallState==='function')this.clearRecallState(client.sessionId);
+    if (this.deathLimbo) this.deathLimbo.delete(client.sessionId);
+    const tokenStillConnected = token && [...this.tokens.values()].includes(token);
+    if (this.deathDrops && token && !tokenStillConnected) {
+      for (const [id, drop] of this.deathDrops) if (drop && drop.ownerToken === token) this.deathDrops.delete(id);
+    }
     this.abilityBuffs.delete(client.sessionId);
     if (this.weaponMomentum) this.weaponMomentum.delete(client.sessionId);
     if (this.moveRejects) this.moveRejects.delete(client.sessionId);
@@ -1694,6 +1701,8 @@ class GameRoom extends Room {
         inv: Array.isArray(prof.inv) ? prof.inv : [],
         armor: prof.armor || null,
         lootRecovery: Array.isArray(prof.lootRecovery) ? prof.lootRecovery : [],
+        deathLimbo: prof.deathLimbo || null,
+        deathDrops: Array.isArray(prof.deathDrops) ? prof.deathDrops : [],
       });
     } catch (_) {
       return '';
@@ -6527,6 +6536,7 @@ class GameRoom extends Room {
       claimLocation: String(input.claimLocation || '').slice(0, 80),
       inventoryOverflow: input.inventoryOverflow === true,
       nextStep: String(input.nextStep || this.questRewardLoopHint(input)).slice(0, 180),
+      presentation: input.presentation === 'first_shift' ? 'first_shift' : '',
     };
   }
   sendQuestRewardSummary(client, input) {
@@ -7307,11 +7317,33 @@ class GameRoom extends Room {
     const q = RECALL.selectQuestion(subject, history, Date.now(), Math.random);
     return { id:q.id, topic:q.topic, difficulty:q.difficulty, subject: q.subject, stage: q.stage, prompt: q.prompt, answers: q.answers, correct: q.correct, explanation: q.explanation };
   }
+  restoreDeathRecoveryState(client, prof, p) {
+    if (!client || !prof || !p) return;
+    if (!this.deathLimbo) this.deathLimbo = new Map();
+    if (!this.deathDrops) this.deathDrops = new Map();
+    const token = this.tokens.get(client.sessionId);
+    const limbo = prof.deathLimbo;
+    if (limbo && Array.isArray(limbo.items) && limbo.index >= 0 && limbo.index < limbo.items.length) {
+      this.deathLimbo.set(client.sessionId, limbo);
+      p.x = TOWN_RETURN_SPAWN.x; p.y = TOWN_RETURN_SPAWN.y; p.z = TOWN_RETURN_SPAWN.z;
+      p.dim = 'overworld'; p.dgn = '';
+      this.pvel.set(client.sessionId, { x: 0, z: 0 });
+      client.send('deathLimboStart', this.publicDeathLimbo(limbo, p));
+    }
+    for (const stored of Array.isArray(prof.deathDrops) ? prof.deathDrops : []) {
+      const item = this.cloneDeathItem(stored && stored.item);
+      if (!item || !stored.id) continue;
+      this.deathDrops.set(stored.id, {
+        id: stored.id, item, label: stored.label || this.deathItemLabel(item),
+        x: stored.x, y: stored.y, z: stored.z, dgn: '',
+        ownerName: stored.ownerName || prof.name || 'A hunter', ownerToken: token, expiresAt: 0,
+      });
+    }
+  }
   beginDeathLimbo(client, rec, context = {}) {
     const p = this.state.players.get(client.sessionId);
     if (!this.deathLimbo) this.deathLimbo = new Map();
     if (!this.deathDrops) this.deathDrops = new Map();
-    if (!this.deathDropSeq) this.deathDropSeq = 0;
     if (!client || !rec || !rec.prof || !p || this.deathLimbo.has(client.sessionId)) return false;
     const inv = Array.isArray(rec.prof.inv) ? rec.prof.inv : (rec.prof.inv = []);
     const items = [];
@@ -7323,16 +7355,11 @@ class GameRoom extends Room {
       const question=this.deathLimboQuestion(items.length, subject, selectionHistory);
       items.push({ source: 'inventory', slot, item, label: this.deathItemLabel(item), question });
       selectionHistory={...selectionHistory,lastQuestionId:question.id,lastTopic:question.topic};
-      inv[slot] = null;
     }
     const equippedArmor = this.cloneDeathItem(rec.prof.armor);
     if (equippedArmor) {
       const question=this.deathLimboQuestion(items.length, subject, selectionHistory);
       items.push({ source: 'armor', slot: -1, item: equippedArmor, label: this.deathItemLabel(equippedArmor), question });
-      rec.prof.armor = null;
-      p.armorId = 0;
-      p.armorType = '';
-      client.send('armorSync', { armor: null });
     }
     if (!items.length) return false;
     const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -7345,6 +7372,7 @@ class GameRoom extends Room {
       recentHits: context.recentHits || '',
     };
     const limbo = { id, index: 0, items, death, startedAt: Date.now() };
+    rec.prof.deathLimbo = limbo;
     this.deathLimbo.set(client.sessionId, limbo);
     p.x = TOWN_RETURN_SPAWN.x; p.y = TOWN_RETURN_SPAWN.y; p.z = TOWN_RETURN_SPAWN.z; p.dgn = '';
     this.pvel.set(client.sessionId, { x: 0, z: 0 });
@@ -7364,23 +7392,6 @@ class GameRoom extends Room {
       x: p && p.x, y: p && p.y, z: p && p.z,
     };
   }
-  restoreDeathLimboItem(rec, entry, client) {
-    const item = this.cloneDeathItem(entry && entry.item);
-    if (!item) return false;
-    if (entry.source === 'armor' && !rec.prof.armor) {
-      rec.prof.armor = item;
-      const p = this.state.players.get(client && client.sessionId);
-      if (p) {
-        p.armorId = item.id;
-        p.armorType = ARMOR_INFO[item.id] ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[item.id], item).type.id : '';
-      }
-      if (client) client.send('armorSync', { armor: item });
-      return true;
-    }
-    const inv = Array.isArray(rec.prof.inv) ? rec.prof.inv : (rec.prof.inv = []);
-    if (entry.slot >= 0 && entry.slot < 36 && !inv[entry.slot]) { inv[entry.slot] = item; return true; }
-    return this.addDeathStackToInventory(rec.prof, item);
-  }
   addDeathStackToInventory(prof, item) {
     if (!prof || !item || !Number.isFinite(Number(item.id)) || (item.id | 0) <= 0) return false;
     const inv = Array.isArray(prof.inv) ? prof.inv : (prof.inv = []);
@@ -7390,15 +7401,6 @@ class GameRoom extends Room {
     if (slot < 0 && inv.length >= 36) return false;
     inv[slot >= 0 ? slot : inv.length] = this.cloneDeathItem(item);
     return true;
-  }
-  createDeathDrop(entry, death, ownerName) {
-    const item = this.cloneDeathItem(entry && entry.item);
-    if (!item || !death) return null;
-    const id = 'death_' + (++this.deathDropSeq) + '_' + Date.now().toString(36);
-    const drop = { id, item, label: this.deathItemLabel(item), x: death.x, y: death.y, z: death.z, dgn: death.dgn || '', ownerName: ownerName || 'A hunter', expiresAt: Date.now() + 10 * 60 * 1000 };
-    this.deathDrops.set(id, drop);
-    this.sendSpace(drop.dgn || '', 'deathDropCreated', this.publicDeathDrop(drop));
-    return drop;
   }
   publicDeathDrop(drop) {
     return { id: drop.id, item: { id: drop.item.id, count: drop.item.count || 1, label: drop.label }, x: drop.x, y: drop.y, z: drop.z, owner: drop.ownerName, dgn: drop.dgn || '', expiresAt: drop.expiresAt };
@@ -7414,12 +7416,11 @@ class GameRoom extends Room {
     const sourceQuestion=RECALL.QUESTIONS.find(q=>q.id===entry.question.id)||entry.question;
     const review=RECALL.reviewQuestion(rec.prof.recallMastery||{},sourceQuestion,correct,Date.now());
     rec.prof.recallMastery=review.history;
-    if (correct) this.restoreDeathLimboItem(rec, entry, client);
-    else this.createDeathDrop(entry, limbo.death, rec.prof.name || 'A hunter');
     limbo.index++;
+    rec.prof.deathLimbo = limbo.index >= limbo.items.length ? null : limbo;
     this.dirtyPlayers.add(rec.token);
     this.sendProfile(client, rec.prof);
-    client.send('deathLimboResult', { id: limbo.id, correct, item: { id: entry.item.id, count: entry.item.count || 1, label: entry.label }, correctIndex: entry.question.correct, explanation: entry.question.explanation, nextDue:review.record.nextDue, mastery:RECALL.masterySummary(review.history,'Computer Science') });
+    client.send('deathLimboResult', { id: limbo.id, correct, itemSafe: true, item: { id: entry.item.id, count: entry.item.count || 1, label: entry.label }, correctIndex: entry.question.correct, explanation: entry.question.explanation, nextDue:review.record.nextDue, mastery:RECALL.masterySummary(review.history,'Computer Science') });
     const p = this.state.players.get(client.sessionId);
     if (limbo.index >= limbo.items.length) {
       this.deathLimbo.delete(client.sessionId);
@@ -7434,14 +7435,22 @@ class GameRoom extends Room {
     if (!p || !rec || !this.deathDrops || !this.deathDrops.size) return;
     const now = Date.now();
     for (const [id, drop] of [...this.deathDrops]) {
-      if (drop.expiresAt <= now) { this.deathDrops.delete(id); this.sendSpace(drop.dgn || '', 'deathDropExpired', { id, dgn: drop.dgn || '' }); continue; }
+      if (drop.ownerToken !== rec.token) continue;
+      if (drop.expiresAt > 0 && drop.expiresAt <= now) { this.deathDrops.delete(id); continue; }
       if ((drop.dgn || '') !== (p.dgn || '')) continue;
       if (Math.hypot(p.x - drop.x, p.z - drop.z) > 2.2 || Math.abs(p.y - drop.y) > 4) continue;
       const item = this.cloneDeathItem(drop.item);
-      if (!item) { this.deathDrops.delete(id); continue; }
+      if (!item) {
+        this.deathDrops.delete(id);
+        rec.prof.deathDrops = (Array.isArray(rec.prof.deathDrops) ? rec.prof.deathDrops : []).filter(saved => saved && saved.id !== id);
+        this.dirtyPlayers.add(rec.token);
+        continue;
+      }
       if (!this.addDeathStackToInventory(rec.prof, item)) return client.send('deathDropReject', { reason: 'full', id });
-      this.deathDrops.delete(id); this.dirtyPlayers.add(rec.token); this.sendProfile(client, rec.prof);
-      this.sendSpace(drop.dgn || '', 'deathDropTaken', { id, by: rec.prof.name || 'A hunter', item: { id: item.id, count: item.count || 1, label: drop.label }, dgn: drop.dgn || '' });
+      this.deathDrops.delete(id);
+      rec.prof.deathDrops = (Array.isArray(rec.prof.deathDrops) ? rec.prof.deathDrops : []).filter(saved => saved && saved.id !== id);
+      this.dirtyPlayers.add(rec.token); this.sendProfile(client, rec.prof);
+      client.send('deathDropTaken', { id, by: rec.prof.name || 'A hunter', item: { id: item.id, count: item.count || 1, label: drop.label }, dgn: drop.dgn || '' });
     }
   }
   publicDragonTypes(prof, token = '') {
@@ -9999,9 +10008,6 @@ class GameRoom extends Room {
       return;
     }
     if (this.deathLimbo && this.deathLimbo.has(client.sessionId)) {
-      p.yaw = normalizeYaw(m.yaw, p.yaw); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
-    }
-    if (typeof this.recallMovementLocked === 'function' && this.recallMovementLocked(client.sessionId)) {
       p.yaw = normalizeYaw(m.yaw, p.yaw); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
     }
     if (this.skyshipPassengers && this.skyshipPassengers.has(client.sessionId)) {

@@ -7,6 +7,7 @@
   const SOURCES=Object.freeze({
     bandit:Object.freeze({chance:.04,armorChance:0,maxRank:1,rankDivisor:2,rarityPerTier:.02,axeChance:.65}),
     captain:Object.freeze({chance:1,armorChance:.12,maxRank:2,rankDivisor:1,rarityPerTier:.03,axeChance:.70}),
+    chest:Object.freeze({chance:.30,armorChance:.18,maxRank:4,rankOffset:0,rarityPerTier:.035,rarityPerPlus:0,axeChance:.50}),
     gate:Object.freeze({chance:1,armorChance:.35,maxRank:5,rankOffset:1,rarityPerTier:.05,rarityPerPlus:.03,axeChance:.50}),
   });
   function clamp(value,min,max){return Math.max(min,Math.min(max,value|0));}
@@ -15,24 +16,24 @@
     const chance=Math.max(0,Math.min(.999999,Number(roll)||0));
     if(chance>=rule.chance)return null;
     const ti=clamp(tier,0,4),pi=clamp(plus,0,5);
-    const rank=source==='gate'
+    const rank=(source==='gate'||source==='chest')
       ?Math.min(rule.maxRank,ti+rule.rankOffset)
       :Math.min(rule.maxRank,Math.floor(ti/rule.rankDivisor));
     return Object.freeze({
       source,
       rank,
       archetype:(Math.max(0,Math.min(.999999,Number(archetypeRoll)||0))<rule.axeChance?'axe':'sword'),
-      rarityBonus:ti*rule.rarityPerTier+(source==='gate'?pi*rule.rarityPerPlus:0),
+      rarityBonus:ti*rule.rarityPerTier+((source==='gate'||source==='chest')?pi*rule.rarityPerPlus:0),
     });
   }
   function armorSpec(source,tier=0,plus=0,roll=Math.random(),archetypeRoll=Math.random()){
     const rule=SOURCES[source];if(!rule||!rule.armorChance)return null;
     if(Math.max(0,Math.min(.999999,Number(roll)||0))>=rule.armorChance)return null;
     const ti=clamp(tier,0,4),pi=clamp(plus,0,5);
-    const rank=source==='gate'?Math.min(rule.maxRank,ti+rule.rankOffset):Math.min(rule.maxRank,Math.floor(ti/rule.rankDivisor));
+    const rank=(source==='gate'||source==='chest')?Math.min(rule.maxRank,ti+rule.rankOffset):Math.min(rule.maxRank,Math.floor(ti/rule.rankDivisor));
     const ar=Math.max(0,Math.min(.999999,Number(archetypeRoll)||0));
     const armorType=source==='captain'?(ar<.55?'scout':ar<.90?'vanguard':'bulwark'):(ar<.30?'scout':ar<.70?'vanguard':'bulwark');
-    return Object.freeze({source,rank,armorType,rarityBonus:ti*rule.rarityPerTier+(source==='gate'?pi*rule.rarityPerPlus:0)});
+    return Object.freeze({source,rank,armorType,rarityBonus:ti*rule.rarityPerTier+((source==='gate'||source==='chest')?pi*rule.rarityPerPlus:0)});
   }
   function salvageYield(rankIndex=0,rarityIndex=0,tier=1){
     const salvage=[1,2,4,7,12][clamp(rarityIndex,0,4)];

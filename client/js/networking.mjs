@@ -14,6 +14,7 @@ import {createCombatFeedback} from './combat-feedback.mjs';
 import {createOverworldResultPresenter} from './overworld-results.mjs';
 import {biomeStatus} from './biome-status.mjs';
 import {normalizeRewardGear} from './reward-items.mjs';
+import {questCompletionMoment} from './reward-notification-policy.mjs';
 import {apiUrl,backendWsUrl} from './config.mjs';
 import {DEITY_LEVEL,DEITY_POWER_DEFS,DEITY_POWER_IDS,hunterRankLevelLabel,isDeityLevel} from './progression.mjs';
 import {CUTSCENES_ENABLED} from './feature-flags.mjs';
@@ -486,9 +487,14 @@ const GEAR_REWARDS=createGearRewardPresenter({
     const quality=summary.profile.rarityIndex>=4?'legendary':summary.profile.rarityIndex>=2?'rare':'item';
     rewardGain(quality,1,summary.profile.rarity.name+' Gear',{icon:summary.armor?'AR':'WP',immersive:false});
     if(quality==='legendary')showName('LEGENDARY GEAR ACQUIRED');
-    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.055,.15,recovered?3.5:5,8),new THREE.MeshBasicMaterial({color,transparent:true,opacity:recovered?.42:.72,depthWrite:false}));
-    beam.position.set(player.pos.x,player.pos.y+(recovered?1.75:2.5),player.pos.z);scene.add(beam);
-    setTimeout(()=>{scene.remove(beam);beam.geometry.dispose();beam.material.dispose();},1800);
+    // Reserve the short world pillar for genuinely exceptional gear. Lower
+    // rarities keep their color in the reveal and inventory without visual clutter.
+    if(summary.profile.rarityIndex>=3){
+      const height=recovered?3:summary.profile.rarityIndex>=4?6:4.5;
+      const beam=new THREE.Mesh(new THREE.CylinderGeometry(.045,.14,height,8),new THREE.MeshBasicMaterial({color,transparent:true,opacity:recovered?.36:.56,depthWrite:false,blending:THREE.AdditiveBlending}));
+      beam.position.set(player.pos.x,player.pos.y+height/2,player.pos.z);scene.add(beam);
+      setTimeout(()=>{scene.remove(beam);beam.geometry.dispose();beam.material.dispose();},1600);
+    }
   },
 });
 
@@ -767,7 +773,7 @@ function tickLocalSpiritVisual(now){
 function ensureDeathLimboEl(){
   if(deathLimboEl)return deathLimboEl;
   deathLimboEl=document.createElement('div');deathLimboEl.id='deathlimbo';
-  deathLimboEl.innerHTML='<div class="deathlimbo-panel"><div class="deathlimbo-kicker">LIMBO RECOVERY</div><h2 id="deathlimbotitle">Recover your items</h2><div id="deathlimboitem"></div><div id="deathlimboq"></div><div id="deathlimboanswers"></div><div id="deathlimbofeedback"></div></div>';
+  deathLimboEl.innerHTML='<div class="deathlimbo-panel"><div class="deathlimbo-kicker">RECALL REVIEW</div><h2 id="deathlimbotitle">Learn and return</h2><p class="deathlimbo-safety">Your items stay safe, even when you miss a question.</p><div id="deathlimboitem"></div><div id="deathlimboq"></div><div id="deathlimboanswers"></div><div id="deathlimbofeedback"></div></div>';
   document.body.appendChild(deathLimboEl);return deathLimboEl;
 }
 function hideDeathLimbo(){if(deathLimboEl)deathLimboEl.classList.remove('show');deathLimboState=null;if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();}
@@ -776,7 +782,7 @@ function renderDeathLimbo(m){
   deathLimboState=m;
   const el=ensureDeathLimboEl(),answers=el.querySelector('#deathlimboanswers'),feedback=el.querySelector('#deathlimbofeedback');
   el.querySelector('#deathlimbotitle').textContent='Item '+((m.index|0)+1)+' / '+(m.total|0);
-  el.querySelector('#deathlimboitem').textContent='Protect: '+(m.item.count>1?m.item.count+' × ':'')+(m.item.label||'Item');
+  el.querySelector('#deathlimboitem').textContent='In your safe inventory: '+(m.item.count>1?m.item.count+' × ':'')+(m.item.label||'Item');
   el.querySelector('#deathlimboq').textContent=m.question.prompt||'Answer to recover the item.';
   answers.innerHTML='';feedback.textContent='';
   (m.question.answers||[]).forEach((text,i)=>{
@@ -792,16 +798,34 @@ function renderDeathLimbo(m){
 function applyDeathLimboResult(m){
   const el=ensureDeathLimboEl(),feedback=el.querySelector('#deathlimbofeedback');
   if(m&&m.mastery&&globalThis.BlockcraftRecall)globalThis.BlockcraftRecall.setMastery(m.mastery);
-  if(m&&m.correct){feedback.className='ok';feedback.textContent='Correct — recovered '+((m.item&&m.item.label)||'item')+'. '+(m.explanation||'')+' Scheduled for spaced review.';SFX.success();}
-  else{feedback.className='bad';feedback.textContent='Wrong — '+((m.item&&m.item.label)||'item')+' dropped where you died.'+(m&&m.explanation?' '+m.explanation:'')+' This topic will return soon.';SFX.error();}
+  if(m&&m.correct){feedback.className='ok';feedback.textContent='Correct. '+((m.item&&m.item.label)||'Your item')+' stays safe. '+(m.explanation||'')+' Scheduled for spaced review.';SFX.success();}
+  else{feedback.className='review';feedback.textContent='Not yet — your item is safe. '+(m&&m.explanation||'')+' This topic will return soon.';SFX.error();}
 }
 const deathDropVisuals=new Map();
+const mobLootBursts=[];
+function disposeMobLootBurst(rec){
+  scene.remove(rec.group);rec.group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){if(o.material.map)o.material.map.dispose();o.material.dispose();}});
+}
+function showMobLootBurst(m){
+  const items=(Array.isArray(m&&m.items)?m.items:[]).filter(item=>item&&ITEMS[item.id]).slice(0,8);
+  if(!items.length||!Number.isFinite(m.x)||!Number.isFinite(m.y)||!Number.isFinite(m.z))return;
+  const group=new THREE.Group(),total=items.length;
+  items.forEach((item,index)=>{
+    const angle=(index/Math.max(1,total))*Math.PI*2+.45,radius=.48+Math.min(3,index)*.12;
+    const texture=new THREE.CanvasTexture(ITEMS[item.id].icon),sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,depthTest:false,depthWrite:false}));
+    sprite.scale.set(.72,.72,1);sprite.position.set(Math.cos(angle)*radius,.55+index%2*.18,Math.sin(angle)*radius);sprite.renderOrder=24;sprite.userData.baseY=sprite.position.y;group.add(sprite);
+    if((item.count|0)>1){const badge=document.createElement('canvas');badge.width=128;badge.height=64;const ctx=badge.getContext('2d');ctx.fillStyle='rgba(5,12,20,.9)';ctx.fillRect(30,10,68,44);ctx.strokeStyle='#7dd3fc';ctx.lineWidth=3;ctx.strokeRect(30,10,68,44);ctx.fillStyle='#fff';ctx.font='800 27px system-ui';ctx.textAlign='center';ctx.fillText('×'+(item.count|0),64,42);const badgeSprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(badge),transparent:true,depthTest:false,depthWrite:false}));badgeSprite.scale.set(.72,.36,1);badgeSprite.position.set(sprite.position.x+.3,sprite.position.y-.3,sprite.position.z+.02);badgeSprite.renderOrder=25;badgeSprite.userData.baseY=badgeSprite.position.y;group.add(badgeSprite);}
+  });
+  group.position.set(m.x,m.y+.15,m.z);scene.add(group);mobLootBursts.push({group,origin:group.position.clone(),startedAt:performance.now()});
+  if(typeof burst==='function')burst(m.x,m.y+.65,m.z,[1,.78,.28],14+items.length*3,1.8,1.8,.5);
+}
 function deathDropLabelCanvas(m){
   const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;const ctx=canvas.getContext('2d');
   ctx.fillStyle='rgba(12,5,8,.92)';ctx.fillRect(4,4,504,120);ctx.strokeStyle='#fb7185';ctx.lineWidth=6;ctx.strokeRect(5,5,502,118);
   ctx.textAlign='center';ctx.fillStyle='#ffd4dc';ctx.font='800 25px system-ui';ctx.fillText('LOST: '+String(m.item&&m.item.label||'ITEM').toUpperCase()+(m.item&&m.item.count>1?' ×'+m.item.count:''),256,43);
-  ctx.fillStyle='#f9a8b8';ctx.font='700 18px system-ui';ctx.fillText('PUBLIC LOOT · '+Math.max(0,Math.ceil((m.expiresAt-Date.now())/1000))+'s',256,76);
-  ctx.fillStyle='#cbd5e1';ctx.font='16px system-ui';ctx.fillText('Dropped by '+String(m.owner||'a hunter'),256,103);return canvas;
+  const timed=m.expiresAt>0,seconds=timed?Math.max(0,Math.ceil((m.expiresAt-Date.now())/1000)):0;
+  ctx.fillStyle='#f9a8b8';ctx.font='700 18px system-ui';ctx.fillText(timed?'PRIVATE RECOVERY · '+seconds+'s':'PRIVATE RECOVERY · NO EXPIRY',256,76);
+  ctx.fillStyle='#cbd5e1';ctx.font='16px system-ui';ctx.fillText('Only you can collect this item',256,103);return canvas;
 }
 function removeDeathDropVisual(id){
   const rec=deathDropVisuals.get(id);if(!rec)return;scene.remove(rec.group);rec.group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){if(o.material.map)o.material.map.dispose();o.material.dispose();}});deathDropVisuals.delete(id);
@@ -815,7 +839,8 @@ function showDeathDropVisual(m){
   group.position.set(m.x,m.y+.05,m.z);group.add(beam,ring,icon,label);group.userData.drop=m;scene.add(group);deathDropVisuals.set(m.id,{group,ring,icon,label,labelCanvas,labelTex,lastSecond:-1});
 }
 function tickDeathDropVisuals(now=performance.now()){
-  for(const [id,rec] of deathDropVisuals){const m=rec.group.userData.drop,left=Math.max(0,Math.ceil((m.expiresAt-Date.now())/1000));if(!left){removeDeathDropVisual(id);continue;}rec.group.visible=m.dgn?dim==='dungeon':dim!=='dungeon';if(!rec.group.visible)continue;rec.ring.rotation.z+=.015;rec.icon.position.y=1.15+Math.sin(now*.003)*.16;rec.group.children[0].material.opacity=.35+Math.sin(now*.004)*.12;const second=Math.ceil(left/5)*5;if(second!==rec.lastSecond){rec.lastSecond=second;const fresh=deathDropLabelCanvas(m),ctx=rec.labelCanvas.getContext('2d');ctx.clearRect(0,0,512,128);ctx.drawImage(fresh,0,0);rec.labelTex.needsUpdate=true;}}
+  for(const [id,rec] of deathDropVisuals){const m=rec.group.userData.drop,timed=m.expiresAt>0,left=timed?Math.max(0,Math.ceil((m.expiresAt-Date.now())/1000)):Infinity;if(timed&&!left){removeDeathDropVisual(id);continue;}rec.group.visible=m.dgn?dim==='dungeon':dim!=='dungeon';if(!rec.group.visible)continue;rec.ring.rotation.z+=.015;rec.icon.position.y=1.15+Math.sin(now*.003)*.16;rec.group.children[0].material.opacity=.35+Math.sin(now*.004)*.12;const second=timed?Math.ceil(left/5)*5:-1;if(second!==rec.lastSecond){rec.lastSecond=second;const fresh=deathDropLabelCanvas(m),ctx=rec.labelCanvas.getContext('2d');ctx.clearRect(0,0,512,128);ctx.drawImage(fresh,0,0);rec.labelTex.needsUpdate=true;}}
+  for(let i=mobLootBursts.length-1;i>=0;i--){const rec=mobLootBursts[i],age=(now-rec.startedAt)/1000;if(age>=1.65){disposeMobLootBurst(rec);mobLootBursts.splice(i,1);continue;}if(age<1.05){rec.group.position.copy(rec.origin);rec.group.children.forEach((sprite,index)=>{sprite.position.y=(sprite.userData.baseY||.5)+Math.sin(now*.006+index)*.09+Math.sin(Math.min(1,age/.55)*Math.PI)*.65;});}else{const t=Math.min(1,(age-1.05)/.6),ease=1-Math.pow(1-t,3),target=player&&player.pos?player.pos:rec.origin;rec.group.position.lerpVectors(rec.origin,target,ease);rec.group.position.y+=1.15*ease;rec.group.scale.setScalar(Math.max(.08,1-ease*.86));}}
 }
 Object.defineProperty(globalThis,'BlockcraftDeathDrops',{value:Object.freeze({show:showDeathDropVisual,remove:removeDeathDropVisual,tick:tickDeathDropVisuals,clear:()=>[...deathDropVisuals.keys()].forEach(removeDeathDropVisual)}),configurable:true});
 Object.defineProperty(globalThis,'BlockcraftMajorPresentation',{value:Object.freeze({present:presentMajor}),configurable:true});
@@ -1789,8 +1814,7 @@ function netAttachRoom(room,name,client){
       const starterLine=starterCount?'Starter items granted: '+starterCount:'';
       const next=m&&m.nextStep?String(m.nextStep):jobContractNextHint(job,m.jobLevelAfter|0,milestones,!!m.graduation);
       const nextEventText=String(next||'Take another contract.').replace(/^next:\s*/i,'');
-      sysMsg('<b>'+escHTML(title)+' complete:</b> '+escHTML(parts.join(', ')||'Rewards claimed')+'<br>'+escHTML(levelLine)+(starterLine?'<br>'+escHTML(starterLine):'')+'<br>'+escHTML(next));
-      showName(title+' complete');
+      if(m&&m.firstShiftComplete)sysMsg('<b>'+escHTML(title)+' complete:</b> '+escHTML(parts.join(', ')||'Rewards claimed')+'<br>'+escHTML(levelLine)+(starterLine?'<br>'+escHTML(starterLine):'')+'<br>'+escHTML(next));
       eventFeed('[Job]',(m&&m.firstShiftComplete?'First shift complete: ':'')+title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText,{key:'job-contract-claim:'+String(c.id||title),cooldown:0});
       if(m&&m.firstShiftComplete)openFirstShiftCompletePanel(m,c,{title,jobName,levelLine,next});
     };
@@ -1816,9 +1840,6 @@ function netAttachRoom(room,name,client){
       accept:m=>{
         if(m.type==='armor'){gearInspectSlot=m.id?-2:-1;if(uiOpen)renderUI();}
         if(m.type==='jobContract'&&m.action==='claim'){
-          if(m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
-          if(m.rewardXp)rewardGain('xp',m.rewardXp,'Hunter XP');
-          if(m.rewardJobXp)rewardGain('item',m.rewardJobXp,((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP',{icon:'JOB'});
           SFX.coin();presentJobContractClaim(m);
           if(!m.firstShiftComplete)for(const milestone of Array.isArray(m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
           if(m.graduation&&!m.firstShiftComplete)setTimeout(()=>ONBOARD.showFieldWorkGraduation(),40);
@@ -1924,7 +1945,12 @@ function netAttachRoom(room,name,client){
       })[m.source]||'Quest Reward';
       const where=m.claimLocation?' <small>Claimed at '+escHTML(m.claimLocation)+'</small>':'';
       const completeTitle=questRewardCompletionTitle(m,sourceLabel),next=questRewardNextStep(m);
-      showName(completeTitle);
+      // First Hands, first job shift, and first pet already have dedicated
+      // presentations. Other claims use one moment, not one popup per currency.
+      if(m.title!=='First Hands'&&m.presentation!=='first_shift'&&m.source!=='companion'){
+        const moment=questCompletionMoment({...m,nextStep:next});
+        if(globalThis.BlockcraftRewardNotifications)globalThis.BlockcraftRewardNotifications.announce(moment.kind,moment.amount,moment.label,moment.options);
+      }
       sysMsg('<b>'+escHTML(completeTitle)+'</b><br>'+line+where+'<br><small>Next: '+escHTML(next)+'</small>',{tier:'minor',title:sourceLabel+' Reward'});
       eventFeed('[Quest]',completeTitle+' claimed. '+line.replace(/\s+/g,' ')+'.',{key:'quest-reward:'+String(m.id||completeTitle),cooldown:0});
     });
@@ -1963,14 +1989,9 @@ function netAttachRoom(room,name,client){
       if(m.completed){
         const completedFirstHands=m.completed.giver==='Mara Vale'&&m.completed.title==='First Hands';
         const completedRoadReady=m.completed.giver==='Mara Vale'&&m.completed.title==='Road Ready';
-        SFX.coin();SFX.level();
-        if(m.completed.gold)rewardGain('gold',m.completed.gold,'Gold');
-        if(m.completed.xp)rewardGain('xp',m.completed.xp,'Hunter XP');
+        SFX.coin();
         const rewardItems=Array.isArray(m.completed.rewardItems)?m.completed.rewardItems:[];
-        for(const it of rewardItems)if(it&&ITEMS[it.id])rewardGain('item',it.count||1,ITEMS[it.id].name);
-        const questGold=m.completed.gold|0;
         const triage=itemTriageSummary(rewardItems);
-        sysMsg('<b>'+escHTML(m.completed.title||'Town quest')+'</b> complete.'+(questGold?'<br>'+economyRecapHTML(questGold,gold+questGold,'Town quest reward'):'')+(triage?'<br><b>Reward triage:</b> '+escHTML(triage):''),{tier:'major',title:'Quest Complete'});
         eventFeed('[Quest]',String(m.completed.title||'Town quest')+' complete'+(triage?': '+triage:'')+'.',{key:'npc-complete:'+String(m.completed.id||m.completed.title||''),cooldown:0});
         // Multiplayer turn-in returns here before the local dialogue callback
         // can run. Start the one-time milestone reward from the authoritative
@@ -2041,12 +2062,7 @@ function netAttachRoom(room,name,client){
       refreshHUD();if(qOpen)renderUI();
     });
     room.onMessage('aegisTrialReward', m=>{
-      quest=null;SFX.coin();SFX.level();
-      const reward=m&&m.reward||{},label=reward.kind||'Aegis Cache';
-      if(m&&m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
-      if(m&&m.rewardXp)rewardGain('xp',m.rewardXp,'Hunter XP');
-      if(reward.id&&ITEMS[reward.id])rewardGain(reward.rarity==='rare'?'rare':'item',1,ITEMS[reward.id].name);
-      sysMsg('<b>Aegis Trial complete</b> - +'+((m&&m.rewardXp)||0)+' XP, <b>'+escHTML(label)+'</b>.<br>'+economyRecapHTML((m&&m.rewardGold)||0,gold+((m&&m.rewardGold)||0),'Trial purse'));
+      quest=null;SFX.coin();
       refreshHUD();if(qOpen)closeQWin();
     });
     room.onMessage('guildHallSync', m=>{
@@ -2338,7 +2354,7 @@ function netAttachRoom(room,name,client){
       COMPANIONS.activeFamiliar='';
       if(dim==='dungeon') exitDungeon(true);
       hp=0; renderBars();
-      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Answer to recover your carried items',m&&m.recentHits||'',{
+      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Review questions before returning; your items are safe',m&&m.recentHits||'',{
         clickToRespawn:false,
         autoRespawnMs:1400,
         onRespawn:()=>renderBars()
@@ -2353,13 +2369,13 @@ function netAttachRoom(room,name,client){
       if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
       else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
       setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
-      sysMsg('<b>Returned from limbo.</b> Correct answers restored items; mistakes became public drops.');
+      sysMsg('<b>Returned from limbo.</b> Your items remained safe. Missed topics will return for practice.');
     });
     room.onMessage('deathLimboReject',m=>sysMsg((m&&m.reason)==='rate'?'Slow down.':'That limbo answer was not accepted.'));
     room.onMessage('deathDropCreated',m=>{
       const label=m&&m.item&&m.item.label||'An item';
       showDeathDropVisual(m);
-      sysMsg('<b>'+escHTML(label)+'</b> dropped where '+escHTML((m&&m.owner)||'a hunter')+' died. Anyone can loot it.');
+      sysMsg('<b>'+escHTML(label)+'</b> became your private recovery drop. Return to the marked death location to collect it.');
     });
     room.onMessage('deathDropSnapshot',m=>{for(const drop of Array.isArray(m&&m.drops)?m.drops:[])showDeathDropVisual(drop);});
     room.onMessage('deathDropTaken',m=>{
@@ -2449,6 +2465,7 @@ function netAttachRoom(room,name,client){
         const received=receiveRewardItem(it);if(received)presentGear(received);
         if(received&&!ITEMS[it.id].tool)rewardGain('item',it.count||1,ITEMS[it.id].name);
       }
+      if(m&&m.visibleDrop)showMobLootBurst(m);
       if(m.source==='mob'){
         gainJobXP('adventurer', 3, 'hunt');
         jobContractProgress('kill', 1, 0);
@@ -2777,19 +2794,18 @@ function netAttachRoom(room,name,client){
       const c=clampRegionalContract(m&&m.contract);
       if(m&&m.rewardXp) gainXP(m.rewardXp|0);
       if(m&&m.rewardGold) addGold(m.rewardGold|0);
-      if(Array.isArray(m&&m.rewardItems)) for(const it of m.rewardItems) if(ITEMS[it.id]){addItem(it.id,it.count||1);rewardGain(rewardClass(ITEMS[it.id].name,it.id)||'item',it.count||1,ITEMS[it.id].name);}
+      if(Array.isArray(m&&m.rewardItems)) for(const it of m.rewardItems) if(ITEMS[it.id])addItem(it.id,it.count||1);
       if(m&&m.rewardGear){
         if(m.rewardGearRecovered){
           const stack=rewardGearStack(m.rewardGear);
-          if(stack)presentGear({stack,slot:-1,recovered:true,baseline:ITEMS[stack.id].armor?armorSlot:null});
+          if(stack)sysMsg('<b>'+escHTML(ITEMS[stack.id].name)+'</b> was secured in recovery. Open your Quest Log for the full reward.',{tier:'minor',title:'Recovery'});
         }else{
-          const received=receiveRewardItem(m.rewardGear);if(received)presentGear(received);
+          receiveRewardItem(m.rewardGear);
         }
       }
       if(typeof (m&&m.roadWardenRep)==='number') roadWardenRep=Math.max(0,m.roadWardenRep|0);
       regionalContract=null;
       renderRegionalContractsUI();
-      sysMsg((c&&String(c.type||'').startsWith('road_')?'Road Warden':'Guild')+' contract claimed'+(c?': <b>'+escHTML(c.title)+'</b>':'')+'<br>'+economyRecapHTML((m&&m.rewardGold)|0,gold,'Contract payout'));
       if(m&&m.roadWardenMilestone)sysMsg('<b>Road Warden milestone · '+escHTML(m.roadWardenMilestone.name)+'</b> — '+escHTML(m.roadWardenMilestone.reward||''));
     });
     room.onMessage('regionalContractReject',m=>{
@@ -3249,8 +3265,9 @@ function netAttachRoom(room,name,client){
         supply_trust:'You are not trusted on this Homestead.',
         supply_owner:'Only the owner can withdraw from Homestead Supply.',
         owner:'Only the chest owner can do that.',
-        full:'That chest has no room for those items.',
+        full:'No room available. Free a backpack slot to claim loot, or free chest space to deposit.',
         unsupported_item:'Chests store stackable supplies only. Gear stays in your bag.',
+        reward_deposit:'Reward chests only hold your personal loot.',
         no_matching:'No backpack stacks match items already in that chest.',
         no_materials:'No deposit-safe materials found in your backpack.',
         empty:'That chest slot is empty.',
@@ -3658,7 +3675,6 @@ function netRestoreProfile(m){
     if(onboardingActive) prepareOnboardingStep();
     refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker(); renderBars(); refreshPlayUi(); updateLandMinimap();
     if(m.firstQuestRewardClaimed===true&&Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0&&!firstQuestRewardPresentationSeen()){
-      rewardGain('gold',100,'Gold');
       eventLog('First villager quest complete — server reward: +100 gold.');
       showFirstVillagerReward(requestTownJobGuidance);
     } else if(Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0) awardFirstVillagerQuestBonus();

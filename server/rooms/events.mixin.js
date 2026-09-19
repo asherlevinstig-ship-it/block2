@@ -2053,27 +2053,46 @@ class EventsMixin {
   normalizeFellowshipWeek(guild, now = Date.now()) {
     if (!guild) return;
     const week = this.currentFellowshipWeek(now);
+    if (!guild.weeklyRewardClaims || typeof guild.weeklyRewardClaims !== 'object') guild.weeklyRewardClaims = { week, claims: {}, banked: {} };
+    const rewardState = guild.weeklyRewardClaims;
+    if (!rewardState.banked || typeof rewardState.banked !== 'object' || Array.isArray(rewardState.banked)) rewardState.banked = {};
     if (Math.max(0, Number(guild.renownWeekStart) || 0) !== week) {
+      // Bank earned but unclaimed rewards before resetting the cooperative week.
+      // No claim deadline: an absent student can collect them on return.
+      if (Number(guild.renownWeekStart) > 0 && Number(guild.renownWeekStart) < week && rewardState.week === guild.renownWeekStart) {
+        for (const reward of FELLOWSHIP_WEEKLY_REWARDS) {
+          if ((guild.renownWeek | 0) < reward.threshold) continue;
+          const claimed = Array.isArray(rewardState.claims && rewardState.claims[reward.id]) ? rewardState.claims[reward.id] : [];
+          for (const token of guild.members || []) {
+            if (claimed.includes(token)) continue;
+            const account = rewardState.banked[token] || (rewardState.banked[token] = {});
+            account[reward.id] = Math.min(1000000, Math.max(0, account[reward.id] | 0) + 1);
+          }
+        }
+      }
       guild.renownWeekStart = week;
       guild.renownWeek = 0;
       guild.contractsWeek = 0;
-      guild.weeklyRewardClaims = { week, claims: {} };
+      rewardState.week = week;
+      rewardState.claims = {};
       this.dirtyGuilds = true;
     }
     guild.renownWeek = Math.max(0, guild.renownWeek | 0);
     guild.contractsWeek = Math.max(0, guild.contractsWeek | 0);
-    if (!guild.weeklyRewardClaims || typeof guild.weeklyRewardClaims !== 'object' || Math.max(0, Number(guild.weeklyRewardClaims.week) || 0) !== week) guild.weeklyRewardClaims = { week, claims: {} };
+    if (Math.max(0, Number(rewardState.week) || 0) !== week) { rewardState.week = week; rewardState.claims = {}; this.dirtyGuilds = true; }
     if (!guild.weeklyRewardClaims.claims || typeof guild.weeklyRewardClaims.claims !== 'object' || Array.isArray(guild.weeklyRewardClaims.claims)) guild.weeklyRewardClaims.claims = {};
   }
   fellowshipWeeklyRewardsFor(guild, token = '') {
     if (!guild) return [];
     this.normalizeFellowshipWeek(guild);
     const claims = guild.weeklyRewardClaims && guild.weeklyRewardClaims.claims || {};
+    const banked = guild.weeklyRewardClaims && guild.weeklyRewardClaims.banked && guild.weeklyRewardClaims.banked[token] || {};
     return FELLOWSHIP_WEEKLY_REWARDS.map(r => {
       const claimedBy = Array.isArray(claims[r.id]) ? claims[r.id] : [];
       const unlocked = (guild.renownWeek | 0) >= r.threshold;
       const claimed = !!(token && claimedBy.includes(token));
-      return { id: r.id, threshold: r.threshold, name: r.name, desc: r.desc, gold: r.gold | 0, items: (r.items || []).map(it => ({ id: it.id, count: it.count })), unlocked, claimed, claimable: unlocked && !claimed };
+      const saved = Math.max(0, banked[r.id] | 0);
+      return { id: r.id, threshold: r.threshold, name: r.name, desc: r.desc, gold: r.gold | 0, items: (r.items || []).map(it => ({ id: it.id, count: it.count })), unlocked, claimed, banked: saved, claimable: saved > 0 || unlocked && !claimed };
     });
   }
   publicFellowshipNoticeObjective(objective, guild) {
@@ -2411,15 +2430,22 @@ class EventsMixin {
     const id = typeof (m && m.id) === 'string' ? m.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) : '';
     const reward = FELLOWSHIP_WEEKLY_REWARD_BY_ID.get(id);
     if (!reward) return client.send('guildReject', { reason: 'reward' });
-    if ((guild.renownWeek | 0) < reward.threshold) return client.send('guildReject', { reason: 'reward_locked', threshold: reward.threshold, weekRenown: guild.renownWeek | 0 });
+    const banked = guild.weeklyRewardClaims.banked[rec.token] || {};
+    const saved = Math.max(0, banked[id] | 0);
+    if (!saved && (guild.renownWeek | 0) < reward.threshold) return client.send('guildReject', { reason: 'reward_locked', threshold: reward.threshold, weekRenown: guild.renownWeek | 0 });
     const claims = guild.weeklyRewardClaims.claims;
     const claimedBy = Array.isArray(claims[id]) ? claims[id] : (claims[id] = []);
-    if (claimedBy.includes(rec.token)) return client.send('guildReject', { reason: 'reward_claimed' });
+    if (!saved && claimedBy.includes(rec.token)) return client.send('guildReject', { reason: 'reward_claimed' });
     if (this.rateLimited(client, 'guildReward', 1, 2)) return client.send('guildReject', { reason: 'rate' });
     const rewardDraft={...rec.prof,inv:(rec.prof.inv||[]).map(slot=>slot?{...slot}:null)};
     if(!(reward.items||[]).every(item=>this.addRewardItem(rewardDraft,item.id,item.count)===0))return client.send('guildReject',{reason:'full'});
-    claimedBy.push(rec.token);
-    if (claimedBy.length > 200) claims[id] = claimedBy.slice(-200);
+    if (saved) {
+      banked[id] = saved - 1;
+      guild.weeklyRewardClaims.banked[rec.token] = banked;
+    } else {
+      claimedBy.push(rec.token);
+      if (claimedBy.length > 200) claims[id] = claimedBy.slice(-200);
+    }
     const rewardGold = Math.max(0, reward.gold | 0);
     if (rewardGold) {
       rec.prof.gold = Math.min(1e9, (rec.prof.gold | 0) + rewardGold);
@@ -2433,7 +2459,7 @@ class EventsMixin {
     this.dirtyGuilds = true;
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
-    const rewards = this.fellowshipWeeklyRewardsFor(guild, rec.token).map(r => r.id === id ? { ...r, claimed: true, claimable: false } : r);
+    const rewards = this.fellowshipWeeklyRewardsFor(guild, rec.token);
     client.send('guildWeeklyRewardResult', { id, name: reward.name, threshold: reward.threshold, rewardGold, gold: rec.prof.gold | 0, items, weekRenown: guild.renownWeek | 0, rewards });
     this.broadcastGuildHallSync();
   }

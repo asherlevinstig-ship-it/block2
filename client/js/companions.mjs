@@ -2447,7 +2447,7 @@ function showFamiliarTutorial(kind){
   familiarTutorialKind=kind;
   const el=document.getElementById('tutorialhud'); if(!el)return;
   const role=kind==='shade'?'guard you':kind==='fang'?'hunt beside you':kind==='mote'?'restore your health':kind==='sprite'?'find bonus drops':kind==='cat'?'soften rough landings':kind==='dog'?'help animal hunts':'strengthen hostile hunts';
-  el.innerHTML='<div class="tutpill">Companion bond</div><div class="tutkey">K</div><div class="tuttext">Call '+FAMILIARS[kind].name+' to '+role+'</div><div class="tutsub">Open Companions to see Bond XP, daily challenge, and upgrades.</div>';
+  el.innerHTML='<div class="tutpill">Companion bond</div><div class="tutkey">K</div><div class="tuttext">Call '+FAMILIARS[kind].name+' to '+role+'</div><div class="tutsub">Open Companions to see Bond XP, self-paced exercise, and upgrades.</div>';
   el.classList.remove('hidden');
 }
 function finishFamiliarTutorial(kind){

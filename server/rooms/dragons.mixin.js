@@ -624,11 +624,12 @@ class DragonsMixin {
   recordFamiliarChallenge(prof,kind,reason,value){
     if(!prof.familiarChallenges)prof.familiarChallenges={};
     const day=FAMILIAR_SYSTEM.dayKey(),def=FAMILIAR_SYSTEM.dailyChallenge(kind,day);if(!def)return null;
-    let state=prof.familiarChallenges[kind];if(!state||state.day!==day)state={day,progress:0,claimed:false};
+    let state=prof.familiarChallenges[kind];if(!state||(state.claimed&&state.day!==day))state={day,progress:0,claimed:false};
+    const activeDef=FAMILIAR_SYSTEM.dailyChallenge(kind,state.day);if(!activeDef)return null;
     let justCompleted=false;
-    if(!state.claimed&&def.reason===reason){state.progress=Math.min(def.need,state.progress+(def.metric==='count'?1:Math.max(0,value|0)));if(state.progress>=def.need){state.claimed=true;justCompleted=true;}}
+    if(!state.claimed&&activeDef.reason===reason){state.progress=Math.min(activeDef.need,state.progress+(activeDef.metric==='count'?1:Math.max(0,value|0)));if(state.progress>=activeDef.need){state.claimed=true;justCompleted=true;}}
     prof.familiarChallenges[kind]=state;
-    return {day,title:def.title,need:def.need,progress:state.progress,claimed:state.claimed,justCompleted};
+    return {day:state.day,title:activeDef.title,need:activeDef.need,progress:state.progress,claimed:state.claimed,justCompleted};
   }
   handleBindFamiliar(client, m) {
     const rec = this.profileFor(client);

@@ -151,9 +151,12 @@ test('Gate encounter previews derive difficulty, boss stats, party size, and rew
 
 test('weapon sources climb one rank at a time and never skip the early gear path', () => {
   assert.deepEqual([0,1,2,3,4].map(tier=>LOOT_ECONOMY.weaponSpec('gate',tier,0,0).rank),[1,2,3,4,5]);
+  assert.deepEqual([0,1,2,3,4,5].map(tier=>LOOT_ECONOMY.weaponSpec('chest',tier,0,0).rank),[0,1,2,3,4,4]);
   assert.deepEqual([0,1,2,3].map(tier=>LOOT_ECONOMY.weaponSpec('captain',tier,0,0).rank),[0,1,2,2]);
   assert.equal(LOOT_ECONOMY.weaponSpec('bandit',2,0,.039).rank,1);
   assert.equal(LOOT_ECONOMY.weaponSpec('bandit',2,0,.04),null);
+  assert.equal(LOOT_ECONOMY.weaponSpec('chest',2,0,.299).rank,2);
+  assert.equal(LOOT_ECONOMY.weaponSpec('chest',2,0,.30),null);
   assert.equal(LOOT_ECONOMY.weaponSpec('captain',2,0,0,.69).archetype,'axe');
   assert.equal(LOOT_ECONOMY.weaponSpec('captain',2,0,0,.70).archetype,'sword');
   assert.equal(LOOT_ECONOMY.weaponSpec('gate',2,0,0,.49).archetype,'axe');
@@ -162,7 +165,10 @@ test('weapon sources climb one rank at a time and never skip the early gear path
 
 test('armor sources use the same E-to-S path with deliberately rarer drops',()=>{
   assert.deepEqual([0,1,2,3,4].map(tier=>LOOT_ECONOMY.armorSpec('gate',tier,0,0).rank),[1,2,3,4,5]);
+  assert.deepEqual([0,1,2,3,4,5].map(tier=>LOOT_ECONOMY.armorSpec('chest',tier,0,0).rank),[0,1,2,3,4,4]);
   assert.deepEqual([0,1,2,3].map(tier=>LOOT_ECONOMY.armorSpec('captain',tier,0,0).rank),[0,1,2,2]);
+  assert.equal(LOOT_ECONOMY.armorSpec('chest',2,0,.179).rank,2);
+  assert.equal(LOOT_ECONOMY.armorSpec('chest',2,0,.18),null);
   assert.equal(LOOT_ECONOMY.armorSpec('captain',2,0,.119).rank,2);
   assert.equal(LOOT_ECONOMY.armorSpec('captain',2,0,.12),null);
   assert.equal(LOOT_ECONOMY.armorSpec('gate',4,0,.349).rank,5);

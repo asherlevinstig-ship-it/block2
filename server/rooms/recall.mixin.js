@@ -14,7 +14,7 @@ class RecallMixin{
       ]);
     }catch(_){return null;}finally{clearTimeout(timer);}
   }
-  initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallRecentQuestions=new Map();this.recallRecentPrompts=new Map();this.recallStartsPending=new Set();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
+  initRecallState(){this.recallChallenges=new Map();this.recallSubjects=new Map();this.recallRecentQuestions=new Map();this.recallRecentPrompts=new Map();this.recallStartsPending=new Set();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
   cleanRecallSubject(value){return String(value||'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim().slice(0,96);}
   recallTutorialSpace(p){
     return !!(p&&(p.dim==='tutorial'||String(p.dgn||'').startsWith('tutorial-')));
@@ -289,9 +289,8 @@ class RecallMixin{
       }
       return client.send('recallResult',{id:challenge.id,correct:true,mana:restore,stamina:stamina.restore,sp:stamina.sp,maxSp:stamina.maxSp,staminaFraction:RECALL.RESTORE_FRACTION,explorationGold,fellowshipRenown,explanation:challenge.explanation,nextDue:review&&review.record.nextDue,mastery,questionHall:challenge.source==='question_hall'});
     }
-    const hall=challenge.source==='question_hall',freezeMs=hall?0:RECALL.FREEZE_MS;
-    if(!hall){const frozenUntil=now+freezeMs;this.recallFrozenUntil.set(sid,frozenUntil);}
-    client.send('recallResult',{id:challenge.id,correct:false,correctIndex:challenge.correct,explanation:challenge.explanation,freezeMs,nextDue:review&&review.record.nextDue,mastery,questionHall:hall});
+    const hall=challenge.source==='question_hall';
+    client.send('recallResult',{id:challenge.id,correct:false,correctIndex:challenge.correct,explanation:challenge.explanation,freezeMs:0,nextDue:review&&review.record.nextDue,mastery,questionHall:hall});
   }
   restoreRecallStamina(client,prof){
     if(!prof||typeof this.maxStaminaForProfile!=='function')return{restore:0,sp:null,maxSp:null};
@@ -306,10 +305,6 @@ class RecallMixin{
     prof.vitalsSavedAt=Date.now();
     return{restore,sp:prof.vitals.sp,maxSp};
   }
-  recallMovementLocked(sessionId,now=Date.now()){
-    const until=this.recallFrozenUntil&&this.recallFrozenUntil.get(sessionId)||0;
-    if(until<=now){if(until&&this.recallFrozenUntil)this.recallFrozenUntil.delete(sessionId);return false;}return true;
-  }
-  clearRecallState(sessionId){if(this.recallChallenges)this.recallChallenges.delete(sessionId);if(this.recallFrozenUntil)this.recallFrozenUntil.delete(sessionId);if(this.recallSubjects)this.recallSubjects.delete(sessionId);if(this.recallRecentQuestions)this.recallRecentQuestions.delete(sessionId);if(this.recallRecentPrompts)this.recallRecentPrompts.delete(sessionId);if(this.recallStartsPending)this.recallStartsPending.delete(sessionId);}
+  clearRecallState(sessionId){if(this.recallChallenges)this.recallChallenges.delete(sessionId);if(this.recallSubjects)this.recallSubjects.delete(sessionId);if(this.recallRecentQuestions)this.recallRecentQuestions.delete(sessionId);if(this.recallRecentPrompts)this.recallRecentPrompts.delete(sessionId);if(this.recallStartsPending)this.recallStartsPending.delete(sessionId);}
 }
 module.exports=RecallMixin.prototype;

@@ -1,5 +1,5 @@
 const hud=document.getElementById('recallhud'),subjectEl=document.getElementById('recallsubject'),timeEl=document.getElementById('recalltime'),progressEl=document.getElementById('recallprogress'),closeEl=document.getElementById('recallclose'),questionEl=document.getElementById('recallquestion'),instructionEl=document.getElementById('recallinstruction'),fallbackEl=document.getElementById('recallfallback'),feedbackEl=document.getElementById('recallfeedback');
-let active=null,group=null,freezeUntil=0,answerPending=false,masterySummary=null,questionHallOpen=false,questionHallAnswered=0,questionHallNextTimer=0,recallClearTimer=0;
+let active=null,group=null,answerPending=false,masterySummary=null,questionHallOpen=false,questionHallAnswered=0,questionHallNextTimer=0,recallClearTimer=0;
 const questionHallMarks=[];
 let requestTimer=0,recallRoom=null,recallDim=null;
 function finishRequest(){if(requestTimer)clearTimeout(requestTimer);requestTimer=0;}
@@ -58,16 +58,6 @@ function updateQuestionHallProgress(){
   if(fill)fill.style.width=pct+'%';
   if(label)label.textContent=Math.min(count,QUESTION_HALL_GOAL)+' / '+QUESTION_HALL_GOAL+(count>=QUESTION_HALL_GOAL?' · KEEP GOING':'');
   progressEl.classList.toggle('hidden',!questionHallOpen);
-}
-function releaseRecallMovement(reason){
-  try{
-    if(typeof globalThis.BlockcraftReleaseMovementInput==='function')globalThis.BlockcraftReleaseMovementInput(reason);
-    else {
-      for(const code of ['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight'])if(typeof keys==='object')keys[code]=false;
-      if(player&&player.vel)player.vel.set(0,0,0);
-    }
-    if(NET&&NET.on&&NET.room&&player&&player.pos)NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,heldId:typeof displayHeldId==='function'?displayHeldId():undefined});
-  }catch(e){}
 }
 function syncRecallPose(){
   try{if(NET&&NET.on&&NET.room&&player&&player.pos)NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,heldId:typeof displayHeldId==='function'?displayHeldId():undefined});}catch(e){}
@@ -135,15 +125,15 @@ function queueQuestionHallNext(delay=900){
 function reviewTiming(nextDue){const ms=Math.max(0,(Number(nextDue)||0)-Date.now());if(ms<3*60*1000)return 'again soon';if(ms<60*60*1000)return 'in '+Math.max(1,Math.round(ms/60000))+' minutes';if(ms<36*60*60*1000)return 'tomorrow';return 'in '+Math.max(2,Math.round(ms/86400000))+' days';}
 function result(m){
   if(!m||!active||m.id!==active.id)return;finishRequest();if(m.expired){clearRecall();return sysMsg('The Recall Cast faded.');}
-  if(m.correct)syncRecallPose();else releaseRecallMovement('recall-wrong');
+  if(m.correct)syncRecallPose();
   masterySummary=m.mastery||masterySummary;
   const hall=questionHallOpen||!!m.questionHall,answer=active&&active.answers&&active.answers[m.correctIndex]||'';
   if(m.correct&&globalThis.BlockcraftOnboarding)globalThis.BlockcraftOnboarding.markRecall();
   if(hall){questionHallAnswered++;updateQuestionHallProgress();}
   if(hall)spawnQuestionHallAnswerMark(!!m.correct);
   if(m.correct){const gain=Number.isFinite(+m.stamina)?Math.max(1,Math.round(+m.stamina)):Math.max(1,Math.ceil(maxSp()*(Number(m.staminaFraction)||.2)));if(Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));else sp=Math.min(maxSp(),sp+gain);resultFlash();if(m.fellowshipRenown&&globalThis.BlockcraftFellowshipEffects&&globalThis.BlockcraftFellowshipEffects.pulseRecallLecternRenown)globalThis.BlockcraftFellowshipEffects.pulseRecallLecternRenown(m.fellowshipRenown|0);showName('+'+(m.mana|0)+' MP · +'+gain+' SP'+(m.explorationGold?' · +'+m.explorationGold+' GOLD':'')+(m.fellowshipRenown?' · +'+m.fellowshipRenown+' RENOWN':''));feedbackEl.textContent='Correct. '+(m.explanation||'')+' Review '+reviewTiming(m.nextDue)+'.';feedbackEl.className='correct';sysMsg('Recall reward: <b>+'+(m.mana|0)+' MP</b> and <b>+'+gain+' SP</b>'+(m.explorationGold?' plus <b>+'+(m.explorationGold|0)+' gold</b> from the ruins.':'.')+(m.fellowshipRenown?' Fellowship study: <b>+'+(m.fellowshipRenown|0)+' Renown</b>.':'')+' '+escHTML(m.explanation||'')+' <b>Review '+reviewTiming(m.nextDue)+'.</b>');SFX.level();}
-  else{if(!hall)freezeUntil=performance.now()+Math.max(0,m.freezeMs|0);resultFlash(true);if(active&&Number.isInteger(m.correctIndex)){const node=group&&group.children[m.correctIndex];if(node){node.scale.set(1.28,1.28,1.28);node.children[0].material.color.setHex(0x34d399);}}showName(hall?'TRY AGAIN':'WRONG — FROZEN');feedbackEl.textContent='Correct answer: '+answer+'. '+(m.explanation||'')+' This topic will return '+reviewTiming(m.nextDue)+'.';feedbackEl.className='wrong';sysMsg('<b>Correct answer:</b> '+escHTML(answer)+' · '+escHTML(m.explanation||'')+' <b>Returns '+reviewTiming(m.nextDue)+'.</b>');SFX.error();}
-  renderBars();active=null;answerPending=false;if(hall)queueQuestionHallNext(m.correct?1150:1700);else{if(recallClearTimer)clearTimeout(recallClearTimer);recallClearTimer=setTimeout(()=>{recallClearTimer=0;clearRecall();},m.correct?1800:Math.max(3500,m.freezeMs|0));}
+  else{resultFlash(true);if(active&&Number.isInteger(m.correctIndex)){const node=group&&group.children[m.correctIndex];if(node){node.scale.set(1.28,1.28,1.28);node.children[0].material.color.setHex(0x34d399);}}showName(hall?'TRY AGAIN':'NOT YET — KEEP MOVING');feedbackEl.textContent='Correct answer: '+answer+'. '+(m.explanation||'')+' This topic will return '+reviewTiming(m.nextDue)+'.';feedbackEl.className='wrong';sysMsg('<b>Correct answer:</b> '+escHTML(answer)+' · '+escHTML(m.explanation||'')+' <b>Returns '+reviewTiming(m.nextDue)+'.</b>');SFX.error();}
+  renderBars();active=null;answerPending=false;if(hall)queueQuestionHallNext(m.correct?1150:1700);else{if(recallClearTimer)clearTimeout(recallClearTimer);recallClearTimer=setTimeout(()=>{recallClearTimer=0;clearRecall();},m.correct?1800:3500);}
 }
 function reject(m){
   const r=m&&m.reason;
@@ -167,7 +157,6 @@ function tick(now=performance.now()){
   tickQuestionHallMarks(now);
   if((active||requestTimer||questionHallOpen)&&(!NET.on||recallRoom!==NET.room||recallDim!==dim)){clearRecall();return;}
   if(active&&active.expiresAt<=Date.now()){const hall=questionHallOpen;clearRecall({keepQuestionHall:hall});if(hall)queueQuestionHallNext();else sysMsg('The Recall question expired. Press P for another.');return;}
-  if(freezeUntil>now){keys.KeyW=keys.KeyA=keys.KeyS=keys.KeyD=keys.Space=keys.ShiftLeft=keys.ShiftRight=false;player.vel.x=0;player.vel.z=0;}
   if(!active)return;
   if(group)group.children.forEach((p,i)=>{p.children[0].material.opacity=.34+Math.sin(now*.004+i)*.12;p.children[1].rotation.z+=.012;p.children[2].intensity=1.5+Math.sin(now*.006+i)*.45;});
   if(answerPending||active.fallback||active.questionHall)return;
@@ -176,6 +165,6 @@ function tick(now=performance.now()){
 }
 function setMastery(value){if(value&&typeof value==='object')masterySummary=value;}
 if(closeEl)closeEl.addEventListener('click',closeQuestionHall);
-const api=Object.freeze({start,showQuestion,result,reject,tick,clear:clearRecall,closeQuestionHall,questionHallActive:()=>questionHallOpen,setMastery,get mastery(){return masterySummary;},get active(){return active;},get frozen(){return freezeUntil>performance.now();}});
+const api=Object.freeze({start,showQuestion,result,reject,tick,clear:clearRecall,closeQuestionHall,questionHallActive:()=>questionHallOpen,setMastery,get mastery(){return masterySummary;},get active(){return active;},get frozen(){return false;}});
 globalThis.BlockcraftRecall=api;
 export {api};

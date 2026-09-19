@@ -13,7 +13,7 @@ test('recall question shuffles answers without losing the correct answer',()=>{
 test('recall tuning keeps answers available until the student chooses',()=>{
   assert.equal(RECALL.COOLDOWN_MS,0);
   assert.ok(RECALL.QUESTION_MS>=10*60*1000);
-  assert.ok(RECALL.FREEZE_MS>=3000&&RECALL.FREEZE_MS<=5000);
+  assert.equal(RECALL.FREEZE_MS,0,'wrong answers never lock movement');
   assert.ok(RECALL.RESTORE_FRACTION>0&&RECALL.RESTORE_FRACTION<=.25);
 });
 

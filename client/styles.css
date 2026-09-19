@@ -195,7 +195,7 @@
   .rewardmoment-frame{position:relative;display:grid;grid-template-columns:72px minmax(0,1fr);align-items:center;gap:15px;min-height:92px;padding:13px 26px 13px 18px;clip-path:polygon(0 13px,13px 0,calc(100% - 13px) 0,100% 13px,100% calc(100% - 13px),calc(100% - 13px) 100%,13px 100%,0 calc(100% - 13px));background:linear-gradient(100deg,rgba(6,13,20,.96),rgba(14,22,30,.93) 70%,color-mix(in srgb,var(--moment) 15%,rgba(6,13,20,.96)));border-top:2px solid var(--moment);border-bottom:1px solid color-mix(in srgb,var(--moment) 72%,transparent)}
   .rewardmoment-frame:after{content:"";position:absolute;left:0;bottom:0;width:100%;height:3px;background:linear-gradient(90deg,var(--moment),#d8f4ff 58%,transparent);transform-origin:left;animation:rewardMomentTimer var(--moment-duration,3s) linear forwards}
   .rewardmoment-icon{display:grid;place-items:center;width:60px;height:60px;clip-path:polygon(50% 0,88% 15%,100% 50%,88% 85%,50% 100%,12% 85%,0 50%,12% 15%);background:linear-gradient(145deg,color-mix(in srgb,var(--moment) 32%,#26343c),#0b141d);box-shadow:inset 0 0 0 2px var(--moment);color:var(--moment);font:700 28px/1 Georgia,serif;font-style:normal}
-  .rewardmoment-frame>div{display:grid;gap:3px;min-width:0}.rewardmoment-kicker{color:var(--moment);font-size:9px;letter-spacing:3px}.rewardmoment-title{overflow:hidden;color:#f7fbff;font:700 21px/1.15 Georgia,serif;letter-spacing:1.5px;text-overflow:ellipsis;white-space:nowrap}.rewardmoment-detail{color:#dbe7ef;font-size:13px;letter-spacing:.5px}.rewardmoment-hint{color:#8fb3c4;font-size:10px;font-style:normal;letter-spacing:1px}
+  .rewardmoment-frame>div{display:grid;gap:3px;min-width:0}.rewardmoment-kicker{color:var(--moment);font-size:9px;letter-spacing:3px}.rewardmoment-title{color:#f7fbff;font:700 21px/1.15 Georgia,serif;letter-spacing:1.5px;overflow-wrap:anywhere}.rewardmoment-detail{color:#dbe7ef;font-size:13px;letter-spacing:.5px;line-height:1.35;overflow-wrap:anywhere}.rewardmoment-hint{color:#8fb3c4;font-size:10px;font-style:normal;letter-spacing:1px;line-height:1.35}
   body.presentation-combat #rewardfeed{opacity:.32;transform:translateX(-50%) scale(.92);transition:opacity .16s,transform .16s}
   @keyframes rewardMomentIn{from{opacity:0;transform:translateX(-50%) translateY(-14px) scale(.94)}60%{opacity:1;transform:translateX(-50%) translateY(2px) scale(1.015)}to{transform:translateX(-50%)}}
   @keyframes rewardMomentTimer{from{transform:scaleX(0)}to{transform:scaleX(1)}}
@@ -1614,6 +1614,11 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   #uipanel h2{font-size:15px;color:#3a3a3a;margin-bottom:10px;letter-spacing:1px}
   #uipanel .slot{background:var(--slot-bg);border:2px solid;border-color:var(--slot-dark) var(--slot-light) var(--slot-light) var(--slot-dark);border-radius:0;cursor:pointer}
   #uipanel .slot:hover{box-shadow:inset 0 0 0 999px rgba(255,255,255,.25)}
+  #uipanel .chest-loot-grid .slot[class*="gear-"]{border-color:var(--gear-color);box-shadow:inset 0 0 13px color-mix(in srgb,var(--gear-color) 30%,transparent),0 0 12px color-mix(in srgb,var(--gear-color) 45%,transparent)}
+  #uipanel .chest-loot-grid .slot:is(.gear-rare,.gear-epic,.gear-mythic,.gear-unique){animation:chest-loot-glow 2.4s ease-in-out infinite alternate}
+  #uipanel .chest-loot-grid .slot.gear-unique{border-color:var(--unique-color);--gear-color:var(--unique-color)}
+  @keyframes chest-loot-glow{to{box-shadow:inset 0 0 18px color-mix(in srgb,var(--gear-color) 45%,transparent),0 0 21px color-mix(in srgb,var(--gear-color) 72%,transparent)}}
+  @media (prefers-reduced-motion:reduce){#uipanel .chest-loot-grid .slot{animation:none!important}}
   #uipanel .slot.gear-inspected{outline:3px solid #f8d66d;outline-offset:1px;box-shadow:0 0 13px rgba(248,214,109,.8),inset 0 0 8px rgba(255,255,255,.35)}
   .gear-compare{width:min(465px,100%);box-sizing:border-box;margin:0 0 12px;padding:10px 12px;color:#eaf6ff;background:linear-gradient(145deg,#101927,#080d15);border:1px solid #52677f;border-radius:6px;box-shadow:inset 0 0 18px rgba(79,216,255,.05),0 3px 10px rgba(0,0,0,.24)}
   .gear-compare header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding-bottom:7px;border-bottom:1px solid rgba(159,216,255,.18)}
@@ -1626,6 +1631,18 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   .grid{display:grid;gap:3px}
   .row{display:flex;gap:3px}
   .uisec{margin-bottom:12px}
+  .dungeon-loot-briefing{box-sizing:border-box;max-width:700px;margin:0 0 14px;padding:14px 16px;border:1px solid #b98739;border-radius:7px;background:linear-gradient(145deg,#172432,#0b121e);color:#eaf5ff;box-shadow:inset 0 0 24px rgba(87,169,231,.08),0 8px 24px rgba(0,0,0,.22)}
+  .dungeon-loot-headline{display:flex;justify-content:space-between;align-items:center;gap:16px}
+  .dungeon-loot-headline small{display:block;color:#91b7d2;font-size:9px;font-weight:800;letter-spacing:2px}
+  .dungeon-loot-headline b{display:block;margin-top:3px;color:#ffe1a0;font:700 19px Georgia,serif}
+  .dungeon-loot-headline>span{padding:5px 8px;border:1px solid rgba(255,217,142,.55);border-radius:3px;color:#ffe1a0;font-size:9px;font-weight:800;letter-spacing:1px;white-space:nowrap}
+  .dungeon-loot-briefing p{margin:10px 0 8px;color:#d7e5f0;font-size:12px;line-height:1.45}
+  .dungeon-loot-odds{padding:8px 10px;border-left:3px solid #79c7f5;background:rgba(83,164,221,.1);color:#aeddfb;font-size:11px;line-height:1.4}
+  .dungeon-loot-finds{display:grid;gap:7px;margin-top:12px}
+  .dungeon-loot-find{display:flex;align-items:center;gap:10px;min-height:50px;padding:6px 8px;border:1px solid var(--loot-color);border-radius:5px;background:rgba(255,255,255,.045);box-shadow:inset 0 0 13px color-mix(in srgb,var(--loot-color) 18%,transparent),0 0 10px color-mix(in srgb,var(--loot-color) 22%,transparent)}
+  .dungeon-loot-find canvas{width:38px;height:38px;flex:0 0 38px;image-rendering:pixelated}
+  .dungeon-loot-find div{flex:1;min-width:0}.dungeon-loot-find b{display:block;color:#fff;font-size:12px}.dungeon-loot-find small{display:block;color:var(--loot-color);font-size:10px}
+  .dungeon-loot-find .qbtn{margin:0;padding:7px 10px;flex:0 0 auto}
   #craftarea{display:flex;align-items:center;gap:14px;margin-bottom:14px}
   .craftwrap{display:flex;align-items:flex-start;gap:16px;margin-bottom:14px}
   .craftwrap #craftarea{margin-bottom:0}
@@ -1877,6 +1894,7 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   .deathlimbo-panel{width:min(720px,calc(100vw - 36px));border:1px solid rgba(167,139,250,.75);border-radius:14px;background:linear-gradient(160deg,rgba(10,13,30,.97),rgba(30,14,42,.96));box-shadow:0 0 44px rgba(167,139,250,.28),inset 0 0 32px rgba(255,255,255,.05);padding:24px;color:#eef2ff;text-align:center}
   .deathlimbo-kicker{font-size:11px;letter-spacing:4px;color:#a78bfa;text-shadow:0 0 12px rgba(167,139,250,.7);margin-bottom:8px}
   #deathlimbotitle{font-size:24px;letter-spacing:3px;color:#fff;margin-bottom:8px}
+  .deathlimbo-safety{margin:0 auto 14px;max-width:520px;color:#9ef0bc;font-size:14px;font-weight:700;line-height:1.4}
   #deathlimboitem{display:inline-block;margin:0 auto 14px;padding:8px 12px;border:1px solid rgba(251,191,36,.55);border-radius:999px;background:rgba(64,42,8,.58);color:#ffe39a;font-size:13px;letter-spacing:1px}
   #deathlimboq{font-size:20px;font-weight:800;line-height:1.35;margin:8px 0 16px;color:#f8fbff}
   #deathlimboanswers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -1885,7 +1903,7 @@ body.mobile-play-mode .bc-modal-close{top:max(8px,env(safe-area-inset-top))!impo
   #deathlimboanswers button:disabled{opacity:.55;cursor:default}
   #deathlimboanswers b{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;border-radius:50%;margin-right:8px;background:#7dd3fc;color:#071221}
   #deathlimbofeedback{min-height:22px;margin-top:14px;font-size:13px;line-height:1.4;color:#c7d2fe}
-  #deathlimbofeedback.ok{color:#86efac}#deathlimbofeedback.bad{color:#fca5a5}
+  #deathlimbofeedback.ok{color:#86efac}#deathlimbofeedback.review{color:#fde68a}
   body.recall-active #tutorialhud,body.recall-active #coachhud,body.recall-active #eventhud,body.recall-active #currentquest,body.recall-active #townchoices{display:none!important}
   #recallhud{position:fixed;left:50%;top:18px;transform:translateX(-50%);width:min(620px,calc(100vw - 32px));z-index:24;pointer-events:none;color:#eef8ff;border:1px solid rgba(99,210,255,.68);border-radius:10px;padding:11px 15px;background:linear-gradient(160deg,rgba(5,13,28,.96),rgba(14,9,33,.95));box-shadow:0 0 30px rgba(56,189,248,.22),inset 0 0 22px rgba(167,139,250,.08);text-align:center}
   #recallclose{display:none;position:absolute;right:12px;top:10px;width:30px;height:30px;border:1px solid rgba(125,211,252,.58);border-radius:8px;background:rgba(3,9,18,.82);color:#dff7ff;font:900 18px/1 system-ui;cursor:pointer}

@@ -82,6 +82,7 @@ const I = {
   COAL: 101,
   IRON_INGOT: 102,
   DIAMOND: 103,
+  CHARCOAL: 104,
   IRON_PICK: 112,
   WOOD_AXE: 114,
   IRON_AXE: 116,
@@ -104,6 +105,11 @@ const I = {
   SHADOW_SIGIL: 191,
   FANG_TOTEM: 192,
   WINDSEED: 193,
+  HEARTWOOD_RESIN: 194,
+  SUNSHARD: 195,
+  MESA_AMBER: 196,
+  FROST_CRYSTAL: 197,
+  MIRE_BLOOM: 198,
   MOTE_CHARM: 200,
   COMPOST: 202,
   GOLDEN_WHEAT: 203,
@@ -4144,6 +4150,17 @@ test('daily Bond Challenges complete once and repetitive awards diminish', () =>
   assert.deepEqual([gains[0],gains[20],gains[40]],[8,4,2]);
 });
 
+test('unfinished familiar Bond Exercise keeps its progress across a day change', () => {
+  const room=makeRoom(),client=makeClient('bond_no_expiry');const {prof}=seedPlayer(room,client);room.clients=[client];
+  prof.familiarUnlocks=['shade'];room.state.players.get(client.sessionId).familiar='shade';
+  const yesterday=FAMILIAR_SYSTEM.dayKey()-1,def=FAMILIAR_SYSTEM.dailyChallenge('shade',yesterday);
+  prof.familiarChallenges.shade={day:yesterday,progress:def.need-1,claimed:false};
+  room.awardFamiliarXp(client,'shade',1,def.reason);
+  assert.equal(prof.familiarChallenges.shade.day,yesterday);
+  assert.equal(prof.familiarChallenges.shade.claimed,true);
+  assert.equal(client.sent.at(-1).msg.challenge.justCompleted,true);
+});
+
 test('familiar telemetry reports hourly pacing, diminishing pressure, and tier distribution', () => {
   const room=makeRoom(),client=makeClient('bond_telemetry');const {prof}=seedPlayer(room,client);room.clients=[client];
   prof.familiarUnlocks=['fang'];prof.familiarXp.fang=300;room.state.players.get(client.sessionId).familiar='fang';
@@ -4307,7 +4324,7 @@ test('familiar lifecycle dismisses on death, suspends during locked travel, and 
   assert.equal(room.shadeStepCd.has(client.sessionId), false);
 });
 
-test('death limbo quizzes inventory and equipped armor, dropping failed answers publicly', () => {
+test('death limbo keeps every item safe through wrong answers and completes with full vitals', () => {
   const room = makeRoom();
   const client = makeClient('limbo');
   const { prof } = seedPlayer(room, client, {
@@ -4319,18 +4336,18 @@ test('death limbo quizzes inventory and equipped armor, dropping failed answers 
   room.state.players.get(client.sessionId).armorId = I.IRON_ARMOR;
   room.state.players.get(client.sessionId).armorType = 'scout';
   room.clients = [client];
-  const broadcasts = [];
-  room.sendSpace = (dgn, type, msg) => broadcasts.push({ dgn, type, msg });
+  room.sendSpace = () => {};
 
   room.hurtPlayer(client, 99, 'zombie');
 
   const start = client.sent.find(e => e.type === 'deathLimboStart').msg;
   assert.equal(start.total, 3);
   assert.equal(room.state.players.get(client.sessionId).y, W.TOWN.G + 1);
-  assert.equal(prof.inv[0], null);
-  assert.equal(prof.inv[1], null);
-  assert.equal(prof.armor, null);
-  assert.equal(room.state.players.get(client.sessionId).armorId, 0);
+  assert.equal(prof.inv[0].id, I.BREAD, 'unanswered inventory stays authoritative in the profile');
+  assert.equal(prof.inv[1].id, I.IRON_SWORD);
+  assert.equal(prof.armor.id, I.IRON_ARMOR, 'unanswered equipped armour stays authoritative too');
+  assert.equal(room.state.players.get(client.sessionId).armorId, I.IRON_ARMOR);
+  assert.equal(sanitizeProfile(prof).deathLimbo.id, start.id, 'pending limbo survives a persistence round trip');
 
   const first = room.deathLimbo.get(client.sessionId).items[0];
   room.handleDeathLimboAnswer(client, { id: start.id, answer: first.question.correct });
@@ -4341,10 +4358,11 @@ test('death limbo quizzes inventory and equipped armor, dropping failed answers 
   const second = room.deathLimbo.get(client.sessionId).items[1];
   room.handleDeathLimboAnswer(client, { id: next.id, answer: (second.question.correct + 1) % 4 });
 
-  assert.equal(prof.inv.some(s => s && s.id === I.IRON_SWORD), false);
-  assert.equal(room.deathDrops.size, 1);
-  assert.equal([...room.deathDrops.values()][0].item.rarity, 'rare');
-  assert.equal(broadcasts.some(e => e.type === 'deathDropCreated'), true);
+  assert.equal(prof.inv.some(s => s && s.id === I.IRON_SWORD && s.rarity === 'rare'), true, 'a wrong answer cannot move equipment out of the saved inventory');
+  assert.equal(room.deathDrops.size, 0);
+  assert.equal((prof.deathDrops || []).length, 0);
+  assert.equal(client.sent.some(e => e.type === 'deathDropCreated'), false);
+  assert.equal(client.sent.findLast(e => e.type === 'deathLimboResult').msg.itemSafe, true);
   const armor = room.deathLimbo.get(client.sessionId).items[2];
   room.handleDeathLimboAnswer(client, { id: start.id, answer: armor.question.correct });
   assert.equal(prof.armor.id, I.IRON_ARMOR);
@@ -4358,6 +4376,58 @@ test('death limbo quizzes inventory and equipped armor, dropping failed answers 
   assert.equal(complete.mp, 20, 'limbo refills mana');
   assert.equal(complete.sp, 100, 'limbo refills stamina');
   assert.equal(complete.hunger, 100, 'limbo refills food');
+  assert.equal(prof.deathLimbo, null);
+
+});
+
+test('legacy private death drops remain recoverable by their owner', () => {
+  const room = makeRoom(), client = makeClient('legacy-drop-owner');
+  const { token, prof } = seedPlayer(room, client, { x: 40, y: 16, z: 40 });
+  const drop = { id: 'legacy-death-drop', item: { id: I.IRON_SWORD, count: 1, dur: 123, rarity: 'rare' }, label: 'Iron Sword', x: 40, y: 16, z: 40, dgn: '', ownerName: 'A hunter', ownerToken: token, expiresAt: 0 };
+  prof.deathDrops = [{ ...drop, item: { ...drop.item } }];
+  room.restoreDeathRecoveryState(client, prof, room.state.players.get(client.sessionId));
+  assert.equal(room.deathDrops.has(drop.id), true);
+  const stranger = makeClient('limbo-stranger');
+  const strangerRec = seedPlayer(room, stranger, { x: drop.x, y: drop.y, z: drop.z });
+  room.collectDeathDrops(stranger);
+  assert.equal(strangerRec.prof.inv.some(Boolean), false, 'another player cannot collect the private recovery drop');
+  assert.equal(room.deathDrops.has(drop.id), true);
+
+  const owner = room.state.players.get(client.sessionId);
+  owner.x = drop.x; owner.y = drop.y; owner.z = drop.z;
+  room.collectDeathDrops(client);
+  assert.equal(prof.inv.some(s => s && s.id === I.IRON_SWORD && s.rarity === 'rare'), true);
+  assert.equal(prof.deathDrops.length, 0, 'collection clears the durable recovery record');
+  assert.equal(room.deathDrops.has(drop.id), false);
+  assert.equal(client.sent.some(e => e.type === 'deathDropTaken'), true);
+});
+
+test('persisted death limbo resumes after a wrong answer without dropping items', () => {
+  const before = makeRoom(), original = makeClient('limbo-before-restart');
+  const { token, prof } = seedPlayer(before, original, {
+    lvl: 4, hp: 3, x: 72, y: 16, z: 81,
+    inv: [{ id: I.BREAD, count: 3 }, { id: I.IRON_PICK, count: 1, dur: 77 }],
+  });
+  before.clients = [original]; before.sendSpace = () => {};
+  before.hurtPlayer(original, 99, 'zombie');
+  const first = before.deathLimbo.get(original.sessionId).items[0];
+  before.handleDeathLimboAnswer(original, { id: prof.deathLimbo.id, answer: (first.question.correct + 1) % 4 });
+  const saved = sanitizeProfile(prof);
+  assert.equal(saved.deathLimbo.index, 1);
+  assert.equal(saved.inv[0].count, 3, 'wrong answers leave saved inventory intact');
+  assert.equal(saved.deathDrops.length, 0);
+
+  const after = makeRoom(), rejoined = makeClient('limbo-after-restart');
+  after.clients = [rejoined];
+  after.tokens.set(rejoined.sessionId, token);
+  after.profiles.set(token, saved);
+  after.state.players.set(rejoined.sessionId, { x: 500, y: 16, z: 500, dim: 'overworld', dgn: '', armorId: 0, armorType: '' });
+  after.restoreDeathRecoveryState(rejoined, saved, after.state.players.get(rejoined.sessionId));
+
+  assert.equal(after.deathLimbo.get(rejoined.sessionId).index, 1, 'the next unanswered item is restored');
+  assert.equal(after.deathDrops.size, 0, 'no recovery drop is created for a new wrong answer');
+  assert.equal(rejoined.sent.at(-1).type, 'deathLimboStart');
+  assert.equal(rejoined.sent.at(-1).msg.index, 1);
 });
 
 test('town respawn refills vitals so the player can move and recover', () => {
@@ -5524,7 +5594,30 @@ test('hunted animals grant food through server rewards', () => {
   assert.equal(prof.jobXpByJob.cook, 4);
   assert.equal(prof.jobContract.have, 1);
   assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'hunt' && e.msg.xp === 4), true);
+  const grant = client.sent.find(e => e.type === 'grant' && e.msg.source === 'hunt');
+  assert.equal(grant.msg.visibleDrop, true);
+  assert.deepEqual([grant.msg.x, grant.msg.y, grant.msg.z], [24, 10, 24]);
   assert.equal(client.sent.some(e => e.type === 'jobProgress' && e.msg.contract && e.msg.contract.type === 'hunt'), true);
+});
+
+test('ordinary hostile loot varies by enemy family and exposes only delivered corpse loot', () => {
+  const room = makeRoom();
+  const archer = room.rollOrdinaryMobDrops('wind_archer', { biomeDrop: I.WINDSEED }, 1, () => 1);
+  const undead = room.rollOrdinaryMobDrops('frost_wight', { biomeDrop: I.FROST_CRYSTAL }, 2, () => 1);
+  const raider = room.rollOrdinaryMobDrops('raider', {}, 2, () => 1);
+  const nature = room.rollOrdinaryMobDrops('rootbound', { biomeDrop: I.HEARTWOOD_RESIN }, 1, () => 1);
+  assert.deepEqual(archer, [{ id: I.STICK, count: 1 }]);
+  assert.deepEqual(undead, [{ id: I.CHARCOAL, count: 2 }]);
+  assert.deepEqual(raider, [{ id: I.COAL, count: 2 }]);
+  assert.deepEqual(nature, [{ id: I.HEARTWOOD_RESIN, count: 1 }]);
+
+  const allBonuses = room.rollOrdinaryMobDrops('wind_archer', { biomeDrop: I.WINDSEED }, 3, () => 0);
+  assert.equal(allBonuses.some(item => item.id === I.WINDSEED), true);
+  assert.equal(allBonuses.some(item => item.id === I.MONSTER_MEAT), true);
+  assert.equal(allBonuses.some(item => item.id === I.COAL), true);
+  assert.equal(allBonuses.some(item => item.id === I.COOKED_MEAT), true);
+  assert.equal(allBonuses.some(item => item.id === I.GEODE), true);
+  assert.equal(allBonuses.some(item => item.id === I.REPAIR_KIT), true);
 });
 
 test('normal attacks use hunted animal drops', () => {
@@ -11569,23 +11662,103 @@ test('cleared dungeon consumes its gate and support contribution can earn boss r
   assert.equal(loot.msg.result.bossName, 'Gate Boss');
 });
 
-test('generated dungeon chests can contain gate keys', () => {
-  const room = makeRoom();
+test('generated dungeon chests give every party member personal gate loot', () => {
+  const room = makeRoom(), a = makeClient('dungeon-looter-a'), b = makeClient('dungeon-looter-b');
+  room.clients = [a, b];
+  seedPlayer(room, a, { token: 'dungeon_looter_a', dgn: 'g5', x: 1.5, y: 9, z: 12.5 });
+  seedPlayer(room, b, { token: 'dungeon_looter_b', dgn: 'g5', x: 1.5, y: 9, z: 12.5 });
   const w = new D.DungeonGrid();
   w.setB(1, 9, 12, W.B.CHEST);
-  putInstance(room, { id: 'g5', seed: 1, world: w });
+  const inst = putInstance(room, { id: 'g5', seed: 1, world: w, players: [a.sessionId, b.sessionId] });
 
-  const rec = room.getChestRecord('g5:1,9,12');
+  const key = 'g5:1,9,12';
+  const rec = room.getChestRecord(key, a), other = room.getChestRecord(key, b);
 
-  assert.equal(rec.scope, 'dungeon');
+  assert.equal(rec.scope, 'dungeon_personal');
+  assert.equal(rec.firstPersonalChest, true);
+  assert.equal(other.firstPersonalChest, true);
+  assert.equal(rec.slots.some(s => s && s.gear), true, 'each player receives equipment in their first dungeon chest');
+  assert.deepEqual(rec.slots, other.slots);
   assert.equal(rec.slots.some(s => s && s.id === I.SOLO_KEY_E), true);
   assert.equal(rec.slots.some(s => s && s.id === I.TEAM_KEY_E), true);
   assert.equal(room.gateLootedChests.get('g5').has('1,9,12'), true);
   assert.equal(room.dirtyGates, true);
 
-  room.chests.delete('g5:1,9,12');
-  const reopened = room.getChestRecord('g5:1,9,12');
-  assert.equal(reopened.slots.every(s => s === null), true);
+  const original = rec.slots[0].count;
+  room.handleChestWithdraw(a, { x: 1, y: 9, z: 12, slot: 0, count: 1 });
+  assert.equal(room.getChestRecord(key, a).slots[0].count, original - 1);
+  assert.equal(room.getChestRecord(key, b).slots[0].count, original, 'another party member keeps an untouched reward chest');
+  assert.equal(room.chests.has(key), false, 'run-scoped personal loot never enters shared chest persistence');
+  assert.equal(room.dungeonStatusPayload(inst, a).remainingChests, 1);
+  room.rateBuckets.clear();
+  for (let slot = 0; slot < 18; slot++) {
+    const stack = room.getChestRecord(key, a).slots[slot];
+    if (stack) room.handleChestWithdraw(a, { x: 1, y: 9, z: 12, slot, count: stack.count });
+  }
+  assert.equal(room.dungeonStatusPayload(inst, a).remainingChests, 0);
+  assert.equal(room.dungeonStatusPayload(inst, b).remainingChests, 1, 'the dungeon tracker is personal too');
+});
+
+test('first dungeon chest guarantees gear if both bonus rolls miss, but later chests keep their stated odds', () => {
+  const room = makeRoom(), player = makeClient('dungeon-guarantee');
+  room.clients = [player];
+  seedPlayer(room, player, { token: 'dungeon_guarantee', dgn: 'g56', x: 1.5, y: 9, z: 12.5 });
+  const w = new D.DungeonGrid();
+  w.setB(1, 9, 12, W.B.CHEST);
+  w.setB(2, 9, 12, W.B.CHEST);
+  putInstance(room, { id: 'g56', seed: 56, rank: 2, world: w, players: [player.sessionId] });
+  room.rollWeaponDropForSource = () => null;
+  room.rollArmorDropForSource = () => null;
+
+  const first = room.getChestRecord('g56:1,9,12', player);
+  const second = room.getChestRecord('g56:2,9,12', player);
+  assert.equal(first.firstPersonalChest, true);
+  assert.equal(first.slots.filter(stack => stack && stack.gear).length, 1);
+  assert.equal(first.slots.find(stack => stack && stack.gear).source, 'chest');
+  assert.equal(second.firstPersonalChest, false);
+  assert.equal(second.slots.some(stack => stack && stack.gear), false);
+  assert.equal(room.getChestRecord('g56:1,9,12', player), first, 'reopening cannot reroll rewards');
+
+  room.sendChest(player, 'g56:1,9,12');
+  const state = player.sent.findLast(event => event.type === 'chestState').msg;
+  assert.equal(state.firstPersonalChest, true);
+  assert.deepEqual(state.gearOdds, { weapon: 30, armor: 18 });
+});
+
+test('personal dungeon chest equipment keeps its identity and remains safe when the bag is full', () => {
+  const room = makeRoom(), open = makeClient('dungeon-gear-open'), full = makeClient('dungeon-gear-full');
+  room.clients = [open, full];
+  const { prof: openProf } = seedPlayer(room, open, { token: 'dungeon_gear_open', dgn: 'g52', x: 1.5, y: 9, z: 12.5 });
+  const fullBag = Array.from({ length: 36 }, () => ({ id: I.COAL, count: 64 }));
+  const { prof: fullProf } = seedPlayer(room, full, { token: 'dungeon_gear_full', dgn: 'g52', x: 1.5, y: 9, z: 12.5, inv: fullBag });
+  const w = new D.DungeonGrid();
+  w.setB(1, 9, 12, W.B.CHEST);
+  putInstance(room, { id: 'g52', seed: 52, rank: 2, world: w, players: [open.sessionId, full.sessionId] });
+  const key = 'g52:1,9,12';
+  const gear = { id: I.IRON_ARMOR, count: 1, dur: 321, gearRank: 'C', rarity: 'rare', armorType: 'scout', gear: true, source: 'chest' };
+  const openChest = room.getChestRecord(key, open);
+  openChest.slots[17] = { ...gear };
+
+  room.handleChestWithdraw(open, { x: 1, y: 9, z: 12, slot: 17, count: 1 });
+
+  const saved = openProf.inv.find(stack => stack && stack.id === I.IRON_ARMOR);
+  assert.deepEqual(
+    { id: saved.id, count: saved.count, dur: saved.dur, gearRank: saved.gearRank, rarity: saved.rarity, armorType: saved.armorType, source: saved.source },
+    { id: gear.id, count: gear.count, dur: gear.dur, gearRank: gear.gearRank, rarity: gear.rarity, armorType: gear.armorType, source: gear.source },
+    'withdrawal preserves rank, rarity, durability, archetype, and source',
+  );
+  assert.equal(openChest.slots[17], null);
+  const tx = open.sent.findLast(event => event.type === 'chestTx');
+  assert.deepEqual({ ...tx.msg.item, gear: undefined }, { ...saved, gear: undefined }, 'the client receives the saved authoritative equipment stack');
+  assert.equal(tx.msg.item.gear, true);
+
+  const fullChest = room.getChestRecord(key, full);
+  fullChest.slots[17] = { ...gear };
+  room.handleChestWithdraw(full, { x: 1, y: 9, z: 12, slot: 17, count: 1 });
+
+  assert.deepEqual(fullChest.slots[17], gear, 'a full inventory leaves the equipment safely in the personal chest');
+  assert.equal(fullProf.inv.length, 36);
+  assert.equal(full.sent.findLast(event => event.type === 'chestReject').msg.reason, 'full');
 });
 
 test('dungeon status reports rank type party boss and remaining chests', () => {
@@ -13823,7 +13996,7 @@ test('small discoveries include every archetype and buried treasure is public', 
   assert.equal(chest.slots.some(Boolean), true);
 });
 
-test('overworld treasure caches scatter visible public loot chests around the map', () => {
+test('overworld treasure caches scatter visible personal loot chests around the map', () => {
   const specs = W.treasureCacheSpecs();
   assert.ok(specs.length >= 35);
   assert.equal(new Set(specs.map(s => s.id)).size, specs.length);
@@ -13833,10 +14006,64 @@ test('overworld treasure caches scatter visible public loot chests around the ma
 
   const room = makeRoom(), cache = specs.find(s => s.ring >= 3) || specs[0];
   room.world.setB(cache.x, cache.y + 1, cache.z, W.B.CHEST);
-  const chest = room.getChestRecord('overworld:' + cache.x + ',' + (cache.y + 1) + ',' + cache.z);
-  assert.equal(chest.scope, 'public');
-  assert.ok(chest.slots.some(s => s && s.id === I.COAL));
-  assert.ok(chest.slots.some(s => s && [I.GEODE, I.STORMGLASS, I.SOLAR_GLYPH, I.LEGEND_TOKEN].includes(s.id)));
+  const a = makeClient('cache-hunter-a'), b = makeClient('cache-hunter-b');
+  room.clients.push(a, b);
+  const aRecord = seedPlayer(room, a, { x: cache.x + .5, y: cache.y + 1, z: cache.z + .5 });
+  seedPlayer(room, b, { x: cache.x + .5, y: cache.y + 1, z: cache.z + .5 });
+  const key = 'overworld:' + cache.x + ',' + (cache.y + 1) + ',' + cache.z;
+  const chestA = room.getChestRecord(key, a), chestB = room.getChestRecord(key, b);
+  assert.equal(chestA.scope, 'personal_cache');
+  assert.deepEqual(chestA.slots, chestB.slots);
+  assert.ok(chestA.slots.some(s => s && s.id === I.COAL));
+  assert.ok(chestA.slots.some(s => s && [I.GEODE, I.STORMGLASS, I.SOLAR_GLYPH, I.LEGEND_TOKEN].includes(s.id)));
+  assert.equal(room.chests.has(key), false, 'personal cache state must not enter the shared world chest map');
+
+  const firstCount = chestA.slots[0].count;
+  room.handleChestWithdraw(a, { x: cache.x, y: cache.y + 1, z: cache.z, slot: 0, count: 1 });
+  assert.equal(room.getChestRecord(key, a).slots[0].count, firstCount - 1);
+  assert.equal(room.getChestRecord(key, b).slots[0].count, firstCount, 'another player retains their own untouched cache');
+  assert.equal(room.dirtyPlayers.has(aRecord.token), true);
+  assert.equal(room.dirtyChests, false, 'personal cache claims do not dirty shared chest persistence');
+
+  const restored = sanitizeProfile(aRecord.prof);
+  room.profiles.set(aRecord.token, restored);
+  assert.equal(room.getChestRecord(key, a).slots[0].count, firstCount - 1, 'partial claims survive profile persistence');
+  room.handleChestDeposit(a, { x: cache.x, y: cache.y + 1, z: cache.z, id: I.COAL, count: 1 });
+  assert.equal(a.sent.at(-1).type, 'chestReject');
+  assert.equal(a.sent.at(-1).msg.reason, 'reward_deposit');
+
+  room.rateBuckets.clear();
+  for (let slot = 0; slot < 18; slot++) {
+    const stack = room.getChestRecord(key, a).slots[slot];
+    if (stack) room.handleChestWithdraw(a, { x: cache.x, y: cache.y + 1, z: cache.z, slot, count: stack.count });
+  }
+  assert.equal(room.getChestRecord(key, a).slots.some(Boolean), false);
+  assert.equal(room.profiles.get(aRecord.token).claimedDiscoveries.includes(cache.id), true);
+  assert.equal(room.getChestRecord(key, b).slots.some(Boolean), true, 'one completed claim never empties another account cache');
+
+  const full = makeClient('cache-hunter-full');
+  const fullRecord = seedPlayer(room, full, {
+    x: cache.x + .5, y: cache.y + 1, z: cache.z + .5,
+    inv: Array.from({ length: 36 }, () => ({ id: I.COAL, count: 64 })),
+  });
+  room.handleChestWithdraw(full, { x: cache.x, y: cache.y + 1, z: cache.z, slot: 0, count: 1 });
+  assert.equal(full.sent.at(-1).msg.reason, 'full');
+  assert.deepEqual(fullRecord.prof.treasureCacheClaims, {}, 'a failed withdrawal never consumes a personal claim');
+});
+
+test('treasure cache claim persistence rejects forged cache data', () => {
+  const profile = defaultProfile('Cache Keeper');
+  profile.treasureCacheClaims = {
+    cache_85_355: [999, 4, -8],
+    '../shared': [1, 2, 3],
+    cache_bad: 'all',
+  };
+  profile.claimedDiscoveries = ['cache_85_355'];
+  const clean = sanitizeProfile(profile);
+  assert.deepEqual(clean.treasureCacheClaims.cache_85_355.slice(0, 4), [64, 4, 0, 0]);
+  assert.equal(Object.hasOwn(clean.treasureCacheClaims, '../shared'), false);
+  assert.equal(Object.hasOwn(clean.treasureCacheClaims, 'cache_bad'), false);
+  assert.deepEqual(clean.claimedDiscoveries, ['cache_85_355']);
 });
 
 test('fantasy structures awaken defenders, share completion, and unlock persistent rewards', () => {
@@ -14686,6 +14913,27 @@ test('weekly fellowship rewards unlock by Renown and are claimed once per member
   room.handleGuildWeeklyRewardClaim(member, { id: 'supply_10' });
   assert.equal(member.sent.some(e => e.type === 'guildWeeklyRewardResult' && e.msg.id === 'supply_10'), true);
   assert.equal(mate.prof.gold, 25);
+});
+
+test('unclaimed fellowship rewards survive weekly reset and persistence', () => {
+  const room=makeRoom(),client=makeClient('fellowship_saved_reward');room.clients=[client];
+  const {token,prof}=seedPlayer(room,client,{...GUILD_RECEPTION_PLAYER_POS,token:'saved_weekly_token',gold:0});
+  const prior=room.currentFellowshipWeek()-7*24*60*60*1000;
+  const alreadyClaimed='saved_weekly_claimed_token';
+  const guild={id:'G1',name:'Patient Wardens',leader:token,leaderName:'Hunter',members:new Set([token,alreadyClaimed]),roles:new Map(),invites:new Set(),private:false,floor:0,foundedAt:1,floorBoughtAt:0,renown:0,totalRenown:30,renownWeek:30,contractsWeek:0,renownWeekStart:prior,weeklyRewardClaims:{week:prior,claims:{supply_10:[alreadyClaimed]},banked:{}},projects:new Set(),notice:null};
+  room.guilds.set(guild.id,guild);
+  const before=room.fellowshipWeeklyRewardsFor(guild,token);
+  assert.equal(guild.renownWeek,0);
+  assert.equal(before.find(r=>r.id==='supply_10').banked,1);
+  assert.equal(before.find(r=>r.id==='chest_30').claimable,true);
+  assert.equal(room.fellowshipWeeklyRewardsFor(guild,alreadyClaimed).find(r=>r.id==='supply_10').banked,0);
+  const clean=sanitizeGuilds({G1:{...guild,members:[token,alreadyClaimed],roles:{},invites:[],projects:[]}}).G1;
+  assert.equal(clean.weeklyRewardClaims.banked[token].supply_10,1);
+  room.handleGuildWeeklyRewardClaim(client,{id:'supply_10'});
+  assert.equal(prof.gold,25);
+  assert.equal(room.fellowshipWeeklyRewardsFor(guild,token).find(r=>r.id==='supply_10').banked,0);
+  room.handleGuildWeeklyRewardClaim(client,{id:'supply_10'});
+  assert.equal(client.sent.at(-1).msg.reason,'reward_locked');
 });
 
 test('weekly fellowship reward claims wait for capacity without consuming gold or claim state', () => {

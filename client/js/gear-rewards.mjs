@@ -1,6 +1,6 @@
 const SOURCE_LABELS=Object.freeze({
   gate:'Gate clear',unique_gate:'Unique Gate drop',boss:'Boss reward',captain:'Bandit captain',bandit:'Bandit camp',
-  road_warden:'Road Warden cache',regional_contract:'Regional contract',
+  road_warden:'Road Warden cache',regional_contract:'Regional contract',chest:'Dungeon chest',
   aegis_trial:'Aegis trial',crafted:'Crafted',starter:'Starter equipment',dev:'Test reward',
 });
 

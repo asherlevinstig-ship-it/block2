@@ -27,6 +27,21 @@ test('starting Recall again resends the active question and its pillars',async()
   assert.deepEqual(sent[0].message.pillars,challenge.pillars);
 });
 
+test('a wrong Recall answer schedules review without freezing movement',()=>{
+  const room=Object.create(recall),sessionId='wrong-answer',now=Date.now(),sent=[];
+  room.initRecallState();
+  room.state={players:new Map([[sessionId,{x:10,y:4,z:20,dim:'overworld',dgn:''}]])};
+  room.recallChallenges.set(sessionId,{id:'challenge-wrong',questionId:'it_ns_hex_bin_003',topic:'Number systems',correct:0,answers:['A','B','C','D'],pillars:[{x:10,z:20},{x:10,z:20},{x:10,z:20},{x:10,z:20}],fallback:true,expiresAt:now+60_000,source:'recall',explanation:'Review the four-bit groups.'});
+  room.profileFor=()=>null;
+  room.recordRecallAnalytics=()=>{};
+  room.handleRecallAnswer({sessionId,send:(type,message)=>sent.push({type,message})},{id:'challenge-wrong',index:1});
+  assert.equal(sent.at(-1).type,'recallResult');
+  assert.equal(sent.at(-1).message.correct,false);
+  assert.equal(sent.at(-1).message.freezeMs,0);
+  assert.equal(room.recallChallenges.has(sessionId),false);
+  assert.equal(room.recallFrozenUntil,undefined);
+});
+
 test('recall answer pillars spawn in a wide facing-relative diamond',()=>{
   const p={x:10,y:4,z:20,yaw:0};
   const pillars=recall.recallPositions(p);

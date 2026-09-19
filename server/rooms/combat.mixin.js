@@ -1105,8 +1105,7 @@ class CombatMixin {
         }
       }
       else if (!dgn) {
-        items.push({ id: I.MONSTER_MEAT, count: 1 + Math.floor(ring / 2) });
-        if(killedMeta.biomeDrop&&Math.random()<.45)items.push({id:killedMeta.biomeDrop,count:1+Math.floor(ring/2)});
+        items.push(...this.rollOrdinaryMobDrops(kind, killedMeta, ring));
         if(killedMeta.underground){
           if(Math.random() < (killedMeta.ancientCityMob ? .8 : .35)) items.push({ id: I.ANCIENT_FRAGMENT, count: 1 + (killedMeta.ancientCityMob ? Math.floor(ring / 2) : 0) });
           if(killedMeta.ancientCityMob && Math.random() < .28) items.push({ id: I.ECHO_GLYPH, count: 1 });
@@ -1129,7 +1128,10 @@ class CombatMixin {
         this.awardFamiliarXp(client, 'wolf', 1, 'hunter_howl');
         client.send('familiarTrait', { kind: 'wolf', trait: 'hunter_howl', bonus });
       }
-      this.awardGrant(client, { source: wildCompanion ? 'wild_pet_harmed' : animal ? 'hunt' : 'mob', xp, items, dangerRing: ring, elite });
+      this.awardGrant(client, {
+        source: wildCompanion ? 'wild_pet_harmed' : animal ? 'hunt' : 'mob', xp, items, dangerRing: ring, elite,
+        visibleDrop: !dgn && !wildCompanion, x: dx, y: dy, z: dz, dgn: dgn || '', kind,
+      });
       if (!wildCompanion) {
         if (animal) this.recordHuntProgress(client);
         else this.recordKillProgress(client, true);
@@ -1198,6 +1200,28 @@ class CombatMixin {
     if (Math.random() < KEY_LOOT.overworldSolo * mul) items.push({ id: keyForRank('solo', Math.min(2, ring)), count: 1 });
     if (Math.random() < KEY_LOOT.overworldTeam * mul) items.push({ id: keyForRank('team', Math.min(2, ring)), count: 1 });
     return items;
+  }
+  rollOrdinaryMobDrops(kind, meta = {}, ring = 0, rng = Math.random) {
+    const tier = Math.max(0, Math.min(3, ring | 0));
+    const name = String(kind || '').toLowerCase(), items = [];
+    const ranged = name.includes('archer') || name === 'skeleton';
+    const undead = /husk|wight|skeleton|dreadguard/.test(name);
+    const raider = /raider|redclaw|stalker|bandit/.test(name);
+    const nature = /rootbound|mirewalker/.test(name);
+    if (ranged) items.push({ id: I.STICK, count: 1 + Math.floor(tier / 2) });
+    else if (undead) items.push({ id: I.CHARCOAL, count: 1 + Math.floor(tier / 2) });
+    else if (raider) items.push({ id: I.COAL, count: 1 + Math.floor(tier / 2) });
+    else if (nature && meta.biomeDrop) items.push({ id: meta.biomeDrop, count: 1 + Math.floor(tier / 2) });
+    else items.push({ id: I.MONSTER_MEAT, count: 1 + Math.floor(tier / 2) });
+    if (meta.biomeDrop && !nature && rng() < .38 + tier * .06) items.push({ id: meta.biomeDrop, count: 1 + Math.floor(tier / 2) });
+    if (!items.some(item => item.id === I.MONSTER_MEAT) && rng() < .28 + tier * .05) items.push({ id: I.MONSTER_MEAT, count: 1 });
+    if (!items.some(item => item.id === I.COAL) && rng() < .18 + tier * .05) items.push({ id: I.COAL, count: 1 + Math.floor(tier / 2) });
+    if (rng() < .05 + tier * .025) items.push({ id: I.COOKED_MEAT, count: 1 });
+    if (rng() < .025 + tier * .015) items.push({ id: I.GEODE, count: 1 });
+    if (rng() < .018 + tier * .012) items.push({ id: I.REPAIR_KIT, count: 1 });
+    const merged = new Map();
+    for (const item of items) merged.set(item.id, (merged.get(item.id) || 0) + Math.max(1, item.count | 0));
+    return [...merged].map(([id, count]) => ({ id, count }));
   }
   awardLoot(client, loot) {
     const rec = this.profileFor(client);

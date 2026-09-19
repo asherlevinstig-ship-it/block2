@@ -4,7 +4,7 @@
   else root.BlockcraftRecallSystem=api;
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
-  const COOLDOWN_MS=0,QUESTION_MS=10*60*1000,FREEZE_MS=3500,RESTORE_FRACTION=.2;
+  const COOLDOWN_MS=0,QUESTION_MS=10*60*1000,FREEZE_MS=0,RESTORE_FRACTION=.2;
   const TOPICS=['Percentages','Linear equations','Graphs','Factorising','Cell biology','Bioenergetics','Atomic structure','Acids and alkalis','Forces','Motion','Grammar','Language techniques','Rivers','River processes','Norman England','First World War','Passwords','Primary keys','Religious practice','Beliefs'];
   const QUESTIONS=Object.freeze([
     Object.freeze({subject:'Maths',stage:'KS3',prompt:'What is 15% of 200?',answers:['30','15','20','35'],correct:0,explanation:'10% is 20 and 5% is 10, so 15% is 30.'}),

@@ -1549,8 +1549,8 @@ ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
   {kind:'farm',pillar:'Lesson 9 / 13 - Farming', key:'WOODEN HOE + G', text:'Use the wooden hoe on one mature wheat crop.', sub:'Select the hoe on your hotbar, aim at tall golden wheat, then use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
   {kind:'eat',pillar:'Lesson 10 / 13 - Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
   {kind:'combat',pillar:'Lesson 11 / 13 - Combat', key:'LEFT CLICK / F', text:'Break the training dummy with three strikes.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingFlags.dummy>=3},
-  {kind:'recall',pillar:'Lesson 12 / 13 - Recall Cast', key:'P', text:'Low on mana or stamina? Press P, then run towards the correct answer.', sub:'A correct Recall answer recharges both mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingFlags.recall},
-  {kind:'finish',pillar:'Lesson 13 / 13 - Departure', key:'FIND LIGHT', text:'Step into the final pillar of light to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
+  {kind:'recall',pillar:'Lesson 12 / 13 - Recall Cast', key:'P', text:'Low on mana or stamina? Press P, then run towards the correct answer.', sub:'A correct Recall answer recharges mana and stamina. A wrong answer shows the explanation without freezing you.', done:()=>onboardingFlags.recall},
+  {kind:'finish',pillar:'Lesson 13 / 13 - Departure', key:'FIND LIGHT', text:'Step into the final pillar of light to travel to town.', sub:'After death, answer review questions to return. Your carried items stay safe even when you miss one.', done:()=>onboardingArrived}
 );
 for(const step of ONBOARDING_STEPS){
   if(step.kind==='move') step.pillar='Lesson 1 / 13 - Movement';
@@ -1567,7 +1567,7 @@ for(const step of ONBOARDING_STEPS){
   else if(step.kind==='recall') step.pillar='Lesson 12 / 13 - Recall Cast';
   else if(step.kind==='finish'){
     step.pillar='Lesson 13 / 13 - Departure';
-    step.sub='Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot for everyone.';
+    step.sub='After death, answer review questions to return. Your carried items stay safe even when you miss one.';
   }
 }
 function showStartHelp(){

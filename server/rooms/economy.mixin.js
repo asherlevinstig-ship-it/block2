@@ -20,12 +20,12 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 const { shortHash } = require('../identity-trace');
 
 class EconomyMixin {
-  rollWeaponDrop(rank=0,rarityBonus=0,archetype='sword'){
+  rollWeaponDrop(rank=0,rarityBonus=0,archetype='sword',rand=Math.random){
     const ri=Math.max(0,Math.min(5,rank|0));
     const swords=[I.WOOD_SWORD,I.STONE_SWORD,I.IRON_SWORD,I.DIA_SWORD,I.DIA_SWORD,I.DIA_SWORD];
     const axes=[I.WOOD_AXE,I.STONE_AXE,I.IRON_AXE,I.DIA_AXE,I.DIA_AXE,I.DIA_AXE];
     const kind=archetype==='axe'?'axe':'sword',ids=kind==='axe'?axes:swords;
-    return {id:ids[ri],count:1,plus:ri<=3?0:ri-3,rarity:GEAR_SYSTEM.rollRarity(Math.random(),rarityBonus).id,archetype:kind,gear:true};
+    return {id:ids[ri],count:1,plus:ri<=3?0:ri-3,rarity:GEAR_SYSTEM.rollRarity(rand(),rarityBonus).id,archetype:kind,gear:true};
   }
   applyUniqueDungeonSkin(item,kind='weapon',source='',rank=0,roll=Math.random()){
     if(!item||source!=='gate')return item;
@@ -67,26 +67,26 @@ class EconomyMixin {
     if(best.sword===best.axe)return fallback==='axe'?'axe':'sword';
     return best.axe<best.sword?'axe':'sword';
   }
-  rollWeaponDropForSource(source,tier=0,plus=0,prof=null){
-    const spec=LOOT_ECONOMY.weaponSpec(source,tier,plus,Math.random());
+  rollWeaponDropForSource(source,tier=0,plus=0,prof=null,rand=Math.random){
+    const spec=LOOT_ECONOMY.weaponSpec(source,tier,plus,rand(),rand());
     if(!spec)return null;
     // Gates and captains are the guaranteed progression sources, so they gear the
     // player's lagging archetype; bandit trash keeps its thematic axe bias.
-    const archetype=(source==='gate'||source==='captain')&&prof?this.gateWeaponArchetype(prof,spec.archetype):spec.archetype;
-    return this.applyUniqueDungeonSkin({...this.rollWeaponDrop(spec.rank,spec.rarityBonus,archetype),source},'weapon',source,spec.rank);
+    const archetype=(source==='gate'||source==='captain'||source==='chest')&&prof?this.gateWeaponArchetype(prof,spec.archetype):spec.archetype;
+    return this.applyUniqueDungeonSkin({...this.rollWeaponDrop(spec.rank,spec.rarityBonus,archetype,rand),source},'weapon',source,spec.rank,rand());
   }
-  rollArmorDrop(rank=0,rarityBonus=0,armorType='vanguard'){
+  rollArmorDrop(rank=0,rarityBonus=0,armorType='vanguard',rand=Math.random){
     const ri=Math.max(0,Math.min(5,rank|0));
     const ids=[I.HIDE_ARMOR,I.CHAIN_ARMOR,I.IRON_ARMOR,I.DIA_ARMOR,I.STORMGLASS_ARMOR,I.STORMGLASS_ARMOR];
     return {
       id:ids[ri]||I.IRON_ARMOR,count:1,gearRank:GEAR_SYSTEM.RANKS[ri].id,
-      rarity:GEAR_SYSTEM.rollRarity(Math.random(),rarityBonus).id,
+      rarity:GEAR_SYSTEM.rollRarity(rand(),rarityBonus).id,
       armorType:GEAR_SYSTEM.ARMOR_ARCHETYPES[armorType]?armorType:'vanguard',gear:true,
     };
   }
-  rollArmorDropForSource(source,tier=0,plus=0){
-    const spec=LOOT_ECONOMY.armorSpec(source,tier,plus,Math.random());
-    return spec?this.applyUniqueDungeonSkin({...this.rollArmorDrop(spec.rank,spec.rarityBonus,spec.armorType),source},'armor',source,spec.rank):null;
+  rollArmorDropForSource(source,tier=0,plus=0,rand=Math.random){
+    const spec=LOOT_ECONOMY.armorSpec(source,tier,plus,rand(),rand());
+    return spec?this.applyUniqueDungeonSkin({...this.rollArmorDrop(spec.rank,spec.rarityBonus,spec.armorType,rand),source},'armor',source,spec.rank,rand()):null;
   }
   gearRewardStack(item,info){
     if(!item||!info)return null;
@@ -158,14 +158,26 @@ class EconomyMixin {
     if (scope === 'town') { rec.owner = ''; rec.team = ''; }
     return rec;
   }
-  dungeonLootChestRecord(key) {
+  dungeonLootChestRecord(key, client = null) {
     const info = this.parseChestKey(key);
     if (!info || info.space === 'overworld') return null;
     const inst = this.instances[info.space];
     if (!inst || inst.getB(info.x, info.y, info.z) !== W.B.CHEST) return null;
     const chestId = info.x + ',' + info.y + ',' + info.z;
+    const token = client && this.clientToken(client);
+    if (client && !token) return null;
+    let playerChests = null;
+    if (client) {
+      if (!this.dungeonPersonalChests) this.dungeonPersonalChests = new Map();
+      let byPlayer = this.dungeonPersonalChests.get(info.space);
+      if (!byPlayer) this.dungeonPersonalChests.set(info.space, byPlayer = new Map());
+      playerChests = byPlayer.get(token);
+      if (!playerChests) byPlayer.set(token, playerChests = new Map());
+      const existing = playerChests.get(chestId);
+      if (existing) return existing;
+    }
+    const firstPersonalChest = !!(playerChests && playerChests.size === 0);
     const looted = this.gateLootedChests.get(info.space) || new Set();
-    if (looted.has(chestId)) return { scope: 'dungeon', owner: '', team: '', slots: new Array(18).fill(null) };
     const rank = Math.max(0, Math.min(5, inst.rank | 0));
     const a = W.hash2(info.x * 92821 + inst.seed, info.z * 68917 + info.y * 37);
     const b = W.hash2(info.z * 8191 + inst.seed, info.x * 31337 + rank);
@@ -189,12 +201,34 @@ class EconomyMixin {
         slots[i++] = { id: DRAGON_EGG_OF(pool[Math.min(pool.length - 1, Math.floor(pick * pool.length))]), count: 1 };
       }
     }
+    let gearRoll = 0;
+    const gearRand = () => W.hash2(info.x * 9187 + inst.seed + gearRoll++ * 131, info.z * 5171 + info.y * 733 + rank * 3571 + gearRoll * 19);
+    const ownerProfile = client && this.profileFor(client);
+    const weapon = this.rollWeaponDropForSource('chest', rank, 0, ownerProfile && ownerProfile.prof, gearRand);
+    if (weapon && i < slots.length) slots[i++] = weapon;
+    const armor = this.rollArmorDropForSource('chest', rank, 0, gearRand);
+    if (armor && i < slots.length) slots[i++] = armor;
+    if (firstPersonalChest && !slots.some(stack => stack && stack.gear) && i < slots.length) {
+      const forceWeapon = gearRand() < .5;
+      const spec = forceWeapon
+        ? LOOT_ECONOMY.weaponSpec('chest', rank, 0, 0, gearRand())
+        : LOOT_ECONOMY.armorSpec('chest', rank, 0, 0, gearRand());
+      const guaranteed = forceWeapon
+        ? this.rollWeaponDrop(spec.rank, spec.rarityBonus, this.gateWeaponArchetype(ownerProfile && ownerProfile.prof, spec.archetype), gearRand)
+        : this.rollArmorDrop(spec.rank, spec.rarityBonus, spec.armorType, gearRand);
+      slots[i++] = { ...guaranteed, source: 'chest' };
+    }
     const bonus = this.rollDungeonBonusLoot('chest', rank, n => W.hash2(info.x * 6113 + inst.seed + n * 101, info.z * 3257 + info.y * 313 + rank * 911 + n * 17));
     for (const it of bonus) if (i < slots.length) slots[i++] = { ...it };
-    looted.add(chestId);
-    this.gateLootedChests.set(info.space, looted);
-    this.dirtyGates = true;
-    return { scope: 'dungeon', owner: '', team: '', slots };
+    if (!looted.has(chestId)) {
+      looted.add(chestId);
+      this.gateLootedChests.set(info.space, looted);
+      this.dirtyGates = true;
+    }
+    if (!client) return { scope: 'dungeon_personal', owner: '', team: '', chestId, slots };
+    const rec = { scope: 'dungeon_personal', owner: token, team: '', chestId, firstPersonalChest, slots };
+    playerChests.set(chestId, rec);
+    return rec;
   }
   overworldTreasureChestRecord(key) {
     const info = this.parseChestKey(key);
@@ -207,39 +241,80 @@ class EconomyMixin {
         if (s.rewardChest) this.landmarkCampChests.set(s.rewardChest.x + ',' + s.rewardChest.y + ',' + s.rewardChest.z, s);
       }
     }
-    let site = this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z), discovery = false, cache = false;
+    let site = this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z), discovery = false;
     if (!site) {
       for (const s of W.smallDiscoverySpecs()) {
         const chest = s.type === 'buried_chest' ? [s.x, s.y - 1, s.z] : s.type === 'traveling_merchant' ? [s.x, s.y + 1, s.z - 2] : null;
         if (chest && chest[0] === info.x && chest[1] === info.y && chest[2] === info.z) { site = s; discovery = true; break; }
       }
     }
-    if (!site) {
-      for (const s of W.treasureCacheSpecs()) {
-        if (s.x === info.x && s.y + 1 === info.y && s.z === info.z) { site = s; cache = true; break; }
-      }
-    }
     if (!site || this.world.getB(info.x, info.y, info.z) !== W.B.CHEST) return null;
     const ring = dangerRingAt(site.x, site.z), regional = BIOME_COLLECTIBLE[W.biomeAt(site.x, site.z)];
     const roll = W.hash2(site.x * 7717, site.z * 3571), slots = new Array(18).fill(null);
     let i = 0;
-    slots[i++] = { id: I.COAL, count: (discovery ? 1 : 2) + ring * (cache ? 2 : 3) };
+    slots[i++] = { id: I.COAL, count: (discovery ? 1 : 2) + ring * 3 };
     if (site.type === 'bandit_camp') slots[i++] = { id: I.IRON_INGOT, count: 2 + ring * 2 };
     if (ring >= 1) slots[i++] = { id: I.IRON_INGOT, count: ring + 1 };
     if (ring >= 2) slots[i++] = { id: I.DIAMOND, count: ring - 1 + (roll > .55 ? 1 : 0) };
     if (regional) slots[i++] = { id: regional.item, count: 1 + ring };
-    if (cache && roll > .20) slots[i++] = { id: ring >= 2 ? I.COOKED_MEAT : I.BREAD, count: 1 + (roll > .70 ? 1 : 0) };
-    if (cache && roll > .35) slots[i++] = { id: I.REPAIR_KIT, count: 1 };
-    if (cache && ring >= 2 && roll > .45) slots[i++] = { id: I.GEODE, count: 1 + (roll > .85 ? 1 : 0) };
-    if (cache && ring >= 3 && roll > .55) slots[i++] = { id: I.STORMGLASS, count: 1 };
-    if (cache && ring >= 3 && roll > .78) slots[i++] = { id: I.SOLAR_GLYPH, count: 1 };
     if (ring >= 3) slots[i++] = { id: I.LEGEND_TOKEN, count: 1 };
     return { scope: 'public', owner: '', team: '', slots };
   }
+  overworldTreasureCacheSite(key) {
+    const info = this.parseChestKey(key);
+    if (!info || info.space !== 'overworld') return null;
+    if (!this.overworldTreasureCacheSites) {
+      this.overworldTreasureCacheSites = new Map(W.treasureCacheSpecs().map(site => [site.x + ',' + (site.y + 1) + ',' + site.z, site]));
+    }
+    const site = this.overworldTreasureCacheSites.get(info.x + ',' + info.y + ',' + info.z);
+    return site && this.world.getB(info.x, info.y, info.z) === W.B.CHEST ? site : null;
+  }
+  overworldTreasureCacheSlots(site) {
+    const ring = dangerRingAt(site.x, site.z), regional = BIOME_COLLECTIBLE[W.biomeAt(site.x, site.z)];
+    const roll = W.hash2(site.x * 7717, site.z * 3571), slots = new Array(18).fill(null);
+    let i = 0;
+    slots[i++] = { id: I.COAL, count: 2 + ring * 2 };
+    if (ring >= 1) slots[i++] = { id: I.IRON_INGOT, count: ring + 1 };
+    if (ring >= 2) slots[i++] = { id: I.DIAMOND, count: ring - 1 + (roll > .55 ? 1 : 0) };
+    if (regional) slots[i++] = { id: regional.item, count: 1 + ring };
+    if (roll > .20) slots[i++] = { id: ring >= 2 ? I.COOKED_MEAT : I.BREAD, count: 1 + (roll > .70 ? 1 : 0) };
+    if (roll > .35) slots[i++] = { id: I.REPAIR_KIT, count: 1 };
+    if (ring >= 2 && roll > .45) slots[i++] = { id: I.GEODE, count: 1 + (roll > .85 ? 1 : 0) };
+    if (ring >= 3 && roll > .55) slots[i++] = { id: I.STORMGLASS, count: 1 };
+    if (ring >= 3 && roll > .78) slots[i++] = { id: I.SOLAR_GLYPH, count: 1 };
+    if (ring >= 3) slots[i++] = { id: I.LEGEND_TOKEN, count: 1 };
+    return slots;
+  }
+  personalTreasureCacheRecord(client, key, site = this.overworldTreasureCacheSite(key)) {
+    const profile = client && this.profileFor(client);
+    if (!site || !profile) return null;
+    const base = this.overworldTreasureCacheSlots(site);
+    const saved = profile.prof.treasureCacheClaims && profile.prof.treasureCacheClaims[site.id];
+    const slots = base.map((stack, i) => {
+      if (!stack) return null;
+      if (!Array.isArray(saved)) return { ...stack };
+      const count = Math.max(0, Math.min(stack.count, saved[i] | 0));
+      return count > 0 ? { ...stack, count } : null;
+    });
+    return { scope: 'personal_cache', owner: profile.token, team: '', cacheId: site.id, slots };
+  }
+  savePersonalTreasureCacheState(profile, site, slots) {
+    profile.treasureCacheClaims = profile.treasureCacheClaims && typeof profile.treasureCacheClaims === 'object'
+      ? profile.treasureCacheClaims : {};
+    profile.treasureCacheClaims[site.id] = Array.from({ length: 18 }, (_, i) => Math.max(0, Math.min(64, slots[i] && slots[i].count | 0)));
+    if (!slots.some(Boolean)) {
+      profile.claimedDiscoveries = Array.isArray(profile.claimedDiscoveries) ? profile.claimedDiscoveries : [];
+      if (!profile.claimedDiscoveries.includes(site.id)) profile.claimedDiscoveries.push(site.id);
+    }
+  }
   getChestRecord(key, client) {
+    const cacheSite = this.overworldTreasureCacheSite(key);
+    if (cacheSite) return client ? this.personalTreasureCacheRecord(client, key, cacheSite) : null;
+    const info = this.parseChestKey(key);
+    if (info && info.space !== 'overworld') return this.dungeonLootChestRecord(key, client);
     const raw = this.chests.get(key);
     if (!raw) {
-      const generated = this.dungeonLootChestRecord(key) || this.overworldTreasureChestRecord(key);
+      const generated = this.overworldTreasureChestRecord(key);
       if (generated) {
         this.chests.set(key, generated);
         return generated;
@@ -263,15 +338,17 @@ class EconomyMixin {
   deleteChest(key) {
     if (this.chests.delete(key) && key.startsWith('overworld:')) this.dirtyChests = true;
   }
-  isChestEmpty(key) {
-    return !this.getChestRecord(key).slots.some(Boolean);
+  isChestEmpty(key, client) {
+    const rec = this.getChestRecord(key, client);
+    return !!rec && !rec.slots.some(Boolean);
   }
   canAccessChest(client, key) {
     const p = this.state.players.get(client.sessionId);
     if (!p) return false;
     const info = this.parseChestKey(key);
     if (!info) return false;
-    const rec = this.getChestRecord(key);
+    const rec = this.getChestRecord(key, client);
+    if (!rec) return false;
     const camp = this.landmarkCampChests && this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z);
     if(camp&&camp.rewardChest){
       const profile=this.profileFor(client);
@@ -287,6 +364,7 @@ class EconomyMixin {
     if (rec.scope === 'town') return false;
     if (rec.scope === 'public') return info.space === 'overworld';
     if (rec.scope === 'dungeon') return info.space !== 'overworld' && (p.dgn || '') === info.space;
+    if (rec.scope === 'dungeon_personal') return info.space !== 'overworld' && (p.dgn || '') === info.space && rec.owner === this.clientToken(client);
     if (rec.scope === 'team') return !!rec.team && rec.team === this.cleanTeamId(p.team);
     if (rec.scope === 'personal' && rec.supply === true && this.canUseHomesteadSupplyChest(client, key, rec)) return true;
     return (!!rec.owner && rec.owner === this.clientToken(client)) || (!!rec.team && rec.team === this.cleanTeamId(p.team));
@@ -295,7 +373,7 @@ class EconomyMixin {
     const p = client && this.state.players.get(client.sessionId);
     const info = this.parseChestKey(key);
     if (!p || !info || info.space !== 'overworld') return null;
-    const record = rec || this.getChestRecord(key);
+    const record = rec || this.getChestRecord(key, client);
     if (!record || record.scope !== 'personal' || record.supply !== true || !record.owner) return null;
     if (!this.world || this.world.getB(info.x, info.y, info.z) !== W.B.CHEST) return null;
     const claim = this.landClaimFor && this.landClaimFor(info.x, info.z);
@@ -309,10 +387,10 @@ class EconomyMixin {
     return !!(ctx && (ctx.own || this.hasLandPermission(client, ctx.claim)));
   }
   canToggleChestSupply(client, key) {
-    const ctx = this.homesteadSupplyContext(client, key, this.getChestRecord(key));
+    const ctx = this.homesteadSupplyContext(client, key, this.getChestRecord(key, client));
     if (ctx) return !!ctx.own;
     const info = this.parseChestKey(key);
-    const rec = this.getChestRecord(key);
+    const rec = this.getChestRecord(key, client);
     const token = this.clientToken(client);
     if (!info || info.space !== 'overworld' || !rec || rec.scope !== 'personal' || rec.owner !== token) return false;
     const claim = this.landClaimFor && this.landClaimFor(info.x, info.z);
@@ -323,7 +401,7 @@ class EconomyMixin {
   chestSupplyModeReason(client, key) {
     const info = this.parseChestKey(key);
     if (!info || info.space !== 'overworld') return 'overworld';
-    const rec = this.getChestRecord(key);
+    const rec = this.getChestRecord(key, client);
     const token = this.clientToken(client);
     if (!rec || rec.scope !== 'personal') return 'personal';
     if (!token || rec.owner !== token) return 'owner';
@@ -336,7 +414,7 @@ class EconomyMixin {
   }
   chestAccessRejectReason(client, key) {
     if (!key) return 'near';
-    const rec = this.getChestRecord(key);
+    const rec = this.getChestRecord(key, client);
     if (rec && rec.scope === 'personal' && rec.supply === true) {
       const ctx = this.homesteadSupplyContext(client, key, rec);
       if (ctx && !this.hasLandPermission(client, ctx.claim)) return 'supply_trust';
@@ -344,14 +422,15 @@ class EconomyMixin {
     return 'locked';
   }
   canWithdrawChest(client, key) {
-    const rec = this.getChestRecord(key);
+    const rec = this.getChestRecord(key, client);
     if (rec && rec.scope === 'personal' && rec.supply === true) return rec.owner === this.clientToken(client);
     return this.canAccessChest(client, key);
   }
   canBreakChest(client, key) {
-    const rec = this.getChestRecord(key);
-    if (rec.scope === 'dungeon') return this.canAccessChest(client, key) && this.isChestEmpty(key);
-    return !!rec.owner && rec.owner === this.clientToken(client) && this.isChestEmpty(key);
+    const rec = this.getChestRecord(key, client);
+    if (!rec || rec.scope === 'personal_cache' || rec.scope === 'dungeon_personal') return false;
+    if (rec.scope === 'dungeon') return this.canAccessChest(client, key) && this.isChestEmpty(key, client);
+    return !!rec.owner && rec.owner === this.clientToken(client) && this.isChestEmpty(key, client);
   }
   // Adds up to `count` of `id` to the inventory. Returns the number it could NOT place
   // (0 = all placed) so callers that paid for the items can refund on a full bag.
@@ -789,12 +868,13 @@ class EconomyMixin {
     if (!this.canInteractAt(p, x + .5, y + .5, z + .5, 6)) return null;
     return (p.dgn || 'overworld') + ':' + x + ',' + y + ',' + z;
   }
-  getChestState(key) {
-    return this.getChestRecord(key).slots;
+  getChestState(key, client) {
+    const rec = this.getChestRecord(key, client);
+    return rec ? rec.slots : [];
   }
   ensureHomesteadChestCapacity(client, key, rec = null) {
     const info = this.parseChestKey(key);
-    const record = rec || this.getChestRecord(key);
+    const record = rec || this.getChestRecord(key, client);
     if (!info || info.space !== 'overworld' || !record || record.scope !== 'personal' || !record.owner || !this.world) return record;
     const claim = this.landClaimFor && this.landClaimFor(info.x, info.z);
     if (!claim || claim.owner !== record.owner || this.isLandClaimAbandoned(claim)) return record;
@@ -810,13 +890,19 @@ class EconomyMixin {
     return record;
   }
   sendChest(client, key) {
-    const rec = this.getChestRecord(key);
+    const rec = this.getChestRecord(key, client);
+    if (!rec) return client.send('chestReject', { reason: 'locked' });
     this.ensureHomesteadChestCapacity(client, key, rec);
     const slots = rec.slots.map(s => s ? { ...s } : null);
     client.send('chestState', {
       key,
       slots,
       scope: rec.scope,
+      firstPersonalChest: rec.scope === 'dungeon_personal' && rec.firstPersonalChest === true,
+      gearOdds: rec.scope === 'dungeon_personal' ? {
+        weapon: Math.round(LOOT_ECONOMY.SOURCES.chest.chance * 100),
+        armor: Math.round(LOOT_ECONOMY.SOURCES.chest.armorChance * 100),
+      } : null,
       supply: rec.supply === true,
       canToggleSupply: this.canToggleChestSupply(client, key),
       supplyModeReason: this.chestSupplyModeReason(client, key),
@@ -872,10 +958,12 @@ class EconomyMixin {
     const key = this.chestKeyForPlayer(client, m);
     const rec = this.profileFor(client);
     if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: this.chestAccessRejectReason(client, key) });
+    const targetChest = this.getChestRecord(key, client);
+    if (targetChest && (targetChest.scope === 'personal_cache' || targetChest.scope === 'dungeon_personal')) return client.send('chestReject', { reason: 'reward_deposit' });
     if (this.rateLimited(client, 'chestBatch', 3, 6)) return client.send('chestReject', { reason: 'rate' });
     const mode = m.mode === 'materials' ? 'materials' : 'matching';
     this.ensureHomesteadChestCapacity(client, key);
-    const slots = this.getChestState(key);
+    const slots = this.getChestState(key, client);
     const chestIds = new Set(slots.filter(Boolean).map(s => s.id | 0));
     const prof = rec.prof;
     const moved = [];
@@ -911,8 +999,9 @@ class EconomyMixin {
     const i = Math.max(0, Math.min(slots.length - 1, slotIndex | 0));
     const slot = slots[i];
     if (!slot) return null;
-    const take = Math.max(1, Math.min(slot.count, count | 0 || slot.count));
-    const out = { id: slot.id, count: take };
+    const gear = !!(slot.gear || TOOL_INFO[slot.id] || ARMOR_INFO[slot.id]);
+    const take = gear ? 1 : Math.max(1, Math.min(slot.count, count | 0 || slot.count));
+    const out = { ...slot, count: take };
     slot.count -= take;
     if (slot.count <= 0) slots[i] = null;
     return out;
@@ -926,6 +1015,8 @@ class EconomyMixin {
     const key = this.chestKeyForPlayer(client, m);
     const rec = this.profileFor(client);
     if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: this.chestAccessRejectReason(client, key) });
+    const targetChest = this.getChestRecord(key, client);
+    if (targetChest && (targetChest.scope === 'personal_cache' || targetChest.scope === 'dungeon_personal')) return client.send('chestReject', { reason: 'reward_deposit' });
     if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', { reason: 'rate' });
     const id = m.id | 0, count = Math.max(1, Math.min(64, m.count | 0 || 1));
     const matching = (rec.prof.inv || []).filter(stack => stack && (stack.id | 0) === id);
@@ -933,7 +1024,7 @@ class EconomyMixin {
       return client.send('chestReject', { reason: 'unsupported_item' });
     }
     this.ensureHomesteadChestCapacity(client, key);
-    const slots = this.getChestState(key);
+    const slots = this.getChestState(key, client);
     // place into the chest first, then consume exactly what it accepted — never refund a
     // full count after a partial deposit (which would duplicate the overflow).
     const want = Math.min(count, this.countItem(rec.prof, id));
@@ -950,15 +1041,31 @@ class EconomyMixin {
     const key = this.chestKeyForPlayer(client, m);
     const rec = this.profileFor(client);
     if (!key || !rec || !m || !this.canWithdrawChest(client, key)) {
-      const chest = key && this.getChestRecord(key);
+      const chest = key && this.getChestRecord(key, client);
       return client.send('chestReject', { reason: chest && chest.supply === true ? 'supply_owner' : 'owner' });
     }
     if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', { reason: 'rate' });
-    const slots = this.getChestState(key);
+    const cacheSite = this.overworldTreasureCacheSite(key);
+    const slots = this.getChestState(key, client);
     const slotIndex = Math.max(0, Math.min(slots.length - 1, m.slot | 0));
     const source = slots[slotIndex];
     if (!source) return client.send('chestReject', { reason: 'empty' });
-    const requested = Math.max(1, Math.min(source.count, m.count | 0 || source.count));
+    const gear = !!(source.gear || TOOL_INFO[source.id] || ARMOR_INFO[source.id]);
+    const requested = gear ? 1 : Math.max(1, Math.min(source.count, m.count | 0 || source.count));
+    if (gear) {
+      const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(stack => stack ? { ...stack } : null) };
+      const index = draft.inv.findIndex(stack => !stack);
+      if (index < 0 && draft.inv.length >= 36) return client.send('chestReject', { reason: 'full' });
+      if (this.addGearRewardItem(draft, { ...source, count: 1, gear: true })) return client.send('chestReject', { reason: 'full' });
+      const insertedAt = index >= 0 ? index : draft.inv.length - 1;
+      const deliveredStack = draft.inv[insertedAt];
+      const item = this.removeChestItem(slots, slotIndex, 1);
+      if (!item || !deliveredStack) return client.send('chestReject', { reason: 'empty' });
+      rec.prof.inv = draft.inv;
+      this.dirtyPlayers.add(rec.token);
+      this.sendChest(client, key);
+      return client.send('chestTx', { action: 'withdraw', id: item.id, count: 1, item: { ...deliveredStack, gear: true } });
+    }
     const capacity = this.inventorySpaceFor(rec.prof, source.id, requested);
     if (capacity <= 0) return client.send('chestReject', { reason: 'full' });
 
@@ -972,8 +1079,9 @@ class EconomyMixin {
     const item = this.removeChestItem(slots, slotIndex, delivered);
     if (!item) return client.send('chestReject', { reason: 'empty' });
     rec.prof.inv = draft.inv;
+    if (cacheSite) this.savePersonalTreasureCacheState(rec.prof, cacheSite, slots);
     this.dirtyPlayers.add(rec.token);
-    if (key.startsWith('overworld:')) this.dirtyChests = true;
+    if (key.startsWith('overworld:') && !cacheSite) this.dirtyChests = true;
     this.sendChest(client, key);
     client.send('chestTx', { action: 'withdraw', id: item.id, count: delivered });
   }
@@ -984,7 +1092,7 @@ class EconomyMixin {
       const reason = this.chestSupplyModeReason(client, key) || 'owner';
       return client.send('chestReject', { reason: reason === 'owner' ? 'supply_toggle_owner' : 'supply_' + reason });
     }
-    const rec = this.getChestRecord(key);
+    const rec = this.getChestRecord(key, client);
     if (!rec) return client.send('chestReject', { reason: 'supply_toggle_owner' });
     if (m.supply === true) rec.supply = true;
     else delete rec.supply;

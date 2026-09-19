@@ -38,7 +38,7 @@ class DungeonMixin {
     this.gateTtl = 0;
   }
 
-  dungeonStatusPayload(inst) {
+  dungeonStatusPayload(inst, client = null) {
     if (!inst) return null;
     const party = [];
     for (const sid of inst.players || []) {
@@ -55,7 +55,8 @@ class DungeonMixin {
     let bossAlive = false, boss = null;
     this.state.mobs.forEach(m => { if (m.dgn === inst.id && m.kind === 'boss' && m.hp > 0) { bossAlive = true; boss = m; } });
     const looted = this.gateLootedChests.get(inst.id)?.size || 0;
-    const unopenedChests = this.unopenedDungeonChests(inst).slice(0, 8);
+    const personalUnopenedChests = this.unopenedDungeonChests(inst, client);
+    const unopenedChests = personalUnopenedChests.slice(0, 8);
     const roomProgress = inst.roomProgress || { total: 0, cleared: 0 };
     const totalPlayers = Math.max(inst.originalPlayers ? inst.originalPlayers.size : 0, inst.players ? inst.players.size : 0, party.length);
     const aliveCount = party.filter(m => m.state === 'alive').length;
@@ -84,7 +85,7 @@ class DungeonMixin {
       bossRoom: inst.bossRoom ? { x: inst.bossRoom.x, z: inst.bossRoom.z } : null,
       exit: inst.entrance ? { x: inst.entrance.x, z: inst.entrance.z } : null,
       unopenedChests,
-      remainingChests: Math.max(0, (inst.lootChestTotal || 0) - looted),
+      remainingChests: client ? personalUnopenedChests.length : Math.max(0, (inst.lootChestTotal || 0) - looted),
     };
   }
   dungeonBossStatusPayload(boss) {
@@ -158,18 +159,26 @@ class DungeonMixin {
     if (topReason) lines.push('Wipe training: most lethal mechanic was ' + this.combatReasonLabel(topReason) + '.');
     return { tag: spec.tag, focus: spec.focus, clean, bonus, hitCount: rec.total | 0, lessonHits, partyHits, deaths: inst.deathCount | 0, topDeath: topReason ? this.combatReasonLabel(topReason) : '', lines };
   }
-  unopenedDungeonChests(inst) {
+  unopenedDungeonChests(inst, client = null) {
     if (!inst) return [];
+    if (client) {
+      const token = this.clientToken(client);
+      const playerChests = token && this.dungeonPersonalChests && this.dungeonPersonalChests.get(inst.id)?.get(token);
+      return (inst.lootChestLocations || []).filter(ch => {
+        if (!ch) return false;
+        const rec = playerChests && playerChests.get(ch.key);
+        return !rec || rec.slots.some(Boolean);
+      }).map(ch => ({ x: ch.x, y: ch.y, z: ch.z }));
+    }
     const looted = this.gateLootedChests.get(inst.id) || new Set();
     return (inst.lootChestLocations || []).filter(ch => ch && !looted.has(ch.key)).map(ch => ({ x: ch.x, y: ch.y, z: ch.z }));
   }
   sendDungeonStatus(dgn) {
     const inst = this.instances[dgn];
-    const payload = this.dungeonStatusPayload(inst);
-    if (!payload) return;
+    if (!inst) return;
     for (const c of this.clients) {
       const p = this.state.players.get(c.sessionId);
-      if (p && p.dgn === dgn) c.send('dungeonStatus', payload);
+      if (p && p.dgn === dgn) c.send('dungeonStatus', this.dungeonStatusPayload(inst, c));
     }
   }
   dungeonPartyStatusPayload(inst) {
@@ -521,6 +530,7 @@ class DungeonMixin {
     this.state.gates.delete(id);
     this.gateTtls.delete(id);
     this.gateLootedChests.delete(id);
+    if (this.dungeonPersonalChests) this.dungeonPersonalChests.delete(id);
     this.dirtyGates = true;
     this.mirrorPrimaryGate();
   }

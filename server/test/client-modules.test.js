@@ -1346,8 +1346,18 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(menusSource, /chestMode/);
   assert.match(menusSource, /treasureChestRevealSeen/);
   assert.match(menusSource, /function showTreasureChestReveal\(key, chest\)/);
+  assert.match(menusSource, /const items=\(chest\.slots\|\|\[\]\)\.filter\(s=>s&&ITEMS\[s\.id\]\)\.map\(s=>\(\{\.\.\.s/, 'treasure reveals retain authoritative rarity metadata');
+  assert.match(menusSource, /quality\.rank\.id\+' · '\+quality\.rarity\.name/, 'gear in treasure reveals names its rank and rarity');
   assert.match(menusSource, /TREASURE FOUND/);
   assert.match(menusSource, /SFX\.treasure\(\)/);
+  assert.match(menusSource, /c\.slots=\(m\.slots\|\|\[\]\)\.map\(s=>s\?\{\.\.\.s\}:null\)/, 'chest gear metadata survives client state updates');
+  assert.match(menusSource, /m\.action==='withdraw'&&m\.item&&m\.item\.gear/, 'equipment withdrawals preserve their authoritative stack');
+  assert.match(menusSource, /dungeon-loot-briefing/);
+  assert.match(menusSource, /firstPersonalChest/);
+  assert.match(menusSource, /First-chest gear: guaranteed/);
+  assert.match(menusSource, /Bonus gear odds:/);
+  assert.match(menusSource, /qBtn\('CLAIM',\(\)=>requestChestWithdraw\(slot\)\)/);
+  assert.match(menusSource, /el\.addEventListener\('click',e=>\{e\.preventDefault\(\);e\.stopPropagation\(\);requestChestWithdraw\(i\);\}\)/);
   assert.match(menusSource, /SORT BAG/);
   assert.match(menusSource, /requestInventorySort/);
   assert.match(menusSource, /DEPOSIT MATCHING/);
@@ -1371,6 +1381,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(networkingSource, /function itemTriageSummary/);
   assert.match(networkingSource, /function rewardItemsGroupedHTML/);
   assert.match(networkingSource, /Loot triage:/);
+  assert.match(networkingSource, /if\(summary\.profile\.rarityIndex>=3\)\{[\s\S]*new THREE\.CylinderGeometry/, 'only epic and mythic gear creates a brief acquisition pillar');
   assert.match(networkingSource, /Reward triage:/);
   assert.match(networkingSource, /Sort your bag, deposit supplies/);
   assert.match(networkingSource, /Only the owner can withdraw from Homestead Supply/);
@@ -1400,7 +1411,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8'), /BlockcraftFamiliarSystem/);
   assert.match(menusSource, /Companions grow through <b>Bond XP<\/b> earned only while they are active/);
   assert.match(menusSource, /familiarBindingSlot\(def\.sigil\)/);
-  assert.match(menusSource, /Daily Bond:/);
+  assert.match(menusSource, /Bond Exercise:/);
   assert.match(menusSource, /BIND '\+def\.name\.toUpperCase\(\)/);
   assert.match(menusSource, /Befriend a wild cat with River Fish/);
   assert.match(menusSource, /Befriend a wild dog with Cooked Meat/);
@@ -1860,7 +1871,7 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.ok(networkingSource.includes("eventFeed('[Job]',(m&&m.firstShiftComplete?'First shift complete: ':'')+title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText"));
   assert.match(networkingSource,/ready to claim/);
   assert.match(networkingSource,/Dungeon gold:/);
-  assert.match(networkingSource,/Contract payout/);
+  assert.match(networkingSource,/questCompletionMoment\(\{\.\.\.m,nextStep:next\}\)/);
   assert.match(networkingSource,/Protected claim purchased/);
   assert.match(networkingSource,/Treasure cache/);
   assert.match(networkingSource,/function showLevelUpReveal\(m\)/);
@@ -2002,6 +2013,7 @@ test('gear reward presentation compares authoritative drops and labels their sou
   assert.equal(result.verdict,'UPGRADE');
   assert.equal(result.rows.some(row=>row[0]==='DPS'&&parseFloat(row[2])>0),true);
   assert.equal(gearRewardSource('captain'),'Bandit captain');
+  assert.equal(gearRewardSource('chest'),'Dungeon chest');
   assert.equal(gearRewardSource('aegis_trial'),'Aegis trial');
 });
 
@@ -2281,7 +2293,8 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(room,/if\(questionHallRequest&&active\.source==='question_hall'\)this\.recallChallenges\.delete\(client\.sessionId\)/);
   assert.match(room,/fallback=questionHall\|\|pillars\.some/);
   assert.match(room,/questionHall:challenge\.source==='question_hall'/);
-  assert.match(room,/const hall=challenge\.source==='question_hall',freezeMs=hall\?0:RECALL\.FREEZE_MS/);
+  assert.match(room,/freezeMs:0/);
+  assert.doesNotMatch(room,/recallFrozenUntil\.set/);
 });
 
 test('cursor item follows the mouse without relying on a leaked module global',()=>{
@@ -2340,8 +2353,8 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(recall,/Number\.isFinite\(\+m\.stamina\)/);
   assert.match(recall,/Number\.isFinite\(\+m\.sp\)/);
   assert.match(recall,/function submitAnswer\(index\)\{\s*if\(!active\|\|answerPending\)return;[\s\S]*answerPending=true;syncRecallPose\(\)/);
-  assert.match(recall,/if\(m\.correct\)syncRecallPose\(\);else releaseRecallMovement\('recall-wrong'\)/);
-  assert.doesNotMatch(recall,/releaseRecallMovement\('recall-submit'\)/);
+  assert.match(recall,/if\(m\.correct\)syncRecallPose\(\)/);
+  assert.doesNotMatch(recall,/releaseRecallMovement|freezeUntil/);
   assert.match(room,/const ids=\[\.\.\.new Set\(\[mastery\.lastQuestionId,\.\.\.recent,\.\.\.answered\]/);
   assert.match(room,/avoidQuestionIds:avoid\.ids/);
   assert.match(room,/avoidPrompts:avoid\.prompts/);
@@ -2984,17 +2997,27 @@ test('status modal presents a styled RPG character sheet instead of browser-defa
   assert.match(styles,/@media\(max-width:1180px\)[\s\S]*\.stat-main-grid,\.stat-bottom-grid\{grid-template-columns:1fr\}/);
 });
 
-test('death drops render as timed public world loot and onboarding teaches Recall and limbo',()=>{
+test('legacy death drops remain visible while onboarding teaches safe Recall and limbo review',()=>{
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   assert.match(networking,/function showDeathDropVisual\(m\)[\s\S]*CylinderGeometry\(\.18,\.38,12/);
-  assert.match(networking,/PUBLIC LOOT[\s\S]*expiresAt-Date\.now\(\)/);
+  assert.match(networking,/Your items stay safe, even when you miss a question/);
+  assert.match(networking,/Not yet — your item is safe/);
+  assert.match(networking,/PRIVATE RECOVERY · NO EXPIRY[\s\S]*Only you can collect this item/);
+  assert.match(networking,/timed=m\.expiresAt>0[\s\S]*if\(timed&&!left\)/);
   assert.match(networking,/deathDropSnapshot[\s\S]*deathDropExpired/);
   assert.match(frame,/BlockcraftDeathDrops\)globalThis\.BlockcraftDeathDrops\.tick\(now\)/);
   assert.match(combat,/kind:'recall'[\s\S]*key:'P'/);
   assert.match(combat,/Lesson 12 \/ 13 - Recall Cast/);
-  assert.match(combat,/Death sends carried items to limbo[\s\S]*mistakes become public loot/);
+  assert.match(combat,/Your carried items stay safe even when you miss one/);
+});
+
+test('ordinary mob rewards burst visibly from the defeated enemy before flying to the hunter',()=>{
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(networking,/function showMobLootBurst\(m\)[\s\S]*new THREE\.CanvasTexture\(ITEMS\[item\.id\]\.icon\)/);
+  assert.match(networking,/mobLootBursts[\s\S]*position\.lerpVectors\(rec\.origin,target,ease\)/);
+  assert.match(networking,/if\(m&&m\.visibleDrop\)showMobLootBurst\(m\)/);
 });
 
 test('Recall is temporarily locked to Computer Science without subject-switch shortcuts',()=>{
@@ -3485,7 +3508,7 @@ test('onboarding recall lesson completes from a correct answer away from the way
   const network=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
   assert.match(combat,/markRecall:\(\)=>\{if\(onboardingActive&&onboardingKind\(\)==='recall'\)onboardingFlags\.recall=true;\}/);
-  assert.match(combat,/Low on mana or stamina\? Press P, then run towards the correct answer\.[\s\S]*A correct Recall answer recharges both mana and stamina\.[\s\S]*done:\(\)=>onboardingFlags\.recall/);
+  assert.match(combat,/Low on mana or stamina\? Press P, then run towards the correct answer\.[\s\S]*A correct Recall answer recharges mana and stamina\.[\s\S]*done:\(\)=>onboardingFlags\.recall/);
   assert.doesNotMatch(combat,/done:\(\)=>onboardingArrived&&onboardingFlags\.recall/);
   assert.match(recall,/if\(m\.correct&&globalThis\.BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markRecall\(\);/);
   assert.match(network,/if\(m&&Array\.isArray\(m\.activeObjectives\)\)setActiveObjectives\(m\.activeObjectives,\{announce:false\}\);[\s\S]*if\(!onboardingDone\(\)\)\{/);
@@ -5385,6 +5408,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(networking,/progressionMilestoneReward/);
   assert.match(networking,/questRewardSummary/);
   assert.match(networking,/function questRewardSummaryLine\(m\)/);
+  assert.match(networking,/questCompletionMoment\(\{\.\.\.m,nextStep:next\}\)/);
+  assert.doesNotMatch(networking,/if\(m\.completed\.gold\)rewardGain\('gold'/);
   assert.match(networking,/function questRewardNextStep\(m\)/);
   assert.match(networking,/if\(m&&m\.nextStep\)return String\(m\.nextStep\)/);
   assert.match(networking,/function questRewardCompletionTitle\(m,sourceLabel\)/);

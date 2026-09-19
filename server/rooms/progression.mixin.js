@@ -1072,6 +1072,7 @@ class ProgressionMixin {
         items: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
         claimLocation: 'Job Board',
         inventoryOverflow: false,
+        presentation: firstShiftComplete ? 'first_shift' : '',
         nextStep: graduation ? 'D-Rank Prep: craft armor, pack food, check repairs, then clear a D-rank Gate.'
           : firstGateBridgeFocus === 'first_e_gate' ? 'Return to Mara Vale and accept The First Gate.'
           : firstGateBridgeFocus === 'first_road_ready' ? 'Return to Mara Vale for Road Ready, then your first E-rank Gate.'
