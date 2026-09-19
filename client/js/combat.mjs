@@ -4575,10 +4575,13 @@ function landTutorialRoute(target){
 const TOWN_ACTIVITY_GUIDES=[
   {group:'WORK & RECOVERY',step:'activity_farm',title:'FARM & HARVEST',summary:'Grow crops at the town plots. Speak to Liss or work the soil with a hoe.',target:()=>HUB.farm,nearKey:'G / F',nearText:'Speak to Liss, or use a hoe and seeds on the plots.',nearSub:'Till, plant, then harvest. Liss also offers farming quests.'},
   {group:'WORK & RECOVERY',step:'activity_cook',title:'COOK & PREPARE',summary:'Visit Greta at the tavern and make food for travel.',target:()=>HUB.tavern,nearText:'Talk to Greta, then choose KITCHEN.',nearSub:'Bring ingredients or use the recipe book to see what you can make.'},
+  {group:'WORK & RECOVERY',step:'activity_tavern_game',title:'SCHOLAR TABLE',summary:'Play an optional question game at the Gilded Mug. Your first quick round is free.',target:()=>{const host=villagers.find(v=>v.role==='tavern_scholar'&&v.grp);return host?{x:host.grp.position.x,z:host.grp.position.z}:HUB.tavern;},nearText:'Find a Scholar Table host and press G.',nearSub:'Try the free first quick round; later games show their gold stake before you start.'},
   {group:'WORK & RECOVERY',step:'activity_smith',title:'SMITH & REPAIR',summary:'Visit Tobin for crafting, repairs, upgrades, and recovered loot.',target:()=>HUB.smith,nearText:'Talk to Tobin, then choose SERVICES.',nearSub:'Craft gear, repair worn equipment, or inspect forge upgrades.'},
   {group:'WORK & RECOVERY',step:'activity_meditate',title:'MEDITATE',summary:'Restore mana and stamina at the Meditation Hall. Long-term growth unlocks at Level 4.',target:()=>HUB.meditate,nearText:'Step into the focus circle and press G.',nearSub:'Answer the focus question, then hold still to complete the session.'},
   {group:'PEOPLE & GROUPS',step:'activity_guild',title:'GUILD HALL',summary:'Browse Guild Contracts and fellowship options at the notice board.',target:()=>HUB.guildNoticeBoard,nearText:'Open the Guild Hall notice board or speak to the receptionist.',nearSub:'Choose a contract, or explore fellowships and shared goals.'},
   {group:'PEOPLE & GROUPS',step:'activity_social',title:'SOCIAL PLAY',summary:'Meet Aelin to learn nearby players, friends, teams, and dungeon queues.',target:()=>HUB.socialMentor,nearText:'Speak to Aelin, or open the Social hub.',nearSub:'Find nearby Hunters, make friends, form a team, or join a dungeon queue.'},
+  {group:'PEOPLE & GROUPS',step:'activity_gate',title:'DUNGEON GATES',summary:'Prepare for a Gate, find one beyond town, or queue with other hunters.',target:()=>gate&&Number.isFinite(gate.x)&&Number.isFinite(gate.z)?{x:gate.x,z:gate.z}:HUB.northGate,nearText:'At an active Gate, press G to enter. If none is nearby, watch the map for its marker.',nearSub:'Use Gate Prep for supplies, or open Social to queue with other hunters.'},
+  {group:'PEOPLE & GROUPS',step:'activity_legendary',title:'LEGENDARY FORGE',summary:'Bring tokens from Gates and events to the Aegis Guardian for a legendary weapon.',target:()=>HUB.aegisApproach,nearText:'Press G near the Aegis Guardian.',nearSub:'Inspect weapon powers and token costs before forging.'},
   {group:'PORTALS & COMPANIONS',step:'activity_question_portal',title:'QUESTION HALL PORTAL',summary:'Enter the blue study portal for question practice.',target:()=>HUB.questionPortal,nearText:'Press G at the blue Question Hall portal.',nearSub:'Practice questions, then use the return portal to come back to town.'},
   {group:'PORTALS & COMPANIONS',step:'activity_taming_portal',title:'TAMING LAND PORTAL',summary:'Visit the dragon and familiar sanctuary.',target:()=>HUB.tamingPortal,nearText:'Press G at the green Taming Land portal.',nearSub:'Explore companions, dragon care, and taming activities.'},
   {group:'PORTALS & COMPANIONS',step:'activity_fishing_portal',title:'FISHING LAKE PORTAL',summary:'Travel to the lake for fishing and quiet exploration.',target:()=>HUB.fishingPortal,nearText:'Press G at the blue Fishing Lake portal.',nearSub:'Bring a fishing rod in your hotbar, or visit the outfitter first.'},
@@ -4661,21 +4664,55 @@ function renderTownTutorialOptions(force=false){
   }
   townChoicesEl.classList.remove('hidden');
 }
+function renderFeaturedTownActivities(){
+  const menus=gameContext.modules.menus;
+  const event=globalThis.serverEvent;
+  const eventOpen=!!(event&&event.phase==='queue');
+  const nextEventMinutes=event&&!eventOpen&&Number(event.nextAt)>Date.now()?Math.max(1,Math.ceil((Number(event.nextAt)-Date.now())/60000)):0;
+  const tokens=countItem(I.LEGEND_TOKEN);
+  const gateRank=menus&&typeof menus.nextGatePrepRank==='function'?Math.max(0,menus.nextGatePrepRank()):0;
+  const gatePrep=menus&&typeof menus.gateReadiness==='function'?menus.gateReadiness(gateRank):null;
+  const gateReady=gateSystemUnlocked();
+  const freeTable=!!(globalThis.BlockcraftKnowledgeChallenge&&globalThis.BlockcraftKnowledgeChallenge.introAvailable);
+  const entries=[
+    {id:'tavern',icon:'◆',title:'SCHOLAR TABLE',state:freeTable?'FIRST QUICK ROUND FREE':'OPTIONAL TAVERN GAME',copy:'Answer questions at the Gilded Mug. Choose a round and see any stake before playing.',actions:[['FIND TABLE',()=>guideTownTutorialChoice('activity_tavern_game')]]},
+    {id:'gates',icon:'◈',title:'DUNGEON GATES',state:gateReady?(gatePrep&&gatePrep.ready?'READY FOR '+['E','D','C','B','A','S'][gateRank]+'-RANK':'CHECK '+['E','D','C','B','A','S'][gateRank]+'-RANK PREP'):'EXPLORE THE FIRST GATE',copy:'Prepare your gear, find a Gate outside town, or match with other hunters.',actions:[['PREP CHECK',()=>menus&&menus.openGatePrep&&menus.openGatePrep(gateRank)],['FIND GATE',()=>guideTownTutorialChoice('activity_gate')]]},
+    {id:'events',icon:'✦',title:'SERVER EVENTS',state:eventOpen?(event.joined?'QUEUED · WATCH THE EVENT BANNER':'QUEUE OPEN NOW'):nextEventMinutes?'NEXT IN ABOUT '+nextEventMinutes+' MIN':'JOIN WHEN THE NEXT EVENT OPENS',copy:eventOpen?'Join '+(event.name||'the public event')+' with other hunters for Legendary Token rewards.':'Public events open on a timer. The event banner shows the next chance and reward.',actions:eventOpen&&!event.joined?[['JOIN EVENT',()=>{closeQWin(false);if(NET.on&&NET.room&&globalThis.serverEvent&&globalThis.serverEvent.phase==='queue'&&!globalThis.serverEvent.joined)NET.room.send('eventJoin',{});}]]:[]},
+    {id:'social',icon:'♟',title:'PLAY TOGETHER',state:'FRIENDS · TEAMS · DUNGEON QUEUE',copy:'Find a team, invite a nearby hunter, or queue for a public Gate together.',actions:[['OPEN SOCIAL',()=>{closeQWin(false);if(globalThis.openSocialUI)globalThis.openSocialUI('dungeon');}],['QUEUE FOR GATE',()=>menus&&menus.openRandomGateQueue&&menus.openRandomGateQueue()]]},
+    {id:'legendary',icon:'✧',title:'LEGENDARY WEAPONS',state:tokens?tokens+' TOKEN'+(tokens===1?'':'S')+' HELD':'EARN TOKENS IN GATES & EVENTS',copy:'Preview the Aegis Forge, then bring tokens to choose a weapon with a distinct power.',actions:[['PREVIEW FORGE',()=>menus&&menus.previewLegendary&&menus.previewLegendary()],['FIND FORGE',()=>guideTownTutorialChoice('activity_legendary')]]},
+  ];
+  const recommended=eventOpen&&!event.joined?'events':tokens?'legendary':freeTable?'tavern':gateReady?'gates':'social';
+  const title=document.createElement('div');title.className='sub2';title.textContent='FEATURED ADVENTURES';qpanelEl.appendChild(title);
+  const intro=document.createElement('p');intro.className='qtext';intro.textContent='Choose one next step. The recommended activity changes with your progress; the others stay available without adding HUD clutter.';qpanelEl.appendChild(intro);
+  const grid=document.createElement('div');grid.className='town-feature-grid';
+  for(const entry of entries){
+    const card=document.createElement('article');card.className='town-feature-card'+(entry.id===recommended?' recommended':'');
+    const heading=document.createElement('div');heading.className='town-feature-heading';
+    const icon=document.createElement('i');icon.textContent=entry.icon;heading.appendChild(icon);
+    const headingCopy=document.createElement('span');headingCopy.innerHTML='<b>'+escHTML(entry.title)+'</b><small>'+escHTML(entry.state)+'</small>';heading.appendChild(headingCopy);card.appendChild(heading);
+    const body=document.createElement('p');body.textContent=entry.copy;card.appendChild(body);
+    if(entry.id===recommended){const badge=document.createElement('strong');badge.className='town-feature-recommended';badge.textContent='RECOMMENDED NEXT';card.appendChild(badge);}
+    const actions=document.createElement('div');actions.className='town-feature-actions';for(const [label,run] of entry.actions)actions.appendChild(qBtn(label,run));card.appendChild(actions);
+    grid.appendChild(card);
+  }
+  qpanelEl.appendChild(grid);
+}
 function openTownTutorialsUI(){
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   openQWin('management');
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent='TOWN TUTORIALS'; qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='CHOOSE WHAT TO LEARN NEXT'; qpanelEl.appendChild(sub);
+  const h=document.createElement('h2'); h.textContent='TOWN ACTIVITIES'; qpanelEl.appendChild(h);
+  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='CHOOSE WHAT TO DO NEXT'; qpanelEl.appendChild(sub);
   const info=document.createElement('p'); info.className='qtext';
-  info.innerHTML='Pick a guided town activity. The large prompt and pillar of light will point you there. Completed tutorials can be replayed.';
+  info.innerHTML='The big adventures are here, alongside guided town activities. A light and route can lead you to each place.';
   qpanelEl.appendChild(info);
+  renderFeaturedTownActivities();
   const style=document.createElement('div'); style.className='shoprow';
   const styleMark=document.createElement('b'); styleMark.style.color='#4fd8ff'; styleMark.style.fontSize='22px'; styleMark.textContent='?'; style.appendChild(styleMark);
   const styleTxt=document.createElement('span'); styleTxt.innerHTML='<b>CHOOSE PLAYSTYLE</b><br><small>Pick fighter, builder, farmer, miner, social, collector, explorer, or learner guidance.</small>'; style.appendChild(styleTxt);
   style.appendChild(qBtn('CHOOSE',()=>{ if(globalThis.BlockcraftPlayerStyleGuide)globalThis.BlockcraftPlayerStyleGuide.open(); }));
   qpanelEl.appendChild(style);
-  const activitiesTitle=document.createElement('div');activitiesTitle.className='sub2';activitiesTitle.textContent='WHAT CAN I DO IN TOWN?';qpanelEl.appendChild(activitiesTitle);
+  const activitiesTitle=document.createElement('div');activitiesTitle.className='sub2';activitiesTitle.textContent='MORE TOWN ACTIVITIES';qpanelEl.appendChild(activitiesTitle);
   const activitiesIntro=document.createElement('p');activitiesIntro.className='qtext';activitiesIntro.textContent='Pick an activity. A light and route will guide you to the right person, station, or portal.';qpanelEl.appendChild(activitiesIntro);
   if(townGuidanceActive&&TOWN_ACTIVITY_GUIDES.some(guide=>guide.step===townGuidanceStep)){
     qpanelEl.appendChild(qBtn('STOP CURRENT GUIDE',()=>{
@@ -4685,7 +4722,9 @@ function openTownTutorialsUI(){
     },true));
   }
   let lastActivityGroup='';
+  const featuredSteps=new Set(['activity_tavern_game','activity_gate','activity_legendary','activity_social']);
   for(const activity of TOWN_ACTIVITY_GUIDES){
+    if(featuredSteps.has(activity.step))continue;
     if(activity.group!==lastActivityGroup){
       const group=document.createElement('div');group.className='sub2';group.textContent=activity.group;qpanelEl.appendChild(group);
       lastActivityGroup=activity.group;
@@ -7018,7 +7057,7 @@ function nearbyInteractionPrompt(){
   const push=(entry,distance=0)=>{if(entry)candidates.push({...entry,distance:Number.isFinite(distance)?distance:0});};
   if(gate && dim==='overworld'){
     const d=Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z);
-    if(d<=6)push({key:'G',title:'Gate Portal',small:'Enter this Gate dungeon',priority:120},d);
+    if(d<=6)push({key:'G',title:'Gate Portal',small:'Enter dungeon · O → Activities for prep or team queue',priority:120},d);
   }
   if(dim==='dungeon'&&exitPortal){
     const d=Math.hypot(exitPortal.position.x-player.pos.x,exitPortal.position.z-player.pos.z);
@@ -7123,9 +7162,14 @@ function nearbyInteractionPrompt(){
   if(petPracticeInsulator&&jobTutorialPetDragonStep===0)push({key:'G',title:'Tutorial Egg',small:jobTutorialPetEggStarted?(Date.now()>=jobTutorialPetEggReadyAt?'Claim the hatchling':'Fast incubation running'):'Use Verdant Dragon Egg',priority:119},petPracticeInsulator.distance);
   const petPracticeDragon=nearPetTamerPracticeDragon();
   if(petPracticeDragon&&jobTutorialPetDragonStep>0&&jobTutorialPetDragonStep<5)push({key:petTamerTutorialPromptKey(),title:'Your Hatched Dragon',small:jobTutorialPetDragonSeen?'Lesson complete':petTamerTutorialProgressLabel()+' - '+petTamerTutorialAction().key,priority:118},petPracticeDragon.distance);
-  if(guardianUnderCrosshair(8)||nearbyGuardian())push({key:'G',title:'Aegis Guardian',small:'Open Guardian trials and rewards',priority:93},0);
+  if(guardianUnderCrosshair(8)||nearbyGuardian())push({key:'G',title:'Aegis Guardian',small:'Forge Legendary weapons · '+countItem(I.LEGEND_TOKEN)+' token(s) held',priority:93},0);
   const vill=villagerUnderCrosshair(4.5)||nearbyVillager(3.7);
-  if(vill)push({key:'G',title:vill.name||vill.shortName||'Villager',small:vill.title||'Talk',priority:90},vill.distance||0);
+  if(vill){
+    const small=vill.role==='tavern_scholar'
+      ?globalThis.BlockcraftKnowledgeChallenge&&globalThis.BlockcraftKnowledgeChallenge.introAvailable?'Scholar Table · first Quick round free':'Scholar Table · optional question game'
+      :vill.role==='social_mentor'?'Learn friends, teams and dungeon queues':vill.title||'Talk';
+    push({key:'G',title:vill.name||vill.shortName||'Villager',small,priority:90},vill.distance||0);
+  }
   const dragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
     ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
     : null;
@@ -7580,7 +7624,7 @@ function interactWithVillager(vill){
   }
   else if(vill.role==='bartender') openTavernUI();
   else if(vill.role==='tavern_scholar'){
-    sysMsg('<b>'+escHTML(vill.name||'Scholar Table Host')+':</b> "Choose a stake, answer cleanly, and the table pays for sharp thinking."');
+    sysMsg('<b>'+escHTML(vill.name||'Scholar Table Host')+':</b> "Your first Quick round is free practice. After that, choose a stake and see what you can earn."');
     if(globalThis.BlockcraftKnowledgeChallenge) globalThis.BlockcraftKnowledgeChallenge.open();
   }
   else if(vill.role==='traveling_merchant'){

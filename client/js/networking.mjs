@@ -1479,6 +1479,7 @@ function netAttachRoom(room,name,client){
       });
       if(netRestoreProfile(m)===false){NET.profileReady=false;return;}
       NET.profileReady=true;
+      if(globalThis.BlockcraftKnowledgeChallenge&&globalThis.BlockcraftKnowledgeChallenge.setIntroAvailable)globalThis.BlockcraftKnowledgeChallenge.setIntroAvailable(m&&m.scholarIntroUsed!==true);
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied-vitals', {
         profileVitals:m&&m.vitals,
         localVitals:{hp,mp,sp,hunger,maxHp:maxHp(),maxMp:maxMp(),maxSp:maxSp(),maxHunger:maxHunger()},

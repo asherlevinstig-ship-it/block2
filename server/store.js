@@ -402,6 +402,7 @@ function defaultProfile(name) {
     starterGoldGranted: true,
     noobsGuildJoinRewardClaimed: false,
     firstQuestRewardClaimed: false,
+    scholarIntroUsed: false,
     maraRoadReadySwordGranted: false,
     maraRoadReadyCraftRequired: false,
     maraRoadReadyCrafted: false,
@@ -1078,6 +1079,7 @@ function sanitizeProfile(p) {
   out.starterGoldGranted = true;
   if (p.starterGoldGranted !== true) out.gold = Math.max(100, out.gold);
   out.noobsGuildJoinRewardClaimed = p.noobsGuildJoinRewardClaimed === true;
+  out.scholarIntroUsed = p.scholarIntroUsed === true;
   if (p.skyshipTransit && typeof p.skyshipTransit === 'object') {
     out.skyshipTransit = {
       route: p.skyshipTransit.route === 'western' ? 'western' : 'western',

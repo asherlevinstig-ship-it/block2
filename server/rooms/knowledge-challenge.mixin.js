@@ -127,8 +127,8 @@ class KnowledgeChallengeMixin {
       return client.send('kcReject', { reason: 'unavailable' });
     }
     const type = KC.SHIFT_TYPES[m.shiftType] ? m.shiftType : 'standard';
-    const entry = Math.max(0, this.kcConfig().entry[type] | 0);
-    if ((rec.prof.gold | 0) < entry) return client.send('kcReject', { reason: 'gold', gold: rec.prof.gold | 0, entry });
+    const previewEntry = type === 'quick' && rec.prof.scholarIntroUsed !== true ? 0 : Math.max(0, this.kcConfig().entry[type] | 0);
+    if ((rec.prof.gold | 0) < previewEntry) return client.send('kcReject', { reason: 'gold', gold: rec.prof.gold | 0, entry: previewEntry });
 
     const subjectQuery = { subject: m.subject, subjectId: m.subjectId, fallbackSubject: m.fallbackSubject || 'Computer Science' };
     const reservation = { cancelled: false };
@@ -188,9 +188,12 @@ class KnowledgeChallengeMixin {
       // prevents a second start from crossing this debit while content loads.
       const commitRec = typeof this.profileFor === 'function' ? this.profileFor(client) : null;
       if (!commitRec || !commitRec.prof || commitRec.token !== rec.token) return client.send('kcReject', { reason: 'unavailable' });
+      const intro = type === 'quick' && commitRec.prof.scholarIntroUsed !== true;
+      const entry = intro ? 0 : Math.max(0, this.kcConfig().entry[type] | 0);
       if ((commitRec.prof.gold | 0) < entry) return client.send('kcReject', { reason: 'gold', gold: commitRec.prof.gold | 0, entry });
       commitRec.prof.gold = Math.max(0, (commitRec.prof.gold | 0) - entry);
-      if (typeof this.recordEconomyGold === 'function') this.recordEconomyGold(client, -entry, 'knowledge_challenge', 'shift_entry', { shiftType: type });
+      if (intro) commitRec.prof.scholarIntroUsed = true;
+      if (entry && typeof this.recordEconomyGold === 'function') this.recordEconomyGold(client, -entry, 'knowledge_challenge', 'shift_entry', { shiftType: type });
       if (this.dirtyPlayers) this.dirtyPlayers.add(commitRec.token);
       this.kcSyncGold(client, commitRec.prof);
 
@@ -204,7 +207,8 @@ class KnowledgeChallengeMixin {
       } catch (_) {}
       if (reservation.cancelled || this.kcStarting.get(client.sessionId) !== reservation) {
         commitRec.prof.gold = Math.min(this.kcConfig().maxGold, (commitRec.prof.gold | 0) + entry);
-        if (typeof this.recordEconomyGold === 'function') this.recordEconomyGold(client, entry, 'knowledge_challenge', 'shift_entry_refund', { shiftType: type });
+        if (intro) commitRec.prof.scholarIntroUsed = false;
+        if (entry && typeof this.recordEconomyGold === 'function') this.recordEconomyGold(client, entry, 'knowledge_challenge', 'shift_entry_refund', { shiftType: type });
         if (this.dirtyPlayers) this.dirtyPlayers.add(commitRec.token);
         this.kcSyncGold(client, commitRec.prof);
         if (shiftId) { try { await store.endShift(shiftId, { status: 'abandoned', payoutGold: 0, totals: freshTotals() }); } catch (_) {} }
@@ -212,7 +216,7 @@ class KnowledgeChallengeMixin {
       }
 
       const shift = {
-        id: shiftId, subjectId: subject.subjectId, type, entry,
+        id: shiftId, subjectId: subject.subjectId, type, entry, intro,
         planned: KC.SHIFT_TYPES[type].cases, ordinal: 0, lastAtomId: null,
         pending: null, corrective: null, confusionPairs, remediation: [], totals: freshTotals(),
       };
@@ -226,7 +230,7 @@ class KnowledgeChallengeMixin {
         entry,
       });
       client.send('kcShiftStarted', {
-        shiftId, shiftType: type, planned: shift.planned, entry, gold: commitRec.prof.gold | 0,
+        shiftId, shiftType: type, planned: shift.planned, entry, intro, gold: commitRec.prof.gold | 0,
         subjectId: subject.subjectId,
         subjectName: subject.subjectName || '',
         requestedSubject: subject.requestedSubject || m.subject || '',
@@ -466,7 +470,7 @@ class KnowledgeChallengeMixin {
     const t = shift.totals;
     const avgResponseMs = t.completedCases ? Math.round(t.responseMsSum / t.completedCases) : 0;
     const abandoned = reason === 'abandoned';
-    const payout = abandoned ? 0 : KC.computeShiftPayout(shift.entry, t, this.kcConfig().payout).payout;
+    const payout = abandoned || shift.intro ? 0 : KC.computeShiftPayout(shift.entry, t, this.kcConfig().payout).payout;
 
     const rec = typeof this.profileFor === 'function' ? this.profileFor(client) : null;
     if (!abandoned && payout > 0 && rec && rec.prof) {
@@ -482,14 +486,14 @@ class KnowledgeChallengeMixin {
     if (client && !abandoned) {
       const net = (payout | 0) - (shift.entry | 0);
       const player = typeof this.playerFor === 'function' ? this.playerFor(client) : null;
-      const line = (player && player.name ? player.name : 'A hunter') + ' finished ' + String(shift.type || 'shift')
-        + ': payout +' + (payout | 0) + ' gold'
-        + ' (net ' + (net >= 0 ? '+' : '') + net + ' after stake).';
+      const line = (player && player.name ? player.name : 'A hunter') + (shift.intro
+        ? ' finished a free Scholar Table practice round.'
+        : ' finished ' + String(shift.type || 'shift') + ': payout +' + (payout | 0) + ' gold (net ' + (net >= 0 ? '+' : '') + net + ' after stake).');
       const msg = { name: '[Tavern] [Scholar Table]', text: line };
       if (typeof this.broadcast === 'function') this.broadcast('chat', msg);
       else client.send('chat', msg);
       client.send('kcShiftReport', {
-        shiftId: shift.id, reason, payout, entry: shift.entry,
+        shiftId: shift.id, reason, payout, entry: shift.entry, intro: !!shift.intro,
         gold: rec && rec.prof ? rec.prof.gold | 0 : 0, totals,
       });
     }

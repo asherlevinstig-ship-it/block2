@@ -22,6 +22,7 @@ let overlay = null, panel = null, shift = null, pending = null, caseAt = 0, busy
 let awaitingContinue = false, buffered = null;
 let correctiveAttempt = null;
 let tableHeat = 0, lastStreak = 0;
+let introAvailable = false;
 
 function now() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 function el(tag, cls, html) { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; }
@@ -81,12 +82,13 @@ function close() {
 function renderChooser() {
   ensure(); panel.innerHTML = '';
   panel.appendChild(el('h2', 'kc-title', 'SCHOLAR TABLE'));
-  panel.appendChild(el('p', 'kc-note kc-tavern-note', 'Choose your stake. Once the gold hits the table, the first challenge is dealt immediately.'));
-  panel.appendChild(el('p', 'kc-note', 'Better accuracy, streaks, recovery answers, and mastery progress improve the payout. Walk away early and the table keeps the stake.'));
+  panel.appendChild(el('p', 'kc-note kc-tavern-note', introAvailable ? 'Your first Quick round is free practice: no gold stake and no gold payout. Other rounds show their stake below.' : 'Choose your stake. Once the gold hits the table, the first challenge is dealt immediately.'));
+  panel.appendChild(el('p', 'kc-note', 'Better accuracy, streaks, recovery answers, and mastery progress improve paid payouts. On paid rounds, walking away early forfeits the stake.'));
   const grid = el('div', 'kc-grid');
   for (const type of Object.keys(ENTRY)) {
     const card = el('button', 'kc-shift'); card.type = 'button';
-    card.innerHTML = '<b>' + ENTRY[type] + ' GOLD</b><span>' + type.toUpperCase() + ' · ' + (PLANNED[type] ? PLANNED[type] + ' cases' : 'endless') + '</span><em>Put stake on table</em>';
+    const free = type === 'quick' && introAvailable;
+    card.innerHTML = '<b>' + (free ? 'FREE FIRST ROUND' : ENTRY[type] + ' GOLD') + '</b><span>' + type.toUpperCase() + ' · ' + (PLANNED[type] ? PLANNED[type] + ' cases' : 'endless') + '</span><em>' + (free ? 'Practice with no gold at risk' : 'Put stake on table') + '</em>';
     card.onclick = () => start(type);
     grid.appendChild(card);
   }
@@ -99,8 +101,8 @@ function renderChooser() {
 function renderDealing(type) {
   ensure(); panel.innerHTML = '';
   panel.classList.remove('kc-hit', 'kc-miss');
-  panel.appendChild(el('h2', 'kc-title', 'GOLD ON THE TABLE'));
-  panel.appendChild(el('p', 'kc-note kc-tavern-note', 'Stake locked: <b>' + (ENTRY[type] | 0) + ' gold</b>. The Scholar is dealing your first challenge...'));
+  panel.appendChild(el('h2', 'kc-title', type === 'quick' && introAvailable ? 'PRACTICE ROUND' : 'GOLD ON THE TABLE'));
+  panel.appendChild(el('p', 'kc-note kc-tavern-note', type === 'quick' && introAvailable ? 'Free practice round. No gold is at risk. The Scholar is dealing your first challenge...' : 'Stake locked: <b>' + (ENTRY[type] | 0) + ' gold</b>. The Scholar is dealing your first challenge...'));
   const deal = el('div', 'kc-dealing');
   deal.innerHTML = '<span></span><span></span><span></span>';
   panel.appendChild(deal);
@@ -282,7 +284,7 @@ function proceed() {
 }
 
 // ---- message handlers (relayed from networking.mjs) ----
-function onStarted(m) { busy = false; shift = { id: m.shiftId, type: m.shiftType, planned: m.planned | 0 }; }
+function onStarted(m) { busy = false; introAvailable = false; shift = { id: m.shiftId, type: m.shiftType, planned: m.planned | 0, intro: !!m.intro }; }
 function onCase(m) {
   busy = false;
   if (awaitingContinue) { buffered = m; const c = panel && panel.querySelector('.kc-continue'); if (c) c.disabled = false; }
@@ -338,8 +340,8 @@ function onReport(m) {
   panel.appendChild(el('h2', 'kc-title', 'TABLE RESULT'));
   const t = m.totals || {};
   const delta = (m.payout | 0) - (m.entry | 0);
-  tavernFx(delta >= 0 ? 'win' : 'loss', { delta, payout: m.payout | 0, entry: m.entry | 0 });
-  panel.appendChild(el('p', 'kc-note', 'Stake <b>' + (m.entry | 0) + '</b> · Payout <b>' + (m.payout | 0) + '</b> · Net <b class="' + (delta >= 0 ? 'kc-up' : 'kc-down') + '">' + (delta >= 0 ? '+' : '') + delta + ' gold</b>'));
+  if (!m.intro) tavernFx(delta >= 0 ? 'win' : 'loss', { delta, payout: m.payout | 0, entry: m.entry | 0 });
+  panel.appendChild(el('p', 'kc-note', m.intro ? 'Practice round complete · no gold staked or lost.' : 'Stake <b>' + (m.entry | 0) + '</b> · Payout <b>' + (m.payout | 0) + '</b> · Net <b class="' + (delta >= 0 ? 'kc-up' : 'kc-down') + '">' + (delta >= 0 ? '+' : '') + delta + ' gold</b>'));
   const stats = el('div', 'kc-stats');
   const rows = [
     ['Cases', t.completedCases | 0], ['First-try', t.firstAttemptCorrect | 0], ['Independent', t.independentCorrect | 0],
@@ -351,7 +353,7 @@ function onReport(m) {
   const again = el('button', 'kc-btn', 'PLAY AGAIN'); again.type = 'button'; again.onclick = () => renderChooser();
   const leave = el('button', 'kc-btn', 'LEAVE'); leave.type = 'button'; leave.onclick = () => hide();
   row.appendChild(again); row.appendChild(leave); panel.appendChild(row);
-  if (delta >= 0) sfx('level');
+  if (!m.intro && delta >= 0) sfx('level');
 }
 function onReject(m) {
   busy = false;
@@ -505,6 +507,8 @@ const STYLE = `
 globalThis.BlockcraftKnowledgeChallenge = Object.freeze({
   open, close, start,
   get active() { return !!shift; },
+  get introAvailable() { return introAvailable; },
+  setIntroAvailable(value) { introAvailable = !!value; },
   handle(type, m) {
     const map = { kcShiftStarted: onStarted, kcCase: onCase, kcResult: onResult, kcCorrective: onCorrective, kcCorrectiveResult: onCorrectiveResult, kcShiftReport: onReport, kcReject: onReject, kcTrace: onTrace };
     (map[type] || function () {})(m);

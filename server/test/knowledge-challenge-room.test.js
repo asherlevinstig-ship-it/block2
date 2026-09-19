@@ -32,6 +32,7 @@ function fakeStore(over) {
 }
 
 function makeRoom(store, prof) {
+  if(prof.scholarIntroUsed == null)prof.scholarIntroUsed=true;
   const room = Object.create(mixin);
   room.initKnowledgeChallengeState();
   room.kcStore = () => store;
@@ -47,6 +48,38 @@ function makeRoom(store, prof) {
   room.broadcast = (type, msg) => { room._broadcasts.push({ type, msg }); };
   return room;
 }
+
+test('first Quick round is free, no-loss practice and paid rounds follow',async()=>{
+  const store=fakeStore(),prof={gold:0,scholarIntroUsed:false},room=makeRoom(store,prof),client=makeClient();
+  await room.handleKcStart(client,{shiftType:'quick'});
+  assert.equal(prof.gold,0);
+  assert.equal(prof.scholarIntroUsed,true);
+  assert.equal(store._calls.startShift[0].entryCostGold,0);
+  assert.equal(client.sent.find(s=>s.type==='kcShiftStarted').msg.intro,true);
+  assert.equal(room._econ.length,0);
+  await room.kcEndShift(client,'ended');
+  assert.equal(client.sent.find(s=>s.type==='kcShiftReport').msg.payout,0);
+  assert.equal(prof.gold,0);
+  await room.handleKcStart(client,{shiftType:'quick'});
+  assert.equal(client.sent.at(-1).type,'kcReject');
+  assert.equal(client.sent.at(-1).msg.reason,'gold');
+});
+
+test('cancelled introductory start does not consume the free round',async()=>{
+  let enterStart,finishStart;
+  const entered=new Promise(resolve=>{enterStart=resolve;});
+  const pending=new Promise(resolve=>{finishStart=resolve;});
+  const store=fakeStore({async startShift(){enterStart();return pending;}});
+  const prof={gold:0,scholarIntroUsed:false},room=makeRoom(store,prof),client=makeClient();
+  const attempt=room.handleKcStart(client,{shiftType:'quick'});
+  await entered;
+  room.kcAbandon(client);
+  finishStart({id:77});
+  await attempt;
+  assert.equal(prof.scholarIntroUsed,false);
+  assert.equal(prof.gold,0);
+  assert.equal(room.kcShifts.has(client.sessionId),false);
+});
 
 function makeClient() {
   const sent = [];

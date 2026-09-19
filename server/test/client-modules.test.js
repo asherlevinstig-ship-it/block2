@@ -2664,7 +2664,7 @@ test('retired level two job chooser cannot open',()=>{
   assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
   assert.match(combat,/function openTownTutorialsUI\(\)/);
   assert.match(combat,/openQWin\('management'\)/);
-  assert.match(combat,/Completed tutorials can be replayed/);
+  assert.match(combat,/FEATURED ADVENTURES/);
   assert.match(combat,/if\(uiShellState\.qOpen\) closeQWin\(true\)/);
   assert.match(combat,/filter\(c=>force\|\|!townTutorialStepDone\(c\[0\]\)\)/);
   assert.match(combat,/completed\?'REPLAY':'BEGIN'/);
@@ -2970,7 +2970,8 @@ test('first town arrival stages the fountain and Question Portal',()=>{
   assert.match(combat,/title:'Return Portal',small:'Travel back to Town of Beginnings'/);
   assert.match(combat,/if\(nearQuestionHallTownPortal\(\)\)\{ if\(typeof exitQuestionRoomToTown==='function'\)exitQuestionRoomToTown\(\); return; \}/);
   assert.match(combat,/shouldShowFirstTownArrivalChoice,\s*\n {2}showFirstTownArrivalChoice,/);
-  assert.match(world,/const TOWN_ARRIVAL_KEY='bc_town_arrival_v1'/);
+  assert.match(world,/createTownArrivalProgress\(\{/);
+  assert.match(world,/accountId:\(\)=>globalThis\.AUTH_UI/);
   assert.match(world,/stage==='fountain'.*Grand Fountain/);
   assert.doesNotMatch(world,/Tamsin at the Job Board/);
   assert.match(world,/stage==='portal'.*Question Portal/);
@@ -2999,6 +3000,60 @@ test('first town arrival stages the fountain and Question Portal',()=>{
   assert.match(networking,/dimensionsApi\.enterQuestionRoom\(\{\.\.\.m,resume:true,serverSynced:true\}\)/);
   assert.match(dimensions,/announceArrivalTitle\('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare'\)/);
   assert.match(dimensions,/enterQuestionRoom,\s*\n {2}repairQuestionRoomPosition,\s*\n {2}exitQuestionRoom,\s*\n {2}exitQuestionRoomToTown,/);
+});
+
+test('town arrival progress is isolated by account on shared browsers',async()=>{
+  const {createTownArrivalProgress}=await import(pathToFileURL(path.join(__dirname,'../../client/js/town-arrival-progress.mjs')).href);
+  const entries=new Map([['bc_town_arrival_v1','done']]);
+  const browserStorage={getItem:key=>entries.get(key)||null,setItem:(key,value)=>entries.set(key,value)};
+  let account='student_1',level=1;
+  const progress=createTownArrivalProgress({accountId:()=>account,level:()=>level,storage:()=>browserStorage});
+  assert.equal(progress.stage(),'fountain','legacy browser-wide completion must not skip a new student');
+  progress.set('portal');
+  account='student_2';
+  assert.equal(progress.stage(),'fountain','another student starts their own arrival route');
+  progress.set('done');
+  account='student_1';
+  assert.equal(progress.stage(),'portal','the first student resumes their own route');
+  assert.equal(entries.get('bc_town_arrival_v2:student_1'),'portal');
+  assert.equal(entries.get('bc_town_arrival_v2:student_2'),'done');
+  account='student_3';level=2;
+  assert.equal(progress.stage(),'done','an established hunter does not repeat the introduction');
+  level=1;
+  assert.equal(progress.stage(),'fountain','an unsaved fallback responds to profile hydration');
+  account='';
+  progress.set('done');
+  account='student_4';
+  assert.equal(progress.stage(),'fountain','anonymous progress cannot carry into a login');
+});
+
+test('town activity hub features the five major activities without another HUD stack',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'../../client/js/combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'../../client/styles.css'),'utf8');
+  for(const title of ['SCHOLAR TABLE','DUNGEON GATES','SERVER EVENTS','PLAY TOGETHER','LEGENDARY WEAPONS'])assert.match(combat,new RegExp("title:'"+title+"'"));
+  assert.match(combat,/function renderFeaturedTownActivities\(\)/);
+  assert.match(combat,/renderFeaturedTownActivities\(\);/);
+  assert.match(combat,/eventOpen&&!event\.joined\?'events':tokens\?'legendary':freeTable\?'tavern':gateReady\?'gates'/);
+  assert.match(combat,/\['PREVIEW FORGE',\(\)=>menus&&menus\.previewLegendary&&menus\.previewLegendary\(\)\]/);
+  assert.match(combat,/const featuredSteps=new Set\(\['activity_tavern_game','activity_gate','activity_legendary','activity_social'\]\)/);
+  assert.match(combat,/target:\(\)=>\{const host=villagers\.find\(v=>v\.role==='tavern_scholar'/);
+  assert.match(combat,/small:'Enter dungeon · O → Activities for prep or team queue'/);
+  assert.match(combat,/Forge Legendary weapons · /);
+  assert.match(combat,/Scholar Table · first Quick round free/);
+  assert.match(combat,/Learn friends, teams and dungeon queues/);
+  assert.match(menus,/function openLegendaryCraftUI\(previewOnly=false\)/);
+  assert.match(menus,/previewOnly \|\| tokens<craft\.cost \|\| ownedArmor/);
+  assert.match(menus,/qBtn\('EXPLORE ACTIVITIES',\(\)=>openTownTutorialsUI\(\)\)/);
+  assert.match(menus,/qBtn\('TOWN ACTIVITIES',\(\)=>openTownTutorialsUI\(\)\)/);
+  assert.match(styles,/\.town-feature-grid\{display:grid/);
+});
+
+test('the Scholar Table introductory round is persisted per profile',()=>{
+  const {defaultProfile,sanitizeProfile}=require('../store');
+  assert.equal(defaultProfile().scholarIntroUsed,false);
+  assert.equal(sanitizeProfile({...defaultProfile(),scholarIntroUsed:true}).scholarIntroUsed,true);
+  assert.equal(sanitizeProfile({...defaultProfile(),scholarIntroUsed:false}).scholarIntroUsed,false);
 });
 
 test('fresh server joins restore the persisted Question Hall dimension',()=>{
@@ -3389,7 +3444,7 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   for(const activity of ['activity_farm','activity_cook','activity_smith','activity_meditate','activity_guild','activity_social','activity_question_portal','activity_taming_portal','activity_fishing_portal','activity_dragons','activity_recall','activity_market','activity_outfitter']){
     assert.match(combat,new RegExp(`step:'${activity}'`));
   }
-  assert.match(combat,/WHAT CAN I DO IN TOWN\?/);
+  assert.match(combat,/MORE TOWN ACTIVITIES/);
   assert.match(combat,/const activity=TOWN_ACTIVITY_GUIDES\.find\(guide=>guide\.step===step\)/);
   assert.match(combat,/lastActivityGroup=''/);
   assert.match(combat,/activity\.group!==lastActivityGroup/);
@@ -3397,8 +3452,8 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(world,/townGuidanceActive&&String\(townGuidanceStep\|\|''\)\.startsWith\('activity_'\)/);
   assert.match(world,/kind:townGuidanceStep,color:0x7dd3fc,target:info\.target,route:guidanceRouteToTarget\(info\.target\)/);
   assert.ok(world.indexOf("townGuidanceActive&&String(townGuidanceStep||'').startsWith('activity_')")<world.indexOf('const trackerTarget=trackerObjectiveGuidanceInfo();'));
-  assert.match(menus,/Find work, guilds, friends, portals, dragons, Recall practice, and vendors/);
-  assert.match(menus,/WHAT CAN I DO IN TOWN\?/);
+  assert.match(menus,/Try the Scholar Table, find a Gate, join an event or team, and work toward a Legendary weapon/);
+  assert.match(menus,/EXPLORE ACTIVITIES/);
   assert.match(menus,/function openNpcDialogueShell\(v,context=''\)/);
   assert.match(menus,/npc-dialogue-shell/);
   assert.match(menus,/npc-dialogue-portrait/);

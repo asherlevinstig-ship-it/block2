@@ -11,6 +11,7 @@ import {createPrng,varyColor,paintAtlasTile} from './world-textures.mjs';
 import {createParticleBudget} from './performance-budget.mjs';
 import {buildChunkLightField,sampleChunkLight} from './voxel-lighting.mjs';
 import {CUTSCENES_ENABLED} from './feature-flags.mjs';
+import {createTownArrivalProgress} from './town-arrival-progress.mjs';
 import {REWARD_TIERS,rewardMomentCopy,mergeRewardMoment} from './reward-notification-policy.mjs';
 
 /* Blockcraft world runtime module. World data, generation, rendering, entities, and shared game foundations.
@@ -5810,19 +5811,16 @@ Object.defineProperty(globalThis,'BlockcraftGuideObjective',{value:Object.freeze
   clear:()=>{manualGuidanceTarget=null;return true;},
   current:()=>manualGuidanceTarget?{...manualGuidanceTarget}:null,
 }),configurable:true});
-const TOWN_ARRIVAL_KEY='bc_town_arrival_v1';
-let townArrivalStageCache='';
+const townArrivalProgress=createTownArrivalProgress({
+  accountId:()=>globalThis.AUTH_UI&&globalThis.AUTH_UI.state&&globalThis.AUTH_UI.state.account&&globalThis.AUTH_UI.state.account.id,
+  level:()=>S&&S.lvl,
+  storage:()=>localStorage,
+});
 function townArrivalStage(){
-  if(townArrivalStageCache)return townArrivalStageCache;
-  try{townArrivalStageCache=localStorage.getItem(TOWN_ARRIVAL_KEY)||'';}catch(e){}
-  if(townArrivalStageCache==='tamsin')townArrivalStageCache='portal';
-  if(!['fountain','portal','done'].includes(townArrivalStageCache))
-    townArrivalStageCache=S&&S.lvl>1?'done':'fountain';
-  return townArrivalStageCache;
+  return townArrivalProgress.stage();
 }
 function setTownArrivalStage(stage,announce=''){
-  townArrivalStageCache=stage;
-  try{localStorage.setItem(TOWN_ARRIVAL_KEY,stage);}catch(e){}
+  townArrivalProgress.set(stage);
   if(announce)sysMsg('<b>Town guide:</b> '+announce);
 }
 function townArrivalObjective(){
@@ -12231,13 +12229,13 @@ function buildProps(){
   tavernPatron('Noll Brisk','Miner',80.4,74.4,-Math.PI*.8,'#8a5a32','#6b4524',
     'If Tobin asks, I was never here before noon.');
   tavernPatron('Iris Quill','Scholar Table Host',79.6,87.1,0,'#24415a','#17283a',
-    'Gold on the table, mind on the question. Greta calls it showing off; I call it revision with consequences.');
+    'Your first Quick round is free practice. After that, the stake is shown before you play.');
   tavernPatron('Oren Chalk','Scholar Table Host',76.0,86.8,.18,'#1f4a44','#15332f',
-    'Small stake, sharp answer, warm purse. Sit if you dare.');
+    'Try the free Quick round first. Paid rounds are always optional.');
   tavernPatron('Saffi Ledger','Scholar Table Host',83.0,86.8,-.18,'#4a345f','#2f213d',
-    'A streak is not luck if your brain can prove it twice.');
+    'A streak is not luck if your brain can prove it twice. Your first Quick round is free.');
   tavernPatron('Bryn Tally','Scholar Table Host',76.9,77.0,Math.PI*.08,'#2b415f','#1b2a3f',
-    'Main room table is open. Put down gold and make the whole tavern believe you.');
+    'Main room table is open. Your first Quick round is free practice.');
   for(const [back,homeX,homeZ] of [[4,79,87],[3,76,87],[2,83,87],[1,77,77]]){
     const host=villagers[villagers.length-back];
     if(host){

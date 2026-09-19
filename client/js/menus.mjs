@@ -4729,7 +4729,7 @@ function openTownMapUI(){
   const canvas=document.createElement('canvas');canvas.className='town-map-canvas';canvas.width=760;canvas.height=540;panel.appendChild(canvas);
   const legend=document.createElement('div');legend.className='town-map-legend';legend.innerHTML='<span><b></b>You</span><span><b class="gold"></b>Buildings</span><span><b class="green"></b>NPCs / services</span>';panel.appendChild(legend);
   qpanelEl.appendChild(panel);
-  const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('REFRESH',()=>drawTownMapCanvas(canvas)));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+  const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('TOWN ACTIVITIES',()=>openTownTutorialsUI()));row.appendChild(qBtn('REFRESH',()=>drawTownMapCanvas(canvas)));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
   cancelAnimationFrame(townMapAnimation);
   const tick=()=>{if(!canvas.isConnected)return;drawTownMapCanvas(canvas);townMapAnimation=requestAnimationFrame(tick);};
   tick();
@@ -4890,11 +4890,10 @@ function openQuestLogUI(){
   const h=document.createElement('h2'); h.textContent='QUEST LOG'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='PRESS O TO OPEN · ESC TO CLOSE'; qpanelEl.appendChild(sub);
   const p=document.createElement('p'); p.className='qtext'; p.textContent=earlyJourneyActive()?'Follow Mara: gather → craft → fight → upgrade → first Gate. Your current objective is below.':'All active objectives are grouped by source so you know what kind of work you are doing and where to go next.'; qpanelEl.appendChild(p);
-  if(dim==='overworld'&&player&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))){
-    const town=document.createElement('div');town.className='cartographer-briefing fresh';
-    town.innerHTML='<small>TOWN OF BEGINNINGS</small><p>Want a change of pace? Find work, guilds, friends, portals, dragons, Recall practice, and vendors.</p>';
-    town.appendChild(qBtn('WHAT CAN I DO IN TOWN?',()=>openTownTutorialsUI()));qpanelEl.appendChild(town);
-  }
+  const inTown=dim==='overworld'&&player&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
+  const town=document.createElement('div');town.className='cartographer-briefing fresh';
+  town.innerHTML='<small>FEATURED ADVENTURES</small><p>'+(inTown?'Try the Scholar Table, find a Gate, join an event or team, and work toward a Legendary weapon.':'Plan your next town visit: Gates, server events, social play, the Scholar Table, and the Aegis Forge.')+'</p>';
+  town.appendChild(qBtn('EXPLORE ACTIVITIES',()=>openTownTutorialsUI()));qpanelEl.appendChild(town);
   const journey=document.createElement('div');journey.className='quest-rank-summary';
   const rankProgress=currentRankProgress(),rank=localPlayerHunterRankIndex();
   journey.innerHTML='<span><small>HUNTER JOURNEY</small><b>'+hunterRankLetter(rank)+'-Rank · '+rankJourneyLevelText(rank)+'</b></span><span>'+(rankProgress.maxRank?'S-Rank achieved':rankProgress.remaining.toLocaleString('en-US')+' XP to '+hunterRankLetter(rankProgress.nextRank)+'-Rank')+'</span>';
@@ -7212,7 +7211,7 @@ function openGuardianUI(){
   row.appendChild(qBtn('CRAFT LEGENDARY ITEM', ()=>openLegendaryCraftUI()));
   row.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }
-function openLegendaryCraftUI(){
+function openLegendaryCraftUI(previewOnly=false){
   openQWin('commerce');
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent='LEGENDARY FORGE'; qpanelEl.appendChild(h);
@@ -7221,7 +7220,7 @@ function openLegendaryCraftUI(){
   sub.innerHTML='YOUR TOKENS: <b style="color:#ffd24a">'+tokens+'</b> - ONE ITEM PER CRAFT';
   qpanelEl.appendChild(sub);
   const info=document.createElement('p'); info.className='qtext';
-  info.innerHTML='Choose one legendary item to forge. The server consumes the listed tokens and creates <b>one</b> item at a time.';
+  info.innerHTML=previewOnly?'Preview the weapons, powers, and token costs here. Visit the Aegis Guardian to forge an item.':'Choose one legendary item to forge. The server consumes the listed tokens and creates <b>one</b> item at a time.';
   qpanelEl.appendChild(info);
   for(const craft of LEGENDARY_CRAFTS){
     const id=craft.id, ownedArmor=id===I.LEGEND_ARMOR && equippedArmor();
@@ -7231,14 +7230,15 @@ function openLegendaryCraftUI(){
     nm.innerHTML=escHTML(ITEMS[id].name)+'<br><small style="color:#b8985e">'+escHTML(craft.hint)+'</small>';
     r.appendChild(nm);
     const ct=document.createElement('b'); ct.textContent=craft.cost+' LT'; r.appendChild(ct);
-    r.appendChild(qBtn(ownedArmor?'EQUIPPED':'FORGE', ()=>{
+    r.appendChild(qBtn(previewOnly?'VIEW ONLY':ownedArmor?'EQUIPPED':'FORGE', ()=>{
+      if(previewOnly)return;
       if(ownedArmor){ sysMsg('<b>Legendary Aegis Armor</b> is already equipped'); return; }
       requestLegendaryCraft(id, craft.cost);
-    }, tokens<craft.cost || ownedArmor));
+    }, previewOnly || tokens<craft.cost || ownedArmor));
     qpanelEl.appendChild(r);
   }
   const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px';
-  row.appendChild(qBtn('BACK', ()=>openGuardianUI(), true));
+  row.appendChild(qBtn(previewOnly?'BACK TO ACTIVITIES':'BACK', ()=>previewOnly?openTownTutorialsUI():openGuardianUI(), true));
   row.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
   qpanelEl.appendChild(row);
 }
@@ -9100,6 +9100,7 @@ gameContext.registerModule('menus', Object.freeze({
   openGuildHall:openGuildHallUI,
   openRegionalContracts:openRegionalContractsUI,
   openGuardian:openGuardianUI,
+  previewLegendary:()=>openLegendaryCraftUI(true),
   openGatePrep:openGatePrepUI,
   applyElderheartExpedition,
   applyAncientCityRun,
