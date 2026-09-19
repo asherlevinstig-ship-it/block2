@@ -2704,7 +2704,7 @@ scene.add(dragonShrineVisual);
 globalThis.BlockcraftDragonShrineWorld={
   site:dragonShrineSite,
   nearby:()=>dim==='overworld'&&Math.hypot(player.pos.x-dragonShrineSite.x,player.pos.z-dragonShrineSite.z)<4.5&&Math.abs(player.pos.y-dragonShrineSite.y)<4,
-  tick(now){dragonShrineVisual.visible=dim==='overworld';shrineEgg.visible=!(quest&&quest.title==='First Bonded Mount'&&quest.shrineEggClaimed);shrineEgg.rotation.y=now*.0007;}
+  tick(now){dragonShrineVisual.visible=dim==='overworld';shrineEgg.visible=!dragonUnlocks.length&&!(quest&&quest.title==='First Bonded Mount'&&quest.shrineEggClaimed);shrineEgg.rotation.y=now*.0007;}
 };
 const townGroup = new THREE.Group();   // overworld-only visuals, hidden inside dungeons
 scene.add(townGroup);
@@ -3861,7 +3861,7 @@ function updateLandMinimap(force=true){
   for(const s of ancientCities)if(discoveredOrHinted(s))marker(s,'#7dd3fc',3);
   const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8',rain_bloom:'#67d6ff',storm_crystal:'#b79cff',sun_dial:'#ffd24a'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);
-  if(quest&&quest.title==='First Bonded Mount'&&!quest.shrineEggClaimed&&!questDone())marker({...dragonShrineSite,id:'dragon_shrine'},'#ff8647',4,true);
+  if(highestGateRankCleared>=0&&!dragonUnlocks.length&&!(quest&&quest.title==='First Bonded Mount'&&quest.shrineEggClaimed))marker({...dragonShrineSite,id:'dragon_shrine'},'#ff8647',4,true);
   if(mapUtility&&miniMap&&!worldMap&&!claimMode){
     for(const s of regionalLandmarks){
       if(s.type==='cave')continue;

@@ -6766,6 +6766,38 @@ class GameRoom extends Room {
       priority: 16,
       lifecycle: lifecycleFor('active'),
     });
+    const hasDragon = Array.isArray(prof.mountUnlocks) && prof.mountUnlocks.some(kind => String(kind).startsWith('dragon:'));
+    const firstDragon = prof.firstDragonJourney && typeof prof.firstDragonJourney === 'object' ? prof.firstDragonJourney : {};
+    if ((prof.highestGateRankCleared | 0) >= 0 && !hasDragon) {
+      const eggClaimed = firstDragon.shrineEggClaimed === true;
+      const guards = Math.max(0, Math.min(3, firstDragon.shrineGuardKills | 0));
+      add({
+        id: 'companion:first_dragon',
+        source: 'companion',
+        category: 'companion',
+        questType: 'mount',
+        title: 'Your First Dragon',
+        status: 'active',
+        text: eggClaimed
+          ? 'Place the Egg Insulator anywhere, select the Dragon Egg and press G. After 30 seconds press G again to hatch it.'
+          : `Reach Emberwatch Shrine, defeat its guardians (${guards}/3), then press G at the egg podium. The podium awards both the egg and its insulator.`,
+        hudText: eggClaimed
+          ? 'Place the Egg Insulator, select the egg, press G, then hatch it when READY.'
+          : `Emberwatch Shrine · Guardians ${guards}/3 · claim the hatching kit at the podium.`,
+        location: eggClaimed ? 'Any safe place in the overworld' : 'Emberwatch Shrine',
+        action: eggClaimed ? null : { type: 'follow_marker', label: 'FIND EMBERWATCH' },
+        checklist: [
+          { id: 'gate', label: 'Complete the first E-rank Gate', done: true, hint: 'This unlocks the dragon journey.' },
+          { id: 'shrine', label: 'Defeat 3 Emberwatch guardians', done: guards >= 3, hint: 'Follow the orange shrine marker beyond the north gate.' },
+          { id: 'egg', label: 'Claim the egg and Egg Insulator', done: eggClaimed, hint: 'Press G at the shrine podium after the guardians fall.' },
+          { id: 'hatch', label: 'Hatch and bond your dragon', done: false, hint: 'Place the Insulator anywhere; use the egg on it and return after 30 seconds.' },
+        ],
+        progress: { current: eggClaimed ? 3 : Math.min(3, guards), required: 4 },
+        reward: { note: 'Permanent dragon mount' },
+        priority: 12,
+        lifecycle: lifecycleFor('active', firstDragon),
+      });
+    }
     if (!prof.noobsGuildJoinRewardClaimed && !playerGuild) add({
       id: 'fellowship:join_noobs',
       source: 'fellowship',

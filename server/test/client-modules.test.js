@@ -2002,6 +2002,22 @@ test('weapons share E-to-Legendary ranks and Common-to-Mythic rarity rules', () 
   assert.equal(sharedGear.WEAPON_IDENTITY.stagger.bossMoveMultiplier,.75);
 });
 
+test('Shard Pedestal only attunes shards while the Aegis Guardian owns Legendary forging', () => {
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  const shardStart=menus.indexOf('function openShardUI()');
+  const shardEnd=menus.indexOf('// ---------------- mining:',shardStart);
+  const shardUi=menus.slice(shardStart,shardEnd);
+  const guardianStart=menus.indexOf('function openGuardianUI()');
+  const guardianEnd=menus.indexOf('function openLegendaryCraftUI()',guardianStart);
+  const guardianUi=menus.slice(guardianStart,guardianEnd);
+  assert.ok(shardStart>=0&&shardEnd>shardStart);
+  assert.match(shardUi,/ATTUNEMENT ONLY/);
+  assert.match(shardUi,/this pedestal attunes Dungeon Shards; it does not forge equipment/i);
+  assert.doesNotMatch(shardUi,/removeItems\(I\.LEGEND_TOKEN|forgeLegendaryWeapon|qBtn\('FORGE'/);
+  assert.match(guardianUi,/CRAFT LEGENDARY ITEM/);
+  assert.match(guardianUi,/AEGIS FORGE - LEGENDARY CRAFTING/);
+});
+
 test('gear reward presentation compares authoritative drops and labels their source', async()=>{
   const {compareGearReward,gearRewardSource}=await clientModule('gear-rewards.mjs');
   const item={tool:{tier:3,cls:'sword',dur:480}};
@@ -2615,7 +2631,6 @@ test('retired level two job chooser cannot open',()=>{
   assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
   assert.match(combat,/function openTownTutorialsUI\(\)/);
   assert.match(combat,/openQWin\('management'\)/);
-  assert.match(combat,/setTownTutorialChoice\('menu'\)/);
   assert.match(combat,/Completed tutorials can be replayed/);
   assert.match(combat,/if\(uiShellState\.qOpen\) closeQWin\(true\)/);
   assert.match(combat,/filter\(c=>force\|\|!townTutorialStepDone\(c\[0\]\)\)/);
@@ -3336,6 +3351,13 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(combat,/Walk into the pillar of light/);
   assert.match(combat,/FIND LIGHT/);
   assert.match(combat,/Follow the pillar of light to the Guild Hall notice board/);
+  assert.doesNotMatch(combat,/JOB PATHS/);
+  for(const activity of ['activity_farm','activity_cook','activity_smith','activity_meditate']){
+    assert.match(combat,new RegExp(`step:'${activity}'`));
+  }
+  assert.match(combat,/WHAT CAN I DO IN TOWN\?/);
+  assert.match(combat,/const activity=TOWN_ACTIVITY_GUIDES\.find\(guide=>guide\.step===step\)/);
+  assert.match(menus,/WHAT CAN I DO IN TOWN\?/);
   assert.match(menus,/function openNpcDialogueShell\(v,context=''\)/);
   assert.match(menus,/npc-dialogue-shell/);
   assert.match(menus,/npc-dialogue-portrait/);
@@ -3754,6 +3776,11 @@ test('fellowship hall exposes renown and project completion controls',()=>{
   assert.match(menus,/function appendFellowshipOverview\(mine,canModerate\)/);
   assert.match(menus,/function appendFellowshipRenownSources\(mine\)/);
   assert.match(menus,/function appendFellowshipWeeklyRewards\(mine\)/);
+  assert.match(menus,/function appendGuildHallWelcome\(mine\)/);
+  assert.match(menus,/FIRST VISIT · FELLOWSHIPS MADE SIMPLE/);
+  assert.match(menus,/RECOMMENDED · /);
+  assert.match(menus,/JOIN · \+'/);
+  assert.match(menus,/if\(!focus&&!guildHallWelcomeSeen\(\)\)\{appendGuildHallWelcome\(mine\);return;\}/);
   assert.match(menus,/FELLOWSHIP OVERVIEW/);
   assert.match(menus,/WEEKLY FELLOWSHIP REWARDS/);
   assert.match(menus,/Weekly rewards are <b>per member<\/b>/);

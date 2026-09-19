@@ -23,11 +23,11 @@ test('shrine clears headroom and puts a podium on solid ground',()=>{
 function harness(){
   const source=fs.readFileSync(require.resolve('../rooms/dragons.mixin.js'),'utf8');
   const methods=source.slice(source.indexOf('  dragonShrineQuest('),source.indexOf('  // Dragon incubation'));
-  const Room=vm.runInNewContext('(class Room {'+methods+'})',{DRAGON_SHRINE:shrine.site,I:{DRAGON_EGG:185},Mob:class{},Math});
+  const Room=vm.runInNewContext('(class Room {'+methods+'})',{DRAGON_SHRINE:shrine.site,I:{DRAGON_EGG:185},W:{B:{EGG_INSULATOR:34}},Mob:class{},Math,Date});
   const messages=[], client={sessionId:'me',send:(type,data)=>messages.push({type,data})};
-  const prof={activeNpcQuest:{giver:'Mara Vale',title:'First Bonded Mount',shrineGuardKills:0},inv:[],mountUnlocks:[]};
+  const prof={activeNpcQuest:{giver:'Mara Vale',title:'First Bonded Mount',shrineGuardKills:0},firstDragonJourney:null,highestGateRankCleared:0,npcQuestChains:{'Mara Vale':3},inv:[],mountUnlocks:[]};
   const rec={token:'token',prof}, room=new Room();
-  Object.assign(room,{clients:[client],state:{players:new Map([['me',{dim:'overworld',dgn:'',x:shrine.site.x,z:shrine.site.z,y:shrine.site.y}]]),mobs:new Map()},mobMeta:{},mobSeq:0,dirtyPlayers:new Set(),profileFor:()=>rec,isPlayerAlive:()=>true,rateLimited:()=>false,freshMeta:()=>({}),addRewardItem:(p,id)=>{p.inv.push({id,count:1});return 0;},syncPlayerProfile(){}});
+  Object.assign(room,{clients:[client],state:{players:new Map([['me',{dim:'overworld',dgn:'',x:shrine.site.x,z:shrine.site.z,y:shrine.site.y}]]),mobs:new Map()},mobMeta:{},mobSeq:0,dirtyPlayers:new Set(),profileFor:()=>rec,isPlayerAlive:()=>true,rateLimited:()=>false,freshMeta:()=>({}),countItem:(p,id)=>(p.inv||[]).filter(s=>s&&s.id===id).reduce((n,s)=>n+s.count,0),addRewardItem:(p,id)=>{p.inv.push({id,count:1});return 0;},syncPlayerProfile(){}});
   return {room,client,prof,messages};
 }
 
@@ -38,11 +38,23 @@ test('three guardians gate the egg and claim is one-time',()=>{
   assert.equal(messages.at(-1).data.reason,'guards');
   for(const [id] of room.state.mobs){const meta=room.mobMeta[id];room.state.mobs.delete(id);delete room.mobMeta[id];room.onDragonShrineGuardKilled(meta);}
   room.handleClaimDragonShrineEgg(client);
-  assert.equal(prof.inv.length,1);
+  assert.equal(prof.inv.length,2);
   assert.equal(prof.activeNpcQuest.shrineEggClaimed,true);
   room.handleClaimDragonShrineEgg(client);
-  assert.equal(prof.inv.length,1);
+  assert.equal(prof.inv.length,2);
   assert.equal(messages.at(-1).data.reason,'claimed');
+});
+
+test('first Gate opens Emberwatch without waiting for Mara companion quests',()=>{
+  const {room,client,prof,messages}=harness();
+  prof.activeNpcQuest=null;
+  room.tickDragonShrine();
+  assert.equal(room.state.mobs.size,3);
+  for(const [id] of room.state.mobs){const meta=room.mobMeta[id];room.state.mobs.delete(id);delete room.mobMeta[id];room.onDragonShrineGuardKilled(meta);}
+  room.handleClaimDragonShrineEgg(client);
+  assert.equal(prof.firstDragonJourney.shrineEggClaimed,true);
+  assert.deepEqual(prof.inv.map(slot=>slot.id),[185,34]);
+  assert.equal(messages.some(message=>message.type==='dragonShrineResult'&&message.data.stage==='claimed'),true);
 });
 
 test('full inventory leaves egg claim retryable and saved kills avoid repeat fights',()=>{

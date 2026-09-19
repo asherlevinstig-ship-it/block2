@@ -407,6 +407,7 @@ function defaultProfile(name) {
     maraRoadReadyCrafted: false,
     npcQuestChains: {},
     activeNpcQuest: null,
+    firstDragonJourney: null,
     questHistory: [],
     aegisTrialReady: false,
     aegisTrial: null,
@@ -1091,6 +1092,11 @@ function sanitizeProfile(p) {
   out.maraRoadReadyCrafted = p.maraRoadReadyCrafted === true;
   out.npcQuestChains = sanitizeNpcQuestChains(p.npcQuestChains);
   out.activeNpcQuest = sanitizeActiveNpcQuest(p.activeNpcQuest);
+  out.firstDragonJourney = p.firstDragonJourney && typeof p.firstDragonJourney === 'object' ? {
+    shrineGuardKills: clampI(p.firstDragonJourney.shrineGuardKills, 0, 3),
+    shrineEggClaimed: p.firstDragonJourney.shrineEggClaimed === true,
+    startedAt: clampI(p.firstDragonJourney.startedAt, 0, Number.MAX_SAFE_INTEGER),
+  } : null;
   out.questHistory = sanitizeQuestHistory(p.questHistory);
   out.aegisTrialReady = p.aegisTrialReady === true;
   out.aegisTrial = sanitizeAegisTrial(p.aegisTrial);

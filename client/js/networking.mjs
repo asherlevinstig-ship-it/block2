@@ -2985,9 +2985,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('blacksmithReject', m=>blacksmithServiceRejected(m));
     room.onMessage('hatchDragonReject', m=>dragonHatchRejected(m));
     room.onMessage('dragonShrineResult',m=>{
-      if(m.ok&&m.stage==='claimed'){sysMsg('<b>Dragon egg recovered!</b> Place the Egg Insulator, select the egg and press <b>G</b> on it. After 30 seconds press G again to hatch.');eventFeed('[Dragon]','Emberwatch egg recovered.',{key:'shrine:claimed',cooldown:0});}
+      if(m.ok&&m.stage==='claimed'){sysMsg('<b>Dragon hatching kit recovered!</b> '+(m.grantedInsulator?'You received an Egg Insulator and Dragon Egg. ':'')+'Place the Egg Insulator anywhere, select the egg and press <b>G</b> on it. After 30 seconds press G again to hatch.');eventFeed('[Dragon]','Emberwatch egg recovered.',{key:'shrine:claimed',cooldown:0});}
       else if(m.ok&&m.stage==='guard')showName(m.remaining?m.remaining+' shrine guardians remain':'Guardians defeated · press G at the egg podium');
-      else sysMsg(m.reason==='guards'?'Defeat all 3 shrine guardians before claiming the egg.':m.reason==='full'?'Make room in your inventory for the egg.':m.reason==='claimed'?'You already recovered this egg.':'Accept First Bonded Mount from Mara and stand beside the shrine podium.');
+      else sysMsg(m.reason==='guards'?'Defeat all 3 shrine guardians before claiming the egg.':m.reason==='full'?'Make two inventory spaces for the egg and its insulator.':m.reason==='claimed'?'You already recovered this egg.':'Complete your first E-rank Gate, then stand beside the Emberwatch podium.');
     });
     room.onMessage('portableInsulatorResult',m=>{
       if(room!==NET.room)return;

@@ -3990,6 +3990,25 @@ test('the first-pet objective starts after Road Ready without renumbering Mara q
   assert.equal(objective, undefined);
 });
 
+test('the first Gate opens a persistent dragon journey without waiting for later Mara quests', () => {
+  const room = makeRoom(), client = makeClient('first_dragon_objective');
+  const { prof } = seedPlayer(room, client);
+  assert.equal(room.activeQuestObjectives(client, prof).some(o => o.id === 'companion:first_dragon'), false);
+  prof.highestGateRankCleared = 0;
+  let objective = room.activeQuestObjectives(client, prof).find(o => o.id === 'companion:first_dragon');
+  assert.ok(objective);
+  assert.equal(objective.action.label, 'FIND EMBERWATCH');
+  assert.equal(objective.checklist.length, 4);
+  prof.firstDragonJourney = { shrineGuardKills: 3, shrineEggClaimed: true, startedAt: Date.now() };
+  objective = room.activeQuestObjectives(client, prof).find(o => o.id === 'companion:first_dragon');
+  assert.match(objective.text, /Egg Insulator/);
+  assert.equal(objective.progress.current, 3);
+  prof.mountUnlocks = ['dragon:ember'];
+  assert.equal(room.activeQuestObjectives(client, prof).some(o => o.id === 'companion:first_dragon'), false);
+  const restored = sanitizeProfile({ ...prof, firstDragonJourney: { shrineGuardKills: 99, shrineEggClaimed: true, startedAt: Date.now() } });
+  assert.deepEqual(restored.firstDragonJourney && { shrineGuardKills: restored.firstDragonJourney.shrineGuardKills, shrineEggClaimed: restored.firstDragonJourney.shrineEggClaimed }, { shrineGuardKills: 3, shrineEggClaimed: true });
+});
+
 test('wildlife herds share danger and wolves select living prey', () => {
   const room = makeRoom();
   const deerA = new Mob(); deerA.kind = 'deer'; deerA.x = 100; deerA.y = 10; deerA.z = 100; deerA.hp = deerA.maxHp = 7;

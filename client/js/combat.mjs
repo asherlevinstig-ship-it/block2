@@ -4492,7 +4492,19 @@ function landTutorialRoute(target){
   const s=Math.sign(dz)||1;
   return [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC+s*(TOWN.HS-3)},{x:TOWN.TC,z:TOWN.TC+s*(TOWN.HS+4)},target];
 }
+const TOWN_ACTIVITY_GUIDES=[
+  {step:'activity_farm',title:'FARM & HARVEST',summary:'Grow crops at the town plots. Speak to Liss for Fieldcraft or work the soil with a hoe.',target:()=>HUB.farm,nearKey:'G / F',nearText:'Speak to Liss for FIELDCRAFT, or use a hoe and seeds on the plots.',nearSub:'Till, plant, then harvest. Liss also offers farming quests.'},
+  {step:'activity_cook',title:'COOK & PREPARE',summary:'Visit Greta at the tavern, open KITCHEN, and make food for travel.',target:()=>HUB.tavern,nearText:'Talk to Greta, then choose KITCHEN.',nearSub:'Bring ingredients or use the recipe book to see what you can make.'},
+  {step:'activity_smith',title:'SMITH & REPAIR',summary:'Visit Tobin for crafting, gear repair, upgrades, and recovered loot.',target:()=>HUB.smith,nearText:'Talk to Tobin, then choose SERVICES.',nearSub:'Craft gear, repair worn equipment, or inspect forge upgrades.'},
+  {step:'activity_meditate',title:'MEDITATE',summary:'Focus in the Meditation Hall to restore and grow your resources. Unlocks at Level 4.',target:()=>HUB.meditate,nearText:'Step into the focus circle and press G.',nearSub:'Meditation unlocks at Level 4. Hold still once focus begins.',minLevel:()=>MEDITATION_UNLOCK_LEVEL},
+];
 function townTutorialInfo(step){
+  const activity=TOWN_ACTIVITY_GUIDES.find(guide=>guide.step===step);
+  if(activity)return {
+    pill:'Town Activity - '+activity.title,target:activity.target(),near:4.5,farKey:'FIND LIGHT',nearKey:activity.nearKey||'G',
+    farText:'Follow the light to '+activity.title.toLowerCase()+'.',nearText:activity.nearText,
+    farSub:activity.summary,nearSub:activity.nearSub
+  };
   if(step==='job') return {
     pill:'Town Tutorial - Guild Hall', target:HUB.guildNoticeBoard, near:4.0, farKey:'FIND LIGHT', nearKey:'G / Right Click',
     farText:'Follow the pillar of light to the Guild Hall notice board.', nearText:'Open Guild Contracts.',
@@ -4562,8 +4574,6 @@ function renderTownTutorialOptions(force=false){
 }
 function openTownTutorialsUI(){
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
-  townGuidanceActive=true;
-  setTownTutorialChoice('menu');
   openQWin('management');
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent='TOWN TUTORIALS'; qpanelEl.appendChild(h);
@@ -4576,11 +4586,23 @@ function openTownTutorialsUI(){
   const styleTxt=document.createElement('span'); styleTxt.innerHTML='<b>CHOOSE PLAYSTYLE</b><br><small>Pick fighter, builder, farmer, miner, social, collector, explorer, or learner guidance.</small>'; style.appendChild(styleTxt);
   style.appendChild(qBtn('CHOOSE',()=>{ if(globalThis.BlockcraftPlayerStyleGuide)globalThis.BlockcraftPlayerStyleGuide.open(); }));
   qpanelEl.appendChild(style);
-  const jobRow=document.createElement('div'); jobRow.className='shoprow';
-  const jobMark=document.createElement('b'); jobMark.style.color='#ffd24a'; jobMark.style.fontSize='22px'; jobMark.textContent='!'; jobRow.appendChild(jobMark);
-  const jobTxt=document.createElement('span'); jobTxt.innerHTML='<b>JOB PATHS</b><br><small>Open the big worker cards and choose a training room.</small>'; jobRow.appendChild(jobTxt);
-  jobRow.appendChild(qBtn('OPEN',()=>{ if(uiShellState.qOpen) closeQWin(false); openLevel2JobChoice(true); }));
-  qpanelEl.appendChild(jobRow);
+  const activitiesTitle=document.createElement('div');activitiesTitle.className='sub2';activitiesTitle.textContent='WHAT CAN I DO IN TOWN?';qpanelEl.appendChild(activitiesTitle);
+  const activitiesIntro=document.createElement('p');activitiesIntro.className='qtext';activitiesIntro.textContent='Pick an activity. A light will guide you to its real station; no profession choice is required.';qpanelEl.appendChild(activitiesIntro);
+  if(townGuidanceActive&&TOWN_ACTIVITY_GUIDES.some(guide=>guide.step===townGuidanceStep)){
+    qpanelEl.appendChild(qBtn('STOP CURRENT GUIDE',()=>{
+      townGuidanceActive=false;townGuidanceStep='';tutorialPillarGroup.visible=false;tutorialEl.classList.add('hidden');
+      try{localStorage.removeItem('bc_town_tutorial_choice_v1');}catch(e){}
+      closeQWin(true);
+    },true));
+  }
+  for(const activity of TOWN_ACTIVITY_GUIDES){
+    const minLevel=activity.minLevel?activity.minLevel():0,unlocked=!minLevel||(S&&S.lvl|0)>=minLevel;
+    const row=document.createElement('div');row.className='shoprow';
+    const copy=document.createElement('span');copy.innerHTML='<b>'+escHTML(activity.title)+'</b><br><small>'+escHTML(activity.summary)+'</small>';row.appendChild(copy);
+    row.appendChild(qBtn(unlocked?'GUIDE ME':'LV '+minLevel,()=>guideTownTutorialChoice(activity.step),!unlocked));
+    qpanelEl.appendChild(row);
+  }
+  const lessonsTitle=document.createElement('div');lessonsTitle.className='sub2';lessonsTitle.textContent='OTHER TOWN LESSONS';qpanelEl.appendChild(lessonsTitle);
   const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
   const choices=[
     ['job','GUILD HALL','Learn regional contracts and exploration work.',true],
@@ -4616,8 +4638,9 @@ function guideTownTutorialChoice(step, ready=true){
   tutorialPillarGroup.position.set(info.target.x,y+4,info.target.z);
   updateTownGuidanceHud();
   renderTownTutorialOptions();
-  showName('Tutorial started: '+(step==='job'?'Guild Hall':step==='tavern'?'Tavern':'Buy Land'));
-  eventLog('Town tutorial started - find the light pillar.');
+  const activity=TOWN_ACTIVITY_GUIDES.find(guide=>guide.step===step);
+  showName((activity?'Town activity: ':'Tutorial started: ')+(activity?activity.title:step==='job'?'Guild Hall':step==='tavern'?'Tavern':'Buy Land'));
+  eventLog((activity?'Town activity selected':'Town tutorial started')+' - find the light pillar.');
   lockFallback=true;
   requestPointerLockSafe(null);
   refreshPlayUi();
@@ -7186,7 +7209,7 @@ function interactAncientCityDiscovery(s){
 }
 function secondaryAction(){
   const shrine=globalThis.BlockcraftDragonShrineWorld;
-  if(shrine&&shrine.nearby()&&quest&&quest.title==='First Bonded Mount'&&!quest.shrineEggClaimed&&!questDone()){
+  if(shrine&&shrine.nearby()&&highestGateRankCleared>=0&&!dragonUnlocks.length&&!(quest&&quest.title==='First Bonded Mount'&&quest.shrineEggClaimed)){
     if(NET.on&&NET.room)NET.room.send('claimDragonShrineEgg');
     else sysMsg('Reconnect to retrieve the shrine egg.');
     return;

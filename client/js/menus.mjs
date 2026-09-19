@@ -3827,13 +3827,42 @@ function applyPowerRanking(data){
   }
   const actions=document.createElement('div');actions.className='qrow';actions.appendChild(qBtn('REFRESH',openPowerRanking));actions.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(actions);
 }
+function guildHallWelcomeKey(){
+  const account=String(gameContext&&gameContext.account&&gameContext.account.id||'guest').replace(/[^A-Za-z0-9_-]/g,'').slice(0,80)||'guest';
+  return 'bc_fellowship_hall_welcome_v1_'+account;
+}
+function guildHallWelcomeSeen(){try{return localStorage.getItem(guildHallWelcomeKey())==='1';}catch{return false;}}
+function markGuildHallWelcomeSeen(){try{localStorage.setItem(guildHallWelcomeKey(),'1');}catch{}}
+function appendGuildHallWelcome(mine){
+  const intro=document.createElement('div');intro.className='cartographer-briefing fresh fellowship-first-visit';
+  intro.innerHTML='<small>FIRST VISIT · FELLOWSHIPS MADE SIMPLE</small><p>A fellowship is your long-term group. You do not need to lead one or understand every hall upgrade to begin.</p><ul><li><b>1 · Join</b> the starter fellowship or another group.</li><li><b>2 · Play</b> Guild and Road Warden contracts together to earn Renown.</li><li><b>3 · Grow</b> the hall with shared projects and claim rewards you unlock. Saved rewards do not expire at reset.</li></ul>';
+  qpanelEl.appendChild(intro);
+  if(mine){
+    const status=document.createElement('div');status.className='quest-rank-summary';
+    status.innerHTML='<span><small>YOU ALREADY BELONG</small><b>'+escHTML(mine.name||'Your Fellowship')+'</b></span><span>OPEN YOUR DASHBOARD</span>';
+    status.onclick=()=>{markGuildHallWelcomeSeen();openGuildHallUI();};qpanelEl.appendChild(status);
+  }else{
+    const fellowships=[...(guildHallState.fellowships||[])],starter=fellowships.find(f=>f&&f.starter===true);
+    if(starter){
+      const reward=Math.max(0,starter.starterRewardGold|0),quick=document.createElement('div');quick.className='shoprow fellowship-starter-choice';
+      quick.innerHTML='<span><b style="color:#9be76d">RECOMMENDED · '+escHTML(starter.name||'Noobs')+'</b><br><small>Join immediately, meet other new hunters, and start contributing. You can leave later.</small></span>';
+      quick.appendChild(qBtn(reward?'JOIN · +'+reward+' GOLD':'JOIN STARTER',()=>{markGuildHallWelcomeSeen();requestGuildJoin(starter.id);}));qpanelEl.appendChild(quick);
+    }else{
+      const loading=document.createElement('p');loading.className='qtext';loading.textContent='Lyra is checking the available fellowship charters…';qpanelEl.appendChild(loading);
+    }
+  }
+  const actions=document.createElement('div');actions.className='qrow';
+  actions.appendChild(qBtn(mine?'OPEN FELLOWSHIP':'BROWSE OR CREATE',()=>{markGuildHallWelcomeSeen();openGuildHallUI();}));
+  actions.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(actions);
+}
 function openGuildHallUI(focus=''){
   openQWin('commerce');guildHallOpen=true;qpanelEl.innerHTML='';
   const h=document.createElement('h2');h.textContent='HUNTERS FELLOWSHIP HALL';qpanelEl.appendChild(h);
-  qpanelEl.appendChild(qBtn('MOST POWERFUL HUNTERS',openPowerRanking));
   const sub=document.createElement('div');sub.className='sub2';sub.innerHTML='LYRA PENNANT, RECEPTIONIST &middot; YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>';qpanelEl.appendChild(sub);
-  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='"Every fellowship begins with a name, a fire to gather around, and enough ambition to need another floor."<br><br>Fellowships are long-term hunter communities. A leader may purchase one permanent hall floor bearing the fellowship name.';qpanelEl.appendChild(intro);
   const mine=guildHallState.guild;
+  if(!focus&&!guildHallWelcomeSeen()){appendGuildHallWelcome(mine);return;}
+  qpanelEl.appendChild(qBtn('MOST POWERFUL HUNTERS',openPowerRanking));
+  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='"Every fellowship begins with a name, a fire to gather around, and enough ambition to need another floor."<br><br>Fellowships are long-term hunter communities. A leader may purchase one permanent hall floor bearing the fellowship name.';qpanelEl.appendChild(intro);
   if(!mine){
     const label=document.createElement('div');label.className='sub2';label.textContent='FOUND A FELLOWSHIP';qpanelEl.appendChild(label);
     const input=document.createElement('input');input.id='guildname';input.maxLength=20;input.placeholder='Fellowship name (3-20 characters)';input.style.cssText='width:100%;margin:8px 0;padding:10px;background:#101722;color:#fff;border:1px solid #c8a85a;font-family:inherit';qpanelEl.appendChild(input);
@@ -4507,7 +4536,7 @@ function progressionRoadmap(){
     {id:'combat_path',title:'Combat Path',requirement:JOBS_ENABLED?'Complete your first job contract':'Reach E-Rank Level 2',eligible:S.lvl>=2&&(!JOBS_ENABLED||jobProgress||highestGateRankCleared>=0||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='next_adventurer_contract'),action:S.path?'Practice your first ability when prompted.':'Choose your first combat path when the story asks for it.',where:'Character progression'},
     {id:'gates',title:'Ranked Gates',requirement:JOBS_ENABLED?'Finish Mara’s first town arc and a starter job contract':'Finish Mara’s first town arc',eligible:S.lvl>=3&&(!JOBS_ENABLED||jobProgress||progressionFocus==='first_d_gate'||highestGateRankCleared>=0),action:'Prepare supplies, then complete Mara’s first Gate invitation.',where:'Mara → wilderness Gate'},
     {id:'familiars',title:'Familiars',requirement:'Reach D-Rank progression',eligible:highestGateRankCleared>=1,action:'Follow Mara’s companion quest and bind your first familiar.',where:'Mara Vale'},
-    {id:'mounts',title:'Mounts',requirement:'Reach C-Rank progression',eligible:rank>=2,action:'Complete the first bonded-mount lesson.',where:'Dragon Roost'},
+    {id:'mounts',title:'First Dragon',requirement:'Complete your first E-rank Gate',eligible:highestGateRankCleared>=0,action:'Follow the Emberwatch marker, defeat 3 guardians, recover the hatching kit, then hatch and ride.',where:'Emberwatch Shrine → Dragon Roost'},
     {id:'specialisation',title:'Specialisation',requirement:'Reach C-Rank Level 1',eligible:rank>=2&&S.lvl>=21,action:'Review and choose carefully: this combat-path specialisation is permanent.',where:'Mara Vale'},
     {id:'roads',title:'Road Warden Region',requirement:'Reach B-Rank',eligible:rank>=3,action:'Accept one regional contract and follow its road tracker.',where:'Road Patrol'},
     {id:'fellowships',title:'Fellowships',requirement:'Reach A-Rank',eligible:rank>=4,action:'Join or establish a fellowship.',where:'Fellowship Hall'},
@@ -4861,6 +4890,11 @@ function openQuestLogUI(){
   const h=document.createElement('h2'); h.textContent='QUEST LOG'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='PRESS O TO OPEN · ESC TO CLOSE'; qpanelEl.appendChild(sub);
   const p=document.createElement('p'); p.className='qtext'; p.textContent=earlyJourneyActive()?'Follow Mara: gather → craft → fight → upgrade → first Gate. Your current objective is below.':'All active objectives are grouped by source so you know what kind of work you are doing and where to go next.'; qpanelEl.appendChild(p);
+  if(dim==='overworld'&&player&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))){
+    const town=document.createElement('div');town.className='cartographer-briefing fresh';
+    town.innerHTML='<small>TOWN OF BEGINNINGS</small><p>Want a change of pace? Farm, cook, smith, or meditate without choosing a profession.</p>';
+    town.appendChild(qBtn('WHAT CAN I DO IN TOWN?',()=>openTownTutorialsUI()));qpanelEl.appendChild(town);
+  }
   const journey=document.createElement('div');journey.className='quest-rank-summary';
   const rankProgress=currentRankProgress(),rank=localPlayerHunterRankIndex();
   journey.innerHTML='<span><small>HUNTER JOURNEY</small><b>'+hunterRankLetter(rank)+'-Rank · '+rankJourneyLevelText(rank)+'</b></span><span>'+(rankProgress.maxRank?'S-Rank achieved':rankProgress.remaining.toLocaleString('en-US')+' XP to '+hunterRankLetter(rankProgress.nextRank)+'-Rank')+'</span>';
@@ -5255,7 +5289,9 @@ function openStablemasterUI(v={name:'Rook Emberstall'}){
   qpanelEl.appendChild(intro);
   if(!dragonUnlocks.length){
     const none=document.createElement('p'); none.className='qtext';
-    none.innerHTML='Bring me a hatched bond first. Place an <b>Egg Insulator</b>, hatch a <b>Dragon Egg</b>, then come back with a name worthy of smoke and sky.';
+    none.innerHTML=highestGateRankCleared<0
+      ?'<b>Your first dragon unlocks after the first E-rank Gate.</b><br>Continue Mara’s opening story; no familiar, profession, or high Hunter rank is required.'
+      :'<b>Your First Dragon is ready now.</b><br>1. Follow the Emberwatch Shrine marker.<br>2. Defeat its 3 guardians and press <b>G</b> at the egg podium to receive both the egg and Egg Insulator.<br>3. Place the Insulator anywhere, select the egg, press <b>G</b>, wait 30 seconds, then press <b>G</b> again.<br>4. Let the hatchling grow, then press <b>X</b> to summon and mount.';
     qpanelEl.appendChild(none);
   } else {
     const grid=document.createElement('div'); grid.className='bondgrid'; qpanelEl.appendChild(grid);
@@ -5291,6 +5327,8 @@ function openStablemasterUI(v={name:'Rook Emberstall'}){
     }
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
+  if(!dragonUnlocks.length)row.appendChild(qBtn(highestGateRankCleared>=0?'FIND EMBERWATCH':'OPEN QUEST LOG',()=>{closeQWin();openQuestLogUI();}));
+  row.appendChild(qBtn('PORTAL GUIDE',()=>sysMsg('<b>Portal Court is always open.</b> Stand in a portal and press <b>G</b>. The green Taming Land portal leads to the dragon sanctuary; every activity portal has a return portal.',{tier:'minor',title:'Town Travel Portals'}),true));
   row.appendChild(qBtn('ROOST QUEST', ()=>openQuestUI({...v, role:'roost', questSource:'npc'})));
   row.appendChild(qBtn('COMPANIONS', ()=>openDragonBondUI()));
   row.appendChild(qBtn('TAMER SERVICES', ()=>openPetTamerServicesUI()));
@@ -8235,10 +8273,10 @@ function openShardUI(){
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent='SHARD PEDESTAL'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent='SCALE THE GATES \u2014 GREATER RISK, GREATER REWARD';
+  sub.textContent='ATTUNEMENT ONLY \u2014 SCALE THE GATES';
   qpanelEl.appendChild(sub);
   const info=document.createElement('p'); info.className='qtext';
-  info.innerHTML='Clear a gate to earn a <b>Dungeon Shard</b>. Attune one here to open a scaled gate with random modifiers. Clear it for <b>+loot</b> and a <b>Legendary Weapon Token</b>.';
+  info.innerHTML='<b>This pedestal attunes Dungeon Shards; it does not forge equipment.</b><br>Attune a shard here to open a scaled gate with random modifiers. Clear it for improved loot and a <b>Legendary Weapon Token</b>, then take that token to the <b>Aegis Guardian</b> at the Aegis Shrine for Legendary crafting.';
   qpanelEl.appendChild(info);
   for(let ti=0;ti<5;ti++){
     const cnt=countItem(SHARD_IDS[ti]);
@@ -8254,71 +8292,7 @@ function openShardUI(){
     }, cnt<1));
     qpanelEl.appendChild(r);
   }
-  qpanelEl.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
-  return;
-  const tk=countItem(I.LEGEND_TOKEN);
-  const r=document.createElement('div'); r.className='shoprow';
-  r.appendChild(iconNode(I.LEGEND_TOKEN));
-  const nm=document.createElement('span'); nm.textContent='Forge Legendary Blade (1 token)'; r.appendChild(nm);
-  const ct=document.createElement('b'); ct.textContent='x'+tk; r.appendChild(ct);
-  r.appendChild(qBtn('FORGE', ()=>{
-    if(!removeItems(I.LEGEND_TOKEN,1)){ sysMsg('You need a <b>Legendary Weapon Token</b>'); return; }
-    addItem(I.LEGEND_SWORD,1);
-    SFX.level();
-    sysMsg('The pedestal blazes \u2014 a <b>Legendary Blade</b> is forged (damage 9)');
-    openShardUI();
-  }, tk<1));
-  qpanelEl.appendChild(r);
-  const ar=document.createElement('div'); ar.className='shoprow';
-  ar.appendChild(iconNode(I.LEGEND_ARMOR));
-  const an=document.createElement('span'); an.textContent='Forge Legendary Aegis Armor (2 tokens)'; ar.appendChild(an);
-  const ac=document.createElement('b'); ac.textContent='x'+tk; ar.appendChild(ac);
-  ar.appendChild(qBtn('FORGE', ()=>{
-    if(countItem(I.LEGEND_TOKEN)<2 || !removeItems(I.LEGEND_TOKEN,2)){ sysMsg('You need <b>2 Legendary Weapon Tokens</b>'); return; }
-    addItem(I.LEGEND_ARMOR,1);
-    SFX.level();
-    sysMsg('The pedestal shapes a <b>Legendary Aegis Armor</b>. Equip it in your inventory.');
-    openShardUI();
-  }, tk<2));
-  qpanelEl.appendChild(ar);
-  const sr=document.createElement('div'); sr.className='shoprow';
-  sr.appendChild(iconNode(I.BLACKHOLE_STAFF));
-  const sn=document.createElement('span'); sn.textContent='Forge Blackhole Staff (3 tokens)'; sr.appendChild(sn);
-  const sc=document.createElement('b'); sc.textContent='x'+tk; sr.appendChild(sc);
-  sr.appendChild(qBtn('FORGE', ()=>{
-    if(countItem(I.LEGEND_TOKEN)<3 || !removeItems(I.LEGEND_TOKEN,3)){ sysMsg('You need <b>3 Legendary Weapon Tokens</b>'); return; }
-    addItem(I.BLACKHOLE_STAFF,1);
-    SFX.level();
-    sysMsg('The pedestal folds light into a <b>Blackhole Staff</b>. Select it, then use primary action on a target.');
-    openShardUI();
-  }, tk<3));
-  qpanelEl.appendChild(sr);
-  const forgeLegendaryWeapon=(id,cost,hint)=>{
-    const wr=document.createElement('div'); wr.className='shoprow';
-    wr.appendChild(iconNode(id));
-    const wn=document.createElement('span'); wn.textContent='Forge '+ITEMS[id].name+' ('+cost+' tokens)'; wr.appendChild(wn);
-    const wc=document.createElement('b'); wc.textContent='x'+tk; wr.appendChild(wc);
-    wr.appendChild(qBtn('FORGE', ()=>{
-      if(countItem(I.LEGEND_TOKEN)<cost || !removeItems(I.LEGEND_TOKEN,cost)){ sysMsg('You need <b>'+cost+' Legendary Weapon Tokens</b>'); return; }
-      addItem(id,1);
-      SFX.level();
-      sysMsg('The pedestal forges a <b>'+ITEMS[id].name+'</b>. '+hint);
-      openShardUI();
-    }, tk<cost));
-    qpanelEl.appendChild(wr);
-  };
-  forgeLegendaryWeapon(I.CHRONO_DAGGER,2,'Primary action marks a target and snaps it back after 4 seconds.');
-  forgeLegendaryWeapon(I.TITAN_HAMMER,3,'Primary action slams the ground with a launch shockwave.');
-  forgeLegendaryWeapon(I.METEOR_STAFF,3,'Primary action calls a delayed meteor onto the target.');
-  forgeLegendaryWeapon(I.SOUL_REAPER_SCYTHE,3,'Primary action drains a target and stores souls on kills.');
-  forgeLegendaryWeapon(I.GRAVITY_BOW,3,'Primary action reverses gravity on a target, lifting it into the air.');
-  forgeLegendaryWeapon(I.WARDEN_CLEAVER,3,'Primary action sends a sonic boom through enemies and blocks.');
-  forgeLegendaryWeapon(I.ECLIPSE_KATANA,3,'Primary action dashes through a target and strikes from behind.');
-  forgeLegendaryWeapon(I.PHOENIX_SWORD,3,'Primary action burns a target; carrying it can trigger fiery rebirth.');
-  forgeLegendaryWeapon(I.FROSTBITE_CHAKRAM,3,'Primary action bounces a freezing blade between targets.');
-  forgeLegendaryWeapon(I.MIDAS_BLADE,3,'Primary action strikes harder based on gold carried.');
-  forgeLegendaryWeapon(I.LEVIATHAN_TRIDENT,3,'Primary action throws storm lightning through grouped targets.');
-  forgeLegendaryWeapon(I.VOID_ANCHOR,3,'Primary action drops an anti-mobility anchor zone.');
+  qpanelEl.appendChild(qBtn('WHERE DO I FORGE?',()=>sysMsg('Take Legendary Weapon Tokens to the <b>Aegis Guardian</b> at the Aegis Shrine. The Guardian handles trials and all Legendary crafting.',{tier:'minor',title:'Aegis Legendary Forge'}),true));
   qpanelEl.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }
 

@@ -35,10 +35,24 @@ class DragonsMixin {
     const q = prof && prof.activeNpcQuest;
     return q && q.giver === 'Mara Vale' && q.title === 'First Bonded Mount' ? q : null;
   }
+  dragonShrineProgress(prof) {
+    if (!prof) return null;
+    const storyQuest = this.dragonShrineQuest(prof);
+    const maraStep = Math.max(0, prof.npcQuestChains && prof.npcQuestChains['Mara Vale'] | 0);
+    if (!storyQuest && (prof.highestGateRankCleared | 0) < 0 && maraStep < 3) return null;
+    if (!prof.firstDragonJourney || typeof prof.firstDragonJourney !== 'object') {
+      prof.firstDragonJourney = { shrineGuardKills: 0, shrineEggClaimed: false, startedAt: Date.now() };
+    }
+    if (storyQuest) {
+      prof.firstDragonJourney.shrineGuardKills = Math.max(prof.firstDragonJourney.shrineGuardKills | 0, storyQuest.shrineGuardKills | 0);
+      prof.firstDragonJourney.shrineEggClaimed = prof.firstDragonJourney.shrineEggClaimed === true || storyQuest.shrineEggClaimed === true;
+    }
+    return prof.firstDragonJourney;
+  }
   tickDragonShrine() {
     for (const client of this.clients || []) {
       const rec = this.profileFor(client), p = this.state.players.get(client.sessionId);
-      const q = rec && this.dragonShrineQuest(rec.prof);
+      const q = rec && this.dragonShrineProgress(rec.prof);
       if (!q || q.shrineEggClaimed || (rec.prof.mountUnlocks || []).some(k => String(k).startsWith('dragon:')) || !p || p.dim !== 'overworld' || p.dgn || Math.hypot(p.x-DRAGON_SHRINE.x,p.z-DRAGON_SHRINE.z)>35) continue;
       let alive = 0;
       this.state.mobs.forEach((mob,id) => { if (mob.hp>0 && this.mobMeta[id] && this.mobMeta[id].dragonShrineToken === rec.token) alive++; });
@@ -55,16 +69,19 @@ class DragonsMixin {
   }
   onDragonShrineGuardKilled(meta) {
     for (const client of this.clients || []) {
-      const rec=this.profileFor(client), q=rec && this.dragonShrineQuest(rec.prof);
+      const rec=this.profileFor(client), q=rec && this.dragonShrineProgress(rec.prof);
       if (!q || q.shrineEggClaimed || rec.token !== meta.dragonShrineToken) continue;
       q.shrineGuardKills=Math.min(3,(q.shrineGuardKills|0)+1);
+      const storyQuest=this.dragonShrineQuest(rec.prof);
+      if(storyQuest)storyQuest.shrineGuardKills=q.shrineGuardKills;
       this.dirtyPlayers.add(rec.token);
-      client.send('npcQuest',{action:'progress',quest:q});
+      if(storyQuest)client.send('npcQuest',{action:'progress',quest:storyQuest});
       client.send('dragonShrineResult',{ok:true,stage:'guard',remaining:3-q.shrineGuardKills});
+      if(this.refreshNpcQuestReadiness)this.refreshNpcQuestReadiness(client);
     }
   }
   handleClaimDragonShrineEgg(client) {
-    const rec=this.profileFor(client), p=this.state.players.get(client.sessionId), q=rec && this.dragonShrineQuest(rec.prof);
+    const rec=this.profileFor(client), p=this.state.players.get(client.sessionId), q=rec && this.dragonShrineProgress(rec.prof);
     const reject=reason=>client.send('dragonShrineResult',{ok:false,reason});
     if (!p || !q || !this.isPlayerAlive(client)) return reject('quest');
     if (p.dim!=='overworld' || p.dgn || Math.hypot(p.x-DRAGON_SHRINE.x,p.z-DRAGON_SHRINE.z)>4.5 || Math.abs(p.y-DRAGON_SHRINE.y)>4) return reject('range');
@@ -74,11 +91,19 @@ class DragonsMixin {
     if ((q.shrineGuardKills|0)<3) return reject('guards');
     const draft={...rec.prof,inv:(rec.prof.inv||[]).map(s=>s?{...s}:null)};
     if (this.addRewardItem(draft,I.DRAGON_EGG,1)) return reject('full');
+    const grantInsulator=this.countItem(draft,W.B.EGG_INSULATOR)<=0;
+    if (grantInsulator && this.addRewardItem(draft,W.B.EGG_INSULATOR,1)) return reject('full');
     rec.prof.inv=draft.inv; q.shrineEggClaimed=true;
-    q.desc='Egg recovered! Place your Egg Insulator anywhere, select the egg and press G on it. After 30 seconds press G again. Let the hatchling grow, then press X to ride.';
+    const storyQuest=this.dragonShrineQuest(rec.prof);
+    if(storyQuest){
+      storyQuest.shrineGuardKills=q.shrineGuardKills;
+      storyQuest.shrineEggClaimed=true;
+      storyQuest.desc='Egg recovered! Place your Egg Insulator anywhere, select the egg and press G on it. After 30 seconds press G again. Let the hatchling grow, then press X to ride.';
+    }
     this.dirtyPlayers.add(rec.token); this.syncPlayerProfile(client,rec.prof);
-    client.send('npcQuest',{action:'progress',quest:q});
-    client.send('dragonShrineResult',{ok:true,stage:'claimed'});
+    if(storyQuest)client.send('npcQuest',{action:'progress',quest:storyQuest});
+    client.send('dragonShrineResult',{ok:true,stage:'claimed',grantedInsulator:grantInsulator});
+    if(this.refreshNpcQuestReadiness)this.refreshNpcQuestReadiness(client);
   }
   // Dragon incubation and nesting state, co-located with the mixin that owns it.
   // Called once from onCreate, before the incubation/nest restore loaders run.
@@ -1027,7 +1052,7 @@ class DragonsMixin {
     const rec = this.profileFor(client);
     if (!p || !rec) return client.send('hatchDragonReject', { reason: 'profile' });
     if (!m) return client.send('hatchDragonReject', { reason: 'payload' });
-    const shrineQuest=this.dragonShrineQuest(rec.prof);
+    const shrineQuest=this.dragonShrineProgress(rec.prof);
     // Existing incubations and already-bonded dragons remain usable after migration.
     if (shrineQuest && !shrineQuest.shrineEggClaimed && !(rec.prof.mountUnlocks||[]).length && !rec.prof.portableDragonEgg && ![...this.ensureDragonIncubations().values()].some(inc=>inc.token===rec.token)) return client.send('hatchDragonReject',{reason:'shrine'});
     if (p.dim !== 'overworld' || p.dgn) return this.handlePortableDragonHatch(client,m,p,rec);
