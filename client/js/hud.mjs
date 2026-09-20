@@ -42,7 +42,7 @@ statPointNudgeEl.id='statpointnudge';
 statPointNudgeEl.type='button';
 statPointNudgeEl.className='hidden';
 statPointNudgeEl.setAttribute('aria-label','Open character stats to spend stat points');
-statPointNudgeEl.innerHTML='<span>C</span><b>0 stat points</b><small>Press C to upgrade</small>';
+statPointNudgeEl.innerHTML='<span>C</span><b>System · 0 points available</b><small>Open character to assign</small>';
 document.body.appendChild(statPointNudgeEl);
 statPointNudgeEl.onclick=()=>{
   if(typeof globalThis.openStat==='function')globalThis.openStat();
@@ -59,7 +59,7 @@ function refreshStatPointNudge(){
   const points=currentStatPoints();
   const show=points>0;
   statPointNudgeEl.classList.toggle('hidden',!show);
-  statPointNudgeEl.innerHTML='<span>C</span><b>'+points+' stat point'+(points===1?'':'s')+'</b><small>Press C to upgrade</small>';
+  statPointNudgeEl.innerHTML='<span>C</span><b>System · '+points+' point'+(points===1?'':'s')+' available</b><small>Open character to assign</small>';
   statPointNudgeEl.title=show?points+' unspent stat point'+(points===1?'':'s')+'. Press C to open Character.':'No unspent stat points';
 }
 function itemTooltipText(stack){

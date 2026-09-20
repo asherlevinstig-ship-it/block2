@@ -1444,10 +1444,13 @@ function netAbilityFx(m){
     shockwaveEarthVfx(x,y,z,true);
     showName('Shockwave');
   } else if(m.kind==='mend'){
-    healingPlusVfx(x,y+.05,z,.8,.8);
-    ringPulse(x,y+.08,z,1.6,0x22c55e,.45);
-    glowFlash(x,y+1,z,0x86efac,3.2,.34);
-    burst(x,y+1,z,[.25,1,.42],22,2.4,2.4,.62);
+    const hx=Number.isFinite(Number(m.targetX))?Number(m.targetX):x;
+    const hy=Number.isFinite(Number(m.targetY))?Number(m.targetY):y;
+    const hz=Number.isFinite(Number(m.targetZ))?Number(m.targetZ):z;
+    healingPlusVfx(hx,hy+.05,hz,.8,.8);
+    ringPulse(hx,hy+.08,hz,1.6,0x22c55e,.45);
+    glowFlash(hx,hy+1,hz,0x86efac,3.2,.34);
+    burst(hx,hy+1,hz,[.25,1,.42],22,2.4,2.4,.62);
     showName('Verdant Mend');
   } else if(m.kind==='roots'){
     const radius=Math.max(2,Number(m.radius)||5.8);

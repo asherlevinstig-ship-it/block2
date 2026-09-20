@@ -41,7 +41,6 @@ class CombatMixin {
     this.prospectAt = new Map();
     this.shadowSoldiers = new Map();   // sessionId -> summoned soldier mob ids
     this.shadowSpirits = new Map();    // sessionId -> short-lived capture offer
-    this.secondWindAt = new Map();     // sessionId -> next Second Wind proc time
     this.pvel = new Map();      // sessionId -> {x,z} horizontal velocity estimate (written by the move handler)
   }
 
@@ -373,6 +372,9 @@ class CombatMixin {
     } else if (def.kind === 'mend') {
       const result = this.healVerdantAlly(client, p, def.range || 9, ABILITY_SYSTEM.abilityDamage('mend', rec.prof.S) * (spec === 'grovekeeper' && rank >= 2 ? 1.25 : 1));
       fx.targetSid = result.sid || '';
+      fx.targetX = result.x;
+      fx.targetY = result.y;
+      fx.targetZ = result.z;
       fx.heal = result.heal | 0;
       if (spec === 'grovekeeper' && rank >= 2 && result.sid) {
         const targetClient = this.clients.find(c => c.sessionId === result.sid);
@@ -411,9 +413,9 @@ class CombatMixin {
       const hp = this.ensurePlayerHp(c), missing = Math.max(0, hp.max - hp.hp);
       if (missing <= 0) continue;
       const pct = hp.hp / Math.max(1, hp.max);
-      if (!best || pct < best.pct || (pct === best.pct && c.sessionId !== client.sessionId)) best = { client: c, hp, pct };
+      if (!best || pct < best.pct || (pct === best.pct && c.sessionId !== client.sessionId)) best = { client: c, hp, pct, player: op };
     }
-    if (!best) best = { client, hp: this.ensurePlayerHp(client), pct: 1 };
+    if (!best) best = { client, hp: this.ensurePlayerHp(client), pct: 1, player: p };
     const before = best.hp.hp;
     best.hp.hp = Math.min(best.hp.max, best.hp.hp + amount);
     const heal = Math.round(best.hp.hp - before);
@@ -426,7 +428,7 @@ class CombatMixin {
       }
       if (best.client.sessionId !== client.sessionId && p.dgn) this.recordBossSupport(client, p.dgn, heal);
     }
-    return { sid: best.client.sessionId, heal };
+    return { sid: best.client.sessionId, heal, x: best.player.x, y: best.player.y, z: best.player.z };
   }
   healVerdantAllies(client, p, radius, amount) {
     const team = this.cleanTeamId(p.team);
@@ -462,26 +464,30 @@ class CombatMixin {
   handleShadowArmyCast(client,p,rec,st,now,def){
     if(!this.shadowSpirits)this.shadowSpirits=new Map();
     const offer=this.shadowSpirits.get(client.sessionId);
+    const limits=SHADOW_ARMY.limits(rec.prof.S.lvl),deployLimit=limits.deployed+(rec.prof.abilitySpec==='commander'?1:0);
     if(offer&&now<=offer.expiresAt&&(offer.dgn||'')===(p.dgn||'')&&Math.hypot(offer.x-p.x,offer.z-p.z)<=7){
-      const limits=SHADOW_ARMY.limits(rec.prof.S.lvl),army=Array.isArray(rec.prof.shadowArmy)?rec.prof.shadowArmy:(rec.prof.shadowArmy=[]);
-      if(army.length>=limits.storage)return {action:'capture',captured:false,attempted:false,reason:'storage',storage:limits.storage};
+      const army=Array.isArray(rec.prof.shadowArmy)?rec.prof.shadowArmy:(rec.prof.shadowArmy=[]);
+      if(army.length>=limits.storage)return {action:'capture',captured:false,attempted:false,reason:'storage',storage:limits.storage,stored:army.length,deployLimit};
       const chance=SHADOW_ARMY.captureChance(limits.rank,offer.rank,{boss:offer.boss,elite:offer.elite});
-      if(chance<=0)return {action:'capture',captured:false,attempted:false,reason:offer.boss?'boss_rank':'rank',chance};
+      if(chance<=0)return {action:'capture',captured:false,attempted:false,reason:offer.boss?'boss_rank':'rank',chance,storage:limits.storage,stored:army.length,deployLimit};
       this.shadowSpirits.delete(client.sessionId);
-      if(Math.random()>=chance)return {action:'capture',captured:false,attempted:true,reason:'resisted',chance};
+      if(Math.random()>=chance)return {action:'capture',captured:false,attempted:true,reason:'resisted',chance,storage:limits.storage,stored:army.length,deployLimit};
       const spirit={id:offer.id,kind:offer.kind,name:offer.name,rank:offer.rank,boss:offer.boss,elite:offer.elite,level:offer.level,capturedAt:now};
       army.push(spirit);this.dirtyPlayers.add(rec.token);
-      return {action:'capture',captured:true,attempted:true,spirit,storage:limits.storage,chance};
+      const bossUpkeep=spirit.boss?SHADOW_ARMY.bossUpkeep(spirit.rank)*(rec.prof.abilitySpec==='commander'?.75:1):0;
+      return {action:'capture',captured:true,attempted:true,spirit,storage:limits.storage,stored:army.length,deployLimit,chance,bossUpkeep};
     }
     const army=Array.isArray(rec.prof.shadowArmy)?rec.prof.shadowArmy:[];
-    if(!army.length)return {action:'deploy',deployed:0,reason:'empty'};
-    if(st.mp+.001<def.mp)return {action:'deploy',deployed:0,reason:'mana'};
+    if(!army.length)return {action:'deploy',deployed:0,reason:'empty',storage:limits.storage,stored:0,deployLimit};
+    if(st.mp+.001<def.mp)return {action:'deploy',deployed:0,reason:'mana',storage:limits.storage,stored:army.length,deployLimit};
     st.mp-=def.mp;
-    const limits=SHADOW_ARMY.limits(rec.prof.S.lvl),deployLimit=limits.deployed+(rec.prof.abilitySpec==='commander'?1:0),roster=army.slice(0,deployLimit);
+    const roster=army.slice(0,deployLimit);
     this.despawnShadowSoldier(client.sessionId);
     for(let i=0;i<roster.length;i++)this.spawnShadowSoldier(client,p,rec.prof,now,roster[i],i);
     this.sendSpace(p.dgn||'','fx',{t:'ability',path:'shadow',slot:2,kind:'summon',x:p.x,y:p.y,z:p.z,yaw:p.yaw||0,sid:client.sessionId,dgn:p.dgn||''});
-    return {action:'deploy',deployed:roster.length,storage:limits.storage};
+    const bosses=roster.filter(spirit=>spirit&&spirit.boss).length;
+    const bossUpkeep=roster.reduce((sum,spirit)=>sum+(spirit&&spirit.boss?SHADOW_ARMY.bossUpkeep(spirit.rank)*(rec.prof.abilitySpec==='commander'?.75:1):0),0);
+    return {action:'deploy',deployed:roster.length,storage:limits.storage,stored:army.length,deployLimit,bosses,bossUpkeep};
   }
   dragonAbilityDir(p, m) {
     let dx = Number(m && m.dx), dy = Number(m && m.dy), dz = Number(m && m.dz);
@@ -676,7 +682,7 @@ class CombatMixin {
     meta.stateT = Math.max(meta.stateT || 0, seconds);
     mob.state = 'stun';
   }
-  // ---- Shadow Soldier: a server-simulated summoned ally (replicates like any mob) ----
+  // ---- Shadow Army: server-simulated captured allies (replicate like any mob) ----
   spawnShadowSoldier(client, p, prof, now = Date.now(), spirit=null, index=0) {
     if (!this.shadowSoldiers) this.shadowSoldiers = new Map();
     if (!Number.isFinite(this.mobSeq)) this.mobSeq = 0;

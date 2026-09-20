@@ -14,7 +14,7 @@
       abilities:Object.freeze([
         Object.freeze({name:'Shadow Dash',glyph:'»',kind:'dash',mp:8,sp:10,cdMs:4000,txt:'Rift forward to dodge, escape, or close distance'}),
         Object.freeze({name:'Umbral Edge',glyph:'◈',kind:'buff',mp:15,sp:0,cdMs:18000,txt:'Empower melee hits with shadow damage for 10s'}),
-        Object.freeze({name:'Shadow Soldier',glyph:'♞',kind:'summon',mp:30,sp:0,cdMs:40000,txt:'Summon an ally that chases enemies and strikes for 30s'}),
+        Object.freeze({name:'Shadow Army',glyph:'♞',kind:'summon',mp:30,sp:0,cdMs:40000,txt:'Near a fallen spirit: capture it. Otherwise: deploy stored shadows for 30s'}),
       ])}),
     mage:Object.freeze({name:'Arcane Magus',color:'#38bdf8',
       desc:'Bend fire, frost and storm to your will.',

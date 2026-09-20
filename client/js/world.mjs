@@ -10094,11 +10094,16 @@ function gainXP(n){
   while(S.xp>=xpNeed()){ S.xp-=xpNeed(); S.lvl++; S.pts+=3; leveled=true; }
   if(leveled){
     hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
-    titleFlash('Level '+S.lvl,'+'+((S.lvl-beforeLevel)*3)+' stat points',{kind:'success',duration:1500});
-    sysMsg('Level <b>'+beforeLevel+' → '+S.lvl+'</b><br>+'+((S.lvl-beforeLevel)*3)+' stat points · HP, MP, SP, and food restored',{tier:'major',title:'Level Up'});
+    const levels=S.lvl-beforeLevel,statPoints=levels*3;
+    const immersiveReveal=typeof globalThis.BlockcraftLevelUpReveal==='function';
+    if(immersiveReveal)globalThis.BlockcraftLevelUpReveal({fromLevel:beforeLevel,level:S.lvl,levels,statPoints,xp:S.xp,nextXp:xpNeed(),nextRankLevel:nextHunterRankLevel(localPlayerRankIndex())});
+    else{
+      titleFlash('Level '+S.lvl,'+'+statPoints+' stat points',{kind:'success',duration:1500});
+      sysMsg('Level <b>'+beforeLevel+' → '+S.lvl+'</b><br>'+statPoints+' stat points · HP, MP, SP, and food restored',{tier:'major',title:'Level Up'});
+    }
     const afterRank=localPlayerRankIndex();
     if(afterRank>beforeRank && !NET.on) sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(afterRank)+'-Rank gates can now appear.');
-    SFX.level();
+    if(!immersiveReveal)SFX.level();
     burst(player.pos.x, player.pos.y+1, player.pos.z, [1,.85,.3], 26, 2.6, 3, .8);
     if(CUTSCENES_ENABLED && !hadGateSystem && gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
     if(!S.path) sysMsg('Your hunter path is still waiting. Press <b>C</b> to preview all four paths and confirm your choice.');

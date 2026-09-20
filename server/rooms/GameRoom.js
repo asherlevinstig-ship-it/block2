@@ -20,6 +20,7 @@ const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
 const RECALL = require('../../shared/recall-system');
 const APPEARANCE_SYSTEM = require('../../shared/appearance-system');
+const ABILITY_SYSTEM = require('../../shared/ability-system');
 const ABILITY_PROGRESSION = require('../../shared/ability-progression');
 const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches, drainRequestedPublicGateRanks, progressionGateRank } = require('./dungeon-handoff');
 const { issueDungeonAdmission } = require('./dungeon-admission');
@@ -31,6 +32,7 @@ const { registerRoom, unregisterRoom, getActiveRooms } = require('../metrics-reg
 const { registerProfileResetHandler, registerProfileUpdateHandler } = require('../profile-reset');
 const { accountSummary, recordIdentityTrace, shortHash } = require('../identity-trace');
 const { recordRoomLifecycleTrace } = require('../room-lifecycle-trace');
+const { itemStackLimit } = require('../../shared/item-stack-limits');
 
 const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
 const DEFAULT_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
@@ -455,6 +457,8 @@ class GameRoom extends Room {
     this.deathLimbo = new Map();
     this.deathDrops = new Map();
     this.deathDropSeq = 0;
+    this.adminItemDrops = new Map();
+    this.adminItemDropSeq = 0;
     this.trades = new Map();
     this.tradeSeq = 0;
     this.karmaHunterState = new Map();
@@ -623,6 +627,7 @@ class GameRoom extends Room {
     this.onMessage('deathLimboAnswer', (client, m) => this.handleDeathLimboAnswer(client, m));
     this.onMessage('adminGateTeleport', (client, m) => this.handleAdminGateTeleport(client, m));
     this.onMessage('adminSpawnMob', (client, m) => this.handleAdminSpawnMob(client, m));
+    this.onMessage('adminDropItem', (client, m) => this.handleAdminDropItem(client, m));
     this.onMessage('adminQuickGate', (client, m) => this.handleAdminQuickGate(client, m));
     this.onMessage('profileRequest', (client, m = {}) => {
       const rec = this.profileFor(client);
@@ -1442,6 +1447,8 @@ class GameRoom extends Room {
       this.sendLandClaims(client);
       const visibleDeathDrops = [...this.deathDrops.values()].filter(drop => drop.ownerToken === token && (!drop.expiresAt || drop.expiresAt > Date.now()) && (drop.dgn || '') === (joined.dgn || '')).map(drop => this.publicDeathDrop(drop));
       if (visibleDeathDrops.length) client.send('deathDropSnapshot', { drops: visibleDeathDrops });
+      const visibleAdminDrops = [...(this.adminItemDrops || new Map()).values()].filter(drop => (!drop.expiresAt || drop.expiresAt > Date.now()) && (drop.dgn || '') === (joined.dgn || '')).map(drop => this.publicAdminItemDrop(drop));
+      if (visibleAdminDrops.length) client.send('publicItemDropSnapshot', { drops: visibleAdminDrops });
       this.sendDragonIncubations(client);
       this.sendNestDragons(client);
       this.sendEventStatus(client);
@@ -4774,6 +4781,71 @@ class GameRoom extends Room {
     this.sendSpace('', 'fx', { t: 'adminSpawn', x: p.x, y: p.y, z: p.z, kind, count: spawned.length, dgn: '' });
     return true;
   }
+  adminDropStack(raw = {}) {
+    const id = Math.max(1, Number(raw.id) | 0);
+    if (!this.tradeItemKnown(id) || id === W.B.BEDROCK || id === W.B.BARRIER) return null;
+    const info = ARMOR_INFO[id] || TOOL_INFO[id] || null;
+    const stack = { id, count: 1 };
+    if (info) {
+      stack.dur = Math.max(1, info.dur | 0 || 1);
+      stack.source = 'admin';
+      if (ARMOR_INFO[id]) stack.armorType = ARMOR_INFO[id].armorType || 'vanguard';
+    }
+    const rarity = String(raw.rarity || '').toLowerCase();
+    if (GEAR_SYSTEM.RARITIES.some(entry => entry.id === rarity)) stack.rarity = rarity;
+    return stack;
+  }
+  publicAdminItemDrop(drop) {
+    return {
+      id: drop.id,
+      item: { id: drop.item.id, count: drop.item.count || 1, label: drop.label, rarity: drop.item.rarity || '' },
+      x: drop.x, y: drop.y, z: drop.z, dgn: drop.dgn || '',
+      droppedBy: drop.droppedBy || 'Admin', expiresAt: drop.expiresAt || 0, publicDrop: true,
+    };
+  }
+  handleAdminDropItem(client, m = {}) {
+    if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminDropItemReject', { reason: 'admin' });
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return client.send('adminDropItemReject', { reason: 'player' });
+    if (p.dgn) return client.send('adminDropItemReject', { reason: 'dungeon' });
+    const base = this.adminDropStack(m);
+    if (!base) return client.send('adminDropItemReject', { reason: 'item' });
+    if (this.rateLimited(client, 'adminDropItem', 4, 8)) return client.send('adminDropItemReject', { reason: 'rate' });
+    const gearLike = !!(TOOL_INFO[base.id] || ARMOR_INFO[base.id]);
+    let left = Math.max(1, Math.min(gearLike ? 12 : 256, Number(m.count) | 0 || 1));
+    const cap = gearLike ? 1 : itemStackLimit(base.id);
+    const stacks = [];
+    while (left > 0) {
+      const count = Math.min(left, cap);
+      stacks.push({ ...base, count });
+      left -= count;
+    }
+    if (!this.adminItemDrops) this.adminItemDrops = new Map();
+    const angle = (p.yaw || 0) + Math.PI;
+    const centerX = clampN(p.x + Math.sin(angle) * 2.2, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
+    const centerZ = clampN(p.z + Math.cos(angle) * 2.2, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
+    const floorY = this.world && this.world.standHeight ? this.world.standHeight(centerX, centerZ, Math.min(W.WH - 2, p.y + 3)) : p.y;
+    if (!Number.isFinite(floorY) || floorY < 2) return client.send('adminDropItemReject', { reason: 'space' });
+    const now = Date.now(), expiresAt = now + 15 * 60 * 1000, created = [];
+    for (let index = 0; index < stacks.length; index++) {
+      const spread = stacks.length > 1 ? .55 : 0;
+      const a = angle + (index - (stacks.length - 1) / 2) * .55;
+      this.adminItemDropSeq = (this.adminItemDropSeq | 0) + 1;
+      const id = 'admin-drop-' + this.adminItemDropSeq + '-' + now.toString(36);
+      const drop = {
+        id, item: stacks[index], label: this.tradeItemName(base.id) || ('Item #' + base.id),
+        x: centerX + Math.sin(a) * spread, y: floorY + .05, z: centerZ + Math.cos(a) * spread,
+        dgn: '', droppedBy: p.name || 'Admin', expiresAt,
+      };
+      this.adminItemDrops.set(id, drop);
+      const visible = this.publicAdminItemDrop(drop);
+      created.push(visible);
+      this.sendSpace('', 'publicItemDropCreated', visible);
+    }
+    client.send('adminDropItemResult', { ok: true, itemId: base.id, count: stacks.reduce((sum, stack) => sum + stack.count, 0), stacks: created.length, label: created[0].item.label });
+    this.broadcast('chat', { name: '[Admin]', text: (p.name || 'Admin') + ' dropped ' + created[0].item.label + ' ×' + stacks.reduce((sum, stack) => sum + stack.count, 0) + ' for players.' });
+    return true;
+  }
   handleAdminQuickGate(client, m = {}) {
     if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminQuickGateReject', { reason: 'admin' });
     const p = this.state.players.get(client.sessionId);
@@ -7485,6 +7557,30 @@ class GameRoom extends Room {
       client.send('deathDropTaken', { id, by: rec.prof.name || 'A hunter', item: { id: item.id, count: item.count || 1, label: drop.label }, dgn: drop.dgn || '' });
     }
   }
+  collectAdminItemDrops(client) {
+    const p = this.state.players.get(client.sessionId), rec = this.profileFor(client);
+    if (!p || !rec || !this.adminItemDrops || !this.adminItemDrops.size) return;
+    const now = Date.now();
+    for (const [id, drop] of [...this.adminItemDrops]) {
+      if (drop.expiresAt > 0 && drop.expiresAt <= now) {
+        this.adminItemDrops.delete(id);
+        this.sendSpace(drop.dgn || '', 'publicItemDropExpired', { id, dgn: drop.dgn || '' });
+        continue;
+      }
+      if ((drop.dgn || '') !== (p.dgn || '')) continue;
+      if (Math.hypot(p.x - drop.x, p.z - drop.z) > 2.2 || Math.abs(p.y - drop.y) > 4) continue;
+      const item = this.cloneDeathItem(drop.item);
+      if (!item) { this.adminItemDrops.delete(id); continue; }
+      if (!this.addDeathStackToInventory(rec.prof, item)) return client.send('publicItemDropReject', { reason: 'full', id });
+      this.adminItemDrops.delete(id);
+      this.dirtyPlayers.add(rec.token);
+      this.sendProfile(client, rec.prof);
+      this.sendSpace(drop.dgn || '', 'publicItemDropTaken', {
+        id, by: rec.prof.name || 'A hunter',
+        item: { id: item.id, count: item.count || 1, label: drop.label }, dgn: drop.dgn || '',
+      });
+    }
+  }
   publicDragonTypes(prof, token = '') {
     const unlocks = this.effectiveMountUnlocksFor ? this.effectiveMountUnlocksFor(token, prof) : (prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : []);
     return new Set((Array.isArray(unlocks) ? unlocks : [])
@@ -8102,12 +8198,15 @@ class GameRoom extends Room {
     if (hp.hp > 0 && hp.hp < hp.max * .25 && rec && rec.prof && rec.prof.S
         && rec.prof.S.path === 'guardian' && rec.prof.S.lvl >= 8) {
       const now = Date.now();
-      if (!this.secondWindAt) this.secondWindAt = new Map();
-      if (now >= (this.secondWindAt.get(client.sessionId) || 0)) {
-        this.secondWindAt.set(client.sessionId, now + 60000);
+      const cooldownMs = ABILITY_SYSTEM.PATHS.guardian.abilities[2].cdMs;
+      if (now >= (Number(rec.prof.secondWindReadyAt) || 0)) {
+        rec.prof.secondWindReadyAt = now + cooldownMs;
+        this.dirtyPlayers.add(rec.token);
         const heal = Math.round(hp.max * .4);
         hp.hp = Math.min(hp.max, hp.hp + heal);
-        client.send('hurt', { n:-heal,reason:'second_wind',hp:hp.hp,maxHp:hp.max });
+        this.syncProfileVitals(client, rec.prof);
+        this.savePlayerProfileNow(rec.token, rec.prof);
+        client.send('hurt', { n:-heal,reason:'second_wind',hp:hp.hp,maxHp:hp.max,readyAt:rec.prof.secondWindReadyAt,cooldownMs });
         if (p) this.sendSpace(p.dgn || '', 'fx', { t: 'secondWind', x: p.x, y: p.y, z: p.z, sid:client.sessionId, dgn: p.dgn || '' });
       }
     }
@@ -10197,6 +10296,7 @@ class GameRoom extends Room {
     else this.trackAcceptedMoveFall(client, fromY, p.y);
     if (!rawDgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
     this.collectDeathDrops(client);
+    this.collectAdminItemDrops(client);
   }
 
   // Step all in-flight projectiles (ability fireballs, legendary meteors, skeleton/bolt arrows)

@@ -27,6 +27,25 @@ const APPEARANCE_SYSTEM=globalThis.BlockcraftAppearanceSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const JOBS_ENABLED=!!JOB_SYSTEM.ENABLED;
 const player=combatState.player,inv=combatState.inventory;
+const movementCorrection={x:0,y:0,z:0,active:false};
+function addMovementCorrectionVisual(dx,dy,dz){
+  const distance=Math.hypot(dx,dy,dz);
+  if(!Number.isFinite(distance)||distance<=.001)return;
+  if(distance>1.75){movementCorrection.x=0;movementCorrection.y=0;movementCorrection.z=0;movementCorrection.active=false;return;}
+  movementCorrection.x+=dx;movementCorrection.y+=dy;movementCorrection.z+=dz;
+  const total=Math.hypot(movementCorrection.x,movementCorrection.y,movementCorrection.z);
+  if(total>1.25){const scale=1.25/total;movementCorrection.x*=scale;movementCorrection.y*=scale;movementCorrection.z*=scale;}
+  movementCorrection.active=true;
+}
+function tickPositionCorrection(dt){
+  if(!movementCorrection.active)return movementCorrection;
+  const decay=Math.exp(-Math.max(0,Number(dt)||0)*11);
+  movementCorrection.x*=decay;movementCorrection.y*=decay;movementCorrection.z*=decay;
+  if(Math.hypot(movementCorrection.x,movementCorrection.y,movementCorrection.z)<.002){
+    movementCorrection.x=0;movementCorrection.y=0;movementCorrection.z=0;movementCorrection.active=false;
+  }
+  return movementCorrection;
+}
 const OVERWORLD_RESULTS=createOverworldResultPresenter({document,itemName:id=>ITEMS[id]?ITEMS[id].name:'Supplies'});
 biomeStatus.init(document);
 const serverInventorySnapshot=new Array(36).fill(null);
@@ -63,6 +82,15 @@ const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
 let seenClaimableObjectiveIds=new Set();
 let objectiveFeedPrimed=false;
+let secondWindNoticeShown=false;
+let shadowArmyNoticeShown=false;
+const SHADOW_ARMY_UI=globalThis.BlockcraftShadowArmyUiState||(globalThis.BlockcraftShadowArmyUiState={army:[],offer:null});
+function syncShadowArmyUi(rawArmy,offer=SHADOW_ARMY_UI.offer){
+  if(Array.isArray(rawArmy))SHADOW_ARMY_UI.army=rawArmy.map(spirit=>({...spirit}));
+  SHADOW_ARMY_UI.offer=offer&&Number(offer.expiresAt)>Date.now()?{...offer}:null;
+  if(typeof updateAbilityHUD==='function')updateAbilityHUD();
+  if(typeof statOpen!=='undefined'&&statOpen&&typeof renderStat==='function')renderStat();
+}
 const EVENT_FEED_COOLDOWN_MS=7000;
 const eventFeedRecent=new Map();
 function eventFeed(name,text,opts={}){
@@ -174,25 +202,32 @@ function ensureLevelUpRevealStyles(){
   if(document.getElementById('level-up-reveal-style'))return;
   const style=document.createElement('style');style.id='level-up-reveal-style';
   style.textContent=`
-    .level-up-reveal{position:fixed;left:50%;top:12vh;z-index:9100;transform:translate(-50%,-16px) scale(.96);opacity:0;pointer-events:none;min-width:min(500px,calc(100vw - 28px));max-width:600px;padding:18px 20px 16px;border:2px solid #9ae66e;border-radius:8px;background:linear-gradient(180deg,rgba(21,37,34,.98),rgba(7,15,22,.96));box-shadow:0 0 0 1px rgba(255,255,255,.13) inset,0 20px 52px rgba(0,0,0,.55),0 0 46px rgba(154,230,110,.24);color:#f5fff0;text-align:center;font-family:inherit;transition:opacity .22s ease,transform .22s ease}
-    .level-up-reveal.show{opacity:1;transform:translate(-50%,0) scale(1)}
-    .level-up-reveal.leaving{opacity:0;transform:translate(-50%,-10px) scale(.98)}
-    .level-up-reveal small{display:block;color:#c9ff7e;letter-spacing:.24em;font-size:12px;margin-bottom:4px}
-    .level-up-reveal h3{margin:0;font-size:30px;line-height:1;color:#fffbd2;text-shadow:0 2px 0 #1d2a33}
-    .level-up-reveal p{margin:8px 0 12px;color:#dff6d5;font-size:15px}
-    .level-up-rewards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-    .level-up-reward{padding:9px;border:1px solid rgba(201,255,126,.36);background:rgba(255,255,255,.075);border-radius:6px}
-    .level-up-reward span{display:block;color:#b8cbd0;font-size:11px;letter-spacing:.12em}
-    .level-up-reward b{display:block;color:#ffffff;font-size:15px;margin-top:2px}
-    .level-up-reveal.deity{border-color:#ffd76a;background:radial-gradient(circle at 50% 0%,rgba(255,215,106,.24),transparent 46%),linear-gradient(180deg,rgba(39,31,70,.98),rgba(8,12,26,.97));box-shadow:0 0 0 1px rgba(255,255,255,.16) inset,0 26px 70px rgba(0,0,0,.62),0 0 64px rgba(255,215,106,.38)}
-    .level-up-reveal.deity small{color:#ffd76a}
-    .level-up-reveal.deity h3{color:#fff1b0;text-shadow:0 2px 0 #2e2547,0 0 24px rgba(255,215,106,.42)}
+    .level-up-reveal{position:fixed;inset:0;z-index:9100;display:grid;place-items:center;padding:24px;box-sizing:border-box;opacity:0;pointer-events:none;overflow:hidden;background:radial-gradient(circle at 50% 48%,rgba(19,114,181,.2),rgba(2,6,14,.76) 54%,rgba(0,2,8,.9));backdrop-filter:blur(3px) saturate(.72);color:#edfaff;text-align:center;font-family:inherit;transition:opacity .28s ease}
+    .level-up-reveal:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 4px,rgba(99,210,255,.025) 5px),linear-gradient(90deg,transparent 49.85%,rgba(95,211,255,.12) 50%,transparent 50.15%);mix-blend-mode:screen}
+    .level-up-reveal:after{content:"";position:absolute;inset:-25%;border:1px solid rgba(92,211,255,.18);background:conic-gradient(from 45deg,transparent,rgba(70,194,255,.08),transparent 24%);animation:level-up-system-scan 6s linear infinite}
+    .level-up-reveal.show{opacity:1}.level-up-reveal.leaving{opacity:0}
+    .level-up-system-card{position:relative;z-index:2;width:min(720px,calc(100vw - 34px));padding:25px 30px 23px;box-sizing:border-box;border:1px solid rgba(112,221,255,.9);clip-path:polygon(24px 0,calc(100% - 24px) 0,100% 24px,100% calc(100% - 24px),calc(100% - 24px) 100%,24px 100%,0 calc(100% - 24px),0 24px);background:linear-gradient(135deg,rgba(3,25,45,.97),rgba(3,10,24,.98));box-shadow:0 0 0 1px rgba(117,221,255,.18) inset,0 28px 90px rgba(0,0,0,.7),0 0 70px rgba(35,183,255,.38);transform:scale(.88) translateY(18px);filter:blur(2px);transition:transform .42s cubic-bezier(.18,1.25,.24,1),filter .35s ease}
+    .level-up-reveal.show .level-up-system-card{transform:scale(1) translateY(0);filter:blur(0)}
+    .level-up-system-kicker{display:flex;align-items:center;justify-content:center;gap:10px;color:#7cddff;font-size:11px;font-weight:900;letter-spacing:.42em;text-transform:uppercase}.level-up-system-kicker:before,.level-up-system-kicker:after{content:"";width:68px;height:1px;background:linear-gradient(90deg,transparent,#64d7ff)}.level-up-system-kicker:after{transform:scaleX(-1)}
+    .level-up-system-title{margin:14px 0 2px;color:#dcf8ff;font-size:clamp(34px,6vw,66px);font-weight:900;line-height:.9;letter-spacing:.18em;text-indent:.18em;text-shadow:0 0 9px #18baff,0 0 28px rgba(24,186,255,.72)}
+    .level-up-system-sub{margin:8px 0 18px;color:#83d8f8;font-size:12px;letter-spacing:.22em;text-transform:uppercase}
+    .level-up-levels{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:center;margin:0 auto 18px;max-width:520px}.level-up-level{display:grid;gap:3px;padding:11px;border:1px solid rgba(100,211,255,.25);background:rgba(31,132,185,.08)}.level-up-level span{color:#7198ad;font-size:9px;letter-spacing:.22em}.level-up-level b{color:#eafdff;font-size:20px}.level-up-level.current{border-color:#65dbff;background:rgba(37,180,236,.13);box-shadow:0 0 24px rgba(39,193,255,.17)}.level-up-level.current b{color:#86eaff;text-shadow:0 0 12px rgba(51,207,255,.75)}.level-up-level-arrow{color:#6ee4ff;font-size:24px;text-shadow:0 0 12px #27c7ff}
+    .level-up-rewards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .level-up-reward{padding:11px 9px;border:1px solid rgba(102,208,255,.27);background:linear-gradient(180deg,rgba(47,165,218,.1),rgba(0,0,0,.12))}
+    .level-up-reward span{display:block;color:#789db0;font-size:9px;letter-spacing:.15em}
+    .level-up-reward b{display:block;color:#eafaff;font-size:15px;margin-top:4px}.level-up-reward.primary{border-color:rgba(112,225,255,.75);box-shadow:0 0 18px rgba(36,187,247,.15)}.level-up-reward.primary b{color:#8beaff;font-size:21px;text-shadow:0 0 10px rgba(48,207,255,.68)}
+    .level-up-xp{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;margin:16px 0 0;color:#789fb4;font-size:9px;letter-spacing:.14em}.level-up-xp i{height:4px;background:rgba(42,102,133,.45);overflow:hidden}.level-up-xp i:after{content:"";display:block;width:var(--xp);height:100%;background:linear-gradient(90deg,#178bc3,#7ce8ff);box-shadow:0 0 12px #37c9ff}
+    .level-up-system-action{margin-top:17px;padding-top:14px;border-top:1px solid rgba(102,208,255,.2);color:#9fbac8;font-size:11px;letter-spacing:.13em}.level-up-system-action kbd{display:inline-grid;place-items:center;min-width:26px;height:24px;margin-right:7px;border:1px solid #72ddff;background:#082a40;color:#dff9ff;font:900 12px inherit;box-shadow:0 0 12px rgba(58,204,255,.28)}.level-up-system-action b{color:#75e3ff}
+    .level-up-reveal.deity{background:radial-gradient(circle at 50% 42%,rgba(255,207,87,.2),rgba(12,7,27,.82) 58%,rgba(2,2,9,.94))}
+    .level-up-reveal.deity .level-up-system-card{border-color:#ffd76a;background:linear-gradient(145deg,rgba(42,25,58,.98),rgba(8,10,27,.98));box-shadow:0 0 0 1px rgba(255,235,169,.16) inset,0 28px 90px rgba(0,0,0,.72),0 0 72px rgba(255,199,64,.34)}
+    .level-up-reveal.deity .level-up-system-kicker,.level-up-reveal.deity .level-up-system-title{color:#ffe18b;text-shadow:0 0 10px #ffba32,0 0 30px rgba(255,194,54,.6)}
     .level-up-reveal.deity .level-up-reward{border-color:rgba(255,215,106,.42);background:rgba(255,231,150,.09)}
     .level-up-reveal.deity .level-up-spark{background:#fff1b0;box-shadow:0 0 18px #ffd76a}
     .level-up-spark{position:absolute;width:8px;height:8px;border-radius:50%;background:#e7ff9b;box-shadow:0 0 14px #9ae66e;animation:level-up-spark 950ms ease-out forwards}
     @keyframes level-up-spark{from{opacity:1;transform:translate(0,0) scale(1)}to{opacity:0;transform:translate(var(--tx),var(--ty)) scale(.25)}}
-    @media (max-width:560px){.level-up-rewards{grid-template-columns:1fr}.level-up-reveal h3{font-size:26px}}
-    @media (prefers-reduced-motion:reduce){.level-up-reveal,.level-up-spark{transition:none;animation:none}}
+    @keyframes level-up-system-scan{to{transform:rotate(360deg)}}
+    @media (max-width:560px){.level-up-reveal{padding:10px}.level-up-system-card{padding:20px 15px}.level-up-levels{gap:7px}.level-up-level b{font-size:14px}.level-up-rewards{grid-template-columns:1fr 1fr}.level-up-reward:last-child{grid-column:1/-1}.level-up-system-title{font-size:36px}.level-up-system-kicker:before,.level-up-system-kicker:after{width:24px}}
+    @media (prefers-reduced-motion:reduce){.level-up-reveal,.level-up-system-card,.level-up-spark,.level-up-reveal:after{transition:none;animation:none}}
   `;
   document.head.appendChild(style);
 }
@@ -202,17 +237,17 @@ function showLevelUpReveal(m){
   const levels=Math.max(1,(m&&m.levels)|0),statPoints=Math.max(0,(m&&m.statPoints)|0);
   const nextRankLevel=Math.max(0,(m&&m.nextRankLevel)|0);
   ensureLevelUpRevealStyles();
-  const card=document.createElement('div');card.className='level-up-reveal';card.setAttribute('role','status');card.setAttribute('aria-live','polite');
-  const levelLine=levels>1?hunterRankLevelLabel(fromLevel)+' → '+hunterRankLevelLabel(level):hunterRankLevelLabel(level);
+  document.querySelectorAll('.level-up-reveal').forEach(el=>el.remove());
+  const card=document.createElement('div');card.className='level-up-reveal';card.setAttribute('role','status');card.setAttribute('aria-live','assertive');
   const nextLine=nextRankLevel?hunterRankLevelLabel(nextRankLevel)+' begins':'Mastery rank reached';
   const xp=Number.isFinite(Number(m&&m.xp))?Math.max(0,(m.xp|0)):0;
   const nextXp=Number.isFinite(Number(m&&m.nextXp))?Math.max(0,(m.nextXp|0)):0;
-  card.innerHTML='<small>LEVEL UP</small><h3>'+escHTML(levelLine)+'</h3><p>Your hunter grew stronger. Press C to spend your stat points now.</p><div class="level-up-rewards">'
-    +'<div class="level-up-reward"><span>STAT POINTS</span><b>+'+statPoints+'</b></div>'
-    +'<div class="level-up-reward"><span>NEXT TARGET</span><b>'+escHTML(nextLine)+'</b></div>'
-    +'<div class="level-up-reward"><span>XP PROGRESS</span><b>'+xp.toLocaleString('en-US')+' / '+Math.max(1,nextXp).toLocaleString('en-US')+'</b></div>'
-    +'<div class="level-up-reward"><span>OPEN STATS</span><b>Press C</b></div>'
-    +'</div>';
+  const xpPct=Math.max(0,Math.min(100,Math.round(xp/Math.max(1,nextXp)*100)));
+  card.innerHTML='<div class="level-up-system-card"><div class="level-up-system-kicker">SYSTEM NOTIFICATION</div><div class="level-up-system-title">LEVEL UP</div><div class="level-up-system-sub">Your attributes have increased</div>'
+    +'<div class="level-up-levels"><div class="level-up-level"><span>PREVIOUS</span><b>'+escHTML(hunterRankLevelLabel(fromLevel))+'</b></div><div class="level-up-level-arrow">›</div><div class="level-up-level current"><span>CURRENT</span><b>'+escHTML(hunterRankLevelLabel(level))+'</b></div></div>'
+    +'<div class="level-up-rewards"><div class="level-up-reward primary"><span>STAT POINTS ACQUIRED</span><b>+'+statPoints+'</b></div><div class="level-up-reward"><span>NEXT RANK TARGET</span><b>'+escHTML(nextLine)+'</b></div><div class="level-up-reward"><span>LEVELS GAINED</span><b>+'+levels+'</b></div></div>'
+    +'<div class="level-up-xp" style="--xp:'+xpPct+'%"><span>XP</span><i></i><b>'+xp.toLocaleString('en-US')+' / '+Math.max(1,nextXp).toLocaleString('en-US')+'</b></div>'
+    +'<div class="level-up-system-action"><kbd>C</kbd> OPEN CHARACTER · <b>'+statPoints+' POINT'+(statPoints===1?'':'S')+' AWAITING ASSIGNMENT</b></div></div>';
   for(let i=0;i<16;i++){
     const spark=document.createElement('i');spark.className='level-up-spark';
     spark.style.left=(8+Math.random()*84)+'%';spark.style.top=(10+Math.random()*74)+'%';
@@ -222,25 +257,26 @@ function showLevelUpReveal(m){
   }
   document.body.appendChild(card);
   requestAnimationFrame(()=>card.classList.add('show'));
-  setTimeout(()=>{card.classList.add('leaving');setTimeout(()=>card.remove(),360);},4300);
+  setTimeout(()=>{card.classList.add('leaving');setTimeout(()=>card.remove(),360);},5600);
   SFX.level();
   rewardGain('rare',statPoints||1,'Stat Points',{icon:'LV',duration:2700,immersive:false});
   showName(hunterRankLevelLabel(level).toUpperCase());
   sysMsg('<b>'+hunterRankLevelLabel(level,{long:true})+' reached!</b> You earned <b>+'+statPoints+'</b> stat point'+(statPoints===1?'':'s')+'. Press <b>C</b> to spend them.',{tier:'major',title:'Level Up'});
   refreshHUD();
 }
+Object.defineProperty(globalThis,'BlockcraftLevelUpReveal',{value:showLevelUpReveal,configurable:true});
 function showDeityAscension(m){
   applyDeityState({unlocked:true,ascendedAt:Date.now(),powers:m&&m.powers,choices:m&&m.choices});
   ensureLevelUpRevealStyles();
+  document.querySelectorAll('.level-up-reveal').forEach(el=>el.remove());
   const level=Math.max(DEITY_LEVEL,(m&&m.level)|0);
   const powerText=deityState.powers.length?deityState.powers.map(deityPowerName).join(', '):'Choose one in Status';
   const card=document.createElement('div');card.className='level-up-reveal deity';card.setAttribute('role','status');card.setAttribute('aria-live','assertive');
-  card.innerHTML='<small>ASCENSION UNLOCKED</small><h3>DEITY</h3><p>S-Rank Level 10 reached. Your hunter has crossed into divine power.</p><div class="level-up-rewards">'
+  card.innerHTML='<div class="level-up-system-card"><div class="level-up-system-kicker">ASCENSION UNLOCKED</div><div class="level-up-system-title">DEITY</div><div class="level-up-system-sub">Your hunter has crossed into divine power</div><div class="level-up-rewards">'
     +'<div class="level-up-reward"><span>THRESHOLD</span><b>'+hunterRankLevelLabel(level)+'</b></div>'
     +'<div class="level-up-reward"><span>STATE</span><b>Deity</b></div>'
     +'<div class="level-up-reward"><span>POWER</span><b>'+escHTML(powerText)+'</b></div>'
-    +'<div class="level-up-reward"><span>OPEN STATS</span><b>Press C</b></div>'
-    +'</div>';
+    +'</div><div class="level-up-system-action"><kbd>C</kbd> OPEN CHARACTER · <b>CHOOSE YOUR DEITY POWER</b></div></div>';
   for(let i=0;i<26;i++){
     const spark=document.createElement('i');spark.className='level-up-spark';
     spark.style.left=(6+Math.random()*88)+'%';spark.style.top=(8+Math.random()*78)+'%';
@@ -821,19 +857,21 @@ function showMobLootBurst(m){
 }
 function deathDropLabelCanvas(m){
   const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;const ctx=canvas.getContext('2d');
-  ctx.fillStyle='rgba(12,5,8,.92)';ctx.fillRect(4,4,504,120);ctx.strokeStyle='#fb7185';ctx.lineWidth=6;ctx.strokeRect(5,5,502,118);
-  ctx.textAlign='center';ctx.fillStyle='#ffd4dc';ctx.font='800 25px system-ui';ctx.fillText('LOST: '+String(m.item&&m.item.label||'ITEM').toUpperCase()+(m.item&&m.item.count>1?' ×'+m.item.count:''),256,43);
+  const publicDrop=!!m.publicDrop;
+  ctx.fillStyle=publicDrop?'rgba(12,9,2,.94)':'rgba(12,5,8,.92)';ctx.fillRect(4,4,504,120);ctx.strokeStyle=publicDrop?'#ffd24a':'#fb7185';ctx.lineWidth=6;ctx.strokeRect(5,5,502,118);
+  ctx.textAlign='center';ctx.fillStyle=publicDrop?'#fff1a8':'#ffd4dc';ctx.font='800 25px system-ui';ctx.fillText((publicDrop?'FREE DROP: ':'LOST: ')+String(m.item&&m.item.label||'ITEM').toUpperCase()+(m.item&&m.item.count>1?' ×'+m.item.count:''),256,43);
   const timed=m.expiresAt>0,seconds=timed?Math.max(0,Math.ceil((m.expiresAt-Date.now())/1000)):0;
-  ctx.fillStyle='#f9a8b8';ctx.font='700 18px system-ui';ctx.fillText(timed?'PRIVATE RECOVERY · '+seconds+'s':'PRIVATE RECOVERY · NO EXPIRY',256,76);
-  ctx.fillStyle='#cbd5e1';ctx.font='16px system-ui';ctx.fillText('Only you can collect this item',256,103);return canvas;
+  ctx.fillStyle=publicDrop?'#ffd86b':'#f9a8b8';ctx.font='700 18px system-ui';ctx.fillText(publicDrop?(timed?'PUBLIC LOOT · '+seconds+'s':'PUBLIC LOOT'):(timed?'PRIVATE RECOVERY · '+seconds+'s':'PRIVATE RECOVERY · NO EXPIRY'),256,76);
+  ctx.fillStyle='#cbd5e1';ctx.font='16px system-ui';ctx.fillText(publicDrop?'Walk over it to collect · dropped by '+String(m.droppedBy||'Admin'):'Only you can collect this item',256,103);return canvas;
 }
 function removeDeathDropVisual(id){
   const rec=deathDropVisuals.get(id);if(!rec)return;scene.remove(rec.group);rec.group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){if(o.material.map)o.material.map.dispose();o.material.dispose();}});deathDropVisuals.delete(id);
 }
 function showDeathDropVisual(m){
   if(!m||!m.id||!m.item||!ITEMS[m.item.id])return;removeDeathDropVisual(m.id);
-  const group=new THREE.Group(),beam=new THREE.Mesh(new THREE.CylinderGeometry(.18,.38,12,12,1,true),new THREE.MeshBasicMaterial({color:0xfb7185,transparent:true,opacity:.46,depthWrite:false,blending:THREE.AdditiveBlending}));
-  beam.position.y=6;const ring=new THREE.Mesh(new THREE.TorusGeometry(.85,.09,10,40),new THREE.MeshBasicMaterial({color:0xffd4dc,transparent:true,opacity:.95,depthTest:false}));ring.rotation.x=Math.PI/2;ring.position.y=.12;
+  const publicDrop=!!m.publicDrop,color=publicDrop?0xffd24a:0xfb7185,ringColor=publicDrop?0xfff1a8:0xffd4dc;
+  const group=new THREE.Group(),beam=new THREE.Mesh(new THREE.CylinderGeometry(.18,.38,12,12,1,true),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.46,depthWrite:false,blending:THREE.AdditiveBlending}));
+  beam.position.y=6;const ring=new THREE.Mesh(new THREE.TorusGeometry(.85,.09,10,40),new THREE.MeshBasicMaterial({color:ringColor,transparent:true,opacity:.95,depthTest:false}));ring.rotation.x=Math.PI/2;ring.position.y=.12;
   const iconTex=new THREE.CanvasTexture(ITEMS[m.item.id].icon),icon=new THREE.Sprite(new THREE.SpriteMaterial({map:iconTex,transparent:true,depthTest:false}));icon.scale.set(1.35,1.35,1);icon.position.y=1.15;icon.renderOrder=21;
   const labelCanvas=deathDropLabelCanvas(m),labelTex=new THREE.CanvasTexture(labelCanvas),label=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTex,transparent:true,depthTest:false}));label.scale.set(6,1.5,1);label.position.y=3.05;label.renderOrder=22;
   group.position.set(m.x,m.y+.05,m.z);group.add(beam,ring,icon,label);group.userData.drop=m;scene.add(group);deathDropVisuals.set(m.id,{group,ring,icon,label,labelCanvas,labelTex,lastSecond:-1});
@@ -1840,6 +1878,12 @@ function netAttachRoom(room,name,client){
       reject:why=>{globalThis.__BLOCKCRAFT_LAST_PROGRESSION_REJECT__=why;sysMsg(why);SFX.error();},
       accept:m=>{
         if(m.type==='armor'){gearInspectSlot=m.id?-2:-1;if(uiOpen)renderUI();}
+        if(m.type==='stat'){
+          const names={str:'STRENGTH',agi:'AGILITY',vit:'VITALITY',int:'INTELLIGENCE'};
+          const statName=names[m.stat]||'ATTRIBUTE',amount=Math.max(1,m.amount|0);
+          showName(statName+' +'+amount);
+          eventFeed('[System]',statName+' increased by '+amount+'.',{key:'stat:'+String(m.stat||'')+':'+String(Date.now()),cooldown:0});
+        }
         if(m.type==='jobContract'&&m.action==='claim'){
           SFX.coin();presentJobContractClaim(m);
           if(!m.firstShiftComplete)for(const milestone of Array.isArray(m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
@@ -2386,6 +2430,17 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('deathDropExpired',m=>removeDeathDropVisual(m&&m.id));
     room.onMessage('deathDropReject',m=>{if((m&&m.reason)==='full')sysMsg('Bag full. Sort your bag, deposit supplies in a chest, or free one slot before looting that death drop.');});
+    room.onMessage('publicItemDropCreated',m=>{
+      showDeathDropVisual(m);
+      sysMsg('<b>Admin drop:</b> '+escHTML(m&&m.item&&m.item.label||'An item')+' is available nearby. Walk over it to collect it.');
+    });
+    room.onMessage('publicItemDropSnapshot',m=>{for(const drop of Array.isArray(m&&m.drops)?m.drops:[])showDeathDropVisual(drop);});
+    room.onMessage('publicItemDropTaken',m=>{
+      removeDeathDropVisual(m&&m.id);
+      sysMsg('<b>'+escHTML(m&&m.by||'A hunter')+'</b> collected '+escHTML(m&&m.item&&m.item.label||'an admin drop')+'.');
+    });
+    room.onMessage('publicItemDropExpired',m=>removeDeathDropVisual(m&&m.id));
+    room.onMessage('publicItemDropReject',m=>{if((m&&m.reason)==='full')sysMsg('Bag full. Free space before collecting this public item drop.');});
     room.onMessage('worldDeath',m=>{
       COMPANIONS.activeFamiliar='';
       hp=0; renderBars();
@@ -2839,8 +2894,14 @@ function netAttachRoom(room,name,client){
           'buriedAttempt',m.buriedAttempt,'buriedNow',m.buriedNow,'floorY',m.floorY,'dgn',m.rawDgn);}}
       const before=dimensionsState.kind==='fishing_lake'&&player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null}:null;
       const lastSent=NET&&NET.lastMoveSent?{...NET.lastMoveSent}:null;
+      const correctionDx=player.pos.x-(+m.x),correctionDy=player.pos.y-(+m.y),correctionDz=player.pos.z-(+m.z);
+      const correctionDistance=Math.hypot(correctionDx,correctionDy,correctionDz);
+      addMovementCorrectionVisual(correctionDx,correctionDy,correctionDz);
       player.pos.set(+m.x,+m.y,+m.z);
-      if(player.vel)player.vel.set(0,0,0);
+      if(player.vel){
+        if(correctionDistance>1.5||Math.abs(correctionDy)>.8)player.vel.set(0,0,0);
+        else player.vel.multiplyScalar(.55);
+      }
       if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
       const after=dimensionsState.kind==='fishing_lake'&&player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null}:null;
       const delta=before?{x:+((+m.x)-before.x).toFixed(3),y:+((+m.y)-before.y).toFixed(3),z:+((+m.z)-before.z).toFixed(3)}:null;
@@ -2911,6 +2972,16 @@ function netAttachRoom(room,name,client){
       const text=r==='admin'?'Spawn tools are admin-only.':r==='dungeon'?'Spawn tools are only available in the overworld.':r==='player'?'No live player position found.':'Spawn failed.';
       sysMsg(text);
       try{window.dispatchEvent(new CustomEvent('blockcraft-admin-spawn',{detail:{ok:false,reason:r||'failed'}}));}catch(e){}
+    });
+    room.onMessage('adminDropItemResult',m=>{
+      sysMsg('<b>Admin drop:</b> '+escHTML(m&&m.label||'Item')+' ×'+Math.max(1,(m&&m.count)|0)+' is now public loot nearby.');
+      try{window.dispatchEvent(new CustomEvent('blockcraft-admin-item-drop',{detail:m||{}}));}catch(e){}
+    });
+    room.onMessage('adminDropItemReject',m=>{
+      const r=m&&m.reason;
+      const text=r==='admin'?'Item drops are admin-only.':r==='dungeon'?'Public admin drops are only available in the overworld.':r==='item'?'That item cannot be dropped.':r==='rate'?'Wait a moment before dropping more items.':r==='space'?'No safe drop position was found.':'Item drop failed.';
+      sysMsg(text);
+      try{window.dispatchEvent(new CustomEvent('blockcraft-admin-item-drop',{detail:{ok:false,reason:r||'failed'}}));}catch(e){}
     });
     room.onMessage('adminQuickGateResult', m=>{
       const rank=RANKS[Math.max(0,Math.min(RANKS.length-1,(m&&m.rank)|0))];
@@ -3152,11 +3223,16 @@ function netAttachRoom(room,name,client){
     room.onMessage('abilitySpecReject',()=>sysMsg('That specialization cannot be changed.'));
     room.onMessage('shadowSpirit',m=>{
       if(!m)return;
-      showName((m.boss?'BOSS SPIRIT':'FALLEN SPIRIT')+' · '+(m.rankName||'E')+'-RANK');
-      sysMsg('A shadow remains. Stand near it and cast <b>Shadow Soldier</b> to command: <b>Arise</b>.');
-      eventFeed('[Abilities]','A '+String(m.rankName||'E')+'-Rank '+(m.boss?'boss ':'')+'shadow spirit is waiting.',{key:'shadow:spirit:'+String(m.id||m.rankName||''),cooldown:0});
+      syncShadowArmyUi(null,m);
+      showName('PRESS H · COMMAND ARISE');
+      const spiritName=String(m.name||'fallen enemy').replace(/_/g,' ');
+      shadowSummonPortalVfx(Number(m.x)||player.pos.x,Number(m.y)||player.pos.y,Number(m.z)||player.pos.z);
+      const offerId=m.id;
+      setTimeout(()=>{if(SHADOW_ARMY_UI.offer&&SHADOW_ARMY_UI.offer.id===offerId)syncShadowArmyUi(null,null);},Math.max(0,Number(m.expiresAt)-Date.now())+50);
+      sysMsg('<b>Capture opportunity:</b> '+escHTML(spiritName)+' left a '+escHTML(m.rankName||'E')+'-Rank spirit. Stand within <b>7 blocks</b> and press <b>H</b> before it fades.');
+      eventFeed('[Shadow Army]','Capture available: '+String(m.rankName||'E')+'-Rank '+(m.boss?'boss ':'' )+spiritName+'. Move within 7 blocks and press H.',{key:'shadow:spirit:'+String(m.id||m.rankName||''),cooldown:0});
     });
-    room.onMessage('shadowRecall',m=>{showName('BOSS SHADOW RECALLED');sysMsg('Your mana could no longer sustain the boss shadow.');eventFeed('[Abilities]','Boss shadow recalled as your mana faded.',{key:'shadow:recall',cooldown:0});});
+    room.onMessage('shadowRecall',m=>{showName('BOSS SHADOW RECALLED');sysMsg('Your mana could no longer sustain the boss shadow. It remains safely stored for your next deployment.');eventFeed('[Shadow Army]','Boss shadow returned to storage as your mana faded.',{key:'shadow:recall',cooldown:0});});
     room.onMessage('dragonAbilityReject', m=>dragonAbilityRejected(m));
     room.onMessage('dragonAbilityResult', m=>dragonAbilityResolved(m));
     room.onMessage('dragonCare', m=>applyDragonCare(m));
@@ -3309,7 +3385,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('hurt', m=>{
       if(tutorialSafe() && (!m || m.n>=0)){ globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('vitals.client-refill.tutorial-hurt',{message:m,before:{hp,sp,hunger},after:{hp:maxHp(),sp:maxSp(),hunger:maxHunger()}});try{console.warn('[bc-vitals] tutorial hurt refill '+vitalsDebugText({message:m,before:{hp,sp,hunger},after:{hp:maxHp(),sp:maxSp(),hunger:maxHunger()}}));}catch(e){} hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars(); return; }
       if(m&&m.reason==='second_wind'){
-        swCd=60;                                   // drive the passive's HUD cooldown
+        const readyAt=Number(m.readyAt)||Date.now()+(Number(m.cooldownMs)||60000);
+        swCd=Math.max(0,(readyAt-Date.now())/1000); // drive the passive's HUD cooldown
         sysMsg('<b>Second Wind</b> restores your strength');
         healingPlusVfx(player.pos.x, player.pos.y, player.pos.z, 1.05, 1.15);
         if(globalThis.BlockcraftViewmodelFx)globalThis.BlockcraftViewmodelFx.play('secondwind');
@@ -3442,6 +3519,16 @@ function netRestoreProfile(m){
       S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
     }
     S.path=serverPath||authPath||'';
+    if(S.path==='guardian'&&S.lvl>=8){
+      swCd=Math.max(0,((Number(m&&m.secondWindReadyAt)||0)-Date.now())/1000);
+      if(!secondWindNoticeShown){
+        secondWindNoticeShown=true;
+        sysMsg(swCd>0
+          ? '<b>Second Wind</b> is automatic and recharging for '+Math.ceil(swCd)+'s.'
+          : '<b>Second Wind armed:</b> automatically heals you when health falls below 25%.');
+      }
+    }else swCd=0;
+    syncShadowArmyUi(m&&m.shadowArmy,null);
     pathDebug('room.path.applied', { path:S.path, source:serverPath?'room':authPath?'auth-or-cache':'none' });
     if(S.path&&combatApi.restoreHydratedPath)combatApi.restoreHydratedPath(S.path,serverPath?'room':'auth-or-cache');
     if(authGameProfile&&S.path)authGameProfile.path=S.path;
@@ -3470,6 +3557,11 @@ function netRestoreProfile(m){
     }
     if(onboardingActive) cancelOnboardingForProfileRestore();
     if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m.abilitySpec||'');
+    syncShadowArmyUi(m&&m.shadowArmy,null);
+    if(S.path==='shadow'&&S.lvl>=8&&!shadowArmyNoticeShown){
+      shadowArmyNoticeShown=true;
+      sysMsg('<b>Shadow Army:</b> defeat an enemy, stand near its spirit, then press <b>H</b> to capture it. Press <b>H</b> away from a spirit to deploy your stored shadows for 30 seconds.');
+    }
     if(Array.isArray(m.inv)){
       for(let i=0;i<36;i++){
         inv[i]=cleanServerInventoryStack(m.inv[i]);
@@ -3729,14 +3821,25 @@ function abilityRejected(m){
 function abilityResolved(m){
   if(!m) return;
   COMBAT_FEEDBACK.abilitySettled(m.slot,true);
+  if(Array.isArray(m.shadowArmy))syncShadowArmyUi(m.shadowArmy,m.action==='capture'&&m.attempted?null:SHADOW_ARMY_UI.offer);
   if(m.action==='capture'){
-    if(m.captured){showName('ARISE · '+String((m.spirit&&m.spirit.name)||'SHADOW').toUpperCase());SFX.level();sysMsg('<b>Spirit captured.</b> '+((m.shadowArmy&&m.shadowArmy.length)||0)+' / '+(m.storage||0)+' shadows stored.');}
-    else if(m.reason==='storage')sysMsg('Your <b>shadow storage is full</b>.');
+    if(m.attempted)syncShadowArmyUi(null,null);
+    if(m.captured){
+      showName('ARISE · '+String((m.spirit&&m.spirit.name)||'SHADOW').toUpperCase());SFX.level();
+      sysMsg('<b>Spirit captured.</b> '+(m.stored||0)+' / '+(m.storage||0)+' stored. Move away from fallen spirits and press <b>H</b> to deploy up to '+(m.deployLimit||1)+' shadows for 30 seconds.'+(m.bossUpkeep?' This boss costs <b>'+Number(m.bossUpkeep).toFixed(1)+' MP/sec</b> while active.':''));
+      eventFeed('[Shadow Army]',String((m.spirit&&m.spirit.name)||'Shadow')+' captured · '+(m.stored||0)+'/'+(m.storage||0)+' stored.',{key:'shadow:capture:'+String(m.spirit&&m.spirit.id||Date.now()),cooldown:0});
+    }
+    else if(m.reason==='storage')sysMsg('Your <b>shadow storage is full</b> ('+(m.stored||0)+' / '+(m.storage||0)+'). Your captured spirits are permanent and reusable.');
     else if(m.reason==='boss_rank')sysMsg('That boss spirit is too powerful for your Hunter rank.');
-    else showName('THE SPIRIT RESISTED');
+    else if(m.reason==='rank')sysMsg('That spirit is too powerful for your current Hunter rank.');
+    else {showName('THE SPIRIT RESISTED');sysMsg('Capture resisted'+(Number.isFinite(m.chance)?' · '+Math.round(m.chance*100)+'% chance':'')+'. Defeat another enemy to try again.');}
   }else if(m.action==='deploy'){
-    if(m.deployed)showName('SHADOW ARMY · '+m.deployed+' DEPLOYED');
-    else if(m.reason==='empty')sysMsg('You have no captured shadows. Defeat an enemy, then command its spirit to <b>Arise</b>.');
+    if(m.deployed){
+      showName('SHADOW ARMY · '+m.deployed+' DEPLOYED');
+      sysMsg('<b>'+m.deployed+' shadow'+(m.deployed===1?'':'s')+' deployed</b> for 30 seconds. They follow you and attack automatically.'+(m.bossUpkeep?' Boss upkeep: <b>'+Number(m.bossUpkeep).toFixed(1)+' MP/sec</b>.':''));
+      eventFeed('[Shadow Army]',m.deployed+' shadow'+(m.deployed===1?'':'s')+' deployed for 30 seconds.',{key:'shadow:deploy:'+String(Date.now()),cooldown:0});
+    }
+    else if(m.reason==='empty')sysMsg('<b>No shadows stored.</b> Defeat a non-animal enemy, stand within 7 blocks of its spirit, then press <b>H</b> to command Arise.');
     else if(m.reason==='mana')sysMsg('Not enough <b>mana</b> to deploy your shadows.');
   }
   if(typeof m.mp==='number') mp=Math.max(0,Math.min(maxMp(),m.mp));
@@ -4385,6 +4488,7 @@ function playerAppearance(){
   look.cosmetics=[...equippedCosmetics];
   return look;
 }
+Object.defineProperty(globalThis,'BlockcraftPlayerAppearance',{value:()=>playerAppearance(),configurable:true});
 function remoteAppearance(ref){
   const look=appearanceForPath(ref&&ref.path,parseReplicatedAppearance(ref&&ref.appearance));
   look.armorId=ref?(ref.armorId|0):0;
@@ -5012,7 +5116,7 @@ var abilityDemo=null;
 const DEMO_STEPS=[
   {path:'shadow', slot:0, name:'Shadow Dash'},
   {path:'shadow', slot:1, name:'Umbral Edge'},
-  {path:'shadow', slot:2, name:'Shadow Soldier'},
+  {path:'shadow', slot:2, name:'Shadow Army'},
   {path:'mage', slot:0, name:'Fireball'},
   {path:'mage', slot:1, name:'Frost Nova'},
   {path:'mage', slot:2, name:'Chain Lightning'},
@@ -5261,14 +5365,14 @@ function runDemoEffect(step){
       destroyDemoDummy(target,bot.grp.rotation.y);
     },980);
     setTimeout(()=>{ if(bot.sword) bot.sword.rotation.z=0; },1450);
-  } else if(step.name==='Shadow Soldier'){
+  } else if(step.name==='Shadow Army'){
     if(abilityDemo.ally) scene.remove(abilityDemo.ally.grp);
     const a={...makeShadow(), life:999, atkCd:0, phase:Math.random()*10};
     const sx=b.x-abilityDemo.dir.x*.55+abilityDemo.side.x*.95;
     const sz=b.z-abilityDemo.dir.z*.55+abilityDemo.side.z*.95;
     a.grp.position.set(sx,b.y,sz);
     a.grp.rotation.y=forwardFacingYaw(tp.x-sx,tp.z-sz);
-    const tag=makeNameTag('Shadow Soldier','#b08aff','summoned ally','#8b5cf6',{lvl:S.lvl,rank:'Ally'});
+    const tag=makeNameTag('Captured Shadow','#b08aff','stored spirit · 30s deployment','#8b5cf6',{lvl:S.lvl,rank:'Ally'});
     tag.position.y=2.05; a.grp.add(tag);
     scene.add(a.grp); abilityDemo.ally=a;
     shadowSummonPortalVfx(a.grp.position.x,a.grp.position.y,a.grp.position.z);
@@ -6360,6 +6464,7 @@ gameContext.registerState('networking', Object.freeze({
   onboarding:ONBOARD,
   get journeyResult(){ return e2eJourneyResult; },
   get restartRecovery(){ return dungeonRestartRecovery; },
+  movementCorrection,
 }));
 let portableSyncRoom=null,portableSyncDimension=null,portableSyncSpace=null;
 function clearPortableIncubationMeshes(){
@@ -6379,6 +6484,7 @@ function tickPortableInsulatorSync(){
 }
 gameContext.registerModule('networking', Object.freeze({
   tickPortableInsulatorSync,
+  tickPositionCorrection,
   connect:netConnect,
   tick:netTick,
   tickCompanionDragons,

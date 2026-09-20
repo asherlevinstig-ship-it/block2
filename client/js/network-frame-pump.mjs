@@ -139,7 +139,7 @@ export function createNetworkFramePump({
       }
       if(tickRemotePlayerAction)tickRemotePlayerAction(r,stepDt,moving,stride);
       if(animateAvatarCape)animateAvatarCape(r,now,moving?.85:(ref.mount?.25:.06),stride,stepDt);
-      if(animateHunterIdle)animateHunterIdle(r,now,stepDt,moving);
+      if(animateHunterIdle)animateHunterIdle(r,now,stepDt,moving,stride);
       pulseAegisGlow(r,now);
       if(maintenanceDue)netUpdateTag(r);
     }

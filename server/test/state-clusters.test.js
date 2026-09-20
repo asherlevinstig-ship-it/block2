@@ -32,7 +32,7 @@ const CLUSTERS = {
   initCombatState: [
     'sArrows', 'sFireballs', 'sMeteors', 'dragonBreathCd', 'blackholeCd', 'legendaryCd',
     'dragonAbilityCd', 'phoenixUsed', 'abilityState', 'abilityBuffs', 'weaponMomentum', 'monkAuraAt', 'prospectAt',
-    'shadowSoldiers', 'shadowSpirits', 'secondWindAt', 'pvel',
+    'shadowSoldiers', 'shadowSpirits', 'pvel',
   ],
   initDungeonState: ['dungeonLobbies', 'dungeonPingAt', 'dungeonPartyStatusState', 'dungeonStatusRequestAt', 'gateBreaches', 'gateBreachScars', 'gateSeq', 'gateTtls', 'gateLootedChests', 'gateTimer', 'gateTtl'],
   initPersistenceState: [

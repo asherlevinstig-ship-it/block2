@@ -602,6 +602,10 @@ function ensureAdminExtendedControls(){
       '<label>Radius<input id="adminspawnradius" type="number" min="2" max="30" value="6"></label>'+
       '<label>Boss style<select id="adminspawnstyle"><option value="">Default</option><option value="cinder_smith">Cinder Smith</option><option value="hollow_castellan">Hollow Castellan</option><option value="glass_choir">Glass Choir</option><option value="silent_prior">Silent Prior</option><option value="rimebound_giant">Rimebound Giant</option><option value="thunder_warden">Thunder Warden</option><option value="buried_monarch">Buried Monarch</option><option value="abyssal_gatekeeper">Abyssal Gatekeeper</option><option value="rift_monarch">Rift Monarch</option><option value="ancient_warden">Ancient Warden</option></select></label>'+
       '<label class="admincheck"><button id="adminspawnhere" type="button">SPAWN NEAR ME</button></label>'+
+      '<label class="adminspan">Public item drop<select id="admindropitem"><option value="">Choose item</option></select></label>'+
+      '<label>Drop count<input id="admindropcount" type="number" min="1" max="256" value="1"></label>'+
+      '<label>Drop rarity<select id="admindroprarity"><option value="">Default</option><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="mythic">Mythic</option></select></label>'+
+      '<label class="admincheck adminspan"><button id="admindrophere" type="button">DROP ITEM FOR PLAYERS</button></label>'+
       '<label class="adminspan">Raw command<input id="adminrawcommand" maxlength="140" placeholder="/event help"></label>'+
       '<label class="admincheck adminspan"><button id="adminruncommand" type="button">RUN RAW COMMAND</button></label>';
     while(wrap.firstChild)grid.appendChild(wrap.firstChild);
@@ -645,6 +649,10 @@ const adminSpawnRank=document.getElementById('adminspawnrank');
 const adminSpawnRadius=document.getElementById('adminspawnradius');
 const adminSpawnStyle=document.getElementById('adminspawnstyle');
 const adminSpawnHere=document.getElementById('adminspawnhere');
+const adminDropItem=document.getElementById('admindropitem');
+const adminDropCount=document.getElementById('admindropcount');
+const adminDropRarity=document.getElementById('admindroprarity');
+const adminDropHere=document.getElementById('admindrophere');
 const loadscreen=document.getElementById('loadscreen');
 const loadstatus=document.getElementById('loadstatus');
 const uiEl=document.getElementById('ui');
@@ -5612,6 +5620,10 @@ function populateAdminItemOptions(){
     adminItemId.appendChild(opt);
   }
   adminItemId.dataset.ready='1';
+  if(adminDropItem&&!adminDropItem.dataset.ready){
+    adminDropItem.innerHTML=adminItemId.innerHTML;
+    adminDropItem.dataset.ready='1';
+  }
 }
 function syncAdminTokenField(){
   if(!devResetToken)return;
@@ -5731,6 +5743,19 @@ function runAdminSpawnHere(){
   setDevResetStatus('Spawning '+count+' '+kind.replace(/_/g,' ')+'...');
   try{NET.room.send('adminSpawnMob',{kind,count,rank,radius,bossStyle});}
   catch(e){adminSpawnHere.disabled=false;setDevResetStatus(e&&e.message||'Spawn failed.','bad');}
+}
+function runAdminDropHere(){
+  if(!adminDropHere)return;
+  if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Item drops are admin-only.','bad');return;}
+  if(!(NET&&NET.on&&NET.room)){setDevResetStatus('Enter the world before dropping an item.','bad');return;}
+  const id=Math.max(0,Number(adminDropItem&&adminDropItem.value||0)|0);
+  if(!id){setDevResetStatus('Choose an item to drop.','bad');return;}
+  const count=Math.max(1,Math.min(256,Number(adminDropCount&&adminDropCount.value)||1));
+  const rarity=String(adminDropRarity&&adminDropRarity.value||'');
+  adminDropHere.disabled=true;
+  setDevResetStatus('Dropping item for nearby players...');
+  try{NET.room.send('adminDropItem',{id,count,rarity});}
+  catch(e){adminDropHere.disabled=false;setDevResetStatus(e&&e.message||'Item drop failed.','bad');}
 }
 function adminCsv(value){
   return String(value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
@@ -5912,6 +5937,7 @@ for(const [id,command] of [
 if(adminRunCommand)adminRunCommand.addEventListener('click',()=>adminSendCommand(adminRawCommand&&adminRawCommand.value));
 if(adminRawCommand)adminRawCommand.addEventListener('keydown',e=>{if(e.code==='Enter'){e.preventDefault();adminSendCommand(adminRawCommand.value);}});
 if(adminSpawnHere)adminSpawnHere.addEventListener('click',runAdminSpawnHere);
+if(adminDropHere)adminDropHere.addEventListener('click',runAdminDropHere);
 if(adminPreviewModel)adminPreviewModel.addEventListener('click',()=>{
   if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Model preview is admin-only.','bad');return;}
   const preview=globalThis.BlockcraftAppearancePreview;
@@ -5938,6 +5964,15 @@ window.addEventListener('blockcraft-admin-spawn',e=>{
     return;
   }
   setDevResetStatus('Spawned '+(d.count||0)+' '+String(d.kind||'actor').replace(/_/g,' ')+'.','ok');
+});
+window.addEventListener('blockcraft-admin-item-drop',e=>{
+  if(adminDropHere)adminDropHere.disabled=false;
+  const d=e&&e.detail||{};
+  if(d.ok===false){
+    const reason=d.reason==='admin'?'Item drops are admin-only.':d.reason==='dungeon'?'Leave the dungeon before dropping public items.':d.reason==='item'?'Choose a valid item.':d.reason==='rate'?'Wait a moment before dropping more items.':'Item drop failed.';
+    setDevResetStatus(reason,'bad');return;
+  }
+  setDevResetStatus('Dropped '+(d.label||'item')+' ×'+(d.count||1)+' in '+(d.stacks||1)+' stack'+((d.stacks||1)===1?'':'s')+'.','ok');
 });
 if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDevResetPanel();});
 if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();closeDevResetPanel();}});

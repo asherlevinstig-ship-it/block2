@@ -102,7 +102,7 @@ function sanitizeShadowArmy(list,level=1) {
     if(!kind)continue;
     out.push({
       id:cleanShortText(raw.id,'spirit_'+out.length,64),kind,
-      name:cleanShortText(raw.name,raw.boss?'Boss Shadow':'Shadow Soldier',40),
+      name:cleanShortText(raw.name,raw.boss?'Boss Shadow':'Captured Shadow',40),
       rank:clampI(raw.rank,0,5),boss:raw.boss===true,elite:raw.elite===true,
       level:clampI(raw.level,1,999),capturedAt:clampI(raw.capturedAt,0,4102444800000),
     });
@@ -425,6 +425,7 @@ function defaultProfile(name) {
     familiarChallenges: {},
     shadowArmy: [],
     abilitySpec: '',
+    secondWindReadyAt: 0,
     deity: { unlocked: false, ascendedAt: 0, chosenPower: '', powers: [], active: {} },
     meditationGrowth: { completed: 0, next: 3, hp: 0, mp: 0, sp: 0, hunger: 0 },
     dragonCare: {},
@@ -1206,6 +1207,7 @@ function sanitizeProfile(p) {
   for(const kind of FAMILIAR_UNLOCK_IDS){const raw=p.familiarChallenges&&p.familiarChallenges[kind];if(raw&&typeof raw==='object')out.familiarChallenges[kind]={day:clampI(raw.day,0,100000),progress:clampI(raw.progress,0,1000000),claimed:raw.claimed===true};}
   out.shadowArmy = sanitizeShadowArmy(p.shadowArmy,out.S.lvl);
   out.abilitySpec = ABILITY_PROGRESSION.validSpecialization(out.S.path,p.abilitySpec)?p.abilitySpec:'';
+  out.secondWindReadyAt = clampI(p.secondWindReadyAt, 0, 4102444800000);
   out.dragonCare = sanitizeDragonCare(p.dragonCare);
   out.dragonBondXp = sanitizeDragonBondXp(p.dragonBondXp, out.mountUnlocks);
   out.dragonRoleMastery = sanitizeDragonRoleMastery(p.dragonRoleMastery, out.mountUnlocks);

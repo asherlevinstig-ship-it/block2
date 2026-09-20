@@ -126,9 +126,10 @@ function showFeatherStepLandingFx(m={}){
 }
 const PANTHER_FORM={eye:0.68,height:0.96,width:0.24,speed:8.15,strafe:1.14,accel:46,brake:42,airAccel:12,jump:9.35,pounce:1.8,landingDip:.075,shiftMs:900};
 let pantherLocalUntil=0,pantherShiftStart=-1e9,pantherShiftMs=PANTHER_FORM.shiftMs,pantherProwlT=0;
-const MOVEMENT_FEEL={walk:4.3,sprint:6.2,sprintRampUp:.25,sprintRampDown:.18,exhaustedWalk:.8,recoverSprintAt:.12,groundAccel:22,groundSprintAccel:28,groundBrake:34,airAccel:6.5,airBrake:2.8,waterAccel:10};
+const MOVEMENT_FEEL={walk:4.3,sprint:6.2,sprintRampUp:.25,sprintRampDown:.18,exhaustedWalk:.8,recoverSprintAt:.12,groundAccel:22,groundSprintAccel:28,groundBrake:34,airAccel:6.5,airBrake:2.8,waterAccel:10,flightAccel:5.4,flightBrake:2.5};
 const FALL_DAMAGE={safeDrop:5,featherAbsorbDrop:16,hardScale:1.25,featherScale:.5,maxDamage:18};
 let sprintRamp=0,staminaExhausted=false,locomotionBobT=0,locomotionBob=0,locomotionRoll=0,locomotionPitch=0,landingDip=0,lastPlanarSpeed=0,localFallPeakY=0,localFallAirborne=false;
+let waterBlend=0,stepCameraOffset=0,flightBank=0,flightPitch=0;
 let lastTabletSprintDrainTraceAt=0;
 const movementState={grounded:false,airborne:true,swimming:false,sprinting:false,exhausted:false,panther:false,state:'airborne',speed:0,targetSpeed:0,sprintFactor:0};
 function pantherFormActive(now=performance.now()){
@@ -452,11 +453,20 @@ function tryStepAssist(fromX,fromY,fromZ,dx,dz,wasGround,feetWater,flying){
     for(let i=0;i<10&&!player.onGround;i++)moveAxis('y',-.13);
     if(!combatApi.collides(player.pos)&&player.pos.y<=fromY+1.08){
       landingDip=Math.max(landingDip,.018);
+      stepCameraOffset=Math.max(-1.05,Math.min(.25,stepCameraOffset+fromY-player.pos.y));
       return true;
     }
   }
   player.pos.set(currentX,currentY,currentZ);
   return false;
+}
+function movePlanarSwept(dx,dz){
+  const steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dz))/.12));
+  const sx=dx/steps,sz=dz/steps;
+  for(let i=0;i<steps;i++){
+    if(Math.abs(sx)>=Math.abs(sz)){moveAxis('x',sx);moveAxis('z',sz);}
+    else {moveAxis('z',sz);moveAxis('x',sx);}
+  }
 }
 function tickCameraLocomotion(dt, moving, grounded, swimming, sprintFactor, pantherView, f, s, planarSpeed){
   const pantherActive=!!(pantherView&&pantherView.active);
@@ -472,7 +482,8 @@ function tickCameraLocomotion(dt, moving, grounded, swimming, sprintFactor, pant
   const targetRoll=pantherActive?(s*.035):(s*.018+sprintFactor*s*.014);
   locomotionRoll=approach(locomotionRoll,targetRoll,pantherActive?13:9,dt);
   landingDip=approach(landingDip,0,9,dt);
-  return {bob:locomotionBob-landingDip,pitch:locomotionPitch,roll:locomotionRoll};
+  stepCameraOffset=approach(stepCameraOffset,0,5.8,dt);
+  return {bob:locomotionBob-landingDip+stepCameraOffset,pitch:locomotionPitch,roll:locomotionRoll};
 }
 function tickFeatherStepLandingFx(now){
   for(let i=featherStepLandings.length-1;i>=0;i--){
@@ -3528,7 +3539,9 @@ function tick(now){
     // --- water & jump physics ---
     const waistWater = getB(Math.floor(player.pos.x), Math.floor(player.pos.y+0.8), Math.floor(player.pos.z))===B.WATER;
     const feetWater  = waistWater || getB(Math.floor(player.pos.x), Math.floor(player.pos.y+0.2), Math.floor(player.pos.z))===B.WATER;
-    const inWater = feetWater;
+    const waterTarget=waistWater?1:(feetWater?.58:0);
+    waterBlend=approach(waterBlend,waterTarget,waterTarget>waterBlend?7:5,dt);
+    const inWater = waterBlend>.06;
     if(feetWater && !wasInWater && player.vel.y<-5){          // entry splash
       burst(player.pos.x, player.pos.y+.4, player.pos.z, [.45,.62,.85], 16, 2.6, 2.2, .5);
       SFX.splash(player.vel.y<-10);
@@ -3547,19 +3560,27 @@ function tick(now){
         if(climb!==0) player.vel.y=climb*9;
         else player.vel.y += (0-player.vel.y)*Math.min(1,dt*8);
       }
+      const bankTarget=Math.max(-.13,Math.min(.13,-s*.085-player.vel.x*Math.cos(player.yaw)*.006+player.vel.z*Math.sin(player.yaw)*.006));
+      const pitchTarget=Math.max(-.08,Math.min(.07,-player.vel.y*.008));
+      flightBank=approach(flightBank,bankTarget,4.8,dt);
+      flightPitch=approach(flightPitch,pitchTarget,4.2,dt);
       if(deityFlying&&Math.random()<dt*22){
         spawnParticle({x:player.pos.x+(Math.random()-.5)*.9,y:player.pos.y+.05+Math.random()*.55,z:player.pos.z+(Math.random()-.5)*.9,
           vx:(Math.random()-.5)*.35,vy:-.25-Math.random()*.45,vz:(Math.random()-.5)*.35,life:.55,grav:-.05,r:1,g:.82,b:.34});
       }
     } else {
-    let grav = waistWater?9 : feetWater?14 : 26;
+    flightBank=approach(flightBank,0,6.5,dt);
+    flightPitch=approach(flightPitch,0,6.5,dt);
+    let grav = 26+(9-26)*waterBlend;
     if(!feetWater && player.vel.y>0 && !keys['Space']) grav*=1.7;   // tap = short hop, hold = full arc
     player.vel.y -= grav*dt;
-    if(waistWater) player.vel.y=Math.max(player.vel.y,-2.2);
-    else if(feetWater) player.vel.y=Math.max(player.vel.y,-3.5);
+    if(waterBlend>.04){
+      const sinkLimit=waterBlend<.58?(-18+25*waterBlend):(-3.5+(waterBlend-.58)*(1.3/.42));
+      player.vel.y=Math.max(player.vel.y,sinkLimit);
+    }
     const wantJump = keys['Space'] || (now-jumpPressT<130);         // buffered taps
     if(wantJump){
-      const canJump = player.onGround || (!feetWater && now-lastGroundT<120);  // coyote time
+      const canJump = player.onGround || (!feetWater && now-lastGroundT<165);  // forgiving ledge coyote time
       if(canJump){
         player.vel.y=mounted?9.4:(pantherFormActive(now)?PANTHER_FORM.jump:8.2); player.onGround=false;
         if(pantherMove){
@@ -3571,7 +3592,7 @@ function tick(now){
         lastGroundT=-1e9; jumpPressT=-1e9;
       } else if(feetWater && !player.onGround){
         // swim up: strong, snappy thrust so a player who falls in can breach and hop out on their own
-        player.vel.y=Math.min(player.vel.y+38*dt, waistWater?4.8:6.6);
+        player.vel.y=Math.min(player.vel.y+(27+11*waterBlend)*dt, 6.6-1.8*waterBlend);
         // climb out: pushing toward a bank vaults you over the lip. Probe the direction the player is
         // steering (falls back to velocity) so it fires immediately, and only needs one clear block above.
         if(f!==0||s!==0){
@@ -3605,15 +3626,15 @@ function tick(now){
       playerKb.multiplyScalar(Math.max(0,1-dt*5));
     }
     const groundedForMove=wasGround||player.onGround||(!feetWater&&now-lastGroundT<90);
-    const controlRate=pantherMove?(groundedForMove?(movementInput?PANTHER_FORM.accel:PANTHER_FORM.brake):PANTHER_FORM.airAccel):(inWater?MOVEMENT_FEEL.waterAccel:(groundedForMove?(movementInput?(sprint?MOVEMENT_FEEL.groundSprintAccel:MOVEMENT_FEEL.groundAccel):MOVEMENT_FEEL.groundBrake):(movementInput?MOVEMENT_FEEL.airAccel:MOVEMENT_FEEL.airBrake)));
+    const dryControl=flying?(movementInput?MOVEMENT_FEEL.flightAccel:MOVEMENT_FEEL.flightBrake):(groundedForMove?(movementInput?(sprint?MOVEMENT_FEEL.groundSprintAccel:MOVEMENT_FEEL.groundAccel):MOVEMENT_FEEL.groundBrake):(movementInput?MOVEMENT_FEEL.airAccel:MOVEMENT_FEEL.airBrake));
+    const controlRate=pantherMove?(groundedForMove?(movementInput?PANTHER_FORM.accel:PANTHER_FORM.brake):PANTHER_FORM.airAccel):(dryControl+(MOVEMENT_FEEL.waterAccel-dryControl)*waterBlend);
     player.vel.x=approach(player.vel.x,targetVx,controlRate,dt);
     player.vel.z=approach(player.vel.z,targetVz,controlRate,dt);
     if(!movementInput&&groundedForMove&&Math.hypot(player.vel.x,player.vel.z)<.035){player.vel.x=0;player.vel.z=0;}
-    const moveScale=inWater?.6:1,stepFromX=player.pos.x,stepFromY=player.pos.y,stepFromZ=player.pos.z;
+    const moveScale=1-.4*waterBlend,stepFromX=player.pos.x,stepFromY=player.pos.y,stepFromZ=player.pos.z;
     const moveDx=player.vel.x*moveScale*dt,moveDz=player.vel.z*moveScale*dt;
     player.vx=player.vel.x; player.vz=player.vel.z;
-    moveAxis('x', moveDx);
-    moveAxis('z', moveDz);
+    movePlanarSwept(moveDx,moveDz);
     tryStepAssist(stepFromX,stepFromY,stepFromZ,moveDx,moveDz,wasGround,feetWater,flying);
     moveAxis('y', player.vel.y*dt);
     if(eventStartLocked()){holdEventStartPosition();player.onGround=true;}
@@ -3685,7 +3706,15 @@ function tick(now){
       applyMeditationCamera();
     }
     applyDirectorCamera(now,dt);
+    camera.rotation.x+=flightPitch;
+    camera.rotation.z+=flightBank;
     refreshDirectorCameraHud();
+    }
+    const correctionVisual=networkingApi.tickPositionCorrection&&networkingApi.tickPositionCorrection(dt);
+    if(correctionVisual&&correctionVisual.active&&!cutscene&&!directorFree&&!(worldState.skyshipJourney&&worldState.skyshipJourney.boarded)){
+      camera.position.x+=correctionVisual.x;
+      camera.position.y+=correctionVisual.y;
+      camera.position.z+=correctionVisual.z;
     }
     if(camShake>0){
       camShake=Math.max(0,camShake-dt*2.2);

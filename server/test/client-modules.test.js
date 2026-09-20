@@ -1910,6 +1910,10 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(networkingSource,/function showLevelUpReveal\(m\)/);
   assert.match(networkingSource,/function showDeityAscension\(m\)/);
   assert.match(networkingSource,/LEVEL UP/);
+  assert.match(networkingSource,/SYSTEM NOTIFICATION/);
+  assert.match(networkingSource,/STAT POINTS ACQUIRED/);
+  assert.match(networkingSource,/POINT.*AWAITING ASSIGNMENT/);
+  assert.match(networkingSource,/BlockcraftLevelUpReveal/);
   assert.match(networkingSource,/room\.onMessage\('levelUp'/);
   assert.match(networkingSource,/room\.onMessage\('deityAscended'/);
   assert.match(networkingSource,/room\.onMessage\('deityPowerResult'/);
@@ -2091,6 +2095,21 @@ test('shadow army progression scales storage, deployment, capture odds, and boss
   assert.ok(shadow.combatProfile('boss',3,true).radius>2);
 });
 
+test('Shadow Army UI teaches capture and deployment as distinct live states',()=>{
+  const abilities=fs.readFileSync(path.join(__dirname,'..','..','shared','ability-system.js'),'utf8');
+  const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const index=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
+  assert.match(index,/\/shared\/shadow-army\.js/);
+  assert.match(abilities,/name:'Shadow Army'[\s\S]*Near a fallen spirit: capture it[\s\S]*deploy stored shadows for 30s/);
+  assert.match(dimensions,/capturing\?'ARISE':army\.stored\?'DEPLOY '/);
+  assert.match(dimensions,/function shadowArmyGuideHTML\(\)/);
+  assert.match(dimensions,/Capture first\. Deploy second\./);
+  assert.match(networking,/PRESS H · COMMAND ARISE/);
+  assert.match(networking,/Stand within <b>7 blocks<\/b> and press <b>H<\/b> before it fades/);
+  assert.match(networking,/They follow you and attack automatically/);
+});
+
 test('client prediction applies Arcanist mana and cooldown discounts',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   assert.match(source,/mp-=abilityManaCost\(a\)/);
@@ -2105,6 +2124,20 @@ test('Rootsnare VFX renders a physical root field, not just particles',()=>{
   assert.match(visuals,/rootTendrilMesh/);
   assert.match(visuals,/new THREE\.CylinderGeometry\(\.035\+h\*\.006,\s*\.095\+h\*\.015,\s*height,\s*6\)/);
   assert.match(visuals,/rootClutchVfx\(x,y,z,radius\)/);
+});
+
+test('Verdant Mend VFX follows the authoritative healed target',()=>{
+  const visuals=fs.readFileSync(path.join(__dirname,'..','..','client','js','replication-visuals.mjs'),'utf8');
+  assert.match(visuals,/m\.kind==='mend'[\s\S]*m\.targetX[\s\S]*healingPlusVfx\(hx,hy\+\.05,hz/);
+});
+
+test('Second Wind is presented as an automatic armed passive and restores its durable cooldown',()=>{
+  const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(dimensions,/a\.passive\?'AUTO'/);
+  assert.match(dimensions,/swCd>0\?Math\.ceil\(swCd\)\+'s':'ARMED'/);
+  assert.match(networking,/m&&m\.secondWindReadyAt/);
+  assert.match(networking,/Second Wind armed:<\/b> automatically heals you when health falls below 25%/);
 });
 
 test('browser and server consume one shared safeguarded comms ruleset', () => {
@@ -2572,7 +2605,7 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
   assert.match(css,/#hotbar \.slot\{width:calc\(\(100vw - 54px\)\/9\)/);
   assert.doesNotMatch(css,/#utilitybar\{/);
   assert.doesNotMatch(css,/#keyprompthud|keyPromptSweep/);
-  assert.match(css,/#statpointnudge\{position:fixed;left:50%;bottom:146px/);
+  assert.match(css,/#statpointnudge\{position:fixed;left:50%;bottom:146px[\s\S]*rgba\(103,218,255,\.72\)/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#statpointnudge\{bottom:218px/);
   assert.doesNotMatch(css,/#recallrechargenudge/);
 });
@@ -4433,6 +4466,10 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(combat, /btn\.id='adminpreviewmodel'/);
   assert.match(combat, /adminPreviewModel\.classList\.toggle\('hidden',!admin\)/);
   assert.match(combat, /id="admingrantallarmor"/);
+  assert.match(combat, /id="admindrophere"/);
+  assert.match(combat, /NET\.room\.send\('adminDropItem',\{id,count,rarity\}\)/);
+  assert.match(networking, /publicItemDropCreated/);
+  assert.match(networking, /FREE DROP:/);
   assert.match(combat, /function adminArmorGrantList\(\)/);
   assert.match(combat, /Added all armor sets to inventory/);
   assert.match(combat, /grant\.equip=true/);

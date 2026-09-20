@@ -1827,6 +1827,35 @@ test('admin can spawn one persistent test player for safe social interaction che
   assert.equal(room.state.players.get(sid),bot,'re-spawning moves the existing replicated player instead of replacing it');
 });
 
+test('admin public item drops are validated, stack-capped, visible, and collectible',()=>{
+  const room=makeRoom(),admin=makeClient('drop_admin'),player=makeClient('drop_player'),normal=makeClient('drop_normal');
+  admin._accountRole='admin';
+  seedPlayer(room,admin,{x:520,y:16,z:520,yaw:0});
+  const {prof}=seedPlayer(room,player,{x:520,y:16,z:522,inv:[]});
+  seedPlayer(room,normal,{x:524,y:16,z:524});
+  room.clients.push(admin,player,normal);
+  room.world.standHeight=()=>16;
+
+  room.handleAdminDropItem(normal,{id:I.BREAD,count:2});
+  assert.equal(normal.sent.some(e=>e.type==='adminDropItemReject'&&e.msg.reason==='admin'),true);
+  room.handleAdminDropItem(admin,{id:W.B.BEDROCK,count:1});
+  assert.equal(admin.sent.some(e=>e.type==='adminDropItemReject'&&e.msg.reason==='item'),true);
+
+  room.handleAdminDropItem(admin,{id:I.BREAD,count:40});
+  const result=admin.sent.find(e=>e.type==='adminDropItemResult');
+  assert.deepEqual({count:result.msg.count,stacks:result.msg.stacks},{count:40,stacks:3});
+  assert.deepEqual([...room.adminItemDrops.values()].map(drop=>drop.item.count),[16,16,8]);
+  assert.equal(player.sent.filter(e=>e.type==='publicItemDropCreated').length,3,'all overworld players see public drops');
+
+  for(const drop of room.adminItemDrops.values()){
+    const live=room.state.players.get(player.sessionId);live.x=drop.x;live.y=drop.y;live.z=drop.z;
+    room.collectAdminItemDrops(player);
+  }
+  assert.equal(itemCount(prof,I.BREAD),40);
+  assert.equal(room.adminItemDrops.size,0);
+  assert.equal(admin.sent.filter(e=>e.type==='publicItemDropTaken').length,3,'collection clears the drop for every viewer');
+});
+
 test('admin gate teleport from DungeonRoom returns the hunter to the hosted gate',()=>{
   const room=makeDungeonRoom(),admin=makeClient('dungeon_gate_admin');
   admin._accountRole='admin';
@@ -3116,11 +3145,15 @@ test('failed Shadow Army casts preserve cooldown and ineligible spirits',()=>{
   room.handleAbility(client,{path:'shadow',slot:2});
   let st=room.abilityState.get(client.sessionId);
   assert.equal(st.cds['shadow:2'],0,'an empty army does not consume the summon cooldown');
+  let result=client.sent.findLast(e=>e.type==='abilityResult').msg;
+  assert.deepEqual({action:result.action,reason:result.reason,storage:result.storage,stored:result.stored,deployLimit:result.deployLimit},{action:'deploy',reason:'empty',storage:3,stored:0,deployLimit:1});
   prof.shadowArmy=Array.from({length:10},(_,i)=>({id:'s'+i,kind:'zombie',name:'Zombie',rank:0,boss:false,elite:false,level:1,capturedAt:1}));
   room.shadowSpirits.set(client.sessionId,{id:'offer',kind:'zombie',name:'Zombie',rank:0,boss:false,elite:false,level:1,x:20,y:10,z:20,dgn:'',expiresAt:Date.now()+10000});
   room.handleAbility(client,{path:'shadow',slot:2});st=room.abilityState.get(client.sessionId);
   assert.equal(room.shadowSpirits.has(client.sessionId),true,'full storage leaves the spirit available');
   assert.equal(st.cds['shadow:2'],0,'a blocked capture does not consume cooldown');
+  result=client.sent.findLast(e=>e.type==='abilityResult').msg;
+  assert.deepEqual({action:result.action,reason:result.reason,storage:result.storage,stored:result.stored,deployLimit:result.deployLimit},{action:'capture',reason:'storage',storage:3,stored:10,deployLimit:1});
 });
 
 test('Arcanist can cast using its discounted server mana and cooldown',()=>{
@@ -3142,6 +3175,12 @@ test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',(
   room.handleAbility(healer,{path:'verdant',slot:0});
   assert.ok(room.playerHp.get(ally.sessionId).hp>5,'Mend heals the weakest nearby ally before the caster');
   assert.equal(ally.sent.some(e=>e.type==='hurt'&&e.msg.reason==='verdant_mend'),true);
+  const mendFx=healer.sent.find(e=>e.type==='fx'&&e.msg.kind==='mend');
+  assert.deepEqual(
+    {sid:mendFx.msg.targetSid,x:mendFx.msg.targetX,y:mendFx.msg.targetY,z:mendFx.msg.targetZ},
+    {sid:ally.sessionId,x:22,y:10,z:20},
+    'Mend VFX identifies the authoritative healed player and position'
+  );
 
   const mob=new Mob();mob.kind='zombie';mob.x=23;mob.y=10;mob.z=20;mob.hp=30;mob.maxHp=30;room.state.mobs.set('rooted',mob);
   room.mobMeta.rooted=room.freshMeta(23,20,3,1.5,'zombie',0,true);
@@ -4855,7 +4894,7 @@ test('shared ability system: one tuning table serves both sides, with level-scal
   assert.equal(ABILITY.abilityDamage('soldier', { lvl: 10 }), 7, 'soldier keeps its own 4 + 0.3/level curve');
 });
 
-test('Shadow Soldier is server-simulated: it spawns as a friendly mob, hunts, strikes, and expires', () => {
+test('Shadow Army deployment is server-simulated: it spawns friendly mobs, hunts, strikes, and expires', () => {
   const room = makeRoom();
   room.mobSeq = 0;
   const client = makeClient('summoner');
@@ -4902,7 +4941,7 @@ test('Shadow Soldier is server-simulated: it spawns as a friendly mob, hunts, st
   assert.equal(room.shadowSoldiers.size, 0);
 });
 
-test('Second Wind is server-authoritative: guardians heal at the brink, on a real cooldown', () => {
+test('Second Wind is server-authoritative: guardians heal at the brink, on a durable cooldown', () => {
   const room = makeRoom();
   const guardian = makeClient('guardian');
   const { prof } = seedPlayer(room, guardian, { lvl: 8, hp: 20 });
@@ -4914,10 +4953,20 @@ test('Second Wind is server-authoritative: guardians heal at the brink, on a rea
   const hp = room.playerHp.get(guardian.sessionId);
   assert.equal(hp.hp > 3, true, 'Second Wind healed the guardian');
   assert.equal(guardian.sent.some(e => e.type === 'hurt' && e.msg.reason === 'second_wind' && e.msg.n < 0), true);
+  assert.equal(prof.secondWindReadyAt > Date.now(), true, 'the cooldown is stored on the durable profile');
+  assert.equal(sanitizeProfile(prof).secondWindReadyAt, prof.secondWindReadyAt, 'the cooldown survives persistence sanitization');
 
   hp.hp = 20;
   room.hurtPlayer(guardian, 17, 'test');                       // still on cooldown: no second proc
   assert.equal(room.playerHp.get(guardian.sessionId).hp, 3, 'the passive stays on cooldown');
+
+  const replacementSession = makeClient('guardian-reconnected');
+  room.tokens.set(replacementSession.sessionId, room.tokens.get(guardian.sessionId));
+  room.state.players.set(replacementSession.sessionId, { x: 20, y: 10, z: 20, dgn: '' });
+  room.playerHp.set(replacementSession.sessionId, { hp: 20, max: 20 });
+  room.clients = [replacementSession];
+  room.hurtPlayer(replacementSession, 17, 'test');
+  assert.equal(room.playerHp.get(replacementSession.sessionId).hp, 3, 'reconnecting cannot reset the profile cooldown');
 
   const civilian = makeClient('civilian');
   seedPlayer(room, civilian, { lvl: 8, hp: 20 });

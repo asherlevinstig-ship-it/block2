@@ -19,6 +19,8 @@ function suppressRoomMouseLook(ms,reason){
 // this adapter keeps the historical client shape (cd in seconds, n/g/txt fields).
 const ABILITY_SYS=window.BlockcraftAbilitySystem;
 const ABILITY_PROGRESSION=window.BlockcraftAbilityProgression;
+const SHADOW_ARMY_SYS=window.BlockcraftShadowArmy;
+const SHADOW_ARMY_UI=globalThis.BlockcraftShadowArmyUiState||(globalThis.BlockcraftShadowArmyUiState={army:[],offer:null});
 let abilitySpec='',pendingAbilitySpec='';
 Object.defineProperty(globalThis,'BlockcraftAbilityProgressionState',{value:Object.freeze({get:()=>abilitySpec,set:v=>{abilitySpec=String(v||'');if(abilitySpec)pendingAbilitySpec='';}}),configurable:true});
 const PATHS=(()=>{
@@ -580,7 +582,7 @@ function sendAbilityRequest(path,i,a){
     dx:d.x, dy:d.y, dz:d.z
   });
   mp-=abilityManaCost(a); sp=Math.max(0,sp-a.sp); abCd[i]=abilityCooldown(a);
-  // predict movement/buff feedback locally; the Shadow Soldier is server-simulated
+  // predict movement/buff feedback locally; the Shadow Army is server-simulated
   // in multiplayer (a real replicated mob), so slot 2 no longer spawns a local ghost
   if((path==='shadow' && (i===0||i===1)) || (path==='guardian' && i===0) || (path==='verdant' && i===2)){
     doAbility(path,i);
@@ -590,6 +592,13 @@ function sendAbilityRequest(path,i,a){
 }
 function abilityManaCost(a){return a.mp*(abilitySpec==='arcanist'&&ABILITY_PROGRESSION.rankForLevel(S.lvl)>=2?.85:1);}
 function abilityCooldown(a){return a.cd*(abilitySpec==='arcanist'&&ABILITY_PROGRESSION.rankForLevel(S.lvl)>=2?.85:1);}
+function shadowArmyUiState(){
+  const limits=SHADOW_ARMY_SYS&&SHADOW_ARMY_SYS.limits?SHADOW_ARMY_SYS.limits(S.lvl):{storage:0,deployed:0};
+  const army=Array.isArray(SHADOW_ARMY_UI.army)?SHADOW_ARMY_UI.army:[];
+  const offer=SHADOW_ARMY_UI.offer&&Number(SHADOW_ARMY_UI.offer.expiresAt)>Date.now()?SHADOW_ARMY_UI.offer:null;
+  if(!offer&&SHADOW_ARMY_UI.offer)SHADOW_ARMY_UI.offer=null;
+  return {army,offer,stored:army.length,storage:limits.storage||0,deployLimit:(limits.deployed||0)+(abilitySpec==='commander'?1:0)};
+}
 function verdantMendVfx(x,y,z,scale=1){
   healingPlusVfx(x,y+.05,z,.75,.72*scale);
   ringPulse(x,y+.08,z,1.6*scale,0x22c55e,.45);
@@ -774,7 +783,7 @@ function shadowCastScreen(kind){
   setTimeout(()=>{if(el.className===kind)el.className='';},durations[kind]||700);
 }
 Object.defineProperty(globalThis,'BlockcraftAbilityScreen',{value:Object.freeze({play:shadowCastScreen}),configurable:true});
-// the Shadow Soldier
+// the offline Shadow Army preview ally
 function makeShadow(){
   const grp=new THREE.Group(), mats=[], legs=[], arms=[];
   const reg=m=>{mats.push(m);return m;};
@@ -806,7 +815,7 @@ function spawnAlly(){
   scene.add(a.grp); allies.push(a);
   shadowSummonPortalVfx(a.grp.position.x, a.grp.position.y, a.grp.position.z);
   burst(a.grp.position.x, a.grp.position.y+1, a.grp.position.z, [.45,.3,.9], 24, 2.4, 2.4, .65);
-  sysMsg('<b>Shadow Soldier</b> rises');
+  sysMsg('<b>Shadow Army</b>: a captured shadow rises');
 }
 function tickAbilities(dt,t){
   for(let i=0;i<3;i++) abCd[i]=Math.max(0,abCd[i]-dt);
@@ -942,7 +951,7 @@ function renderAbilities(){
   abEl.setAttribute('aria-label',path&&PATHS[path]?(PATHS[path].name+' ability hotbar'):'Ability hotbar');
   if(path){
     const P=PATHS[path];
-    P.ab.forEach((a,i)=>rows.push({a,i,key:['Q','R','H'][i], col:P.col, locked:!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i]}));
+    P.ab.forEach((a,i)=>rows.push({a,i,key:a.passive?'AUTO':['Q','R','H'][i], col:P.col, locked:!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i], passive:!!a.passive, shadowArmy:path==='shadow'&&i===2}));
   } else if(S.lvl>=2){
     ['Q','R','H'].forEach((key,i)=>rows.push({
       a:{g:'?',n:'Choose a path'}, i, key, col:'#7385a3', locked:true, pathPending:true
@@ -969,14 +978,16 @@ function renderAbilities(){
     rows.push({a:{n:meta.n, g:meta.g, cd:lw.info.legendary.cd||10, txt:meta.txt}, i:4, key:'F', col:meta.col, locked:false, legendaryKind:lw.kind});
   }
   rows.forEach(row=>{
-    const d=document.createElement('div'); d.className='abslot'+(row.pathPending?' path-pending':'');
+    const d=document.createElement('div'); d.className='abslot'+(row.pathPending?' path-pending':'')+(row.passive?' passive':'')+(row.shadowArmy?' shadow-army':'');
     d.style.borderColor=row.col; d.style.color=row.col;
     const unlockLabel=row.locked&&!row.pathPending&&AB_UNLOCK[row.i]?' — unlocks at Level '+AB_UNLOCK[row.i]:'';
-    d.title=row.pathPending?'Choose your ability path with C':((row.a.n||'Ability')+unlockLabel);
+    d.title=row.pathPending?'Choose your ability path with C':row.passive
+      ? (row.a.n+unlockLabel+' — automatic heal below 25% health')
+      : ((row.a.n||'Ability')+unlockLabel);
     d.dataset.abilityKey=row.key==='Q'?'KeyQ':row.key==='R'?'KeyR':row.key==='H'?'KeyH':row.key==='J'?'KeyJ':row.key==='F'?'KeyF':'';
-    d.setAttribute('role','button');
-    d.setAttribute('tabindex','0');
-    d.setAttribute('aria-label',(row.a.n||'Ability')+' - '+row.key+unlockLabel);
+    d.setAttribute('role',row.passive?'status':'button');
+    d.setAttribute('tabindex',row.passive?'-1':'0');
+    d.setAttribute('aria-label',(row.a.n||'Ability')+' - '+(row.passive?'automatic passive':row.key)+unlockLabel);
     d.innerHTML='<span class="k">'+row.key+'</span>'+row.a.g+'<div class="cdov"></div><span class="lk">'+(row.pathPending?'PATH':'')+'</span>';
     d.addEventListener('pointerdown',e=>{
       const code=d.dataset.abilityKey||'';
@@ -1004,10 +1015,27 @@ function updateAbilityHUD(){
     const d=abSlots[idx++]; if(!d) return;
     const locked=!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i];
     d.classList.toggle('locked',locked);
-    d.querySelector('.lk').textContent=locked?('Lv'+AB_UNLOCK[i]):'';
-    const cd=a.passive ? swCd/60 : abCd[i]/abilityCooldown(a);
+    d.querySelector('.lk').textContent=locked?('Lv'+AB_UNLOCK[i]):a.passive?(swCd>0?Math.ceil(swCd)+'s':'ARMED'):'';
+    const cd=a.passive ? swCd/abilityCooldown(a) : abCd[i]/abilityCooldown(a);
     d.classList.toggle('cooldown',!locked&&cd>0.01);
     d.classList.toggle('ready',!locked&&cd<=0.01);
+    if(path==='shadow'&&i===2){
+      const army=shadowArmyUiState(),capturing=!!army.offer;
+      const label=locked?'Lv'+AB_UNLOCK[i]:capturing?'ARISE':army.stored?'DEPLOY '+Math.min(army.stored,army.deployLimit):'CAPTURE';
+      d.querySelector('.lk').textContent=label;
+      d.classList.toggle('capture',!locked&&capturing);
+      d.dataset.mode=capturing?'capture':army.stored?'deploy':'empty';
+      d.title=locked?'Shadow Army — unlocks at '+hunterRankLevelLabel(AB_UNLOCK[i])
+        :capturing?'Press H now to capture the nearby '+String(army.offer.name||'fallen spirit')+'.'
+          :army.stored?'Press H away from a fallen spirit to deploy '+Math.min(army.stored,army.deployLimit)+' of '+army.stored+' stored shadows for 30s.'
+            :'Defeat an enemy. Stand within 7 blocks of its spirit and press H to capture it.';
+      d.setAttribute('aria-label','Shadow Army - '+(locked?'locked':capturing?'press H to capture nearby spirit':army.stored?'press H to deploy stored shadows':'defeat an enemy to create a capturable spirit'));
+    }
+    if(a.passive){
+      const state=locked?'unlocks at level '+AB_UNLOCK[i]:swCd>0?'recharging, '+Math.ceil(swCd)+' seconds':'armed';
+      d.setAttribute('aria-label','Second Wind - automatic passive - '+state);
+      d.title='Second Wind — automatic heal below 25% health — '+state;
+    }
     d.querySelector('.cdov').style.height=(Math.max(0,Math.min(1,cd))*100)+'%';
   });
   if(equippedAegisArmor()){
@@ -1098,6 +1126,22 @@ function statUtilityKitHTML(){
     '<div class="stat-utility-focus">'+(active?'<b>'+escHTML(active.name)+'</b><small>'+escHTML(active.use||active.desc||'Ready from the utility hotbar.')+'</small><button type="button" data-utility-use="active">USE ACTIVE</button>':'<b>No active utility equipped</b><small>Equip an active utility if you want a hotkey tool.</small><button type="button" data-utility-open="1">OPEN UTILITIES</button>')+'</div>'+
     '<div class="stat-utility-library"><small>UTILITY LIBRARY ('+order.length+')</small><div class="stat-utility-grid">'+cards+'</div></div></div>';
 }
+function shadowArmyGuideHTML(){
+  const state=shadowArmyUiState();
+  const roster=state.army.slice(0,6).map(spirit=>{
+    const rank=SHADOW_ARMY_SYS&&SHADOW_ARMY_SYS.RANKS?SHADOW_ARMY_SYS.RANKS[Math.max(0,Math.min(5,spirit.rank|0))]:'E';
+    return '<span class="shadow-roster-spirit '+(spirit.boss?'boss':'')+'"><b>'+escHTML(spirit.name||'Captured Shadow')+'</b><small>'+rank+'-Rank'+(spirit.boss?' Boss':spirit.elite?' Elite':'')+'</small></span>';
+  }).join('');
+  const hidden=Math.max(0,state.stored-6);
+  const bossCount=state.army.filter(spirit=>spirit&&spirit.boss).length;
+  const bossUpkeep=state.army.reduce((sum,spirit)=>sum+(spirit&&spirit.boss&&SHADOW_ARMY_SYS?SHADOW_ARMY_SYS.bossUpkeep(spirit.rank)*(abilitySpec==='commander'?.75:1):0),0);
+  return '<div class="shadow-army-guide">'+
+    '<div class="shadow-army-guide-head"><span><b>SHADOW ARMY</b><small>Capture first. Deploy second.</small></span><strong>'+state.stored+' / '+state.storage+' STORED</strong></div>'+
+    '<div class="shadow-army-steps"><span><b>1</b> Defeat a non-animal enemy.</span><span><b>2</b> Stand within 7 blocks of its spirit.</span><span><b>3</b> Press H to command <em>Arise</em> and capture it.</span><span><b>4</b> Away from a spirit, press H to deploy up to '+state.deployLimit+' for 30s.</span></div>'+
+    (state.stored?'<div class="shadow-roster">'+roster+(hidden?'<span class="shadow-roster-more">+'+hidden+' more</span>':'')+'</div>':'<p>No shadows stored yet. Your next defeated enemy can leave a spirit for 12 seconds.</p>')+
+    (bossCount?'<p class="shadow-boss-note">Boss shadows continuously drain '+Math.round(bossUpkeep*10)/10+' MP/sec while deployed. They are recalled when your mana runs out.'+(abilitySpec==='commander'?' Commander reduces this upkeep by 25%.':'')+'</p>':'')+
+    (abilitySpec==='commander'?'<p class="shadow-commander-note">Commander active: deploy +1 shadow and pay 25% less boss upkeep.</p>':'')+'</div>';
+}
 function renderStat(){
   const ATTRS=[
     ['str','STRENGTH','+6% melee damage per point'],
@@ -1147,6 +1191,7 @@ function renderStat(){
       const got=S.lvl>=AB_UNLOCK[i];
       h+='<div class="ablist stat-ability-row"><span'+(got?'':' class="dim"')+'><kbd>'+['Q','R','H'][i]+'</kbd> '+a.g+' '+a.n+(a.passive?' (passive)':'')+'</span><span class="dim">'+(got ? a.txt+' &middot; '+(a.mp?a.mp+' MP ':'')+(a.sp?a.sp+' SP ':'')+'&middot; '+a.cd+'s cd' : 'Unlocks at '+hunterRankLevelLabel(AB_UNLOCK[i]))+'</span></div>';
     });
+    if(S.path==='shadow'&&S.lvl>=AB_UNLOCK[2])h+=shadowArmyGuideHTML();
   }else{
     h+='<div class="stat-path-callout"><b>Your hunter path is waiting</b><p>Preview all four paths and confirm your permanent choice in the full path guide.</p><button id="statchoosepath" type="button">CHOOSE HUNTER PATH</button></div>';
   }

@@ -7453,9 +7453,35 @@ var vmReady=false;
 scene.add(camera);
 const vm=new THREE.Group();
 camera.add(vm);
-let vmSwingT=0, vmDip=0, vmBob=0, vmAmp=0, vmLastId=-2, vmPX=0, vmPZ=0,vmAbilityKind='',vmAbilityT=0,vmAbilityDuration=0;
+let vmSwingT=0, vmSwingKind='', vmSwingDuration=.42, vmDip=0, vmBob=0, vmAmp=0, vmLastId=-2, vmLookSig='', vmPX=0, vmPZ=0,vmAbilityKind='',vmAbilityT=0,vmAbilityDuration=0;
 const vmCache={};
-function vmBlockMesh(id){
+function vmHunterLook(){
+  const supplied=globalThis.BlockcraftPlayerAppearance&&globalThis.BlockcraftPlayerAppearance();
+  const draft=!supplied&&globalThis.AUTH_UI&&globalThis.AUTH_UI.currentAppearance?globalThis.AUTH_UI.currentAppearance():null;
+  return supplied||draft||{skin:'#d8b08a',shirt:'#243a67',accent:'#9b6be8'};
+}
+function vmBox(parent,size,pos,color,rot){
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(...size),new THREE.MeshBasicMaterial({color,depthTest:false}));
+  mesh.position.set(...pos);if(rot)mesh.rotation.set(...rot);mesh.renderOrder=999;parent.add(mesh);return mesh;
+}
+function vmArmMesh(look=vmHunterLook()){
+  const grp=new THREE.Group(),skin=look.skin||'#d8b08a',shirt=look.shirt||'#243a67',accent=look.accent||look.scarf||'#9b6be8';
+  vmBox(grp,[.23,.22,.42],[.13,-.08,.12],shirt,[.5,-.28,-.08]);
+  vmBox(grp,[.245,.07,.25],[.035,.025,-.055],accent,[.5,-.28,-.08]);
+  vmBox(grp,[.205,.19,.2],[-.035,.07,-.16],skin,[.5,-.28,-.08]);
+  vmBox(grp,[.06,.09,.1],[-.14,.035,-.2],skin,[.5,-.28,-.08]);
+  return grp;
+}
+function vmHeldKind(id){
+  id|=0;
+  if((id>=122&&id<=125)||id===136||id===167||id===169)return 'sword';
+  if(id===160)return 'dagger';if(id===161)return 'hammer';if(id===163)return 'scythe';if(id===164)return 'bow';
+  if(id===165)return 'cleaver';if(id===166)return 'katana';if(id===168)return 'chakram';if(id===170)return 'trident';
+  if(id===171)return 'anchor';if(id===138||id===162)return 'staff';if(id>=110&&id<=113)return 'pick';
+  if(id>=114&&id<=117)return 'axe';if(id>=118&&id<=121)return 'shovel';return '';
+}
+function vmBlockMesh(id,look){
+  const grp=vmArmMesh(look);
   const tiles=BLOCKS[id].tiles;
   const g=new THREE.BoxGeometry(.34,.34,.34);
   const uv=g.attributes.uv;
@@ -7470,13 +7496,46 @@ function vmBlockMesh(id){
     }
   }
   const m=new THREE.Mesh(g, new THREE.MeshBasicMaterial({map:atlasTex, depthTest:false}));
-  m.rotation.set(.25,-.6,0);
-  return m;
+  m.position.set(-.08,.16,-.32);m.rotation.set(.25,-.6,0);m.renderOrder=999;grp.add(m);
+  return grp;
 }
-function vmItemMesh(id){
+function vmWeaponMesh(id,look){
+  const kind=vmHeldKind(id),grp=vmArmMesh(look),tool=new THREE.Group();
+  tool.position.set(-.09,.1,-.28);tool.rotation.set(.18,-.18,-.48);grp.add(tool);
+  const legendary=!!(ITEMS[id]&&ITEMS[id].legendary)||id===I.LEGEND_SWORD;
+  const metal=legendary?(id===I.PHOENIX_SWORD?'#ff7b1c':id===I.FROSTBITE_CHAKRAM?'#78e8ff':'#b86cff'):'#526b85';
+  const dark=kind==='staff'||kind==='scythe'||kind==='anchor'?'#35204f':'#6b4a2a',gold='#e4bd55';
+  if(kind==='sword'||kind==='dagger'||kind==='katana'||kind==='cleaver'){
+    vmBox(tool,[.065,kind==='dagger'?.42:.72,.055],[0,.28,0],metal,[0,0,kind==='katana'?-.08:0]);
+    vmBox(tool,[.016,kind==='dagger'?.36:.65,.062],[.035,.3,0],legendary?'#fff4b8':'#bdd7ec',[0,0,kind==='katana'?-.08:0]);
+    vmBox(tool,[.36,.065,.08],[0,-.08,0],gold);vmBox(tool,[.085,.3,.085],[0,-.24,0],dark);
+  }else if(kind==='pick'||kind==='axe'||kind==='shovel'||kind==='hammer'){
+    vmBox(tool,[.075,.74,.075],[0,.08,0],dark);
+    const head=kind==='hammer'?[.48,.23,.22]:kind==='shovel'?[.24,.3,.08]:[.5,.12,.1];
+    vmBox(tool,head,[kind==='axe'?.12:0,.48,0],kind==='hammer'?gold:metal,[0,0,kind==='axe'?.12:0]);
+  }else if(kind==='staff'||kind==='scythe'||kind==='trident'||kind==='anchor'){
+    vmBox(tool,[.07,.88,.07],[0,.12,0],dark);
+    if(kind==='scythe')vmBox(tool,[.5,.065,.08],[.2,.52,0],metal,[0,0,-.25]);
+    else if(kind==='trident')for(const x of [-.16,0,.16])vmBox(tool,[.055,.3,.055],[x,.62,0],metal);
+    else if(kind==='anchor')vmBox(tool,[.42,.28,.14],[0,.5,0],metal);
+    else {vmBox(tool,[.24,.24,.24],[0,.58,0],metal,[0,0,.785]);vmBox(tool,[.34,.045,.045],[0,.58,.02],gold);}
+  }else if(kind==='bow'||kind==='chakram'){
+    vmBox(tool,[kind==='bow'?.08:.42,kind==='bow'?.72:.08,.06],[0,.22,0],metal,[0,0,kind==='bow'?.12:.785]);
+    vmBox(tool,[kind==='bow'?.2:.08,kind==='bow'?.08:.42,.055],[0,.22,.01],metal,[0,0,kind==='bow'?.12:.785]);
+  }
+  if(legendary){
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:new THREE.Color(metal),transparent:true,opacity:.36,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+    glow.position.set(-.08,.28,-.32);glow.scale.set(.82,.82,1);glow.renderOrder=998;grp.add(glow);grp.userData.legendaryGlow=glow;
+  }
+  grp.userData.weaponKind=kind;
+  return grp;
+}
+function vmItemMesh(id,look){
+  const kind=vmHeldKind(id);
+  if(kind)return vmWeaponMesh(id,look);
   const tex=new THREE.CanvasTexture(ITEMS[id].icon);
   tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
-  const grp=new THREE.Group();
+  const grp=vmArmMesh(look);
   const legendary=!!(ITEMS[id]&&ITEMS[id].legendary) || id===I.LEGEND_SWORD;
   if(legendary){
     const glowCol = id===I.PHOENIX_SWORD ? 0xff7b1c : id===I.METEOR_STAFF ? 0xff5a16 : id===I.FROSTBITE_CHAKRAM ? 0x78e8ff :
@@ -7485,7 +7544,7 @@ function vmItemMesh(id){
       map:new THREE.CanvasTexture(glowTexCanvas), color:glowCol, transparent:true,
       opacity:.36, depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending
     }));
-    glow.position.set(0,0,-.02);
+    glow.position.set(-.08,.12,-.3);
     glow.scale.set(.78,.78,1);
     glow.renderOrder=998;
     grp.add(glow);
@@ -7494,36 +7553,34 @@ function vmItemMesh(id){
   const size=legendary?.58:.52;
   const m=new THREE.Mesh(new THREE.PlaneGeometry(size,size),
     new THREE.MeshBasicMaterial({map:tex, transparent:true, depthTest:false, side:THREE.DoubleSide}));
-  m.renderOrder=999; grp.add(m);
-  grp.rotation.set(.15,-.85,.35);
+  m.position.set(-.08,.12,-.31);m.rotation.set(.15,-.85,.35);m.renderOrder=999;grp.add(m);
   return grp;
-}
-function vmArmMesh(){
-  const m=new THREE.Mesh(new THREE.BoxGeometry(.17,.17,.5),
-    new THREE.MeshBasicMaterial({color:0xd8b08a, depthTest:false}));
-  m.rotation.set(.5,-.3,0);
-  return m;
 }
 function updateViewModel(){
   if(!vmReady) return;
   const held=displayHeldId();
   const s=held?{id:held}:inv[combatState.selectedSlot];
   const id=s?s.id:-1;
-  if(id===vmLastId) return;
+  const look=vmHunterLook(),lookSig=[look.skin,look.shirt,look.accent,look.scarf].join('|');
+  if(id===vmLastId&&lookSig===vmLookSig) return;
   vmLastId=id;
+  vmLookSig=lookSig;
   vm.clear();
   vm.userData.shadowGlow=null;
   let mesh;
-  if(id===-1) mesh=vmCache.arm||(vmCache.arm=vmArmMesh());
-  else if(ITEMS[id].place!==undefined) mesh=vmCache[id]||(vmCache[id]=vmBlockMesh(id));
-  else mesh=vmCache[id]||(vmCache[id]=vmItemMesh(id));
+  const cacheKey=id+'|'+lookSig;
+  if(id===-1) mesh=vmCache[cacheKey]||(vmCache[cacheKey]=vmArmMesh(look));
+  else if(ITEMS[id].place!==undefined) mesh=vmCache[cacheKey]||(vmCache[cacheKey]=vmBlockMesh(id,look));
+  else mesh=vmCache[cacheKey]||(vmCache[cacheKey]=vmItemMesh(id,look));
   mesh.renderOrder=999;
   vm.add(mesh);
   vmDip=.22;
 }
 function vmSwing(){
   vmSwingT=1;
-  if(globalThis.BlockcraftSelfAvatar&&globalThis.BlockcraftSelfAvatar.swing)globalThis.BlockcraftSelfAvatar.swing(1);
+  vmSwingKind=vmHeldKind(displayHeldId());
+  vmSwingDuration=vmSwingKind==='hammer'||vmSwingKind==='anchor'?.62:vmSwingKind==='dagger'||vmSwingKind==='chakram'?.31:vmSwingKind==='bow'?.5:.42;
+  if(globalThis.BlockcraftSelfAvatar&&globalThis.BlockcraftSelfAvatar.swing)globalThis.BlockcraftSelfAvatar.swing(1,vmSwingKind);
   if(NET.on&&NET.room)NET.room.send('playerAction',{kind:'primary',strength:1});
 }
 function vmAbility(kind){
@@ -7536,21 +7593,26 @@ function vmTick(dt, now){
   const dc=globalThis.BlockcraftDirectorCamera;
   const directorThirdPerson=!!(dc&&dc.active&&dc.active()&&dc.status&&dc.status().mode!=='first');
   vm.visible=!isMeditating && !cutscene && !fishingActive && !directorThirdPerson;
-  vmSwingT=Math.max(0,vmSwingT-dt*4.2);
+  vmSwingT=Math.max(0,vmSwingT-dt/Math.max(.18,vmSwingDuration));
   vmDip=Math.max(0,vmDip-dt*1.4);
   const dx2=player.pos.x-vmPX, dz2=player.pos.z-vmPZ;
   vmPX=player.pos.x; vmPZ=player.pos.z;
   const speed=Math.hypot(dx2,dz2)/Math.max(dt,.001);
   vmAmp+=((speed>.5?1:0)-vmAmp)*Math.min(1,dt*6);
   if(vmAmp>.02) vmBob+=dt*speed*1.8;
-  const sw=Math.sin(vmSwingT*Math.PI);
+  const attackU=1-vmSwingT;
+  const prep=vmSwingT<=0?0:attackU<.2?attackU/.2:Math.max(0,1-(attackU-.2)/.8);
+  const strike=vmSwingT<=0?0:attackU<.2?0:attackU<.5?(attackU-.2)/.3:Math.max(0,1-(attackU-.5)/.5);
+  const heavy=vmSwingKind==='hammer'||vmSwingKind==='anchor'||vmSwingKind==='staff',quick=vmSwingKind==='dagger'||vmSwingKind==='chakram';
+  const attackPitch=prep*(heavy?.55:.34)-strike*(heavy?1.65:quick?.92:1.25);
+  const attackYaw=strike*(vmSwingKind==='bow'?-.48:quick?.42:.28),attackRoll=prep*(heavy?.52:.24)-strike*(quick?.2:.42);
   const mineRock=(mining&&mouseL)?Math.sin(now/85)*.4:0;
   vm.position.set(
-    .5+Math.cos(vmBob)*.022*vmAmp,
-    -.42+Math.abs(Math.sin(vmBob))*.03*vmAmp - vmDip*.6,
-    -.8);
-  vm.rotation.set(-sw*1.1+mineRock*.5, sw*.35, -sw*.3+mineRock*.15);
-  vm.scale.set(1,1,1);
+    .46+Math.cos(vmBob)*.022*vmAmp,
+    -.46+Math.abs(Math.sin(vmBob))*.03*vmAmp - vmDip*.6,
+    -.88);
+  vm.rotation.set(attackPitch+mineRock*.5,attackYaw,attackRoll+mineRock*.15);
+  vm.scale.setScalar(.84);
   if(vmAbilityKind){
     vmAbilityT+=dt;const u=Math.min(1,vmAbilityT/vmAbilityDuration);
     if(vmAbilityKind==='dash'){
@@ -7558,21 +7620,21 @@ function vmTick(dt, now){
       vm.position.z=-.8-.18*wind+.34*Math.sin(release*Math.PI);
       vm.position.x=.5-.1*wind+.13*release;
       vm.rotation.z+=.46*wind-.7*Math.sin(release*Math.PI);
-      vm.scale.set(1+.18*Math.sin(release*Math.PI),1-.2*Math.sin(release*Math.PI),1);
+      vm.scale.set(.84*(1+.18*Math.sin(release*Math.PI)),.84*(1-.2*Math.sin(release*Math.PI)),.84);
     }else if(vmAbilityKind==='umbral'){
       const gather=Math.sin(Math.min(1,u/.7)*Math.PI);
       vm.position.y-=.12*gather;vm.position.z+=.12*gather;
       vm.rotation.x-=.52*gather;vm.rotation.z+=.34*gather;
-      vm.scale.setScalar(1+.08*gather);
+      vm.scale.setScalar(.84*(1+.08*gather));
     }else if(vmAbilityKind==='iron'){
       const lock=Math.sin(u*Math.PI);vm.position.x-=.13*lock;vm.position.y+=.08*lock;
-      vm.rotation.x-=.28*lock;vm.rotation.z+=.5*lock;vm.scale.setScalar(1+.06*lock);
+      vm.rotation.x-=.28*lock;vm.rotation.z+=.5*lock;vm.scale.setScalar(.84*(1+.06*lock));
     }else if(vmAbilityKind==='shockwave'){
       const raise=Math.sin(Math.min(1,u/.58)*Math.PI),slam=u>.58?Math.sin((u-.58)/.42*Math.PI):0;
       vm.position.y+=.2*raise-.28*slam;vm.rotation.x-=.8*raise;vm.rotation.z+=.42*raise-.55*slam;
     }else{
       const stagger=Math.sin(Math.min(1,u/.42)*Math.PI),rise=u>.35?Math.sin((u-.35)/.65*Math.PI):0;
-      vm.position.y-=.2*stagger;vm.rotation.z+=.32*stagger-.2*rise;vm.scale.setScalar(.94+.12*rise);
+      vm.position.y-=.2*stagger;vm.rotation.z+=.32*stagger-.2*rise;vm.scale.setScalar(.84*(.94+.12*rise));
     }
     if(u>=1)vmAbilityKind='';
   }
