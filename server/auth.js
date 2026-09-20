@@ -606,10 +606,22 @@ class AuthService {
   async enqueueBugReportNotification(report) {
     if (!this.authBackend || typeof this.authBackend.getPool !== 'function') return null;
     const pool = this.authBackend.getPool();
-    const [tables] = await pool.execute(
-      "SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='staffflow_email_queue'",
+    await pool.execute(
+      `CREATE TABLE IF NOT EXISTS blockcraft_bug_report_outbox (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        report_id VARCHAR(96) NOT NULL,
+        recipient_email VARCHAR(255) NOT NULL,
+        recipient_name VARCHAR(255) NOT NULL,
+        subject VARCHAR(255) NOT NULL,
+        body_text MEDIUMTEXT NOT NULL,
+        body_html MEDIUMTEXT NOT NULL,
+        status VARCHAR(24) NOT NULL DEFAULT 'pending',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        relayed_at DATETIME NULL,
+        UNIQUE KEY blockcraft_bug_report_outbox_report (report_id),
+        INDEX blockcraft_bug_report_outbox_status (status, id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     );
-    if (!tables || !tables[0] || Number(tables[0].total) < 1) return null;
     const to = report.to || this.bugReportRecipient();
     const subject = '[Blockcraft] Bug report: ' + report.id;
     const text = this.bugReportText(report);
@@ -618,13 +630,12 @@ class AuthService {
       + '<h1 style="font-size:22px">Blockcraft bug report</h1><pre style="white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace">'
       + text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
       + '</pre></div></body></html>';
-    const uniqueKey = 'blockcraft_bug_report:' + String(report.id || crypto.randomBytes(8).toString('hex'));
-    const teacherId = Math.max(1, Number(this.env.BUG_REPORT_STAFFFLOW_TEACHER_ID || this.env.BLOCKCRAFT_CURRICULUM_STAFFFLOW_TEACHER_ID || 1) | 0);
     const [result] = await pool.execute(
-      `INSERT INTO staffflow_email_queue
-       (teacher_id, person_id, recipient_email, recipient_name, subject, body_text, body_html, reason, unique_key, scheduled_for)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, 'blockcraft_curriculum', ?, NOW())`,
-      [teacherId, to, report.player && report.player.name || 'Blockcraft Player', subject, text, html, uniqueKey],
+      `INSERT INTO blockcraft_bug_report_outbox
+       (report_id, recipient_email, recipient_name, subject, body_text, body_html)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)`,
+      [String(report.id), to, report.player && report.player.name || 'Blockcraft Player', subject, text, html],
     );
     return { sent: false, queued: true, to, queueId: result && result.insertId || null, channel: 'blockcraft_mysql_outbox' };
   }
@@ -645,9 +656,9 @@ class AuthService {
     if (!this.authBackend || typeof this.authBackend.getPool !== 'function') return [];
     const size = Math.max(1, Math.min(50, Number(limit) || 15));
     const [rows] = await this.authBackend.getPool().execute(
-      `SELECT id, teacher_id, recipient_email, recipient_name, subject, body_text, body_html, reason, unique_key
-       FROM staffflow_email_queue
-       WHERE reason='blockcraft_curriculum' AND status='pending'
+      `SELECT id, report_id, recipient_email, recipient_name, subject, body_text, body_html
+       FROM blockcraft_bug_report_outbox
+       WHERE status='pending'
        ORDER BY id ASC LIMIT ${size}`,
     );
     return Array.isArray(rows) ? rows : [];
@@ -659,9 +670,9 @@ class AuthService {
     if (!cleanIds.length) return 0;
     const placeholders = cleanIds.map(() => '?').join(',');
     const [result] = await this.authBackend.getPool().execute(
-      `UPDATE staffflow_email_queue
-       SET status='sent', sent_at=NOW(), attempts=attempts+1, last_error='relayed_to_siteground'
-       WHERE reason='blockcraft_curriculum' AND status='pending' AND id IN (${placeholders})`,
+      `UPDATE blockcraft_bug_report_outbox
+       SET status='relayed', relayed_at=NOW()
+       WHERE status='pending' AND id IN (${placeholders})`,
       cleanIds,
     );
     return Number(result && result.affectedRows || 0);

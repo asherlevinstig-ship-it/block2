@@ -129,7 +129,7 @@ test('auth bug reports write a durable MySQL outbox entry instead of claiming em
     getPool: () => ({
       async execute(sql, params) {
         calls.push({ sql, params });
-        if (/information_schema\.tables/.test(sql)) return [[{ total: 1 }]];
+        if (/CREATE TABLE IF NOT EXISTS blockcraft_bug_report_outbox/.test(sql)) return [{ affectedRows: 0 }];
         return [{ insertId: 321 }];
       },
     }),
@@ -145,7 +145,7 @@ test('auth bug reports write a durable MySQL outbox entry instead of claiming em
   assert.equal(mail.queued, true);
   assert.equal(mail.channel, 'blockcraft_mysql_outbox');
   assert.equal(mail.queueId, 321);
-  assert.match(calls[1].sql, /INSERT INTO staffflow_email_queue/);
+  assert.match(calls[1].sql, /INSERT INTO blockcraft_bug_report_outbox/);
   assert.equal(calls[1].params[1], 'asherlevin85@gmail.com');
   auth.stop();
 });
@@ -158,7 +158,7 @@ test('bug report outbox can be pulled and acknowledged by the SiteGround relay',
         async execute(sql, params = []) {
           calls.push({ sql, params });
           if (/^\s*SELECT id,/i.test(sql)) return [[{ id: 91, subject: '[Blockcraft] Bug report: demo' }]];
-          if (/^\s*UPDATE staffflow_email_queue/i.test(sql)) return [{ affectedRows: 1 }];
+          if (/^\s*UPDATE blockcraft_bug_report_outbox/i.test(sql)) return [{ affectedRows: 1 }];
           throw new Error('unexpected SQL: ' + sql);
         },
       }),
@@ -170,7 +170,7 @@ test('bug report outbox can be pulled and acknowledged by the SiteGround relay',
 
   assert.deepEqual(reports, [{ id: 91, subject: '[Blockcraft] Bug report: demo' }]);
   assert.equal(acknowledged, 1);
-  assert.match(calls[0].sql, /reason='blockcraft_curriculum' AND status='pending'/);
+  assert.match(calls[0].sql, /FROM blockcraft_bug_report_outbox/);
   assert.deepEqual(calls[1].params, [91]);
   auth.stop();
 });
