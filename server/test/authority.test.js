@@ -456,6 +456,19 @@ test('overworld joins keep a returning position unless another player occupies i
   assert.ok(Math.hypot(separated[0] - clear[0], separated[2] - clear[2]) >= 1.35, 'the next join receives nearby personal space');
 });
 
+test('overworld joins repair buried and flooded town saves', () => {
+  const room = makeRoom();
+  const x = W.TOWN.TC + 20.5, z = W.TOWN.TC + 20.5;
+  const buried = room.openOverworldPlayerSpawn([x, 4.5, z], 'joining');
+  assert.equal(buried[1] >= W.TOWN.G + .75, true, 'a below-plaza save is restored above town ground');
+
+  room.world.getB = (bx, by, bz) => bx === Math.floor(x) && bz === Math.floor(z) && by === W.TOWN.G + 1
+    ? W.B.WATER
+    : W.B.AIR;
+  const flooded = room.openOverworldPlayerSpawn([x, W.TOWN.G + 1.01, z], 'joining');
+  assert.equal(Math.hypot(flooded[0] - x, flooded[2] - z) >= 1, true, 'a town save inside water is moved to a dry neighbor');
+});
+
 test('the frontier opens only after a Gate clear and preserves unlocked return positions', () => {
   const room = makeRoom(), client = makeClient('frontier_hunter');
   const { prof } = seedPlayer(room, client, { x: 986.5, y: 16, z: 500.5 });

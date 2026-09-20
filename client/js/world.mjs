@@ -12643,6 +12643,10 @@ gameContext.registerState('world', Object.freeze({
 }));
 gameContext.registerModule('world', Object.freeze({
   frontierBounds:{min:WORLD_MIN,max:WORLD_MAX,coreSize:WX,borderWidth:LAVA_BORDER_WIDTH},
+  town:TOWN,
+  blocks:B,
+  height:WH,
+  isSolid,
   syncFrontierBarrier,
   tickElvenRealm,
   updatePowerCrowns,

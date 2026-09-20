@@ -2938,6 +2938,8 @@ test('retired level two job chooser cannot open',()=>{
   assert.match(networking,/serverHasActiveRoom&&dim==='job'&&dimensionsApi\.exitJobTutorialRoom/);
   assert.match(networking,/serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi\.exitTamingLand/);
   assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job,{serverSynced:!!serverActiveRoom})')<networking.indexOf('player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2])'), 'job room is rebuilt before restored position is applied');
+  assert.match(networking,/safeOverworldProfileRestorePosition\(rawRestorePos\)/, 'overworld profile restores repair buried town positions client-side');
+  assert.match(world,/town:TOWN,[\s\S]*blocks:B,[\s\S]*height:WH,[\s\S]*isSolid,/, 'world module exposes safe restore geometry without relying on page globals');
   assert.match(frame,/worldState\.JOB_TUTORIAL_MEADOWS&&worldState\.JOB_TUTORIAL_MEADOWS\.pet_tamer/);
   assert.match(frame,/tickPetTamerTutorialGroundDragon\(petTamerActive, petRoom, now, dt\)/);
   const social = fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
@@ -3054,7 +3056,7 @@ test('first town arrival stages the fountain and Question Portal',()=>{
   assert.match(dimensions,/tutorialEnter',\{kind:'questions'\}/);
   assert.match(dimensions,/tutorialExit',\{destination:'town'\}/);
   assert.match(networking,/m\.kind==='questions'&&dim==='questions'/);
-  assert.match(networking,/const restorePos=\(restoreFishingLake\|\|restoreQuestions\|\|dim==='questions'\)\?null/);
+  assert.match(networking,/const rawRestorePos=\(restoreFishingLake\|\|restoreQuestions\|\|dim==='questions'\)\?null/);
   assert.match(networking,/dimensionsApi\.enterQuestionRoom\(\{\.\.\.m,resume:true,serverSynced:true\}\)/);
   assert.match(dimensions,/announceArrivalTitle\('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare'\)/);
   assert.match(dimensions,/enterQuestionRoom,\s*\n {2}repairQuestionRoomPosition,\s*\n {2}exitQuestionRoom,\s*\n {2}exitQuestionRoomToTown,/);

@@ -142,6 +142,24 @@ function jobTutorialCompletionPanelOpen(){
   const rewardPanel=document.getElementById('rewardpanel');
   return !!(rewardWin&&rewardPanel&&rewardPanel.classList.contains('job-tutorial-complete')&&!rewardWin.classList.contains('hidden'));
 }
+function safeOverworldProfileRestorePosition(raw){
+  if(!Array.isArray(raw)||raw.length<3)return raw;
+  const x=Number(raw[0]),y=Number(raw[1]),z=Number(raw[2]);
+  if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z))return raw;
+  const town=worldApi.town,blocks=worldApi.blocks;
+  if(!town||!blocks||typeof worldApi.getBlock!=='function')return [x,y,z];
+  const inTown=Math.abs(Math.floor(x)-town.TC)<=town.HS+2&&Math.abs(Math.floor(z)-town.TC)<=town.HS+2;
+  if(!inTown)return [x,y,z];
+  const bx=Math.floor(x),by=Math.floor(y),bz=Math.floor(z);
+  const body=[by,by+1].map(sampleY=>worldApi.getBlock(bx,sampleY,bz));
+  const buried=body.some(id=>worldApi.isSolid(id));
+  const submerged=body.some(id=>id===blocks.WATER||id===blocks.LAVA);
+  if(y>=town.G+.75&&y<=town.G+7&&!buried&&!submerged)return [x,y,z];
+  const sx=town.TC+.5,sz=town.TC+62.5;
+  const sy=typeof worldApi.standHeight==='function'?worldApi.standHeight(sx,sz,worldApi.height-2):town.G+1;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('profile.restore-position-repaired',{before:[x,y,z],after:[sx,sy,sz],buried,submerged});
+  return [sx,Number.isFinite(sy)&&sy>0?sy:town.G+1,sz];
+}
 function feedItemName(id){
   return (ITEMS[id]&&ITEMS[id].name)||'Item';
 }
@@ -3743,7 +3761,8 @@ function netRestoreProfile(m){
     }
     const forceJobHandoffTownReturn=jobTutorialCompletionPanelOpen()&&!restoreJobRoom&&!restoreTamingLand&&!restoreFishingLake&&!restoreQuestions;
     const townReturn=forceJobHandoffTownReturn&&dimensionsApi.townReturnPoint?dimensionsApi.townReturnPoint():null;
-    const restorePos=(restoreFishingLake||restoreQuestions||dim==='questions')?null:(townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos);
+    const rawRestorePos=(restoreFishingLake||restoreQuestions||dim==='questions')?null:(townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos);
+    const restorePos=dim==='overworld'?safeOverworldProfileRestorePosition(rawRestorePos):rawRestorePos;
     if(Array.isArray(restorePos) && !onboardingActive){
       player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2]);
       player.vel.set(0,0,0);

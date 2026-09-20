@@ -251,6 +251,16 @@ function safeOverworldJoinPosition(world, pos, frontierUnlocked = false) {
   const max = frontierUnlocked ? W.WORLD_MAX - W.LAVA_BORDER_WIDTH - .5 : W.WX - W.LAVA_BORDER_WIDTH - .5;
   if (px < min || pz < min || px > max || pz > max || py < 1 || py > W.WH + 8) return fallback;
   const solid = (x, y, z) => W.isSolid(world.getB(x, y, z));
+  const unsafeTownFluid = (x, y, z) => {
+    const inTown = Math.abs(Math.floor(x) - W.TOWN.TC) <= W.TOWN.HS + 2
+      && Math.abs(Math.floor(z) - W.TOWN.TC) <= W.TOWN.HS + 2;
+    if (!inTown) return false;
+    const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+    return [by, by + 1].some(sampleY => {
+      const id = world.getB(bx, sampleY, bz);
+      return id === W.B.WATER || id === W.B.LAVA;
+    });
+  };
   const candidates = [
     [px, pz],
     [px + 1.5, pz], [px - 1.5, pz], [px, pz + 1.5], [px, pz - 1.5],
@@ -267,10 +277,12 @@ function safeOverworldJoinPosition(world, pos, frontierUnlocked = false) {
     if (i === 0 && py >= y - .25 && py <= y + 4) {
       const savedY = Math.max(1, Math.min(W.WH - 1, py));
       const sy = Math.floor(savedY);
-      if (!solid(bx, sy, bz) && !solid(bx, sy + 1, bz) && !solid(bx, sy + 2, bz)) return [x, savedY, z];
+      if (!solid(bx, sy, bz) && !solid(bx, sy + 1, bz) && !solid(bx, sy + 2, bz)
+        && !unsafeTownFluid(x, savedY, z)) return [x, savedY, z];
     }
     const by = Math.floor(y);
     if (solid(bx, by, bz) || solid(bx, by + 1, bz) || solid(bx, by + 2, bz)) continue;
+    if (unsafeTownFluid(x, y, z)) continue;
     return [x, y + .01, z];
   }
   return fallback;
@@ -8762,6 +8774,16 @@ class GameRoom extends Room {
           : D.standHeightIn(inst.world, x, z, Math.min(12, fromY));
       }
       if (rawDgn) return Number.isFinite(+fromY) ? +fromY : -1;
+      const currentY = Number.isFinite(+fromY) ? +fromY : Number.isFinite(+(p && p.y)) ? +p.y : 0;
+      const buried = bodyBlocked(x, currentY, z);
+      const inTown = Math.abs(Math.floor(x) - W.TOWN.TC) <= W.TOWN.HS + 2
+        && Math.abs(Math.floor(z) - W.TOWN.TC) <= W.TOWN.HS + 2;
+      // A corrupt/legacy town save can put the camera below the plaza. In that
+      // case a downward-only probe finds another underground block and leaves
+      // the player below the map. Search from the top to recover the surface.
+      if ((buried || (inTown && currentY < W.TOWN.G + .75)) && this.world && typeof this.world.standHeight === 'function') {
+        return this.world.standHeight(x, z, W.WH - 2);
+      }
       // Search from the player's current foot layer down. standHeight() itself
       // starts one cell above fromY, so the small offset prevents low leaves from
       // being mistaken for ground while still including a one-block step.
