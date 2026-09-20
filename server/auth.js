@@ -589,7 +589,10 @@ class AuthService {
   }
 
   bugReportRecipient() {
-    return cleanBugText(this.env.BUG_REPORT_NOTIFY_TO || this.env.CURRICULUM_NOTIFY_TO || DEFAULT_BUG_REPORT_TO, 160);
+    // Bug reports are an internal support channel. Keep the destination fixed
+    // server-side so neither client payloads nor stale deployment variables can
+    // redirect student diagnostics elsewhere.
+    return DEFAULT_BUG_REPORT_TO;
   }
 
   bugReportMailBridgeUrl() {

@@ -3620,7 +3620,7 @@ class GameRoom extends Room {
     return consumeRateLimit(this.rateBuckets, client.sessionId, bucket, ratePerSec, burst);
   }
   bugReportRecipient() {
-    return cleanBugText(process.env.BUG_REPORT_NOTIFY_TO || process.env.CURRICULUM_NOTIFY_TO || DEFAULT_BUG_REPORT_TO, 160);
+    return DEFAULT_BUG_REPORT_TO;
   }
   bugReportMailBridgeUrl() {
     return cleanBugText(process.env.BUG_REPORT_MAIL_BRIDGE_URL || process.env.CURRICULUM_MAIL_BRIDGE_URL || DEFAULT_MAIL_BRIDGE_URL, 400);

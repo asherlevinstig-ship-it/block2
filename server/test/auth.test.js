@@ -108,6 +108,20 @@ test('auth bug reports sanitize payloads and use the mail bridge', async () => {
   auth.stop();
 });
 
+test('bug report recipient cannot be redirected by deployment configuration', () => {
+  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-bug-recipient-')), {
+    authBackend: null,
+    env: {
+      BUG_REPORT_NOTIFY_TO: 'somebody-else@example.test',
+      CURRICULUM_NOTIFY_TO: 'curriculum@example.test',
+    },
+  });
+  const report = auth.buildHttpBugReport({ id: 'student_1', displayName: 'Asher' }, { message: 'Recipient test.' });
+  assert.equal(auth.bugReportRecipient(), 'asherlevin85@gmail.com');
+  assert.equal(report.to, 'asherlevin85@gmail.com');
+  auth.stop();
+});
+
 test('auth bug reports write a durable MySQL outbox entry instead of claiming email delivery', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-bug-queue-'));
   const calls = [];
