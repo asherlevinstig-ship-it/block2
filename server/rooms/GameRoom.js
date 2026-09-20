@@ -3797,14 +3797,16 @@ class GameRoom extends Room {
       mail = { sent: false, to: report.to, reason: cleanBugText(error && error.message || 'mail_failed', 240) };
     }
     const mailed = !!(mail && mail.sent);
+    const queued = !!(mail && mail.queued);
     console.warn('[bug-report]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, saved, saveReason, mail }));
-    if (!saved && !mailed) return client.send('bugReportResult', { ok: false, reason: 'report_failed', saveReason, mailReason: mail && mail.reason || '' });
+    if (!saved && !mailed && !queued) return client.send('bugReportResult', { ok: false, reason: 'report_failed', saveReason, mailReason: mail && mail.reason || '' });
     client.send('bugReportResult', {
       ok: true,
       id: report.id,
       to: report.to,
       saved,
       saveReason,
+      queued,
       mailed,
       mailReason: mail && mail.reason || '',
     });

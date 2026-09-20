@@ -94,6 +94,7 @@ test('auth bug reports sanitize payloads and use the mail bridge', async () => {
   await auth.saveBugReportFile(report);
   const mail = await auth.sendBugReportNotification(report);
   assert.equal(mail.sent, true);
+  assert.equal(mail.queued, true);
   assert.equal(report.to, 'asherlevin85@gmail.com');
   assert.equal(report.player.schoolId, '3');
   assert.equal(report.clientContext.token, undefined);
@@ -107,7 +108,7 @@ test('auth bug reports sanitize payloads and use the mail bridge', async () => {
   auth.stop();
 });
 
-test('auth bug reports prefer the StaffFlow MySQL queue over the challenged HTTP bridge', async () => {
+test('auth bug reports write a durable MySQL outbox entry instead of claiming email delivery', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-bug-queue-'));
   const calls = [];
   const authBackend = {
@@ -126,11 +127,37 @@ test('auth bug reports prefer the StaffFlow MySQL queue over the challenged HTTP
   });
   const report = auth.buildHttpBugReport({ id: 'student_1', displayName: 'Asher' }, { message: 'Queue this report.' });
   const mail = await auth.sendBugReportNotification(report);
-  assert.equal(mail.sent, true);
-  assert.equal(mail.channel, 'staffflow_mysql_queue');
+  assert.equal(mail.sent, false);
+  assert.equal(mail.queued, true);
+  assert.equal(mail.channel, 'blockcraft_mysql_outbox');
   assert.equal(mail.queueId, 321);
   assert.match(calls[1].sql, /INSERT INTO staffflow_email_queue/);
   assert.equal(calls[1].params[1], 'asherlevin85@gmail.com');
+  auth.stop();
+});
+
+test('bug report outbox can be pulled and acknowledged by the SiteGround relay', async () => {
+  const calls = [];
+  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-outbox-')), {
+    authBackend: {
+      getPool: () => ({
+        async execute(sql, params = []) {
+          calls.push({ sql, params });
+          if (/^\s*SELECT id,/i.test(sql)) return [[{ id: 91, subject: '[Blockcraft] Bug report: demo' }]];
+          if (/^\s*UPDATE staffflow_email_queue/i.test(sql)) return [{ affectedRows: 1 }];
+          throw new Error('unexpected SQL: ' + sql);
+        },
+      }),
+    },
+  });
+
+  const reports = await auth.pullBugReportOutbox(15);
+  const acknowledged = await auth.acknowledgeBugReportOutbox([91, 91, -1, 'bad']);
+
+  assert.deepEqual(reports, [{ id: 91, subject: '[Blockcraft] Bug report: demo' }]);
+  assert.equal(acknowledged, 1);
+  assert.match(calls[0].sql, /reason='blockcraft_curriculum' AND status='pending'/);
+  assert.deepEqual(calls[1].params, [91]);
   auth.stop();
 });
 

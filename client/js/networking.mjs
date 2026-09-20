@@ -1300,11 +1300,12 @@ function applyBugReportResult(m){
   if(m&&m.ok){
     const id=String(m.id||'saved');
     const mailReason=String(m.mailReason||'');
-    const status=m.mailed?'Sent. Report ID: '+id+' · emailed':'Saved. Report ID: '+id+' · email not sent'+(mailReason?' ('+mailReason+')':'');
-    bugReportSetStatus(status, m.mailed?'ok':'bad');
-    if(typeof sysMsg==='function')sysMsg(m.mailed?'<b>Bug report emailed.</b> Report ID <b>'+escHTML(id)+'</b>.':'<b>Bug report saved.</b> Email not sent'+(mailReason?': <b>'+escHTML(mailReason)+'</b>':'')+'. Report ID <b>'+escHTML(id)+'</b>.');
+    const delivered=!!(m.mailed||m.queued);
+    const status=m.mailed?'Sent. Report ID: '+id+' · emailed':m.queued?'Received. Report ID: '+id+' · email queued':'Saved. Report ID: '+id+' · email not sent'+(mailReason?' ('+mailReason+')':'');
+    bugReportSetStatus(status, delivered?'ok':'bad');
+    if(typeof sysMsg==='function')sysMsg(m.mailed?'<b>Bug report emailed.</b> Report ID <b>'+escHTML(id)+'</b>.':m.queued?'<b>Bug report received.</b> Email queued. Report ID <b>'+escHTML(id)+'</b>.':'<b>Bug report saved.</b> Email not sent'+(mailReason?': <b>'+escHTML(mailReason)+'</b>':'')+'. Report ID <b>'+escHTML(id)+'</b>.');
     if(bugReportMsg)bugReportMsg.value='';
-    if(m.mailed)setTimeout(()=>closeBugReport(),1200);
+    if(delivered)setTimeout(()=>closeBugReport(),1200);
   }else{
     const reason=String(m&&m.reason||'failed');
     bugReportSetStatus(reason==='rate'?'Please wait a moment before sending another report.':'Report failed. Try again in a moment.', 'bad');

@@ -623,7 +623,42 @@ class AuthService {
        VALUES (?, NULL, ?, ?, ?, ?, ?, 'blockcraft_curriculum', ?, NOW())`,
       [teacherId, to, report.player && report.player.name || 'Blockcraft Player', subject, text, html, uniqueKey],
     );
-    return { sent: true, queued: true, to, queueId: result && result.insertId || null, channel: 'staffflow_mysql_queue' };
+    return { sent: false, queued: true, to, queueId: result && result.insertId || null, channel: 'blockcraft_mysql_outbox' };
+  }
+
+  bugReportBridgeAuthorized(req) {
+    const expected = this.bugReportMailBridgeSecret();
+    const provided = String(req && req.headers && req.headers['x-blockcraft-mail-secret'] || '');
+    if (!expected || !provided) return false;
+    const expectedHash = crypto.createHash('sha256').update(expected).digest();
+    const providedHash = crypto.createHash('sha256').update(provided).digest();
+    return crypto.timingSafeEqual(expectedHash, providedHash);
+  }
+
+  async pullBugReportOutbox(limit = 15) {
+    if (!this.authBackend || typeof this.authBackend.getPool !== 'function') return [];
+    const size = Math.max(1, Math.min(50, Number(limit) || 15));
+    const [rows] = await this.authBackend.getPool().execute(
+      `SELECT id, teacher_id, recipient_email, recipient_name, subject, body_text, body_html, reason, unique_key
+       FROM staffflow_email_queue
+       WHERE reason='blockcraft_curriculum' AND status='pending'
+       ORDER BY id ASC LIMIT ${size}`,
+    );
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  async acknowledgeBugReportOutbox(ids = []) {
+    if (!this.authBackend || typeof this.authBackend.getPool !== 'function') return 0;
+    const cleanIds = [...new Set(ids.map(Number).filter(id => Number.isSafeInteger(id) && id > 0))].slice(0, 50);
+    if (!cleanIds.length) return 0;
+    const placeholders = cleanIds.map(() => '?').join(',');
+    const [result] = await this.authBackend.getPool().execute(
+      `UPDATE staffflow_email_queue
+       SET status='sent', sent_at=NOW(), attempts=attempts+1, last_error='relayed_to_siteground'
+       WHERE reason='blockcraft_curriculum' AND status='pending' AND id IN (${placeholders})`,
+      cleanIds,
+    );
+    return Number(result && result.affectedRows || 0);
   }
 
   buildHttpBugReport(account, body = {}) {
@@ -1377,6 +1412,7 @@ class AuthService {
       next();
     });
     app.use('/auth/bug-report', require('express').json({ limit: '180kb' }));
+    app.use('/auth/bug-report-outbox', require('express').json({ limit: '8kb' }));
     app.use('/auth', require('express').json({ limit: '8kb' }));
     const complete = async (req, res, create) => {
       if (!this.allowAttempt(req, req.body && req.body.username)) return res.status(429).json({ ok: false, error: 'Too many authentication attempts.' });
@@ -1462,9 +1498,30 @@ class AuthService {
         mail = { sent: false, to: report.to, reason: cleanBugText(error && error.message || 'mail_failed', 240) };
       }
       const mailed = !!(mail && mail.sent);
+      const queued = !!(mail && mail.queued);
       console.warn('[bug-report-http]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, saved, saveReason, mail }));
-      if (!saved && !mailed) return res.status(500).json({ ok: false, code: 'report_failed', saveReason, mailReason: mail && mail.reason || '' });
-      res.json({ ok: true, id: report.id, to: report.to, saved, saveReason, mailed, mailReason: mail && mail.reason || '' });
+      if (!saved && !mailed && !queued) return res.status(500).json({ ok: false, code: 'report_failed', saveReason, mailReason: mail && mail.reason || '' });
+      res.json({ ok: true, id: report.id, to: report.to, saved, saveReason, queued, mailed, mailReason: mail && mail.reason || '' });
+    });
+    app.post('/auth/bug-report-outbox/pull', async (req, res) => {
+      if (!this.bugReportBridgeAuthorized(req)) return res.status(403).json({ ok: false, error: 'invalid_secret' });
+      try {
+        const reports = await this.pullBugReportOutbox(req.body && req.body.limit);
+        res.json({ ok: true, reports });
+      } catch (error) {
+        console.warn('[bug-report-outbox] pull failed:', cleanBugText(error && error.message || error, 240));
+        res.status(500).json({ ok: false, error: 'pull_failed' });
+      }
+    });
+    app.post('/auth/bug-report-outbox/ack', async (req, res) => {
+      if (!this.bugReportBridgeAuthorized(req)) return res.status(403).json({ ok: false, error: 'invalid_secret' });
+      try {
+        const acknowledged = await this.acknowledgeBugReportOutbox(Array.isArray(req.body && req.body.ids) ? req.body.ids : []);
+        res.json({ ok: true, acknowledged });
+      } catch (error) {
+        console.warn('[bug-report-outbox] acknowledgement failed:', cleanBugText(error && error.message || error, 240));
+        res.status(500).json({ ok: false, error: 'ack_failed' });
+      }
     });
     app.post('/auth/profile/name', async (req, res) => {
       const account = this.authenticateRequest(req);
