@@ -55,13 +55,13 @@ export function gateMilestoneHandoff(message, earned = true) {
   const rank = firstClear.rank | 0;
   if (rank === 0) return {
     label: 'FIRST GATE CLEARED',
-    text: 'You cleared your first E-rank Gate. Exit through the portal, return to Mara, and claim the quest to open the base-building path.',
+    text: 'Return to Mara to claim your next quest.',
     action: 'RETURN TO MARA',
   };
   if (rank !== 1) return null;
   return {
     label: 'C-RANK CLIMB UNLOCKED',
-    text: 'Contracts, D-rank Gates, events, regional trouble, and C-rank prep checks now push you toward C-rank positioning fights.',
+    text: 'Open the C-rank prep check to see your next requirement.',
     action: 'C PREP CHECK',
   };
 }
@@ -223,7 +223,9 @@ export function createOnboardingUI(deps) {
         rewardLineHTML({ label: 'Next Contact', value: 'MARA VALE' }) +
         rewardLineHTML({ label: 'First Assignment', value: 'FIRST HANDS' }) +
       '</div>' +
-      '<div class="rnote"><b>Your route: gather → craft → fight → upgrade → first Gate</b><br>You gathered logs and crafted planks in training. Follow the green light to Mara, awaken your combat path at Level 2, then fight for Road Ready. Inspect your gear and consider a stronger sword before your first Gate. Land and base systems follow that clear.</div>' +
+      '<button id="trainingcontinue">MEET MARA</button>';
+      '<div class="rnote"><b>Next action:</b> Follow the green light to Mara for your first assignment.</div>' +
+      '<button id="trainingcontinue">MEET MARA</button>';
       '<button id="trainingcontinue">MEET MARA</button>';
     rewardWin.classList.remove('hidden');
     if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(rewardWin);
@@ -253,7 +255,9 @@ export function createOnboardingUI(deps) {
         rewardLineHTML({ label: 'Tool Care', value: 'REPAIR KIT', id: I.REPAIR_KIT }) +
         rewardLineHTML({ label: 'Navigation Utility', value: 'COMPASS SENSE' }) +
       '</div>' +
-      '<div class="rnote"><b>Next objective:</b><br>Craft armor near Tobin, stock travel food from Greta, check your tool, then clear a D-rank Gate. Future Adventurer contracts now rotate between patrols, Gates, and server events.</div>' +
+      '<button id="graduationcontinue">TRACK D-RANK GATE</button>';
+      '<div class="rnote"><b>Next action:</b> Track the D-rank Gate objective. Its prep check will show what you still need.</div>' +
+      '<button id="graduationcontinue">TRACK D-RANK GATE</button>';
       '<button id="graduationcontinue">TRACK D-RANK GATE</button>';
     rewardWin.classList.remove('hidden');
     rewardWin.classList.add('promotion-open');
@@ -287,8 +291,9 @@ export function createOnboardingUI(deps) {
         rewardLineHTML({ label: 'D-Rank Solo Gate Key', value: hasKey ? 'SECURED' : 'CHECK INVENTORY', id: I.SOLO_KEY_D }) +
         rewardLineHTML({ label: 'Public and Key Access', value: 'D-RANK' }) +
       '</div>' +
-      '<div class="rnote"><b>Prepare before entering D-rank:</b><br>Bring iron armor, an iron-tier weapon, food, and a repaired tool.</div>' +
-      '<div class="rnote"><b>Next objective:</b><br>' + escHTML(String(objective.text || '').replace(/\.$/, '')) + '. Town quests, Guild Contracts, Gates, events, and field threats drive the climb.</div>' +
+      '<button id="promotioncontinue">TRACK NEXT STEP</button>';
+      '<div class="rnote"><b>Next action:</b> ' + escHTML(objective.path && objective.path.now || objective.label || 'Follow your tracked objective') + '.</div>' +
+      '<button id="promotioncontinue">TRACK NEXT OBJECTIVE</button>';
       '<button id="promotioncontinue">TRACK NEXT STEP</button>';
     rewardWin.classList.remove('hidden');
     rewardWin.classList.add('promotion-open');
@@ -312,14 +317,8 @@ export function createOnboardingUI(deps) {
   function showRankPromotion(message) {
     const details = rankPromotionDetails(message);
     if (!details || !rankUpWin || !rankUpPanel) return false;
-    const unlocks = [
-      [],
-      ['D-Rank Gates & keys', 'Familiars', 'Improved quest rewards'],
-      ['C-Rank Gates & keys', 'Combat specialisation', 'Mount progression'],
-      ['B-Rank Gates & keys', 'Road Warden region', 'Advanced Guild Contracts'],
-      ['A-Rank Gates & keys', 'Fellowships', 'High-rank equipment'],
-      ['Western Frontier', 'Dragon mastery', 'S-Rank endgame'],
-    ][details.rank] || [];
+    const objective=firstPromotionObjective();
+    const nextAction=objective&&objective.path&&objective.path.now||objective&&objective.label||details.next;
     rankUpPanel.innerHTML =
       '<div class="rupill">HUNTER PROMOTION</div>' +
       '<div class="rurank">' + escHTML(details.letter) + '</div>' +
@@ -330,9 +329,9 @@ export function createOnboardingUI(deps) {
         '<div class="rureward"><span>GATE ACCESS</span><b>' + escHTML(details.gateAccess) + '</b></div>' +
         '<div class="rureward"><span>STAT POINTS EARNED</span><b>+' + details.statPoints + '</b></div>' +
       '</div>' +
-      '<div class="ruunlocks"><span>NEWLY UNLOCKED</span>' + unlocks.map(item => '<b>◆ ' + escHTML(item) + '</b>').join('') + '</div>' +
-      '<div class="runext"><b>Next target:</b> ' + escHTML(details.next) + '.<br>Keep earning Hunter XP from quests, contracts, Gates, events, and hostile threats.</div>' +
-      '<button id="rankupcontinue">CONTINUE</button>';
+      '<div class="ruunlocks"><span>RANK FEATURES RECORDED</span><b>◆ Review the full unlock list later in your Quest Log</b></div>' +
+      '<div class="runext"><b>One next action:</b> ' + escHTML(nextAction) + '.</div>' +
+      '<button id="rankupcontinue">TRACK NEXT OBJECTIVE</button>';
     rankUpWin.classList.remove('hidden');
     if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(rankUpWin);
     if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
@@ -341,6 +340,7 @@ export function createOnboardingUI(deps) {
     if (btn) btn.onclick = () => {
       rankUpWin.classList.add('hidden');
       if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
+      if(globalThis.BlockcraftRefreshObjectiveTracker)globalThis.BlockcraftRefreshObjectiveTracker();
       if (!rewardWin || rewardWin.classList.contains('hidden')) restoreLock();
     };
     return true;

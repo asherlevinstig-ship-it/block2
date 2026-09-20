@@ -1348,24 +1348,17 @@ function showFellowshipTutorial(m={},mode='joined'){
     '<h2>FELLOWSHIP UNLOCKED</h2>'+
     '<div class="rsub">'+(mode==='created'?'YOU FOUNDED '+name:'YOU JOINED '+name)+'</div>'+
     '<div class="rewardloot">'+
-      rewardLineHTML({label:'Renown',value:'SHARED UPGRADE CURRENCY'})+
-      rewardLineHTML({label:'Stations',value:'LEARN · PLAN · PREP · SUSTAIN · SKY'})+
-      rewardLineHTML({label:'Notice Board',value:'PIN A WEEKLY FOCUS'})+
+      rewardLineHTML({label:'Fellowship Access',value:'OVERVIEW READY'})+
     '</div>'+
-    '<div class="rnote"><b>How fellowships work:</b><br>Complete Guild/Road work and special station activities to earn Renown. Spend Renown with Lyra to build stations in your hall.</div>'+
-    '<div class="rnote"><b>First good move:</b><br>Open Lyra’s Fellowship Overview, check the next affordable project, then pin a shared notice so everyone knows what matters.</div>'+
-    '<button id="fellowshipopenhall">OPEN FELLOWSHIP HALL</button>'+
-    '<button id="fellowshipcontinue" class="secondary">GOT IT</button>';
+    '<div class="rnote"><b>One next action:</b><br>Open the Fellowship Hall overview. Renown, projects, stations, and notices will be introduced there when you need them.</div>'+
+    '<button id="fellowshipopenhall">OPEN FELLOWSHIP HALL</button>';
   rewardWin.classList.remove('hidden');
   rewardWin.classList.add('promotion-open');
   if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
   if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   releasePointerLockWithoutCameraFallback(false);refreshPlayUi();
-  const close=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();resumeGameplayCamera();};
   const open=document.getElementById('fellowshipopenhall');
   if(open)open.onclick=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'tutorial'});openGuildHallUI();refreshPlayUi();};
-  const done=document.getElementById('fellowshipcontinue');
-  if(done)done.onclick=close;
   return true;
 }
 
@@ -1517,6 +1510,7 @@ function netAttachRoom(room,name,client){
       });
       if(netRestoreProfile(m)===false){NET.profileReady=false;return;}
       NET.profileReady=true;
+      if(menusApi.scheduleReturningPlayerRecap)menusApi.scheduleReturningPlayerRecap(m);
       if(globalThis.BlockcraftKnowledgeChallenge&&globalThis.BlockcraftKnowledgeChallenge.setIntroAvailable)globalThis.BlockcraftKnowledgeChallenge.setIntroAvailable(m&&m.scholarIntroUsed!==true);
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied-vitals', {
         profileVitals:m&&m.vitals,
@@ -1816,12 +1810,11 @@ function netAttachRoom(room,name,client){
       shell.appendChild(rewards);
       const next=document.createElement('p');next.className='qtext first-shift-next';next.innerHTML='<b>Next Best Action:</b> '+escHTML(summary.next||'Take another contract or try a job tutorial.');shell.appendChild(next);
       const row=document.createElement('div');row.className='qrow first-shift-actions';
-      const another=qBtn('TAKE ANOTHER CONTRACT',()=>openJobsUI(c.job==='adventurer'?'adventurer':(c.job||playerJob||'')));
-      another.classList.add('primary');
-      row.appendChild(another);
-      row.appendChild(qBtn('TRY JOB TUTORIAL',()=>openTownTutorialsUI()));
-      row.appendChild(qBtn('OPEN QUEST LOG',()=>openQuestLogUI()));
-      row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+      const nextButton=qBtn(gateBridge?'TRACK MARA':'VIEW NEXT OBJECTIVE',()=>{
+        if(gateBridge){closeQWin();showName('MEET MARA');refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();return;}
+        openQuestLogUI();
+      });
+      nextButton.classList.add('primary');row.appendChild(nextButton);
       shell.appendChild(row);
       qpanelEl.appendChild(shell);
       if(typeof SFX!=='undefined'&&SFX&&SFX.level)SFX.level();
@@ -1945,12 +1938,12 @@ function netAttachRoom(room,name,client){
       if(qOpen&&qMode==='management')openLandClaimsUI();
     });
     room.onMessage('homesteadUpgrade',m=>{
-      homesteadUpgrades=clampHomesteadUpgrades(m&&m.upgrades);
+      homesteadUpgrades=clampHomesteadUpgrades({...((m&&m.upgrades)||{}),specs:m&&m.specs});
       if(qOpen&&qMode==='management')openLandClaimsUI();
       refreshHUD();
     });
     room.onMessage('homesteadUpgradeResult',m=>{
-      homesteadUpgrades=clampHomesteadUpgrades(m&&m.upgrades);
+      homesteadUpgrades=clampHomesteadUpgrades({...((m&&m.upgrades)||{}),specs:m&&m.specs});
       if(typeof (m&&m.gold)==='number')gold=Math.max(0,m.gold|0);
       SFX.success();
       const action=String(m&&m.action||'');
@@ -2098,7 +2091,8 @@ function netAttachRoom(room,name,client){
             rewardWin.classList.add('hidden');
             rewardWin.classList.remove('promotion-open');
             if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
-            resumeGameplayCamera();
+            if(m.key==='base_setup')openLandClaimsUI();
+            else openQuestLogUI();
           };
         });
       }
@@ -2653,6 +2647,7 @@ function netAttachRoom(room,name,client){
       refreshHUD();updateLandMinimap();SFX.level();SFX.treasure();showName('DAILY LEGEND CONQUERED');
       sysMsg('<b>FEATURED STRUCTURE COMPLETE!</b><br>'+escHTML(m.name||'Legendary site')+' · '+escHTML(m.modifier&&m.modifier.name||'Daily challenge')+'<br>Repeat reward: '+(m.gold|0)+' gold · '+(m.xp|0)+' XP · '+escHTML(m.reward&&m.reward.name||'regional treasure'));
       eventFeed('[Daily Legend]',String(m.name||'Featured structure')+' daily reward claimed.',{key:'structure:daily:'+String(m.day||''),cooldown:0});
+      if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft();
     });
     room.onMessage('fantasyStructureReject',m=>{
       if(m&&m.reason==='range')sysMsg('Move into the heart of the structure to begin its encounter.');
@@ -2836,15 +2831,17 @@ function netAttachRoom(room,name,client){
       regionalContractOffers=Array.isArray(m&&m.offers)?m.offers.map(clampRegionalContract).filter(Boolean):[];
       regionalContract=clampRegionalContract(m&&m.active);
       renderRegionalContractsUI();
+      if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft();
     });
     room.onMessage('regionalContractUpdate',m=>{
       regionalContract=clampRegionalContract(m&&m.active);
       renderRegionalContractsUI();
+      if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft();
       if(regionalContract){ sysMsg('Guild contract: <b>'+escHTML(regionalContract.title)+'</b> '+regionalContract.have+'/'+regionalContract.need);eventFeed('[Guild]',String(regionalContract.title||'Guild contract')+' progress '+regionalContract.have+'/'+regionalContract.need+'.',{key:'guild-progress:'+String(regionalContract.id||regionalContract.title||''),cooldown:6000});}
     });
     room.onMessage('regionalContractReady',m=>{
       const c=clampRegionalContract(m&&m.active);
-      if(c){ regionalContract=c; renderRegionalContractsUI(); sysMsg('Guild contract complete: <b>'+escHTML(c.title)+'</b> - claim it at the Guild Hall');eventFeed('[Guild]',String(c.title||'Guild contract')+' complete. Claim at the Guild Hall.',{key:'guild-ready:'+String(c.id||c.title||''),cooldown:0});OVERWORLD_RESULTS.show({title:'CONTRACT COMPLETE',summary:c.title,contract:'READY',next:'Return to the Guild Hall to claim your rewards.'}); }
+      if(c){ regionalContract=c; renderRegionalContractsUI(); if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft(); sysMsg('Guild contract complete: <b>'+escHTML(c.title)+'</b> - claim it at the Guild Hall');eventFeed('[Guild]',String(c.title||'Guild contract')+' complete. Claim at the Guild Hall.',{key:'guild-ready:'+String(c.id||c.title||''),cooldown:0});OVERWORLD_RESULTS.show({title:'CONTRACT COMPLETE',summary:c.title,contract:'READY',next:'Return to the Guild Hall to claim your rewards.'}); }
     });
     room.onMessage('regionalContractClaimed',m=>{
       const c=clampRegionalContract(m&&m.contract);
@@ -2862,6 +2859,7 @@ function netAttachRoom(room,name,client){
       if(typeof (m&&m.roadWardenRep)==='number') roadWardenRep=Math.max(0,m.roadWardenRep|0);
       regionalContract=null;
       renderRegionalContractsUI();
+      if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft();
       if(m&&m.roadWardenMilestone)sysMsg('<b>Road Warden milestone · '+escHTML(m.roadWardenMilestone.name)+'</b> — '+escHTML(m.roadWardenMilestone.reward||''));
     });
     room.onMessage('regionalContractReject',m=>{
@@ -2870,11 +2868,11 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('craftLegendaryResult', m=>applyLegendaryCraftResult(m));
     room.onMessage('craftLegendaryReject', m=>legendaryCraftRejected(m));
-    room.onMessage('eventStatus', m=>applyEventStatus(m));
+    room.onMessage('eventStatus', m=>{applyEventStatus(m);if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft();});
     room.onMessage('powerRanking', m=>{if(room===NET.room)menusApi.applyPowerRanking(m);});
     room.onMessage('powerRankingChanged', ()=>{if(room===NET.room)menusApi.invalidatePowerRanking();});
-    room.onMessage('eventJoined', m=>{ applyEventStatus(m); sysMsg('Joined the <b>'+escHTML(m&&m.name||'server')+'</b> event queue. Watch the countdown banner.'); eventFeed('[Event]','Joined '+String(m&&m.name||'server event')+' queue.',{key:'event:joined:'+String(m&&m.id||m&&m.name||''),cooldown:0}); });
-    room.onMessage('eventLeft', m=>{ applyEventStatus(m); sysMsg('Left the event queue. You can rejoin while the countdown is still open.'); eventFeed('[Event]','Left '+String(m&&m.name||'server event')+' queue.',{key:'event:left:'+String(m&&m.id||m&&m.name||''),cooldown:0}); });
+    room.onMessage('eventJoined', m=>{ applyEventStatus(m); if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft(); sysMsg('Joined the <b>'+escHTML(m&&m.name||'server')+'</b> event queue. Watch the countdown banner.'); eventFeed('[Event]','Joined '+String(m&&m.name||'server event')+' queue.',{key:'event:joined:'+String(m&&m.id||m&&m.name||''),cooldown:0}); });
+    room.onMessage('eventLeft', m=>{ applyEventStatus(m); if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft(); sysMsg('Left the event queue. You can rejoin while the countdown is still open.'); eventFeed('[Event]','Left '+String(m&&m.name||'server event')+' queue.',{key:'event:left:'+String(m&&m.id||m&&m.name||''),cooldown:0}); });
     room.onMessage('eventReject', m=>eventRejected(m));
     room.onMessage('eventStarted', m=>{applyEventStatus(m);eventFeed('[Event]',String(m&&m.name||'Server event')+' staging started.',{key:'event:started:'+String(m&&m.id||m&&m.name||''),cooldown:0});});
     room.onMessage('eventGo', m=>{eventGo(m);eventFeed('[Event]',String(m&&m.name||'Server event')+' began.',{key:'event:go:'+String(m&&m.id||m&&m.name||''),cooldown:0});});
@@ -3088,7 +3086,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonPerchBreed', m=>{ if(m) dragonBreedFx(m.x|0, m.y|0, m.z|0, m.offspring); });
     room.onMessage('perchReject', m=>perchRejected(m));
     room.onMessage('familiarBound', m=>{ const kind=(m&&m.kind)||'shade'; const sig=FAMILIARS[kind]&&FAMILIARS[kind].sigil; let i=Math.max(0,Math.min(35,(m&&m.slot)|0)); if(!(m&&m.slot>=0&&inv[i]&&inv[i].id===sig))i=inv.findIndex(s=>s&&s.id===sig); if(i>=0){ const s=inv[i]; s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); } familiarBoundLocal(kind); eventFeed('[Familiar]',((FAMILIARS[kind]&&FAMILIARS[kind].name)||'Familiar')+' bound to you.',{key:'familiar:bound:'+kind,cooldown:0}); });
-    room.onMessage('familiarBond', m=>{COMPANIONS.applyFamiliarBond(m);if(m&&m.challenge&&m.challenge.justCompleted&&FAMILIARS[m.kind])eventFeed('[Familiar]',FAMILIARS[m.kind].name+' bond challenge complete.',{key:'familiar:challenge:'+m.kind+':'+String(m.challenge.id||m.challenge.title||''),cooldown:0});});
+    room.onMessage('familiarBond', m=>{COMPANIONS.applyFamiliarBond(m);if(menusApi.refreshTodayInBlockcraft)menusApi.refreshTodayInBlockcraft();if(m&&m.challenge&&m.challenge.justCompleted&&FAMILIARS[m.kind])eventFeed('[Familiar]',FAMILIARS[m.kind].name+' bond challenge complete.',{key:'familiar:challenge:'+m.kind+':'+String(m.challenge.id||m.challenge.title||''),cooldown:0});});
     room.onMessage('familiarTrait', m=>{
       if(!(m&&FAMILIARS[m.kind]))return;
       COMPANIONS.familiarReaction(m.kind,1);

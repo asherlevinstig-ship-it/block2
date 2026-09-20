@@ -938,7 +938,7 @@ function matchRecipe(cells, w){
 
 // ---------------- world ----------------
 const CHUNK=16, WORLD_SIZE=1000, WORLD_CH=Math.ceil(WORLD_SIZE/CHUNK), WX=WORLD_SIZE, WH=64, SEA=13;
-const LAVA_BORDER_WIDTH=12, LAVA_BORDER_TOP=WH-2;
+const LAVA_BORDER_WIDTH=12, BORDER_WALL_TOP=WH-2;
 const WORLD_TC=WX/2, WORLD_TOWN_HS=72, WORLD_TOWN_G=15;
 const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const TRAINING_MEADOW_TOWN_PORTAL=Object.freeze({dx:0,dz:40,range:5.8});
@@ -2002,17 +2002,20 @@ function generateWorld(){
   ancientCities=buildAncientCities(setB,getB);
   treasureCaches=buildTreasureCaches(setB);
   globalThis.BlockcraftDragonShrine.build(setB,B,terrainHeight);
-  buildLavaBorder();
+  buildBoundaryWall();
 }
 function isLavaBorderLand(x,z){
   return x<LAVA_BORDER_WIDTH || z<LAVA_BORDER_WIDTH || x>=WX-LAVA_BORDER_WIDTH || z>=WX-LAVA_BORDER_WIDTH;
 }
-function buildLavaBorder(){
-  for(let x=0;x<WX;x++)for(let z=0;z<WX;z++){
-    if(!isLavaBorderLand(x,z)) continue;
-    setB(x,0,z,B.BEDROCK);
-    for(let y=1;y<=SEA;y++) setB(x,y,z,B.LAVA);                  // lava sea (ocean floor)
-    for(let y=SEA+1;y<=LAVA_BORDER_TOP;y++) setB(x,y,z,B.AIR);   // open sky above, not a wall
+function buildBoundaryWall(){
+  const near=LAVA_BORDER_WIDTH-1,far=WX-LAVA_BORDER_WIDTH;
+  for(let n=near;n<=far;n++){
+    for(let y=1;y<=BORDER_WALL_TOP;y++){
+      setB(near,y,n,B.GLASS);
+      setB(far,y,n,B.GLASS);
+      setB(n,y,near,B.GLASS);
+      setB(n,y,far,B.GLASS);
+    }
   }
 }
 generateWorld();
@@ -4163,8 +4166,9 @@ function updateClaimHud(){
   const recommend=rec&&!c&&!(rec.x===h.x&&rec.z===h.z)
     ? '<br><span class="ok">Recommended edge:</span> <b>'+rec.x+', '+rec.z+'</b> - '+escHTML(rec.relation)+' - '+rec.price+' gold'
     : '';
+  const ownGroup=c&&c.own?connectedOwnedClaimGroup(h.x,h.z):null;
   claimHud.innerHTML='<b>LAND CLAIM</b><br>Tile: '+h.x+', '+h.z+'<br>Status: '+state+
-    '<br>Preview: <b>'+escHTML(analysis.relation)+'</b><br>'+priceLine+'<br>'+goldLine+'<br>'+escHTML(detail)+recommend+'<br>'+((c&&c.own)?'Click to manage access':analysis.canBuy?'Click to purchase':'Blocked')+' - Esc exits';
+    '<br>Preview: <b>'+escHTML(analysis.relation)+'</b><br>'+priceLine+'<br>'+goldLine+'<br>'+escHTML(detail)+recommend+'<br>'+((c&&c.own)?(ownGroup&&ownGroup.size>=3?'Click to choose Homestead upgrades':'Click to manage; 3 connected tiles unlock upgrades'):analysis.canBuy?'Click to purchase':'Blocked')+' - Esc exits';
 }
 function updateClaimHover(){
   if(!claimMode) return;
@@ -4374,7 +4378,7 @@ function appendHomesteadUpgradePanel(panel, btn, canManage=true){
   intro.className='qtext homestead-upgrades-copy';
   intro.textContent=canManage
     ? 'Choose starter rooms for storage, crafting, recovery, and companion care.'
-    : 'Homestead upgrades are managed by the owner.';
+    : 'Stand inside this Homestead to choose upgrades or set its home spawn.';
   panel.appendChild(intro);
   const grid=document.createElement('div');
   grid.className='homestead-upgrade-grid';
@@ -4386,11 +4390,9 @@ function appendHomesteadUpgradePanel(panel, btn, canManage=true){
     card.className='homestead-upgrade-card'+(owned?' owned':'');
     const cost=spec.costGold>0?spec.costGold+'g':'Free';
     card.innerHTML='<small>'+(owned?'OWNED':'STARTER')+'</small><b>'+escHTML(spec.title)+'</b><p>'+escHTML(spec.desc)+'</p><em>'+escHTML(spec.benefit)+'</em><span>Cost: '+escHTML(cost)+'</span>';
-    if(canManage){
-      const action=btn(owned?'OWNED':'ADD UPGRADE',()=>sendHomesteadUpgrade('buy',spec.id));
-      action.disabled=owned;
-      card.appendChild(action);
-    }
+    const action=btn(owned?'OWNED':canManage?'ADD UPGRADE':'VISIT HOMESTEAD',()=>sendHomesteadUpgrade('buy',spec.id));
+    action.disabled=owned||!canManage;
+    card.appendChild(action);
     grid.appendChild(card);
   }
   panel.appendChild(grid);
@@ -4500,24 +4502,36 @@ function appendCurrentLandPanel(panel, btn, close){
   }
   panel.appendChild(box);
 }
-function openLandClaimsUI(focusX=null, focusZ=null){
+function openLandClaimsUI(focusX=null, focusZ=null, showAll=false){
   const open=globalThis.openQWin, panel=globalThis.qpanelEl, btn=globalThis.qBtn, close=globalThis.closeQWin;
   if(typeof open!=='function'||!panel||typeof btn!=='function'||typeof close!=='function'){ sysMsg('Claim management is not ready yet'); return; }
   if(progressionFocus==='first_base_setup'&&!landClaimOverlay) toggleLandClaimOverlay(true);
   if(focusX!=null&&focusZ!=null) landClaimPanelFocus=landKey(focusX|0,focusZ|0);
   const owned=landClaimEntries(c=>c.own);
   const shared=landClaimEntries(c=>!c.own&&c.canEdit&&c.status!=='abandoned');
-  if(progressionFocus==='first_homestead_upgrade'&&!landClaimPanelFocus){
+  if(landClaimPanelFocus&&!landClaims.get(landClaimPanelFocus)?.own)landClaimPanelFocus=null;
+  if(!showAll&&!landClaimPanelFocus){
     const current=landClaimStatusAt(Math.floor(player.pos.x),Math.floor(player.pos.z),Math.floor(player.pos.y));
     if(current.kind==='own') landClaimPanelFocus=landKey(current.x,current.z);
   }
   const focus=landClaimPanelFocus&&landClaims.get(landClaimPanelFocus);
   const focusOwn=focus&&focus.own;
+  const [fx,fz]=focusOwn?landClaimPanelFocus.split(',').map(Number):[0,0];
+  const focusGroup=focusOwn?connectedOwnedClaimGroup(fx,fz):null;
+  const homesteadScope=!!(focusGroup&&focusGroup.size>=3);
   open('management');
   panel.innerHTML='';
   panel.appendChild(landManagerMarker());
   const h=document.createElement('h2'); h.textContent='LAND CLAIMS'; panel.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='OWNED '+owned.length+' - SHARED '+shared.length; panel.appendChild(sub);
+  if(homesteadScope){
+    const standingInHomestead=focusGroup.entries.some(entry=>entry.x===Math.floor(player.pos.x)&&entry.z===Math.floor(player.pos.z));
+    appendHomesteadUpgradePanel(panel,btn,standingInHomestead);
+  }else if(focusOwn){
+    const hint=document.createElement('p');hint.className='qtext homestead-upgrades-copy';
+    hint.textContent='Homestead upgrades unlock when three owned tiles share an edge. This connected area has '+(focusGroup?focusGroup.size:1)+' of 3 tiles.';
+    panel.appendChild(hint);
+  }
   const rule=document.createElement('p'); rule.className='qtext';
   rule.textContent='Claim activity: owner or trusted visits keep land active. Dormant after '+LAND_DORMANT_DAYS+' days; abandoned and reclaimable after '+LAND_ABANDONED_DAYS+' days.';
   panel.appendChild(rule);
@@ -4530,7 +4544,7 @@ function openLandClaimsUI(focusX=null, focusZ=null){
     panel.appendChild(setup.firstChild);
   }
   const overlayRow=document.createElement('div'); overlayRow.className='land-overlay-row';
-  const overlayBtn=btn(landClaimOverlay?'HIDE CLAIMS':'SHOW CLAIMS',()=>{toggleLandClaimOverlay();openLandClaimsUI(focusX,focusZ);});
+  const overlayBtn=btn(landClaimOverlay?'HIDE CLAIMS':'SHOW CLAIMS',()=>{toggleLandClaimOverlay();openLandClaimsUI(focusX,focusZ,showAll);});
   overlayBtn.classList.toggle('selected',landClaimOverlay);
   overlayRow.appendChild(overlayBtn);
   const legend=document.createElement('span');
@@ -4544,10 +4558,8 @@ function openLandClaimsUI(focusX=null, focusZ=null){
     if(sharedGroup&&sharedGroup.size>=3) appendHomesteadWorkOrderPanel(panel, btn, false);
   }
   if(focusOwn){
-    const [fx,fz]=landClaimPanelFocus.split(',').map(Number);
-    const group=connectedOwnedClaimGroup(fx,fz);
+    const group=focusGroup;
     const groupSize=group?group.size:1;
-    const homesteadScope=groupSize>=3;
     const groupTrustCount=token=>group&&token?group.entries.reduce((n,e)=>n+((Array.isArray(e.c.allowed)&&e.c.allowed.some(a=>a.token===token))?1:0),0):0;
     const info=document.createElement('p'); info.className='qtext';
     const focusStatus=landClaimStatusAt(fx,fz,Math.floor(player.pos.y));
@@ -4566,7 +4578,6 @@ function openLandClaimsUI(focusX=null, focusZ=null){
       panel.appendChild(groupRow);
     }
     if(homesteadScope){
-      appendHomesteadUpgradePanel(panel, btn);
       appendHomesteadWorkOrderPanel(panel, btn);
     }
     const trustedTitle=document.createElement('div'); trustedTitle.className='sub2'; trustedTitle.textContent='TRUSTED HUNTERS'; panel.appendChild(trustedTitle);
@@ -4594,7 +4605,7 @@ function openLandClaimsUI(focusX=null, focusZ=null){
     }
     if(!any){ const empty=document.createElement('p'); empty.className='qtext'; empty.textContent='No untrusted online hunters are visible right now.'; panel.appendChild(empty); }
     const row=document.createElement('div'); row.className='qrow';
-    row.appendChild(btn('ALL CLAIMS',()=>{landClaimPanelFocus=null;openLandClaimsUI();}));
+    row.appendChild(btn('ALL CLAIMS',()=>{landClaimPanelFocus=null;openLandClaimsUI(null,null,true);}));
     row.appendChild(btn('CLOSE',()=>close(),true));
     panel.appendChild(row);
     return;
@@ -4888,13 +4899,56 @@ function makeVillager(robe, robeDark, hat, profile={}){
     signatureGlow=addBox(staff,[.17,.17,.17],[.22,.74,0],crystalM,[0,.785,.785]);
     addBox(torso,[.3,.36,.1],[-.31,-.04,.2],beltM,[0,0,.08]);
   }
+  const signature=profile.signature||'';
+  if(signature&&signature!=='mara'){
+    const woodM=voxelMats('#694524','#8b6136','#432b17','#28180c');
+    const ironM=voxelMats('#788696','#aebbc7','#4b5563','#303843');
+    const paperM=voxelMats('#d8c99f','#fff1c5','#a6956c','#756643');
+    const roleGoldM=glowVoxelMats('#b9852e','#ffe08a','#725019','#ffd24a',.4);
+    const greenM=voxelMats('#487a3f','#79aa5f','#2d5128','#1b3518');
+    if(signature==='miner'){
+      addBox(head,[.58,.08,.58],[0,.31,0],ironM);addBox(head,[.14,.13,.08],[0,.31,.3],roleGoldM);
+      addBox(arms[1],[.07,.74,.07],[0,-.64,.05],woodM,[0,0,-.18]);addBox(arms[1],[.42,.09,.09],[-.12,-.92,.05],ironM,[0,0,-.12]);
+    }else if(signature==='smith'){
+      addBox(torso,[.43,.52,.05],[0,-.02,.18],voxelMats('#4b2b20','#704133','#2d1712','#1d0d09'));
+      addBox(arms[1],[.09,.7,.09],[0,-.62,.03],woodM);addBox(arms[1],[.34,.18,.18],[0,-.94,.03],ironM);
+    }else if(signature==='scholar'){
+      addBox(head,[.12,.12,.04],[.16,.02,.29],roleGoldM);addBox(torso,[.34,.42,.09],[-.27,-.03,.2],paperM,[0,0,.14]);
+    }else if(signature==='quartermaster'||signature==='outfitter'){
+      addBox(torso,[.58,.58,.18],[0,.02,-.24],woodM);addBox(torso,[.62,.08,.2],[0,.18,-.25],roleGoldM);
+      if(signature==='outfitter')addBox(torso,[.09,.52,.07],[.22,.02,.19],greenM,[0,0,-.18]);
+    }else if(signature==='farmer'){
+      addBox(arms[1],[.08,.68,.08],[0,-.62,.03],woodM,[0,0,.08]);addBox(arms[1],[.36,.08,.08],[.12,-.92,.03],ironM,[0,0,-.35]);
+      addBox(torso,[.32,.32,.1],[-.3,-.1,.2],greenM);
+    }else if(signature==='cook'||signature==='bartender'){
+      addBox(head,[.5,.18,.5],[0,.35,0],paperM);addBox(head,[.36,.18,.36],[0,.51,0],paperM);
+      addBox(arms[1],[.07,.64,.07],[0,-.62,.04],ironM);addBox(arms[1],[.26,.08,.16],[.08,-.91,.04],ironM);
+    }else if(signature==='mason'){
+      addBox(arms[1],[.08,.62,.08],[0,-.62,.03],woodM);addBox(arms[1],[.3,.06,.22],[.08,-.91,.03],ironM,[0,0,-.2]);
+    }else if(signature==='monk'){
+      addBox(torso,[.13,.72,.04],[-.18,0,.18],roleGoldM,[0,0,.12]);
+      for(let i=0;i<4;i++)addBox(torso,[.07,.07,.06],[.18+i*.065,-.18-i*.02,.2],woodM);
+    }else if(signature==='warden'||signature==='road_warden'){
+      signatureCape=addBox(torso,[.56,.82,.07],[0,-.11,-.19],voxelMats('#263746','#40566a','#15232f','#0c161f'));
+      addBox(arms[1],[.07,1.18,.07],[0,-.78,.02],woodM);addBox(arms[1],[.2,.22,.08],[0,-1.39,.02],ironM,[0,0,.785]);
+    }else if(signature==='stablemaster'){
+      addBox(torso,[.62,.12,.35],[0,.27,.01],greenM);addBox(torso,[.18,.42,.1],[.28,-.06,.2],woodM);
+    }else if(signature==='guild_receptionist'||signature==='social_mentor'||signature==='job_mentor'||signature==='worker_tutor'){
+      addBox(torso,[.38,.45,.07],[-.28,-.03,.2],paperM,[0,0,.08]);addBox(torso,[.1,.1,.06],[.2,.15,.19],roleGoldM,[0,.785,.785]);
+    }else if(signature==='cartographer'){
+      addBox(torso,[.46,.5,.12],[0,.03,-.23],woodM);addBox(arms[1],[.4,.28,.06],[0,-.59,.12],paperM,[.25,0,0]);
+    }else if(signature==='skyship_attendant'){
+      addBox(head,[.58,.08,.58],[0,.31,0],ironM);addBox(head,[.18,.1,.05],[-.13,.05,.29],roleGoldM);addBox(head,[.18,.1,.05],[.13,.05,.29],roleGoldM);
+      signatureCape=addBox(torso,[.72,.12,.35],[0,.28,.01],voxelMats('#24576d','#3f8296','#153847','#0b232e'));
+    }
+  }
   grp.add(blobShadow(1));
   // Preserve each palette and emissive treatment while collapsing a voxel box's
   // six face materials into one atlas-backed draw.
   atlasVoxelRoot(grp);
   // Merge rigid siblings around the pivots used by walking and Mara's signature motion.
   batchStaticModelParts({THREE,root:grp,animated:[...legs,...arms,head,signatureGlow,signatureCape].filter(Boolean)});
-  return {grp, head, torso, legs, arms, signature:profile.signature||'', signatureGlow, signatureCape};
+  return {grp, head, torso, legs, arms, signature, signatureGlow, signatureCape,appearance:{skin,hair,robe,robeDark,role:signature}};
 }
 function angDiff(a,b){ let d=a-b; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI; return d; }
 
@@ -5012,13 +5066,29 @@ function npcVisualProfile(def,index){
     signature:'mara',robe:['#255e64','#153b43'],hat:false,
     skinPair:['#b77959','#87523f'],hair:'#241b22'
   };
-  return {robe:ROBES[index%ROBES.length],hat:index%2===1};
+  const rolePalettes={
+    miner:['#596271','#333842'],smith:['#8b4a2e','#332018'],scholar:['#315f7a','#1d3548'],quartermaster:['#75613c','#493b22'],outfitter:['#416b62','#27463f'],
+    farmer:['#6f8e48','#3f5928'],cook:['#a66a39','#5e3921'],mason:['#77736a','#49463f'],monk:['#596d8c','#33445f'],warden:['#364b61','#1f2d3c'],
+    stablemaster:['#7a5534','#49301d'],guild_receptionist:['#735987','#443451'],social_mentor:['#587b55','#324b31'],road_warden:['#485867','#293642'],
+    job_mentor:['#74653d','#493f24'],worker_tutor:['#6a5b42','#413724'],cartographer:['#47737a','#29454c'],skyship_attendant:['#356b82','#1d3d4d']
+  };
+  const role=def&&def.role||'';
+  return {signature:role,robe:rolePalettes[role]||ROBES[index%ROBES.length],hat:['farmer','stablemaster','road_warden'].includes(role)||index%3===1,
+    skinPair:VILL_SKIN[index%VILL_SKIN.length],hair:VILL_HAIR[(index*3+1)%VILL_HAIR.length]};
 }
 function npcSpotFree(x,z){
   const bx=Math.floor(x), bz=Math.floor(z), G=TOWN.G;
   if(!isSolid(getB(bx,G,bz))) return false;
   for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)
     if(isSolid(getB(bx+dx,G+1,bz+dz)) || isSolid(getB(bx+dx,G+2,bz+dz))) return false;
+  return true;
+}
+function npcAgentSpotFree(v,x,z){
+  if(!npcSpotFree(x,z))return false;
+  for(const other of villagers){
+    if(!other||other===v||!other.grp||other.inside||other.grp.visible===false)continue;
+    if(Math.hypot(x-other.grp.position.x,z-other.grp.position.z)<.72)return false;
+  }
   return true;
 }
 function npcNewTarget(v){
@@ -5028,7 +5098,7 @@ function npcNewTarget(v){
     const x=center ? center[0]+(Math.random()*2-1)*radius : TOWN.TC+(Math.random()*2-1)*22;
     const z=center ? center[1]+(Math.random()*2-1)*radius : TOWN.TC+(Math.random()*2-1)*22;
     if(Math.hypot(x-TOWN.TC,z-TOWN.TC)<6) continue;   // stay out of the fountain
-    if(npcSpotFree(x,z)){ v.tx=x; v.tz=z; return; }
+    if(npcAgentSpotFree(v,x,z)){ v.tx=x; v.tz=z; return; }
   }
   v.tx=v.grp.position.x; v.tz=v.grp.position.z;
 }
@@ -5042,7 +5112,8 @@ function spawnVillagers(n){
              name:def.name, shortName:def.shortName||def.name, role:def.role, title:def.title,
              personality:def.personality, line:def.line, accept:def.accept, done:def.done, focus:def.focus,
              work:def.work, home:def.home||HOMES[i%HOMES.length], static:!!def.static,
-             fixedY:def.fixedY, inside:false, stuck:0, targetCenter:def.work, targetRadius:def.role==='warden'?2.5:3.5};
+             fixedY:def.fixedY, inside:false, stuck:0, targetCenter:def.work, targetRadius:def.role==='warden'?2.5:3.5,
+             animState:'idle',greetT:0,nearPlayer:false};
     if(v.static){
       let sx=def.work[0], sz=def.work[1];
       if(!Number.isFinite(def.fixedY)&&!npcSpotFree(sx,sz)){
@@ -5109,7 +5180,10 @@ function tickVillagers(dt, t){
     }
     if(v.signatureCape)v.signatureCape.rotation.x=.06+Math.sin(t*1.15+v.phase)*.025;
     if(v.legs){ const k=Math.max(0,1-dt*9);                                 // ease limbs back to rest each tick
-      v.legs[0].rotation.x*=k; v.legs[1].rotation.x*=k; v.arms[0].rotation.x*=k; v.arms[1].rotation.x*=k; }
+      v.legs[0].rotation.x*=k; v.legs[1].rotation.x*=k;
+      for(const arm of v.arms){arm.rotation.x*=k;arm.rotation.z*=k;}
+      v.head.rotation.x*=k;if(v.torso){v.torso.rotation.x*=k;v.torso.rotation.z*=k;}
+    }
     if(v.nameplate && v.nameplate.material){
       const d=pd;
       const target=!v.inside && !qOpen && d<8 ? Math.min(.95,(8-d)/2.5) : 0;
@@ -5117,7 +5191,28 @@ function tickVillagers(dt, t){
       v.nameplate.visible=v.nameplate.material.opacity>.04;
     }
     updateNpcQuestMarker(v,dt,t,pd);
-    if(v.static){ p.y=(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.3+v.phase)*.012; continue; }   // static NPC breathes in place
+    const dialogueActive=!!(qOpen&&globalThis.BlockcraftActiveNpcName&&globalThis.BlockcraftActiveNpcName===(v.name||v.shortName));
+    if(dialogueActive){
+      v.animState='talk';
+      const talk=Math.sin(t*4.2+v.phase),nod=Math.sin(t*2.1+v.phase);
+      if(v.arms){v.arms[0].rotation.x=-.28+talk*.18;v.arms[0].rotation.z=.18;v.arms[1].rotation.x=-.14-talk*.12;}
+      v.head.rotation.x=nod*.055;if(v.torso)v.torso.rotation.z=talk*.012;
+      p.y=(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.5+v.phase)*.014;
+      continue;
+    }
+    if(v.static){
+      v.animState='work';
+      const work=Math.sin(t*3.1+v.phase),role=v.role||'';
+      if(v.arms&&['miner','smith','mason','cook','farmer'].includes(role)){
+        v.arms[1].rotation.x=-.52+work*.34;v.arms[0].rotation.x=-.12-work*.08;
+      }else if(v.arms&&['scholar','cartographer','guild_receptionist','social_mentor','job_mentor','worker_tutor'].includes(role)){
+        v.arms[0].rotation.x=-.34+work*.06;v.arms[1].rotation.x=-.32-work*.06;v.head.rotation.x=.04+work*.025;
+      }else if(v.arms&&['stablemaster','warden','road_warden','skyship_attendant'].includes(role)){
+        v.arms[0].rotation.x=-.12+work*.05;v.head.rotation.y+=Math.sin(t*.7+v.phase)*.002;
+      }
+      p.y=(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.3+v.phase)*.012;
+      continue;
+    }   // static NPCs perform role-specific work instead of standing as mannequins
     // indoors at night; step back out at dawn
     if(v.inside){
       if(!night){
@@ -5137,25 +5232,31 @@ function tickVillagers(dt, t){
     }
     // turn to greet the player when they come close
     if(pd<2.6 && !night){
+      if(!v.nearPlayer)v.greetT=1.15;
+      v.nearPlayer=true;v.greetT=Math.max(0,(v.greetT||0)-dt);v.animState=v.greetT>0?'greet':'attend';
       const want=Math.atan2(player.pos.x-p.x, player.pos.z-p.z);
       v.grp.rotation.y += angDiff(want, v.grp.rotation.y)*Math.min(1,dt*8);
-      v.head.rotation.y=0; p.y=TOWN.G+1;
+      v.head.rotation.y=0;
+      if(v.arms&&v.greetT>0){v.arms[0].rotation.x=-.18+Math.sin(t*8+v.phase)*.1;v.arms[0].rotation.z=-.62;}
+      p.y=TOWN.G+1;
       continue;
     }
+    if(pd>3.1)v.nearPlayer=false;
     if(v.wait>0){
-      v.wait-=dt; p.y=TOWN.G+1;
+      v.animState='idle';v.wait-=dt; p.y=TOWN.G+1;
       v.head.rotation.y=Math.sin(t*1.4+v.phase)*.3;   // idle look-around
       continue;
     }
     const dx=v.tx-p.x, dz=v.tz-p.z, d=Math.hypot(dx,dz);
     if(d<.4){ v.wait=1+Math.random()*3.5; npcNewTarget(v); continue; }
     const step=(night?v.speed*1.4:v.speed)*dt, nx=p.x+dx/d*step, nz=p.z+dz/d*step;
-    if(!npcSpotFree(nx,nz)){
+    if(!npcAgentSpotFree(v,nx,nz)){
       if(night){ v.stuck++; if(v.stuck>8){ v.inside=true; v.grp.visible=false; } }
-      else { v.wait=.4; npcNewTarget(v); }
+      else { v.wait=.25+Math.random()*.35; npcNewTarget(v); }
       continue;
     }
     v.stuck=0;
+    v.animState='walk';
     p.x=nx; p.z=nz;
     const want=Math.atan2(dx,dz);
     v.grp.rotation.y += angDiff(want, v.grp.rotation.y)*Math.min(1,dt*10);
@@ -9713,12 +9814,12 @@ function rewardUnlockText(m, earned){
 }
 function dungeonRewardHandoffText(m, earned, failed){
   const result=m&&m.result;
-  if(failed && result&&result.reason==='breach') return 'The failed Gate cost the clear payout and left a public threat. Repair, restock, and clear the next Gate before the timer expires.';
-  if(failed) return 'Return to town, repair, restock, and challenge another Gate. Existing gear is kept.';
+  if(failed && result&&result.reason==='breach') return 'Next action: return to town and prepare to contain the public threat.';
+  if(failed) return 'Next action: return to town and prepare for another Gate. Existing gear is kept.';
   if(!earned) return rewardUnlockText(m||{}, false);
   const total=Math.max(0,result&&result.chestTotal|0),opened=Math.max(0,result&&result.chestsOpened|0),left=Math.max(0,total-opened);
   const chest=total&&left>0?' Optional chests remain: '+left+'.':'';
-  return 'Full clear reward awarded: XP, gold, materials, key/shard/gear chances, and progress credit. Exit through the portal when ready.'+chest+' '+rewardUnlockText(m||{}, true);
+  return 'Next action: Exit through the portal when ready.'+chest+' '+rewardUnlockText(m||{}, true);
 }
 function rewardIcon(label, id){
   if(label==='XP'||label==='Hunter XP') return 'XP';
@@ -9797,7 +9898,8 @@ function postActivitySocial(container,activity){
   const participants=Array.isArray(activity&&activity.participants)?activity.participants:[];
   const ownToken=String(gameContext&&gameContext.account&&gameContext.account.id||'');
   const others=participants.filter(person=>person&&person.token&&person.token!==ownToken&&!person.self);
-  const shell=document.createElement('section');shell.className='post-activity-social';
+  const shell=document.createElement('details');shell.className='post-activity-social optional-followups';
+  const disclosure=document.createElement('summary');disclosure.textContent='Optional social follow-ups';shell.appendChild(disclosure);
   const head=document.createElement('header');head.innerHTML='<span><small>KEEP THE PARTY GOING</small><b>Adventure is better together</b></span>';
   const replay=document.createElement('button');replay.type='button';replay.className='post-social-replay';replay.dataset.postAction='play_again';replay.textContent='PLAY AGAIN';replay.onclick=()=>postActivitySend(replay,activity,'play_again');head.appendChild(replay);shell.appendChild(head);
   if(others.length){
@@ -9901,7 +10003,7 @@ function showDungeonReward(m, earned){
     milestoneLine+
     '<div class="rnote">'+escHTML(dungeonRewardHandoffText(m||{}, earned, failed))+'</div>'+
     '<div id="dungeonresultsocial"></div>'+
-    '<button id="rewardclose">'+escHTML(milestone?milestone.action:'CLOSE')+'</button>';
+    '<button id="rewardclose">'+escHTML(milestone?milestone.action:'RETURN TO WORLD')+'</button>';
   postActivitySocial(document.getElementById('dungeonresultsocial'),result);
   rewardWin.classList.remove('hidden');
   rewardWin.classList.toggle('post-activity-open',!!(result&&Array.isArray(result.participants)));
@@ -9920,9 +10022,11 @@ function showDungeonReward(m, earned){
     rewardWin.classList.remove('post-activity-open');
     rewardWin.style.pointerEvents='';
     if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
-    if(resumePlay){
-      resumeGameplayCamera();
+    if(milestone&&milestone.action==='C PREP CHECK'){
+      setTimeout(()=>{const menus=gameContext.requireModule('menus');if(menus&&menus.openGatePrep)menus.openGatePrep(2);},0);
+      return;
     }
+    if(resumePlay||!milestone)resumeGameplayCamera();
   };
   clearTimeout(rewardHideTimer);
   if(!milestone){
@@ -10024,9 +10128,10 @@ function showEventResult(m){
   if(reward.xp) rewardRows.push({label:'Hunter XP', value:'+'+(reward.xp|0).toLocaleString('en-US')});
   if(reward.tokens) rewardRows.push({label:itemLabel(I.LEGEND_TOKEN), value:'+'+(reward.tokens|0), id:I.LEGEND_TOKEN});
   if(reward.unlock) rewardRows.push({label:'Utility Unlocked', value:reward.unlock});
-  eventResultRewards.innerHTML=rewardRows.length
+  eventResultRewards.innerHTML=(rewardRows.length
     ? '<div class="rewardloot">'+rewardRows.map(rewardLineHTML).join('')+'</div>'
-    : '<div class="rnote">'+(won?'Reward delivered':'No reward this time')+'</div>';
+    : '<div class="rnote">'+(won?'Reward delivered':'No reward this time')+'</div>')+
+    '<div class="rnote">Next action: follow your tracked objective when you return to the overworld.</div>';
   postActivitySocial(eventResultSocial,m);
   renderEventResult();
 }

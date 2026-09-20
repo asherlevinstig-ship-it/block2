@@ -12,7 +12,7 @@ const DRAGON_SHRINE = require('../shared/dragon-shrine');
 
 const CHUNK = 16, WORLD_SIZE = 1000, WORLD_CH = Math.ceil(WORLD_SIZE / CHUNK);
 const WX = WORLD_SIZE, WH = 64, SEA = 13;
-const LAVA_BORDER_WIDTH = 12, LAVA_BORDER_TOP = WH - 2;
+const LAVA_BORDER_WIDTH = 12, BORDER_WALL_TOP = WH - 2;
 const TOWN = { TC: WX / 2, HS: 72, G: 15 };
 const TRAINING_MEADOW = { x: 560, z: 840, G: 18, R: 58 };
 const TRAINING_MEADOW_TOWN_PORTAL = Object.freeze({ dx: 0, dz: 40, range: 5.8 });
@@ -929,18 +929,21 @@ function generate() {
   buildAncientCities(setB, getB);
   buildTreasureCaches(setB);
   DRAGON_SHRINE.build(setB,B,terrainHeight);
-  buildLavaBorder();
+  buildBoundaryWall();
   buildTown();
 }
 function isLavaBorderLand(x, z) {
   return x < LAVA_BORDER_WIDTH || z < LAVA_BORDER_WIDTH || x >= WX - LAVA_BORDER_WIDTH || z >= WX - LAVA_BORDER_WIDTH;
 }
-function buildLavaBorder() {
-  for (let x = 0; x < WX; x++) for (let z = 0; z < WX; z++) {
-    if (!isLavaBorderLand(x, z)) continue;
-    setB(x, 0, z, B.BEDROCK);
-    for (let y = 1; y <= SEA; y++) setB(x, y, z, B.LAVA);                  // lava sea (ocean floor)
-    for (let y = SEA + 1; y <= LAVA_BORDER_TOP; y++) setB(x, y, z, B.AIR); // open sky above, not a wall
+function buildBoundaryWall() {
+  const near = LAVA_BORDER_WIDTH - 1, far = WX - LAVA_BORDER_WIDTH;
+  for (let n = near; n <= far; n++) {
+    for (let y = 1; y <= BORDER_WALL_TOP; y++) {
+      setB(near, y, n, B.GLASS);
+      setB(far, y, n, B.GLASS);
+      setB(n, y, near, B.GLASS);
+      setB(n, y, far, B.GLASS);
+    }
   }
 }
 
@@ -1312,16 +1315,19 @@ function createWorld() {
     buildAncientCities(setLocal, getLocal);
     buildTreasureCaches(setLocal);
     DRAGON_SHRINE.build(setLocal,B,terrainHeight);
-    buildLavaBorderLocal();
+    buildBoundaryWallLocal();
     buildTownLocal();
   };
   const isLavaBorderLandLocal = (x, z) => x < LAVA_BORDER_WIDTH || z < LAVA_BORDER_WIDTH || x >= WX - LAVA_BORDER_WIDTH || z >= WX - LAVA_BORDER_WIDTH;
-  const buildLavaBorderLocal = () => {
-    for (let x = 0; x < WX; x++) for (let z = 0; z < WX; z++) {
-      if (!isLavaBorderLandLocal(x, z)) continue;
-      setLocal(x, 0, z, B.BEDROCK);
-      for (let y = 1; y <= SEA; y++) setLocal(x, y, z, B.LAVA);                  // lava sea (ocean floor)
-      for (let y = SEA + 1; y <= LAVA_BORDER_TOP; y++) setLocal(x, y, z, B.AIR); // open sky above, not a wall
+  const buildBoundaryWallLocal = () => {
+    const near = LAVA_BORDER_WIDTH - 1, far = WX - LAVA_BORDER_WIDTH;
+    for (let n = near; n <= far; n++) {
+      for (let y = 1; y <= BORDER_WALL_TOP; y++) {
+        setLocal(near, y, n, B.GLASS);
+        setLocal(far, y, n, B.GLASS);
+        setLocal(n, y, near, B.GLASS);
+        setLocal(n, y, far, B.GLASS);
+      }
     }
   };
   const standHeightLocal = (x, z, fromY) => {

@@ -4125,8 +4125,6 @@ function showJobTutorialCompletionReward(jobId){
     '<div class="rnote first-shift-next"><b>Next Best Action:</b><br>Follow the HUD marker to '+escHTML(mission.target)+'. Activities now progress with your Hunter level.</div>'+
     '<div class="job-tutorial-actions">'+
       '<button id="jobtutorialfollow">FOLLOW FIRST SHIFT</button>'+
-      '<button id="jobtutorialopenboard">OPEN QUEST LOG</button>'+
-      '<button id="jobtutorialrewardclose">CLOSE</button>'+
     '</div>';
   rewardWin.classList.remove('hidden');
   rewardWin.classList.add('promotion-open');
@@ -4140,12 +4138,8 @@ function showJobTutorialCompletionReward(jobId){
     rewardWin.style.zIndex='';
     closeBlockingGameModal(rewardWin,{relock,reason:'job-tutorial-reward'});
   };
-  const board=document.getElementById('jobtutorialopenboard');
-  if(board)board.onclick=()=>{closeReward(false);setTimeout(()=>openQuestLogUI(),250);};
   const follow=document.getElementById('jobtutorialfollow');
   if(follow)follow.onclick=()=>{closeReward(true);showName(mission.title);refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();};
-  const btn=document.getElementById('jobtutorialrewardclose');
-  if(btn)btn.onclick=()=>closeReward(true);
   return true;
 }
 function updateJobTutorialHud(){

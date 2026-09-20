@@ -60,7 +60,10 @@ test('post-gate chapter reaches the E-rank climb and survives reload', async ({ 
   await dismissMilestone(page);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ type: 'land', label: 'OPEN HOMESTEAD' });
 
-  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('homesteadUpgrade', { action: 'buy', id: 'storage' }));
+  await expect(page.locator('#qpanel')).toContainText('HOMESTEAD UPGRADES');
+  const storageUpgrade = page.locator('#qpanel .homestead-upgrade-card').filter({ hasText: 'Storage Room' });
+  await expect(storageUpgrade.getByRole('button', { name: 'ADD UPGRADE' })).toBeEnabled();
+  await storageUpgrade.getByRole('button', { name: 'ADD UPGRADE' }).click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('e_rank_climb');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().activeObjectives.some(objective => objective.title === 'E-rank Climb'))).toBe(true);
 

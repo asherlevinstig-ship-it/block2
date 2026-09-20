@@ -2713,7 +2713,7 @@ function showFirstVillagerReward(onContinue){
     '<h2>FIRST QUEST COMPLETE</h2>'+
     '<div class="rsub">THE TOWN RECOGNISES YOUR PROGRESS</div>'+
     '<div class="rewardloot">'+rewardLineHTML({label:'Gold',value:'+100'})+'</div>'+
-    '<div class="rnote">You reached Level 2. Next you will choose a combat path, learn your first ability, then optionally try a job room.</div>'+
+    '<div class="rnote">You reached Level 2. Choose your combat path next.</div>'+
     '<button id="rewardclose">CHOOSE PATH</button>';
   rewardWin.classList.remove('hidden');
   if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
@@ -2903,12 +2903,13 @@ function awardAegisTrialLoot(){
       '<div class="rsub">'+escHTML(entry.kind)+' drop</div>'+
       '<div class="rewardloot">'+rewardLineHTML(line)+'</div>'+
       '<div class="rnote">'+escHTML(entry.note)+'</div>'+
-      '<button id="rewardclose">CLOSE</button>';
+      '<div class="rnote"><b>One next action:</b><br>Review your active objective and decide where this reward helps.</div>'+
+      '<button id="rewardclose">OPEN QUEST LOG</button>';
     rewardWin.classList.remove('hidden');
     if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
     if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     const btn=document.getElementById('rewardclose');
-    if(btn) btn.onclick=()=>{rewardWin.classList.add('hidden');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();};
+    if(btn) btn.onclick=()=>{rewardWin.classList.add('hidden');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();openQuestLogUI();};
     clearTimeout(rewardHideTimer);
     rewardHideTimer=setTimeout(()=>{rewardWin.classList.add('hidden');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();}, 9000);
   }
@@ -3093,8 +3094,13 @@ let dungeonLobbyOpen=false;
 let dungeonLobbyState=null;
 let dungeonMatchmakingState={listings:[]};
 let randomGateQueueState={queued:false,rank:-1,waiting:0};
+const RETURNING_RECAP_MIN_AWAY_MS=15*60*1000;
+let returningRecapTimer=0;
+let returningRecapShown=false;
+let returningRecapPending=null;
 const pendingGuildInvites={};
 function openQWin(mode='dialog'){
+  globalThis.BlockcraftActiveNpcName='';
   setTownMapMovementOverlay(false);
   if(!qOpen) SFX.uiOpen();
   qOpen=true;
@@ -3115,6 +3121,7 @@ function openQWin(mode='dialog'){
   refreshPlayUi();
 }
 function closeQWin(relock=true){
+  globalThis.BlockcraftActiveNpcName='';
   setTownMapMovementOverlay(false);
   if(qOpen) SFX.uiClose();
   qOpen=false; qMode=''; regionalContractsOpen=false; utilityPanelOpen=false; questLogOpen=false; guildHallOpen=false; dungeonLobbyOpen=false; qwinEl.classList.add('hidden');
@@ -4379,6 +4386,121 @@ function recoveryHubInfo(){
   if(craft)return {title:'Crafting Recovery',status:'Open the next useful recipe. Missing materials will show with a concrete gather route.',where:'Crafting menu',button:craft.label,action:()=>activateObjectiveCraftShortcut(craft.outputId,craft.kind)};
   return null;
 }
+function returningRecapAwayText(lastPlayedAt){
+  const minutes=Math.max(1,Math.floor((Date.now()-Math.max(0,Number(lastPlayedAt)||0))/60000));
+  if(minutes<60)return minutes+' minute'+(minutes===1?'':'s');
+  const hours=Math.floor(minutes/60);
+  if(hours<48)return hours+' hour'+(hours===1?'':'s');
+  const days=Math.floor(hours/24);
+  return days+' day'+(days===1?'':'s');
+}
+function returningRecapPrimaryInfo(){
+  const recovery=recoveryHubInfo();
+  if(recovery)return recovery;
+  const next=progressionDirectorCandidate()||progressionRoadmap().find(entry=>!entry.introduced&&entry.eligible);
+  if(next)return {title:next.title,status:next.action,where:next.where,button:'OPEN QUEST LOG',action:()=>openQuestLogUI()};
+  return {title:'Choose Your Next Adventure',status:'Your core journey is open. Pick a contract, event, Gate, discovery, or social goal.',where:'Quest Log',button:'OPEN QUEST LOG',action:()=>openQuestLogUI()};
+}
+function returningRecapOptionalInfo(){
+  const today=todayInBlockcraftEntries(),ready=today.filter(entry=>entry.tone==='ready').length,done=today.filter(entry=>entry.tone==='done').length;
+  return {title:'Today in Blockcraft',status:(ready?ready+' ready now. ':done?done+' complete. ':'')+'Daily structures, familiar exercises, events, and contracts are grouped in one optional card.',where:'Quest Log',button:'VIEW TODAY',action:()=>openQuestLogUI()};
+}
+function todayTimeText(at){
+  at=Math.max(0,Number(at)||0);
+  if(!at)return 'SCHEDULE UPDATING';
+  const minutes=Math.max(0,Math.ceil((at-Date.now())/60000));
+  if(minutes<=0)return 'NOW';
+  if(minutes<60)return minutes+'M';
+  const hours=Math.floor(minutes/60),rest=minutes%60;
+  return hours+'H'+(rest?' '+rest+'M':'');
+}
+function todayFamiliarEntry(){
+  const owned=familiarBondCards().filter(f=>f.bound),f=owned.find(entry=>entry.active)||owned[0];
+  if(!f)return {id:'familiar',label:'FAMILIAR EXERCISE',title:'Bind a Familiar',detail:'Unlock a companion to begin persistent Bond exercises.',state:'NOT UNLOCKED',tone:'muted',button:'COMPANIONS',action:()=>openDragonBondUI()};
+  const today=BlockcraftFamiliarSystem.dayKey(),saved=COMPANIONS.familiarChallenges[f.id],day=saved&&!saved.claimed?saved.day:today,daily=BlockcraftFamiliarSystem.dailyChallenge(f.id,day);
+  if(!daily)return {id:'familiar',label:'FAMILIAR EXERCISE',title:f.def.name,detail:'Travel together to earn Bond XP.',state:'AVAILABLE',tone:'ready',button:'COMPANIONS',action:()=>openDragonBondUI()};
+  const progress=saved&&saved.day===day?Math.min(daily.need,saved.progress|0):0,done=!!(saved&&saved.day===day&&saved.claimed);
+  return {id:'familiar',label:'FAMILIAR EXERCISE',title:f.def.name+' · '+daily.title,detail:done?'Bond reward earned.':progress+' / '+daily.need+' · +'+BlockcraftFamiliarSystem.DAILY_CHALLENGE_REWARD+' Bond XP · progress persists',state:done?'COMPLETE':progress?'IN PROGRESS':'READY',tone:done?'done':'ready',button:'COMPANIONS',action:()=>openDragonBondUI()};
+}
+function todayInBlockcraftEntries(){
+  const daily=globalThis.BlockcraftFantasyStructureDaily;
+  const structure=daily?{id:'structure',label:'DAILY STRUCTURE',title:daily.name||'Featured Structure',detail:daily.claimed?'Daily legend reward claimed.':(daily.modifier&&daily.modifier.name?daily.modifier.name+' · ':'')+(daily.reward&&daily.reward.name?'Reward: '+daily.reward.name:'Replay the featured landmark.'),state:daily.claimed?'COMPLETE':'FEATURED',tone:daily.claimed?'done':'ready',button:'OPEN JOURNAL',action:()=>openDiscoveryJournalUI()}:{id:'structure',label:'DAILY STRUCTURE',title:'Featured Legend',detail:'The featured structure will appear after your profile finishes loading.',state:'CHECKING',tone:'muted',button:'OPEN JOURNAL',action:()=>openDiscoveryJournalUI()};
+  const event=globalThis.serverEvent,phase=String(event&&event.phase||'idle');
+  const eventOpen=phase==='queue',eventActive=phase==='starting'||phase==='active';
+  const eventEntry={id:'event',label:'SERVER EVENT',title:event&&event.name||'Public Event',detail:eventOpen?(event.joined?'You are queued. Watch the event banner.':'Queue is open for '+Math.max(0,event.reward|0)+' Legendary Tokens.'):(eventActive?(event.participating?'You are participating now.':'An event is currently underway.'):'Next event in '+todayTimeText(event&&event.nextAt)),state:eventOpen?(event.joined?'JOINED':'QUEUE OPEN'):eventActive?'LIVE':'UPCOMING',tone:eventOpen&&!event.joined?'ready':event&&(event.joined||event.participating)?'done':'muted',button:eventOpen&&!event.joined?'JOIN EVENT':'ACTIVITIES',action:()=>{if(eventOpen&&!event.joined&&NET.on&&NET.room){closeQWin();NET.room.send('eventJoin',{});return;}openTownTutorialsUI();}};
+  const contract=clampRegionalContract(regionalContract);
+  const contractEntry=contract?{id:'contract',label:'GUILD CONTRACT',title:contract.title,detail:contract.ready?'Reward ready at the Guild Hall.':Math.min(contract.need,contract.have)+' / '+contract.need+' · '+contract.desc,state:contract.ready?'CLAIM READY':'ACTIVE',tone:contract.ready?'ready':'active',button:'GUILD BOARD',action:()=>openRegionalContractsUI()}:{id:'contract',label:'GUILD CONTRACT',title:'Choose Regional Work',detail:'Pick one focused optional contract from the Hunter Guild.',state:'AVAILABLE',tone:'ready',button:'GUILD BOARD',action:()=>openRegionalContractsUI()};
+  return [structure,todayFamiliarEntry(),eventEntry,contractEntry];
+}
+function appendTodayInBlockcraftCard(parent){
+  const entries=todayInBlockcraftEntries(),card=document.createElement('section');card.className='today-card';
+  const head=document.createElement('header');head.innerHTML='<span><small>OPTIONAL ROTATION</small><b>TODAY IN BLOCKCRAFT</b></span><em>'+entries.filter(entry=>entry.tone==='ready').length+' READY NOW</em>';card.appendChild(head);
+  const list=document.createElement('div');list.className='today-list';card.appendChild(list);
+  for(const entry of entries){
+    const row=document.createElement('article');row.className='today-row '+entry.id+' '+entry.tone;
+    const copy=document.createElement('span');copy.innerHTML='<small>'+escHTML(entry.label)+'</small><b>'+escHTML(entry.title)+'</b><p>'+escHTML(entry.detail)+'</p>';row.appendChild(copy);
+    const state=document.createElement('em');state.textContent=entry.state;row.appendChild(state);
+    row.appendChild(qBtn(entry.button,()=>entry.action(),entry.tone==='muted'));
+    list.appendChild(row);
+  }
+  parent.appendChild(card);
+  return card;
+}
+function refreshTodayInBlockcraftCard(){
+  const current=qpanelEl&&qpanelEl.querySelector('.today-card');
+  if(!current)return false;
+  const holder=document.createElement('div');appendTodayInBlockcraftCard(holder);
+  current.replaceWith(holder.firstElementChild);
+  return true;
+}
+function returningRecapBlocked(){
+  if(dim!=='overworld'||qOpen||uiOpen||statOpen||onboardingActive)return true;
+  return ['rewardwin','gearrewardwin','rankupwin','pathselect','deathscreen'].some(panelVisible);
+}
+function appendReturningRecapCard(parent,kind,info){
+  const card=document.createElement('section');
+  card.className='return-recap-card '+kind;
+  const label=document.createElement('small');label.textContent=kind==='recommended'?'RECOMMENDED OBJECTIVE':'OPTIONAL OPPORTUNITY';card.appendChild(label);
+  const title=document.createElement('h3');title.textContent=info.title;card.appendChild(title);
+  const status=document.createElement('p');status.textContent=info.status;card.appendChild(status);
+  const where=document.createElement('div');where.innerHTML='<b>WHERE</b><span>'+escHTML(info.where||'Quest Log')+'</span>';card.appendChild(where);
+  card.appendChild(qBtn(info.button||'OPEN',()=>{closeQWin();setTimeout(()=>{if(typeof info.action==='function')info.action();},0);}));
+  parent.appendChild(card);
+}
+function openReturningPlayerRecap(profile={},options={}){
+  if(returningRecapShown&&!options.force)return false;
+  if(returningRecapBlocked()&&!options.force)return false;
+  returningRecapShown=true;
+  returningRecapPending=null;
+  if(returningRecapTimer){clearTimeout(returningRecapTimer);returningRecapTimer=0;}
+  const primary=returningRecapPrimaryInfo(),optional=returningRecapOptionalInfo();
+  openQWin('return-recap');qpanelEl.innerHTML='';
+  const eyebrow=document.createElement('div');eyebrow.className='return-recap-eyebrow';eyebrow.textContent='HUNTER STATUS UPDATE';qpanelEl.appendChild(eyebrow);
+  const h=document.createElement('h2');h.textContent='WELCOME BACK'+(profile.name?', '+String(profile.name).slice(0,24).toUpperCase():'');qpanelEl.appendChild(h);
+  const summary=document.createElement('p');summary.className='return-recap-summary';summary.textContent='You were away for about '+returningRecapAwayText(profile.previousLastPlayedAt)+'. Here is one clear place to resume, plus one optional detour.';qpanelEl.appendChild(summary);
+  const grid=document.createElement('div');grid.className='return-recap-grid';qpanelEl.appendChild(grid);
+  appendReturningRecapCard(grid,'recommended',primary);
+  appendReturningRecapCard(grid,'optional',optional);
+  const row=document.createElement('div');row.className='qrow return-recap-footer';row.appendChild(qBtn('PLAY NOW',()=>closeQWin(),true));qpanelEl.appendChild(row);
+  return true;
+}
+function scheduleReturningPlayerRecap(profile={}){
+  if(returningRecapShown||returningRecapTimer)return false;
+  const last=Math.max(0,Number(profile.previousLastPlayedAt)||0),away=Date.now()-last;
+  const established=(profile.tutorials&&profile.tutorials.onboarding>=7)&&((profile.S&&profile.S.lvl>1)||!!(profile.S&&profile.S.path)||Math.max(0,(profile.npcQuestChains&&profile.npcQuestChains['Mara Vale'])|0)>0);
+  if(!established||last<=0||away<RETURNING_RECAP_MIN_AWAY_MS)return false;
+  returningRecapPending={...profile,previousLastPlayedAt:last};
+  let attempts=0;
+  const tryOpen=()=>{
+    returningRecapTimer=0;
+    if(!returningRecapPending||returningRecapShown)return;
+    if(!returningRecapBlocked()){openReturningPlayerRecap(returningRecapPending);return;}
+    if(++attempts<300)returningRecapTimer=setTimeout(tryOpen,1000);
+    else returningRecapPending=null;
+  };
+  returningRecapTimer=setTimeout(tryOpen,1200);
+  return true;
+}
 function appendRecoveryHubCard(panel){
   const info=recoveryHubInfo();
   if(!info)return false;
@@ -4899,6 +5021,7 @@ function openQuestLogUI(){
   journey.innerHTML='<span><small>HUNTER JOURNEY</small><b>'+hunterRankLetter(rank)+'-Rank · '+rankJourneyLevelText(rank)+'</b></span><span>'+(rankProgress.maxRank?'S-Rank achieved':rankProgress.remaining.toLocaleString('en-US')+' XP to '+hunterRankLetter(rankProgress.nextRank)+'-Rank')+'</span>';
   journey.onclick=()=>openRankJourneyUI();qpanelEl.appendChild(journey);
   appendRecoveryHubCard(qpanelEl);
+  appendTodayInBlockcraftCard(qpanelEl);
   const tabs=document.createElement('div');tabs.innerHTML=questLogFilterBarHTML();qpanelEl.appendChild(tabs.firstElementChild);
   const grid=document.createElement('div'); grid.className='questgrid';
   const serverCards=safeQuestLogCard('Server Objectives',serverObjectiveQuestLogCards);
@@ -7245,6 +7368,27 @@ function openLegendaryCraftUI(previewOnly=false){
 function npcDialogueInitials(v){
   return String(v&&v.shortName||v&&v.name||'?').split(/\s+/).filter(Boolean).slice(0,2).map(s=>s[0]).join('').toUpperCase()||'?';
 }
+function npcDialoguePortraitCanvas(v){
+  const c=document.createElement('canvas');c.width=c.height=96;c.setAttribute('aria-hidden','true');
+  const g=c.getContext('2d'),a=v&&v.appearance||{},role=String(v&&v.role||'town');
+  const roleColors={guide:'#2f6970',miner:'#596271',smith:'#8b4a2e',scholar:'#315f7a',quartermaster:'#75613c',outfitter:'#416b62',farmer:'#6f8e48',cook:'#a66a39',mason:'#77736a',monk:'#596d8c',warden:'#364b61',road_warden:'#485867',stablemaster:'#7a5534',guild_receptionist:'#735987',social_mentor:'#587b55',cartographer:'#47737a',skyship_attendant:'#356b82',guardian:'#5a427d'};
+  const robe=a.robe||roleColors[role]||'#665744',dark=a.robeDark||'#30291f',skin=a.skin||'#caa074',skinD=shadeHex(skin,-28),hair=a.hair||'#3a2718';
+  const bg=g.createLinearGradient(0,0,96,96);bg.addColorStop(0,roleColors[role]||'#263746');bg.addColorStop(1,'#08111d');g.fillStyle=bg;g.fillRect(0,0,96,96);
+  g.fillStyle='rgba(255,255,255,.05)';for(let i=-96;i<192;i+=16)g.fillRect(i,0,2,96);
+  g.fillStyle=dark;g.fillRect(8,79,80,17);g.fillStyle=robe;g.fillRect(18,68,60,28);g.fillStyle=shadeHex(robe,18);g.fillRect(18,68,60,5);
+  g.fillStyle=skinD;g.fillRect(38,60,20,15);g.fillStyle=skin;g.fillRect(25,20,46,47);g.fillStyle=skinD;g.fillRect(25,59,46,8);g.fillRect(20,34,5,22);g.fillRect(71,34,5,22);
+  g.fillStyle=hair;g.fillRect(23,17,50,13);g.fillRect(23,25,7,21);g.fillRect(66,25,7,21);g.fillStyle=shadeHex(hair,18);g.fillRect(29,17,37,4);
+  g.fillStyle='#f8f8f0';g.fillRect(33,38,10,8);g.fillRect(53,38,10,8);g.fillStyle=role==='guardian'?'#b894ff':'#315f7a';g.fillRect(37,40,4,5);g.fillRect(55,40,4,5);
+  g.fillStyle=shadeHex(hair,-26);g.fillRect(32,34,12,3);g.fillRect(52,34,12,3);g.fillStyle=skinD;g.fillRect(44,48,8,5);g.fillRect(39,57,18,3);
+  g.fillStyle='rgba(255,210,74,.72)';g.fillRect(4,4,28,3);g.fillRect(4,4,3,28);g.fillRect(64,89,28,3);g.fillRect(89,64,3,28);
+  if(role==='miner'){g.fillStyle='#788696';g.fillRect(22,14,52,8);g.fillStyle='#ffd24a';g.fillRect(43,12,10,8);}
+  else if(role==='cook'||role==='bartender'){g.fillStyle='#efe2bd';g.fillRect(25,8,46,12);g.fillRect(32,3,32,10);}
+  else if(role==='farmer'||role==='stablemaster'||role==='road_warden'){g.fillStyle='#c8a85a';g.fillRect(14,13,68,6);g.fillRect(27,5,42,11);}
+  else if(role==='scholar'){g.strokeStyle='#ffd24a';g.lineWidth=3;g.strokeRect(31,36,14,12);g.strokeRect(51,36,14,12);g.fillRect(45,40,6,3);}
+  else if(role==='warden'||role==='guardian'){g.fillStyle='rgba(24,36,52,.82)';g.fillRect(18,12,10,54);g.fillRect(68,12,10,54);}
+  else if(role==='skyship_attendant'){g.fillStyle='#b9852e';g.fillRect(30,34,16,7);g.fillRect(51,34,16,7);g.fillRect(46,36,5,3);}
+  c.className='npc-dialogue-portrait-art';return c;
+}
 function npcDialogueRoleClass(v){
   const role=String(v&&v.role||'town').replace(/[^a-z0-9_-]/gi,'').toLowerCase();
   return role||'town';
@@ -7255,9 +7399,10 @@ function npcDialogueButton(label,cb,variant=''){
   return b;
 }
 function openNpcDialogueShell(v,context=''){
+  globalThis.BlockcraftActiveNpcName=String(v&&v.name||v&&v.shortName||'');
   const shell=document.createElement('div');shell.className='npc-dialogue-shell '+npcDialogueRoleClass(v);
   const head=document.createElement('div');head.className='npc-dialogue-head';
-  const portrait=document.createElement('div');portrait.className='npc-dialogue-portrait';portrait.textContent=npcDialogueInitials(v);head.appendChild(portrait);
+  const portrait=document.createElement('div');portrait.className='npc-dialogue-portrait has-art';portrait.setAttribute('aria-label',(v&&v.name||'Villager')+' portrait');portrait.appendChild(npcDialoguePortraitCanvas(v));head.appendChild(portrait);
   const nameplate=document.createElement('div');nameplate.className='npc-dialogue-nameplate';
   const name=document.createElement('h2');name.textContent=String(v&&v.name||'Villager').toUpperCase();nameplate.appendChild(name);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=(context || (v&&v.title)||'Townsperson').toUpperCase();nameplate.appendChild(sub);
@@ -7265,7 +7410,7 @@ function openNpcDialogueShell(v,context=''){
   const body=document.createElement('p');body.className='qtext npc-dialogue-text';shell.appendChild(body);
   const row=document.createElement('div');row.className='qrow npc-dialogue-actions';shell.appendChild(row);
   qpanelEl.appendChild(shell);
-  return {shell,body,row};
+  return {shell,body,row,portrait};
 }
 function openSocialMentorUI(v={name:'Nia Brightbell'}){
   openQWin('dialog');
@@ -7311,6 +7456,7 @@ function openQuestUI(v){
     return items.length ? ' + '+items.map(it=>escHTML(ITEMS[it.id].name)+' x'+Math.max(1,it.count|0||1)).join(', ') : '';
   };
   if(quest && questDone() && questCanTurnIn(v)){
+    ui.portrait.dataset.mood='proud';
     const tier=jobPerkTier('adventurer');
     const rewardGold=playerJob==='adventurer'&&tier ? Math.round(quest.gold*(1+tier*.05)) : quest.gold;
     body.innerHTML='"'+escHTML(v.done||'You have done well. The town is in your debt.')+'"<br><br>'+npcFlavor(v)+'<br><br>Reward: <b>'+rewardGold+' gold</b> + '+quest.xp+' XP'+rewardItemsText(quest);
@@ -7337,6 +7483,7 @@ function openQuestUI(v){
       closeQWin();
     }, 'primary'));
   } else if(quest){
+    ui.portrait.dataset.mood=questDone()?'ready':'focused';
     const sameSource=(quest.source||'npc')===source;
     const sameGiver=questCanTurnIn(v) || ((quest.source||'npc')==='npc' && quest.giver===giver);
     const progress=questProgressText(quest);
@@ -7349,6 +7496,7 @@ function openQuestUI(v){
       quest=null; closeQWin();
     }, 'dim'));
   } else {
+    ui.portrait.dataset.mood='welcoming';
     const offer=rollQuest(giver, v.role, source);
     const lootLine=source==='guardian'
       ? '<br><small style="color:#d9b66f">Aegis cache: rare weapons, rare armor, or Shade familiar.</small>'
@@ -9161,6 +9309,9 @@ gameContext.registerModule('menus', Object.freeze({
   openJobs:openJobsUI,
   openGuildHall:openGuildHallUI,
   openRegionalContracts:openRegionalContractsUI,
+  scheduleReturningPlayerRecap,
+  openReturningPlayerRecap,
+  refreshTodayInBlockcraft:refreshTodayInBlockcraftCard,
   openGuardian:openGuardianUI,
   previewLegendary:()=>openLegendaryCraftUI(true),
   openGatePrep:openGatePrepUI,

@@ -1273,6 +1273,11 @@ class GameRoom extends Room {
           });
         }
       }
+      client._previousLastPlayedAt = Math.max(0, Number(prof && prof.lastPlayedAt) || 0);
+      if (prof && !prof.noPersist) {
+        prof.lastPlayedAt = Date.now();
+        this.dirtyPlayers.add(token);
+      }
       this.persistedInventorySignatures.set(token, this.inventoryPersistenceSignature(prof));
       // Ability training was removed. Existing path owners should never be
       // routed into its legacy recovery UI after loading an older profile.
@@ -1571,6 +1576,7 @@ class GameRoom extends Room {
           else prof.pos = [p.x, p.y, p.z];
         }
         this.syncProfileVitals(client, prof);
+        if (!prof.noPersist) prof.lastPlayedAt = Date.now();
         this.emitVitalsDebug(client, 'leave.synced', {
           profile: prof.vitals,
           live: this.debugLiveVitals(client),
@@ -5448,6 +5454,7 @@ class GameRoom extends Room {
     };
     return {
       ...prof,
+      previousLastPlayedAt: client ? Math.max(0, Number(client._previousLastPlayedAt) || 0) : Math.max(0, Number(prof.lastPlayedAt) || 0),
       mountUnlocks,
       dragonNames: parsePublic(this.publicDragonNames(prof, token)),
       dragonGenders: parsePublic(this.publicDragonGenders(prof, token)),

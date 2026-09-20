@@ -427,7 +427,7 @@ test('client soundtrack mp3 assets exist for every referenced music mode', () =>
   }
 });
 
-test('client celebrates the first completed job contract with clear next actions', () => {
+test('client celebrates the first completed job contract with one clear next action', () => {
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
 
@@ -437,9 +437,9 @@ test('client celebrates the first completed job contract with clear next actions
   assert.match(networking, /first-shift-crest/);
   assert.match(networking, /first-shift-loop/);
   assert.match(networking, /career started/);
-  assert.match(networking, /TAKE ANOTHER CONTRACT/);
-  assert.match(networking, /TRY JOB TUTORIAL/);
-  assert.match(networking, /OPEN QUEST LOG/);
+  assert.match(networking, /gateBridge\?'TRACK MARA':'VIEW NEXT OBJECTIVE'/);
+  assert.doesNotMatch(networking, /qBtn\('TAKE ANOTHER CONTRACT'/);
+  assert.doesNotMatch(networking, /row\.appendChild\(qBtn\('TRY JOB TUTORIAL'/);
   assert.match(networking, /m&&m\.firstShiftComplete\)openFirstShiftCompletePanel/);
   assert.match(networking, /!\(m\.type==='jobContract'&&m\.action==='claim'&&m\.firstShiftComplete\)/);
   assert.match(styles, /\.first-shift-panel/);
@@ -458,7 +458,8 @@ test('retired job tutorial handoff redirects imported sessions to the quest log'
   assert.match(combat, /FIRST REAL SHIFT UNLOCKED/);
   assert.match(combat, /OPEN QUEST LOG/);
   assert.match(combat, /FOLLOW FIRST SHIFT/);
-  assert.match(combat, /setTimeout\(\(\)=>openQuestLogUI\(\),250\)/);
+  assert.doesNotMatch(combat, /jobtutorialopenboard/);
+  assert.match(combat, /if\(follow\)follow\.onclick=/);
   assert.match(networking, /const starter=JOBS_ENABLED\?clampJobContract\(m&&m\.starterContract\):null/);
   assert.match(networking, /progressionFocus='e_rank_climb'/);
   assert.match(networking, /First real .* shift ready/);
@@ -1526,7 +1527,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /public cleanup pays reduced XP and materials only/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Optional chests remain/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Exit through the portal when ready/);
-  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Full clear reward awarded/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Next action: Exit through the portal/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /function groupedRewardLootHTML/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Rare Protected/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /No clear loot, progress, keys, shards, or gear/);
@@ -2213,12 +2214,12 @@ test('first Gate clears produce the right onboarding handoffs', async () => {
   const { gateMilestoneHandoff, rankPromotionDetails } = await clientModule('onboarding.mjs');
   assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 0, nextRank: 1 } }, true), {
     label: 'FIRST GATE CLEARED',
-    text: 'You cleared your first E-rank Gate. Exit through the portal, return to Mara, and claim the quest to open the base-building path.',
+    text: 'Return to Mara to claim your next quest.',
     action: 'RETURN TO MARA',
   });
   assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 1, nextRank: 2 } }, true), {
     label: 'C-RANK CLIMB UNLOCKED',
-    text: 'Contracts, D-rank Gates, events, regional trouble, and C-rank prep checks now push you toward C-rank positioning fights.',
+    text: 'Open the C-rank prep check to see your next requirement.',
     action: 'C PREP CHECK',
   });
   assert.equal(gateMilestoneHandoff({ firstClear: { rank: 1 } }, false), null);
@@ -3490,6 +3491,14 @@ test('first ten minute guidance skips subject selection and teaches explicit que
   assert.match(menus,/function openNpcDialogueShell\(v,context=''\)/);
   assert.match(menus,/npc-dialogue-shell/);
   assert.match(menus,/npc-dialogue-portrait/);
+  assert.match(menus,/function npcDialoguePortraitCanvas\(v\)/);
+  assert.match(menus,/BlockcraftActiveNpcName/);
+  assert.match(styles,/\.npc-dialogue-portrait-art/);
+  assert.match(world,/function npcAgentSpotFree\(v,x,z\)/);
+  assert.match(world,/dialogueActive/);
+  assert.match(world,/v\.animState='work'/);
+  for(const signature of ['miner','smith','scholar','farmer','cook','mason','monk','warden','stablemaster','cartographer','skyship_attendant'])
+    assert.match(world,new RegExp("signature==='"+signature+"'"));
   assert.match(menus,/npcDialogueButton\('ACCEPT'/);
   assert.match(menus,/function openSocialMentorUI/);
   assert.match(menus,/openQWin\('dialog'\);\s*qpanelEl\.innerHTML='';\s*const ui=openNpcDialogueShell\(v, 'FELLOWSHIP MENTOR/);
@@ -3943,7 +3952,7 @@ test('fellowship hall exposes renown and project completion controls',()=>{
   assert.match(networking,/FELLOWSHIP_TUTORIAL_KEY='bc_fellowship_tutorial_seen_v1'/);
   assert.match(networking,/function showFellowshipTutorial\(m=\{\},mode='joined'\)/);
   assert.match(networking,/FELLOWSHIP UNLOCKED/);
-  assert.match(networking,/SHARED UPGRADE CURRENCY/);
+  assert.match(networking,/One next action:/);
   assert.match(networking,/OPEN FELLOWSHIP HALL/);
   assert.match(networking,/showFellowshipTutorial\(m,'created'\)/);
   assert.match(networking,/showFellowshipTutorial\(m,'joined'\)/);
@@ -5247,7 +5256,9 @@ test('Rank Journey presents ten-level bands, promotion unlocks, and reward previ
   assert.match(menus, /function openRankJourneyUI\(\)/);
   assert.match(menus, /RANK JOURNEY/);
   assert.match(menus, /quest-reward-preview/);
-  assert.match(onboarding, /NEWLY UNLOCKED/);
+  assert.match(onboarding, /RANK FEATURES RECORDED/);
+  assert.match(onboarding, /One next action:/);
+  assert.match(onboarding, /TRACK NEXT OBJECTIVE/);
   assert.match(css, /\.rank-journey-hero/);
 });
 
@@ -5308,6 +5319,7 @@ test('quest log progression director introduces one system at a time',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
   const store=fs.readFileSync(path.join(__dirname,'..','store.js'),'utf8');
   const earlyLoopE2E=fs.readFileSync(path.join(__dirname,'..','..','e2e','player-facing-early-loop.spec.js'),'utf8');
@@ -5367,6 +5379,27 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/function recoveryHubInfo\(\)/);
   assert.match(menus,/function appendRecoveryHubCard/);
   assert.match(menus,/Recovery Hub/);
+  assert.match(menus,/function scheduleReturningPlayerRecap\(profile=\{\}\)/);
+  assert.match(menus,/function openReturningPlayerRecap\(profile=\{\},options=\{\}\)/);
+  assert.match(menus,/RECOMMENDED OBJECTIVE/);
+  assert.match(menus,/OPTIONAL OPPORTUNITY/);
+  assert.match(menus,/function todayInBlockcraftEntries\(\)/);
+  assert.match(menus,/function appendTodayInBlockcraftCard\(parent\)/);
+  assert.match(menus,/TODAY IN BLOCKCRAFT/);
+  assert.match(menus,/return \[structure,todayFamiliarEntry\(\),eventEntry,contractEntry\];/);
+  assert.match(menus,/appendTodayInBlockcraftCard\(qpanelEl\)/);
+  assert.match(menus,/title:'Today in Blockcraft'/);
+  assert.match(menus,/refreshTodayInBlockcraft:refreshTodayInBlockcraftCard/);
+  assert.match(styles,/\.today-card\{/);
+  assert.match(styles,/\.today-list\{display:grid/);
+  assert.match(menus,/returningRecapBlocked\(\)/);
+  assert.match(menus,/openReturningPlayerRecap,/);
+  assert.match(menus,/scheduleReturningPlayerRecap,/);
+  const recapNetworking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(recapNetworking,/menusApi\.scheduleReturningPlayerRecap\(m\)/);
+  const recapGameRoom=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
+  assert.match(recapGameRoom,/previousLastPlayedAt:/);
+  assert.match(recapGameRoom,/prof\.lastPlayedAt = Date\.now\(\)/);
   assert.match(menus,/Reward Pending/);
   assert.match(menus,/Choose Path/);
   assert.doesNotMatch(menus,/Start Awakening/);
@@ -5531,7 +5564,6 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(networking,/while\(compact\.message\.length>256&&bytes\(compact\)>3500\)/);
   assert.match(networking,/if\(token\)sendBugReportHttp\(payload,pendingId\)/);
   assert.match(onboarding,/actionHTML/);
-  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(styles,/\.qaction/);
   assert.match(styles,/overflow-wrap:anywhere/);
   assert.match(styles,/\.objective-list/);
@@ -5590,6 +5622,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(networking,/landClaimRefresh/);
   assert.match(networking,/homesteadWorkOrder/);
   assert.match(networking,/homesteadUpgradeResult/);
+  assert.match(networking,/specs:m&&m\.specs/, 'client reads upgrade choices from the server payload');
+  assert.match(networking,/if\(m\.key==='base_setup'\)openLandClaimsUI\(\)/, 'base reward leads directly to Homestead upgrades');
   assert.match(networking,/Homestead ledger/);
   assert.match(networking,/Homestead assist/);
   assert.match(networking,/Protection active for/);

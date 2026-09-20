@@ -1282,6 +1282,18 @@ test('teacher accounts receive admin Deity powers without a teachers.role value'
   assert.deepEqual(payload.deity.powers, [...DEITY_POWER_IDS]);
 });
 
+test('profile payload preserves the previous session timestamp for returning-player recap', () => {
+  const room = makeRoom(), client = makeClient('returning_recap');
+  const { prof } = seedPlayer(room, client, { lvl: 8 });
+  client._previousLastPlayedAt = 1_700_000_000_000;
+  prof.lastPlayedAt = 1_800_000_000_000;
+
+  const payload = room.profilePayload(client, prof);
+
+  assert.equal(payload.previousLastPlayedAt, 1_700_000_000_000);
+  assert.equal(payload.lastPlayedAt, 1_800_000_000_000);
+});
+
 test('Deity powers drive server-owned flight invisibility day cycle and weather', () => {
   const room = makeRoom(), client = makeClient('deity_uses');
   const { prof } = seedPlayer(room, client, { lvl: DEITY_LEVEL });
@@ -11953,7 +11965,12 @@ test('authoritative room world generates biome blocks', () => {
   const w = W.createWorld();
   w.generate();
 
-  assert.equal(w.getB(0, 13, 0), W.B.LAVA);
+  assert.notEqual(w.getB(0, 13, 0), W.B.LAVA, 'the outer terrain is no longer a lava sea');
+  for (const [x, z] of [[11, 500], [988, 500], [500, 11], [500, 988]]) {
+    assert.equal(w.getB(x, 30, z), W.B.GLASS, 'the playable perimeter is a see-through wall');
+    assert.equal(w.getB(x, 62, z), W.B.GLASS, 'the wall reaches the build ceiling');
+    assert.equal(w.isSolid(w.getB(x, 30, z)), true, 'the boundary wall blocks movement');
+  }
   assert.equal(w.getB(15, 21, 15), W.B.SNOW);
   assert.equal(w.getB(15, 13, 495), W.B.ICE);
   assert.equal(w.getB(20, 20, 70), W.B.RED_SAND);
