@@ -1561,7 +1561,19 @@ class AuthService {
       if (!saved && !mailed && !queued) return res.status(500).json({ ok: false, code: 'report_failed', saveReason, mailReason: mail && mail.reason || '' });
       // `mailed` stays true for older already-open clients that predate the
       // queued state. New clients use deliveryState for precise wording.
-      res.json({ ok: true, id: report.id, to: report.to, saved, saveReason, queued, mailed: acceptedForEmail, deliveryState: mailed ? 'sent' : 'queued', mailReason: mail && mail.reason || '' });
+      res.json({
+        ok: true,
+        id: report.id,
+        to: report.to,
+        saved,
+        saveReason,
+        queued,
+        mailed: acceptedForEmail,
+        deliveryState: mailed ? 'sent' : 'queued',
+        immediate: !!(mail && mail.immediate),
+        mailChannel: mail && mail.channel || '',
+        mailReason: mail && (mail.reason || mail.bridgeReason) || '',
+      });
     });
     app.post('/auth/bug-report-outbox/pull', async (req, res) => {
       if (!this.bugReportBridgeAuthorized(req)) return res.status(403).json({ ok: false, error: 'invalid_secret' });
