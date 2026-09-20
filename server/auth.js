@@ -430,6 +430,7 @@ class AuthService {
     const username = cleanUsername(account.username || account.email);
     const identifiers = this.adminIdentifiers();
     return role === 'admin'
+      || role === 'school_admin'
       || this.adminEmails().has(username)
       || identifiers.has(cleanAdminId(username))
       || identifiers.has(cleanAdminId(account.displayName));

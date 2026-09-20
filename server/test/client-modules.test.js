@@ -2968,6 +2968,7 @@ test('retired level two job chooser cannot open',()=>{
 });
 
 test('admin world destinations expose server-backed town and elven teleports',()=>{
+  const auth=fs.readFileSync(path.join(__dirname,'..','..','client','js','auth.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   assert.match(combat,/id="adminworlddestination"/);
@@ -2977,6 +2978,7 @@ test('admin world destinations expose server-backed town and elven teleports',()
   assert.match(networking,/room\.onMessage\('adminWorldTeleportResult'/);
   assert.match(networking,/NETWORK\.returnToPrimary\(\)\.then\(applyAdminWorldPosition\)/);
   assert.match(networking,/blockcraft-admin-world-teleport/);
+  assert.match(auth,/role === 'school_admin'/);
 });
 
 test('first town arrival stages the fountain and Question Portal',()=>{

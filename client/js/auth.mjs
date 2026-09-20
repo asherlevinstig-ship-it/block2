@@ -374,7 +374,7 @@ export function createAuthController({ user, password, playerName, status, play,
     const account = state.account || {};
     const username = String(account.username || '').trim().toLowerCase();
     const role = String(account.role || account.accountType || '').trim().toLowerCase();
-    return username === 'asherlevin85@gmail.com' || role === 'admin';
+    return username === 'asherlevin85@gmail.com' || role === 'admin' || role === 'school_admin';
   }
 
   function setStatus(text, kind = '') {

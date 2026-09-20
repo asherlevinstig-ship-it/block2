@@ -4012,7 +4012,7 @@ class GameRoom extends Room {
     const type = String(client && client._accountType || '').toLowerCase();
     const account = client && client._account && typeof client._account === 'object' ? client._account : {};
     const username = String(account.username || account.email || '').trim().toLowerCase();
-    return username === 'asherlevin85@gmail.com' || role === 'admin' || role === 'owner' || type === 'admin' || type === 'teacher';
+    return username === 'asherlevin85@gmail.com' || role === 'admin' || role === 'owner' || role === 'school_admin' || type === 'admin' || type === 'teacher';
   }
   cleanDeityActive(active, powers) {
     const owned = new Set(Array.isArray(powers) ? powers : []);
@@ -4735,6 +4735,10 @@ class GameRoom extends Room {
       prof.pos = [fresh.x, fresh.y, fresh.z];
       this.dirtyPlayers.add(token);
     }
+    client.send('positionCorrection', {
+      x: fresh.x, y: fresh.y, z: fresh.z, yaw: fresh.yaw,
+      reason: 'admin_world_teleport',
+    });
     client.send('adminWorldTeleportResult', {
       ok: true, destination: destination.id, label: destination.label,
       x: fresh.x, y: fresh.y, z: fresh.z, yaw: fresh.yaw,

@@ -9,6 +9,13 @@ const { AuthService } = require('../auth');
 const { MySqlAuthBackend, normalizeBcryptHash } = require('../mysql-auth');
 const { MySqlGameQuestionStore } = require('../mysql-game-questions');
 
+test('school admin roles receive admin authorization', () => {
+  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-admin-')));
+  assert.equal(auth.isAdminAccount({ id: 'teacher_1', username: 'school@example.test', accountType: 'teacher', role: 'school_admin' }), true);
+  assert.equal(auth.isAdminAccount({ id: 'student_1', username: 'student@example.test', accountType: 'student', role: 'student' }), false);
+  auth.stop();
+});
+
 test('accounts use scrypt hashes and verified server sessions', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-'));
   const auth = new AuthService(dir);

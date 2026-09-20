@@ -1828,8 +1828,8 @@ test('admin gate teleport lists active gates server-side and rejects normal play
 
 test('admin world teleport reaches the Town of Beginnings and the Elaria overlook',()=>{
   const room=makeRoom(),admin=makeClient('world_teleport_admin'),normal=makeClient('world_teleport_normal');
-  admin._accountRole='admin';
-  const {prof}=seedPlayer(room,admin,{x:100,z:100,y:16,mount:'horse'});
+  admin._accountRole='school_admin';
+  const {prof}=seedPlayer(room,admin,{x:W.WX-W.LAVA_BORDER_WIDTH-1.35,z:500.5,y:20.002,mount:'horse'});
   seedPlayer(room,normal,{x:102,z:100,y:16});
 
   room.handleAdminWorldTeleport(normal,{destination:'elven'});
@@ -1852,6 +1852,11 @@ test('admin world teleport reaches the Town of Beginnings and the Elaria overloo
   assert.deepEqual([p.x,p.y,p.z],[ADMIN_WORLD_DESTINATIONS.elven.x,ADMIN_WORLD_DESTINATIONS.elven.y,ADMIN_WORLD_DESTINATIONS.elven.z]);
   assert.deepEqual(prof.pos,[p.x,p.y,p.z]);
   assert.equal(p.yaw,Math.PI/2,'arrival faces east toward the elven hall');
+  assert.equal(admin.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='admin_world_teleport'),true,'teleport clears stale client movement at the frontier');
+  const before=p.x;
+  room.lastMoveMsg.set(admin.sessionId,Date.now()-100);
+  room.handleMove(admin,{x:before+1,y:p.y,z:p.z,yaw:p.yaw});
+  assert.equal(p.x>before,true,'a school admin can move after arriving beyond the locked frontier');
 });
 
 test('admin can spawn one persistent test player for safe social interaction checks',()=>{
