@@ -81,7 +81,7 @@ test('auth bug reports sanitize payloads and use the mail bridge', async () => {
       return {
         ok: true,
         headers: { get: name => String(name).toLowerCase() === 'content-type' ? 'application/json' : '' },
-        json: async () => ({ ok: true, queued: true, queueId: 'mail-test' }),
+        json: async () => ({ ok: true, queued: true, queueId: 'mail-test', staffflowQueueId: 42, workerTriggered: true }),
       };
     },
   });
@@ -93,8 +93,10 @@ test('auth bug reports sanitize payloads and use the mail bridge', async () => {
   });
   await auth.saveBugReportFile(report);
   const mail = await auth.sendBugReportNotification(report);
-  assert.equal(mail.sent, true);
+  assert.equal(mail.sent, false);
   assert.equal(mail.queued, true);
+  assert.equal(mail.immediate, true);
+  assert.equal(mail.queueId, 42);
   assert.equal(report.to, 'asherlevin85@gmail.com');
   assert.equal(report.player.schoolId, '3');
   assert.equal(report.clientContext.token, undefined);
@@ -147,6 +149,49 @@ test('auth bug reports write a durable MySQL outbox entry instead of claiming em
   assert.equal(mail.queueId, 321);
   assert.match(calls[1].sql, /INSERT INTO blockcraft_bug_report_outbox/);
   assert.equal(calls[1].params[1], 'asherlevin85@gmail.com');
+  auth.stop();
+});
+
+test('bug reports hand the durable outbox entry to StaffFlow immediately and acknowledge it', async () => {
+  const calls = [];
+  let mailed = null;
+  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-bug-immediate-')), {
+    authBackend: {
+      getPool: () => ({
+        async execute(sql, params = []) {
+          calls.push({ sql, params });
+          if (/CREATE TABLE IF NOT EXISTS blockcraft_bug_report_outbox/.test(sql)) return [{ affectedRows: 0 }];
+          if (/INSERT INTO blockcraft_bug_report_outbox/.test(sql)) return [{ insertId: 654 }];
+          if (/UPDATE blockcraft_bug_report_outbox/.test(sql)) return [{ affectedRows: 1 }];
+          throw new Error('unexpected SQL: ' + sql);
+        },
+      }),
+    },
+    env: {
+      BUG_REPORT_MAIL_BRIDGE_SECRET: 'secret',
+      BUG_REPORT_MAIL_BRIDGE_URL: 'https://mail.test/bridge',
+    },
+    bugReportMailBridgeFetch: async (_url, options) => {
+      mailed = JSON.parse(options.body);
+      return {
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ ok: true, queued: true, queueId: '1001', staffflowQueueId: 1001, workerTriggered: true }),
+      };
+    },
+  });
+  const report = auth.buildHttpBugReport({ id: 'student_1', displayName: 'Asher' }, { message: 'Send immediately.' });
+  const mail = await auth.sendBugReportNotification(report);
+
+  assert.equal(mailed.reportId, report.id);
+  assert.equal(mail.sent, false);
+  assert.equal(mail.queued, true);
+  assert.equal(mail.immediate, true);
+  assert.equal(mail.channel, 'staffflow_http_queue');
+  assert.equal(mail.queueId, 1001);
+  assert.equal(mail.outboxId, 654);
+  assert.match(calls[2].sql, /SET status='relayed'/);
+  assert.deepEqual(calls[2].params, [654]);
   auth.stop();
 });
 

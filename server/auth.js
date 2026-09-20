@@ -754,7 +754,22 @@ class AuthService {
     let queued = null;
     try { queued = await this.enqueueBugReportNotification(report); }
     catch (error) { console.warn('[bug-report] StaffFlow queue unavailable:', cleanBugText(error && error.message || error, 200)); }
-    if (queued) return queued;
+    let immediate = null;
+    try { immediate = await this.sendBugReportViaStaffFlowBridge(report); }
+    catch (error) { console.warn('[bug-report] Immediate StaffFlow handoff unavailable:', cleanBugText(error && error.message || error, 200)); }
+    if (immediate && immediate.queued) {
+      if (queued && queued.queueId) {
+        try { await this.acknowledgeBugReportOutbox([queued.queueId]); }
+        catch (error) { console.warn('[bug-report] Immediate StaffFlow acknowledgement failed:', cleanBugText(error && error.message || error, 200)); }
+      }
+      return { ...immediate, outboxId: queued && queued.queueId || null };
+    }
+    if (queued) return { ...queued, immediate: false, bridgeReason: immediate && immediate.reason || '' };
+    return immediate || { sent: false, queued: false, to, reason: 'mail_bridge_unavailable' };
+  }
+
+  async sendBugReportViaStaffFlowBridge(report) {
+    const to = report.to || this.bugReportRecipient();
     const bridgeUrl = this.bugReportMailBridgeUrl();
     const bridgeSecret = this.bugReportMailBridgeSecret();
     if (!to) return { sent: false, to, reason: 'mail_recipient_not_configured' };
@@ -772,6 +787,7 @@ class AuthService {
       },
       body: JSON.stringify({
         to,
+        reportId: String(report.id || ''),
         subject: '[Blockcraft] Bug report: ' + report.id,
         title: 'Bug report: ' + report.id,
         template: 'request',
@@ -808,7 +824,15 @@ class AuthService {
       if (!result) try { detail = await response.text(); } catch (_e) {}
       throw new Error('mail_bridge_failed' + (detail ? ': ' + detail.slice(0, 200) : ''));
     }
-    return { sent: true, queued: true, to, queueId: result.queueId || null, channel: 'siteground_http_queue' };
+    return {
+      sent: false,
+      queued: true,
+      immediate: result.workerTriggered === true,
+      workerTriggered: result.workerTriggered === true,
+      to,
+      queueId: result.staffflowQueueId || result.queueId || null,
+      channel: 'staffflow_http_queue',
+    };
   }
 
   authorizeTeacher(req) {
