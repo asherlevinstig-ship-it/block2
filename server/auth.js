@@ -128,6 +128,20 @@ function verifyLightweaveHandoffToken(token) {
   };
 }
 
+function createBlockcraftMailRelayToken() {
+  if (!LIGHTWEAVE_HANDOFF_SECRET) return '';
+  const now = Date.now();
+  const payload64 = b64url(JSON.stringify({
+    kind: 'service',
+    service: 'blockcraft-mail',
+    iat: now,
+    exp: now + LIGHTWEAVE_HANDOFF_MAX_AGE_MS,
+    nonce: crypto.randomBytes(12).toString('hex'),
+  }));
+  const signature = crypto.createHmac('sha256', LIGHTWEAVE_HANDOFF_SECRET).update(payload64).digest('base64url');
+  return 'lw1.' + payload64 + '.' + signature;
+}
+
 function adminMaxHp(profile) {
   const growth = profile && profile.meditationGrowth || {};
   return 20 + ((profile && profile.S && profile.S.vit || 1) - 1) * 2 + (growth.hp || 0);
@@ -772,9 +786,10 @@ class AuthService {
     const to = report.to || this.bugReportRecipient();
     const bridgeUrl = this.bugReportMailBridgeUrl();
     const bridgeSecret = this.bugReportMailBridgeSecret();
+    const relayToken = createBlockcraftMailRelayToken();
     if (!to) return { sent: false, to, reason: 'mail_recipient_not_configured' };
     if (!bridgeUrl) return { sent: false, to, reason: 'mail_bridge_url_not_configured' };
-    if (!bridgeSecret) return { sent: false, to, reason: 'mail_bridge_secret_not_configured' };
+    if (!bridgeSecret && !relayToken) return { sent: false, to, reason: 'mail_bridge_auth_not_configured' };
     const fetchImpl = this.bugReportMailBridgeFetch || this.curriculumMailBridgeFetch || globalThis.fetch;
     if (typeof fetchImpl !== 'function') return { sent: false, to, reason: 'fetch_not_available' };
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -783,7 +798,8 @@ class AuthService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Blockcraft-Mail-Secret': bridgeSecret,
+        ...(bridgeSecret ? { 'X-Blockcraft-Mail-Secret': bridgeSecret } : {}),
+        ...(relayToken ? { 'X-Blockcraft-Relay-Token': relayToken } : {}),
       },
       body: JSON.stringify({
         to,

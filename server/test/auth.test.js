@@ -167,11 +167,9 @@ test('bug reports hand the durable outbox entry to StaffFlow immediately and ack
         },
       }),
     },
-    env: {
-      BUG_REPORT_MAIL_BRIDGE_SECRET: 'secret',
-      BUG_REPORT_MAIL_BRIDGE_URL: 'https://mail.test/bridge',
-    },
+    env: { BUG_REPORT_MAIL_BRIDGE_URL: 'https://mail.test/bridge' },
     bugReportMailBridgeFetch: async (_url, options) => {
+      assert.match(options.headers['X-Blockcraft-Relay-Token'], /^lw1\./);
       mailed = JSON.parse(options.body);
       return {
         ok: true,
