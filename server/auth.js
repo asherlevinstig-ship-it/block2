@@ -25,6 +25,7 @@ const DEFAULT_ASHER_LEGACY_PROFILE_IDS = [
 ];
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const DEFAULT_CURRICULUM_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
+const DEFAULT_BUG_REPORT_MAIL_BRIDGE_URL = 'https://liveweave.net/teacher/blockcraft_curriculum_mail.php';
 const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
 const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
 const BUG_REPORT_MAIL_TIMEOUT_MS = Math.max(2000, Math.min(15000, Number(process.env.BUG_REPORT_MAIL_TIMEOUT_MS || 8000) | 0));
@@ -610,7 +611,7 @@ class AuthService {
   }
 
   bugReportMailBridgeUrl() {
-    return cleanBugText(this.env.BUG_REPORT_MAIL_BRIDGE_URL || this.env.CURRICULUM_MAIL_BRIDGE_URL || DEFAULT_CURRICULUM_MAIL_BRIDGE_URL, 400);
+    return cleanBugText(this.env.BUG_REPORT_MAIL_BRIDGE_URL || DEFAULT_BUG_REPORT_MAIL_BRIDGE_URL, 400);
   }
 
   bugReportMailBridgeSecret() {
