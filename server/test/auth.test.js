@@ -78,7 +78,11 @@ test('auth bug reports sanitize payloads and use the mail bridge', async () => {
     },
     bugReportMailBridgeFetch: async (_url, options) => {
       mailed = JSON.parse(options.body);
-      return { ok: true };
+      return {
+        ok: true,
+        headers: { get: name => String(name).toLowerCase() === 'content-type' ? 'application/json' : '' },
+        json: async () => ({ ok: true, queued: true, queueId: 'mail-test' }),
+      };
     },
   });
   const account = { id: 'student_1', username: 'asher@test.local', displayName: 'Asher', schoolId: '3' };
@@ -100,6 +104,33 @@ test('auth bug reports sanitize payloads and use the mail bridge', async () => {
   assert.equal(mailed.subjectName, 'Bug Reports');
   assert.match(mailed.notes, /Still loading/);
   assert.match(mailed.subject, /\[Blockcraft\] Bug report:/);
+  auth.stop();
+});
+
+test('auth bug reports prefer the StaffFlow MySQL queue over the challenged HTTP bridge', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-bug-queue-'));
+  const calls = [];
+  const authBackend = {
+    getPool: () => ({
+      async execute(sql, params) {
+        calls.push({ sql, params });
+        if (/information_schema\.tables/.test(sql)) return [[{ total: 1 }]];
+        return [{ insertId: 321 }];
+      },
+    }),
+  };
+  const auth = new AuthService(dir, {
+    authBackend,
+    env: { BUG_REPORT_NOTIFY_TO: 'asherlevin85@gmail.com' },
+    bugReportMailBridgeFetch: async () => { throw new Error('HTTP bridge should not run'); },
+  });
+  const report = auth.buildHttpBugReport({ id: 'student_1', displayName: 'Asher' }, { message: 'Queue this report.' });
+  const mail = await auth.sendBugReportNotification(report);
+  assert.equal(mail.sent, true);
+  assert.equal(mail.channel, 'staffflow_mysql_queue');
+  assert.equal(mail.queueId, 321);
+  assert.match(calls[1].sql, /INSERT INTO staffflow_email_queue/);
+  assert.equal(calls[1].params[1], 'asherlevin85@gmail.com');
   auth.stop();
 });
 

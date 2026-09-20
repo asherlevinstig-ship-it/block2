@@ -3714,6 +3714,13 @@ class GameRoom extends Room {
   }
   async sendBugReportMail(report) {
     const to = report.to || this.bugReportRecipient();
+    const authService = getAuthService();
+    if (authService && typeof authService.enqueueBugReportNotification === 'function') {
+      let queued = null;
+      try { queued = await authService.enqueueBugReportNotification(report); }
+      catch (error) { console.warn('[bug-report] StaffFlow queue unavailable:', cleanBugText(error && error.message || error, 200)); }
+      if (queued) return queued;
+    }
     const bridgeUrl = this.bugReportMailBridgeUrl();
     const bridgeSecret = this.bugReportMailBridgeSecret();
     if (!to) return { sent: false, to, reason: 'mail_recipient_not_configured' };
@@ -3759,12 +3766,17 @@ class GameRoom extends Room {
     } finally {
       if (timeout) clearTimeout(timeout);
     }
-    if (!response || !response.ok) {
+    const contentType = String(response && response.headers && response.headers.get && response.headers.get('content-type') || '').toLowerCase();
+    let result = null;
+    if (response && response.ok && contentType.includes('application/json')) {
+      try { result = await response.json(); } catch (_e) {}
+    }
+    if (!response || !response.ok || !result || result.ok !== true || result.queued !== true) {
       let detail = '';
-      try { detail = await response.text(); } catch (_e) {}
+      if (!result) try { detail = await response.text(); } catch (_e) {}
       throw new Error('mail_bridge_failed' + (detail ? ': ' + detail.slice(0, 200) : ''));
     }
-    return { sent: true, to };
+    return { sent: true, queued: true, to, queueId: result.queueId || null, channel: 'siteground_http_queue' };
   }
   async handleBugReport(client, m) {
     if (!client || this.rateLimited(client, 'bugReport', 0.05, 2)) return client && client.send('bugReportResult', { ok: false, reason: 'rate' });

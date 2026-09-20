@@ -600,6 +600,32 @@ class AuthService {
     return String(this.env.BUG_REPORT_MAIL_BRIDGE_SECRET || this.env.CURRICULUM_MAIL_BRIDGE_SECRET || this.env.BLOCKCRAFT_CURRICULUM_MAIL_SECRET || '').trim();
   }
 
+  async enqueueBugReportNotification(report) {
+    if (!this.authBackend || typeof this.authBackend.getPool !== 'function') return null;
+    const pool = this.authBackend.getPool();
+    const [tables] = await pool.execute(
+      "SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='staffflow_email_queue'",
+    );
+    if (!tables || !tables[0] || Number(tables[0].total) < 1) return null;
+    const to = report.to || this.bugReportRecipient();
+    const subject = '[Blockcraft] Bug report: ' + report.id;
+    const text = this.bugReportText(report);
+    const html = '<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;color:#0f172a;padding:24px">'
+      + '<div style="max-width:760px;margin:auto;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:24px">'
+      + '<h1 style="font-size:22px">Blockcraft bug report</h1><pre style="white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace">'
+      + text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
+      + '</pre></div></body></html>';
+    const uniqueKey = 'blockcraft_bug_report:' + String(report.id || crypto.randomBytes(8).toString('hex'));
+    const teacherId = Math.max(1, Number(this.env.BUG_REPORT_STAFFFLOW_TEACHER_ID || this.env.BLOCKCRAFT_CURRICULUM_STAFFFLOW_TEACHER_ID || 1) | 0);
+    const [result] = await pool.execute(
+      `INSERT INTO staffflow_email_queue
+       (teacher_id, person_id, recipient_email, recipient_name, subject, body_text, body_html, reason, unique_key, scheduled_for)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, 'blockcraft_curriculum', ?, NOW())`,
+      [teacherId, to, report.player && report.player.name || 'Blockcraft Player', subject, text, html, uniqueKey],
+    );
+    return { sent: true, queued: true, to, queueId: result && result.insertId || null, channel: 'staffflow_mysql_queue' };
+  }
+
   buildHttpBugReport(account, body = {}) {
     const now = Date.now();
     const context = compactBugValue(body.clientContext || {});
@@ -673,6 +699,10 @@ class AuthService {
 
   async sendBugReportNotification(report) {
     const to = report.to || this.bugReportRecipient();
+    let queued = null;
+    try { queued = await this.enqueueBugReportNotification(report); }
+    catch (error) { console.warn('[bug-report] StaffFlow queue unavailable:', cleanBugText(error && error.message || error, 200)); }
+    if (queued) return queued;
     const bridgeUrl = this.bugReportMailBridgeUrl();
     const bridgeSecret = this.bugReportMailBridgeSecret();
     if (!to) return { sent: false, to, reason: 'mail_recipient_not_configured' };
@@ -716,12 +746,17 @@ class AuthService {
     } finally {
       if (timeout) clearTimeout(timeout);
     }
-    if (!response || !response.ok) {
+    const contentType = String(response && response.headers && response.headers.get && response.headers.get('content-type') || '').toLowerCase();
+    let result = null;
+    if (response && response.ok && contentType.includes('application/json')) {
+      try { result = await response.json(); } catch (_e) {}
+    }
+    if (!response || !response.ok || !result || result.ok !== true || result.queued !== true) {
       let detail = '';
-      try { detail = await response.text(); } catch (_e) {}
+      if (!result) try { detail = await response.text(); } catch (_e) {}
       throw new Error('mail_bridge_failed' + (detail ? ': ' + detail.slice(0, 200) : ''));
     }
-    return { sent: true, to };
+    return { sent: true, queued: true, to, queueId: result.queueId || null, channel: 'siteground_http_queue' };
   }
 
   authorizeTeacher(req) {
