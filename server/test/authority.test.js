@@ -12004,9 +12004,17 @@ test('authoritative room world generates biome blocks', () => {
   assert.equal(w.getB(elf.x + 12, elf.ground, elf.z - 11), W.B.HEARTWOOD, 'elven pavilion floors use heartwood');
   assert.equal(w.getB(elf.x + 12, elf.ground + 6, elf.z - 11), W.B.ELVEN_GLASS, 'elven pavilion roofs use crystal glass');
   assert.equal(w.getB(elf.x + 16, elf.ground, elf.z), W.B.WATER, 'the moonwell is built in the grove');
+  assert.equal(w.getB(elf.x - 22, elf.ground + 5, elf.z - 16), W.B.HEARTWOOD, 'an ancient-tree ring gives the grove a distant silhouette');
+  assert.equal(w.getB(elf.x - 25, elf.ground + 7, elf.z - 10), W.B.MOONSTONE, 'moonstone waystones mark the outer sanctuary');
+  assert.equal(w.getB(elf.x + 22, elf.ground, elf.z), W.B.WATER, 'the moonlit rill carries water into the outer grove');
+  assert.equal(w.getB(elf.x - 14, elf.ground, elf.z), W.B.ELVEN_GLASS, 'the overlook marks the intended establishing viewpoint');
+  for (let y = elf.ground + 1; y <= elf.ground + 9; y++) {
+    assert.equal(w.getB(elf.x - 14, y, elf.z), W.B.AIR, 'the third-person overlook keeps clear camera headroom');
+  }
   for (let x = elf.entranceX; x <= elf.x - 3; x++) {
     const start = W.terrainHeight(elf.entranceX, elf.z);
-    const top = Math.round(start + (elf.ground - start) * Math.min(1, (x - elf.entranceX) / 24));
+    const onOverlook = x >= elf.x - 18 && x <= elf.x - 10;
+    const top = onOverlook ? elf.ground : Math.round(start + (elf.ground - start) * Math.min(1, (x - elf.entranceX) / 24));
     assert.notEqual(w.getB(x, top, elf.z), W.B.AIR, 'the eastern approach has a continuous floor');
     assert.equal(w.getB(x, top + 1, elf.z), W.B.AIR, 'the eastern approach has headroom');
   }

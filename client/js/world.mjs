@@ -2029,7 +2029,7 @@ function generateWorld(){
 function isLavaBorderLand(x,z){
   return x<WORLD_MIN+LAVA_BORDER_WIDTH || z<WORLD_MIN+LAVA_BORDER_WIDTH || x>WORLD_MAX-LAVA_BORDER_WIDTH || z>WORLD_MAX-LAVA_BORDER_WIDTH;
 }
-function isElfRealmLand(x,z,pad=0){return Math.hypot(x-elvenRealmSite.x,z-elvenRealmSite.z)<=elvenRealmSite.radius+pad;}
+function isElfRealmLand(x,z,pad=0){return Math.hypot(x-elvenRealmSite.x,z-elvenRealmSite.z)<=elvenRealmSite.protectedRadius+pad;}
 generateWorld();
 
 // ---------------- Town of Beginnings ----------------
@@ -2734,9 +2734,39 @@ function syncFrontierBarrier(){
   }
 }
 const dragonShrineSite=globalThis.BlockcraftDragonShrine.site;
+const elvenMoteCount=42,elvenMoteBase=new Float32Array(elvenMoteCount*3),elvenMotePositions=new Float32Array(elvenMoteCount*3);
+for(let i=0;i<elvenMoteCount;i++){
+  const angle=i*2.399963,ring=4+(i%7)*3.3;
+  elvenMoteBase[i*3]=Math.cos(angle)*ring;
+  elvenMoteBase[i*3+1]=1.8+(i*17%29)*.42;
+  elvenMoteBase[i*3+2]=Math.sin(angle)*ring;
+  elvenMotePositions.set(elvenMoteBase.subarray(i*3,i*3+3),i*3);
+}
+const elvenMoteGeometry=new THREE.BufferGeometry();
+elvenMoteGeometry.setAttribute('position',new THREE.BufferAttribute(elvenMotePositions,3));
+const elvenMoteMaterial=new THREE.PointsMaterial({color:0x8dffd0,size:.24,transparent:true,opacity:.78,depthWrite:false,blending:THREE.AdditiveBlending,fog:false});
+const elvenMotes=new THREE.Points(elvenMoteGeometry,elvenMoteMaterial);
+elvenMotes.position.set(elvenRealmSite.x,elvenRealmSite.ground+1,elvenRealmSite.z);elvenMotes.frustumCulled=false;scene.add(elvenMotes);
+const elvenFogColor=new THREE.Color(0x4b8b78),elvenSkyColor=new THREE.Color(0x70bca8),elvenLightColor=new THREE.Color(0xc5ffe4);
 let elvenArrivalInside=false;
-function tickElvenRealm(){
-  const inside=dim==='overworld'&&highestGateRankCleared>=0&&Math.hypot(player.pos.x-elvenRealmSite.x,player.pos.z-elvenRealmSite.z)<elvenRealmSite.radius;
+function elvenRealmInfluence(){
+  if(dim!=='overworld')return 0;
+  return Math.max(0,Math.min(1,(115-Math.hypot(player.pos.x-elvenRealmSite.x,player.pos.z-elvenRealmSite.z))/82));
+}
+function tickElvenRealm(now=performance.now()){
+  const distance=Math.hypot(player.pos.x-elvenRealmSite.x,player.pos.z-elvenRealmSite.z),influence=elvenRealmInfluence();
+  elvenMotes.visible=dim==='overworld'&&distance<175;
+  if(elvenMotes.visible){
+    const positions=elvenMoteGeometry.attributes.position.array,t=now*.001;
+    for(let i=0;i<elvenMoteCount;i++){
+      positions[i*3]=elvenMoteBase[i*3]+Math.sin(t*.62+i*1.7)*.42;
+      positions[i*3+1]=elvenMoteBase[i*3+1]+Math.sin(t*.9+i*.73)*.65;
+      positions[i*3+2]=elvenMoteBase[i*3+2]+Math.cos(t*.57+i*1.3)*.42;
+    }
+    elvenMoteGeometry.attributes.position.needsUpdate=true;
+    elvenMotes.rotation.y=t*.025;elvenMoteMaterial.opacity=.3+influence*.58;
+  }
+  const inside=dim==='overworld'&&highestGateRankCleared>=0&&distance<elvenRealmSite.radius;
   if(inside&&!elvenArrivalInside)sysMsg('<b>Elaria, the Elven Grove</b> — the forest beyond the old border welcomes you.');
   elvenArrivalInside=inside;
 }
@@ -8175,6 +8205,18 @@ function updateDayNight(dt){
       scene.fog.color.lerp(_tmpC,f*.7);
       SKY.lerp(_tmpC,f*.75);
       hemi.intensity+=f*1.2;
+    }
+    const elfInfluence=elvenRealmInfluence();
+    if(elfInfluence>.001){
+      const atmosphere=elfInfluence*.72;
+      scene.fog.color.lerp(elvenFogColor,atmosphere*.46);
+      SKY.lerp(elvenSkyColor,atmosphere*.34);
+      matOpaque.color.lerp(elvenLightColor,atmosphere*.12);
+      matTrans.color.lerp(elvenLightColor,atmosphere*.2);
+      scene.fog.near=THREE.MathUtils.lerp(scene.fog.near,24,atmosphere);
+      scene.fog.far=THREE.MathUtils.lerp(scene.fog.far,108,atmosphere*.7);
+      hemi.color.lerp(elvenLightColor,atmosphere*.3);
+      hemi.intensity+=atmosphere*.16;
     }
   }
   const shrineDark=shrineInteriorFactor();

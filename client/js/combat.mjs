@@ -202,7 +202,7 @@ function playerTouchesLava(){
 let lastFrontierHint=0;
 function tickLavaBorder(now){
   worldApi.syncFrontierBarrier();
-  worldApi.tickElvenRealm();
+  worldApi.tickElvenRealm(now);
   if(dim!=='overworld') return;
   // only burns when the player is actually touching lava (not merely near the border)
   if(playerTouchesLava()){

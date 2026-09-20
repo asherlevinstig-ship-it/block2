@@ -941,7 +941,7 @@ function isLavaBorderLand(x, z) {
 }
 function isElfRealmLand(x,z,pad=0){
   const s=ELF_REALM.site;
-  return Math.hypot(x-s.x,z-s.z)<=s.radius+pad;
+  return Math.hypot(x-s.x,z-s.z)<=s.protectedRadius+pad;
 }
 
 function buildGuildHallBase(setBlock = setB) {

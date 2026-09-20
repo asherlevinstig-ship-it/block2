@@ -3,7 +3,7 @@
   else root.BlockcraftElfRealm=factory();
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
-  const site=Object.freeze({x:1018,z:500,ground:19,name:'Elaria, the Elven Grove',radius:26,entranceX:990});
+  const site=Object.freeze({x:1018,z:500,ground:19,name:'Elaria, the Elven Grove',radius:31,protectedRadius:38,entranceX:990});
 
   function build(setB,B,terrainHeight,height=64){
     const {x:cx,z:cz,ground,radius,entranceX}=site;
@@ -18,9 +18,9 @@
     for(let x=cx-radius;x<=cx+radius;x++)for(let z=cz-radius;z<=cz+radius;z++){
       const distance=Math.hypot(x-cx,z-cz);
       if(distance>radius)continue;
-      const blend=Math.max(0,Math.min(1,(distance-20)/6));
+      const blend=Math.max(0,Math.min(1,(distance-24)/7));
       const top=Math.round(ground*(1-blend)+terrainHeight(x,z)*blend);
-      column(x,z,top,distance>23?B.GRASS:((x+z)%13===0?B.STARLEAF:B.GRASS));
+      column(x,z,top,distance>28?B.GRASS:((x+z)%13===0?B.STARLEAF:B.GRASS));
     }
 
     // The path begins just beyond the former border, leaving established land intact.
@@ -50,10 +50,34 @@
       if(Math.abs(z-cz)>=3)put(cx-20,ground+7,z,B.STARLEAF);
     }
 
+    // A broad, camera-safe overlook creates an intentional establishing view.
+    // Its open center frames the living hall while the side pylons frame players
+    // and mounts in third-person without colliding with the camera boom.
+    for(let x=cx-18;x<=cx-10;x++)for(let z=cz-7;z<=cz+7;z++){
+      const edge=Math.abs(z-cz)>=6||x===cx-18||x===cx-10;
+      column(x,z,ground,edge?B.MOONSTONE:B.HEARTWOOD);
+    }
+    for(const z of [cz-8,cz+8]){
+      for(let y=ground+1;y<=ground+5;y++)put(cx-11,y,z,B.MOONSTONE);
+      put(cx-11,ground+6,z,B.ELVEN_GLASS);
+      put(cx-11,ground+7,z,B.LANTERN);
+    }
+    for(const z of [cz-3,cz,cz+3])put(cx-14,ground,z,B.ELVEN_GLASS);
+
     for(const [x,z,trunk,canopy] of [
       [cx-11,cz-13,ground+12,5],[cx-11,cz+13,ground+13,5],
       [cx+10,cz-15,ground+12,5],[cx+10,cz+15,ground+13,5],
+      [cx-22,cz-16,ground+15,6],[cx-22,cz+16,ground+16,6],
+      [cx-3,cz-25,ground+16,6],[cx-3,cz+25,ground+15,6],
+      [cx+21,cz-18,ground+16,6],[cx+21,cz+18,ground+15,6],
     ])tree(x,z,trunk,canopy);
+
+    // Moonstone waystones make the grove readable from the old frontier.
+    for(const [dx,dz,h] of [[-25,-10,7],[-25,10,6],[-8,-23,8],[-8,23,7],[25,-10,8],[25,10,7]]){
+      for(let y=ground+1;y<=ground+h;y++)put(cx+dx,y,cz+dz,B.MOONSTONE);
+      put(cx+dx,ground+h+1,cz+dz,B.ELVEN_GLASS);
+      put(cx+dx,ground+h+2,cz+dz,B.LANTERN);
+    }
 
     // The living hall is a two-block trunk with a broad crown and glowing roots.
     for(let x=cx+4;x<=cx+5;x++)for(let z=cz;z<=cz+1;z++)for(let y=ground+1;y<=ground+15;y++)put(x,y,z,B.HEARTWOOD);
@@ -88,6 +112,13 @@
       if(distance>=2.8&&distance<=4.2)put(wellX+dx,ground+1,wellZ+dz,B.ELVEN_GLASS);
     }
     for(const dx of [-4,4])for(const dz of [-4,4])put(wellX+dx,ground+2,wellZ+dz,B.LANTERN);
+
+    // A moonlit rill carries the well's colour toward the outer forest.
+    for(let x=wellX+4;x<=cx+27;x++){
+      for(const dz of [-2,2])put(x,ground,wellZ+dz,B.MOONSTONE);
+      for(let dz=-1;dz<=1;dz++)put(x,ground,wellZ+dz,B.WATER);
+      if((x-wellX)%5===0){put(x,ground+1,wellZ-2,B.STARLEAF);put(x,ground+1,wellZ+2,B.STARLEAF);}
+    }
   }
 
   return {site,build};
