@@ -3715,11 +3715,11 @@ class GameRoom extends Room {
   async sendBugReportMail(report) {
     const to = report.to || this.bugReportRecipient();
     const authService = getAuthService();
-    if (authService && typeof authService.enqueueBugReportNotification === 'function') {
-      let queued = null;
-      try { queued = await authService.enqueueBugReportNotification(report); }
-      catch (error) { console.warn('[bug-report] StaffFlow queue unavailable:', cleanBugText(error && error.message || error, 200)); }
-      if (queued) return queued;
+    if (authService && typeof authService.sendBugReportNotification === 'function') {
+      let delivery = null;
+      try { delivery = await authService.sendBugReportNotification(report); }
+      catch (error) { console.warn('[bug-report] StaffFlow delivery unavailable:', cleanBugText(error && error.message || error, 200)); }
+      if (delivery && (delivery.sent || delivery.queued)) return delivery;
     }
     const bridgeUrl = this.bugReportMailBridgeUrl();
     const bridgeSecret = this.bugReportMailBridgeSecret();
@@ -3810,7 +3810,9 @@ class GameRoom extends Room {
       queued,
       mailed: acceptedForEmail,
       deliveryState: mailed ? 'sent' : 'queued',
-      mailReason: mail && mail.reason || '',
+      immediate: !!(mail && mail.immediate),
+      mailChannel: mail && mail.channel || '',
+      mailReason: mail && (mail.reason || mail.bridgeReason) || '',
     });
   }
   editTargetInReach(p, x, y, z) {
