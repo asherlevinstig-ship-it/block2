@@ -353,7 +353,9 @@ export function createAuthController({ user, password, playerName, status, play,
     try {
       const params = new URLSearchParams(location.search || '');
       if (params.get('manual_login') === '1') return false;
-      return /^block2\.vercel\.app$/i.test(location.hostname || '');
+      const hostname=String(location.hostname||'').toLowerCase();
+      if(hostname==='localhost'||hostname==='127.0.0.1'||hostname==='[::1]'||hostname==='us-mia-ea26ba04.colyseus.cloud')return false;
+      return true;
     } catch (_) {
       return false;
     }

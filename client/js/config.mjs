@@ -13,11 +13,17 @@ function pageBackendUrl() {
   }
 }
 
+function sameOriginBackendHost() {
+  const hostname=String(location&&location.hostname||'').toLowerCase();
+  if(hostname==='localhost'||hostname==='127.0.0.1'||hostname==='[::1]')return true;
+  try{return hostname===new URL(DEFAULT_BACKEND_URL).hostname.toLowerCase();}
+  catch(_){return false;}
+}
+
 export function backendHttpUrl() {
   const explicit = cleanUrl(globalThis.BlockcraftConfig && globalThis.BlockcraftConfig.backendUrl) || pageBackendUrl();
   if (explicit) return explicit;
-  if (/\.vercel\.app$/i.test(location.hostname)) return DEFAULT_BACKEND_URL;
-  return '';
+  return sameOriginBackendHost()?'':DEFAULT_BACKEND_URL;
 }
 
 export function backendWsUrl() {

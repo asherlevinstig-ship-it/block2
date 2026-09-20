@@ -22,10 +22,7 @@ function filesUnder(dir) {
 
 const clientBytes = filesUnder(client).reduce((total, file) => total + fs.statSync(file).size, 0);
 assert.ok(clientBytes <= 36 * 1024 * 1024, `client payload ${(clientBytes / 1024 / 1024).toFixed(2)} MB exceeded 36 MB`);
-const vercel = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'));
-const headerSources = vercel.headers.map(rule => rule.source);
-assert.ok(
-  headerSources.indexOf('/assets/bggame-0ded2d310665.webp') > headerSources.indexOf('/assets/(.*)'),
-  'fingerprinted splash cache rule must follow the generic asset rule so Vercel applies it last'
-);
+const headers = fs.readFileSync(path.join(client, '_headers'), 'utf8');
+assert.match(headers, /\/assets\/bggame-0ded2d310665\.webp[\s\S]*Cache-Control: public, max-age=31536000, immutable/, 'fingerprinted splash must remain immutable on Cloudflare Workers');
+assert.match(headers, /\/build-info\.json[\s\S]*Cache-Control: no-cache/, 'release identity must not be cached');
 console.log(JSON.stringify({ splashKb: Math.round(splashBytes / 1024), clientMb: Math.round(clientBytes / 1024 / 1024 * 100) / 100 }));

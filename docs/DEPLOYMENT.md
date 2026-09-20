@@ -8,6 +8,11 @@ Place the process behind an HTTPS reverse proxy that supports WebSocket upgrades
 replaces (rather than appends untrusted values to) `X-Forwarded-Proto` and
 `X-Forwarded-For`. Do not expose the Node port directly to the public internet.
 
+The static browser client is deployed independently as a Cloudflare Worker with
+static assets. Its build and cutover runbook is
+[CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md). Cloudflare does
+not replace or replicate the single authoritative Colyseus process.
+
 Use Node.js 20 and install the locked dependency tree with `npm ci`. Before release,
 run `npm run check`, `npm run test:integration`, and `npm run test:e2e`.
 

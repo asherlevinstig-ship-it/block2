@@ -39,7 +39,7 @@ copyFile(require.resolve('three/build/three.min.js'), path.join(dist, 'three.js'
 fs.writeFileSync(path.join(dist, 'colyseus.js'), browserSdkBundle());
 fs.writeFileSync(path.join(dist, 'build-info.json'), JSON.stringify({
   schemaVersion,
-  commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT || null,
+  commit: process.env.CF_PAGES_COMMIT_SHA || process.env.GIT_COMMIT || null,
 }));
 
 console.log('Built static client in dist/');

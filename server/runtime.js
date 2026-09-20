@@ -76,7 +76,7 @@ function attachHttpRoutes(app, config, getGameServer = () => null) {
   app.use('/shared', express.static(path.join(__dirname, '..', 'shared'), staticOptions));
   app.use(express.static(path.join(__dirname, '..', 'client'), staticOptions));
 
-  // Serve the same schema-matched bundle used by Vercel, including in local tests.
+  // Serve the same schema-matched bundle used by Cloudflare Workers, including in local tests.
   const colyseusBrowserSdk = browserSdkBundle();
   app.get('/colyseus.js', (_req, res) => res.type('application/javascript').send(colyseusBrowserSdk));
   app.get('/three.js', (_req, res) => res.sendFile(require.resolve('three/build/three.min.js')));

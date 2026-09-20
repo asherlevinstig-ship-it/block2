@@ -47,13 +47,13 @@ STORE=firebase
 FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"..."}
 ```
 
-If the browser client is hosted separately on Vercel, set the exact Vercel origin on the Colyseus server too:
+If the browser client is hosted separately on Cloudflare Workers, set its exact production origin on the Colyseus server too:
 
 ```env
-CLIENT_ORIGIN=https://your-vercel-client.vercel.app
+CLIENT_ORIGIN=https://block2.asherlevin85.workers.dev
 ```
 
-The client uses the Colyseus endpoint automatically on `*.vercel.app`, and can also be pointed at a different backend with `?backend=https://your-colyseus-endpoint`.
+Hosted frontends use the production Colyseus endpoint automatically and can also be pointed at a different backend with `?backend=https://your-colyseus-endpoint`. See [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md) for the cutover and custom-domain procedure.
 
 ## 5. Existing MySQL Users
 
@@ -195,12 +195,12 @@ Computer Science homework without deleting historical attempts.
 ## 6. Lightweave Login Handoff
 
 Logging in on the SiteGround/Lightweave site does not automatically authenticate
-`block2.vercel.app`, because browser cookies are scoped by domain. To carry the
+the Cloudflare Workers frontend, because browser cookies are scoped by domain. To carry the
 login forward, Lightweave should create a short, random, single-use `auth_token`
 for the logged-in teacher or student row, then redirect to Blockcraft with it:
 
 ```text
-https://block2.vercel.app/?auth_token=<short-lived-random-token>
+https://block2.asherlevin85.workers.dev/?auth_token=<short-lived-random-token>
 ```
 
 Blockcraft exchanges that token at `/auth/token-login`, creates its own `bc_session`,

@@ -100,6 +100,8 @@ no bedrock, and a 10-block reach check from the editing player.
 See [docs/SYSTEMS.md](docs/SYSTEMS.md) for the full gameplay-system reference (Hunter progression,
 classes & abilities, biomes, economy, dragons, familiars, events…) and
 [docs/PROTOCOL.md](docs/PROTOCOL.md) for the client↔server message catalogue.
+The production static frontend deploys as a Cloudflare Worker with static assets; see
+[docs/CLOUDFLARE_PAGES.md](docs/CLOUDFLARE_PAGES.md) for setup and cutover.
 
 **Party dungeons.** Gates carry an `id` and a random `seed`. Right-clicking a
 gate sends `enterGate`; the server creates (or joins you into) the instance for

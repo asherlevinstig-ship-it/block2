@@ -2981,6 +2981,16 @@ test('admin world destinations expose server-backed town and elven teleports',()
   assert.match(auth,/role === 'school_admin'/);
 });
 
+test('hosted static clients use the Cloudflare-compatible remote backend path',()=>{
+  const config=fs.readFileSync(path.join(__dirname,'..','..','client','js','config.mjs'),'utf8');
+  const auth=fs.readFileSync(path.join(__dirname,'..','..','client','js','auth.mjs'),'utf8');
+  assert.doesNotMatch(config,/\.vercel\.app/);
+  assert.match(config,/return sameOriginBackendHost\(\)\?'':DEFAULT_BACKEND_URL/);
+  assert.match(config,/hostname==='localhost'/);
+  assert.doesNotMatch(auth,/block2\\\.vercel\\\.app/);
+  assert.match(auth,/hostname==='us-mia-ea26ba04\.colyseus\.cloud'/);
+});
+
 test('first town arrival stages the fountain and Question Portal',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');

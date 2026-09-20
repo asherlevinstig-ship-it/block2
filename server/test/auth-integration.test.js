@@ -426,7 +426,7 @@ test('hunter pathway is saved through authenticated profile storage and remains 
 });
 
 test('configured client origins receive credentialed CORS and cross-site cookies', { concurrency: false }, async () => {
-  const origin = 'https://blockcraft-client.vercel.app';
+  const origin = 'https://block2.asherlevin85.workers.dev';
   const f = await fixture({ production: true, clientOrigin: origin });
   try {
     const preflight = await f.request('/auth/login', {
@@ -439,7 +439,7 @@ test('configured client origins receive credentialed CORS and cross-site cookies
     assert.match(preflight.headers.get('access-control-allow-headers'), /Authorization/);
 
     const accepted = await f.request('/auth/register', jsonPost(
-      { username: 'vercel_user', password: 'long enough password' },
+      { username: 'pages_user', password: 'long enough password' },
       { origin, 'x-forwarded-proto': 'https', 'x-forwarded-for': '203.0.113.9' },
     ));
     assert.equal(accepted.status, 200);
@@ -456,7 +456,7 @@ test('bearer session token authenticates cross-site auth requests when cookies a
     async loadPlayer(id) { return profiles.get(id) || null; },
     async savePlayer(id, profile) { profiles.set(id, profile); },
   };
-  const origin = 'https://blockcraft-client.vercel.app';
+  const origin = 'https://block2.asherlevin85.workers.dev';
   const f = await fixture({ production: true, clientOrigin: origin, profileStore });
   try {
     const login = await f.request('/auth/register', jsonPost(

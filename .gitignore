@@ -1,6 +1,7 @@
 # dependencies
 node_modules/
 dist/
+.wrangler/
 
 # runtime persistence (JsonStore output) — regenerated at runtime
 data/
