@@ -210,8 +210,18 @@ const KARMA_HUNTER_MIN_INTERVAL_MS = 20 * 60 * 1000;
 const KARMA_HUNTER_LIFETIME_MS = 8 * 60 * 1000;
 const KARMA_GIFT_REDEEM = 6;
 const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 62.5 });
+const ADMIN_WORLD_DESTINATIONS = Object.freeze({
+  town: Object.freeze({ id: 'town', label: 'Town of Beginnings', x: TOWN_RETURN_SPAWN.x, y: TOWN_RETURN_SPAWN.y, z: TOWN_RETURN_SPAWN.z, yaw: Math.PI }),
+  elven: Object.freeze({ id: 'elven', label: 'Elaria, Elven Kingdom', x: W.ELF_REALM.site.x - 13.5, y: W.ELF_REALM.site.ground + 1.01, z: W.ELF_REALM.site.z + .5, yaw: Math.PI / 2 }),
+});
 const ADMIN_QUICK_GATE_ROTATION = Object.freeze(DUNGEON_POOLS.flatMap((ids, rank) => ids.map(dungeonId => Object.freeze({ rank, dungeonId }))));
 const adminQuickGateIndices = new Map();
+
+function adminWorldDestination(value) {
+  const id = String(value || '').trim().toLowerCase();
+  if (id === 'elaria' || id === 'elven_kingdom') return ADMIN_WORLD_DESTINATIONS.elven;
+  return ADMIN_WORLD_DESTINATIONS[id] || null;
+}
 
 function townReturnArray(y = TOWN_RETURN_SPAWN.y) {
   return [TOWN_RETURN_SPAWN.x, y, TOWN_RETURN_SPAWN.z];
@@ -626,6 +636,7 @@ class GameRoom extends Room {
     this.onMessage('kcEnd', (client, m) => this.handleKcEnd(client, m));
     this.onMessage('deathLimboAnswer', (client, m) => this.handleDeathLimboAnswer(client, m));
     this.onMessage('adminGateTeleport', (client, m) => this.handleAdminGateTeleport(client, m));
+    this.onMessage('adminWorldTeleport', (client, m) => this.handleAdminWorldTeleport(client, m));
     this.onMessage('adminSpawnMob', (client, m) => this.handleAdminSpawnMob(client, m));
     this.onMessage('adminDropItem', (client, m) => this.handleAdminDropItem(client, m));
     this.onMessage('adminQuickGate', (client, m) => this.handleAdminQuickGate(client, m));
@@ -1312,7 +1323,7 @@ class GameRoom extends Room {
       client._mutedComms = new Set(prof.mutedPlayers || []);
       if (!prof.activeRoom) {
         const beforePos = Array.isArray(prof.pos) ? prof.pos.slice(0, 3) : null;
-        const safePos = this.openOverworldPlayerSpawn(prof.pos, client.sessionId, (prof.highestGateRankCleared | 0) >= 0);
+        const safePos = this.openOverworldPlayerSpawn(prof.pos, client.sessionId, this.isAdminClient(client) || (prof.highestGateRankCleared | 0) >= 0);
         const changed = !beforePos || Math.hypot((beforePos[0] || 0) - safePos[0], (beforePos[2] || 0) - safePos[2]) > .05 || Math.abs((beforePos[1] || 0) - safePos[1]) > .2;
         if (changed) {
           prof.pos = safePos;
@@ -4694,6 +4705,39 @@ class GameRoom extends Room {
       id: gate.id, gateId: gate.id, rank: gate.rank | 0, kind: gate.kind || 'public',
       x: fresh.x, y: fresh.y, z: fresh.z, yaw: fresh.yaw,
       gateX: gate.x, gateY: gate.y, gateZ: gate.z,
+    });
+    return true;
+  }
+  handleAdminWorldTeleport(client, m = {}) {
+    if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminWorldTeleportReject', { reason: 'admin' });
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return client.send('adminWorldTeleportReject', { reason: 'player' });
+    const destination = adminWorldDestination(m && m.destination);
+    if (!destination) return client.send('adminWorldTeleportReject', { reason: 'destination' });
+    if (p.dgn && typeof this.ejectFromDungeon === 'function') this.ejectFromDungeon(client.sessionId);
+    const fresh = this.state.players.get(client.sessionId) || p;
+    const requested = [destination.x, destination.y, destination.z];
+    const pos = typeof this.openOverworldPlayerSpawn === 'function'
+      ? this.openOverworldPlayerSpawn(requested, client.sessionId, true)
+      : requested;
+    fresh.dim = 'overworld';
+    fresh.dgn = '';
+    fresh.mount = '';
+    fresh.x = pos[0];
+    fresh.y = pos[1];
+    fresh.z = pos[2];
+    fresh.yaw = destination.yaw;
+    this.pvel.set(client.sessionId, { x: 0, z: 0 });
+    const token = this.tokens.get(client.sessionId);
+    const prof = token && this.profiles.get(token);
+    if (prof) {
+      prof.activeRoom = null;
+      prof.pos = [fresh.x, fresh.y, fresh.z];
+      this.dirtyPlayers.add(token);
+    }
+    client.send('adminWorldTeleportResult', {
+      ok: true, destination: destination.id, label: destination.label,
+      x: fresh.x, y: fresh.y, z: fresh.z, yaw: fresh.yaw,
     });
     return true;
   }
@@ -10184,7 +10228,7 @@ class GameRoom extends Room {
     const velCap = deityFlight ? 15 : mounted ? 16 : 9*armorMove*hungerMove*potionSpeed;
     let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
     let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
-    const frontierUnlocked = !p.dgn && !!(rec && rec.prof && (rec.prof.highestGateRankCleared | 0) >= 0);
+    const frontierUnlocked = !p.dgn && (this.isAdminClient(client) || !!(rec && rec.prof && (rec.prof.highestGateRankCleared | 0) >= 0));
     const borderMin = frontierUnlocked ? W.WORLD_MIN + W.LAVA_BORDER_WIDTH + 1.35 : W.LAVA_BORDER_WIDTH + 1.35;
     const borderMax = frontierUnlocked ? W.WORLD_MAX - W.LAVA_BORDER_WIDTH - 1.35 : W.WX - W.LAVA_BORDER_WIDTH - 1.35;
     sx = clampN(sx, borderMin, borderMax);
@@ -10910,4 +10954,5 @@ module.exports = {
   SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS,
   SKYSHIP_BOARD_RANK, SKYSHIP_BOARD_GOLD,
   DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance,
+  ADMIN_WORLD_DESTINATIONS, adminWorldDestination,
 };

@@ -66,7 +66,7 @@ const {
   progressionGateRank,
 } = require('../rooms/dungeon-handoff');
 const { ADMISSION_TTL_MS, issueDungeonAdmission, peekDungeonAdmission, claimDungeonAdmission, clearDungeonAdmissions } = require('../rooms/dungeon-admission');
-const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
+const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance, ADMIN_WORLD_DESTINATIONS } = require('../rooms/GameRoom');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
 const { Gate, Mob } = require('../schema');
 const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, TOOL_INFO, ARMOR_INFO, DEITY_LEVEL, DEITY_POWER_IDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
@@ -472,6 +472,13 @@ test('the frontier opens only after a Gate clear and preserves unlocked return p
   assert.equal(Math.abs(restored[0] - 1020.5) < .05, true, 'unlocked frontier positions survive reconnects');
   const saved = sanitizeProfile({ ...defaultProfile('Explorer'), pos: [-30.5, 20, 1020.5], highestGateRankCleared: 0 });
   assert.deepEqual(saved.pos, [-30.5, 20, 1020.5], 'frontier coordinates survive profile sanitization');
+
+  const admin=makeClient('frontier_admin');
+  admin._accountRole='admin';
+  seedPlayer(room,admin,{x:986.5,y:16,z:500.5});
+  const adminPlayer=room.state.players.get(admin.sessionId);
+  room.handleMove(admin,{x:987.7,y:16,z:500.5,yaw:0});
+  assert.equal(adminPlayer.x>W.WX-W.LAVA_BORDER_WIDTH-1.35,true,'admins can explore beyond the frontier without altering progression');
 });
 
 test('dungeon party spawns use distinct safe entrance positions', () => {
@@ -1819,6 +1826,34 @@ test('admin gate teleport lists active gates server-side and rejects normal play
   assert.equal(admin.sent.some(e=>e.type==='adminGateTeleportResult'&&e.msg.id===g.id),true);
 });
 
+test('admin world teleport reaches the Town of Beginnings and the Elaria overlook',()=>{
+  const room=makeRoom(),admin=makeClient('world_teleport_admin'),normal=makeClient('world_teleport_normal');
+  admin._accountRole='admin';
+  const {prof}=seedPlayer(room,admin,{x:100,z:100,y:16,mount:'horse'});
+  seedPlayer(room,normal,{x:102,z:100,y:16});
+
+  room.handleAdminWorldTeleport(normal,{destination:'elven'});
+  assert.equal(normal.sent.some(e=>e.type==='adminWorldTeleportReject'&&e.msg.reason==='admin'),true);
+  room.handleAdminWorldTeleport(admin,{destination:'missing'});
+  assert.equal(admin.sent.some(e=>e.type==='adminWorldTeleportReject'&&e.msg.reason==='destination'),true);
+
+  room.handleAdminWorldTeleport(admin,{destination:'town'});
+  let p=room.state.players.get(admin.sessionId),result=admin.sent.find(e=>e.type==='adminWorldTeleportResult'&&e.msg.destination==='town');
+  assert.ok(result);
+  assert.deepEqual([p.x,p.y,p.z],[ADMIN_WORLD_DESTINATIONS.town.x,ADMIN_WORLD_DESTINATIONS.town.y,ADMIN_WORLD_DESTINATIONS.town.z]);
+  assert.equal(p.mount,'');
+
+  room.world.standHeight=()=>W.ELF_REALM.site.ground+1;
+  room.handleAdminWorldTeleport(admin,{destination:'elven'});
+  p=room.state.players.get(admin.sessionId);
+  result=admin.sent.find(e=>e.type==='adminWorldTeleportResult'&&e.msg.destination==='elven');
+  assert.ok(result);
+  assert.equal(result.msg.label,'Elaria, Elven Kingdom');
+  assert.deepEqual([p.x,p.y,p.z],[ADMIN_WORLD_DESTINATIONS.elven.x,ADMIN_WORLD_DESTINATIONS.elven.y,ADMIN_WORLD_DESTINATIONS.elven.z]);
+  assert.deepEqual(prof.pos,[p.x,p.y,p.z]);
+  assert.equal(p.yaw,Math.PI/2,'arrival faces east toward the elven hall');
+});
+
 test('admin can spawn one persistent test player for safe social interaction checks',()=>{
   const room=makeRoom(),admin=makeClient('interaction_admin'),normal=makeClient('interaction_normal');
   admin._accountRole='admin';
@@ -1902,6 +1937,21 @@ test('admin gate teleport from DungeonRoom returns the hunter to the hosted gate
   assert.deepEqual(removed,[admin.sessionId]);
   assert.deepEqual(prof.pos,[614.6,18.01,644.5]);
   assert.equal(admin.sent.some(e=>e.type==='adminGateTeleportResult'&&e.msg.returnOverworld===true&&e.msg.id==='g81'),true);
+});
+
+test('admin world teleport exits a DungeonRoom directly to the selected destination',()=>{
+  const room=makeDungeonRoom(),admin=makeClient('dungeon_world_admin');
+  admin._accountRole='admin';
+  const {prof}=seedPlayer(room,admin,{x:23.1,y:12.4,z:23.4,dgn:'g82'});
+  const removed=[];
+  room.instance={id:'g82',removePlayer:sid=>removed.push(sid)};
+  room.handleAdminWorldTeleportFromDungeon(admin,{destination:'elven'});
+  const p=room.state.players.get(admin.sessionId),destination=ADMIN_WORLD_DESTINATIONS.elven;
+  assert.equal(p.dim,'overworld');
+  assert.equal(p.dgn,'');
+  assert.deepEqual(removed,[admin.sessionId]);
+  assert.deepEqual(prof.pos,[destination.x,destination.y,destination.z]);
+  assert.equal(admin.sent.some(e=>e.type==='adminWorldTeleportResult'&&e.msg.returnOverworld===true&&e.msg.destination==='elven'),true);
 });
 
 test('gate entry moves the authoritative player to the dungeon entrance spawn',()=>{

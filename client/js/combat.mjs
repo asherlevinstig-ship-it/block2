@@ -598,6 +598,13 @@ function ensureAdminExtendedControls(){
       '<label class="admincheck"><button id="admingateteleport" type="button">TELEPORT TO GATE</button></label>';
     while(wrap.firstChild)grid.appendChild(wrap.firstChild);
   }
+  if(grid&&!document.getElementById('adminworlddestination')){
+    const wrap=document.createElement('div');
+    wrap.innerHTML=
+      '<label class="adminspan">World destination<select id="adminworlddestination"><option value="town">Town of Beginnings</option><option value="elven">Elaria — Elven Kingdom</option></select></label>'+
+      '<label class="admincheck adminspan"><button id="adminworldteleport" type="button">TELEPORT TO DESTINATION</button></label>';
+    while(wrap.firstChild)grid.appendChild(wrap.firstChild);
+  }
   if(grid&&!document.getElementById('adminworldeventparkour')){
     const wrap=document.createElement('div');
     wrap.innerHTML=
@@ -651,6 +658,8 @@ const adminUtilityPassive=document.getElementById('adminutilitypassive');
 const adminGateSelect=document.getElementById('admingateselect');
 const adminGateRefresh=document.getElementById('admingaterefresh');
 const adminGateTeleport=document.getElementById('admingateteleport');
+const adminWorldDestination=document.getElementById('adminworlddestination');
+const adminWorldTeleport=document.getElementById('adminworldteleport');
 const adminRawCommand=document.getElementById('adminrawcommand');
 const adminRunCommand=document.getElementById('adminruncommand');
 const adminSpawnKind=document.getElementById('adminspawnkind');
@@ -5720,6 +5729,17 @@ function runAdminGateTeleport(){
   try{NET.room.send('adminGateTeleport',{id});}
   catch(e){adminGateTeleport.disabled=false;setDevResetStatus(e&&e.message||'Gate teleport failed.','bad');}
 }
+function runAdminWorldTeleport(){
+  if(!adminWorldTeleport)return;
+  if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('World teleport is admin-only.','bad');return;}
+  if(!(NET&&NET.on&&NET.room)){setDevResetStatus('Enter the world before teleporting.','bad');return;}
+  const destination=String(adminWorldDestination&&adminWorldDestination.value||'town');
+  const label=adminWorldDestination&&adminWorldDestination.selectedOptions&&adminWorldDestination.selectedOptions[0]?adminWorldDestination.selectedOptions[0].textContent:destination;
+  adminWorldTeleport.disabled=true;
+  setDevResetStatus('Teleporting to '+label+'...');
+  try{NET.room.send('adminWorldTeleport',{destination});}
+  catch(e){adminWorldTeleport.disabled=false;setDevResetStatus(e&&e.message||'World teleport failed.','bad');}
+}
 function adminSendCommand(text){
   if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Admin command is admin-only.','bad');return false;}
   if(!(NET&&NET.on&&NET.room)){setDevResetStatus('Enter the world before running admin commands.','bad');return false;}
@@ -5929,6 +5949,7 @@ if(adminPatchGo)adminPatchGo.addEventListener('click',runAdminPatch);
 if(adminItemId)adminItemId.addEventListener('change',syncAdminGearFields);
 if(adminGateRefresh)adminGateRefresh.addEventListener('click',()=>{const gates=refreshAdminGateSelect();setDevResetStatus(gates.length?'Loaded '+gates.length+' active gate'+(gates.length===1?'':'s')+'.':'No active gates found.',gates.length?'ok':'bad');});
 if(adminGateTeleport)adminGateTeleport.addEventListener('click',runAdminGateTeleport);
+if(adminWorldTeleport)adminWorldTeleport.addEventListener('click',runAdminWorldTeleport);
 for(const [id,command] of [
   ['adminworldeventparkour','/event parkour'],
   ['adminworldeventking','/event king'],
@@ -5957,6 +5978,16 @@ window.addEventListener('blockcraft-admin-gate-teleport',e=>{
   if(d.ok===false){setDevResetStatus(d.reason==='none'?'No active gates found.':d.reason==='admin'?'Gate teleport is admin-only.':'Gate teleport failed.','bad');return;}
   if(d.id||d.gateId)setDevResetStatus('Teleported to gate '+(d.id||d.gateId)+'.','ok');
   refreshAdminGateSelect();
+});
+window.addEventListener('blockcraft-admin-world-teleport',e=>{
+  if(adminWorldTeleport)adminWorldTeleport.disabled=false;
+  const d=e&&e.detail||{};
+  if(d.ok===false){
+    const text=d.reason==='admin'?'World teleport is admin-only.':d.reason==='destination'?'Choose a valid world destination.':'World teleport failed.';
+    setDevResetStatus(text,'bad');
+    return;
+  }
+  setDevResetStatus('Teleported to '+String(d.label||'destination')+'.','ok');
 });
 window.addEventListener('blockcraft-admin-spawn',e=>{
   if(adminSpawnHere)adminSpawnHere.disabled=false;

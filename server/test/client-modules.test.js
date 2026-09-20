@@ -2967,6 +2967,18 @@ test('retired level two job chooser cannot open',()=>{
   assert.match(styles,/#townchoices \.tcrow\.job-choice/);
 });
 
+test('admin world destinations expose server-backed town and elven teleports',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(combat,/id="adminworlddestination"/);
+  assert.match(combat,/Town of Beginnings/);
+  assert.match(combat,/Elaria — Elven Kingdom/);
+  assert.match(combat,/NET\.room\.send\('adminWorldTeleport',\{destination\}\)/);
+  assert.match(networking,/room\.onMessage\('adminWorldTeleportResult'/);
+  assert.match(networking,/NETWORK\.returnToPrimary\(\)\.then\(applyAdminWorldPosition\)/);
+  assert.match(networking,/blockcraft-admin-world-teleport/);
+});
+
 test('first town arrival stages the fountain and Question Portal',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');

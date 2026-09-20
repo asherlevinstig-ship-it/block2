@@ -2958,6 +2958,28 @@ function netAttachRoom(room,name,client){
       sysMsg(text);
       try{window.dispatchEvent(new CustomEvent('blockcraft-admin-gate-teleport',{detail:{ok:false,reason:r||'failed'}}));}catch(e){}
     });
+    room.onMessage('adminWorldTeleportResult', m=>{
+      const applyAdminWorldPosition=()=>{
+        if(m&&Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&Number.isFinite(+m.z)){
+          player.pos.set(+m.x,+m.y,+m.z);
+          if(player.vel)player.vel.set(0,0,0);
+          if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
+        }
+      };
+      if(m&&m.returnOverworld&&NETWORK&&NETWORK.returnToPrimary){
+        try{if(dimensionsApi.clearRoomEntitiesForSwitch)dimensionsApi.clearRoomEntitiesForSwitch();}catch(e){}
+        NET.dgn='';
+        NETWORK.returnToPrimary().then(applyAdminWorldPosition);
+      }else applyAdminWorldPosition();
+      sysMsg('<b>Admin teleport:</b> moved to '+escHTML(m&&m.label||'world destination')+'.');
+      try{window.dispatchEvent(new CustomEvent('blockcraft-admin-world-teleport',{detail:m||{}}));}catch(e){}
+    });
+    room.onMessage('adminWorldTeleportReject', m=>{
+      const r=m&&m.reason;
+      const text=r==='admin'?'World teleport is admin-only.':r==='destination'?'That world destination is not available.':'World teleport failed.';
+      sysMsg(text);
+      try{window.dispatchEvent(new CustomEvent('blockcraft-admin-world-teleport',{detail:{ok:false,reason:r||'failed'}}));}catch(e){}
+    });
     room.onMessage('adminSpawnResult', m=>{
       const count=Math.max(0,(m&&m.count)|0),kind=String(m&&m.kind||'actor').replace(/_/g,' ');
       sysMsg(m&&m.kind==='test_player'

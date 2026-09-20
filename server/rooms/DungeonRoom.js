@@ -3,7 +3,7 @@ const { StateView } = require('@colyseus/schema');
 const { State, Player } = require('../schema');
 const { createStore, sanitizeProfile, cleanToken, defaultProfile, ensureAsherAdminFishingRod } = require('../store');
 const D = require('../dungeon');
-const { GameRoom } = require('./GameRoom');
+const { GameRoom, adminWorldDestination } = require('./GameRoom');
 const W = require('../world');
 const { handOff, hostGate, unhostGate, consumeGate, recordGateBreach, requestPublicGateRank, progressionGateRank } = require('./dungeon-handoff');
 const { canonicalDungeonId } = require('../../shared/dungeon-pools');
@@ -164,6 +164,7 @@ class DungeonRoom extends GameRoom {
     this.onMessage('respawnTown', (c, m) => this.handleRespawnTown(c, m));
     this.onMessage('stuckRescue', (c, m) => this.handleStuckRescue(c, m));
     this.onMessage('adminGateTeleport', (c, m) => this.handleAdminGateTeleportFromDungeon(c, m));
+    this.onMessage('adminWorldTeleport', (c, m) => this.handleAdminWorldTeleportFromDungeon(c, m));
     this.onMessage('prospect', c => this.handleProspect(c));
     this.onMessage('useRepairKit', (c, m) => this.handleUseRepairKit(c, m));
     this.onMessage('dedit', (c, m) => this.handleDungeonEdit(c, m));   // mining inside the dungeon
@@ -399,6 +400,42 @@ class DungeonRoom extends GameRoom {
       id: inst.id, gateId: inst.id, rank: inst.rank | 0, kind: inst.kind || 'public',
       x, y, z, yaw: p.yaw, gateX: inst.gateX, gateY: inst.gateY, gateZ: inst.gateZ,
       returnOverworld: true,
+    });
+    return true;
+  }
+
+  handleAdminWorldTeleportFromDungeon(client, m = {}) {
+    if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminWorldTeleportReject', { reason: 'admin' });
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p) return client.send('adminWorldTeleportReject', { reason: 'player' });
+    const destination = adminWorldDestination(m && m.destination);
+    if (!destination) return client.send('adminWorldTeleportReject', { reason: 'destination' });
+    const token = this.tokens.get(client.sessionId);
+    const rec = token && this.profileFor(client);
+    const inst = this.instance || (p.dgn && this.instances[p.dgn]);
+    const { x, y, z, yaw } = destination;
+    p.dgn = '';
+    p.dim = 'overworld';
+    p.mount = '';
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    p.yaw = yaw;
+    p.spirit = false;
+    const hp = this.playerHp.get(client.sessionId);
+    if (hp && hp.hp <= 0) hp.hp = Math.max(1, hp.max);
+    if (inst && typeof inst.removePlayer === 'function') inst.removePlayer(client.sessionId);
+    this.clearDungeonRecoveryForSid(client.sessionId);
+    if (rec && rec.prof) {
+      rec.prof.activeRoom = null;
+      rec.prof.pos = [x, y, z];
+      rec.prof.dungeonRecovery = null;
+      this.dirtyPlayers.add(rec.token);
+      if (!rec.prof.noPersist) handOff(rec.token, rec.prof);
+    }
+    client.send('adminWorldTeleportResult', {
+      ok: true, destination: destination.id, label: destination.label,
+      x, y, z, yaw, returnOverworld: true,
     });
     return true;
   }
