@@ -3781,27 +3781,33 @@ class GameRoom extends Room {
   async handleBugReport(client, m) {
     if (!client || this.rateLimited(client, 'bugReport', 0.05, 2)) return client && client.send('bugReportResult', { ok: false, reason: 'rate' });
     const report = this.buildBugReport(client, m || {});
+    let saved = false;
+    let saveReason = '';
     try {
       await this.saveBugReportFile(report);
-      let mail = { sent: false, to: report.to, reason: 'not_attempted' };
-      try {
-        mail = await this.sendBugReportMail(report);
-      } catch (error) {
-        mail = { sent: false, to: report.to, reason: cleanBugText(error && error.message || 'mail_failed', 240) };
-      }
-      console.warn('[bug-report]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, mail }));
-      client.send('bugReportResult', {
-        ok: true,
-        id: report.id,
-        to: report.to,
-        saved: true,
-        mailed: !!(mail && mail.sent),
-        mailReason: mail && mail.reason || '',
-      });
+      saved = true;
     } catch (error) {
-      console.warn('[bug-report] failed:', error && error.message || error);
-      client.send('bugReportResult', { ok: false, reason: 'save_failed' });
+      saveReason = cleanBugText(error && error.message || 'save_failed', 240);
+      console.warn('[bug-report] local save unavailable:', saveReason);
     }
+    let mail = { sent: false, to: report.to, reason: 'not_attempted' };
+    try {
+      mail = await this.sendBugReportMail(report);
+    } catch (error) {
+      mail = { sent: false, to: report.to, reason: cleanBugText(error && error.message || 'mail_failed', 240) };
+    }
+    const mailed = !!(mail && mail.sent);
+    console.warn('[bug-report]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, saved, saveReason, mail }));
+    if (!saved && !mailed) return client.send('bugReportResult', { ok: false, reason: 'report_failed', saveReason, mailReason: mail && mail.reason || '' });
+    client.send('bugReportResult', {
+      ok: true,
+      id: report.id,
+      to: report.to,
+      saved,
+      saveReason,
+      mailed,
+      mailReason: mail && mail.reason || '',
+    });
   }
   editTargetInReach(p, x, y, z) {
     if (!p) return false;

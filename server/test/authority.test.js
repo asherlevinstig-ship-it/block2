@@ -578,6 +578,28 @@ test('bug reports still acknowledge when email bridge fails', async () => {
   assert.equal(savedReport.position.x, 7);
 });
 
+test('bug reports still reach email when cloud local storage is unavailable', async () => {
+  const room = makeRoom();
+  const client = makeClient('bug-cloud-storage-fail');
+  seedPlayer(room, client, { name: 'CloudHunter', x: 17, y: 18, z: 19 });
+  let mailedReport = null;
+  room.saveBugReportFile = async () => { throw new Error('EROFS: read-only file system'); };
+  room.sendBugReportMail = async report => {
+    mailedReport = report;
+    return { sent: true, queued: true, to: report.to };
+  };
+
+  await room.handleBugReport(client, { message: 'This must survive ephemeral hosting.' });
+
+  const result = client.sent.find(e => e.type === 'bugReportResult');
+  assert.equal(result.msg.ok, true);
+  assert.equal(result.msg.saved, false);
+  assert.equal(result.msg.mailed, true);
+  assert.match(result.msg.saveReason, /read-only file system/);
+  assert.equal(mailedReport.message, 'This must survive ephemeral hosting.');
+  assert.equal(mailedReport.position.x, 17);
+});
+
 function markDragonDailyClaimed(room, prof) {
   const day = room.dragonChallengeDay();
   const def = room.dragonDailyChallenge(day);

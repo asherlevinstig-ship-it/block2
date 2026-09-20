@@ -1440,23 +1440,31 @@ class AuthService {
       res.json({ ok: true, account, gameProfile: await this.publicGameProfile(account) });
     });
     app.post('/auth/bug-report', async (req, res) => {
-      const account = this.authenticateRequest(req);
+      // Sessions are shared through MySQL in production.  After a deployment the
+      // in-memory cache is empty, so hydrate it before rejecting a still-valid
+      // browser session.
+      const account = await this.authenticateRoomRequest(req);
       if (!account) return res.status(401).json({ ok: false, code: 'auth' });
+      const report = this.buildHttpBugReport(account, req.body || {});
+      let saved = false;
+      let saveReason = '';
       try {
-        const report = this.buildHttpBugReport(account, req.body || {});
         await this.saveBugReportFile(report);
-        let mail = { sent: false, to: report.to, reason: 'not_attempted' };
-        try {
-          mail = await this.sendBugReportNotification(report);
-        } catch (error) {
-          mail = { sent: false, to: report.to, reason: cleanBugText(error && error.message || 'mail_failed', 240) };
-        }
-        console.warn('[bug-report-http]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, mail }));
-        res.json({ ok: true, id: report.id, to: report.to, saved: true, mailed: !!(mail && mail.sent), mailReason: mail && mail.reason || '' });
-      } catch (e) {
-        console.warn('[bug-report-http] failed:', e && e.message || e);
-        res.status(500).json({ ok: false, code: 'save_failed' });
+        saved = true;
+      } catch (error) {
+        saveReason = cleanBugText(error && error.message || 'save_failed', 240);
+        console.warn('[bug-report-http] local save unavailable:', saveReason);
       }
+      let mail = { sent: false, to: report.to, reason: 'not_attempted' };
+      try {
+        mail = await this.sendBugReportNotification(report);
+      } catch (error) {
+        mail = { sent: false, to: report.to, reason: cleanBugText(error && error.message || 'mail_failed', 240) };
+      }
+      const mailed = !!(mail && mail.sent);
+      console.warn('[bug-report-http]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, saved, saveReason, mail }));
+      if (!saved && !mailed) return res.status(500).json({ ok: false, code: 'report_failed', saveReason, mailReason: mail && mail.reason || '' });
+      res.json({ ok: true, id: report.id, to: report.to, saved, saveReason, mailed, mailReason: mail && mail.reason || '' });
     });
     app.post('/auth/profile/name', async (req, res) => {
       const account = this.authenticateRequest(req);
