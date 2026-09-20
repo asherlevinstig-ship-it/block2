@@ -3798,6 +3798,7 @@ class GameRoom extends Room {
     }
     const mailed = !!(mail && mail.sent);
     const queued = !!(mail && mail.queued);
+    const acceptedForEmail = mailed || queued;
     console.warn('[bug-report]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, saved, saveReason, mail }));
     if (!saved && !mailed && !queued) return client.send('bugReportResult', { ok: false, reason: 'report_failed', saveReason, mailReason: mail && mail.reason || '' });
     client.send('bugReportResult', {
@@ -3807,7 +3808,8 @@ class GameRoom extends Room {
       saved,
       saveReason,
       queued,
-      mailed,
+      mailed: acceptedForEmail,
+      deliveryState: mailed ? 'sent' : 'queued',
       mailReason: mail && mail.reason || '',
     });
   }

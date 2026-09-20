@@ -600,6 +600,22 @@ test('bug reports still reach email when cloud local storage is unavailable', as
   assert.equal(mailedReport.position.x, 17);
 });
 
+test('queued bug reports remain compatible with clients opened before queued status existed', async () => {
+  const room = makeRoom();
+  const client = makeClient('bug-legacy-client');
+  seedPlayer(room, client, { name: 'LegacyHunter' });
+  room.saveBugReportFile = async () => 'data/bug-reports/legacy.json';
+  room.sendBugReportMail = async report => ({ sent: false, queued: true, to: report.to });
+
+  await room.handleBugReport(client, { message: 'Old client compatibility.' });
+
+  const result = client.sent.find(e => e.type === 'bugReportResult');
+  assert.equal(result.msg.ok, true);
+  assert.equal(result.msg.queued, true);
+  assert.equal(result.msg.mailed, true);
+  assert.equal(result.msg.deliveryState, 'queued');
+});
+
 function markDragonDailyClaimed(room, prof) {
   const day = room.dragonChallengeDay();
   const def = room.dragonDailyChallenge(day);
