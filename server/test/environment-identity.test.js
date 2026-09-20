@@ -65,7 +65,9 @@ test('dungeons suppress skylight and retain authored local colour profiles',asyn
 
 test('voxel atlas keeps pixel filtering and deterministic natural and dungeon wear tiles',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
-  assert.match(source,/const ATLAS_COLS = 8, ATLAS_ROWS = 8/);
+  assert.match(source,/const ATLAS_COLS = 8, ATLAS_ROWS = 9/);
+  assert.match(source,/elvenTexturePack\.src='\/assets\/elven-texture-pack\.png'/,'the authored elven texture strip loads into the atlas');
+  for(const tile of ['[0,8]','[1,8]','[2,8]','[3,8]'])assert.ok(source.includes(tile),tile+' is registered as an elven block texture');
   assert.match(source,/atlasTex\.magFilter = THREE\.NearestFilter;[\s\S]*atlasTex\.minFilter = THREE\.NearestFilter;[\s\S]*atlasTex\.generateMipmaps = false/);
   for(const tile of ['[0,6]','[1,6]','[2,6]','[3,6]','[4,6]','[5,6]','[6,6]','[7,6]','[2,7]','[3,7]','[4,7]','[5,7]']){
     assert.ok(source.includes('return '+tile),tile+' participates in deterministic surface selection');

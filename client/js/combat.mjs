@@ -199,7 +199,10 @@ function playerTouchesLava(){
   for(const x of xs)for(const y of ys)for(const z of zs) if(getB(x,y,z)===B.LAVA) return true;
   return false;
 }
+let lastFrontierHint=0;
 function tickLavaBorder(now){
+  worldApi.syncFrontierBarrier();
+  worldApi.tickElvenRealm();
   if(dim!=='overworld') return;
   // only burns when the player is actually touching lava (not merely near the border)
   if(playerTouchesLava()){
@@ -215,9 +218,16 @@ function tickLavaBorder(now){
     player.pos.x+=dx/d*.18; player.pos.z+=dz/d*.18;
     player.vel.y=Math.max(player.vel.y,-.5);
   }
-  // keep the player inside the world bounds (no aggressive border shove)
-  player.pos.x=Math.max(.55,Math.min(WX-.55,player.pos.x));
-  player.pos.z=Math.max(.55,Math.min(WX-.55,player.pos.z));
+  const bounds=worldApi.frontierBounds;
+  const unlocked=highestGateRankCleared>=0;
+  const min=unlocked?bounds.min+bounds.borderWidth+1.35:bounds.borderWidth+1.35;
+  const max=unlocked?bounds.max-bounds.borderWidth-1.35:bounds.coreSize-bounds.borderWidth-1.35;
+  if(!unlocked&&Math.min(player.pos.x-min,max-player.pos.x,player.pos.z-min,max-player.pos.z)<18&&now-lastFrontierHint>15000){
+    lastFrontierHint=now;
+    sysMsg('Clear a <b>Gate dungeon</b> to unlock the frontier and explore farther.');
+  }
+  player.pos.x=Math.max(min,Math.min(max,player.pos.x));
+  player.pos.z=Math.max(min,Math.min(max,player.pos.z));
 }
 function raycast(maxDist){
   const dir = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ'));

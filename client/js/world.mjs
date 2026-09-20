@@ -42,7 +42,7 @@ const {createOnboardingUI,isOnboardingBuildPlacement,countOnboardingBuildBlocks,
 
 // ---------------- texture atlas ----------------
 const TS = 16;
-const ATLAS_COLS = 8, ATLAS_ROWS = 8;
+const ATLAS_COLS = 8, ATLAS_ROWS = 9;
 const atlasCanvas = document.createElement('canvas');
 atlasCanvas.width = ATLAS_COLS*TS; atlasCanvas.height = ATLAS_ROWS*TS;
 const actx = atlasCanvas.getContext('2d', { willReadFrequently: true });
@@ -246,11 +246,25 @@ paintTile(5,7,(x,y,r)=>{let c=(y%4===3)?[37,39,44]:[79,73,69];const root=(x===4&
 paintTile(6,7,(x,y,r)=>{const vein=((x*7+y*13)%19)<2;return vary(vein?[19,21,27]:r()>.82?[57,59,67]:[39,41,47],6,r);});
 paintTile(7,7,(x,y,r)=>{const mortar=y%4===3||(x+(Math.floor(y/4)%2?4:0))%8===7;let c=mortar?[31,35,37]:[61,72,61];if((x*5+y*3)%17<2)c=[83,98,72];return vary(c,7,r);});
 
+// row 8 - Elaria texture-pack fallbacks. The authored PNG replaces these
+// pixels after load; deterministic fallbacks keep first-frame chunks valid.
+paintTile(0,8,(x,y,r)=>{const vein=Math.abs(Math.sin((x+y*.2)*.65));let c=vein>.76?[150,210,158]:vein>.45?[218,198,142]:[240,224,174];return vary(c,5,r);});
+paintTile(1,8,(x,y,r)=>{let c=r()<.35?[18,92,61]:r()>.82?[83,180,82]:[38,132,70];if((x*3+y*5)%29<2)c=[125,246,188];return vary(c,5,r);});
+paintTile(2,8,(x,y,r)=>{const rune=x===7||y===7||(x+y)%15===0;return vary(rune?[117,174,151]:r()<.2?[207,212,199]:[231,230,213],4,r);});
+paintTile(3,8,(x,y,r)=>{const line=x%7===0||y%7===0||Math.abs(x-y)===1;return [...vary(line?[170,255,244]:[48,183,184],5,r),line?220:145];});
+
 const atlasTex = new THREE.CanvasTexture(atlasCanvas);
 atlasTex.encoding = THREE.sRGBEncoding;
 atlasTex.magFilter = THREE.NearestFilter;
 atlasTex.minFilter = THREE.NearestFilter;
 atlasTex.generateMipmaps = false;
+const elvenTexturePack=new Image();
+elvenTexturePack.onload=()=>{
+  actx.imageSmoothingEnabled=false;
+  for(let i=0;i<4;i++)actx.drawImage(elvenTexturePack,i*16,0,16,16,i*TS,8*TS,TS,TS);
+  atlasTex.needsUpdate=true;
+};
+elvenTexturePack.src='/assets/elven-texture-pack.png';
 
 // animated lava: repaint the lava atlas tile (7,3) each frame with a flowing pattern
 let lavaAnimT = 0;
@@ -277,7 +291,7 @@ function paintLavaTile(phase){
 }
 
 // ---------------- block & item registry ----------------
-const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, LOG:5, LEAVES:6, PLANKS:7, COBBLE:8, GLASS:9, WATER:10, BEDROCK:11, BRICK:12, TABLE:13, FURNACE:14, COAL_ORE:15, IRON_ORE:16, DIAMOND_ORE:17, CONCRETE:18, TORCH:19, BED:20, CHEST:21, FARMLAND:22, WHEAT_1:23, WHEAT_2:24, WHEAT_3:25, LAVA:26, SNOW:27, ICE:28, RED_SAND:29, TERRACOTTA:30, CACTUS:31, LANTERN:32, CAMPFIRE:33, EGG_INSULATOR:34, BARRIER:35 };
+const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, LOG:5, LEAVES:6, PLANKS:7, COBBLE:8, GLASS:9, WATER:10, BEDROCK:11, BRICK:12, TABLE:13, FURNACE:14, COAL_ORE:15, IRON_ORE:16, DIAMOND_ORE:17, CONCRETE:18, TORCH:19, BED:20, CHEST:21, FARMLAND:22, WHEAT_1:23, WHEAT_2:24, WHEAT_3:25, LAVA:26, SNOW:27, ICE:28, RED_SAND:29, TERRACOTTA:30, CACTUS:31, LANTERN:32, CAMPFIRE:33, EGG_INSULATOR:34, BARRIER:35, HEARTWOOD:36, STARLEAF:37, MOONSTONE:38, ELVEN_GLASS:39 };
 const BLOCKS = {
   [B.GRASS]:  {name:'Grass',          tiles:[[0,0],[1,0],[2,0]], solid:true, opaque:true},
   [B.DIRT]:   {name:'Dirt',           tiles:[[2,0],[2,0],[2,0]], solid:true, opaque:true},
@@ -314,6 +328,10 @@ const BLOCKS = {
   [B.CAMPFIRE]:{name:'Campfire',      tiles:[[7,2],[7,2],[7,2]], solid:false,opaque:false, noMesh:true},
   [B.EGG_INSULATOR]:{name:'Egg Insulator',tiles:[[7,2],[7,2],[7,2]], solid:false,opaque:false, noMesh:true},
   [B.BARRIER]:{name:'Training Boundary',tiles:[[4,1],[4,1],[4,1]], solid:true, opaque:false, noMesh:true},
+  [B.HEARTWOOD]:{name:'Living Heartwood',tiles:[[0,8],[0,8],[0,8]],solid:true,opaque:true},
+  [B.STARLEAF]:{name:'Starleaf Canopy',tiles:[[1,8],[1,8],[1,8]],solid:true,opaque:true},
+  [B.MOONSTONE]:{name:'Runed Moonstone',tiles:[[2,8],[2,8],[2,8]],solid:true,opaque:true},
+  [B.ELVEN_GLASS]:{name:'Elven Crystal Glass',tiles:[[3,8],[3,8],[3,8]],solid:true,opaque:false,translucent:true},
 };
 const isOpaque = id => id!==B.AIR && BLOCKS[id] && BLOCKS[id].opaque;
 const isSolid  = id => id!==B.AIR && BLOCKS[id] && BLOCKS[id].solid;
@@ -938,7 +956,9 @@ function matchRecipe(cells, w){
 
 // ---------------- world ----------------
 const CHUNK=16, WORLD_SIZE=1000, WORLD_CH=Math.ceil(WORLD_SIZE/CHUNK), WX=WORLD_SIZE, WH=64, SEA=13;
-const LAVA_BORDER_WIDTH=12, BORDER_WALL_TOP=WH-2;
+const LAVA_BORDER_WIDTH=12, FRONTIER_REACH=64;
+const WORLD_MIN=-FRONTIER_REACH, WORLD_MAX=WX+FRONTIER_REACH-1, WORLD_SPAN=WX+FRONTIER_REACH*2;
+const elvenRealmSite=globalThis.BlockcraftElfRealm.site;
 const WORLD_TC=WX/2, WORLD_TOWN_HS=72, WORLD_TOWN_G=15;
 const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const TRAINING_MEADOW_TOWN_PORTAL=Object.freeze({dx:0,dz:40,range:5.8});
@@ -961,8 +981,8 @@ const JOB_TUTORIAL_MEADOWS=Object.freeze({
   pet_tamer:{x:500,z:925,G:22,R:52,ground:B.GRASS},
 });
 const {DimensionGrid}=window.BlockcraftDimensions;
-let world = new DimensionGrid({kind:'overworld',id:'global',width:WX,height:WH,depth:WX,empty:B.AIR,outside:B.AIR});
-const inWorld = (x,y,z)=> x>=0&&x<WX&&y>=0&&y<WH&&z>=0&&z<WX;
+let world = new DimensionGrid({kind:'overworld',id:'global',width:WORLD_SPAN,height:WH,depth:WORLD_SPAN,originX:WORLD_MIN,originZ:WORLD_MIN,empty:B.AIR,outside:B.AIR});
+const inWorld = (x,y,z)=> x>=WORLD_MIN&&x<=WORLD_MAX&&y>=0&&y<WH&&z>=WORLD_MIN&&z<=WORLD_MAX;
 const getB = (x,y,z)=>world.getB(x,y,z);
 let trackVoxelLighting=false;
 const setB = (x,y,z,v)=>{
@@ -1000,6 +1020,8 @@ function lowN(x,z,ox,oz){ return noise2((x+ox)*0.011, (z+oz)*0.011); }
 function mountainBoost(x,z){ const m=noise2((x+1234)*0.006,(z+5678)*0.006); const t=Math.max(0,(m-0.6)/0.4); return t*t*44; }
 function terrainHeight(x,z){ return Math.floor(7 + fbm(x+311,z+97)*22 + mountainBoost(x,z)); }
 function biomeAt(x,z){
+  const dx=x-elvenRealmSite.x,dz=z-elvenRealmSite.z;
+  if(dx*dx+dz*dz<=(elvenRealmSite.radius+8)*(elvenRealmSite.radius+8))return BIO.FOREST;
   const temp=lowN(x,z,0,0), moist=lowN(x,z,777,3210);
   if(temp<0.34) return BIO.SNOWY;
   if(temp>0.66){ if(moist<0.30) return BIO.MESA; if(moist<0.55) return BIO.DESERT; return BIO.PLAINS; }
@@ -1951,12 +1973,12 @@ function activateOverworldGrid(candidate){
     world=candidate;
     return world;
   }
-  world=new DimensionGrid({kind:'overworld',id:'global',width:WX,height:WH,depth:WX,empty:B.AIR,outside:B.AIR});
+  world=new DimensionGrid({kind:'overworld',id:'global',width:WORLD_SPAN,height:WH,depth:WORLD_SPAN,originX:WORLD_MIN,originZ:WORLD_MIN,empty:B.AIR,outside:B.AIR});
   generateWorld();
   return world;
 }
 function generateWorld(){
-  for(let x=0;x<WX;x++)for(let z=0;z<WX;z++){
+  for(let x=WORLD_MIN;x<=WORLD_MAX;x++)for(let z=WORLD_MIN;z<=WORLD_MAX;z++){
     const biome=biomeAt(x,z), h=terrainHeight(x,z);
     for(let y=0;y<=h;y++){
       let id;
@@ -1980,7 +2002,7 @@ function generateWorld(){
     }
     for(let y=h+1;y<=SEA;y++) setB(x,y,z, (biome===BIO.SNOWY && y===SEA)?B.ICE:B.WATER);
   }
-  for(let x=3;x<WX-3;x++)for(let z=3;z<WX-3;z++){
+  for(let x=WORLD_MIN+3;x<=WORLD_MAX-3;x++)for(let z=WORLD_MIN+3;z<=WORLD_MAX-3;z++){
     const biome=biomeAt(x,z);
     const treeThresh = biome===BIO.FOREST?0.978 : (biome===BIO.PLAINS||biome===BIO.SWAMP)?0.992 : (biome===BIO.SNOWY?0.987:1.1);
     if(hash2(x*5+1,z*5+7) > treeThresh){
@@ -2002,22 +2024,12 @@ function generateWorld(){
   ancientCities=buildAncientCities(setB,getB);
   treasureCaches=buildTreasureCaches(setB);
   globalThis.BlockcraftDragonShrine.build(setB,B,terrainHeight);
-  buildBoundaryWall();
+  globalThis.BlockcraftElfRealm.build(setB,B,terrainHeight,WH);
 }
 function isLavaBorderLand(x,z){
-  return x<LAVA_BORDER_WIDTH || z<LAVA_BORDER_WIDTH || x>=WX-LAVA_BORDER_WIDTH || z>=WX-LAVA_BORDER_WIDTH;
+  return x<WORLD_MIN+LAVA_BORDER_WIDTH || z<WORLD_MIN+LAVA_BORDER_WIDTH || x>WORLD_MAX-LAVA_BORDER_WIDTH || z>WORLD_MAX-LAVA_BORDER_WIDTH;
 }
-function buildBoundaryWall(){
-  const near=LAVA_BORDER_WIDTH-1,far=WX-LAVA_BORDER_WIDTH;
-  for(let n=near;n<=far;n++){
-    for(let y=1;y<=BORDER_WALL_TOP;y++){
-      setB(near,y,n,B.GLASS);
-      setB(far,y,n,B.GLASS);
-      setB(n,y,near,B.GLASS);
-      setB(n,y,far,B.GLASS);
-    }
-  }
-}
+function isElfRealmLand(x,z,pad=0){return Math.hypot(x-elvenRealmSite.x,z-elvenRealmSite.z)<=elvenRealmSite.radius+pad;}
 generateWorld();
 
 // ---------------- Town of Beginnings ----------------
@@ -2699,7 +2711,35 @@ function buildChunkGeometry(cx, cz, translucentPass, lightField=null){
 // ---------------- three.js ----------------
 const rendering=createRenderingRuntime({THREE,mount:document.getElementById('game'),width:innerWidth,height:innerHeight,pixelRatio:devicePixelRatio});
 const {scene,camera,renderer}=rendering;
+const frontierWallMaterial=new THREE.MeshBasicMaterial({color:0x8bdfff,transparent:true,opacity:.22,depthWrite:false,side:THREE.DoubleSide});
+function frontierWallGroup(min,max){
+  const group=new THREE.Group(),center=(min+max)/2,span=max-min;
+  const wall=(x,z,rotate)=>{
+    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(span,WH),frontierWallMaterial);
+    mesh.position.set(x,WH/2,z);mesh.rotation.y=rotate;mesh.renderOrder=8;
+    mesh.userData.boundaryAxis=rotate?'x':'z';mesh.userData.boundaryCoord=rotate?x:z;
+    group.add(mesh);
+  };
+  wall(center,min,0);wall(center,max,0);wall(min,center,Math.PI/2);wall(max,center,Math.PI/2);
+  scene.add(group);return group;
+}
+const lockedFrontierWalls=frontierWallGroup(LAVA_BORDER_WIDTH+.5,WX-LAVA_BORDER_WIDTH-.5);
+const outerFrontierWalls=frontierWallGroup(WORLD_MIN+LAVA_BORDER_WIDTH+.5,WORLD_MAX-LAVA_BORDER_WIDTH-.5);
+function syncFrontierBarrier(){
+  lockedFrontierWalls.visible=dim==='overworld'&&highestGateRankCleared<0;
+  outerFrontierWalls.visible=dim==='overworld';
+  for(const group of [lockedFrontierWalls,outerFrontierWalls]){
+    if(!group.visible)continue;
+    for(const wall of group.children)wall.visible=Math.abs(player.pos[wall.userData.boundaryAxis]-wall.userData.boundaryCoord)<130;
+  }
+}
 const dragonShrineSite=globalThis.BlockcraftDragonShrine.site;
+let elvenArrivalInside=false;
+function tickElvenRealm(){
+  const inside=dim==='overworld'&&highestGateRankCleared>=0&&Math.hypot(player.pos.x-elvenRealmSite.x,player.pos.z-elvenRealmSite.z)<elvenRealmSite.radius;
+  if(inside&&!elvenArrivalInside)sysMsg('<b>Elaria, the Elven Grove</b> — the forest beyond the old border welcomes you.');
+  elvenArrivalInside=inside;
+}
 const dragonShrineVisual=new THREE.Group();
 dragonShrineVisual.position.set(dragonShrineSite.x,dragonShrineSite.y+1,dragonShrineSite.z);
 const shrineEgg=new THREE.Mesh(new THREE.IcosahedronGeometry(.58,1),new THREE.MeshLambertMaterial({color:0xff8647,emissive:0x8a2608}));
@@ -3615,6 +3655,8 @@ function analyzeClaimPurchase(x,z){
   const pricing=landPriceForClaim(x,z), price=pricing.price, existing=landClaims.get(landKey(x,z));
   let blocked='', blockedDetail='';
   if(isLavaBorderLand(x,z)){ blocked='World border'; blockedDetail='The world border cannot be claimed.'; }
+  else if(isElfRealmLand(x,z)){ blocked='Elven sanctuary'; blockedDetail='Elaria is protected and cannot be claimed.'; }
+  else if((x<0||z<0||x>=WX||z>=WX)&&highestGateRankCleared<0){ blocked='Frontier locked'; blockedDetail='Clear a Gate dungeon to explore and claim the frontier.'; }
   else if(isTownLand(x,z)){ blocked='Town protected'; blockedDetail='Town land cannot be claimed.'; }
   else if(player&&Math.hypot(x+.5-player.pos.x,z+.5-player.pos.z)>64){ blocked='Too far away'; blockedDetail='Move closer before buying this tile.'; }
   else if(existing&&existing.status!=='abandoned'){ blocked=existing.own?'Already yours':existing.canEdit?'Shared claim':'Already claimed'; blockedDetail=existing.own?'Click to manage access.':existing.canEdit?(existing.title||existing.name)+' is shared land.':'Owned by '+(existing.title||existing.name||'another hunter')+'.'; }
@@ -3645,7 +3687,7 @@ function recommendedClaimTile(){
     const [x,z]=key.split(',').map(Number);
     for(const [dx,dz] of LAND_DIRS){
       const nx=x+dx, nz=z+dz, nk=landKey(nx,nz);
-      if(nx<0||nz<0||nx>=WX||nz>=WX||landClaims.has(nk)||isTownLand(nx,nz)||isLavaBorderLand(nx,nz)) continue;
+      if(nx<WORLD_MIN||nz<WORLD_MIN||nx>WORLD_MAX||nz>WORLD_MAX||landClaims.has(nk)||isTownLand(nx,nz)||isLavaBorderLand(nx,nz)||isElfRealmLand(nx,nz)) continue;
       const analysis=analyzeClaimPurchase(nx,nz);
       const score=(analysis.canBuy?0:10000)+Math.hypot((nx+.5)-px,(nz+.5)-pz)+analysis.price*.05-(analysis.groups>=2?10:analysis.groups?4:0)-analysis.discount*.08;
       if(!best||score<best.score) best={x:nx,z:nz,price:analysis.price,relation:analysis.relation,canBuy:analysis.canBuy,score};
@@ -3657,7 +3699,7 @@ function recommendedClaimTile(){
   for(let r=1;r<=96&&!fallback;r++) for(let dz=-r;dz<=r&&!fallback;dz++) for(let dx=-r;dx<=r;dx++){
     if(Math.max(Math.abs(dx),Math.abs(dz))!==r) continue;
     const x=cx+dx,z=cz+dz;
-    if(x<0||z<0||x>=WX||z>=WX||landClaims.has(landKey(x,z))||isTownLand(x,z)||isLavaBorderLand(x,z)) continue;
+    if(x<WORLD_MIN||z<WORLD_MIN||x>WORLD_MAX||z>WORLD_MAX||landClaims.has(landKey(x,z))||isTownLand(x,z)||isLavaBorderLand(x,z)||isElfRealmLand(x,z)) continue;
     const analysis=analyzeClaimPurchase(x,z);
     fallback={x,z,price:analysis.price,relation:analysis.relation,canBuy:analysis.canBuy,score:0};
   }
@@ -3736,7 +3778,7 @@ function updateLandMinimap(force=true){
     landMapCtx.fillRect(i,0,1,landMapCanvas.height);
     landMapCtx.fillRect(0,i,landMapCanvas.width,1);
   }
-  const mapPx=x=>Math.floor(x/WX*landMapCanvas.width), mapPz=z=>Math.floor(z/WX*landMapCanvas.height);
+  const mapPx=x=>Math.floor((x-WORLD_MIN)/WORLD_SPAN*landMapCanvas.width), mapPz=z=>Math.floor((z-WORLD_MIN)/WORLD_SPAN*landMapCanvas.height);
   const localMapRange=170;
   const weatherSenseRange=280;
   const hasWeatherSense=utilityUnlocked('weather_sense');
@@ -3756,13 +3798,20 @@ function updateLandMinimap(force=true){
     const cx=mapPx(WORLD_TC),cz=mapPz(WORLD_TC);
     landMapCtx.save();landMapCtx.lineWidth=1;
     for(let i=1;i<DANGER_RINGS.length;i++){
-      const r=Math.round(DANGER_RINGS[i].min/WX*landMapCanvas.width);
+      const r=Math.round(DANGER_RINGS[i].min/WORLD_SPAN*landMapCanvas.width);
       landMapCtx.strokeStyle=i===1?'rgba(255,210,74,.25)':i===2?'rgba(255,139,82,.28)':'rgba(255,93,93,.3)';
       landMapCtx.beginPath();landMapCtx.arc(cx+.5,cz+.5,r,0,Math.PI*2);landMapCtx.stroke();
     }
     landMapCtx.restore();
   };
   drawDangerRings();
+  if(worldMap||nearPlayer(elvenRealmSite)){
+    const ex=mapPx(elvenRealmSite.x),ez=mapPz(elvenRealmSite.z);
+    landMapCtx.strokeStyle='#91f5bb';landMapCtx.fillStyle='#91f5bb';landMapCtx.lineWidth=2;
+    landMapCtx.beginPath();landMapCtx.arc(ex,ez,worldMap?5:3,0,Math.PI*2);landMapCtx.stroke();
+    landMapCtx.fillRect(ex-1,ez-1,3,3);
+    if(worldMap){landMapCtx.font='bold 8px Courier New';landMapCtx.fillText('ELARIA',ex-17,ez-8);}
+  }
   landClaims.forEach((c,key)=>{
     if(!landClaimOverlay&&!c.own&&!c.canEdit&&c.status!=='abandoned') return;
     const [x,z]=key.split(',').map(Number);
@@ -3969,7 +4018,7 @@ function updateLandMinimap(force=true){
       const x=mapPx(m.x), z=mapPz(m.z);
       const pulse=m.pulse?1:0, focus=m.focus?1:0, active=m.active!==false;
       if(worldMap && !claimMode){
-        const r=Math.max(2,Math.round(80/WX*landMapCanvas.width));
+        const r=Math.max(2,Math.round(80/WORLD_SPAN*landMapCanvas.width));
         landMapCtx.strokeStyle=active?'rgba(184,108,255,.32)':'rgba(142,154,170,.18)';
         landMapCtx.lineWidth=1;
         landMapCtx.beginPath();
@@ -4118,7 +4167,7 @@ function claimTileFromMouse(){
   if(t<0) return null;
   const x = Math.floor(camera.position.x + dir.x*t);
   const z = Math.floor(camera.position.z + dir.z*t);
-  if(x<0||z<0||x>=WX||z>=WX) return null;
+  if(x<WORLD_MIN||z<WORLD_MIN||x>WORLD_MAX||z>WORLD_MAX) return null;
   return {x,z};
 }
 function landOverlayStatusLine(status){
@@ -10551,7 +10600,7 @@ function inOverworldBattle(){
 function inVisualBattle(){return nearbyHostileBattle();}
 function standHeight(x,z,fromY){
   const bx=Math.floor(x), bz=Math.floor(z);
-  if(bx<0||bx>=WX||bz<0||bz>=WX) return -1;
+  if(bx<WORLD_MIN||bx>WORLD_MAX||bz<WORLD_MIN||bz>WORLD_MAX) return -1;
   for(let y=Math.min(WH-2,Math.floor(fromY)+1); y>=1; y--)
     if(isSolid(getB(bx,y,bz))) return y+1;
   return -1;
@@ -12551,6 +12600,9 @@ gameContext.registerState('world', Object.freeze({
   get TRAINING_MEADOW_TOWN_PORTAL(){ return TRAINING_MEADOW_TOWN_PORTAL; },
 }));
 gameContext.registerModule('world', Object.freeze({
+  frontierBounds:{min:WORLD_MIN,max:WORLD_MAX,coreSize:WX,borderWidth:LAVA_BORDER_WIDTH},
+  syncFrontierBarrier,
+  tickElvenRealm,
   updatePowerCrowns,
   updateWorldBounties,
   getBlock:getB,

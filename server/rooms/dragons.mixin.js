@@ -862,7 +862,10 @@ class DragonsMixin {
     dx /= len; dz /= len;
     const start = { x: p.x, y: p.y, z: p.z };
     const solid = this.spaceSolid(p.dgn || '');
-    const borderMin = W.LAVA_BORDER_WIDTH + 1.35, borderMax = W.WX - W.LAVA_BORDER_WIDTH - 1.35;
+    const frontierProfile = this.profileFor(client)?.prof;
+    const frontierUnlocked = !p.dgn && !!frontierProfile && (frontierProfile.highestGateRankCleared | 0) >= 0;
+    const borderMin = frontierUnlocked ? W.WORLD_MIN + W.LAVA_BORDER_WIDTH + 1.35 : W.LAVA_BORDER_WIDTH + 1.35;
+    const borderMax = frontierUnlocked ? W.WORLD_MAX - W.LAVA_BORDER_WIDTH - 1.35 : W.WX - W.LAVA_BORDER_WIDTH - 1.35;
     const distance = shadeStepDistance(powerLevel);
     const steps = Math.ceil(distance / 0.24);
     let x = p.x, z = p.z;

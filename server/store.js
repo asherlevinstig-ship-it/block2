@@ -697,9 +697,9 @@ function sanitizeHomesteadUpgrades(raw) {
   const src = raw && typeof raw === 'object' ? raw : {};
   const home = Array.isArray(src.homeSpawn) && src.homeSpawn.length >= 3
     ? [
-      clampF(src.homeSpawn[0], 0, 1000),
+      clampF(src.homeSpawn[0], WORLD.WORLD_MIN, WORLD.WORLD_MAX),
       clampF(src.homeSpawn[1], 1, 80),
-      clampF(src.homeSpawn[2], 0, 1000),
+      clampF(src.homeSpawn[2], WORLD.WORLD_MIN, WORLD.WORLD_MAX),
     ]
     : null;
   return {
@@ -975,7 +975,7 @@ function sanitizeWorldProgress(p) {
   const cropKinds = {};
   if (raw.cropKinds && typeof raw.cropKinds === 'object') {
     for (const key of Object.keys(raw.cropKinds).slice(0, 4096)) {
-      if (/^\d+,\d+,\d+$/.test(key) && raw.cropKinds[key] === 'windseed') cropKinds[key] = 'windseed';
+      if (/^-?\d+,\d+,-?\d+$/.test(key) && raw.cropKinds[key] === 'windseed') cropKinds[key] = 'windseed';
     }
   }
   return {
@@ -990,9 +990,9 @@ function sanitizeLandClaims(claims) {
   const out = {};
   if (!claims || typeof claims !== 'object') return out;
   for (const key in claims) {
-    if (!/^\d+,\d+$/.test(key)) continue;
+    if (!/^-?\d+,-?\d+$/.test(key)) continue;
     const [x, z] = key.split(',').map(Number);
-    if (x < 0 || x >= 1000 || z < 0 || z >= 1000) continue;
+    if (x < WORLD.WORLD_MIN || x > WORLD.WORLD_MAX || z < WORLD.WORLD_MIN || z > WORLD.WORLD_MAX) continue;
     const raw = claims[key] || {};
     const owner = cleanToken(raw.owner) || '';
     if (!owner) continue;
@@ -1370,9 +1370,9 @@ function sanitizeProfile(p) {
   let pos = Array.isArray(p.pos) ? p.pos : [];
   if (pos.length !== 3 || pos.some(v => !isFinite(+v))) pos = [...DEFAULT_TOWN_RETURN_POS];  // bad data -> current town spawn
   out.pos = [
-    clampF(pos[0], 0, WORLD.WX - 1),
+    clampF(pos[0], WORLD.WORLD_MIN, WORLD.WORLD_MAX),
     clampF(pos[1], 1, WORLD.WH - 1),
-    clampF(pos[2], 0, WORLD.WX - 1),
+    clampF(pos[2], WORLD.WORLD_MIN, WORLD.WORLD_MAX),
   ];
   out.activeRoom = sanitizeActiveRoom(p.activeRoom);
   if (out.activeRoom) {
@@ -1431,7 +1431,7 @@ function sanitizeChests(chests) {
   const out = {};
   if (!chests || typeof chests !== 'object') return out;
   for (const key in chests) {
-    if (!/^(overworld|g\d+):\d+,\d+,\d+$/.test(key)) continue;
+    if (!/^(overworld|g\d+):-?\d+,\d+,-?\d+$/.test(key)) continue;
     const raw = chests[key];
     const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
     let scope = typeof obj.scope === 'string' ? obj.scope : (key.startsWith('overworld:') ? 'personal' : 'dungeon');
@@ -1463,7 +1463,7 @@ function sanitizeFurnaces(furnaces) {
   const out = {};
   if (!furnaces || typeof furnaces !== 'object') return out;
   for (const key in furnaces) {
-    if (!/^(overworld|g\d+):\d+,\d+,\d+$/.test(key)) continue;
+    if (!/^(overworld|g\d+):-?\d+,\d+,-?\d+$/.test(key)) continue;
     const f = furnaces[key] || {};
     out[key] = {
       input: cleanSlot(f.input),
@@ -1480,12 +1480,12 @@ function sanitizeIncubations(incubations) {
   const out = {};
   if (!incubations || typeof incubations !== 'object') return out;
   for (const key in incubations) {
-    if (!/^\d+,\d+,\d+$/.test(key)) continue;          // overworld block coordinate
+    if (!/^-?\d+,\d+,-?\d+$/.test(key)) continue;          // overworld block coordinate
     const inc = incubations[key] || {};
     const token = cleanToken(inc.token);
     if (!token || !DRAGON_SPECIES.has(inc.type)) continue;
     out[key] = {
-      x: clampI(inc.x, 0, 1024), y: clampI(inc.y, 0, 255), z: clampI(inc.z, 0, 1024),
+      x: clampI(inc.x, WORLD.WORLD_MIN, WORLD.WORLD_MAX), y: clampI(inc.y, 0, 255), z: clampI(inc.z, WORLD.WORLD_MIN, WORLD.WORLD_MAX),
       type: inc.type,
       eggId: clampI(inc.eggId, 0, 999),
       token,
@@ -1503,7 +1503,7 @@ function sanitizeNestDragons(nests) {
   const out = {};
   if (!nests || typeof nests !== 'object') return out;
   for (const key in nests) {
-    if (!/^\d+,\d+,\d+#\d+$/.test(key)) continue;       // "x,y,z#slot"
+    if (!/^-?\d+,\d+,-?\d+#\d+$/.test(key)) continue;       // "x,y,z#slot"
     const n = nests[key] || {};
     const token = cleanToken(n.token);
     if (!token || !DRAGON_SPECIES.has(n.type)) continue;

@@ -231,14 +231,14 @@ function isLegacyUnsafeTownReturn(pos) {
   return y < W.TOWN.G + .75 || townReturnDrop;
 }
 
-function safeOverworldJoinPosition(world, pos) {
+function safeOverworldJoinPosition(world, pos, frontierUnlocked = false) {
   const fallback = townReturnArray();
   if (!world || typeof world.standHeight !== 'function' || typeof world.getB !== 'function') return fallback;
   if (!Array.isArray(pos) || pos.length < 3) return fallback;
   const px = Number(pos[0]), py = Number(pos[1]), pz = Number(pos[2]);
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) return fallback;
-  const min = Math.max(1, W.LAVA_BORDER_WIDTH + .5);
-  const max = Math.min(W.WX - 2, W.WX - W.LAVA_BORDER_WIDTH - .5);
+  const min = frontierUnlocked ? W.WORLD_MIN + W.LAVA_BORDER_WIDTH + .5 : W.LAVA_BORDER_WIDTH + .5;
+  const max = frontierUnlocked ? W.WORLD_MAX - W.LAVA_BORDER_WIDTH - .5 : W.WX - W.LAVA_BORDER_WIDTH - .5;
   if (px < min || pz < min || px > max || pz > max || py < 1 || py > W.WH + 8) return fallback;
   const solid = (x, y, z) => W.isSolid(world.getB(x, y, z));
   const candidates = [
@@ -376,11 +376,11 @@ class GameRoom extends Room {
     return occupied;
   }
 
-  openOverworldPlayerSpawn(pos, ignoreSid = '') {
-    const base = safeOverworldJoinPosition(this.world, pos);
+  openOverworldPlayerSpawn(pos, ignoreSid = '', frontierUnlocked = false) {
+    const base = safeOverworldJoinPosition(this.world, pos, frontierUnlocked);
     const seen = new Set();
     const tryOffset = (dx, dz) => {
-      const candidate = safeOverworldJoinPosition(this.world, [base[0] + dx, base[1], base[2] + dz]);
+      const candidate = safeOverworldJoinPosition(this.world, [base[0] + dx, base[1], base[2] + dz], frontierUnlocked);
       const key = candidate.map(n => Math.round(Number(n) * 100)).join(',');
       if (seen.has(key)) return null;
       seen.add(key);
@@ -1312,7 +1312,7 @@ class GameRoom extends Room {
       client._mutedComms = new Set(prof.mutedPlayers || []);
       if (!prof.activeRoom) {
         const beforePos = Array.isArray(prof.pos) ? prof.pos.slice(0, 3) : null;
-        const safePos = this.openOverworldPlayerSpawn(prof.pos, client.sessionId);
+        const safePos = this.openOverworldPlayerSpawn(prof.pos, client.sessionId, (prof.highestGateRankCleared | 0) >= 0);
         const changed = !beforePos || Math.hypot((beforePos[0] || 0) - safePos[0], (beforePos[2] || 0) - safePos[2]) > .05 || Math.abs((beforePos[1] || 0) - safePos[1]) > .2;
         if (changed) {
           prof.pos = safePos;
@@ -3842,12 +3842,17 @@ class GameRoom extends Room {
       return;
     }
     if (!W.inWorld(x, y, z)) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z), id, { reason: 'bounds', slot: m.slot });
+    if (x < 0 || z < 0 || x >= W.WX || z >= W.WX) {
+      const editProfile = this.profileFor(client)?.prof;
+      if (!editProfile || (editProfile.highestGateRankCleared | 0) < 0) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z), id, { reason: 'frontier_locked', slot: m.slot });
+    }
     if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.BARRIER) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z), id, { reason: 'invalid_block', slot: m.slot });
     const prev = this.world.getB(x, y, z);
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'rate', slot: m.slot });
     if (prev === W.B.BEDROCK || prev === W.B.BARRIER || prev === W.B.LAVA || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'protected_block', slot: m.slot });
     if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'reach', slot: m.slot });
     if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'world_border', slot: m.slot });
+    if (W.isElfRealmLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'elf_realm', slot: m.slot });
     const guildFloorEdit = this.canEditGuildFloor && this.canEditGuildFloor(client, x, y, z, id, prev);
     const portableInsulator = id === W.B.EGG_INSULATOR;
     if (this.isTownProtected(x, z) && !guildFloorEdit && !portableInsulator) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'town_buffer', slot: m.slot });
@@ -5070,6 +5075,7 @@ class GameRoom extends Room {
   }
   canEditLand(client, x, z, opts = {}) {
     if (W.isLavaBorderLand(x | 0, z | 0)) return false;
+    if (W.isElfRealmLand(x | 0, z | 0)) return false;
     if (!opts.allowTown && this.isTownProtected(x, z)) return false;
     const rec = this.landClaimFor(x, z);
     if (!rec) return true;
@@ -5189,8 +5195,10 @@ class GameRoom extends Room {
     const x = m && isFinite(+m.x) ? (m.x | 0) : -1;
     const z = m && isFinite(+m.z) ? (m.z | 0) : -1;
     if (this.rateLimited(client, 'action', 5, 10)) return client.send('landClaimReject', { reason: 'rate' });
-    if (x < 0 || z < 0 || x >= W.WX || z >= W.WX) return client.send('landClaimReject', { reason: 'bounds' });
+    if (x < W.WORLD_MIN || z < W.WORLD_MIN || x > W.WORLD_MAX || z > W.WORLD_MAX) return client.send('landClaimReject', { reason: 'bounds' });
+    if ((x < 0 || z < 0 || x >= W.WX || z >= W.WX) && (rec.prof.highestGateRankCleared | 0) < 0) return client.send('landClaimReject', { reason: 'frontier_locked' });
     if (W.isLavaBorderLand(x, z)) return client.send('landClaimReject', { reason: 'border', x, z });
+    if (W.isElfRealmLand(x, z)) return client.send('landClaimReject', { reason: 'elf_realm', x, z });
     if (this.isTownProtected(x, z)) return client.send('landClaimReject', { reason: 'town', x, z });
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 64) return client.send('landClaimReject', { reason: 'range', x, z });
     const key = this.landKey(x, z);
@@ -5217,7 +5225,7 @@ class GameRoom extends Room {
     const z = m && isFinite(+m.z) ? (m.z | 0) : -1;
     const reject = reason => client.send('landClaimRenameReject', { reason, x, z });
     if (this.rateLimited(client, 'action', 5, 10)) return reject('rate');
-    if (!ownerToken || x < 0 || z < 0 || x >= W.WX || z >= W.WX) return reject('invalid');
+    if (!ownerToken || x < W.WORLD_MIN || z < W.WORLD_MIN || x > W.WORLD_MAX || z > W.WORLD_MAX) return reject('invalid');
     const rec = this.landClaimFor(x, z);
     if (!rec) return reject('missing');
     if (rec.owner !== ownerToken) return reject('owner');
@@ -5239,7 +5247,7 @@ class GameRoom extends Room {
     const trust = !(m && m.trust === false);
     const reject = reason => client.send('landClaimTrustReject', { reason, x, z });
     if (this.rateLimited(client, 'action', 5, 10)) return reject('rate');
-    if (!ownerToken || x < 0 || z < 0 || x >= W.WX || z >= W.WX) return reject('invalid');
+    if (!ownerToken || x < W.WORLD_MIN || z < W.WORLD_MIN || x > W.WORLD_MAX || z > W.WORLD_MAX) return reject('invalid');
     const rec = this.landClaimFor(x, z);
     if (!rec) return reject('missing');
     if (rec.owner !== ownerToken) return reject('owner');
@@ -10156,7 +10164,7 @@ class GameRoom extends Room {
       this.pvel.set(client.sessionId, { x: 0, z: 0 });
       return;
     }
-    const nx = clampN(m.x, 0, W.WX), ny = clampN(m.y, -20, W.WH + 10), nz = clampN(m.z, 0, W.WX);
+    const nx = clampN(m.x, W.WORLD_MIN, W.WORLD_MAX + 1), ny = clampN(m.y, -20, W.WH + 10), nz = clampN(m.z, W.WORLD_MIN, W.WORLD_MAX + 1);
     const now = Date.now();
     const last = this.lastMoveMsg.get(client.sessionId) || now;
     const dt = Math.max(0.05, Math.min(0.5, (now - last) / 1000));
@@ -10176,8 +10184,9 @@ class GameRoom extends Room {
     const velCap = deityFlight ? 15 : mounted ? 16 : 9*armorMove*hungerMove*potionSpeed;
     let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
     let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
-    const borderMin = W.LAVA_BORDER_WIDTH + 1.35;
-    const borderMax = W.WX - W.LAVA_BORDER_WIDTH - 1.35;
+    const frontierUnlocked = !p.dgn && !!(rec && rec.prof && (rec.prof.highestGateRankCleared | 0) >= 0);
+    const borderMin = frontierUnlocked ? W.WORLD_MIN + W.LAVA_BORDER_WIDTH + 1.35 : W.LAVA_BORDER_WIDTH + 1.35;
+    const borderMax = frontierUnlocked ? W.WORLD_MAX - W.LAVA_BORDER_WIDTH - 1.35 : W.WX - W.LAVA_BORDER_WIDTH - 1.35;
     sx = clampN(sx, borderMin, borderMax);
     sz = clampN(sz, borderMin, borderMax);
     const dy = ny - p.y;

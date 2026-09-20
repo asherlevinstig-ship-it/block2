@@ -9,10 +9,12 @@ const {selectFantasyStructureSpecs,buildFantasyStructures}=require('../shared/ov
 // solid footprints (mobs never need to path inside them).
 const { DimensionGrid } = require('../shared/dimension-grid');
 const DRAGON_SHRINE = require('../shared/dragon-shrine');
+const ELF_REALM = require('../shared/elf-realm');
 
 const CHUNK = 16, WORLD_SIZE = 1000, WORLD_CH = Math.ceil(WORLD_SIZE / CHUNK);
 const WX = WORLD_SIZE, WH = 64, SEA = 13;
-const LAVA_BORDER_WIDTH = 12, BORDER_WALL_TOP = WH - 2;
+const LAVA_BORDER_WIDTH = 12, FRONTIER_REACH = 64;
+const WORLD_MIN = -FRONTIER_REACH, WORLD_MAX = WX + FRONTIER_REACH - 1, WORLD_SPAN = WX + FRONTIER_REACH * 2;
 const TOWN = { TC: WX / 2, HS: 72, G: 15 };
 const TRAINING_MEADOW = { x: 560, z: 840, G: 18, R: 58 };
 const TRAINING_MEADOW_TOWN_PORTAL = Object.freeze({ dx: 0, dz: 40, range: 5.8 });
@@ -75,14 +77,14 @@ const B = {
   COAL_ORE: 15, IRON_ORE: 16, DIAMOND_ORE: 17, CONCRETE: 18, TORCH: 19, BED: 20,
   CHEST: 21, FARMLAND: 22, WHEAT_1: 23, WHEAT_2: 24, WHEAT_3: 25, LAVA: 26,
   SNOW: 27, ICE: 28, RED_SAND: 29, TERRACOTTA: 30, CACTUS: 31, LANTERN: 32, CAMPFIRE: 33,
-  EGG_INSULATOR: 34, BARRIER: 35,
+  EGG_INSULATOR: 34, BARRIER: 35, HEARTWOOD: 36, STARLEAF: 37, MOONSTONE: 38, ELVEN_GLASS: 39,
 };
-const MAX_BLOCK_ID = 35;
+const MAX_BLOCK_ID = 39;
 const NON_SOLID = new Set([B.AIR, B.WATER, B.LAVA, B.TORCH, B.LANTERN, B.CAMPFIRE, B.EGG_INSULATOR, B.WHEAT_1, B.WHEAT_2, B.WHEAT_3]);
 
-const idx = (x, y, z) => y * WX * WX + z * WX + x;
-const inWorld = (x, y, z) => x >= 0 && x < WX && y >= 0 && y < WH && z >= 0 && z < WX;
-const worldGrid = new DimensionGrid({ kind: 'overworld', id: 'global', width: WX, height: WH, depth: WX, empty: B.AIR, outside: B.AIR });
+const idx = (x, y, z) => y * WORLD_SPAN * WORLD_SPAN + (z - WORLD_MIN) * WORLD_SPAN + (x - WORLD_MIN);
+const inWorld = (x, y, z) => x >= WORLD_MIN && x <= WORLD_MAX && y >= 0 && y < WH && z >= WORLD_MIN && z <= WORLD_MAX;
+const worldGrid = new DimensionGrid({ kind: 'overworld', id: 'global', width: WORLD_SPAN, height: WH, depth: WORLD_SPAN, originX: WORLD_MIN, originZ: WORLD_MIN, empty: B.AIR, outside: B.AIR });
 const getB = (x, y, z) => worldGrid.getB(x, y, z);
 const setB = (x, y, z, v) => worldGrid.setB(x, y, z, v);
 const isSolid = id => !NON_SOLID.has(id);
@@ -118,6 +120,8 @@ function lowN(x, z, ox, oz) { return noise2((x + ox) * 0.011, (z + oz) * 0.011);
 function mountainBoost(x, z) { const m = noise2((x + 1234) * 0.006, (z + 5678) * 0.006); const t = Math.max(0, (m - 0.6) / 0.4); return t * t * 44; }
 function terrainHeight(x, z) { return Math.floor(7 + fbm(x + 311, z + 97) * 22 + mountainBoost(x, z)); }
 function biomeAt(x, z) {
+  const elf=ELF_REALM.site,dx=x-elf.x,dz=z-elf.z;
+  if(dx*dx+dz*dz<=(elf.radius+8)*(elf.radius+8))return BIO.FOREST;
   const temp = lowN(x, z, 0, 0), moist = lowN(x, z, 777, 3210);
   if (temp < 0.34) return BIO.SNOWY;
   if (temp > 0.66) { if (moist < 0.30) return BIO.MESA; if (moist < 0.55) return BIO.DESERT; return BIO.PLAINS; }
@@ -127,7 +131,7 @@ function biomeAt(x, z) {
 }
 function naturalTreeSpecAt(x, z) {
   x |= 0; z |= 0;
-  if (x < 3 || z < 3 || x >= WX - 3 || z >= WX - 3) return null;
+  if (x < WORLD_MIN + 3 || z < WORLD_MIN + 3 || x > WORLD_MAX - 3 || z > WORLD_MAX - 3) return null;
   const biome = biomeAt(x, z);
   const treeThresh = biome === BIO.FOREST ? 0.978 : (biome === BIO.PLAINS || biome === BIO.SWAMP) ? 0.992 : (biome === BIO.SNOWY ? 0.987 : 1.1);
   if (hash2(x * 5 + 1, z * 5 + 7) <= treeThresh) return null;
@@ -888,7 +892,7 @@ function buildSkyportBlocks(setBlock) {
 
 function generate() {
   // --- terrain (biome math identical to the client; cave ore seams are authored later) ---
-  for (let x = 0; x < WX; x++) for (let z = 0; z < WX; z++) {
+  for (let x = WORLD_MIN; x <= WORLD_MAX; x++) for (let z = WORLD_MIN; z <= WORLD_MAX; z++) {
     const biome = biomeAt(x, z), h = terrainHeight(x, z);
     for (let y = 0; y <= h; y++) {
       let id;
@@ -907,7 +911,7 @@ function generate() {
     for (let y = h + 1; y <= SEA; y++) setB(x, y, z, (biome === BIO.SNOWY && y === SEA) ? B.ICE : B.WATER);
   }
   // --- vegetation: biome-varied trees + desert cactus (same hashes as the client) ---
-  for (let x = 3; x < WX - 3; x++) for (let z = 3; z < WX - 3; z++) {
+  for (let x = WORLD_MIN + 3; x <= WORLD_MAX - 3; x++) for (let z = WORLD_MIN + 3; z <= WORLD_MAX - 3; z++) {
     const biome = biomeAt(x, z);
     const treeThresh = biome === BIO.FOREST ? 0.978 : (biome === BIO.PLAINS || biome === BIO.SWAMP) ? 0.992 : (biome === BIO.SNOWY ? 0.987 : 1.1);
     if (hash2(x * 5 + 1, z * 5 + 7) > treeThresh) {
@@ -929,22 +933,15 @@ function generate() {
   buildAncientCities(setB, getB);
   buildTreasureCaches(setB);
   DRAGON_SHRINE.build(setB,B,terrainHeight);
-  buildBoundaryWall();
+  ELF_REALM.build(setB,B,terrainHeight,WH);
   buildTown();
 }
 function isLavaBorderLand(x, z) {
-  return x < LAVA_BORDER_WIDTH || z < LAVA_BORDER_WIDTH || x >= WX - LAVA_BORDER_WIDTH || z >= WX - LAVA_BORDER_WIDTH;
+  return x < WORLD_MIN + LAVA_BORDER_WIDTH || z < WORLD_MIN + LAVA_BORDER_WIDTH || x > WORLD_MAX - LAVA_BORDER_WIDTH || z > WORLD_MAX - LAVA_BORDER_WIDTH;
 }
-function buildBoundaryWall() {
-  const near = LAVA_BORDER_WIDTH - 1, far = WX - LAVA_BORDER_WIDTH;
-  for (let n = near; n <= far; n++) {
-    for (let y = 1; y <= BORDER_WALL_TOP; y++) {
-      setB(near, y, n, B.GLASS);
-      setB(far, y, n, B.GLASS);
-      setB(n, y, near, B.GLASS);
-      setB(n, y, far, B.GLASS);
-    }
-  }
+function isElfRealmLand(x,z,pad=0){
+  const s=ELF_REALM.site;
+  return Math.hypot(x-s.x,z-s.z)<=s.radius+pad;
 }
 
 function buildGuildHallBase(setBlock = setB) {
@@ -1155,14 +1152,14 @@ function buildTown() {
 // y the feet should stand at, or -1 (used by mob AI and gate placement)
 function standHeight(x, z, fromY) {
   const bx = Math.floor(x), bz = Math.floor(z);
-  if (bx < 0 || bx >= WX || bz < 0 || bz >= WX) return -1;
+  if (bx < WORLD_MIN || bx > WORLD_MAX || bz < WORLD_MIN || bz > WORLD_MAX) return -1;
   for (let y = Math.min(WH - 2, Math.floor(fromY) + 1); y >= 1; y--)
     if (isSolid(getB(bx, y, bz))) return y + 1;
   return -1;
 }
 
 function createWorld() {
-  const grid = new DimensionGrid({ kind: 'overworld', id: 'global', width: WX, height: WH, depth: WX, empty: B.AIR, outside: B.AIR });
+  const grid = new DimensionGrid({ kind: 'overworld', id: 'global', width: WORLD_SPAN, height: WH, depth: WORLD_SPAN, originX: WORLD_MIN, originZ: WORLD_MIN, empty: B.AIR, outside: B.AIR });
   const buf = grid.data;
   const getLocal = (x, y, z) => grid.getB(x, y, z);
   const setLocal = (x, y, z, v) => grid.setB(x, y, z, v);
@@ -1272,7 +1269,7 @@ function createWorld() {
   };
   const generateLocal = () => {
     buf.fill(B.AIR);
-    for (let x = 0; x < WX; x++) for (let z = 0; z < WX; z++) {
+    for (let x = WORLD_MIN; x <= WORLD_MAX; x++) for (let z = WORLD_MIN; z <= WORLD_MAX; z++) {
       const biome = biomeAt(x, z), h = terrainHeight(x, z);
       for (let y = 0; y <= h; y++) {
         let id;
@@ -1290,7 +1287,7 @@ function createWorld() {
       }
       for (let y = h + 1; y <= SEA; y++) setLocal(x, y, z, (biome === BIO.SNOWY && y === SEA) ? B.ICE : B.WATER);
     }
-    for (let x = 3; x < WX - 3; x++) for (let z = 3; z < WX - 3; z++) {
+    for (let x = WORLD_MIN + 3; x <= WORLD_MAX - 3; x++) for (let z = WORLD_MIN + 3; z <= WORLD_MAX - 3; z++) {
       const biome = biomeAt(x, z);
       const treeThresh = biome === BIO.FOREST ? 0.978 : (biome === BIO.PLAINS || biome === BIO.SWAMP) ? 0.992 : (biome === BIO.SNOWY ? 0.987 : 1.1);
       if (hash2(x * 5 + 1, z * 5 + 7) > treeThresh) {
@@ -1315,24 +1312,12 @@ function createWorld() {
     buildAncientCities(setLocal, getLocal);
     buildTreasureCaches(setLocal);
     DRAGON_SHRINE.build(setLocal,B,terrainHeight);
-    buildBoundaryWallLocal();
+    ELF_REALM.build(setLocal,B,terrainHeight,WH);
     buildTownLocal();
-  };
-  const isLavaBorderLandLocal = (x, z) => x < LAVA_BORDER_WIDTH || z < LAVA_BORDER_WIDTH || x >= WX - LAVA_BORDER_WIDTH || z >= WX - LAVA_BORDER_WIDTH;
-  const buildBoundaryWallLocal = () => {
-    const near = LAVA_BORDER_WIDTH - 1, far = WX - LAVA_BORDER_WIDTH;
-    for (let n = near; n <= far; n++) {
-      for (let y = 1; y <= BORDER_WALL_TOP; y++) {
-        setLocal(near, y, n, B.GLASS);
-        setLocal(far, y, n, B.GLASS);
-        setLocal(n, y, near, B.GLASS);
-        setLocal(n, y, far, B.GLASS);
-      }
-    }
   };
   const standHeightLocal = (x, z, fromY) => {
     const bx = Math.floor(x), bz = Math.floor(z);
-    if (bx < 0 || bx >= WX || bz < 0 || bz >= WX) return -1;
+    if (bx < WORLD_MIN || bx > WORLD_MAX || bz < WORLD_MIN || bz > WORLD_MAX) return -1;
     for (let y = Math.min(WH - 2, Math.floor(fromY) + 1); y >= 1; y--)
       if (isSolid(getLocal(bx, y, bz))) return y + 1;
     return -1;
@@ -1344,9 +1329,9 @@ function createWorld() {
 }
 
 module.exports = {
-  WX, WH, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, TRAINING_MEADOW_TOWN_PORTAL, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
+  WX, WH, WORLD_MIN, WORLD_MAX, WORLD_SPAN, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, TRAINING_MEADOW_TOWN_PORTAL, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID, ELF_REALM,
   townPos, townBlockPos,
-  generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
+  generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, isElfRealmLand, createWorld, worldGrid,
   biomeAt, naturalTreeSpecAt, naturalTreeForBlock, fantasyStructureSpecs, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
   ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, trainingMeadowTownPortalPoint, buildTrainingMeadow,

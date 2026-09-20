@@ -456,6 +456,24 @@ test('overworld joins keep a returning position unless another player occupies i
   assert.ok(Math.hypot(separated[0] - clear[0], separated[2] - clear[2]) >= 1.35, 'the next join receives nearby personal space');
 });
 
+test('the frontier opens only after a Gate clear and preserves unlocked return positions', () => {
+  const room = makeRoom(), client = makeClient('frontier_hunter');
+  const { prof } = seedPlayer(room, client, { x: 986.5, y: 16, z: 500.5 });
+  const player = room.state.players.get(client.sessionId);
+  room.handleMove(client, { x: 987.7, y: 16, z: 500.5, yaw: 0 });
+  assert.equal(player.x <= W.WX - W.LAVA_BORDER_WIDTH - 1.35, true, 'uncleared players stay inside the old boundary');
+  assert.deepEqual(room.openOverworldPlayerSpawn([1020.5, 16, 500.5], client.sessionId), [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
+
+  prof.highestGateRankCleared = 0;
+  player.x = 986.5;
+  room.handleMove(client, { x: 987.7, y: 16, z: 500.5, yaw: 0 });
+  assert.equal(player.x > W.WX - W.LAVA_BORDER_WIDTH - 1.35, true, 'a cleared player may cross the old boundary');
+  const restored = room.openOverworldPlayerSpawn([1020.5, 16, 500.5], client.sessionId, true);
+  assert.equal(Math.abs(restored[0] - 1020.5) < .05, true, 'unlocked frontier positions survive reconnects');
+  const saved = sanitizeProfile({ ...defaultProfile('Explorer'), pos: [-30.5, 20, 1020.5], highestGateRankCleared: 0 });
+  assert.deepEqual(saved.pos, [-30.5, 20, 1020.5], 'frontier coordinates survive profile sanitization');
+});
+
 test('dungeon party spawns use distinct safe entrance positions', () => {
   const room = makeDungeonRoom();
   const layout = D.generateDungeon(0, 0x5eed1234, 'abandoned_mine');
@@ -9629,6 +9647,8 @@ test('land claim persistence keeps large-world claims and permission lists', () 
       permissions: { ally_token_123: true, blocked_token_123: false },
     },
     '1000,875': { owner: 'owner_token_123' },
+    '-30,875': { owner: 'owner_token_123' },
+    '1064,875': { owner: 'owner_token_123' },
   });
 
   assert.equal(cleaned['900,875'].owner, 'owner_token_123');
@@ -9637,7 +9657,9 @@ test('land claim persistence keeps large-world claims and permission lists', () 
   assert.deepEqual(cleaned['900,875'].allowed, ['friend_token_123']);
   assert.equal(cleaned['901,875'].lastVisitedAt, 1);
   assert.deepEqual(cleaned['901,875'].allowed, ['ally_token_123']);
-  assert.equal(cleaned['1000,875'], undefined);
+  assert.equal(cleaned['1000,875'].owner, 'owner_token_123');
+  assert.equal(cleaned['-30,875'].owner, 'owner_token_123');
+  assert.equal(cleaned['1064,875'], undefined);
 });
 
 test('farming tills plants grows and harvests through server transactions', () => {
@@ -10426,7 +10448,7 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
     onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0,
   });
   assert.deepEqual(defaultProfile('New').pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
-  assert.deepEqual(sanitizeProfile({ name: 'Bad Spawn', pos: [99999, -100, 99999] }).pos, [W.WX - 1, 1, W.WX - 1]);
+  assert.deepEqual(sanitizeProfile({ name: 'Bad Spawn', pos: [99999, -100, 99999] }).pos, [W.WORLD_MAX, 1, W.WORLD_MAX]);
   assert.deepEqual(sanitizeProfile({ name: 'Missing Spawn', pos: ['nope'] }).pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
   const legacy = sanitizeProfile({
     name: 'Legacy',
@@ -11967,9 +11989,26 @@ test('authoritative room world generates biome blocks', () => {
 
   assert.notEqual(w.getB(0, 13, 0), W.B.LAVA, 'the outer terrain is no longer a lava sea');
   for (const [x, z] of [[11, 500], [988, 500], [500, 11], [500, 988]]) {
-    assert.equal(w.getB(x, 30, z), W.B.GLASS, 'the playable perimeter is a see-through wall');
-    assert.equal(w.getB(x, 62, z), W.B.GLASS, 'the wall reaches the build ceiling');
-    assert.equal(w.isSolid(w.getB(x, 30, z)), true, 'the boundary wall blocks movement');
+    assert.notEqual(w.getB(x, 30, z), W.B.GLASS, 'the old shared glass wall is gone');
+    assert.notEqual(w.getB(x, 62, z), W.B.GLASS, 'the frontier is not blocked by saved world geometry');
+  }
+  assert.equal(w.standHeight(-30, 500, 62) > 1, true, 'the western frontier has terrain');
+  assert.equal(w.standHeight(1030, 500, 62) > 1, true, 'the eastern frontier has terrain');
+  assert.equal(w.standHeight(500, -30, 62) > 1, true, 'the northern frontier has terrain');
+  assert.equal(w.standHeight(500, 1030, 62) > 1, true, 'the southern frontier has terrain');
+  const elf = W.ELF_REALM.site;
+  assert.equal(W.biomeAt(elf.x, elf.z), W.BIO.FOREST, 'Elaria has a forest climate');
+  assert.equal(W.isElfRealmLand(elf.x, elf.z), true, 'Elaria is a protected realm landmark');
+  assert.equal(w.getB(elf.x + 4, elf.ground + 5, elf.z), W.B.HEARTWOOD, 'the living hall uses its elven texture block');
+  assert.equal(w.getB(elf.x + 4, elf.ground + 15, elf.z - 5), W.B.STARLEAF, 'the living hall crown uses starleaf');
+  assert.equal(w.getB(elf.x + 12, elf.ground, elf.z - 11), W.B.HEARTWOOD, 'elven pavilion floors use heartwood');
+  assert.equal(w.getB(elf.x + 12, elf.ground + 6, elf.z - 11), W.B.ELVEN_GLASS, 'elven pavilion roofs use crystal glass');
+  assert.equal(w.getB(elf.x + 16, elf.ground, elf.z), W.B.WATER, 'the moonwell is built in the grove');
+  for (let x = elf.entranceX; x <= elf.x - 3; x++) {
+    const start = W.terrainHeight(elf.entranceX, elf.z);
+    const top = Math.round(start + (elf.ground - start) * Math.min(1, (x - elf.entranceX) / 24));
+    assert.notEqual(w.getB(x, top, elf.z), W.B.AIR, 'the eastern approach has a continuous floor');
+    assert.equal(w.getB(x, top + 1, elf.z), W.B.AIR, 'the eastern approach has headroom');
   }
   assert.equal(w.getB(15, 21, 15), W.B.SNOW);
   assert.equal(w.getB(15, 13, 495), W.B.ICE);
