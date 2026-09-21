@@ -461,6 +461,10 @@ class GameRoom extends Room {
 
     // ---- per-session bookkeeping (rate limiting, PvP, vitals) ----
     this.lastMoveMsg = new Map();
+    // Short-lived authoritative arrival anchors prevent a movement packet that
+    // was sampled before a server teleport from pulling the player back toward
+    // their old position after the teleport has already been applied.
+    this.authoritativeMoveAnchors = new Map();
     this.worldBountyMoveAt = new Map();
     this.lastAttackMsg = new Map();
     this.rateBuckets = new Map();   // sessionId -> Map(bucket -> {tokens,last}) for handler flood control
@@ -1612,6 +1616,7 @@ class GameRoom extends Room {
     }
     this.lastSaveMsg.delete(client.sessionId);
     this.lastMoveMsg.delete(client.sessionId);
+    if (this.authoritativeMoveAnchors) this.authoritativeMoveAnchors.delete(client.sessionId);
     if (this.worldBountyMoveAt) this.worldBountyMoveAt.delete(client.sessionId);
     this.lastAttackMsg.delete(client.sessionId);
     this.rateBuckets.delete(client.sessionId);
@@ -4764,6 +4769,11 @@ class GameRoom extends Room {
     fresh.z = pos[2];
     fresh.yaw = destination.yaw;
     this.pvel.set(client.sessionId, { x: 0, z: 0 });
+    if (!this.authoritativeMoveAnchors) this.authoritativeMoveAnchors = new Map();
+    this.authoritativeMoveAnchors.set(client.sessionId, {
+      x: fresh.x, y: fresh.y, z: fresh.z, yaw: fresh.yaw,
+      until: Date.now() + 1500,
+    });
     const token = this.tokens.get(client.sessionId);
     const prof = token && this.profiles.get(token);
     if (prof) {
@@ -10260,6 +10270,20 @@ class GameRoom extends Room {
     }
     const nx = clampN(m.x, W.WORLD_MIN, W.WORLD_MAX + 1), ny = clampN(m.y, -20, W.WH + 10), nz = clampN(m.z, W.WORLD_MIN, W.WORLD_MAX + 1);
     const now = Date.now();
+    const arrivalAnchor = this.authoritativeMoveAnchors && this.authoritativeMoveAnchors.get(client.sessionId);
+    if (arrivalAnchor) {
+      if (now >= arrivalAnchor.until) this.authoritativeMoveAnchors.delete(client.sessionId);
+      else if (Math.hypot(nx - arrivalAnchor.x, nz - arrivalAnchor.z) > 4 || Math.abs(ny - arrivalAnchor.y) > 4) {
+        setReplicatedPlayerPose(p, arrivalAnchor.x, arrivalAnchor.y, arrivalAnchor.z, arrivalAnchor.yaw);
+        this.pvel.set(client.sessionId, { x: 0, z: 0 });
+        this.lastMoveMsg.set(client.sessionId, now);
+        client.send('positionCorrection', {
+          x: p.x, y: p.y, z: p.z, yaw: p.yaw,
+          reason: 'authoritative_teleport_settle',
+        });
+        return;
+      } else this.authoritativeMoveAnchors.delete(client.sessionId);
+    }
     const last = this.lastMoveMsg.get(client.sessionId) || now;
     const dt = Math.max(0.05, Math.min(0.5, (now - last) / 1000));
     this.lastMoveMsg.set(client.sessionId, now);
@@ -10306,6 +10330,35 @@ class GameRoom extends Room {
       if (rawDgn) return -1;
       return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, fromY) : -1;
     };
+    // A player can remain connected while generated terrain changes beneath them
+    // (for example, when a road breadcrumb is added during a deployment). The
+    // previous escape allowance only helped clients that already knew to jump or
+    // move into open air; normal movement under a multi-block surface left them
+    // walking inside rock indefinitely. If both the current and requested poses
+    // are buried, lift the player through the same safe-spawn path used on join.
+    if (!rawDgn && buried(p.x, p.y, p.z) && buried(sx, sy, sz)) {
+      const rescue = this.openOverworldPlayerSpawn([p.x, p.y, p.z], client.sessionId, frontierUnlocked);
+      if (Array.isArray(rescue) && rescue.length >= 3 && !buried(rescue[0], rescue[1], rescue[2])) {
+        const yaw = normalizeYaw(m.yaw, p.yaw);
+        setReplicatedPlayerPose(p, rescue[0], rescue[1], rescue[2], yaw);
+        this.pvel.set(client.sessionId, { x: 0, z: 0 });
+        this.moveRejects.delete(client.sessionId);
+        const token = this.tokens.get(client.sessionId);
+        const prof = token && this.profiles.get(token);
+        if (prof) {
+          prof.pos = [p.x, p.y, p.z];
+          this.dirtyPlayers.add(token);
+        }
+        client.send('positionCorrection', {
+          x: p.x, y: p.y, z: p.z, yaw,
+          reason: 'buried_recovery',
+          requested: { x: nx, y: ny, z: nz },
+          attempted: { x: sx, y: sy, z: sz },
+          buriedNow: false,
+        });
+        return;
+      }
+    }
     const townFloorStrict = !activeDgn && this.world && this.isTownProtected(sx, sz);
     // Search from the current foot layer down. The client reports its stepped-up
     // Y itself; scanning higher here would turn low leaves/arches into false floors.

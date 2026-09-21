@@ -2725,8 +2725,12 @@ function frontierWallGroup(min,max){
 }
 const lockedFrontierWalls=frontierWallGroup(LAVA_BORDER_WIDTH+.5,WX-LAVA_BORDER_WIDTH-.5);
 const outerFrontierWalls=frontierWallGroup(WORLD_MIN+LAVA_BORDER_WIDTH+.5,WORLD_MAX-LAVA_BORDER_WIDTH-.5);
+function localFrontierUnlocked(){
+  const auth=globalThis.AUTH_UI;
+  return highestGateRankCleared>=0||!!(auth&&auth.isAdminAccount&&auth.isAdminAccount());
+}
 function syncFrontierBarrier(){
-  lockedFrontierWalls.visible=dim==='overworld'&&highestGateRankCleared<0;
+  lockedFrontierWalls.visible=dim==='overworld'&&!localFrontierUnlocked();
   outerFrontierWalls.visible=dim==='overworld';
   for(const group of [lockedFrontierWalls,outerFrontierWalls]){
     if(!group.visible)continue;
@@ -2766,7 +2770,7 @@ function tickElvenRealm(now=performance.now()){
     elvenMoteGeometry.attributes.position.needsUpdate=true;
     elvenMotes.rotation.y=t*.025;elvenMoteMaterial.opacity=.3+influence*.58;
   }
-  const inside=dim==='overworld'&&highestGateRankCleared>=0&&distance<elvenRealmSite.radius;
+  const inside=dim==='overworld'&&localFrontierUnlocked()&&distance<elvenRealmSite.radius;
   if(inside&&!elvenArrivalInside)sysMsg('<b>Elaria, the Elven Grove</b> — the forest beyond the old border welcomes you.');
   elvenArrivalInside=inside;
 }

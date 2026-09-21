@@ -680,6 +680,13 @@ let nextHungerSuggestionAt=0;
 let nextTreasureMapHintAt=0;
 let nextFirstHandsProtectedHintAt=0;
 let nextLandProtectedHintAt=0;
+function showImmediateBreakDenied(hit,now){
+  if(!hit||now<nextLandProtectedHintAt)return;
+  nextLandProtectedHintAt=now+3500;
+  if(hit.id===B.BEDROCK||hit.id===B.BARRIER)sysMsg('That block is <b>unbreakable</b>.');
+  else if(hit.id===B.WATER||hit.id===B.LAVA)sysMsg('Liquids cannot be mined as blocks.');
+  else if(!BREAK[hit.id])sysMsg('This block cannot be mined.');
+}
 let nextWeatherDiscoveryHintAt=0;
 let lastLandBoundarySig='';
 let lastLandBoundaryTile='';
@@ -3777,13 +3784,17 @@ function tick(now){
         }
       }
     } else {
-      if(mouseL && hit && BREAK[hit.id] && dim==='overworld' && !canBreakHere(hit.x,hit.z,hit.y,hit.id)){
-        if(firstHandsQuestActive() && hit.id===B.LOG && isTownLand(hit.x,hit.z) && now>=nextFirstHandsProtectedHintAt){
+      if(mouseL && hit){
+        if(BREAK[hit.id] && dim==='overworld' && !canBreakHere(hit.x,hit.z,hit.y,hit.id)){
+          if(firstHandsQuestActive() && hit.id===B.LOG && isTownLand(hit.x,hit.z) && now>=nextFirstHandsProtectedHintAt){
           nextFirstHandsProtectedHintAt=now+4500;
           sysMsg('Mara: town trees are protected. Follow the north gate trail and gather logs <b>outside the wall</b>.','minor');
-        } else if(now>=nextLandProtectedHintAt){
-          nextLandProtectedHintAt=now+3500;
-          showLandEditDenied(hit.x,hit.z,'break',hit.y,hit.id);
+          } else if(now>=nextLandProtectedHintAt){
+            nextLandProtectedHintAt=now+3500;
+            showLandEditDenied(hit.x,hit.z,'break',hit.y,hit.id);
+          }
+        } else if(!BREAK[hit.id]){
+          showImmediateBreakDenied(hit,now);
         }
       }
       mining=null; crack.visible=false; crack.userData.st=-1; hideMineUI();

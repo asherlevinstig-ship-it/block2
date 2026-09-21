@@ -219,7 +219,12 @@ function tickLavaBorder(now){
     player.vel.y=Math.max(player.vel.y,-.5);
   }
   const bounds=worldApi.frontierBounds;
-  const unlocked=highestGateRankCleared>=0;
+  // Admins can inspect every generated region regardless of the progression
+  // stored on their player profile. Without this bypass the server teleport
+  // succeeds, then this local clamp immediately places them back inside the
+  // old frontier wall (x/z 986.65).
+  const admin=!!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount());
+  const unlocked=admin||highestGateRankCleared>=0;
   const min=unlocked?bounds.min+bounds.borderWidth+1.35:bounds.borderWidth+1.35;
   const max=unlocked?bounds.max-bounds.borderWidth-1.35:bounds.coreSize-bounds.borderWidth-1.35;
   if(!unlocked&&Math.min(player.pos.x-min,max-player.pos.x,player.pos.z-min,max-player.pos.z)<18&&now-lastFrontierHint>15000){

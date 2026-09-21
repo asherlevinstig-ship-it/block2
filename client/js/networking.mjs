@@ -2917,6 +2917,12 @@ function netAttachRoom(room,name,client){
       const correctionDistance=Math.hypot(correctionDx,correctionDy,correctionDz);
       addMovementCorrectionVisual(correctionDx,correctionDy,correctionDz);
       player.pos.set(+m.x,+m.y,+m.z);
+      if(m.reason==='admin_world_teleport'||m.reason==='authoritative_teleport_settle'){
+        // The frame pump may already have sampled a move at the old border
+        // position. Give the authoritative arrival time to settle before the
+        // client sends another movement packet.
+        NET.lastMove=performance.now()+350;
+      }
       if(player.vel){
         if(correctionDistance>1.5||Math.abs(correctionDy)>.8)player.vel.set(0,0,0);
         else player.vel.multiplyScalar(.55);
@@ -2985,6 +2991,7 @@ function netAttachRoom(room,name,client){
           player.pos.set(+m.x,+m.y,+m.z);
           if(player.vel)player.vel.set(0,0,0);
           if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
+          NET.lastMove=performance.now()+350;
         }
       };
       if(m&&m.returnOverworld&&NETWORK&&NETWORK.returnToPrimary){
@@ -4391,11 +4398,35 @@ function netSendEdit(x,y,z,id){
   if(dim==='overworld') NET.room.send('edit',{x,y,z,id,slot:selected});
   else if(dim==='dungeon' && NET.dgn) NET.room.send('dedit',{x,y,z,id,slot:selected});
 }
+function netEditRejectFeedback(m,x,y,z,id){
+  const reason=String(m&&m.reason||''),breaking=m&&m.requested===B.AIR;
+  if(reason==='town_buffer'||reason==='land_permission'){
+    if(typeof showLandEditDenied==='function')showLandEditDenied(x,z,breaking?'break':'build',y,breaking?id:(m.requested||id));
+    return;
+  }
+  const messages={
+    dungeon_locked:'Dungeon blocks are sealed by the Gate.',
+    frontier_locked:'Clear a <b>Gate dungeon</b> before mining or building beyond the frontier.',
+    world_border:'The world boundary cannot be changed.',
+    elf_realm:'The Elven Grove is protected; its structures cannot be mined.',
+    protected_block:'That block is unbreakable.',
+    invalid_block:'That block cannot be changed.',
+    event_protected:'This block is protected while the world event is active.',
+    chest_permission:'Only the chest owner or a trusted Hunter can break it.',
+    reach:'Move closer to the block and try again.',
+    rate:'You are changing blocks too quickly. Wait a moment and try again.',
+    occupied:'Remove the existing block before placing another one there.',
+    inventory:'You no longer have that block in your inventory.',
+    bounds:'That location is outside the editable world.',
+  };
+  if(messages[reason])sysMsg(messages[reason]);
+  else if(reason)sysMsg(breaking?'That block cannot be broken here.':'You cannot build here.');
+}
 function netEditReject(m){
   SFX.error();
   if(!m) return;
-  if(m.reason==='dungeon_locked') sysMsg('Dungeon blocks are sealed by the Gate.');
   const x=m.x|0, y=m.y|0, z=m.z|0, id=m.id|0;
+  netEditRejectFeedback(m,x,y,z,id);
   if(m.requested && m.requested!==B.AIR && ITEMS[m.requested]) addItem(m.requested, 1);
   if(isLightBlock(getB(x,y,z)) && !isLightBlock(id)) removeTorchMesh(x,y,z);
   removeCropMesh(x,y,z);
@@ -4405,7 +4436,7 @@ function netEditReject(m){
   syncCropMesh(x,y,z,id);
   syncInsulatorMesh(x,y,z,id);
   rebuildAround(x,z);
-  if(dim==='overworld' && typeof landClaimStatusAt==='function' && typeof showLandEditDenied==='function'){
+  if(!m.reason && dim==='overworld' && typeof landClaimStatusAt==='function' && typeof showLandEditDenied==='function'){
     const status=landClaimStatusAt(x,z,y,m.requested||0);
     if(status && status.canEdit===false) showLandEditDenied(x,z,m.requested===B.AIR?'break':'build',y,m.requested||id);
   }

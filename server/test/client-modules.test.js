@@ -39,6 +39,17 @@ test('event feed stays readable during combat and guided HUD presentation',()=>{
   assert.doesNotMatch(styles,/body\.presentation-combat[^\{]*#chatlog\{\s*opacity:\.12/);
 });
 
+test('blocked mining explains client and server rejection reasons',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'../../client/js/frame-loop.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
+  assert.match(frame,/That block is <b>unbreakable<\/b>/);
+  assert.match(frame,/Liquids cannot be mined as blocks/);
+  assert.match(networking,/Move closer to the block and try again/);
+  assert.match(networking,/Clear a <b>Gate dungeon<\/b> before mining or building beyond the frontier/);
+  assert.match(networking,/Only the chest owner or a trusted Hunter can break it/);
+  assert.match(networking,/That block cannot be broken here/);
+});
+
 test('negative-karma bounties render a red world marker and tracked overhead arrow',()=>{
   const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
@@ -2979,8 +2990,12 @@ test('admin world destinations expose server-backed town and elven teleports',()
   assert.match(combat,/NET\.room\.send\('adminWorldTeleport',\{destination\}\)/);
   assert.match(networking,/room\.onMessage\('adminWorldTeleportResult'/);
   assert.match(networking,/NETWORK\.returnToPrimary\(\)\.then\(applyAdminWorldPosition\)/);
+  assert.match(networking,/m\.reason==='admin_world_teleport'\|\|m\.reason==='authoritative_teleport_settle'/);
+  assert.match(networking,/NET\.lastMove=performance\.now\(\)\+350/);
   assert.match(networking,/blockcraft-admin-world-teleport/);
   assert.match(auth,/role === 'school_admin'/);
+  assert.match(combat,/const admin=!!\(AUTH_UI&&AUTH_UI\.isAdminAccount&&AUTH_UI\.isAdminAccount\(\)\);\s*const unlocked=admin\|\|highestGateRankCleared>=0;/, 'admin movement bypasses the client frontier clamp');
+  assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8'),/function localFrontierUnlocked\(\)\{[\s\S]*auth\.isAdminAccount\(\)[\s\S]*lockedFrontierWalls\.visible=dim==='overworld'&&!localFrontierUnlocked\(\)/, 'admin hides the locked inner frontier wall');
 });
 
 test('hosted static clients use the Cloudflare-compatible remote backend path',()=>{

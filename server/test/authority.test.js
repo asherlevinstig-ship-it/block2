@@ -1701,6 +1701,24 @@ test('movement into solid terrain is rejected server-side (anti-noclip)',()=>{
   assert.equal(p.y,gy,'an embedded player can escape to valid air');
 });
 
+test('movement recovers a player buried beneath a newly generated road surface',()=>{
+  const room=makeRoom(),client=makeClient('buried_road_hunter');
+  room.lastMoveMsg=new Map();
+  const crumb=W.roadBreadcrumbSpecs().find(s=>s.x===514&&s.z===341);
+  assert.ok(crumb&&crumb.type==='campfire','reported location remains a generated road camp');
+  for(let x=512;x<=516;x++)for(let z=339;z<=343;z++)for(let y=10;y<=18;y++)room.world.setB(x,y,z,W.B.STONE);
+  seedPlayer(room,client,{x:514.305,y:16,z:341.824});
+  const p=room.state.players.get(client.sessionId);
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+
+  room.handleMove(client,{x:514.4,y:16,z:341.7,yaw:1.302});
+
+  const surface=room.world.standHeight(p.x,p.z,W.WH-2);
+  assert.ok(p.y>=surface,'buried player is lifted onto the current generated surface');
+  assert.equal(W.isSolid(room.world.getB(Math.floor(p.x),Math.floor(p.y+.2),Math.floor(p.z))),false);
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='buried_recovery'),true);
+});
+
 test('movement below valid ground is snapped back to the authoritative floor',()=>{
   const room=makeRoom(),client=makeClient('town_floor_hunter');
   room.lastMoveMsg=new Map();
@@ -1905,6 +1923,10 @@ test('admin world teleport reaches the Town of Beginnings and the Elaria overloo
   assert.equal(p.yaw,Math.PI/2,'arrival faces east toward the elven hall');
   assert.equal(admin.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='admin_world_teleport'),true,'teleport clears stale client movement at the frontier');
   const before=p.x;
+  room.lastMoveMsg.set(admin.sessionId,Date.now()-100);
+  room.handleMove(admin,{x:W.WX-W.LAVA_BORDER_WIDTH-1.35,y:20.002,z:500.5,yaw:0});
+  assert.deepEqual([p.x,p.y,p.z],[ADMIN_WORLD_DESTINATIONS.elven.x,ADMIN_WORLD_DESTINATIONS.elven.y,ADMIN_WORLD_DESTINATIONS.elven.z],'a movement packet sampled at the old border cannot undo the teleport');
+  assert.equal(admin.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='authoritative_teleport_settle'),true,'the stale client is corrected back to the teleport arrival');
   room.lastMoveMsg.set(admin.sessionId,Date.now()-100);
   room.handleMove(admin,{x:before+1,y:p.y,z:p.z,yaw:p.yaw});
   assert.equal(p.x>before,true,'a school admin can move after arriving beyond the locked frontier');
