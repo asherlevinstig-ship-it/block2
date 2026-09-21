@@ -1323,7 +1323,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(sitegroundMailBridge, /function bcm_enqueue_staffflow_mail/);
   assert.match(sitegroundMailBridge, /staffflow_email_queue/);
   assert.match(sitegroundMailBridge, /staffflow_mysql_queue/);
-  assert.match(sitegroundMailBridge, /cron_staffflow_daily_email\.php/);
+  assert.match(sitegroundMailBridge, /cron_staffflow_email_worker\.php/);
+  assert.doesNotMatch(sitegroundMailBridge, /\$worker = __DIR__ \. '\/cron_staffflow_daily_email\.php'/);
   assert.match(sitegroundMailBridge, /function bcm_trigger_mail_worker/);
   assert.match(sitegroundMailBridge, /function bcm_trigger_staffflow_worker/);
   assert.match(sitegroundMailBridge, /blockcraft_curriculum_mail_cron\.php/);

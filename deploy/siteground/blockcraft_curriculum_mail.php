@@ -92,7 +92,10 @@ function bcm_trigger_staffflow_worker(): bool {
     if (!function_exists('exec')) return false;
     if (!defined('STAFFFLOW_CRON_SECRET')) return false;
     $php = defined('BLOCKCRAFT_CURRICULUM_PHP_BINARY') ? (string)BLOCKCRAFT_CURRICULUM_PHP_BINARY : '/usr/local/bin/php';
-    $worker = __DIR__ . '/cron_staffflow_daily_email.php';
+    // The daily job only generates digest rows. Bug reports are already in
+    // staffflow_email_queue, so launch the paced delivery worker that actually
+    // sends pending messages.
+    $worker = __DIR__ . '/cron_staffflow_email_worker.php';
     if (!is_file($worker)) return false;
     $cmd = escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' ' . escapeshellarg((string)STAFFFLOW_CRON_SECRET) . ' >/dev/null 2>&1 &';
     @exec($cmd);
