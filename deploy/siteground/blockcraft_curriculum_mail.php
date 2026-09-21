@@ -21,6 +21,14 @@ function bcm_clean($value, int $max = 5000): string {
     return mb_substr(trim((string)$value), 0, $max);
 }
 
+function bcm_sanitize_bug_report_delivery_text(string $value): string {
+    // Keep the complete origin in Blockcraft's durable report, but do not put
+    // public workers.dev links in outbound email where recipient filtering can
+    // silently quarantine an otherwise valid support message.
+    $value = preg_replace('~https?://(?:[a-z0-9-]+\\.)*workers\\.dev(?:/[^\\s"\'<>]*)?~i', '[Blockcraft web client]', $value) ?? $value;
+    return preg_replace('~(?:[a-z0-9-]+\\.)*workers\\.dev~i', 'Blockcraft web client', $value) ?? $value;
+}
+
 function bcm_html(string $value): string {
     return nl2br(htmlspecialchars($value, ENT_QUOTES, 'UTF-8'));
 }
@@ -189,6 +197,11 @@ $syllabus = bcm_clean($payload['syllabus'] ?? '');
 $notes = bcm_clean($payload['notes'] ?? '');
 $text = bcm_clean($payload['text'] ?? '', 20000);
 $files = is_array($payload['files'] ?? null) ? $payload['files'] : [];
+
+if (str_starts_with($subject, '[Blockcraft] Bug report:')) {
+    $notes = bcm_sanitize_bug_report_delivery_text($notes);
+    $text = bcm_sanitize_bug_report_delivery_text($text);
+}
 
 $fileLines = [];
 foreach ($files as $file) {
