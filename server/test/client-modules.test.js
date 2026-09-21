@@ -6301,3 +6301,17 @@ test('admin grants accept the incubator and ordinary blocks but reject protected
   assert.throws(()=>grant({id:W.B.BARRIER}),/Unknown item/);
   assert.throws(()=>grant({id:9999}),/Unknown item/);
 });
+
+test('Elaria throne room includes royal decor and a seated Elven King',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  assert.match(world,/elvenRoyalInterior\.name='elaria-royal-interior'/);
+  assert.match(world,/function buildElvenRoyalInterior\(\)/);
+  assert.match(world,/const banner=/);
+  assert.match(world,/const planter=/);
+  assert.match(world,/const chandelier=/);
+  assert.match(world,/King Aelarion/);
+  assert.match(world,/title:'King of the Elves'/);
+  assert.match(world,/signature:'elf_king'/);
+  assert.match(world,/static:true,seated:true/);
+  assert.match(world,/if\(v\.seated&&v\.legs\)/);
+});

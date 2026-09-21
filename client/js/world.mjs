@@ -4990,7 +4990,22 @@ function makeVillager(robe, robeDark, hat, profile={}){
     const paperM=voxelMats('#d8c99f','#fff1c5','#a6956c','#756643');
     const roleGoldM=glowVoxelMats('#b9852e','#ffe08a','#725019','#ffd24a',.4);
     const greenM=voxelMats('#487a3f','#79aa5f','#2d5128','#1b3518');
-    if(signature==='miner'){
+    if(signature==='elf_king'){
+      const royalGreenM=glowVoxelMats('#164f43','#2d8269','#0b2d27','#72ffd0',.38);
+      const royalGoldM=glowVoxelMats('#c7952e','#ffe69a','#765018','#ffd76a',.72);
+      const royalCrystalM=glowVoxelMats('#72d7c1','#d9fff4','#278978','#8affdf',.95);
+      signatureCape=addBox(torso,[.66,.92,.08],[0,-.12,-.2],royalGreenM,[.04,0,0]);
+      addBox(signatureCape,[.62,.08,.1],[0,-.43,.01],royalGoldM);
+      addBox(torso,[.7,.13,.36],[0,.29,.01],royalGoldM);
+      addBox(torso,[.12,.58,.05],[0,-.02,.18],royalGoldM);
+      // Long elven ears and a five-point crown make the sovereign readable
+      // from the entrance, even before his nameplate fades in.
+      addBox(head,[.23,.1,.07],[-.34,.02,.02],skinM,[0,0,-.28]);
+      addBox(head,[.23,.1,.07],[.34,.02,.02],skinM,[0,0,.28]);
+      addBox(head,[.66,.08,.64],[0,.34,0],royalGoldM);
+      for(const x of [-.25,-.12,0,.12,.25])addBox(head,[.08,.28+(x===0?.12:0),.08],[x,.49+(x===0?.06:0),0],royalGoldM,[0,0,x*1.2]);
+      signatureGlow=addBox(head,[.13,.13,.13],[0,.72,.04],royalCrystalM,[0,.785,.785]);
+    }else if(signature==='miner'){
       addBox(head,[.58,.08,.58],[0,.31,0],ironM);addBox(head,[.14,.13,.08],[0,.31,.3],roleGoldM);
       addBox(arms[1],[.07,.74,.07],[0,-.64,.05],woodM,[0,0,-.18]);addBox(arms[1],[.42,.09,.09],[-.12,-.92,.05],ironM,[0,0,-.12]);
     }else if(signature==='smith'){
@@ -5226,6 +5241,84 @@ function spawnVillagers(n){
   }
 }
 spawnVillagers(NPC_ROLES.length);
+
+// Elaria's royal interior uses lightweight model props rather than more solid
+// terrain, keeping the ceremonial aisle and spiral stair fully traversable.
+const elvenRoyalInterior=new THREE.Group();
+elvenRoyalInterior.name='elaria-royal-interior';
+scene.add(elvenRoyalInterior);
+function buildElvenRoyalInterior(){
+  const elf=elvenRealmSite,tx=elf.x+4,tz=elf.z,g=elf.ground;
+  const wood=matCol('#5b3520'),darkWood=matCol('#301b16');
+  const green=matCol('#165747','#72ffd0',.2),greenDark=matCol('#0b3029');
+  const gold=matCol('#d3a538','#ffd76a',.5),ivory=matCol('#e8e0bd');
+  const crystal=matCol('#78e0ca','#8affdf',.95),leaf=matCol('#3d8a55','#72ff9c',.18);
+  const add=(geo,mat,x,y,z,ry=0,parent=elvenRoyalInterior)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.y=ry;parent.add(m);return m;};
+
+  // Emerald processional carpet with gold rails leading directly to the throne.
+  add(new THREE.BoxGeometry(10.5,.035,1.8),greenDark,tx-1.25,g+1.025,tz+.5);
+  for(const z of [tz-.43,tz+1.43])add(new THREE.BoxGeometry(10.5,.055,.11),gold,tx-1.25,g+1.055,z);
+  for(let x=tx-6;x<=tx+3;x+=1.5)add(new THREE.BoxGeometry(.09,.065,1.55),green,x,g+1.065,tz+.5);
+
+  const banner=(x,y,z,rotation=0)=>{
+    const root=new THREE.Group();root.position.set(x,y,z);root.rotation.y=rotation;elvenRoyalInterior.add(root);
+    add(new THREE.BoxGeometry(1.45,.08,.08),gold,0,1.85,0,0,root);
+    add(new THREE.BoxGeometry(1.18,2.75,.055),green,0,.45,0,0,root);
+    add(new THREE.BoxGeometry(.12,2.5,.07),gold,0,.5,.035,0,root);
+    const gem=add(new THREE.OctahedronGeometry(.18,0),crystal,0,.55,.08,0,root);gem.rotation.z=Math.PI/4;
+    add(new THREE.ConeGeometry(.59,.55,3),greenDark,0,-1.18,0,Math.PI,root);
+  };
+  banner(tx+5.72,g+4,tz-3.3,-Math.PI/2);banner(tx+5.72,g+4,tz+4.3,-Math.PI/2);
+  banner(tx-.7,g+4,tz-5.65,0);banner(tx-.7,g+4,tz+6.65,Math.PI);
+
+  const planter=(x,z)=>{
+    add(new THREE.CylinderGeometry(.42,.55,.55,6),gold,x,g+1.3,z);
+    add(new THREE.SphereGeometry(.56,8,6),leaf,x,g+1.95,z).scale.set(1,.85,1);
+    for(let i=0;i<3;i++)add(new THREE.OctahedronGeometry(.12+i*.025,0),crystal,x+(i-1)*.28,g+2.24+Math.abs(i-1)*.08,z);
+  };
+  planter(tx-4.7,tz-3.7);planter(tx-4.7,tz+4.7);planter(tx+2.1,tz-5.1);planter(tx+2.1,tz+6.1);
+
+  const chandelier=(x,y,z)=>{
+    const root=new THREE.Group();root.position.set(x,y,z);elvenRoyalInterior.add(root);
+    add(new THREE.CylinderGeometry(.035,.035,2.1,6),darkWood,0,1.05,0,0,root);
+    const ring=add(new THREE.TorusGeometry(.82,.07,5,16),gold,0,0,0,0,root);ring.rotation.x=Math.PI/2;
+    for(let i=0;i<8;i++){
+      const a=i*Math.PI/4,px=Math.cos(a)*.78,pz=Math.sin(a)*.78;
+      add(new THREE.CylinderGeometry(.025,.025,.45,5),gold,px,-.2,pz,0,root);
+      const drop=add(new THREE.OctahedronGeometry(.16,0),crystal,px,-.48,pz,0,root);drop.rotation.y=a;
+    }
+  };
+  chandelier(tx-2,g+7.7,tz+.5);chandelier(tx+2,g+7.7,tz+.5);
+
+  // Council furniture, archive shelves, and observatory instruments dress the
+  // upper rooms without placing collision across the square-spiral stair.
+  add(new THREE.CylinderGeometry(1.45,1.45,.16,12),wood,tx,g+11.18,tz+.5);
+  add(new THREE.CylinderGeometry(.22,.32,.85,8),gold,tx,g+10.68,tz+.5);
+  for(let i=0;i<8;i++){
+    const a=i*Math.PI/4,x=tx+Math.cos(a)*2.25,z=tz+.5+Math.sin(a)*2.25;
+    add(new THREE.BoxGeometry(.65,.72,.65),darkWood,x,g+11.36,z,-a);
+  }
+  for(const z of [tz-4.45,tz+5.45])for(const x of [tx-2,tx,tx+2]){
+    add(new THREE.BoxGeometry(1.45,2.55,.34),darkWood,x,g+12.4,z);
+    for(let shelf=0;shelf<3;shelf++)for(let book=0;book<5;book++){
+      const colours=[green,gold,ivory,crystal];
+      add(new THREE.BoxGeometry(.19,.48+(book%2)*.08,.22),colours[(book+shelf)%colours.length],x-.48+book*.24,g+11.55+shelf*.72,z+(z<tz ? .2 : -.2));
+    }
+  }
+  const orrery=new THREE.Group();orrery.position.set(tx,g+20.35,tz+.5);elvenRoyalInterior.add(orrery);
+  add(new THREE.CylinderGeometry(.55,.72,.18,10),gold,0,0,0,0,orrery);
+  add(new THREE.SphereGeometry(.38,10,8),crystal,0,1.1,0,0,orrery);
+  for(const scale of [1,1.4]){const ring=add(new THREE.TorusGeometry(.62*scale,.035,5,20),gold,0,1.1,0,0,orrery);ring.rotation.set(Math.PI/2.7,scale*.6,0);}
+
+  // King Aelarion sits on the existing heartwood throne, facing the entrance.
+  const visual={signature:'elf_king',skinPair:['#d8ae83','#ad7958'],hair:'#e4d5a8'};
+  const king={...makeVillager('#174f43','#0c2e28',false,visual),role:'elf_king',name:'King Aelarion',shortName:'Aelarion',title:'King of the Elves',
+    personality:'ancient, gracious, fiercely protective of Elaria',line:'Welcome beneath the living crown, traveler. Elaria remembers every oath made beneath these branches.',
+    static:true,seated:true,fixedY:g+2.18,inside:false,wait:0,tx:0,tz:0,speed:0,phase:1.7,home:[tx+3.5,tz+.5],stuck:0};
+  king.grp.position.set(tx+3.5,king.fixedY,tz+.5);king.grp.rotation.y=-Math.PI/2;king.grp.scale.setScalar(1.12);
+  attachNpcNameplate(king,3.0);scene.add(king.grp);villagers.push(king);
+}
+buildElvenRoyalInterior();
 for(const [i,s] of smallDiscoveries.filter(d=>d.type==='traveling_merchant').entries()){
   const v={...makeVillager('#6b4f8a','#44305f',true),role:'traveling_merchant',name:'Road Merchant',shortName:'Merchant',title:'Traveling Trader',line:'Road dust, rare stock, fair prices.',static:true,fixedY:s.y+1,phase:i*.9,inside:false};
   v.grp.position.set(s.x+.5,s.y+1,s.z+.5);v.grp.rotation.y=Math.PI;attachNpcNameplate(v);scene.add(v.grp);villagers.push(v);
@@ -5268,6 +5361,12 @@ function tickVillagers(dt, t){
       for(const arm of v.arms){arm.rotation.x*=k;arm.rotation.z*=k;}
       v.head.rotation.x*=k;if(v.torso){v.torso.rotation.x*=k;v.torso.rotation.z*=k;}
     }
+    if(v.seated&&v.legs){
+      v.legs[0].rotation.x=-1.42;v.legs[1].rotation.x=-1.42;
+      v.legs[0].rotation.z=.04;v.legs[1].rotation.z=-.04;
+      if(v.arms){v.arms[0].rotation.x=-.28;v.arms[1].rotation.x=-.28;v.arms[0].rotation.z=-.14;v.arms[1].rotation.z=.14;}
+      p.y=v.fixedY;
+    }
     if(v.nameplate && v.nameplate.material){
       const d=pd;
       const target=!v.inside && !qOpen && d<8 ? Math.min(.95,(8-d)/2.5) : 0;
@@ -5287,14 +5386,17 @@ function tickVillagers(dt, t){
     if(v.static){
       v.animState='work';
       const work=Math.sin(t*3.1+v.phase),role=v.role||'';
-      if(v.arms&&['miner','smith','mason','cook','farmer'].includes(role)){
+      if(v.seated){
+        v.head.rotation.y=Math.sin(t*.42+v.phase)*.12;
+        if(v.signatureGlow)v.signatureGlow.rotation.y=t*.55;
+      }else if(v.arms&&['miner','smith','mason','cook','farmer'].includes(role)){
         v.arms[1].rotation.x=-.52+work*.34;v.arms[0].rotation.x=-.12-work*.08;
       }else if(v.arms&&['scholar','cartographer','guild_receptionist','social_mentor','job_mentor','worker_tutor'].includes(role)){
         v.arms[0].rotation.x=-.34+work*.06;v.arms[1].rotation.x=-.32-work*.06;v.head.rotation.x=.04+work*.025;
       }else if(v.arms&&['stablemaster','warden','road_warden','skyship_attendant'].includes(role)){
         v.arms[0].rotation.x=-.12+work*.05;v.head.rotation.y+=Math.sin(t*.7+v.phase)*.002;
       }
-      p.y=(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.3+v.phase)*.012;
+      p.y=v.seated?v.fixedY:(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.3+v.phase)*.012;
       continue;
     }   // static NPCs perform role-specific work instead of standing as mannequins
     // indoors at night; step back out at dawn
