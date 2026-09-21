@@ -852,6 +852,12 @@ function currentLocationInfo(){
     const ring=dangerRingAtClient(player.pos.x,player.pos.z), danger=DANGER_RINGS[ring];
     const elf=globalThis.BlockcraftElfRealm&&globalThis.BlockcraftElfRealm.site;
     if(elf&&Math.hypot(player.pos.x-elf.x,player.pos.z-elf.z)<=elf.protectedRadius){
+      const crownDistance=Math.hypot(player.pos.x-(elf.x+4),player.pos.z-elf.z);
+      if(crownDistance<=10){
+        if(player.pos.y<=elf.ground+10)return {cls:'event elven',name:'Crown of Elaria · Throne Hall',meta:'The royal chamber within the living heart-tree'};
+        if(player.pos.y<=elf.ground+20)return {cls:'event elven',name:'Crown of Elaria · Moon Council',meta:'Council gallery and royal archives'};
+        return {cls:'event elven',name:'Crown of Elaria · Canopy Observatory',meta:'High sanctuary among the ancient boughs'};
+      }
       return {cls:'event elven',name:'Elaria, Elven Kingdom',meta:'The protected Elven Grove beyond the eastern frontier'};
     }
     const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===treasure.targetId);

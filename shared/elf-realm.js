@@ -128,7 +128,7 @@
     // upper tiers form a strong silhouette in both first- and third-person views.
     const tx=cx+4,tz=cz;
     for(let y=ground+1;y<=ground+32;y++){
-      const r=y<=ground+8?6:(y<=ground+21?5:4);
+      const r=y<=ground+10?9:(y<=ground+21?8:6);
       for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
         const edge=dx*dx+dz*dz>=Math.max(1,(r-2)*(r-2));
         if(dx*dx+dz*dz<=r*r+(y%3===0?2:0)&&edge)put(tx+dx,y,tz+dz,B.HEARTWOOD);
@@ -258,6 +258,102 @@
       for(let y=ground+19;y>=ground+1;y--)put(wx,y,wz,B.WATER);
       for(const ox of [-1,1])for(let y=ground+1;y<=ground+5;y++)put(wx+ox,y,wz,B.STARLEAF);
     }
+
+    // Hollow the full palace after its exterior is complete. Each tier narrows
+    // with the trunk but keeps at least an eight-block-wide playable chamber.
+    for(let y=ground+1;y<=ground+31;y++){
+      const cavity=y<=ground+10?6:(y<=ground+21?5:4);
+      for(let dx=-cavity;dx<=cavity;dx++)for(let dz=-cavity;dz<=cavity;dz++){
+        if(dx*dx+dz*dz<=cavity*cavity)put(tx+dx,y,tz+dz,B.AIR);
+      }
+    }
+
+    // The ceremonial western doorway preserves a broad sightline from the
+    // arrival road all the way to the throne at the living heart of the tree.
+    for(let x=tx-10;x<=tx-4;x++)for(let y=ground+1;y<=ground+7;y++)for(let z=tz-2;z<=tz+2;z++)put(x,y,z,B.AIR);
+    for(let x=tx-10;x<=tx+4;x++)for(let z=tz-1;z<=tz+1;z++)put(x,ground,z,Math.abs(z-tz)===1?B.MOONSTONE:B.HEARTWOOD);
+
+    // Interior floors align with the exterior terraces so doors and bridges do
+    // not need hidden teleports. The glass inlay also makes the vertical route
+    // legible when looking up through the hollow trunk.
+    const interiorFloor=(y,r)=>{
+      for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++)if(dx*dx+dz*dz<=r*r){
+        const inlay=(Math.abs(dx)===Math.abs(dz)&&Math.abs(dx)<=2)||(!dx&&!dz);
+        put(tx+dx,y,tz+dz,inlay?B.ELVEN_GLASS:B.HEARTWOOD);
+      }
+    };
+    interiorFloor(ground,6);
+    interiorFloor(ground+10,5);
+    interiorFloor(ground+19,4);
+    interiorFloor(ground+27,4);
+
+    // Open cardinal doors from the upper rooms onto their terraces. North and
+    // south meet the tower bridges; east opens toward the waterfalls and grove.
+    for(const floorY of [ground+10,ground+19,ground+27])for(const [dx,dz] of [[0,-1],[0,1],[1,0]]){
+      for(let n=3;n<=10;n++){
+        put(tx+dx*n,floorY,tz+dz*n,B.HEARTWOOD);
+        for(let y=floorY+1;y<=floorY+3;y++)put(tx+dx*n,y,tz+dz*n,B.AIR);
+      }
+    }
+
+    // One continuous square-spiral staircase climbs from the throne hall to the
+    // canopy observatory. Two horizontal treads per rise keep every step within
+    // normal player movement, while a final clearance pass cuts clean stairwells
+    // through each floor.
+    const stairLoop=[];
+    for(let x=-3;x<=3;x++)stairLoop.push([x,-3]);
+    for(let z=-2;z<=3;z++)stairLoop.push([3,z]);
+    for(let x=2;x>=-3;x--)stairLoop.push([x,3]);
+    for(let z=2;z>=-2;z--)stairLoop.push([-3,z]);
+    const stairSteps=[];
+    for(let step=0;step<=55;step++){
+      const [dx,dz]=stairLoop[step%stairLoop.length],y=ground+1+Math.floor(step/2);
+      stairSteps.push({x:tx+dx,y,z:tz+dz});
+      put(tx+dx,y,tz+dz,B.MOONSTONE);
+    }
+    for(const step of stairSteps){put(step.x,step.y+1,step.z,B.AIR);put(step.x,step.y+2,step.z,B.AIR);}
+    for(const floorY of [ground+10,ground+19,ground+27]){
+      put(tx, floorY+1, tz, B.LANTERN);
+      for(const [dx,dz] of [[-2,0],[2,0],[0,-2],[0,2]])put(tx+dx,floorY+1,tz+dz,B.ELVEN_GLASS);
+    }
+
+    // Throne Hall: a moonstone dais, high heartwood throne, crystal wings,
+    // lantern columns, and a clear processional aisle from the western door.
+    for(let x=tx-5;x<=tx+3;x++)put(x,ground,tz,B.MOONSTONE);
+    box(tx+3,ground+1,tz-2,tx+5,ground+1,tz+2,B.MOONSTONE);
+    box(tx+4,ground+2,tz-1,tx+5,ground+5,tz+1,B.HEARTWOOD);
+    put(tx+3,ground+2,tz,B.HEARTWOOD);
+    for(const z of [tz-2,tz+2]){
+      box(tx+5,ground+2,z,tx+5,ground+6,z,B.ELVEN_GLASS);
+      put(tx+5,ground+7,z,B.LANTERN);
+    }
+    for(let z=tz-2;z<=tz+2;z++)put(tx+5,ground+6,z,Math.abs(z-tz)===2?B.STARLEAF:B.MOONSTONE);
+    for(const [x,z] of [[tx-2,tz-5],[tx-2,tz+5],[tx+2,tz-5],[tx+2,tz+5]]){
+      box(x,ground+1,z,x,ground+4,z,B.MOONSTONE);put(x,ground+5,z,B.LANTERN);
+    }
+
+    // Moon Council gallery and royal archive occupy the middle tiers.
+    box(tx-1,ground+11,tz-1,tx+1,ground+11,tz+1,B.TABLE);
+    for(const [dx,dz] of [[-3,0],[3,0],[0,-3],[0,3]])put(tx+dx,ground+11,tz+dz,B.HEARTWOOD);
+    for(const z of [tz-4,tz+4])for(let x=tx-2;x<=tx+2;x+=2){
+      box(x,ground+11,z,x,ground+14,z,B.PLANKS);put(x,ground+15,z,B.ELVEN_GLASS);
+    }
+    box(tx-1,ground+20,tz-1,tx+1,ground+20,tz+1,B.MOONSTONE);
+    put(tx,ground+21,tz,B.ELVEN_GLASS);put(tx,ground+22,tz,B.LANTERN);
+    for(const [dx,dz] of [[-3,-2],[-3,2],[3,-2],[3,2]]){
+      put(tx+dx,ground+20,tz+dz,B.TABLE);put(tx+dx,ground+21,tz+dz,B.LANTERN);
+    }
+
+    // The top tier is a quiet canopy observatory with an open crystal oculus.
+    for(let dx=-3;dx<=3;dx++)for(let dz=-3;dz<=3;dz++)if(dx*dx+dz*dz<=10&&((dx+dz)&1)===0)put(tx+dx,ground+27,tz+dz,B.ELVEN_GLASS);
+    box(tx-1,ground+28,tz-1,tx+1,ground+28,tz+1,B.MOONSTONE);
+    put(tx,ground+29,tz,B.ELVEN_GLASS);put(tx,ground+30,tz,B.LANTERN);
+    for(const [dx,dz] of [[-4,0],[4,0],[0,-4],[0,4]]){
+      put(tx+dx,ground+28,tz+dz,B.MOONSTONE);put(tx+dx,ground+29,tz+dz,B.LANTERN);
+    }
+    // Furnishings and oculus inlays are placed after the stair itself, so reopen
+    // its two-block clearance as the final interior construction operation.
+    for(const step of stairSteps){put(step.x,step.y+1,step.z,B.AIR);put(step.x,step.y+2,step.z,B.AIR);}
 
     // Preserve signature details from the original grove composition.
     put(cx+4,ground+15,cz-5,B.STARLEAF);

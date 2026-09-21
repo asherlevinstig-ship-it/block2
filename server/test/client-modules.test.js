@@ -3007,6 +3007,9 @@ test('Elaria owns its HUD and land identity over tracked wilderness Gates',()=>{
   assert.match(frame,/gate&&Number\.isFinite\(\+gate\.x\)[\s\S]*Math\.hypot\(player\.pos\.x-gate\.x,player\.pos\.z-gate\.z\)<48/,'Gate Approach only displays near the tracked Gate');
   assert.match(world,/kind:'elf_realm'[\s\S]*label:'Elaria, Elven Kingdom'[\s\S]*canEdit:false/,'Elaria is identified as protected realm land rather than available wilderness');
   assert.match(frame,/status\.kind==='elf_realm'[\s\S]*title:'Entering Elaria'/,'crossing into the grove announces the named realm');
+  assert.match(frame,/Crown of Elaria · Throne Hall/,'the hollow palace identifies its throne room');
+  assert.match(frame,/Crown of Elaria · Moon Council/,'the hollow palace identifies its council tier');
+  assert.match(frame,/Crown of Elaria · Canopy Observatory/,'the hollow palace identifies its canopy tier');
 });
 
 test('hosted static clients use the Cloudflare-compatible remote backend path',()=>{

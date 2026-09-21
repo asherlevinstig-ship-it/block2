@@ -12140,6 +12140,25 @@ test('authoritative room world generates biome blocks', () => {
   assert.equal(w.getB(elf.x - 8, elf.ground + 8, elf.z - 12), W.B.MOONSTONE, 'moonstone satellite towers frame the palace');
   assert.equal(w.getB(elf.x + 14, elf.ground + 34, elf.z), W.B.STARLEAF, 'the world-tree crown dominates the Elaria skyline');
   assert.equal(w.getB(elf.x + 11, elf.ground + 8, elf.z - 9), W.B.WATER, 'an elevated waterfall descends from the palace terraces');
+  const crownX=elf.x+4,crownZ=elf.z;
+  assert.equal(w.getB(crownX-8,elf.ground+3,crownZ),W.B.AIR,'the ceremonial entrance opens into the tree');
+  assert.equal(w.getB(crownX,elf.ground+8,crownZ),W.B.AIR,'the palace trunk is hollow at full hall height');
+  assert.equal(w.getB(crownX+4,elf.ground+2,crownZ),W.B.HEARTWOOD,'the throne anchors the east end of the hall');
+  assert.equal(w.getB(crownX,elf.ground+11,crownZ),W.B.TABLE,'the Moon Council has a central table');
+  assert.equal(w.getB(crownX,elf.ground+30,crownZ),W.B.LANTERN,'the canopy observatory has a luminous oculus');
+  const standable=(x,y,z)=>W.isSolid(w.getB(x,y-1,z))&&!W.isSolid(w.getB(x,y,z))&&!W.isSolid(w.getB(x,y+1,z));
+  const start={x:crownX-9,y:elf.ground+1,z:crownZ},queue=[start],seen=new Set([start.x+','+start.y+','+start.z]);
+  for(let qi=0;qi<queue.length;qi++){
+    const p=queue[qi];
+    for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]])for(const dy of [0,1,-1]){
+      const next={x:p.x+dx,y:p.y+dy,z:p.z+dz},key=next.x+','+next.y+','+next.z;
+      if(next.x<crownX-11||next.x>crownX+11||next.z<crownZ-11||next.z>crownZ+11||next.y<elf.ground+1||next.y>elf.ground+32||seen.has(key)||!standable(next.x,next.y,next.z))continue;
+      seen.add(key);queue.push(next);
+    }
+  }
+  for(const floorY of [elf.ground,elf.ground+10,elf.ground+19,elf.ground+27]){
+    assert.equal(queue.some(p=>p.y===floorY+1&&Math.hypot(p.x-crownX,p.z-crownZ)<=5),true,'internal stairs reach palace floor '+floorY);
+  }
   assert.equal(w.getB(elf.x - 14, elf.ground, elf.z), W.B.ELVEN_GLASS, 'the overlook marks the intended establishing viewpoint');
   for (let y = elf.ground + 1; y <= elf.ground + 9; y++) {
     assert.equal(w.getB(elf.x - 14, y, elf.z), W.B.AIR, 'the third-person overlook keeps clear camera headroom');
