@@ -65,10 +65,23 @@ function syncRecallPose(){
 function submitAnswer(index){
   if(!active||answerPending)return;
   if(!NET.on||!NET.room)return sysMsg('Recall answer requires a server connection.');
+  if(!Number.isInteger(index)||index<0||index>=active.answers.length)return;
+  const answerId=active.id,hall=!!(active.questionHall||questionHallOpen),self=NET.room.state&&NET.room.state.players&&NET.room.state.players.get&&NET.room.state.players.get(NET.room.sessionId);
+  const positionDrift=self&&player&&player.pos?Math.hypot(player.pos.x-self.x,player.pos.z-self.z):0;
+  // World-space answers depend on the authoritative pose. If a state patch shows
+  // that pose trailing the local player, leave a short window for the 80 ms move
+  // pump to converge before the answer is checked. Modal Question Hall choices do
+  // not require a position and remain instant.
+  const reconcileDelay=!hall&&!active.fallback&&positionDrift>2?Math.min(900,120+positionDrift*45):0;
+  if(globalThis.BlockcraftTrace)globalThis.BlockcraftTrace('recall.answer.submit',{id:answerId,index,questionHall:hall,fallback:!!active.fallback,positionDrift:Math.round(positionDrift*100)/100,reconcileDelay});
   answerPending=true;syncRecallPose();fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=true);
-  requestTimer=setTimeout(()=>{requestTimer=0;answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Answer confirmation delayed. Try your answer again.');},8000);
-  try{NET.room.send('recallAnswer',{id:active.id,index});}
-  catch(_){finishRequest();answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Could not send answer. Try again after reconnecting.');}
+  requestTimer=setTimeout(()=>{requestTimer=0;answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);feedbackEl.textContent='The server has not confirmed that answer yet. Check your connection, then choose it again.';feedbackEl.className='wrong';sysMsg('Answer confirmation delayed. Try your answer again.');},8000);
+  const send=()=>{
+    if(!active||active.id!==answerId||!answerPending)return;
+    try{syncRecallPose();NET.room.send('recallAnswer',{id:answerId,index});}
+    catch(_){finishRequest();answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Could not send answer. Try again after reconnecting.');}
+  };
+  if(reconcileDelay)setTimeout(send,reconcileDelay);else send();
 }
 function showQuestion(m){
   if(m&&m.questionHall&&!questionHallOpen)return;
@@ -141,7 +154,7 @@ function reject(m){
   finishRequest();
   if(r==='active')sysMsg(questionHallOpen?'Answer or close the current question.':'Run towards the <b>correct answer pillar</b>.');
   else if(r==='rate'){showName('RECALL BUSY · TRY AGAIN SHORTLY');sysMsg('Too many Recall requests. Try again in a moment.');if(questionHallOpen&&!active)queueQuestionHallNext(2200);}
-  else if(r==='position'){answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Run fully inside the correct pillar to answer.');}
+  else if(r==='position'){answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);feedbackEl.textContent='The realm has not received your position inside that answer pillar yet. Step out, then run fully into it again.';feedbackEl.className='wrong';sysMsg('Run fully inside the answer pillar to answer.');}
   else {clearRecall();sysMsg(r==='ruin_claimed'?'You have already deciphered this ruin.':r==='ruin_range'?'Move closer to the ancient ruins.':r==='space_changed'?'Location changed while preparing Recall. Press P to try again.':'Recall is no longer available. Press P for a question.');}
 }
 function answerPillarAtPlayer(question){
@@ -164,7 +177,16 @@ function tick(now=performance.now()){
   if(pillar)submitAnswer(pillar.index);
 }
 function setMastery(value){if(value&&typeof value==='object')masterySummary=value;}
+function answerFromKeyboard(e){
+  if(!active||answerPending||fallbackEl.classList.contains('hidden')||e.ctrlKey||e.altKey||e.metaKey)return;
+  const target=e.target,tag=String(target&&target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='textarea'||tag==='select'||(target&&target.isContentEditable))return;
+  const keys={KeyA:0,Digit1:0,KeyB:1,Digit2:1,KeyC:2,Digit3:2,KeyD:3,Digit4:3},index=keys[e.code];
+  if(!Number.isInteger(index)||index>=active.answers.length)return;
+  e.preventDefault();e.stopPropagation();submitAnswer(index);
+}
 if(closeEl)closeEl.addEventListener('click',closeQuestionHall);
+if(globalThis.addEventListener)globalThis.addEventListener('keydown',answerFromKeyboard,true);
 const api=Object.freeze({start,showQuestion,result,reject,tick,clear:clearRecall,closeQuestionHall,questionHallActive:()=>questionHallOpen,setMastery,get mastery(){return masterySummary;},get active(){return active;},get frozen(){return false;}});
 globalThis.BlockcraftRecall=api;
 export {api};

@@ -12127,7 +12127,8 @@ test('authoritative room world generates biome blocks', () => {
   const elf = W.ELF_REALM.site;
   assert.equal(W.biomeAt(elf.x, elf.z), W.BIO.FOREST, 'Elaria has a forest climate');
   assert.equal(W.isElfRealmLand(elf.x, elf.z), true, 'Elaria is a protected realm landmark');
-  assert.equal(w.getB(elf.x + 4, elf.ground + 5, elf.z), W.B.HEARTWOOD, 'the living hall uses its elven texture block');
+  assert.equal(w.getB(elf.x + 9, elf.ground + 5, elf.z), W.B.HEARTWOOD, 'the great tree uses its elven texture block');
+  assert.equal(w.getB(elf.x + 4, elf.ground + 5, elf.z), W.B.AIR, 'the great tree has a walkable heart chamber');
   assert.equal(w.getB(elf.x + 4, elf.ground + 15, elf.z - 5), W.B.STARLEAF, 'the living hall crown uses starleaf');
   assert.equal(w.getB(elf.x + 12, elf.ground, elf.z - 11), W.B.HEARTWOOD, 'elven pavilion floors use heartwood');
   assert.equal(w.getB(elf.x + 12, elf.ground + 6, elf.z - 11), W.B.ELVEN_GLASS, 'elven pavilion roofs use crystal glass');
@@ -12135,6 +12136,10 @@ test('authoritative room world generates biome blocks', () => {
   assert.equal(w.getB(elf.x - 22, elf.ground + 5, elf.z - 16), W.B.HEARTWOOD, 'an ancient-tree ring gives the grove a distant silhouette');
   assert.equal(w.getB(elf.x - 25, elf.ground + 7, elf.z - 10), W.B.MOONSTONE, 'moonstone waystones mark the outer sanctuary');
   assert.equal(w.getB(elf.x + 22, elf.ground, elf.z), W.B.WATER, 'the moonlit rill carries water into the outer grove');
+  assert.equal(w.getB(elf.x - 3, elf.ground + 17, elf.z), W.B.ELVEN_GLASS, 'the palace has a tall crystal chapel window');
+  assert.equal(w.getB(elf.x - 8, elf.ground + 8, elf.z - 12), W.B.MOONSTONE, 'moonstone satellite towers frame the palace');
+  assert.equal(w.getB(elf.x + 14, elf.ground + 34, elf.z), W.B.STARLEAF, 'the world-tree crown dominates the Elaria skyline');
+  assert.equal(w.getB(elf.x + 11, elf.ground + 8, elf.z - 9), W.B.WATER, 'an elevated waterfall descends from the palace terraces');
   assert.equal(w.getB(elf.x - 14, elf.ground, elf.z), W.B.ELVEN_GLASS, 'the overlook marks the intended establishing viewpoint');
   for (let y = elf.ground + 1; y <= elf.ground + 9; y++) {
     assert.equal(w.getB(elf.x - 14, y, elf.z), W.B.AIR, 'the third-person overlook keeps clear camera headroom');

@@ -597,7 +597,7 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
   assert.match(combat, /title:'Taming Land Portal'/);
   assert.match(combat, /title:'Question Hall Portal'/);
   assert.match(combat, /if\(nearTamingLandPortal\(\)\)\{ enterTamingLand\(\); return; \}/);
-  assert.match(combat, /if\(nearTownQuestionHallPortal\(\)\)\{ if\(typeof enterQuestionRoom==='function'\)enterQuestionRoom\(\); return; \}/);
+  assert.match(combat, /if\(nearTownQuestionHallPortal\(\)\)\{[\s\S]*enterQuestionRoom\(\)[\s\S]*openQuestionHallQuestion\(\)/);
   assert.match(combat, /if\(nearTamingLandExit\(\)\)\{ exitTamingLand\(\); return; \}/);
   assert.match(frame, /if\(dim==='taming_land'\)\{/);
   assert.match(frame, /enterTamingLand:\(\)=>dimensionsApi\.enterTamingLand/);
@@ -2342,7 +2342,7 @@ test('Recall Cast uses the dedicated P practice hotkey',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
-  assert.match(combat,/e\.code==='KeyP'\|\|String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'\)&&!e\.repeat&&gameInput[\s\S]*BlockcraftRecall\.start\(dim==='questions'\?\{source:'question_hall'\}:undefined\);\s*return;/);
+  assert.match(combat,/e\.code==='KeyP'\|\|String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'\)&&!e\.repeat&&gameInput[\s\S]*if\(dim==='questions'\)openQuestionHallQuestion\(\);[\s\S]*else globalThis\.BlockcraftRecall\.start\(\);\s*return;/);
   assert.doesNotMatch(combat,/e\.code==='KeyI'[\s\S]*BlockcraftRecall\.start\(\)/);
   assert.match(html,/<kbd>P<\/kbd><\/div><b>Recall Cast<\/b>/);
   assert.doesNotMatch(html,/id="recallanswers"/);
@@ -2365,7 +2365,7 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(combat,/poseMeditationDummy\(appearanceDummy,0,performance\.now\(\),true\)/);
   assert.match(combat,/applyMeditationCamera\(\)/);
   assert.match(combat,/const baseY=player&&player\.pos\?player\.pos\.y:TOWN\.G\+1/);
-  assert.match(combat,/if\(dim==='questions'\)\{startQuestionHallMeditationPose\(\);releaseGameplayCursor\(\);\}/);
+  assert.match(combat,/function openQuestionHallQuestion\(\)[\s\S]*startQuestionHallMeditationPose\(\);[\s\S]*releaseGameplayCursor\(\);/);
   assert.match(combat,/key:'P',title:'Question Hall',small:'Answer Computer Science questions'/);
   assert.match(combat,/function recoverQuestionHallAfterRecall\(\)/);
   assert.match(combat,/standHeight\(player\.pos\.x,player\.pos\.z,WH-2\)/);
@@ -2996,6 +2996,17 @@ test('admin world destinations expose server-backed town and elven teleports',()
   assert.match(auth,/role === 'school_admin'/);
   assert.match(combat,/const admin=!!\(AUTH_UI&&AUTH_UI\.isAdminAccount&&AUTH_UI\.isAdminAccount\(\)\);\s*const unlocked=admin\|\|highestGateRankCleared>=0;/, 'admin movement bypasses the client frontier clamp');
   assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8'),/function localFrontierUnlocked\(\)\{[\s\S]*auth\.isAdminAccount\(\)[\s\S]*lockedFrontierWalls\.visible=dim==='overworld'&&!localFrontierUnlocked\(\)/, 'admin hides the locked inner frontier wall');
+});
+
+test('Elaria owns its HUD and land identity over tracked wilderness Gates',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const elaria=frame.indexOf("name:'Elaria, Elven Kingdom'");
+  const gateApproach=frame.indexOf("name:'Wilderness Gate Approach'");
+  assert.ok(elaria>=0&&elaria<gateApproach,'the named Elven realm wins before the generic tracked-Gate fallback');
+  assert.match(frame,/gate&&Number\.isFinite\(\+gate\.x\)[\s\S]*Math\.hypot\(player\.pos\.x-gate\.x,player\.pos\.z-gate\.z\)<48/,'Gate Approach only displays near the tracked Gate');
+  assert.match(world,/kind:'elf_realm'[\s\S]*label:'Elaria, Elven Kingdom'[\s\S]*canEdit:false/,'Elaria is identified as protected realm land rather than available wilderness');
+  assert.match(frame,/status\.kind==='elf_realm'[\s\S]*title:'Entering Elaria'/,'crossing into the grove announces the named realm');
 });
 
 test('hosted static clients use the Cloudflare-compatible remote backend path',()=>{
@@ -5351,6 +5362,16 @@ test('knowledge challenge is wired from client to server',()=>{
   assert.match(room,/onMessage\('kcEnd'/);
   assert.match(room,/initKnowledgeChallengeState/);
   assert.match(mixin,/handleKcStart|handleKcAnswer|kcEndShift/);
+});
+
+test('Question Hall opens an answerable question on entry and supports keyboard answers',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  assert.match(combat,/function openQuestionHallQuestion\(\)[\s\S]*BlockcraftRecall\.start\(\{source:'question_hall'\}\)/,'Question Hall owns one reusable question-opening flow');
+  assert.match(combat,/nearTownQuestionHallPortal\(\)[\s\S]*enterQuestionRoom\(\)[\s\S]*openQuestionHallQuestion\(\)/,'entering the portal automatically opens the first question');
+  assert.match(recall,/const keys=\{KeyA:0,Digit1:0,KeyB:1,Digit2:1,KeyC:2,Digit3:2,KeyD:3,Digit4:3\}/,'visible choices support A-D and 1-4');
+  assert.match(recall,/const reconcileDelay=!hall&&!active\.fallback&&positionDrift>2\?Math\.min\(900,120\+positionDrift\*45\):0/,'world-space answers allow a lagging authoritative pose to catch up');
+  assert.match(recall,/feedbackEl\.textContent='The server has not confirmed that answer yet\./,'a delayed answer remains visibly actionable');
 });
 
 test('quest log progression director introduces one system at a time',()=>{

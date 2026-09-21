@@ -3,11 +3,14 @@
   else root.BlockcraftElfRealm=factory();
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
-  const site=Object.freeze({x:1018,z:500,ground:19,name:'Elaria, the Elven Grove',radius:31,protectedRadius:38,entranceX:990});
+  const site=Object.freeze({x:1018,z:500,ground:19,name:'Elaria, the Elven Grove',radius:42,protectedRadius:46,entranceX:990});
 
   function build(setB,B,terrainHeight,height=64){
     const {x:cx,z:cz,ground,radius,entranceX}=site;
     const put=(x,y,z,id)=>{if(y>0&&y<height)setB(x,y,z,id);};
+    const box=(x1,y1,z1,x2,y2,z2,id)=>{
+      for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++)for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++)for(let z=Math.min(z1,z2);z<=Math.max(z1,z2);z++)put(x,y,z,id);
+    };
     const column=(x,z,top,surface=B.GRASS)=>{
       for(let y=1;y<top;y++)put(x,y,z,B.STONE);
       put(x,top,z,surface);
@@ -119,6 +122,148 @@
       for(let dz=-1;dz<=1;dz++)put(x,ground,wellZ+dz,B.WATER);
       if((x-wellX)%5===0){put(x,ground+1,wellZ-2,B.STARLEAF);put(x,ground+1,wellZ+2,B.STARLEAF);}
     }
+
+    // The Crown of Elaria: a monumental palace grown around the ancient tree.
+    // Its west facade is deliberately framed by the arrival overlook, while the
+    // upper tiers form a strong silhouette in both first- and third-person views.
+    const tx=cx+4,tz=cz;
+    for(let y=ground+1;y<=ground+32;y++){
+      const r=y<=ground+8?6:(y<=ground+21?5:4);
+      for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
+        const edge=dx*dx+dz*dz>=Math.max(1,(r-2)*(r-2));
+        if(dx*dx+dz*dz<=r*r+(y%3===0?2:0)&&edge)put(tx+dx,y,tz+dz,B.HEARTWOOD);
+      }
+    }
+
+    // A vaulted, walkable heart chamber and a tall western entrance.
+    for(let y=ground+1;y<=ground+12;y++)for(let dx=-3;dx<=3;dx++)for(let dz=-3;dz<=3;dz++){
+      if(dx*dx+dz*dz<=9)put(tx+dx,y,tz+dz,B.AIR);
+    }
+    for(let x=tx-7;x<=tx-3;x++)for(let y=ground+1;y<=ground+6;y++)for(let z=tz-1;z<=tz+1;z++)put(x,y,z,B.AIR);
+    box(tx-3,ground,tz-3,tx+3,ground,tz+3,B.HEARTWOOD);
+    for(const [dx,dz] of [[-2,-2],[-2,2],[2,-2],[2,2]]){
+      put(tx+dx,ground+1,tz+dz,B.LANTERN);
+      for(let y=ground+2;y<=ground+9;y+=3)put(tx+dx,y,tz+dz,B.ELVEN_GLASS);
+    }
+
+    // Root buttresses anchor the scale of the tree without blocking the main path.
+    for(const [dx,dz,len] of [[-1,-1,11],[-1,1,11],[1,-1,13],[1,1,13],[0,-1,10],[0,1,10]]){
+      for(let n=5;n<=len;n++){
+        const rx=tx+dx*n,rz=tz+dz*n,ry=ground+Math.max(1,5-Math.floor(n/2));
+        put(rx,ry,rz,B.HEARTWOOD);put(rx,ry-1,rz,B.HEARTWOOD);
+      }
+    }
+
+    const platform=(y,r)=>{
+      for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
+        const d=Math.hypot(dx,dz);
+        if(d<=r)put(tx+dx,y,tz+dz,d>r-1.2?B.MOONSTONE:B.HEARTWOOD);
+      }
+      for(let a=0;a<32;a++){
+        const angle=a*Math.PI/16,px=Math.round(tx+Math.cos(angle)*(r+1)),pz=Math.round(tz+Math.sin(angle)*(r+1));
+        put(px,y+1,pz,a%4===0?B.LANTERN:B.ELVEN_GLASS);
+      }
+    };
+    platform(ground+10,9);
+    platform(ground+19,10);
+    platform(ground+27,8);
+
+    // Exterior spiral stairs make every palace tier reachable on foot.
+    let last=null;
+    for(let step=0;step<=81;step++){
+      const y=ground+1+Math.floor(step/3),angle=-Math.PI/2+step*.18,r=8;
+      const sx=Math.round(tx+Math.cos(angle)*r),sz=Math.round(tz+Math.sin(angle)*r);
+      put(sx,y,sz,B.MOONSTONE);
+      put(sx,y+1,sz,B.AIR);put(sx,y+2,sz,B.AIR);
+      const outerX=Math.round(tx+Math.cos(angle)*(r+1)),outerZ=Math.round(tz+Math.sin(angle)*(r+1));
+      put(outerX,y+1,outerZ,step%5===0?B.LANTERN:B.ELVEN_GLASS);
+      if(last){
+        put(Math.round((last.x+sx)/2),Math.min(last.y,y),Math.round((last.z+sz)/2),B.MOONSTONE);
+      }
+      last={x:sx,y,z:sz};
+    }
+
+    // Moonstone-and-crystal chapel facade wrapped into the living trunk.
+    const facadeX=tx-7;
+    for(const dz of [-5,5]){
+      box(facadeX,ground+7,tz+dz,facadeX+2,ground+22,tz+dz,B.MOONSTONE);
+      for(let y=ground+23;y<=ground+28;y++){
+        const inset=Math.floor((y-(ground+23))/2);
+        box(facadeX+inset, y, tz+dz, facadeX+2, y, tz+dz, B.MOONSTONE);
+      }
+      put(facadeX+1,ground+29,tz+dz,B.LANTERN);
+    }
+    for(let y=ground+11;y<=ground+25;y++){
+      const half=Math.max(1,4-Math.floor(Math.abs(y-(ground+17))/3));
+      for(let z=tz-half;z<=tz+half;z++)put(facadeX,y,z,B.ELVEN_GLASS);
+    }
+    for(let z=tz-4;z<=tz+4;z++){
+      put(facadeX,ground+9,z,B.MOONSTONE);
+      put(facadeX,ground+26-Math.floor(Math.abs(z-tz)/2),z,B.MOONSTONE);
+    }
+
+    const tower=(x,z,baseY,h)=>{
+      for(let y=baseY+1;y<=baseY+h;y++)for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++){
+        const wall=Math.abs(dx)===2||Math.abs(dz)===2;
+        if(wall)put(x+dx,y,z+dz,(y%4===0&&(dx===0||dz===0))?B.ELVEN_GLASS:B.MOONSTONE);
+      }
+      box(x-3,baseY+h+1,z-3,x+3,baseY+h+1,z+3,B.HEARTWOOD);
+      for(let layer=0;layer<5;layer++){
+        const r=Math.max(0,3-layer);
+        for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++)put(x+dx,baseY+h+2+layer,z+dz,B.ELVEN_GLASS);
+      }
+      put(x,baseY+h+7,z,B.LANTERN);
+    };
+    tower(tx-14,tz-12,ground,14);
+    tower(tx-14,tz+12,ground,14);
+    tower(tx+9,tz-14,ground+10,12);
+    tower(tx+9,tz+14,ground+10,12);
+
+    const bridge=(x1,z1,x2,z2,y)=>{
+      const steps=Math.max(Math.abs(x2-x1),Math.abs(z2-z1));
+      for(let i=0;i<=steps;i++){
+        const x=Math.round(x1+(x2-x1)*i/steps),z=Math.round(z1+(z2-z1)*i/steps);
+        put(x,y,z,B.HEARTWOOD);
+        const px=Math.abs(z2-z1)>Math.abs(x2-x1)?1:0,pz=px?0:1;
+        put(x+px,y,z+pz,B.HEARTWOOD);put(x-px,y,z-pz,B.HEARTWOOD);
+        if(i%3===0){put(x+px*2,y+1,z+pz*2,B.ELVEN_GLASS);put(x-px*2,y+1,z-pz*2,B.ELVEN_GLASS);}
+        if(i%7===0)put(x,y+2,z,B.LANTERN);
+      }
+    };
+    bridge(tx-8,tz-5,tx-14,tz-12,ground+10);
+    bridge(tx-8,tz+5,tx-14,tz+12,ground+10);
+    bridge(tx+7,tz-7,tx+9,tz-14,ground+19);
+    bridge(tx+7,tz+7,tx+9,tz+14,ground+19);
+    for(const [x,z,doorZ,baseY] of [
+      [tx-14,tz-12,tz-10,ground+10],[tx-14,tz+12,tz+10,ground+10],
+      [tx+9,tz-14,tz-12,ground+19],[tx+9,tz+14,tz+12,ground+19],
+    ])for(let dx=-1;dx<=1;dx++)for(let y=baseY+1;y<=baseY+3;y++)put(x+dx,y,doorZ,B.AIR);
+
+    // A vast layered crown, branch balconies, hanging lights, and twin falls.
+    for(let dx=-17;dx<=17;dx++)for(let dz=-17;dz<=17;dz++)for(let dy=-4;dy<=4;dy++){
+      const organic=(dx*dx+dz*dz)/255+(dy*dy)/18;
+      if(organic<=1.05&&((dx*13+dz*7+dy*5)%11!==0))put(tx+dx,ground+34+dy,tz+dz,B.STARLEAF);
+    }
+    for(const [dx,dz,len] of [[-1,0,18],[1,0,16],[0,-1,18],[0,1,18],[-1,-1,14],[-1,1,14]]){
+      for(let n=4;n<=len;n++){
+        const by=ground+31-Math.floor(n/7);
+        put(tx+dx*n,by,tz+dz*n,B.HEARTWOOD);
+        if(n<len-2)put(tx+dx*n,by+1,tz+dz*n,B.HEARTWOOD);
+      }
+    }
+    for(const [dx,dz,drop] of [[-12,-8,8],[-14,7,11],[-4,-16,7],[6,15,10],[13,-5,9],[14,7,6]]){
+      for(let n=0;n<drop;n++)put(tx+dx,ground+31-n,tz+dz,n===drop-1?B.LANTERN:B.HEARTWOOD);
+    }
+    for(const [wx,wz] of [[tx+7,tz-9],[tx+7,tz+9]]){
+      for(let y=ground+19;y>=ground+1;y--)put(wx,y,wz,B.WATER);
+      for(const ox of [-1,1])for(let y=ground+1;y<=ground+5;y++)put(wx+ox,y,wz,B.STARLEAF);
+    }
+
+    // Preserve signature details from the original grove composition.
+    put(cx+4,ground+15,cz-5,B.STARLEAF);
+    put(cx+12,ground,cz-11,B.HEARTWOOD);
+    put(cx+12,ground+6,cz-11,B.ELVEN_GLASS);
+    put(cx+16,ground,cz,B.WATER);
   }
 
   return {site,build};

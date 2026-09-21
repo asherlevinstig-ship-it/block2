@@ -5102,6 +5102,13 @@ function startQuestionHallMeditationPose(){
   ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,1.35,0x7dd3fc,.5);
   return true;
 }
+function openQuestionHallQuestion(){
+  if(dim!=='questions'||!globalThis.BlockcraftRecall)return false;
+  startQuestionHallMeditationPose();
+  releaseGameplayCursor();
+  globalThis.BlockcraftRecall.start({source:'question_hall'});
+  return true;
+}
 function recoverQuestionHallAfterRecall(){
   if(dim!=='questions'||!player)return false;
   const y=typeof standHeight==='function'?standHeight(player.pos.x,player.pos.z,WH-2):-1;
@@ -6365,8 +6372,8 @@ addEventListener('keydown', e=>{
   if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
   if((e.code==='KeyP'||String(e.key||'').toLowerCase()==='p')&&!e.repeat&&gameInput){
     e.preventDefault();
-    if(dim==='questions'){startQuestionHallMeditationPose();releaseGameplayCursor();}
-    globalThis.BlockcraftRecall.start(dim==='questions'?{source:'question_hall'}:undefined);
+    if(dim==='questions')openQuestionHallQuestion();
+    else globalThis.BlockcraftRecall.start();
     return;
   }
   if(e.code==='KeyE'){
@@ -7444,7 +7451,10 @@ function secondaryAction(){
   if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<=6){ enterDungeon(); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
   if(nearTamingLandPortal()){ enterTamingLand(); return; }
-  if(nearTownQuestionHallPortal()){ if(typeof enterQuestionRoom==='function')enterQuestionRoom(); return; }
+  if(nearTownQuestionHallPortal()){
+    if(typeof enterQuestionRoom==='function'&&enterQuestionRoom())setTimeout(()=>{if(dim==='questions')openQuestionHallQuestion();},350);
+    return;
+  }
   if(nearFishingLakePortal()){ if(typeof enterFishingLake==='function')enterFishingLake(); return; }
   if(nearTamingLandExit()){ exitTamingLand(); return; }
   if(nearFishingLakeExit()){ if(typeof exitFishingLake==='function')exitFishingLake(); return; }

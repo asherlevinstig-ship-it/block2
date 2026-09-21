@@ -3593,6 +3593,7 @@ function explainBaseSetupPlacement(x,z,y,blockId){
 function landClaimStatusAt(x,z,y=player?player.pos.y:0,blockId=0){
   x|=0; z|=0; y|=0; blockId|=0;
   if(isLavaBorderLand(x,z)) return {kind:'border',x,z,label:'World border',canEdit:false,detail:'The world border cannot be claimed or edited.'};
+  if(isElfRealmLand(x,z)) return {kind:'elf_realm',x,z,label:'Elaria, Elven Kingdom',canEdit:false,detail:'The Elven Kingdom is a protected sanctuary and cannot be claimed or edited.'};
   if(isTownLand(x,z)){
     const decor=guildFloorInteriorForLocal(x,y,z) && (!blockId || GUILD_DECOR_BLOCKS_C.has(blockId));
     return {kind:'town',x,z,label:'Town protected',canEdit:decor,detail:decor?'Your guild hall floor allows decor placement here.':'Town land is protected. Only fellowship decor can be placed inside your claimed guild hall floor.'};

@@ -790,6 +790,7 @@ function landBoundaryToastText(status){
   if(status.kind==='shared') return {title:'Entering '+(landClaimToastName(status)||'Shared Land'), meta:(status.claim&&status.claim.name?status.claim.name:'Owner')+' trusts you here', cls:'shared'};
   if(status.kind==='other') return {title:'Entering '+(landClaimToastName(status)||'Claimed Land'), meta:'Protected claim - permission required', cls:'other'};
   if(status.kind==='town') return {title:'Entering Town Land', meta:'Protected by the Town of Beginnings', cls:'town'};
+  if(status.kind==='elf_realm') return {title:'Entering Elaria', meta:'Protected Elven Kingdom sanctuary', cls:'shared'};
   if(status.kind==='border') return {title:'World Border', meta:'Protected edge of the realm', cls:'other'};
   return null;
 }
@@ -849,6 +850,10 @@ function currentLocationInfo(){
   }
   if(dim==='overworld'){
     const ring=dangerRingAtClient(player.pos.x,player.pos.z), danger=DANGER_RINGS[ring];
+    const elf=globalThis.BlockcraftElfRealm&&globalThis.BlockcraftElfRealm.site;
+    if(elf&&Math.hypot(player.pos.x-elf.x,player.pos.z-elf.z)<=elf.protectedRadius){
+      return {cls:'event elven',name:'Elaria, Elven Kingdom',meta:'The protected Elven Grove beyond the eastern frontier'};
+    }
     const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===treasure.targetId);
     if(treasureSite&&Math.hypot(player.pos.x-treasureSite.x,player.pos.z-treasureSite.z)<(treasureSite.radius||8)+5)return {cls:'event',name:'Treasure Clue',meta:'Search this landmark and press G to investigate'};
     const ancient=(ancientCities||[]).find(s=>Math.hypot(player.pos.x-s.x,player.pos.z-s.z)<(s.radius||24));
@@ -900,7 +905,7 @@ function currentLocationInfo(){
   if(isTownLand(Math.floor(player.pos.x), Math.floor(player.pos.z))){
     return { cls:'town', name:'Town of Beginnings', meta:'Safe town - quests, market, tavern, shards' };
   }
-  if(gate){
+  if(gate&&Number.isFinite(+gate.x)&&Number.isFinite(+gate.z)&&Math.hypot(player.pos.x-gate.x,player.pos.z-gate.z)<48){
     const ring=dangerRingAtClient(player.pos.x,player.pos.z);
     return { cls:'wild danger'+ring, name:'Wilderness Gate Approach', meta:RANKS[gate.rank].n+'-Rank '+gateKindLabel(gate.kind)+' - '+DANGER_RINGS[ring].name };
   }
