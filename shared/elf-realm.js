@@ -311,7 +311,7 @@
       stairSteps.push({x:tx+dx,y,z:tz+dz});
       put(tx+dx,y,tz+dz,B.MOONSTONE);
     }
-    for(const step of stairSteps){put(step.x,step.y+1,step.z,B.AIR);put(step.x,step.y+2,step.z,B.AIR);}
+    for(const step of stairSteps)for(let rise=1;rise<=3;rise++)put(step.x,step.y+rise,step.z,B.AIR);
     for(const floorY of [ground+10,ground+19,ground+27]){
       put(tx, floorY+1, tz, B.LANTERN);
       for(const [dx,dz] of [[-2,0],[2,0],[0,-2],[0,2]])put(tx+dx,floorY+1,tz+dz,B.ELVEN_GLASS);
@@ -351,9 +351,17 @@
     for(const [dx,dz] of [[-4,0],[4,0],[0,-4],[0,4]]){
       put(tx+dx,ground+28,tz+dz,B.MOONSTONE);put(tx+dx,ground+29,tz+dz,B.LANTERN);
     }
-    // Furnishings and oculus inlays are placed after the stair itself, so reopen
-    // its two-block clearance as the final interior construction operation.
-    for(const step of stairSteps){put(step.x,step.y+1,step.z,B.AIR);put(step.x,step.y+2,step.z,B.AIR);}
+    // Furnishings and oculus inlays are placed after the stair itself. Cut a
+    // generous landing aperture through every upper floor, then rebuild the
+    // treads and preserve three full blocks of headroom over each one. This is
+    // intentionally roomier than the player's collision capsule so diagonal
+    // movement cannot catch on a ceiling edge while entering the next floor.
+    for(const floorY of [ground+10,ground+19,ground+27])for(const step of stairSteps){
+      if(step.y<floorY-3||step.y>floorY+1)continue;
+      for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++)for(let y=floorY;y<=floorY+3;y++)put(step.x+ox,y,step.z+oz,B.AIR);
+    }
+    for(const step of stairSteps)put(step.x,step.y,step.z,B.MOONSTONE);
+    for(const step of stairSteps)for(let rise=1;rise<=3;rise++)put(step.x,step.y+rise,step.z,B.AIR);
 
     // Preserve signature details from the original grove composition.
     put(cx+4,ground+15,cz-5,B.STARLEAF);

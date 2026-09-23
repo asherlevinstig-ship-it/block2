@@ -66,7 +66,7 @@ const {
   progressionGateRank,
 } = require('../rooms/dungeon-handoff');
 const { ADMISSION_TTL_MS, issueDungeonAdmission, peekDungeonAdmission, claimDungeonAdmission, clearDungeonAdmissions } = require('../rooms/dungeon-admission');
-const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance, ADMIN_WORLD_DESTINATIONS } = require('../rooms/GameRoom');
+const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance, ADMIN_WORLD_DESTINATIONS, safeOverworldJoinPosition, exactOverworldStandPosition } = require('../rooms/GameRoom');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
 const { Gate, Mob } = require('../schema');
 const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, TOOL_INFO, ARMOR_INFO, DEITY_LEVEL, DEITY_POWER_IDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
@@ -1930,6 +1930,17 @@ test('admin world teleport reaches the Town of Beginnings and the Elaria overloo
   room.lastMoveMsg.set(admin.sessionId,Date.now()-100);
   room.handleMove(admin,{x:before+1,y:p.y,z:p.z,yaw:p.yaw});
   assert.equal(p.x>before,true,'a school admin can move after arriving beyond the locked frontier');
+});
+
+test('server shutdown captures each live overworld position before persistence flush',()=>{
+  const room=makeRoom(),client=makeClient('restart_position');
+  const {token,prof}=seedPlayer(room,client,{x:1024.3,y:27,z:503.555});
+  room.clients.push(client);
+  prof.pos=[W.TOWN.TC+.5,W.TOWN.G+1.01,W.TOWN.TC+.5];
+
+  assert.equal(room.syncLivePlayerPositionsForShutdown(),1);
+  assert.deepEqual(prof.pos,[1024.3,27,503.555],'the final live Elaria pose replaces the older town checkpoint');
+  assert.equal(room.dirtyPlayers.has(token),true,'the restart flush includes the captured pose');
 });
 
 test('admin can spawn one persistent test player for safe social interaction checks',()=>{
@@ -12159,6 +12170,23 @@ test('authoritative room world generates biome blocks', () => {
   for(const floorY of [elf.ground,elf.ground+10,elf.ground+19,elf.ground+27]){
     assert.equal(queue.some(p=>p.y===floorY+1&&Math.hypot(p.x-crownX,p.z-crownZ)<=5),true,'internal stairs reach palace floor '+floorY);
   }
+  const stairLoop=[];
+  for(let x=-3;x<=3;x++)stairLoop.push([x,-3]);
+  for(let z=-2;z<=3;z++)stairLoop.push([3,z]);
+  for(let x=2;x>=-3;x--)stairLoop.push([x,3]);
+  for(let z=2;z>=-2;z--)stairLoop.push([-3,z]);
+  for(let step=0;step<=55;step++){
+    const [dx,dz]=stairLoop[step%stairLoop.length],y=elf.ground+1+Math.floor(step/2);
+    assert.equal(W.isSolid(w.getB(crownX+dx,y,crownZ+dz)),true,'interior stair tread '+step+' remains supported');
+    for(let rise=1;rise<=3;rise++)assert.equal(W.isSolid(w.getB(crownX+dx,y+rise,crownZ+dz)),false,'interior stair tread '+step+' has full headroom');
+  }
+  assert.deepEqual(safeOverworldJoinPosition(w,[1024.3,27,503.555],true),[1024.3,27,503.555],
+    'restart recovery preserves a valid position underneath the palace upper floors');
+  const elvenArrival=ADMIN_WORLD_DESTINATIONS.elven;
+  assert.deepEqual(exactOverworldStandPosition(w,[elvenArrival.x,elvenArrival.y,elvenArrival.z],true),
+    [elvenArrival.x,elvenArrival.y,elvenArrival.z],'admin arrival uses the doorway level rather than the highest canopy block');
+  assert.equal(w.standHeight(elvenArrival.x,elvenArrival.z,W.WH-2)>elvenArrival.y+20,true,
+    'the regression fixture includes a canopy high above the requested doorway arrival');
   assert.equal(w.getB(elf.x - 14, elf.ground, elf.z), W.B.ELVEN_GLASS, 'the overlook marks the intended establishing viewpoint');
   for (let y = elf.ground + 1; y <= elf.ground + 9; y++) {
     assert.equal(w.getB(elf.x - 14, y, elf.z), W.B.AIR, 'the third-person overlook keeps clear camera headroom');
@@ -12169,6 +12197,15 @@ test('authoritative room world generates biome blocks', () => {
     const top = onOverlook ? elf.ground : Math.round(start + (elf.ground - start) * Math.min(1, (x - elf.entranceX) / 24));
     assert.notEqual(w.getB(x, top, elf.z), W.B.AIR, 'the eastern approach has a continuous floor');
     assert.equal(w.getB(x, top + 1, elf.z), W.B.AIR, 'the eastern approach has headroom');
+  }
+  const frontierPort=W.SKYSHIP_FRONTIER_PORT;
+  assert.equal(frontierPort.x<W.LAVA_BORDER_WIDTH,true,'Westwind Frontier Port is beyond the original progression wall');
+  assert.equal(w.getB(Math.floor(frontierPort.arrivalX),frontierPort.top,Math.floor(frontierPort.arrivalZ)),W.B.PLANKS,'the frontier arrival has a solid terminal platform');
+  assert.equal(w.getB(Math.floor(frontierPort.arrivalX),frontierPort.top+1,Math.floor(frontierPort.arrivalZ)),W.B.AIR,'the frontier arrival has player headroom');
+  for(let step=0;step<8;step++){
+    const x=frontierPort.x+8+step,y=frontierPort.top-step;
+    assert.equal(w.getB(x,y,frontierPort.z),W.B.COBBLE,'frontier port stair '+step+' reaches terrain');
+    assert.equal(w.getB(x,y+1,frontierPort.z),W.B.AIR,'frontier port stair '+step+' has headroom');
   }
   assert.equal(w.getB(15, 21, 15), W.B.SNOW);
   assert.equal(w.getB(15, 13, 495), W.B.ICE);
@@ -13940,13 +13977,22 @@ test('skyship boarding is server-gated by dock state, S rank, 1000 gold, and gan
   room.handleSkyshipBoard(client);
   assert.equal(client.sent.at(-1).msg.reason, 'away');
 
+  const port=W.SKYSHIP_FRONTIER_PORT;
+  Object.assign(room.state.players.get(client.sessionId),{x:port.x-10,y:port.top+1,z:port.z});
+  room.handleSkyshipBoard(client);
+  assert.equal(client.sent.at(-1).type,'skyshipBoardResult','the frontier port boards the visible return leg');
+  assert.equal(room.skyshipPassengers.get(client.sessionId).direction,'inbound');
+  room.handleSkyshipBoard(client);
+  assert.equal(client.sent.at(-1).type,'skyshipLeft','return passengers may disembark before departure');
+  assert.equal(seeded.prof.gold,SKYSHIP_BOARD_GOLD);
+
   room.skyshipEpoch = Date.now();
   Object.assign(room.state.players.get(client.sessionId), { x: cx, y: top + 1, z: cz });
   room.handleSkyshipBoard(client);
   assert.equal(client.sent.at(-1).msg.reason, 'range');
 });
 
-test('skyship arrival lands the passenger on Western Frontier terrain (terrainHeight is exported)', () => {
+test('skyship arrival crosses the old wall and lands at Westwind Frontier Port', () => {
   const room = makeRoom(), client = makeClient('westwind_rider');
   room.clients.push(client);
   room.skyshipEpoch = Date.now();
@@ -13959,9 +14005,24 @@ test('skyship arrival lands the passenger on Western Frontier terrain (terrainHe
   room.tickSkyship(Date.now());
   const p = room.state.players.get(client.sessionId);
   assert.equal(room.skyshipPassengers.size, 0, 'the seat is released on arrival');
-  assert.equal(p.x, W.LAVA_BORDER_WIDTH + 32);
-  assert.equal(p.y, W.terrainHeight(p.x, p.z) + 1.05, 'the passenger stands on real terrain, not inside it');
+  assert.deepEqual([p.x,p.y,p.z],[W.SKYSHIP_FRONTIER_PORT.arrivalX,W.SKYSHIP_FRONTIER_PORT.arrivalY,W.SKYSHIP_FRONTIER_PORT.arrivalZ]);
+  assert.equal(p.x<W.LAVA_BORDER_WIDTH,true,'the route carries passengers through the original frontier wall');
   assert.equal(client.sent.at(-1).type, 'skyshipArrived');
+  assert.equal(client.sent.at(-1).msg.destination,'frontier');
+});
+
+test('skyship return leg carries frontier passengers back to the Town skyport',()=>{
+  const room=makeRoom(),client=makeClient('westwind_return_rider'),now=Date.now();
+  room.clients.push(client);room.skyshipEpoch=now-SKYSHIP_DOCK_MS-SKYSHIP_TRAVEL_MS-SKYSHIP_AWAY_MS-SKYSHIP_TRAVEL_MS+1;
+  seedPlayer(room,client,{x:W.SKYSHIP_FRONTIER_PORT.x-10,y:W.SKYSHIP_FRONTIER_PORT.top+1,z:W.SKYSHIP_FRONTIER_PORT.z});
+  room.skyshipPassengers=new Map([[client.sessionId,{
+    slot:0,party:false,paid:SKYSHIP_BOARD_GOLD,direction:'inbound',departed:true,
+    departAt:now-60000,arriveAt:now-1,token:room.tokens.get(client.sessionId),
+  }]]);
+  room.tickSkyship(now);
+  const p=room.state.players.get(client.sessionId),dock=W.townPos(32,64,'skyport');
+  assert.deepEqual([p.x,p.y,p.z],[dock.x-5.5,W.TOWN.G+25.05,dock.z+.5]);
+  assert.equal(client.sent.at(-1).msg.destination,'town');
 });
 
 test('danger rings increase with radial distance and far camp treasure scales up', () => {

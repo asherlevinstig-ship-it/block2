@@ -2263,15 +2263,17 @@ function netAttachRoom(room,name,client){
     room.onMessage('skyshipDeparted', m=>{
       worldApi.applySkyshipJourney({...m,boarded:true,phase:'flight'});
       player.vel.set(0,0,0); SFX.success();
-      sysMsg('<b>Westwind is underway.</b> Movement locked until the Western Frontier.');
-      eventFeed('[Skyship]','The Westwind departed for the Western Frontier.',{key:'skyship:departed',cooldown:0});
+      const returning=m&&m.direction==='inbound';
+      sysMsg('<b>Westwind is underway.</b> Movement locked until '+(returning?'the Town of Beginnings.':'the far Western Frontier.'));
+      eventFeed('[Skyship]','The Westwind departed for '+(returning?'Town.':'the far Western Frontier.'),{key:'skyship:departed',cooldown:0});
     });
     room.onMessage('skyshipArrived', m=>{
       worldApi.applySkyshipJourney({boarded:false});
       if(m&&Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&Number.isFinite(+m.z)) player.pos.set(+m.x,+m.y,+m.z);
       player.vel.set(0,0,0); SFX.level();
-      sysMsg('<b>Westwind has arrived at the Western Frontier.</b>'+(m&&m.recovered?' Your interrupted journey was completed safely.':''));
-      eventFeed('[Skyship]','Arrived at the Western Frontier.',{key:'skyship:arrived',cooldown:0});
+      const returned=m&&m.destination==='town';
+      sysMsg('<b>Westwind has arrived at '+(returned?'the Town of Beginnings':'Westwind Frontier Port')+'.</b>'+(m&&m.recovered?' Your interrupted journey was completed safely.':''));
+      eventFeed('[Skyship]','Arrived at '+(returned?'Town.':'Westwind Frontier Port.'),{key:'skyship:arrived',cooldown:0});
     });
     room.onMessage('skyshipBoardReject', m=>{
       const r=m&&m.reason;
@@ -4409,6 +4411,7 @@ function netEditRejectFeedback(m,x,y,z,id){
     frontier_locked:'Clear a <b>Gate dungeon</b> before mining or building beyond the frontier.',
     world_border:'The world boundary cannot be changed.',
     elf_realm:'The Elven Grove is protected; its structures cannot be mined.',
+    frontier_port:'Westwind Frontier Port is protected public travel infrastructure.',
     protected_block:'That block is unbreakable.',
     invalid_block:'That block cannot be changed.',
     event_protected:'This block is protected while the world event is active.',

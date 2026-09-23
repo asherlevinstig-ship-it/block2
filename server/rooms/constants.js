@@ -14,7 +14,9 @@ const SKYSHIP_AWAY_MS = 16000;
 const SKYSHIP_SPEED = 19;
 // The group origin sits amidships; -23 places its eastern stern at the gangway.
 const SKYSHIP_DOCK_X = W.townPos(32, 64, 'skyport').x - 23;
-const SKYSHIP_EDGE_X = W.LAVA_BORDER_WIDTH + 14;
+// The frontier berth sits beyond the original transparent progression wall,
+// near the expanded world's western edge.
+const SKYSHIP_EDGE_X = W.SKYSHIP_FRONTIER_PORT.shipX;
 const SKYSHIP_TRAVEL_MS = Math.round((SKYSHIP_DOCK_X - SKYSHIP_EDGE_X) / SKYSHIP_SPEED * 1000);
 const SKYSHIP_CYCLE_MS = SKYSHIP_DOCK_MS + SKYSHIP_TRAVEL_MS * 2 + SKYSHIP_AWAY_MS;
 const SKYSHIP_BOARD_RANK = 5; // S in the extended E,D,C,B,A,S hunter ordering

@@ -212,7 +212,7 @@ const KARMA_GIFT_REDEEM = 6;
 const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 62.5 });
 const ADMIN_WORLD_DESTINATIONS = Object.freeze({
   town: Object.freeze({ id: 'town', label: 'Town of Beginnings', x: TOWN_RETURN_SPAWN.x, y: TOWN_RETURN_SPAWN.y, z: TOWN_RETURN_SPAWN.z, yaw: Math.PI }),
-  elven: Object.freeze({ id: 'elven', label: 'Elaria, Elven Kingdom', x: W.ELF_REALM.site.x - 13.5, y: W.ELF_REALM.site.ground + 1.01, z: W.ELF_REALM.site.z + .5, yaw: Math.PI / 2 }),
+  elven: Object.freeze({ id: 'elven', label: 'Elaria, Elven Kingdom', x: W.ELF_REALM.site.x - 6.5, y: W.ELF_REALM.site.ground + 1.01, z: W.ELF_REALM.site.z + .5, yaw: Math.PI / 2 }),
 });
 const ADMIN_QUICK_GATE_ROTATION = Object.freeze(DUNGEON_POOLS.flatMap((ids, rank) => ids.map(dungeonId => Object.freeze({ rank, dungeonId }))));
 const adminQuickGateIndices = new Map();
@@ -271,13 +271,23 @@ function safeOverworldJoinPosition(world, pos, frontierUnlocked = false) {
     const [rawX, rawZ] = candidates[i];
     const x = Math.max(min, Math.min(max, Number(rawX)));
     const z = Math.max(min, Math.min(max, Number(rawZ)));
+    // Multi-storey structures can have a roof or another walkable floor far
+    // above the saved player. Preserve the exact saved level when it has solid
+    // support and two clear body cells instead of always choosing the world's
+    // highest block at this X/Z coordinate.
+    if (i === 0) {
+      const savedY = Math.max(1, Math.min(W.WH - 1, py));
+      const bx = Math.floor(x), by = Math.floor(savedY), bz = Math.floor(z);
+      if (solid(bx, by - 1, bz) && !solid(bx, by, bz) && !solid(bx, by + 1, bz)
+        && !unsafeTownFluid(x, savedY, z)) return [x, savedY, z];
+    }
     const y = world.standHeight(x, z, W.WH - 2);
     if (!Number.isFinite(y) || y < 2 || y > W.WH - 1) continue;
     const bx = Math.floor(x), bz = Math.floor(z);
     if (i === 0 && py >= y - .25 && py <= y + 4) {
       const savedY = Math.max(1, Math.min(W.WH - 1, py));
       const sy = Math.floor(savedY);
-      if (!solid(bx, sy, bz) && !solid(bx, sy + 1, bz) && !solid(bx, sy + 2, bz)
+      if (!solid(bx, sy, bz) && !solid(bx, sy + 1, bz)
         && !unsafeTownFluid(x, savedY, z)) return [x, savedY, z];
     }
     const by = Math.floor(y);
@@ -286,6 +296,18 @@ function safeOverworldJoinPosition(world, pos, frontierUnlocked = false) {
     return [x, y + .01, z];
   }
   return fallback;
+}
+
+function exactOverworldStandPosition(world, pos, frontierUnlocked = false) {
+  if (!world || !Array.isArray(pos) || pos.length < 3) return null;
+  const x = Number(pos[0]), y = Number(pos[1]), z = Number(pos[2]);
+  if (![x, y, z].every(Number.isFinite)) return null;
+  const min = frontierUnlocked ? W.WORLD_MIN + W.LAVA_BORDER_WIDTH + .5 : W.LAVA_BORDER_WIDTH + .5;
+  const max = frontierUnlocked ? W.WORLD_MAX - W.LAVA_BORDER_WIDTH - .5 : W.WX - W.LAVA_BORDER_WIDTH - .5;
+  if (x < min || z < min || x > max || z > max || y < 1 || y > W.WH - 2) return null;
+  const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+  const solid = (sx, sy, sz) => W.isSolid(world.getB(sx, sy, sz));
+  return solid(bx, by - 1, bz) && !solid(bx, by, bz) && !solid(bx, by + 1, bz) ? [x, y, z] : null;
 }
 
 function angleDelta(a, b) {
@@ -1437,17 +1459,22 @@ class GameRoom extends Room {
     this.updateClientGameInterestView(client);
     if (prof && prof.skyshipTransit) {
       const tr = prof.skyshipTransit, now = Date.now();
+      const returnTrip=tr.direction==='inbound'||tr.route==='western_return';
       if (tr.arriveAt > now && tr.departAt <= now) {
         this.skyshipPassengers.set(client.sessionId, { ...tr, token });
         this.placeSkyshipPassenger(client.sessionId, now);
-      } else if (tr.departAt > now && skyshipSnapshot(this.skyshipEpoch, now).state === 'docked') {
+      } else if (tr.departAt > now && skyshipSnapshot(this.skyshipEpoch, now).state === (returnTrip?'away':'docked')) {
         this.skyshipPassengers.set(client.sessionId, { ...tr, token });
         this.placeSkyshipPassenger(client.sessionId, now);
       } else {
-        const ax = W.LAVA_BORDER_WIDTH + 32, az = W.TOWN.TC;
-        p.x = ax; p.y = W.terrainHeight(ax, az) + 1.05; p.z = az;
+        if(returnTrip){
+          const dock=W.townPos(32,64,'skyport');p.x=dock.x-5.5;p.y=W.TOWN.G+25.05;p.z=dock.z+.5;
+        }else{
+          const port=W.SKYSHIP_FRONTIER_PORT;p.x=port.arrivalX;p.y=port.arrivalY;p.z=port.arrivalZ;
+        }
         prof.pos = [p.x, p.y, p.z]; prof.skyshipTransit = null; this.dirtyPlayers.add(token);
         client._skyshipRecovered = true;
+        client._skyshipRecoveredRoute=returnTrip?'western_return':'western';
       }
     }
     if (prof && prof.activeNpcQuest && prof.activeNpcQuest.type === 'gate' && prof.activeNpcQuest.gateRank >= 0) {
@@ -1486,7 +1513,7 @@ class GameRoom extends Room {
       this.sendEventStatus(client);
       this.sendSkyshipSync(client);
       if (this.skyshipPassengers.has(client.sessionId)) client.send('skyshipBoardResult', { ok: true, recovered: true, ...this.skyshipPassengerPayload(client.sessionId), gold: prof ? prof.gold | 0 : 0 });
-      else if (client._skyshipRecovered) client.send('skyshipArrived', { route: 'western', recovered: true, x: joined.x, y: joined.y, z: joined.z });
+      else if (client._skyshipRecovered) client.send('skyshipArrived', { route:client._skyshipRecoveredRoute||'western', destination:client._skyshipRecoveredRoute==='western_return'?'town':'frontier', recovered: true, x: joined.x, y: joined.y, z: joined.z });
       this.sendDayCycleSync(client);
       this.sendWeather(client);
       this.sendGuildHallSync(client);
@@ -2101,6 +2128,25 @@ class GameRoom extends Room {
     }
   }
 
+  syncLivePlayerPositionsForShutdown() {
+    let synced = 0;
+    // During a process restart Colyseus skips normal leave finalization. Copy
+    // every live overworld pose into its profile before the final flush so a
+    // player in Elaria resumes there instead of using an older town save.
+    for (const client of this.clients || []) {
+      const token = this.tokens && this.tokens.get(client.sessionId);
+      const prof = token && this.profiles && this.profiles.get(token);
+      const player = this.state && this.state.players && this.state.players.get(client.sessionId);
+      if (!token || !prof || !player || player.dgn) continue;
+      if (prof.activeRoom) this.persistActiveRoomPose(client, prof, player);
+      else prof.pos = [player.x, player.y, player.z];
+      this.syncProfileVitals(client, prof);
+      this.dirtyPlayers.add(token);
+      synced++;
+    }
+    return synced;
+  }
+
   async onDispose() {
     logRoomLifecycle('overworld.dispose.start', {
       roomId: this.roomId || '',
@@ -2108,7 +2154,10 @@ class GameRoom extends Room {
       clients: this.clients ? this.clients.length : 0,
       players: this.state && this.state.players ? this.state.players.size : 0,
     });
-    try { if (!this.createFailed) await this.flush(); }
+    try {
+      this.syncLivePlayerPositionsForShutdown();
+      if (!this.createFailed) await this.flush();
+    }
     finally {
       if (this.unregisterProfileResetHandler) {
         this.unregisterProfileResetHandler();
@@ -3905,6 +3954,7 @@ class GameRoom extends Room {
     if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'reach', slot: m.slot });
     if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'world_border', slot: m.slot });
     if (W.isElfRealmLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'elf_realm', slot: m.slot });
+    if (W.isSkyshipFrontierPortLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'frontier_port', slot: m.slot });
     const guildFloorEdit = this.canEditGuildFloor && this.canEditGuildFloor(client, x, y, z, id, prev);
     const portableInsulator = id === W.B.EGG_INSULATOR;
     if (this.isTownProtected(x, z) && !guildFloorEdit && !portableInsulator) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'town_buffer', slot: m.slot });
@@ -4758,9 +4808,10 @@ class GameRoom extends Room {
     if (p.dgn && typeof this.ejectFromDungeon === 'function') this.ejectFromDungeon(client.sessionId);
     const fresh = this.state.players.get(client.sessionId) || p;
     const requested = [destination.x, destination.y, destination.z];
-    const pos = typeof this.openOverworldPlayerSpawn === 'function'
+    const exact = destination.id === 'elven' ? exactOverworldStandPosition(this.world, requested, true) : null;
+    const pos = exact || (typeof this.openOverworldPlayerSpawn === 'function'
       ? this.openOverworldPlayerSpawn(requested, client.sessionId, true)
-      : requested;
+      : requested);
     fresh.dim = 'overworld';
     fresh.dgn = '';
     fresh.mount = '';
@@ -5170,6 +5221,7 @@ class GameRoom extends Room {
   canEditLand(client, x, z, opts = {}) {
     if (W.isLavaBorderLand(x | 0, z | 0)) return false;
     if (W.isElfRealmLand(x | 0, z | 0)) return false;
+    if (W.isSkyshipFrontierPortLand(x | 0, z | 0)) return false;
     if (!opts.allowTown && this.isTownProtected(x, z)) return false;
     const rec = this.landClaimFor(x, z);
     if (!rec) return true;
@@ -5293,6 +5345,7 @@ class GameRoom extends Room {
     if ((x < 0 || z < 0 || x >= W.WX || z >= W.WX) && (rec.prof.highestGateRankCleared | 0) < 0) return client.send('landClaimReject', { reason: 'frontier_locked' });
     if (W.isLavaBorderLand(x, z)) return client.send('landClaimReject', { reason: 'border', x, z });
     if (W.isElfRealmLand(x, z)) return client.send('landClaimReject', { reason: 'elf_realm', x, z });
+    if (W.isSkyshipFrontierPortLand(x, z)) return client.send('landClaimReject', { reason: 'frontier_port', x, z });
     if (this.isTownProtected(x, z)) return client.send('landClaimReject', { reason: 'town', x, z });
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 64) return client.send('landClaimReject', { reason: 'range', x, z });
     const key = this.landKey(x, z);
@@ -11057,5 +11110,5 @@ module.exports = {
   SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS,
   SKYSHIP_BOARD_RANK, SKYSHIP_BOARD_GOLD,
   DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance,
-  ADMIN_WORLD_DESTINATIONS, adminWorldDestination,
+  ADMIN_WORLD_DESTINATIONS, adminWorldDestination, safeOverworldJoinPosition, exactOverworldStandPosition,
 };

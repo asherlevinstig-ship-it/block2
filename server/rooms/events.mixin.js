@@ -233,22 +233,26 @@ class EventsMixin {
 
   skyshipTiming(now = Date.now()) {
     const elapsed = ((now - this.skyshipEpoch) % SKYSHIP_CYCLE_MS + SKYSHIP_CYCLE_MS) % SKYSHIP_CYCLE_MS;
-    return { elapsed, departAt: now + Math.max(0, SKYSHIP_DOCK_MS - elapsed), snapshot: skyshipSnapshot(this.skyshipEpoch, now) };
+    const cycleStart=now-elapsed,townDepartAt=cycleStart+SKYSHIP_DOCK_MS;
+    const frontierArriveAt=townDepartAt+SKYSHIP_TRAVEL_MS;
+    const frontierDepartAt=frontierArriveAt+SKYSHIP_AWAY_MS;
+    return { elapsed, departAt: townDepartAt, townDepartAt, frontierArriveAt, frontierDepartAt,
+      townArriveAt: frontierDepartAt+SKYSHIP_TRAVEL_MS, snapshot: skyshipSnapshot(this.skyshipEpoch, now) };
   }
 
   skyshipPosition(now = Date.now()) {
     const timing = this.skyshipTiming(now), ship = timing.snapshot;
-    const dock = W.townPos(32, 64, 'skyport');
-    const dockX = dock.x - 23, edgeX = W.LAVA_BORDER_WIDTH + 14;
-    const dockY = W.TOWN.G + 23.45;
+    const dock = W.townPos(32, 64, 'skyport'),frontier=W.SKYSHIP_FRONTIER_PORT;
+    const dockX = dock.x - 23, edgeX = frontier.shipX;
+    const dockY = W.TOWN.G + 23.45,edgeY=frontier.shipY;
     let x = dockX, y = dockY, z = dock.z;
     if (ship.state === 'outbound') {
       x = dockX + (edgeX - dockX) * ship.progress;
-      y += Math.min(8, (dockX - x) * .035);
+      y = dockY+(edgeY-dockY)*ship.progress+Math.sin(Math.PI*ship.progress)*8;
     } else if (ship.state === 'inbound') {
       x = edgeX + (dockX - edgeX) * ship.progress;
-      y += Math.min(8, (dockX - x) * .035);
-    } else if (ship.state === 'away') { x = edgeX; y += 8; }
+      y = edgeY+(dockY-edgeY)*ship.progress+Math.sin(Math.PI*ship.progress)*8;
+    } else if (ship.state === 'away') { x = edgeX; y = edgeY; }
     return { x, y, z, state: ship.state, progress: ship.progress };
   }
 
@@ -257,8 +261,8 @@ class EventsMixin {
     const part = this.skyshipPassengers.get(sid);
     if (!part) return { boarded: false };
     const timing = this.skyshipTiming(now);
-    return { boarded: true, phase: timing.snapshot.state === 'docked' ? 'boarding' : 'flight',
-      departAt: part.departAt, arriveAt: part.arriveAt, route: 'western', fare: SKYSHIP_BOARD_GOLD,
+    return { boarded: true, phase: now<part.departAt ? 'boarding' : 'flight',
+      departAt: part.departAt, arriveAt: part.arriveAt, route: part.direction==='inbound'?'western_return':'western', direction:part.direction||'outbound', fare: SKYSHIP_BOARD_GOLD,
       slot: part.slot, party: !!part.party };
   }
 
@@ -266,15 +270,15 @@ class EventsMixin {
     if (!this.skyshipPassengers) this.skyshipPassengers = new Map();
     const part = this.skyshipPassengers.get(sid), p = this.state.players.get(sid);
     if (!part || !p) return;
-    const ship = this.skyshipPosition(now), row = Math.floor(part.slot / 3), col = part.slot % 3;
-    p.x = ship.x - (row - 2) * 2.5;
+    const ship = this.skyshipPosition(now), row = Math.floor(part.slot / 5), col = part.slot % 5;
+    p.x = ship.x - (row - 2.5) * 2.2;
     p.y = ship.y + 4.1;
-    p.z = ship.z + (col - 1) * 2.1;
+    p.z = ship.z + (col - 2) * 2.1;
     p.yaw = Math.PI / 2;
     this.pvel.set(sid, { x: 0, z: 0 });
   }
 
-  boardSkyshipPassenger(client, party = false, now = Date.now()) {
+  boardSkyshipPassenger(client, party = false, now = Date.now(), direction = 'outbound') {
     if (!this.skyshipPassengers) this.skyshipPassengers = new Map();
     const sid = client.sessionId, p = this.state.players.get(sid), rec = this.profileFor(client);
     if (!p || !rec || this.skyshipPassengers.has(sid)) return false;
@@ -283,10 +287,11 @@ class EventsMixin {
     const timing = this.skyshipTiming(now), used = new Set([...this.skyshipPassengers.values()].map(v => v.slot));
     let slot = 0; while (used.has(slot) && slot < 29) slot++;
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) - SKYSHIP_BOARD_GOLD);
-    const part = { slot, party, paid: SKYSHIP_BOARD_GOLD, departAt: timing.departAt, departed: false,
-      arriveAt: timing.departAt + SKYSHIP_TRAVEL_MS, token: rec.token };
+    const inbound=direction==='inbound',departAt=inbound?timing.frontierDepartAt:timing.townDepartAt;
+    const part = { slot, party, paid: SKYSHIP_BOARD_GOLD, direction:inbound?'inbound':'outbound', departAt, departed: false,
+      arriveAt: departAt + SKYSHIP_TRAVEL_MS, token: rec.token };
     this.skyshipPassengers.set(sid, part);
-    rec.prof.skyshipTransit = { ...part, route: 'western' };
+    rec.prof.skyshipTransit = { ...part, route: inbound?'western_return':'western' };
     this.dirtyPlayers.add(rec.token);
     if (this.recordEconomyGold) this.recordEconomyGold(client, -SKYSHIP_BOARD_GOLD, 'travel_sink', 'skyship_board', { party: !!party, rank });
     this.placeSkyshipPassenger(sid, now);
@@ -298,14 +303,19 @@ class EventsMixin {
     if (!this.skyshipPassengers) this.skyshipPassengers = new Map();
     const sid = client.sessionId, part = this.skyshipPassengers.get(sid), rec = this.profileFor(client);
     if (!part || !rec) return false;
-    if (this.skyshipTiming().snapshot.state !== 'docked') return client.send('skyshipBoardReject', { reason: 'moving' }), true;
+    const requiredState=part.direction==='inbound'?'away':'docked';
+    if (this.skyshipTiming().snapshot.state !== requiredState) return client.send('skyshipBoardReject', { reason: 'moving' }), true;
     this.skyshipPassengers.delete(sid);
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + (part.paid | 0));
     rec.prof.skyshipTransit = null;
     this.dirtyPlayers.add(rec.token);
     if (this.recordEconomyGold) this.recordEconomyGold(client, part.paid | 0, 'travel_refund', 'skyship_leave', { paid: part.paid | 0 });
     const p = this.state.players.get(sid);
-    if (p) { p.x = W.TOWN.TC - 42; p.y = W.TOWN.G + 25.05; p.z = W.TOWN.TC; }
+    if (p) {
+      if(part.direction==='inbound'){
+        const port=W.SKYSHIP_FRONTIER_PORT;p.x=port.arrivalX;p.y=port.arrivalY;p.z=port.arrivalZ;
+      }else{const dock=W.townPos(32,64,'skyport');p.x=dock.x-5.5;p.y=W.TOWN.G+25.05;p.z=dock.z+.5;}
+    }
     client.send('skyshipLeft', { gold: rec.prof.gold | 0, refunded: part.paid | 0 });
     return true;
   }
@@ -316,16 +326,18 @@ class EventsMixin {
     for (const [sid, part] of [...this.skyshipPassengers]) {
       const client = this.clients.find(c => c.sessionId === sid), p = this.state.players.get(sid);
       if (!p) continue;
-      if (ship.state === 'outbound' && !part.departed) {
+      const travelState=part.direction==='inbound'?'inbound':'outbound';
+      if (ship.state === travelState && !part.departed) {
         part.departed = true;
         if (client) client.send('skyshipDeparted', this.skyshipPassengerPayload(sid, now));
       }
-      if (now >= part.arriveAt || ship.state === 'away') {
-        const rec = client && this.profileFor(client), x = W.LAVA_BORDER_WIDTH + 32, z = W.TOWN.TC;
-        p.x = x; p.y = W.terrainHeight(x, z) + 1.05; p.z = z; p.yaw = -Math.PI / 2;
+      if (now >= part.arriveAt) {
+        const rec = client && this.profileFor(client), returning=part.direction==='inbound';
+        if(returning){const dock=W.townPos(32,64,'skyport');p.x=dock.x-5.5;p.y=W.TOWN.G+25.05;p.z=dock.z+.5;p.yaw=Math.PI/2;}
+        else{const port=W.SKYSHIP_FRONTIER_PORT;p.x=port.arrivalX;p.y=port.arrivalY;p.z=port.arrivalZ;p.yaw=-Math.PI/2;}
         this.skyshipPassengers.delete(sid);
         if (rec) { rec.prof.pos = [p.x, p.y, p.z]; rec.prof.skyshipTransit = null; this.dirtyPlayers.add(rec.token); }
-        if (client) client.send('skyshipArrived', { route: 'western', x: p.x, y: p.y, z: p.z });
+        if (client) client.send('skyshipArrived', { route:returning?'western_return':'western', destination:returning?'town':'frontier', x: p.x, y: p.y, z: p.z });
       } else this.placeSkyshipPassenger(sid, now);
     }
   }
@@ -377,13 +389,16 @@ class EventsMixin {
     const rec = this.profileFor(client);
     if (!p || !rec || p.dgn) return client.send('skyshipBoardReject', { reason: 'invalid' });
     if (this.leaveSkyshipPassenger(client)) return;
-    const dock = W.townPos(32, 64, 'skyport');
+    const dock = W.townPos(32, 64, 'skyport'),port=W.SKYSHIP_FRONTIER_PORT;
     const cx = dock.x, cz = dock.z, top = W.TOWN.G + 24;
-    const inGangway = p.x >= cx - 15.5 && p.x <= cx - 6.5
+    const atTown = p.x >= cx - 15.5 && p.x <= cx - 6.5
       && Math.abs(p.z - cz) <= 3.25 && p.y >= top + .25 && p.y <= top + 4;
-    if (!inGangway) return client.send('skyshipBoardReject', { reason: 'range' });
+    const atFrontier=p.x>=port.x-15.5&&p.x<=port.x-6.5
+      && Math.abs(p.z-port.z)<=3.25&&p.y>=port.top+.25&&p.y<=port.top+4;
+    if (!atTown&&!atFrontier) return client.send('skyshipBoardReject', { reason: 'range' });
     const ship = skyshipSnapshot(this.skyshipEpoch || Date.now(), Date.now());
-    if (ship.state !== 'docked') return client.send('skyshipBoardReject', { reason: 'away' });
+    const direction=atFrontier?'inbound':'outbound',requiredState=atFrontier?'away':'docked';
+    if (ship.state !== requiredState) return client.send('skyshipBoardReject', { reason: 'away' });
     const rank = this.playerHunterRankIndexForProfile(rec.prof);
     if (rank < SKYSHIP_BOARD_RANK)
       return client.send('skyshipBoardReject', { reason: 'rank', requiredRank: 'S', rank });
@@ -391,14 +406,16 @@ class EventsMixin {
     if (availableGold < SKYSHIP_BOARD_GOLD)
       return client.send('skyshipBoardReject', { reason: 'gold', requiredGold: SKYSHIP_BOARD_GOLD, gold: availableGold });
     const now = Date.now();
-    this.boardSkyshipPassenger(client, false, now);
+    this.boardSkyshipPassenger(client, false, now, direction);
     // Nearby online party members travel together and pay their own fare.
     if (p.team) for (const other of this.clients) {
       if (other.sessionId === client.sessionId) continue;
       const op = this.state.players.get(other.sessionId);
       if (!op || op.team !== p.team || this.skyshipPassengers.has(other.sessionId)) continue;
-      const nearby = op.x >= cx - 15.5 && op.x <= cx - 6.5 && Math.abs(op.z - cz) <= 3.25 && op.y >= top + .25 && op.y <= top + 4;
-      if (nearby) this.boardSkyshipPassenger(other, true, now);
+      const nearby=atFrontier
+        ?op.x>=port.x-15.5&&op.x<=port.x-6.5&&Math.abs(op.z-port.z)<=3.25&&op.y>=port.top+.25&&op.y<=port.top+4
+        :op.x>=cx-15.5&&op.x<=cx-6.5&&Math.abs(op.z-cz)<=3.25&&op.y>=top+.25&&op.y<=top+4;
+      if (nearby) this.boardSkyshipPassenger(other, true, now, direction);
     }
   }
   randomEventDelay() {

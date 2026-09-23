@@ -1082,8 +1082,9 @@ function sanitizeProfile(p) {
   out.noobsGuildJoinRewardClaimed = p.noobsGuildJoinRewardClaimed === true;
   out.scholarIntroUsed = p.scholarIntroUsed === true;
   if (p.skyshipTransit && typeof p.skyshipTransit === 'object') {
+    const inbound=p.skyshipTransit.direction === 'inbound' || p.skyshipTransit.route === 'western_return';
     out.skyshipTransit = {
-      route: p.skyshipTransit.route === 'western' ? 'western' : 'western',
+      route: inbound ? 'western_return' : 'western', direction: inbound ? 'inbound' : 'outbound',
       departAt: clampI(p.skyshipTransit.departAt, 0, Number.MAX_SAFE_INTEGER),
       arriveAt: clampI(p.skyshipTransit.arriveAt, 0, Number.MAX_SAFE_INTEGER),
       paid: clampI(p.skyshipTransit.paid, 0, 1000000), slot: clampI(p.skyshipTransit.slot, 0, 29), party: p.skyshipTransit.party === true,

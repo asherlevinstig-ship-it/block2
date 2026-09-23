@@ -959,6 +959,9 @@ const CHUNK=16, WORLD_SIZE=1000, WORLD_CH=Math.ceil(WORLD_SIZE/CHUNK), WX=WORLD_
 const LAVA_BORDER_WIDTH=12, FRONTIER_REACH=64;
 const WORLD_MIN=-FRONTIER_REACH, WORLD_MAX=WX+FRONTIER_REACH-1, WORLD_SPAN=WX+FRONTIER_REACH*2;
 const elvenRealmSite=globalThis.BlockcraftElfRealm.site;
+const skyshipFrontierPort=globalThis.BlockcraftSkyshipRoute.frontierPortSite({
+  worldMin:WORLD_MIN,borderWidth:LAVA_BORDER_WIDTH,routeZ:WX/2+20,terrainHeight,
+});
 const WORLD_TC=WX/2, WORLD_TOWN_HS=72, WORLD_TOWN_G=15;
 const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const TRAINING_MEADOW_TOWN_PORTAL=Object.freeze({dx:0,dz:40,range:5.8});
@@ -2025,11 +2028,18 @@ function generateWorld(){
   treasureCaches=buildTreasureCaches(setB);
   globalThis.BlockcraftDragonShrine.build(setB,B,terrainHeight);
   globalThis.BlockcraftElfRealm.build(setB,B,terrainHeight,WH);
+  globalThis.BlockcraftSkyshipRoute.buildFrontierPort(setB,B,terrainHeight,WH,{
+    worldMin:WORLD_MIN,borderWidth:LAVA_BORDER_WIDTH,routeZ:WX/2+20,
+  });
 }
 function isLavaBorderLand(x,z){
   return x<WORLD_MIN+LAVA_BORDER_WIDTH || z<WORLD_MIN+LAVA_BORDER_WIDTH || x>WORLD_MAX-LAVA_BORDER_WIDTH || z>WORLD_MAX-LAVA_BORDER_WIDTH;
 }
 function isElfRealmLand(x,z,pad=0){return Math.hypot(x-elvenRealmSite.x,z-elvenRealmSite.z)<=elvenRealmSite.protectedRadius+pad;}
+function isSkyshipFrontierPortLand(x,z,pad=0){
+  const s=skyshipFrontierPort;
+  return x>=s.x-18-pad&&x<=s.x+20+pad&&z>=s.z-11-pad&&z<=s.z+11+pad;
+}
 generateWorld();
 
 // ---------------- Town of Beginnings ----------------
@@ -3594,6 +3604,7 @@ function landClaimStatusAt(x,z,y=player?player.pos.y:0,blockId=0){
   x|=0; z|=0; y|=0; blockId|=0;
   if(isLavaBorderLand(x,z)) return {kind:'border',x,z,label:'World border',canEdit:false,detail:'The world border cannot be claimed or edited.'};
   if(isElfRealmLand(x,z)) return {kind:'elf_realm',x,z,label:'Elaria, Elven Kingdom',canEdit:false,detail:'The Elven Kingdom is a protected sanctuary and cannot be claimed or edited.'};
+  if(isSkyshipFrontierPortLand(x,z)) return {kind:'frontier_port',x,z,label:'Westwind Frontier Port',canEdit:false,detail:'The skyship terminal is protected public travel infrastructure.'};
   if(isTownLand(x,z)){
     const decor=guildFloorInteriorForLocal(x,y,z) && (!blockId || GUILD_DECOR_BLOCKS_C.has(blockId));
     return {kind:'town',x,z,label:'Town protected',canEdit:decor,detail:decor?'Your guild hall floor allows decor placement here.':'Town land is protected. Only fellowship decor can be placed inside your claimed guild hall floor.'};
@@ -3691,6 +3702,7 @@ function analyzeClaimPurchase(x,z){
   let blocked='', blockedDetail='';
   if(isLavaBorderLand(x,z)){ blocked='World border'; blockedDetail='The world border cannot be claimed.'; }
   else if(isElfRealmLand(x,z)){ blocked='Elven sanctuary'; blockedDetail='Elaria is protected and cannot be claimed.'; }
+  else if(isSkyshipFrontierPortLand(x,z)){ blocked='Frontier port'; blockedDetail='Westwind Frontier Port cannot be claimed.'; }
   else if((x<0||z<0||x>=WX||z>=WX)&&highestGateRankCleared<0){ blocked='Frontier locked'; blockedDetail='Clear a Gate dungeon to explore and claim the frontier.'; }
   else if(isTownLand(x,z)){ blocked='Town protected'; blockedDetail='Town land cannot be claimed.'; }
   else if(player&&Math.hypot(x+.5-player.pos.x,z+.5-player.pos.z)>64){ blocked='Too far away'; blockedDetail='Move closer before buying this tile.'; }
@@ -3722,7 +3734,7 @@ function recommendedClaimTile(){
     const [x,z]=key.split(',').map(Number);
     for(const [dx,dz] of LAND_DIRS){
       const nx=x+dx, nz=z+dz, nk=landKey(nx,nz);
-      if(nx<WORLD_MIN||nz<WORLD_MIN||nx>WORLD_MAX||nz>WORLD_MAX||landClaims.has(nk)||isTownLand(nx,nz)||isLavaBorderLand(nx,nz)||isElfRealmLand(nx,nz)) continue;
+      if(nx<WORLD_MIN||nz<WORLD_MIN||nx>WORLD_MAX||nz>WORLD_MAX||landClaims.has(nk)||isTownLand(nx,nz)||isLavaBorderLand(nx,nz)||isElfRealmLand(nx,nz)||isSkyshipFrontierPortLand(nx,nz)) continue;
       const analysis=analyzeClaimPurchase(nx,nz);
       const score=(analysis.canBuy?0:10000)+Math.hypot((nx+.5)-px,(nz+.5)-pz)+analysis.price*.05-(analysis.groups>=2?10:analysis.groups?4:0)-analysis.discount*.08;
       if(!best||score<best.score) best={x:nx,z:nz,price:analysis.price,relation:analysis.relation,canBuy:analysis.canBuy,score};
@@ -3734,7 +3746,7 @@ function recommendedClaimTile(){
   for(let r=1;r<=96&&!fallback;r++) for(let dz=-r;dz<=r&&!fallback;dz++) for(let dx=-r;dx<=r;dx++){
     if(Math.max(Math.abs(dx),Math.abs(dz))!==r) continue;
     const x=cx+dx,z=cz+dz;
-    if(x<WORLD_MIN||z<WORLD_MIN||x>WORLD_MAX||z>WORLD_MAX||landClaims.has(landKey(x,z))||isTownLand(x,z)||isLavaBorderLand(x,z)||isElfRealmLand(x,z)) continue;
+    if(x<WORLD_MIN||z<WORLD_MIN||x>WORLD_MAX||z>WORLD_MAX||landClaims.has(landKey(x,z))||isTownLand(x,z)||isLavaBorderLand(x,z)||isElfRealmLand(x,z)||isSkyshipFrontierPortLand(x,z)) continue;
     const analysis=analyzeClaimPurchase(x,z);
     fallback={x,z,price:analysis.price,relation:analysis.relation,canBuy:analysis.canBuy,score:0};
   }
@@ -7873,7 +7885,7 @@ let skyShipClockOffset=0, skyShipEpoch=Date.now();
 let skyShipDockMs=22000, skyShipAwayMs=16000;
 const SKYSHIP_SPEED=19;
 // The group origin sits amidships; -23 places its eastern stern at the gangway.
-const SKYSHIP_DOCK_X=HUB.skyport.x-23, SKYSHIP_EDGE_X=LAVA_BORDER_WIDTH+14;
+const SKYSHIP_DOCK_X=HUB.skyport.x-23, SKYSHIP_EDGE_X=skyshipFrontierPort.shipX;
 let skyShipTravelMs=Math.round((SKYSHIP_DOCK_X-SKYSHIP_EDGE_X)/SKYSHIP_SPEED*1000);
 let skyShipCycleMs=skyShipDockMs+skyShipTravelMs*2+skyShipAwayMs;
 function applySkyShipSync(m){
@@ -7984,7 +7996,7 @@ function tickSkyShip(dt,t){
   if(!skyShip) return;
   // Sit clear of the west-side spiral instead of clipping across its upper path.
   const s=skyShip, g=s.grp, dockX=SKYSHIP_DOCK_X, dockY=HUB.skyport.y-.55;
-  const edgeX=SKYSHIP_EDGE_X;
+  const edgeX=SKYSHIP_EDGE_X,edgeY=skyshipFrontierPort.shipY;
   const now=Date.now()+skyShipClockOffset;
   const elapsed=((now-skyShipEpoch)%skyShipCycleMs+skyShipCycleMs)%skyShipCycleMs;
   let progress=0;
@@ -8006,17 +8018,15 @@ function tickSkyShip(dt,t){
     g.visible=true;
     g.position.x=dockX+(edgeX-dockX)*progress;
     g.position.z=HUB.skyport.z+Math.sin(t*.18+s.phase)*2.2;
-    const climb=Math.min(8,(dockX-g.position.x)*.035);
-    g.position.y=dockY+climb+Math.sin(t*.5+s.phase)*.55;
+    g.position.y=dockY+(edgeY-dockY)*progress+Math.sin(Math.PI*progress)*8+Math.sin(t*.5+s.phase)*.35;
   } else if(s.state==='inbound'){
     g.visible=true;
     g.position.x=edgeX+(dockX-edgeX)*progress;
     g.position.z=HUB.skyport.z+Math.sin(t*.18+s.phase)*2.2*(1-progress);
-    const climb=Math.min(8,(dockX-g.position.x)*.035);
-    g.position.y=dockY+climb+Math.sin(t*.5+s.phase)*.55*(1-progress);
+    g.position.y=edgeY+(dockY-edgeY)*progress+Math.sin(Math.PI*progress)*8+Math.sin(t*.5+s.phase)*.35;
   } else {
-    g.visible=false;
-    g.position.set(edgeX,dockY+8,HUB.skyport.z);
+    g.visible=true;
+    g.position.set(edgeX,edgeY+Math.sin(t*.65+s.phase)*.18,HUB.skyport.z);
   }
   g.rotation.y=-Math.PI/2;                                  // bow faces the western route
   g.rotation.z = Math.sin(t*0.6+s.phase)*0.045;             // gentle roll
@@ -10790,7 +10800,7 @@ function removeMob(i){
 }
 function applySkyshipJourney(m){
   skyshipJourney={boarded:!!(m&&m.boarded),phase:m&&m.phase||'',departAt:+(m&&m.departAt)||0,
-    arriveAt:+(m&&m.arriveAt)||0,route:m&&m.route||'',fare:+(m&&m.fare)||0,slot:+(m&&m.slot)||0,party:!!(m&&m.party)};
+    arriveAt:+(m&&m.arriveAt)||0,route:m&&m.route||'',direction:m&&m.direction||'outbound',fare:+(m&&m.fare)||0,slot:+(m&&m.slot)||0,party:!!(m&&m.party)};
 }
 function killAllMobs(){ for(let i=mobs.length-1;i>=0;i--) removeMob(i); }
 function tickMobs(dt,t){
@@ -12750,6 +12760,7 @@ gameContext.registerState('world', Object.freeze({
 }));
 gameContext.registerModule('world', Object.freeze({
   frontierBounds:{min:WORLD_MIN,max:WORLD_MAX,coreSize:WX,borderWidth:LAVA_BORDER_WIDTH},
+  skyshipFrontierPort,
   town:TOWN,
   blocks:B,
   height:WH,

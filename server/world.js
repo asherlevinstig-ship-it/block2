@@ -10,6 +10,7 @@ const {selectFantasyStructureSpecs,buildFantasyStructures}=require('../shared/ov
 const { DimensionGrid } = require('../shared/dimension-grid');
 const DRAGON_SHRINE = require('../shared/dragon-shrine');
 const ELF_REALM = require('../shared/elf-realm');
+const SKYSHIP_ROUTE = require('../shared/skyship-route');
 
 const CHUNK = 16, WORLD_SIZE = 1000, WORLD_CH = Math.ceil(WORLD_SIZE / CHUNK);
 const WX = WORLD_SIZE, WH = 64, SEA = 13;
@@ -88,6 +89,9 @@ const worldGrid = new DimensionGrid({ kind: 'overworld', id: 'global', width: WO
 const getB = (x, y, z) => worldGrid.getB(x, y, z);
 const setB = (x, y, z, v) => worldGrid.setB(x, y, z, v);
 const isSolid = id => !NON_SOLID.has(id);
+const SKYSHIP_FRONTIER_PORT = SKYSHIP_ROUTE.frontierPortSite({
+  worldMin: WORLD_MIN, borderWidth: LAVA_BORDER_WIDTH, routeZ: TOWN.TC + 20, terrainHeight,
+});
 
 function buildTownFarmWorksite(setBlock, groundY = TOWN.G) {
   const fx = HUB.farm.x | 0, fz = HUB.farm.z | 0;
@@ -934,6 +938,9 @@ function generate() {
   buildTreasureCaches(setB);
   DRAGON_SHRINE.build(setB,B,terrainHeight);
   ELF_REALM.build(setB,B,terrainHeight,WH);
+  SKYSHIP_ROUTE.buildFrontierPort(setB,B,terrainHeight,WH,{
+    worldMin:WORLD_MIN,borderWidth:LAVA_BORDER_WIDTH,routeZ:TOWN.TC+20,
+  });
   buildTown();
 }
 function isLavaBorderLand(x, z) {
@@ -942,6 +949,10 @@ function isLavaBorderLand(x, z) {
 function isElfRealmLand(x,z,pad=0){
   const s=ELF_REALM.site;
   return Math.hypot(x-s.x,z-s.z)<=s.protectedRadius+pad;
+}
+function isSkyshipFrontierPortLand(x,z,pad=0){
+  const s=SKYSHIP_FRONTIER_PORT;
+  return x>=s.x-18-pad&&x<=s.x+20+pad&&z>=s.z-11-pad&&z<=s.z+11+pad;
 }
 
 function buildGuildHallBase(setBlock = setB) {
@@ -1313,6 +1324,9 @@ function createWorld() {
     buildTreasureCaches(setLocal);
     DRAGON_SHRINE.build(setLocal,B,terrainHeight);
     ELF_REALM.build(setLocal,B,terrainHeight,WH);
+    SKYSHIP_ROUTE.buildFrontierPort(setLocal,B,terrainHeight,WH,{
+      worldMin:WORLD_MIN,borderWidth:LAVA_BORDER_WIDTH,routeZ:TOWN.TC+20,
+    });
     buildTownLocal();
   };
   const standHeightLocal = (x, z, fromY) => {
@@ -1329,9 +1343,9 @@ function createWorld() {
 }
 
 module.exports = {
-  WX, WH, WORLD_MIN, WORLD_MAX, WORLD_SPAN, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, TRAINING_MEADOW_TOWN_PORTAL, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID, ELF_REALM,
+  WX, WH, WORLD_MIN, WORLD_MAX, WORLD_SPAN, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, TRAINING_MEADOW_TOWN_PORTAL, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID, ELF_REALM, SKYSHIP_FRONTIER_PORT,
   townPos, townBlockPos,
-  generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, isElfRealmLand, createWorld, worldGrid,
+  generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, isElfRealmLand, isSkyshipFrontierPortLand, createWorld, worldGrid,
   biomeAt, naturalTreeSpecAt, naturalTreeForBlock, fantasyStructureSpecs, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
   ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, trainingMeadowTownPortalPoint, buildTrainingMeadow,

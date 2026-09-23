@@ -7325,8 +7325,13 @@ function nearDragonRoost(){
   return dim==='overworld' && Math.hypot(player.pos.x-HUB.roost.x, player.pos.z-HUB.roost.z)<13;
 }
 function nearSkyshipGangway(){
-  return dim==='overworld' && player.pos.x>=HUB.skyport.x-15.5 && player.pos.x<=HUB.skyport.x-6.5 &&
-    Math.abs(player.pos.z-HUB.skyport.z)<=3.25 && player.pos.y>=HUB.skyport.y+.25 && player.pos.y<=HUB.skyport.y+4;
+  if(dim!=='overworld')return false;
+  const town=player.pos.x>=HUB.skyport.x-15.5&&player.pos.x<=HUB.skyport.x-6.5&&
+    Math.abs(player.pos.z-HUB.skyport.z)<=3.25&&player.pos.y>=HUB.skyport.y+.25&&player.pos.y<=HUB.skyport.y+4;
+  const port=worldApi.skyshipFrontierPort;
+  const frontier=port&&player.pos.x>=port.x-15.5&&player.pos.x<=port.x-6.5&&
+    Math.abs(player.pos.z-port.z)<=3.25&&player.pos.y>=port.top+.25&&player.pos.y<=port.top+4;
+  return town||frontier;
 }
 function tryBoardSkyship(){
   if(skyshipJourney&&skyshipJourney.boarded){
