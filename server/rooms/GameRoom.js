@@ -203,6 +203,9 @@ const GAME_DUNGEON_MOB_INTEREST_RADIUS = Math.max(1, Number(process.env.GAME_DUN
 const GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS = Math.max(GAME_DUNGEON_MOB_INTEREST_RADIUS, Number(process.env.GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40));
 const JOIN_SNAPSHOT_DELAY_MS = Math.max(0, Number(process.env.JOIN_SNAPSHOT_DELAY_MS || 100));
 const BLOCK_EDIT_REACH = 4.5;
+// Movement snapshots can trail the local player slightly. Keep the allowance
+// small while matching the client's face-based voxel raycast.
+const BLOCK_EDIT_REACH_TOLERANCE = 0.25;
 const PLAYER_EYE_HEIGHT = 1.62;
 const KARMA_HUNTER_THRESHOLD = -100;
 const KARMA_HUNTER_MAX_HOURLY_CHANCE = 0.9;
@@ -3872,7 +3875,15 @@ class GameRoom extends Room {
   }
   editTargetInReach(p, x, y, z) {
     if (!p) return false;
-    return Math.hypot(x + .5 - p.x, y + .5 - (p.y + PLAYER_EYE_HEIGHT), z + .5 - p.z) <= BLOCK_EDIT_REACH;
+    const eyeX = Number(p.x), eyeY = Number(p.y) + PLAYER_EYE_HEIGHT, eyeZ = Number(p.z);
+    if (![eyeX, eyeY, eyeZ].every(Number.isFinite)) return false;
+    // The client raycast reaches the first face of a voxel, not its centre.
+    // Measuring to the centre incorrectly rejects reachable logs (especially
+    // those above the player), causing the optimistic break to be rolled back.
+    const dx = eyeX < x ? x - eyeX : eyeX > x + 1 ? eyeX - (x + 1) : 0;
+    const dy = eyeY < y ? y - eyeY : eyeY > y + 1 ? eyeY - (y + 1) : 0;
+    const dz = eyeZ < z ? z - eyeZ : eyeZ > z + 1 ? eyeZ - (z + 1) : 0;
+    return Math.hypot(dx, dy, dz) <= BLOCK_EDIT_REACH + BLOCK_EDIT_REACH_TOLERANCE;
   }
   initTreeRegrowthState() {
     this.treeRegrowth = new Map();

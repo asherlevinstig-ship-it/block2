@@ -42,3 +42,21 @@ test('active rooms warn players, lock matchmaking, flush progress, and honor the
   assert.equal(warning[3].restartAt, 9000);
   assert.match(warning[3].detail, /progress is being saved/i);
 });
+
+test('restart captures final live positions after the countdown and before flushing profiles', async () => {
+  const events=[];
+  const room={
+    clients:[{}],
+    broadcast(){events.push('broadcast');},
+    async lock(){events.push('lock');},
+    syncLivePlayerPositionsForShutdown(){events.push('capture');},
+    async flush(){events.push('flush');},
+  };
+  await warnForRestart([room],{
+    delayMs:8000,
+    wait:async()=>{events.push('countdown');},
+  });
+  assert.ok(events.indexOf('capture')>events.indexOf('countdown'),'capture uses the position at the end of the warning');
+  assert.ok(events.indexOf('flush')>events.indexOf('capture'),'the captured position is included in the shutdown flush');
+  assert.deepEqual(events.filter(event=>event==='capture'),['capture'],'the live pose is captured once during restart preparation');
+});

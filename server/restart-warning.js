@@ -34,11 +34,19 @@ async function warnForRestart(rooms, options = {}) {
   const lockRooms = activeRooms.map(async room => {
     if (typeof room.lock === 'function') await room.lock();
   });
-  const flushRooms = activeRooms.map(async room => {
-    if (typeof room.flush === 'function') await room.flush();
-  });
   const countdown = effectiveDelayMs > 0 ? sleep(effectiveDelayMs) : Promise.resolve();
-  const results = await Promise.allSettled([...lockRooms, ...flushRooms, countdown]);
+  // Keep connected players in the room throughout the warning countdown, then
+  // capture their final authoritative poses immediately before persistence.
+  // Waiting until onDispose is too late: Colyseus may already have removed the
+  // clients, leaving the older profile position (usually Town) to be restored.
+  const preparationResults = await Promise.allSettled([...lockRooms, countdown]);
+  const captureResults = await Promise.allSettled(activeRooms.map(async room => {
+    if (typeof room.syncLivePlayerPositionsForShutdown === 'function') await room.syncLivePlayerPositionsForShutdown();
+  }));
+  const flushResults = await Promise.allSettled(activeRooms.map(async room => {
+    if (typeof room.flush === 'function') await room.flush();
+  }));
+  const results = [...preparationResults, ...captureResults, ...flushResults];
   const failures = results.filter(result => result.status === 'rejected');
   for (const failure of failures) {
     console.warn('[shutdown] restart preparation failed:', failure.reason && failure.reason.message || failure.reason);

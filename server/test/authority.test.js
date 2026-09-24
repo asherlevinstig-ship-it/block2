@@ -9210,7 +9210,7 @@ test('placement rejects town edits and overwrites, and owns placed chests', () =
   assert.equal(room.getChestRecord('overworld:20,10,20').owner, 'builder_token_123');
 });
 
-test('building reach allows four-block vertical stacking but rejects beyond 4.5 blocks', () => {
+test('block reach follows the visible voxel face and still rejects targets beyond range', () => {
   const room = makeRoom();
   const client = makeClient('vertical_builder');
   const { prof } = seedPlayer(room, client, {
@@ -9227,9 +9227,35 @@ test('building reach allows four-block vertical stacking but rejects beyond 4.5 
   assert.equal(itemCount(prof, W.B.PLANKS), 1);
 
   room.handleWorldEdit(client, { x: 20, y: 16, z: 20, id: W.B.PLANKS });
-  assert.equal(room.world.getB(20, 16, 20), W.B.AIR);
-  assert.equal(itemCount(prof, W.B.PLANKS), 1);
+  assert.equal(room.world.getB(20, 16, 20), W.B.PLANKS);
+  assert.equal(itemCount(prof, W.B.PLANKS), 0);
+
+  room.handleWorldEdit(client, { x: 20, y: 17, z: 20, id: W.B.PLANKS });
+  assert.equal(room.world.getB(20, 17, 20), W.B.AIR);
+  assert.equal(itemCount(prof, W.B.PLANKS), 0);
   assert.equal(client.sent.at(-1).type, 'editReject');
+  assert.equal(client.sent.at(-1).msg.reason, 'reach');
+});
+
+test('a reachable overhead tree block breaks by hand and awards its wood', () => {
+  const room = makeRoom();
+  const client = makeClient('tree_harvester');
+  const { prof } = seedPlayer(room, client, {
+    token: 'tree_harvester_token_123',
+    x: 20.5,
+    y: 10,
+    z: 20.5,
+    inv: [],
+  });
+  room.landClaims.set('20,20', { owner: 'tree_harvester_token_123', name: 'Harvester', price: 50, boughtAt: 1 });
+  room.world.setB(20, 16, 20, W.B.LOG);
+
+  room.handleWorldEdit(client, { x: 20, y: 16, z: 20, id: W.B.AIR, slot: 0 });
+
+  assert.equal(room.world.getB(20, 16, 20), W.B.AIR);
+  assert.equal(itemCount(prof, W.B.LOG) >= 1, true);
+  assert.equal(client.sent.some(event => event.type === 'editReject'), false);
+  assert.equal(client.sent.some(event => event.type === 'mineNoDrop'), false);
 });
 
 test('unclaimed wilderness allows risky building while claims buy protected rights', () => {
