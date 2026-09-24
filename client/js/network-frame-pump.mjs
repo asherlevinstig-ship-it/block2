@@ -19,13 +19,33 @@ export function createNetworkFramePump({
   tickLocalSpiritVisual,
   updateTag:netUpdateTag,
   tickRemotePlayerAction,
+  pendingProfileMovement,
 }){
   return function netTick(dt,now){
-    if(!NET.on||NET.profileReady===false) return;
+    if(!NET.on) return;
     // 'save' and 'meta' only have handlers on the overworld `blockcraft` room (DungeonRoom's 2c-i
     // profile is read-only and doesn't sync cosmetic meta) — Colyseus 0.15 disconnects a client
     // outright for an unregistered message type, so these must not reach a `dungeon` room.
     const isOverworldRoom=NET.room&&NET.room.name==='blockcraft';
+    if(NET.profileReady===false){
+      // A failed/late profile restore must not freeze the server-owned player at the join spawn.
+      // Edits are still sent in this state, so continuing movement prevents every later edit from
+      // looking hundreds of blocks out of reach. Saves stay disabled until hydration succeeds.
+      if(isOverworldRoom&&now-(NET.lastProfileRequestAt||0)>=1000){
+        NET.lastProfileRequestAt=now;
+        NET.room.send('profileRequest',{reason:'profile_pending'});
+        globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.retry',{at:Math.round(now)});
+      }
+      if(isOverworldRoom&&typeof pendingProfileMovement==='function'&&now-NET.lastMove>80){
+        const movePayload=pendingProfileMovement();
+        if(movePayload){
+          NET.lastMove=now;
+          NET.lastMoveSent={at:Date.now(),now:Math.round(now),dim:String(movePayload.dim||''),dgn:NET.dgn||'',x:+Number(movePayload.x).toFixed(3),y:+Number(movePayload.y).toFixed(3),z:+Number(movePayload.z).toFixed(3),yaw:Number.isFinite(movePayload.yaw)?+movePayload.yaw.toFixed(4):null,profilePending:true};
+          NET.room.send('move',{x:movePayload.x,y:movePayload.y,z:movePayload.z,yaw:movePayload.yaw,heldId:movePayload.heldId});
+        }
+      }
+      return;
+    }
     if(isOverworldRoom&&now-(NET.lastVitalCheck||0)>1000){
       NET.lastVitalCheck=now;
       try{

@@ -326,14 +326,20 @@ test('loading watchdog ignores stale timers after success or a new transition', 
   assert.equal(failures, 1);
 });
 
-test('an unhydrated profile cannot emit movement or overwrite saved vitals', async () => {
+test('an unhydrated profile retries hydration and keeps authoritative movement synchronized without saving vitals', async () => {
   const { createNetworkFramePump } = await clientModule('network-frame-pump.mjs');
   const sent = [];
   let snapshots = 0;
-  const tick = createNetworkFramePump({ connection: { on: true, profileReady: false, room: { name: 'blockcraft', send: (...args) => sent.push(args) } }, snapshot: () => { snapshots++;return {}; } });
+  const tick = createNetworkFramePump({
+    connection: { on: true, profileReady: false, lastMove: 0, lastProfileRequestAt: 0, room: { name: 'blockcraft', send: (...args) => sent.push(args) } },
+    snapshot: () => { snapshots++;return {}; },
+    pendingProfileMovement: () => ({ dim: 'overworld', x: 490.5, y: 16, z: 407.5, yaw: 1.2, heldId: 0 }),
+  });
   tick(.016, 30000);
   assert.equal(snapshots, 0);
-  assert.deepEqual(sent, []);
+  assert.deepEqual(sent.map(row => row[0]), ['profileRequest', 'move']);
+  assert.equal(sent[0][1].reason, 'profile_pending');
+  assert.deepEqual(sent[1][1], { x: 490.5, y: 16, z: 407.5, yaw: 1.2, heldId: 0 });
 });
 
 test('GameContext owns shared services, state slices, module APIs, and runtime lifecycle', async () => {

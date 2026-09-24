@@ -3984,7 +3984,8 @@ class GameRoom extends Room {
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'rate', slot: m.slot });
     if (prev === W.B.BEDROCK || prev === W.B.BARRIER || prev === W.B.LAVA || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'protected_block', slot: m.slot });
     const reach = this.editReachDetails(p, x, y, z);
-    if (!reach.within) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'reach', slot: m.slot, reach });
+    const adminReachBypass = !reach.within && this.isAdminClient(client);
+    if (!reach.within && !adminReachBypass) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'reach', slot: m.slot, reach });
     if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'world_border', slot: m.slot });
     if (W.isElfRealmLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'elf_realm', slot: m.slot });
     if (W.isSkyshipFrontierPortLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'frontier_port', slot: m.slot });
@@ -4009,7 +4010,7 @@ class GameRoom extends Room {
     this.recordEditTrace(client, id === W.B.AIR ? 'break.accepted' : 'place.accepted', {
       target: { x, y, z }, actual: prev, requested: id,
       reason: 'accepted', slot: m.slot, reach,
-      harvest: id === W.B.AIR ? { natural: naturalHarvest, tree: treeHarvest, regrowthQueued } : null,
+      harvest: id === W.B.AIR ? { natural: naturalHarvest, tree: treeHarvest, regrowthQueued, adminReachBypass } : null,
     });
     if (prev === W.B.EGG_INSULATOR && id !== W.B.EGG_INSULATOR) { this.cancelDragonIncubationAt(x, y, z); this.cancelNestDragonsAt(x, y, z); }
     if (prev === W.B.CHEST && id === W.B.AIR) this.deleteChest('overworld:' + x + ',' + y + ',' + z);

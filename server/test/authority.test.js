@@ -9266,6 +9266,27 @@ test('a reachable overhead tree block breaks by hand and awards its wood', () =>
   assert.equal(result.msg.items.some(item => item.id === W.B.LOG && item.count >= 1), true);
 });
 
+test('admin mining is not rejected when a stale authoritative position fails reach', () => {
+  const room = makeRoom();
+  const client = makeClient('admin_stale_position');
+  client._accountType = 'teacher';
+  client._accountRole = 'school_admin';
+  const { prof } = seedPlayer(room, client, {
+    token: 'admin_stale_position_token_123',
+    x: 500.5,
+    y: 16,
+    z: 562.5,
+    inv: [],
+  });
+  room.world.setB(490, 16, 407, W.B.LOG);
+
+  room.handleWorldEdit(client, { x: 490, y: 16, z: 407, id: W.B.AIR, slot: 0 });
+
+  assert.equal(room.world.getB(490, 16, 407), W.B.AIR);
+  assert.equal(itemCount(prof, W.B.LOG) >= 1, true);
+  assert.equal(client.sent.some(event => event.type === 'editReject' && event.msg.reason === 'reach'), false);
+});
+
 test('unclaimed wilderness allows risky building while claims buy protected rights', () => {
   const room = makeRoom();
   const client = makeClient('claimer');
