@@ -6416,6 +6416,7 @@ test('Elaria is populated by proximity-managed magical wildlife',()=>{
   assert.match(world,/const elvenButterflies=\[\],elvenBirds=\[\],elvenMoonfish=\[\],elvenSpiritDeer=\[\],elvenWisps=\[\]/);
   assert.match(world,/function buildElvenWildlife\(\)/);
   assert.match(world,/function updateElvenWildlife\(dt,t\)/);
+  assert.match(world,/"updateElvenWildlife":\{get:\(\)=>updateElvenWildlife\}/);
   assert.match(world,/playerOverworldDistanceSq\(elvenRealmSite\.x,elvenRealmSite\.z\)<145\*145/);
   assert.match(world,/blending:THREE\.AdditiveBlending/);
   assert.match(frame,/updateElvenWildlife\(ambientStep,now\/1000\)/);

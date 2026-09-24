@@ -13473,6 +13473,7 @@ const legacyWorldBindings={
   "updateDamageNumbers":{get:()=>updateDamageNumbers},
   "updateDayNight":{get:()=>updateDayNight},
   "updateEmitters":{get:()=>updateEmitters},
+  "updateElvenWildlife":{get:()=>updateElvenWildlife},
   "updateLandMinimap":{get:()=>updateLandMinimap},
   "updateParticles":{get:()=>updateParticles},
   "updateRoadBirds":{get:()=>updateRoadBirds},
