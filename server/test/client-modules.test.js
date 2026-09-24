@@ -2658,13 +2658,22 @@ test('secondary action prioritizes nearby characters before hotbar items',()=>{
   const body=match[1];
   const guardianIndex=body.indexOf('guardianUnderCrosshair(8)||nearbyGuardian()');
   const villagerIndex=body.indexOf('villagerUnderCrosshair(4.5)||nearbyVillager(3.7)');
-  const dragonIndex=body.indexOf('BlockcraftDragonWorld');
   const heldIndex=body.indexOf('const heldRC=inv[selected]');
   assert.ok(guardianIndex >= 0 && guardianIndex < heldIndex, 'guardian interaction wins before hotbar item use');
   assert.ok(villagerIndex >= 0 && villagerIndex < heldIndex, 'villager/NPC interaction wins before hotbar item use');
-  assert.ok(dragonIndex >= 0 && dragonIndex < heldIndex, 'nearby dragon interaction wins before hotbar item use');
+  assert.equal(body.includes('BlockcraftDragonWorld'), false, 'generic G/right-click interaction does not open the owned-dragon menu');
   assert.match(body,/if\(heldRC && heldRC\.id===I\.TOWN_MAP/);
   assert.match(body,/if\(heldRC && heldRC\.id===I\.APPEARANCE_MIRROR/);
+});
+
+test('the previously unused backslash key exclusively opens the dragon menu',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
+  assert.match(combat,/if\(e\.code==='Backslash' && !e\.repeat\)\{/);
+  assert.match(combat,/openDragonInteractUI\(dragonTypeForMenu\)/);
+  assert.doesNotMatch(combat,/if\(e\.code==='KeyB' && !e\.repeat\)/);
+  assert.match(combat,/action==='dragons'\)tapVirtualKey\('Backslash'\)/);
+  assert.match(html,/<kbd>\\<\/kbd><kbd>Shift \+ Tab<\/kbd>/);
 });
 
 test('narrow game HUD consolidates abilities, quest, status, and hotbar without clipping',()=>{
@@ -2899,7 +2908,7 @@ test('retired level two job chooser cannot open',()=>{
   assert.match(combat,/if\(performPetTamerDragonTutorialAction\(\)\) return/);
   assert.match(combat,/if\(e\.shiftKey && commandPetTamerPracticeDragon\(\)\) return/);
   assert.match(combat,/heldRC && heldRC\.id===I\.DRAGON_TREAT && protectPetTamerTutorialTreatUse\(\)/);
-  assert.match(combat,/if\(finishPetTamerRoostLesson\(\)\) return; openDragonBondUI\(\)/);
+  assert.match(combat,/if\(e\.code==='Backslash' && !e\.repeat\)\{[\s\S]*if\(finishPetTamerRoostLesson\(\)\) return;/);
   assert.match(combat,/if\(mountPetTamerPracticeDragon\(\)\) return; toggleMount\(\)/);
   assert.match(combat,/petTamerTutorialProgressLabel\(\)\+' - '\+petTamerTutorialAction\(\)\.key/);
   assert.match(combat,/function jobTutorialBeaconTarget\(jobId, room\)/);
@@ -2911,12 +2920,12 @@ test('retired level two job chooser cannot open',()=>{
   assert.match(combat,/SHIFT\+TAB/);
   assert.match(combat,/FLY RING/);
   assert.match(combat,/Z \+ SHIFT/);
-  assert.match(combat,/B AT ROOST/);
+  assert.match(combat,/\\\\ AT ROOST/);
   assert.match(frame,/Dragon flight naturally glides downward\. Hold Shift to climb/);
   assert.match(frame,/const dragonClimbing=sprintKey/);
   assert.match(frame,/const targetVy=dragonClimbing\?8\.4:-2\.8/);
   assert.match(companions,/Shift climbs, release to glide down/);
-  assert.match(combat,/Press B at the roost station/);
+  assert.match(combat,/Press \\\\ at the roost station/);
   assert.match(combat,/Pet Tamer lesson complete\.<\/b> Returning you to Town of Beginnings/);
   assert.match(combat,/jobTutorialHandoff\(jobId\)/);
   assert.match(combat,/Next Best Action/);

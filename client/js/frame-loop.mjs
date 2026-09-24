@@ -897,7 +897,7 @@ function currentLocationInfo(){
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.roost.x, player.pos.z-HUB.roost.z)<22){
     if(HUB.tamingPortal&&Math.hypot(player.pos.x-HUB.tamingPortal.x, player.pos.z-HUB.tamingPortal.z)<6)
       return { cls:'town', name:'Taming Land Portal', meta:'Press G to visit the dragon and familiar sanctuary' };
-    return { cls:'town', name:'Dragon Roost', meta:'Bonded dragons perch here - press B for bonds' };
+    return { cls:'town', name:'Dragon Roost', meta:'Bonded dragons perch here - press \\ for bonds' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.shrine.x, player.pos.z-HUB.shrine.z)<9){
     return { cls:'town', name:'Meditation Hall', meta:'Meditation and quiet focus' };
@@ -2579,7 +2579,7 @@ function updateEncounterPrompt(){
     : null;
   if(dragon){
     encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('G'))+'</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML((dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase())+'</small>';
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(inputKey('\\'))+'</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML(inputText('Press \\ for Dragon Menu - '+(dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase()))+'</small>';
     return;
   }
   const wildTrack=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.nearby&&globalThis.BlockcraftTamingLandTracks.nearby();

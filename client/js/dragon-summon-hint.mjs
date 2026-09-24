@@ -5,7 +5,7 @@ export function dragonSummonHint({owned,adult,realmAllowed,mountedDragon,touch=f
     if(!realmAllowed)return 'Return to the overworld or Taming Land · then use Menu → Call Dragon';
     return 'Open Menu → Call Dragon to summon & ride';
   }
-  if(!adult)return 'Your dragon is growing · Press B to view growth';
+  if(!adult)return 'Your dragon is growing · Press \\ to view growth';
   if(!realmAllowed)return 'Return to the overworld or Taming Land · then press X to ride';
   return 'Press X to summon & ride your dragon';
 }

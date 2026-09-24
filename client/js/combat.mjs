@@ -782,7 +782,7 @@ function instructionKey(value){
   if(upper==='O')return 'MENU · QUESTS';
   if(upper==='X')return 'MENU · CALL DRAGON';
   if(upper==='Z')return 'MENU · MOUNT';
-  if(upper==='B')return 'MENU · DRAGONS';
+  if(upper==='\\')return 'MENU · DRAGONS';
   if(upper==='J')return 'MENU · DRAGON ABILITY';
   if(upper==='K')return 'MENU · FAMILIAR';
   if(upper==='L'||upper==='PRESS L')return 'MENU · LAND';
@@ -806,6 +806,7 @@ function instructionText(value){
     .replace(/press\s+O\b/gi,'open Menu · Quests')
     .replace(/press\s+X\b/gi,'open Menu · Call Dragon')
     .replace(/press\s+Z\b/gi,'open Menu · Mount')
+    .replace(/press\s+\\/gi,'open Menu · Dragons')
     .replace(/press\s+K\b/gi,'open Menu · Familiar')
     .replace(/press\s+L\b/gi,'open Menu · Land')
     .replace(/move the target with WASD/gi,'move the target with the move stick')
@@ -821,7 +822,7 @@ function tryLockLandscapeOrientation(){
   }catch{}
 }
 function dispatchVirtualKey(code,type='keydown'){
-  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyB:'b',KeyC:'c',KeyE:'e',KeyF:'f',KeyG:'g',KeyH:'h',KeyI:'i',KeyJ:'j',KeyK:'k',KeyL:'l',KeyO:'o',KeyP:'p',KeyQ:'q',KeyR:'r',KeyT:'t',KeyX:'x',KeyZ:'z',Tab:'Tab',ShiftLeft:'Shift',Space:' ',Escape:'Escape'};
+  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',Backslash:'\\',KeyC:'c',KeyE:'e',KeyF:'f',KeyG:'g',KeyH:'h',KeyI:'i',KeyJ:'j',KeyK:'k',KeyL:'l',KeyO:'o',KeyP:'p',KeyQ:'q',KeyR:'r',KeyT:'t',KeyX:'x',KeyZ:'z',Tab:'Tab',ShiftLeft:'Shift',Space:' ',Escape:'Escape'};
   const event=new KeyboardEvent(type,{code,key:keyMap[code]||code,bubbles:true,cancelable:true});
   window.dispatchEvent(event);
 }
@@ -1050,7 +1051,7 @@ function ensureTabletControls(){
     else if(action==='questions')tapVirtualKey('KeyP');
     else if(action==='utilities'){ if(typeof openUtilitiesUI==='function')openUtilitiesUI(); else tapVirtualKey('KeyI'); }
     else if(action==='social')openSocialFromHud();
-    else if(action==='dragons')tapVirtualKey('KeyB');
+    else if(action==='dragons')tapVirtualKey('Backslash');
     else if(action==='call-dragon')tapVirtualKey('KeyX');
     else if(action==='mount')tapVirtualKey('KeyZ');
     else if(action==='dragon-ability')tapVirtualKey('KeyJ');
@@ -1877,7 +1878,7 @@ const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'FEED TREAT',title:'Care',verb:'SELECT TREAT + G',purpose:'Follow station 3, select the Dragon Treat on your hotbar, then press G beside your dragon.',done:'Your dragon accepts the treat. Happiness and bond are the first Pet Tamer loop.'},
   {key:'COMMAND',title:'Roles',verb:'SHIFT+TAB',purpose:'Follow station 4, press Shift+Tab beside your dragon, then click the pulsing Stay command.',done:'Your dragon stays at its post. Follow, Stay, Guard, and Rest are role commands.'},
   {key:'FLY RING',title:'Flight',verb:'Z + SHIFT',purpose:'Mount your dragon with Z, then hold Shift to climb and fly through station 5, the green ring.',done:'You flew through the ring. Dragons naturally glide down unless you hold Shift to climb.'},
-  {key:'ROOST',title:'Roost',verb:'B AT ROOST',purpose:'Follow station 6 to the roost station and press B to finish through the dragon bond menu.',done:'You now know the dragon loop: hatch, care, command, ride, and manage bonds at the roost.'},
+  {key:'ROOST',title:'Roost',verb:'\\ AT ROOST',purpose:'Follow station 6 to the roost station and press \\ to finish through the dragon bond menu.',done:'You now know the dragon loop: hatch, care, command, ride, and manage bonds at the roost.'},
 ]);
 function level2JobChoiceSeen(){
   try{return localStorage.getItem(LEVEL2_JOB_CHOICE_KEY)==='1';}catch(e){return false;}
@@ -4271,13 +4272,13 @@ function updateJobTutorialHud(){
     copy=jobTutorialPetDragonStep===0&&nearPetTamerPracticeInsulator()
       ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:petTamerTutorialPromptSub()+'. The egg and timer are visible on the open insulator.'}
       : jobTutorialPetDragonStep>=5&&nearPetTamerPracticeRoost()
-      ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:'Press B at the roost station to finish through dragon bonds.'}
+      ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:'Press \\ at the roost station to finish through dragon bonds.'}
       : nearPetTamerPracticeDragon()
       ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:petTamerTutorialPromptSub()+'. This is your temporary tutorial dragon.'}
       : jobTutorialPetDragonSeen
         ? {key:'DRAGON LESSON COMPLETE',text:'You learned the basic dragon loop.',sub:'Returning you to Town of Beginnings.'}
         : jobTutorialPetDragonStep>=5
-          ? {key:'FOLLOW STATION 6',text:'Follow the pillar of light to the roost station.',sub:'Press B there to finish the tutorial.'}
+          ? {key:'FOLLOW STATION 6',text:'Follow the pillar of light to the roost station.',sub:'Press \\ there to finish the tutorial.'}
           : jobTutorialPetDragonStep===0
             ? {key:'FOLLOW STATION 1',text:'Follow the pillar of light to the open Egg Insulator.',sub:'Select the Verdant Dragon Egg and press G there.'}
             : {key:'FOLLOW DRAGON STATIONS',text:'Follow the numbered stations around your hatched dragon.',sub:'The pillar always marks the next real action.'};
@@ -6489,7 +6490,19 @@ addEventListener('keydown', e=>{
   if(gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen){
     if(e.code==='KeyM'){ e.preventDefault(); showName(SFX.toggleMute()?'Sound muted':'Sound on'); return; }
     if(e.code==='KeyT'){ e.preventDefault(); openTeamUI(); return; }
-    if(e.code==='KeyB' && !e.repeat){ e.preventDefault(); if(finishPetTamerRoostLesson()) return; openDragonBondUI(); return; }
+    if(e.code==='Backslash' && !e.repeat){
+      e.preventDefault();
+      if(finishPetTamerRoostLesson()) return;
+      const nearbyDragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
+        ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
+        : null;
+      const dragonTypeForMenu=nearbyDragon&&nearbyDragon.type
+        ? nearbyDragon.type
+        : isDragon(mountKind)?dragonType(mountKind):(dragonUnlocks.find(type=>DRAGON_TYPES[type])||'');
+      if(dragonTypeForMenu&&typeof openDragonInteractUI==='function')openDragonInteractUI(dragonTypeForMenu);
+      else openDragonBondUI();
+      return;
+    }
     if(e.code==='KeyV' && !e.repeat){ e.preventDefault(); toggleAppearanceDummy(); return; }
     if(e.code==='KeyU' && !e.repeat){ e.preventDefault(); toggleAbilityDemo(); return; }
     if(e.code==='KeyZ' && !e.repeat){ e.preventDefault(); if(mountPetTamerPracticeDragon()) return; toggleMount(); return; }
@@ -7393,7 +7406,7 @@ function nearbyInteractionPrompt(){
   const dragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
     ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
     : null;
-  if(dragon)push({key:'G',title:dragon.name||'Dragon',small:(dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase(),priority:88},0);
+  if(dragon)push({key:'\\',title:dragon.name||'Dragon',small:'DRAGON MENU - '+(dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase(),priority:88},0);
   if(nearDragonRoost())push({key:'G',title:'Dragon Roost',small:'Open dragon bond and roost options',priority:82},0);
   const treasureClue=nearbyTreasureClue();
   if(treasureClue)push({key:'G',title:'Treasure Clue',small:'Investigate the marked clue site',priority:86},0);
@@ -7625,10 +7638,6 @@ function secondaryAction(){
     interactWithVillager(vill);
     return;
   }
-  const nearbyDragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
-    ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
-    : null;
-  if(nearbyDragon&&nearbyDragon.type&&typeof openDragonInteractUI==='function'){ openDragonInteractUI(nearbyDragon.type); return; }
   const heldRC=inv[selected];
   const wildPet=mobUnderCrosshair(5.2);
   if(wildPet&&wildPet.net&&['wild_cat','wild_dog','wild_wolf'].includes(wildPet.kind)){
