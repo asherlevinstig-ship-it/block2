@@ -18,6 +18,7 @@ const JOB_SYSTEM = require('../../shared/job-system');
 const { itemStackLimit } = require('../../shared/item-stack-limits');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 const { shortHash } = require('../identity-trace');
+const ELARIA_BUY=[[W.B.HEARTWOOD,8,40],[W.B.STARLEAF,8,50],[W.B.MOONSTONE,8,60],[W.B.ELVEN_GLASS,8,70],[I.HEARTWOOD_RESIN,2,28],[I.RAINWAKE_PETAL,1,24]];
 
 class EconomyMixin {
   rollWeaponDrop(rank=0,rarityBonus=0,archetype='sword',rand=Math.random){
@@ -807,7 +808,8 @@ class EconomyMixin {
     const isRoad = m.vendor === 'road';
     const isGuild = m.vendor === 'guild';
     const isOutfitter = m.vendor === 'outfitter';
-    const vendor = isTavern ? 'tavern' : isRoad ? 'road' : isGuild ? 'guild' : isOutfitter ? 'outfitter' : 'market';
+    const isElven = m.vendor === 'elaria';
+    const vendor = isTavern ? 'tavern' : isRoad ? 'road' : isGuild ? 'guild' : isOutfitter ? 'outfitter' : isElven ? 'elaria' : 'market';
     const reject = (reason, extra = null) => client.send('shopReject', Object.assign({ reason, vendor }, extra || {}));
     if (this.rateLimited(client, 'shop', 8, 16)) return reject('rate');
     const p=this.state.players.get(client.sessionId);
@@ -815,6 +817,7 @@ class EconomyMixin {
     if(isTavern&&(!p||p.dgn||Math.hypot(p.x-tavern.x,p.z-tavern.z)>9))return reject('range');
     if(isRoad&&(!p||p.dgn||!W.smallDiscoverySpecs().some(s=>s.type==='traveling_merchant'&&Math.hypot(p.x-s.x,p.z-s.z)<6)))return reject('range');
     if(isOutfitter&&(!p||p.dgn||Math.hypot(p.x-W.HUB.outfitter.x,p.z-W.HUB.outfitter.z)>8))return reject('range');
+    if(isElven&&(!p||p.dgn||p.dim!=='overworld'||Math.hypot(p.x-(W.ELF_REALM.site.x-8),p.z-(W.ELF_REALM.site.z-5))>18))return reject('range');
     if (isGuild) {
       const guild = this.guildForToken && this.guildForToken(rec.token);
       if (!this.nearGuildReception || !this.nearGuildReception(client)) return reject('range');
@@ -823,8 +826,8 @@ class EconomyMixin {
     }
     const roadSafety=this.roadSafetySnapshot?this.roadSafetySnapshot().score:50;
     const wardenStock=ROAD_MERCHANT_BUY.concat((rec.prof.roadWardenRep|0)>=3?[[I.IRON_INGOT,1,18]]:[],(rec.prof.roadWardenRep|0)>=6?[[I.COOKED_MEAT,2,16]]:[],roadSafety>=80?[[I.BREAD,2,12]]:[]);
-    if(isOutfitter&&action!=='buy')return reject('invalid');
-    const catalog = isGuild ? GUILD_DECOR_BUY : isTavern ? (action === 'sell' ? TAVERN_SELL : TAVERN_BUY) : isRoad ? (action === 'sell' ? SHOP_SELL : wardenStock) : isOutfitter ? OUTFITTER_BUY : (action === 'sell' ? SHOP_SELL : SHOP_BUY);
+    if((isOutfitter||isElven)&&action!=='buy')return reject('invalid');
+    const catalog = isGuild ? GUILD_DECOR_BUY : isTavern ? (action === 'sell' ? TAVERN_SELL : TAVERN_BUY) : isRoad ? (action === 'sell' ? SHOP_SELL : wardenStock) : isOutfitter ? OUTFITTER_BUY : isElven ? ELARIA_BUY : (action === 'sell' ? SHOP_SELL : SHOP_BUY);
     const id = m.id | 0;
     const entry = this.findCatalogEntry(catalog, id);
     if (!entry) return reject('invalid');

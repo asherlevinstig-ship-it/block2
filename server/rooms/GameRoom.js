@@ -668,6 +668,7 @@ class GameRoom extends Room {
     this.onMessage('recallStart', (client, m) => this.handleRecallStart(client, m));
     this.onMessage('recallAnswer', (client, m) => this.handleRecallAnswer(client, m));
     this.onMessage('recallSubject', (client, m) => this.handleRecallSubject(client, m));
+    this.onMessage('elariaActivity', (client, m) => this.handleElariaActivity(client, m));
     this.onMessage('kcStart', (client, m) => this.handleKcStart(client, m));
     this.onMessage('kcAnswer', (client, m) => this.handleKcAnswer(client, m));
     this.onMessage('kcCorrective', (client, m) => this.handleKcCorrective(client, m));
@@ -3898,7 +3899,15 @@ class GameRoom extends Room {
     if (!spec || this.isTownProtected(spec.x, spec.z) || W.isTrainingMeadowLand(spec.x, spec.z, 3)) return false;
     if (![W.B.GRASS, W.B.SNOW].includes(this.world.getB(spec.x, spec.groundY, spec.z))) return false;
     const key = spec.x + ',' + spec.z;
-    if (!this.treeRegrowth.has(key)) this.treeRegrowth.set(key, { spec, dueAt: now + TREE_REGROW_MS });
+    const dueAt = now + TREE_REGROW_MS;
+    const pending = this.treeRegrowth.get(key);
+    // A tree's delay starts after its most recent harvest. Without refreshing an
+    // existing entry, a second log can regrow immediately when an older timer
+    // (started by a leaf or another trunk block) is already about to expire.
+    if (pending) {
+      pending.spec = spec;
+      pending.dueAt = Math.max(Number(pending.dueAt) || 0, dueAt);
+    } else this.treeRegrowth.set(key, { spec, dueAt });
     return true;
   }
   queueMissingNaturalTrees(saved, now = Date.now()) {
@@ -8308,13 +8317,14 @@ class GameRoom extends Room {
       client.send('hurt', { n: -hp.max, reason: 'training' });
       return;
     }
-    const incoming=Math.max(0,Number(amount)||0);
+    const incoming=Math.max(0,Number(amount)||0),damageNow=Date.now();
     const buffs = this.abilityBuffs.get(client.sessionId);
-    if (buffs && buffs.ironUntil > Date.now()) amount *= .5;
-    if (buffs && buffs.pantherUntil > Date.now()) amount *= .85;
-    if (buffs && buffs.monkStoneUntil > Date.now()) amount *= (1 - JOB_SYSTEM.MONK_RULES.stoneMitigation);
-    if (buffs && buffs.potionStoneUntil > Date.now()) amount *= 0.65;
+    if (buffs && buffs.ironUntil > damageNow) amount *= .5;
+    if (buffs && buffs.pantherUntil > damageNow) amount *= .85;
+    if (buffs && buffs.monkStoneUntil > damageNow) amount *= (1 - JOB_SYSTEM.MONK_RULES.stoneMitigation);
+    if (buffs && buffs.potionStoneUntil > damageNow) amount *= 0.65;
     const rec = this.profileFor(client);
+    if ((buffs && buffs.elariaGraceUntil > damageNow) || (rec && rec.prof && (rec.prof.elariaBlessingUntil || 0) > damageNow)) amount *= .9;
     const armorStack = rec && rec.prof && rec.prof.armor;
     const armor = armorStack ? ARMOR_INFO[armorStack.id] : null;
     let armorFeedback=null;
@@ -10231,7 +10241,7 @@ class GameRoom extends Room {
       if (c) this.regenAbilityState(c, abilityNow);
     });
     this.abilityBuffs.forEach((b, sid) => {
-      if ((b.umbralUntil || 0) <= abilityNow && (b.shadowBurstUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.pantherUntil || 0) <= abilityNow && (b.verdantRegenUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow && (b.potionRegenUntil || 0) <= abilityNow && (b.potionSpeedUntil || 0) <= abilityNow && (b.potionStoneUntil || 0) <= abilityNow && (b.potionTipsyUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
+      if ((b.umbralUntil || 0) <= abilityNow && (b.shadowBurstUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.pantherUntil || 0) <= abilityNow && (b.verdantRegenUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow && (b.potionRegenUntil || 0) <= abilityNow && (b.potionSpeedUntil || 0) <= abilityNow && (b.potionStoneUntil || 0) <= abilityNow && (b.potionTipsyUntil || 0) <= abilityNow && (b.elariaGraceUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
     });
     this.updatePlayerHunger(dt);
     this.tickBiomeStatuses(dt);
@@ -10351,8 +10361,9 @@ class GameRoom extends Room {
     const hungerState = !parkourEventPlayer && !mounted && this.playerHunger && this.playerHunger.get(client.sessionId);
     const hungerMove = hungerState && hungerState.hunger <= 0 ? 0.62 : 1;
     const moveBuffs=this.abilityBuffs.get(client.sessionId),potionSpeed=!mounted&&moveBuffs&&moveBuffs.potionSpeedUntil>now?1.25:1;
-    const maxStep = (deityFlight ? 19 : mounted ? 20 : 12*armorMove*hungerMove*potionSpeed) * dt + 1.25;
-    const velCap = deityFlight ? 15 : mounted ? 16 : 9*armorMove*hungerMove*potionSpeed;
+    const elariaGrace=!mounted&&((moveBuffs&&moveBuffs.elariaGraceUntil>now)||(rec&&rec.prof&&(rec.prof.elariaBlessingUntil||0)>now))?1.08:1;
+    const maxStep = (deityFlight ? 19 : mounted ? 20 : 12*armorMove*hungerMove*potionSpeed*elariaGrace) * dt + 1.25;
+    const velCap = deityFlight ? 15 : mounted ? 16 : 9*armorMove*hungerMove*potionSpeed*elariaGrace;
     let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
     let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
     const frontierUnlocked = !p.dgn && (this.isAdminClient(client) || !!(rec && rec.prof && (rec.prof.highestGateRankCleared | 0) >= 0));
@@ -11103,6 +11114,7 @@ applyMixin(GameRoom, require('./knowledge-challenge.mixin'));
 applyMixin(GameRoom, require('./expedition.mixin'));
 applyMixin(GameRoom, require('./ancient-city-run.mixin'));
 applyMixin(GameRoom, require('./overworld-structures.mixin'));
+applyMixin(GameRoom, require('./elaria.mixin'));
 
 
 module.exports = {

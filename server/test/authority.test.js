@@ -5765,6 +5765,68 @@ test('River and Trail sells only its common recipe-based gear near the outfitter
   assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'range', vendor: 'outfitter' } });
 });
 
+test('Moonthread Exchange sells Elarian materials only inside the realm', () => {
+  const room=makeRoom(),client=makeClient('elaria-shopper'),site=W.ELF_REALM.site;
+  const {prof}=seedPlayer(room,client,{gold:100,x:site.x-8,y:site.ground+1,z:site.z-5});
+  room.handleShop(client,{action:'buy',vendor:'elaria',id:W.B.HEARTWOOD});
+  assert.equal(prof.gold,60);
+  assert.equal(itemCount(prof,W.B.HEARTWOOD),8);
+  assert.deepEqual(client.sent.at(-1),{type:'shopResult',msg:{action:'buy',vendor:'elaria',id:W.B.HEARTWOOD,count:8,gold:-40}});
+  room.state.players.get(client.sessionId).x=W.TOWN.TC;
+  room.state.players.get(client.sessionId).z=W.TOWN.TC;
+  room.handleShop(client,{action:'buy',vendor:'elaria',id:W.B.STARLEAF});
+  assert.equal(prof.gold,60,'remote purchases do not spend gold');
+  assert.deepEqual(client.sent.at(-1),{type:'shopReject',msg:{reason:'range',vendor:'elaria'}});
+});
+
+test('Elaria lore, blessing, ceremony, and court activities persist and reward once', () => {
+  const room=makeRoom(),site=W.ELF_REALM.site,client=makeClient('elaria-citizen');
+  const {prof}=seedPlayer(room,client,{gold:0,x:site.x+16,y:site.ground+1,z:site.z});
+  const player=room.state.players.get(client.sessionId);
+  const visit=(target,x,y,z,action='visit')=>{Object.assign(player,{x,y,z});room.handleElariaActivity(client,{action,target});};
+
+  visit('moonwell',site.x+16,site.ground+1,site.z);
+  assert.equal(prof.elariaLoreFound.includes('moonwell'),true);
+  assert.ok(prof.elariaBlessingUntil>Date.now());
+  visit('harp',site.x-12.2,site.ground+1,site.z-6.3);
+  visit('archives',site.x+4,site.ground+12,site.z+4.8);
+  visit('orrery',site.x+4,site.ground+21,site.z+.5);
+  assert.equal(prof.elariaLoreRewarded,true);
+  assert.equal(prof.gold,75);
+  assert.equal(itemCount(prof,I.HEARTWOOD_RESIN),2);
+  visit('orrery',site.x+4,site.ground+21,site.z+.5);
+  assert.equal(prof.gold,75,'lore completion cannot be claimed twice');
+
+  room.rateBuckets.delete(client.sessionId+':elariaActivity');
+  visit('chime_dawn',site.x-21,site.ground+2,site.z-8,'chime');
+  visit('chime_river',site.x-12,site.ground+2,site.z+8,'chime');
+  visit('chime_crown',site.x-5,site.ground+2,site.z-6,'chime');
+  assert.equal(prof.gold,110);
+  assert.equal(prof.elariaCeremonyDay,room.elariaDay());
+  visit('chime_crown',site.x-5,site.ground+2,site.z-6,'chime');
+  assert.equal(prof.gold,110,'daily ceremony cannot be claimed twice');
+
+  room.rateBuckets.clear();
+  visit('throne',site.x+7.5,site.ground+2.2,site.z+.5,'court_start');
+  const routes=[['moonwell','archives','orrery'],['harp','chime_dawn','chime_crown'],['westwatch','moonwell','throne']];
+  const points={moonwell:[site.x+16,site.ground+1,site.z],harp:[site.x-12.2,site.ground+1,site.z-6.3],archives:[site.x+4,site.ground+12,site.z+4.8],orrery:[site.x+4,site.ground+21,site.z+.5],chime_dawn:[site.x-21,site.ground+2,site.z-8],chime_crown:[site.x-5,site.ground+2,site.z-6],westwatch:[site.x-29,site.ground+1,site.z],throne:[site.x+7.5,site.ground+2.2,site.z+.5]};
+  for(const target of routes[prof.elariaCourt.route]){const [x,y,z]=points[target];visit(target,x,y,z,target.startsWith('chime_')?'chime':'visit');}
+  assert.equal(prof.elariaCourt.step,3);
+  visit('throne',site.x+7.5,site.ground+2.2,site.z+.5,'court_claim');
+  assert.equal(prof.gold,200);
+  assert.equal(prof.elariaCourt.claimed,true);
+  visit('throne',site.x+7.5,site.ground+2.2,site.z+.5,'court_claim');
+  assert.equal(prof.gold,200,'court reward cannot be claimed twice');
+});
+
+test('Grace of the Moonwell mitigates incoming damage', () => {
+  const room=makeRoom(),client=makeClient('moonwell-guarded'),site=W.ELF_REALM.site;
+  const {prof}=seedPlayer(room,client,{x:site.x+16,y:site.ground+1,z:site.z});
+  prof.elariaBlessingUntil=Date.now()+60000;
+  room.hurtPlayer(client,10,'blessing_test');
+  assert.equal(client.sent.findLast(m=>m.type==='hurt').msg.n,9);
+});
+
 test('tavern buys farmed and hunted food for server gold', () => {
   const room = makeRoom();
   const client = makeClient('seller');
@@ -12234,6 +12296,9 @@ test('harvested natural trees regrow without replacing player blocks', async () 
   room.world.setB(canopyBlock.x, canopyBlock.y, canopyBlock.z, W.B.PLANKS);
 
   assert.equal(room.queueNaturalTreeRegrowth(missingLog.x, missingLog.y, missingLog.z, 1000), true);
+  const firstDue=room.treeRegrowth.get(spec.x+','+spec.z).dueAt;
+  assert.equal(room.queueNaturalTreeRegrowth(missingLog.x, missingLog.y, missingLog.z, 9000), true);
+  assert.equal(room.treeRegrowth.get(spec.x+','+spec.z).dueAt,firstDue+8000,'each new harvest restarts the full regrowth delay');
   assert.equal(room.tickTreeRegrowth(60 * 60 * 1000), 0, 'a player block postpones the whole tree');
   assert.equal(room.world.getB(missingLog.x, missingLog.y, missingLog.z), W.B.AIR);
 

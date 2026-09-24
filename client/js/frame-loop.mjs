@@ -3856,6 +3856,7 @@ function tick(now){
   updateEmitters(dt);
   if(runAmbient){
     updateRoadBirds(ambientStep,now/1000);
+    updateElvenWildlife(ambientStep,now/1000);
     updateSkyDragons(ambientStep,now/1000);
     updateFishSchools(ambientStep,now/1000);
     updateTavernNightEffects(ambientStep, now);
@@ -3896,7 +3897,8 @@ function tick(now){
     const tutorialJob=dim==='job'&&combatState.jobTutorialActive ? combatState.jobTutorialJob : '';
     const inMeditation=typeof inMeditationSpot==='function'&&inMeditationSpot();
     syncPresentationMode(worldApi.inVisualBattle());
-    SFX.tick(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern(), inMenu, !!cutscene, worldApi.inOverworldBattle(), tutorialJob, dim, inMeditation);
+    const elvenAudio=typeof elvenRealmAudioState==='function'?elvenRealmAudioState():null;
+    SFX.tick(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern(), inMenu, !!cutscene, worldApi.inOverworldBattle(), tutorialJob, dim, inMeditation, elvenAudio);
   }
   if(runAmbient)tickGates(ambientStep, now);
   tickAbilities(dt, now/1000);

@@ -140,6 +140,10 @@ const legacyMenuBindings={
   "openFirstGateBriefing":{get:()=>openFirstGateBriefing},
   "openQuestLogUI":{get:()=>openQuestLogUI},
   "openQuestUI":{get:()=>openQuestUI},
+  "openElvenCitizenUI":{get:()=>openElvenCitizenUI},
+  "openElariaActivitiesUI":{get:()=>openElariaActivitiesUI},
+  "handleElariaActivityState":{get:()=>handleElariaActivityState},
+  "handleElariaActivityResult":{get:()=>handleElariaActivityResult},
   "openQWin":{get:()=>openQWin},
   "openShardUI":{get:()=>openShardUI},
   "openShopUI":{get:()=>openShopUI},
@@ -1546,9 +1550,9 @@ const SFX=(()=>{
   const MENU_MUSIC_VOLUME=.11, TOWN_MUSIC_VOLUME=.08, TAVERN_MUSIC_VOLUME=.08, FOREST_MUSIC_VOLUME=.075, BATTLE_MUSIC_VOLUME=.095, TAMING_MUSIC_VOLUME=.08, FISHING_MUSIC_VOLUME=.08;
   const TUTORIAL_MUSIC_VOLUME=.045, QUESTIONS_MUSIC_VOLUME=.045;
   const MUSIC_FADE_IN=1.8, MUSIC_FADE_OUT=5.5, MUSIC_SILENCE=.002;
-  let ctx=null, master=null, nbuf=null, windGain=null, rainGain=null, menuMusic=null, townMusic=null, tavernMusic=null, forestMusic=null, battleMusic=null, tamingMusic=null, fishingMusic=null, tutorialMusic=null, questionsMusic=null;
+  let ctx=null, master=null, nbuf=null, windGain=null, rainGain=null, elvenCanopyGain=null, elvenWaterGain=null, elvenPalaceGain=null, menuMusic=null, townMusic=null, tavernMusic=null, forestMusic=null, battleMusic=null, tamingMusic=null, fishingMusic=null, tutorialMusic=null, questionsMusic=null;
   let activeMusicMode='none';
-  let muted=false, cricketT=0, popT=0, fireVol=0;
+  let muted=false, cricketT=0, popT=0, fireVol=0, elvenBirdT=0, elvenChimeT=0;
   function createMusic(src){
     const audio=new Audio(src);
     audio.loop=true;
@@ -1618,6 +1622,19 @@ const SFX=(()=>{
     const rf=ctx.createBiquadFilter(); rf.type='bandpass'; rf.frequency.value=1500; rf.Q.value=.6;
     rainGain=ctx.createGain(); rainGain.gain.value=0;
     rs.connect(rf); rf.connect(rainGain); rainGain.connect(master); rs.start();
+    // Elaria uses its own continuous beds. Their gains remain at zero outside
+    // the grove, so one shared set of sources covers the whole visit.
+    const canopy=ctx.createBufferSource();canopy.buffer=nbuf;canopy.loop=true;
+    const canopyFilter=ctx.createBiquadFilter();canopyFilter.type='bandpass';canopyFilter.frequency.value=760;canopyFilter.Q.value=.35;
+    elvenCanopyGain=ctx.createGain();elvenCanopyGain.gain.value=0;canopy.connect(canopyFilter);canopyFilter.connect(elvenCanopyGain);elvenCanopyGain.connect(master);canopy.start();
+    const falls=ctx.createBufferSource();falls.buffer=nbuf;falls.loop=true;
+    const fallsFilter=ctx.createBiquadFilter();fallsFilter.type='lowpass';fallsFilter.frequency.value=1350;fallsFilter.Q.value=.45;
+    elvenWaterGain=ctx.createGain();elvenWaterGain.gain.value=0;falls.connect(fallsFilter);fallsFilter.connect(elvenWaterGain);elvenWaterGain.connect(master);falls.start();
+    elvenPalaceGain=ctx.createGain();elvenPalaceGain.gain.value=0;elvenPalaceGain.connect(master);
+    for(const [frequency,volume] of [[174,.48],[261,.22],[348,.1]]){
+      const tone=ctx.createOscillator(),toneGain=ctx.createGain();tone.type='sine';tone.frequency.value=frequency;toneGain.gain.value=volume;
+      tone.connect(toneGain);toneGain.connect(elvenPalaceGain);tone.start();
+    }
     menuMusic=createMusic('audio/menu.mp3');
     townMusic=createMusic('audio/townbg.mp3');
     tavernMusic=createMusic('audio/tavern.mp3');
@@ -1741,13 +1758,19 @@ function noise(dur,vol,fc,q,delay,type){
         },
       };
     },
-    tick(dt, fireD, nightF, outdoor, inTown, inTavern, inMenu, inCutscene, inBattle=false, tutorialJob='', dimension='', inMeditation=false){
+    tick(dt, fireD, nightF, outdoor, inTown, inTavern, inMenu, inCutscene, inBattle=false, tutorialJob='', dimension='', inMeditation=false, elvenAudio=null){
       if(!ctx) return;
       const ft=Math.max(0, 1-fireD/9)*.4;
       fireVol+= (ft-fireVol)*Math.min(1,dt*4);
       const rl=typeof weatherLerp==='number'?weatherLerp:0;                 // world.mjs weather intensity
       windGain.gain.value=muted?0:(outdoor? .014+gDayF*.008+rl*.02 : .003); // storms gust harder
       if(rainGain)rainGain.gain.value=muted||!outdoor?0:rl*.05;
+      const elf=elvenAudio||{},elfInfluence=Math.max(0,Math.min(1,+elf.influence||0));
+      const elfWater=Math.max(0,Math.min(1,+elf.waterfall||0)),elfPalace=Math.max(0,Math.min(1,+elf.palace||0));
+      const smoothGain=(node,value)=>{if(node)node.gain.setTargetAtTime(muted?0:value,ctx.currentTime,.35);};
+      smoothGain(elvenCanopyGain,elfInfluence*.032);
+      smoothGain(elvenWaterGain,elfWater*.085);
+      smoothGain(elvenPalaceGain,elfPalace*.018);
       activeMusicMode=nextMusicMode(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob, dimension, inMeditation);
       updateMusicTrack(menuMusic, activeMusicMode==='menu', MENU_MUSIC_VOLUME, dt);
       updateMusicTrack(townMusic, activeMusicMode==='town', TOWN_MUSIC_VOLUME, dt);
@@ -1769,6 +1792,22 @@ function noise(dur,vol,fc,q,delay,type){
           const v=.06*nightF;
           for(let k=0;k<3;k++) osc('sine',4200+Math.random()*250,0,.03,v,k*.055);
         }
+      }
+      if(!muted&&elfInfluence>.12){
+        elvenBirdT-=dt;
+        if(elvenBirdT<=0&&nightF<.7){
+          elvenBirdT=2.8+Math.random()*4.5;
+          const base=1850+Math.random()*850,volume=.025+elfInfluence*.035;
+          osc('sine',base,base*1.34,.075,volume);osc('sine',base*1.18,base*1.52,.065,volume*.78,.095);
+        }
+        elvenChimeT-=dt;
+        if(elvenChimeT<=0){
+          elvenChimeT=5.5+Math.random()*7;
+          const volume=.018+elfInfluence*.025+elfPalace*.025;
+          osc('sine',659,0,.9,volume);osc('sine',988,0,1.2,volume*.72,.16);osc('sine',1318,0,1.35,volume*.48,.36);
+        }
+      }else{
+        elvenBirdT=Math.min(elvenBirdT,1.5);elvenChimeT=Math.min(elvenChimeT,2.5);
       }
     },
   };
@@ -2552,13 +2591,13 @@ function shopRejected(m){
     const price=Number.isFinite(Number(m&&m.price))?Math.max(0,Number(m.price)|0):0;
     const have=Number.isFinite(Number(m&&m.gold))?Math.max(0,Number(m.gold)|0):Math.max(0,Number(gold)||0);
     const item=m&&ITEMS[m.id]?ITEMS[m.id].name:'that';
-    const where=vendor==='tavern'?'The tavern':vendor==='road'?'The road merchant':vendor==='guild'?'The guild hall':vendor==='outfitter'?'River & Trail':'The merchant';
+    const where=vendor==='tavern'?'The tavern':vendor==='road'?'The road merchant':vendor==='guild'?'The guild hall':vendor==='outfitter'?'River & Trail':vendor==='elaria'?'The Moonthread Exchange':'The merchant';
     const detail=price?': need <b>'+price+' gold</b>, you have <b>'+have+' gold</b>.':' for '+escHTML(item)+'.';
     sysMsg('<b>Not enough gold.</b> '+where+' cannot sell you <b>'+escHTML(item)+'</b>'+detail);
   }
   else if(reason==='item') sysMsg('Nothing to sell');
   else if(reason==='rank') sysMsg('Clear the previous gate rank first');
-  else if(reason==='range') sysMsg(vendor==='tavern'?'Stand closer to <b>Greta at the tavern counter</b>':vendor==='road'?'Stand closer to the <b>road merchant</b>':vendor==='outfitter'?'Stand closer to <b>Nessa at River & Trail</b>':'Stand closer to the <b>guild reception desk</b>');
+  else if(reason==='range') sysMsg(vendor==='tavern'?'Stand closer to <b>Greta at the tavern counter</b>':vendor==='road'?'Stand closer to the <b>road merchant</b>':vendor==='outfitter'?'Stand closer to <b>Nessa at River & Trail</b>':vendor==='elaria'?'Stand closer to an <b>Elarian artisan</b>':'Stand closer to the <b>guild reception desk</b>');
   else if(reason==='full') sysMsg(inventoryFullHelpHTML('shop'));
   else if(reason==='rate') sysMsg('The merchant needs a moment - try that trade again');
   else sysMsg('Trade failed');
@@ -7441,6 +7480,110 @@ function openSocialMentorUI(v={name:'Nia Brightbell'}){
   }));
   actions.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }
+let elariaActivityState=null;
+const ELARIA_SITE_NAMES={moonwell:'Moonwell',harp:'Elarian Harp',archives:'Moon Archives',orrery:'Canopy Orrery',throne:'Heartwood Throne',westwatch:'Western Watch',chime_dawn:'Dawn Chime',chime_river:'River Chime',chime_crown:'Crown Chime'};
+function sendElariaActivity(action,target=''){
+  if(NET.on&&NET.room){NET.room.send('elariaActivity',{action,target});return true;}
+  sysMsg('Elaria activities require a connection to the realm.');return false;
+}
+function elariaActivityCard(title,status,description,actionLabel='',action=null){
+  const card=document.createElement('div');card.className='shoprow elaria-activity-card';
+  const copy=document.createElement('span');copy.innerHTML='<b>'+escHTML(title)+'</b><br><small style="color:#9fffd0">'+escHTML(status)+'</small><br><small class="safety">'+escHTML(description)+'</small>';card.appendChild(copy);
+  if(actionLabel&&action)card.appendChild(qBtn(actionLabel,action));
+  return card;
+}
+function openElariaActivitiesUI(requestStatus=true){
+  openQWin('dialog');qpanelEl.innerHTML='';
+  const shell=document.createElement('div');shell.id='elaria-activities';shell.className='npc-dialogue-shell';qpanelEl.appendChild(shell);
+  const h=document.createElement('h2');h.textContent='LIFE BENEATH THE LIVING CROWN';shell.appendChild(h);
+  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='Elaria rewards participation, not only sightseeing. Choose one opportunity, then follow its landmark prompts through the city.';shell.appendChild(intro);
+  const s=elariaActivityState||{},lore=Array.isArray(s.lore)?s.lore:[],ceremony=s.ceremony||{},court=s.court||{};
+  shell.appendChild(elariaActivityCard('Moonthread Exchange','LOCAL MERCHANT','Buy Living Heartwood, Starleaf, Runed Moonstone, Elven Glass, resin, and rare petals.','BROWSE',()=>openShopUI('elaria')));
+  const blessingActive=(s.blessingUntil||0)>Date.now();
+  shell.appendChild(elariaActivityCard('Grace of the Moonwell',blessingActive?'ACTIVE · '+Math.max(1,Math.ceil((s.blessingUntil-Date.now())/60000))+' MINUTES':s.blessingReady===false?'RECEIVED TODAY':'AVAILABLE TODAY','Visit and use the Moonwell for 20 minutes of +8% movement speed and 10% damage resistance.','TRACK',()=>{closeQWin(false);sysMsg('Seek the glowing <b>Moonwell</b> east of the heart-tree and press <b>G</b>.');}));
+  shell.appendChild(elariaActivityCard('Living Memory Lore Hunt',(s.loreComplete?'COMPLETE':lore.length+' / '+(s.loreTotal||4)+' MEMORIES'),'Examine the Moonwell, Elarian Harp, Moon Archives, and Canopy Orrery. First completion awards 75 gold, 80 XP, and 2 Heartwood Resin.','TRACK',()=>{closeQWin(false);sysMsg('Follow the landmark prompts from the grove floor to the palace canopy. Found: <b>'+lore.map(id=>escHTML(ELARIA_SITE_NAMES[id]||id)).join(', ')+'</b>.');}));
+  const nextChime=['Dawn Chime','River Chime','Crown Chime'][Math.max(0,Math.min(2,ceremony.step|0))];
+  shell.appendChild(elariaActivityCard('Three-Chime Ceremony',ceremony.done?'COMPLETED TODAY':'NEXT · '+nextChime,'Ring Dawn, River, then Crown once per day. The city answers with 35 gold, 45 XP, and Heartwood Resin.','TRACK',()=>{closeQWin(false);sysMsg('Begin at the <b>Dawn Chime</b> on Elaria’s western path, then seek River and Crown.');}));
+  if(!court.active){
+    shell.appendChild(elariaActivityCard('Royal Court Request','AVAILABLE AT THE THRONE','King Aelthar offers one rotating civic route each day with a 90 gold, 100 XP, and 2-resin reward.','ACCEPT AT THRONE',()=>sendElariaActivity('court_start')));
+  }else{
+    const route=Array.isArray(court.route)?court.route:[],next=route[Math.max(0,court.step|0)];
+    const status=court.claimed?'COMPLETED TODAY':court.claimable?'RETURN TO THE THRONE':((court.step|0)+' / 3 · NEXT: '+(ELARIA_SITE_NAMES[next]||next||'Throne'));
+    shell.appendChild(elariaActivityCard(court.name||'Royal Court Request',status,'Complete the King’s three-part civic route, then return to the Heartwood Throne.',court.claimable&&!court.claimed?'CLAIM AT THRONE':'TRACK',()=>court.claimable&&!court.claimed?sendElariaActivity('court_claim'):(closeQWin(false),sysMsg('Next court destination: <b>'+escHTML(ELARIA_SITE_NAMES[next]||next||'Heartwood Throne')+'</b>.'))));
+  }
+  const row=document.createElement('div');row.className='qrow npc-dialogue-actions';row.appendChild(qBtn('REFRESH',()=>sendElariaActivity('status')));row.appendChild(qBtn('LEAVE',()=>closeQWin(),true));shell.appendChild(row);
+  if(requestStatus)sendElariaActivity('status');
+}
+function handleElariaActivityState(m){
+  if(!m||typeof m!=='object')return;elariaActivityState=m;
+  if(document.getElementById('elaria-activities'))openElariaActivitiesUI(false);
+}
+function handleElariaActivityResult(m){
+  if(!m)return;
+  if(!m.ok){SFX.error();const r=String(m.reason||'');sysMsg(r==='range'?'Stand beside the matching <b>Elarian landmark or citizen</b>.':r==='full'?inventoryFullHelpHTML('reward'):r==='court'?'Finish today’s <b>Royal Court route</b> and claim it at the throne.':r==='rate'?'The grove needs a moment before answering again.':'That Elarian activity is not available.');return;}
+  if(m.state)elariaActivityState=m.state;
+  if(m.kind==='court_started'){SFX.success();sysMsg('<b>Royal request accepted: '+escHTML(m.name||'Court Request')+'.</b> First destination: '+escHTML(ELARIA_SITE_NAMES[m.next]||m.next||'unknown')+'.');}
+  else if(m.kind==='court_complete'){SFX.level();showName('ROYAL REQUEST COMPLETE');sysMsg('<b>King Aelthar honors your service.</b> +90 gold · +100 XP · Heartwood Resin x2.');}
+  else if(m.kind==='ceremony_wrong'){SFX.error();sysMsg('The chimes answer out of sequence. Begin with <b>Dawn</b>, then <b>River</b>, then <b>Crown</b>.');}
+  else if(m.kind==='ceremony_step'){SFX.success();sysMsg('<b>The chime rings true.</b> Continue the Dawn → River → Crown ceremony.'+(m.courtAdvanced?' Your court route also advances.':''));}
+  else if(m.kind==='ceremony_complete'){SFX.level();showName('THREE-CHIME CEREMONY');sysMsg('<b>Elaria answers in harmony.</b> +35 gold · +45 XP · Heartwood Resin.');}
+  else if(m.kind==='ceremony_already')sysMsg('You have completed today’s <b>Three-Chime Ceremony</b>.'+(m.courtAdvanced?' The note still advances your <b>Royal Court route</b>.':''));
+  else if(m.kind==='visit'){
+    if(m.blessing){SFX.level();showName('GRACE OF THE MOONWELL');sysMsg('<b>Moonwell blessing:</b> +8% movement speed and 10% damage resistance for 20 minutes.');}
+    if(m.loreComplete){SFX.level();showName('LIVING MEMORY COMPLETE');sysMsg('<b>All four memories recovered.</b> +75 gold · +80 XP · Heartwood Resin x2.');}
+    else if(m.loreFound){SFX.success();sysMsg('<b>Living Memory discovered.</b> The lore hunt advances.');}
+    if(m.courtAdvanced)sysMsg('<b>Royal Court route advanced.</b> Check Elaria Activities for the next destination.');
+  }
+  if(document.getElementById('elaria-activities'))openElariaActivitiesUI(false);
+}
+function openElvenCitizenUI(v={name:'Elarian',title:'Resident',role:'elf_citizen'}){
+  openQWin('dialog');
+  qpanelEl.innerHTML='';
+  const ui=openNpcDialogueShell(v, (v.title||'Resident')+' · Elaria, Elven Kingdom');
+  const activity=escHTML(v.currentActivity||'Living beneath the crown');
+  ui.body.innerHTML='"'+escHTML(v.line||'May the living crown shelter your road.')+'"<br><br><small>CURRENTLY · '+activity+'</small>';
+  const topics={
+    elf_king:[
+      ['ASK ABOUT ELARIA','Elaria was not built around the heart-tree. The city learned to grow with it. Every bridge leaves room for a new branch, and every law must leave room for a new life.'],
+      ['ASK ABOUT THE BORDER','The old wall kept danger out, but it also taught both realms to fear one another. Those who reach us peacefully prove that a border can become a road.'],
+      ['ASK FOR GUIDANCE','Begin at the Moonwell, listen to our people, then ring the Dawn, River, and Crown chimes in that order. The grove reveals itself to travelers who participate.'],
+    ],
+    elf_guard:[
+      ['ASK ABOUT YOUR DUTY','We patrol the bridges, palace doors, and outer paths. Our task is not to bar visitors; it is to make sure every visitor can walk here without fear.'],
+      ['WHERE SHOULD I GO?','Visit the Moonwell west of the living palace, climb to the Moon Archives, and finish at the canopy observatory. The three grove chimes offer a smaller pilgrimage.'],
+    ],
+    elf_scholar:[
+      ['ASK ABOUT YOUR WORK',v.nightWorker?'I chart the way Gate-light bends through the constellations. The pattern suggests worlds beyond our mapped frontier.':'The leaves preserve seasons in their veins. I compare them with our written histories to find where memory and record disagree.'],
+      ['ASK ABOUT THE PALACE','The ground floor belongs to the Crown, the middle gallery to memory, and the highest chamber to possibility. The staircase joins rule, history, and discovery.'],
+    ],
+    elf_musician:[
+      ['ASK ABOUT ELVEN MUSIC','Our music begins with listening: water, wings, leaves, then strings. Try the harp nearby, and the grove will add its own accompaniment.'],
+      ['ASK ABOUT THE CHIMES','Ring Dawn first, River second, and Crown last. When all three agree, the city and its wildlife answer as one instrument.'],
+    ],
+    elf_gardener:[
+      ['ASK ABOUT THE MOONWELL','The moonfish keep the water clear, while the well feeds every moonblossom in the grove. Make a wish there, but do not throw anything into the water.'],
+      ['ASK ABOUT THE WILDLIFE','Spirit deer follow calm footsteps. Aurora butterflies gather around music. The wisps are curious, but they decide for themselves whom to follow.'],
+    ],
+    elf_artisan:[
+      ['ASK ABOUT YOUR CRAFT','We shape moonstone with resonance, not force. The right note shows where the crystal wishes to divide without losing its light.'],
+      ['EXAMINE THEIR WORK','The object catches emerald and violet light along impossibly fine edges. Tiny leaf patterns shift when you change your viewing angle.'],
+    ],
+    elf_scout:[
+      ['ASK ABOUT THE FRONTIER','The road to the old border is watched from the canopy. The Westwind airship now turns that once-forbidden crossing into a living route.'],
+      ['ASK WHAT YOU HAVE SEEN','Beyond the mapped valleys: silver rain, moving lights beneath the forests, and Gate storms that vanish before sunrise. There is more world yet.'],
+    ],
+  };
+  const options=topics[v.role]||[
+    ['ASK ABOUT ELARIA','The grove is safest when visitors listen, explore, and leave its living things unharmed.'],
+    ['ASK WHAT TO DO','Speak with the citizens, examine the palace, visit the Moonwell, play the harp, or seek the three chimes.'],
+  ];
+  for(const [label,text] of options)ui.row.appendChild(npcDialogueButton(label,()=>{
+    ui.body.innerHTML='"'+escHTML(text)+'"<br><br><small>CURRENTLY · '+activity+'</small>';
+  }));
+  if(v.role==='elf_artisan')ui.row.appendChild(npcDialogueButton('MOONTHREAD EXCHANGE',()=>openShopUI('elaria'),'primary'));
+  ui.row.appendChild(npcDialogueButton(v.role==='elf_king'?'ELARIA ACTIVITIES & COURT':'ELARIA ACTIVITIES',()=>openElariaActivitiesUI(),'primary'));
+  ui.row.appendChild(npcDialogueButton('LEAVE',()=>closeQWin(), 'dim'));
+}
 function openQuestUI(v){
   if(v&&v.role==='stablemaster'){ openStablemasterUI(v); return; }
   if(v&&v.role==='social_mentor'){ openSocialMentorUI(v); return; }
@@ -7543,6 +7686,7 @@ const SHOP_BUY=[
 ];
 const SHOP_SELL=[[I.COAL,1,2],[I.IRON_INGOT,1,8],[I.DIAMOND,1,35],[B.LOG,1,1],[B.IRON_ORE,1,5]];
 const ROAD_MERCHANT_BUY=[[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[B.TORCH,12,14],[I.WINDSEED,2,22],[I.HEARTWOOD_RESIN,2,22],[I.SUNSHARD,2,22],[I.MESA_AMBER,2,22],[I.FROST_CRYSTAL,2,22],[I.MIRE_BLOOM,2,22],[I.RAINWAKE_PETAL,1,18],[I.STORMGLASS,1,26],[I.SOLAR_GLYPH,1,24]];
+const ELARIA_BUY=[[B.HEARTWOOD,8,40],[B.STARLEAF,8,50],[B.MOONSTONE,8,60],[B.ELVEN_GLASS,8,70],[I.HEARTWOOD_RESIN,2,28],[I.RAINWAKE_PETAL,1,24]];
 // Convenience prices deliberately sit above the cost of crafting these starter recipes.
 const OUTFITTER_BUY=[[I.FISHING_ROD,1,12],[I.WOOD_PICK,1,8],[I.WOOD_AXE,1,8],[I.WOOD_SHOVEL,1,7],[I.WOOD_SWORD,1,9],[I.WOOD_HOE,1,7],[I.STONE_PICK,1,18],[I.STONE_AXE,1,18],[I.REPAIR_KIT,1,24]];
 const GUILD_DECOR_BUY=[[B.TORCH,8,10],[B.LANTERN,2,18],[B.CAMPFIRE,1,18],[B.TABLE,1,18],[B.BED,1,24],[B.CHEST,1,28],[B.FURNACE,1,30]];
@@ -7564,16 +7708,16 @@ function buyDecisionLine(id){
 function openShopUI(vendor='market'){
   openQWin('commerce');
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent=vendor==='road'?'ROAD MERCHANT':vendor==='outfitter'?'RIVER & TRAIL OUTFITTER':'MARKET STALL'; qpanelEl.appendChild(h);
+  const h=document.createElement('h2'); h.textContent=vendor==='road'?'ROAD MERCHANT':vendor==='outfitter'?'RIVER & TRAIL OUTFITTER':vendor==='elaria'?'MOONTHREAD EXCHANGE':'MARKET STALL'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; qpanelEl.appendChild(sub);
-  const refresh=()=>{ sub.innerHTML=(vendor==='outfitter'?'<b style="color:#67e8f9">COMMON GEAR</b> · Crafting is cheaper · ':'')+'YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>'; };
+  const refresh=()=>{ sub.innerHTML=(vendor==='outfitter'?'<b style="color:#67e8f9">COMMON GEAR</b> · Crafting is cheaper · ':vendor==='elaria'?'<b style="color:#9fffd0">ELARIAN MATERIALS</b> · Grown and shaped in the living city · ':'')+'YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>'; };
   refresh();
   const mk=(title, list, isBuy)=>{
     const t=document.createElement('div'); t.className='sub2'; t.style.marginTop='10px'; t.textContent=title; qpanelEl.appendChild(t);
     for(const [id,n,price] of list){
       const r=document.createElement('div'); r.className='shoprow';
       r.appendChild(iconNode(id));
-      const nm=document.createElement('span'); nm.innerHTML=escHTML(ITEMS[id].name+(n>1?' x'+n:''))+(vendor==='outfitter'?'<small style="color:#a8b6bf"> · COMMON</small>':'')+'<br><small class="safety">'+escHTML(isBuy?buyDecisionLine(id):sellDecisionLine(id,vendor))+'</small>'; r.appendChild(nm);
+      const nm=document.createElement('span'); nm.innerHTML=escHTML(ITEMS[id].name+(n>1?' x'+n:''))+(vendor==='outfitter'?'<small style="color:#a8b6bf"> · COMMON</small>':vendor==='elaria'?'<small style="color:#9fffd0"> · ELARIA</small>':'')+'<br><small class="safety">'+escHTML(isBuy?buyDecisionLine(id):sellDecisionLine(id,vendor))+'</small>'; r.appendChild(nm);
       const pr=document.createElement('b'); pr.textContent=price+'g'; r.appendChild(pr);
       r.appendChild(qBtn(isBuy?'BUY':'SELL', ()=>{
         if(requestShop(isBuy?'buy':'sell', vendor, id)) return;
@@ -7591,8 +7735,8 @@ function openShopUI(vendor='market'){
   };
   const roadDiscount=1-Math.min(.15,Math.floor(roadWardenRep/3)*.05)-(roadSafety>=80?.10:roadSafety>=60?.05:0);
   const roadStock=ROAD_MERCHANT_BUY.concat(roadWardenRep>=3?[[I.IRON_INGOT,1,18]]:[],roadWardenRep>=6?[[I.COOKED_MEAT,2,16]]:[],roadSafety>=80?[[I.BREAD,2,12]]:[]).map(e=>[e[0],e[1],Math.max(1,Math.ceil(e[2]*roadDiscount))]);
-  mk('\u2014 BUY \u2014', vendor==='road'?roadStock:vendor==='outfitter'?OUTFITTER_BUY:SHOP_BUY, true);
-  if(vendor!=='outfitter')mk('\u2014 SELL \u2014', SHOP_SELL, false);
+  mk('\u2014 BUY \u2014', vendor==='road'?roadStock:vendor==='outfitter'?OUTFITTER_BUY:vendor==='elaria'?ELARIA_BUY:SHOP_BUY, true);
+  if(!['outfitter','elaria'].includes(vendor))mk('\u2014 SELL \u2014', SHOP_SELL, false);
   qpanelEl.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }
 
@@ -8559,6 +8703,7 @@ function updateMineUI(frac){
   const nm=BLOCKS[mining.id]?BLOCKS[mining.id].name:'';
   let tag='', cls='';
   if(!mining.willDrop){ tag=' \u26a0 needs better pick'; cls='bad'; }
+  else if(!mining.effective && BREAK[mining.id].handHarvest){ tag=' · BY HAND (AXE IS FASTER)'; cls='slow'; }
   else if(!mining.effective && BREAK[mining.id].cls){ tag=' (wrong tool)'; cls='slow'; }
   mineLblEl.textContent=nm+' '+((frac*100)|0)+'%'+(comboCount>1?' \u00b7 \u00d7'+comboCount:'')+tag;
   mineProgEl.className=cls+(mining.crit>0?' crit':'');

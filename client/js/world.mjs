@@ -881,7 +881,7 @@ for(const [tName, rows, cls, label] of TOOL_DEFS)
 const BREAK = {
   [B.GRASS]:{t:.7, cls:'shovel', drop:[B.DIRT,1]},
   [B.DIRT]:{t:.6, cls:'shovel'}, [B.SAND]:{t:.55, cls:'shovel'},
-  [B.LOG]:{t:1.7, cls:'axe'}, [B.PLANKS]:{t:1.7, cls:'axe'}, [B.TABLE]:{t:1.7, cls:'axe'},
+  [B.LOG]:{t:1.7, cls:'axe', handHarvest:true}, [B.PLANKS]:{t:1.7, cls:'axe'}, [B.TABLE]:{t:1.7, cls:'axe'},
   [B.LEAVES]:{t:.35, cls:null}, [B.GLASS]:{t:.5, cls:null, drop:null},
   [B.STONE]:{t:3.4, cls:'pick', tier:1, drop:[B.COBBLE,1]},
   [B.COBBLE]:{t:3.6, cls:'pick', tier:1}, [B.BRICK]:{t:3.6, cls:'pick', tier:1},
@@ -2767,6 +2767,19 @@ function elvenRealmInfluence(){
   if(dim!=='overworld')return 0;
   return Math.max(0,Math.min(1,(115-Math.hypot(player.pos.x-elvenRealmSite.x,player.pos.z-elvenRealmSite.z))/82));
 }
+function elvenRealmAudioState(){
+  const influence=elvenRealmInfluence();
+  if(influence<=0)return {influence:0,waterfall:0,palace:0};
+  const tx=elvenRealmSite.x+4,tz=elvenRealmSite.z,g=elvenRealmSite.ground;
+  const waterfallDistance=Math.min(
+    Math.hypot(player.pos.x-(tx+7),player.pos.z-(tz-9)),
+    Math.hypot(player.pos.x-(tx+7),player.pos.z-(tz+9)),
+  );
+  const waterfall=Math.max(0,Math.min(1,(34-waterfallDistance)/28))*influence;
+  const palaceRadius=Math.hypot(player.pos.x-tx,player.pos.z-tz);
+  const palace=player.pos.y>=g+1&&palaceRadius<13?Math.max(0,Math.min(1,(13-palaceRadius)/5))*influence:0;
+  return {influence,waterfall,palace};
+}
 function tickElvenRealm(now=performance.now()){
   const distance=Math.hypot(player.pos.x-elvenRealmSite.x,player.pos.z-elvenRealmSite.z),influence=elvenRealmInfluence();
   elvenMotes.visible=dim==='overworld'&&distance<175;
@@ -2783,6 +2796,85 @@ function tickElvenRealm(now=performance.now()){
   const inside=dim==='overworld'&&localFrontierUnlocked()&&distance<elvenRealmSite.radius;
   if(inside&&!elvenArrivalInside)sysMsg('<b>Elaria, the Elven Grove</b> — the forest beyond the old border welcomes you.');
   elvenArrivalInside=inside;
+}
+
+// Peaceful Elarian wildlife is client-side scenery: pooled, non-colliding and
+// active only near the grove. Every species carries a magical light signature.
+const elvenWildlifeGroup=new THREE.Group();
+elvenWildlifeGroup.name='elaria-magical-wildlife';scene.add(elvenWildlifeGroup);
+const elvenButterflies=[],elvenBirds=[],elvenMoonfish=[],elvenSpiritDeer=[],elvenWisps=[];
+const elfWildGeo={
+  butterflyWing:new THREE.BoxGeometry(.28,.035,.2),butterflyBody:new THREE.BoxGeometry(.08,.08,.22),
+  birdBody:new THREE.BoxGeometry(.42,.16,.18),birdWing:new THREE.BoxGeometry(.46,.035,.2),birdTail:new THREE.BoxGeometry(.18,.05,.3),
+  fishBody:new THREE.BoxGeometry(.46,.18,.16),fishTail:new THREE.BoxGeometry(.18,.22,.045),
+  deerBody:new THREE.BoxGeometry(1.05,.58,.42),deerNeck:new THREE.BoxGeometry(.34,.72,.32),deerHead:new THREE.BoxGeometry(.48,.38,.36),
+  deerLeg:new THREE.BoxGeometry(.15,.82,.15),antler:new THREE.BoxGeometry(.07,.65,.07),wisp:new THREE.IcosahedronGeometry(.13,1),
+};
+const elfWildMat={
+  cyan:new THREE.MeshBasicMaterial({color:0x8affdf,transparent:true,opacity:.82,blending:THREE.AdditiveBlending,depthWrite:false}),
+  violet:new THREE.MeshBasicMaterial({color:0xc19cff,transparent:true,opacity:.78,blending:THREE.AdditiveBlending,depthWrite:false}),
+  gold:new THREE.MeshBasicMaterial({color:0xffe69a,transparent:true,opacity:.88,blending:THREE.AdditiveBlending,depthWrite:false}),
+  white:new THREE.MeshBasicMaterial({color:0xe9fff8,transparent:true,opacity:.9}),
+  deer:new THREE.MeshLambertMaterial({color:0x8ac7a8,emissive:0x174d43,emissiveIntensity:.62}),
+  deerDark:new THREE.MeshLambertMaterial({color:0x315f52,emissive:0x0b2923,emissiveIntensity:.5}),
+};
+function elfWildMesh(parent,geometry,material,x=0,y=0,z=0){
+  const mesh=new THREE.Mesh(geometry,material);mesh.position.set(x,y,z);parent.add(mesh);return mesh;
+}
+function buildElvenWildlife(){
+  const x=elvenRealmSite.x,z=elvenRealmSite.z,g=elvenRealmSite.ground;
+  for(let i=0;i<12;i++){
+    const grp=new THREE.Group(),left=elfWildMesh(grp,elfWildGeo.butterflyWing,i%2?elfWildMat.violet:elfWildMat.cyan,-.17,0,0),right=elfWildMesh(grp,elfWildGeo.butterflyWing,i%2?elfWildMat.cyan:elfWildMat.violet,.17,0,0);
+    elfWildMesh(grp,elfWildGeo.butterflyBody,elfWildMat.gold);elvenWildlifeGroup.add(grp);
+    const a=i/12*Math.PI*2,r=7+(i%4)*3;elvenButterflies.push({grp,left,right,cx:x-7+Math.cos(a)*r,cy:g+2+(i%3)*.45,cz:z+Math.sin(a)*r,phase:i*1.73,r:.8+(i%3)*.45});
+  }
+  for(let i=0;i<5;i++){
+    const grp=new THREE.Group(),left=elfWildMesh(grp,elfWildGeo.birdWing,i%2?elfWildMat.cyan:elfWildMat.violet,-.35,0,0),right=elfWildMesh(grp,elfWildGeo.birdWing,i%2?elfWildMat.cyan:elfWildMat.violet,.35,0,0);
+    elfWildMesh(grp,elfWildGeo.birdBody,elfWildMat.white);elfWildMesh(grp,elfWildGeo.birdTail,elfWildMat.gold,0,0,.25);elvenWildlifeGroup.add(grp);
+    elvenBirds.push({grp,left,right,cx:x-1+(i-2)*4,cy:g+20+i*2.2,cz:z+(i%2?5:-5),phase:i*1.37,r:9+i*1.8,speed:.13+i*.012});
+  }
+  const wellX=x+16;
+  for(let i=0;i<9;i++){
+    const grp=new THREE.Group(),body=elfWildMesh(grp,elfWildGeo.fishBody,i%2?elfWildMat.cyan:elfWildMat.violet),tail=elfWildMesh(grp,elfWildGeo.fishTail,elfWildMat.gold,-.3,0,0);
+    body.rotation.z=(i%3-1)*.08;elvenWildlifeGroup.add(grp);elvenMoonfish.push({grp,tail,cx:wellX,cy:g+.72,cz:z,phase:i*.81,r:.65+(i%4)*.48,speed:.35+i*.025});
+  }
+  for(let i=0;i<3;i++){
+    const grp=new THREE.Group(),legs=[];elfWildMesh(grp,elfWildGeo.deerBody,elfWildMat.deer,0,1.25,0);elfWildMesh(grp,elfWildGeo.deerNeck,elfWildMat.deer,.36,1.72,-.22).rotation.z=-.32;
+    elfWildMesh(grp,elfWildGeo.deerHead,elfWildMat.deer,.48,2.08,-.42);
+    for(const lx of [-.35,.35])for(const lz of [-.14,.14])legs.push(elfWildMesh(grp,elfWildGeo.deerLeg,elfWildMat.deerDark,lx,.62,lz));
+    for(const side of [-1,1]){
+      const antler=elfWildMesh(grp,elfWildGeo.antler,elfWildMat.gold,.48+side*.14,2.53,-.42);antler.rotation.z=side*.3;
+      const tine=elfWildMesh(grp,elfWildGeo.antler,elfWildMat.cyan,.48+side*.27,2.68,-.42);tine.scale.y=.55;tine.rotation.z=side*.72;
+    }
+    grp.scale.setScalar(.82+i*.08);elvenWildlifeGroup.add(grp);elvenSpiritDeer.push({grp,legs,cx:x-19+i*5,cy:g+1,cz:z+(i-1)*8,phase:i*2.1,r:2.4+i*.7,speed:.08+i*.015});
+  }
+  for(let i=0;i<8;i++){
+    const orb=elfWildMesh(elvenWildlifeGroup,elfWildGeo.wisp,i%3===0?elfWildMat.gold:i%2?elfWildMat.violet:elfWildMat.cyan);
+    elvenWisps.push({orb,cx:x-10+(i%4)*6,cy:g+3+(i%3)*2.1,cz:z+(i<4?-9:9),phase:i*1.91});
+  }
+}
+buildElvenWildlife();
+function updateElvenWildlife(dt,t){
+  const near=dim==='overworld'&&playerOverworldDistanceSq(elvenRealmSite.x,elvenRealmSite.z)<145*145;
+  elvenWildlifeGroup.visible=near;if(!near)return;
+  for(const b of elvenButterflies){
+    const a=t*.42+b.phase;b.grp.position.set(b.cx+Math.cos(a)*b.r,b.cy+Math.sin(t*1.7+b.phase)*.55,b.cz+Math.sin(a)*b.r);b.grp.rotation.y=-a;
+    const flap=.25+Math.abs(Math.sin(t*8.5+b.phase))*1.05;b.left.rotation.z=flap;b.right.rotation.z=-flap;
+  }
+  for(const b of elvenBirds){
+    const a=t*b.speed+b.phase;b.grp.position.set(b.cx+Math.cos(a)*b.r,b.cy+Math.sin(t*.72+b.phase)*1.35,b.cz+Math.sin(a)*b.r*.72);b.grp.rotation.y=-a+Math.PI/2;
+    const flap=Math.sin(t*6.2+b.phase)*.62;b.left.rotation.z=flap;b.right.rotation.z=-flap;
+  }
+  for(const f of elvenMoonfish){
+    const a=t*f.speed+f.phase;f.grp.position.set(f.cx+Math.cos(a)*f.r,f.cy+Math.sin(t*1.1+f.phase)*.07,f.cz+Math.sin(a)*f.r);f.grp.rotation.y=-a+Math.PI/2;f.tail.rotation.y=Math.sin(t*7+f.phase)*.62;
+  }
+  for(const d of elvenSpiritDeer){
+    const a=t*d.speed+d.phase,x=d.cx+Math.cos(a)*d.r,z=d.cz+Math.sin(a)*d.r*.65;d.grp.position.set(x,d.cy,z);d.grp.rotation.y=-a+Math.PI/2;
+    const stride=Math.sin(t*3.6+d.phase)*.34;for(let i=0;i<d.legs.length;i++)d.legs[i].rotation.x=(i%2?stride:-stride);
+  }
+  for(const w of elvenWisps){
+    const a=t*.3+w.phase;w.orb.position.set(w.cx+Math.sin(a)*1.4,w.cy+Math.sin(t*.8+w.phase)*1.1,w.cz+Math.cos(a*.83)*1.4);const pulse=.72+Math.sin(t*2+w.phase)*.25;w.orb.scale.setScalar(pulse);
+  }
 }
 const dragonShrineVisual=new THREE.Group();
 dragonShrineVisual.position.set(dragonShrineSite.x,dragonShrineSite.y+1,dragonShrineSite.z);
@@ -3621,9 +3713,10 @@ function landClaimStatusAt(x,z,y=player?player.pos.y:0,blockId=0){
 function showLandEditDenied(x,z,action='edit',y=player?player.pos.y:0,blockId=0){
   const s=landClaimStatusAt(x,z,y,blockId);
   const verb=action==='break'?'break blocks':action==='farm'?'farm here':'build here';
+  const restoredTree=action==='break'&&blockId===B.LOG;
   if(s.kind==='border') sysMsg('The <b>world border</b> is protected');
-  else if(s.kind==='town') sysMsg(s.detail);
-  else if(s.kind==='other') sysMsg('Cannot '+verb+': <b>'+escHTML(landClaimOwner(s.claim))+'</b> must trust you before you can build here.');
+  else if(s.kind==='town') sysMsg(restoredTree?'The tree returned because <b>town trees are protected</b>. Follow a road beyond the wall and harvest an unclaimed wilderness tree.':s.detail);
+  else if(s.kind==='other') sysMsg(restoredTree?'The tree returned because this land belongs to <b>'+escHTML(landClaimOwner(s.claim))+'</b>. Find an unclaimed wilderness tree, or ask the owner to trust you.':'Cannot '+verb+': <b>'+escHTML(landClaimOwner(s.claim))+'</b> must trust you before you can build here.');
   else sysMsg('Cannot '+verb+' on this land.');
   eventLog(s.detail+' Press L, then click owned land to inspect permissions.','[Land]');
   return s;
@@ -5002,6 +5095,11 @@ function makeVillager(robe, robeDark, hat, profile={}){
     const paperM=voxelMats('#d8c99f','#fff1c5','#a6956c','#756643');
     const roleGoldM=glowVoxelMats('#b9852e','#ffe08a','#725019','#ffd24a',.4);
     const greenM=voxelMats('#487a3f','#79aa5f','#2d5128','#1b3518');
+    if(signature.startsWith('elf_')){
+      // Long ears give every Elarian an immediately readable silhouette.
+      addBox(head,[.23,.1,.07],[-.34,.02,.02],skinM,[0,0,-.28]);
+      addBox(head,[.23,.1,.07],[.34,.02,.02],skinM,[0,0,.28]);
+    }
     if(signature==='elf_king'){
       const royalGreenM=glowVoxelMats('#164f43','#2d8269','#0b2d27','#72ffd0',.38);
       const royalGoldM=glowVoxelMats('#c7952e','#ffe69a','#765018','#ffd76a',.72);
@@ -5012,11 +5110,39 @@ function makeVillager(robe, robeDark, hat, profile={}){
       addBox(torso,[.12,.58,.05],[0,-.02,.18],royalGoldM);
       // Long elven ears and a five-point crown make the sovereign readable
       // from the entrance, even before his nameplate fades in.
-      addBox(head,[.23,.1,.07],[-.34,.02,.02],skinM,[0,0,-.28]);
-      addBox(head,[.23,.1,.07],[.34,.02,.02],skinM,[0,0,.28]);
       addBox(head,[.66,.08,.64],[0,.34,0],royalGoldM);
       for(const x of [-.25,-.12,0,.12,.25])addBox(head,[.08,.28+(x===0?.12:0),.08],[x,.49+(x===0?.06:0),0],royalGoldM,[0,0,x*1.2]);
       signatureGlow=addBox(head,[.13,.13,.13],[0,.72,.04],royalCrystalM,[0,.785,.785]);
+    }else if(signature==='elf_guard'){
+      const guardM=voxelMats('#164f43','#2d8269','#0b2d27','#071d18');
+      signatureCape=addBox(torso,[.58,.78,.07],[0,-.09,-.19],guardM);
+      addBox(torso,[.7,.13,.36],[0,.29,.01],roleGoldM);
+      addBox(arms[1],[.055,1.35,.055],[0,-.87,.02],roleGoldM);
+      signatureGlow=addBox(arms[1],[.18,.36,.09],[0,-1.54,.02],glowVoxelMats('#72d7c1','#d9fff4','#278978','#8affdf',.85),[0,0,.785]);
+    }else if(signature==='elf_scholar'){
+      addBox(torso,[.42,.5,.08],[-.27,-.02,.2],paperM,[0,0,.12]);
+      addBox(head,[.1,.1,.04],[.16,.02,.29],roleGoldM);
+      signatureGlow=addBox(torso,[.09,.09,.05],[-.16,.12,.25],glowVoxelMats('#72d7c1','#d9fff4','#278978','#8affdf',.72),[0,.785,.785]);
+    }else if(signature==='elf_gardener'){
+      addBox(arms[1],[.07,.82,.07],[0,-.69,.03],woodM,[0,0,.12]);
+      addBox(torso,[.34,.3,.12],[-.31,-.12,.2],greenM);
+      for(const y of [-.2,0,.2])addBox(arms[1],[.2,.05,.08],[.12,-.98+y*.25,.03],greenM,[0,0,-.35+y]);
+    }else if(signature==='elf_artisan'){
+      addBox(torso,[.44,.52,.06],[0,-.04,.18],voxelMats('#4f3428','#785344','#2d1b15','#1a0e0b'));
+      addBox(arms[1],[.07,.65,.07],[0,-.63,.03],woodM);
+      signatureGlow=addBox(arms[1],[.28,.16,.16],[0,-.98,.03],glowVoxelMats('#72d7c1','#d9fff4','#278978','#8affdf',.75));
+    }else if(signature==='elf_musician'){
+      const harp=new THREE.Group();harp.position.set(.35,.98,.18);grp.add(harp);
+      addBox(harp,[.07,.95,.07],[0,-.4,0],roleGoldM,[0,0,-.25]);
+      addBox(harp,[.07,.78,.07],[.34,-.5,0],roleGoldM,[0,0,.4]);
+      addBox(harp,[.48,.07,.07],[.14,-.86,0],roleGoldM);
+      for(let i=0;i<3;i++)addBox(harp,[.018,.55-i*.1,.018],[.12+i*.08,-.51-i*.04,.01],paperM);
+    }else if(signature==='elf_scout'){
+      signatureCape=addBox(torso,[.56,.78,.07],[0,-.09,-.19],greenM);
+      const bow=new THREE.Group();bow.position.set(.38,1.15,.08);grp.add(bow);
+      addBox(bow,[.055,.72,.055],[0,-.32,0],woodM,[0,0,.28]);
+      addBox(bow,[.055,.72,.055],[.02,-.93,0],woodM,[0,0,-.28]);
+      addBox(bow,[.018,1.22,.018],[.13,-.62,0],paperM);
     }else if(signature==='miner'){
       addBox(head,[.58,.08,.58],[0,.31,0],ironM);addBox(head,[.14,.13,.08],[0,.31,.3],roleGoldM);
       addBox(arms[1],[.07,.74,.07],[0,-.64,.05],woodM,[0,0,-.18]);addBox(arms[1],[.42,.09,.09],[-.12,-.92,.05],ironM,[0,0,-.12]);
@@ -5326,11 +5452,73 @@ function buildElvenRoyalInterior(){
   const visual={signature:'elf_king',skinPair:['#d8ae83','#ad7958'],hair:'#e4d5a8'};
   const king={...makeVillager('#174f43','#0c2e28',false,visual),role:'elf_king',name:'King Aelarion',shortName:'Aelarion',title:'King of the Elves',
     personality:'ancient, gracious, fiercely protective of Elaria',line:'Welcome beneath the living crown, traveler. Elaria remembers every oath made beneath these branches.',
-    static:true,seated:true,fixedY:g+2.18,inside:false,wait:0,tx:0,tz:0,speed:0,phase:1.7,home:[tx+3.5,tz+.5],stuck:0};
+    static:true,seated:true,elvenCitizen:true,fixedY:g+2.18,inside:false,wait:0,tx:0,tz:0,speed:0,phase:1.7,home:[tx+3.5,tz+.5],stuck:0};
   king.grp.position.set(tx+3.5,king.fixedY,tz+.5);king.grp.rotation.y=-Math.PI/2;king.grp.scale.setScalar(1.12);
   attachNpcNameplate(king,3.0);scene.add(king.grp);villagers.push(king);
 }
 buildElvenRoyalInterior();
+
+// Visible counterparts for Elaria's hands-on interactions. These stay
+// non-colliding so the harp and chime ritual never obstruct the grove paths.
+const elvenInteractionProps=new THREE.Group();
+elvenInteractionProps.name='elaria-interaction-props';scene.add(elvenInteractionProps);
+function buildElvenInteractionProps(){
+  const {x,z,ground:g}=elvenRealmSite;
+  const wood=matCol('#57351f'),gold=matCol('#d7aa3d','#ffe58a',.45),crystal=matCol('#66e8d0','#8affdf',.9),violet=matCol('#7555a8','#b991ff',.6);
+  const add=(geo,mat,px,py,pz,parent=elvenInteractionProps)=>{const mesh=new THREE.Mesh(geo,mat);mesh.position.set(px,py,pz);parent.add(mesh);return mesh;};
+  const harp=new THREE.Group();harp.position.set(x-12.2,g+1,z-6.3);elvenInteractionProps.add(harp);
+  add(new THREE.BoxGeometry(.16,2.2,.16),wood,-.65,1.05,0,harp).rotation.z=-.14;
+  add(new THREE.BoxGeometry(.16,1.55,.16),gold,.55,.78,0,harp).rotation.z=.5;
+  add(new THREE.BoxGeometry(1.25,.14,.24),wood,0,.08,0,harp);
+  for(let i=0;i<7;i++)add(new THREE.BoxGeometry(.018,1.35-i*.12,.025),i%2?violet:crystal,-.45+i*.14,.78-i*.02,.02,harp);
+  const chime=(px,pz,mat)=>{
+    const root=new THREE.Group();root.position.set(px,g+1,pz);elvenInteractionProps.add(root);
+    add(new THREE.CylinderGeometry(.08,.1,2.5,7),wood,0,1.25,0,root);
+    add(new THREE.BoxGeometry(1.15,.1,.14),gold,0,2.48,0,root);
+    for(let i=-1;i<=1;i++){
+      add(new THREE.CylinderGeometry(.055,.1,.72+i*.09,7),mat,i*.34,1.92,0,root);
+      add(new THREE.OctahedronGeometry(.09,0),gold,i*.34,1.45-i*.04,0,root);
+    }
+  };
+  chime(x-21,z-8,gold);chime(x-12,z+8,crystal);chime(x-5,z-6,violet);
+}
+buildElvenInteractionProps();
+
+const ELVEN_CITIZENS=(()=>{
+  const x=elvenRealmSite.x,z=elvenRealmSite.z,g=elvenRealmSite.ground,tx=x+4;
+  return [
+    {name:'Caelen Dawnspear',role:'elf_guard',title:'Captain of the Crown Guard',robe:['#194f45','#0b2d28'],route:[[tx+1.7,g+1,z-.85],[tx-.4,g+1,z-.85],[tx-2.4,g+1,z-2.1],[tx-.4,g+1,z-.85]],alwaysDuty:true,line:'The Crown Guard watches every bridge and branch. Walk freely, traveler, but carry peace beneath the living crown.'},
+    {name:'Thalia Greenmantle',role:'elf_guard',title:'Crown Guard',robe:['#205b4d','#10372f'],route:[[tx+1.7,g+1,z+1.85],[tx-.4,g+1,z+1.85],[tx-2.4,g+1,z+3.1],[tx-.4,g+1,z+1.85]],alwaysDuty:true,line:'King Aelarion receives peaceful travelers. The Moon Council keeps its records on the floor above.'},
+    {name:'Ilyra Moonquill',role:'elf_scholar',title:'Moon Council Archivist',robe:['#51608b','#2b3458'],route:[[tx-1.8,g+11.08,z+3.45],[tx,g+11.08,z+3.45],[tx+1.8,g+11.08,z+3.45]],socialPoint:[tx,g+11.08,z+.5],restPoint:[tx-1.8,g+11.08,z+3.45],line:'Every leaf records a season. Every book records what the leaves were kind enough to teach us.'},
+    {name:'Vaelis Starwatch',role:'elf_scholar',title:'Canopy Astronomer',robe:['#354d79','#1d294a'],route:[[tx,g+20.08,z+.5],[tx+1.8,g+20.08,z+.5],[tx,g+20.08,z+2.2]],socialPoint:[tx,g+20.08,z+.5],restPoint:[tx-1.8,g+20.08,z+.5],nightWorker:true,line:'The observatory measures more than stars. Some nights, the old Gates bend their light.'},
+    {name:'Lethiel Larksong',role:'elf_musician',title:'Court Harpist',robe:['#6a4f83','#3d2d55'],route:[[x-13,g+1,z-6.8],[x-11.5,g+1,z-5.8]],line:'The grove has its own melody. I merely leave enough silence for travelers to hear it.'},
+    {name:'Aeris Silverbell',role:'elf_musician',title:'Bridge Minstrel',robe:['#476f75','#29464d'],route:[[x-12.5,g+1,z+7.6],[x-10.8,g+1,z+6.4]],line:'Songs cross borders more easily than armies. This one followed the Westwind home.'},
+    {name:'Nimriel Fernhand',role:'elf_gardener',title:'Moonwell Gardener',robe:['#477348','#28472b'],route:[[x-24,g+1,z-6],[x-19,g+1,z-9],[x-13,g+1,z-6],[x-16,g+1,z-1]],line:'Moonblossoms open for patient hands. Rushing them only teaches the roots to hide.'},
+    {name:'Orist Leafkeeper',role:'elf_gardener',title:'Canopy Tender',robe:['#557943','#304b28'],route:[[x-20,g+1,z+8],[x-14,g+1,z+10],[x-8,g+1,z+7],[x-12,g+1,z+3]],line:'We do not command the living tree. We listen, prune gently, and make room for tomorrow.'},
+    {name:'Maeron Glowforge',role:'elf_artisan',title:'Crystal Artisan',robe:['#79583e','#463021'],route:[[x-9,g+1,z-8.5],[x-4,g+1,z-6],[x-7,g+1,z-2],[x-11,g+1,z-4]],line:'Moonstone holds memory in its light. A careful cut lets that memory sing instead of shatter.'},
+    {name:'Sylwen Threadlight',role:'elf_artisan',title:'Royal Weaver',robe:['#7b536f','#493047'],route:[[x-18,g+1,z+2],[x-14,g+1,z-1],[x-9,g+1,z+2],[x-13,g+1,z+5]],line:'These banners are woven with starleaf fibre. They change shade when the canopy approves of the weather.'},
+    {name:'Faelar Windstep',role:'elf_scout',title:'Grove Scout',robe:['#365e4a','#1c382c'],route:[[x-29.2,g+1,z],[x-24,g+1,z-3],[x-18,g+1,z],[x-24,g+1,z+3]],speed:1.35,line:'The western road is quiet today. Quiet is a report, not a promise.'},
+    {name:'Seris Hawkeye',role:'elf_scout',title:'Canopy Ranger',robe:['#3d674d','#213b2b'],route:[[x-10,g+1,z+10],[x-4,g+1,z+7],[x-1,g+1,z+1],[x-5,g+1,z-5],[x-10,g+1,z-10]],speed:1.45,line:'From the high branches we can see the old border, the airship, and storms three valleys away.'},
+  ];
+})();
+function spawnElvenCitizens(){
+  const x=elvenRealmSite.x,z=elvenRealmSite.z,g=elvenRealmSite.ground;
+  const socialRing=[[-16,-2],[-14,-3.7],[-12,-2],[-12,1],[-14,2.7],[-16,1],[-18,0],[-10,0]];
+  let socialIndex=0;
+  for(let i=0;i<ELVEN_CITIZENS.length;i++){
+    const def=ELVEN_CITIZENS[i],visual={signature:def.role,skinPair:i%3===0?['#d8ae83','#ad7958']:i%3===1?['#c99470','#966247']:['#e0b991','#b17f5d'],hair:['#e4d5a8','#704b32','#bec7b0','#3b2b31'][i%4]};
+    const workRoute=def.route||[def.at],socialOffset=socialRing[socialIndex%socialRing.length],scheduled=!!def.route&&!def.alwaysDuty;
+    const v={...makeVillager(def.robe[0],def.robe[1],false,visual),name:def.name,shortName:def.name.split(' ')[0],role:def.role,title:def.title,line:def.line,
+      personality:'a resident of Elaria',elvenCitizen:true,static:!def.route,fixedY:def.at&&def.at[1],route:def.route||null,workRoute,routeIndex:1,routeWait:i%3*.45,
+      scheduled,alwaysDuty:!!def.alwaysDuty,nightWorker:!!def.nightWorker,socialPoint:scheduled?(def.socialPoint||[x+socialOffset[0],g+1,z+socialOffset[1]]):null,
+      restPoint:scheduled?(def.restPoint||workRoute[0]):null,scheduleMode:'work',currentActivity:def.alwaysDuty?'Patrolling the living palace':'Working in Elaria',
+      speed:def.speed||(.85+(i%4)*.09),phase:i*.73,inside:false,wait:0,tx:0,tz:0,stuck:0};
+    if(scheduled)socialIndex++;
+    const start=def.at||def.route[0];v.grp.position.set(start[0],start[1],start[2]);v.grp.rotation.y=def.facing==null?0:def.facing;
+    attachNpcNameplate(v);scene.add(v.grp);villagers.push(v);
+  }
+}
+spawnElvenCitizens();
 for(const [i,s] of smallDiscoveries.filter(d=>d.type==='traveling_merchant').entries()){
   const v={...makeVillager('#6b4f8a','#44305f',true),role:'traveling_merchant',name:'Road Merchant',shortName:'Merchant',title:'Traveling Trader',line:'Road dust, rare stock, fair prices.',static:true,fixedY:s.y+1,phase:i*.9,inside:false};
   v.grp.position.set(s.x+.5,s.y+1,s.z+.5);v.grp.rotation.y=Math.PI;attachNpcNameplate(v);scene.add(v.grp);villagers.push(v);
@@ -5351,16 +5539,72 @@ function hideNpcOverlays(v){
   if(v&&v.questMarker){v.questMarker.visible=false;if(v.questMarker.material)v.questMarker.material.opacity=0;}
 }
 
+function elvenScheduleMode(v){
+  if(v&&v.nightWorker){
+    if(gDayF>=.72&&gDayF<.86)return 'social';
+    return gDayF<.28||gDayF>=.86?'work':'rest';
+  }
+  if(gDayF>=.28&&gDayF<.35)return 'dawn';
+  if(gDayF>=.35&&gDayF<.72)return 'work';
+  if(gDayF>=.72&&gDayF<.86)return 'social';
+  return 'rest';
+}
+function elvenActivityLabel(v,mode){
+  if(v.alwaysDuty)return v.role==='elf_guard'?'Patrolling the Crown Hall':'Standing watch';
+  if(mode==='dawn')return v.role==='elf_scout'?'Inspecting the dawn perimeter':v.role==='elf_gardener'?'Opening the moonblossom beds':'Starting the morning round';
+  if(mode==='social')return v.role==='elf_musician'?'Performing the evening gathering':v.role==='elf_scholar'?'Sharing the day’s discoveries':'Gathering with the citizens of Elaria';
+  if(mode==='rest')return v.nightWorker?'Resting before the night watch':'Returning to a quiet resting place';
+  const work={elf_guard:'Patrolling the living palace',elf_scholar:v.nightWorker?'Charting stars above the canopy':'Cataloguing the Moon Archives',elf_musician:'Rehearsing an Elarian melody',elf_gardener:'Tending the moonwell gardens',elf_artisan:'Shaping moonstone and starleaf',elf_scout:'Patrolling Elaria’s outer paths'};
+  return work[v.role]||'Working in Elaria';
+}
+function syncElvenSchedule(v){
+  if(!v.elvenCitizen)return;
+  if(v.alwaysDuty){v.currentActivity=elvenActivityLabel(v,'work');return;}
+  if(!v.scheduled){v.currentActivity=v.seated?'Holding court beneath the living crown':'Serving in the royal palace';return;}
+  const mode=elvenScheduleMode(v);
+  v.currentActivity=elvenActivityLabel(v,mode);
+  if(mode===v.scheduleMode)return;
+  v.scheduleMode=mode;
+  v.route=(mode==='work'||mode==='dawn')?v.workRoute:[mode==='social'?v.socialPoint:v.restPoint];
+  v.routeIndex=0;v.routeWait=0;v.nearPlayer=false;
+}
+function animateElvenRoutine(v,t,mode='work'){
+  const beat=Math.sin(t*(mode==='social'?3.2:4.4)+v.phase),slow=Math.sin(t*1.1+v.phase);
+  if(mode==='rest'){
+    v.head.rotation.y=slow*.18;v.head.rotation.x=.04+Math.abs(slow)*.025;
+    if(v.arms){v.arms[0].rotation.x=-.08;v.arms[1].rotation.x=-.08;}
+  }else if(mode==='social'){
+    const centerX=elvenRealmSite.x-14,centerZ=elvenRealmSite.z;
+    v.grp.rotation.y+=angDiff(Math.atan2(centerX-v.grp.position.x,centerZ-v.grp.position.z),v.grp.rotation.y)*.08;
+    if(v.arms&&v.role==='elf_musician'){
+      v.arms[0].rotation.x=-.62+beat*.16;v.arms[1].rotation.x=-.48-beat*.2;
+    }else if(v.arms){v.arms[0].rotation.x=-.2+beat*.18;v.arms[0].rotation.z=-.25;v.arms[1].rotation.x=-.12-beat*.08;}
+    v.head.rotation.x=slow*.035;
+  }else if(v.role==='elf_gardener'&&v.arms){
+    v.torso.rotation.x=.1+Math.abs(beat)*.08;v.arms[1].rotation.x=-.75+beat*.32;v.arms[0].rotation.x=-.35-beat*.14;
+  }else if(v.role==='elf_artisan'&&v.arms){
+    v.arms[1].rotation.x=-.95+Math.abs(beat)*.7;v.arms[0].rotation.x=-.3;v.torso.rotation.z=beat*.025;
+  }else if(v.role==='elf_musician'&&v.arms){
+    v.arms[0].rotation.x=-.58+beat*.12;v.arms[1].rotation.x=-.45-beat*.16;v.head.rotation.x=slow*.04;
+  }else if(v.role==='elf_scout'){
+    v.head.rotation.y=slow*.55;if(v.arms)v.arms[0].rotation.x=-.18;
+  }else if(v.role==='elf_guard'){
+    v.head.rotation.y=slow*.24;if(v.arms){v.arms[0].rotation.x=-.1;v.arms[1].rotation.x=-.2;}
+  }
+}
+
 function tickVillagers(dt, t){
   const night = gDayF<0.35;
   for(const v of villagers){
     const p=v.grp.position;
-    const dxp=player.pos.x-p.x,dzp=player.pos.z-p.z,pdSq=dxp*dxp+dzp*dzp;
+    const dxp=player.pos.x-p.x,dyp=player.pos.y-p.y,dzp=player.pos.z-p.z,pdSq=dxp*dxp+dyp*dyp+dzp*dzp;
+    if(v.elvenCitizen)v.grp.visible=dim==='overworld'&&pdSq<=OVERWORLD_NPC_ACTIVE_SQ;
     if(dim!=='overworld'||pdSq>OVERWORLD_NPC_ACTIVE_SQ){
       hideNpcOverlays(v);
       continue;
     }
     const pd=Math.sqrt(pdSq);
+    if(v.elvenCitizen)syncElvenSchedule(v);
     headTrack(v, dt);
     if(v.signatureGlow){
       const pulse=.92+Math.sin(t*2.4+v.phase)*.1;v.signatureGlow.scale.setScalar(pulse);
@@ -5395,6 +5639,24 @@ function tickVillagers(dt, t){
       p.y=(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.5+v.phase)*.014;
       continue;
     }
+    if(v.elvenCitizen&&Array.isArray(v.route)&&v.route.length){
+      if(pd<2.6){
+        if(!v.nearPlayer)v.greetT=1.15;
+        v.nearPlayer=true;v.greetT=Math.max(0,(v.greetT||0)-dt);v.animState=v.greetT>0?'greet':'attend';
+        const want=Math.atan2(player.pos.x-p.x,player.pos.z-p.z);
+        v.grp.rotation.y+=angDiff(want,v.grp.rotation.y)*Math.min(1,dt*8);
+        if(v.arms&&v.greetT>0){v.arms[0].rotation.x=-.18+Math.sin(t*8+v.phase)*.1;v.arms[0].rotation.z=-.62;}
+        continue;
+      }
+      if(pd>3.1)v.nearPlayer=false;
+      if(v.routeWait>0){v.animState=v.scheduleMode==='social'?'social':'work';v.routeWait-=dt;animateElvenRoutine(v,t,v.scheduleMode);continue;}
+      const target=v.route[v.routeIndex%v.route.length],dx=target[0]-p.x,dy=target[1]-p.y,dz=target[2]-p.z,d=Math.hypot(dx,dy,dz);
+      if(d<.18){v.routeIndex=(v.routeIndex+1)%v.route.length;v.routeWait=v.scheduleMode==='social'?4.5+v.phase%2:1.1+(v.routeIndex%3)*.7;continue;}
+      const step=Math.min(d,v.speed*dt);p.x+=dx/d*step;p.y+=dy/d*step;p.z+=dz/d*step;v.animState='walk';
+      const want=Math.atan2(dx,dz);v.grp.rotation.y+=angDiff(want,v.grp.rotation.y)*Math.min(1,dt*9);
+      const sw=Math.sin(t*7.5+v.phase)*.5;if(v.legs){v.legs[0].rotation.x=sw;v.legs[1].rotation.x=-sw;v.arms[0].rotation.x=-sw*.72;v.arms[1].rotation.x=sw*.72;}
+      continue;
+    }
     if(v.static){
       v.animState='work';
       const work=Math.sin(t*3.1+v.phase),role=v.role||'';
@@ -5403,11 +5665,12 @@ function tickVillagers(dt, t){
         if(v.signatureGlow)v.signatureGlow.rotation.y=t*.55;
       }else if(v.arms&&['miner','smith','mason','cook','farmer'].includes(role)){
         v.arms[1].rotation.x=-.52+work*.34;v.arms[0].rotation.x=-.12-work*.08;
-      }else if(v.arms&&['scholar','cartographer','guild_receptionist','social_mentor','job_mentor','worker_tutor'].includes(role)){
+      }else if(v.arms&&['scholar','cartographer','guild_receptionist','social_mentor','job_mentor','worker_tutor','elf_scholar','elf_musician'].includes(role)){
         v.arms[0].rotation.x=-.34+work*.06;v.arms[1].rotation.x=-.32-work*.06;v.head.rotation.x=.04+work*.025;
-      }else if(v.arms&&['stablemaster','warden','road_warden','skyship_attendant'].includes(role)){
+      }else if(v.arms&&['stablemaster','warden','road_warden','skyship_attendant','elf_guard'].includes(role)){
         v.arms[0].rotation.x=-.12+work*.05;v.head.rotation.y+=Math.sin(t*.7+v.phase)*.002;
       }
+      if(v.elvenCitizen)animateElvenRoutine(v,t,'work');
       p.y=v.seated?v.fixedY:(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.3+v.phase)*.012;
       continue;
     }   // static NPCs perform role-specific work instead of standing as mannequins
@@ -5480,7 +5743,7 @@ function applyDayCycleSync(m){
 const sstep=(a,b,x)=>{ x=Math.min(1,Math.max(0,(x-a)/(b-a))); return x*x*(3-2*x); };
 
 // gradient sky dome with sun disc, halo, moon and twilight scattering
-const skyUniforms={ sunDir:{value:new THREE.Vector3(0,1,0)}, tamingMix:{value:0} };
+const skyUniforms={ sunDir:{value:new THREE.Vector3(0,1,0)}, tamingMix:{value:0}, elvenMix:{value:0} };
 const skyMat=new THREE.ShaderMaterial({
   uniforms: skyUniforms,
   side: THREE.BackSide,
@@ -5495,6 +5758,7 @@ const skyMat=new THREE.ShaderMaterial({
     varying vec3 vDir;
     uniform vec3 sunDir;
     uniform float tamingMix;
+    uniform float elvenMix;
     void main(){
       vec3 d = normalize(vDir);
       vec3 s = normalize(sunDir);
@@ -5519,6 +5783,17 @@ const skyMat=new THREE.ShaderMaterial({
       float ma = max(dot(d, -s), 0.0);
       col += vec3(0.86, 0.89, 0.96) * smoothstep(0.99955, 0.99985, ma) * (1.0 - dayF);
       col += vec3(0.55, 0.62, 0.78) * pow(ma, 300.0) * 0.35 * (1.0 - dayF);
+      // Elaria replaces the ordinary blue vault with an emerald-violet sky.
+      // It keeps the day/night rhythm while remaining unmistakable at a glance.
+      vec3 elfDayZen = vec3(0.13, 0.18, 0.43), elfDayHor = vec3(0.30, 0.76, 0.62);
+      vec3 elfNightZen = vec3(0.018, 0.035, 0.10), elfNightHor = vec3(0.055, 0.20, 0.20);
+      vec3 elfZen = mix(elfNightZen, elfDayZen, dayF);
+      vec3 elfHor = mix(elfNightHor, elfDayHor, dayF);
+      vec3 elfSky = mix(elfZen, elfHor, pow(1.0 - max(d.y, 0.0), 1.25));
+      float elfAurora = pow(max(dot(d, normalize(vec3(-0.42, 0.54, 0.38))), 0.0), 7.0);
+      elfSky += vec3(0.30, 0.90, 0.66) * elfAurora * (0.12 + (1.0 - dayF) * 0.28);
+      elfSky += vec3(0.72, 0.38, 0.90) * duskF * h * 0.22;
+      col = mix(col, elfSky, elvenMix);
       vec3 tamZen = vec3(0.31, 0.12, 0.58);
       vec3 tamHor = vec3(0.20, 0.82, 0.92);
       vec3 tamRose = vec3(1.0, 0.40, 0.78);
@@ -8263,6 +8538,7 @@ function updateDayNight(dt){
   const th=tod*Math.PI*2;
   _sunDir.set(Math.sin(th), -Math.cos(th), 0.22).normalize();
   skyUniforms.sunDir.value.copy(_sunDir);
+  skyUniforms.elvenMix.value=dim==='overworld'?elvenRealmInfluence():0;
   const sunE=_sunDir.y;
   const dayF=sstep(-0.12,0.20,sunE);
   gDayF=dayF;

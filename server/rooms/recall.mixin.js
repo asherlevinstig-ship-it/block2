@@ -5,6 +5,9 @@ const W=require('../world');
 const { getAuthService }=require('../auth');
 
 class RecallMixin{
+  sendRecallTrace(client,event,data={}){
+    try{if(client&&typeof client.send==='function')client.send('recallTrace',{event:String(event||'unknown'),at:Date.now(),...data});}catch(_){}
+  }
   async loadRecallQuestionWithTimeout(store,account,input,timeoutMs=4000){
     let timer;
     try{
@@ -46,7 +49,9 @@ class RecallMixin{
     if(!challenge||challenge.expiresAt<=Date.now())return false;
     challenge.pillars=this.recallPositions(p,Number.isFinite(yaw)?yaw:p.yaw);
     challenge.fallback=challenge.source==='question_hall'||challenge.pillars.some(value=>value.blocked);
+    challenge.originX=p.x;challenge.originZ=p.z;
     const rec=typeof this.profileFor==='function'&&this.profileFor(client);
+    this.sendRecallTrace(client,'placed',{challengeId:challenge.id,relocated:true,mode:challenge.fallback?'screen_fallback':'world_pillars',blocked:challenge.pillars.filter(value=>value.blocked).length,pillars:challenge.pillars.map(value=>({x:Math.round(value.x*10)/10,y:Math.round(value.y*10)/10,z:Math.round(value.z*10)/10,blocked:!!value.blocked}))});
     this.sendRecallQuestion(client,challenge,rec,p);
     return true;
   }
@@ -59,7 +64,8 @@ class RecallMixin{
   recallStandHeight(p,x,z){
     if(this.recallTutorialSpace(p))return p.y;
     const dgn=p&&p.dgn||'',inst=dgn&&this.instances&&this.instances[dgn],world=inst&&inst.world||this.world;
-    const h=world&&typeof world.standHeight==='function'?world.standHeight(x,z,(p&&p.y||W.WH)-1):W.standHeight(x,z,(p&&p.y||W.WH)-1);
+    const fromY=this.recallDungeonSpace(p)?(p&&p.y||W.WH)-1:Math.min(W.WH-2,(p&&p.y||W.WH)+2);
+    const h=world&&typeof world.standHeight==='function'?world.standHeight(x,z,fromY):W.standHeight(x,z,fromY);
     return h>0?h:p.y;
   }
   recallPillarClear(p,candidate){
@@ -75,26 +81,35 @@ class RecallMixin{
     const solid=typeof this.spaceSolid==='function'?this.spaceSolid(p.dgn||''):null;
     if(!solid)return true;
     const y=this.recallStandHeight(p,candidate.x,candidate.z);
-    if(!Number.isFinite(y)||y<=0)return false;
+    // Do not move an overworld answer onto a roof or cliff that the player
+    // cannot reach from the cast point.
+    if(!Number.isFinite(y)||y<=0||(!dungeonSpace&&Math.abs(y-p.y)>2.5))return false;
     const bx=Math.floor(candidate.x),bz=Math.floor(candidate.z);
     // Reserve the whole visible beam and label footprint, not merely enough
     // room for a player's body. This prevents apparently valid answers from
     // cutting through roofs, walls, trees or street furniture.
-    const r=dungeonSpace?1:2,heights=dungeonSpace?[y+.2,y+1.5,y+2.8,y+3.6]:[y+.2,y+1.5,y+3.2,y+5,y+7];
+    // World pillars need player clearance plus room for the readable label, not
+    // an empty 5x5x7 building lot. The old volume forced most wilderness casts
+    // into screen fallback because one leaf, slope, or roadside prop failed it.
+    const r=dungeonSpace?1:0,heights=dungeonSpace?[y+.2,y+1.5,y+2.8,y+3.6]:[y+.2,y+1.5,y+2.8,y+4.25];
     for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
       for(const yy of heights)if(solid(bx+dx,Math.floor(yy),bz+dz))return false;
     }
-    if(!AI.losClear(solid,p.x,p.y+1.2,p.z,candidate.x,y+1.2,candidate.z))return false;
+    // Dungeon answers must remain in the same cave chamber. In the open world,
+    // trees and small slopes may briefly occlude a beam but do not make it
+    // unreachable; requiring LOS there caused most forest casts to disappear.
+    if(dungeonSpace&&!AI.losClear(solid,p.x,p.y+1.2,p.z,candidate.x,y+1.2,candidate.z))return false;
     candidate.y=y;
     return true;
   }
-  recallResolvePillar(p,base,forward,right){
+  recallResolvePillar(p,base,forward,right,occupied=[]){
     const offsets=[{f:0,s:0}];
-    for(const r of [2.75,5.5,8.25,11]){
+    for(const r of [2.75,5.5,8.25,11,13.75,16.5]){
       offsets.push({f:r,s:0},{f:-r,s:0},{f:0,s:r},{f:0,s:-r},{f:r,s:r},{f:r,s:-r},{f:-r,s:r},{f:-r,s:-r});
     }
     for(const o of offsets){
       const candidate={index:base.index,x:base.x+forward.x*o.f+right.x*o.s,y:base.y,z:base.z+forward.z*o.f+right.z*o.s};
+      if(occupied.some(value=>Math.hypot(value.x-candidate.x,value.z-candidate.z)<(this.recallDungeonSpace(p)?2.5:4)))continue;
       if(this.recallPillarClear(p,candidate))return candidate;
     }
     return {...base,blocked:true};
@@ -113,22 +128,30 @@ class RecallMixin{
       {f:11,s:9.5},   // right point
       {f:7,s:0},      // rear point: far enough that its label cannot engulf the camera
     ];
+    const placed=[];
     return diamond.map((o,i)=>{
       const base={index:i,x:p.x+forward.x*o.f+right.x*o.s,y:p.y,z:p.z+forward.z*o.f+right.z*o.s};
-      return typeof this.recallPillarClear==='function'?this.recallResolvePillar(p,base,forward,right):base;
+      const resolved=typeof this.recallPillarClear==='function'?this.recallResolvePillar(p,base,forward,right,placed):base;
+      if(!resolved.blocked)placed.push(resolved);
+      return resolved;
     });
   }
   async handleRecallStart(client,message={}){
     if(!client)return;
     const p=this.state.players.get(client.sessionId);let now=Date.now();
-    if(!p)return;
+    if(!p){this.sendRecallTrace(client,'reject',{reason:'player_missing'});return client.send('recallReject',{reason:'player_missing'});}
+    this.sendRecallTrace(client,'received',{source:String(message.source||'recall'),dim:p.dim||'overworld',dgn:p.dgn||'',x:+p.x,y:+p.y,z:+p.z,yaw:Number.isFinite(message.yaw)?+message.yaw:+p.yaw});
     const rec=typeof this.profileFor==='function'&&this.profileFor(client);
     const active=this.recallChallenges.get(client.sessionId),questionHallRequest=message.source==='question_hall';
     if(active&&active.expiresAt>now){
       if(questionHallRequest&&active.source==='question_hall')this.recallChallenges.delete(client.sessionId);
-      else return this.sendRecallQuestion(client,active,rec,p);
+      else{
+        const moved=Math.hypot((active.originX==null?p.x:active.originX)-p.x,(active.originZ==null?p.z:active.originZ)-p.z);
+        this.sendRecallTrace(client,'active_relocated',{challengeId:active.id,moved:Math.round(moved*100)/100});
+        return this.relocateRecallChallenge(client,p,message.yaw);
+      }
     }
-    if(this.rateLimited(client,'recallStart',4,8))return client.send('recallReject',{reason:'rate'});
+    if(this.rateLimited(client,'recallStart',4,8)){this.sendRecallTrace(client,'reject',{reason:'rate'});return client.send('recallReject',{reason:'rate'});}
     const subject='Computer Science';
     this.recallSubjects.set(client.sessionId,subject);
     if(rec)rec.prof.recallSubject=subject;
@@ -142,7 +165,7 @@ class RecallMixin{
     }
     const tutorial=this.recallTutorialSpace(p),questionHall=questionHallRequest;
     let q=null;
-    if(this.recallStartsPending.has(client.sessionId))return client.send('recallReject',{reason:'pending'});
+    if(this.recallStartsPending.has(client.sessionId)){this.sendRecallTrace(client,'reject',{reason:'pending'});return client.send('recallReject',{reason:'pending'});}
     this.recallStartsPending.add(client.sessionId);
     const startDim=p.dim,startDungeon=p.dgn;
     try{
@@ -153,7 +176,7 @@ class RecallMixin{
       }
     }catch(_){}finally{this.recallStartsPending.delete(client.sessionId);}
     if(this.state.players.get(client.sessionId)!==p)return;
-    if(p.dim!==startDim||p.dgn!==startDungeon)return client.send('recallReject',{reason:'space_changed'});
+    if(p.dim!==startDim||p.dgn!==startDungeon){this.sendRecallTrace(client,'reject',{reason:'space_changed',startDim,currentDim:p.dim||''});return client.send('recallReject',{reason:'space_changed'});}
     now=Date.now();
     if(!q){
       const history=rec&&rec.prof.recallMastery||{},recent=this.recallRecentQuestions.get(client.sessionId)||[],recentPrompts=this.recallRecentPrompts.get(client.sessionId)||[],avoid=this.recallAvoidance(history,recent,recentPrompts);
@@ -184,8 +207,9 @@ class RecallMixin{
         this.dirtyPlayers.add(rec.token);
       }
     }
-    const challenge={id,questionId:q.id,databaseQuestionId:Number(q.questionId)||0,subjectId:Number(q.subjectId)||0,scopeSchoolId:Number(q.scopeSchoolId)||0,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source};
+    const challenge={id,questionId:q.id,databaseQuestionId:Number(q.questionId)||0,subjectId:Number(q.subjectId)||0,scopeSchoolId:Number(q.scopeSchoolId)||0,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source,originX:p.x,originZ:p.z};
     this.recallChallenges.set(client.sessionId,challenge);
+    this.sendRecallTrace(client,'placed',{challengeId:id,mode:fallback?'screen_fallback':'world_pillars',blocked:pillars.filter(value=>value.blocked).length,pillars:pillars.map(value=>({x:Math.round(value.x*10)/10,y:Math.round(value.y*10)/10,z:Math.round(value.z*10)/10,blocked:!!value.blocked}))});
     this.sendRecallQuestion(client,challenge,rec,p);
   }
   recordRecallAnalytics(client,challenge,answerIndex,correct,now=Date.now()){

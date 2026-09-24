@@ -3,6 +3,7 @@ let active=null,group=null,answerPending=false,masterySummary=null,questionHallO
 const questionHallMarks=[];
 let requestTimer=0,recallRoom=null,recallDim=null;
 function finishRequest(){if(requestTimer)clearTimeout(requestTimer);requestTimer=0;}
+function recallTrace(event,data={}){try{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('recall.'+event,data);}catch(_){}}
 const colors=[0x38bdf8,0xa78bfa,0xfbbf24,0x34d399],QUESTION_HALL_GOAL=10;
 // The server accepts answers within 2.65 blocks so movement replication has some
 // slack. Keep the client activation area large enough to cover the visible pillar.
@@ -84,46 +85,56 @@ function submitAnswer(index){
   if(reconcileDelay)setTimeout(send,reconcileDelay);else send();
 }
 function showQuestion(m){
-  if(m&&m.questionHall&&!questionHallOpen)return;
+  if(m&&m.questionHall&&!questionHallOpen){recallTrace('question.ignored',{reason:'question_hall_closed',id:m.id||''});return;}
   finishRequest();recallRoom=NET.room;recallDim=dim;
   const hall=!!(m&&m.questionHall)||questionHallOpen;
+  const answers=Array.isArray(m&&m.answers)?m.answers:[],pillars=Array.isArray(m&&m.pillars)?m.pillars:[];
+  const worldPillars=!hall&&!m.fallback&&answers.length>0&&pillars.length===answers.length;
+  const screenFallback=!hall&&!worldPillars;
   if(recallClearTimer){clearTimeout(recallClearTimer);recallClearTimer=0;}
-  clearRecall({keepQuestionHall:hall});active=m;answerPending=false;masterySummary=m.mastery||masterySummary;group=new THREE.Group();
+  clearRecall({keepQuestionHall:hall});active={...m,answers,pillars,fallback:screenFallback||!!m.fallback};answerPending=false;masterySummary=m.mastery||masterySummary;group=new THREE.Group();
   if(hall)questionHallOpen=true;
-  if(!m.fallback&&!hall)m.pillars.forEach((p,i)=>{
+  if(worldPillars)pillars.forEach((p,i)=>{
     const compact=!!m.dungeonRecall||dim==='dungeon';
     const letter=String.fromCharCode(65+i),root=new THREE.Group(),mat=new THREE.MeshBasicMaterial({color:colors[i],transparent:true,opacity:.38,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
     const beamH=compact?4.2:7,beamR=compact?.72:1.05,ringR=compact?.92:1.28;
     const beam=new THREE.Mesh(new THREE.CylinderGeometry(beamR,beamR,beamH,24,1,true),mat),ring=new THREE.Mesh(new THREE.TorusGeometry(ringR,.12,10,36),new THREE.MeshBasicMaterial({color:colors[i],transparent:true,opacity:1,depthTest:true,depthWrite:false})),light=new THREE.PointLight(colors[i],1.45,compact?7:10);
     beam.position.y=beamH/2;ring.rotation.x=Math.PI/2;ring.position.y=.12;light.position.y=compact?1.7:2;root.position.set(p.x,p.y,p.z);root.add(beam,ring,light,makeLabel(m.answers[i],labelColor(i),letter,compact));root.userData.index=i;group.add(root);
   });
-  if(!m.fallback&&!hall)scene.add(group);else{fallbackEl.innerHTML='';m.answers.forEach((answer,i)=>{const b=document.createElement('button');b.className='recallchoice';b.style.setProperty('--answer',labelColor(i));b.textContent=String.fromCharCode(65+i)+'  '+answer;b.onclick=()=>submitAnswer(i);fallbackEl.appendChild(b);});fallbackEl.classList.remove('hidden');}
+  if(worldPillars)scene.add(group);else{fallbackEl.innerHTML='';answers.forEach((answer,i)=>{const b=document.createElement('button');b.className='recallchoice';b.style.setProperty('--answer',labelColor(i));b.textContent=String.fromCharCode(65+i)+'  '+answer;b.onclick=()=>submitAnswer(i);fallbackEl.appendChild(b);});fallbackEl.classList.remove('hidden');}
   subjectEl.textContent=(hall?'QUESTION HALL · ':(m.ruinBonus?'RUIN INSCRIPTION · ':''))+m.stage+' · '+m.subject+(m.topic?' · '+m.topic:'');
-  timeEl.textContent=hall?'CLOSE':(m.fallback?'CHOOSE':'RUN');
+  timeEl.textContent=hall?'CLOSE':(screenFallback?'CHOOSE':'RUN');
   questionEl.textContent=m.prompt;feedbackEl.className='hidden';feedbackEl.textContent='';
-  if(instructionEl){instructionEl.textContent='RUN TOWARDS THE CORRECT ANSWER';instructionEl.classList.toggle('hidden',hall||!!m.fallback);}
-  document.body.classList.add('recall-active');document.body.classList.toggle('question-hall-recall-open',hall);hud.classList.toggle('question-hall-recall',hall);updateQuestionHallProgress();hud.classList.remove('hidden');
+  if(instructionEl){instructionEl.textContent='RUN TOWARDS THE CORRECT ANSWER';instructionEl.classList.toggle('hidden',hall||screenFallback);}
+  document.body.classList.add('recall-active');document.body.classList.toggle('question-hall-recall-open',hall);hud.classList.toggle('question-hall-recall',hall);hud.classList.toggle('recall-screen-fallback',screenFallback);updateQuestionHallProgress();hud.classList.remove('hidden');
+  recallTrace('question.shown',{id:m.id||'',mode:hall?'question_hall':(screenFallback?'screen_fallback':'world_pillars'),serverFallback:!!m.fallback,answers:answers.length,pillars:pillars.map(p=>({x:+p.x,y:+p.y,z:+p.z,blocked:!!p.blocked})),dim:String(dim||'')});
+  if(screenFallback){
+    try{if(typeof globalThis.releaseGameplayCursor==='function')globalThis.releaseGameplayCursor();}catch(_){}
+    showName('SAFE ANSWER MODE');
+    sysMsg('<b>Recall:</b> the terrain blocked a safe four-pillar layout, so the answers opened on screen. Use A–D, 1–4, or click an answer.');
+  }
 }
 function clearRecall(opts={}){
   finishRequest();
   active=null;answerPending=false;if(questionHallNextTimer){clearTimeout(questionHallNextTimer);questionHallNextTimer=0;}if(recallClearTimer){clearTimeout(recallClearTimer);recallClearTimer=0;}
-  clearMeshes();fallbackEl.innerHTML='';fallbackEl.classList.add('hidden');if(instructionEl)instructionEl.classList.add('hidden');feedbackEl.className='hidden';hud.classList.remove('question-hall-recall');hud.classList.add('hidden');document.body.classList.remove('recall-active','question-hall-recall-open');
+  clearMeshes();fallbackEl.innerHTML='';fallbackEl.classList.add('hidden');if(instructionEl)instructionEl.classList.add('hidden');feedbackEl.className='hidden';hud.classList.remove('question-hall-recall','recall-screen-fallback');hud.classList.add('hidden');document.body.classList.remove('recall-active','question-hall-recall-open');
   if(!opts.keepQuestionHall){questionHallOpen=false;questionHallAnswered=0;}updateQuestionHallProgress();
 }
 function selectedSubject(){return 'Computer Science';}
 function start(opts={}){
-  if(!NET.on||!NET.room)return sysMsg('Recall Cast requires a server connection.');
+  if(!NET.on||!NET.room){recallTrace('start.blocked',{reason:'offline'});return sysMsg('Recall Cast requires a server connection.');}
   const source=opts&&opts.source==='lectern'?'lectern':(opts&&opts.source==='question_hall'?'question_hall':'');
-  if(active&&(active.expiresAt<=Date.now()||recallRoom!==NET.room||recallDim!==dim))clearRecall();
-  if(active){hud.classList.remove('hidden');return sysMsg(active.fallback||active.questionHall?'Choose an answer to the current question.':'Run towards the <b>correct answer pillar</b>.');}
-  if(requestTimer)return sysMsg('Preparing the next Recall question…');
+  recallTrace('start.requested',{source:source||'recall',dim:String(dim||''),active:!!active,pending:!!requestTimer});
+  if(active&&(active.expiresAt<=Date.now()||recallRoom!==NET.room||recallDim!==dim)){recallTrace('cleared',{reason:'stale_before_start'});clearRecall();}
+  if(active){recallTrace('start.reused',{id:active.id||'',mode:active.fallback||active.questionHall?'screen':'world'});hud.classList.remove('hidden');return sysMsg(active.fallback||active.questionHall?'Choose an answer to the current question.':'Run towards the <b>correct answer pillar</b>.');}
+  if(requestTimer){recallTrace('start.blocked',{reason:'pending'});return sysMsg('Preparing the next Recall question…');}
   clearRecall({keepQuestionHall:questionHallOpen});
   if(source==='question_hall')questionHallOpen=true;
   recallRoom=NET.room;recallDim=dim;
   showName('PREPARING QUESTION…');
-  requestTimer=setTimeout(()=>{requestTimer=0;showName('QUESTION DELAYED · PRESS P TO RETRY');sysMsg('No Recall question received. Press P to retry.');},8000);
-  try{NET.room.send('recallStart',{yaw:player.yaw,subject:selectedSubject(),source});}
-  catch(_){finishRequest();sysMsg('Could not send Recall request. Check your connection and press P to retry.');}
+  requestTimer=setTimeout(()=>{requestTimer=0;recallTrace('start.timeout',{source:source||'recall',dim:String(dim||'')});showName('QUESTION DELAYED · PRESS P TO RETRY');sysMsg('No Recall question received. Press P to retry.');},8000);
+  try{NET.room.send('recallStart',{yaw:player.yaw,subject:selectedSubject(),source});recallTrace('start.sent',{source:source||'recall',yaw:+player.yaw});}
+  catch(error){finishRequest();recallTrace('start.failed',{message:String(error&&error.message||error||'')});sysMsg('Could not send Recall request. Check your connection and press P to retry.');}
 }
 function closeQuestionHall(){
   const wasHall=questionHallOpen;
@@ -150,6 +161,7 @@ function result(m){
 }
 function reject(m){
   const r=m&&m.reason;
+  recallTrace('rejected',{reason:String(r||'unknown')});
   if(r==='pending')return sysMsg('Preparing the next Recall question…');
   finishRequest();
   if(r==='active')sysMsg(questionHallOpen?'Answer or close the current question.':'Run towards the <b>correct answer pillar</b>.');
@@ -168,8 +180,8 @@ function answerPillarAtPlayer(question){
 }
 function tick(now=performance.now()){
   tickQuestionHallMarks(now);
-  if((active||requestTimer||questionHallOpen)&&(!NET.on||recallRoom!==NET.room||recallDim!==dim)){clearRecall();return;}
-  if(active&&active.expiresAt<=Date.now()){const hall=questionHallOpen;clearRecall({keepQuestionHall:hall});if(hall)queueQuestionHallNext();else sysMsg('The Recall question expired. Press P for another.');return;}
+  if((active||requestTimer||questionHallOpen)&&(!NET.on||recallRoom!==NET.room||recallDim!==dim)){recallTrace('cleared',{reason:!NET.on?'offline':(recallRoom!==NET.room?'room_changed':'dimension_changed'),fromDim:String(recallDim||''),toDim:String(dim||'')});clearRecall();return;}
+  if(active&&active.expiresAt<=Date.now()){const hall=questionHallOpen;recallTrace('cleared',{reason:'expired',id:active.id||''});clearRecall({keepQuestionHall:hall});if(hall)queueQuestionHallNext();else sysMsg('The Recall question expired. Press P for another.');return;}
   if(!active)return;
   if(group)group.children.forEach((p,i)=>{p.children[0].material.opacity=.34+Math.sin(now*.004+i)*.12;p.children[1].rotation.z+=.012;p.children[2].intensity=1.5+Math.sin(now*.006+i)*.45;});
   if(answerPending||active.fallback||active.questionHall)return;

@@ -3255,6 +3255,10 @@ function netAttachRoom(room,name,client){
       else sysMsg('Legendary weapon failed');
     });
     room.onMessage('abilitySync', m=>applyAbilitySync(m));
+    room.onMessage('recallTrace',m=>{
+      const event=String(m&&m.event||'unknown');
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('recall.server.'+event,m||{});
+    });
     room.onMessage('recallQuestion',m=>globalThis.BlockcraftRecall.showQuestion(m));
     room.onMessage('recallResult',m=>globalThis.BlockcraftRecall.result(m));
     room.onMessage('recallReject',m=>globalThis.BlockcraftRecall.reject(m));
@@ -3312,6 +3316,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('craftReject', m=>{if(room===NET.room)menusApi.craftingRejected(m);});
     room.onMessage('shopResult', m=>{applyShopResult(m);if(m&&ITEMS[m.id])eventFeed('[Trade]',(m.action==='sell'?'Sold ':'Bought ')+feedStackText(m.id,m.count||1)+(m.gold?' for '+Math.abs(m.gold|0)+' gold':'')+'.',{key:'shop:'+String(m.vendor||'')+':'+String(m.action||'')+':'+m.id,cooldown:1500});});
     room.onMessage('shopReject', m=>shopRejected(m));
+    room.onMessage('elariaActivityState',m=>{if(typeof globalThis.handleElariaActivityState==='function')globalThis.handleElariaActivityState(m);});
+    room.onMessage('elariaActivityResult',m=>{if(typeof globalThis.handleElariaActivityResult==='function')globalThis.handleElariaActivityResult(m);});
     room.onMessage('landClaims', m=>applyLandClaims(m));
     room.onMessage('landClaimUpdate', m=>applyLandClaimUpdate(m));
     room.onMessage('landClaimResult', m=>applyLandClaimResult(m));

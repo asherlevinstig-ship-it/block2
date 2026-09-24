@@ -39,6 +39,26 @@ test('event feed stays readable during combat and guided HUD presentation',()=>{
   assert.doesNotMatch(styles,/body\.presentation-combat[^\{]*#chatlog\{\s*opacity:\.12/);
 });
 
+test('Elaria exposes persistent local activities, merchant stock, and landmark participation',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'../../client/js/combat.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'../rooms/GameRoom.js'),'utf8');
+  const activity=fs.readFileSync(path.join(__dirname,'../rooms/elaria.mixin.js'),'utf8');
+  assert.match(room,/onMessage\('elariaActivity'/);
+  assert.match(room,/require\('\.\/elaria\.mixin'\)/);
+  assert.match(activity,/court_start/);
+  assert.match(activity,/elariaCeremonyDay/);
+  assert.match(activity,/elariaLoreFound/);
+  assert.match(menus,/function openElariaActivitiesUI\(/);
+  assert.match(menus,/MOONTHREAD EXCHANGE/);
+  assert.match(menus,/Grace of the Moonwell/);
+  assert.match(combat,/NET\.room\.send\('elariaActivity',\{action:'chime'/);
+  assert.match(combat,/action:'visit'/);
+  assert.match(networking,/onMessage\('elariaActivityState'/);
+  assert.match(networking,/onMessage\('elariaActivityResult'/);
+});
+
 test('blocked mining explains client and server rejection reasons',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'../../client/js/frame-loop.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
@@ -48,6 +68,20 @@ test('blocked mining explains client and server rejection reasons',()=>{
   assert.match(networking,/Clear a <b>Gate dungeon<\/b> before mining or building beyond the frontier/);
   assert.match(networking,/Only the chest owner or a trusted Hunter can break it/);
   assert.match(networking,/That block cannot be broken here/);
+});
+
+test('players can gather their first log by hand before crafting an axe',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'../../client/js/combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  const constants=fs.readFileSync(path.join(__dirname,'../rooms/constants.js'),'utf8');
+  assert.match(world,/\[B\.LOG\]:\{t:1\.7, cls:'axe', handHarvest:true\}/);
+  assert.match(combat,/Oak logs can be gathered by hand/);
+  assert.match(combat,/Craft an axe later to chop faster/);
+  assert.match(menus,/BY HAND \(AXE IS FASTER\)/);
+  assert.match(constants,/\[W\.B\.LOG\]: \{ cls: 'axe', tier: 0 \}/,'the authoritative server must award logs without requiring an axe tier');
+  assert.match(world,/The tree returned because <b>town trees are protected<\/b>/);
+  assert.match(world,/The tree returned because this land belongs to/);
 });
 
 test('negative-karma bounties render a red world marker and tracked overhead arrow',()=>{
@@ -97,6 +131,14 @@ test('touch players receive touch-specific help and every world action has a tou
   assert.match(styles,/body\.mobile-play-mode \.touch-control-help\{display:block\}/);
   for(const action of ['player','dragons','call-dragon','mount','dragon-ability','familiar','land'])assert.match(combat,new RegExp('data-mobile-menu-action="'+action+'"'));
   assert.match(combat,/function tapVirtualKey\(code\)\{[\s\S]*dispatchVirtualKey\(code,'keydown'\);[\s\S]*dispatchVirtualKey\(code,'keyup'\);/);
+  assert.match(combat,/root\.addEventListener\('touchend'[\s\S]*\{capture:true,passive:false\}\)/,'iPad rapid taps cannot become native double-tap zoom');
+  assert.match(combat,/root\.addEventListener\('dblclick'/);
+  assert.match(combat,/\['gesturestart','gesturechange','gestureend'\]/);
+  assert.match(combat,/tablet\.zoom-gesture-blocked/);
+  assert.match(styles,/#tabletcontrols\{[^}]*touch-action:none[^}]*-webkit-touch-callout:none/);
+  assert.match(combat,/const TABLET_LOOK_SWIPE_GAIN=1\.45,PHONE_LOOK_SWIPE_GAIN=\.92/);
+  assert.match(combat,/function touchLookSwipeGain\(\)\{return tabletInputState\.tablet\?TABLET_LOOK_SWIPE_GAIN:PHONE_LOOK_SWIPE_GAIN;\}/);
+  assert.match(combat,/const gain=touchLookSwipeGain\(\);\s*if\(gameplayCameraInputAllowed\(\)\)queueMouseLook\(dx\*gain,dy\*gain\)/);
   assert.match(combat,/onboardingKind\(\)==='cursor'\)[\s\S]*onboardingFlags\.cursor=true/);
   assert.match(combat,/function instructionKey\(value\)/);
   assert.match(combat,/function instructionText\(value\)/);
@@ -426,7 +468,8 @@ test('client soundtrack manager selects one exclusive music mode', () => {
   assert.match(menus, /updateMusicTrack\(tutorialMusic, activeMusicMode==='tutorial', TUTORIAL_MUSIC_VOLUME, dt\);/);
   assert.match(menus, /updateMusicTrack\(questionsMusic, activeMusicMode==='questions', QUESTIONS_MUSIC_VOLUME, dt\);/);
   assert.match(frame, /const inMeditation=typeof inMeditationSpot==='function'&&inMeditationSpot\(\);/);
-  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\), tutorialJob, dim, inMeditation\);/);
+  assert.match(frame, /const elvenAudio=typeof elvenRealmAudioState==='function'\?elvenRealmAudioState\(\):null;/);
+  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\), tutorialJob, dim, inMeditation, elvenAudio\);/);
   assert.match(menus, /if\(!active&&audio\.volume<MUSIC_SILENCE\)/);
 });
 
@@ -874,7 +917,7 @@ test('overworld battle soundtrack is driven by hostile non-dungeon mobs', () => 
   assert.match(world, /BATTLE_MUSIC_STATES\.has\(state\)/);
   assert.match(world, /inOverworldBattle,/);
   assert.match(frame, /const tutorialJob=dim==='job'&&combatState\.jobTutorialActive \? combatState\.jobTutorialJob : '';/);
-  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\), tutorialJob, dim, inMeditation\);/);
+  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\), tutorialJob, dim, inMeditation, elvenAudio\);/);
 });
 
 test('client renders Deity power effects and stealth shimmer states', () => {
@@ -1655,7 +1698,7 @@ test('Recall pillars explicitly tell players to run towards the correct answer',
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   assert.match(html, /id="recallinstruction"/);
   assert.match(recall, /RUN TOWARDS THE CORRECT ANSWER/);
-  assert.match(recall, /m\.fallback\?'CHOOSE':'RUN'/);
+  assert.match(recall, /screenFallback\?'CHOOSE':'RUN'/);
   assert.match(styles, /#recallinstruction/);
 });
 
@@ -2343,7 +2386,11 @@ test('Recall Cast uses the dedicated P practice hotkey',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
-  assert.match(combat,/e\.code==='KeyP'\|\|String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'\)&&!e\.repeat&&gameInput[\s\S]*if\(dim==='questions'\)openQuestionHallQuestion\(\);[\s\S]*else globalThis\.BlockcraftRecall\.start\(\);\s*return;/);
+  assert.match(combat,/const recallKey=e\.code==='KeyP'\|\|String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'/);
+  assert.match(combat,/if\(recallKey&&!e\.repeat&&gameInput\)[\s\S]*if\(dim==='questions'\)openQuestionHallQuestion\(\);[\s\S]*else globalThis\.BlockcraftRecall\.start\(\);\s*return;/);
+  assert.match(combat,/recall\.key\.blocked/);
+  assert.match(recall,/recall\.question\.shown|question\.shown/);
+  assert.match(room,/sendRecallTrace\(client,'placed'/);
   assert.doesNotMatch(combat,/e\.code==='KeyI'[\s\S]*BlockcraftRecall\.start\(\)/);
   assert.match(html,/<kbd>P<\/kbd><\/div><b>Recall Cast<\/b>/);
   assert.doesNotMatch(html,/id="recallanswers"/);
@@ -2369,7 +2416,11 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(combat,/function openQuestionHallQuestion\(\)[\s\S]*startQuestionHallMeditationPose\(\);[\s\S]*releaseGameplayCursor\(\);/);
   assert.match(combat,/key:'P',title:'Question Hall',small:'Answer Computer Science questions'/);
   assert.match(combat,/function recoverQuestionHallAfterRecall\(\)/);
-  assert.match(combat,/standHeight\(player\.pos\.x,player\.pos\.z,WH-2\)/);
+  assert.match(combat,/let questionHallQuestionAnchor=null/);
+  assert.match(combat,/questionHallQuestionAnchor=\{x:player\.pos\.x,y:player\.pos\.y,z:player\.pos\.z,yaw:player\.yaw,pitch:player\.pitch\}/);
+  assert.match(combat,/player\.pos\.set\(anchor\.x,anchor\.y,anchor\.z\)/);
+  assert.match(combat,/standHeight\(player\.pos\.x,player\.pos\.z,22\)/);
+  assert.doesNotMatch(combat,/function recoverQuestionHallAfterRecall\(\)[\s\S]{0,500}standHeight\(player\.pos\.x,player\.pos\.z,WH-2\)/);
   assert.match(combat,/player\.vel\.set\(0,0,0\);/);
   assert.match(combat,/player\.onGround=true;/);
   assert.match(combat,/globalThis\.BlockcraftQuestionHallRecovery=recoverQuestionHallAfterRecall/);
@@ -2457,7 +2508,7 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(room,/this\.recallRecentPrompts\.set\(client\.sessionId,\[prompt,\.\.\.recentPrompts\.filter/);
   assert.match(recall,/renderBars\(\);active=null;answerPending=false;if\(hall\)queueQuestionHallNext/);
   assert.match(recall,/if\(recallClearTimer\)\{clearTimeout\(recallClearTimer\);recallClearTimer=0;\}[\s\S]*clearRecall\(\{keepQuestionHall:hall\}\)/,'a stale result timer cannot erase a newly arrived question');
-  assert.match(room,/else return this\.sendRecallQuestion\(client,active,rec,p\)/,'requesting Recall while the server still has a challenge resends its pillars');
+  assert.match(room,/return this\.relocateRecallChallenge\(client,p,message\.yaw\)/,'requesting Recall while the server still has a challenge safely relocates its pillars');
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.mpb,body\.calm-town:not\(\.level-two-hud\) #stats \.hub\{display:none\}/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.spb[^{}]*\{display:none\}/);
 });
@@ -3239,7 +3290,7 @@ test('quest log hotkey works while gameplay overlay is hidden even without point
   assert.match(combat,/function gameplayInputActive\(\)\{\s*return locked\|\|overlay\.classList\.contains\('hidden'\);\s*\}/);
   assert.match(combat,/if\(e\.code==='KeyO' && !e\.repeat && !pathChoiceOpen && !jobChoiceOpen && !claimMode && !uiOpen && !statOpen && gameplayInputActive\(\)\)\{/);
   assert.match(combat,/else if\(!uiShellState\.qOpen\) openQuestLogUI\(\);/);
-  assert.match(combat,/if\(e\.code==='KeyO'[\s\S]*return;\s*\}\s*if\(globalThis\.chatTyping\) return;/);
+  assert.match(combat,/if\(e\.code==='KeyO'[\s\S]*return;\s*\}[\s\S]*if\(globalThis\.chatTyping\) return;/);
   assert.doesNotMatch(combat,/else if\(locked && !uiOpen && !statOpen\) openQuestLogUI\(\);/);
   assert.match(menus,/openQuestLog:openQuestLogUI/);
 });
@@ -6314,4 +6365,74 @@ test('Elaria throne room includes royal decor and a seated Elven King',()=>{
   assert.match(world,/signature:'elf_king'/);
   assert.match(world,/static:true,seated:true/);
   assert.match(world,/if\(v\.seated&&v\.legs\)/);
+});
+
+test('Elaria has a distinct, animated elven population',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'../../client/js/combat.mjs'),'utf8');
+  assert.match(world,/const ELVEN_CITIZENS=/);
+  assert.match(world,/function spawnElvenCitizens\(\)/);
+  assert.match(world,/Caelen Dawnspear/);
+  assert.match(world,/Ilyra Moonquill/);
+  assert.match(world,/Nimriel Fernhand/);
+  assert.match(world,/Maeron Glowforge/);
+  assert.match(world,/Lethiel Larksong/);
+  assert.match(world,/Faelar Windstep/);
+  assert.match(world,/signature\.startsWith\('elf_'\)/);
+  assert.match(world,/v\.elvenCitizen&&Array\.isArray\(v\.route\)/);
+  assert.match(world,/function elvenScheduleMode\(v\)/);
+  assert.match(world,/function elvenActivityLabel\(v,mode\)/);
+  assert.match(world,/function syncElvenSchedule\(v\)/);
+  assert.match(world,/function animateElvenRoutine\(v,t,mode='work'\)/);
+  assert.match(world,/mode==='social'/);
+  assert.match(world,/mode==='rest'/);
+  assert.match(world,/alwaysDuty:true/);
+  assert.match(combat,/else if\(vill\.elvenCitizen\)/);
+  assert.match(combat,/vill\.currentActivity\|\|vill\.title/);
+  assert.match(combat,/Math\.hypot\(player\.pos\.x-p\.x,player\.pos\.y-p\.y,player\.pos\.z-p\.z\)/);
+});
+
+test('Elaria has a localized soundscape and a distinct shader sky',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'../../client/js/frame-loop.mjs'),'utf8');
+  assert.match(world,/function elvenRealmAudioState\(\)/);
+  assert.match(world,/elvenMix:\{value:0\}/);
+  assert.match(world,/uniform float elvenMix/);
+  assert.match(world,/Elaria replaces the ordinary blue vault/);
+  assert.match(world,/skyUniforms\.elvenMix\.value=dim==='overworld'\?elvenRealmInfluence\(\):0/);
+  assert.match(menus,/elvenCanopyGain/);
+  assert.match(menus,/elvenWaterGain/);
+  assert.match(menus,/elvenPalaceGain/);
+  assert.match(menus,/elvenBirdT/);
+  assert.match(menus,/elvenChimeT/);
+  assert.match(frame,/elvenRealmAudioState\(\)/);
+});
+
+test('Elaria is populated by proximity-managed magical wildlife',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'../../client/js/frame-loop.mjs'),'utf8');
+  assert.match(world,/elvenWildlifeGroup\.name='elaria-magical-wildlife'/);
+  assert.match(world,/const elvenButterflies=\[\],elvenBirds=\[\],elvenMoonfish=\[\],elvenSpiritDeer=\[\],elvenWisps=\[\]/);
+  assert.match(world,/function buildElvenWildlife\(\)/);
+  assert.match(world,/function updateElvenWildlife\(dt,t\)/);
+  assert.match(world,/playerOverworldDistanceSq\(elvenRealmSite\.x,elvenRealmSite\.z\)<145\*145/);
+  assert.match(world,/blending:THREE\.AdditiveBlending/);
+  assert.match(frame,/updateElvenWildlife\(ambientStep,now\/1000\)/);
+});
+
+test('Elaria landmarks and citizens provide playable interactions',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'../../client/js/combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'../../client/js/menus.mjs'),'utf8');
+  assert.match(world,/elvenInteractionProps\.name='elaria-interaction-props'/);
+  assert.match(world,/function buildElvenInteractionProps\(\)/);
+  assert.match(combat,/const ELARIA_INTERACTABLES=/);
+  for(const landmark of ['moonwell','harp','archives','throne','orrery','chime_dawn','chime_river','chime_crown'])assert.match(combat,new RegExp("id:'"+landmark+"'"));
+  assert.match(combat,/function nearbyElvenInteractable\(\)/);
+  assert.match(combat,/function interactElvenLandmark\(/);
+  assert.match(combat,/elariaAttunementStep>=3/);
+  assert.match(combat,/if\(typeof openElvenCitizenUI==='function'\)openElvenCitizenUI\(vill\)/);
+  assert.match(menus,/function openElvenCitizenUI\(/);
+  for(const role of ['elf_king','elf_guard','elf_scholar','elf_musician','elf_gardener','elf_artisan','elf_scout'])assert.match(menus,new RegExp(role+':\\['));
 });

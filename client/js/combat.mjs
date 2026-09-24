@@ -452,6 +452,7 @@ let mouseL=false;
 let mouseR=false, placeKeyHeld=false, nextHeldPlaceAt=0;
 const BLOCK_PLACE_INITIAL_DELAY_MS=210, BLOCK_PLACE_REPEAT_MS=165;
 let mining=null; // {x,y,z,progress,total,willDrop}
+let lastHandHarvestHint=0;
 function toolFor(blockId){
   const s=inv[selected];
   return (s && ITEMS[s.id].tool) ? {stack:s, ...ITEMS[s.id].tool, speed:toolSpeedFor(s), maxDur:toolMaxDur(s)} : null;
@@ -483,6 +484,10 @@ function startMine(hit){
   let total=info.t, willDrop=true;
   const effective = tool && info.cls && tool.cls===info.cls;
   if(effective) total = info.t / tool.speed;
+  else if(info.handHarvest&&performance.now()-lastHandHarvestHint>12000){
+    lastHandHarvestHint=performance.now();
+    sysMsg('<b>Oak logs can be gathered by hand.</b> Keep holding the break action until the bar completes. Craft an axe later to chop faster.');
+  }
   if(info.tier){ // pick required for drop
     const tier = (tool && tool.cls==='pick') ? tool.tier : 0;
     if(tier < info.tier){ willDrop=false; total = info.t*3; }
@@ -696,6 +701,7 @@ const coachHudStateEl=document.getElementById('coachhud');
 const controlPausePrompt=document.getElementById('controlpauseprompt');
 const questionBtn=document.getElementById('questionbtn');
 const socialBtn=document.getElementById('socialbtn');
+const TABLET_LOOK_SWIPE_GAIN=1.45,PHONE_LOOK_SWIPE_GAIN=.92;
 const tabletInputState={
   touch:false,
   tablet:false,
@@ -709,6 +715,7 @@ const tabletInputState={
   sprintToggled:false,
   lastDebugSig:'',
 };
+function touchLookSwipeGain(){return tabletInputState.tablet?TABLET_LOOK_SWIPE_GAIN:PHONE_LOOK_SWIPE_GAIN;}
 function detectTabletInput(){
   const coarse=!!(typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches);
   const touch=!!(navigator.maxTouchPoints>0||('ontouchstart' in window));
@@ -917,6 +924,22 @@ function ensureTabletControls(){
       '<button data-mobile-menu-action="close">Close</button>'+
     '</div>';
   document.body.appendChild(root);
+  // iPad Safari can still interpret rapid taps on native buttons as a page
+  // double-tap zoom even when the viewport and CSS disable zoom. Gameplay
+  // actions run on pointerdown, so suppress the later native touch/click
+  // gesture inside this control layer without affecting menus or login forms.
+  let lastTabletTouchEnd=0;
+  root.addEventListener('touchend',e=>{
+    const button=e.target&&e.target.closest&&e.target.closest('button');
+    if(!button||!tabletInputState.gameplayTouch)return;
+    const now=performance.now(),rapid=now-lastTabletTouchEnd<420;
+    lastTabletTouchEnd=now;
+    if(e.cancelable)e.preventDefault();
+    e.stopPropagation();
+    if(rapid)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.zoom-gesture-blocked',{control:button.dataset.tabletKey||button.dataset.tabletMenu||button.dataset.mobileMenuAction||button.className||'button'});
+  },{capture:true,passive:false});
+  root.addEventListener('dblclick',e=>{if(tabletInputState.gameplayTouch){e.preventDefault();e.stopPropagation();}},{capture:true});
+  for(const gesture of ['gesturestart','gesturechange','gestureend'])root.addEventListener(gesture,e=>{if(tabletInputState.gameplayTouch&&e.cancelable)e.preventDefault();},{passive:false});
   const stick=root.querySelector('.tablet-stick');
   const look=root.querySelector('.tablet-look-zone');
   const mobileQuickMenu=root.querySelector('.mobile-quick-menu');
@@ -960,7 +983,8 @@ function ensureTabletControls(){
     e.preventDefault();e.stopPropagation();
     const dx=e.clientX-tabletInputState.look.x,dy=e.clientY-tabletInputState.look.y;
     tabletInputState.look.x=e.clientX;tabletInputState.look.y=e.clientY;
-    if(gameplayCameraInputAllowed())queueMouseLook(dx*0.92,dy*0.92);
+    const gain=touchLookSwipeGain();
+    if(gameplayCameraInputAllowed())queueMouseLook(dx*gain,dy*gain);
   });
   const endLook=e=>{
     if(tabletInputState.look.id!==e.pointerId)return;
@@ -1073,6 +1097,7 @@ function refreshTabletMode(){
       gameplayTouch:tabletInputState.gameplayTouch,
       touch:tabletInputState.touch,
       forced:tabletInputState.forced,
+      lookSwipeGain:touchLookSwipeGain(),
       visible:shouldShow,
       controlsClass:controls.className,
       bodyClass:document.body.className,
@@ -1097,6 +1122,7 @@ globalThis.BlockcraftTabletDebug=()=>({
   selectedSlot:selected,
   pressed:Array.from(tabletInputState.pressed),
   sprintToggled:tabletInputState.sprintToggled,
+  lookSwipeGain:touchLookSwipeGain(),
   viewport:{w:innerWidth,h:innerHeight},
 });
 function bindHudActionButton(btn,handler,name){
@@ -5076,8 +5102,10 @@ function settleFirstTownAdventureSpawn(){
   if(player)player.onGround=true;
   if(typeof globalThis.BlockcraftSnapGameplayCamera==='function')globalThis.BlockcraftSnapGameplayCamera();
 }
+let questionHallQuestionAnchor=null;
 function startQuestionHallMeditationPose(){
   if(dim!=='questions'||!player)return false;
+  if(!questionHallQuestionAnchor)questionHallQuestionAnchor={x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,pitch:player.pitch};
   if(!meditationPrevView)meditationPrevView={yaw:player.yaw,pitch:player.pitch};
   isMeditating=true;
   meditationFocusReady=false;
@@ -5111,9 +5139,18 @@ function openQuestionHallQuestion(){
 }
 function recoverQuestionHallAfterRecall(){
   if(dim!=='questions'||!player)return false;
-  const y=typeof standHeight==='function'?standHeight(player.pos.x,player.pos.z,WH-2):-1;
-  if(Number.isFinite(y)&&y>1)player.pos.y=y+.035;
-  else player.pos.set(930.5,20.05,865.5);
+  const anchor=questionHallQuestionAnchor;
+  questionHallQuestionAnchor=null;
+  if(anchor&&Number.isFinite(anchor.x)&&Number.isFinite(anchor.y)&&Number.isFinite(anchor.z)){
+    player.pos.set(anchor.x,anchor.y,anchor.z);
+    player.yaw=anchor.yaw;player.pitch=anchor.pitch;
+  }else{
+    // Question Hall has a roof at Y=24. Never use a world-top probe here:
+    // it resolves the roof as the nearest standable surface instead of the floor.
+    const y=typeof standHeight==='function'?standHeight(player.pos.x,player.pos.z,22):-1;
+    if(Number.isFinite(y)&&y>1)player.pos.y=y+.035;
+    else player.pos.set(930.5,20.05,858.5);
+  }
   player.vel.set(0,0,0);
   player.onGround=true;
   stopPrimaryAction();
@@ -6254,13 +6291,17 @@ function suppressMouseLook(ms=700,reason='manual'){
   fishingInputDebug('mouse.suppress-start',{ms,reason,suppressedUntil:Math.round(mouseLookSuppressedUntil)});
 }
 addEventListener('keydown', e=>{
+  const recallKey=e.code==='KeyP'||String(e.key||'').toLowerCase()==='p';
   if(e.code==='F9'&&!e.repeat){
     e.preventDefault();
     if(devReset&&!devReset.classList.contains('hidden'))closeDevResetPanel();
     else openDevResetPanel();
     return;
   }
-  if(isTextEntryTarget(e.target)) return;
+  if(isTextEntryTarget(e.target)){
+    if(recallKey&&!e.repeat)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('recall.key.blocked',{reason:'text_entry',target:String(e.target&&e.target.tagName||'').toLowerCase(),id:String(e.target&&e.target.id||'')});
+    return;
+  }
   if(e.code==='Escape'&&devReset&&!devReset.classList.contains('hidden')){
     e.preventDefault();
     closeDevResetPanel();
@@ -6272,13 +6313,16 @@ addEventListener('keydown', e=>{
     else if(!uiShellState.qOpen) openQuestLogUI();
     return;
   }
+  if(globalThis.chatTyping&&recallKey&&!e.repeat)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('recall.key.blocked',{reason:'chat_typing'});
   if(globalThis.chatTyping) return;
   if(eventStartLocked()&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) confirmEventReady();
   if(firstTownChoiceOpen){
+    if(recallKey&&!e.repeat)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('recall.key.blocked',{reason:'first_town_choice'});
     e.preventDefault();
     return;
   }
   if(pathChoiceOpen || jobChoiceOpen){
+    if(recallKey&&!e.repeat)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('recall.key.blocked',{reason:pathChoiceOpen?'path_choice':'job_choice'});
     e.preventDefault();
     return;
   }
@@ -6292,6 +6336,15 @@ addEventListener('keydown', e=>{
     gameplayInputDebug('movement.resume:'+e.code);
   }
   const gameInput=gameplayInputActive();
+  if(recallKey&&!e.repeat){
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('recall.key.received',{gameInput,dim:String(dim||''),uiOpen:!!uiOpen,statOpen:!!statOpen,qOpen:!!uiShellState.qOpen,claimMode:!!claimMode,cursorReleased:!!cursorReleased,locked:!!locked});
+    if(!gameInput){
+      e.preventDefault();
+      gameplayInputDebug('recall.key.blocked');
+      sysMsg('Close the current menu or dialog, then press <b>P</b> to open Recall.');
+      return;
+    }
+  }
   // Key presses also carry browser user activation. This recovers full 360°
   // mouse-look after automatic login or a question modal even when the player
   // starts moving before clicking the world again.
@@ -6370,7 +6423,7 @@ addEventListener('keydown', e=>{
   keys[e.code]=true;
   acknowledgeSmartSuggestionKeySafe(e.code);
   if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
-  if((e.code==='KeyP'||String(e.key||'').toLowerCase()==='p')&&!e.repeat&&gameInput){
+  if(recallKey&&!e.repeat&&gameInput){
     e.preventDefault();
     if(dim==='questions')openQuestionHallQuestion();
     else globalThis.BlockcraftRecall.start();
@@ -7099,10 +7152,74 @@ function nearbyVillager(range=3.6){
   let best=null,bd=range;
   for(const v of villagers){
     if(!v||!v.grp||v.inside||v.grp.visible===false)continue;
-    const p=v.grp.position,d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+    const p=v.grp.position,d=Math.hypot(player.pos.x-p.x,player.pos.y-p.y,player.pos.z-p.z);
     if(d<bd){bd=d;best=v;}
   }
   return best?{...best,distance:bd}:null;
+}
+const ELARIA_INTERACTABLES=(()=>{
+  const elf=globalThis.BlockcraftElfRealm&&globalThis.BlockcraftElfRealm.site;
+  if(!elf)return [];
+  const x=elf.x,z=elf.z,g=elf.ground,tx=x+4;
+  return [
+    {id:'moonwell',title:'Moonwell',small:'Make a wish and watch the moonfish',x:x+16,y:g+1,z,range:4.8},
+    {id:'harp',title:'Elarian Harp',small:'Play a living-grove melody',x:x-12.2,y:g+1,z:z-6.3,range:4.2},
+    {id:'archives',title:'Moon Archives',small:'Examine the leaf-bound histories',x:tx,y:g+12,z:z+4.8,range:4.4},
+    {id:'throne',title:'Heartwood Throne',small:'Examine the living crown of Elaria',x:tx+3.5,y:g+2.2,z:z+.5,range:3.8},
+    {id:'orrery',title:'Canopy Orrery',small:'Align the crystal stars',x:tx,y:g+21,z:z+.5,range:4.2},
+    {id:'chime_dawn',title:'Dawn Chime',small:'Attune 1 of 3 · Dawn → River → Crown',x:x-21,y:g+2,z:z-8,range:3.5,order:0},
+    {id:'chime_river',title:'River Chime',small:'Attune 2 of 3 · Dawn → River → Crown',x:x-12,y:g+2,z:z+8,range:3.5,order:1},
+    {id:'chime_crown',title:'Crown Chime',small:'Attune 3 of 3 · Dawn → River → Crown',x:x-5,y:g+2,z:z-6,range:3.5,order:2},
+    {id:'westwatch',title:'Western Watch',small:'Survey Elaria’s peaceful frontier',x:x-29,y:g+1,z,range:5.5},
+  ];
+})();
+let elariaAttunementStep=0,elariaHarpPhrase=0;
+function nearbyElvenInteractable(){
+  if(dim!=='overworld')return null;
+  let best=null,bestDistance=Infinity;
+  for(const target of ELARIA_INTERACTABLES){
+    const distance=Math.hypot(player.pos.x-target.x,player.pos.y-target.y,player.pos.z-target.z);
+    if(distance<=target.range&&distance<bestDistance){best={...target,distance};bestDistance=distance;}
+  }
+  return best;
+}
+function interactElvenLandmark(target=nearbyElvenInteractable()){
+  if(!target)return false;
+  if(target.order!=null){
+    if(NET.on&&NET.room){NET.room.send('elariaActivity',{action:'chime',target:target.id});return true;}
+    if(target.order!==elariaAttunementStep){
+      elariaAttunementStep=target.order===0?1:0;SFX.error&&SFX.error();
+      sysMsg(target.order===0?'<b>Dawn Chime:</b> the first note wakes. Seek the River Chime next.':'The chimes answer out of sequence. Begin with <b>Dawn</b>, then <b>River</b>, then <b>Crown</b>.');
+      return true;
+    }
+    elariaAttunementStep++;
+    if(elariaAttunementStep>=3){
+      elariaAttunementStep=0;SFX.level&&SFX.level();burst(player.pos.x,player.pos.y+1,player.pos.z,[.45,1,.82],28,2.8,3.5,.8);
+      sysMsg('<b>Grove Attuned:</b> Dawn, river, and crown ring together. Magical wildlife gathers as Elaria answers your melody.');
+    }else{
+      SFX.success&&SFX.success();
+      sysMsg('<b>'+escHTML(target.title)+':</b> note '+elariaAttunementStep+' of 3 rings true. '+(elariaAttunementStep===1?'Find the River Chime.':'Finish at the Crown Chime.'));
+    }
+    return true;
+  }
+  if(target.id==='moonwell'){
+    SFX.meditate&&SFX.meditate(true);burst(target.x,target.y+.5,target.z,[.38,.95,1],18,1.8,2.2,.65);
+    sysMsg('<b>Moonwell:</b> silver fish circle your reflection. The water holds your wish without asking you to name it.');
+  }else if(target.id==='harp'){
+    const phrases=['a bright arpeggio sends butterflies rising from the fern beds.','a low woodland chord rolls through the roots of the heart-tree.','three clear notes are answered by crystal-winged birds above.'];
+    SFX.success&&SFX.success();sysMsg('<b>Elarian Harp:</b> '+phrases[elariaHarpPhrase++%phrases.length]);
+  }else if(target.id==='archives'){
+    sysMsg('<b>Moon Archives:</b> leaf-bound histories describe Elaria growing around the first heart-tree, its roots sheltering travelers long before the old border was raised.');
+  }else if(target.id==='throne'){
+    sysMsg('<b>Heartwood Throne:</b> it was grown, never carved. Rings in the living wood mark every ruler who swore to protect the grove rather than possess it.');
+  }else if(target.id==='orrery'){
+    SFX.success&&SFX.success();burst(target.x,target.y,target.z,[.7,.5,1],20,2.2,2.8,.7);
+    sysMsg('<b>Canopy Orrery:</b> the crystal stars align. One wandering light points toward a Gate beyond the known constellations.');
+  }else if(target.id==='westwatch'){
+    sysMsg('<b>Western Watch:</b> the old border is visible beyond the trees, but the airship road and the lights of Elaria now turn separation into passage.');
+  }
+  if(NET.on&&NET.room)NET.room.send('elariaActivity',{action:'visit',target:target.id});
+  return true;
 }
 function blockInteractionPrompt(hit){
   if(!hit)return null;
@@ -7152,6 +7269,8 @@ function nearbyInteractionPrompt(){
   if(nearFishingLakeExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(nearTrainingMeadowTownPortal())push({key:'G',title:'Town Portal',small:'Enter the Town of Beginnings',priority:119},0);
   if(nearQuestionHallTownPortal())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
+  const elvenLandmark=nearbyElvenInteractable();
+  if(elvenLandmark)push({key:'G',title:elvenLandmark.title,small:elvenLandmark.small,priority:92},elvenLandmark.distance);
   if(dim==='questions')push({key:'P',title:'Question Hall',small:'Answer Computer Science questions',priority:118},0);
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
   if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':'Begin focus meditation',priority:112},0);
@@ -7249,7 +7368,7 @@ function nearbyInteractionPrompt(){
   if(vill){
     const small=vill.role==='tavern_scholar'
       ?globalThis.BlockcraftKnowledgeChallenge&&globalThis.BlockcraftKnowledgeChallenge.introAvailable?'Scholar Table · first Quick round free':'Scholar Table · optional question game'
-      :vill.role==='social_mentor'?'Learn friends, teams and dungeon queues':vill.title||'Talk';
+      :vill.role==='social_mentor'?'Learn friends, teams and dungeon queues':vill.elvenCitizen?vill.currentActivity||vill.title||'Living in Elaria':vill.title||'Talk';
     push({key:'G',title:vill.name||vill.shortName||'Villager',small,priority:90},vill.distance||0);
   }
   const dragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
@@ -7471,6 +7590,7 @@ function secondaryAction(){
     return;
   }
   if(nearQuestionHallTownPortal()){ if(typeof exitQuestionRoomToTown==='function')exitQuestionRoomToTown(); return; }
+  if(interactElvenLandmark())return;
   if(tryMinerTutorialTrade()) return;
   if(tryFarmerTutorialTrade()) return;
   if(tryCookTutorialAction()) return;
@@ -7711,6 +7831,10 @@ function interactWithVillager(vill){
   }
   else if(vill.role==='skyship_attendant'){
     sysMsg('<b>'+escHTML(vill.name||'Westwind Travel Clerk')+':</b> "The Westwind flies to distant regions. Reach <b>S-Rank</b>, bring <b>1,000 gold</b>, then stand at the gangway and press <b>G</b> to board."');
+  }
+  else if(vill.elvenCitizen){
+    if(typeof openElvenCitizenUI==='function')openElvenCitizenUI(vill);
+    else sysMsg('<b>'+escHTML(vill.name||'Elarian')+' · '+escHTML(vill.title||'Resident')+':</b> "'+escHTML(vill.line||'May the living crown shelter your road.')+'"<br><small>'+escHTML(vill.currentActivity||'Living beneath the crown')+'</small>');
   }
   else if(vill.role==='bartender') openTavernUI();
   else if(vill.role==='tavern_scholar'){

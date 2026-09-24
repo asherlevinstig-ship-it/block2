@@ -12,19 +12,23 @@ test('recall avoidance carries recently answered prompts across reconnects',()=>
   assert.ok(avoid.prompts.includes('what is hexadecimal 2f in binary?'));
 });
 
-test('starting Recall again resends the active question and its pillars',async()=>{
+test('starting Recall again relocates the active question around the current player',async()=>{
   const room=Object.create(recall),sessionId='player-1',now=Date.now(),sent=[];
   const player={x:10,y:4,z:20,yaw:0,dim:'overworld',dgn:''};
   const challenge={id:'challenge-1',questionId:'it_ns_hex_bin_003',subject:'Computer Science',stage:'GCSE',topic:'Number systems',difficulty:2,prompt:'What is hexadecimal 2F in binary?',answers:['0010 1111','0011 1110','0010 1011','1111 0010'],pillars:[{index:0,x:10,y:4,z:4}],fallback:false,expiresAt:now+60_000,source:''};
   room.state={players:new Map([[sessionId,player]])};
   room.recallChallenges=new Map([[sessionId,challenge]]);
+  room.instances={};room.world={standHeight(){return 4;}};room.spaceSolid=()=>()=>false;
   room.rateLimited=()=>false;
   room.profileFor=()=>({prof:{recallMastery:{items:{}}}});
   await room.handleRecallStart({sessionId,send:(type,message)=>sent.push({type,message})},{});
-  assert.equal(sent.length,1);
-  assert.equal(sent[0].type,'recallQuestion');
-  assert.equal(sent[0].message.id,challenge.id);
-  assert.deepEqual(sent[0].message.pillars,challenge.pillars);
+  const question=sent.find(message=>message.type==='recallQuestion');
+  assert.ok(question);
+  assert.equal(question.message.id,challenge.id);
+  assert.equal(question.message.pillars.length,4);
+  assert.notDeepEqual(question.message.pillars,[{index:0,x:10,y:4,z:4}]);
+  assert.ok(sent.some(message=>message.type==='recallTrace'&&message.message.event==='active_relocated'));
+  assert.ok(sent.some(message=>message.type==='recallTrace'&&message.message.event==='placed'));
 });
 
 test('a wrong Recall answer schedules review without freezing movement',()=>{
@@ -139,14 +143,22 @@ test('Recall carries selected database identifiers into asynchronous attempt ana
 
 function recallClientHarness(){
   const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
-  const timers=new Map(),sent=[],messages=[],nodes=new Map();let seq=0;
+  const timers=new Map(),sent=[],messages=[],traces=[],nodes=new Map();let seq=0,cursorReleases=0;
   const node=()=>({classList:{add(){},remove(){},toggle(){}},style:{setProperty(){}},querySelector(){return null;},querySelectorAll(){return [];},addEventListener(){},appendChild(){},innerHTML:'',textContent:''});
   const document={body:node(),getElementById(id){if(!nodes.has(id))nodes.set(id,node());return nodes.get(id);},createElement:node};
-  const context=vm.createContext({document,THREE:{Group:class{constructor(){this.children=[];}traverse(){};}},NET:{on:true,room:{send:(type,message)=>sent.push({type,message})}},dim:'overworld',player:{yaw:0},scene:{remove(){}},performance:{now:()=>0},Date,sysMsg:m=>messages.push(m),showName:m=>messages.push(m),setTimeout:(fn,ms)=>{timers.set(++seq,{fn,ms});return seq;},clearTimeout:id=>timers.delete(id)});
+  const context=vm.createContext({document,THREE:{Group:class{constructor(){this.children=[];}traverse(){};}},NET:{on:true,room:{send:(type,message)=>sent.push({type,message})}},dim:'overworld',player:{yaw:0},scene:{remove(){}},performance:{now:()=>0},Date,sysMsg:m=>messages.push(m),showName:m=>messages.push(m),BlockcraftTrace:(event,data)=>traces.push({event,data}),releaseGameplayCursor:()=>{cursorReleases++;},setTimeout:(fn,ms)=>{timers.set(++seq,{fn,ms});return seq;},clearTimeout:id=>timers.delete(id)});
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../../client/js/recall.mjs'),'utf8').replace('export {api};',''),context);
   const question={id:'one',prompt:'Question?',answers:['A','B','C','D'],pillars:[],fallback:true,expiresAt:Date.now()+60000};
-  return {api:context.BlockcraftRecall,context,question,sent,messages,timers,fire(ms){const entry=[...timers].find(([,t])=>t.ms===ms);assert.ok(entry,`timer ${ms} exists`);timers.delete(entry[0]);entry[1].fn();}};
+  return {api:context.BlockcraftRecall,context,question,sent,messages,traces,timers,get cursorReleases(){return cursorReleases;},fire(ms){const entry=[...timers].find(([,t])=>t.ms===ms);assert.ok(entry,`timer ${ms} exists`);timers.delete(entry[0]);entry[1].fn();}};
 }
+
+test('blocked world pillars open an explicit usable screen fallback',()=>{
+  const h=recallClientHarness();h.api.showQuestion(h.question);
+  assert.equal(h.api.active.fallback,true);
+  assert.equal(h.cursorReleases,1);
+  assert.ok(h.messages.some(message=>message.includes('terrain blocked a safe four-pillar layout')));
+  assert.ok(h.traces.some(entry=>entry.event==='recall.question.shown'&&entry.data.mode==='screen_fallback'));
+});
 
 test('P suppresses duplicate fetches and permits retry after a missing response',()=>{
   const h=recallClientHarness();h.api.start();h.api.start();
@@ -193,11 +205,12 @@ test('a stalled database still delivers one playable fallback and releases pendi
     const client={sessionId:'p',_account:{},send:(type,message)=>sent.push({type,message})};
     await room.handleRecallStart(client);
     assert.equal(room.recallStartsPending.size,0);
-    assert.equal(sent.length,1);assert.equal(sent[0].type,'recallQuestion');
-    assert.equal(sent[0].message.answers.length,4);assert.ok(sent[0].message.prompt);
+    const first=sent.find(message=>message.type==='recallQuestion');
+    assert.ok(first);assert.equal(first.message.answers.length,4);assert.ok(first.message.prompt);
     resolveLookup({id:'too-late'});await new Promise(resolve=>setImmediate(resolve));
-    assert.equal(sent.length,1,'late database completion cannot overwrite fallback');
+    assert.equal(sent.filter(message=>message.type==='recallQuestion').length,1,'late database completion cannot overwrite fallback');
     await room.handleRecallStart(client);
-    assert.equal(sent[1].message.id,sent[0].message.id,'retry resends the active question');
+    const questions=sent.filter(message=>message.type==='recallQuestion');
+    assert.equal(questions[1].message.id,questions[0].message.id,'retry resends the active question');
   }finally{auth.getGameQuestionStore=original;}
 });

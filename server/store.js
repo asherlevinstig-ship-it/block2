@@ -456,6 +456,13 @@ function defaultProfile(name) {
     ancientWardenPending: [],
     elderheartExpedition: null,
     elderheartExpeditionDone: false,
+    elariaLoreFound: [],
+    elariaLoreRewarded: false,
+    elariaBlessingDay: -1,
+    elariaBlessingUntil: 0,
+    elariaCeremonyDay: -1,
+    elariaCeremonyStep: 0,
+    elariaCourt: null,
     cartographerIntroSeen: false,
     townMapClaimed: false,
     cosmeticUnlocks: [],
@@ -1261,6 +1268,14 @@ function sanitizeProfile(p) {
     ? { id: 'elderheart_road', stage: clampI(p.elderheartExpedition.stage, 0, 3), startedAt: Math.max(0, Math.min(1e13, Number(p.elderheartExpedition.startedAt) || 0)) }
     : null;
   out.elderheartExpeditionDone = p.elderheartExpeditionDone === true;
+  out.elariaLoreFound=[...new Set((Array.isArray(p.elariaLoreFound)?p.elariaLoreFound:[]).filter(id=>['moonwell','harp','archives','orrery'].includes(id)))];
+  out.elariaLoreRewarded=p.elariaLoreRewarded===true;
+  out.elariaBlessingDay=clampI(p.elariaBlessingDay,-1,100000);
+  out.elariaBlessingUntil=clampI(p.elariaBlessingUntil,0,4102444800000);
+  out.elariaCeremonyDay=clampI(p.elariaCeremonyDay,-1,100000);
+  out.elariaCeremonyStep=clampI(p.elariaCeremonyStep,0,2);
+  const elariaCourtRoute=Number(p.elariaCourt&&p.elariaCourt.route);
+  out.elariaCourt=p.elariaCourt&&typeof p.elariaCourt==='object'&&Number.isInteger(elariaCourtRoute)&&elariaCourtRoute>=0&&elariaCourtRoute<=2?{day:clampI(p.elariaCourt.day,-1,100000),route:elariaCourtRoute,step:clampI(p.elariaCourt.step,0,3),claimed:p.elariaCourt.claimed===true}:null;
   out.cartographerIntroSeen = !!p.cartographerIntroSeen;
   out.townMapClaimed = p.townMapClaimed === true;
   out.cosmeticUnlocks = sanitizeCosmeticUnlocks(p.cosmeticUnlocks);
