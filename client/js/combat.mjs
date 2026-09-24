@@ -40,6 +40,7 @@ const legacyCombatBindings={
   "awakeningWin":{get:()=>awakeningWin},
   "beginOnboarding":{get:()=>beginOnboarding},
   "calmTownHud":{get:()=>calmTownHud},
+  "cancelMine":{get:()=>cancelMine},
   "cancelOnboardingForProfileRestore":{get:()=>cancelOnboardingForProfileRestore},
   "clearTownJobGuidance":{get:()=>clearTownJobGuidance},
   "clearTownGuidance":{get:()=>clearTownGuidance},
@@ -453,6 +454,14 @@ let mouseR=false, placeKeyHeld=false, nextHeldPlaceAt=0;
 const BLOCK_PLACE_INITIAL_DELAY_MS=210, BLOCK_PLACE_REPEAT_MS=165;
 let mining=null; // {x,y,z,progress,total,willDrop}
 let lastHandHarvestHint=0;
+function cancelMine(reason){
+  const m=mining;
+  if(m&&m.id===B.LOG)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tree.mine.cancelled',{
+    reason:String(reason||'cancelled'),target:{x:m.x,y:m.y,z:m.z,id:m.id},progress:+Math.min(1,(m.progress||0)/Math.max(.001,m.total||1)).toFixed(3),
+    elapsedMs:Math.round(performance.now()-(m.startedAt||performance.now())),player:{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)}
+  });
+  mining=null;
+}
 function toolFor(blockId){
   const s=inv[selected];
   return (s && ITEMS[s.id].tool) ? {stack:s, ...ITEMS[s.id].tool, speed:toolSpeedFor(s), maxDur:toolMaxDur(s)} : null;
@@ -463,6 +472,7 @@ function meleeSwingTime(){
   return (tool && tool.cls==='axe') ? .55 : .35;   // axes swing slower (matches the server cadence); everything else standard
 }
 function startMine(hit){
+  if(mining&&(mining.x!==hit.x||mining.y!==hit.y||mining.z!==hit.z))cancelMine('target_changed');
   if(NET.on&&(dim!=='overworld'||NET.dgn)&&hit.id===B.EGG_INSULATOR){
     mining=null;
     sysMsg('This portable nest is saved to your character. Leave it here to reuse it when you return.');
@@ -495,7 +505,12 @@ function startMine(hit){
   const creative=!!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount());
   if(creative){ total=.08; willDrop=true; }
   total=Math.max(total,creative?.08:.15);
-  mining={x:hit.x,y:hit.y,z:hit.z,id:hit.id,progress:0,total,willDrop, effective, creative};
+  const startedAt=performance.now();
+  mining={x:hit.x,y:hit.y,z:hit.z,id:hit.id,progress:0,total,willDrop, effective, creative,startedAt};
+  if(hit.id===B.LOG)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tree.mine.start',{
+    target:{x:hit.x,y:hit.y,z:hit.z,id:hit.id},player:{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)},
+    slot:selected,tool:tool?{id:tool.stack.id,cls:tool.cls,tier:tool.tier}:null,hand:!effective,total:+total.toFixed(3),online:!!NET.on,dim:String(dim||'')
+  });
 }
 function finishMine(){
   const m=mining; mining=null;
@@ -516,6 +531,10 @@ function finishMine(){
   setB(m.x,m.y,m.z,B.AIR);
   if(onboardingActive&&onboardingKind()==='tree'&&m.id===B.LOG&&isOnboardingTreeLog(m.x,m.y,m.z,TRAINING_MEADOW)) onboardingFlags.tree=true;
   rebuildAround(m.x,m.z);
+  if(m.id===B.LOG)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tree.mine.complete',{
+    target:{x:m.x,y:m.y,z:m.z,id:m.id},player:{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)},
+    slot:selected,hand:!m.effective,willDrop:!!m.willDrop,durationMs:Math.round(performance.now()-(m.startedAt||performance.now())),online:!!NET.on
+  });
   netSendEdit(m.x,m.y,m.z,B.AIR);
   if(!NET.on && m.willDrop){
     let droppedId=0, droppedCount=0;
@@ -5491,7 +5510,7 @@ function refreshPlayUi(){
   refreshTabletMode();
   playbtn.textContent='RESUME';
   if(!gameplayCameraInputAllowed()) mouseLookDelta.x=mouseLookDelta.y=0;
-  if(!locked) mouseL=false, mining=null;
+  if(!locked){mouseL=false;cancelMine('cursor_released');}
   const debugSig=[
     overlay.classList.contains('hidden')?'overlay:hidden':'overlay:visible',
     locked?'locked':'unlocked',
@@ -6580,7 +6599,7 @@ addEventListener('keydown', e=>{
     if(e.code.startsWith('Digit')){ const n=+e.code.slice(5); if(n>=1&&n<=9) selectSlot(n-1); }
   }
 });
-function stopPrimaryAction(){ mouseL=false; mining=null; suppressMine=false; }
+function stopPrimaryAction(){ mouseL=false; cancelMine('input_released'); suppressMine=false; }
 addEventListener('keyup', e=>{
   keys[e.code]=false;
   if(e.code==='KeyF'){

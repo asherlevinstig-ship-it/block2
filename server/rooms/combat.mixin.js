@@ -4,7 +4,7 @@
 const {
   ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, ANIMAL_BASE_KIND, ANIMAL_LOOT, ARMOR_INFO, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
   DANGER_RINGS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_TYPE_SET,
-  I, KEY_LOOT, MINE_DROPS, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
+  I, KEY_LOOT, MINE_DROPS, MINE_REQUIRE, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
   keyForRank, spriteForageChance, spriteBonusDrops, dogExtraMeatChance, wolfHostileXpBonus,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
@@ -1153,8 +1153,11 @@ class CombatMixin {
   }
   awardMine(client, blockId, slot, x, y, z) {
     const rec = this.profileFor(client);
+    const requirement = MINE_REQUIRE[blockId] || null;
+    const equipped = rec && this.equippedTool(rec.prof, slot);
+    const toolDebug = equipped ? { id: equipped.slot.id | 0, cls: equipped.cls, tier: equipped.tier | 0 } : null;
     if (rec && !this.canMineDrop(rec.prof, blockId, slot)) {
-      client.send('mineNoDrop', { block: blockId, reason: 'tool' });
+      client.send('mineNoDrop', { block: blockId, reason: 'tool', slot: slot | 0, tool: toolDebug, requirement });
       return;
     }
     this.damageTool(client, rec, slot, blockId);
@@ -1190,6 +1193,12 @@ class CombatMixin {
       block: blockId,
       xp: Math.round((drop.xp || 0) * DANGER_RINGS[Number.isFinite(x) && Number.isFinite(z) ? dangerRingAt(x, z) : 0].loot),
       items,
+    });
+    client.send('mineResult', {
+      ok: true, block: blockId | 0, slot: slot | 0, tool: toolDebug,
+      hand: !toolDebug, requirement, items,
+      natural: Number.isFinite(x) && Number.isFinite(z),
+      target: Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? { x, y, z } : null,
     });
     if (spriteBonus) this.sendSpace(fp.dgn || '', 'fx', { t:'spriteBonus', x:Number.isFinite(x)?x+.5:fp.x, y:Number.isFinite(y)?y+.6:fp.y+1, z:Number.isFinite(z)?z+.5:fp.z, count:spriteCount, sid:client.sessionId, dgn:fp.dgn || '' });
     this.recordMineProgress(client, blockId);

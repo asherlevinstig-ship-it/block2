@@ -9235,6 +9235,8 @@ test('block reach follows the visible voxel face and still rejects targets beyon
   assert.equal(itemCount(prof, W.B.PLANKS), 0);
   assert.equal(client.sent.at(-1).type, 'editReject');
   assert.equal(client.sent.at(-1).msg.reason, 'reach');
+  assert.equal(client.sent.at(-1).msg.reach.within, false);
+  assert.equal(client.sent.at(-1).msg.reach.distance > client.sent.at(-1).msg.reach.limit, true);
 });
 
 test('a reachable overhead tree block breaks by hand and awards its wood', () => {
@@ -9256,6 +9258,12 @@ test('a reachable overhead tree block breaks by hand and awards its wood', () =>
   assert.equal(itemCount(prof, W.B.LOG) >= 1, true);
   assert.equal(client.sent.some(event => event.type === 'editReject'), false);
   assert.equal(client.sent.some(event => event.type === 'mineNoDrop'), false);
+  const result = client.sent.find(event => event.type === 'mineResult');
+  assert.equal(result.msg.ok, true);
+  assert.equal(result.msg.block, W.B.LOG);
+  assert.equal(result.msg.hand, true);
+  assert.deepEqual(result.msg.requirement, { cls: 'axe', tier: 0 });
+  assert.equal(result.msg.items.some(item => item.id === W.B.LOG && item.count >= 1), true);
 });
 
 test('unclaimed wilderness allows risky building while claims buy protected rights', () => {

@@ -3873,17 +3873,29 @@ class GameRoom extends Room {
       mailReason: mail && (mail.reason || mail.bridgeReason) || '',
     });
   }
-  editTargetInReach(p, x, y, z) {
-    if (!p) return false;
+  editReachDetails(p, x, y, z) {
+    const limit = BLOCK_EDIT_REACH + BLOCK_EDIT_REACH_TOLERANCE;
+    if (!p) return { distance: null, limit, within: false };
     const eyeX = Number(p.x), eyeY = Number(p.y) + PLAYER_EYE_HEIGHT, eyeZ = Number(p.z);
-    if (![eyeX, eyeY, eyeZ].every(Number.isFinite)) return false;
+    if (![eyeX, eyeY, eyeZ].every(Number.isFinite)) return { distance: null, limit, within: false };
     // The client raycast reaches the first face of a voxel, not its centre.
     // Measuring to the centre incorrectly rejects reachable logs (especially
     // those above the player), causing the optimistic break to be rolled back.
     const dx = eyeX < x ? x - eyeX : eyeX > x + 1 ? eyeX - (x + 1) : 0;
     const dy = eyeY < y ? y - eyeY : eyeY > y + 1 ? eyeY - (y + 1) : 0;
     const dz = eyeZ < z ? z - eyeZ : eyeZ > z + 1 ? eyeZ - (z + 1) : 0;
-    return Math.hypot(dx, dy, dz) <= BLOCK_EDIT_REACH + BLOCK_EDIT_REACH_TOLERANCE;
+    const distance = Math.hypot(dx, dy, dz);
+    const round = value => Math.round(value * 1000) / 1000;
+    return {
+      distance: round(distance),
+      limit: round(limit),
+      within: distance <= limit,
+      eye: { x: round(eyeX), y: round(eyeY), z: round(eyeZ) },
+      nearest: { x: round(eyeX - dx * Math.sign(eyeX - (x + .5))), y: round(eyeY - dy * Math.sign(eyeY - (y + .5))), z: round(eyeZ - dz * Math.sign(eyeZ - (z + .5))) },
+    };
+  }
+  editTargetInReach(p, x, y, z) {
+    return this.editReachDetails(p, x, y, z).within;
   }
   initTreeRegrowthState() {
     this.treeRegrowth = new Map();
@@ -3971,7 +3983,8 @@ class GameRoom extends Room {
     const prev = this.world.getB(x, y, z);
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'rate', slot: m.slot });
     if (prev === W.B.BEDROCK || prev === W.B.BARRIER || prev === W.B.LAVA || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'protected_block', slot: m.slot });
-    if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'reach', slot: m.slot });
+    const reach = this.editReachDetails(p, x, y, z);
+    if (!reach.within) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'reach', slot: m.slot, reach });
     if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'world_border', slot: m.slot });
     if (W.isElfRealmLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'elf_realm', slot: m.slot });
     if (W.isSkyshipFrontierPortLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'frontier_port', slot: m.slot });
@@ -3987,14 +4000,16 @@ class GameRoom extends Room {
     const editKey = x + ',' + y + ',' + z;
     const naturalHarvest = id === W.B.AIR && !this.state.edits.has(editKey);
     if (id !== W.B.AIR && !this.consumeForPlacement(client, id)) return this.rejectEdit(client, x, y, z, prev, id, { reason: 'inventory', slot: m.slot });
-    if (id === W.B.AIR && (prev === W.B.LOG || prev === W.B.LEAVES)) this.queueNaturalTreeRegrowth(x, y, z);
+    const treeHarvest = id === W.B.AIR && (prev === W.B.LOG || prev === W.B.LEAVES);
+    const regrowthQueued = treeHarvest ? this.queueNaturalTreeRegrowth(x, y, z) : false;
     if (this.treeRestoredEditKeys) this.treeRestoredEditKeys.delete(editKey);
     this.world.setB(x, y, z, id);
     this.state.edits.set(editKey, id);
     this.dirtyWorld = true;
     this.recordEditTrace(client, id === W.B.AIR ? 'break.accepted' : 'place.accepted', {
       target: { x, y, z }, actual: prev, requested: id,
-      reason: 'accepted', slot: m.slot,
+      reason: 'accepted', slot: m.slot, reach,
+      harvest: id === W.B.AIR ? { natural: naturalHarvest, tree: treeHarvest, regrowthQueued } : null,
     });
     if (prev === W.B.EGG_INSULATOR && id !== W.B.EGG_INSULATOR) { this.cancelDragonIncubationAt(x, y, z); this.cancelNestDragonsAt(x, y, z); }
     if (prev === W.B.CHEST && id === W.B.AIR) this.deleteChest('overworld:' + x + ',' + y + ',' + z);

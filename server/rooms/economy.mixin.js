@@ -636,6 +636,8 @@ class EconomyMixin {
       reason: String(details.reason || ''),
       slot: details.slot == null ? null : details.slot | 0,
       land: details.land || this.editTraceLand(client, target.x, target.z),
+      reach: details.reach || null,
+      harvest: details.harvest || null,
     };
     console.log('[edit-trace]', JSON.stringify(payload));
     return payload;
@@ -647,6 +649,8 @@ class EconomyMixin {
       target: { x, y, z }, actual, requested,
       reason: msg.reason || 'unspecified',
       slot: extra && extra.slot,
+      reach: extra && extra.reach,
+      harvest: extra && extra.harvest,
     });
     client.send('editReject', msg);
   }

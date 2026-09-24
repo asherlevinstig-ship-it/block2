@@ -3073,7 +3073,8 @@ function netAttachRoom(room,name,client){
       if(!m) return;
       kingCrownChanged(m);
     });
-    room.onMessage('mineNoDrop', ()=>sysMsg('Your tool is too weak to harvest that block'));
+    room.onMessage('mineNoDrop', m=>{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace(m&&m.block===B.LOG?'tree.mine.no-drop':'block.mine.no-drop',m||{});sysMsg('Your tool is too weak to harvest that block');});
+    room.onMessage('mineResult', m=>{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace(m&&m.block===B.LOG?'tree.mine.server-result':'block.mine.server-result',m||{});});
     room.onMessage('toolSync', m=>applyToolSync(m));
     room.onMessage('armorSync',m=>{
       equipmentModel.restore(m&&m.armor);
@@ -4403,6 +4404,7 @@ if(typeof window!=='undefined'&&!window.__blockcraftVitalFlushBound){
 // ---- block edit sync ----
 function netSendEdit(x,y,z,id){
   if(!NET.on) return;
+  if(id===B.AIR)globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('block.break.request',{target:{x,y,z},requested:id,slot:selected,player:{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)},dim:String(dim||''),dgn:String(NET.dgn||'')});
   if(dim==='overworld') NET.room.send('edit',{x,y,z,id,slot:selected});
   else if(dim==='dungeon' && NET.dgn) NET.room.send('dedit',{x,y,z,id,slot:selected});
 }
@@ -4435,6 +4437,7 @@ function netEditReject(m){
   SFX.error();
   if(!m) return;
   const x=m.x|0, y=m.y|0, z=m.z|0, id=m.id|0;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace(m.requested===B.AIR?'block.break.rejected':'block.edit.rejected',{target:{x,y,z},actual:id,requested:m.requested,reason:String(m.reason||''),reach:m.reach||null,slot:m.slot,player:{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)}});
   netEditRejectFeedback(m,x,y,z,id);
   if(m.requested && m.requested!==B.AIR && ITEMS[m.requested]) addItem(m.requested, 1);
   if(isLightBlock(getB(x,y,z)) && !isLightBlock(id)) removeTorchMesh(x,y,z);

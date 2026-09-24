@@ -3808,7 +3808,7 @@ function tick(now){
           showImmediateBreakDenied(hit,now);
         }
       }
-      mining=null; crack.visible=false; crack.userData.st=-1; hideMineUI();
+      cancelMine(mouseL?'target_unavailable':'input_released'); crack.visible=false; crack.userData.st=-1; hideMineUI();
     }
 
     const held=inv[combatState.selectedSlot];
