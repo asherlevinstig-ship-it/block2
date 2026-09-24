@@ -43,6 +43,16 @@ class RecallMixin{
     client.send('recallQuestion',{id:challenge.id,questionId:challenge.questionId,subject:challenge.subject,stage:challenge.stage,topic:challenge.topic,difficulty:challenge.difficulty,prompt:challenge.prompt,answers:challenge.answers,pillars:challenge.pillars,fallback:challenge.fallback,expiresAt:challenge.expiresAt,ruinBonus:!!challenge.ruinId,lectern:challenge.source==='lectern',questionHall:challenge.source==='question_hall',dungeonRecall:this.recallDungeonSpace(p),mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},'Computer Science')});
     return true;
   }
+  scheduleRecallExpiry(client,challenge){
+    if(!client||!challenge||!this.clock||typeof this.clock.setTimeout!=='function')return;
+    this.clock.setTimeout(()=>{
+      const current=this.recallChallenges&&this.recallChallenges.get(client.sessionId);
+      if(!current||current.id!==challenge.id)return;
+      this.recallChallenges.delete(client.sessionId);
+      this.sendRecallTrace(client,'expired',{challengeId:challenge.id,unanswered:true});
+      try{client.send('recallResult',{id:challenge.id,expired:true,unanswered:true});}catch(_){}
+    },Math.max(1,challenge.expiresAt-Date.now()));
+  }
   relocateRecallChallenge(client,p,yaw=null){
     if(!client||!p||!this.recallChallenges)return false;
     const challenge=this.recallChallenges.get(client.sessionId);
@@ -209,6 +219,7 @@ class RecallMixin{
     }
     const challenge={id,questionId:q.id,databaseQuestionId:Number(q.questionId)||0,subjectId:Number(q.subjectId)||0,scopeSchoolId:Number(q.scopeSchoolId)||0,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source,originX:p.x,originZ:p.z};
     this.recallChallenges.set(client.sessionId,challenge);
+    this.scheduleRecallExpiry(client,challenge);
     this.sendRecallTrace(client,'placed',{challengeId:id,mode:fallback?'screen_fallback':'world_pillars',blocked:pillars.filter(value=>value.blocked).length,pillars:pillars.map(value=>({x:Math.round(value.x*10)/10,y:Math.round(value.y*10)/10,z:Math.round(value.z*10)/10,blocked:!!value.blocked}))});
     this.sendRecallQuestion(client,challenge,rec,p);
   }

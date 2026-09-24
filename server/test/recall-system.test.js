@@ -10,9 +10,9 @@ test('recall question shuffles answers without losing the correct answer',()=>{
   assert.equal(q.prompt,original.prompt);
 });
 
-test('recall tuning keeps answers available until the student chooses',()=>{
+test('recall tuning removes unanswered questions and pillars after 30 seconds',()=>{
   assert.equal(RECALL.COOLDOWN_MS,0);
-  assert.ok(RECALL.QUESTION_MS>=10*60*1000);
+  assert.equal(RECALL.QUESTION_MS,30*1000);
   assert.equal(RECALL.FREEZE_MS,0,'wrong answers never lock movement');
   assert.ok(RECALL.RESTORE_FRACTION>0&&RECALL.RESTORE_FRACTION<=.25);
 });

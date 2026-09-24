@@ -103,7 +103,7 @@ function showQuestion(m){
   });
   if(worldPillars)scene.add(group);else{fallbackEl.innerHTML='';answers.forEach((answer,i)=>{const b=document.createElement('button');b.className='recallchoice';b.style.setProperty('--answer',labelColor(i));b.textContent=String.fromCharCode(65+i)+'  '+answer;b.onclick=()=>submitAnswer(i);fallbackEl.appendChild(b);});fallbackEl.classList.remove('hidden');}
   subjectEl.textContent=(hall?'QUESTION HALL · ':(m.ruinBonus?'RUIN INSCRIPTION · ':''))+m.stage+' · '+m.subject+(m.topic?' · '+m.topic:'');
-  timeEl.textContent=hall?'CLOSE':(screenFallback?'CHOOSE':'RUN');
+  timeEl.textContent=hall?'30s':(screenFallback?'CHOOSE · 30s':'RUN · 30s');
   questionEl.textContent=m.prompt;feedbackEl.className='hidden';feedbackEl.textContent='';
   if(instructionEl){instructionEl.textContent='RUN TOWARDS THE CORRECT ANSWER';instructionEl.classList.toggle('hidden',hall||screenFallback);}
   document.body.classList.add('recall-active');document.body.classList.toggle('question-hall-recall-open',hall);hud.classList.toggle('question-hall-recall',hall);hud.classList.toggle('recall-screen-fallback',screenFallback);updateQuestionHallProgress();hud.classList.remove('hidden');
@@ -148,7 +148,7 @@ function queueQuestionHallNext(delay=900){
 }
 function reviewTiming(nextDue){const ms=Math.max(0,(Number(nextDue)||0)-Date.now());if(ms<3*60*1000)return 'again soon';if(ms<60*60*1000)return 'in '+Math.max(1,Math.round(ms/60000))+' minutes';if(ms<36*60*60*1000)return 'tomorrow';return 'in '+Math.max(2,Math.round(ms/86400000))+' days';}
 function result(m){
-  if(!m||!active||m.id!==active.id)return;finishRequest();if(m.expired){clearRecall();return sysMsg('The Recall Cast faded.');}
+  if(!m||!active||m.id!==active.id)return;finishRequest();if(m.expired){const hall=questionHallOpen;clearRecall({keepQuestionHall:hall});return sysMsg(hall?'The unanswered question faded after 30 seconds. Press <b>P</b> when ready for another.':'The unanswered Recall question and its pillars faded after 30 seconds. Press <b>P</b> for another.');}
   if(m.correct)syncRecallPose();
   masterySummary=m.mastery||masterySummary;
   const hall=questionHallOpen||!!m.questionHall,answer=active&&active.answers&&active.answers[m.correctIndex]||'';
@@ -181,8 +181,9 @@ function answerPillarAtPlayer(question){
 function tick(now=performance.now()){
   tickQuestionHallMarks(now);
   if((active||requestTimer||questionHallOpen)&&(!NET.on||recallRoom!==NET.room||recallDim!==dim)){recallTrace('cleared',{reason:!NET.on?'offline':(recallRoom!==NET.room?'room_changed':'dimension_changed'),fromDim:String(recallDim||''),toDim:String(dim||'')});clearRecall();return;}
-  if(active&&active.expiresAt<=Date.now()){const hall=questionHallOpen;recallTrace('cleared',{reason:'expired',id:active.id||''});clearRecall({keepQuestionHall:hall});if(hall)queueQuestionHallNext();else sysMsg('The Recall question expired. Press P for another.');return;}
+  if(active&&active.expiresAt<=Date.now()){const hall=questionHallOpen;recallTrace('cleared',{reason:'expired',id:active.id||''});clearRecall({keepQuestionHall:hall});sysMsg(hall?'The unanswered question faded after 30 seconds. Press <b>P</b> when ready for another.':'The unanswered Recall question and its pillars faded after 30 seconds. Press <b>P</b> for another.');return;}
   if(!active)return;
+  if(timeEl){const seconds=Math.max(0,Math.ceil((active.expiresAt-Date.now())/1000));timeEl.textContent=(active.questionHall?'':active.fallback?'CHOOSE · ':'RUN · ')+seconds+'s';}
   if(group)group.children.forEach((p,i)=>{p.children[0].material.opacity=.34+Math.sin(now*.004+i)*.12;p.children[1].rotation.z+=.012;p.children[2].intensity=1.5+Math.sin(now*.006+i)*.45;});
   if(answerPending||active.fallback||active.questionHall)return;
   const pillar=answerPillarAtPlayer(active);

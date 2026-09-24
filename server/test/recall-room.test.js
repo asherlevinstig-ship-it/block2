@@ -175,6 +175,29 @@ test('P replaces expired client questions instead of remaining stuck active',()=
   h.api.start();assert.equal(h.sent.length,1);assert.equal(h.api.active,null);
 });
 
+test('unanswered client questions and pillars disappear at their 30-second deadline',()=>{
+  const h=recallClientHarness();h.api.showQuestion({...h.question,expiresAt:Date.now()-1});
+  h.api.tick();
+  assert.equal(h.api.active,null);
+  assert.ok(h.messages.some(message=>message.includes('faded after 30 seconds')));
+  assert.equal(h.timers.size,0,'expiry does not automatically replace the unanswered question');
+});
+
+test('server expiry removes an unanswered Recall challenge and notifies its client',()=>{
+  const room=Object.create(recall),timers=[],sent=[],sessionId='idle-recall';
+  room.initRecallState();
+  room.clock={setTimeout(fn,ms){timers.push({fn,ms});}};
+  const client={sessionId,send:(type,message)=>sent.push({type,message})};
+  const challenge={id:'idle-question',expiresAt:Date.now()+30000};
+  room.recallChallenges.set(sessionId,challenge);
+  room.scheduleRecallExpiry(client,challenge);
+  assert.equal(timers.length,1);
+  assert.ok(timers[0].ms>29000&&timers[0].ms<=30000);
+  timers[0].fn();
+  assert.equal(room.recallChallenges.has(sessionId),false);
+  assert.deepEqual(sent.at(-1),{type:'recallResult',message:{id:'idle-question',expired:true,unanswered:true}});
+});
+
 test('Recall clears stale questions after changing rooms and ignores old results',()=>{
   const h=recallClientHarness();h.api.showQuestion(h.question);
   h.api.result({id:'older-question',expired:true});assert.equal(h.api.active.id,'one');
