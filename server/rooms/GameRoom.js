@@ -11092,6 +11092,20 @@ class GameRoom extends Room {
     const expiredGates = [];
     const nowMs = Date.now();
     this.gateTtls.forEach((expiresAt, id) => {
+      const inst = this.instances && this.instances[id];
+      const occupied = !!(inst && inst.players && inst.players.size > 0);
+      const hosted = isHostedGate(id);
+      if ((occupied || hosted) && expiresAt > 0) {
+        // Once a party has crossed the threshold, exploration time is not a
+        // collapse countdown. Keep the remaining duration frozen until the
+        // legacy instance empties or the dedicated DungeonRoom retires it.
+        const pausedUntil = Math.max(expiresAt, nowMs) + Math.max(0, Number(dt) || 0) * 1000;
+        this.gateTtls.set(id, pausedUntil);
+        const gate = this.state.gates.get(id);
+        if (gate) gate.expiresAt = pausedUntil;
+        this.dirtyGates = true;
+        return;
+      }
       if (expiresAt <= nowMs) expiredGates.push(id);
     });
     for (const id of expiredGates) {

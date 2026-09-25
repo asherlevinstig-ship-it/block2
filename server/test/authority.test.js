@@ -7100,7 +7100,7 @@ test('DungeonRoom.update runs its instance hazards (Sanguine heals wounded trash
   assert.equal(room.state.mobs.get('w1').hp, 16, 'update ran inst.tick -> hazards, healing the wounded mob 6/s');
 });
 
-test('DungeonRoom timer breach exports live enemies and returns party to town', () => {
+test('DungeonRoom pauses gate collapse while occupied', () => {
   drainGateBreaches();
   const room = makeDungeonRoom();
   const client = makeClient('dr-breach-runner');
@@ -7115,6 +7115,16 @@ test('DungeonRoom timer breach exports live enemies and returns party to town', 
   room.state.mobs.set('boss', { x: 22, y: 9, z: 20, hp: 180, maxHp: 180, kind: 'boss', dgn: 'dr-breach', yaw: 0, state: '' });
 
   room.update(0.1);
+  const pausedUntil = room.gateExpiresAt;
+  const pausedPayloads = drainGateBreaches();
+
+  assert.equal(!!room.breached, false);
+  assert.equal(pausedPayloads.length, 0);
+  assert.equal(room.state.players.get(client.sessionId).dgn, 'dr-breach');
+  assert.ok(pausedUntil > Date.now(), 'the expired deadline moves forward while a hunter remains inside');
+
+  // Keep direct breach serialization covered without making it timer-driven.
+  room.breachToOverworld();
   const [payload] = drainGateBreaches();
 
   assert.equal(room.breached, true);
@@ -10289,7 +10299,7 @@ test('gate lobby uses the requested gate id and issues admission after ready', (
   assert.deepEqual(start.msg.finalSummary.responsibilities, [
     'Stay together until first room.',
     'Boss mastery starts on first boss hit.',
-    'Gate collapse timer continues outside.',
+    'Gate collapse timer pauses while any hunter is inside.',
   ]);
   const admitted = peekDungeonAdmission(start.msg.ticket);
   assert.equal(admitted.rank, 3);
@@ -13336,7 +13346,7 @@ test('gates restore from persistence and flush only active unexpired gates', asy
   assert.equal(saved.g3.expiresAt > Date.now(), true);
 });
 
-test('expired uncleared gates breach dungeon mobs into the overworld', () => {
+test('occupied legacy dungeons pause gate expiry instead of collapsing', () => {
   const room = makeRoom();
   const client = makeClient('breach_runner');
   const { prof } = seedPlayer(room, client, { dgn: 'g1', hp: 20 });
@@ -13355,24 +13365,16 @@ test('expired uncleared gates breach dungeon mobs into the overworld', () => {
 
   room.tickGateLifecycle(1, []);
 
-  assert.equal(room.state.gates.has('g1'), false);
-  assert.equal(room.instances.g1, undefined);
-  assert.equal(room.state.mobs.get('trash').dgn, '');
-  assert.equal(room.state.mobs.get('boss').dgn, '');
-  assert.equal(room.state.mobs.get('boss').state, 'chase');
-  assert.equal(room.mobMeta.boss.gateBreachBoss, true);
-  assert.equal(room.state.mobs.get('boss').displayName, 'Breached Gate Boss');
-  assert.equal(room.gateBreaches.get('g1').bossId, 'boss');
-  assert.equal(room.state.players.get(client.sessionId).dgn, '');
-  const failed = client.sent.find(e => e.type === 'dungeonFailed').msg;
-  assert.equal(failed.reason, 'breach');
-  assert.equal(failed.respawnPolicy, 'dungeon_town_full_v1');
-  assert.equal(failed.hp, 20);
-  assert.equal(failed.mp, 20);
-  assert.equal(failed.sp, 100);
-  assert.equal(failed.hunger, 100);
-  assert.equal(events.find(e => e.type === 'gateBreach').msg.count, 2);
-  assert.match(chats.find(e => e.type === 'chat').msg.text, /breached into the overworld/);
+  assert.equal(room.state.gates.has('g1'), true);
+  assert.ok(room.gateTtls.get('g1') > Date.now());
+  assert.equal(room.state.gates.get('g1').expiresAt, room.gateTtls.get('g1'));
+  assert.ok(room.instances.g1);
+  assert.equal(room.state.mobs.get('trash').dgn, 'g1');
+  assert.equal(room.state.mobs.get('boss').dgn, 'g1');
+  assert.equal(room.state.players.get(client.sessionId).dgn, 'g1');
+  assert.equal(client.sent.some(e => e.type === 'dungeonFailed'), false);
+  assert.equal(events.some(e => e.type === 'gateBreach'), false);
+  assert.equal(chats.some(e => e.type === 'chat' && /breached into the overworld/.test(e.msg.text)), false);
 });
 
 test('hosted DungeonRoom gates breach into overworld from handoff payload instead of clean expiry', () => {
@@ -13432,7 +13434,7 @@ test('killing a breached gate boss resolves the public cleanup event', () => {
   room.gateTtls.set('g1', gate.expiresAt);
   putInstance(room, { id: 'g1', rank: 2, players: [runner.sessionId] });
   room.state.mobs.set('boss', { x: 22, y: 9, z: 20, hp: 1, maxHp: 240, kind: 'boss', dgn: 'g1', yaw: 0, state: '' });
-  room.tickGateLifecycle(1, []);
+  room.breachExpiredGate('g1');
   const boss = room.state.mobs.get('boss');
   boss.hp = 0;
 
@@ -13470,7 +13472,7 @@ test('original dungeon party cannot farm cleanup rewards from their own breach',
   room.gateTtls.set('g1', gate.expiresAt);
   putInstance(room, { id: 'g1', rank: 1, players: [client.sessionId] });
   room.state.mobs.set('boss', { x: 22, y: 9, z: 20, hp: 1, maxHp: 180, kind: 'boss', dgn: 'g1', yaw: 0, state: '' });
-  room.tickGateLifecycle(1, []);
+  room.breachExpiredGate('g1');
   const boss = room.state.mobs.get('boss');
   boss.hp = 0;
 
@@ -13504,7 +13506,7 @@ test('active breach cap replaces old same-rank breaches and penalizes road safet
   putInstance(room, { id: 'g1', rank: 1, players: [client.sessionId] });
   room.state.mobs.set('boss', { x: 22, y: 9, z: 20, hp: 1, maxHp: 180, kind: 'boss', dgn: 'g1', yaw: 0, state: '' });
 
-  room.tickGateLifecycle(1, []);
+  room.breachExpiredGate('g1');
 
   assert.equal(room.gateBreaches.has('old'), false);
   assert.equal(room.state.mobs.has('oldboss'), false);

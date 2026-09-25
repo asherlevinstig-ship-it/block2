@@ -812,7 +812,13 @@ class DungeonRoom extends GameRoom {
   update(dt) {
     const inst = this.instance;
     if (!inst) return;
-    if (this.gateExpiresAt && this.gateExpiresAt <= Date.now() && !inst.cleared) {
+    const now = Date.now();
+    const occupied = !!(inst.players && inst.players.size > 0);
+    if (this.gateExpiresAt && occupied && !inst.cleared) {
+      // The overworld TTL controls how long an unused portal waits for a
+      // party. It must not become a raid timer after somebody enters.
+      this.gateExpiresAt = Math.max(this.gateExpiresAt, now) + Math.max(0, Number(dt) || 0) * 1000;
+    } else if (this.gateExpiresAt && this.gateExpiresAt <= now && !inst.cleared) {
       this.breachToOverworld();
       return;
     }

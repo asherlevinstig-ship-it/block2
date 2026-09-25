@@ -805,7 +805,7 @@ class DungeonMixin {
       responsibilities: [
         'Stay together until first room.',
         'Boss mastery starts on first boss hit.',
-        'Gate collapse timer continues outside.',
+        'Gate collapse timer pauses while any hunter is inside.',
       ],
     };
   }

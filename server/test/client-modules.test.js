@@ -1585,7 +1585,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Gate opens in /);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /enterDungeonAfterCountdown/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'server', 'rooms', 'dungeon.mixin.js'), 'utf8'), /Stay together until first room/);
-  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'server', 'rooms', 'dungeon.mixin.js'), 'utf8'), /Gate collapse timer continues outside/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'server', 'rooms', 'dungeon.mixin.js'), 'utf8'), /Gate collapse timer pauses while any hunter is inside/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /public cleanup pays reduced XP and materials only/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Optional chests remain/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Exit through the portal when ready/);
