@@ -1167,6 +1167,7 @@ function bugReportClientContext(){
     dimension: dim,
     dungeonId: NET&&NET.dgn || '',
     position: player&&player.pos ? { x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw||0 } : null,
+    questionState: globalThis.BlockcraftRecall&&typeof globalThis.BlockcraftRecall.debugState==='function'?globalThis.BlockcraftRecall.debugState():null,
     snapshot: snap,
   };
 }

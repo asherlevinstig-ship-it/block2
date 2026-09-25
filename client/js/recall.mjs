@@ -1,9 +1,10 @@
 const hud=document.getElementById('recallhud'),subjectEl=document.getElementById('recallsubject'),timeEl=document.getElementById('recalltime'),progressEl=document.getElementById('recallprogress'),closeEl=document.getElementById('recallclose'),questionEl=document.getElementById('recallquestion'),instructionEl=document.getElementById('recallinstruction'),fallbackEl=document.getElementById('recallfallback'),feedbackEl=document.getElementById('recallfeedback');
 let active=null,group=null,answerPending=false,masterySummary=null,questionHallOpen=false,questionHallAnswered=0,questionHallNextTimer=0,recallClearTimer=0;
 const questionHallMarks=[];
-let requestTimer=0,recallRoom=null,recallDim=null;
+let requestTimer=0,recallRoom=null,recallDim=null,lastProximityTraceAt=0;
 function finishRequest(){if(requestTimer)clearTimeout(requestTimer);requestTimer=0;}
 function recallTrace(event,data={}){try{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('recall.'+event,data);}catch(_){}}
+function recallPosition(value){return value&&Number.isFinite(Number(value.x))&&Number.isFinite(Number(value.y))&&Number.isFinite(Number(value.z))?{x:Math.round(Number(value.x)*1000)/1000,y:Math.round(Number(value.y)*1000)/1000,z:Math.round(Number(value.z)*1000)/1000}:null;}
 const colors=[0x38bdf8,0xa78bfa,0xfbbf24,0x34d399],QUESTION_HALL_GOAL=10;
 // The server accepts answers within 2.65 blocks so movement replication has some
 // slack. Keep the client activation area large enough to cover the visible pillar.
@@ -76,15 +77,16 @@ function submitAnswer(index){
   const reconcileDelay=!hall&&!active.fallback&&positionDrift>2?Math.min(900,120+positionDrift*45):0;
   if(globalThis.BlockcraftTrace)globalThis.BlockcraftTrace('recall.answer.submit',{id:answerId,index,questionHall:hall,fallback:!!active.fallback,positionDrift:Math.round(positionDrift*100)/100,reconcileDelay});
   answerPending=true;syncRecallPose();fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=true);
-  requestTimer=setTimeout(()=>{requestTimer=0;answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);feedbackEl.textContent='The server has not confirmed that answer yet. Check your connection, then choose it again.';feedbackEl.className='wrong';sysMsg('Answer confirmation delayed. Try your answer again.');},8000);
+  requestTimer=setTimeout(()=>{requestTimer=0;answerPending=false;recallTrace('answer.timeout',{id:answerId,index,questionHall:hall,fallback:!!active&&!!active.fallback});fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);feedbackEl.textContent='The server has not confirmed that answer yet. Check your connection, then choose it again.';feedbackEl.className='wrong';sysMsg('Answer confirmation delayed. Try your answer again.');},8000);
   const send=()=>{
     if(!active||active.id!==answerId||!answerPending)return;
-    try{syncRecallPose();NET.room.send('recallAnswer',{id:answerId,index});}
-    catch(_){finishRequest();answerPending=false;fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Could not send answer. Try again after reconnecting.');}
+    try{syncRecallPose();NET.room.send('recallAnswer',{id:answerId,index});recallTrace('answer.sent',{id:answerId,index,questionHall:hall,fallback:!!active.fallback,localPosition:recallPosition(player&&player.pos)});}
+    catch(error){finishRequest();answerPending=false;recallTrace('answer.send_failed',{id:answerId,index,message:String(error&&error.message||error||'')});fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Could not send answer. Try again after reconnecting.');}
   };
   if(reconcileDelay)setTimeout(send,reconcileDelay);else send();
 }
 function showQuestion(m){
+  recallTrace('question.received',{id:m&&m.id||'',questionId:m&&m.questionId||'',questionHall:!!(m&&m.questionHall),fallback:!!(m&&m.fallback),answers:Array.isArray(m&&m.answers)?m.answers.length:0,pillars:Array.isArray(m&&m.pillars)?m.pillars.length:0,expiresInMs:Math.max(0,Number(m&&m.expiresAt||0)-Date.now()),dim:String(dim||'')});
   if(m&&m.questionHall&&!questionHallOpen){recallTrace('question.ignored',{reason:'question_hall_closed',id:m.id||''});return;}
   finishRequest();recallRoom=NET.room;recallDim=dim;
   const hall=!!(m&&m.questionHall)||questionHallOpen;
@@ -148,7 +150,7 @@ function queueQuestionHallNext(delay=900){
 }
 function reviewTiming(nextDue){const ms=Math.max(0,(Number(nextDue)||0)-Date.now());if(ms<3*60*1000)return 'again soon';if(ms<60*60*1000)return 'in '+Math.max(1,Math.round(ms/60000))+' minutes';if(ms<36*60*60*1000)return 'tomorrow';return 'in '+Math.max(2,Math.round(ms/86400000))+' days';}
 function result(m){
-  if(!m||!active||m.id!==active.id)return;finishRequest();if(m.expired){const hall=questionHallOpen;clearRecall({keepQuestionHall:hall});return sysMsg(hall?'The unanswered question faded after 30 seconds. Press <b>P</b> when ready for another.':'The unanswered Recall question and its pillars faded after 30 seconds. Press <b>P</b> for another.');}
+  if(!m||!active||m.id!==active.id){recallTrace('result.ignored',{receivedId:String(m&&m.id||''),activeId:String(active&&active.id||''),hasActive:!!active});return;}finishRequest();recallTrace('result.received',{id:m.id,correct:!!m.correct,expired:!!m.expired,questionHall:!!m.questionHall});if(m.expired){const hall=questionHallOpen;clearRecall({keepQuestionHall:hall});return sysMsg(hall?'The unanswered question faded after 30 seconds. Press <b>P</b> when ready for another.':'The unanswered Recall question and its pillars faded after 30 seconds. Press <b>P</b> for another.');}
   if(m.correct)syncRecallPose();
   masterySummary=m.mastery||masterySummary;
   const hall=questionHallOpen||!!m.questionHall,answer=active&&active.answers&&active.answers[m.correctIndex]||'';
@@ -186,8 +188,23 @@ function tick(now=performance.now()){
   if(timeEl){const seconds=Math.max(0,Math.ceil((active.expiresAt-Date.now())/1000));timeEl.textContent=(active.questionHall?'':active.fallback?'CHOOSE · ':'RUN · ')+seconds+'s';}
   if(group)group.children.forEach((p,i)=>{p.children[0].material.opacity=.34+Math.sin(now*.004+i)*.12;p.children[1].rotation.z+=.012;p.children[2].intensity=1.5+Math.sin(now*.006+i)*.45;});
   if(answerPending||active.fallback||active.questionHall)return;
+  if(now-lastProximityTraceAt>=1000){
+    let nearest=null,nearestDistance=Infinity;
+    for(const candidate of active.pillars||[]){const distance=Math.hypot(player.pos.x-candidate.x,player.pos.z-candidate.z);if(distance<nearestDistance){nearest=candidate;nearestDistance=distance;}}
+    if(nearest&&nearestDistance<=5){
+      lastProximityTraceAt=now;
+      const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get&&NET.room.state.players.get(NET.room.sessionId);
+      recallTrace('pillar.proximity',{id:active.id||'',index:nearest.index,distance:Math.round(nearestDistance*1000)/1000,triggerRadius:active.dungeonRecall?RECALL_DUNGEON_PILLAR_TRIGGER_RADIUS:RECALL_PILLAR_TRIGGER_RADIUS,local:recallPosition(player&&player.pos),server:recallPosition(self)});
+    }
+  }
   const pillar=answerPillarAtPlayer(active);
   if(pillar)submitAnswer(pillar.index);
+}
+function debugState(){
+  const self=NET&&NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get&&NET.room.state.players.get(NET.room.sessionId);
+  const local=recallPosition(player&&player.pos);
+  const server=recallPosition(self);
+  return {active:!!active,id:String(active&&active.id||''),questionId:String(active&&active.questionId||''),mode:active?(active.questionHall?'question_hall':active.fallback?'screen_fallback':'world_pillars'):'none',answerPending,requestPending:!!requestTimer,questionHallOpen,expiresInMs:active?Math.max(0,(Number(active.expiresAt)||0)-Date.now()):0,answers:active&&Array.isArray(active.answers)?active.answers.length:0,pillars:active&&Array.isArray(active.pillars)?active.pillars.map(p=>({index:p.index,x:p.x,y:p.y,z:p.z,blocked:!!p.blocked})):[],renderedPillars:group&&group.children?group.children.length:0,fallbackButtons:fallbackEl&&fallbackEl.querySelectorAll?fallbackEl.querySelectorAll('button').length:0,hudVisible:!!(hud&&hud.classList&&typeof hud.classList.contains==='function'&&!hud.classList.contains('hidden')),roomMatches:recallRoom===NET.room,dimensionMatches:recallDim===dim,dimension:String(dim||''),localPosition:local,serverPosition:server,positionDrift:local&&server?Math.round(Math.hypot(local.x-server.x,local.z-server.z)*1000)/1000:null};
 }
 function setMastery(value){if(value&&typeof value==='object')masterySummary=value;}
 function answerFromKeyboard(e){
@@ -200,6 +217,6 @@ function answerFromKeyboard(e){
 }
 if(closeEl)closeEl.addEventListener('click',closeQuestionHall);
 if(globalThis.addEventListener)globalThis.addEventListener('keydown',answerFromKeyboard,true);
-const api=Object.freeze({start,showQuestion,result,reject,tick,clear:clearRecall,closeQuestionHall,questionHallActive:()=>questionHallOpen,setMastery,get mastery(){return masterySummary;},get active(){return active;},get frozen(){return false;}});
+const api=Object.freeze({start,showQuestion,result,reject,tick,clear:clearRecall,closeQuestionHall,questionHallActive:()=>questionHallOpen,setMastery,debugState,get mastery(){return masterySummary;},get active(){return active;},get frozen(){return false;}});
 globalThis.BlockcraftRecall=api;
 export {api};

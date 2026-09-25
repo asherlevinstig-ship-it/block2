@@ -703,6 +703,7 @@ test('bug reports prefer HTTP and bound the WebSocket fallback payload', () => {
   assert.match(section, /NET\.room\.send\('bugReport',compact\)/);
   assert.match(section, /while\(compact\.trace\.length&&bytes\(compact\)>3500\)compact\.trace\.shift\(\)/);
   assert.doesNotMatch(networking, /bugReportFallbackTimer|sendBugReportHttpFallback/);
+  assert.match(networking, /questionState: globalThis\.BlockcraftRecall&&typeof globalThis\.BlockcraftRecall\.debugState==='function'\?globalThis\.BlockcraftRecall\.debugState\(\):null/);
 });
 
 test('Town of Beginnings has explainer NPC helpers for major areas', () => {

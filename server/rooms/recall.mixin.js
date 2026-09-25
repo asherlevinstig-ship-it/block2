@@ -6,16 +6,32 @@ const { getAuthService }=require('../auth');
 
 class RecallMixin{
   sendRecallTrace(client,event,data={}){
-    try{if(client&&typeof client.send==='function')client.send('recallTrace',{event:String(event||'unknown'),at:Date.now(),...data});}catch(_){}
+    const p=client&&this.state&&this.state.players&&this.state.players.get(client.sessionId);
+    const round=value=>Number.isFinite(Number(value))?Math.round(Number(value)*1000)/1000:null;
+    const payload={
+      event:String(event||'unknown'),at:Date.now(),room:this.roomName||'blockcraft',shardId:this.shardId||'main',
+      player:p?{name:String(p.name||'').slice(0,32),x:round(p.x),y:round(p.y),z:round(p.z),dim:String(p.dim||''),dgn:String(p.dgn||'')}:null,
+      ...data,
+    };
+    const traceMode=String(process.env.BLOCKCRAFT_RECALL_TRACE||'all').toLowerCase();
+    const underTest=process.env.NODE_ENV==='test'||!!process.env.NODE_TEST_CONTEXT||process.argv.includes('--test');
+    if(!underTest&&!['0','off','false'].includes(traceMode))console.log('[recall-trace]',JSON.stringify(payload));
+    try{if(client&&typeof client.send==='function')client.send('recallTrace',payload);}catch(_){}
+    return payload;
   }
-  async loadRecallQuestionWithTimeout(store,account,input,timeoutMs=4000){
-    let timer;
+  async loadRecallQuestionWithTimeout(store,account,input,timeoutMs=4000,onOutcome=null){
+    let timer,outcome='empty',startedAt=Date.now();
     try{
-      return await Promise.race([
-        Promise.resolve().then(()=>store.loadRecallQuestion(account,input)),
-        new Promise(resolve=>{timer=setTimeout(()=>resolve(null),timeoutMs);}),
+      const result=await Promise.race([
+        Promise.resolve().then(()=>store.loadRecallQuestion(account,input)).then(value=>({kind:value?'database':'empty',value})),
+        new Promise(resolve=>{timer=setTimeout(()=>resolve({kind:'timeout',value:null}),timeoutMs);}),
       ]);
-    }catch(_){return null;}finally{clearTimeout(timer);}
+      outcome=result&&result.kind||'empty';
+      return result&&result.value||null;
+    }catch(error){outcome='error';return null;}finally{
+      clearTimeout(timer);
+      if(typeof onOutcome==='function')try{onOutcome({outcome,durationMs:Math.max(0,Date.now()-startedAt),timeoutMs});}catch(_){}
+    }
   }
   initRecallState(){this.recallChallenges=new Map();this.recallSubjects=new Map();this.recallRecentQuestions=new Map();this.recallRecentPrompts=new Map();this.recallStartsPending=new Set();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
   cleanRecallSubject(value){return String(value||'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim().slice(0,96);}
@@ -41,6 +57,7 @@ class RecallMixin{
   sendRecallQuestion(client,challenge,rec,p){
     if(!client||!challenge)return false;
     client.send('recallQuestion',{id:challenge.id,questionId:challenge.questionId,subject:challenge.subject,stage:challenge.stage,topic:challenge.topic,difficulty:challenge.difficulty,prompt:challenge.prompt,answers:challenge.answers,pillars:challenge.pillars,fallback:challenge.fallback,expiresAt:challenge.expiresAt,ruinBonus:!!challenge.ruinId,lectern:challenge.source==='lectern',questionHall:challenge.source==='question_hall',dungeonRecall:this.recallDungeonSpace(p),mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},'Computer Science')});
+    this.sendRecallTrace(client,'question_sent',{challengeId:challenge.id,questionId:challenge.questionId,source:challenge.source||'recall',mode:challenge.fallback?'screen_fallback':'world_pillars',answers:Array.isArray(challenge.answers)?challenge.answers.length:0,pillars:Array.isArray(challenge.pillars)?challenge.pillars.length:0,expiresInMs:Math.max(0,challenge.expiresAt-Date.now())});
     return true;
   }
   scheduleRecallExpiry(client,challenge){
@@ -174,7 +191,7 @@ class RecallMixin{
       ruinId=ruin.id;
     }
     const tutorial=this.recallTutorialSpace(p),questionHall=questionHallRequest;
-    let q=null;
+    let q=null,lookup={outcome:'not_available',durationMs:0,timeoutMs:4000};
     if(this.recallStartsPending.has(client.sessionId)){this.sendRecallTrace(client,'reject',{reason:'pending'});return client.send('recallReject',{reason:'pending'});}
     this.recallStartsPending.add(client.sessionId);
     const startDim=p.dim,startDungeon=p.dgn;
@@ -182,7 +199,7 @@ class RecallMixin{
       const auth=getAuthService(),store=auth&&typeof auth.getGameQuestionStore==='function'?auth.getGameQuestionStore():null;
       if(store&&client&&client._account&&typeof store.loadRecallQuestion==='function'){
         const mastery=rec&&rec.prof&&rec.prof.recallMastery||{},recent=this.recallRecentQuestions.get(client.sessionId)||[],recentPrompts=this.recallRecentPrompts.get(client.sessionId)||[],avoid=this.recallAvoidance(mastery,recent,recentPrompts);
-        q=await this.loadRecallQuestionWithTimeout(store,client._account,{subject,fallbackSubject:'Computer Science',avoidQuestionIds:avoid.ids,avoidPrompts:avoid.prompts});
+        q=await this.loadRecallQuestionWithTimeout(store,client._account,{subject,fallbackSubject:'Computer Science',avoidQuestionIds:avoid.ids,avoidPrompts:avoid.prompts},4000,result=>{lookup=result;});
       }
     }catch(_){}finally{this.recallStartsPending.delete(client.sessionId);}
     if(this.state.players.get(client.sessionId)!==p)return;
@@ -199,6 +216,7 @@ class RecallMixin{
       }
       q=RECALL.selectQuestion(subject,selectionHistory,now,Math.random);
     }
+    this.sendRecallTrace(client,'question_selected',{provider:lookup.outcome==='database'?'database':'builtin',lookupOutcome:lookup.outcome,lookupMs:lookup.durationMs|0,questionId:q&&q.id||'',databaseQuestionId:Number(q&&q.questionId)||0,subject:q&&q.subject||subject,topic:q&&q.topic||''});
     this.recallSeq++;
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
     const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=questionHall||pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
@@ -287,12 +305,15 @@ class RecallMixin{
   }
   handleRecallAnswer(client,message){
     const sid=client&&client.sessionId,challenge=sid&&this.recallChallenges.get(sid),p=sid&&this.state.players.get(sid),now=Date.now();
-    if(!challenge||!p||!message||message.id!==challenge.id)return client&&client.send('recallReject',{reason:'invalid'});
-    if(challenge.expiresAt<=now){this.recallChallenges.delete(sid);return client.send('recallResult',{id:challenge.id,expired:true});}
+    if(!challenge||!p||!message||message.id!==challenge.id){this.sendRecallTrace(client,'answer_rejected',{reason:'invalid',receivedId:String(message&&message.id||''),activeId:String(challenge&&challenge.id||'')});return client&&client.send('recallReject',{reason:'invalid'});}
+    if(challenge.expiresAt<=now){this.recallChallenges.delete(sid);this.sendRecallTrace(client,'answer_rejected',{reason:'expired',challengeId:challenge.id,lateByMs:now-challenge.expiresAt});return client.send('recallResult',{id:challenge.id,expired:true});}
     const index=message.index|0,pillar=challenge.pillars[index];
-    if(!pillar||(!challenge.fallback&&Math.hypot(p.x-pillar.x,p.z-pillar.z)>2.65))return client.send('recallReject',{reason:'position'});
+    const distance=pillar?Math.hypot(p.x-pillar.x,p.z-pillar.z):null;
+    this.sendRecallTrace(client,'answer_received',{challengeId:challenge.id,index,mode:challenge.fallback?'screen_fallback':'world_pillars',distance:Number.isFinite(distance)?Math.round(distance*1000)/1000:null,pillar:pillar?{x:pillar.x,y:pillar.y,z:pillar.z}:null});
+    if(!pillar||(!challenge.fallback&&distance>2.65)){this.sendRecallTrace(client,'answer_rejected',{reason:'position',challengeId:challenge.id,index,distance:Number.isFinite(distance)?Math.round(distance*1000)/1000:null,limit:2.65,pillar:pillar?{x:pillar.x,y:pillar.y,z:pillar.z}:null});return client.send('recallReject',{reason:'position'});}
     this.recallChallenges.delete(sid);
     const rec=typeof this.profileFor==='function'&&this.profileFor(client),correct=index===challenge.correct;
+    this.sendRecallTrace(client,'answer_result',{challengeId:challenge.id,index,correct,correctIndex:challenge.correct,durationMs:Math.max(0,now-(challenge.startedAt||now)),source:challenge.source||'recall'});
     let review=null,mastery=null;
     if(rec){
       const question=RECALL.QUESTIONS.find(q=>q.id===challenge.questionId)||{id:challenge.questionId,topic:challenge.topic};

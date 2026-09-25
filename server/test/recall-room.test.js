@@ -119,12 +119,23 @@ test('recall uses compact answer pillars inside low dungeon caves',()=>{
 
 
 test('Recall database lookup falls back on timeout, failure and an empty bank',async()=>{
-  const room=Object.create(recall);
-  assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>new Promise(()=>{})},{},{},5),null);
-  assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>Promise.reject(new Error('offline'))},{},{},5),null);
-  assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>null},{},{},5),null);
+  const room=Object.create(recall),outcomes=[],capture=result=>outcomes.push(result.outcome);
+  assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>new Promise(()=>{})},{},{},5,capture),null);
+  assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>Promise.reject(new Error('offline'))},{},{},5,capture),null);
+  assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>null},{},{},5,capture),null);
   const question={id:'db-question'};
-  assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>question},{},{},50),question);
+  assert.equal(await room.loadRecallQuestionWithTimeout({loadRecallQuestion:()=>question},{},{},50,capture),question);
+  assert.deepEqual(outcomes,['timeout','error','empty','database']);
+});
+
+test('Recall server traces include the authoritative player and room context',()=>{
+  const room=Object.create(recall),sent=[];
+  room.roomName='class-room';room.shardId='school-3';
+  room.state={players:new Map([['trace-player',{name:'Trace Student',x:10.12345,y:4,z:20.98765,dim:'questions',dgn:'hall-1'}]])};
+  const payload=room.sendRecallTrace({sessionId:'trace-player',send:(type,message)=>sent.push({type,message})},'question_selected',{questionId:'q-1'});
+  assert.equal(payload.room,'class-room');assert.equal(payload.shardId,'school-3');
+  assert.deepEqual(payload.player,{name:'Trace Student',x:10.123,y:4,z:20.988,dim:'questions',dgn:'hall-1'});
+  assert.equal(payload.questionId,'q-1');assert.deepEqual(sent,[{type:'recallTrace',message:payload}]);
 });
 
 test('Recall carries selected database identifiers into asynchronous attempt analytics',()=>{
@@ -158,6 +169,14 @@ test('blocked world pillars open an explicit usable screen fallback',()=>{
   assert.equal(h.cursorReleases,1);
   assert.ok(h.messages.some(message=>message.includes('terrain blocked a safe four-pillar layout')));
   assert.ok(h.traces.some(entry=>entry.event==='recall.question.shown'&&entry.data.mode==='screen_fallback'));
+});
+
+test('Recall exposes a bug-report snapshot and traces question delivery',()=>{
+  const h=recallClientHarness();h.api.showQuestion(h.question);
+  const state=h.api.debugState();
+  assert.equal(state.active,true);assert.equal(state.id,'one');assert.equal(state.mode,'screen_fallback');
+  assert.equal(state.answers,4);assert.equal(state.fallbackButtons,0);assert.equal(state.dimension,'overworld');
+  assert.ok(h.traces.some(entry=>entry.event==='recall.question.received'&&entry.data.id==='one'));
 });
 
 test('P suppresses duplicate fetches and permits retry after a missing response',()=>{
@@ -224,7 +243,7 @@ test('a stalled database still delivers one playable fallback and releases pendi
   try{
     const room=Object.create(recall),sent=[],p={x:10,y:4,z:20,yaw:0,dim:'tutorial',dgn:'tutorial-test'};
     room.initRecallState();room.state={players:new Map([['p',p]])};room.rateLimited=()=>false;
-    room.loadRecallQuestionWithTimeout=(store,account,input)=>recall.loadRecallQuestionWithTimeout(store,account,input,5);
+    room.loadRecallQuestionWithTimeout=(store,account,input,_timeout,onOutcome)=>recall.loadRecallQuestionWithTimeout(store,account,input,5,onOutcome);
     const client={sessionId:'p',_account:{},send:(type,message)=>sent.push({type,message})};
     await room.handleRecallStart(client);
     assert.equal(room.recallStartsPending.size,0);
