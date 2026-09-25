@@ -2368,7 +2368,11 @@ function netAttachRoom(room,name,client){
       dungeonLobbyState=null;
       if(dungeonLobbyOpen) closeQWin();
       if(r==='gone') sysMsg('That <b>Gate</b> closed before the party entered.');
-      else if(r==='range') sysMsg('You drifted too far from the <b>Gate Lobby</b>.');
+      else if(r==='range'){
+        const distance=Number(m&&m.distance),range=Number(m&&m.interactRange);
+        const detail=Number.isFinite(distance)&&Number.isFinite(range)?' ('+distance.toFixed(1)+' blocks away; threshold '+range.toFixed(0)+')':'';
+        sysMsg('You drifted too far from the <b>Gate Lobby</b>'+detail+'.');
+      }
       else if(r==='left') sysMsg('You left the <b>Gate Lobby</b>.');
     });
     room.onMessage('gateReject', m=>gateRejected(m));

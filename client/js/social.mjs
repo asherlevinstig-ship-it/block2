@@ -75,7 +75,7 @@ function cycleChatMode(){setChatMode(chatMode==='local'?'party':chatMode==='part
 function quickChatContext(){
   if(typeof hp==='number'&&typeof maxHp==='function'&&hp<=maxHp()*.35)return 'danger';
   if(dim==='dungeon')return 'dungeon';
-  if(dungeonLobbyState||(gate&&dim==='overworld'&&Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z)<=12))return 'gate';
+  if(dungeonLobbyState||(gate&&dim==='overworld'&&Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z)<=gateInteractionRange(gate)))return 'gate';
   if(dim==='overworld'&&typeof isTownLand==='function'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return 'town';
   return 'universal';
 }

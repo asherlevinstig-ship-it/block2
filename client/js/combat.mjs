@@ -7293,7 +7293,7 @@ function nearbyInteractionPrompt(){
   const push=(entry,distance=0)=>{if(entry)candidates.push({...entry,distance:Number.isFinite(distance)?distance:0});};
   if(gate && dim==='overworld'){
     const d=Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z);
-    if(d<=6)push({key:'G',title:'Gate Portal',small:'Enter dungeon · O → Activities for prep or team queue',priority:120},d);
+    if(d<=(gate.landmark==='town_mega'?gateInteractionRange(gate):6))push({key:'G',title:'Gate Portal',small:'Enter dungeon · O → Activities for prep or team queue',priority:120},d);
   }
   if(dim==='dungeon'&&exitPortal){
     const d=Math.hypot(exitPortal.position.x-player.pos.x,exitPortal.position.z-player.pos.z);

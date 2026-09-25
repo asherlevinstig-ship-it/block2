@@ -2281,7 +2281,7 @@ function updateGatePrompt(){
   }
   const visible=locked&&dim==='overworld'&&gate&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&!document.body.classList.contains('cutscene');
   const distance=visible?Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z):Infinity;
-  const promptRange=gate&&gate.landmark==='town_mega'?12:6;
+  const promptRange=gate&&gate.landmark==='town_mega'?gateInteractionRange(gate):6;
   if(distance>promptRange){gatePromptEl.classList.add('hidden');gatePromptEl.innerHTML='';return;}
   const readiness=gateReadinessLocal(gate.rank|0),preview=gatePreviewLocal(gate.rank|0,gate.kind),statusClass=readiness.ready?'ready':'warning';
   const party=preview.recommendedParty,partyText=party[0]===party[1]?String(party[0]):party[0]+'-'+party[1];

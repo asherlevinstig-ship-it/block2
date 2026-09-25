@@ -1912,11 +1912,12 @@ function decorateTownMegaGate(local){
   group.scale.setScalar(1.85);
   local.grp.userData.ring.scale.setScalar(4.4);
   local.grp.userData.ring.position.y=6.15;
+  local.grp.userData.ring.material.opacity=.74;
   local.grp.userData.disc.scale.setScalar(4.4);
   local.grp.userData.disc.position.y=6.15;
   local.grp.userData.beam.scale.set(4.6,1,4.6);
   const portalGlow=local.grp.children.find(o=>o&&o.isSprite);
-  if(portalGlow){portalGlow.scale.set(21,21,1);portalGlow.position.y=6.15;}
+  if(portalGlow){portalGlow.scale.set(21,21,1);portalGlow.position.y=6.15;portalGlow.material.opacity=.28;}
   local.grp.add(group);local.megaGateAura=group;
   local.megaFx={group,runes,innerRunes,vortex,rise,orbit,vortexMeta,riseMeta,orbitMeta};
 }

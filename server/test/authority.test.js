@@ -10440,8 +10440,20 @@ test('the gigantic Town Mega Gate can be used from its visible threshold', () =>
   room.state.gates.set(gate.id, gate);
   seedPlayer(room, client, { x: gate.x + 10, y: 16, z: gate.z });
   assert.equal(room.findGateForPlayer(client, { id: gate.id }).gate, gate);
-  room.state.players.get(client.sessionId).x = gate.x + 13;
+  room.state.players.get(client.sessionId).x = gate.x + 19;
   assert.equal(room.findGateForPlayer(client, { id: gate.id }).reason, 'range');
+});
+
+test('Town Mega Gate final ready check uses the same monumental threshold', async () => {
+  const room = makeRoom(), client = makeClient('mega-ready');
+  const gate = makeGate('town-mega-ready', W.HUB.megaGate.x, W.HUB.megaGate.z, 0, 'public');
+  gate.landmark = 'town_mega';
+  room.state.gates.set(gate.id, gate);room.clients.push(client);
+  seedPlayer(room, client, { token: 'mega_ready_token', x: gate.x + 15, y: 16, z: gate.z });
+  room.enterGate(client, { id: gate.id });
+  await room.handleDungeonLobbyReady(client, { gateId: gate.id, ready: true });
+  assert.equal(client.sent.some(entry => entry.type === 'dungeonLobbyStart'), true);
+  assert.equal(client.sent.some(entry => entry.type === 'dungeonLobbyClosed' && entry.msg.reason === 'range'), false);
 });
 
 test('DungeonRoom refuses to create from raw client-authored gate options', async () => {

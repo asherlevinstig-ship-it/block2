@@ -1276,6 +1276,7 @@ function renderStat(){
 let dim='overworld', owWorld=null, gate=null, dungeon=null, exitPortal=null, gateTimer=40;
 const netGates={};
 const GATE_INTERACT_RANGE=8;
+function gateInteractionRange(g){return g&&g.landmark==='town_mega'?18:GATE_INTERACT_RANGE;}
 function clearNetGates(){
   for(const id in netGates){ scene.remove(netGates[id].grp); delete netGates[id]; }
 }
@@ -1286,7 +1287,7 @@ function nearestActiveGate(maxDistance=Infinity){
   const consider=g=>{
     if(!g||g.active===false||!Number.isFinite(+g.x)||!Number.isFinite(+g.z))return;
     const distance=Math.hypot(+g.x-player.pos.x,+g.z-player.pos.z);
-    const allowed=g.landmark==='town_mega'?Math.max(limit,12):limit;
+    const allowed=g.landmark==='town_mega'?Math.max(limit,gateInteractionRange(g)):limit;
     if(distance<=allowed&&distance<=best){best=distance;closest=g;}
   };
   // The authoritative collection can arrive one render tick before its local
@@ -3020,9 +3021,9 @@ function tickGates(dt, now){
     const baseScale=local&&local.landmark==='town_mega'?4.4:1;
     const pl=baseScale*(1+Math.sin(now/(urgent?120:warn?190:280))*(urgent ? .14 : warn ? .09 : .05));
     g.userData.ring.scale.set(pl,pl,1);
-    if(g.userData.beam)g.userData.beam.material.opacity=urgent ? .22 : warn ? .14 : .09;
-    if(g.userData.ring&&g.userData.ring.material)g.userData.ring.material.color.setHex(urgent?0xff2f2f:warn?0xffb84a:new THREE.Color(col[0],col[1],col[2]).getHex());
     const mega=local&&local.landmark==='town_mega';
+    if(g.userData.beam)g.userData.beam.material.opacity=mega ? .055 : urgent ? .22 : warn ? .14 : .09;
+    if(g.userData.ring&&g.userData.ring.material)g.userData.ring.material.color.setHex(urgent?0xff2f2f:warn?0xffb84a:new THREE.Color(col[0],col[1],col[2]).getHex());
     if(Math.random()<dt*(mega?34:urgent?42:warn?28:16)){
       const p=g.position;
       spawnParticle({x:p.x+(Math.random()-.5)*(mega?7.2:2.4), y:p.y+.3+Math.random()*(mega?6.2:3.2), z:p.z+(Math.random()-.5)*(mega?1.5:.7),
@@ -3114,6 +3115,7 @@ const legacyDimensionsBindings={
   "gate":{get:()=>gate,set:value=>{gate=value;}},
   "gateCompass":{get:()=>gateCompass},
   "GATE_INTERACT_RANGE":{get:()=>GATE_INTERACT_RANGE},
+  "gateInteractionRange":{get:()=>gateInteractionRange},
   "gateKindLabel":{get:()=>gateKindLabel},
   "generateJobTutorialRoom":{get:()=>generateJobTutorialRoom},
   "generateQuestionRoom":{get:()=>generateQuestionRoom},

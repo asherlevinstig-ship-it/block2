@@ -2063,7 +2063,11 @@ function gateKeyRejected(m){
 }
 function gateRejected(m){
   const r=m&&m.reason;
-  if(r==='range') sysMsg('Move closer to that <b>Gate</b>');
+  if(r==='range'){
+    const distance=Number(m&&m.distance),range=Number(m&&m.interactRange);
+    const detail=Number.isFinite(distance)&&Number.isFinite(range)?' You are '+distance.toFixed(1)+' blocks away; move within '+range.toFixed(0)+'.':'';
+    sysMsg('Move closer to that <b>Gate</b>.'+detail);
+  }
   else if(r==='solo') sysMsg('That <b>Solo Gate</b> belongs to another hunter');
   else if(r==='team') sysMsg('That <b>Team Gate</b> is for another team');
   else if(r==='gone') sysMsg('That <b>Gate</b> has closed');

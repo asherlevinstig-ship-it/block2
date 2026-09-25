@@ -371,10 +371,14 @@ class DungeonMixin {
     let gate = requested ? this.state.gates.get(requested) : null;
     if (!gate && this.state.gate.active) gate = this.state.gates.get(this.state.gate.id) || this.state.gate;
     if (!gate || !gate.active) return { gate: null, reason: 'gone' };
-    const interactRange = gate.landmark === 'town_mega' ? 12 : GATE_INTERACT_RANGE;
-    if (Math.hypot(gate.x - p.x, gate.z - p.z) > interactRange) return { gate: null, reason: 'range' };
+    const interactRange = this.gateInteractionRange(gate);
+    const distance = Math.hypot(gate.x - p.x, gate.z - p.z);
+    if (distance > interactRange) return { gate: null, reason: 'range', distance, interactRange };
     if (!this.canEnterGate(client, gate)) return { gate: null, reason: gate.kind || 'locked' };
     return { gate, reason: '' };
+  }
+  gateInteractionRange(gate) {
+    return gate && gate.landmark === 'town_mega' ? 18 : GATE_INTERACT_RANGE;
   }
   canEnterGate(client, gate) {
     if (!gate || !gate.active) return false;
@@ -879,7 +883,7 @@ class DungeonMixin {
         const p = this.state.players.get(sid), g = this.state.gates.get(lobby.gateId);
         const payload = this.dungeonLobbyPayload(lobby, sid);
         payload.youDistance = p && g ? Math.hypot(g.x - p.x, g.z - p.z) : Infinity;
-        payload.canReady = !!lobby.randomQueue || payload.youDistance <= (g && g.landmark === 'town_mega' ? 12 : GATE_INTERACT_RANGE);
+        payload.canReady = !!lobby.randomQueue || payload.youDistance <= this.gateInteractionRange(g);
         c.send('dungeonLobby', payload);
       }
     }
@@ -1239,8 +1243,10 @@ class DungeonMixin {
     for (const sid of members) {
       const c = this.clients.find(cl => cl.sessionId === sid);
       const p = this.state.players.get(sid);
-      if (!c || !p || p.dgn || p.dim !== 'overworld' || !this.canEnterGate(c, g) || (!lobby.randomQueue && Math.hypot(g.x - p.x, g.z - p.z) > 7)) {
-        if (c) c.send('dungeonLobbyClosed', { gateId: g.id, reason: 'range' });
+      const distance = p ? Math.hypot(g.x - p.x, g.z - p.z) : Infinity;
+      const interactRange = this.gateInteractionRange(g);
+      if (!c || !p || p.dgn || p.dim !== 'overworld' || !this.canEnterGate(c, g) || (!lobby.randomQueue && distance > interactRange)) {
+        if (c) c.send('dungeonLobbyClosed', { gateId: g.id, reason: 'range', distance, interactRange });
         continue;
       }
       if (ticket) {
@@ -1306,7 +1312,7 @@ class DungeonMixin {
     }
     const found = this.findGateForPlayer(client, m);
     const g = found.gate;
-    if (!p || !g) return client.send('gateReject', { reason: found.reason || 'locked' });
+    if (!p || !g) return client.send('gateReject', { reason: found.reason || 'locked', distance: found.distance, interactRange: found.interactRange });
     if (this.rateLimited(client, 'dungeonReady', 5, 10)) return client.send('gateReject', { reason: 'rate' });
     this.removeRandomGateQueue(client.sessionId);
     if (!this.dungeonLobbies) this.dungeonLobbies = new Map();
@@ -1349,9 +1355,10 @@ class DungeonMixin {
     if (!lobby || !lobby.members.has(client.sessionId)) return client.send('gateReject', { reason: 'lobby' });
     const g = this.state.gates.get(lobby.gateId);
     if (!g || !g.active) return this.disbandDungeonLobby(lobby.gateId, 'gone');
-    if (!this.canEnterGate(client, g) || (!lobby.randomQueue && Math.hypot(g.x - p.x, g.z - p.z) > (g.landmark === 'town_mega' ? 12 : GATE_INTERACT_RANGE))) {
+    const distance = Math.hypot(g.x - p.x, g.z - p.z), interactRange = this.gateInteractionRange(g);
+    if (!this.canEnterGate(client, g) || (!lobby.randomQueue && distance > interactRange)) {
       this.leaveDungeonLobby(client.sessionId, true);
-      return client.send('gateReject', { reason: 'range' });
+      return client.send('gateReject', { reason: 'range', distance, interactRange });
     }
     if (m && m.ready === false) {
       lobby.ready.delete(client.sessionId);
