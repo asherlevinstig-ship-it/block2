@@ -1971,13 +1971,27 @@ function buildRegionalLandmarks(setBlock,getBlock){
 function isOverworldGrid(grid=world){
   return !!(grid&&grid.kind==='overworld');
 }
+function overworldTownAuthored(grid=world){
+  if(!isOverworldGrid(grid)||typeof grid.getB!=='function')return false;
+  const {TC,G}=TOWN;
+  let landmarks=0;
+  for(const [ox,oz] of [[-10,0],[10,0],[0,-10],[0,10]])if(grid.getB(TC+ox,G+1,TC+oz)===B.LANTERN)landmarks++;
+  return landmarks>=3&&[B.CONCRETE,B.COBBLE,B.BRICK].includes(grid.getB(TC,G,TC));
+}
 function activateOverworldGrid(candidate){
   if(isOverworldGrid(candidate)){
     world=candidate;
+    // A prior emergency recovery could leave a structurally valid overworld grid
+    // containing only procedural terrain. Repair the protected town in-place so
+    // player/world edits elsewhere survive the dimension return.
+    if(!overworldTownAuthored(world))buildTown();
     return world;
   }
   world=new DimensionGrid({kind:'overworld',id:'global',width:WORLD_SPAN,height:WH,depth:WORLD_SPAN,originX:WORLD_MIN,originZ:WORLD_MIN,empty:B.AIR,outside:B.AIR});
   generateWorld();
+  // generateWorld builds the wilderness and regional landmarks. The town is a
+  // separate authored pass and must also run when rebuilding outside boot.
+  buildTown();
   return world;
 }
 function generateWorld(){
@@ -2205,6 +2219,9 @@ const townLampAnchors=[];
 function buildTown(){
   const {TC,HS,G}=TOWN;
   const x1=TC-HS, x2=TC+HS, z1=TC-HS, z2=TC+HS;
+  // buildTown is also the recovery pass after a damaged dimension return.
+  // Keep derived lamp metadata idempotent when that repair runs after boot.
+  townLampAnchors.length=0;
 
   // --- flatten the site: clear above ground, fill below, lay the floor ---
   for(let x=x1-2;x<=x2+2;x++)for(let z=z1-2;z<=z2+2;z++){
@@ -13084,6 +13101,7 @@ gameContext.registerModule('world', Object.freeze({
   completeDeathRespawnUi,
   buildTamingLand,
   isOverworldGrid,
+  overworldTownAuthored,
   activateOverworldGrid,
   trainingMeadowTownPortalPoint,
   updateCropTimerVisual,

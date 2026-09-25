@@ -1168,6 +1168,7 @@ function bugReportClientContext(){
     dungeonId: NET&&NET.dgn || '',
     position: player&&player.pos ? { x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw||0 } : null,
     questionState: globalThis.BlockcraftRecall&&typeof globalThis.BlockcraftRecall.debugState==='function'?globalThis.BlockcraftRecall.debugState():null,
+    dimensionDebug: globalThis.__BLOCKCRAFT_LAST_DIM_DEBUG__||null,
     snapshot: snap,
   };
 }
@@ -2399,8 +2400,8 @@ function netAttachRoom(room,name,client){
       };
       if(dim==='dungeon'&&NET.roomName==='dungeon'&&NETWORK&&NETWORK.returnToPrimary){
         NET.dgn='';
-        exitDungeon(true);
-        NETWORK.returnToPrimary().then(finishReturn).catch(finishReturn);
+        const returning=exitDungeon(true);
+        Promise.resolve(returning).then(finishReturn).catch(finishReturn);
       }else{
         if(dim==='dungeon')exitDungeon(true);
         finishReturn();

@@ -2147,11 +2147,12 @@ function restoreOverworldReturnGrid(ret,reason='return'){
   for(let i=0;i<candidates.length;i++){
     const candidate=candidates[i];
     if(candidate&&typeof worldApi.isOverworldGrid==='function'&&worldApi.isOverworldGrid(candidate)){
-      world=candidate;
-      if(worldState)worldState.grid=candidate;
-      owWorld=candidate;
-      dimDebug('restore.selected',{reason,sourceIndex:i,selected:dimDebugGrid(candidate)});
-      return candidate;
+      const selected=typeof worldApi.activateOverworldGrid==='function'?worldApi.activateOverworldGrid(candidate):candidate;
+      world=selected;
+      if(worldState)worldState.grid=selected;
+      owWorld=selected;
+      dimDebug('restore.selected',{reason,sourceIndex:i,selected:dimDebugGrid(selected),townAuthored:typeof worldApi.overworldTownAuthored==='function'?worldApi.overworldTownAuthored(selected):null});
+      return selected;
     }
   }
   const rebuilt=typeof worldApi.activateOverworldGrid==='function'?worldApi.activateOverworldGrid():null;
@@ -2871,13 +2872,14 @@ function beginDungeon(ri, seed, editLog, opts){
 function exitDungeon(instant){
   const doSwap=()=>{
     if(!dungeon) return;
+    let roomReturn=null;
     clearShardHazards();
     clearDungeonDecor();
     if(!dungeon.cleared) sysMsg('You <b>fled</b> the gate');
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net) removeMob(i);
     if(NET.on && NET.dgn){
       if(NET.roomName==='dungeon' && NETWORK.returnToPrimary){
-        clearRoomEntitiesForSwitch(); NETWORK.returnToPrimary(); NET.dgn='';
+        clearRoomEntitiesForSwitch(); roomReturn=NETWORK.returnToPrimary(); NET.dgn='';
       } else { NET.room.send('exitGate'); NET.dgn=''; }
     }
     if(exitPortal){ scene.remove(exitPortal); exitPortal=null; }
@@ -2893,9 +2895,10 @@ function exitDungeon(instant){
     triggerPlayerArrivalVfx('town:from-dungeon',130);
     announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Returned from the Gate');
     if(!instant) sleepEl.style.opacity=0;
+    return roomReturn;
   };
-  if(instant) doSwap();
-  else runPortalTransition({title:'Returning',subtitle:'Leaving the dungeon through the Gate',kind:'dungeon'},doSwap);
+  if(instant)return doSwap();
+  return runPortalTransition({title:'Returning',subtitle:'Leaving the dungeon through the Gate',kind:'dungeon'},doSwap);
 }
 function onBossKilled(){
   if(!dungeon||dungeon.cleared) return;

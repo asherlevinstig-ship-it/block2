@@ -1671,8 +1671,31 @@ test('client chunk rebuilding fully refreshes compact dungeon world meshes', () 
   assert.match(worldSource, /for\(let cx=Math\.max\(cb\.minCx,c\.cx-c\.r\);cx<=Math\.min\(cb\.maxCx,c\.cx\+c\.r\);cx\+\+\)/);
   assert.match(worldSource, /for\(let y=Math\.max\(1,b\.minY\);y<=b\.maxY;y\+\+\)/);
   assert.match(dimensionsSource, /function rebuildAllChunks\(\)\{\s*worldApi\.clearChunks\(\);\s*worldApi\.rebuildVisible\(true\);\s*\}/);
+  assert.match(dimensionsSource, /const selected=typeof worldApi\.activateOverworldGrid==='function'\?worldApi\.activateOverworldGrid\(candidate\):candidate/,
+    'every cached overworld return runs through the authored-world repair');
+  assert.match(worldSource, /function overworldTownAuthored\(grid=world\)/);
+  assert.match(worldSource, /if\(!overworldTownAuthored\(world\)\)buildTown\(\)/,
+    'a valid procedural grid with a missing town is repaired in place');
+  assert.match(worldSource, /function buildTown\(\)\{[\s\S]*townLampAnchors\.length=0/,
+    'rebuilding the town does not duplicate derived lamp metadata');
+  assert.match(worldSource, /generateWorld\(\);\s*\/\/ generateWorld builds[\s\S]*buildTown\(\);\s*return world;/,
+    'a rebuilt overworld includes both wilderness and authored town passes');
   assert.match(dimensionsSource, /DungeonRules\.safeStandHeightIn\(dungeon\.world,spawnX,spawnZ\)/,
     'local and admin dungeon entry uses the same safe authored-floor spawn rule as the server');
+});
+
+test('dedicated dungeon death returns to the primary room only once', () => {
+  const dimensions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(dimensions, /roomReturn=NETWORK\.returnToPrimary\(\)/);
+  assert.match(dimensions, /if\(instant\)return doSwap\(\)/);
+  const start=networking.indexOf("room.onMessage('dungeonSpiritQuit'");
+  const end=networking.indexOf("room.onMessage('dungeonDeath'",start);
+  const section=networking.slice(start,end);
+  assert.match(section,/const returning=exitDungeon\(true\)/);
+  assert.match(section,/Promise\.resolve\(returning\)\.then\(finishReturn\)/);
+  assert.doesNotMatch(section,/NETWORK\.returnToPrimary\(\)/,
+    'the death handler reuses exitDungeon\'s room-return promise instead of starting a second switch');
 });
 
 test('onboarding building counts a three-block stack above the stone pad', async () => {
@@ -3480,7 +3503,7 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(networking,/applyDeathRespawnVitals\(m\)/);
   assert.match(networking,/worldRespawn[\s\S]*worldApi\.completeDeathRespawnUi\(\{resume:true,source:'worldRespawn'\}\)/);
   assert.doesNotMatch(networking,/worldRespawn[\s\S]*else hp=maxHp\(\)/);
-  assert.match(networking,/dungeonSpiritQuit[\s\S]*NETWORK\.returnToPrimary\(\)\.then\(finishReturn\)\.catch\(finishReturn\)/);
+  assert.match(networking,/dungeonSpiritQuit[\s\S]*const returning=exitDungeon\(true\);[\s\S]*Promise\.resolve\(returning\)\.then\(finishReturn\)\.catch\(finishReturn\)/);
   assert.doesNotMatch(networking,/RESPAWN AT GATE/);
   assert.match(styles,/#deathrecap/);
   assert.match(styles,/#deathrespawn/);
