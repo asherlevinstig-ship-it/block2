@@ -3452,7 +3452,7 @@ function gatePrepLoopCard(){
   const rank=nextGatePrepRank();
   if(rank<0)return '';
   const r=gateReadinessLocal(rank),rankName=RANKS[rank]&&RANKS[rank].n||'?';
-  const next=r.next?('Next fix: '+r.next.label+'. '+(r.next.hint||'')):'Ready to find, join, or open a '+rankName+'-rank Gate.';
+  const next=r.next?('Recommended upgrade: '+r.next.label+'. '+(r.next.hint||'')+' You may still enter underprepared.'):'Ready to find, join, or open a '+rankName+'-rank Gate.';
   const checks='<div class="gate-prep-mini">'+r.checks.map(c=>'<span class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'✓':'!')+'</b>'+escHTML(c.label)+'</span>').join('')+'</div>';
   const extra=checks+'<div class="qrow"><button type="button" class="qbtn" data-gate-prep-rank="'+rank+'">OPEN PREP CHECK</button></div>';
   return questLogCardHTML('Gate Prep',rankName+'-Rank Readiness',r.status+' '+r.score+'/'+r.total+' - '+next,'Smithy, tavern, inventory, then wilderness Gate',true,extra,{className:'prep-loop',recommended:!r.ready,ready:r.ready,progressHTML:questProgressHTML(r.score,r.total)});
@@ -3469,7 +3469,7 @@ function openGatePrepUI(rank=nextGatePrepRank()){
   const h=document.createElement('h2');h.textContent='GATE PREP';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=rankName+'-RANK DANGER CHECK · '+r.status+' · '+r.score+'/'+r.total;qpanelEl.appendChild(sub);
   const intro=document.createElement('div');intro.className='cartographer-briefing'+(r.ready?'':' fresh');
-  intro.innerHTML='<small>PREPARE - ENTER DANGER - LOOT - UPGRADE</small><p>'+(r.ready?'Your kit is ready enough. Find a Gate, group up if needed, then bring the loot back to town.':'Fix the first missing item before entering. Preparation makes Gates feel like a planned expedition instead of a coin flip.')+'</p><ul><li><b>Smithy</b> handles weapons, armor, repair kits, and tools.</li><li><b>Tavern</b> handles food before long fights.</li><li><b>Party</b> matters more as Gate rank rises.</li></ul>';
+  intro.innerHTML='<small>ADVISORY CHECK · NEVER AN ENTRY LOCK</small><p>'+(r.ready?'Your kit is ready enough. Find a Gate, group up if needed, then bring the loot back to town.':'You may enter now while underprepared. The missing items below are safety recommendations, not requirements.')+'</p><ul><li><b>Smithy</b> handles weapons, armor, repair kits, and tools.</li><li><b>Tavern</b> handles optional food for longer fights.</li><li><b>Gate Lobby</b> opens when every hunter presses Ready near the Gate.</li></ul>';
   qpanelEl.appendChild(intro);
   const checks=document.createElement('div');checks.className='gate-readiness-list';
   checks.innerHTML=r.checks.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'✓':'!')+'</b><span>'+escHTML(c.label)+'<small>'+escHTML(c.done?'Covered':(c.hint||'Improve this before entering.'))+'</small></span></div>').join('');
@@ -3481,13 +3481,13 @@ function openGatePrepUI(rank=nextGatePrepRank()){
     '<div class="gate-preview-card"><b>NEXT FIX</b><br>'+escHTML(r.next?r.next.label:'Ready to enter')+'</div>'+
     '<div class="gate-preview-card"><b>LOOP</b><br>Clear boss, loot chest, upgrade, then climb rank.</div>';
   qpanelEl.appendChild(grid);
-  if(r.next){const p=document.createElement('p');p.className='qtext';p.innerHTML='<b>Do this now:</b> '+escHTML(r.next.hint||r.next.label);qpanelEl.appendChild(p);}
+  if(r.next){const p=document.createElement('p');p.className='qtext';p.innerHTML='<b>Recommended next:</b> '+escHTML(r.next.hint||r.next.label)+'<br><small>You can skip this recommendation and enter the Gate now.</small>';qpanelEl.appendChild(p);}
   const row=document.createElement('div');row.className='qrow';
   row.appendChild(qBtn('INVENTORY',()=>openUI()));
   row.appendChild(qBtn('MARKET',()=>openShopUI('market')));
   row.appendChild(qBtn('SMITHY',()=>openQuestUI(villagers.find(v=>v.role==='smith')||NPC_ROLES.find(v=>v.role==='smith'))));
   row.appendChild(qBtn('TAVERN',()=>openTavernUI()));
-  row.appendChild(qBtn(r.ready?'FIND GATE':'QUEST LOG',()=>r.ready?sysMsg('<b>Gate ready:</b> follow the Gate marker or join a nearby party.'):openQuestLogUI()));
+  row.appendChild(qBtn(r.ready?'FIND GATE':'ENTER ANYWAY',()=>{closeQWin();sysMsg(r.ready?'<b>Gate ready:</b> follow the Gate marker or join a nearby party.':'<b>Underprepared entry allowed.</b> Return to the Gate, open its lobby, stay within 6 blocks, and press <b>READY</b>.');}));
   row.appendChild(qBtn('RANDOM GATE',()=>openRandomGateQueueUI()));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   qpanelEl.appendChild(row);

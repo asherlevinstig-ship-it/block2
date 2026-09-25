@@ -1278,6 +1278,24 @@ const netGates={};
 function clearNetGates(){
   for(const id in netGates){ scene.remove(netGates[id].grp); delete netGates[id]; }
 }
+function nearestActiveGate(maxDistance=Infinity){
+  if(dim!=='overworld'||!player||!player.pos)return null;
+  const limit=Number.isFinite(+maxDistance)?Math.max(0,+maxDistance):Infinity;
+  let closest=null,best=limit;
+  const consider=g=>{
+    if(!g||g.active===false||!Number.isFinite(+g.x)||!Number.isFinite(+g.z))return;
+    const distance=Math.hypot(+g.x-player.pos.x,+g.z-player.pos.z);
+    if(distance<=best){best=distance;closest=g;}
+  };
+  // The authoritative collection can arrive one render tick before its local
+  // mesh mirror. Resolve against both so an immediate G press cannot fall
+  // through into held-item use merely because the cached `gate` pointer lags.
+  const synced=NET.on&&NET.room&&NET.room.state&&NET.room.state.gates;
+  if(synced&&synced.forEach)synced.forEach(consider);
+  for(const id in netGates)consider(netGates[id]);
+  consider(gate);
+  return closest;
+}
 const RANKS=[
   {n:'E', col:0x6ee06a, mul:1.0},
   {n:'D', col:0x4fd8ff, mul:1.6},
@@ -2810,13 +2828,23 @@ function enterDungeonRoomWith(desc){
   });
   return true;
 }
-function enterDungeon(){
-  if(NET.on){
-    NET.room.send('enterGate', { id: gate && gate.id || '' });
-    return;
+function enterDungeon(targetGate=null){
+  const chosen=targetGate||nearestActiveGate();
+  if(!chosen){
+    sysMsg('No active <b>Gate</b> is close enough to enter.');
+    return false;
   }
-  beginDungeon(gate.rank, (Math.random()*2147483647)|0, null,
-    {back:{x:gate.x, y:gate.y, z:gate.z}, shard:gate.shard||null, localMobs:true, cleared:false});
+  if(NET.on){
+    if(!chosen.id){
+      sysMsg('The <b>Gate</b> is still synchronizing. Stay close and press <b>G</b> again.');
+      return false;
+    }
+    NET.room.send('enterGate', { id: chosen.id });
+    return true;
+  }
+  beginDungeon(chosen.rank, (Math.random()*2147483647)|0, null,
+    {back:{x:chosen.x, y:chosen.y, z:chosen.z}, shard:chosen.shard||null, localMobs:true, cleared:false});
+  return true;
 }
 function beginDungeon(ri, seed, editLog, opts){
   opts=opts||{};
@@ -3057,6 +3085,7 @@ const legacyDimensionsBindings={
   "meteorMarkVfx":{get:()=>meteorMarkVfx},
   "midasStrikeVfx":{get:()=>midasStrikeVfx},
   "netGates":{get:()=>netGates},
+  "nearestActiveGate":{get:()=>nearestActiveGate},
   "openStat":{get:()=>openStat},
   "owWorld":{get:()=>owWorld,set:value=>{owWorld=value;}},
   "PATHS":{get:()=>PATHS},

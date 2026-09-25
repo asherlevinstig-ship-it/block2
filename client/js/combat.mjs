@@ -7604,7 +7604,8 @@ function secondaryAction(){
     if(egg&&DRAGON_EGG_TO_TYPE[egg.id]){hatchDragonEgg(selected,eggTarget);return;}
   }
   if(inv[selected]&&inv[selected].id===B.EGG_INSULATOR){placeSelectedBlockAtHit(eggTarget);return;}
-  if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<=6){ enterDungeon(); return; }
+  const nearbyGate=dim==='overworld'&&typeof nearestActiveGate==='function'?nearestActiveGate(6):null;
+  if(nearbyGate){ enterDungeon(nearbyGate); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
   if(nearTamingLandPortal()){ enterTamingLand(); return; }
   if(nearTownQuestionHallPortal()){

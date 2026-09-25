@@ -2376,7 +2376,7 @@ function netAttachRoom(room,name,client){
       const missing=Array.isArray(m&&m.missing)?m.missing:[];
       const label=next&&next.label?next.label:(missing[0]&&missing[0].label)||'prep item';
       const hint=next&&next.hint?next.hint:(missing[0]&&missing[0].hint)||'You may enter, but the gate will be safer after one more prep step.';
-      sysMsg('<b>D-rank prep check:</b> missing '+escHTML(label)+'.<br>'+escHTML(hint),{tier:'minor',title:'Gate Prep'});
+      sysMsg('<b>Optional D-rank prep recommendation:</b> '+escHTML(label)+' is not packed.<br>'+escHTML(hint)+'<br><b>This does not block entry.</b> Stay near the Gate and press <b>READY</b> in the lobby.',{tier:'minor',title:'Gate Prep · Advisory'});
     });
     room.onMessage('dedit', m=>{ if(dim==='dungeon') netWriteEdit(m.x, m.y, m.z, m.id); });
     room.onMessage('gateCleared', m=>{ if(dungeon){ dungeon.cleared=true; questGate(m&&m.rank==null?dungeon.rank:m.rank); announceDungeonClearHandoff(m); globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker(); } });

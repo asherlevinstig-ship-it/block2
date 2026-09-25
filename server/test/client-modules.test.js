@@ -1698,6 +1698,16 @@ test('dedicated dungeon death returns to the primary room only once', () => {
     'the death handler reuses exitDungeon\'s room-return promise instead of starting a second switch');
 });
 
+test('gate food readiness is presented as advice rather than an entry lock', () => {
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(menus,/ADVISORY CHECK · NEVER AN ENTRY LOCK/);
+  assert.match(menus,/r\.ready\?'FIND GATE':'ENTER ANYWAY'/);
+  assert.match(menus,/You can skip this recommendation and enter the Gate now/);
+  assert.match(networking,/This does not block entry/);
+  assert.match(networking,/press <b>READY<\/b> in the lobby/);
+});
+
 test('onboarding building counts a three-block stack above the stone pad', async () => {
   const { isOnboardingBuildPlacement, countOnboardingBuildBlocks } = await clientModule('onboarding.mjs');
   const meadow = { x: 100, z: 200, G: 12 };
@@ -6227,12 +6237,22 @@ test('dragon eggs target nests before nearby services and incubators bypass only
   const world=fs.readFileSync(path.join(__dirname,'../../client/js/world.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'../rooms/GameRoom.js'),'utf8');
   const action=combat.slice(combat.indexOf('function secondaryAction(){'),combat.indexOf('function placeSelectedBlockAtHit(hit){'));
-  assert.ok(action.indexOf('const eggTarget=raycast(6)')<action.indexOf('if(gate '));
+  assert.ok(action.indexOf('const eggTarget=raycast(6)')<action.indexOf('const nearbyGate='));
   assert.match(action,/hatchDragonEgg\(selected,eggTarget\)/);
   assert.match(world,/if\(placeId===B\.EGG_INSULATOR\)return true/);
   assert.match(room,/const portableInsulator = id === W\.B\.EGG_INSULATOR/);
   assert.match(room,/!portableInsulator && !this\.canEditLand/);
   assert.match(room,/id !== W\.B\.AIR && prev !== W\.B\.AIR && prev !== W\.B\.WATER/);
+});
+
+test('gate interaction resolves the active synced gate at keypress and sends its exact id',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'../../client/js/combat.mjs'),'utf8');
+  const dimensions=fs.readFileSync(path.join(__dirname,'../../client/js/dimensions.mjs'),'utf8');
+  const action=combat.slice(combat.indexOf('function secondaryAction(){'),combat.indexOf('function placeSelectedBlockAtHit(hit){'));
+  assert.match(action,/const nearbyGate=dim==='overworld'&&typeof nearestActiveGate==='function'\?nearestActiveGate\(6\):null;/);
+  assert.match(action,/if\(nearbyGate\)\{ enterDungeon\(nearbyGate\); return; \}/);
+  assert.match(dimensions,/function nearestActiveGate\(maxDistance=Infinity\)[\s\S]*NET\.room\.state\.gates[\s\S]*synced\.forEach\(consider\)[\s\S]*for\(const id in netGates\)consider\(netGates\[id\]\)/);
+  assert.match(dimensions,/function enterDungeon\(targetGate=null\)[\s\S]*const chosen=targetGate\|\|nearestActiveGate\(\)[\s\S]*NET\.room\.send\('enterGate', \{ id: chosen\.id \}\)/);
 });
 
 test('incubation broadcasts never consume another players egg slot',()=>{
