@@ -2839,6 +2839,11 @@ function enterDungeon(targetGate=null){
       sysMsg('The <b>Gate</b> is still synchronizing. Stay close and press <b>G</b> again.');
       return false;
     }
+    // Flush the current pose immediately before the interaction. The ordinary
+    // movement pump runs on a timer; without this, a fast approach + G press can
+    // be validated against the server's previous position and rejected as range.
+    NET.room.send('move', {x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,heldId:typeof displayHeldId==='function'?displayHeldId():undefined});
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('gate.interact.request',{id:chosen.id,distance:+Math.hypot(chosen.x-player.pos.x,chosen.z-player.pos.z).toFixed(3),x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)});
     NET.room.send('enterGate', { id: chosen.id });
     return true;
   }

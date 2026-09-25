@@ -6251,8 +6251,14 @@ test('gate interaction resolves the active synced gate at keypress and sends its
   const action=combat.slice(combat.indexOf('function secondaryAction(){'),combat.indexOf('function placeSelectedBlockAtHit(hit){'));
   assert.match(action,/const nearbyGate=dim==='overworld'&&typeof nearestActiveGate==='function'\?nearestActiveGate\(6\):null;/);
   assert.match(action,/if\(nearbyGate\)\{ enterDungeon\(nearbyGate\); return; \}/);
+  const keyHandler=combat.slice(combat.indexOf("if(e.code==='KeyG' && !e.repeat){"),combat.indexOf("if(e.code==='KeyJ'",combat.indexOf("if(e.code==='KeyG' && !e.repeat){")));
+  assert.match(keyHandler,/const keyGate=!fishingBusy&&dim==='overworld'&&typeof nearestActiveGate==='function'\?nearestActiveGate\(6\):null;/);
+  assert.ok(keyHandler.indexOf('if(keyGate)')<keyHandler.indexOf('fishing.handleKeyDown'), 'nearby Gate interaction must win before fishing can auto-equip the rod');
   assert.match(dimensions,/function nearestActiveGate\(maxDistance=Infinity\)[\s\S]*NET\.room\.state\.gates[\s\S]*synced\.forEach\(consider\)[\s\S]*for\(const id in netGates\)consider\(netGates\[id\]\)/);
-  assert.match(dimensions,/function enterDungeon\(targetGate=null\)[\s\S]*const chosen=targetGate\|\|nearestActiveGate\(\)[\s\S]*NET\.room\.send\('enterGate', \{ id: chosen\.id \}\)/);
+  const enter=dimensions.slice(dimensions.indexOf('function enterDungeon(targetGate=null){'),dimensions.indexOf('function beginDungeon(',dimensions.indexOf('function enterDungeon(targetGate=null){')));
+  assert.match(enter,/NET\.room\.send\('move', \{x:player\.pos\.x,y:player\.pos\.y,z:player\.pos\.z/);
+  assert.ok(enter.indexOf("NET.room.send('move'")<enter.indexOf("NET.room.send('enterGate'"), 'fresh position must reach the server before Gate range validation');
+  assert.match(enter,/NET\.room\.send\('enterGate', \{ id: chosen\.id \}\)/);
 });
 
 test('incubation broadcasts never consume another players egg slot',()=>{

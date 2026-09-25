@@ -6589,6 +6589,11 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyG' && !e.repeat){
       const fishing=globalThis.BlockcraftFishing;
       const fishingBusy=!!(fishing&&fishing.active&&fishing.active());
+      // An inactive fishing rod may auto-equip itself when water is nearby.
+      // Resolve a nearby overworld Gate first so G cannot turn into "select
+      // fishing rod" while the player is standing at the portal.
+      const keyGate=!fishingBusy&&dim==='overworld'&&typeof nearestActiveGate==='function'?nearestActiveGate(6):null;
+      if(keyGate){ e.preventDefault(); enterDungeon(keyGate); return; }
       // The return portal wins over *starting* a new cast, so pressing G on the
       // portal leaves the fishing room instead of the rod grabbing the press.
       // An in-progress cast (aim/wait/bite/fight) still owns G.
