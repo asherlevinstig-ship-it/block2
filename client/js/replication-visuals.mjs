@@ -1909,13 +1909,14 @@ function decorateTownMegaGate(local){
   const vortexMeta=Array.from({length:128},(_,i)=>({radius:.28+Math.sqrt(Math.random())*2.62,phase:Math.random()*Math.PI*2,speed:.28+Math.random()*.55,wave:Math.random()*Math.PI*2,depth:(Math.random()-.5)*.34,layer:i%4}));
   const riseMeta=Array.from({length:64},()=>({x:(Math.random()-.5)*7.8,z:(Math.random()-.5)*1.45,phase:Math.random(),speed:.1+Math.random()*.16,drift:Math.random()*Math.PI*2}));
   const orbitMeta=Array.from({length:36},(_,i)=>({phase:i/36*Math.PI*2,jitter:Math.random()*Math.PI*2,radius:3.35+Math.random()*.58,speed:.22+Math.random()*.22}));
-  local.grp.userData.ring.scale.setScalar(2.15);
-  local.grp.userData.ring.position.y=3.0;
-  local.grp.userData.disc.scale.setScalar(2.15);
-  local.grp.userData.disc.position.y=3.0;
-  local.grp.userData.beam.scale.set(2.2,1,2.2);
+  group.scale.setScalar(1.85);
+  local.grp.userData.ring.scale.setScalar(4.4);
+  local.grp.userData.ring.position.y=6.15;
+  local.grp.userData.disc.scale.setScalar(4.4);
+  local.grp.userData.disc.position.y=6.15;
+  local.grp.userData.beam.scale.set(4.6,1,4.6);
   const portalGlow=local.grp.children.find(o=>o&&o.isSprite);
-  if(portalGlow){portalGlow.scale.set(10.5,10.5,1);portalGlow.position.y=3.0;}
+  if(portalGlow){portalGlow.scale.set(21,21,1);portalGlow.position.y=6.15;}
   local.grp.add(group);local.megaGateAura=group;
   local.megaFx={group,runes,innerRunes,vortex,rise,orbit,vortexMeta,riseMeta,orbitMeta};
 }

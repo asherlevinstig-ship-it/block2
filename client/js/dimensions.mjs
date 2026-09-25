@@ -1282,11 +1282,12 @@ function clearNetGates(){
 function nearestActiveGate(maxDistance=Infinity){
   if(dim!=='overworld'||!player||!player.pos)return null;
   const limit=Number.isFinite(+maxDistance)?Math.max(0,+maxDistance):Infinity;
-  let closest=null,best=limit;
+  let closest=null,best=Infinity;
   const consider=g=>{
     if(!g||g.active===false||!Number.isFinite(+g.x)||!Number.isFinite(+g.z))return;
     const distance=Math.hypot(+g.x-player.pos.x,+g.z-player.pos.z);
-    if(distance<=best){best=distance;closest=g;}
+    const allowed=g.landmark==='town_mega'?Math.max(limit,12):limit;
+    if(distance<=allowed&&distance<=best){best=distance;closest=g;}
   };
   // The authoritative collection can arrive one render tick before its local
   // mesh mirror. Resolve against both so an immediate G press cannot fall
@@ -1362,8 +1363,8 @@ function makeGateLabel(rank, kind, shard, landmark=''){
   const tex=new THREE.CanvasTexture(c);
   tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false}));
-  sp.position.y=mega?6.65:3.85;
-  sp.scale.set(mega?5.7:3.6,mega?1.8:1.2,1);
+  sp.position.y=mega?13.1:3.85;
+  sp.scale.set(mega?9.4:3.6,mega?2.65:1.2,1);
   return sp;
 }
 function gateTimerText(expiresAt){
@@ -3016,7 +3017,7 @@ function tickGates(dt, now){
     g.userData.disc.rotation.z+=dt*1.6;
     const urgency=local?gateUrgency(local.expiresAt):'stable';
     const urgent=urgency==='critical'||urgency==='breach', warn=urgency==='warning';
-    const baseScale=local&&local.landmark==='town_mega'?2.15:1;
+    const baseScale=local&&local.landmark==='town_mega'?4.4:1;
     const pl=baseScale*(1+Math.sin(now/(urgent?120:warn?190:280))*(urgent ? .14 : warn ? .09 : .05));
     g.userData.ring.scale.set(pl,pl,1);
     if(g.userData.beam)g.userData.beam.material.opacity=urgent ? .22 : warn ? .14 : .09;

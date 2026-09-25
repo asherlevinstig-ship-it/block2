@@ -6519,12 +6519,13 @@ test('Town of Beginnings presents a social Mega Gate and explains the wider netw
   assert.match(dimensions,/TOWN MEGA GATE/);
   assert.match(dimensions,/E-RANK · SOLO OR TEAM/);
   assert.match(visuals,/function decorateTownMegaGate\(local\)/);
-  assert.match(visuals,/ring\.scale\.setScalar\(2\.15\)/);
+  assert.match(visuals,/group\.scale\.setScalar\(1\.85\)/);
+  assert.match(visuals,/ring\.scale\.setScalar\(4\.4\)/);
   assert.match(visuals,/makeCloud\(128,\.18/);
   assert.match(visuals,/makeCloud\(64,\.14/);
   assert.match(visuals,/makeCloud\(36,\.22/);
   assert.match(dimensions,/function tickTownMegaGateFx\(local,dt,now\)/);
-  assert.match(dimensions,/baseScale=local&&local\.landmark==='town_mega'\?2\.15:1/);
+  assert.match(dimensions,/baseScale=local&&local\.landmark==='town_mega'\?4\.4:1/);
   assert.match(frame,/Go solo or rally up to/);
   assert.match(networking,/The wider Gate network is now yours to challenge/);
   assert.match(networking,/E, D, C, B, A, and S-rank Gates/);

@@ -10433,6 +10433,17 @@ test('Town Mega Gate identity survives secure dungeon admission', () => {
   assert.equal(room.dungeonResultPayload(inst).landmark, 'town_mega');
 });
 
+test('the gigantic Town Mega Gate can be used from its visible threshold', () => {
+  const room = makeRoom(), client = makeClient('mega-threshold');
+  const gate = makeGate('town-mega-range', W.HUB.megaGate.x, W.HUB.megaGate.z, 0, 'public');
+  gate.landmark = 'town_mega';
+  room.state.gates.set(gate.id, gate);
+  seedPlayer(room, client, { x: gate.x + 10, y: 16, z: gate.z });
+  assert.equal(room.findGateForPlayer(client, { id: gate.id }).gate, gate);
+  room.state.players.get(client.sessionId).x = gate.x + 13;
+  assert.equal(room.findGateForPlayer(client, { id: gate.id }).reason, 'range');
+});
+
 test('DungeonRoom refuses to create from raw client-authored gate options', async () => {
   clearDungeonAdmissions();
   await assert.rejects(

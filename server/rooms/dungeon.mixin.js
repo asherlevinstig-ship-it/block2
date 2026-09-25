@@ -371,7 +371,8 @@ class DungeonMixin {
     let gate = requested ? this.state.gates.get(requested) : null;
     if (!gate && this.state.gate.active) gate = this.state.gates.get(this.state.gate.id) || this.state.gate;
     if (!gate || !gate.active) return { gate: null, reason: 'gone' };
-    if (Math.hypot(gate.x - p.x, gate.z - p.z) > GATE_INTERACT_RANGE) return { gate: null, reason: 'range' };
+    const interactRange = gate.landmark === 'town_mega' ? 12 : GATE_INTERACT_RANGE;
+    if (Math.hypot(gate.x - p.x, gate.z - p.z) > interactRange) return { gate: null, reason: 'range' };
     if (!this.canEnterGate(client, gate)) return { gate: null, reason: gate.kind || 'locked' };
     return { gate, reason: '' };
   }
@@ -878,7 +879,7 @@ class DungeonMixin {
         const p = this.state.players.get(sid), g = this.state.gates.get(lobby.gateId);
         const payload = this.dungeonLobbyPayload(lobby, sid);
         payload.youDistance = p && g ? Math.hypot(g.x - p.x, g.z - p.z) : Infinity;
-        payload.canReady = !!lobby.randomQueue || payload.youDistance <= GATE_INTERACT_RANGE;
+        payload.canReady = !!lobby.randomQueue || payload.youDistance <= (g && g.landmark === 'town_mega' ? 12 : GATE_INTERACT_RANGE);
         c.send('dungeonLobby', payload);
       }
     }
@@ -1348,7 +1349,7 @@ class DungeonMixin {
     if (!lobby || !lobby.members.has(client.sessionId)) return client.send('gateReject', { reason: 'lobby' });
     const g = this.state.gates.get(lobby.gateId);
     if (!g || !g.active) return this.disbandDungeonLobby(lobby.gateId, 'gone');
-    if (!this.canEnterGate(client, g) || (!lobby.randomQueue && Math.hypot(g.x - p.x, g.z - p.z) > GATE_INTERACT_RANGE)) {
+    if (!this.canEnterGate(client, g) || (!lobby.randomQueue && Math.hypot(g.x - p.x, g.z - p.z) > (g.landmark === 'town_mega' ? 12 : GATE_INTERACT_RANGE))) {
       this.leaveDungeonLobby(client.sessionId, true);
       return client.send('gateReject', { reason: 'range' });
     }
