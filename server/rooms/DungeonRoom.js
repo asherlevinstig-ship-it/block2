@@ -114,6 +114,7 @@ class DungeonRoom extends GameRoom {
       rank: options.rank | 0,
       dungeonId: canonicalDungeonId(options.rank, options.seed, options.dungeonId),
       kind: options.kind || 'public',
+      landmark: options.landmark === 'town_mega' ? 'town_mega' : '',
       // gate world coords so gateEntryPayload's back-position (bx/by/bz) returns the hunter to
       // the overworld gate on exit; the client passes these from the gate it entered.
       x: Number.isFinite(options.x) ? options.x : (Number.isFinite(options.gateX) ? options.gateX : 0),

@@ -59,6 +59,12 @@ test('dungeons suppress skylight and retain authored local colour profiles',asyn
     assert.ok(profile.fogFar>profile.fogNear,theme+' fog range remains usable');
   }
   const identity=createEnvironmentIdentity(THREE);
+  for(const theme of Object.keys(DUNGEON_PALETTES)){
+    const palette=identity.dungeon(theme);
+    assert.ok(Number.isFinite(palette.ambient)&&palette.ambient>0,theme+' runtime palette retains ambient intensity');
+    assert.ok(Number.isFinite(palette.sun)&&palette.sun>0,theme+' runtime palette retains key-light intensity');
+    assert.ok(Number.isFinite(palette.fogNear)&&Number.isFinite(palette.fogFar),theme+' runtime palette retains fog distances');
+  }
   assert.notEqual(identity.dungeon('forge').key.getHex(),identity.dungeon('frozen').key.getHex());
   assert.notEqual(identity.dungeon('overgrown').ground.getHex(),identity.dungeon('void').ground.getHex());
 });

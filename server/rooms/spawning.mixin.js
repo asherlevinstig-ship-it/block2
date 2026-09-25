@@ -23,6 +23,8 @@ const METEOR_REPEAT_JITTER_MS = 8 * 60 * 1000;
 const METEOR_AFTER_KILL_MIN_MS = 14 * 60 * 1000;
 const METEOR_AFTER_KILL_JITTER_MS = 10 * 60 * 1000;
 const METEOR_RETRY_MS = 90 * 1000;
+const PUBLIC_GATE_TTL_SECONDS = 10 * 60;
+const TOWN_MEGA_GATE_TTL_SECONDS = 7 * 24 * 60 * 60;
 const randomMeteorDelay = (minMs, jitterMs) => minMs + Math.floor(Math.random() * jitterMs);
 
 class SpawningMixin {
@@ -1733,7 +1735,7 @@ class SpawningMixin {
   spawnMissingPublicGates(maxPublicRank, publicRanks) {
     let spawned = 0;
     for (let r = 0; r <= maxPublicRank; r++) {
-      if (!publicRanks.has(r) && this.spawnGate(r, { announce: false })) spawned++;
+      if (!publicRanks.has(r) && (r === 0 ? this.ensureTownMegaGate() : this.spawnGate(r, { announce: false }))) spawned++;
     }
     if (spawned) this.broadcast('chat', { name: '[System]', text: 'A gate has opened' });
     return spawned;
@@ -1741,6 +1743,7 @@ class SpawningMixin {
 
   ensurePublicGateRank(rank) {
     const ri = Math.max(0, Math.min(5, rank | 0));
+    if (ri === 0) return this.ensureTownMegaGate();
     let gate = null;
     this.state.gates.forEach(g => {
       if (!gate && g && g.active && g.kind === 'public' && (g.rank | 0) === ri) gate = g;
@@ -1770,13 +1773,33 @@ class SpawningMixin {
           if (distance < band.min || distance > band.max) continue;
           const gy = this.world.standHeight(pos.x + .5, pos.z + .5, W.WH - 2);
           if (gy < 3 || gy > 34) continue;
-          gate = this.createGate({ x: pos.x + .5, y: gy, z: pos.z + .5, rank: ri, kind: 'public', ttl: 180 });
+          gate = this.createGate({ x: pos.x + .5, y: gy, z: pos.z + .5, rank: ri, kind: 'public', ttl: PUBLIC_GATE_TTL_SECONDS });
           this.broadcast('chat', { name: '[System]', text: 'A gate has opened' });
           return gate;
         }
       }
     }
     return null;
+  }
+
+  ensureTownMegaGate() {
+    let gate = null;
+    this.state.gates.forEach(g => {
+      if (!gate && g && g.active && g.kind === 'public' && g.landmark === 'town_mega') gate = g;
+    });
+    if (gate) return gate;
+    const x = W.HUB.megaGate.x, z = W.HUB.megaGate.z;
+    let y = this.world.standHeight(x, z, W.WH - 2);
+    // Town generation owns a flat G-level avenue. Keep a deterministic fallback
+    // so a damaged local column cannot push the landmark onto a roof or remove it.
+    if (!Number.isFinite(y) || y < W.TOWN.G || y > W.TOWN.G + 4) y = W.TOWN.G + 1;
+    return this.createGate({
+      x, y, z,
+      rank: 0,
+      kind: 'public',
+      landmark: 'town_mega',
+      ttl: TOWN_MEGA_GATE_TTL_SECONDS,
+    });
   }
 
   gateSpawnCandidate(rank) {
@@ -1800,7 +1823,7 @@ class SpawningMixin {
       if (distance < band.min || distance > band.max) continue;
       const gy = this.world.standHeight(x + .5, z + .5, W.WH - 2);
       if (gy < 3 || gy > 34) continue;
-      this.createGate({ x: x + .5, y: gy, z: z + .5, rank: ri, kind: 'public', ttl: 75 });
+      this.createGate({ x: x + .5, y: gy, z: z + .5, rank: ri, kind: 'public', ttl: PUBLIC_GATE_TTL_SECONDS });
       if (announce) this.broadcast('chat', { name: '[System]', text: 'A gate has opened' });
       return true;
     }

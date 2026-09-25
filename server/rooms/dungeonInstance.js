@@ -37,6 +37,7 @@ class DungeonInstance {
     };
     this.cleared = false;
     this.kind = g.kind || 'public';
+    this.landmark = g.landmark === 'town_mega' ? 'town_mega' : '';
     this.bossRoom = { x: d.bossRoom.x, z: d.bossRoom.z };
     // entry room — where a DungeonRoom spawns a joining hunter (falls back to the boss room)
     this.entrance = d.entrance ? { x: d.entrance.x, z: d.entrance.z } : { x: this.bossRoom.x, z: this.bossRoom.z };

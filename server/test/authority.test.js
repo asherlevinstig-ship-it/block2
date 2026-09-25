@@ -10421,6 +10421,18 @@ test('DungeonRoom admissions reject forged expired reused and wrong-player ticke
   assert.equal(claimDungeonAdmission(expired, 'late_token_123', issuedAt + ADMISSION_TTL_MS), null);
 });
 
+test('Town Mega Gate identity survives secure dungeon admission', () => {
+  clearDungeonAdmissions();
+  const gate = { id: 'town-mega', seed: 88, dungeonId: 'abandoned_mine', rank: 0, kind: 'public', landmark: 'town_mega', x: W.HUB.megaGate.x, y: 16, z: W.HUB.megaGate.z };
+  const ticket = issueDungeonAdmission(gate, ['mega_hunter_token'], 1000);
+  const claimed = claimDungeonAdmission(ticket, 'mega_hunter_token', 1000);
+  assert.equal(claimed.landmark, 'town_mega');
+  const room = makeRoom();
+  const inst = new DungeonInstance(D.generateDungeon(0, gate.seed, gate.dungeonId), claimed, room);
+  assert.equal(inst.landmark, 'town_mega');
+  assert.equal(room.dungeonResultPayload(inst).landmark, 'town_mega');
+});
+
 test('DungeonRoom refuses to create from raw client-authored gate options', async () => {
   clearDungeonAdmissions();
   await assert.rejects(
@@ -10507,16 +10519,14 @@ test('random Gate queue groups distant opt-in hunters into a persistent team and
   assert.equal(hunter.sent.some(e => e.type === 'dungeonLobbyStart'), true);
 });
 
-test('random Gate queue rejects locked ranks and supports cancellation without forming a team', () => {
+test('random Gate queue lets novices risk higher ranks and supports cancellation without forming a team', () => {
   const room = makeRoom(), gate = makeGate('g-random-locked', 20.5, 20.5, 1);
   room.state.gates.set(gate.id, gate);
   const client = makeClient('random-cancel');room.clients.push(client);
   seedPlayer(room, client, { lvl: 1 });
   room.handleRandomGateQueue(client, { action: 'join', rank: 1 });
-  assert.equal(client.sent.at(-1).msg.reason, 'rank');
-  room.state.gates.set('e-random', makeGate('e-random', 22.5, 22.5, 0));
-  room.handleRandomGateQueue(client, { action: 'join', rank: 0 });
   assert.equal(room.randomGateQueue.has(client.sessionId), true);
+  assert.equal(client.sent.at(-1).msg.rank, 1);
   room.handleRandomGateQueue(client, { action: 'leave' });
   assert.equal(room.randomGateQueue.has(client.sessionId), false);
   assert.equal(room.teamRecords.size, 0);
@@ -12040,6 +12050,43 @@ test('cleared dungeon consumes its gate and support contribution can earn boss r
   assert.equal(loot.msg.result.bossName, 'Gate Boss');
 });
 
+test('boss clear materializes a guaranteed personal reward chest in the arena', () => {
+  const room = makeRoom();
+  const client = makeClient('boss-chest-hunter');
+  room.clients = [client];
+  const d = D.generateDungeon(0, 0x51de, 'sunken_crypt');
+  const inst = putInstance(room, {
+    id: 'g51',
+    rank: 0,
+    seed: 0x51de,
+    world: d.world,
+    bossRoom: d.bossRoom,
+    players: [client.sessionId],
+  });
+  seedPlayer(room, client, {
+    token: 'boss_chest_hunter_token',
+    dgn: inst.id,
+    x: d.bossRoom.x,
+    y: 9,
+    z: d.bossRoom.z,
+  });
+  room.recordBossContribution(client, inst.id, 8);
+
+  room.onBossDown(inst.id);
+
+  assert.ok(inst.bossRewardChest, 'a visible chest is created on every successful clear');
+  const chest = inst.bossRewardChest;
+  assert.equal(inst.getB(Math.floor(chest.x), chest.y, Math.floor(chest.z)), W.B.CHEST);
+  assert.equal(inst.lootChestLocations.some(entry => entry.key === chest.key), true);
+  assert.equal(inst.lootChestTotal, inst.lootChestLocations.length);
+  assert.equal(client.sent.some(e => e.type === 'dedit' && e.msg.id === W.B.CHEST), true, 'the spawned chest is replicated immediately');
+  const status = room.dungeonStatusPayload(inst, client);
+  assert.equal(status.unopenedChests.some(entry => entry.x === chest.x && entry.z === chest.z), true, 'the objective tracker points to the reward');
+  const record = room.getChestRecord(inst.id + ':' + chest.key, client);
+  assert.equal(record.scope, 'dungeon_personal');
+  assert.equal(record.slots.some(Boolean), true);
+});
+
 test('generated dungeon chests give every party member personal gate loot', () => {
   const room = makeRoom(), a = makeClient('dungeon-looter-a'), b = makeClient('dungeon-looter-b');
   room.clients = [a, b];
@@ -13185,6 +13232,7 @@ test('public gate refill can spawn every missing unlocked rank at once', () => {
   const spawned = [];
   const announcements = [];
   room.spawnGate = rank => { spawned.push(rank); return true; };
+  room.ensureTownMegaGate = () => { spawned.push(0); return { id: 'town-mega', rank: 0, landmark: 'town_mega' }; };
   room.broadcast = (type, msg) => announcements.push({ type, msg });
 
   const count = room.spawnMissingPublicGates(4, new Set([1, 3]));
@@ -13196,13 +13244,15 @@ test('public gate refill can spawn every missing unlocked rank at once', () => {
 
 test('the promised E-rank gate has a deterministic placement fallback', () => {
   const room = makeRoom();
-  room.spawnGate = () => false;
   room.world.standHeight = () => 10;
 
   const gate = room.ensurePublicGateRank(0);
   assert.ok(gate);
   assert.equal(gate.rank, 0);
   assert.equal(gate.kind, 'public');
+  assert.equal(gate.landmark, 'town_mega');
+  assert.equal(gate.x, W.HUB.megaGate.x);
+  assert.equal(gate.z, W.HUB.megaGate.z);
   assert.equal(room.ensurePublicGateRank(0), gate, 'an active E-rank gate is reused');
 });
 
@@ -13229,18 +13279,21 @@ test('gate lifecycle resolves surface session entries when ensuring a quest gate
   assert.deepEqual(ensured, [0]);
 });
 
-test('public gate availability comes from online Hunter XP rank, not clear records', () => {
+test('all public Gate ranks remain available regardless of online Hunter progression', () => {
   const room = makeRoom();
   const fresh = makeClient('fresh');
   const veteran = makeClient('veteran');
-  seedPlayer(room, fresh, { token: 'fresh_token_123', lvl: 99, highestGateRankCleared: -1 });
+  seedPlayer(room, fresh, { token: 'fresh_token_123', lvl: 1, highestGateRankCleared: -1 });
   seedPlayer(room, veteran, { token: 'veteran_token_123', lvl: 1, highestGateRankCleared: 2 });
 
   assert.equal(room.maxUnlockedPublicRank(), 5);
+  const sGate = makeGate('g-open-s', 20.5, 20.5, 5, 'public');
+  assert.equal(room.canEnterGate(fresh, sGate), true, 'a novice may knowingly attempt an S-rank public Gate');
+  assert.equal(room.canAccessGateRank(fresh, 5), true, 'random public matchmaking is open at every rank');
 
   const emptyRoom = makeRoom();
   emptyRoom.worldProgress.highestGateRankCleared = 3;
-  assert.equal(emptyRoom.maxUnlockedPublicRank(), 0);
+  assert.equal(emptyRoom.maxUnlockedPublicRank(), 5);
 });
 
 test('ranked dungeon pools select stable canonical content ids', () => {
@@ -13292,6 +13345,28 @@ test('gate persistence sanitizes active gate metadata', () => {
       lootedChests: ['12,9,10', '1,2,3'],
     },
   });
+});
+
+test('gate persistence keeps only the canonical Town Mega Gate landmark', () => {
+  const cleaned = sanitizeGates({
+    g1: { id: 'g1', kind: 'public', rank: 0, seed: 1, landmark: 'town_mega', x: W.HUB.megaGate.x, y: 16, z: W.HUB.megaGate.z, expiresAt: Date.now() + 60000 },
+    g2: { id: 'g2', kind: 'public', rank: 1, seed: 2, landmark: 'town_mega', x: 500, y: 16, z: 300, expiresAt: Date.now() + 60000 },
+    g3: { id: 'g3', kind: 'public', rank: 0, seed: 3, landmark: 'forged', x: 500, y: 16, z: 400, expiresAt: Date.now() + 60000 },
+  });
+  assert.equal(cleaned.g1.landmark, 'town_mega');
+  assert.equal('landmark' in cleaned.g2, false);
+  assert.equal('landmark' in cleaned.g3, false);
+});
+
+test('a persisted Town Mega Gate restores only at its canonical town anchor', () => {
+  const room = makeRoom(), expiresAt = Date.now() + 60000;
+  const restored = room.restoreSavedGates({
+    g1: { id: 'g1', kind: 'public', rank: 0, seed: 1, landmark: 'town_mega', x: W.HUB.megaGate.x, y: 16, z: W.HUB.megaGate.z, expiresAt },
+    g2: { id: 'g2', kind: 'public', rank: 0, seed: 2, landmark: 'town_mega', x: 300, y: 16, z: 300, expiresAt },
+  });
+  assert.equal(restored, 1);
+  assert.equal(room.state.gates.get('g1').landmark, 'town_mega');
+  assert.equal(room.state.gates.has('g2'), false);
 });
 
 test('gates restore from persistence and flush only active unexpired gates', async () => {

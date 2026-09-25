@@ -13,13 +13,15 @@ function issueDungeonAdmission(gate, tokens, now = Date.now()) {
   if (!allowed.size) throw new TypeError('gate admission requires an authenticated party');
   pruneAdmissions(now);
   const ticket = crypto.randomBytes(24).toString('base64url');
-  admissions.set(ticket, {
-    gate: {
+  const descriptor = {
       id: gate.id, seed: gate.seed >>> 0, dungeonId: gate.dungeonId || '', rank: gate.rank | 0,
       kind: gate.kind || 'public', x: +gate.x, y: +gate.y, z: +gate.z,
       expiresAt: gate.expiresAt || 0,
       shardPlus: gate.shardPlus | 0, shardName: gate.shardName || '', shardMods: gate.shardMods || '',
-    },
+  };
+  if (gate.landmark === 'town_mega') descriptor.landmark = 'town_mega';
+  admissions.set(ticket, {
+    gate: descriptor,
     allowed,
     claimed: new Set(),
     expiresAt: now + ADMISSION_TTL_MS,

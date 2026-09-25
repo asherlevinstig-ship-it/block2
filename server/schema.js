@@ -88,6 +88,7 @@ class Gate extends Schema {
     this.seed = 0;           // deterministic dungeon seed shared with clients
     this.dungeonId = '';     // canonical content identity selected from the rank pool
     this.kind = 'public';    // public | solo | team | shard
+    this.landmark = '';      // stable presentation/behavior identity (for example town_mega)
     this.owner = '';         // player token for solo/key/shard gates
     this.team = '';          // team id for team/shard gates
     this.shardPlus = 0;      // shard tier +N (0 = not a sharded gate)
@@ -100,7 +101,7 @@ class Gate extends Schema {
 }
 defineTypes(Gate, {
   active: 'boolean', x: 'number', y: 'number', z: 'number', rank: 'uint8',
-  id: 'string', seed: 'uint32', dungeonId: 'string', kind: 'string', owner: 'string', team: 'string',
+  id: 'string', seed: 'uint32', dungeonId: 'string', kind: 'string', landmark: 'string', owner: 'string', team: 'string',
   shardPlus: 'uint8', shardName: 'string', shardMods: 'string',
   refundItem: 'uint16', refundOwner: 'string', expiresAt: 'number',
 });

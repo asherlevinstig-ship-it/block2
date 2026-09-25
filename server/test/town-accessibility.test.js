@@ -42,7 +42,7 @@ test('every Town of Beginnings public entrance connects plaza, threshold, and us
 
 test('open-air town services have unobstructed player standing space',()=>{
   const world=W.createWorld();world.generate(),G=W.TOWN.G;
-  for(const name of ['guide','jobs','cartographer','quarry','farm','guardian','outfitter','questionPortal','fishingPortal','tamingPortal']){
+  for(const name of ['guide','jobs','cartographer','quarry','farm','guardian','outfitter','questionPortal','fishingPortal','tamingPortal','megaGate']){
     const point=W.HUB[name],x=Math.floor(point.x),z=Math.floor(point.z);
     assert.equal(W.isSolid(world.getB(x,G,z)),true,name+' has a walkable floor');
     assert.equal(W.isSolid(world.getB(x,G+1,z)),false,name+' has feet clearance');

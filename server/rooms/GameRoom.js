@@ -1967,6 +1967,7 @@ class GameRoom extends Room {
           rank: g.rank,
           seed: g.seed,
           dungeonId: g.dungeonId,
+          landmark: g.landmark || '',
           owner: g.owner,
           team: g.team,
           shardPlus: g.shardPlus,
@@ -4735,14 +4736,14 @@ class GameRoom extends Room {
     return this.maxUnlockedGateRankForClient(client);
   }
   canAccessGateRank(client, rank) {
-    return (rank | 0) <= this.maxUnlockedGateRankForClient(client);
+    // Public Gate access is risk-based rather than progression-locked. This is
+    // intentionally separate from key purchasing/attunement, which still uses
+    // maxUnlockedGateRankForKey and the player's earned Hunter rank.
+    const ri = Number(rank);
+    return Number.isInteger(ri) && ri >= 0 && ri <= 5;
   }
   maxUnlockedPublicRank() {
-    let rank = 0;
-    this.tokens.forEach(token => {
-      rank = Math.max(rank, this.maxUnlockedGateRankForProfile(this.profiles.get(token)));
-    });
-    return rank;
+    return 5;
   }
   keyRank(id) {
     let rank = SOLO_KEYS.indexOf(id);
@@ -11118,6 +11119,9 @@ class GameRoom extends Room {
     // were already TTL-expired or never existed here (public gates keyed by roomId).
     for (const id of drainConsumedGates()) this.expireGate(id);
     for (const rank of drainRequestedPublicGateRanks()) this.ensurePublicGateRank(rank);
+    // The Town Mega Gate is a permanent gathering landmark. A completed,
+    // expired, or pre-feature save recreates it on the next populated tick.
+    if (surface.length) this.ensureTownMegaGate();
     for (const entry of surface) {
       const token = entry && entry.sid && this.tokens.get(entry.sid);
       const prof = token && this.profiles.get(token);

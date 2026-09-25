@@ -707,7 +707,8 @@ function announceDungeonClearHandoff(m){
   const result=m&&m.result;
   const chest=dungeonChestSummary(result);
   const mastery=result&&result.mastery&&result.mastery.clean?' Clean mastery earned.':result&&result.mastery?' Mastery recap ready.':'';
-  sysMsg('<b>Boss defeated.</b> Loot awarded. Exit through the portal when ready.'+chest+mastery,{tier:'major',title:'Gate Cleared'});
+  const network=result&&result.landmark==='town_mega'?'<br><b>The wider Gate network is now yours to challenge:</b> E, D, C, B, A, and S-rank Gates appear throughout the wilderness. Check the World Map, prepare for the danger, then go solo or rally other hunters.':'';
+  sysMsg('<b>Boss defeated.</b> Your main loot was awarded, and a bonus reward chest appeared in the boss room. Follow the objective marker and press G at the chest, then exit when ready.'+chest+mastery+network,{tier:'major',title:network?'Mega Gate Cleared':'Gate Cleared'});
 }
 function announceDungeonMissedLoot(m){
   const reason=m&&m.reason;

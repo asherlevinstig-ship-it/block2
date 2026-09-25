@@ -1704,6 +1704,7 @@ function sanitizeGates(gates) {
       expiresAt: clampI(raw.expiresAt, 0, 4102444800000),
       lootedChests,
     };
+    if (raw.landmark === 'town_mega' && kind === 'public' && out[id].rank === 0) out[id].landmark = 'town_mega';
     if (kind === 'shard') {
       out[id].shardPlus = clampI(raw.shardPlus, 0, 5);
       out[id].shardName = typeof raw.shardName === 'string' ? raw.shardName.slice(0, 16) : '';

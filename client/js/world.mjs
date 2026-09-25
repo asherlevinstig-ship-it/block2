@@ -2105,6 +2105,7 @@ const HUB = {
   market: { x: dpx(43, 'market') - .9, z: TOWN.TC - 7 },
   marketX: dpx(43, 'market'),
   outfitter: { x: dpx(42, 'market'), z: dpz(70.5, 'market') },
+  megaGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + 13.5 },
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 };
 const TOWN_INTERACTION_ZONES = Object.freeze({

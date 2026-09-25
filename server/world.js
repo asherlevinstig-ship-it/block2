@@ -61,6 +61,10 @@ const HUB = Object.freeze({
   tamingPortal: { x: TOWN.TC + 45.5, z: TOWN.TC + 3.5 },
   shard: { x: TOWN.TC + 17, z: TOWN.TC - 43 },
   outfitter: townPos(42, 70.5, 'market'),
+  // Permanent social E-rank threshold at the north end of the main avenue.
+  // The synced Gate owns the portal itself; this anchor keeps server placement
+  // deterministic across restarts and clear/reopen cycles.
+  megaGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + 13.5 },
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 });
 function isTownFarmWorksite(x, z) {

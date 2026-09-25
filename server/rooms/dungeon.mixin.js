@@ -173,6 +173,46 @@ class DungeonMixin {
     const looted = this.gateLootedChests.get(inst.id) || new Set();
     return (inst.lootChestLocations || []).filter(ch => ch && !looted.has(ch.key)).map(ch => ({ x: ch.x, y: ch.y, z: ch.z }));
   }
+  ensureBossRewardChest(inst) {
+    if (!inst || !inst.bossRoom || inst.bossRewardChest) return inst && inst.bossRewardChest || null;
+    const cx = Math.floor(inst.bossRoom.x), cz = Math.floor(inst.bossRoom.z);
+    const offsets = [
+      [0, 3], [3, 0], [0, -3], [-3, 0],
+      [2, 2], [2, -2], [-2, 2], [-2, -2],
+      [0, 2], [2, 0], [0, -2], [-2, 0], [0, 0],
+    ];
+    const occupied = [];
+    for (const sid of inst.players || []) {
+      const p = this.state && this.state.players && this.state.players.get(sid);
+      if (p && p.dgn === inst.id) occupied.push(p);
+    }
+    let spot = null;
+    for (const [ox, oz] of offsets) {
+      const x = cx + ox, y = 9, z = cz + oz;
+      if (!inst.inBounds(x, y + 1, z)) continue;
+      if (!W.isSolid(inst.getB(x, y - 1, z))) continue;
+      if (inst.getB(x, y, z) !== W.B.AIR || inst.getB(x, y + 1, z) !== W.B.AIR) continue;
+      if (occupied.some(p => Math.hypot(p.x - (x + .5), p.z - (z + .5)) < 1.35)) continue;
+      spot = { x, y, z };
+      break;
+    }
+    if (!spot) return null;
+    inst.setB(spot.x, spot.y, spot.z, W.B.CHEST);
+    inst.addEdit(spot.x, spot.y, spot.z, W.B.CHEST);
+    const chest = {
+      key: spot.x + ',' + spot.y + ',' + spot.z,
+      x: spot.x + .5,
+      y: spot.y,
+      z: spot.z + .5,
+      bossReward: true,
+    };
+    inst.bossRewardChest = chest;
+    if (!Array.isArray(inst.lootChestLocations)) inst.lootChestLocations = [];
+    if (!inst.lootChestLocations.some(existing => existing && existing.key === chest.key)) inst.lootChestLocations.push(chest);
+    inst.lootChestTotal = inst.lootChestLocations.length;
+    this.sendSpace(inst.id, 'dedit', { x: spot.x, y: spot.y, z: spot.z, id: W.B.CHEST });
+    return chest;
+  }
   sendDungeonStatus(dgn) {
     const inst = this.instances[dgn];
     if (!inst) return;
@@ -289,6 +329,7 @@ class DungeonMixin {
       id: inst.id,
       rank: inst.rank | 0,
       kind: inst.kind || 'public',
+      landmark: inst.landmark || '',
       dungeonId: inst.dungeonId || '',
       dungeonName: def.name || '',
       bossName: def.boss || 'Gate Boss',
@@ -321,7 +362,7 @@ class DungeonMixin {
     legacy.active = true;
     legacy.x = first.x; legacy.y = first.y; legacy.z = first.z;
     legacy.rank = first.rank; legacy.id = first.id; legacy.seed = first.seed;
-    legacy.kind = first.kind; legacy.owner = first.owner; legacy.team = first.team;
+    legacy.kind = first.kind; legacy.landmark = first.landmark || ''; legacy.owner = first.owner; legacy.team = first.team;
   }
   findGateForPlayer(client, m) {
     const p = this.state.players.get(client.sessionId);
@@ -336,10 +377,9 @@ class DungeonMixin {
   }
   canEnterGate(client, gate) {
     if (!gate || !gate.active) return false;
-    // Owned/team/shard gates grant entry by entitlement: the rank was already
-    // enforced when the key was bought and the gate created, so a lower-level
-    // teammate is not re-gated at the portal. Only walk-up public gates check
-    // the entrant's own Hunter rank here.
+    // Public Gates are open challenges: their labels, previews, and readiness
+    // checks communicate danger, but Hunter rank never prevents an attempt.
+    // Owned/team/shard gates still enforce their ownership entitlement.
     if (gate.kind === 'solo') return !!gate.owner && gate.owner === this.clientToken(client);
     if (gate.kind === 'team') {
       const p = this.state.players.get(client.sessionId);
@@ -350,10 +390,13 @@ class DungeonMixin {
       const p = this.state.players.get(client.sessionId);
       return !!p && !!gate.team && gate.team === this.cleanTeamId(p.team);
     }
-    return this.canAccessGateRank(client, gate.rank);
+    return gate.kind === 'public';
   }
   isValidRestoredPublicGate(raw) {
     const rank = Math.max(0, Math.min(5, raw.rank | 0));
+    if (raw.landmark === 'town_mega') {
+      return rank === 0 && Math.hypot((+raw.x || 0) - W.HUB.megaGate.x, (+raw.z || 0) - W.HUB.megaGate.z) <= 2;
+    }
     const band = GATE_DISTANCE_BANDS[rank] || GATE_DISTANCE_BANDS[0];
     const x = +raw.x, z = +raw.z;
     if (!isFinite(x) || !isFinite(z)) return false;
@@ -378,6 +421,7 @@ class DungeonMixin {
       g.seed = raw.seed >>> 0;
       g.dungeonId = canonicalDungeonId(g.rank, g.seed, raw.dungeonId);
       g.kind = kind;
+      g.landmark = raw.landmark === 'town_mega' ? 'town_mega' : '';
       g.owner = (g.kind === 'solo' || g.kind === 'team' || g.kind === 'shard') ? (cleanToken(raw.owner) || '') : '';
       g.team = (g.kind === 'team' || g.kind === 'shard') ? this.cleanTeamId(raw.team) : '';
       if (g.kind === 'shard') {
@@ -399,7 +443,7 @@ class DungeonMixin {
     this.mirrorPrimaryGate();
     return count;
   }
-  createGate({ x, y, z, rank, kind, owner, team, ttl, shardPlus, shardName, shardMods, refundItem, refundOwner, dungeonId }) {
+  createGate({ x, y, z, rank, kind, landmark, owner, team, ttl, shardPlus, shardName, shardMods, refundItem, refundOwner, dungeonId }) {
     const g = new Gate();
     g.x = x; g.y = y; g.z = z;
     g.rank = Math.max(0, Math.min(5, rank | 0));
@@ -407,6 +451,7 @@ class DungeonMixin {
     g.seed = (Math.random() * 4294967295) >>> 0;
     g.dungeonId = canonicalDungeonId(g.rank, g.seed, dungeonId);
     g.kind = ['public', 'solo', 'team', 'shard'].includes(kind) ? kind : 'public';
+    g.landmark = landmark === 'town_mega' && g.kind === 'public' && g.rank === 0 ? 'town_mega' : '';
     g.owner = owner || '';
     g.team = this.cleanTeamId(team || '');
     g.shardPlus = Math.max(0, Math.min(5, shardPlus | 0));
@@ -1073,7 +1118,7 @@ class DungeonMixin {
     const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
     const spawn = playerSpawn || this.dungeonSafeSpawn(inst, ex);
     return {
-      id: inst.id, seed: inst.seed, dungeonId: inst.dungeonId || canonicalDungeonId(inst.rank, inst.seed), rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public',
+      id: inst.id, seed: inst.seed, dungeonId: inst.dungeonId || canonicalDungeonId(inst.rank, inst.seed), rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public', landmark: inst.landmark || (g && g.landmark) || '',
       edits: inst.edits,
       status: this.dungeonStatusPayload(inst),
       bx: g ? g.x : inst.gateX, by: g ? g.y : inst.gateY, bz: g ? g.z : inst.gateZ,
@@ -1781,6 +1826,7 @@ class DungeonMixin {
     // portal, but the party cannot leave and regenerate a fresh boss from the
     // same gate during its remaining TTL.
     this.expireGate(dgn);
+    this.ensureBossRewardChest(inst);
     const ri = inst.rank;
     const result = this.dungeonResultPayload(inst, 'cleared', '');
     const reward = BOSS_REWARD_BY_RANK[ri];

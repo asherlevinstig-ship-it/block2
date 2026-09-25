@@ -908,6 +908,9 @@ function currentLocationInfo(){
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.guild.x, player.pos.z-HUB.guild.z)<20){
     return { cls:'town', name:'Hunters Guild Hall', meta:'Found a guild or claim a permanent guild floor' };
   }
+  if(dim==='overworld'&&gate&&gate.landmark==='town_mega'&&Math.hypot(player.pos.x-gate.x,player.pos.z-gate.z)<32){
+    return { cls:'town', name:'Town Mega Gate', meta:'E-Rank raid · enter solo or rally a team' };
+  }
   if(isTownLand(Math.floor(player.pos.x), Math.floor(player.pos.z))){
     return { cls:'town', name:'Town of Beginnings', meta:'Safe town - quests, market, tavern, shards' };
   }
@@ -2282,9 +2285,11 @@ function updateGatePrompt(){
   const readiness=gateReadinessLocal(gate.rank|0),preview=gatePreviewLocal(gate.rank|0,gate.kind),statusClass=readiness.ready?'ready':'warning';
   const party=preview.recommendedParty,partyText=party[0]===party[1]?String(party[0]):party[0]+'-'+party[1];
   const missing=readiness.next&&!readiness.next.done?(' · Missing: '+readiness.next.label):'';
-  gatePromptEl.innerHTML='<span class="key">G</span>Inspect '+escHTML(RANKS[gate.rank|0].n)+'-Rank '+escHTML(gateKindLabel(gate.kind))+' Gate <span class="gate-status '+statusClass+'">'+escHTML(readiness.status)+'</span><span class="gate-preview">Enemy Lv '+preview.enemyLevels[0]+'-'+preview.enemyLevels[1]+' · Recommended party '+partyText+' · '+escHTML(readiness.difficulty+missing)+'</span>';
+  const gateTitle=gate.landmark==='town_mega'?'Town Mega Gate':RANKS[gate.rank|0].n+'-Rank '+gateKindLabel(gate.kind)+' Gate';
+  const rally=gate.landmark==='town_mega'?' · Go solo or rally up to '+partyText+' hunters':' · Recommended party '+partyText;
+  gatePromptEl.innerHTML='<span class="key">G</span>Inspect '+escHTML(gateTitle)+' <span class="gate-status '+statusClass+'">'+escHTML(readiness.status)+'</span><span class="gate-preview">Enemy Lv '+preview.enemyLevels[0]+'-'+preview.enemyLevels[1]+rally+' · '+escHTML(readiness.difficulty+missing)+'</span>';
   const collapse=gateCollapseHint(gate.expiresAt),collapseClass=collapse&&collapse.indexOf('imminent')>=0?' danger':'';
-  if(collapse)gatePromptEl.innerHTML='<span class="key">G</span>Inspect '+escHTML(RANKS[gate.rank|0].n)+'-Rank '+escHTML(gateKindLabel(gate.kind))+' Gate <span class="gate-status '+statusClass+collapseClass+'">'+escHTML(collapse)+'</span><span class="gate-preview">Enemy Lv '+preview.enemyLevels[0]+'-'+preview.enemyLevels[1]+' - Recommended party '+partyText+' - '+escHTML(readiness.difficulty+missing)+'</span>';
+  if(collapse)gatePromptEl.innerHTML='<span class="key">G</span>Inspect '+escHTML(gateTitle)+' <span class="gate-status '+statusClass+collapseClass+'">'+escHTML(collapse)+'</span><span class="gate-preview">Enemy Lv '+preview.enemyLevels[0]+'-'+preview.enemyLevels[1]+' - Recommended party '+partyText+' - '+escHTML(readiness.difficulty+missing)+'</span>';
   gatePromptEl.classList.remove('hidden');
 }
 function updateGateRally(now){
@@ -4120,7 +4125,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     moveSelfTo:(x,y,z)=>{if(!player||!player.pos)return false;player.pos.set(Number(x)||0,Number(y)||0,Number(z)||0);player.vel&&player.vel.set&&player.vel.set(0,0,0);if(NET.on&&NET.room)NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw||0,pitch:player.pitch||0});return true;},
     remoteSummary:()=>{const out=[];if(NET&&NET.remotes)for(const sid in NET.remotes){const r=NET.remotes[sid],ref=r&&r.ref||{};out.push({sid,name:String(ref.name||''),dgn:String(ref.dgn||''),visible:!!(r&&r.grp&&r.grp.visible),x:r&&r.grp?Math.round(r.grp.position.x*10)/10:0,y:r&&r.grp?Math.round(r.grp.position.y*10)/10:0,z:r&&r.grp?Math.round(r.grp.position.z*10)/10:0});}return out;},
     nearbySocialTarget:()=>typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null,
-    trackedGate:()=>gate?{id:gate.id||'',rank:gate.rank|0,kind:gate.kind||'public'}:null,
+    trackedGate:()=>gate?{id:gate.id||'',rank:gate.rank|0,kind:gate.kind||'public',landmark:gate.landmark||''}:null,
     send:(type,message={})=>{if(!NET.on||!NET.room)throw new Error('not connected');NET.room.send(type,message);},
     disconnect:()=>{if(!NET.room||!NET.room.connection)throw new Error('no active connection');NET.room.connection.close();},
     pauseReconnect:()=>NETWORK.pauseReconnect(),

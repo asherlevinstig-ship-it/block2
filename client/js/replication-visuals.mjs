@@ -1838,7 +1838,7 @@ function netFirstGate(){
   return NET.room.state.gate || null;
 }
 function decorateFirstPublicGate(local){
-  if(!local||!local.grp||local.firstGateDecor||(local.rank|0)!==0||(local.kind||'public')!=='public')return;
+  if(!local||!local.grp||local.firstGateDecor||local.landmark==='town_mega'||(local.rank|0)!==0||(local.kind||'public')!=='public')return;
   local.firstGateDecor=true;
   const group=new THREE.Group();
   group.name='first-gate-threshold';
@@ -1867,6 +1867,58 @@ function decorateFirstPublicGate(local){
   local.grp.add(group);
   local.firstGateAura=group;
 }
+function decorateTownMegaGate(local){
+  if(!local||!local.grp||local.megaGateDecor||local.landmark!=='town_mega')return;
+  local.megaGateDecor=true;
+  const group=new THREE.Group();group.name='town-mega-gate-threshold';
+  const stone=new THREE.MeshLambertMaterial({color:0x27343c});
+  const trim=new THREE.MeshLambertMaterial({color:0xb88b35,emissive:0x3b2606});
+  const glow=new THREE.MeshBasicMaterial({color:0x72f0a0,transparent:true,opacity:.52,blending:THREE.AdditiveBlending,depthWrite:false});
+  const base=new THREE.Mesh(new THREE.RingGeometry(3.45,4.45,12),glow);
+  base.rotation.x=-Math.PI/2;base.position.y=.08;group.add(base);
+  for(const x of [-4.05,4.05]){
+    const pillar=new THREE.Mesh(new THREE.BoxGeometry(1.05,5.6,1.05),stone);
+    pillar.position.set(x,2.8,0);group.add(pillar);
+    const inset=new THREE.Mesh(new THREE.BoxGeometry(.2,3.7,.08),glow);
+    inset.position.set(x,3,.57);group.add(inset);
+    const crown=new THREE.Mesh(new THREE.OctahedronGeometry(.58,0),trim);
+    crown.position.set(x,6.0,0);group.add(crown);
+  }
+  const arch=new THREE.Mesh(new THREE.TorusGeometry(3.45,.34,8,28,Math.PI),trim);
+  arch.rotation.z=Math.PI;arch.position.y=2.65;group.add(arch);
+  const runes=new THREE.Mesh(new THREE.TorusGeometry(3.08,.08,6,32),glow);
+  runes.position.y=3.0;group.add(runes);
+  const innerRunes=new THREE.Mesh(new THREE.TorusGeometry(2.55,.045,6,32),new THREE.MeshBasicMaterial({color:0xe8bd62,transparent:true,opacity:.66,blending:THREE.AdditiveBlending,depthWrite:false}));
+  innerRunes.position.y=3.0;group.add(innerRunes);
+  const makeCloud=(count,size,palette)=>{
+    const positions=new Float32Array(count*3),colors=new Float32Array(count*3);
+    for(let i=0;i<count;i++){
+      const c=new THREE.Color(palette[i%palette.length]);
+      colors[i*3]=c.r;colors[i*3+1]=c.g;colors[i*3+2]=c.b;
+    }
+    const geometry=new THREE.BufferGeometry();
+    geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
+    geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+    const material=new THREE.PointsMaterial({map:new THREE.CanvasTexture(glowTexCanvas),size,vertexColors:true,transparent:true,opacity:.92,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+    const points=new THREE.Points(geometry,material);points.frustumCulled=false;group.add(points);
+    return {points,positions};
+  };
+  const vortex=makeCloud(128,.18,[0x76ffd0,0x65cfff,0xd8a7ff,0xffd76a]);
+  const rise=makeCloud(64,.14,[0x6effa4,0xbefee0,0xffdc73]);
+  const orbit=makeCloud(36,.22,[0xffffff,0x8cffe0,0xffcf62]);
+  const vortexMeta=Array.from({length:128},(_,i)=>({radius:.28+Math.sqrt(Math.random())*2.62,phase:Math.random()*Math.PI*2,speed:.28+Math.random()*.55,wave:Math.random()*Math.PI*2,depth:(Math.random()-.5)*.34,layer:i%4}));
+  const riseMeta=Array.from({length:64},()=>({x:(Math.random()-.5)*7.8,z:(Math.random()-.5)*1.45,phase:Math.random(),speed:.1+Math.random()*.16,drift:Math.random()*Math.PI*2}));
+  const orbitMeta=Array.from({length:36},(_,i)=>({phase:i/36*Math.PI*2,jitter:Math.random()*Math.PI*2,radius:3.35+Math.random()*.58,speed:.22+Math.random()*.22}));
+  local.grp.userData.ring.scale.setScalar(2.15);
+  local.grp.userData.ring.position.y=3.0;
+  local.grp.userData.disc.scale.setScalar(2.15);
+  local.grp.userData.disc.position.y=3.0;
+  local.grp.userData.beam.scale.set(2.2,1,2.2);
+  const portalGlow=local.grp.children.find(o=>o&&o.isSprite);
+  if(portalGlow){portalGlow.scale.set(10.5,10.5,1);portalGlow.position.y=3.0;}
+  local.grp.add(group);local.megaGateAura=group;
+  local.megaFx={group,runes,innerRunes,vortex,rise,orbit,vortexMeta,riseMeta,orbitMeta};
+}
 function netMirrorGate(){
   if(dim!=='overworld') return;
   if(!gateSystemUnlocked()){
@@ -1885,13 +1937,14 @@ function netMirrorGate(){
       const gateCol=tier?parseInt(tier.col.slice(1),16):RANKS[g.rank].col;
       let local=netGates[g.id];
       if(!local){
-        local={id:g.id, dungeonId:g.dungeonId||'', x:g.x, y:g.y, z:g.z, rank:g.rank, kind:g.kind||'public', shard, expiresAt:g.expiresAt||0, colArr:tier?tier.c3.slice():hex01(RANKS[g.rank].col), grp:makeGateMesh(gateCol)};
+        local={id:g.id, dungeonId:g.dungeonId||'', x:g.x, y:g.y, z:g.z, rank:g.rank, kind:g.kind||'public', landmark:g.landmark||'', shard, expiresAt:g.expiresAt||0, colArr:tier?tier.c3.slice():hex01(RANKS[g.rank].col), grp:makeGateMesh(gateCol)};
         netGates[g.id]=local;
         setGateLabel(local);
         scene.add(local.grp);
         burst(g.x, g.y+1.5, g.z, local.colArr, 30, 3, 3, .9);
       }
-      local.x=g.x; local.y=g.y; local.z=g.z; local.dungeonId=g.dungeonId||''; local.rank=g.rank; local.kind=g.kind||'public'; local.shard=shard; local.expiresAt=g.expiresAt||0;
+      local.x=g.x; local.y=g.y; local.z=g.z; local.dungeonId=g.dungeonId||''; local.rank=g.rank; local.kind=g.kind||'public'; local.landmark=g.landmark||''; local.shard=shard; local.expiresAt=g.expiresAt||0;
+      decorateTownMegaGate(local);
       decorateFirstPublicGate(local);
       setGateLabel(local);
       local.grp.position.set(g.x,g.y,g.z);

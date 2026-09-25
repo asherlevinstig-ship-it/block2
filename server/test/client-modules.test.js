@@ -6510,3 +6510,22 @@ test('Elaria landmarks and citizens provide playable interactions',()=>{
   assert.match(menus,/function openElvenCitizenUI\(/);
   for(const role of ['elf_king','elf_guard','elf_scholar','elf_musician','elf_gardener','elf_artisan','elf_scout'])assert.match(menus,new RegExp(role+':\\['));
 });
+
+test('Town of Beginnings presents a social Mega Gate and explains the wider network after clear',()=>{
+  const dimensions=fs.readFileSync(path.join(__dirname,'../../client/js/dimensions.mjs'),'utf8');
+  const visuals=fs.readFileSync(path.join(__dirname,'../../client/js/replication-visuals.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'../../client/js/frame-loop.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'../../client/js/networking.mjs'),'utf8');
+  assert.match(dimensions,/TOWN MEGA GATE/);
+  assert.match(dimensions,/E-RANK · SOLO OR TEAM/);
+  assert.match(visuals,/function decorateTownMegaGate\(local\)/);
+  assert.match(visuals,/ring\.scale\.setScalar\(2\.15\)/);
+  assert.match(visuals,/makeCloud\(128,\.18/);
+  assert.match(visuals,/makeCloud\(64,\.14/);
+  assert.match(visuals,/makeCloud\(36,\.22/);
+  assert.match(dimensions,/function tickTownMegaGateFx\(local,dt,now\)/);
+  assert.match(dimensions,/baseScale=local&&local\.landmark==='town_mega'\?2\.15:1/);
+  assert.match(frame,/Go solo or rally up to/);
+  assert.match(networking,/The wider Gate network is now yours to challenge/);
+  assert.match(networking,/E, D, C, B, A, and S-rank Gates/);
+});

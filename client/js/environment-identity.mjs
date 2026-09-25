@@ -30,6 +30,7 @@ export function createEnvironmentIdentity(THREE) {
   }));
   const townSurface={...TOWN_PALETTE,tint:new THREE.Color(TOWN_PALETTE.tint),horizon:new THREE.Color(TOWN_PALETTE.horizon),sky:new THREE.Color(TOWN_PALETTE.sky),ground:new THREE.Color(TOWN_PALETTE.ground),key:new THREE.Color(TOWN_PALETTE.key)};
   const dungeons = Object.fromEntries(Object.entries(DUNGEON_PALETTES).map(([name, p]) => [name, {
+    ...p,
     tint: new THREE.Color(p.tint), sky: new THREE.Color(p.sky),
     ground: new THREE.Color(p.ground), key: new THREE.Color(p.key),
   }]));

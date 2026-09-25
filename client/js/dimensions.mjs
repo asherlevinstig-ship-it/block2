@@ -1333,31 +1333,37 @@ function makeGateMesh(col){
 function gateKindLabel(kind){
   return kind==='solo' ? 'Solo' : kind==='team' ? 'Team' : kind==='shard' ? 'Shard' : 'Public';
 }
-function makeGateLabel(rank, kind, shard){
-  const c=document.createElement('canvas'); c.width=192; c.height=64;
+function makeGateLabel(rank, kind, shard, landmark=''){
+  const mega=landmark==='town_mega';
+  const c=document.createElement('canvas'); c.width=mega?256:192; c.height=mega?80:64;
   const g=c.getContext('2d');
-  g.font='bold 24px Courier New';
+  const mid=c.width/2;
+  g.font='bold '+(mega?25:24)+'px Courier New';
   g.textAlign='center';
   g.fillStyle='rgba(6,8,16,.72)';
-  g.fillRect(10,8,172,48);
-  g.strokeStyle='rgba(255,255,255,.24)';
-  g.lineWidth=2; g.strokeRect(10,8,172,48);
+  g.fillRect(mega?8:10,8,c.width-(mega?16:20),mega?64:48);
+  g.strokeStyle=mega?'rgba(232,189,98,.85)':'rgba(255,255,255,.24)';
+  g.lineWidth=mega?3:2; g.strokeRect(mega?8:10,8,c.width-(mega?16:20),mega?64:48);
   g.fillStyle='#ffffff';
-  if(shard) g.fillText(shard.name+' +'+shard.plus,96,30);
-  else g.fillText(RANKS[rank].n+'-Rank Gate',96,30);
+  if(mega) g.fillText('TOWN MEGA GATE',mid,35);
+  else if(shard) g.fillText(shard.name+' +'+shard.plus,mid,30);
+  else g.fillText(RANKS[rank].n+'-Rank Gate',mid,30);
   g.font='bold 16px Courier New';
-  if(shard){
+  if(mega){
+    g.fillStyle='#8cff9a';
+    g.fillText('E-RANK · SOLO OR TEAM',mid,59);
+  } else if(shard){
     g.fillStyle=(SHARD_TIERS[shard.plus-1]||SHARD_TIERS[0]).col;
-    g.fillText((shard.mods||[]).join(' ').slice(0,22)||'Sharded',96,50);
+    g.fillText((shard.mods||[]).join(' ').slice(0,22)||'Sharded',mid,50);
   } else {
     g.fillStyle=kind==='solo'?'#9ad0ff':kind==='team'?'#ffd24a':'#8cff9a';
-    g.fillText(gateKindLabel(kind),96,50);
+    g.fillText(gateKindLabel(kind),mid,50);
   }
   const tex=new THREE.CanvasTexture(c);
   tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false}));
-  sp.position.y=3.85;
-  sp.scale.set(3.6,1.2,1);
+  sp.position.y=mega?6.65:3.85;
+  sp.scale.set(mega?5.7:3.6,mega?1.8:1.2,1);
   return sp;
 }
 function gateTimerText(expiresAt){
@@ -1417,10 +1423,11 @@ function setGateTimerLabel(local){
 function setGateLabel(local){
   const kind=local.kind||'public';
   const shard=local.shard||null;
-  const key=local.rank+':'+kind+':'+(shard?shard.plus+','+(shard.mods||[]).join(','):'');
+  const landmark=local.landmark||'';
+  const key=local.rank+':'+kind+':'+landmark+':'+(shard?shard.plus+','+(shard.mods||[]).join(','):'');
   if(!(local.label && local.labelKey===key)){
     if(local.label){ local.grp.remove(local.label); disposeSprite(local.label); }
-    local.label=makeGateLabel(local.rank, kind, shard);
+    local.label=makeGateLabel(local.rank, kind, shard, landmark);
     local.labelKey=key;
     local.grp.add(local.label);
   }
@@ -2964,6 +2971,35 @@ function gateCompass(){
   const a=Math.atan2(dx,-dz);
   return Math.round(Math.hypot(dx,dz))+'m '+COMPASS[(Math.round(a/(Math.PI/4))+8)%8];
 }
+function tickTownMegaGateFx(local,dt,now){
+  const fx=local&&local.megaFx;if(!fx)return;
+  const t=now*.001,pulse=.82+Math.sin(t*2.4)*.14;
+  fx.runes.rotation.z+=dt*.34;
+  fx.innerRunes.rotation.z-=dt*.52;
+  fx.runes.material.opacity=.42+pulse*.22;
+  fx.innerRunes.material.opacity=.38+pulse*.3;
+  const vp=fx.vortex.positions;
+  for(let i=0;i<fx.vortexMeta.length;i++){
+    const m=fx.vortexMeta[i],a=m.phase+t*m.speed*(i%2?-1:1),r=m.radius*(.91+Math.sin(t*1.7+m.wave)*.09),n=i*3;
+    vp[n]=Math.cos(a)*r;vp[n+1]=3+Math.sin(a)*r;vp[n+2]=m.depth+Math.sin(a*3+m.wave+t)*.1;
+  }
+  fx.vortex.points.geometry.attributes.position.needsUpdate=true;
+  fx.vortex.points.material.opacity=.74+pulse*.22;
+  const rp=fx.rise.positions;
+  for(let i=0;i<fx.riseMeta.length;i++){
+    const m=fx.riseMeta[i],u=(m.phase+t*m.speed)%1,n=i*3;
+    rp[n]=m.x+Math.sin(t*.75+m.drift+u*5)*.28;rp[n+1]=u*6.8;rp[n+2]=m.z+Math.cos(t*.6+m.drift)*.18;
+  }
+  fx.rise.points.geometry.attributes.position.needsUpdate=true;
+  fx.rise.points.material.opacity=.55+pulse*.25;
+  const op=fx.orbit.positions;
+  for(let i=0;i<fx.orbitMeta.length;i++){
+    const m=fx.orbitMeta[i],a=m.phase+t*m.speed,n=i*3,flare=1+Math.sin(t*3.2+m.jitter)*.06;
+    op[n]=Math.cos(a)*m.radius*flare;op[n+1]=3+Math.sin(a)*m.radius*flare;op[n+2]=.34*Math.sin(a*2+m.jitter+t);
+  }
+  fx.orbit.points.geometry.attributes.position.needsUpdate=true;
+  fx.orbit.points.material.size=.18+pulse*.075;
+}
 function tickGates(dt, now){
   tickQuestionRoomSafety(now);
   if(NET.on) netMirrorGate();
@@ -2971,20 +3007,26 @@ function tickGates(dt, now){
     gateTimer-=dt;
     if(gateTimer<=0) spawnGate();
   }
+  for(const id in netGates){
+    const local=netGates[id];
+    if(local.landmark==='town_mega')tickTownMegaGateFx(local,dt,now);
+  }
   for(const [g,col,local] of [[gate&&gate.grp, gate&&gate.colArr, gate], [exitPortal, [.43,.88,.42], null], [tamingLandExitPortal, [.62,.99,.45], null], [onboardingTownPortal, [.31,.85,1], null], [questionHallTownPortal, [.49,.83,.99], null]]){
     if(!g) continue;
     g.userData.disc.rotation.z+=dt*1.6;
     const urgency=local?gateUrgency(local.expiresAt):'stable';
     const urgent=urgency==='critical'||urgency==='breach', warn=urgency==='warning';
-    const pl=1+Math.sin(now/(urgent?120:warn?190:280))*(urgent ? .14 : warn ? .09 : .05);
+    const baseScale=local&&local.landmark==='town_mega'?2.15:1;
+    const pl=baseScale*(1+Math.sin(now/(urgent?120:warn?190:280))*(urgent ? .14 : warn ? .09 : .05));
     g.userData.ring.scale.set(pl,pl,1);
     if(g.userData.beam)g.userData.beam.material.opacity=urgent ? .22 : warn ? .14 : .09;
     if(g.userData.ring&&g.userData.ring.material)g.userData.ring.material.color.setHex(urgent?0xff2f2f:warn?0xffb84a:new THREE.Color(col[0],col[1],col[2]).getHex());
-    if(Math.random()<dt*(urgent?42:warn?28:16)){
+    const mega=local&&local.landmark==='town_mega';
+    if(Math.random()<dt*(mega?34:urgent?42:warn?28:16)){
       const p=g.position;
-      spawnParticle({x:p.x+(Math.random()-.5)*2.4, y:p.y+.3+Math.random()*3.2, z:p.z+(Math.random()-.5)*.7,
-        vx:(Math.random()-.5)*.3, vy:.5+Math.random()*.5, vz:(Math.random()-.5)*.3,
-        life:urgent ? .38 : .6, grav:0, r:urgent?1:warn?1:col[0], g:urgent ? .22 : warn ? .62 : col[1], b:urgent ? .12 : warn ? .22 : col[2]});
+      spawnParticle({x:p.x+(Math.random()-.5)*(mega?7.2:2.4), y:p.y+.3+Math.random()*(mega?6.2:3.2), z:p.z+(Math.random()-.5)*(mega?1.5:.7),
+        vx:(Math.random()-.5)*(mega?.55:.3), vy:(mega?.75:.5)+Math.random()*(mega?.85:.5), vz:(Math.random()-.5)*(mega?.5:.3),
+        life:mega?.85:urgent?.38:.6, grav:mega?-.04:0, r:mega?(Math.random()<.22?1:.42):urgent?1:warn?1:col[0], g:mega?(Math.random()<.22?.79:1):urgent?.22:warn?.62:col[1], b:mega?(Math.random()<.22?.3:.72):urgent?.12:warn?.22:col[2]});
     }
   }
 }
