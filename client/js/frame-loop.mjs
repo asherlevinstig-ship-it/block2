@@ -2661,14 +2661,6 @@ function fishingRodHotbarSlot(){
   for(let s=0;s<9;s++)if(inv[s]&&inv[s].id===I.FISHING_ROD)return s;
   return -1;
 }
-function ensureFishingRodEquipped(){
-  if(equippedFishingRod())return true;
-  const slot=fishingRodHotbarSlot();
-  if(slot<0)return false;
-  if(typeof selectSlot==='function')selectSlot(slot);
-  else if(combatState)combatState.selectedSlot=slot;
-  return equippedFishingRod();
-}
 function nearbyFishingWaterPrompt(){
   if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active()){
     return globalThis.BlockcraftFishing.prompt();
@@ -2679,7 +2671,9 @@ function nearbyFishingWaterPrompt(){
   if(!water)return null;
   const ownsRod=typeof countItem==='function'&&countItem(I.FISHING_ROD)>0;
   if(!ownsRod)return {key:'CRAFT',title:'Need a Fishing Rod',small:'Craft one at a Crafting Table: 3 sticks + 1 wheat.'};
-  if(fishingRodHotbarSlot()<0)return {key:'ROD',title:'Equip Fishing Rod',small:'Move the rod into your hotbar (1-9) to fish.'};
+  const rodSlot=fishingRodHotbarSlot();
+  if(rodSlot<0)return {key:'ROD',title:'Equip Fishing Rod',small:'Move the rod into your hotbar (1-9) to fish.'};
+  if(!equippedFishingRod())return {key:String(rodSlot+1),title:'Select Fishing Rod',small:'Select hotbar slot '+(rodSlot+1)+', then press G to cast.'};
   return {key:'G',title:'Cast Fishing Rod',small:'Aim at the water, then move the target with WASD. Uses stamina.'};
 }
 function nearbyFishingWaterInfo(radius=7){
@@ -2889,7 +2883,7 @@ function beginFishingCastPlacement(){
     document.body.classList.remove('game-modal-open');
     fishingTargetDebug('aim.closed-stray-qwin',{reason:'fishing-start'});
   }
-  if(!ensureFishingRodEquipped())return false;
+  if(!equippedFishingRod())return false;
   const gate=nearbyFishingWaterInfo(12);
   if(!gate)return false;
   const water=fishingLookWater()||gate; // start the target where you're aiming; fall back to nearest water

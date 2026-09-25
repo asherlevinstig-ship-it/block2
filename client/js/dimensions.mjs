@@ -1275,6 +1275,7 @@ function renderStat(){
 // ---------------- dungeon gates ----------------
 let dim='overworld', owWorld=null, gate=null, dungeon=null, exitPortal=null, gateTimer=40;
 const netGates={};
+const GATE_INTERACT_RANGE=8;
 function clearNetGates(){
   for(const id in netGates){ scene.remove(netGates[id].grp); delete netGates[id]; }
 }
@@ -3069,6 +3070,7 @@ const legacyDimensionsBindings={
   "frostbiteChakramVfx":{get:()=>frostbiteChakramVfx},
   "gate":{get:()=>gate,set:value=>{gate=value;}},
   "gateCompass":{get:()=>gateCompass},
+  "GATE_INTERACT_RANGE":{get:()=>GATE_INTERACT_RANGE},
   "gateKindLabel":{get:()=>gateKindLabel},
   "generateJobTutorialRoom":{get:()=>generateJobTutorialRoom},
   "generateQuestionRoom":{get:()=>generateQuestionRoom},

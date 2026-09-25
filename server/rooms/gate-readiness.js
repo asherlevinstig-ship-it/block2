@@ -2,7 +2,9 @@ const { BOSS_REWARD_BY_RANK, FOOD_VALUES, HUNTER_RANK_LEVELS, I, KEY_LOOT, LEGEN
 const { RANK_MUL } = require('../../shared/dungeon-generation');
 const { dungeonDefinition } = require('../../shared/dungeon-pools');
 
-const GATE_INTERACT_RANGE = 6;
+// The portal mesh is several blocks wide. Eight blocks lets players interact
+// from its visible rim while remaining close enough for authoritative checks.
+const GATE_INTERACT_RANGE = 8;
 const DIFFICULTIES = ['Initiate', 'Dangerous', 'Severe', 'Extreme', 'Cataclysmic', 'Ascendant'];
 const REQUIREMENTS = [
   { weapon: 1, armor: 0, food: 1, tool: 1, health: .25 },

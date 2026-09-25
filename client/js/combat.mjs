@@ -6592,7 +6592,7 @@ addEventListener('keydown', e=>{
       // An inactive fishing rod may auto-equip itself when water is nearby.
       // Resolve a nearby overworld Gate first so G cannot turn into "select
       // fishing rod" while the player is standing at the portal.
-      const keyGate=!fishingBusy&&dim==='overworld'&&typeof nearestActiveGate==='function'?nearestActiveGate(6):null;
+      const keyGate=!fishingBusy&&dim==='overworld'&&typeof nearestActiveGate==='function'?nearestActiveGate(GATE_INTERACT_RANGE):null;
       if(keyGate){ e.preventDefault(); enterDungeon(keyGate); return; }
       // The return portal wins over *starting* a new cast, so pressing G on the
       // portal leaves the fishing room instead of the rod grabbing the press.
@@ -7609,7 +7609,7 @@ function secondaryAction(){
     if(egg&&DRAGON_EGG_TO_TYPE[egg.id]){hatchDragonEgg(selected,eggTarget);return;}
   }
   if(inv[selected]&&inv[selected].id===B.EGG_INSULATOR){placeSelectedBlockAtHit(eggTarget);return;}
-  const nearbyGate=dim==='overworld'&&typeof nearestActiveGate==='function'?nearestActiveGate(6):null;
+  const nearbyGate=dim==='overworld'&&typeof nearestActiveGate==='function'?nearestActiveGate(GATE_INTERACT_RANGE):null;
   if(nearbyGate){ enterDungeon(nearbyGate); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
   if(nearTamingLandPortal()){ enterTamingLand(); return; }
