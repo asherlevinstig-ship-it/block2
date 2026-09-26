@@ -373,7 +373,7 @@ class DungeonMixin {
     if (!gate || !gate.active) return { gate: null, reason: 'gone' };
     const interactRange = this.gateInteractionRange(gate);
     let distance = Math.hypot(gate.x - p.x, gate.z - p.z);
-    if (distance > interactRange && gate.landmark === 'town_mega' && this.reconcileTownMegaGatePose(client, p, gate, interactRange)) {
+    if (distance > interactRange && gate.landmark === 'town_mega' && this.reconcileTownMegaGatePose(client, p, gate, interactRange, m)) {
       distance = Math.hypot(gate.x - p.x, gate.z - p.z);
     }
     if (distance > interactRange) return { gate: null, reason: 'range', distance, interactRange };
@@ -383,27 +383,35 @@ class DungeonMixin {
   gateInteractionRange(gate) {
     return gate && gate.landmark === 'town_mega' ? 18 : GATE_INTERACT_RANGE;
   }
-  reconcileTownMegaGatePose(client, p, gate, interactRange = 18) {
+  reconcileTownMegaGatePose(client, p, gate, interactRange = 18, message = null) {
     const intent = this.lastMoveIntent && this.lastMoveIntent.get(client.sessionId);
-    if (!intent || Date.now() - intent.at > 1200) return false;
-    if (!this.isTownProtected(p.x, p.z) || !this.isTownProtected(intent.x, intent.z)) return false;
-    if (Math.hypot(gate.x - intent.x, gate.z - intent.z) > interactRange) return false;
-    if (Math.hypot(intent.x - p.x, intent.z - p.z) > W.TOWN.HS * 2) return false;
+    const requested = message && message.pose;
+    const candidates = [];
+    if (intent && Date.now() - intent.at <= 2000) candidates.push({ ...intent, source: 'move_intent' });
+    if (requested && [requested.x, requested.y, requested.z].every(Number.isFinite)) {
+      candidates.push({ x: +requested.x, y: +requested.y, z: +requested.z, source: 'gate_request' });
+    }
+    if (!this.isTownProtected(p.x, p.z)) return false;
+    const candidate = candidates.find(next => this.isTownProtected(next.x, next.z)
+      && Math.hypot(gate.x - next.x, gate.z - next.z) <= interactRange
+      && Math.hypot(next.x - p.x, next.z - p.z) <= W.TOWN.HS * 2);
+    if (!candidate) return false;
     const ground = this.world && typeof this.world.standHeight === 'function'
-      ? this.world.standHeight(intent.x, intent.z, W.WH - 2)
+      ? this.world.standHeight(candidate.x, candidate.z, W.WH - 2)
       : -1;
-    if (!Number.isFinite(ground) || ground < W.TOWN.G || ground > W.TOWN.G + 4 || Math.abs(intent.y - ground) > 4) return false;
+    if (!Number.isFinite(ground) || ground < W.TOWN.G || ground > W.TOWN.G + 4 || Math.abs(candidate.y - ground) > 4) return false;
     const solid = this.spaceSolid('');
-    if (solid(Math.floor(intent.x), Math.floor(ground + .2), Math.floor(intent.z))
-      || solid(Math.floor(intent.x), Math.floor(ground + 1.5), Math.floor(intent.z))) return false;
+    if (solid(Math.floor(candidate.x), Math.floor(ground + .2), Math.floor(candidate.z))
+      || solid(Math.floor(candidate.x), Math.floor(ground + 1.5), Math.floor(candidate.z))) return false;
     const from = { x: p.x, y: p.y, z: p.z };
-    p.x = intent.x; p.y = ground + .01; p.z = intent.z;
+    p.x = candidate.x; p.y = ground + .01; p.z = candidate.z;
     if (this.pvel) this.pvel.set(client.sessionId, { x: 0, z: 0 });
     if (this.lastMoveMsg) this.lastMoveMsg.set(client.sessionId, Date.now());
     client.send('positionCorrection', {
       x: p.x, y: p.y, z: p.z, yaw: p.yaw,
       reason: 'gate_interact_reconcile',
-      requested: { x: intent.x, y: intent.y, z: intent.z },
+      source: candidate.source,
+      requested: { x: candidate.x, y: candidate.y, z: candidate.z },
       serverFrom: from,
     });
     return true;

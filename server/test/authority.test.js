@@ -10471,6 +10471,23 @@ test('Town Mega Gate reconciles a recent safe-town movement intent when authorit
   assert.equal(client.sent.at(-1).msg.reason, 'gate_interact_reconcile');
 });
 
+test('Town Mega Gate reconciles the interaction pose when a movement packet was throttled', () => {
+  const room = makeRoom(), client = makeClient('mega-request-pose');
+  const gate = makeGate('town-mega-request-pose', W.HUB.megaGate.x, W.HUB.megaGate.z, 0, 'public');
+  gate.landmark = 'town_mega';room.state.gates.set(gate.id, gate);
+  seedPlayer(room, client, { token: 'mega_request_pose_token', x: W.TOWN.TC + .5, y: 16, z: W.TOWN.TC + 62.5 });
+
+  const found = room.findGateForPlayer(client, {
+    id: gate.id,
+    pose: { x: gate.x + 10, y: 16, z: gate.z, yaw: 0 },
+  });
+
+  assert.equal(found.gate, gate);
+  assert.equal(room.state.players.get(client.sessionId).x, gate.x + 10);
+  assert.equal(client.sent.at(-1).type, 'positionCorrection');
+  assert.equal(client.sent.at(-1).msg.source, 'gate_request');
+});
+
 test('DungeonRoom refuses to create from raw client-authored gate options', async () => {
   clearDungeonAdmissions();
   await assert.rejects(

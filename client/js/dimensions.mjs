@@ -2854,7 +2854,14 @@ function enterDungeon(targetGate=null){
     // be validated against the server's previous position and rejected as range.
     NET.room.send('move', {x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,heldId:typeof displayHeldId==='function'?displayHeldId():undefined});
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('gate.interact.request',{id:chosen.id,distance:+Math.hypot(chosen.x-player.pos.x,chosen.z-player.pos.z).toFixed(3),x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)});
-    NET.room.send('enterGate', { id: chosen.id });
+    // Carry the same pose on the interaction itself. Movement packets and
+    // action packets have separate server throttles, so relying only on the
+    // preceding `move` could leave Gate validation looking at town return
+    // spawn even though the hunter is visibly standing at the portal.
+    NET.room.send('enterGate', {
+      id:chosen.id,
+      pose:{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw},
+    });
     return true;
   }
   beginDungeon(chosen.rank, (Math.random()*2147483647)|0, null,

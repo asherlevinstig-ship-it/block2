@@ -6258,7 +6258,7 @@ test('gate interaction resolves the active synced gate at keypress and sends its
   const enter=dimensions.slice(dimensions.indexOf('function enterDungeon(targetGate=null){'),dimensions.indexOf('function beginDungeon(',dimensions.indexOf('function enterDungeon(targetGate=null){')));
   assert.match(enter,/NET\.room\.send\('move', \{x:player\.pos\.x,y:player\.pos\.y,z:player\.pos\.z/);
   assert.ok(enter.indexOf("NET.room.send('move'")<enter.indexOf("NET.room.send('enterGate'"), 'fresh position must reach the server before Gate range validation');
-  assert.match(enter,/NET\.room\.send\('enterGate', \{ id: chosen\.id \}\)/);
+  assert.match(enter,/NET\.room\.send\('enterGate', \{[\s\S]*id:chosen\.id,[\s\S]*pose:\{x:player\.pos\.x,y:player\.pos\.y,z:player\.pos\.z,yaw:player\.yaw\}/);
 });
 
 test('idle fishing never changes the selected hotbar slot',()=>{
