@@ -36,7 +36,7 @@ const CLUSTERS = {
   ],
   initDungeonState: ['dungeonLobbies', 'dungeonPingAt', 'dungeonPartyStatusState', 'dungeonStatusRequestAt', 'gateBreaches', 'gateBreachScars', 'gateSeq', 'gateTtls', 'gateLootedChests', 'gateTimer', 'gateTtl'],
   initPersistenceState: [
-    'profiles', 'tokens', 'dirtyWorld', 'dirtyWorldProgress', 'dirtyLandClaims', 'dirtyChests',
+    'profiles', 'tokens', 'accountJoinClaims', 'dirtyWorld', 'dirtyWorldProgress', 'dirtyLandClaims', 'dirtyChests',
     'dirtyFurnaces', 'dirtyIncubations', 'dirtyGates', 'dirtyTeams', 'dirtyGuilds', 'dirtyNests',
     'dirtyPlayers', 'playerMutationRevisions', 'lastSaveMsg', 'persistedWorldEditChunks', 'persistedInventorySignatures', 'playerSaveQueues',
   ],

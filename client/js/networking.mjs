@@ -1419,6 +1419,8 @@ function netAttachRoom(room,name,client){
     bugReportRefreshVisible();
     setWorldLoadingStatus('Syncing hunter profile...');
     let staleLocalMobs=0;
+    let staleRemotePlayers=0;
+    for(const sid in NET.remotes){netRemoveRemote(sid);staleRemotePlayers++;}
     // A new room owns a new set of schema references, even when IDs are reused.
     // Old replicated actors otherwise survive reconnect as frozen, unhittable ghosts.
     for(let i=mobs.length-1;i>=0;i--){ removeMob(i); staleLocalMobs++; }
@@ -1435,6 +1437,14 @@ function netAttachRoom(room,name,client){
     const renderWorldBounties=()=>worldApi.updateWorldBounties([...worldBountyRows.values()]);
     worldApi.updateWorldBounties([]);
     room.onMessage('serverRestartWarning',showServerRestartWarning);
+    room.onMessage('sessionReplaced',()=>{
+      NETWORK.pauseReconnect();
+      NET.on=false;
+      eventLog('This account was opened in another browser or device. This older session was closed.','[Network]');
+      if(typeof sysMsg==='function')sysMsg('<b>Session moved.</b> This account is now active in another browser or device.');
+      if(typeof showName==='function')showName('Session active elsewhere');
+      setWorldLoadingStatus('This account is active in another browser or device.');
+    });
     room.onMessage('e2eJourneyResult',m=>{e2eJourneyResult=m||null;});
     room.onMessage('familiarTelemetry',renderFamiliarTelemetry);
     room.onMessage('dungeonRestartRecovery',m=>{
@@ -1449,6 +1459,7 @@ function netAttachRoom(room,name,client){
     const isOverworldRoom=room.name==='blockcraft';
     if(isOverworldRoom) room.send('dungeonRecoveryRequest',{});
     if(staleLocalMobs) eventLog('Cleared '+staleLocalMobs+' pre-connection local mob'+(staleLocalMobs===1?'':'s')+'.','[Damage Audit]');
+    if(staleRemotePlayers) eventLog('Cleared '+staleRemotePlayers+' stale player visual'+(staleRemotePlayers===1?'':'s')+' after changing rooms.','[Network]');
 
     const $=Colyseus.getStateCallbacks(room);
     $(room.state).listen('tod', v=>{ NET.tod=v; });
@@ -1472,6 +1483,8 @@ function netAttachRoom(room,name,client){
         const live=new Set();
         players.forEach((p,sid)=>{
           if(sid===room.sessionId)return;
+          const accountKey=String(p&&p.accountKey||'');
+          if(accountKey)for(const otherSid in NET.remotes)if(otherSid!==sid&&String(NET.remotes[otherSid].ref&&NET.remotes[otherSid].ref.accountKey||'')===accountKey)netRemoveRemote(otherSid);
           live.add(sid);
           if(NET.remotes[sid])NET.remotes[sid].ref=p;
           else {
@@ -1487,6 +1500,8 @@ function netAttachRoom(room,name,client){
     $(room.state).players.onAdd((p,sid)=>{
       menusApi.invalidatePowerRanking();
       if(sid===room.sessionId)return;
+      const accountKey=String(p&&p.accountKey||'');
+      if(accountKey)for(const otherSid in NET.remotes)if(otherSid!==sid&&String(NET.remotes[otherSid].ref&&NET.remotes[otherSid].ref.accountKey||'')===accountKey)netRemoveRemote(otherSid);
       if(NET.remotes[sid])NET.remotes[sid].ref=p;
       else {
         netAddRemote(sid,p);

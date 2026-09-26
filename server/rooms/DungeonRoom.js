@@ -208,6 +208,7 @@ class DungeonRoom extends GameRoom {
     const ex = inst.entrance;
     const p = new Player();
     p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
+    p.accountKey = shortHash(token);
     p.schoolId = auth && auth.schoolId != null ? String(auth.schoolId).slice(0, 24) : '';
     recordIdentityTrace('room.join.profile', {
       room: 'dungeon',
@@ -253,6 +254,7 @@ class DungeonRoom extends GameRoom {
     // GameRoom.onLeave). Tearing down here would retire the recovery marker, and there's no live
     // GameRoom left in the dying process to hand the profile off to anyway.
     if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
+    if (client && client.__blockcraftFinalized) return;
     // An unclean disconnect (a network blip, not a flee/switch) shouldn't eject a hunter from the
     // raid. Hold their seat + live entity briefly; if they reconnect within the window, resume
     // them into the instance and keep everything as it was. Only a timed-out window falls through
@@ -292,6 +294,8 @@ class DungeonRoom extends GameRoom {
   }
 
   async finalizeDungeonLeave(client) {
+    if (!client || client.__blockcraftFinalized) return;
+    client.__blockcraftFinalized = true;
     // Teardown runs synchronously (an async fn executes up to its first await synchronously) —
     // if the departing hunter's schema entity and its mob aggro were instead cleared only after
     // the persistence await below, they'd stay live for the rest of the raid party for the

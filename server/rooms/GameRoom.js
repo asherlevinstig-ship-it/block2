@@ -1266,8 +1266,12 @@ class GameRoom extends Room {
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
     if (token) {
-      await this.replaceExistingSessionForToken(token, client);
+      if (!this.accountJoinClaims) this.accountJoinClaims = new Map();
+      this.accountJoinClaims.set(token, client.sessionId);
+      // Register synchronously before the first await. Two tabs joining together must
+      // not both pass duplicate-session cleanup while neither token is visible yet.
       this.tokens.set(client.sessionId, token);
+      await this.replaceExistingSessionForToken(token, client);
     }
     let prof = null;
     let profileSource = 'none';
@@ -1381,8 +1385,13 @@ class GameRoom extends Room {
       }
     }
     const restartRecovery = prof ? await this.recoverDungeonAfterRestart(token, prof) : null;
+    if (this.accountJoinClaims && this.accountJoinClaims.get(token) !== client.sessionId) {
+      this.tokens.delete(client.sessionId);
+      throw new Error('account session superseded by a newer connection');
+    }
     const p = new Player();
     p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
+    p.accountKey = shortHash(token);
     p.schoolId = auth && auth.schoolId != null ? String(auth.schoolId).slice(0, 24) : '';
     recordIdentityTrace('room.join.profile', {
       room: 'overworld',
@@ -1546,18 +1555,26 @@ class GameRoom extends Room {
   async replaceExistingSessionForToken(token, joiningClient) {
     const clean = cleanToken(token);
     const joiningSid = joiningClient && joiningClient.sessionId;
-    if (!clean || !joiningSid || !this.tokens) return;
-    for (const [sid, existingToken] of [...this.tokens.entries()]) {
-      if (sid === joiningSid || existingToken !== clean) continue;
-      const existingClient = (this.clients || []).find(c => c && c.sessionId === sid) || { sessionId: sid };
-      logRoomLifecycle('overworld.join.replace_existing_session', {
-        roomId: this.roomId || '',
-        shardId: this.shardId || 'main',
-        oldSidHash: shortHash(sid),
-        newSidHash: shortHash(joiningSid),
-        token: clean,
-      });
-      await this.finalizeLeave(existingClient);
+    if (!clean || !joiningSid) return;
+    for (const room of new Set([this, ...getActiveRooms()])) {
+      if (!room || !room.tokens) continue;
+      for (const [sid, existingToken] of [...room.tokens.entries()]) {
+        if ((room === this && sid === joiningSid) || existingToken !== clean) continue;
+        const existingClient = (room.clients || []).find(c => c && c.sessionId === sid) || { sessionId: sid };
+        logRoomLifecycle('overworld.join.replace_existing_session', {
+          roomId: this.roomId || '',
+          shardId: this.shardId || 'main',
+          oldSidHash: shortHash(sid),
+          newSidHash: shortHash(joiningSid),
+          token: clean,
+        });
+        if (typeof existingClient.send === 'function') existingClient.send('sessionReplaced', { reason: 'newer_connection' });
+        if (room.isDungeonRoom === true && typeof room.finalizeDungeonLeave === 'function') await room.finalizeDungeonLeave(existingClient);
+        else if (typeof room.finalizeLeave === 'function') await room.finalizeLeave(existingClient);
+        if (typeof existingClient.leave === 'function') {
+          try { existingClient.leave(CloseCode.CONSENTED); } catch (_) {}
+        }
+      }
     }
   }
 
@@ -1574,6 +1591,7 @@ class GameRoom extends Room {
     // A process shutdown is not a voluntary dungeon exit. Keep the live
     // attempt marker intact so onDispose can flush it for next-boot recovery.
     if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
+    if (client && client.__blockcraftFinalized) return;
     const unexpected = this.shouldAttemptReconnection(code);
     if (unexpected) {
       const disconnectedPlayer = client && this.state.players.get(client.sessionId);
@@ -1612,6 +1630,8 @@ class GameRoom extends Room {
   }
 
   async finalizeLeave(client) {
+    if (!client || client.__blockcraftFinalized) return;
+    client.__blockcraftFinalized = true;
     if (typeof this.kcAbandon === 'function') this.kcAbandon(client);
     if (this.sleepingPlayers) this.sleepingPlayers.delete(client.sessionId);
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
@@ -1645,6 +1665,7 @@ class GameRoom extends Room {
         this.dirtyPlayers.add(token);
       }
       this.tokens.delete(client.sessionId);
+      if (this.accountJoinClaims && this.accountJoinClaims.get(token) === client.sessionId) this.accountJoinClaims.delete(token);
     }
     this.lastSaveMsg.delete(client.sessionId);
     this.lastMoveMsg.delete(client.sessionId);
@@ -1748,6 +1769,7 @@ class GameRoom extends Room {
   initPersistenceState() {
     this.profiles = new Map();
     this.tokens = new Map();
+    this.accountJoinClaims = new Map();
     this.dirtyWorld = false;
     this.dirtyWorldProgress = false;
     this.dirtyLandClaims = false;

@@ -6101,6 +6101,15 @@ test('reconnect-reserved players are excluded from visible online UI', () => {
   assert.match(world, /p&&p\.connected===false/);
 });
 
+test('room attachment removes stale and duplicate-account player visuals', () => {
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(networking, /for\(const sid in NET\.remotes\)\{netRemoveRemote\(sid\);staleRemotePlayers\+\+;\}/);
+  assert.match(networking, /String\(p&&p\.accountKey\|\|''\)/);
+  assert.match(networking, /NET\.remotes\[otherSid\]\.ref&&NET\.remotes\[otherSid\]\.ref\.accountKey/);
+  assert.match(networking, /room\.onMessage\('sessionReplaced'/);
+  assert.match(networking, /NETWORK\.pauseReconnect\(\)/);
+});
+
 test('dragon interaction uses the cinematic command screen with live controls', () => {
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');

@@ -241,9 +241,11 @@ test('local startup prewarms the main overworld while cloud uses matchmaking', (
 test('same-account browser refresh replaces the stale overworld session', async () => {
   const room = Object.create(GameRoom.prototype);
   const finalized = [];
+  const messages = [];
+  const leaves = [];
   room.roomId = 'room-main';
   room.shardId = 'main';
-  room.clients = [{ sessionId: 'old_sid' }, { sessionId: 'other_sid' }, { sessionId: 'new_sid' }];
+  room.clients = [{ sessionId: 'old_sid', send:(type,message)=>messages.push({type,message}), leave:code=>leaves.push(code) }, { sessionId: 'other_sid' }, { sessionId: 'new_sid' }];
   room.tokens = new Map([
     ['old_sid', 'student_1'],
     ['other_sid', 'student_2'],
@@ -253,6 +255,14 @@ test('same-account browser refresh replaces the stale overworld session', async 
   await room.replaceExistingSessionForToken('student_1', { sessionId: 'new_sid' });
 
   assert.deepEqual(finalized, ['old_sid']);
+  assert.deepEqual(messages, [{type:'sessionReplaced',message:{reason:'newer_connection'}}]);
+  assert.deepEqual(leaves, [4000]);
+});
+
+test('overworld join registers an account claim before awaiting duplicate cleanup', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  assert.match(source, /accountJoinClaims\.set\(token, client\.sessionId\);[\s\S]{0,500}this\.tokens\.set\(client\.sessionId, token\);[\s\S]{0,500}await this\.replaceExistingSessionForToken/);
+  assert.match(source, /accountJoinClaims\.get\(token\) !== client\.sessionId/);
 });
 
 test('server event countdown survives overworld room recreation for the same shard', () => {

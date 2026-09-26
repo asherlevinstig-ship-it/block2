@@ -66,6 +66,13 @@ test('player connection presence is replicated independently from the reserved e
   assert.equal(player.connected, false);
 });
 
+test('players replicate an opaque stable account key for duplicate-session cleanup', () => {
+  const fields = schemaTypes(Player);
+  const player = new Player();
+  assert.equal(fields.accountKey, 'string');
+  assert.equal(player.accountKey, '');
+});
+
 test('large filtered player patches decode for every client view', () => {
   const warnings = [];
   const originalWarn = console.warn;
