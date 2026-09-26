@@ -55,6 +55,7 @@ class DungeonRoom extends GameRoom {
     // Per-session + sim bookkeeping the inherited mixins/tick read. The overworld slice of
     // GameRoom.onCreate (world gen, edits, chests, furnaces, gates, teams, events) is skipped.
     this.lastMoveMsg = new Map();
+    this.lastMoveIntent = new Map();
     this.lastAttackMsg = new Map();
     this.rateBuckets = new Map();
     this.playerLastHit = new Map();

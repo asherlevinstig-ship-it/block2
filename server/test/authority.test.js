@@ -10456,6 +10456,21 @@ test('Town Mega Gate final ready check uses the same monumental threshold', asyn
   assert.equal(client.sent.some(entry => entry.type === 'dungeonLobbyClosed' && entry.msg.reason === 'range'), false);
 });
 
+test('Town Mega Gate reconciles a recent safe-town movement intent when authority is still at return spawn', () => {
+  const room = makeRoom(), client = makeClient('mega-spawn-desync');
+  const gate = makeGate('town-mega-desync', W.HUB.megaGate.x, W.HUB.megaGate.z, 0, 'public');
+  gate.landmark = 'town_mega';room.state.gates.set(gate.id, gate);
+  seedPlayer(room, client, { token: 'mega_desync_token', x: W.TOWN.TC + .5, y: 16, z: W.TOWN.TC + 62.5 });
+  room.lastMoveIntent = new Map([[client.sessionId, { x: gate.x + 10, y: 16, z: gate.z, at: Date.now() }]]);
+
+  const found = room.findGateForPlayer(client, { id: gate.id });
+
+  assert.equal(found.gate, gate);
+  assert.equal(room.state.players.get(client.sessionId).x, gate.x + 10);
+  assert.equal(client.sent.at(-1).type, 'positionCorrection');
+  assert.equal(client.sent.at(-1).msg.reason, 'gate_interact_reconcile');
+});
+
 test('DungeonRoom refuses to create from raw client-authored gate options', async () => {
   clearDungeonAdmissions();
   await assert.rejects(

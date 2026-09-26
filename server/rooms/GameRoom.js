@@ -486,6 +486,7 @@ class GameRoom extends Room {
 
     // ---- per-session bookkeeping (rate limiting, PvP, vitals) ----
     this.lastMoveMsg = new Map();
+    this.lastMoveIntent = new Map();
     // Short-lived authoritative arrival anchors prevent a movement packet that
     // was sampled before a server teleport from pulling the player back toward
     // their old position after the teleport has already been applied.
@@ -1647,6 +1648,7 @@ class GameRoom extends Room {
     }
     this.lastSaveMsg.delete(client.sessionId);
     this.lastMoveMsg.delete(client.sessionId);
+    if (this.lastMoveIntent) this.lastMoveIntent.delete(client.sessionId);
     if (this.authoritativeMoveAnchors) this.authoritativeMoveAnchors.delete(client.sessionId);
     if (this.worldBountyMoveAt) this.worldBountyMoveAt.delete(client.sessionId);
     this.lastAttackMsg.delete(client.sessionId);
@@ -10361,6 +10363,8 @@ class GameRoom extends Room {
     }
     const nx = clampN(m.x, W.WORLD_MIN, W.WORLD_MAX + 1), ny = clampN(m.y, -20, W.WH + 10), nz = clampN(m.z, W.WORLD_MIN, W.WORLD_MAX + 1);
     const now = Date.now();
+    if (!this.lastMoveIntent) this.lastMoveIntent = new Map();
+    this.lastMoveIntent.set(client.sessionId, { x: nx, y: ny, z: nz, at: now });
     const arrivalAnchor = this.authoritativeMoveAnchors && this.authoritativeMoveAnchors.get(client.sessionId);
     if (arrivalAnchor) {
       if (now >= arrivalAnchor.until) this.authoritativeMoveAnchors.delete(client.sessionId);

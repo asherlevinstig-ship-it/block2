@@ -6526,6 +6526,7 @@ test('Town of Beginnings presents a social Mega Gate and explains the wider netw
   assert.match(visuals,/makeCloud\(36,\.22/);
   assert.match(dimensions,/function tickTownMegaGateFx\(local,dt,now\)/);
   assert.match(dimensions,/baseScale=local&&local\.landmark==='town_mega'\?4\.4:1/);
+  assert.match(dimensions,/function gateInteractionRange\(g\)\{return g&&g\.landmark==='town_mega'\?18:GATE_INTERACT_RANGE;\}/);
   assert.match(frame,/Go solo or rally up to/);
   assert.match(networking,/The wider Gate network is now yours to challenge/);
   assert.match(networking,/E, D, C, B, A, and S-rank Gates/);
