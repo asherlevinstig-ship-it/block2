@@ -2839,6 +2839,19 @@ class GameRoom extends Room {
       });
       return !!p;
     }
+    if (action === 'positionAtTownReturn') {
+      const p = this.state.players.get(client.sessionId);
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      if (!p) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      p.x = W.TOWN.TC + .5; p.y = W.TOWN.G + 1; p.z = W.TOWN.TC + 62.5;
+      p.dim = 'overworld'; p.dgn = '';
+      rec.prof.pos = [p.x, p.y, p.z]; this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, x: p.x, y: p.y, z: p.z });
+      return true;
+    }
     if (action === 'positionOutsideTown') {
       const p = this.state.players.get(client.sessionId);
       const requestId = String(m && m.requestId || '').slice(0, 32);

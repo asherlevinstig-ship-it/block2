@@ -10488,6 +10488,24 @@ test('Town Mega Gate reconciles the interaction pose when a movement packet was 
   assert.equal(client.sent.at(-1).msg.source, 'gate_request');
 });
 
+test('Town Mega Gate reconciliation probes the local floor below its overhead arch', () => {
+  const room = makeRoom(), client = makeClient('mega-arch-pose');
+  const gate = makeGate('town-mega-arch', W.HUB.megaGate.x, W.HUB.megaGate.z, 0, 'public');
+  gate.landmark = 'town_mega';room.state.gates.set(gate.id, gate);
+  seedPlayer(room, client, { token: 'mega_arch_pose_token', x: W.TOWN.TC + .5, y: 16, z: W.TOWN.TC + 62.5 });
+  const probes = [];
+  room.world.standHeight = (_x, _z, fromY) => { probes.push(fromY); return fromY > 30 ? 45 : 20; };
+
+  const found = room.findGateForPlayer(client, {
+    id: gate.id,
+    pose: { x: gate.x + 10, y: 20, z: gate.z, yaw: 0 },
+  });
+
+  assert.equal(found.gate, gate);
+  assert.equal(probes.at(-1), 22);
+  assert.equal(room.state.players.get(client.sessionId).y, 20.01);
+});
+
 test('DungeonRoom refuses to create from raw client-authored gate options', async () => {
   clearDungeonAdmissions();
   await assert.rejects(

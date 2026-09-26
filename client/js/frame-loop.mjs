@@ -3967,7 +3967,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     const found=[];
     const gates=NET.room&&NET.room.state&&NET.room.state.gates;
     if(gates&&gates.forEach)gates.forEach(g=>{
-      if(g&&g.active)found.push({id:g.id,dungeonId:g.dungeonId||'',rank:g.rank|0,x:+g.x,y:+g.y,z:+g.z,kind:g.kind||'public',shardPlus:g.shardPlus|0,shardName:g.shardName||'',shardMods:(g.shardMods||'').split(',').filter(Boolean)});
+      if(g&&g.active)found.push({id:g.id,dungeonId:g.dungeonId||'',rank:g.rank|0,x:+g.x,y:+g.y,z:+g.z,kind:g.kind||'public',landmark:g.landmark||'',shardPlus:g.shardPlus|0,shardName:g.shardName||'',shardMods:(g.shardMods||'').split(',').filter(Boolean)});
     });
     return found;
   };

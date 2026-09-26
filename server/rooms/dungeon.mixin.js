@@ -396,10 +396,13 @@ class DungeonMixin {
       && Math.hypot(gate.x - next.x, gate.z - next.z) <= interactRange
       && Math.hypot(next.x - p.x, next.z - p.z) <= W.TOWN.HS * 2);
     if (!candidate) return false;
+    // Probe from the reported feet instead of the top of the world. The Mega
+    // Gate sits beneath a monumental town structure; a top-down scan can hit
+    // the arch/roof and incorrectly reject a hunter standing safely below it.
     const ground = this.world && typeof this.world.standHeight === 'function'
-      ? this.world.standHeight(candidate.x, candidate.z, W.WH - 2)
+      ? this.world.standHeight(candidate.x, candidate.z, Math.min(W.WH - 2, candidate.y + 2))
       : -1;
-    if (!Number.isFinite(ground) || ground < W.TOWN.G || ground > W.TOWN.G + 4 || Math.abs(candidate.y - ground) > 4) return false;
+    if (!Number.isFinite(ground) || ground < W.TOWN.G - 1 || ground > W.TOWN.G + 10 || Math.abs(candidate.y - ground) > 4) return false;
     const solid = this.spaceSolid('');
     if (solid(Math.floor(candidate.x), Math.floor(ground + .2), Math.floor(candidate.z))
       || solid(Math.floor(candidate.x), Math.floor(ground + 1.5), Math.floor(candidate.z))) return false;
@@ -1341,7 +1344,12 @@ class DungeonMixin {
     const p = this.state.players.get(client.sessionId);
     if (process.env.BLOCKCRAFT_E2E === '1' && p && m && typeof m.id === 'string') {
       const e2eGate = this.state.gates.get(m.id);
-      if (e2eGate && e2eGate.active && !p.dgn) {
+      // Keep the generic test shortcut for remote wilderness Gates, but do not
+      // use it for the Town Mega Gate. That landmark deliberately exercises
+      // the real client-pose reconciliation path used after a fast approach.
+      // Teleporting the authoritative player here masked production range
+      // desyncs and made the browser suite pass without testing the fix.
+      if (e2eGate && e2eGate.active && e2eGate.landmark !== 'town_mega' && !p.dgn) {
         p.x = e2eGate.x + 1.5; p.y = e2eGate.y + .5; p.z = e2eGate.z;
         p.dim = 'overworld'; p.dgn = '';
       }
