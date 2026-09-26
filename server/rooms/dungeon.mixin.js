@@ -1356,7 +1356,12 @@ class DungeonMixin {
     }
     const found = this.findGateForPlayer(client, m);
     const g = found.gate;
-    if (!p || !g) return client.send('gateReject', { reason: found.reason || 'locked', distance: found.distance, interactRange: found.interactRange });
+    if (!p || !g) {
+      const rejection = { reason: found.reason || 'locked' };
+      if (Number.isFinite(found.distance)) rejection.distance = found.distance;
+      if (Number.isFinite(found.interactRange)) rejection.interactRange = found.interactRange;
+      return client.send('gateReject', rejection);
+    }
     if (this.rateLimited(client, 'dungeonReady', 5, 10)) return client.send('gateReject', { reason: 'rate' });
     this.removeRandomGateQueue(client.sessionId);
     if (!this.dungeonLobbies) this.dungeonLobbies = new Map();

@@ -1861,8 +1861,9 @@ test('stuck rescue relocation keeps an active Recall question reachable',()=>{
   const moved=room.recallChallenges.get(client.sessionId);
   assert.equal(moved.id,challenge.id,'the same question remains active');
   assert.equal(moved.pillars.every(pillar=>Math.hypot(pillar.x-p.x,pillar.z-p.z)<24),true,'all answers move around the rescued player');
-  assert.equal(client.sent.at(-1).type,'recallQuestion');
-  assert.deepEqual(client.sent.at(-1).msg.pillars,moved.pillars);
+  const relocatedQuestion=client.sent.findLast(entry=>entry.type==='recallQuestion');
+  assert.ok(relocatedQuestion,'the relocated Recall question is resent to the player');
+  assert.deepEqual(relocatedQuestion.msg.pillars,moved.pillars);
 });
 
 test('movement cannot tunnel through a thin wall between valid air cells',()=>{

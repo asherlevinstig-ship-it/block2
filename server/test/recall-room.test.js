@@ -46,6 +46,27 @@ test('a wrong Recall answer schedules review without freezing movement',()=>{
   assert.equal(room.recallFrozenUntil,undefined);
 });
 
+test('a Recall answer accepts the action-coupled recent pose when authority trails the pillar',()=>{
+  const room=Object.create(recall),sessionId='lagging-answer',now=Date.now(),sent=[];
+  room.initRecallState();
+  const player={x:10,y:4,z:20,dim:'questions',dgn:'tutorial-questions-1'};
+  room.state={players:new Map([[sessionId,player]])};
+  room.lastMoveIntent=new Map([[sessionId,{x:10,y:4,z:4,at:now}]]);
+  room.recallChallenges.set(sessionId,{id:'challenge-lag',questionId:'it_ns_hex_bin_003',topic:'Number systems',correct:0,answers:['A','B','C','D'],pillars:[{x:10,y:4,z:4},{x:.5,y:4,z:9},{x:19.5,y:4,z:9},{x:10,y:4,z:13}],fallback:false,expiresAt:now+60_000,startedAt:now,source:'recall',originX:10,originZ:20,explanation:'Review the four-bit groups.'});
+  room.profileFor=()=>null;room.recordRecallAnalytics=()=>{};
+  room.regenAbilityState=()=>({mp:0,maxMp:100});room.sendAbilitySync=()=>{};
+
+  room.handleRecallAnswer({sessionId,send:(type,message)=>sent.push({type,message})},{id:'challenge-lag',index:1,pose:{x:10,y:4,z:4}});
+  assert.equal(sent.at(-1).type,'recallReject','a pose for a different pillar remains rejected');
+
+  room.handleRecallAnswer({sessionId,send:(type,message)=>sent.push({type,message})},{id:'challenge-lag',index:0,pose:{x:10,y:4,z:4}});
+  assert.equal(sent.at(-1).type,'recallResult');
+  assert.equal(sent.at(-1).message.correct,true);
+  const received=sent.find(entry=>entry.type==='recallTrace'&&entry.message.event==='answer_received'&&entry.message.index===0);
+  assert.equal(received.message.positionSource,'recent_move_intent');
+  assert.equal(received.message.authorityDrift,16);
+});
+
 test('recall answer pillars spawn in a wide facing-relative diamond',()=>{
   const p={x:10,y:4,z:20,yaw:0};
   const pillars=recall.recallPositions(p);

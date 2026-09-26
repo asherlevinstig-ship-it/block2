@@ -89,7 +89,7 @@ test('gold economy keeps early goals affordable without free vendor or job loops
 });
 
 test('Gate readiness scales loadout advice without becoming an entry lock', () => {
-  assert.equal(GATE_INTERACT_RANGE, 6);
+  assert.equal(GATE_INTERACT_RANGE, 8);
   const starter = gateReadinessForProfile({
     inv: [{ id: 122, count: 1 }, { id: 110, count: 1, dur: 60 }, { id: 178, count: 1 }],
     armor: null,

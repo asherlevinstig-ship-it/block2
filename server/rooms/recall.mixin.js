@@ -303,13 +303,28 @@ class RecallMixin{
       if(typeof this.sendProfile==='function')this.sendProfile(client,prof);
     }).catch(e=>{if(process.env.NODE_ENV!=='test')console.warn('[teacher-analytics] homework progress refresh failed:',e&&e.message||e);});
   }
+  recallAnswerDistance(client,p,challenge,pillar,message,now=Date.now()){
+    const authoritative=Math.hypot(p.x-pillar.x,p.z-pillar.z);
+    if(authoritative<=2.65||challenge.fallback)return {distance:authoritative,source:'authority'};
+    const intent=this.lastMoveIntent&&this.lastMoveIntent.get(client.sessionId),pose=message&&message.pose;
+    if(!intent||now-intent.at>1500||!pose)return {distance:authoritative,source:'authority'};
+    if(![intent.x,intent.y,intent.z,pose.x,pose.y,pose.z].every(Number.isFinite))return {distance:authoritative,source:'authority'};
+    if(Math.hypot(intent.x-pose.x,intent.z-pose.z)>1.5||Math.abs(intent.y-pose.y)>2)return {distance:authoritative,source:'authority'};
+    const candidateDistance=Math.hypot(intent.x-pillar.x,intent.z-pillar.z);
+    const authorityDrift=Math.hypot(intent.x-p.x,intent.z-p.z);
+    const originDistance=Math.hypot(intent.x-(challenge.originX??p.x),intent.z-(challenge.originZ??p.z));
+    const pillarY=Number.isFinite(pillar.y)?pillar.y:p.y;
+    if(candidateDistance>2.65||authorityDrift>18.5||originDistance>22||Math.abs(intent.y-pillarY)>6)return {distance:authoritative,source:'authority'};
+    return {distance:candidateDistance,source:'recent_move_intent',authorityDrift};
+  }
   handleRecallAnswer(client,message){
     const sid=client&&client.sessionId,challenge=sid&&this.recallChallenges.get(sid),p=sid&&this.state.players.get(sid),now=Date.now();
     if(!challenge||!p||!message||message.id!==challenge.id){this.sendRecallTrace(client,'answer_rejected',{reason:'invalid',receivedId:String(message&&message.id||''),activeId:String(challenge&&challenge.id||'')});return client&&client.send('recallReject',{reason:'invalid'});}
     if(challenge.expiresAt<=now){this.recallChallenges.delete(sid);this.sendRecallTrace(client,'answer_rejected',{reason:'expired',challengeId:challenge.id,lateByMs:now-challenge.expiresAt});return client.send('recallResult',{id:challenge.id,expired:true});}
     const index=message.index|0,pillar=challenge.pillars[index];
-    const distance=pillar?Math.hypot(p.x-pillar.x,p.z-pillar.z):null;
-    this.sendRecallTrace(client,'answer_received',{challengeId:challenge.id,index,mode:challenge.fallback?'screen_fallback':'world_pillars',distance:Number.isFinite(distance)?Math.round(distance*1000)/1000:null,pillar:pillar?{x:pillar.x,y:pillar.y,z:pillar.z}:null});
+    const position=pillar?this.recallAnswerDistance(client,p,challenge,pillar,message,now):{distance:null,source:'missing_pillar'};
+    const distance=position.distance;
+    this.sendRecallTrace(client,'answer_received',{challengeId:challenge.id,index,mode:challenge.fallback?'screen_fallback':'world_pillars',distance:Number.isFinite(distance)?Math.round(distance*1000)/1000:null,positionSource:position.source,authorityDrift:Number.isFinite(position.authorityDrift)?Math.round(position.authorityDrift*1000)/1000:null,pillar:pillar?{x:pillar.x,y:pillar.y,z:pillar.z}:null});
     if(!pillar||(!challenge.fallback&&distance>2.65)){this.sendRecallTrace(client,'answer_rejected',{reason:'position',challengeId:challenge.id,index,distance:Number.isFinite(distance)?Math.round(distance*1000)/1000:null,limit:2.65,pillar:pillar?{x:pillar.x,y:pillar.y,z:pillar.z}:null});return client.send('recallReject',{reason:'position'});}
     this.recallChallenges.delete(sid);
     const rec=typeof this.profileFor==='function'&&this.profileFor(client),correct=index===challenge.correct;

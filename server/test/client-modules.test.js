@@ -1738,7 +1738,7 @@ test('Recall pillars explicitly tell players to run towards the correct answer',
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   assert.match(html, /id="recallinstruction"/);
   assert.match(recall, /RUN TOWARDS THE CORRECT ANSWER/);
-  assert.match(recall, /screenFallback\?'CHOOSE':'RUN'/);
+  assert.match(recall, /screenFallback\?'CHOOSE · 30s':'RUN · 30s'/);
   assert.match(styles, /#recallinstruction/);
 });
 
@@ -5475,6 +5475,7 @@ test('Question Hall opens an answerable question on entry and supports keyboard 
   assert.match(combat,/nearTownQuestionHallPortal\(\)[\s\S]*enterQuestionRoom\(\)[\s\S]*openQuestionHallQuestion\(\)/,'entering the portal automatically opens the first question');
   assert.match(recall,/const keys=\{KeyA:0,Digit1:0,KeyB:1,Digit2:1,KeyC:2,Digit3:2,KeyD:3,Digit4:3\}/,'visible choices support A-D and 1-4');
   assert.match(recall,/const reconcileDelay=!hall&&!active\.fallback&&positionDrift>2\?Math\.min\(900,120\+positionDrift\*45\):0/,'world-space answers allow a lagging authoritative pose to catch up');
+  assert.match(recall,/NET\.room\.send\('recallAnswer',\{id:answerId,index,pose\}\)/,'world-space answers carry their action-coupled pose for server reconciliation');
   assert.match(recall,/feedbackEl\.textContent='The server has not confirmed that answer yet\./,'a delayed answer remains visibly actionable');
 });
 

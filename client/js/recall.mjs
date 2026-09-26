@@ -80,7 +80,12 @@ function submitAnswer(index){
   requestTimer=setTimeout(()=>{requestTimer=0;answerPending=false;recallTrace('answer.timeout',{id:answerId,index,questionHall:hall,fallback:!!active&&!!active.fallback});fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);feedbackEl.textContent='The server has not confirmed that answer yet. Check your connection, then choose it again.';feedbackEl.className='wrong';sysMsg('Answer confirmation delayed. Try your answer again.');},8000);
   const send=()=>{
     if(!active||active.id!==answerId||!answerPending)return;
-    try{syncRecallPose();NET.room.send('recallAnswer',{id:answerId,index});recallTrace('answer.sent',{id:answerId,index,questionHall:hall,fallback:!!active.fallback,localPosition:recallPosition(player&&player.pos)});}
+    try{
+      syncRecallPose();
+      const pose=recallPosition(player&&player.pos);
+      NET.room.send('recallAnswer',{id:answerId,index,pose});
+      recallTrace('answer.sent',{id:answerId,index,questionHall:hall,fallback:!!active.fallback,localPosition:pose});
+    }
     catch(error){finishRequest();answerPending=false;recallTrace('answer.send_failed',{id:answerId,index,message:String(error&&error.message||error||'')});fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=false);sysMsg('Could not send answer. Try again after reconnecting.');}
   };
   if(reconcileDelay)setTimeout(send,reconcileDelay);else send();
