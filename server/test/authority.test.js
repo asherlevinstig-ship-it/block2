@@ -15231,6 +15231,37 @@ test('every biome owns a distinct hostile family, ranged identity, schedule, and
   assert.deepEqual(families.filter(f=>f.day).map(f=>f.behavior).sort(),['brute','quickshot']);
 });
 
+test('night hostile spawning covers every biome while daytime keeps its regional schedule',()=>{
+  const room=makeRoom(),samples=new Map();
+  for(let x=W.WORLD_MIN+20;x<=W.WORLD_MAX-20&&samples.size<6;x+=20){
+    for(let z=W.WORLD_MIN+20;z<=W.WORLD_MAX-20&&samples.size<6;z+=20){
+      const biome=W.biomeAt(x,z);
+      if(BIOME_HOSTILE[biome]&&!samples.has(biome))samples.set(biome,{x,z});
+    }
+  }
+  assert.equal(samples.size,6,'the deterministic world supplied a sample of every biome');
+  for(const [biome,pos] of samples){
+    assert.equal(room.hostileSpawnFamilyAt(pos.x,pos.z,'night'),BIOME_HOSTILE[biome],
+      'night remains populated in biome '+biome);
+    assert.equal(!!room.hostileSpawnFamilyAt(pos.x,pos.z,'day'),BIOME_HOSTILE[biome].day,
+      'only the authored hot-biome families receive daytime pressure');
+  }
+});
+
+test('night hostiles can spawn in the expanded frontier beyond the original world edge',()=>{
+  const room=makeRoom();
+  room.mobSeq=0;
+  room.world.standHeight=()=>16;
+  const random=Math.random;
+  Math.random=()=>0;
+  try{
+    assert.equal(room.trySpawnMob({x:W.WX+20,z:W.TOWN.TC},null,'night'),true);
+  }finally{Math.random=random;}
+  const mob=[...room.state.mobs.values()][0];
+  assert.ok(mob&&mob.x>W.WX,'the spawn is retained on generated frontier terrain');
+  assert.ok(mob.x<W.WORLD_MAX,'the spawn still respects the real outer boundary');
+});
+
 test('biome attacks apply visible timed statuses and mire venom damages authoritatively',()=>{
   const room=makeRoom(),client=makeClient('biome-status');room.clients=[client];
   seedPlayer(room,client,{x:220,y:10,z:220});

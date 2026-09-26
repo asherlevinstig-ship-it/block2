@@ -1658,19 +1658,31 @@ class SpawningMixin {
     return false;
   }
 
+  hostileSpawnFamilyAt(x, z, phase = 'night') {
+    const family = BIOME_HOSTILE[W.biomeAt(x, z)];
+    if (!family) return null;
+    // `day` means this family can also appear during the small daytime hostile
+    // pass. It must not make hot biomes empty throughout the entire night.
+    if (phase === 'day' && !family.day) return null;
+    return family;
+  }
+
   trySpawnMob(near, cluster = null, phase='night') {
     for (let i = 0; i < 10; i++) {
       const a = Math.random() * Math.PI * 2, d = 26 + Math.random() * 22;
       const x = near.x + Math.cos(a) * d, z = near.z + Math.sin(a) * d;
-      if (x < 2 || x > W.WX - 2 || z < 2 || z > W.WX - 2) continue;
+      // The explorable frontier extends beyond the original 0..999 terrain.
+      // Keeping the legacy WX bounds made Elaria and both frontier strips
+      // permanently sterile even though terrain and collision exist there.
+      if (x < W.WORLD_MIN + 2 || x > W.WORLD_MAX - 2 || z < W.WORLD_MIN + 2 || z > W.WORLD_MAX - 2) continue;
       if (Math.max(Math.abs(x - W.TOWN.TC), Math.abs(z - W.TOWN.TC)) < W.TOWN.HS + 2) continue;
       if (cluster && this.countOverworldMobsNear(x, z, LOCAL_HOSTILE_COUNT_RADIUS, (m, meta) => !meta.friendly && !this.isAnimalKind(m.kind)) >= cluster.hostileBudget) continue;
       const gy = this.world.standHeight(x, z, W.WH - 2);
       if (gy < 2) continue;
       let lvl = 1;
       this.state.players.forEach(p => { lvl = Math.max(lvl, p.lvl); });
-      const ring = dangerRingAt(x, z), cfg = DANGER_RINGS[ring],biome=W.biomeAt(x,z),family=BIOME_HOSTILE[biome];
-      if(!family||family.day!==(phase==='day'))continue;
+      const ring = dangerRingAt(x, z), cfg = DANGER_RINGS[ring],biome=W.biomeAt(x,z),family=this.hostileSpawnFamilyAt(x,z,phase);
+      if(!family)continue;
       const ranged = Math.random() < .35;
       const kind = ranged?family.ranged:family.melee;
       const id = String(++this.mobSeq);
@@ -1697,7 +1709,7 @@ class SpawningMixin {
     for (let i = 0; i < 16; i++) {
       const a = Math.random() * Math.PI * 2, d = 18 + Math.random() * 34;
       const x = near.x + Math.cos(a) * d, z = near.z + Math.sin(a) * d;
-      if (x < 3 || x > W.WX - 3 || z < 3 || z > W.WX - 3) continue;
+      if (x < W.WORLD_MIN + 3 || x > W.WORLD_MAX - 3 || z < W.WORLD_MIN + 3 || z > W.WORLD_MAX - 3) continue;
       if (Math.max(Math.abs(x - W.TOWN.TC), Math.abs(z - W.TOWN.TC)) < W.TOWN.HS + 5) continue;
       if (cluster && this.countOverworldMobsNear(x, z, LOCAL_ANIMAL_COUNT_RADIUS, m => this.isAnimalKind(m.kind)) >= cluster.animalBudget) continue;
       const gy = this.world.standHeight(x, z, W.WH - 2);
