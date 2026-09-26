@@ -1102,21 +1102,45 @@ class DungeonMixin {
       return;
     }
   }
+  dungeonSpawnHeight(inst, x, z) {
+    const world = inst && inst.world;
+    if (!world || !Number.isFinite(x) || !Number.isFinite(z)) return -1;
+    const solid = AI.makeSolid(world);
+    const y = typeof D.safeStandHeightIn === 'function'
+      ? D.safeStandHeightIn(world, x, z)
+      : D.standHeightIn(world, x, z, 9);
+    if (y <= 0) return -1;
+    // Match the browser's player collision volume (w=.3, h=1.8), rather than
+    // checking only the block at the player's centre. This matters for resumed
+    // coordinates that can sit close to a room wall instead of at cell centre.
+    const minX = Math.floor(x - .3), maxX = Math.floor(x + .3);
+    const minZ = Math.floor(z - .3), maxZ = Math.floor(z + .3);
+    const minY = Math.floor(y + .01), maxY = Math.floor(y + .01 + 1.8);
+    for (let bx = minX; bx <= maxX; bx++) {
+      for (let by = minY; by <= maxY; by++) {
+        for (let bz = minZ; bz <= maxZ; bz++) if (solid(bx, by, bz)) return -1;
+      }
+    }
+    return y + .01;
+  }
+  dungeonSpawnPoseSafe(inst, pos) {
+    if (!pos || !Number.isFinite(pos.y)) return false;
+    const y = this.dungeonSpawnHeight(inst, pos.x, pos.z);
+    return y > 0 && Math.abs(pos.y - y) <= .15;
+  }
   dungeonSafeSpawn(inst, preferred = null, options = null) {
     const world = inst && inst.world;
     const fallback = (inst && (inst.entrance || inst.bossRoom)) || { x: 22, z: 22 };
     const base = preferred || fallback;
     const candidates = [];
-    const solid = world ? AI.makeSolid(world) : null;
     const avoidPlayers = !!(options && options.avoidPlayers);
     const ignoreSid = options && options.ignoreSid || '';
     const finish = hit => {
-      const safe = hit || { x: Math.floor(fallback.x) + .5, y: 9.01, z: Math.floor(fallback.z) + .5 };
-      if (inst && !avoidPlayers) {
-        inst.safeSpawn = { x: safe.x, y: safe.y, z: safe.z };
+      if (hit && inst && !avoidPlayers) {
+        inst.safeSpawn = { x: hit.x, y: hit.y, z: hit.z };
         inst.spawnSafeRadius = this.dungeonSpawnSafeRadius ? this.dungeonSpawnSafeRadius(inst) : 9;
       }
-      return safe;
+      return hit;
     };
     const push = pos => {
       if (!pos) return;
@@ -1127,13 +1151,9 @@ class DungeonMixin {
     push(base);
     push(inst && inst.entrance);
     const tryPoint = pt => {
-      if (!world || !solid || !Number.isFinite(pt.x) || !Number.isFinite(pt.z)) return null;
-      const y = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(world, pt.x, pt.z) : D.standHeightIn(world, pt.x, pt.z, 9);
+      const y = this.dungeonSpawnHeight(inst, pt && pt.x, pt && pt.z);
       if (y <= 0) return null;
-      const bx = Math.floor(pt.x), bz = Math.floor(pt.z);
-      if (solid(bx, Math.floor(y + .2), bz)) return null;
-      if (solid(bx, Math.floor(y + 1.5), bz)) return null;
-      const hit = { x: pt.x, y: y + .01, z: pt.z };
+      const hit = { x: pt.x, y, z: pt.z };
       if (avoidPlayers && this.playerSpawnOccupied(hit, inst && inst.id, ignoreSid)) return null;
       return hit;
     };
@@ -1141,21 +1161,27 @@ class DungeonMixin {
       const hit = tryPoint(pt);
       if (hit) return finish(hit);
     }
-    const startX = Math.floor((base && base.x) || fallback.x);
-    const startZ = Math.floor((base && base.z) || fallback.z);
-    for (let r = 1; r <= 14; r++) {
-      for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
-        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
-        const hit = tryPoint({ x: startX + dx + .5, z: startZ + dz + .5 });
-        if (hit) return finish(hit);
-      }
-    }
     push(inst && inst.bossRoom);
     if (inst && Array.isArray(inst.rooms)) for (const rm of inst.rooms) push(rm);
     for (let i = 2; i < candidates.length; i++) {
       const hit = tryPoint(candidates[i]);
       if (hit) return finish(hit);
     }
+    const startX = Math.floor((base && base.x) || fallback.x);
+    const startZ = Math.floor((base && base.z) || fallback.z);
+    // Search the complete compact dungeon. The old 14-block search ended in an
+    // unchecked y=9.01 fallback, which could place a hunter inside a sealed room
+    // or wall when an entrance had been edited or a layout was unusually wide.
+    const maxRadius = world ? Math.max(world.width || 0, world.depth || 0) : 0;
+    for (let r = 1; r <= maxRadius; r++) {
+      for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const hit = tryPoint({ x: startX + dx + .5, z: startZ + dz + .5 });
+        if (hit) return finish(hit);
+      }
+    }
+    // Fail closed. Returning an unvalidated coordinate here is exactly how a
+    // corrupt/fully blocked instance used to spawn players into solid geometry.
     return finish(null);
   }
   gateEntryPayload(g, inst, playerSpawn = null) {
@@ -1244,6 +1270,13 @@ class DungeonMixin {
       p.dim = 'overworld';
       return false;
     }
+    if (!this.dungeonSpawnPoseSafe(inst, p)) {
+      const spawn = this.dungeonSafeSpawn(inst, inst.entrance, { avoidPlayers: true, ignoreSid: client.sessionId });
+      if (!spawn) return false;
+      p.x = spawn.x; p.y = spawn.y; p.z = spawn.z;
+      p.yaw = 0;
+      client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, reason: 'dungeon_spawn_repair' });
+    }
     client.send('enterDungeon', this.gateEntryPayload(null, inst, p));
     if (typeof this.sendDungeonPartyStatus === 'function') this.sendDungeonPartyStatus(inst.id);
     return true;
@@ -1260,6 +1293,13 @@ class DungeonMixin {
     hp.hp = hp.max;
     const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
     const spawn = this.dungeonSafeSpawn(inst, ex, { avoidPlayers: true, ignoreSid: client.sessionId });
+    if (!spawn) {
+      inst.removePlayer(client.sessionId);
+      p.dgn = '';
+      p.dim = 'overworld';
+      client.send('gateReject', { reason: 'spawn' });
+      return false;
+    }
     p.x = spawn.x;
     p.y = spawn.y;
     p.z = spawn.z;

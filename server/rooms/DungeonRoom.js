@@ -228,6 +228,7 @@ class DungeonRoom extends GameRoom {
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
     const spawn = this.dungeonSafeSpawn(inst, ex, { avoidPlayers: true, ignoreSid: client.sessionId });
+    if (!spawn) throw new Error('dungeon has no collision-safe spawn');
     p.x = spawn.x; p.y = spawn.y; p.z = spawn.z;
     p.dim = 'dungeon';
     p.dgn = inst.id;

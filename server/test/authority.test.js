@@ -515,6 +515,38 @@ test('dungeon party spawns use distinct safe entrance positions', () => {
   assert.ok(D.safeStandHeightIn(layout.world, second.x, second.z) > 0, 'the separated position remains walkable');
 });
 
+test('dungeon spawn search never falls back into a blocked entrance room', () => {
+  const room = makeDungeonRoom();
+  const layout = D.generateDungeon(0, 0x5eed1234, 'abandoned_mine');
+  const entrance = { x: layout.entrance.x, z: layout.entrance.z };
+  const inst = { id: 'blocked_entry', world: layout.world, entrance, bossRoom: entrance, rooms: [] };
+  for (let dx = -14; dx <= 14; dx++) {
+    for (let dz = -14; dz <= 14; dz++) {
+      D.dungeonSetB(layout.world, entrance.x + dx, 9, entrance.z + dz, W.B.STONE);
+      D.dungeonSetB(layout.world, entrance.x + dx, 10, entrance.z + dz, W.B.STONE);
+    }
+  }
+  const spawn = room.dungeonSafeSpawn(inst, entrance);
+  assert.ok(spawn, 'the complete dungeon is searched for a valid room or corridor');
+  assert.ok(Math.max(Math.abs(spawn.x - entrance.x), Math.abs(spawn.z - entrance.z)) > 14,
+    'the unchecked entrance fallback is never used');
+  assert.equal(room.dungeonSpawnPoseSafe(inst, spawn), true, 'the selected pose clears the full player body');
+});
+
+test('dungeon spawn validation includes the player width beside walls', () => {
+  const room = makeDungeonRoom();
+  const layout = D.generateDungeon(0, 0x5eed1234, 'abandoned_mine');
+  const inst = { id: 'wall_width', world: layout.world, entrance: layout.entrance, bossRoom: layout.bossRoom, rooms: layout.rooms };
+  const safe = room.dungeonSafeSpawn(inst, inst.entrance);
+  const bx = Math.floor(safe.x), bz = Math.floor(safe.z);
+  D.dungeonSetB(layout.world, bx + 1, Math.floor(safe.y), bz, W.B.STONE);
+  const nearWall = { x: bx + .75, y: safe.y, z: bz + .5 };
+  assert.equal(D.safeStandHeightIn(layout.world, nearWall.x, nearWall.z) > 0, true,
+    'the old centre-column check would accept this pose');
+  assert.equal(room.dungeonSpawnPoseSafe(inst, nearWall), false,
+    'the browser-sized collision volume catches the adjacent wall');
+});
+
 function placeCraftingTable(room, client, coords = {}) {
   const p = room.state.players.get(client.sessionId);
   const table = {
@@ -2092,6 +2124,25 @@ test('gate entry relocates a buried dungeon entrance spawn to nearby safe ground
   assert.notDeepEqual([Math.floor(p.x),Math.floor(p.z)],[ex.x,ex.z], 'blocked entrance cell is not used');
   assert.equal(AI.makeSolid(inst.world)(Math.floor(p.x),Math.floor(p.y+.2),Math.floor(p.z)),false);
   assert.equal(AI.makeSolid(inst.world)(Math.floor(p.x),Math.floor(p.y+1.5),Math.floor(p.z)),false);
+});
+
+test('dungeon resume repairs a saved player pose embedded in a wall',()=>{
+  const room=makeRoom(),client=makeClient('dungeon_resume_wall_repair');
+  const g=makeGate('g_resume_wall_repair',500.5,430.5,0,'public');
+  g.seed=0x5eed1234;
+  g.dungeonId='abandoned_mine';
+  const inst=room.createInstance(g);
+  seedPlayer(room,client,{x:inst.entrance.x+.5,y:9.01,z:inst.entrance.z+.5,dgn:g.id});
+  const p=room.state.players.get(client.sessionId);
+  p.dim='dungeon';
+  inst.addPlayer(client.sessionId);
+  D.dungeonSetB(inst.world,Math.floor(p.x),Math.floor(p.y),Math.floor(p.z),W.B.STONE);
+
+  assert.equal(room.resumeDungeonInstance(client),true);
+  assert.equal(room.dungeonSpawnPoseSafe(inst,p),true,'the resumed pose is moved into clear walkable space');
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='dungeon_spawn_repair'),true);
+  const payload=client.sent.find(e=>e.type==='enterDungeon').msg;
+  assert.deepEqual([payload.sx,payload.sy,payload.sz],[p.x,p.y,p.z]);
 });
 
 test('dungeon movement snaps transition-height packets back to the entrance floor',()=>{
@@ -7256,9 +7307,11 @@ test('joining a DungeonRoom arms a crash-recovery marker keyed to the overworld 
   const token = 'recovery_token_123';
   const prof = defaultProfile('RoomHopper');
   room.profiles.set(token, prof);
+  const world = new D.DungeonGrid();
+  for (const [x,z] of [[20,20],[21,20]]) D.dungeonSetB(world,x,8,z,W.B.STONE);
   room.instance = {
     id: 'dr-recovery', gateX: 30, gateY: 16, gateZ: 31,
-    entrance: { x: 20, z: 20, r: 3 }, world: new D.DungeonGrid(),
+    entrance: { x: 20, z: 20, r: 3 }, world,
     players: new Set(),
     addPlayer(sid) { this.players.add(sid); },
   };
@@ -7330,10 +7383,14 @@ test('a clean DungeonRoom leave retires the crash-recovery marker it armed on en
 test('an unclean DungeonRoom disconnect that reconnects in time resumes the hunter, no handoff', async () => {
   const room = makeDungeonRoom();
   const client = makeClient('dungeon-reconnect-ok');
-  const { token, prof } = seedPlayer(room, client, { dgn: 'dr-recon' });
+  const layout = D.generateDungeon(0, 0x5eed1234, 'abandoned_mine');
+  const y = D.safeStandHeightIn(layout.world, layout.entrance.x + .5, layout.entrance.z + .5) + .01;
+  const { token, prof } = seedPlayer(room, client, {
+    x: layout.entrance.x + .5, y, z: layout.entrance.z + .5, dgn: 'dr-recon',
+  });
   room.clients.push(client);
   const inst = new DungeonInstance(
-    { world: new D.DungeonGrid(1, 1, 1), bossRoom: { x: 0, z: 0 } },
+    layout,
     { id: 'dr-recon', seed: 1, rank: 0, kind: 'public', x: 30, y: 16, z: 31 }, room);
   room.instances['dr-recon'] = inst;
   room.instance = inst;
