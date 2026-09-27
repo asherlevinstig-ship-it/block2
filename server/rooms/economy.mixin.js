@@ -270,6 +270,18 @@ class EconomyMixin {
     const site = this.overworldTreasureCacheSites.get(info.x + ',' + info.y + ',' + info.z);
     return site && this.world.getB(info.x, info.y, info.z) === W.B.CHEST ? site : null;
   }
+  overworldAuthoredLootChestSite(key) {
+    const info = this.parseChestKey(key);
+    if (!info || info.space !== 'overworld') return null;
+    if (!this.overworldAuthoredLootChestSites) {
+      this.overworldAuthoredLootChestSites = new Map(W.authoredLootChestSpecs().map(site => [site.x + ',' + site.y + ',' + site.z, site]));
+    }
+    const site = this.overworldAuthoredLootChestSites.get(info.x + ',' + info.y + ',' + info.z);
+    return site && this.world.getB(info.x, info.y, info.z) === W.B.CHEST ? site : null;
+  }
+  personalOverworldLootChestSite(key) {
+    return this.overworldTreasureCacheSite(key) || this.overworldAuthoredLootChestSite(key);
+  }
   overworldTreasureCacheSlots(site) {
     const ring = dangerRingAt(site.x, site.z), regional = BIOME_COLLECTIBLE[W.biomeAt(site.x, site.z)];
     const roll = W.hash2(site.x * 7717, site.z * 3571), slots = new Array(18).fill(null);
@@ -286,10 +298,22 @@ class EconomyMixin {
     if (ring >= 3) slots[i++] = { id: I.LEGEND_TOKEN, count: 1 };
     return slots;
   }
-  personalTreasureCacheRecord(client, key, site = this.overworldTreasureCacheSite(key)) {
+  overworldAuthoredLootChestSlots(site) {
+    const slots = new Array(18).fill(null);
+    const contents = site.theme === 'tavern'
+      ? [[I.POT_ALE, 2], [I.BREAD, 3], [I.COAL, 4], [W.B.PLANKS, 8]]
+      : site.theme === 'forge'
+        ? [[I.IRON_INGOT, 4], [I.COAL, 8], [I.REPAIR_KIT, 1]]
+        : [[I.BREAD, 3], [W.B.PLANKS, 8], [I.STICK, 4], [I.COAL, 2]];
+    contents.forEach(([id, count], i) => { slots[i] = { id, count }; });
+    return slots;
+  }
+  personalTreasureCacheRecord(client, key, site = this.personalOverworldLootChestSite(key)) {
     const profile = client && this.profileFor(client);
     if (!site || !profile) return null;
-    const base = this.overworldTreasureCacheSlots(site);
+    const base = site.type === 'treasure_cache'
+      ? this.overworldTreasureCacheSlots(site)
+      : this.overworldAuthoredLootChestSlots(site);
     const saved = profile.prof.treasureCacheClaims && profile.prof.treasureCacheClaims[site.id];
     const slots = base.map((stack, i) => {
       if (!stack) return null;
@@ -309,7 +333,7 @@ class EconomyMixin {
     }
   }
   getChestRecord(key, client) {
-    const cacheSite = this.overworldTreasureCacheSite(key);
+    const cacheSite = this.personalOverworldLootChestSite(key);
     if (cacheSite) return client ? this.personalTreasureCacheRecord(client, key, cacheSite) : null;
     const info = this.parseChestKey(key);
     if (info && info.space !== 'overworld') return this.dungeonLootChestRecord(key, client);
@@ -1052,7 +1076,7 @@ class EconomyMixin {
       return client.send('chestReject', { reason: chest && chest.supply === true ? 'supply_owner' : 'owner' });
     }
     if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', { reason: 'rate' });
-    const cacheSite = this.overworldTreasureCacheSite(key);
+    const cacheSite = this.personalOverworldLootChestSite(key);
     const slots = this.getChestState(key, client);
     const slotIndex = Math.max(0, Math.min(slots.length - 1, m.slot | 0));
     const source = slots[slotIndex];

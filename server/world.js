@@ -87,6 +87,19 @@ const B = {
 const MAX_BLOCK_ID = 39;
 const NON_SOLID = new Set([B.AIR, B.WATER, B.LAVA, B.TORCH, B.LANTERN, B.CAMPFIRE, B.EGG_INSULATOR, B.WHEAT_1, B.WHEAT_2, B.WHEAT_3]);
 
+// Fixed adventure chests that belong to the authored world rather than a
+// player. Their contents are resolved per-player by the room economy so one
+// hunter cannot empty the supplies for everyone else.
+function authoredLootChestSpecs() {
+  const tavern = townBlockPos(85, 84, 'tavern');
+  const forge = townBlockPos(75, 46, 'forge');
+  return [
+    { id: `cache_${tavern.x}_${tavern.z}`, type: 'town_supply', theme: 'tavern', x: tavern.x, y: TOWN.G + 1, z: tavern.z },
+    { id: `cache_${forge.x}_${forge.z}`, type: 'town_supply', theme: 'forge', x: forge.x, y: TOWN.G + 1, z: forge.z },
+    { id: `cache_${TRAINING_MEADOW.x + 33}_${TRAINING_MEADOW.z - 12}`, type: 'training_supply', theme: 'training', x: TRAINING_MEADOW.x + 33, y: TRAINING_MEADOW.G + 1, z: TRAINING_MEADOW.z - 12 },
+  ];
+}
+
 const idx = (x, y, z) => y * WORLD_SPAN * WORLD_SPAN + (z - WORLD_MIN) * WORLD_SPAN + (x - WORLD_MIN);
 const inWorld = (x, y, z) => x >= WORLD_MIN && x <= WORLD_MAX && y >= 0 && y < WH && z >= WORLD_MIN && z <= WORLD_MAX;
 const worldGrid = new DimensionGrid({ kind: 'overworld', id: 'global', width: WORLD_SPAN, height: WH, depth: WORLD_SPAN, originX: WORLD_MIN, originZ: WORLD_MIN, empty: B.AIR, outside: B.AIR });
@@ -946,6 +959,7 @@ function generate() {
     worldMin:WORLD_MIN,borderWidth:LAVA_BORDER_WIDTH,routeZ:TOWN.TC+20,
   });
   buildTown();
+  for (const chest of authoredLootChestSpecs()) setB(chest.x, chest.y, chest.z, B.CHEST);
 }
 function isLavaBorderLand(x, z) {
   return x < WORLD_MIN + LAVA_BORDER_WIDTH || z < WORLD_MIN + LAVA_BORDER_WIDTH || x > WORLD_MAX - LAVA_BORDER_WIDTH || z > WORLD_MAX - LAVA_BORDER_WIDTH;
@@ -1332,6 +1346,7 @@ function createWorld() {
       worldMin:WORLD_MIN,borderWidth:LAVA_BORDER_WIDTH,routeZ:TOWN.TC+20,
     });
     buildTownLocal();
+    for (const chest of authoredLootChestSpecs()) setLocal(chest.x, chest.y, chest.z, B.CHEST);
   };
   const standHeightLocal = (x, z, fromY) => {
     const bx = Math.floor(x), bz = Math.floor(z);
@@ -1348,7 +1363,7 @@ function createWorld() {
 
 module.exports = {
   WX, WH, WORLD_MIN, WORLD_MAX, WORLD_SPAN, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, TRAINING_MEADOW_TOWN_PORTAL, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID, ELF_REALM, SKYSHIP_FRONTIER_PORT,
-  townPos, townBlockPos,
+  townPos, townBlockPos, authoredLootChestSpecs,
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, isElfRealmLand, isSkyshipFrontierPortLand, createWorld, worldGrid,
   biomeAt, naturalTreeSpecAt, naturalTreeForBlock, fantasyStructureSpecs, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,

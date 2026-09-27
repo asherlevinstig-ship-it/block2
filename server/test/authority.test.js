@@ -14744,6 +14744,49 @@ test('overworld treasure caches scatter visible personal loot chests around the 
   assert.deepEqual(fullRecord.prof.treasureCacheClaims, {}, 'a failed withdrawal never consumes a personal claim');
 });
 
+test('authored town and training chests contain persistent personal supplies', () => {
+  const sites = W.authoredLootChestSpecs();
+  assert.deepEqual(sites.map(site => site.theme), ['tavern', 'forge', 'training']);
+  assert.equal(new Set(sites.map(site => site.id)).size, sites.length);
+
+  const world = W.createWorld(); world.generate();
+  assert.equal(sites.every(site => world.getB(site.x, site.y, site.z) === W.B.CHEST), true,
+    'all authored supply chests must exist in the authoritative world');
+
+  const room = makeRoom(), hunter = makeClient('authored-chest-hunter'), second = makeClient('authored-chest-second');
+  room.clients.push(hunter, second);
+  const hunterRecord = seedPlayer(room, hunter, { x: sites[0].x + .5, y: sites[0].y, z: sites[0].z + .5 });
+  seedPlayer(room, second, { x: sites[0].x + .5, y: sites[0].y, z: sites[0].z + .5 });
+
+  for (const site of sites) {
+    room.world.setB(site.x, site.y, site.z, W.B.CHEST);
+    const key = `overworld:${site.x},${site.y},${site.z}`;
+    const record = room.getChestRecord(key, hunter);
+    assert.equal(record.scope, 'personal_cache');
+    assert.equal(record.cacheId, site.id);
+    assert.equal(record.slots.some(Boolean), true, `${site.theme} chest must contain supplies`);
+  }
+
+  const tavern = sites.find(site => site.theme === 'tavern');
+  const tavernKey = `overworld:${tavern.x},${tavern.y},${tavern.z}`;
+  const firstCount = room.getChestRecord(tavernKey, hunter).slots[0].count;
+  room.handleChestWithdraw(hunter, { x: tavern.x, y: tavern.y, z: tavern.z, slot: 0, count: 1 });
+  assert.equal(room.getChestRecord(tavernKey, hunter).slots[0].count, firstCount - 1);
+  assert.equal(room.getChestRecord(tavernKey, second).slots[0].count, firstCount,
+    'authored supplies are never globally emptied by another player');
+
+  const restored = sanitizeProfile(hunterRecord.prof);
+  room.profiles.set(hunterRecord.token, restored);
+  assert.equal(room.getChestRecord(tavernKey, hunter).slots[0].count, firstCount - 1,
+    'authored chest claims survive profile persistence');
+
+  const storageKey = 'overworld:20,10,20';
+  room.world.setB(20, 10, 20, W.B.CHEST);
+  room.createPlacedChest(hunter, storageKey, 'overworld');
+  assert.equal(room.getChestRecord(storageKey, hunter).slots.some(Boolean), false,
+    'player-placed storage remains empty instead of receiving adventure loot');
+});
+
 test('treasure cache claim persistence rejects forged cache data', () => {
   const profile = defaultProfile('Cache Keeper');
   profile.treasureCacheClaims = {
