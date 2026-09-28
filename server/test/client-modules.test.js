@@ -3512,6 +3512,8 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(networking,/hp=0; renderBars\(\);[\s\S]*buttonLabel:'RESPAWN IN TOWN'/);
   assert.match(networking,/applyDeathRespawnVitals\(m\)/);
   assert.match(networking,/worldRespawn[\s\S]*worldApi\.completeDeathRespawnUi\(\{resume:true,source:'worldRespawn'\}\)/);
+  assert.match(networking,/deathLimboComplete[\s\S]*NET\.lastMove=performance\.now\(\)\+350/);
+  assert.match(networking,/worldRespawn[\s\S]*NET\.lastMove=performance\.now\(\)\+350/);
   assert.doesNotMatch(networking,/worldRespawn[\s\S]*else hp=maxHp\(\)/);
   assert.match(networking,/dungeonSpiritQuit[\s\S]*const returning=exitDungeon\(true\);[\s\S]*Promise\.resolve\(returning\)\.then\(finishReturn\)\.catch\(finishReturn\)/);
   assert.doesNotMatch(networking,/RESPAWN AT GATE/);

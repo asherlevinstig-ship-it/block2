@@ -4737,6 +4737,34 @@ test('town respawn refills vitals so the player can move and recover', () => {
   assert.equal(msg.sp, 100);
   assert.equal(msg.hunger, 100);
   assert.deepEqual(prof.vitals, { hp: 20, mp: 20, sp: 100, hunger: 100 });
+  const p = room.state.players.get(client.sessionId);
+  const town = [p.x, p.y, p.z];
+  room.lastMoveMsg.set(client.sessionId, Date.now() - 100);
+  room.handleMove(client, { x: 498.236, y: 15, z: 424.429, yaw: -2.855 });
+  assert.deepEqual([p.x, p.y, p.z], town, 'a movement packet sampled before respawn cannot pull authority back toward the death location');
+  assert.equal(client.sent.some(e => e.type === 'positionCorrection' && e.msg.reason === 'authoritative_teleport_settle'), true);
+});
+
+test('death review completion persists and protects the authoritative return pose', () => {
+  const room = makeRoom(), client = makeClient('limbo_return_anchor');
+  const { prof } = seedPlayer(room, client, { x: 498.236, y: 15, z: 424.429 });
+  prof.inv[0] = { id: I.BREAD, count: 1 };
+  room.clients = [client];
+  room.hurtPlayer(client, 999, 'zombie');
+  const limbo = room.deathLimbo.get(client.sessionId);
+  assert.ok(limbo);
+  while (room.deathLimbo.has(client.sessionId)) {
+    const active = room.deathLimbo.get(client.sessionId);
+    const entry = active.items[active.index];
+    room.handleDeathLimboAnswer(client, { id: active.id, answer: entry.question.correct });
+  }
+  const p = room.state.players.get(client.sessionId), returned = [p.x, p.y, p.z];
+  assert.deepEqual(prof.pos, returned);
+  assert.equal(prof.activeRoom, null);
+  room.lastMoveMsg.set(client.sessionId, Date.now() - 100);
+  room.handleMove(client, { x: 498.236, y: 15, z: 424.429, yaw: -2.855 });
+  assert.deepEqual([p.x, p.y, p.z], returned, 'the first stale movement packet cannot undo the Recall return');
+  assert.equal(client.sent.some(e => e.type === 'positionCorrection' && e.msg.reason === 'authoritative_teleport_settle'), true);
 });
 
 test('boss dragon eggs favor species the player has not hatched yet', () => {

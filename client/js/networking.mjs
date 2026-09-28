@@ -2459,6 +2459,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('deathLimboComplete',m=>{
       hideDeathLimbo();
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
+      NET.lastMove=performance.now()+350;
       if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
       else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
       setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
@@ -2500,6 +2501,7 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('worldRespawn',m=>{
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
+      NET.lastMove=performance.now()+350;
       if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
       else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
       if(worldApi&&typeof worldApi.completeDeathRespawnUi==='function')worldApi.completeDeathRespawnUi({resume:true,source:'worldRespawn'});

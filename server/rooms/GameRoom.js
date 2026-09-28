@@ -7765,7 +7765,22 @@ class GameRoom extends Room {
     if (limbo.index >= limbo.items.length) {
       this.deathLimbo.delete(client.sessionId);
       const town = this.homesteadHomePointForProfile && this.homesteadHomePointForProfile(rec.prof) || townReturnPoint(W.TOWN.G + 2);
-      if (p) { p.x = town.x; p.y = town.y; p.z = town.z; p.dgn = ''; }
+      if (p) {
+        p.x = town.x; p.y = town.y; p.z = town.z;
+        p.dim = 'overworld'; p.dgn = ''; p.mount = ''; p.spirit = false;
+        if (!this.authoritativeMoveAnchors) this.authoritativeMoveAnchors = new Map();
+        this.authoritativeMoveAnchors.set(client.sessionId, {
+          x: p.x, y: p.y, z: p.z, yaw: p.yaw,
+          until: Date.now() + 1500,
+        });
+      }
+      this.pvel.set(client.sessionId, { x: 0, z: 0 });
+      if (this.fallState) this.fallState.delete(client.sessionId);
+      if (this.moveRejects) this.moveRejects.delete(client.sessionId);
+      if (this.lastMoveIntent) this.lastMoveIntent.delete(client.sessionId);
+      rec.prof.pos = [town.x, town.y, town.z];
+      rec.prof.activeRoom = null;
+      this.dirtyPlayers.add(rec.token);
       const vitals = this.applyDeathRespawnVitals(client, rec.prof, { full: true, policy: 'death_limbo_full_v1' });
       client.send('deathLimboComplete', { ...town, ...vitals });
     } else client.send('deathLimboQuestion', this.publicDeathLimbo(limbo, p));
@@ -9044,8 +9059,16 @@ class GameRoom extends Room {
       p.y = town.y;
       p.z = town.z;
       p.mount = '';
+      if (!this.authoritativeMoveAnchors) this.authoritativeMoveAnchors = new Map();
+      this.authoritativeMoveAnchors.set(client.sessionId, {
+        x: p.x, y: p.y, z: p.z, yaw: p.yaw,
+        until: Date.now() + 1500,
+      });
     }
     this.pvel.set(client.sessionId, { x: 0, z: 0 });
+    if (this.fallState) this.fallState.delete(client.sessionId);
+    if (this.moveRejects) this.moveRejects.delete(client.sessionId);
+    if (this.lastMoveIntent) this.lastMoveIntent.delete(client.sessionId);
     if (rec && rec.prof) {
       rec.prof.pos = [town.x, town.y, town.z];
       rec.prof.activeRoom = null;
