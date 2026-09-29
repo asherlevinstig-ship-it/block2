@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { Client, type Room } from "@colyseus/sdk";
+import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   WORLD_ROOM,
   type ActionRejected,
@@ -23,7 +23,8 @@ import "./styles.css";
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
-if (!canvas || !status || !targetLabel) throw new Error("Game shell is missing required elements");
+const playerCount = document.querySelector<HTMLElement>("#players")!;
+if (!canvas || !status || !targetLabel || !playerCount) throw new Error("Game shell is missing required elements");
 
 const app = new pc.Application(canvas, {
   graphicsDeviceOptions: { antialias: true, alpha: false },
@@ -186,6 +187,74 @@ localPlayer.setLocalScale(0.72, 1.45, 0.72);
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
+interface NetworkPlayer {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  name: string;
+}
+
+interface RemotePlayerVisual {
+  entity: pc.Entity;
+  target: pc.Vec3;
+  yaw: number;
+}
+
+const remoteMaterial = new pc.StandardMaterial();
+remoteMaterial.diffuse = new pc.Color(0.24, 0.66, 0.95);
+remoteMaterial.update();
+const remotePlayers = new Map<string, RemotePlayerVisual>();
+const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
+
+function updatePlayerCount(): void {
+  const count = room ? remotePlayers.size + 1 : 0;
+  playerCount.textContent = `${count} player${count === 1 ? "" : "s"} online`;
+}
+
+function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePlayerVisual {
+  const entity = new pc.Entity(`remote-player:${sessionId}`);
+  entity.addComponent("render", { type: "capsule", castShadows: true });
+  if (entity.render) entity.render.material = remoteMaterial;
+  entity.setLocalScale(0.72, 1.45, 0.72);
+  entity.setPosition(player.x, player.y, player.z);
+  app.root.addChild(entity);
+  return { entity, target: new pc.Vec3(player.x, player.y, player.z), yaw: player.yaw };
+}
+
+function bindPlayers(joinedRoom: Room): void {
+  const callbacks = getStateCallbacks(joinedRoom as Room<any, any>) as any;
+  const players = callbacks(joinedRoom.state).players;
+  players.onAdd((player: NetworkPlayer, sessionId: string) => {
+    const isLocal = sessionId === joinedRoom.sessionId;
+    let remote = isLocal ? undefined : remotePlayers.get(sessionId);
+    if (!isLocal && !remote) {
+      remote = createRemotePlayer(sessionId, player);
+      remotePlayers.set(sessionId, remote);
+      updatePlayerCount();
+    }
+
+    const updatePosition = () => {
+      if (isLocal) authoritativeLocalPosition.set(player.x, player.y, player.z);
+      else remote?.target.set(player.x, player.y, player.z);
+    };
+    const playerCallbacks = callbacks(player);
+    playerCallbacks.listen("x", updatePosition, true);
+    playerCallbacks.listen("y", updatePosition, true);
+    playerCallbacks.listen("z", updatePosition, true);
+    playerCallbacks.listen("yaw", (yaw: number) => {
+      if (remote) remote.yaw = yaw;
+    }, true);
+  }, true);
+  players.onRemove((_player: NetworkPlayer, sessionId: string) => {
+    const remote = remotePlayers.get(sessionId);
+    if (!remote) return;
+    remote.entity.destroy();
+    remotePlayers.delete(sessionId);
+    updatePlayerCount();
+  });
+}
+
 const targetMarker = new pc.Entity("mining-target");
 targetMarker.addComponent("render", { type: "box" });
 const targetMaterial = new pc.StandardMaterial();
@@ -237,6 +306,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   const installed = payload.chunks.map(installChunk);
   for (const chunk of installed) rebuildChunk(chunk);
   localPlayer.setPosition(payload.spawn.x, payload.spawn.y, payload.spawn.z);
+  authoritativeLocalPosition.set(payload.spawn.x, payload.spawn.y, payload.spawn.z);
   worldReady = true;
   status.textContent = "Connected. Walk to a corner of the hill, point at a nearby block, then mine.";
 }
@@ -285,6 +355,12 @@ app.on("update", (dt: number) => {
   }
 
   const player = localPlayer.getPosition();
+  if (player.distance(authoritativeLocalPosition) > 1.5) localPlayer.setPosition(authoritativeLocalPosition);
+  for (const remote of remotePlayers.values()) {
+    const position = remote.entity.getPosition();
+    remote.entity.setPosition(position.lerp(position, remote.target, Math.min(1, dt * 12)));
+    remote.entity.setEulerAngles(0, remote.yaw, 0);
+  }
   const desiredCamera = new pc.Vec3(player.x + 14, player.y + 18, player.z + 16);
   const cameraPosition = camera.getPosition();
   camera.setPosition(cameraPosition.lerp(cameraPosition, desiredCamera, Math.min(1, dt * 7)));
@@ -318,15 +394,26 @@ async function connect(): Promise<void> {
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL || "ws://localhost:2567";
   const client = new Client(endpoint);
   room = await client.joinOrCreate(WORLD_ROOM, { name: "Explorer" });
+  bindPlayers(room);
+  updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("block:changed", applyBlockChange);
   room.onMessage("action:rejected", (message: ActionRejected) => {
     status.textContent = `Server rejected ${message.action}: ${message.reason}`;
+    if (message.action === "move") localPlayer.setPosition(authoritativeLocalPosition);
     if (message.reason === "stale") {
       worldReady = false;
       room?.send("world:ready");
     }
+  });
+  room.onLeave(() => {
+    worldReady = false;
+    room = null;
+    status.textContent = "Disconnected from the world.";
+    for (const remote of remotePlayers.values()) remote.entity.destroy();
+    remotePlayers.clear();
+    updatePlayerCount();
   });
   room.send("world:ready");
 }

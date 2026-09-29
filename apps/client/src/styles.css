@@ -33,4 +33,5 @@ html, body, #game {
 .eyebrow { color: #aede8e; font-size: .72rem; font-weight: 800; letter-spacing: .16em; }
 #status { color: #d2dfce; line-height: 1.45; }
 #target { margin-top: 9px !important; color: #f0cb67; font-size: .82rem; line-height: 1.4; }
+#players { margin-top: 5px !important; color: #7ec9f4; font-size: .78rem; }
 .controls { margin-top: 12px !important; color: #94aa90; font-size: .82rem; }

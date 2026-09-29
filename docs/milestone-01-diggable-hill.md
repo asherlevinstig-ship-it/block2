@@ -29,4 +29,5 @@ Accounts, classes, quests, crafting UI, inventories, enemies, markets, guilds, h
 - cursor-based voxel selection with a visible range-aware target
 - revision-aware mining requests and stale-state recovery
 - exposed-voxel chunk rebuilding after synchronized mutations
+- interpolated remote-player avatars with authoritative local correction
 - unit tests for generation, addressing, protection, ray traversal, and action validation
