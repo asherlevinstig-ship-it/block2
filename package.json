@@ -7,13 +7,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n server,client -c magenta,cyan \"npm run dev -w @blockcraft/server\" \"npm run dev -w @blockcraft/client\"",
+    "dev": "npm run build:packages && concurrently -n server,client -c magenta,cyan \"npm run dev -w @blockcraft/server\" \"npm run dev -w @blockcraft/client\"",
     "dev:server": "npm run dev -w @blockcraft/server",
     "dev:client": "npm run dev -w @blockcraft/client",
-    "build": "npm run build --workspaces --if-present",
+    "build:packages": "npm run build -w @blockcraft/protocol && npm run build -w @blockcraft/voxel-world",
+    "build": "npm run build:packages && npm run build -w @blockcraft/client && npm run build -w @blockcraft/server",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run build:packages && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "concurrently": "latest",

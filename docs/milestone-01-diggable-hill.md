@@ -26,5 +26,7 @@ Accounts, classes, quests, crafting UI, inventories, enemies, markets, guilds, h
 - deterministic 16 x 16 x 24 chunks
 - shared Zod message contracts
 - authoritative movement and mining room
-- PlayCanvas scene and basic desktop movement/mining intent
-- unit tests for generation, addressing, and protection
+- cursor-based voxel selection with a visible range-aware target
+- revision-aware mining requests and stale-state recovery
+- exposed-voxel chunk rebuilding after synchronized mutations
+- unit tests for generation, addressing, protection, ray traversal, and action validation

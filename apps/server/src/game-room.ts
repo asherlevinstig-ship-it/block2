@@ -114,11 +114,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const address = worldToChunk(request.x, request.z);
     const stored = this.getChunk(address.chunkX, address.chunkZ);
     const current = getBlock(stored.chunk, address.localX, request.y, address.localZ);
-    const rejection = miningRejectionReason(player, request, current);
+    const rejection = miningRejectionReason(player, request, current, stored.revision);
     if (rejection) return this.reject(client, { requestId: request.requestId, action: "mine", reason: rejection });
     setBlock(stored.chunk, address.localX, request.y, address.localZ, Block.Air);
     stored.revision += 1;
-    const changed: BlockChanged = { ...request, block: Block.Air, revision: stored.revision };
+    const changed: BlockChanged = {
+      requestId: request.requestId,
+      x: request.x,
+      y: request.y,
+      z: request.z,
+      block: Block.Air,
+      revision: stored.revision,
+    };
     this.broadcast("block:changed", changed);
   }
 }

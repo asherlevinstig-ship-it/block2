@@ -26,6 +26,20 @@ export interface GeneratedChunk {
   blocks: Uint8Array;
 }
 
+export interface VoxelPoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface VoxelRaycastHit extends VoxelPoint {
+  block: BlockId;
+  distance: number;
+  previous: VoxelPoint;
+}
+
+export type WorldBlockReader = (x: number, y: number, z: number) => BlockId;
+
 function hash32(value: number): number {
   value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
   value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
@@ -104,4 +118,55 @@ export function highestSolidY(chunk: GeneratedChunk, localX: number, localZ: num
     if (getBlock(chunk, localX, y, localZ) !== Block.Air) return y;
   }
   return 0;
+}
+
+export function voxelRaycast(
+  origin: VoxelPoint,
+  direction: VoxelPoint,
+  maxDistance: number,
+  readBlock: WorldBlockReader,
+): VoxelRaycastHit | null {
+  const length = Math.hypot(direction.x, direction.y, direction.z);
+  if (!Number.isFinite(length) || length === 0 || maxDistance < 0) return null;
+
+  const dx = direction.x / length;
+  const dy = direction.y / length;
+  const dz = direction.z / length;
+  let x = Math.floor(origin.x);
+  let y = Math.floor(origin.y);
+  let z = Math.floor(origin.z);
+  let previous = { x, y, z };
+  let distance = 0;
+
+  const stepX = Math.sign(dx);
+  const stepY = Math.sign(dy);
+  const stepZ = Math.sign(dz);
+  const deltaX = dx === 0 ? Number.POSITIVE_INFINITY : Math.abs(1 / dx);
+  const deltaY = dy === 0 ? Number.POSITIVE_INFINITY : Math.abs(1 / dy);
+  const deltaZ = dz === 0 ? Number.POSITIVE_INFINITY : Math.abs(1 / dz);
+  let sideX = dx > 0 ? (x + 1 - origin.x) * deltaX : dx < 0 ? (origin.x - x) * deltaX : Number.POSITIVE_INFINITY;
+  let sideY = dy > 0 ? (y + 1 - origin.y) * deltaY : dy < 0 ? (origin.y - y) * deltaY : Number.POSITIVE_INFINITY;
+  let sideZ = dz > 0 ? (z + 1 - origin.z) * deltaZ : dz < 0 ? (origin.z - z) * deltaZ : Number.POSITIVE_INFINITY;
+
+  while (distance <= maxDistance) {
+    const block = readBlock(x, y, z);
+    if (block !== Block.Air) return { x, y, z, block, distance, previous };
+
+    previous = { x, y, z };
+    if (sideX <= sideY && sideX <= sideZ) {
+      distance = sideX;
+      sideX += deltaX;
+      x += stepX;
+    } else if (sideY <= sideZ) {
+      distance = sideY;
+      sideY += deltaY;
+      y += stepY;
+    } else {
+      distance = sideZ;
+      sideZ += deltaZ;
+      z += stepZ;
+    }
+  }
+
+  return null;
 }

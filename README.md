@@ -25,3 +25,5 @@ npm run check
 ```
 
 The client runs at `http://localhost:5173` and connects to the server at `ws://localhost:2567` by default.
+
+In the first playable slice, use WASD to move, point at a nearby voxel, and press E or left-click to mine. The server validates distance, spawn protection, block existence, and chunk revision before broadcasting the mutation.

@@ -11,6 +11,7 @@ export const MoveRequestSchema = z.object({
 
 export const MineBlockRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
+  expectedRevision: z.number().int().nonnegative(),
   x: z.number().int(),
   y: z.number().int(),
   z: z.number().int(),
@@ -46,5 +47,5 @@ export interface BlockChanged {
 export interface ActionRejected {
   requestId?: string;
   action: "move" | "mine";
-  reason: "payload" | "range" | "protected" | "missing" | "collision";
+  reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale";
 }
