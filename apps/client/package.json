@@ -1,0 +1,23 @@
+{
+  "name": "@blockcraft/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@blockcraft/protocol": "*",
+    "@blockcraft/voxel-world": "*",
+    "@colyseus/sdk": "latest",
+    "playcanvas": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}

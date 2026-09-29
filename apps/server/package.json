@@ -1,0 +1,28 @@
+{
+  "name": "@blockcraft/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@blockcraft/protocol": "*",
+    "@blockcraft/voxel-world": "*",
+    "@colyseus/core": "latest",
+    "@colyseus/schema": "latest",
+    "@colyseus/ws-transport": "latest",
+    "express": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
