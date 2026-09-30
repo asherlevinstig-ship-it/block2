@@ -12,3 +12,4 @@ tmp/
 data/
 pebble/
 test-results/
+.colyseus-cloud.json
