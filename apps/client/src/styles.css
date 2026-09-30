@@ -15,9 +15,28 @@ html, body, #game {
 
 #game { display: block; touch-action: none; }
 
+#development-banner {
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+  border-bottom: 1px solid rgb(255 226 131 / 45%);
+  background: rgb(100 62 8 / 92%);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 30%);
+  color: #fff2bd;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-align: center;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
 #hud {
   position: fixed;
-  top: max(18px, env(safe-area-inset-top));
+  top: calc(52px + env(safe-area-inset-top));
   left: max(18px, env(safe-area-inset-left));
   max-width: min(390px, calc(100vw - 36px));
   padding: 16px 18px;
