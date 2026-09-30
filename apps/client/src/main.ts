@@ -24,7 +24,10 @@ import {
 } from "@blockcraft/voxel-world";
 import {
   REMOTE_INTERPOLATION_DELAY_MS,
+  approachMovement,
+  cameraRelativeMovement,
   movementYaw,
+  quantizeMovementToEightDirections,
   sampleRemotePose,
   trimRemoteSnapshots,
   type RemoteSnapshot,
@@ -68,6 +71,8 @@ app.start();
 const camera = new pc.Entity("camera");
 camera.addComponent("camera", { clearColor: new pc.Color(0.055, 0.09, 0.075), farClip: 120 });
 app.root.addChild(camera);
+const CAMERA_OFFSET_X = 16;
+const CAMERA_OFFSET_Z = 16;
 
 const light = new pc.Entity("sun");
 light.addComponent("light", { type: "directional", intensity: 1.35, castShadows: true, shadowResolution: 1024 });
@@ -244,6 +249,20 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
   }
 }
 
+const facingMaterial = new pc.StandardMaterial();
+facingMaterial.diffuse = new pc.Color(0.12, 0.09, 0.05);
+facingMaterial.emissive = new pc.Color(0.08, 0.05, 0.02);
+facingMaterial.update();
+
+function addFacingMarker(player: pc.Entity): void {
+  const marker = new pc.Entity("facing-marker");
+  marker.addComponent("render", { type: "box", castShadows: true });
+  if (marker.render) marker.render.material = facingMaterial;
+  marker.setLocalScale(0.2, 0.16, 0.38);
+  marker.setLocalPosition(0, 0.28, 0.46);
+  player.addChild(marker);
+}
+
 const localPlayer = new pc.Entity("local-player");
 localPlayer.addComponent("render", { type: "capsule", castShadows: true });
 const playerMaterial = new pc.StandardMaterial();
@@ -251,6 +270,7 @@ playerMaterial.diffuse = new pc.Color(0.95, 0.73, 0.28);
 playerMaterial.update();
 if (localPlayer.render) localPlayer.render.material = playerMaterial;
 localPlayer.setLocalScale(0.72, 1.45, 0.72);
+addFacingMarker(localPlayer);
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
@@ -286,6 +306,7 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
   entity.addComponent("render", { type: "capsule", castShadows: true });
   if (entity.render) entity.render.material = remoteMaterial;
   entity.setLocalScale(0.72, 1.45, 0.72);
+  addFacingMarker(entity);
   entity.setPosition(player.x, player.y, player.z);
   app.root.addChild(entity);
   return {
@@ -463,12 +484,14 @@ let moveSequence = 0;
 let mineSequence = 0;
 let localVerticalVelocity = 0;
 let cutawayStateKey = "surface";
+let smoothedMovement = { x: 0, z: 0 };
 
 function resetMovementControls(): void {
   keys.clear();
   if (joystickPointerId !== null) releaseJoystick(joystickPointerId);
   touchStrafe = 0;
   touchForward = 0;
+  smoothedMovement = { x: 0, z: 0 };
   if (!room || !worldReady) return;
   moveSequence += 1;
   room.send("move", { sequence: moveSequence, strafe: 0, forward: 0, yaw: localFacingYaw });
@@ -611,13 +634,15 @@ app.on("update", (dt: number) => {
   frameSamples.push(dt * 1000);
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
-  const keyboardForward = Number(keys.has("KeyS")) - Number(keys.has("KeyW"));
+  const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
   const strafe = Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe));
-  const forward = Math.max(-1, Math.min(1, keyboardForward + touchForward));
-  const inputLength = Math.hypot(strafe, forward);
-  const inputScale = inputLength > 1 ? 1 / inputLength : 1;
-  localFacingYaw = movementYaw(strafe, forward, localFacingYaw);
+  const forward = Math.max(-1, Math.min(1, keyboardForward - touchForward));
   const frameTime = Math.min(dt, 0.05);
+  const desiredMovement = quantizeMovementToEightDirections(
+    cameraRelativeMovement(strafe, forward, CAMERA_OFFSET_X, CAMERA_OFFSET_Z),
+  );
+  smoothedMovement = approachMovement(smoothedMovement, desiredMovement, frameTime);
+  localFacingYaw = movementYaw(smoothedMovement.x, smoothedMovement.z, localFacingYaw);
   const current = localPlayer.getPosition();
   const grounded = isPlayerSupported(readCollisionWorldBlock, current.x, current.y, current.z);
   if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;
@@ -625,9 +650,9 @@ app.on("update", (dt: number) => {
   const predicted = resolvePlayerMotion(
     current,
     {
-      x: strafe * inputScale * 4.2 * frameTime,
+      x: smoothedMovement.x * 4.2 * frameTime,
       y: localVerticalVelocity * frameTime,
-      z: forward * inputScale * 4.2 * frameTime,
+      z: smoothedMovement.z * 4.2 * frameTime,
     },
     readCollisionWorldBlock,
   );
@@ -647,7 +672,7 @@ app.on("update", (dt: number) => {
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
   cameraFocus.lerp(cameraFocus, player, Math.min(1, dt * 6));
-  const desiredCamera = new pc.Vec3(cameraFocus.x + 14, cameraFocus.y + 18, cameraFocus.z + 16);
+  const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
   const cameraPosition = camera.getPosition();
   camera.setPosition(cameraPosition.lerp(cameraPosition, desiredCamera, Math.min(1, dt * 7)));
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
@@ -666,7 +691,12 @@ app.on("update", (dt: number) => {
   if (room && worldReady && now - lastMoveSentAt >= 50) {
     lastMoveSentAt = now;
     moveSequence += 1;
-    room.send("move", { sequence: moveSequence, strafe, forward, yaw: localFacingYaw });
+    room.send("move", {
+      sequence: moveSequence,
+      strafe: smoothedMovement.x,
+      forward: smoothedMovement.z,
+      yaw: localFacingYaw,
+    });
   }
 });
 

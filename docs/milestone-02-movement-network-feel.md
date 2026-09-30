@@ -12,6 +12,9 @@ Make movement dependable before adding combat. Local control must remain respons
 - hard correction only for errors above 1.5 world units and smoothed correction above the 0.12-unit dead zone
 - 100 ms buffered snapshot interpolation for remote players
 - movement-facing yaw synchronized through authoritative room state
+- camera-relative keyboard and joystick input snapped to eight readable directions
+- acceleration and deceleration instead of immediate full-speed starts and stops
+- a visible facing marker on local and remote player capsules
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
 - keyboard and joystick reset on browser blur or page visibility loss

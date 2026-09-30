@@ -15,6 +15,57 @@ export interface SampledRemotePose {
 
 export const REMOTE_INTERPOLATION_DELAY_MS = 100;
 
+export interface MovementVector {
+  x: number;
+  z: number;
+}
+
+export function cameraRelativeMovement(
+  strafe: number,
+  forward: number,
+  cameraOffsetX: number,
+  cameraOffsetZ: number,
+): MovementVector {
+  const length = Math.hypot(cameraOffsetX, cameraOffsetZ) || 1;
+  const forwardX = -cameraOffsetX / length;
+  const forwardZ = -cameraOffsetZ / length;
+  const rightX = -forwardZ;
+  const rightZ = forwardX;
+  const x = rightX * strafe + forwardX * forward;
+  const z = rightZ * strafe + forwardZ * forward;
+  const inputLength = Math.hypot(x, z);
+  const scale = inputLength > 1 ? 1 / inputLength : 1;
+  return { x: x * scale, z: z * scale };
+}
+
+export function quantizeMovementToEightDirections(movement: MovementVector, deadZone = 0.12): MovementVector {
+  const magnitude = Math.min(1, Math.hypot(movement.x, movement.z));
+  if (magnitude < deadZone) return { x: 0, z: 0 };
+  const sector = Math.PI / 4;
+  const angle = Math.round(Math.atan2(movement.z, movement.x) / sector) * sector;
+  return { x: Math.cos(angle) * magnitude, z: Math.sin(angle) * magnitude };
+}
+
+export function approachMovement(
+  current: MovementVector,
+  target: MovementVector,
+  deltaTime: number,
+  acceleration = 6,
+  deceleration = 10,
+): MovementVector {
+  const differenceX = target.x - current.x;
+  const differenceZ = target.z - current.z;
+  const distance = Math.hypot(differenceX, differenceZ);
+  if (distance === 0) return target;
+  const speedingUp = Math.hypot(target.x, target.z) > Math.hypot(current.x, current.z) + 0.001;
+  const maximumChange = (speedingUp ? acceleration : deceleration) * deltaTime;
+  if (distance <= maximumChange) return target;
+  return {
+    x: current.x + differenceX / distance * maximumChange,
+    z: current.z + differenceZ / distance * maximumChange,
+  };
+}
+
 export function movementYaw(strafe: number, forward: number, fallback: number): number {
   return Math.hypot(strafe, forward) < 0.01
     ? fallback
