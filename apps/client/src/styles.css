@@ -15,6 +15,8 @@ html, body, #game {
 
 #game { display: block; touch-action: none; }
 
+button { font: inherit; }
+
 #development-banner {
   position: fixed;
   z-index: 20;
@@ -54,3 +56,119 @@ html, body, #game {
 #target { margin-top: 9px !important; color: #f0cb67; font-size: .82rem; line-height: 1.4; }
 #players { margin-top: 5px !important; color: #7ec9f4; font-size: .78rem; }
 .controls { margin-top: 12px !important; color: #94aa90; font-size: .82rem; }
+
+#performance-toggle {
+  position: fixed;
+  z-index: 24;
+  top: calc(50px + env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  min-width: 54px;
+  padding: 9px 11px;
+  border: 1px solid rgb(126 201 244 / 35%);
+  border-radius: 10px;
+  background: rgb(8 18 16 / 85%);
+  color: #a9dcfa;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  backdrop-filter: blur(10px);
+}
+
+#performance-panel {
+  position: fixed;
+  z-index: 23;
+  top: calc(94px + env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  width: min(310px, calc(100vw - 28px));
+  padding: 14px 16px;
+  border: 1px solid rgb(126 201 244 / 28%);
+  border-radius: 14px;
+  background: rgb(7 15 14 / 92%);
+  box-shadow: 0 18px 60px rgb(0 0 0 / 38%);
+  backdrop-filter: blur(12px);
+}
+
+#performance-panel[hidden] { display: none; }
+#performance-panel p { margin: 0; }
+#performance-panel dl { margin: 9px 0 10px; }
+#performance-panel dl div { display: flex; justify-content: space-between; gap: 14px; padding: 3px 0; }
+#performance-panel dt { color: #91a69a; font-size: .74rem; }
+#performance-panel dd { margin: 0; color: #e7f4e2; font-size: .74rem; font-variant-numeric: tabular-nums; }
+#perf-budget { padding-top: 9px; border-top: 1px solid rgb(255 255 255 / 10%); color: #f0cb67; font-size: .72rem; }
+#perf-budget.pass { color: #9ee27f; }
+#perf-budget.fail { color: #ff9b84; }
+
+#touch-controls { display: none; }
+
+@media (pointer: coarse), (max-width: 820px) {
+  #hud {
+    max-width: min(340px, calc(100vw - 28px));
+    padding: 13px 15px;
+  }
+
+  #hud h1 { font-size: 1.12rem; }
+  #status { font-size: .86rem; }
+  .controls { display: none; }
+
+  #touch-controls {
+    position: fixed;
+    z-index: 18;
+    inset: auto max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    pointer-events: none;
+  }
+
+  #joystick-zone,
+  #mine-button { pointer-events: auto; touch-action: none; user-select: none; }
+
+  #joystick-zone {
+    position: relative;
+    width: 118px;
+    height: 118px;
+    border: 2px solid rgb(255 255 255 / 28%);
+    border-radius: 50%;
+    background: rgb(6 14 12 / 48%);
+    box-shadow: inset 0 0 28px rgb(0 0 0 / 30%);
+    backdrop-filter: blur(6px);
+  }
+
+  #joystick-knob {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 52px;
+    height: 52px;
+    border: 2px solid rgb(255 255 255 / 55%);
+    border-radius: 50%;
+    background: rgb(174 222 142 / 72%);
+    box-shadow: 0 8px 18px rgb(0 0 0 / 30%);
+    transform: translate(-50%, -50%);
+  }
+
+  #mine-button {
+    width: 92px;
+    height: 92px;
+    border: 2px solid rgb(255 226 131 / 62%);
+    border-radius: 50%;
+    background: rgb(143 83 13 / 82%);
+    color: #fff2bd;
+    font-size: 1rem;
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 38%);
+    backdrop-filter: blur(8px);
+  }
+
+  #mine-button:active { transform: scale(.94); background: rgb(184 111 24 / 92%); }
+}
+
+@media (max-height: 620px) {
+  #hud { max-width: 300px; padding: 10px 13px; }
+  #hud h1 { margin-bottom: 4px; font-size: 1rem; }
+  #target { margin-top: 5px !important; }
+  #joystick-zone { width: 96px; height: 96px; }
+  #mine-button { width: 78px; height: 78px; }
+}

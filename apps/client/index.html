@@ -15,7 +15,26 @@
       <p id="status">Connecting to the authoritative world...</p>
       <p id="target">Target: waiting for world data</p>
       <p id="players">0 players online</p>
-      <p class="controls">WASD to move · Point with mouse · E or left-click to mine</p>
+      <p class="controls">WASD or joystick to move · E, click, or Mine to dig</p>
+    </section>
+    <button id="performance-toggle" type="button" aria-controls="performance-panel" aria-expanded="false">PERF</button>
+    <aside id="performance-panel" aria-label="Performance metrics" hidden>
+      <p class="eyebrow">LIVE PERFORMANCE</p>
+      <dl>
+        <div><dt>Frame p50 / p95</dt><dd id="perf-frame">—</dd></div>
+        <div><dt>FPS</dt><dd id="perf-fps">—</dd></div>
+        <div><dt>Network RTT</dt><dd id="perf-rtt">—</dd></div>
+        <div><dt>Visible voxels</dt><dd id="perf-voxels">—</dd></div>
+        <div><dt>Meshes / triangles</dt><dd id="perf-geometry">—</dd></div>
+        <div><dt>Chunk build</dt><dd id="perf-chunks">—</dd></div>
+        <div><dt>World payload</dt><dd id="perf-payload">—</dd></div>
+        <div><dt>JS memory</dt><dd id="perf-memory">Unavailable</dd></div>
+      </dl>
+      <p id="perf-budget">Collecting a stable sample…</p>
+    </aside>
+    <section id="touch-controls" aria-label="Touch controls">
+      <div id="joystick-zone" aria-label="Movement joystick"><div id="joystick-knob"></div></div>
+      <button id="mine-button" type="button">Mine</button>
     </section>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -28,7 +28,25 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const playerCount = document.querySelector<HTMLElement>("#players")!;
-if (!canvas || !status || !targetLabel || !playerCount) throw new Error("Game shell is missing required elements");
+const performanceToggle = document.querySelector<HTMLButtonElement>("#performance-toggle")!;
+const performancePanel = document.querySelector<HTMLElement>("#performance-panel")!;
+const performanceFields = {
+  frame: document.querySelector<HTMLElement>("#perf-frame")!,
+  fps: document.querySelector<HTMLElement>("#perf-fps")!,
+  rtt: document.querySelector<HTMLElement>("#perf-rtt")!,
+  voxels: document.querySelector<HTMLElement>("#perf-voxels")!,
+  geometry: document.querySelector<HTMLElement>("#perf-geometry")!,
+  chunks: document.querySelector<HTMLElement>("#perf-chunks")!,
+  payload: document.querySelector<HTMLElement>("#perf-payload")!,
+  memory: document.querySelector<HTMLElement>("#perf-memory")!,
+  budget: document.querySelector<HTMLElement>("#perf-budget")!,
+};
+const joystickZone = document.querySelector<HTMLElement>("#joystick-zone")!;
+const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
+const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
+if (!canvas || !status || !targetLabel || !playerCount || !performanceToggle || !performancePanel || !joystickZone || !joystickKnob || !mineButton) {
+  throw new Error("Game shell is missing required elements");
+}
 
 const app = new pc.Application(canvas, {
   graphicsDeviceOptions: { antialias: true, alpha: false },
@@ -94,6 +112,8 @@ interface ClientChunk {
   blocks: Uint8Array;
   root: pc.Entity;
   meshes: pc.Mesh[];
+  visibleBlocks: number;
+  visibleFaces: number;
 }
 
 const chunks = new Map<string, ClientChunk>();
@@ -125,6 +145,8 @@ function rebuildChunk(chunk: ClientChunk): void {
   for (const mesh of chunk.meshes) mesh.destroy();
   chunk.meshes = [];
   for (const child of [...chunk.root.children]) child.destroy();
+  chunk.visibleBlocks = 0;
+  chunk.visibleFaces = 0;
   const buffers = new Map<number, { positions: number[]; normals: number[]; indices: number[] }>();
   for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
     for (let localZ = 0; localZ < CHUNK_SIZE; localZ += 1) {
@@ -134,6 +156,7 @@ function rebuildChunk(chunk: ClientChunk): void {
         const x = chunk.chunkX * CHUNK_SIZE + localX;
         const z = chunk.chunkZ * CHUNK_SIZE + localZ;
         if (isCutawayHidden(x, y, z)) continue;
+        chunk.visibleBlocks += 1;
         let buffer = buffers.get(block);
         if (!buffer) {
           buffer = { positions: [], normals: [], indices: [] };
@@ -142,6 +165,7 @@ function rebuildChunk(chunk: ClientChunk): void {
         for (const face of faces) {
           const neighbor = readVisibleWorldBlock(x + face.normal[0], y + face.normal[1], z + face.normal[2]);
           if (neighbor !== Block.Air) continue;
+          chunk.visibleFaces += 1;
           const base = buffer.positions.length / 3;
           for (const corner of face.corners) {
             buffer.positions.push(x + corner[0], y + corner[1], z + corner[2]);
@@ -155,7 +179,11 @@ function rebuildChunk(chunk: ClientChunk): void {
   const meshInstances: pc.MeshInstance[] = [];
   for (const [block, buffer] of buffers) {
     if (buffer.indices.length === 0) continue;
-    const mesh = pc.createMesh(app.graphicsDevice, buffer.positions, { normals: buffer.normals, indices: buffer.indices });
+    const geometry = new pc.Geometry();
+    geometry.positions = buffer.positions;
+    geometry.normals = buffer.normals;
+    geometry.indices = buffer.indices;
+    const mesh = pc.Mesh.fromGeometry(app.graphicsDevice, geometry);
     chunk.meshes.push(mesh);
     meshInstances.push(new pc.MeshInstance(mesh, materialFor(block)));
   }
@@ -179,6 +207,8 @@ function installChunk(snapshot: ChunkSnapshot): ClientChunk {
     blocks: Uint8Array.from(snapshot.blocks),
     root,
     meshes: [],
+    visibleBlocks: 0,
+    visibleFaces: 0,
   };
   chunks.set(key, chunk);
   return chunk;
@@ -320,12 +350,19 @@ function updateTarget(): void {
   else targetLabel.textContent = `Target: ${nextKey} · mineable`;
 }
 
+let lastChunkBuildMs = 0;
+let worldPayloadBytes = 0;
+let networkRttMs: number | null = null;
+
 function renderBootstrap(payload: WorldBootstrap): void {
+  const buildStartedAt = performance.now();
+  worldPayloadBytes = new Blob([JSON.stringify(payload)]).size;
   for (const chunk of chunks.values()) for (const mesh of chunk.meshes) mesh.destroy();
   for (const child of [...worldRoot.children]) child.destroy();
   chunks.clear();
   const installed = payload.chunks.map(installChunk);
   for (const chunk of installed) rebuildChunk(chunk);
+  lastChunkBuildMs = performance.now() - buildStartedAt;
   const ownPlayer = room ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId) : undefined;
   const initialPosition = ownPlayer ?? payload.spawn;
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
@@ -340,6 +377,55 @@ function renderBootstrap(payload: WorldBootstrap): void {
 const keys = new Set<string>();
 window.addEventListener("keydown", event => keys.add(event.code));
 window.addEventListener("keyup", event => keys.delete(event.code));
+
+performanceToggle.addEventListener("click", () => {
+  const opening = performancePanel.hidden;
+  performancePanel.hidden = !opening;
+  performanceToggle.setAttribute("aria-expanded", String(opening));
+});
+
+window.addEventListener("keydown", event => {
+  if (event.code !== "KeyP" || event.repeat) return;
+  performanceToggle.click();
+});
+
+let touchStrafe = 0;
+let touchForward = 0;
+let joystickPointerId: number | null = null;
+
+function updateJoystick(clientX: number, clientY: number): void {
+  const bounds = joystickZone.getBoundingClientRect();
+  const radius = bounds.width * 0.34;
+  let offsetX = clientX - (bounds.left + bounds.width / 2);
+  let offsetY = clientY - (bounds.top + bounds.height / 2);
+  const distance = Math.hypot(offsetX, offsetY);
+  if (distance > radius) {
+    offsetX = offsetX / distance * radius;
+    offsetY = offsetY / distance * radius;
+  }
+  touchStrafe = offsetX / radius;
+  touchForward = offsetY / radius;
+  joystickKnob.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+}
+
+function releaseJoystick(pointerId: number): void {
+  if (pointerId !== joystickPointerId) return;
+  joystickPointerId = null;
+  touchStrafe = 0;
+  touchForward = 0;
+  joystickKnob.style.transform = "translate(-50%, -50%)";
+}
+
+joystickZone.addEventListener("pointerdown", event => {
+  joystickPointerId = event.pointerId;
+  joystickZone.setPointerCapture(event.pointerId);
+  updateJoystick(event.clientX, event.clientY);
+});
+joystickZone.addEventListener("pointermove", event => {
+  if (event.pointerId === joystickPointerId) updateJoystick(event.clientX, event.clientY);
+});
+joystickZone.addEventListener("pointerup", event => releaseJoystick(event.pointerId));
+joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.pointerId));
 
 let room: Room | null = null;
 let worldReady = false;
@@ -400,10 +486,77 @@ window.addEventListener("keydown", event => {
 canvas.addEventListener("pointerdown", event => {
   if (event.button === 0) requestMine();
 });
+mineButton.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  requestMine();
+});
+
+const frameSamples: number[] = [];
+const pendingPings = new Map<string, number>();
+let pingSequence = 0;
+let lastPingSentAt = 0;
+let lastPerformanceUpdateAt = 0;
+
+function percentile(values: number[], fraction: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))] ?? 0;
+}
+
+function formatBytes(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(2)} MB` : `${Math.round(bytes / 1024)} KB`;
+}
+
+function updatePerformanceMetrics(now: number): void {
+  if (now - lastPerformanceUpdateAt < 500 || frameSamples.length < 10) return;
+  lastPerformanceUpdateAt = now;
+  const p50 = percentile(frameSamples, 0.5);
+  const p95 = percentile(frameSamples, 0.95);
+  const fps = p50 > 0 ? 1000 / p50 : 0;
+  const visibleVoxels = [...chunks.values()].reduce((total, chunk) => total + chunk.visibleBlocks, 0);
+  const meshes = [...chunks.values()].reduce((total, chunk) => total + chunk.meshes.length, 0);
+  const triangles = [...chunks.values()].reduce((total, chunk) => total + chunk.visibleFaces * 2, 0);
+  const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize;
+  const stable = frameSamples.length >= 120;
+  const withinBudget = stable && p95 <= 33.3 && (networkRttMs === null || networkRttMs <= 150) && lastChunkBuildMs <= 250;
+
+  performanceFields.frame.textContent = `${p50.toFixed(1)} / ${p95.toFixed(1)} ms`;
+  performanceFields.fps.textContent = `${Math.round(fps)}`;
+  performanceFields.rtt.textContent = networkRttMs === null ? "Waiting…" : `${networkRttMs.toFixed(0)} ms`;
+  performanceFields.voxels.textContent = visibleVoxels.toLocaleString();
+  performanceFields.geometry.textContent = `${meshes} / ${triangles.toLocaleString()}`;
+  performanceFields.chunks.textContent = `${lastChunkBuildMs.toFixed(1)} ms`;
+  performanceFields.payload.textContent = formatBytes(worldPayloadBytes);
+  performanceFields.memory.textContent = memory ? formatBytes(memory) : "Unavailable";
+  performanceFields.budget.className = stable ? (withinBudget ? "pass" : "fail") : "";
+  performanceFields.budget.textContent = !stable
+    ? `Collecting sample ${frameSamples.length}/120…`
+    : withinBudget
+      ? "PASS · p95 ≤ 33.3 ms · RTT ≤ 150 ms"
+      : "CHECK · one or more provisional budgets exceeded";
+
+  (window as Window & { __BLOCKCRAFT_PERF__?: Record<string, number | boolean | null> }).__BLOCKCRAFT_PERF__ = {
+    p50,
+    p95,
+    fps,
+    networkRttMs,
+    visibleVoxels,
+    meshes,
+    triangles,
+    lastChunkBuildMs,
+    worldPayloadBytes,
+    stable,
+    withinBudget,
+  };
+}
 
 app.on("update", (dt: number) => {
-  const strafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
-  const forward = Number(keys.has("KeyS")) - Number(keys.has("KeyW"));
+  frameSamples.push(dt * 1000);
+  if (frameSamples.length > 240) frameSamples.shift();
+  const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
+  const keyboardForward = Number(keys.has("KeyS")) - Number(keys.has("KeyW"));
+  const strafe = Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe));
+  const forward = Math.max(-1, Math.min(1, keyboardForward + touchForward));
   const inputLength = Math.hypot(strafe, forward);
   const inputScale = inputLength > 1 ? 1 / inputLength : 1;
   const frameTime = Math.min(dt, 0.05);
@@ -444,6 +597,14 @@ app.on("update", (dt: number) => {
   updateTarget();
 
   const now = performance.now();
+  updatePerformanceMetrics(now);
+  if (room && worldReady && now - lastPingSentAt >= 2000) {
+    lastPingSentAt = now;
+    pingSequence += 1;
+    const id = `ping-${pingSequence}`;
+    pendingPings.set(id, now);
+    room.send("ping", { id });
+  }
   if (room && worldReady && now - lastMoveSentAt >= 50) {
     lastMoveSentAt = now;
     room.send("move", { strafe, forward, yaw: 0 });
@@ -462,7 +623,9 @@ function applyBlockChange(message: BlockChanged): void {
   }
   chunk.blocks[chunkIndex(address.localX, message.y, address.localZ)] = message.block;
   chunk.revision = message.revision;
+  const buildStartedAt = performance.now();
   rebuildChunkAndNeighbors(chunk, message.x, message.z);
+  lastChunkBuildMs = performance.now() - buildStartedAt;
   status.textContent = `Block removed · chunk revision ${chunk.revision}`;
 }
 
@@ -476,6 +639,13 @@ async function connect(): Promise<void> {
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("block:changed", applyBlockChange);
+  room.onMessage("pong", (message: { id?: unknown }) => {
+    if (typeof message.id !== "string") return;
+    const sentAt = pendingPings.get(message.id);
+    if (sentAt === undefined) return;
+    networkRttMs = performance.now() - sentAt;
+    pendingPings.delete(message.id);
+  });
   room.onMessage("action:rejected", (message: ActionRejected) => {
     status.textContent = `Server rejected ${message.action}: ${message.reason}`;
     if (message.action === "move") localPlayer.setPosition(authoritativeLocalPosition);

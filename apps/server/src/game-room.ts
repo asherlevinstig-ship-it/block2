@@ -42,6 +42,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
     this.setState(new WorldState());
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
+    this.onMessage("ping", (client, payload: unknown) => {
+      if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
+        client.send("pong", { id: payload.id });
+      }
+    });
     this.onMessage("move", (client, payload) => this.handleMove(client, payload));
     this.onMessage("mine", (client, payload) => this.handleMine(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);

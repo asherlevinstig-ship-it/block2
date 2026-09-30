@@ -37,3 +37,27 @@ Accounts, classes, quests, crafting UI, inventories, enemies, markets, guilds, h
 - local prediction driven by the same voxel-motion rules as the authoritative server
 - underground roof cutaway, depth feedback, reduced sunlight, and an explorer lantern
 - development-only `?qa=cave` spawn for repeatable underground visual checks
+- optional live performance panel with frame p50/p95, FPS, RTT, visible voxels, mesh/triangle counts, chunk-build time, payload size, and browser memory
+- responsive floating joystick and large contextual Mine control for coarse-pointer/tablet layouts
+- current PlayCanvas `Mesh.fromGeometry` construction without deprecated mesh helpers
+
+## Provisional performance budgets
+
+- frame-time p95: at most 33.3 ms
+- movement/mining round-trip: at most 150 ms on the local development network
+- nine-chunk rebuild: at most 250 ms
+- no overlap between the HUD, safe areas, joystick, and Mine control at 768 x 1024
+
+## Recorded development sample
+
+Local desktop browser using a 768 x 1024 iPad portrait viewport, underground QA spawn, one connected player:
+
+- frame time: 6.1 ms p50 / 6.2 ms p95
+- approximate FPS: 164
+- local Colyseus RTT: 1 ms
+- visible voxels: 17,411
+- meshes / triangles: 45 / 28,880
+- nine-chunk build: 18.8 ms
+- bootstrap payload: 109 KB
+
+This is a layout and instrumentation result, not a physical-iPad benchmark. Milestone criterion 10 remains open until the same panel is sampled on target iPad hardware for ten minutes on both the surface and underground.
