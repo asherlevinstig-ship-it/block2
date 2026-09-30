@@ -12,6 +12,7 @@ import {
   CHUNK_HEIGHT,
   CHUNK_SIZE,
   GRAVITY,
+  PLAYER_HEIGHT,
   TERMINAL_VELOCITY,
   chunkIndex,
   isProtectedVoxel,
@@ -259,18 +260,26 @@ function addFacingMarker(player: pc.Entity): void {
   marker.addComponent("render", { type: "box", castShadows: true });
   if (marker.render) marker.render.material = facingMaterial;
   marker.setLocalScale(0.2, 0.16, 0.38);
-  marker.setLocalPosition(0, 0.28, 0.46);
+  marker.setLocalPosition(0, PLAYER_HEIGHT * 0.58, 0.34);
   player.addChild(marker);
 }
 
 const localPlayer = new pc.Entity("local-player");
-localPlayer.addComponent("render", { type: "capsule", castShadows: true });
 const playerMaterial = new pc.StandardMaterial();
 playerMaterial.diffuse = new pc.Color(0.95, 0.73, 0.28);
 playerMaterial.update();
-if (localPlayer.render) localPlayer.render.material = playerMaterial;
-localPlayer.setLocalScale(0.72, 1.45, 0.72);
-addFacingMarker(localPlayer);
+
+function addPlayerBody(player: pc.Entity, material: pc.StandardMaterial): void {
+  const body = new pc.Entity("player-body");
+  body.addComponent("render", { type: "capsule", castShadows: true });
+  if (body.render) body.render.material = material;
+  body.setLocalScale(0.72, PLAYER_HEIGHT, 0.72);
+  body.setLocalPosition(0, PLAYER_HEIGHT / 2, 0);
+  player.addChild(body);
+  addFacingMarker(player);
+}
+
+addPlayerBody(localPlayer, playerMaterial);
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
@@ -303,10 +312,7 @@ function updatePlayerCount(): void {
 
 function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePlayerVisual {
   const entity = new pc.Entity(`remote-player:${sessionId}`);
-  entity.addComponent("render", { type: "capsule", castShadows: true });
-  if (entity.render) entity.render.material = remoteMaterial;
-  entity.setLocalScale(0.72, 1.45, 0.72);
-  addFacingMarker(entity);
+  addPlayerBody(entity, remoteMaterial);
   entity.setPosition(player.x, player.y, player.z);
   app.root.addChild(entity);
   return {
