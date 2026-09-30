@@ -3,6 +3,7 @@ import { z } from "zod";
 export const WORLD_ROOM = "world";
 
 export const MoveRequestSchema = z.object({
+  sequence: z.number().int().positive(),
   strafe: z.number().finite().min(-1).max(1),
   forward: z.number().finite().min(-1).max(1),
   yaw: z.number().finite().default(0),
@@ -46,5 +47,5 @@ export interface BlockChanged {
 export interface ActionRejected {
   requestId?: string;
   action: "move" | "mine";
-  reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale";
+  reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate";
 }

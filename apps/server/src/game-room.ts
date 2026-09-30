@@ -5,7 +5,6 @@ import {
   type ActionRejected,
   type BlockChanged,
   type ChunkSnapshot,
-  type MoveRequest,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
 import {
@@ -25,6 +24,13 @@ import {
 } from "@blockcraft/voxel-world";
 import { PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason } from "./action-rules.js";
+import {
+  activeMovementInput,
+  idleMovementInput,
+  recordMovementMessage,
+  type MovementRateWindow,
+  type StoredMovementInput,
+} from "./movement-input.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -34,7 +40,8 @@ interface MutableChunk {
 export class WorldRoom extends Room<{ state: WorldState }> {
   override maxClients = 20;
   private readonly chunks = new Map<string, MutableChunk>();
-  private readonly movementInputs = new Map<string, MoveRequest>();
+  private readonly movementInputs = new Map<string, StoredMovementInput>();
+  private readonly movementRateWindows = new Map<string, MovementRateWindow>();
   private readonly verticalVelocities = new Map<string, number>();
   private worldSeed = "blockcraft-dev";
 
@@ -64,13 +71,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.y = spawn.y;
     player.z = spawn.z;
     this.state.players.set(client.sessionId, player);
-    this.movementInputs.set(client.sessionId, { strafe: 0, forward: 0, yaw: 0 });
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
     this.verticalVelocities.set(client.sessionId, 0);
   }
 
   override onLeave(client: Client): void {
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
+    this.movementRateWindows.delete(client.sessionId);
     this.verticalVelocities.delete(client.sessionId);
   }
 
@@ -121,10 +129,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success) return this.reject(client, { action: "move", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    const now = Date.now();
+    const rate = recordMovementMessage(this.movementRateWindows.get(client.sessionId), now);
+    this.movementRateWindows.set(client.sessionId, rate.window);
+    if (!rate.allowed) return this.reject(client, { action: "move", reason: "rate" });
+    const previous = this.movementInputs.get(client.sessionId);
+    if (previous && parsed.data.sequence <= previous.request.sequence) return;
     const rejection = movementRejectionReason(player, parsed.data);
     if (rejection) return this.reject(client, { action: "move", reason: rejection });
     player.yaw = parsed.data.yaw;
-    this.movementInputs.set(client.sessionId, parsed.data);
+    this.movementInputs.set(client.sessionId, { request: parsed.data, receivedAt: now });
   }
 
   private readWorldBlock = (x: number, y: number, z: number) => {
@@ -135,8 +149,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   };
 
   private simulatePlayers(deltaTime: number): void {
+    const now = Date.now();
     for (const [sessionId, player] of this.state.players) {
-      const input = this.movementInputs.get(sessionId) ?? { strafe: 0, forward: 0, yaw: player.yaw };
+      const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
       const speed = 4.2;
@@ -159,6 +174,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.x = next.x;
       player.y = next.y;
       player.z = next.z;
+      player.lastProcessedInput = input.sequence;
     }
   }
 

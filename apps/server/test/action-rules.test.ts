@@ -5,8 +5,8 @@ import { miningRejectionReason, movementRejectionReason } from "../src/action-ru
 describe("authoritative action rules", () => {
   it("accepts small movement steps and rejects teleports", () => {
     const player = { x: 8.5, y: 10, z: 8.5 };
-    expect(movementRejectionReason(player, { strafe: 1, forward: 0, yaw: 0 })).toBeNull();
-    expect(movementRejectionReason(player, { strafe: 1, forward: 1, yaw: 0 })).toBe("range");
+    expect(movementRejectionReason(player, { sequence: 1, strafe: 1, forward: 0, yaw: 0 })).toBeNull();
+    expect(movementRejectionReason(player, { sequence: 2, strafe: 1, forward: 1, yaw: 0 })).toBe("range");
   });
 
   it("rejects mining inside spawn protection", () => {

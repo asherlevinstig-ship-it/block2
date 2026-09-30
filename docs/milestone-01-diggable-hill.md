@@ -29,7 +29,7 @@ Accounts, classes, quests, crafting UI, inventories, enemies, markets, guilds, h
 - cursor-based voxel selection with a visible range-aware target
 - revision-aware mining requests and stale-state recovery
 - exposed-voxel chunk rebuilding after synchronized mutations
-- interpolated remote-player avatars with authoritative local correction
+- buffered remote-player interpolation with sequenced, acknowledgement-aware local correction
 - unit tests for generation, addressing, protection, ray traversal, and action validation
 - server-simulated gravity, voxel collision, falling, and one-block stepping
 - nine nearby bootstrap chunks surrounding protected spawn
@@ -39,6 +39,7 @@ Accounts, classes, quests, crafting UI, inventories, enemies, markets, guilds, h
 - development-only `?qa=cave` spawn for repeatable underground visual checks
 - optional live performance panel with frame p50/p95, FPS, RTT, visible voxels, mesh/triangle counts, chunk-build time, payload size, and browser memory
 - responsive floating joystick and large contextual Mine control for coarse-pointer/tablet layouts
+- stale-input timeout, movement-message rate limiting, movement-facing yaw, and focus-loss input reset
 - current PlayCanvas `Mesh.fromGeometry` construction without deprecated mesh helpers
 
 ## Provisional performance budgets

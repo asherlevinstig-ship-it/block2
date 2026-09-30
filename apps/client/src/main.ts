@@ -22,6 +22,16 @@ import {
   type BlockId,
   type VoxelRaycastHit,
 } from "@blockcraft/voxel-world";
+import {
+  REMOTE_INTERPOLATION_DELAY_MS,
+  movementYaw,
+  positionDistance,
+  predictionError,
+  sampleRemotePose,
+  trimRemoteSnapshots,
+  type Position3,
+  type RemoteSnapshot,
+} from "./movement-network.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -243,13 +253,13 @@ interface NetworkPlayer {
   y: number;
   z: number;
   yaw: number;
+  lastProcessedInput: number;
   name: string;
 }
 
 interface RemotePlayerVisual {
   entity: pc.Entity;
-  target: pc.Vec3;
-  yaw: number;
+  snapshots: RemoteSnapshot[];
 }
 
 const remoteMaterial = new pc.StandardMaterial();
@@ -257,6 +267,11 @@ remoteMaterial.diffuse = new pc.Color(0.24, 0.66, 0.95);
 remoteMaterial.update();
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
+const predictionHistory = new Map<number, Position3>();
+const pendingPredictionCorrection = new pc.Vec3();
+let acknowledgedInputSequence = 0;
+let reconciledInputSequence = 0;
+let localFacingYaw = 0;
 
 function updatePlayerCount(): void {
   const count = room ? remotePlayers.size + 1 : 0;
@@ -270,7 +285,17 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
   entity.setLocalScale(0.72, 1.45, 0.72);
   entity.setPosition(player.x, player.y, player.z);
   app.root.addChild(entity);
-  return { entity, target: new pc.Vec3(player.x, player.y, player.z), yaw: player.yaw };
+  return {
+    entity,
+    snapshots: [{ receivedAt: performance.now(), x: player.x, y: player.y, z: player.z, yaw: player.yaw }],
+  };
+}
+
+function recordRemoteSnapshot(remote: RemotePlayerVisual, player: NetworkPlayer): void {
+  const snapshot = { receivedAt: performance.now(), x: player.x, y: player.y, z: player.z, yaw: player.yaw };
+  const latest = remote.snapshots[remote.snapshots.length - 1];
+  if (latest && snapshot.receivedAt - latest.receivedAt < 1) remote.snapshots[remote.snapshots.length - 1] = snapshot;
+  else remote.snapshots.push(snapshot);
 }
 
 function bindPlayers(joinedRoom: Room): void {
@@ -287,14 +312,17 @@ function bindPlayers(joinedRoom: Room): void {
 
     const updatePosition = () => {
       if (isLocal) authoritativeLocalPosition.set(player.x, player.y, player.z);
-      else remote?.target.set(player.x, player.y, player.z);
+      else if (remote) recordRemoteSnapshot(remote, player);
     };
     const playerCallbacks = callbacks(player);
     playerCallbacks.listen("x", updatePosition, true);
     playerCallbacks.listen("y", updatePosition, true);
     playerCallbacks.listen("z", updatePosition, true);
-    playerCallbacks.listen("yaw", (yaw: number) => {
-      if (remote) remote.yaw = yaw;
+    playerCallbacks.listen("yaw", () => {
+      if (remote) recordRemoteSnapshot(remote, player);
+    }, true);
+    playerCallbacks.listen("lastProcessedInput", (sequence: number) => {
+      if (isLocal) acknowledgedInputSequence = sequence;
     }, true);
   }, true);
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {
@@ -430,9 +458,27 @@ joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.po
 let room: Room | null = null;
 let worldReady = false;
 let lastMoveSentAt = 0;
+let moveSequence = 0;
 let mineSequence = 0;
 let localVerticalVelocity = 0;
 let cutawayStateKey = "surface";
+
+function resetMovementControls(): void {
+  keys.clear();
+  if (joystickPointerId !== null) releaseJoystick(joystickPointerId);
+  touchStrafe = 0;
+  touchForward = 0;
+  if (!room || !worldReady) return;
+  moveSequence += 1;
+  room.send("move", { sequence: moveSequence, strafe: 0, forward: 0, yaw: localFacingYaw });
+  const position = localPlayer.getPosition();
+  predictionHistory.set(moveSequence, { x: position.x, y: position.y, z: position.z });
+}
+
+window.addEventListener("blur", resetMovementControls);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) resetMovementControls();
+});
 
 function hasCeilingAbove(position: pc.Vec3): boolean {
   const x = Math.floor(position.x);
@@ -550,6 +596,33 @@ function updatePerformanceMetrics(now: number): void {
   };
 }
 
+function reconcileAcknowledgedPrediction(dt: number): void {
+  if (acknowledgedInputSequence > reconciledInputSequence) {
+    const predictedAtAcknowledgement = predictionHistory.get(acknowledgedInputSequence);
+    if (predictedAtAcknowledgement) {
+      const error = predictionError(authoritativeLocalPosition, predictedAtAcknowledgement);
+      if (positionDistance(error) > 1.25) {
+        const position = localPlayer.getPosition();
+        localPlayer.setPosition(position.x + error.x, position.y + error.y, position.z + error.z);
+        pendingPredictionCorrection.set(0, 0, 0);
+      } else {
+        pendingPredictionCorrection.add(new pc.Vec3(error.x, error.y, error.z));
+      }
+    }
+    reconciledInputSequence = acknowledgedInputSequence;
+    for (const sequence of predictionHistory.keys()) {
+      if (sequence <= acknowledgedInputSequence) predictionHistory.delete(sequence);
+    }
+  }
+
+  if (pendingPredictionCorrection.lengthSq() < 0.000001) return;
+  const fraction = Math.min(1, dt * 8);
+  const applied = pendingPredictionCorrection.clone().mulScalar(fraction);
+  const position = localPlayer.getPosition();
+  localPlayer.setPosition(position.x + applied.x, position.y + applied.y, position.z + applied.z);
+  pendingPredictionCorrection.sub(applied);
+}
+
 app.on("update", (dt: number) => {
   frameSamples.push(dt * 1000);
   if (frameSamples.length > 240) frameSamples.shift();
@@ -559,6 +632,7 @@ app.on("update", (dt: number) => {
   const forward = Math.max(-1, Math.min(1, keyboardForward + touchForward));
   const inputLength = Math.hypot(strafe, forward);
   const inputScale = inputLength > 1 ? 1 / inputLength : 1;
+  localFacingYaw = movementYaw(strafe, forward, localFacingYaw);
   const frameTime = Math.min(dt, 0.05);
   const current = localPlayer.getPosition();
   const grounded = isPlayerSupported(readWorldBlock, current.x, current.y, current.z);
@@ -575,19 +649,18 @@ app.on("update", (dt: number) => {
   );
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
+  localPlayer.setEulerAngles(0, localFacingYaw, 0);
+  reconcileAcknowledgedPrediction(dt);
 
-  let player = localPlayer.getPosition();
-  const authorityDistance = player.distance(authoritativeLocalPosition);
-  if (authorityDistance > 1.25) localPlayer.setPosition(authoritativeLocalPosition);
-  else if (authorityDistance > 0.04) {
-    player.lerp(player, authoritativeLocalPosition, Math.min(1, dt * 3));
-    localPlayer.setPosition(player);
-  }
-  player = localPlayer.getPosition();
+  const player = localPlayer.getPosition();
+  const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
   for (const remote of remotePlayers.values()) {
-    const position = remote.entity.getPosition();
-    remote.entity.setPosition(position.lerp(position, remote.target, Math.min(1, dt * 12)));
-    remote.entity.setEulerAngles(0, remote.yaw, 0);
+    const pose = sampleRemotePose(remote.snapshots, renderAt);
+    if (pose) {
+      remote.entity.setPosition(pose.x, pose.y, pose.z);
+      remote.entity.setEulerAngles(0, pose.yaw, 0);
+    }
+    trimRemoteSnapshots(remote.snapshots, renderAt);
   }
   const desiredCamera = new pc.Vec3(player.x + 14, player.y + 18, player.z + 16);
   const cameraPosition = camera.getPosition();
@@ -607,7 +680,10 @@ app.on("update", (dt: number) => {
   }
   if (room && worldReady && now - lastMoveSentAt >= 50) {
     lastMoveSentAt = now;
-    room.send("move", { strafe, forward, yaw: 0 });
+    moveSequence += 1;
+    room.send("move", { sequence: moveSequence, strafe, forward, yaw: localFacingYaw });
+    predictionHistory.set(moveSequence, { x: player.x, y: player.y, z: player.z });
+    if (predictionHistory.size > 120) predictionHistory.delete(predictionHistory.keys().next().value as number);
   }
 });
 
