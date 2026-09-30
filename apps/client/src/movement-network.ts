@@ -1,15 +1,15 @@
-export interface Position3 {
+export interface RemoteSnapshot {
   x: number;
   y: number;
   z: number;
-}
-
-export interface RemoteSnapshot extends Position3 {
   receivedAt: number;
   yaw: number;
 }
 
-export interface SampledRemotePose extends Position3 {
+export interface SampledRemotePose {
+  x: number;
+  y: number;
+  z: number;
   yaw: number;
 }
 
@@ -19,18 +19,6 @@ export function movementYaw(strafe: number, forward: number, fallback: number): 
   return Math.hypot(strafe, forward) < 0.01
     ? fallback
     : Math.atan2(strafe, forward) * 180 / Math.PI;
-}
-
-export function predictionError(authoritative: Position3, predictedAtAcknowledgement: Position3): Position3 {
-  return {
-    x: authoritative.x - predictedAtAcknowledgement.x,
-    y: authoritative.y - predictedAtAcknowledgement.y,
-    z: authoritative.z - predictedAtAcknowledgement.z,
-  };
-}
-
-export function positionDistance(position: Position3): number {
-  return Math.hypot(position.x, position.y, position.z);
 }
 
 function lerpAngle(start: number, end: number, fraction: number): number {

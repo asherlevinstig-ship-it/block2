@@ -1,15 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { movementYaw, predictionError, sampleRemotePose, trimRemoteSnapshots } from "./movement-network.js";
+import { movementYaw, sampleRemotePose, trimRemoteSnapshots } from "./movement-network.js";
 
 describe("movement networking", () => {
   it("faces movement and preserves the last facing direction while idle", () => {
     expect(movementYaw(1, 0, 12)).toBe(90);
     expect(movementYaw(0, -1, 12)).toBe(180);
     expect(movementYaw(0, 0, 12)).toBe(12);
-  });
-
-  it("calculates correction at an acknowledged predicted state", () => {
-    expect(predictionError({ x: 2, y: 1, z: 4 }, { x: 2.5, y: 1, z: 3 })).toEqual({ x: -0.5, y: 0, z: 1 });
   });
 
   it("samples remote players from a buffered timeline", () => {

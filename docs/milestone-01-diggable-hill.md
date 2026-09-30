@@ -29,7 +29,7 @@ Accounts, classes, quests, crafting UI, inventories, enemies, markets, guilds, h
 - cursor-based voxel selection with a visible range-aware target
 - revision-aware mining requests and stale-state recovery
 - exposed-voxel chunk rebuilding after synchronized mutations
-- buffered remote-player interpolation with sequenced, acknowledgement-aware local correction
+- buffered remote-player interpolation with sequenced input and bounded authoritative local correction
 - unit tests for generation, addressing, protection, ray traversal, and action validation
 - server-simulated gravity, voxel collision, falling, and one-block stepping
 - nine nearby bootstrap chunks surrounding protected spawn

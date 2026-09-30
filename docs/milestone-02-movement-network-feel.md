@@ -8,14 +8,16 @@ Make movement dependable before adding combat. Local control must remain respons
 
 - monotonically sequenced movement messages
 - server acknowledgement through `lastProcessedInput`
-- client correction against the acknowledged predicted position while preserving newer local movement
-- hard correction for errors above 1.25 world units and smoothed correction below that threshold
+- bounded correction toward current authoritative state, with a dead zone that prevents tiny network differences from shaking the player
+- hard correction only for errors above 1.5 world units and smoothed correction above the 0.12-unit dead zone
 - 100 ms buffered snapshot interpolation for remote players
 - movement-facing yaw synchronized through authoritative room state
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
 - keyboard and joystick reset on browser blur or page visibility loss
-- automated checks for prediction errors, facing, snapshot interpolation, 80/150/250 ms delivery spacing, stale inputs, and rate limiting
+- unloaded chunks treated as solid by local collision prediction so the player cannot fall into an unstreamed void
+- camera focus smoothed separately from player reconciliation so small corrections are not magnified by the view
+- automated checks for facing, snapshot interpolation, 80/150/250 ms delivery spacing, stale inputs, and rate limiting
 
 ## Automated acceptance
 

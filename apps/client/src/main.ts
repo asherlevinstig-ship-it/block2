@@ -25,11 +25,8 @@ import {
 import {
   REMOTE_INTERPOLATION_DELAY_MS,
   movementYaw,
-  positionDistance,
-  predictionError,
   sampleRemotePose,
   trimRemoteSnapshots,
-  type Position3,
   type RemoteSnapshot,
 } from "./movement-network.js";
 import "./styles.css";
@@ -140,6 +137,15 @@ function readWorldBlock(x: number, y: number, z: number): BlockId {
   const address = worldToChunk(x, z);
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
   if (!chunk) return Block.Air;
+  return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
+}
+
+function readCollisionWorldBlock(x: number, y: number, z: number): BlockId {
+  if (y < 0) return Block.Bedrock;
+  if (y >= CHUNK_HEIGHT) return Block.Air;
+  const address = worldToChunk(x, z);
+  const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
+  if (!chunk) return Block.Bedrock;
   return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
 }
 
@@ -267,11 +273,8 @@ remoteMaterial.diffuse = new pc.Color(0.24, 0.66, 0.95);
 remoteMaterial.update();
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
-const predictionHistory = new Map<number, Position3>();
-const pendingPredictionCorrection = new pc.Vec3();
-let acknowledgedInputSequence = 0;
-let reconciledInputSequence = 0;
 let localFacingYaw = 0;
+const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
 
 function updatePlayerCount(): void {
   const count = room ? remotePlayers.size + 1 : 0;
@@ -320,9 +323,6 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("z", updatePosition, true);
     playerCallbacks.listen("yaw", () => {
       if (remote) recordRemoteSnapshot(remote, player);
-    }, true);
-    playerCallbacks.listen("lastProcessedInput", (sequence: number) => {
-      if (isLocal) acknowledgedInputSequence = sequence;
     }, true);
   }, true);
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {
@@ -395,6 +395,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   const initialPosition = ownPlayer ?? payload.spawn;
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
+  cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
   localVerticalVelocity = 0;
   cutawayY = null;
   cutawayStateKey = "surface";
@@ -471,8 +472,6 @@ function resetMovementControls(): void {
   if (!room || !worldReady) return;
   moveSequence += 1;
   room.send("move", { sequence: moveSequence, strafe: 0, forward: 0, yaw: localFacingYaw });
-  const position = localPlayer.getPosition();
-  predictionHistory.set(moveSequence, { x: position.x, y: position.y, z: position.z });
 }
 
 window.addEventListener("blur", resetMovementControls);
@@ -596,31 +595,16 @@ function updatePerformanceMetrics(now: number): void {
   };
 }
 
-function reconcileAcknowledgedPrediction(dt: number): void {
-  if (acknowledgedInputSequence > reconciledInputSequence) {
-    const predictedAtAcknowledgement = predictionHistory.get(acknowledgedInputSequence);
-    if (predictedAtAcknowledgement) {
-      const error = predictionError(authoritativeLocalPosition, predictedAtAcknowledgement);
-      if (positionDistance(error) > 1.25) {
-        const position = localPlayer.getPosition();
-        localPlayer.setPosition(position.x + error.x, position.y + error.y, position.z + error.z);
-        pendingPredictionCorrection.set(0, 0, 0);
-      } else {
-        pendingPredictionCorrection.add(new pc.Vec3(error.x, error.y, error.z));
-      }
-    }
-    reconciledInputSequence = acknowledgedInputSequence;
-    for (const sequence of predictionHistory.keys()) {
-      if (sequence <= acknowledgedInputSequence) predictionHistory.delete(sequence);
-    }
-  }
-
-  if (pendingPredictionCorrection.lengthSq() < 0.000001) return;
-  const fraction = Math.min(1, dt * 8);
-  const applied = pendingPredictionCorrection.clone().mulScalar(fraction);
+function reconcileLocalPlayer(dt: number): void {
   const position = localPlayer.getPosition();
-  localPlayer.setPosition(position.x + applied.x, position.y + applied.y, position.z + applied.z);
-  pendingPredictionCorrection.sub(applied);
+  const distance = position.distance(authoritativeLocalPosition);
+  if (distance > 1.5) {
+    localPlayer.setPosition(authoritativeLocalPosition);
+    localVerticalVelocity = 0;
+  } else if (distance > 0.12) {
+    position.lerp(position, authoritativeLocalPosition, Math.min(1, dt * 4));
+    localPlayer.setPosition(position);
+  }
 }
 
 app.on("update", (dt: number) => {
@@ -635,7 +619,7 @@ app.on("update", (dt: number) => {
   localFacingYaw = movementYaw(strafe, forward, localFacingYaw);
   const frameTime = Math.min(dt, 0.05);
   const current = localPlayer.getPosition();
-  const grounded = isPlayerSupported(readWorldBlock, current.x, current.y, current.z);
+  const grounded = isPlayerSupported(readCollisionWorldBlock, current.x, current.y, current.z);
   if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;
   else localVerticalVelocity = Math.max(-TERMINAL_VELOCITY, localVerticalVelocity - GRAVITY * frameTime);
   const predicted = resolvePlayerMotion(
@@ -645,12 +629,12 @@ app.on("update", (dt: number) => {
       y: localVerticalVelocity * frameTime,
       z: forward * inputScale * 4.2 * frameTime,
     },
-    readWorldBlock,
+    readCollisionWorldBlock,
   );
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   localPlayer.setEulerAngles(0, localFacingYaw, 0);
-  reconcileAcknowledgedPrediction(dt);
+  reconcileLocalPlayer(dt);
 
   const player = localPlayer.getPosition();
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
@@ -662,10 +646,11 @@ app.on("update", (dt: number) => {
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
-  const desiredCamera = new pc.Vec3(player.x + 14, player.y + 18, player.z + 16);
+  cameraFocus.lerp(cameraFocus, player, Math.min(1, dt * 6));
+  const desiredCamera = new pc.Vec3(cameraFocus.x + 14, cameraFocus.y + 18, cameraFocus.z + 16);
   const cameraPosition = camera.getPosition();
   camera.setPosition(cameraPosition.lerp(cameraPosition, desiredCamera, Math.min(1, dt * 7)));
-  camera.lookAt(player.x, player.y - 2, player.z);
+  camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   updateUndergroundPresentation(player);
   updateTarget();
 
@@ -682,8 +667,6 @@ app.on("update", (dt: number) => {
     lastMoveSentAt = now;
     moveSequence += 1;
     room.send("move", { sequence: moveSequence, strafe, forward, yaw: localFacingYaw });
-    predictionHistory.set(moveSequence, { x: player.x, y: player.y, z: player.z });
-    if (predictionHistory.size > 120) predictionHistory.delete(predictionHistory.keys().next().value as number);
   }
 });
 
