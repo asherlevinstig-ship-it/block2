@@ -40,6 +40,16 @@ describe("movement networking", () => {
     expect(decelerating.x).toBeCloseTo(0.5);
   });
 
+  it("changes direction immediately without carrying sideways momentum", () => {
+    const turned = approachMovement({ x: 1, z: 0 }, { x: 0, z: -1 }, 0.016);
+    expect(turned.x).toBeCloseTo(0);
+    expect(turned.z).toBeCloseTo(-1);
+
+    const reversed = approachMovement({ x: 1, z: 0 }, { x: -1, z: 0 }, 0.016);
+    expect(reversed.x).toBeCloseTo(-1);
+    expect(reversed.z).toBeCloseTo(0);
+  });
+
   it("snaps analogue input to one of eight directions while preserving speed", () => {
     const snapped = quantizeMovementToEightDirections({ x: 0.82, z: 0.31 });
     expect(snapped.z).toBeCloseTo(0);

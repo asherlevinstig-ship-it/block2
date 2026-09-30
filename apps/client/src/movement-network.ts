@@ -53,17 +53,18 @@ export function approachMovement(
   acceleration = 6,
   deceleration = 10,
 ): MovementVector {
-  const differenceX = target.x - current.x;
-  const differenceZ = target.z - current.z;
-  const distance = Math.hypot(differenceX, differenceZ);
-  if (distance === 0) return target;
-  const speedingUp = Math.hypot(target.x, target.z) > Math.hypot(current.x, current.z) + 0.001;
-  const maximumChange = (speedingUp ? acceleration : deceleration) * deltaTime;
-  if (distance <= maximumChange) return target;
-  return {
-    x: current.x + differenceX / distance * maximumChange,
-    z: current.z + differenceZ / distance * maximumChange,
-  };
+  const currentSpeed = Math.hypot(current.x, current.z);
+  const targetSpeed = Math.hypot(target.x, target.z);
+  const maximumSpeedChange = (targetSpeed > currentSpeed ? acceleration : deceleration) * deltaTime;
+  const nextSpeed = Math.abs(targetSpeed - currentSpeed) <= maximumSpeedChange
+    ? targetSpeed
+    : currentSpeed + Math.sign(targetSpeed - currentSpeed) * maximumSpeedChange;
+
+  if (nextSpeed <= 0.0001) return { x: 0, z: 0 };
+  if (targetSpeed > 0.0001) {
+    return { x: target.x / targetSpeed * nextSpeed, z: target.z / targetSpeed * nextSpeed };
+  }
+  return { x: current.x / currentSpeed * nextSpeed, z: current.z / currentSpeed * nextSpeed };
 }
 
 export function movementYaw(strafe: number, forward: number, fallback: number): number {

@@ -14,6 +14,7 @@ Make movement dependable before adding combat. Local control must remain respons
 - movement-facing yaw synchronized through authoritative room state
 - camera-relative keyboard and joystick input snapped to eight readable directions
 - acceleration and deceleration instead of immediate full-speed starts and stops
+- immediate directional steering so turns do not carry momentum from the previous direction
 - a visible facing marker on local and remote player capsules
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
