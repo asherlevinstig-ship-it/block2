@@ -13,6 +13,7 @@ import {
   CHUNK_SIZE,
   GRAVITY,
   PLAYER_HEIGHT,
+  PLAYER_RADIUS,
   TERMINAL_VELOCITY,
   chunkIndex,
   isProtectedVoxel,
@@ -260,7 +261,7 @@ function addFacingMarker(player: pc.Entity): void {
   marker.addComponent("render", { type: "box", castShadows: true });
   if (marker.render) marker.render.material = facingMaterial;
   marker.setLocalScale(0.2, 0.16, 0.38);
-  marker.setLocalPosition(0, PLAYER_HEIGHT * 0.58, 0.34);
+  marker.setLocalPosition(0, PLAYER_HEIGHT * 0.58, PLAYER_RADIUS + 0.08);
   player.addChild(marker);
 }
 
@@ -273,7 +274,7 @@ function addPlayerBody(player: pc.Entity, material: pc.StandardMaterial): void {
   const body = new pc.Entity("player-body");
   body.addComponent("render", { type: "capsule", castShadows: true });
   if (body.render) body.render.material = material;
-  body.setLocalScale(0.72, PLAYER_HEIGHT, 0.72);
+  body.setLocalScale(PLAYER_RADIUS * 2, PLAYER_HEIGHT / 2, PLAYER_RADIUS * 2);
   body.setLocalPosition(0, PLAYER_HEIGHT / 2, 0);
   player.addChild(body);
   addFacingMarker(player);

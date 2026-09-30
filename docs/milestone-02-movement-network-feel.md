@@ -16,7 +16,7 @@ Make movement dependable before adding combat. Local control must remain respons
 - acceleration and deceleration instead of immediate full-speed starts and stops
 - immediate directional steering so turns do not carry momentum from the previous direction
 - a visible facing marker on local and remote player capsules
-- player visuals offset above their feet-position roots so step-up never embeds the capsule in terrain
+- player visuals sized to the shared collision height/radius and offset above their feet-position roots so step-up never embeds the capsule in terrain
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
 - keyboard and joystick reset on browser blur or page visibility loss
