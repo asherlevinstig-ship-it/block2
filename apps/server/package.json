@@ -17,7 +17,6 @@
     "@colyseus/schema": "latest",
     "@colyseus/tools": "^0.18.7",
     "@colyseus/ws-transport": "latest",
-    "colyseus": "^0.18.8",
     "express": "latest"
   },
   "devDependencies": {
