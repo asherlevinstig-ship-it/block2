@@ -31,3 +31,9 @@ Accounts, classes, quests, crafting UI, inventories, enemies, markets, guilds, h
 - exposed-voxel chunk rebuilding after synchronized mutations
 - interpolated remote-player avatars with authoritative local correction
 - unit tests for generation, addressing, protection, ray traversal, and action validation
+- server-simulated gravity, voxel collision, falling, and one-block stepping
+- nine nearby bootstrap chunks surrounding protected spawn
+- guaranteed mine-through entrance, descending tunnel, and shallow underground chamber east of spawn
+- local prediction driven by the same voxel-motion rules as the authoritative server
+- underground roof cutaway, depth feedback, reduced sunlight, and an explorer lantern
+- development-only `?qa=cave` spawn for repeatable underground visual checks

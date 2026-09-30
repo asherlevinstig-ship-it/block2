@@ -3,9 +3,8 @@ import { z } from "zod";
 export const WORLD_ROOM = "world";
 
 export const MoveRequestSchema = z.object({
-  x: z.number().finite(),
-  y: z.number().finite(),
-  z: z.number().finite(),
+  strafe: z.number().finite().min(-1).max(1),
+  forward: z.number().finite().min(-1).max(1),
   yaw: z.number().finite().default(0),
 });
 

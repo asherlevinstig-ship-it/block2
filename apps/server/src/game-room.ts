@@ -5,15 +5,20 @@ import {
   type ActionRejected,
   type BlockChanged,
   type ChunkSnapshot,
+  type MoveRequest,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
 import {
   Block,
   CHUNK_HEIGHT,
   CHUNK_SIZE,
+  GRAVITY,
+  TERMINAL_VELOCITY,
   generateChunk,
   getBlock,
   highestSolidY,
+  isPlayerSupported,
+  resolvePlayerMotion,
   setBlock,
   worldToChunk,
   type GeneratedChunk,
@@ -29,6 +34,8 @@ interface MutableChunk {
 export class WorldRoom extends Room<{ state: WorldState }> {
   override maxClients = 20;
   private readonly chunks = new Map<string, MutableChunk>();
+  private readonly movementInputs = new Map<string, MoveRequest>();
+  private readonly verticalVelocities = new Map<string, number>();
   private worldSeed = "blockcraft-dev";
 
   override onCreate(): void {
@@ -37,21 +44,29 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
     this.onMessage("move", (client, payload) => this.handleMove(client, payload));
     this.onMessage("mine", (client, payload) => this.handleMine(client, payload));
+    this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
   override onJoin(client: Client, options: unknown): void {
     const player = new PlayerState();
     const requestedName = typeof options === "object" && options && "name" in options ? String(options.name) : "Explorer";
     player.name = requestedName.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer";
-    const spawn = this.spawnPoint();
+    const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
+    const spawn = process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
+      ? { x: 23.5, y: 3, z: 8.5 }
+      : this.spawnPoint();
     player.x = spawn.x;
     player.y = spawn.y;
     player.z = spawn.z;
     this.state.players.set(client.sessionId, player);
+    this.movementInputs.set(client.sessionId, { strafe: 0, forward: 0, yaw: 0 });
+    this.verticalVelocities.set(client.sessionId, 0);
   }
 
   override onLeave(client: Client): void {
     this.state.players.delete(client.sessionId);
+    this.movementInputs.delete(client.sessionId);
+    this.verticalVelocities.delete(client.sessionId);
   }
 
   private chunkKey(chunkX: number, chunkZ: number): string {
@@ -74,12 +89,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private bootstrapPayload(): WorldBootstrap {
+    const chunks: ChunkSnapshot[] = [];
+    for (let chunkZ = -1; chunkZ <= 1; chunkZ += 1) {
+      for (let chunkX = -1; chunkX <= 1; chunkX += 1) chunks.push(this.snapshot(chunkX, chunkZ));
+    }
     return {
       seed: this.worldSeed,
       chunkSize: CHUNK_SIZE,
       chunkHeight: CHUNK_HEIGHT,
       spawn: this.spawnPoint(),
-      chunks: [this.snapshot(0, 0)],
+      chunks,
     };
   }
 
@@ -99,10 +118,43 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!player) return;
     const rejection = movementRejectionReason(player, parsed.data);
     if (rejection) return this.reject(client, { action: "move", reason: rejection });
-    player.x = parsed.data.x;
-    player.y = parsed.data.y;
-    player.z = parsed.data.z;
     player.yaw = parsed.data.yaw;
+    this.movementInputs.set(client.sessionId, parsed.data);
+  }
+
+  private readWorldBlock = (x: number, y: number, z: number) => {
+    if (y < 0) return Block.Bedrock;
+    if (y >= CHUNK_HEIGHT) return Block.Air;
+    const address = worldToChunk(x, z);
+    return getBlock(this.getChunk(address.chunkX, address.chunkZ).chunk, address.localX, y, address.localZ);
+  };
+
+  private simulatePlayers(deltaTime: number): void {
+    for (const [sessionId, player] of this.state.players) {
+      const input = this.movementInputs.get(sessionId) ?? { strafe: 0, forward: 0, yaw: player.yaw };
+      const inputLength = Math.hypot(input.strafe, input.forward);
+      const scale = inputLength > 1 ? 1 / inputLength : 1;
+      const speed = 4.2;
+      const grounded = isPlayerSupported(this.readWorldBlock, player.x, player.y, player.z);
+      let verticalVelocity = this.verticalVelocities.get(sessionId) ?? 0;
+      if (grounded && verticalVelocity < 0) verticalVelocity = 0;
+      else verticalVelocity = Math.max(-TERMINAL_VELOCITY, verticalVelocity - GRAVITY * deltaTime);
+
+      const next = resolvePlayerMotion(
+        { x: player.x, y: player.y, z: player.z },
+        {
+          x: input.strafe * scale * speed * deltaTime,
+          y: verticalVelocity * deltaTime,
+          z: input.forward * scale * speed * deltaTime,
+        },
+        this.readWorldBlock,
+      );
+      if (next.hitVertical || next.grounded) verticalVelocity = 0;
+      this.verticalVelocities.set(sessionId, verticalVelocity);
+      player.x = next.x;
+      player.y = next.y;
+      player.z = next.z;
+    }
   }
 
   private handleMine(client: Client, payload: unknown): void {

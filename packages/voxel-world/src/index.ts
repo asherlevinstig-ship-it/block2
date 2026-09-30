@@ -1,6 +1,10 @@
 export const CHUNK_SIZE = 16;
 export const CHUNK_HEIGHT = 24;
 export const SPAWN_PROTECTION_RADIUS = 6;
+export const PLAYER_RADIUS = 0.28;
+export const PLAYER_HEIGHT = 1.45;
+export const GRAVITY = 18;
+export const TERMINAL_VELOCITY = 12;
 
 export const Block = {
   Air: 0,
@@ -40,6 +44,18 @@ export interface VoxelRaycastHit extends VoxelPoint {
 
 export type WorldBlockReader = (x: number, y: number, z: number) => BlockId;
 
+export interface PlayerPosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface PlayerMotionResult extends PlayerPosition {
+  grounded: boolean;
+  hitVertical: boolean;
+  stepped: boolean;
+}
+
 function hash32(value: number): number {
   value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
   value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
@@ -57,6 +73,24 @@ export function hashSeed(seed: string): number {
 
 function noise(seed: number, x: number, y: number, z: number): number {
   return hash32(seed ^ Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) / 0xffffffff;
+}
+
+function baseTerrainHeight(seed: number, worldX: number, worldZ: number): number {
+  if (worldX >= 18 && worldX <= 27 && worldZ >= 5 && worldZ <= 11) return 9;
+  if (worldX >= 16 && worldX <= 17 && worldZ >= 7 && worldZ <= 9) return 5;
+  return 6 + Math.floor(noise(seed, worldX >> 2, 0, worldZ >> 2) * 4);
+}
+
+function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId | null {
+  if (worldZ < 7 || worldZ > 9) {
+    const inChamber = worldX >= 22 && worldX <= 27 && worldZ >= 5 && worldZ <= 11 && y >= 3 && y <= 7;
+    return inChamber ? Block.Air : null;
+  }
+  if (worldX === 19 && y >= 6 && y <= 8) return Block.Air;
+  if (worldX === 20 && y >= 5 && y <= 8) return Block.Air;
+  if (worldX === 21 && y >= 4 && y <= 8) return Block.Air;
+  if (worldX >= 22 && worldX <= 27 && y >= 3 && y <= 7) return Block.Air;
+  return null;
 }
 
 export function chunkIndex(x: number, y: number, z: number): number {
@@ -88,7 +122,7 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
     for (let localX = 0; localX < CHUNK_SIZE; localX += 1) {
       const worldX = chunkX * CHUNK_SIZE + localX;
       const worldZ = chunkZ * CHUNK_SIZE + localZ;
-      const height = 6 + Math.floor(noise(seed, worldX >> 2, 0, worldZ >> 2) * 4);
+      const height = baseTerrainHeight(seed, worldX, worldZ);
 
       for (let y = 0; y <= height; y += 1) {
         let block: BlockId = y === 0 ? Block.Bedrock : y === height ? Block.Grass : y >= height - 2 ? Block.Dirt : Block.Stone;
@@ -96,6 +130,11 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (cave) block = Block.Air;
         else if (block === Block.Stone && noise(seed ^ 0x9e3779b9, worldX, y, worldZ) > 0.94) block = Block.IronOre;
         blocks[chunkIndex(localX, y, localZ)] = block;
+      }
+
+      for (let y = 1; y < CHUNK_HEIGHT; y += 1) {
+        const caveBlock = milestoneCaveBlock(worldX, y, worldZ);
+        if (caveBlock !== null) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
       }
     }
   }
@@ -118,6 +157,85 @@ export function highestSolidY(chunk: GeneratedChunk, localX: number, localZ: num
     if (getBlock(chunk, localX, y, localZ) !== Block.Air) return y;
   }
   return 0;
+}
+
+export function playerCollides(readBlock: WorldBlockReader, x: number, y: number, z: number): boolean {
+  const minX = Math.floor(x - PLAYER_RADIUS);
+  const maxX = Math.floor(x + PLAYER_RADIUS);
+  const minY = Math.floor(y + 0.06);
+  const maxY = Math.floor(y + PLAYER_HEIGHT - 0.06);
+  const minZ = Math.floor(z - PLAYER_RADIUS);
+  const maxZ = Math.floor(z + PLAYER_RADIUS);
+  for (let blockY = minY; blockY <= maxY; blockY += 1) {
+    for (let blockZ = minZ; blockZ <= maxZ; blockZ += 1) {
+      for (let blockX = minX; blockX <= maxX; blockX += 1) {
+        if (readBlock(blockX, blockY, blockZ) !== Block.Air) return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function isPlayerSupported(readBlock: WorldBlockReader, x: number, y: number, z: number): boolean {
+  const supportY = Math.floor(y - 0.08);
+  const sampleRadius = PLAYER_RADIUS * 0.82;
+  for (const offsetX of [-sampleRadius, sampleRadius]) {
+    for (const offsetZ of [-sampleRadius, sampleRadius]) {
+      if (readBlock(Math.floor(x + offsetX), supportY, Math.floor(z + offsetZ)) !== Block.Air) return true;
+    }
+  }
+  return false;
+}
+
+function moveVertical(position: PlayerPosition, deltaY: number, readBlock: WorldBlockReader): { hit: boolean } {
+  if (deltaY === 0) return { hit: false };
+  const steps = Math.max(1, Math.ceil(Math.abs(deltaY) / 0.08));
+  const step = deltaY / steps;
+  for (let index = 0; index < steps; index += 1) {
+    if (playerCollides(readBlock, position.x, position.y + step, position.z)) return { hit: true };
+    position.y += step;
+  }
+  return { hit: false };
+}
+
+function moveHorizontalAxis(
+  position: PlayerPosition,
+  axis: "x" | "z",
+  amount: number,
+  canStep: boolean,
+  readBlock: WorldBlockReader,
+): boolean {
+  if (amount === 0) return false;
+  const candidate = { ...position, [axis]: position[axis] + amount };
+  if (!playerCollides(readBlock, candidate.x, candidate.y, candidate.z)) {
+    position[axis] = candidate[axis];
+    return false;
+  }
+  if (!canStep) return false;
+  candidate.y += 1;
+  if (playerCollides(readBlock, candidate.x, candidate.y, candidate.z)) return false;
+  if (!isPlayerSupported(readBlock, candidate.x, candidate.y, candidate.z)) return false;
+  position[axis] = candidate[axis];
+  position.y = candidate.y;
+  return true;
+}
+
+export function resolvePlayerMotion(
+  start: PlayerPosition,
+  delta: PlayerPosition,
+  readBlock: WorldBlockReader,
+): PlayerMotionResult {
+  const position = { ...start };
+  const supportedBeforeMove = isPlayerSupported(readBlock, position.x, position.y, position.z);
+  const steppedX = moveHorizontalAxis(position, "x", delta.x, supportedBeforeMove, readBlock);
+  const steppedZ = moveHorizontalAxis(position, "z", delta.z, supportedBeforeMove || steppedX, readBlock);
+  const vertical = moveVertical(position, delta.y, readBlock);
+  return {
+    ...position,
+    grounded: isPlayerSupported(readBlock, position.x, position.y, position.z),
+    hitVertical: vertical.hit,
+    stepped: steppedX || steppedZ,
+  };
 }
 
 export function voxelRaycast(

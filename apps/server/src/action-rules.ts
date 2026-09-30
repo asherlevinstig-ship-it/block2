@@ -10,9 +10,8 @@ export interface Position {
 }
 
 export function movementRejectionReason(player: Position, request: MoveRequest): RejectionReason | null {
-  const horizontalDistance = Math.hypot(request.x - player.x, request.z - player.z);
-  const verticalDistance = Math.abs(request.y - player.y);
-  return horizontalDistance > 1.5 || verticalDistance > 1.5 ? "range" : null;
+  void player;
+  return Math.hypot(request.strafe, request.forward) > 1.01 ? "range" : null;
 }
 
 export function miningRejectionReason(

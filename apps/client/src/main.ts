@@ -11,8 +11,12 @@ import {
   Block,
   CHUNK_HEIGHT,
   CHUNK_SIZE,
+  GRAVITY,
+  TERMINAL_VELOCITY,
   chunkIndex,
   isProtectedVoxel,
+  isPlayerSupported,
+  resolvePlayerMotion,
   voxelRaycast,
   worldToChunk,
   type BlockId,
@@ -44,6 +48,11 @@ const light = new pc.Entity("sun");
 light.addComponent("light", { type: "directional", intensity: 1.35, castShadows: true, shadowResolution: 1024 });
 light.setEulerAngles(48, 32, 0);
 app.root.addChild(light);
+
+const caveLight = new pc.Entity("explorer-lantern");
+caveLight.addComponent("light", { type: "omni", color: new pc.Color(1, 0.72, 0.38), intensity: 1.1, range: 10 });
+caveLight.enabled = false;
+app.root.addChild(caveLight);
 
 const worldRoot = new pc.Entity("voxel-world");
 app.root.addChild(worldRoot);
@@ -88,6 +97,9 @@ interface ClientChunk {
 }
 
 const chunks = new Map<string, ClientChunk>();
+let cutawayY: number | null = null;
+let cutawayX = 0;
+let cutawayZ = 0;
 
 function chunkKey(chunkX: number, chunkZ: number): string {
   return `${chunkX},${chunkZ}`;
@@ -99,6 +111,14 @@ function readWorldBlock(x: number, y: number, z: number): BlockId {
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
   if (!chunk) return Block.Air;
   return (chunk.blocks[chunkIndex(address.localX, y, address.localZ)] ?? Block.Air) as BlockId;
+}
+
+function isCutawayHidden(x: number, y: number, z: number): boolean {
+  return cutawayY !== null && y > cutawayY && Math.hypot(x + 0.5 - cutawayX, z + 0.5 - cutawayZ) < 8;
+}
+
+function readVisibleWorldBlock(x: number, y: number, z: number): BlockId {
+  return isCutawayHidden(x, y, z) ? Block.Air : readWorldBlock(x, y, z);
 }
 
 function rebuildChunk(chunk: ClientChunk): void {
@@ -113,13 +133,14 @@ function rebuildChunk(chunk: ClientChunk): void {
         if (block === Block.Air) continue;
         const x = chunk.chunkX * CHUNK_SIZE + localX;
         const z = chunk.chunkZ * CHUNK_SIZE + localZ;
+        if (isCutawayHidden(x, y, z)) continue;
         let buffer = buffers.get(block);
         if (!buffer) {
           buffer = { positions: [], normals: [], indices: [] };
           buffers.set(block, buffer);
         }
         for (const face of faces) {
-          const neighbor = readWorldBlock(x + face.normal[0], y + face.normal[1], z + face.normal[2]);
+          const neighbor = readVisibleWorldBlock(x + face.normal[0], y + face.normal[1], z + face.normal[2]);
           if (neighbor !== Block.Air) continue;
           const base = buffer.positions.length / 3;
           for (const corner of face.corners) {
@@ -284,7 +305,7 @@ function updateTarget(): void {
   const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
   const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
   const direction = end.clone().sub(start);
-  const hit = voxelRaycast(start, direction, camera.camera.farClip, readWorldBlock);
+  const hit = voxelRaycast(start, direction, camera.camera.farClip, readVisibleWorldBlock);
   const player = localPlayer.getPosition();
   const inRange = Boolean(hit) && Math.hypot(hit!.x + 0.5 - player.x, hit!.y + 0.5 - player.y, hit!.z + 0.5 - player.z) <= 4.5;
   currentTarget = inRange ? hit : null;
@@ -305,8 +326,13 @@ function renderBootstrap(payload: WorldBootstrap): void {
   chunks.clear();
   const installed = payload.chunks.map(installChunk);
   for (const chunk of installed) rebuildChunk(chunk);
-  localPlayer.setPosition(payload.spawn.x, payload.spawn.y, payload.spawn.z);
-  authoritativeLocalPosition.set(payload.spawn.x, payload.spawn.y, payload.spawn.z);
+  const ownPlayer = room ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId) : undefined;
+  const initialPosition = ownPlayer ?? payload.spawn;
+  localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
+  authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
+  localVerticalVelocity = 0;
+  cutawayY = null;
+  cutawayStateKey = "surface";
   worldReady = true;
   status.textContent = "Connected. Walk to a corner of the hill, point at a nearby block, then mine.";
 }
@@ -319,6 +345,38 @@ let room: Room | null = null;
 let worldReady = false;
 let lastMoveSentAt = 0;
 let mineSequence = 0;
+let localVerticalVelocity = 0;
+let cutawayStateKey = "surface";
+
+function hasCeilingAbove(position: pc.Vec3): boolean {
+  const x = Math.floor(position.x);
+  const z = Math.floor(position.z);
+  for (let y = Math.floor(position.y + 1.5); y < CHUNK_HEIGHT; y += 1) {
+    if (readWorldBlock(x, y, z) !== Block.Air) return true;
+  }
+  return false;
+}
+
+function updateUndergroundPresentation(position: pc.Vec3): void {
+  const underground = hasCeilingAbove(position);
+  const nextCutawayY = underground ? Math.floor(position.y + 1.6) : null;
+  const nextX = underground ? Math.round(position.x / 2) * 2 : 0;
+  const nextZ = underground ? Math.round(position.z / 2) * 2 : 0;
+  const nextKey = underground ? `${nextCutawayY}:${nextX}:${nextZ}` : "surface";
+  caveLight.enabled = underground;
+  caveLight.setPosition(position.x, position.y + 1.2, position.z);
+  if (light.light) light.light.intensity = underground ? 0.5 : 1.35;
+  app.scene.ambientLight = underground ? new pc.Color(0.16, 0.18, 0.2) : new pc.Color(0.36, 0.42, 0.38);
+  if (nextKey === cutawayStateKey) return;
+  cutawayStateKey = nextKey;
+  cutawayY = nextCutawayY;
+  cutawayX = nextX;
+  cutawayZ = nextZ;
+  for (const chunk of chunks.values()) rebuildChunk(chunk);
+  status.textContent = underground
+    ? `Underground · depth ${Math.max(0, 6 - Math.floor(position.y))} · roof cutaway active`
+    : "Surface · find the stone hill east of spawn and mine through its exposed entrance.";
+}
 
 function requestMine(): void {
   if (!room || !worldReady || !currentTarget) return;
@@ -344,18 +402,35 @@ canvas.addEventListener("pointerdown", event => {
 });
 
 app.on("update", (dt: number) => {
-  const direction = new pc.Vec3(
-    Number(keys.has("KeyD")) - Number(keys.has("KeyA")),
-    0,
-    Number(keys.has("KeyS")) - Number(keys.has("KeyW")),
+  const strafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
+  const forward = Number(keys.has("KeyS")) - Number(keys.has("KeyW"));
+  const inputLength = Math.hypot(strafe, forward);
+  const inputScale = inputLength > 1 ? 1 / inputLength : 1;
+  const frameTime = Math.min(dt, 0.05);
+  const current = localPlayer.getPosition();
+  const grounded = isPlayerSupported(readWorldBlock, current.x, current.y, current.z);
+  if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;
+  else localVerticalVelocity = Math.max(-TERMINAL_VELOCITY, localVerticalVelocity - GRAVITY * frameTime);
+  const predicted = resolvePlayerMotion(
+    current,
+    {
+      x: strafe * inputScale * 4.2 * frameTime,
+      y: localVerticalVelocity * frameTime,
+      z: forward * inputScale * 4.2 * frameTime,
+    },
+    readWorldBlock,
   );
-  if (direction.lengthSq() > 0) {
-    direction.normalize().mulScalar(Math.min(dt, 0.05) * 4.2);
-    localPlayer.translate(direction);
-  }
+  if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
+  localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
 
-  const player = localPlayer.getPosition();
-  if (player.distance(authoritativeLocalPosition) > 1.5) localPlayer.setPosition(authoritativeLocalPosition);
+  let player = localPlayer.getPosition();
+  const authorityDistance = player.distance(authoritativeLocalPosition);
+  if (authorityDistance > 1.25) localPlayer.setPosition(authoritativeLocalPosition);
+  else if (authorityDistance > 0.04) {
+    player.lerp(player, authoritativeLocalPosition, Math.min(1, dt * 3));
+    localPlayer.setPosition(player);
+  }
+  player = localPlayer.getPosition();
   for (const remote of remotePlayers.values()) {
     const position = remote.entity.getPosition();
     remote.entity.setPosition(position.lerp(position, remote.target, Math.min(1, dt * 12)));
@@ -365,12 +440,13 @@ app.on("update", (dt: number) => {
   const cameraPosition = camera.getPosition();
   camera.setPosition(cameraPosition.lerp(cameraPosition, desiredCamera, Math.min(1, dt * 7)));
   camera.lookAt(player.x, player.y - 2, player.z);
+  updateUndergroundPresentation(player);
   updateTarget();
 
   const now = performance.now();
-  if (room && worldReady && now - lastMoveSentAt >= 100) {
+  if (room && worldReady && now - lastMoveSentAt >= 50) {
     lastMoveSentAt = now;
-    room.send("move", { x: player.x, y: player.y, z: player.z, yaw: 0 });
+    room.send("move", { strafe, forward, yaw: 0 });
   }
 });
 
@@ -393,7 +469,8 @@ function applyBlockChange(message: BlockChanged): void {
 async function connect(): Promise<void> {
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL || "ws://localhost:2567";
   const client = new Client(endpoint);
-  room = await client.joinOrCreate(WORLD_ROOM, { name: "Explorer" });
+  const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
+  room = await client.joinOrCreate(WORLD_ROOM, { name: "Explorer", ...(qaSpawn === "cave" ? { qaSpawn } : {}) });
   bindPlayers(room);
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";

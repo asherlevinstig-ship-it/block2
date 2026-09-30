@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { Block, CHUNK_SIZE, generateChunk, getBlock, highestSolidY, isProtectedVoxel, voxelRaycast, worldToChunk } from "../src/index.js";
+import {
+  Block,
+  CHUNK_SIZE,
+  generateChunk,
+  getBlock,
+  highestSolidY,
+  isProtectedVoxel,
+  resolvePlayerMotion,
+  voxelRaycast,
+  worldToChunk,
+} from "../src/index.js";
 
 describe("deterministic voxel world", () => {
   it("generates identical chunks from the same seed", () => {
@@ -51,5 +61,34 @@ describe("deterministic voxel world", () => {
     );
     expect(diagonal).toMatchObject({ x: -3, y: 1, z: -3, block: Block.IronOre });
     expect(voxelRaycast({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, 4, () => Block.Stone)).toBeNull();
+  });
+
+  it("builds a guaranteed mine-through entrance and descending cave east of spawn", () => {
+    const chunk = generateChunk("test-world", 1, 0);
+    expect(getBlock(chunk, 2, 6, 8)).not.toBe(Block.Air);
+    expect(getBlock(chunk, 3, 6, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 4, 5, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 6, 3, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 6, 2, 8)).not.toBe(Block.Air);
+  });
+
+  it("steps onto a one-block ledge but cannot pass through a two-block wall", () => {
+    const oneBlockStep = (x: number, y: number) => (y === 0 || (x === 2 && y === 1) ? Block.Stone : Block.Air);
+    const stepped = resolvePlayerMotion({ x: 1.5, y: 1, z: 0.5 }, { x: 1, y: 0, z: 0 }, oneBlockStep);
+    expect(stepped.stepped).toBe(true);
+    expect(stepped.y).toBe(2);
+
+    const wall = (x: number, y: number) => (y === 0 || (x === 2 && (y === 1 || y === 2)) ? Block.Stone : Block.Air);
+    const blocked = resolvePlayerMotion({ x: 1.5, y: 1, z: 0.5 }, { x: 1, y: 0, z: 0 }, wall);
+    expect(blocked.x).toBe(1.5);
+    expect(blocked.stepped).toBe(false);
+  });
+
+  it("lands on voxel terrain without passing through it", () => {
+    const floor = (_x: number, y: number) => (y === 0 ? Block.Stone : Block.Air);
+    const landed = resolvePlayerMotion({ x: 0.5, y: 3, z: 0.5 }, { x: 0, y: -3, z: 0 }, floor);
+    expect(landed.hitVertical).toBe(true);
+    expect(landed.grounded).toBe(true);
+    expect(landed.y).toBeGreaterThan(0.9);
   });
 });
