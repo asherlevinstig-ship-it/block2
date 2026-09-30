@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name: "blockcraft-server",
+    name: "blockcraft-mp",
     script: "apps/server/dist/index.js",
     instances: 1,
     exec_mode: "fork",
