@@ -19,6 +19,18 @@ export function shouldUseDepthSlice(
   return underground || (excavating && playerY < surfaceY - 0.65);
 }
 
+export function bootstrapSliceHeight(
+  currentSliceY: number | null,
+  playerY: number,
+  surfaceY: number,
+  underground: boolean,
+  excavating: boolean,
+): number | null {
+  return shouldUseDepthSlice(currentSliceY, playerY, surfaceY, underground, excavating)
+    ? loweredSliceHeight(currentSliceY, playerY)
+    : null;
+}
+
 export function shouldReleaseDepthSlice(
   playerY: number,
   surfaceY: number,

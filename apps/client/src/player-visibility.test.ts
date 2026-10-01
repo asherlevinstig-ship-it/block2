@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bootstrapSliceHeight,
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
@@ -57,6 +58,14 @@ describe("underground player visibility", () => {
 
   it("keeps an active slice latched when mining removes the ceiling", () => {
     expect(shouldUseDepthSlice(5, 3, 8, false, false)).toBe(true);
+  });
+
+  it("preserves the underground slice across a world refresh", () => {
+    expect(bootstrapSliceHeight(5, 3.95, 8, false, false)).toBe(5);
+  });
+
+  it("reconstructs the slice after a refresh in an open excavation", () => {
+    expect(bootstrapSliceHeight(null, 3.95, 8, false, true)).toBe(5);
   });
 
   it("does not let an excavation detector activate a slice while walking flat", () => {

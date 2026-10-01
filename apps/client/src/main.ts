@@ -38,6 +38,7 @@ import {
   type RemoteSnapshot,
 } from "./movement-network.js";
 import {
+  bootstrapSliceHeight,
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
@@ -612,15 +613,16 @@ let networkRttMs: number | null = null;
 
 function renderBootstrap(payload: WorldBootstrap): void {
   const buildStartedAt = performance.now();
+  const previousSliceY = cutawaySliceY;
+  const previousSurfaceReferenceY = surfaceReferenceY;
   worldPayloadBytes = new Blob([JSON.stringify(payload)]).size;
   for (const chunk of chunks.values()) for (const mesh of chunk.meshes) mesh.destroy();
   for (const child of [...worldRoot.children]) child.destroy();
   chunks.clear();
   const installed = payload.chunks.map(installChunk);
-  for (const chunk of installed) rebuildChunk(chunk);
-  lastChunkBuildMs = performance.now() - buildStartedAt;
   const ownPlayer = room ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId) : undefined;
-  const initialPosition = ownPlayer ?? payload.spawn;
+  const initialPose = ownPlayer ?? payload.spawn;
+  const initialPosition = new pc.Vec3(initialPose.x, initialPose.y, initialPose.z);
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
   cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
@@ -629,16 +631,30 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localVerticalVelocity = 0;
   localVisualVerticalOffset = 0;
   localPlayerVisual.setLocalPosition(0, 0, 0);
-  playerCutaway.active = false;
-  playerCutaway.sliceY = CHUNK_HEIGHT;
-  cutawayStateKey = "surface";
-  cutawaySliceY = null;
-  surfaceReferenceY = initialPosition.y;
+  const detectedSurfaceY = estimatedSurfaceY(initialPosition);
+  surfaceReferenceY = Math.max(previousSurfaceReferenceY ?? initialPosition.y, detectedSurfaceY);
+  const bootstrapUnderground = hasCeilingAbove(initialPosition);
+  const bootstrapExcavating = !bootstrapUnderground && isInOpenExcavation(initialPosition);
+  cutawaySliceY = bootstrapSliceHeight(
+    previousSliceY,
+    initialPosition.y,
+    surfaceReferenceY,
+    bootstrapUnderground,
+    bootstrapExcavating,
+  );
+  playerCutaway.active = cutawaySliceY !== null;
+  playerCutaway.sliceY = cutawaySliceY ?? CHUNK_HEIGHT;
+  cutawayStateKey = cutawaySliceY === null ? "surface" : `slice:${cutawaySliceY}`;
   surfaceReturnStartedAt = null;
   surfaceRestoreStartSliceY = null;
-  undergroundLightingBlend = 0;
-  exitTrail.enabled = false;
-  exitGuide.hidden = true;
+  undergroundLightingBlend = playerCutaway.active ? 1 : 0;
+  exitTrail.enabled = playerCutaway.active;
+  exitGuide.hidden = !playerCutaway.active;
+  for (const chunk of installed) rebuildChunk(chunk);
+  lastChunkBuildMs = performance.now() - buildStartedAt;
+  logMovementEvent(
+    `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)}`,
+  );
   worldReady = true;
   status.textContent = "Connected. Cross the flat ground to the mine entrance east of spawn.";
 }
