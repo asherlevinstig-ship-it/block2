@@ -77,8 +77,16 @@ function noise(seed: number, x: number, y: number, z: number): number {
 }
 
 function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId | null {
+  const inChamberFootprint = worldX >= 22 && worldX <= 27 && worldZ >= 5 && worldZ <= 11;
+  if (inChamberFootprint && y === 2) return Block.Stone;
+
+  if (worldZ >= 7 && worldZ <= 9) {
+    const entranceFloorY = worldX === 18 ? 6 : worldX === 19 ? 5 : worldX === 20 ? 4 : worldX === 21 ? 3 : null;
+    if (entranceFloorY === y) return Block.Stone;
+  }
+
   if (worldZ < 7 || worldZ > 9) {
-    const inChamber = worldX >= 22 && worldX <= 27 && worldZ >= 5 && worldZ <= 11 && y >= 3 && y <= 5;
+    const inChamber = inChamberFootprint && y >= 3 && y <= 5;
     return inChamber ? Block.Air : null;
   }
   if (worldX === 18 && y === SURFACE_HEIGHT) return Block.Air;
@@ -173,8 +181,11 @@ export function playerCollides(readBlock: WorldBlockReader, x: number, y: number
 }
 
 export function isPlayerSupported(readBlock: WorldBlockReader, x: number, y: number, z: number): boolean {
+  return hasPlayerSupport(readBlock, x, y, z, PLAYER_RADIUS * 0.82);
+}
+
+function hasPlayerSupport(readBlock: WorldBlockReader, x: number, y: number, z: number, sampleRadius: number): boolean {
   const supportY = Math.floor(y - 0.08);
-  const sampleRadius = PLAYER_RADIUS * 0.82;
   for (const offsetX of [-sampleRadius, sampleRadius]) {
     for (const offsetZ of [-sampleRadius, sampleRadius]) {
       if (readBlock(Math.floor(x + offsetX), supportY, Math.floor(z + offsetZ)) !== Block.Air) return true;
@@ -210,7 +221,9 @@ function moveHorizontalAxis(
   if (!canStep) return false;
   candidate.y += 1;
   if (playerCollides(readBlock, candidate.x, candidate.y, candidate.z)) return false;
-  if (!isPlayerSupported(readBlock, candidate.x, candidate.y, candidate.z)) return false;
+  // The leading edge touches a step before the inset grounded samples cross
+  // the voxel boundary. Use the complete collider footprint for step support.
+  if (!hasPlayerSupport(readBlock, candidate.x, candidate.y, candidate.z, PLAYER_RADIUS)) return false;
   position[axis] = candidate[axis];
   position.y = candidate.y;
   return true;

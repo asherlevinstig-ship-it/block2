@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   Block,
+  CHUNK_HEIGHT,
   CHUNK_SIZE,
+  GRAVITY,
   SURFACE_HEIGHT,
+  TERMINAL_VELOCITY,
   generateChunk,
   getBlock,
   highestSolidY,
+  isPlayerSupported,
   isProtectedVoxel,
+  playerCollides,
   resolvePlayerMotion,
   voxelRaycast,
   worldToChunk,
@@ -97,6 +102,76 @@ describe("deterministic voxel world", () => {
     const blocked = resolvePlayerMotion({ x: 1.5, y: 1, z: 0.5 }, { x: 1, y: 0, z: 0 }, wall);
     expect(blocked.x).toBe(1.5);
     expect(blocked.stepped).toBe(false);
+  });
+
+  it("recognizes a one-block step when approaching in normal frame-sized increments", () => {
+    const step = (x: number, y: number) => (y === 0 || (x === 2 && y === 1) ? Block.Stone : Block.Air);
+    let position = { x: 1.5, y: 1, z: 0.5 };
+    let stepped = false;
+    for (let frame = 0; frame < 5; frame += 1) {
+      const next = resolvePlayerMotion(position, { x: 0.21, y: 0, z: 0 }, step);
+      position = next;
+      stepped ||= next.stepped;
+    }
+    expect(stepped).toBe(true);
+    expect(position.x).toBeGreaterThan(2);
+    expect(position.y).toBe(2);
+  });
+
+  it("does not auto-step into a low underground ceiling", () => {
+    const crampedStep = (x: number, y: number) => (
+      y === 0 || (x === 2 && (y === 1 || y === 3)) ? Block.Stone : Block.Air
+    );
+    const approach = resolvePlayerMotion({ x: 1.5, y: 1, z: 0.5 }, { x: 0.21, y: 0, z: 0 }, crampedStep);
+    const blocked = resolvePlayerMotion(approach, { x: 0.21, y: 0, z: 0 }, crampedStep);
+    expect(blocked.x).toBe(approach.x);
+    expect(blocked.stepped).toBe(false);
+  });
+
+  it("keeps the complete underground entrance and chamber route supported", () => {
+    const chunks = new Map<string, ReturnType<typeof generateChunk>>();
+    const readWorld = (x: number, y: number, z: number) => {
+      if (y < 0) return Block.Bedrock;
+      if (y >= CHUNK_HEIGHT) return Block.Air;
+      const address = worldToChunk(x, z);
+      const key = `${address.chunkX},${address.chunkZ}`;
+      let chunk = chunks.get(key);
+      if (!chunk) {
+        chunk = generateChunk("collision-regression", address.chunkX, address.chunkZ);
+        chunks.set(key, chunk);
+      }
+      return getBlock(chunk, address.localX, y, address.localZ);
+    };
+
+    for (const [x, y] of [[17.5, 8], [18.5, 7], [19.5, 6], [20.5, 5], [21.5, 4], [22.5, 3], [26.5, 3]]) {
+      expect(playerCollides(readWorld, x, y, 8.5)).toBe(false);
+      expect(isPlayerSupported(readWorld, x, y, 8.5)).toBe(true);
+    }
+    for (let z = 5; z <= 11; z += 1) {
+      for (let x = 22; x <= 27; x += 1) expect(readWorld(x, 2, z)).toBe(Block.Stone);
+    }
+
+    let position = { x: 17.5, y: 8, z: 8.5 };
+    let verticalVelocity = 0;
+    const simulate = (direction: number, frames: number) => {
+      for (let frame = 0; frame < frames; frame += 1) {
+        const grounded = isPlayerSupported(readWorld, position.x, position.y, position.z);
+        verticalVelocity = grounded && verticalVelocity < 0
+          ? 0
+          : Math.max(-TERMINAL_VELOCITY, verticalVelocity - GRAVITY * 0.05);
+        const next = resolvePlayerMotion(position, { x: direction * 0.21, y: verticalVelocity * 0.05, z: 0 }, readWorld);
+        if (next.hitVertical || next.grounded) verticalVelocity = 0;
+        position = next;
+        expect(playerCollides(readWorld, position.x, position.y, position.z)).toBe(false);
+      }
+    };
+
+    simulate(1, 48);
+    expect(position.x).toBeGreaterThan(26);
+    expect(position.y).toBeCloseTo(3, 1);
+    simulate(-1, 55);
+    expect(position.x).toBeLessThan(18);
+    expect(position.y).toBeCloseTo(8, 1);
   });
 
   it("lands on voxel terrain without passing through it", () => {
