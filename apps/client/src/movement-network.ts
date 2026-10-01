@@ -88,9 +88,11 @@ export function movementDirectionChanged(previous: MovementVector, next: Movemen
   return dot < dotThreshold;
 }
 
-export function localReconciliationRate(distance: number, moving: boolean): number {
-  if (distance > 1.5) return Number.POSITIVE_INFINITY;
-  if (moving) return distance > 0.65 ? 2 : 0;
+export function localReconciliationRate(distance: number, moving: boolean, sequenceLag = 0): number {
+  const boundedLag = Math.max(0, Math.min(12, sequenceLag));
+  const hardCorrectionDistance = moving ? 2.5 + boundedLag * 0.4 : 3;
+  if (distance > hardCorrectionDistance) return Number.POSITIVE_INFINITY;
+  if (moving) return distance > 1.75 + boundedLag * 0.15 ? 0.75 : 0;
   return distance > 0.05 ? 8 : 0;
 }
 

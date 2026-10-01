@@ -68,9 +68,15 @@ describe("movement networking", () => {
 
   it("does not pull normal predicted movement toward stale server positions", () => {
     expect(localReconciliationRate(0.3, true)).toBe(0);
-    expect(localReconciliationRate(0.8, true)).toBe(2);
+    expect(localReconciliationRate(1.7, true, 6)).toBe(0);
+    expect(localReconciliationRate(2.8, true, 6)).toBe(0.75);
     expect(localReconciliationRate(0.3, false)).toBe(8);
-    expect(localReconciliationRate(2, true)).toBe(Number.POSITIVE_INFINITY);
+    expect(localReconciliationRate(5, true, 6)).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("expands the hard-correction window while server acknowledgements are delayed", () => {
+    expect(localReconciliationRate(3, true, 0)).toBe(Number.POSITIVE_INFINITY);
+    expect(localReconciliationRate(3, true, 6)).toBe(0.75);
   });
 
   it("smooths a one-block visual step without changing collision height", () => {

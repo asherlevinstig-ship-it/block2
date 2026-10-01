@@ -819,12 +819,12 @@ function updatePerformanceMetrics(now: number): void {
   };
 }
 
-function reconcileLocalPlayer(dt: number, moving: boolean): { distance: number; rate: number } {
+function reconcileLocalPlayer(dt: number, moving: boolean, sequenceLag: number): { distance: number; rate: number } {
   const position = localPlayer.getPosition();
   const distance = position.distance(authoritativeLocalPosition);
-  const reconciliationRate = localReconciliationRate(distance, moving);
+  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag);
   if (!Number.isFinite(reconciliationRate)) {
-    if (worldReady) logMovementEvent(`HARD CORRECTION d=${distance.toFixed(3)}`);
+    if (worldReady) logMovementEvent(`HARD CORRECTION d=${distance.toFixed(3)} lag=${sequenceLag}`);
     localVisualVerticalOffset += position.y - authoritativeLocalPosition.y;
     localPlayer.setPosition(authoritativeLocalPosition);
     localVerticalVelocity = 0;
@@ -872,7 +872,8 @@ app.on("update", (dt: number) => {
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   localPlayer.setEulerAngles(0, localFacingYaw, 0);
   const moving = Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01;
-  const reconciliation = reconcileLocalPlayer(dt, moving);
+  const sequenceLag = Math.max(0, moveSequence - lastProcessedInputSequence);
+  const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag);
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPlayerVisual.setLocalPosition(0, localVisualVerticalOffset, 0);
 
@@ -930,7 +931,7 @@ app.on("update", (dt: number) => {
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
-      `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${Math.max(0, moveSequence - lastProcessedInputSequence)}`,
+      `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
     ].join("\n");
   }
 });
