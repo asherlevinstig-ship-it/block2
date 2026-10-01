@@ -6,6 +6,7 @@ export const PlayerState = schema({
   z: t.float32().default(8.5),
   yaw: t.float32().default(0),
   lastProcessedInput: t.int32().default(0),
+  actionSequence: t.int32().default(0),
   name: t.string().default("Explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;

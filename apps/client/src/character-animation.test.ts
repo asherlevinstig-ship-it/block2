@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { voxelCharacterPose } from "./character-animation.js";
+import { PRIMARY_ACTION_DURATION_MS, primaryActionPose, voxelCharacterPose } from "./character-animation.js";
 
 describe("voxel character animation", () => {
   it("keeps opposing arms and legs in a readable walk cycle", () => {
@@ -23,5 +23,17 @@ describe("voxel character animation", () => {
     expect(rising.leftArmPitch).toBeLessThan(falling.leftArmPitch);
     expect(rising.torsoPitch).toBeLessThan(0);
     expect(falling.torsoPitch).toBeGreaterThan(0);
+  });
+
+  it("uses a fast mining strike with a smooth recovery", () => {
+    const resting = primaryActionPose(null);
+    const strike = primaryActionPose(PRIMARY_ACTION_DURATION_MS / 4);
+    const recovered = primaryActionPose(PRIMARY_ACTION_DURATION_MS);
+
+    expect(resting.active).toBe(false);
+    expect(strike.active).toBe(true);
+    expect(strike.rightArmPitch).toBeLessThan(-100);
+    expect(strike.torsoYaw).toBeLessThan(0);
+    expect(recovered).toEqual({ active: false, torsoYaw: 0, rightArmPitch: 0, rightArmRoll: 0 });
   });
 });

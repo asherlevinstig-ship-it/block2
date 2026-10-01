@@ -46,7 +46,7 @@ import {
 } from "./player-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
 import { createVoxelTexturePixels, type VoxelTextureKind } from "./voxel-textures.js";
-import { voxelCharacterPose } from "./character-animation.js";
+import { PRIMARY_ACTION_DURATION_MS, primaryActionPose, voxelCharacterPose } from "./character-animation.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -418,13 +418,21 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, silhouette };
 }
 
-function animateVoxelCharacter(rig: VoxelCharacterRig, speed: number, time: number, verticalVelocity: number, grounded: boolean): void {
+function animateVoxelCharacter(
+  rig: VoxelCharacterRig,
+  speed: number,
+  time: number,
+  verticalVelocity: number,
+  grounded: boolean,
+  actionElapsedMilliseconds: number | null,
+): void {
   const pose = voxelCharacterPose(speed, time, verticalVelocity, grounded);
+  const action = primaryActionPose(actionElapsedMilliseconds);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
-  rig.torso.setLocalEulerAngles(pose.torsoPitch, 0, pose.torsoRoll);
+  rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw, pose.torsoRoll);
   rig.head.setLocalEulerAngles(0, pose.headYaw, 0);
   rig.leftArm.setLocalEulerAngles(pose.leftArmPitch, 0, 0);
-  rig.rightArm.setLocalEulerAngles(pose.rightArmPitch, 0, 0);
+  rig.rightArm.setLocalEulerAngles(pose.rightArmPitch + action.rightArmPitch, 0, action.rightArmRoll);
   rig.leftLeg.setLocalEulerAngles(pose.leftLegPitch, 0, 0);
   rig.rightLeg.setLocalEulerAngles(pose.rightLegPitch, 0, 0);
 }
@@ -442,6 +450,7 @@ interface NetworkPlayer {
   z: number;
   yaw: number;
   lastProcessedInput: number;
+  actionSequence: number;
   name: string;
 }
 
@@ -449,6 +458,8 @@ interface RemotePlayerVisual {
   entity: pc.Entity;
   rig: VoxelCharacterRig;
   snapshots: RemoteSnapshot[];
+  actionStartedAt: number | null;
+  lastActionSequence: number;
 }
 
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
@@ -456,6 +467,7 @@ const remotePlayers = new Map<string, RemotePlayerVisual>();
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
+let localActionStartedAt: number | null = null;
 let lastProcessedInputSequence = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
 const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
@@ -474,6 +486,8 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
     entity,
     rig,
     snapshots: [{ receivedAt: performance.now(), x: player.x, y: player.y, z: player.z, yaw: player.yaw }],
+    actionStartedAt: null,
+    lastActionSequence: player.actionSequence,
   };
 }
 
@@ -509,6 +523,11 @@ function bindPlayers(joinedRoom: Room): void {
     }, true);
     playerCallbacks.listen("lastProcessedInput", () => {
       if (isLocal) lastProcessedInputSequence = player.lastProcessedInput;
+    }, true);
+    playerCallbacks.listen("actionSequence", () => {
+      if (!remote || player.actionSequence <= remote.lastActionSequence) return;
+      remote.lastActionSequence = player.actionSequence;
+      remote.actionStartedAt = performance.now();
     }, true);
   }, true);
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {
@@ -799,6 +818,8 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
 }
 
 function requestMine(): void {
+  localActionStartedAt = performance.now();
+  logMovementEvent("ACTION mine");
   if (!room || !worldReady || !currentTarget) return;
   const address = worldToChunk(currentTarget.x, currentTarget.z);
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
@@ -941,8 +962,11 @@ app.on("update", (dt: number) => {
   const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag);
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPlayerVisual.setLocalPosition(0, localVisualVerticalOffset, 0);
-  const animationTime = performance.now() / 1000;
-  animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, localVerticalVelocity, predicted.grounded || grounded);
+  const animationNow = performance.now();
+  const animationTime = animationNow / 1000;
+  const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
+  animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed);
+  if (localActionElapsed !== null && localActionElapsed >= PRIMARY_ACTION_DURATION_MS) localActionStartedAt = null;
 
   const player = localPlayer.getPosition();
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
@@ -954,7 +978,9 @@ app.on("update", (dt: number) => {
       const remoteVerticalVelocity = (pose.y - previousPosition.y) / Math.max(frameTime, 0.001);
       remote.entity.setPosition(pose.x, pose.y, pose.z);
       remote.entity.setEulerAngles(0, pose.yaw, 0);
-      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, remoteVerticalVelocity, true);
+      const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
+      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, remoteVerticalVelocity, true, remoteActionElapsed);
+      if (remoteActionElapsed !== null && remoteActionElapsed >= PRIMARY_ACTION_DURATION_MS) remote.actionStartedAt = null;
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }

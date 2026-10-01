@@ -9,6 +9,31 @@ export interface VoxelCharacterPose {
   rightLegPitch: number;
 }
 
+export interface PrimaryActionPose {
+  active: boolean;
+  torsoYaw: number;
+  rightArmPitch: number;
+  rightArmRoll: number;
+}
+
+export const PRIMARY_ACTION_DURATION_MS = 360;
+
+export function primaryActionPose(elapsedMilliseconds: number | null): PrimaryActionPose {
+  if (elapsedMilliseconds === null || elapsedMilliseconds < 0 || elapsedMilliseconds >= PRIMARY_ACTION_DURATION_MS) {
+    return { active: false, torsoYaw: 0, rightArmPitch: 0, rightArmRoll: 0 };
+  }
+
+  const progress = elapsedMilliseconds / PRIMARY_ACTION_DURATION_MS;
+  // Reach the strike quickly, then spend longer recovering to avoid a mechanical snap.
+  const strength = Math.sin(Math.sqrt(progress) * Math.PI);
+  return {
+    active: true,
+    torsoYaw: -11 * strength,
+    rightArmPitch: -112 * strength,
+    rightArmRoll: -9 * strength,
+  };
+}
+
 export function voxelCharacterPose(
   speed: number,
   elapsedSeconds: number,

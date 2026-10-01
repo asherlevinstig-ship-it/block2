@@ -184,6 +184,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     const request = parsed.data;
+    player.actionSequence += 1;
     const address = worldToChunk(request.x, request.z);
     const stored = this.getChunk(address.chunkX, address.chunkZ);
     const current = getBlock(stored.chunk, address.localX, request.y, address.localZ);
