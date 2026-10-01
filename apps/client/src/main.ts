@@ -581,6 +581,7 @@ let localPowerStepApplied = false;
 let localPowerCooldownUntil = 0;
 let powerSequence = 0;
 let localLastPowerSequence = 0;
+let powerServerReady = false;
 let lastProcessedInputSequence = 0;
 let pendingStopInputSequence: number | null = null;
 let pendingStopDeadline = 0;
@@ -800,6 +801,7 @@ function bindPlayers(joinedRoom: Room): void {
   const players = callbacks(joinedRoom.state).players;
   players.onAdd((player: NetworkPlayer, sessionId: string) => {
     const isLocal = sessionId === joinedRoom.sessionId;
+    if (isLocal) powerServerReady = typeof player.equippedPower === "string" && player.equippedPower.length > 0;
     let remote = isLocal ? undefined : remotePlayers.get(sessionId);
     if (!isLocal && !remote) {
       remote = createRemotePlayer(sessionId, player);
@@ -1404,6 +1406,11 @@ function requestDodge(): void {
 
 function requestPower(): void {
   if (!room || !worldReady) return;
+  if (!powerServerReady) {
+    status.textContent = "Power server is updating · Seismic Cleave will unlock automatically.";
+    showCombatFeedback("POWER SERVER UPDATING", "hurt");
+    return;
+  }
   const definition = POWER_DEFINITIONS.seismic_cleave;
   const remaining = localPowerCooldownUntil - Date.now();
   if (remaining > 0) {
@@ -1754,9 +1761,13 @@ app.on("update", (dt: number) => {
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerFraction = powerRemaining / POWER_DEFINITIONS.seismic_cleave.cooldownMs;
   powerCooldownFill.style.width = `${Math.max(0, Math.min(1, powerFraction)) * 100}%`;
-  powerCooldownLabel.textContent = powerRemaining > 0 ? `${(powerRemaining / 1000).toFixed(1)}s` : "READY · R";
-  powerSlot.classList.toggle("ready", powerRemaining <= 0);
-  powerButton.textContent = powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
+  powerCooldownLabel.textContent = !powerServerReady
+    ? "SERVER UPDATE"
+    : powerRemaining > 0
+      ? `${(powerRemaining / 1000).toFixed(1)}s`
+      : "READY · R";
+  powerSlot.classList.toggle("ready", powerServerReady && powerRemaining <= 0);
+  powerButton.textContent = !powerServerReady ? "Wait" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
   cameraTarget.set(player.x, player.y + localVisualVerticalOffset, player.z);
   cameraFocus.copy(cameraTarget);
   const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
@@ -2018,6 +2029,7 @@ async function connect(): Promise<void> {
   });
   room.onLeave(() => {
     worldReady = false;
+    powerServerReady = false;
     room = null;
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
