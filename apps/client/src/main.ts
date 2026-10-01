@@ -1492,7 +1492,7 @@ function applyBlockChange(message: BlockChanged): void {
 async function connect(): Promise<void> {
   const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
-    || (localHost ? "ws://localhost:2567" : "wss://us-mia-ea26ba04.colyseus.cloud");
+    || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
   const client = new Client(endpoint);
   const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
   room = await retryConnection(
