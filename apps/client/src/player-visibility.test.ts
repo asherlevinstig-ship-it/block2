@@ -3,6 +3,7 @@ import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
+  shouldUseDepthSlice,
   type PlayerCutaway,
 } from "./player-visibility.js";
 
@@ -50,5 +51,18 @@ describe("underground player visibility", () => {
 
   it("chooses the initial slice from the player's height", () => {
     expect(loweredSliceHeight(null, 4)).toBe(5);
+  });
+
+  it("keeps an active slice latched when mining removes the ceiling", () => {
+    expect(shouldUseDepthSlice(5, 3, 8, false, false)).toBe(true);
+  });
+
+  it("does not let an excavation detector activate a slice while walking flat", () => {
+    expect(shouldUseDepthSlice(null, 8, 8, false, true)).toBe(false);
+  });
+
+  it("releases the slice only after the player climbs back to the surface", () => {
+    expect(shouldUseDepthSlice(5, 7.5, 8, false, false)).toBe(true);
+    expect(shouldUseDepthSlice(5, 7.8, 8, false, false)).toBe(false);
   });
 });

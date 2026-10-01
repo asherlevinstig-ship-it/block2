@@ -38,6 +38,7 @@ import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
+  shouldUseDepthSlice,
   type PlayerCutaway,
 } from "./player-visibility.js";
 import "./styles.css";
@@ -569,12 +570,35 @@ function isInOpenExcavation(position: pc.Vec3): boolean {
   return isBelowSurroundingSurface(position.y, surroundingHeights);
 }
 
+function estimatedSurfaceY(position: pc.Vec3): number {
+  const centerX = Math.floor(position.x);
+  const centerZ = Math.floor(position.z);
+  const surfaceLevels: number[] = [];
+  for (const offsetX of [-3, 0, 3]) {
+    for (const offsetZ of [-3, 0, 3]) {
+      if (offsetX === 0 && offsetZ === 0) continue;
+      const solidY = highestLoadedSolidY(centerX + offsetX, centerZ + offsetZ);
+      if (solidY >= 0) surfaceLevels.push(solidY + 1);
+    }
+  }
+  surfaceLevels.sort((a, b) => a - b);
+  return Math.max(position.y, surfaceLevels[Math.floor(surfaceLevels.length / 2)] ?? position.y);
+}
+
 function updateUndergroundPresentation(position: pc.Vec3): void {
   const underground = hasCeilingAbove(position);
   const excavating = !underground && isInOpenExcavation(position);
   if (surfaceReferenceY === null) surfaceReferenceY = position.y;
-  const descendedFromSurface = position.y < surfaceReferenceY - 0.65;
-  const visibilityCutaway = underground || (excavating && descendedFromSurface);
+  if (cutawaySliceY === null && underground && position.y >= surfaceReferenceY - 0.65) {
+    surfaceReferenceY = estimatedSurfaceY(position);
+  }
+  const visibilityCutaway = shouldUseDepthSlice(
+    cutawaySliceY,
+    position.y,
+    surfaceReferenceY,
+    underground,
+    excavating,
+  );
   const nextSliceY = visibilityCutaway ? loweredSliceHeight(cutawaySliceY, position.y) : null;
   const nextKey = nextSliceY === null ? "surface" : `slice:${nextSliceY}`;
   caveLight.enabled = underground;
