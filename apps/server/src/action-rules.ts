@@ -9,6 +9,11 @@ export interface Position {
   z: number;
 }
 
+export interface AttackTarget extends Position {
+  id: string;
+  alive: boolean;
+}
+
 export function movementRejectionReason(player: Position, request: MoveRequest): RejectionReason | null {
   void player;
   return Math.hypot(request.strafe, request.forward) > 1.01 ? "range" : null;
@@ -16,6 +21,32 @@ export function movementRejectionReason(player: Position, request: MoveRequest):
 
 export function attackRejectionReason(lastAttackAt: number | undefined, now: number, cooldownMs = 300): RejectionReason | null {
   return lastAttackAt !== undefined && now - lastAttackAt < cooldownMs ? "rate" : null;
+}
+
+export function selectAttackTarget(
+  player: Position,
+  yaw: number,
+  targets: readonly AttackTarget[],
+  maximumRange = 2.6,
+  minimumFacingDot = 0.35,
+): AttackTarget | null {
+  const radians = yaw * Math.PI / 180;
+  const facingX = Math.sin(radians);
+  const facingZ = Math.cos(radians);
+  let closest: AttackTarget | null = null;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (const target of targets) {
+    if (!target.alive || Math.abs(target.y - player.y) > 1.75) continue;
+    const deltaX = target.x - player.x;
+    const deltaZ = target.z - player.z;
+    const distance = Math.hypot(deltaX, deltaZ);
+    if (distance > maximumRange || distance < 0.001) continue;
+    const facingDot = (deltaX * facingX + deltaZ * facingZ) / distance;
+    if (facingDot < minimumFacingDot || distance >= closestDistance) continue;
+    closest = target;
+    closestDistance = distance;
+  }
+  return closest;
 }
 
 export function miningRejectionReason(

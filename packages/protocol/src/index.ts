@@ -50,6 +50,14 @@ export interface BlockChanged {
   revision: number;
 }
 
+export interface CombatHit {
+  attackerId: string;
+  mobId: string;
+  damage: number;
+  health: number;
+  defeated: boolean;
+}
+
 export interface ActionRejected {
   requestId?: string;
   action: "move" | "mine" | "attack";

@@ -5,6 +5,7 @@ import {
   type ActionRejected,
   type BlockChanged,
   type ChunkSnapshot,
+  type CombatHit,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
 import {
@@ -489,8 +490,30 @@ interface RemotePlayerVisual {
   lastActionSequence: number;
 }
 
+interface NetworkMob {
+  x: number;
+  y: number;
+  z: number;
+  health: number;
+  maxHealth: number;
+  alive: boolean;
+  hitSequence: number;
+  name: string;
+}
+
+interface MobVisual {
+  entity: pc.Entity;
+  bodyRoot: pc.Entity;
+  bodyMaterial: pc.StandardMaterial;
+  healthFill: pc.Entity;
+  state: NetworkMob;
+  lastHitSequence: number;
+  hitAt: number;
+}
+
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
+const mobVisuals = new Map<string, MobVisual>();
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
@@ -526,6 +549,64 @@ function recordRemoteSnapshot(remote: RemotePlayerVisual, player: NetworkPlayer)
   const latest = remote.snapshots[remote.snapshots.length - 1];
   if (latest && snapshot.receivedAt - latest.receivedAt < 1) remote.snapshots[remote.snapshots.length - 1] = snapshot;
   else remote.snapshots.push(snapshot);
+}
+
+function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
+  const entity = new pc.Entity(`mob:${mobId}`);
+  const bodyRoot = new pc.Entity("mob-body");
+  entity.addChild(bodyRoot);
+  const bodyMaterial = coloredMaterial(new pc.Color(0.22, 0.62, 0.24));
+  const eyeMaterial = coloredMaterial(new pc.Color(0.03, 0.045, 0.035));
+  const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
+  const healthMaterial = coloredMaterial(new pc.Color(0.35, 0.9, 0.28));
+  addBox(bodyRoot, "crawler-body", bodyMaterial, [0.92, 0.58, 0.86], [0, 0.32, 0]);
+  addBox(bodyRoot, "crawler-head", bodyMaterial, [0.68, 0.48, 0.62], [0, 0.76, 0.08]);
+  addBox(bodyRoot, "crawler-eye-left", eyeMaterial, [0.1, 0.12, 0.06], [-0.17, 0.8, 0.39]);
+  addBox(bodyRoot, "crawler-eye-right", eyeMaterial, [0.1, 0.12, 0.06], [0.17, 0.8, 0.39]);
+  addBox(entity, "health-back", healthBackMaterial, [1.02, 0.1, 0.08], [0, 1.34, 0]);
+  const healthFill = addBox(entity, "health-fill", healthMaterial, [0.96, 0.065, 0.09], [0, 1.34, 0.01]);
+  entity.setPosition(mob.x, mob.y, mob.z);
+  app.root.addChild(entity);
+  return { entity, bodyRoot, bodyMaterial, healthFill, state: mob, lastHitSequence: mob.hitSequence, hitAt: 0 };
+}
+
+function updateMobVisual(mob: MobVisual): void {
+  mob.entity.setPosition(mob.state.x, mob.state.y, mob.state.z);
+  const healthFraction = Math.max(0, Math.min(1, mob.state.health / Math.max(1, mob.state.maxHealth)));
+  mob.healthFill.setLocalScale(0.96 * healthFraction, 0.065, 0.09);
+  mob.healthFill.setLocalPosition(-0.48 * (1 - healthFraction), 1.34, 0.01);
+  if (mob.state.hitSequence > mob.lastHitSequence) {
+    mob.lastHitSequence = mob.state.hitSequence;
+    mob.hitAt = performance.now();
+  }
+}
+
+function bindMobs(joinedRoom: Room): void {
+  const callbacks = getStateCallbacks(joinedRoom as Room<any, any>) as any;
+  const mobs = callbacks(joinedRoom.state).mobs;
+  mobs.onAdd((mob: NetworkMob, mobId: string) => {
+    const visual = createMobVisual(mobId, mob);
+    mobVisuals.set(mobId, visual);
+    const mobCallbacks = callbacks(mob);
+    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence"] as const) {
+      mobCallbacks.listen(field, () => updateMobVisual(visual), true);
+    }
+  }, true);
+  mobs.onRemove((_mob: NetworkMob, mobId: string) => {
+    mobVisuals.get(mobId)?.entity.destroy();
+    mobVisuals.delete(mobId);
+  });
+}
+
+function nearestLivingMob(position: pc.Vec3, maximumRange: number): { id: string; visual: MobVisual; distance: number } | null {
+  let nearest: { id: string; visual: MobVisual; distance: number } | null = null;
+  for (const [id, visual] of mobVisuals) {
+    if (!visual.state.alive) continue;
+    const distance = Math.hypot(visual.state.x - position.x, visual.state.y - position.y, visual.state.z - position.z);
+    if (distance > maximumRange || (nearest && distance >= nearest.distance)) continue;
+    nearest = { id, visual, distance };
+  }
+  return nearest;
 }
 
 function bindPlayers(joinedRoom: Room): void {
@@ -605,14 +686,18 @@ function updateTarget(): void {
   const player = localPlayer.getPosition();
   const inRange = Boolean(hit) && Math.hypot(hit!.x + 0.5 - player.x, hit!.y + 0.5 - player.y, hit!.z + 0.5 - player.z) <= 4.5;
   currentTarget = inRange ? hit : null;
+  const combatMob = nearestLivingMob(player, 4.5);
   targetMarker.enabled = interactionMode === "build" && Boolean(currentTarget);
   if (currentTarget) targetMarker.setPosition(currentTarget.x + 0.5, currentTarget.y + 0.5, currentTarget.z + 0.5);
 
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
-  const nextKey = `${interactionMode}:${targetKey}`;
+  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}` : "none";
+  const nextKey = `${interactionMode}:${targetKey}:${combatKey}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
-  if (interactionMode === "combat") targetLabel.textContent = "Combat: click or press E to swing";
+  if (interactionMode === "combat" && combatMob) {
+    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m`;
+  } else if (interactionMode === "combat") targetLabel.textContent = "Combat: approach the Moss Crawler and click to swing";
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
   else targetLabel.textContent = `Target: ${targetKey} · mineable`;
@@ -1039,14 +1124,19 @@ function requestMine(): void {
 function requestAttack(): void {
   if (!room || !worldReady) return;
   const player = localPlayer.getPosition();
-  localActionFacingYaw = currentTarget
-    ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
-    : localFacingYaw;
+  const targetMob = nearestLivingMob(player, 3.1);
+  localActionFacingYaw = targetMob
+    ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
+    : currentTarget
+      ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
+      : localFacingYaw;
   localActionStartedAt = performance.now();
   attackSequence += 1;
   room.send("attack", { requestId: `attack-${attackSequence}`, yaw: localActionFacingYaw });
   logMovementEvent(`ACTION attack yaw=${localActionFacingYaw.toFixed(1)}`);
-  status.textContent = "Combat swing · damage and health are the next combat step.";
+  status.textContent = targetMob
+    ? `Attacking ${targetMob.visual.state.name}...`
+    : "Combat swing missed · move closer to the Moss Crawler.";
 }
 
 function requestPrimaryAction(): void {
@@ -1254,6 +1344,15 @@ app.on("update", (dt: number) => {
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
+  for (const mob of mobVisuals.values()) {
+    const visible = mob.state.alive && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
+    mob.entity.enabled = visible;
+    if (!visible) continue;
+    const hitStrength = Math.max(0, 1 - (animationNow - mob.hitAt) / 180);
+    mob.bodyRoot.setLocalPosition(0, Math.sin(animationTime * 4.5) * 0.055 - hitStrength * 0.08, 0);
+    mob.bodyMaterial.emissive = new pc.Color(0.55 * hitStrength, 0.08 * hitStrength, 0.04 * hitStrength);
+    mob.bodyMaterial.update();
+  }
   cameraTarget.set(player.x, player.y + localVisualVerticalOffset, player.z);
   cameraFocus.copy(cameraTarget);
   const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
@@ -1403,10 +1502,19 @@ async function connect(): Promise<void> {
     },
   );
   bindPlayers(room);
+  bindMobs(room);
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("block:changed", applyBlockChange);
+  room.onMessage("combat:hit", (message: CombatHit) => {
+    const mob = mobVisuals.get(message.mobId);
+    const name = mob?.state.name ?? "Mob";
+    status.textContent = message.defeated
+      ? `${name} defeated · respawning in 5 seconds.`
+      : `${name} hit for ${message.damage} · ${message.health} HP remaining.`;
+    logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
+  });
   room.onMessage("pong", (message: { id?: unknown }) => {
     if (typeof message.id !== "string") return;
     const sentAt = pendingPings.get(message.id);
@@ -1428,6 +1536,8 @@ async function connect(): Promise<void> {
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
     remotePlayers.clear();
+    for (const mob of mobVisuals.values()) mob.entity.destroy();
+    mobVisuals.clear();
     updatePlayerCount();
   });
   room.send("world:ready");

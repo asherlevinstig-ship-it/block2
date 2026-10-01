@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { attackRejectionReason, miningRejectionReason, movementRejectionReason } from "../src/action-rules.js";
+import { attackRejectionReason, miningRejectionReason, movementRejectionReason, selectAttackTarget } from "../src/action-rules.js";
 
 describe("authoritative action rules", () => {
   it("accepts small movement steps and rejects teleports", () => {
@@ -34,5 +34,23 @@ describe("authoritative action rules", () => {
     expect(attackRejectionReason(undefined, 1000)).toBeNull();
     expect(attackRejectionReason(1000, 1200)).toBe("rate");
     expect(attackRejectionReason(1000, 1300)).toBeNull();
+  });
+
+  it("hits the nearest living mob inside the melee cone", () => {
+    const targets = [
+      { id: "behind", x: 8, y: 8, z: 6, alive: true },
+      { id: "far", x: 8, y: 8, z: 12, alive: true },
+      { id: "crawler", x: 8.5, y: 8, z: 10, alive: true },
+    ];
+    expect(selectAttackTarget({ x: 8, y: 8, z: 8 }, 0, targets)?.id).toBe("crawler");
+    expect(selectAttackTarget({ x: 8, y: 8, z: 8 }, 180, targets)?.id).toBe("behind");
+  });
+
+  it("does not hit dead, distant, or side-on mobs", () => {
+    expect(selectAttackTarget({ x: 0, y: 8, z: 0 }, 0, [
+      { id: "dead", x: 0, y: 8, z: 1, alive: false },
+      { id: "side", x: 2, y: 8, z: 0, alive: true },
+      { id: "far", x: 0, y: 8, z: 4, alive: true },
+    ])).toBeNull();
   });
 });

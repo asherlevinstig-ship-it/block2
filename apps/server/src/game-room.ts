@@ -6,6 +6,7 @@ import {
   type ActionRejected,
   type BlockChanged,
   type ChunkSnapshot,
+  type CombatHit,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
 import {
@@ -23,8 +24,8 @@ import {
   worldToChunk,
   type GeneratedChunk,
 } from "@blockcraft/voxel-world";
-import { PlayerState, WorldState } from "./schema.js";
-import { attackRejectionReason, miningRejectionReason, movementRejectionReason } from "./action-rules.js";
+import { MobState, PlayerState, WorldState } from "./schema.js";
+import { attackRejectionReason, miningRejectionReason, movementRejectionReason, selectAttackTarget } from "./action-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -50,6 +51,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   override onCreate(): void {
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
     this.setState(new WorldState());
+    const crawler = new MobState();
+    this.state.mobs.set("moss-crawler", crawler);
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
@@ -154,6 +157,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private simulatePlayers(deltaTime: number): void {
     const now = Date.now();
+    for (const mob of this.state.mobs.values()) {
+      if (!mob.alive && now >= mob.respawnAt) {
+        mob.health = mob.maxHealth;
+        mob.alive = true;
+        mob.respawnAt = 0;
+      }
+    }
     for (const [sessionId, player] of this.state.players) {
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
@@ -218,5 +228,30 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.lastAttackAt.set(client.sessionId, now);
     player.yaw = parsed.data.yaw;
     player.actionSequence += 1;
+    const targets = [...this.state.mobs.entries()].map(([id, mob]) => ({
+      id,
+      x: mob.x,
+      y: mob.y,
+      z: mob.z,
+      alive: mob.alive,
+    }));
+    const target = selectAttackTarget(player, parsed.data.yaw, targets);
+    if (!target) return;
+    const mob = this.state.mobs.get(target.id);
+    if (!mob || !mob.alive) return;
+    mob.health = Math.max(0, mob.health - 1);
+    mob.hitSequence += 1;
+    if (mob.health === 0) {
+      mob.alive = false;
+      mob.respawnAt = now + 5000;
+    }
+    const hit: CombatHit = {
+      attackerId: client.sessionId,
+      mobId: target.id,
+      damage: 1,
+      health: mob.health,
+      defeated: !mob.alive,
+    };
+    this.broadcast("combat:hit", hit);
   }
 }
