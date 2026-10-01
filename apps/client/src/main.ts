@@ -39,6 +39,7 @@ import {
 } from "./movement-network.js";
 import {
   bootstrapSliceHeight,
+  isAtSurfaceReturnHeight,
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
@@ -724,6 +725,9 @@ let surfaceReferenceY: number | null = null;
 let surfaceReturnStartedAt: number | null = null;
 let surfaceRestoreStartSliceY: number | null = null;
 let undergroundLightingBlend = 0;
+let undergroundClassification = false;
+let excavationClassification = false;
+let surfaceReturnClassification = false;
 let smoothedMovement = { x: 0, z: 0 };
 let lastSentMovement = { x: 0, z: 0 };
 let lastMovementDebugUpdateAt = 0;
@@ -928,6 +932,8 @@ function estimatedSurfaceY(position: pc.Vec3): number {
 function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const underground = hasCeilingAbove(position);
   const excavating = !underground && isInOpenExcavation(position);
+  undergroundClassification = underground;
+  excavationClassification = excavating;
   if (surfaceReferenceY === null) surfaceReferenceY = position.y;
   if (cutawaySliceY === null && underground && position.y >= surfaceReferenceY - 0.65) {
     surfaceReferenceY = estimatedSurfaceY(position);
@@ -943,7 +949,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   let surfaceDurationMs = 0;
   if (cutawaySliceY !== null) {
     const supported = isPlayerSupported(readCollisionWorldBlock, position.x, position.y, position.z);
-    atSurface = !underground && supported && position.y >= surfaceReferenceY - 0.1;
+    atSurface = isAtSurfaceReturnHeight(position.y, surfaceReferenceY, supported);
     if (atSurface) {
       if (surfaceReturnStartedAt === null) {
         surfaceReturnStartedAt = performance.now();
@@ -958,6 +964,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
     surfaceReturnStartedAt = null;
     surfaceRestoreStartSliceY = null;
   }
+  surfaceReturnClassification = atSurface;
   let nextSliceY = visibilityCutaway ? loweredSliceHeight(cutawaySliceY, position.y) : null;
   if (visibilityCutaway && atSurface && surfaceRestoreStartSliceY !== null) {
     nextSliceY = restoredSliceHeight(surfaceRestoreStartSliceY, surfaceReferenceY, surfaceDurationMs);
@@ -1324,6 +1331,7 @@ app.on("update", (dt: number) => {
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
+      `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
       `stop ack   ${pendingStopInputSequence === null ? "ready" : `waiting for #${pendingStopInputSequence}`}`,

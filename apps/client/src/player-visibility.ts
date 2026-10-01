@@ -42,6 +42,15 @@ export function shouldReleaseDepthSlice(
   return !underground && supported && playerY >= surfaceY - 0.1 && surfaceDurationMs >= releaseDelayMs;
 }
 
+export function isAtSurfaceReturnHeight(
+  playerY: number,
+  surfaceY: number,
+  supported: boolean,
+  tolerance = 0.15,
+): boolean {
+  return supported && playerY >= surfaceY - tolerance;
+}
+
 export function restoredSliceHeight(
   startingSliceY: number,
   surfaceY: number,

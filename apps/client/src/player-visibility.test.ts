@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bootstrapSliceHeight,
+  isAtSurfaceReturnHeight,
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
@@ -81,6 +82,12 @@ describe("underground player visibility", () => {
     expect(shouldReleaseDepthSlice(8, 8, false, true, 1200)).toBe(true);
     expect(shouldReleaseDepthSlice(8, 8, true, true, 2000)).toBe(false);
     expect(shouldReleaseDepthSlice(8, 8, false, false, 2000)).toBe(false);
+  });
+
+  it("recognizes surface height even when an exit block remains overhead", () => {
+    expect(isAtSurfaceReturnHeight(7.954, 8, true)).toBe(true);
+    expect(isAtSurfaceReturnHeight(7.7, 8, true)).toBe(false);
+    expect(isAtSurfaceReturnHeight(7.954, 8, false)).toBe(false);
   });
 
   it("restores an underground slice one voxel layer at a time", () => {
