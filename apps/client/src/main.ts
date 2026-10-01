@@ -1732,13 +1732,14 @@ async function connect(): Promise<void> {
       : `${name} hit for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
     if (message.attackerId === room?.sessionId) {
-      localHitPauseUntil = performance.now() + (message.comboStep === 3 ? 75 : 48);
+      const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
+      localHitPauseUntil = performance.now() + (comboStep === 3 ? 75 : 48);
       showCombatFeedback(
         message.defeated
           ? "DEFEATED"
-          : message.comboStep === 3
+          : comboStep === 3
             ? `FINISHER  −${message.damage}`
-            : `COMBO ${message.comboStep}  −${message.damage}`,
+            : `COMBO ${comboStep}  −${message.damage}`,
       );
     }
   });
