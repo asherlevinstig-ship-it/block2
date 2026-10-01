@@ -6,6 +6,7 @@ import {
   type BlockChanged,
   type ChunkSnapshot,
   type CombatHit,
+  type PlayerHit,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
 import {
@@ -76,6 +77,10 @@ const movementDebugLive = document.querySelector<HTMLElement>("#movement-debug-l
 const movementDebugEvents = document.querySelector<HTMLOListElement>("#movement-debug-events")!;
 const movementDebugCopy = document.querySelector<HTMLButtonElement>("#movement-debug-copy")!;
 const movementDebugTrace = document.querySelector<HTMLElement>("#movement-debug-trace")!;
+const playerHealthFill = document.querySelector<HTMLElement>("#player-health-fill")!;
+const playerHealthValue = document.querySelector<HTMLElement>("#player-health-value")!;
+const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
+const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
 const performanceFields = {
   frame: document.querySelector<HTMLElement>("#perf-frame")!,
   fps: document.querySelector<HTMLElement>("#perf-fps")!,
@@ -91,7 +96,7 @@ const joystickZone = document.querySelector<HTMLElement>("#joystick-zone")!;
 const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !playerHealthFill || !playerHealthValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -479,6 +484,8 @@ interface NetworkPlayer {
   yaw: number;
   lastProcessedInput: number;
   actionSequence: number;
+  health: number;
+  maxHealth: number;
   name: string;
 }
 
@@ -498,6 +505,8 @@ interface NetworkMob {
   maxHealth: number;
   alive: boolean;
   hitSequence: number;
+  actionSequence: number;
+  yaw: number;
   name: string;
 }
 
@@ -509,6 +518,8 @@ interface MobVisual {
   state: NetworkMob;
   lastHitSequence: number;
   hitAt: number;
+  lastActionSequence: number;
+  actionAt: number;
 }
 
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
@@ -524,6 +535,20 @@ let pendingStopInputSequence: number | null = null;
 let pendingStopDeadline = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
 const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
+
+function updatePlayerHealth(health: number, maximumHealth: number): void {
+  const fraction = Math.max(0, Math.min(1, health / Math.max(1, maximumHealth)));
+  playerHealthFill.style.width = `${fraction * 100}%`;
+  playerHealthValue.textContent = `${health} / ${maximumHealth}`;
+}
+
+function showCombatFeedback(text: string, hurt = false): void {
+  combatFeedback.textContent = text;
+  combatFeedback.classList.remove("show", "hurt");
+  void combatFeedback.offsetWidth;
+  if (hurt) combatFeedback.classList.add("hurt");
+  combatFeedback.classList.add("show");
+}
 
 function updatePlayerCount(): void {
   const count = room ? remotePlayers.size + 1 : 0;
@@ -567,17 +592,30 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const healthFill = addBox(entity, "health-fill", healthMaterial, [0.96, 0.065, 0.09], [0, 1.34, 0.01]);
   entity.setPosition(mob.x, mob.y, mob.z);
   app.root.addChild(entity);
-  return { entity, bodyRoot, bodyMaterial, healthFill, state: mob, lastHitSequence: mob.hitSequence, hitAt: 0 };
+  return {
+    entity,
+    bodyRoot,
+    bodyMaterial,
+    healthFill,
+    state: mob,
+    lastHitSequence: mob.hitSequence,
+    hitAt: 0,
+    lastActionSequence: mob.actionSequence,
+    actionAt: 0,
+  };
 }
 
 function updateMobVisual(mob: MobVisual): void {
-  mob.entity.setPosition(mob.state.x, mob.state.y, mob.state.z);
   const healthFraction = Math.max(0, Math.min(1, mob.state.health / Math.max(1, mob.state.maxHealth)));
   mob.healthFill.setLocalScale(0.96 * healthFraction, 0.065, 0.09);
   mob.healthFill.setLocalPosition(-0.48 * (1 - healthFraction), 1.34, 0.01);
   if (mob.state.hitSequence > mob.lastHitSequence) {
     mob.lastHitSequence = mob.state.hitSequence;
     mob.hitAt = performance.now();
+  }
+  if (mob.state.actionSequence > mob.lastActionSequence) {
+    mob.lastActionSequence = mob.state.actionSequence;
+    mob.actionAt = performance.now();
   }
 }
 
@@ -588,7 +626,7 @@ function bindMobs(joinedRoom: Room): void {
     const visual = createMobVisual(mobId, mob);
     mobVisuals.set(mobId, visual);
     const mobCallbacks = callbacks(mob);
-    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence"] as const) {
+    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "yaw"] as const) {
       mobCallbacks.listen(field, () => updateMobVisual(visual), true);
     }
   }, true);
@@ -639,6 +677,12 @@ function bindPlayers(joinedRoom: Room): void {
       if (!remote || player.actionSequence <= remote.lastActionSequence) return;
       remote.lastActionSequence = player.actionSequence;
       remote.actionStartedAt = performance.now();
+    }, true);
+    playerCallbacks.listen("health", () => {
+      if (isLocal) updatePlayerHealth(player.health, player.maxHealth);
+    }, true);
+    playerCallbacks.listen("maxHealth", () => {
+      if (isLocal) updatePlayerHealth(player.health, player.maxHealth);
     }, true);
   }, true);
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {
@@ -1123,6 +1167,10 @@ function requestMine(): void {
 
 function requestAttack(): void {
   if (!room || !worldReady) return;
+  if (localActionStartedAt !== null && performance.now() - localActionStartedAt < PRIMARY_ACTION_DURATION_MS) {
+    status.textContent = "Recovering from the previous swing...";
+    return;
+  }
   const player = localPlayer.getPosition();
   const targetMob = nearestLivingMob(player, 3.1);
   localActionFacingYaw = targetMob
@@ -1150,6 +1198,7 @@ function setInteractionMode(mode: InteractionMode): void {
   for (const button of modeButtons) button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
   mineButton.textContent = mode === "build" ? "Mine" : "Attack";
   mineButton.dataset.mode = mode;
+  combatReticle.hidden = mode !== "combat";
   targetStateKey = "";
   updateTarget();
   logMovementEvent(`MODE ${mode.toUpperCase()}`);
@@ -1348,8 +1397,16 @@ app.on("update", (dt: number) => {
     const visible = mob.state.alive && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
     if (!visible) continue;
+    const currentMobPosition = mob.entity.getPosition();
+    const targetMobPosition = new pc.Vec3(mob.state.x, mob.state.y, mob.state.z);
+    currentMobPosition.lerp(currentMobPosition, targetMobPosition, Math.min(1, frameTime * 10));
+    mob.entity.setPosition(currentMobPosition);
+    const currentMobYaw = mob.entity.getEulerAngles().y;
+    mob.entity.setEulerAngles(0, approachYaw(currentMobYaw, mob.state.yaw, frameTime, 420), 0);
     const hitStrength = Math.max(0, 1 - (animationNow - mob.hitAt) / 180);
-    mob.bodyRoot.setLocalPosition(0, Math.sin(animationTime * 4.5) * 0.055 - hitStrength * 0.08, 0);
+    const attackElapsed = animationNow - mob.actionAt;
+    const attackStrength = attackElapsed >= 0 && attackElapsed < 460 ? Math.sin(attackElapsed / 460 * Math.PI) : 0;
+    mob.bodyRoot.setLocalPosition(0, Math.sin(animationTime * 4.5) * 0.055 - hitStrength * 0.08, attackStrength * 0.24);
     mob.bodyMaterial.emissive = new pc.Color(0.55 * hitStrength, 0.08 * hitStrength, 0.04 * hitStrength);
     mob.bodyMaterial.update();
   }
@@ -1514,6 +1571,15 @@ async function connect(): Promise<void> {
       ? `${name} defeated · respawning in 5 seconds.`
       : `${name} hit for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
+    if (message.attackerId === room?.sessionId) showCombatFeedback(message.defeated ? "DEFEATED" : `HIT  −${message.damage}`);
+  });
+  room.onMessage("combat:player-hit", (message: PlayerHit) => {
+    if (message.playerId !== room?.sessionId) return;
+    showCombatFeedback(message.defeated ? "DEFEATED · RESPAWNING" : `HURT  −${message.damage}`, true);
+    status.textContent = message.defeated
+      ? "You were defeated and returned to the surface camp."
+      : `The Moss Crawler hit you · ${message.health} HP remaining.`;
+    logMovementEvent(`HURT hp=${message.health} defeated=${message.defeated}`);
   });
   room.onMessage("pong", (message: { id?: unknown }) => {
     if (typeof message.id !== "string") return;

@@ -15,6 +15,9 @@
       <p id="status">Connecting to the authoritative world...</p>
       <p id="target">Target: waiting for world data</p>
       <p id="players">0 players online</p>
+      <div id="player-health" aria-label="Player health">
+        <span>HP</span><div><i id="player-health-fill"></i></div><strong id="player-health-value">5 / 5</strong>
+      </div>
       <p id="exit-guide" hidden>EXIT ↑ · FOLLOW THE GOLD BLOCKS</p>
       <div id="mode-toggle" role="group" aria-label="Primary action mode">
         <button type="button" data-mode="build" aria-pressed="true">BUILD</button>
@@ -22,6 +25,8 @@
       </div>
       <p class="controls">WASD to move · Q changes mode · E or click acts</p>
     </section>
+    <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
+    <div id="combat-feedback" aria-live="polite"></div>
     <button id="performance-toggle" type="button" aria-controls="performance-panel" aria-expanded="false">PERF</button>
     <aside id="performance-panel" aria-label="Performance metrics" hidden>
       <p class="eyebrow">LIVE PERFORMANCE</p>
