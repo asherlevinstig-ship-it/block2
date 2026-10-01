@@ -4,6 +4,7 @@ export async function retryConnection<T>(
   operation: () => Promise<T>,
   onRetry: (attempt: number, delayMilliseconds: number, error: unknown) => void,
   delays: readonly number[] = CONNECTION_RETRY_DELAYS_MS,
+  attemptTimeoutMilliseconds = 10000,
 ): Promise<T> {
   let lastError: unknown;
   for (let index = 0; index < delays.length; index += 1) {
@@ -13,7 +14,20 @@ export async function retryConnection<T>(
       await new Promise(resolve => globalThis.setTimeout(resolve, delay));
     }
     try {
-      return await operation();
+      let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          operation(),
+          new Promise<never>((_resolve, reject) => {
+            timeoutId = globalThis.setTimeout(
+              () => reject(new Error("Matchmaking timed out")),
+              attemptTimeoutMilliseconds,
+            );
+          }),
+        ]);
+      } finally {
+        if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+      }
     } catch (error) {
       lastError = error;
     }

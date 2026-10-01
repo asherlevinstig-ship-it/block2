@@ -26,4 +26,18 @@ describe("connection retry", () => {
     expect(operation).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });
+
+  it("retries when matchmaking hangs instead of waiting forever", async () => {
+    vi.useFakeTimers();
+    const operation = vi.fn()
+      .mockImplementationOnce(() => new Promise(() => undefined))
+      .mockResolvedValue("connected");
+    const onRetry = vi.fn();
+    const result = retryConnection(operation, onRetry, [0, 25], 100);
+    await vi.advanceTimersByTimeAsync(125);
+    await expect(result).resolves.toBe("connected");
+    expect(operation).toHaveBeenCalledTimes(2);
+    expect(onRetry).toHaveBeenCalledWith(2, 25, expect.objectContaining({ message: "Matchmaking timed out" }));
+    vi.useRealTimers();
+  });
 });
