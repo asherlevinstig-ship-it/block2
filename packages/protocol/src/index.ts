@@ -82,11 +82,16 @@ export const PowerRequestSchema = z.object({
   yaw: z.number().finite(),
 });
 
+export const PowerCancelRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+});
+
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
 export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
 export type PowerRequest = z.infer<typeof PowerRequestSchema>;
+export type PowerCancelRequest = z.infer<typeof PowerCancelRequestSchema>;
 
 export interface ChunkSnapshot {
   chunkX: number;
@@ -169,6 +174,12 @@ export interface PowerResolved {
   damage: number;
   defeatedMobIds: string[];
   fractures: PowerFracture[];
+}
+
+export interface PowerCancelled {
+  casterId: string;
+  powerId: PowerId;
+  reason: "dodge" | "cancel";
 }
 
 export interface ActionRejected {

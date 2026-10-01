@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POWER_DEFINITIONS } from "@blockcraft/protocol";
-import { isPowerCompatible, lineFractureColumns, powerDirection, selectLinePowerTargets } from "../src/power-rules.js";
+import { isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectLinePowerTargets } from "../src/power-rules.js";
 
 describe("Power rules", () => {
   it("resolves facing direction from yaw", () => {
@@ -31,5 +31,14 @@ describe("Power rules", () => {
       { x: 8, z: 12 },
       { x: 8, z: 13 },
     ]);
+  });
+
+  it("chooses the shortest lateral escape side from a line", () => {
+    const right = powerEvadeDirection({ x: 0, y: 8, z: 0 }, 0, { x: 0.2, y: 8, z: 2 });
+    const left = powerEvadeDirection({ x: 0, y: 8, z: 0 }, 0, { x: -0.2, y: 8, z: 2 });
+    expect(right.x).toBeCloseTo(1);
+    expect(right.z).toBeCloseTo(0);
+    expect(left.x).toBeCloseTo(-1);
+    expect(left.z).toBeCloseTo(0);
   });
 });

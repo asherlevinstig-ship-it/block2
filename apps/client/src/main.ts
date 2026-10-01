@@ -13,6 +13,7 @@ import {
   type CombatStagger,
   type PlayerHit,
   type PowerCast,
+  type PowerCancelled,
   type PowerResolved,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
@@ -582,6 +583,11 @@ let localPowerCooldownUntil = 0;
 let powerSequence = 0;
 let localLastPowerSequence = 0;
 let powerServerReady = false;
+let powerAimActive = false;
+let powerAimYaw = 0;
+let powerAimPointerId: number | null = null;
+let cameraShakeUntil = 0;
+let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
 let pendingStopInputSequence: number | null = null;
 let pendingStopDeadline = 0;
@@ -626,8 +632,29 @@ interface PowerImpactVisual {
   startedAt: number;
 }
 
+interface PowerAimSegment {
+  entity: pc.Entity;
+  distance: number;
+}
+
+interface PowerAimVisual {
+  root: pc.Entity;
+  validMaterial: pc.StandardMaterial;
+  blockedMaterial: pc.StandardMaterial;
+  segments: PowerAimSegment[];
+}
+
+interface PowerDebrisVisual {
+  entity: pc.Entity;
+  velocity: pc.Vec3;
+  spin: pc.Vec3;
+  startedAt: number;
+}
+
 const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
+const powerDebrisVisuals: PowerDebrisVisual[] = [];
+let powerAimVisual: PowerAimVisual | null = null;
 
 function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -654,6 +681,45 @@ function startPowerTelegraph(casterId: string, x: number, y: number, z: number, 
   powerTelegraphs.set(casterId, { root, material, startedAt: performance.now(), windupMs });
 }
 
+function destroyPowerAimVisual(): void {
+  powerAimVisual?.root.destroy();
+  powerAimVisual = null;
+}
+
+function createPowerAimVisual(): void {
+  destroyPowerAimVisual();
+  const root = new pc.Entity("power-aim-preview");
+  const validMaterial = powerMaterial(new pc.Color(0.2, 0.95, 0.52), 0.42);
+  const blockedMaterial = powerMaterial(new pc.Color(1, 0.16, 0.08), 0.5);
+  const segments: PowerAimSegment[] = [];
+  const definition = POWER_DEFINITIONS.seismic_cleave;
+  for (let distance = 0.8; distance <= definition.range; distance += 0.8) {
+    const entity = addBox(root, "seismic-aim", validMaterial, [definition.width, 0.028, 0.66], [0, 0.045, distance]);
+    segments.push({ entity, distance });
+  }
+  app.root.addChild(root);
+  powerAimVisual = { root, validMaterial, blockedMaterial, segments };
+}
+
+function updatePowerAimVisual(): void {
+  if (!powerAimActive || !powerAimVisual) return;
+  const player = localPlayer.getPosition();
+  powerAimVisual.root.setPosition(player.x, player.y, player.z);
+  powerAimVisual.root.setEulerAngles(0, powerAimYaw, 0);
+  const radians = powerAimYaw * Math.PI / 180;
+  let pathBlocked = false;
+  for (const segment of powerAimVisual.segments) {
+    const x = Math.floor(player.x + Math.sin(radians) * segment.distance);
+    const z = Math.floor(player.z + Math.cos(radians) * segment.distance);
+    const feetY = Math.floor(player.y + 0.1);
+    pathBlocked ||= readCollisionWorldBlock(x, feetY, z) !== Block.Air
+      || readCollisionWorldBlock(x, feetY + 1, z) !== Block.Air;
+    if (segment.entity.render) {
+      segment.entity.render.material = pathBlocked ? powerAimVisual.blockedMaterial : powerAimVisual.validMaterial;
+    }
+  }
+}
+
 function createPowerImpact(message: PowerResolved): void {
   powerTelegraphs.get(message.casterId)?.root.destroy();
   powerTelegraphs.delete(message.casterId);
@@ -672,6 +738,34 @@ function createPowerImpact(message: PowerResolved): void {
   app.root.addChild(root);
   app.root.addChild(fractureRoot);
   powerImpactVisuals.push({ root, fractureRoot, material, startedAt: performance.now() });
+  const radians = message.yaw * Math.PI / 180;
+  const directionX = Math.sin(radians);
+  const directionZ = Math.cos(radians);
+  for (let index = 0; index < 14; index += 1) {
+    const distance = 0.5 + (index % 7) * 0.66;
+    const side = index % 2 === 0 ? -1 : 1;
+    const debris = new pc.Entity("seismic-debris");
+    debris.addComponent("render", { type: "box" });
+    if (debris.render) debris.render.material = material;
+    const size = 0.09 + (index % 3) * 0.035;
+    debris.setLocalScale(size, size, size);
+    debris.setPosition(
+      message.x + directionX * distance + directionZ * side * 0.22,
+      message.y + 0.12,
+      message.z + directionZ * distance - directionX * side * 0.22,
+    );
+    app.root.addChild(debris);
+    powerDebrisVisuals.push({
+      entity: debris,
+      velocity: new pc.Vec3(directionX * (0.5 + index % 3 * 0.18) + directionZ * side * 0.55, 2.1 + index % 4 * 0.28, directionZ * (0.5 + index % 3 * 0.18) - directionX * side * 0.55),
+      spin: new pc.Vec3(170 + index * 13, 120 + index * 17, 90 + index * 19),
+      startedAt: performance.now(),
+    });
+  }
+  const player = localPlayer.getPosition();
+  const distanceToImpact = Math.hypot(player.x - message.x, player.z - message.z);
+  cameraShakeStrength = Math.max(cameraShakeStrength, Math.max(0.08, 0.28 - distanceToImpact * 0.025));
+  cameraShakeUntil = performance.now() + 360;
 }
 
 function updatePlayerCount(): void {
@@ -888,6 +982,7 @@ function updatePointerPosition(event: PointerEvent): void {
   const rect = canvas.getBoundingClientRect();
   pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
   pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
+  if (powerAimActive) updatePowerAimFromPointer();
 }
 
 canvas.addEventListener("pointermove", updatePointerPosition);
@@ -1311,6 +1406,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
 
 function requestMine(): void {
   if (!room || !worldReady) return;
+  if (powerAimActive || localPowerStartedAt !== null) {
+    status.textContent = "Committed to Seismic Cleave · dodge to cancel.";
+    return;
+  }
   if (!currentTarget) {
     status.textContent = "Move within mining reach and point at a block.";
     return;
@@ -1348,6 +1447,10 @@ function requestMine(): void {
 function requestAttack(): void {
   if (!room || !worldReady) return;
   const now = performance.now();
+  if (powerAimActive || (localPowerStartedAt !== null && now - localPowerStartedAt < SEISMIC_POWER_DURATION_MS)) {
+    status.textContent = "Committed to Seismic Cleave · dodge to cancel.";
+    return;
+  }
   if (localActionStartedAt !== null && now - localActionStartedAt < actionDuration(localActionStep)) {
     status.textContent = "Recovering from the previous swing...";
     return;
@@ -1377,6 +1480,8 @@ function requestAttack(): void {
 
 function requestDodge(): void {
   if (!room || !worldReady) return;
+  if (powerAimActive) cancelPowerAim();
+  if (localPowerStartedAt !== null) cancelLocalPowerPresentation();
   const movementLength = Math.hypot(smoothedMovement.x, smoothedMovement.z);
   const direction = movementLength > 0.05
     ? { x: smoothedMovement.x / movementLength, z: smoothedMovement.z / movementLength }
@@ -1404,13 +1509,30 @@ function requestDodge(): void {
   status.textContent = "Dodging · brief invulnerability active.";
 }
 
-function requestPower(): void {
+function updatePowerAimFromPointer(): void {
+  if (!powerAimActive || !camera.camera) return;
+  const player = localPlayer.getPosition();
+  const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
+  const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
+  const rayY = end.y - start.y;
+  if (Math.abs(rayY) < 0.0001) return;
+  const distanceAlongRay = (player.y - start.y) / rayY;
+  if (distanceAlongRay <= 0) return;
+  const worldX = start.x + (end.x - start.x) * distanceAlongRay;
+  const worldZ = start.z + (end.z - start.z) * distanceAlongRay;
+  powerAimYaw = movementYaw(worldX - player.x, worldZ - player.z, powerAimYaw);
+  localFacingYaw = powerAimYaw;
+  updatePowerAimVisual();
+}
+
+function beginPowerAim(pointerId: number | null = null): void {
   if (!room || !worldReady) return;
   if (!powerServerReady) {
     status.textContent = "Power server is updating · Seismic Cleave will unlock automatically.";
     showCombatFeedback("POWER SERVER UPDATING", "hurt");
     return;
   }
+  if (powerAimActive || localPowerStartedAt !== null) return;
   const definition = POWER_DEFINITIONS.seismic_cleave;
   const remaining = localPowerCooldownUntil - Date.now();
   if (remaining > 0) {
@@ -1419,10 +1541,50 @@ function requestPower(): void {
   }
   const player = localPlayer.getPosition();
   const targetMob = nearestLivingMob(player, definition.range + 1.2);
-  const yaw = targetMob
+  powerAimYaw = targetMob
     ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
     : localFacingYaw;
-  localFacingYaw = yaw;
+  powerAimActive = true;
+  powerAimPointerId = pointerId;
+  localFacingYaw = powerAimYaw;
+  createPowerAimVisual();
+  updatePowerAimVisual();
+  powerSlot.classList.add("aiming");
+  powerButton.classList.add("aiming");
+  showCombatFeedback("AIM SEISMIC CLEAVE", "dodge");
+  status.textContent = "Aiming Seismic Cleave · drag to adjust, release to cast, dodge to cancel.";
+}
+
+function cancelPowerAim(): void {
+  if (!powerAimActive) return;
+  powerAimActive = false;
+  powerAimPointerId = null;
+  destroyPowerAimVisual();
+  powerSlot.classList.remove("aiming");
+  powerButton.classList.remove("aiming");
+  showCombatFeedback("POWER CANCELLED", "dodge");
+}
+
+function cancelLocalPowerPresentation(): void {
+  localPowerCooldownUntil = 0;
+  localPowerStartedAt = null;
+  localPowerFacingYaw = null;
+  localPowerStepApplied = false;
+  const localTelegraph = room ? powerTelegraphs.get(room.sessionId) : undefined;
+  localTelegraph?.root.destroy();
+  if (room) powerTelegraphs.delete(room.sessionId);
+}
+
+function commitPowerAim(): void {
+  if (!powerAimActive || !room) return;
+  const yaw = powerAimYaw;
+  powerAimActive = false;
+  powerAimPointerId = null;
+  destroyPowerAimVisual();
+  powerSlot.classList.remove("aiming");
+  powerButton.classList.remove("aiming");
+  const definition = POWER_DEFINITIONS.seismic_cleave;
+  const player = localPlayer.getPosition();
   localPowerFacingYaw = yaw;
   localPowerStartedAt = performance.now();
   localPowerStepApplied = false;
@@ -1463,11 +1625,14 @@ window.addEventListener("keydown", event => {
   if (event.repeat) return;
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyE") requestPrimaryAction();
-  if (event.code === "KeyR") requestPower();
+  if (event.code === "KeyR") beginPowerAim();
   if (event.code === "Space") {
     event.preventDefault();
     requestDodge();
   }
+});
+window.addEventListener("keyup", event => {
+  if (event.code === "KeyR") commitPowerAim();
 });
 canvas.addEventListener("pointerdown", event => {
   if (event.button !== 0) return;
@@ -1485,9 +1650,30 @@ dodgeButton.addEventListener("pointerdown", event => {
 });
 powerButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  requestPower();
+  powerButton.setPointerCapture(event.pointerId);
+  beginPowerAim(event.pointerId);
 });
-powerSlot.addEventListener("click", requestPower);
+powerButton.addEventListener("pointermove", event => {
+  if (powerAimPointerId !== event.pointerId) return;
+  updatePointerPosition(event);
+});
+powerButton.addEventListener("pointerup", event => {
+  if (powerAimPointerId === event.pointerId) commitPowerAim();
+});
+powerButton.addEventListener("pointercancel", cancelPowerAim);
+powerSlot.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  powerSlot.setPointerCapture(event.pointerId);
+  beginPowerAim(event.pointerId);
+});
+powerSlot.addEventListener("pointermove", event => {
+  if (powerAimPointerId !== event.pointerId) return;
+  updatePointerPosition(event);
+});
+powerSlot.addEventListener("pointerup", event => {
+  if (powerAimPointerId === event.pointerId) commitPowerAim();
+});
+powerSlot.addEventListener("pointercancel", cancelPowerAim);
 
 const frameSamples: number[] = [];
 const pendingPings = new Map<string, number>();
@@ -1586,14 +1772,14 @@ app.on("update", (dt: number) => {
     cameraRelativeMovement(strafe, forward, CAMERA_OFFSET_X, CAMERA_OFFSET_Z),
   );
   smoothedMovement = approachMovement(smoothedMovement, desiredMovement, frameTime);
-  const powerFacingActive = localPowerStartedAt !== null
+  const powerFacingActive = powerAimActive || (localPowerStartedAt !== null
     && performance.now() - localPowerStartedAt < SEISMIC_POWER_DURATION_MS
-    && localPowerFacingYaw !== null;
+    && localPowerFacingYaw !== null);
   const actionFacingActive = localActionStartedAt !== null
     && performance.now() - localActionStartedAt < actionDuration(localActionStep)
     && localActionFacingYaw !== null;
   const desiredFacingYaw = powerFacingActive
-    ? localPowerFacingYaw!
+    ? powerAimActive ? powerAimYaw : localPowerFacingYaw!
     : actionFacingActive
     ? localActionFacingYaw!
     : movementYaw(desiredMovement.x, desiredMovement.z, localFacingYaw);
@@ -1744,6 +1930,7 @@ app.on("update", (dt: number) => {
     telegraph.material.opacity = 0.18 + progress * 0.38 + Math.sin(animationTime * 28) * 0.05;
     telegraph.material.update();
   }
+  updatePowerAimVisual();
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
@@ -1758,19 +1945,45 @@ app.on("update", (dt: number) => {
     impact.material.opacity = Math.max(0, strength * 0.82);
     impact.material.update();
   }
+  for (let index = powerDebrisVisuals.length - 1; index >= 0; index -= 1) {
+    const debris = powerDebrisVisuals[index]!;
+    const elapsed = animationNow - debris.startedAt;
+    if (elapsed >= 720) {
+      debris.entity.destroy();
+      powerDebrisVisuals.splice(index, 1);
+      continue;
+    }
+    debris.velocity.y -= 9.8 * frameTime;
+    const position = debris.entity.getPosition();
+    debris.entity.setPosition(
+      position.x + debris.velocity.x * frameTime,
+      position.y + debris.velocity.y * frameTime,
+      position.z + debris.velocity.z * frameTime,
+    );
+    debris.entity.rotate(debris.spin.x * frameTime, debris.spin.y * frameTime, debris.spin.z * frameTime);
+  }
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerFraction = powerRemaining / POWER_DEFINITIONS.seismic_cleave.cooldownMs;
   powerCooldownFill.style.width = `${Math.max(0, Math.min(1, powerFraction)) * 100}%`;
   powerCooldownLabel.textContent = !powerServerReady
     ? "SERVER UPDATE"
+    : powerAimActive
+      ? "RELEASE TO CAST"
     : powerRemaining > 0
       ? `${(powerRemaining / 1000).toFixed(1)}s`
       : "READY · R";
-  powerSlot.classList.toggle("ready", powerServerReady && powerRemaining <= 0);
-  powerButton.textContent = !powerServerReady ? "Wait" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
+  powerSlot.classList.toggle("ready", powerServerReady && powerRemaining <= 0 && !powerAimActive);
+  powerButton.textContent = !powerServerReady ? "Wait" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
   cameraTarget.set(player.x, player.y + localVisualVerticalOffset, player.z);
   cameraFocus.copy(cameraTarget);
   const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
+  if (animationNow < cameraShakeUntil) {
+    const remaining = Math.max(0, (cameraShakeUntil - animationNow) / 360);
+    const amplitude = cameraShakeStrength * remaining;
+    desiredCamera.x += Math.sin(animationNow * 0.095) * amplitude;
+    desiredCamera.y += Math.cos(animationNow * 0.12) * amplitude * 0.55;
+    desiredCamera.z += Math.sin(animationNow * 0.14 + 1.7) * amplitude;
+  }
   camera.setPosition(desiredCamera);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   const bodyY = localPlayerRig.root.getLocalPosition().y;
@@ -1957,6 +2170,18 @@ async function connect(): Promise<void> {
     }
     logMovementEvent(`POWER RESOLVE hits=${message.hitCount} fractures=${message.fractures.length}`);
   });
+  room.onMessage("power:cancelled", (message: PowerCancelled) => {
+    const telegraph = powerTelegraphs.get(message.casterId);
+    telegraph?.root.destroy();
+    powerTelegraphs.delete(message.casterId);
+    if (message.casterId !== room?.sessionId) return;
+    cancelLocalPowerPresentation();
+    showCombatFeedback(message.reason === "dodge" ? "DODGE CANCEL" : "POWER CANCELLED", "dodge");
+    status.textContent = message.reason === "dodge"
+      ? "Seismic Cleave cancelled into a dodge · cooldown refunded."
+      : "Seismic Cleave cancelled · cooldown refunded.";
+    logMovementEvent(`POWER CANCEL ${message.reason}`);
+  });
   room.onMessage("combat:hit", (message: CombatHit) => {
     const mob = mobVisuals.get(message.mobId);
     const name = mob?.state.name ?? "Mob";
@@ -2013,13 +2238,8 @@ async function connect(): Promise<void> {
       showCombatFeedback(message.reason === "stamina" ? "NO STAMINA" : "DODGE BLOCKED", "hurt");
     }
     if (message.action === "power") {
-      localPowerCooldownUntil = 0;
-      localPowerStartedAt = null;
-      localPowerFacingYaw = null;
-      localPowerStepApplied = false;
-      const localTelegraph = room ? powerTelegraphs.get(room.sessionId) : undefined;
-      localTelegraph?.root.destroy();
-      if (room) powerTelegraphs.delete(room.sessionId);
+      cancelPowerAim();
+      cancelLocalPowerPresentation();
       showCombatFeedback(message.reason === "cooldown" ? "POWER RECHARGING" : "POWER BLOCKED", "hurt");
     }
     if (message.reason === "stale") {
@@ -2030,6 +2250,8 @@ async function connect(): Promise<void> {
   room.onLeave(() => {
     worldReady = false;
     powerServerReady = false;
+    cancelPowerAim();
+    cancelLocalPowerPresentation();
     room = null;
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
@@ -2043,6 +2265,8 @@ async function connect(): Promise<void> {
       impact.fractureRoot.destroy();
     }
     powerImpactVisuals.length = 0;
+    for (const debris of powerDebrisVisuals) debris.entity.destroy();
+    powerDebrisVisuals.length = 0;
     updatePlayerCount();
   });
   room.send("world:ready");

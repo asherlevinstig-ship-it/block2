@@ -57,3 +57,11 @@ export function lineFractureColumns(origin: PowerPosition, yaw: number, range: n
   }
   return [...columns.values()];
 }
+
+export function powerEvadeDirection(origin: PowerPosition, yaw: number, target: PowerPosition): { x: number; z: number } {
+  const direction = powerDirection(yaw);
+  const deltaX = target.x - origin.x;
+  const deltaZ = target.z - origin.z;
+  const side = deltaX * direction.z - deltaZ * direction.x >= 0 ? 1 : -1;
+  return { x: direction.z * side, z: -direction.x * side };
+}

@@ -157,6 +157,11 @@ button { font: inherit; }
   transition: width 80ms linear;
 }
 #power-slot.ready { box-shadow: inset 0 0 18px rgb(255 155 52 / 16%), 0 0 12px rgb(255 147 42 / 12%); }
+#power-slot.aiming {
+  border-color: rgb(89 255 166 / 72%);
+  background: rgb(18 91 58 / 88%);
+  box-shadow: inset 0 0 22px rgb(64 255 151 / 18%), 0 0 16px rgb(64 255 151 / 22%);
+}
 #power-slot:active { transform: scale(.985); }
 
 #combat-reticle {
@@ -206,6 +211,11 @@ button { font: inherit; }
   border-color: rgb(79 201 238 / 45%) !important;
   background: rgb(17 76 98 / 82%) !important;
   color: #c5f3ff !important;
+}
+#power-button.aiming {
+  border-color: rgb(89 255 166 / 78%) !important;
+  background: rgb(18 103 65 / 94%) !important;
+  box-shadow: 0 0 18px rgb(64 255 151 / 28%);
 }
 #power-button {
   border-color: rgb(240 158 67 / 58%) !important;

@@ -7,6 +7,7 @@ import {
   MineBlockRequestSchema,
   MoveRequestSchema,
   POWER_DEFINITIONS,
+  PowerCancelRequestSchema,
   PowerRequestSchema,
   type ActionRejected,
   type BlockChanged,
@@ -16,6 +17,7 @@ import {
   type CombatStagger,
   type PlayerHit,
   type PowerCast,
+  type PowerCancelled,
   type PowerFracture,
   type PowerId,
   type PowerResolved,
@@ -40,7 +42,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
-import { isPowerCompatible, lineFractureColumns, powerDirection, selectLinePowerTargets } from "./power-rules.js";
+import { isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectLinePowerTargets } from "./power-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -103,6 +105,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("attack", (client, payload) => this.handleAttack(client, payload));
     this.onMessage("dodge", (client, payload) => this.handleDodge(client, payload));
     this.onMessage("power", (client, payload) => this.handlePower(client, payload));
+    this.onMessage("power:cancel", (client, payload) => this.handlePowerCancel(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -327,6 +330,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const lastDodgeAt = this.lastDodgeAt.get(client.sessionId) ?? 0;
     if (now - lastDodgeAt < 350) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "rate" });
     if (player.stamina < 35) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "stamina" });
+    this.cancelPendingPower(client.sessionId, "dodge");
     const direction = dodgeDirection(parsed.data.strafe, parsed.data.forward, parsed.data.yaw);
     const next = resolvePlayerMotion(
       { x: player.x, y: player.y, z: player.z },
@@ -357,6 +361,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "compatibility" });
     }
     const now = Date.now();
+    if (this.pendingPowers.has(client.sessionId)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "rate" });
+    }
     if (now < player.powerCooldownUntil) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "cooldown" });
     }
@@ -370,6 +377,27 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       yaw: parsed.data.yaw,
       impactAt: now + definition.windupMs,
     });
+    const threatened = selectLinePowerTargets(
+      player,
+      parsed.data.yaw,
+      [...this.state.mobs.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive })),
+      definition.range,
+      definition.width,
+    );
+    for (const target of threatened) {
+      const mob = this.state.mobs.get(target.id);
+      if (!mob || !mob.alive || mob.combatState === "stagger") continue;
+      const evade = powerEvadeDirection(player, parsed.data.yaw, mob);
+      const sidestep = resolvePlayerMotion(
+        { x: mob.x, y: mob.y, z: mob.z },
+        { x: evade.x * 0.58, y: 0, z: evade.z * 0.58 },
+        this.readWorldBlock,
+      );
+      mob.x = sidestep.x;
+      mob.y = sidestep.y;
+      mob.z = sidestep.z;
+      mob.yaw = Math.atan2(player.x - mob.x, player.z - mob.z) * 180 / Math.PI;
+    }
     const cast: PowerCast = {
       casterId: client.sessionId,
       powerId,
@@ -381,6 +409,29 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       windupMs: definition.windupMs,
     };
     this.broadcast("power:cast", cast);
+  }
+
+  private handlePowerCancel(client: Client, payload: unknown): void {
+    const parsed = PowerCancelRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
+    this.cancelPendingPower(client.sessionId, "cancel");
+  }
+
+  private cancelPendingPower(sessionId: string, reason: PowerCancelled["reason"]): boolean {
+    const pending = this.pendingPowers.get(sessionId);
+    if (!pending) return false;
+    this.pendingPowers.delete(sessionId);
+    const player = this.state.players.get(sessionId);
+    if (player) {
+      player.powerCooldownUntil = 0;
+      player.powerCastStartedAt = 0;
+    }
+    this.broadcast("power:cancelled", {
+      casterId: sessionId,
+      powerId: pending.powerId,
+      reason,
+    } satisfies PowerCancelled);
+    return true;
   }
 
   private fractureTerrain(requestId: string, x: number, z: number, playerY: number): PowerFracture | null {
@@ -486,6 +537,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success) return this.reject(client, { action: "mine", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (this.pendingPowers.has(client.sessionId)) {
+      const requestId = typeof payload === "object" && payload && "requestId" in payload && typeof payload.requestId === "string"
+        ? payload.requestId
+        : undefined;
+      return this.reject(client, { requestId, action: "mine", reason: "rate" });
+    }
     const request = parsed.data;
     player.attackStep = 0;
     player.actionSequence += 1;
@@ -512,6 +569,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success) return this.reject(client, { action: "attack", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (this.pendingPowers.has(client.sessionId)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "rate" });
+    }
     const now = Date.now();
     const chain = this.attackChains.get(client.sessionId);
     if (chain && now < chain.recoveryUntil) {
