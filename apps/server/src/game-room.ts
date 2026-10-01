@@ -1,6 +1,8 @@
 import { Client, Room } from "@colyseus/core";
 import {
   AttackRequestSchema,
+  COMBAT_ATTACKS,
+  COMBO_CHAIN_WINDOW_MS,
   DodgeRequestSchema,
   MineBlockRequestSchema,
   MoveRequestSchema,
@@ -8,6 +10,7 @@ import {
   type BlockChanged,
   type ChunkSnapshot,
   type CombatHit,
+  type CombatMiss,
   type CombatStagger,
   type PlayerHit,
   type WorldBootstrap,
@@ -28,7 +31,7 @@ import {
   type GeneratedChunk,
 } from "@blockcraft/voxel-world";
 import { MobState, PlayerState, WorldState } from "./schema.js";
-import { attackRejectionReason, miningRejectionReason, movementRejectionReason, selectAttackTarget } from "./action-rules.js";
+import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import {
   activeMovementInput,
@@ -43,13 +46,27 @@ interface MutableChunk {
   revision: number;
 }
 
+interface AttackChainState {
+  step: 1 | 2 | 3;
+  recoveryUntil: number;
+  comboExpiresAt: number;
+}
+
+interface PendingAttack {
+  requestId: string;
+  yaw: number;
+  step: 1 | 2 | 3;
+  impactAt: number;
+}
+
 export class WorldRoom extends Room<{ state: WorldState }> {
   override maxClients = 20;
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
   private readonly movementRateWindows = new Map<string, MovementRateWindow>();
   private readonly verticalVelocities = new Map<string, number>();
-  private readonly lastAttackAt = new Map<string, number>();
+  private readonly attackChains = new Map<string, AttackChainState>();
+  private readonly pendingAttacks = new Map<string, PendingAttack>();
   private readonly lastMobAttackAt = new Map<string, number>();
   private readonly lastDodgeAt = new Map<string, number>();
   private worldSeed = "blockcraft-dev";
@@ -93,7 +110,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.movementInputs.delete(client.sessionId);
     this.movementRateWindows.delete(client.sessionId);
     this.verticalVelocities.delete(client.sessionId);
-    this.lastAttackAt.delete(client.sessionId);
+    this.attackChains.delete(client.sessionId);
+    this.pendingAttacks.delete(client.sessionId);
     this.lastDodgeAt.delete(client.sessionId);
   }
 
@@ -165,6 +183,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private simulatePlayers(deltaTime: number): void {
     const now = Date.now();
+    this.resolvePendingAttacks(now);
     for (const [mobId, mob] of this.state.mobs) {
       if (!mob.alive && now >= mob.respawnAt) {
         mob.x = 13.5;
@@ -214,6 +233,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           targetPlayer.z = spawn.z;
           targetPlayer.health = targetPlayer.maxHealth;
           targetPlayer.stamina = targetPlayer.maxStamina;
+          this.pendingAttacks.delete(mob.targetId);
+          this.attackChains.delete(mob.targetId);
           this.movementInputs.set(mob.targetId, { request: idleMovementInput(), receivedAt: now });
           this.verticalVelocities.set(mob.targetId, 0);
           mob.x = 13.5;
@@ -308,6 +329,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     const request = parsed.data;
+    player.attackStep = 0;
     player.actionSequence += 1;
     const address = worldToChunk(request.x, request.z);
     const stored = this.getChunk(address.chunkX, address.chunkZ);
@@ -333,46 +355,89 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     const now = Date.now();
-    const rejection = attackRejectionReason(this.lastAttackAt.get(client.sessionId), now);
-    if (rejection) return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: rejection });
-    this.lastAttackAt.set(client.sessionId, now);
+    const chain = this.attackChains.get(client.sessionId);
+    if (chain && now < chain.recoveryUntil) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "rate" });
+    }
+    const step = chain ? nextComboStep(chain.step, chain.comboExpiresAt, now) : 1;
+    const timing = COMBAT_ATTACKS[step - 1]!;
+    this.attackChains.set(client.sessionId, {
+      step,
+      recoveryUntil: now + timing.durationMs,
+      comboExpiresAt: now + timing.durationMs + COMBO_CHAIN_WINDOW_MS,
+    });
+    this.pendingAttacks.set(client.sessionId, {
+      requestId: parsed.data.requestId,
+      yaw: parsed.data.yaw,
+      step,
+      impactAt: now + timing.impactMs,
+    });
     player.yaw = parsed.data.yaw;
+    player.attackStep = step;
     player.actionSequence += 1;
-    const targets = [...this.state.mobs.entries()].map(([id, mob]) => ({
-      id,
-      x: mob.x,
-      y: mob.y,
-      z: mob.z,
-      alive: mob.alive,
-    }));
-    const target = selectAttackTarget(player, parsed.data.yaw, targets);
-    if (!target) return;
-    const mob = this.state.mobs.get(target.id);
-    if (!mob || !mob.alive) return;
-    mob.health = Math.max(0, mob.health - 1);
-    mob.hitSequence += 1;
-    if (mob.combatState === "windup") {
-      mob.combatState = "stagger";
-      mob.stateUntil = now + 900;
-      mob.targetId = "";
-      mob.staggerSequence += 1;
-      const stagger: CombatStagger = { attackerId: client.sessionId, mobId: target.id, durationMs: 900 };
-      this.broadcast("combat:stagger", stagger);
+  }
+
+  private resolvePendingAttacks(now: number): void {
+    for (const [sessionId, pending] of this.pendingAttacks) {
+      if (now < pending.impactAt) continue;
+      this.pendingAttacks.delete(sessionId);
+      const player = this.state.players.get(sessionId);
+      if (!player) continue;
+      const timing = COMBAT_ATTACKS[pending.step - 1]!;
+      const targets = [...this.state.mobs.entries()].map(([id, mob]) => ({
+        id,
+        x: mob.x,
+        y: mob.y,
+        z: mob.z,
+        alive: mob.alive,
+      }));
+      const target = selectAttackTarget(player, pending.yaw, targets);
+      if (!target) {
+        const miss: CombatMiss = { attackerId: sessionId, comboStep: pending.step };
+        this.broadcast("combat:miss", miss);
+        continue;
+      }
+      const mob = this.state.mobs.get(target.id);
+      if (!mob || !mob.alive) continue;
+      mob.health = Math.max(0, mob.health - timing.damage);
+      mob.hitSequence += 1;
+      if (mob.combatState === "windup") {
+        mob.combatState = "stagger";
+        mob.stateUntil = now + 900;
+        mob.targetId = "";
+        mob.staggerSequence += 1;
+        const stagger: CombatStagger = { attackerId: sessionId, mobId: target.id, durationMs: 900 };
+        this.broadcast("combat:stagger", stagger);
+      }
+      const deltaX = mob.x - player.x;
+      const deltaZ = mob.z - player.z;
+      const distance = Math.hypot(deltaX, deltaZ);
+      if (distance > 0.001 && timing.knockback > 0) {
+        const next = resolvePlayerMotion(
+          { x: mob.x, y: mob.y, z: mob.z },
+          { x: deltaX / distance * timing.knockback, y: 0, z: deltaZ / distance * timing.knockback },
+          this.readWorldBlock,
+        );
+        mob.x = next.x;
+        mob.z = next.z;
+      }
+      if (mob.health === 0) {
+        mob.alive = false;
+        mob.respawnAt = now + 5000;
+        mob.combatState = "idle";
+        mob.stateUntil = 0;
+        mob.targetId = "";
+      }
+      const hit: CombatHit = {
+        attackerId: sessionId,
+        mobId: target.id,
+        damage: timing.damage,
+        health: mob.health,
+        defeated: !mob.alive,
+        comboStep: pending.step,
+        knockback: timing.knockback,
+      };
+      this.broadcast("combat:hit", hit);
     }
-    if (mob.health === 0) {
-      mob.alive = false;
-      mob.respawnAt = now + 5000;
-      mob.combatState = "idle";
-      mob.stateUntil = 0;
-      mob.targetId = "";
-    }
-    const hit: CombatHit = {
-      attackerId: client.sessionId,
-      mobId: target.id,
-      damage: 1,
-      health: mob.health,
-      defeated: !mob.alive,
-    };
-    this.broadcast("combat:hit", hit);
   }
 }

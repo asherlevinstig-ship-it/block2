@@ -7,6 +7,7 @@ export const PlayerState = schema({
   yaw: t.float32().default(0),
   lastProcessedInput: t.int32().default(0),
   actionSequence: t.int32().default(0),
+  attackStep: t.int8().default(0),
   health: t.int8().default(5),
   maxHealth: t.int8().default(5),
   stamina: t.float32().default(100),

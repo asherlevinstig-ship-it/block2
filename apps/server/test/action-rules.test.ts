@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { attackRejectionReason, miningRejectionReason, movementRejectionReason, selectAttackTarget } from "../src/action-rules.js";
+import { attackRejectionReason, miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "../src/action-rules.js";
 
 describe("authoritative action rules", () => {
   it("accepts small movement steps and rejects teleports", () => {
@@ -34,6 +34,13 @@ describe("authoritative action rules", () => {
     expect(attackRejectionReason(undefined, 1000)).toBeNull();
     expect(attackRejectionReason(1000, 1200)).toBe("rate");
     expect(attackRejectionReason(1000, 1300)).toBeNull();
+  });
+
+  it("advances and resets the three-hit combo inside its chain window", () => {
+    expect(nextComboStep(1, 1500, 1400)).toBe(2);
+    expect(nextComboStep(2, 1500, 1400)).toBe(3);
+    expect(nextComboStep(3, 1500, 1400)).toBe(1);
+    expect(nextComboStep(2, 1500, 1501)).toBe(1);
   });
 
   it("hits the nearest living mob inside the melee cone", () => {

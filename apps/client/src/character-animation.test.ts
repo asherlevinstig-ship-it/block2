@@ -45,7 +45,18 @@ describe("voxel character animation", () => {
     expect(strike.active).toBe(true);
     expect(strike.rightArmPitch).toBeLessThan(-100);
     expect(strike.torsoYaw).toBeLessThan(0);
-    expect(recovered).toEqual({ active: false, torsoYaw: 0, rightArmPitch: 0, rightArmRoll: 0 });
+    expect(recovered).toEqual({ active: false, torsoYaw: 0, leftArmPitch: 0, leftArmRoll: 0, rightArmPitch: 0, rightArmRoll: 0 });
+  });
+
+  it("gives each combo step a distinct strike pose", () => {
+    const first = primaryActionPose(135, 1);
+    const second = primaryActionPose(155, 2);
+    const finisher = primaryActionPose(210, 3);
+    expect(first.torsoYaw).toBeLessThan(0);
+    expect(second.torsoYaw).toBeGreaterThan(0);
+    expect(second.rightArmRoll).toBeLessThan(-50);
+    expect(finisher.leftArmPitch).toBeLessThan(-100);
+    expect(finisher.rightArmPitch).toBeLessThan(-120);
   });
 
   it("blends walk animation out after movement stops without resetting its phase", () => {

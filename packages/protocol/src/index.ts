@@ -2,6 +2,13 @@ import { z } from "zod";
 
 export const WORLD_ROOM = "world";
 
+export const COMBO_CHAIN_WINDOW_MS = 520;
+export const COMBAT_ATTACKS = [
+  { step: 1, durationMs: 380, impactMs: 135, damage: 1, knockback: 0.22 },
+  { step: 2, durationMs: 410, impactMs: 155, damage: 1, knockback: 0.38 },
+  { step: 3, durationMs: 560, impactMs: 210, damage: 2, knockback: 0.82 },
+] as const;
+
 export const MoveRequestSchema = z.object({
   sequence: z.number().int().positive(),
   strafe: z.number().finite().min(-1).max(1),
@@ -64,6 +71,13 @@ export interface CombatHit {
   damage: number;
   health: number;
   defeated: boolean;
+  comboStep: number;
+  knockback: number;
+}
+
+export interface CombatMiss {
+  attackerId: string;
+  comboStep: number;
 }
 
 export interface PlayerHit {

@@ -23,6 +23,11 @@ export function attackRejectionReason(lastAttackAt: number | undefined, now: num
   return lastAttackAt !== undefined && now - lastAttackAt < cooldownMs ? "rate" : null;
 }
 
+export function nextComboStep(previousStep: number, comboExpiresAt: number, now: number): 1 | 2 | 3 {
+  if (now > comboExpiresAt) return 1;
+  return (previousStep >= 3 ? 1 : previousStep + 1) as 1 | 2 | 3;
+}
+
 export function selectAttackTarget(
   player: Position,
   yaw: number,

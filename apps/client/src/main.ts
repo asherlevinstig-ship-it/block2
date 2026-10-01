@@ -1,11 +1,14 @@
 import * as pc from "playcanvas";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
+  COMBAT_ATTACKS,
+  COMBO_CHAIN_WINDOW_MS,
   WORLD_ROOM,
   type ActionRejected,
   type BlockChanged,
   type ChunkSnapshot,
   type CombatHit,
+  type CombatMiss,
   type CombatStagger,
   type PlayerHit,
   type WorldBootstrap,
@@ -455,6 +458,7 @@ function animateVoxelCharacter(
   verticalVelocity: number,
   grounded: boolean,
   actionElapsedMilliseconds: number | null,
+  actionStep = 0,
 ): void {
   const locomotion = advanceLocomotionAnimation(
     { phase: rig.locomotionPhase, weight: rig.locomotionWeight },
@@ -464,11 +468,11 @@ function animateVoxelCharacter(
   rig.locomotionPhase = locomotion.phase;
   rig.locomotionWeight = locomotion.weight;
   const pose = voxelCharacterPose(speed, time, verticalVelocity, grounded, 4.2, locomotion);
-  const action = primaryActionPose(actionElapsedMilliseconds);
+  const action = primaryActionPose(actionElapsedMilliseconds, actionStep);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
   rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw, pose.torsoRoll);
   rig.head.setLocalEulerAngles(0, pose.headYaw, 0);
-  rig.leftArm.setLocalEulerAngles(pose.leftArmPitch, 0, 0);
+  rig.leftArm.setLocalEulerAngles(pose.leftArmPitch + action.leftArmPitch, 0, action.leftArmRoll);
   rig.rightArm.setLocalEulerAngles(pose.rightArmPitch + action.rightArmPitch, 0, action.rightArmRoll);
   rig.leftLeg.setLocalEulerAngles(pose.leftLegPitch, 0, 0);
   rig.rightLeg.setLocalEulerAngles(pose.rightLegPitch, 0, 0);
@@ -488,6 +492,7 @@ interface NetworkPlayer {
   yaw: number;
   lastProcessedInput: number;
   actionSequence: number;
+  attackStep: number;
   health: number;
   maxHealth: number;
   stamina: number;
@@ -502,6 +507,7 @@ interface RemotePlayerVisual {
   rig: VoxelCharacterRig;
   snapshots: RemoteSnapshot[];
   actionStartedAt: number | null;
+  actionStep: number;
   lastActionSequence: number;
 }
 
@@ -526,6 +532,8 @@ interface MobVisual {
   entity: pc.Entity;
   bodyRoot: pc.Entity;
   bodyMaterial: pc.StandardMaterial;
+  warning: pc.Entity;
+  warningMaterial: pc.StandardMaterial;
   healthFill: pc.Entity;
   state: NetworkMob;
   lastHitSequence: number;
@@ -544,6 +552,10 @@ let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
 let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
+let localActionStep = 0;
+let localComboStep = 0;
+let localComboExpiresAt = 0;
+let localHitPauseUntil = 0;
 let localDodgeStartedAt: number | null = null;
 let lastProcessedInputSequence = 0;
 let pendingStopInputSequence: number | null = null;
@@ -561,6 +573,10 @@ function updatePlayerStamina(stamina: number, maximumStamina: number): void {
   const fraction = Math.max(0, Math.min(1, stamina / Math.max(1, maximumStamina)));
   playerStaminaFill.style.width = `${fraction * 100}%`;
   playerStaminaValue.textContent = `${Math.round(stamina)}`;
+}
+
+function actionDuration(step: number): number {
+  return step >= 1 && step <= 3 ? COMBAT_ATTACKS[step - 1]!.durationMs : PRIMARY_ACTION_DURATION_MS;
 }
 
 function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" = "hit"): void {
@@ -586,6 +602,7 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
     rig,
     snapshots: [{ receivedAt: performance.now(), x: player.x, y: player.y, z: player.z, yaw: player.yaw }],
     actionStartedAt: null,
+    actionStep: player.attackStep,
     lastActionSequence: player.actionSequence,
   };
 }
@@ -605,18 +622,34 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const eyeMaterial = coloredMaterial(new pc.Color(0.03, 0.045, 0.035));
   const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
   const healthMaterial = coloredMaterial(new pc.Color(0.35, 0.9, 0.28));
+  const warningMaterial = new pc.StandardMaterial();
+  warningMaterial.diffuse = new pc.Color(0.9, 0.16, 0.06);
+  warningMaterial.emissive = new pc.Color(0.7, 0.08, 0.02);
+  warningMaterial.opacity = 0.32;
+  warningMaterial.blendType = pc.BLEND_NORMAL;
+  warningMaterial.depthWrite = false;
+  warningMaterial.update();
   addBox(bodyRoot, "crawler-body", bodyMaterial, [0.92, 0.58, 0.86], [0, 0.32, 0]);
   addBox(bodyRoot, "crawler-head", bodyMaterial, [0.68, 0.48, 0.62], [0, 0.76, 0.08]);
   addBox(bodyRoot, "crawler-eye-left", eyeMaterial, [0.1, 0.12, 0.06], [-0.17, 0.8, 0.39]);
   addBox(bodyRoot, "crawler-eye-right", eyeMaterial, [0.1, 0.12, 0.06], [0.17, 0.8, 0.39]);
   addBox(entity, "health-back", healthBackMaterial, [1.02, 0.1, 0.08], [0, 1.34, 0]);
   const healthFill = addBox(entity, "health-fill", healthMaterial, [0.96, 0.065, 0.09], [0, 1.34, 0.01]);
+  const warning = new pc.Entity("lunge-warning");
+  warning.addComponent("render", { type: "cylinder" });
+  if (warning.render) warning.render.material = warningMaterial;
+  warning.setLocalPosition(0, 0.035, 0);
+  warning.setLocalScale(4.2, 0.025, 4.2);
+  warning.enabled = false;
+  entity.addChild(warning);
   entity.setPosition(mob.x, mob.y, mob.z);
   app.root.addChild(entity);
   return {
     entity,
     bodyRoot,
     bodyMaterial,
+    warning,
+    warningMaterial,
     healthFill,
     state: mob,
     lastHitSequence: mob.hitSequence,
@@ -703,6 +736,7 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("actionSequence", () => {
       if (!remote || player.actionSequence <= remote.lastActionSequence) return;
       remote.lastActionSequence = player.actionSequence;
+      remote.actionStep = player.attackStep;
       remote.actionStartedAt = performance.now();
     }, true);
     playerCallbacks.listen("health", () => {
@@ -1184,6 +1218,9 @@ function requestMine(): void {
     localFacingYaw,
   );
   localActionStartedAt = performance.now();
+  localActionStep = 0;
+  localComboStep = 0;
+  localComboExpiresAt = 0;
   const proximity = Math.hypot(
     currentTarget.x + 0.5 - player.x,
     currentTarget.y + 0.5 - player.y,
@@ -1206,7 +1243,8 @@ function requestMine(): void {
 
 function requestAttack(): void {
   if (!room || !worldReady) return;
-  if (localActionStartedAt !== null && performance.now() - localActionStartedAt < PRIMARY_ACTION_DURATION_MS) {
+  const now = performance.now();
+  if (localActionStartedAt !== null && now - localActionStartedAt < actionDuration(localActionStep)) {
     status.textContent = "Recovering from the previous swing...";
     return;
   }
@@ -1217,13 +1255,20 @@ function requestAttack(): void {
     : currentTarget
       ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
       : localFacingYaw;
-  localActionStartedAt = performance.now();
+  const comboStep = now <= localComboExpiresAt ? localComboStep % 3 + 1 : 1;
+  const timing = COMBAT_ATTACKS[comboStep - 1]!;
+  localActionStartedAt = now;
+  localActionStep = comboStep;
+  localComboStep = comboStep;
+  localComboExpiresAt = now + timing.durationMs + COMBO_CHAIN_WINDOW_MS;
   attackSequence += 1;
   room.send("attack", { requestId: `attack-${attackSequence}`, yaw: localActionFacingYaw });
-  logMovementEvent(`ACTION attack yaw=${localActionFacingYaw.toFixed(1)}`);
+  logMovementEvent(`ACTION attack combo=${comboStep} impact=${timing.impactMs}ms yaw=${localActionFacingYaw.toFixed(1)}`);
   status.textContent = targetMob
-    ? `Attacking ${targetMob.visual.state.name}...`
-    : "Combat swing missed · move closer to the Moss Crawler.";
+    ? comboStep === 3
+      ? `Heavy finisher aimed at ${targetMob.visual.state.name}...`
+      : `Combo ${comboStep} aimed at ${targetMob.visual.state.name}...`
+    : `Combo ${comboStep} swing · no target in reach.`;
 }
 
 function requestDodge(): void {
@@ -1401,7 +1446,7 @@ app.on("update", (dt: number) => {
   );
   smoothedMovement = approachMovement(smoothedMovement, desiredMovement, frameTime);
   const actionFacingActive = localActionStartedAt !== null
-    && performance.now() - localActionStartedAt < PRIMARY_ACTION_DURATION_MS
+    && performance.now() - localActionStartedAt < actionDuration(localActionStep)
     && localActionFacingYaw !== null;
   const desiredFacingYaw = actionFacingActive
     ? localActionFacingYaw!
@@ -1447,7 +1492,9 @@ app.on("update", (dt: number) => {
   const animationNow = performance.now();
   const animationTime = animationNow / 1000;
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
-  animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed);
+  if (animationNow >= localHitPauseUntil) {
+    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep);
+  }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
   if (dodgeElapsed !== null && dodgeElapsed < 320) {
     const dodgeProgress = dodgeElapsed / 320;
@@ -1456,9 +1503,10 @@ app.on("update", (dt: number) => {
     localPlayerVisual.setLocalEulerAngles(0, 0, 0);
     if (dodgeElapsed !== null) localDodgeStartedAt = null;
   }
-  if (localActionElapsed !== null && localActionElapsed >= PRIMARY_ACTION_DURATION_MS) {
+  if (localActionElapsed !== null && localActionElapsed >= actionDuration(localActionStep)) {
     localActionStartedAt = null;
     localActionFacingYaw = null;
+    localActionStep = 0;
   }
 
   const player = localPlayer.getPosition();
@@ -1472,8 +1520,8 @@ app.on("update", (dt: number) => {
       remote.entity.setPosition(pose.x, pose.y, pose.z);
       remote.entity.setEulerAngles(0, pose.yaw, 0);
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
-      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed);
-      if (remoteActionElapsed !== null && remoteActionElapsed >= PRIMARY_ACTION_DURATION_MS) remote.actionStartedAt = null;
+      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep);
+      if (remoteActionElapsed !== null && remoteActionElapsed >= actionDuration(remote.actionStep)) remote.actionStartedAt = null;
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
@@ -1493,6 +1541,13 @@ app.on("update", (dt: number) => {
     const staggerElapsed = animationNow - mob.staggerAt;
     const staggerStrength = staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
     const windupStrength = mob.state.combatState === "windup" ? 0.55 + Math.sin(animationTime * 18) * 0.2 : 0;
+    mob.warning.enabled = mob.state.combatState === "windup";
+    if (mob.warning.enabled) {
+      const warningPulse = 1 + Math.sin(animationTime * 18) * 0.045;
+      mob.warning.setLocalScale(4.2 * warningPulse, 0.025, 4.2 * warningPulse);
+      mob.warningMaterial.opacity = 0.25 + windupStrength * 0.22;
+      mob.warningMaterial.update();
+    }
     mob.bodyRoot.setLocalPosition(
       0,
       Math.sin(animationTime * 4.5) * 0.055 - hitStrength * 0.08,
@@ -1676,7 +1731,22 @@ async function connect(): Promise<void> {
       ? `${name} defeated · respawning in 5 seconds.`
       : `${name} hit for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
-    if (message.attackerId === room?.sessionId) showCombatFeedback(message.defeated ? "DEFEATED" : `HIT  −${message.damage}`);
+    if (message.attackerId === room?.sessionId) {
+      localHitPauseUntil = performance.now() + (message.comboStep === 3 ? 75 : 48);
+      showCombatFeedback(
+        message.defeated
+          ? "DEFEATED"
+          : message.comboStep === 3
+            ? `FINISHER  −${message.damage}`
+            : `COMBO ${message.comboStep}  −${message.damage}`,
+      );
+    }
+  });
+  room.onMessage("combat:miss", (message: CombatMiss) => {
+    if (message.attackerId !== room?.sessionId) return;
+    showCombatFeedback("MISS", "hurt");
+    status.textContent = `Combo ${message.comboStep} missed · recovery leaves you open.`;
+    logMovementEvent(`MISS combo=${message.comboStep}`);
   });
   room.onMessage("combat:stagger", (message: CombatStagger) => {
     if (message.attackerId !== room?.sessionId) return;

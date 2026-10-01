@@ -12,6 +12,8 @@ export interface VoxelCharacterPose {
 export interface PrimaryActionPose {
   active: boolean;
   torsoYaw: number;
+  leftArmPitch: number;
+  leftArmRoll: number;
   rightArmPitch: number;
   rightArmRoll: number;
 }
@@ -38,18 +40,39 @@ export function advanceLocomotionAnimation(
   };
 }
 
-export function primaryActionPose(elapsedMilliseconds: number | null): PrimaryActionPose {
-  if (elapsedMilliseconds === null || elapsedMilliseconds < 0 || elapsedMilliseconds >= PRIMARY_ACTION_DURATION_MS) {
-    return { active: false, torsoYaw: 0, rightArmPitch: 0, rightArmRoll: 0 };
+export function primaryActionPose(elapsedMilliseconds: number | null, comboStep = 0): PrimaryActionPose {
+  const combatTiming = comboStep >= 1 && comboStep <= 3 ? COMBAT_ATTACKS[comboStep - 1] : null;
+  const duration = combatTiming?.durationMs ?? PRIMARY_ACTION_DURATION_MS;
+  if (elapsedMilliseconds === null || elapsedMilliseconds < 0 || elapsedMilliseconds >= duration) {
+    return { active: false, torsoYaw: 0, leftArmPitch: 0, leftArmRoll: 0, rightArmPitch: 0, rightArmRoll: 0 };
   }
 
-  const progress = elapsedMilliseconds / PRIMARY_ACTION_DURATION_MS;
-  // Reach the strike quickly, then spend longer recovering to avoid a mechanical snap.
-  const strength = Math.sin(Math.sqrt(progress) * Math.PI);
+  const impact = combatTiming?.impactMs ?? 95;
+  const strength = elapsedMilliseconds <= impact
+    ? Math.sin(elapsedMilliseconds / impact * Math.PI / 2)
+    : Math.cos((elapsedMilliseconds - impact) / (duration - impact) * Math.PI / 2);
+  if (comboStep === 2) return {
+    active: true,
+    torsoYaw: 18 * strength,
+    leftArmPitch: 0,
+    leftArmRoll: 0,
+    rightArmPitch: -78 * strength,
+    rightArmRoll: -58 * strength,
+  };
+  if (comboStep === 3) return {
+    active: true,
+    torsoYaw: -5 * strength,
+    leftArmPitch: -108 * strength,
+    leftArmRoll: 10 * strength,
+    rightArmPitch: -124 * strength,
+    rightArmRoll: -10 * strength,
+  };
   return {
     active: true,
-    torsoYaw: -11 * strength,
-    rightArmPitch: -112 * strength,
+    torsoYaw: -12 * strength,
+    leftArmPitch: 0,
+    leftArmRoll: 0,
+    rightArmPitch: -116 * strength,
     rightArmRoll: -9 * strength,
   };
 }
@@ -92,3 +115,4 @@ export function voxelCharacterPose(
     rightLegPitch: -stride,
   };
 }
+import { COMBAT_ATTACKS } from "@blockcraft/protocol";
