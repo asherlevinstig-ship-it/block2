@@ -12,8 +12,6 @@ import {
   CHUNK_HEIGHT,
   CHUNK_SIZE,
   GRAVITY,
-  PLAYER_HEIGHT,
-  PLAYER_RADIUS,
   TERMINAL_VELOCITY,
   chunkIndex,
   isProtectedVoxel,
@@ -48,6 +46,7 @@ import {
 } from "./player-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
 import { createVoxelTexturePixels, type VoxelTextureKind } from "./voxel-textures.js";
+import { voxelCharacterPose } from "./character-animation.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -317,24 +316,7 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
   }
 }
 
-const facingMaterial = new pc.StandardMaterial();
-facingMaterial.diffuse = new pc.Color(0.12, 0.09, 0.05);
-facingMaterial.emissive = new pc.Color(0.08, 0.05, 0.02);
-facingMaterial.update();
-
-function addFacingMarker(player: pc.Entity): void {
-  const marker = new pc.Entity("facing-marker");
-  marker.addComponent("render", { type: "box", castShadows: true });
-  if (marker.render) marker.render.material = facingMaterial;
-  marker.setLocalScale(0.2, 0.16, 0.38);
-  marker.setLocalPosition(0, PLAYER_HEIGHT * 0.58, PLAYER_RADIUS + 0.08);
-  player.addChild(marker);
-}
-
 const localPlayer = new pc.Entity("local-player");
-const playerMaterial = new pc.StandardMaterial();
-playerMaterial.diffuse = new pc.Color(0.95, 0.73, 0.28);
-playerMaterial.update();
 const silhouetteMaterial = new pc.StandardMaterial();
 silhouetteMaterial.diffuse = new pc.Color(1, 0.72, 0.18);
 silhouetteMaterial.emissive = new pc.Color(1, 0.42, 0.04);
@@ -344,30 +326,113 @@ silhouetteMaterial.depthTest = false;
 silhouetteMaterial.depthWrite = false;
 silhouetteMaterial.update();
 
-function addPlayerBody(player: pc.Entity, material: pc.StandardMaterial, withSilhouette = false): pc.Entity | null {
-  const body = new pc.Entity("player-body");
-  body.addComponent("render", { type: "capsule", castShadows: true });
-  if (body.render) body.render.material = material;
-  body.setLocalScale(PLAYER_RADIUS * 2, PLAYER_HEIGHT / 2, PLAYER_RADIUS * 2);
-  body.setLocalPosition(0, PLAYER_HEIGHT / 2, 0);
-  player.addChild(body);
+const skinMaterial = new pc.StandardMaterial();
+skinMaterial.diffuse = new pc.Color(0.78, 0.53, 0.32);
+skinMaterial.update();
+const hairMaterial = new pc.StandardMaterial();
+hairMaterial.diffuse = new pc.Color(0.12, 0.075, 0.045);
+hairMaterial.update();
+const bootMaterial = new pc.StandardMaterial();
+bootMaterial.diffuse = new pc.Color(0.12, 0.14, 0.16);
+bootMaterial.update();
+const faceMaterial = new pc.StandardMaterial();
+faceMaterial.diffuse = new pc.Color(0.035, 0.045, 0.05);
+faceMaterial.emissive = new pc.Color(0.02, 0.03, 0.035);
+faceMaterial.update();
+
+function coloredMaterial(color: pc.Color): pc.StandardMaterial {
+  const material = new pc.StandardMaterial();
+  material.diffuse = color;
+  material.update();
+  return material;
+}
+
+interface VoxelCharacterRig {
+  root: pc.Entity;
+  torso: pc.Entity;
+  head: pc.Entity;
+  leftArm: pc.Entity;
+  rightArm: pc.Entity;
+  leftLeg: pc.Entity;
+  rightLeg: pc.Entity;
+  silhouette: pc.Entity | null;
+}
+
+function addBox(
+  parent: pc.Entity,
+  name: string,
+  material: pc.StandardMaterial,
+  scale: [number, number, number],
+  position: [number, number, number],
+): pc.Entity {
+  const box = new pc.Entity(name);
+  box.addComponent("render", { type: "box", castShadows: true });
+  if (box.render) box.render.material = material;
+  box.setLocalScale(...scale);
+  box.setLocalPosition(...position);
+  parent.addChild(box);
+  return box;
+}
+
+function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false): VoxelCharacterRig {
+  const root = new pc.Entity("voxel-character");
+  parent.addChild(root);
+  const torso = addBox(root, "torso", clothing, [0.48, 0.55, 0.3], [0, 0.82, 0]);
+  const head = addBox(root, "head", skinMaterial, [0.38, 0.38, 0.38], [0, 1.28, 0]);
+  addBox(head, "hair", hairMaterial, [0.4, 0.1, 0.4], [0, 0.2, 0]);
+  addBox(head, "left-eye", faceMaterial, [0.055, 0.055, 0.025], [-0.09, 0.045, 0.2]);
+  addBox(head, "right-eye", faceMaterial, [0.055, 0.055, 0.025], [0.09, 0.045, 0.2]);
+
+  const leftArm = new pc.Entity("left-arm-pivot");
+  leftArm.setLocalPosition(-0.34, 1.03, 0);
+  root.addChild(leftArm);
+  addBox(leftArm, "left-arm", clothing, [0.17, 0.46, 0.18], [0, -0.22, 0]);
+  addBox(leftArm, "left-hand", skinMaterial, [0.18, 0.14, 0.19], [0, -0.48, 0]);
+
+  const rightArm = new pc.Entity("right-arm-pivot");
+  rightArm.setLocalPosition(0.34, 1.03, 0);
+  root.addChild(rightArm);
+  addBox(rightArm, "right-arm", clothing, [0.17, 0.46, 0.18], [0, -0.22, 0]);
+  addBox(rightArm, "right-hand", skinMaterial, [0.18, 0.14, 0.19], [0, -0.48, 0]);
+
+  const leftLeg = new pc.Entity("left-leg-pivot");
+  leftLeg.setLocalPosition(-0.13, 0.56, 0);
+  root.addChild(leftLeg);
+  addBox(leftLeg, "left-leg", bootMaterial, [0.2, 0.5, 0.22], [0, -0.25, 0]);
+  addBox(leftLeg, "left-boot", bootMaterial, [0.21, 0.16, 0.31], [0, -0.48, 0.055]);
+
+  const rightLeg = new pc.Entity("right-leg-pivot");
+  rightLeg.setLocalPosition(0.13, 0.56, 0);
+  root.addChild(rightLeg);
+  addBox(rightLeg, "right-leg", bootMaterial, [0.2, 0.5, 0.22], [0, -0.25, 0]);
+  addBox(rightLeg, "right-boot", bootMaterial, [0.21, 0.16, 0.31], [0, -0.48, 0.055]);
+
   let silhouette: pc.Entity | null = null;
   if (withSilhouette) {
     silhouette = new pc.Entity("player-silhouette");
-    silhouette.addComponent("render", { type: "capsule", castShadows: false });
-    if (silhouette.render) silhouette.render.material = silhouetteMaterial;
-    silhouette.setLocalScale(PLAYER_RADIUS * 2.3, PLAYER_HEIGHT * 0.56, PLAYER_RADIUS * 2.3);
-    silhouette.setLocalPosition(0, PLAYER_HEIGHT / 2, 0);
+    addBox(silhouette, "silhouette-body", silhouetteMaterial, [0.62, 1.02, 0.42], [0, 0.72, 0]);
+    addBox(silhouette, "silhouette-head", silhouetteMaterial, [0.46, 0.46, 0.46], [0, 1.28, 0]);
     silhouette.enabled = false;
-    player.addChild(silhouette);
+    root.addChild(silhouette);
   }
-  addFacingMarker(player);
-  return silhouette;
+  return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, silhouette };
+}
+
+function animateVoxelCharacter(rig: VoxelCharacterRig, speed: number, time: number, verticalVelocity: number, grounded: boolean): void {
+  const pose = voxelCharacterPose(speed, time, verticalVelocity, grounded);
+  rig.root.setLocalPosition(0, pose.bodyY, 0);
+  rig.torso.setLocalEulerAngles(pose.torsoPitch, 0, pose.torsoRoll);
+  rig.head.setLocalEulerAngles(0, pose.headYaw, 0);
+  rig.leftArm.setLocalEulerAngles(pose.leftArmPitch, 0, 0);
+  rig.rightArm.setLocalEulerAngles(pose.rightArmPitch, 0, 0);
+  rig.leftLeg.setLocalEulerAngles(pose.leftLegPitch, 0, 0);
+  rig.rightLeg.setLocalEulerAngles(pose.rightLegPitch, 0, 0);
 }
 
 const localPlayerVisual = new pc.Entity("local-player-visual");
 localPlayer.addChild(localPlayerVisual);
-const localPlayerSilhouette = addPlayerBody(localPlayerVisual, playerMaterial, true);
+const localPlayerRig = createVoxelCharacter(localPlayerVisual, coloredMaterial(new pc.Color(0.88, 0.58, 0.12)), true);
+const localPlayerSilhouette = localPlayerRig.silhouette;
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
@@ -382,12 +447,11 @@ interface NetworkPlayer {
 
 interface RemotePlayerVisual {
   entity: pc.Entity;
+  rig: VoxelCharacterRig;
   snapshots: RemoteSnapshot[];
 }
 
-const remoteMaterial = new pc.StandardMaterial();
-remoteMaterial.diffuse = new pc.Color(0.24, 0.66, 0.95);
-remoteMaterial.update();
+const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
@@ -403,11 +467,12 @@ function updatePlayerCount(): void {
 
 function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePlayerVisual {
   const entity = new pc.Entity(`remote-player:${sessionId}`);
-  addPlayerBody(entity, remoteMaterial);
+  const rig = createVoxelCharacter(entity, remoteMaterial);
   entity.setPosition(player.x, player.y, player.z);
   app.root.addChild(entity);
   return {
     entity,
+    rig,
     snapshots: [{ receivedAt: performance.now(), x: player.x, y: player.y, z: player.z, yaw: player.yaw }],
   };
 }
@@ -876,14 +941,20 @@ app.on("update", (dt: number) => {
   const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag);
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPlayerVisual.setLocalPosition(0, localVisualVerticalOffset, 0);
+  const animationTime = performance.now() / 1000;
+  animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, localVerticalVelocity, predicted.grounded || grounded);
 
   const player = localPlayer.getPosition();
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
   for (const remote of remotePlayers.values()) {
     const pose = sampleRemotePose(remote.snapshots, renderAt);
     if (pose) {
+      const previousPosition = remote.entity.getPosition();
+      const remoteSpeed = Math.hypot(pose.x - previousPosition.x, pose.z - previousPosition.z) / Math.max(frameTime, 0.001);
+      const remoteVerticalVelocity = (pose.y - previousPosition.y) / Math.max(frameTime, 0.001);
       remote.entity.setPosition(pose.x, pose.y, pose.z);
       remote.entity.setEulerAngles(0, pose.yaw, 0);
+      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, remoteVerticalVelocity, true);
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }

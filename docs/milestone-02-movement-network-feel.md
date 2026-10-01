@@ -29,6 +29,7 @@ Make movement dependable before adding combat. Local control must remain respons
 - voxel step collision remains immediate while the rendered player and camera ease vertically across one-block climbs and reconciliation corrections
 - an in-game movement debug panel exposes input vectors, yaw, local/server positions, reconciliation, vertical state, collision flags, sequence lag, and recent direction/step/correction events
 - reconciliation thresholds expand with unacknowledged input count, preventing normal high-latency prediction lead from being misclassified as a hard desync
+- local and remote players render as articulated voxel humanoids with walking, idle breathing, body bob, torso lean, opposing limb swings, boots, hands, face details, and an airborne pose
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
 - keyboard and joystick reset on browser blur or page visibility loss
