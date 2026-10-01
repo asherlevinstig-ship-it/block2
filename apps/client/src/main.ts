@@ -620,6 +620,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
   cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
+  camera.setPosition(initialPosition.x + CAMERA_OFFSET_X, initialPosition.y + 18, initialPosition.z + CAMERA_OFFSET_Z);
+  camera.lookAt(initialPosition.x, initialPosition.y - 2, initialPosition.z);
   localVerticalVelocity = 0;
   localVisualVerticalOffset = 0;
   localPlayerVisual.setLocalPosition(0, 0, 0);
@@ -1032,11 +1034,11 @@ app.on("update", (dt: number) => {
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
   cameraTarget.set(player.x, player.y + localVisualVerticalOffset, player.z);
-  cameraFocus.lerp(cameraFocus, cameraTarget, Math.min(1, dt * 6));
+  cameraFocus.copy(cameraTarget);
   const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
-  const cameraPosition = camera.getPosition();
-  camera.setPosition(cameraPosition.lerp(cameraPosition, desiredCamera, Math.min(1, dt * 7)));
+  camera.setPosition(desiredCamera);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
+  const playerScreen = camera.camera?.worldToScreen(cameraTarget);
   updateUndergroundPresentation(player);
   updateTarget();
 
@@ -1074,6 +1076,8 @@ app.on("update", (dt: number) => {
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
+      `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} bodyY=${localPlayerRig.root.getLocalPosition().y.toFixed(3)}`,
+      `camera     screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
     ].join("\n");

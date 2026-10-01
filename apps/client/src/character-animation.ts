@@ -79,9 +79,10 @@ export function voxelCharacterPose(
 
   const phase = locomotion?.phase ?? elapsedSeconds * (4.5 + movement * 5.5);
   const stride = Math.sin(phase) * 40 * movement;
-  const idle = Math.sin(elapsedSeconds * 2.2) * 0.008 * (1 - movement);
   return {
-    bodyY: Math.abs(Math.sin(phase)) * 0.045 * movement + idle,
+    // Keep the feet planted. In an angled top-down view even a small whole-body
+    // bob reads as a hop when locomotion settles back to idle.
+    bodyY: 0,
     torsoPitch: -4 * movement,
     torsoRoll: Math.sin(phase) * 2.5 * movement,
     headYaw: Math.sin(phase * 0.5) * 2 * movement,

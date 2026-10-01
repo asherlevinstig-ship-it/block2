@@ -19,7 +19,13 @@ describe("voxel character animation", () => {
     const pose = voxelCharacterPose(0, 0.5, 0, true);
     expect(pose.leftArmPitch).toBeCloseTo(0);
     expect(pose.leftLegPitch).toBeCloseTo(0);
-    expect(Math.abs(pose.bodyY)).toBeLessThan(0.01);
+    expect(pose.bodyY).toBe(0);
+  });
+
+  it("keeps grounded feet planted throughout the walk cycle", () => {
+    expect(voxelCharacterPose(4.2, 0.1, 0, true).bodyY).toBe(0);
+    expect(voxelCharacterPose(4.2, 0.25, 0, true).bodyY).toBe(0);
+    expect(voxelCharacterPose(0, 0.5, 0, true).bodyY).toBe(0);
   });
 
   it("poses the whole body while airborne", () => {
