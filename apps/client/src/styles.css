@@ -145,6 +145,27 @@ button { font: inherit; }
   color: #ffe0aa;
   text-align: left;
 }
+#power-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: 8px;
+}
+#power-picker button {
+  padding: 6px 7px;
+  border: 1px solid rgb(240 158 67 / 26%);
+  border-radius: 7px;
+  background: rgb(19 28 23 / 72%);
+  color: #9eaa9e;
+  font-size: .55rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+#power-picker button[aria-pressed="true"] {
+  border-color: rgb(240 158 67 / 58%);
+  background: rgb(96 49 13 / 86%);
+  color: #ffe0a1;
+}
 #power-slot span { position: relative; z-index: 1; color: #f6a147; font-size: .62rem; font-weight: 1000; letter-spacing: .11em; }
 #power-slot strong { position: relative; z-index: 1; font-size: .76rem; }
 #power-slot em { position: relative; z-index: 1; color: #ffd17e; font-size: .6rem; font-style: normal; font-weight: 900; }

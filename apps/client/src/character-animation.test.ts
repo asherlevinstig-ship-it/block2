@@ -4,6 +4,7 @@ import {
   advanceLocomotionAnimation,
   primaryActionPose,
   seismicPowerPose,
+  shockwavePowerPose,
   voxelCharacterPose,
 } from "./character-animation.js";
 
@@ -67,6 +68,16 @@ describe("voxel character animation", () => {
     expect(windup.leftArmPitch).toBeLessThan(-80);
     expect(impact.leftArmPitch).toBeCloseTo(-132);
     expect(impact.rightArmPitch).toBeCloseTo(-132);
+    expect(recovered.active).toBe(false);
+  });
+
+  it("opens both arms for Shockwave then returns to idle", () => {
+    const windup = shockwavePowerPose(140);
+    const impact = shockwavePowerPose(330);
+    const recovered = shockwavePowerPose(820);
+    expect(windup.active).toBe(true);
+    expect(impact.leftArmRoll).toBeGreaterThan(60);
+    expect(impact.rightArmRoll).toBeLessThan(-60);
     expect(recovered.active).toBe(false);
   });
 

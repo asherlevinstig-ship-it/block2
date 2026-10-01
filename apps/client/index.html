@@ -26,10 +26,14 @@
         <button type="button" data-mode="build" aria-pressed="true">BUILD</button>
         <button type="button" data-mode="combat" aria-pressed="false">COMBAT</button>
       </div>
-      <button id="power-slot" type="button" aria-label="Use Seismic Cleave">
-        <span>POWER</span><strong>Seismic Cleave</strong><em id="power-cooldown-label">READY · R</em><i id="power-cooldown-fill"></i>
+      <div id="power-picker" role="group" aria-label="Equipped Power">
+        <button type="button" data-power="shockwave" aria-pressed="true">SHOCKWAVE</button>
+        <button type="button" data-power="seismic_cleave" aria-pressed="false">SEISMIC</button>
+      </div>
+      <button id="power-slot" type="button" aria-label="Use Shockwave">
+        <span>POWER</span><strong id="power-name">Shockwave</strong><em id="power-cooldown-label">READY · R</em><i id="power-cooldown-fill"></i>
       </button>
-      <p class="controls">WASD move · Space dodge/cancel · Hold R aim, release cast · Q mode · E/click acts</p>
+      <p id="controls-help" class="controls">WASD move · Space dodge/cancel · Tap R for Shockwave · Q mode · E/click acts</p>
     </section>
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="combat-feedback" aria-live="polite"></div>

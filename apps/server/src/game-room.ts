@@ -8,6 +8,7 @@ import {
   MoveRequestSchema,
   POWER_DEFINITIONS,
   PowerCancelRequestSchema,
+  PowerEquipRequestSchema,
   PowerRequestSchema,
   type ActionRejected,
   type BlockChanged,
@@ -42,7 +43,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
-import { isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectLinePowerTargets } from "./power-rules.js";
+import { isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectLinePowerTargets } from "./power-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -106,6 +107,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("dodge", (client, payload) => this.handleDodge(client, payload));
     this.onMessage("power", (client, payload) => this.handlePower(client, payload));
     this.onMessage("power:cancel", (client, payload) => this.handlePowerCancel(client, payload));
+    this.onMessage("power:equip", (client, payload) => this.handlePowerEquip(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -377,26 +379,28 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       yaw: parsed.data.yaw,
       impactAt: now + definition.windupMs,
     });
-    const threatened = selectLinePowerTargets(
-      player,
-      parsed.data.yaw,
-      [...this.state.mobs.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive })),
-      definition.range,
-      definition.width,
-    );
-    for (const target of threatened) {
-      const mob = this.state.mobs.get(target.id);
-      if (!mob || !mob.alive || mob.combatState === "stagger") continue;
-      const evade = powerEvadeDirection(player, parsed.data.yaw, mob);
-      const sidestep = resolvePlayerMotion(
-        { x: mob.x, y: mob.y, z: mob.z },
-        { x: evade.x * 0.58, y: 0, z: evade.z * 0.58 },
-        this.readWorldBlock,
+    if (definition.core === "line") {
+      const threatened = selectLinePowerTargets(
+        player,
+        parsed.data.yaw,
+        [...this.state.mobs.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive })),
+        definition.range,
+        definition.width,
       );
-      mob.x = sidestep.x;
-      mob.y = sidestep.y;
-      mob.z = sidestep.z;
-      mob.yaw = Math.atan2(player.x - mob.x, player.z - mob.z) * 180 / Math.PI;
+      for (const target of threatened) {
+        const mob = this.state.mobs.get(target.id);
+        if (!mob || !mob.alive || mob.combatState === "stagger") continue;
+        const evade = powerEvadeDirection(player, parsed.data.yaw, mob);
+        const sidestep = resolvePlayerMotion(
+          { x: mob.x, y: mob.y, z: mob.z },
+          { x: evade.x * 0.58, y: 0, z: evade.z * 0.58 },
+          this.readWorldBlock,
+        );
+        mob.x = sidestep.x;
+        mob.y = sidestep.y;
+        mob.z = sidestep.z;
+        mob.yaw = Math.atan2(player.x - mob.x, player.z - mob.z) * 180 / Math.PI;
+      }
     }
     const cast: PowerCast = {
       casterId: client.sessionId,
@@ -415,6 +419,21 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const parsed = PowerCancelRequestSchema.safeParse(payload);
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     this.cancelPendingPower(client.sessionId, "cancel");
+  }
+
+  private handlePowerEquip(client: Client, payload: unknown): void {
+    const parsed = PowerEquipRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const definition = POWER_DEFINITIONS[parsed.data.powerId];
+    if (!definition || !isPowerCompatible(definition, player.mainHandTag)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "compatibility" });
+    }
+    if (this.pendingPowers.has(client.sessionId)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "rate" });
+    }
+    player.equippedPower = parsed.data.powerId;
   }
 
   private cancelPendingPower(sessionId: string, reason: PowerCancelled["reason"]): boolean {
@@ -477,22 +496,31 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.x = stepped.x;
       player.y = stepped.y;
       player.z = stepped.z;
-      const targets = selectLinePowerTargets(
-        player,
-        pending.yaw,
-        [...this.state.mobs.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive })),
-        definition.range,
-        definition.width,
-      );
+      const availableTargets = [...this.state.mobs.entries()].map(([id, mob]) => ({
+        id,
+        x: mob.x,
+        y: mob.y,
+        z: mob.z,
+        alive: mob.alive,
+      }));
+      const targets = definition.core === "burst"
+        ? selectBurstPowerTargets(player, availableTargets, definition.range)
+        : selectLinePowerTargets(player, pending.yaw, availableTargets, definition.range, definition.width);
       const defeatedMobIds: string[] = [];
       for (const target of targets) {
         const mob = this.state.mobs.get(target.id);
         if (!mob || !mob.alive) continue;
         mob.health = Math.max(0, mob.health - definition.damage);
         mob.hitSequence += 1;
+        const radialX = mob.x - player.x;
+        const radialZ = mob.z - player.z;
+        const radialLength = Math.hypot(radialX, radialZ);
+        const knockbackDirection = definition.core === "burst" && radialLength > 0.001
+          ? { x: radialX / radialLength, z: radialZ / radialLength }
+          : direction;
         const knockedBack = resolvePlayerMotion(
           { x: mob.x, y: mob.y, z: mob.z },
-          { x: direction.x * definition.knockback, y: 0, z: direction.z * definition.knockback },
+          { x: knockbackDirection.x * definition.knockback, y: 0, z: knockbackDirection.z * definition.knockback },
           this.readWorldBlock,
         );
         mob.x = knockedBack.x;
@@ -511,7 +539,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           mob.staggerSequence += 1;
         }
       }
-      const fractures = definition.fracturesTerrain
+      const fractures = definition.fracturesTerrain && definition.core === "line"
         ? lineFractureColumns(player, pending.yaw, definition.range)
             .map(column => this.fractureTerrain(pending.requestId, column.x, column.z, player.y))
             .filter((fracture): fracture is PowerFracture => fracture !== null)

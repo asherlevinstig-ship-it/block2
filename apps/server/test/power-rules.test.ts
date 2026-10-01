@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POWER_DEFINITIONS } from "@blockcraft/protocol";
-import { isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectLinePowerTargets } from "../src/power-rules.js";
+import { isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectLinePowerTargets } from "../src/power-rules.js";
 
 describe("Power rules", () => {
   it("resolves facing direction from yaw", () => {
@@ -40,5 +40,19 @@ describe("Power rules", () => {
     expect(right.z).toBeCloseTo(0);
     expect(left.x).toBeCloseTo(-1);
     expect(left.z).toBeCloseTo(0);
+  });
+
+  it("selects living targets inside a radial burst", () => {
+    const targets = selectBurstPowerTargets(
+      { x: 5, y: 8, z: 5 },
+      [
+        { id: "near", x: 6, y: 8, z: 5, alive: true },
+        { id: "edge", x: 5, y: 8, z: 8.2, alive: true },
+        { id: "far", x: 9, y: 8, z: 5, alive: true },
+        { id: "dead", x: 5.5, y: 8, z: 5, alive: false },
+      ],
+      POWER_DEFINITIONS.shockwave.range,
+    );
+    expect(targets.map(target => target.id)).toEqual(["near", "edge"]);
   });
 });

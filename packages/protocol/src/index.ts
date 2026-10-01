@@ -13,6 +13,7 @@ export interface PowerDefinition {
   id: string;
   name: string;
   core: "burst" | "line" | "ground" | "mobility";
+  castType: "tap" | "aim-release" | "ground-release";
   compatibility: readonly ("universal" | "melee" | "ranged" | "focus" | "tool")[];
   windupMs: number;
   activeMs: number;
@@ -28,10 +29,29 @@ export interface PowerDefinition {
 }
 
 export const POWER_DEFINITIONS = {
+  shockwave: {
+    id: "shockwave",
+    name: "Shockwave",
+    core: "burst",
+    castType: "tap",
+    compatibility: ["universal"],
+    windupMs: 280,
+    activeMs: 120,
+    recoveryMs: 420,
+    cooldownMs: 5200,
+    range: 3.2,
+    width: 0,
+    damage: 1,
+    knockback: 1.7,
+    staggerMs: 620,
+    forwardStep: 0,
+    fracturesTerrain: false,
+  },
   seismic_cleave: {
     id: "seismic_cleave",
     name: "Seismic Cleave",
     core: "line",
+    castType: "aim-release",
     compatibility: ["melee"],
     windupMs: 450,
     activeMs: 160,
@@ -86,12 +106,18 @@ export const PowerCancelRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
 });
 
+export const PowerEquipRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  powerId: z.enum(["shockwave", "seismic_cleave"]),
+});
+
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
 export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
 export type PowerRequest = z.infer<typeof PowerRequestSchema>;
 export type PowerCancelRequest = z.infer<typeof PowerCancelRequestSchema>;
+export type PowerEquipRequest = z.infer<typeof PowerEquipRequestSchema>;
 
 export interface ChunkSnapshot {
   chunkX: number;
