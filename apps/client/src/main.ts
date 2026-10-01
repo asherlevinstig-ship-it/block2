@@ -460,7 +460,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   surfaceReferenceY = initialPosition.y;
   surfaceReturnStartedAt = null;
   worldReady = true;
-  status.textContent = "Connected. Walk to a corner of the hill, point at a nearby block, then mine.";
+  status.textContent = "Connected. Cross the flat ground to the mine entrance east of spawn.";
 }
 
 const keys = new Set<string>();
@@ -633,7 +633,7 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
     ? `Underground · slice ${nextSliceY ?? "off"} · lowers only when descending`
     : excavating
       ? `Excavation · slice ${nextSliceY ?? "off"} · lowers only when descending`
-      : "Surface · find the stone hill east of spawn and mine through its exposed entrance.";
+      : "Surface · cross the flat ground to the descending mine entrance east of spawn.";
 }
 
 function requestMine(): void {

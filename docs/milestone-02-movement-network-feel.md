@@ -22,6 +22,7 @@ Make movement dependable before adding combat. Local control must remain respons
 - the slice activates in caves or after the player genuinely descends into an open-air shaft or trench
 - underground visibility uses a world-space horizontal voxel slice with no X/Z tracking; it lowers only when the player descends and leaves surface hills intact
 - the active slice is latched to player depth, so mining or short server corrections cannot reset it; it releases only after the player is supported at surface level continuously
+- the overworld surface is a consistent flat plane; depth comes from player excavation and the descending mine rather than generated hills
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
 - keyboard and joystick reset on browser blur or page visibility loss

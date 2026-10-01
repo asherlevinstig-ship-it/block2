@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   Block,
   CHUNK_SIZE,
+  SURFACE_HEIGHT,
   generateChunk,
   getBlock,
   highestSolidY,
@@ -42,6 +43,17 @@ describe("deterministic voxel world", () => {
     expect(getBlock(chunk, 8, surface + 1, 8)).toBe(Block.Air);
   });
 
+  it("generates one flat surface height across the overworld", () => {
+    for (const [chunkX, chunkZ] of [[-2, -1], [-1, 2], [0, -2], [2, 2]]) {
+      const chunk = generateChunk("test-world", chunkX, chunkZ);
+      for (let z = 0; z < CHUNK_SIZE; z += 1) {
+        for (let x = 0; x < CHUNK_SIZE; x += 1) {
+          expect(highestSolidY(chunk, x, z)).toBe(SURFACE_HEIGHT);
+        }
+      }
+    }
+  });
+
   it("raycasts to the first solid voxel and reports the preceding cell", () => {
     const hit = voxelRaycast(
       { x: 0.5, y: 1.5, z: 0.5 },
@@ -63,11 +75,14 @@ describe("deterministic voxel world", () => {
     expect(voxelRaycast({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, 4, () => Block.Stone)).toBeNull();
   });
 
-  it("builds a guaranteed mine-through entrance and descending cave east of spawn", () => {
+  it("cuts a guaranteed descending entrance into the flat ground east of spawn", () => {
     const chunk = generateChunk("test-world", 1, 0);
+    expect(getBlock(chunk, 2, 7, 8)).toBe(Block.Air);
     expect(getBlock(chunk, 2, 6, 8)).not.toBe(Block.Air);
     expect(getBlock(chunk, 3, 6, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 3, 5, 8)).not.toBe(Block.Air);
     expect(getBlock(chunk, 4, 5, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 5, 7, 8)).not.toBe(Block.Air);
     expect(getBlock(chunk, 6, 3, 8)).toBe(Block.Air);
     expect(getBlock(chunk, 6, 2, 8)).not.toBe(Block.Air);
   });

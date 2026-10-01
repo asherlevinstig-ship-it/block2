@@ -1,5 +1,6 @@
 export const CHUNK_SIZE = 16;
 export const CHUNK_HEIGHT = 24;
+export const SURFACE_HEIGHT = 7;
 export const SPAWN_PROTECTION_RADIUS = 6;
 export const PLAYER_RADIUS = 0.28;
 export const PLAYER_HEIGHT = 1.45;
@@ -75,21 +76,16 @@ function noise(seed: number, x: number, y: number, z: number): number {
   return hash32(seed ^ Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) / 0xffffffff;
 }
 
-function baseTerrainHeight(seed: number, worldX: number, worldZ: number): number {
-  if (worldX >= 18 && worldX <= 27 && worldZ >= 5 && worldZ <= 11) return 9;
-  if (worldX >= 16 && worldX <= 17 && worldZ >= 7 && worldZ <= 9) return 5;
-  return 6 + Math.floor(noise(seed, worldX >> 2, 0, worldZ >> 2) * 4);
-}
-
 function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId | null {
   if (worldZ < 7 || worldZ > 9) {
-    const inChamber = worldX >= 22 && worldX <= 27 && worldZ >= 5 && worldZ <= 11 && y >= 3 && y <= 7;
+    const inChamber = worldX >= 22 && worldX <= 27 && worldZ >= 5 && worldZ <= 11 && y >= 3 && y <= 5;
     return inChamber ? Block.Air : null;
   }
-  if (worldX === 19 && y >= 6 && y <= 8) return Block.Air;
-  if (worldX === 20 && y >= 5 && y <= 8) return Block.Air;
-  if (worldX === 21 && y >= 4 && y <= 8) return Block.Air;
-  if (worldX >= 22 && worldX <= 27 && y >= 3 && y <= 7) return Block.Air;
+  if (worldX === 18 && y === SURFACE_HEIGHT) return Block.Air;
+  if (worldX === 19 && y >= 6 && y <= SURFACE_HEIGHT) return Block.Air;
+  if (worldX === 20 && y >= 5 && y <= SURFACE_HEIGHT) return Block.Air;
+  if (worldX === 21 && y >= 4 && y <= 6) return Block.Air;
+  if (worldX >= 22 && worldX <= 27 && y >= 3 && y <= 5) return Block.Air;
   return null;
 }
 
@@ -122,7 +118,7 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
     for (let localX = 0; localX < CHUNK_SIZE; localX += 1) {
       const worldX = chunkX * CHUNK_SIZE + localX;
       const worldZ = chunkZ * CHUNK_SIZE + localZ;
-      const height = baseTerrainHeight(seed, worldX, worldZ);
+      const height = SURFACE_HEIGHT;
 
       for (let y = 0; y <= height; y += 1) {
         let block: BlockId = y === 0 ? Block.Bedrock : y === height ? Block.Grass : y >= height - 2 ? Block.Dirt : Block.Stone;
