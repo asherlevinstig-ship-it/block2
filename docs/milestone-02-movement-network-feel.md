@@ -27,6 +27,7 @@ Make movement dependable before adding combat. Local control must remain respons
 - voxel materials use mipmapped procedural pixel textures with distinct grass tops and soil sides, granular dirt, mottled stone, rough bedrock, and embedded iron clusters
 - direction switches update movement and network input immediately while the character rotates through the shortest angle; ordinary prediction is not pulled toward stale authoritative movement
 - voxel step collision remains immediate while the rendered player and camera ease vertically across one-block climbs and reconciliation corrections
+- an in-game movement debug panel exposes input vectors, yaw, local/server positions, reconciliation, vertical state, collision flags, sequence lag, and recent direction/step/correction events
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
 - keyboard and joystick reset on browser blur or page visibility loss

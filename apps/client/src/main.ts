@@ -57,6 +57,9 @@ const playerCount = document.querySelector<HTMLElement>("#players")!;
 const exitGuide = document.querySelector<HTMLElement>("#exit-guide")!;
 const performanceToggle = document.querySelector<HTMLButtonElement>("#performance-toggle")!;
 const performancePanel = document.querySelector<HTMLElement>("#performance-panel")!;
+const movementDebugLive = document.querySelector<HTMLElement>("#movement-debug-live")!;
+const movementDebugEvents = document.querySelector<HTMLOListElement>("#movement-debug-events")!;
+const movementDebugCopy = document.querySelector<HTMLButtonElement>("#movement-debug-copy")!;
 const performanceFields = {
   frame: document.querySelector<HTMLElement>("#perf-frame")!,
   fps: document.querySelector<HTMLElement>("#perf-fps")!,
@@ -71,7 +74,7 @@ const performanceFields = {
 const joystickZone = document.querySelector<HTMLElement>("#joystick-zone")!;
 const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !joystickZone || !joystickKnob || !mineButton) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -389,6 +392,7 @@ const remotePlayers = new Map<string, RemotePlayerVisual>();
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
+let lastProcessedInputSequence = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
 const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
 
@@ -437,6 +441,9 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("z", updatePosition, true);
     playerCallbacks.listen("yaw", () => {
       if (remote) recordRemoteSnapshot(remote, player);
+    }, true);
+    playerCallbacks.listen("lastProcessedInput", () => {
+      if (isLocal) lastProcessedInputSequence = player.lastProcessedInput;
     }, true);
   }, true);
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {
@@ -590,6 +597,30 @@ let surfaceReferenceY: number | null = null;
 let surfaceReturnStartedAt: number | null = null;
 let smoothedMovement = { x: 0, z: 0 };
 let lastSentMovement = { x: 0, z: 0 };
+let lastMovementDebugUpdateAt = 0;
+const movementEventLog: string[] = [];
+
+function movementVectorLabel(vector: { x: number; z: number }): string {
+  return `${vector.x.toFixed(2)}, ${vector.z.toFixed(2)}`;
+}
+
+function logMovementEvent(message: string): void {
+  const elapsed = (performance.now() / 1000).toFixed(2);
+  movementEventLog.unshift(`${elapsed}s  ${message}`);
+  movementEventLog.splice(8);
+  movementDebugEvents.replaceChildren(...movementEventLog.map(entry => {
+    const item = document.createElement("li");
+    item.textContent = entry;
+    return item;
+  }));
+}
+
+movementDebugCopy.addEventListener("click", async () => {
+  const text = `${movementDebugLive.textContent ?? ""}\n\n${movementEventLog.join("\n")}`;
+  await navigator.clipboard.writeText(text);
+  movementDebugCopy.textContent = "COPIED";
+  window.setTimeout(() => { movementDebugCopy.textContent = "COPY LOG"; }, 1000);
+});
 
 function resetMovementControls(): void {
   keys.clear();
@@ -788,11 +819,12 @@ function updatePerformanceMetrics(now: number): void {
   };
 }
 
-function reconcileLocalPlayer(dt: number, moving: boolean): void {
+function reconcileLocalPlayer(dt: number, moving: boolean): { distance: number; rate: number } {
   const position = localPlayer.getPosition();
   const distance = position.distance(authoritativeLocalPosition);
   const reconciliationRate = localReconciliationRate(distance, moving);
   if (!Number.isFinite(reconciliationRate)) {
+    if (worldReady) logMovementEvent(`HARD CORRECTION d=${distance.toFixed(3)}`);
     localVisualVerticalOffset += position.y - authoritativeLocalPosition.y;
     localPlayer.setPosition(authoritativeLocalPosition);
     localVerticalVelocity = 0;
@@ -802,6 +834,7 @@ function reconcileLocalPlayer(dt: number, moving: boolean): void {
     localVisualVerticalOffset += previousY - position.y;
     localPlayer.setPosition(position);
   }
+  return { distance, rate: reconciliationRate };
 }
 
 app.on("update", (dt: number) => {
@@ -832,10 +865,14 @@ app.on("update", (dt: number) => {
     readCollisionWorldBlock,
   );
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
-  if (predicted.stepped) localVisualVerticalOffset += current.y - predicted.y;
+  if (predicted.stepped) {
+    localVisualVerticalOffset += current.y - predicted.y;
+    logMovementEvent(`STEP y ${current.y.toFixed(3)} → ${predicted.y.toFixed(3)}`);
+  }
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   localPlayer.setEulerAngles(0, localFacingYaw, 0);
-  reconcileLocalPlayer(dt, Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01);
+  const moving = Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01;
+  const reconciliation = reconcileLocalPlayer(dt, moving);
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPlayerVisual.setLocalPosition(0, localVisualVerticalOffset, 0);
 
@@ -877,7 +914,24 @@ app.on("update", (dt: number) => {
       forward: smoothedMovement.z,
       yaw: localFacingYaw,
     });
+    if (directionChanged) logMovementEvent(`DIR #${moveSequence} ${movementVectorLabel(lastSentMovement)} → ${movementVectorLabel(smoothedMovement)}`);
     lastSentMovement = { ...smoothedMovement };
+  }
+  if (now - lastMovementDebugUpdateAt >= 100) {
+    lastMovementDebugUpdateAt = now;
+    const keysDown = ["KeyW", "KeyA", "KeyS", "KeyD"].filter(code => keys.has(code)).map(code => code.at(-1)).join("") || "none";
+    movementDebugLive.textContent = [
+      `keys       ${keysDown}   raw ${strafe.toFixed(2)}, ${forward.toFixed(2)}`,
+      `desired    ${movementVectorLabel(desiredMovement)}`,
+      `applied    ${movementVectorLabel(smoothedMovement)}`,
+      `yaw        ${localFacingYaw.toFixed(1)} → ${desiredFacingYaw.toFixed(1)}`,
+      `local      ${player.x.toFixed(3)}, ${player.y.toFixed(3)}, ${player.z.toFixed(3)}`,
+      `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
+      `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
+      `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
+      `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
+      `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${Math.max(0, moveSequence - lastProcessedInputSequence)}`,
+    ].join("\n");
   }
 });
 
