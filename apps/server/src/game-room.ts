@@ -1,5 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import {
+  AttackRequestSchema,
   MineBlockRequestSchema,
   MoveRequestSchema,
   type ActionRejected,
@@ -23,7 +24,7 @@ import {
   type GeneratedChunk,
 } from "@blockcraft/voxel-world";
 import { PlayerState, WorldState } from "./schema.js";
-import { miningRejectionReason, movementRejectionReason } from "./action-rules.js";
+import { attackRejectionReason, miningRejectionReason, movementRejectionReason } from "./action-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -43,6 +44,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly movementInputs = new Map<string, StoredMovementInput>();
   private readonly movementRateWindows = new Map<string, MovementRateWindow>();
   private readonly verticalVelocities = new Map<string, number>();
+  private readonly lastAttackAt = new Map<string, number>();
   private worldSeed = "blockcraft-dev";
 
   override onCreate(): void {
@@ -56,6 +58,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     });
     this.onMessage("move", (client, payload) => this.handleMove(client, payload));
     this.onMessage("mine", (client, payload) => this.handleMine(client, payload));
+    this.onMessage("attack", (client, payload) => this.handleAttack(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -80,6 +83,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.movementInputs.delete(client.sessionId);
     this.movementRateWindows.delete(client.sessionId);
     this.verticalVelocities.delete(client.sessionId);
+    this.lastAttackAt.delete(client.sessionId);
   }
 
   private chunkKey(chunkX: number, chunkZ: number): string {
@@ -201,5 +205,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       revision: stored.revision,
     };
     this.broadcast("block:changed", changed);
+  }
+
+  private handleAttack(client: Client, payload: unknown): void {
+    const parsed = AttackRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "attack", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const now = Date.now();
+    const rejection = attackRejectionReason(this.lastAttackAt.get(client.sessionId), now);
+    if (rejection) return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: rejection });
+    this.lastAttackAt.set(client.sessionId, now);
+    player.yaw = parsed.data.yaw;
+    player.actionSequence += 1;
   }
 }

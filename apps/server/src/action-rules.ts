@@ -14,6 +14,10 @@ export function movementRejectionReason(player: Position, request: MoveRequest):
   return Math.hypot(request.strafe, request.forward) > 1.01 ? "range" : null;
 }
 
+export function attackRejectionReason(lastAttackAt: number | undefined, now: number, cooldownMs = 300): RejectionReason | null {
+  return lastAttackAt !== undefined && now - lastAttackAt < cooldownMs ? "rate" : null;
+}
+
 export function miningRejectionReason(
   player: Position,
   request: MineBlockRequest,

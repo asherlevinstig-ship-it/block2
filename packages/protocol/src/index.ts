@@ -17,8 +17,14 @@ export const MineBlockRequestSchema = z.object({
   z: z.number().int(),
 });
 
+export const AttackRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  yaw: z.number().finite(),
+});
+
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
+export type AttackRequest = z.infer<typeof AttackRequestSchema>;
 
 export interface ChunkSnapshot {
   chunkX: number;
@@ -46,6 +52,6 @@ export interface BlockChanged {
 
 export interface ActionRejected {
   requestId?: string;
-  action: "move" | "mine";
+  action: "move" | "mine" | "attack";
   reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate";
 }

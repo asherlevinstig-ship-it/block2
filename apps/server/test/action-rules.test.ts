@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { miningRejectionReason, movementRejectionReason } from "../src/action-rules.js";
+import { attackRejectionReason, miningRejectionReason, movementRejectionReason } from "../src/action-rules.js";
 
 describe("authoritative action rules", () => {
   it("accepts small movement steps and rejects teleports", () => {
@@ -28,5 +28,11 @@ describe("authoritative action rules", () => {
   it("rejects a mining request based on an old chunk revision", () => {
     const player = { x: 20.5, y: 8, z: 20.5 };
     expect(miningRejectionReason(player, { requestId: "stale", expectedRevision: 1, x: 20, y: 7, z: 19 }, Block.Stone, 2)).toBe("stale");
+  });
+
+  it("rate limits combat swings without blocking the next animation", () => {
+    expect(attackRejectionReason(undefined, 1000)).toBeNull();
+    expect(attackRejectionReason(1000, 1200)).toBe("rate");
+    expect(attackRejectionReason(1000, 1300)).toBeNull();
   });
 });

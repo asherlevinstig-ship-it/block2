@@ -52,6 +52,11 @@ import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
 import { createVoxelTexturePixels, type VoxelTextureKind } from "./voxel-textures.js";
 import { retryConnection } from "./connection-retry.js";
 import {
+  alternateInteractionMode,
+  primaryActionForMode,
+  type InteractionMode,
+} from "./interaction-mode.js";
+import {
   PRIMARY_ACTION_DURATION_MS,
   advanceLocomotionAnimation,
   primaryActionPose,
@@ -84,7 +89,8 @@ const performanceFields = {
 const joystickZone = document.querySelector<HTMLElement>("#joystick-zone")!;
 const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton) {
+const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -580,6 +586,7 @@ app.root.addChild(targetMarker);
 const pointer = { x: canvas.width / 2, y: canvas.height / 2 };
 let currentTarget: VoxelRaycastHit | null = null;
 let targetStateKey = "";
+let interactionMode: InteractionMode = "build";
 
 function updatePointerPosition(event: PointerEvent): void {
   const rect = canvas.getBoundingClientRect();
@@ -598,15 +605,17 @@ function updateTarget(): void {
   const player = localPlayer.getPosition();
   const inRange = Boolean(hit) && Math.hypot(hit!.x + 0.5 - player.x, hit!.y + 0.5 - player.y, hit!.z + 0.5 - player.z) <= 4.5;
   currentTarget = inRange ? hit : null;
-  targetMarker.enabled = Boolean(currentTarget);
+  targetMarker.enabled = interactionMode === "build" && Boolean(currentTarget);
   if (currentTarget) targetMarker.setPosition(currentTarget.x + 0.5, currentTarget.y + 0.5, currentTarget.z + 0.5);
 
-  const nextKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
+  const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
+  const nextKey = `${interactionMode}:${targetKey}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
-  if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
-  else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${nextKey} · protected`;
-  else targetLabel.textContent = `Target: ${nextKey} · mineable`;
+  if (interactionMode === "combat") targetLabel.textContent = "Combat: click or press E to swing";
+  else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
+  else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
+  else targetLabel.textContent = `Target: ${targetKey} · mineable`;
 }
 
 let lastChunkBuildMs = 0;
@@ -717,6 +726,7 @@ let worldReady = false;
 let lastMoveSentAt = 0;
 let moveSequence = 0;
 let mineSequence = 0;
+let attackSequence = 0;
 let localVerticalVelocity = 0;
 let cutawayStateKey = "surface";
 let cutawaySliceY: number | null = null;
@@ -1026,18 +1036,56 @@ function requestMine(): void {
   status.textContent = `Mining ${currentTarget.x}, ${currentTarget.y}, ${currentTarget.z}...`;
 }
 
+function requestAttack(): void {
+  if (!room || !worldReady) return;
+  const player = localPlayer.getPosition();
+  localActionFacingYaw = currentTarget
+    ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
+    : localFacingYaw;
+  localActionStartedAt = performance.now();
+  attackSequence += 1;
+  room.send("attack", { requestId: `attack-${attackSequence}`, yaw: localActionFacingYaw });
+  logMovementEvent(`ACTION attack yaw=${localActionFacingYaw.toFixed(1)}`);
+  status.textContent = "Combat swing · damage and health are the next combat step.";
+}
+
+function requestPrimaryAction(): void {
+  if (primaryActionForMode(interactionMode) === "mine") requestMine();
+  else requestAttack();
+}
+
+function setInteractionMode(mode: InteractionMode): void {
+  if (interactionMode === mode && targetStateKey.startsWith(`${mode}:`)) return;
+  interactionMode = mode;
+  for (const button of modeButtons) button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
+  mineButton.textContent = mode === "build" ? "Mine" : "Attack";
+  mineButton.dataset.mode = mode;
+  targetStateKey = "";
+  updateTarget();
+  logMovementEvent(`MODE ${mode.toUpperCase()}`);
+  status.textContent = mode === "build"
+    ? "Build mode · clicks mine nearby targeted blocks."
+    : "Combat mode · clicks perform a melee swing without changing blocks.";
+}
+
+for (const button of modeButtons) {
+  button.addEventListener("click", () => setInteractionMode(button.dataset.mode as InteractionMode));
+}
+
 window.addEventListener("keydown", event => {
-  if (event.code === "KeyE" && !event.repeat) requestMine();
+  if (event.repeat) return;
+  if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
+  if (event.code === "KeyE") requestPrimaryAction();
 });
 canvas.addEventListener("pointerdown", event => {
   if (event.button !== 0) return;
   updatePointerPosition(event);
   updateTarget();
-  requestMine();
+  requestPrimaryAction();
 });
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  requestMine();
+  requestPrimaryAction();
 });
 
 const frameSamples: number[] = [];
@@ -1315,6 +1363,7 @@ app.on("update", (dt: number) => {
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
+      `mode       ${interactionMode} · click=${primaryActionForMode(interactionMode)}`,
       `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,

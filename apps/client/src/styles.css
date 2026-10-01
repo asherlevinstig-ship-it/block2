@@ -69,6 +69,40 @@ button { font: inherit; }
 #exit-guide[hidden] { display: none; }
 .controls { margin-top: 12px !important; color: #94aa90; font-size: .82rem; }
 
+#mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 4px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px;
+  background: rgb(0 0 0 / 22%);
+}
+
+#mode-toggle button {
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #829287;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .1em;
+}
+
+#mode-toggle button[aria-pressed="true"][data-mode="build"] {
+  border-color: rgb(240 203 103 / 42%);
+  background: rgb(128 78 11 / 72%);
+  color: #ffe49a;
+}
+
+#mode-toggle button[aria-pressed="true"][data-mode="combat"] {
+  border-color: rgb(255 118 96 / 48%);
+  background: rgb(126 31 24 / 76%);
+  color: #ffc1b5;
+}
+
 #performance-toggle {
   position: fixed;
   z-index: 24;
@@ -212,6 +246,11 @@ button { font: inherit; }
   }
 
   #mine-button:active { transform: scale(.94); background: rgb(184 111 24 / 92%); }
+  #mine-button[data-mode="combat"] {
+    border-color: rgb(255 126 106 / 70%);
+    background: rgb(135 35 27 / 88%);
+    color: #ffd0c7;
+  }
 }
 
 @media (max-height: 620px) {
