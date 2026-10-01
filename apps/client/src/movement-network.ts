@@ -96,6 +96,15 @@ export function localReconciliationRate(distance: number, moving: boolean, seque
   return distance > 0.05 ? 8 : 0;
 }
 
+export function reconciliationVerticalTarget(
+  localY: number,
+  authoritativeY: number,
+  grounded: boolean,
+  groundedTolerance = 0.12,
+): number {
+  return grounded && Math.abs(authoritativeY - localY) <= groundedTolerance ? localY : authoritativeY;
+}
+
 export function smoothVerticalOffset(offset: number, deltaTime: number, response = 12): number {
   const next = offset * Math.exp(-response * Math.max(0, deltaTime));
   return Math.abs(next) < 0.001 ? 0 : next;

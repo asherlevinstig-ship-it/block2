@@ -7,6 +7,7 @@ import {
   movementDirectionChanged,
   movementYaw,
   quantizeMovementToEightDirections,
+  reconciliationVerticalTarget,
   sampleRemotePose,
   smoothVerticalOffset,
   trimRemoteSnapshots,
@@ -77,6 +78,12 @@ describe("movement networking", () => {
   it("expands the hard-correction window while server acknowledgements are delayed", () => {
     expect(localReconciliationRate(3, true, 0)).toBe(Number.POSITIVE_INFINITY);
     expect(localReconciliationRate(3, true, 6)).toBe(0.75);
+  });
+
+  it("ignores tiny grounded height differences without hiding real vertical corrections", () => {
+    expect(reconciliationVerticalTarget(7.94, 7.95, true)).toBe(7.94);
+    expect(reconciliationVerticalTarget(7.7, 7.95, true)).toBe(7.95);
+    expect(reconciliationVerticalTarget(7.94, 7.95, false)).toBe(7.95);
   });
 
   it("smooths a one-block visual step without changing collision height", () => {

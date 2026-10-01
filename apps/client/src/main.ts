@@ -31,6 +31,7 @@ import {
   movementDirectionChanged,
   movementYaw,
   quantizeMovementToEightDirections,
+  reconciliationVerticalTarget,
   sampleRemotePose,
   smoothVerticalOffset,
   trimRemoteSnapshots,
@@ -468,6 +469,7 @@ const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
 let localActionStartedAt: number | null = null;
+let localActionFacingYaw: number | null = null;
 let lastProcessedInputSequence = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
 const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
@@ -557,11 +559,13 @@ const pointer = { x: canvas.width / 2, y: canvas.height / 2 };
 let currentTarget: VoxelRaycastHit | null = null;
 let targetStateKey = "";
 
-canvas.addEventListener("pointermove", event => {
+function updatePointerPosition(event: PointerEvent): void {
   const rect = canvas.getBoundingClientRect();
   pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
   pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
-});
+}
+
+canvas.addEventListener("pointermove", updatePointerPosition);
 
 function updateTarget(): void {
   if (!camera.camera) return;
@@ -818,9 +822,24 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
 }
 
 function requestMine(): void {
+  if (!room || !worldReady) return;
+  if (!currentTarget) {
+    status.textContent = "Move within mining reach and point at a block.";
+    return;
+  }
+  const player = localPlayer.getPosition();
+  localActionFacingYaw = movementYaw(
+    currentTarget.x + 0.5 - player.x,
+    currentTarget.z + 0.5 - player.z,
+    localFacingYaw,
+  );
   localActionStartedAt = performance.now();
-  logMovementEvent("ACTION mine");
-  if (!room || !worldReady || !currentTarget) return;
+  const proximity = Math.hypot(
+    currentTarget.x + 0.5 - player.x,
+    currentTarget.y + 0.5 - player.y,
+    currentTarget.z + 0.5 - player.z,
+  );
+  logMovementEvent(`ACTION mine reach=${proximity.toFixed(2)}`);
   const address = worldToChunk(currentTarget.x, currentTarget.z);
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
   if (!chunk) return;
@@ -839,7 +858,10 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyE" && !event.repeat) requestMine();
 });
 canvas.addEventListener("pointerdown", event => {
-  if (event.button === 0) requestMine();
+  if (event.button !== 0) return;
+  updatePointerPosition(event);
+  updateTarget();
+  requestMine();
 });
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
@@ -905,18 +927,20 @@ function updatePerformanceMetrics(now: number): void {
   };
 }
 
-function reconcileLocalPlayer(dt: number, moving: boolean, sequenceLag: number): { distance: number; rate: number } {
+function reconcileLocalPlayer(dt: number, moving: boolean, sequenceLag: number, grounded: boolean): { distance: number; rate: number } {
   const position = localPlayer.getPosition();
-  const distance = position.distance(authoritativeLocalPosition);
+  const target = authoritativeLocalPosition.clone();
+  target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
+  const distance = position.distance(target);
   const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag);
   if (!Number.isFinite(reconciliationRate)) {
     if (worldReady) logMovementEvent(`HARD CORRECTION d=${distance.toFixed(3)} lag=${sequenceLag}`);
-    localVisualVerticalOffset += position.y - authoritativeLocalPosition.y;
-    localPlayer.setPosition(authoritativeLocalPosition);
+    localVisualVerticalOffset += position.y - target.y;
+    localPlayer.setPosition(target);
     localVerticalVelocity = 0;
   } else if (reconciliationRate > 0) {
     const previousY = position.y;
-    position.lerp(position, authoritativeLocalPosition, Math.min(1, dt * reconciliationRate));
+    position.lerp(position, target, Math.min(1, dt * reconciliationRate));
     localVisualVerticalOffset += previousY - position.y;
     localPlayer.setPosition(position);
   }
@@ -935,7 +959,12 @@ app.on("update", (dt: number) => {
     cameraRelativeMovement(strafe, forward, CAMERA_OFFSET_X, CAMERA_OFFSET_Z),
   );
   smoothedMovement = approachMovement(smoothedMovement, desiredMovement, frameTime);
-  const desiredFacingYaw = movementYaw(desiredMovement.x, desiredMovement.z, localFacingYaw);
+  const actionFacingActive = localActionStartedAt !== null
+    && performance.now() - localActionStartedAt < PRIMARY_ACTION_DURATION_MS
+    && localActionFacingYaw !== null;
+  const desiredFacingYaw = actionFacingActive
+    ? localActionFacingYaw!
+    : movementYaw(desiredMovement.x, desiredMovement.z, localFacingYaw);
   localFacingYaw = approachYaw(localFacingYaw, desiredFacingYaw, frameTime);
   const current = localPlayer.getPosition();
   const grounded = isPlayerSupported(readCollisionWorldBlock, current.x, current.y, current.z);
@@ -959,14 +988,17 @@ app.on("update", (dt: number) => {
   localPlayer.setEulerAngles(0, localFacingYaw, 0);
   const moving = Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01;
   const sequenceLag = Math.max(0, moveSequence - lastProcessedInputSequence);
-  const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag);
+  const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded);
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPlayerVisual.setLocalPosition(0, localVisualVerticalOffset, 0);
   const animationNow = performance.now();
   const animationTime = animationNow / 1000;
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
   animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed);
-  if (localActionElapsed !== null && localActionElapsed >= PRIMARY_ACTION_DURATION_MS) localActionStartedAt = null;
+  if (localActionElapsed !== null && localActionElapsed >= PRIMARY_ACTION_DURATION_MS) {
+    localActionStartedAt = null;
+    localActionFacingYaw = null;
+  }
 
   const player = localPlayer.getPosition();
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
