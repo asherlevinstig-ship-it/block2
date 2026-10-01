@@ -487,6 +487,8 @@ let localVisualVerticalOffset = 0;
 let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
 let lastProcessedInputSequence = 0;
+let pendingStopInputSequence: number | null = null;
+let pendingStopDeadline = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
 const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
 
@@ -744,6 +746,7 @@ interface StopTraceFrame {
   hitVertical: boolean;
   sentSequence: number;
   acknowledgedSequence: number;
+  pendingStopSequence: number | null;
 }
 
 interface StopTrace {
@@ -769,7 +772,7 @@ function formatStopTrace(trace: StopTrace): string {
   const lines = [
     `STOP TRACE #${trace.id} frames=${trace.frames.length} pre=${STOP_TRACE_HISTORY_FRAMES} post=${STOP_TRACE_AFTER_RELEASE_MS}ms`,
     `viewport=${canvas.width}x${canvas.height} dpr=${window.devicePixelRatio.toFixed(2)} release_at=${trace.releasedAt.toFixed(1)}ms`,
-    "t_ms dt raw_x raw_z desired_x desired_z applied_x applied_z local_x local_y local_z render_y server_x server_y server_z screen_x screen_y ds_x ds_y camera_x camera_y camera_z focus_x focus_y focus_z anim_weight anim_phase body_y arm_r leg_l reconcile rate vertical visual grounded stepped hit_y sent ack lag",
+    "t_ms dt raw_x raw_z desired_x desired_z applied_x applied_z local_x local_y local_z render_y server_x server_y server_z screen_x screen_y ds_x ds_y camera_x camera_y camera_z focus_x focus_y focus_z anim_weight anim_phase body_y arm_r leg_l reconcile rate vertical visual grounded stepped hit_y sent ack lag stop_wait",
   ];
   let previous: StopTraceFrame | undefined;
   for (const frame of trace.frames) {
@@ -789,7 +792,7 @@ function formatStopTrace(trace: StopTrace): string {
       fixed(frame.reconciliationDistance), Number.isFinite(frame.reconciliationRate) ? fixed(frame.reconciliationRate, 1) : "HARD",
       fixed(frame.verticalVelocity), fixed(frame.visualOffset),
       Number(frame.grounded), Number(frame.stepped), Number(frame.hitVertical),
-      frame.sentSequence, frame.acknowledgedSequence, Math.max(0, frame.sentSequence - frame.acknowledgedSequence),
+      frame.sentSequence, frame.acknowledgedSequence, Math.max(0, frame.sentSequence - frame.acknowledgedSequence), frame.pendingStopSequence ?? "-",
     ].join(" "));
     previous = frame;
   }
@@ -800,15 +803,19 @@ function finishStopTrace(): void {
   if (!activeStopTrace) return;
   let maximumScreenDelta = 0;
   let maximumRenderedYDelta = 0;
+  let maximumIdleWorldDelta = 0;
   for (let index = 1; index < activeStopTrace.frames.length; index += 1) {
     const previous = activeStopTrace.frames[index - 1]!;
     const current = activeStopTrace.frames[index]!;
     if (current.at < activeStopTrace.releasedAt) continue;
     maximumScreenDelta = Math.max(maximumScreenDelta, Math.hypot(current.screenX - previous.screenX, current.screenY - previous.screenY));
     maximumRenderedYDelta = Math.max(maximumRenderedYDelta, Math.abs(current.renderedY - previous.renderedY));
+    if (Math.hypot(current.appliedX, current.appliedZ) < 0.01) {
+      maximumIdleWorldDelta = Math.max(maximumIdleWorldDelta, Math.hypot(current.localX - previous.localX, current.localZ - previous.localZ));
+    }
   }
   completedStopTrace = formatStopTrace(activeStopTrace);
-  movementDebugTrace.textContent = `Stop trace #${activeStopTrace.id}: ${activeStopTrace.frames.length} frames · max screen Δ${maximumScreenDelta.toFixed(2)}px · renderY Δ${maximumRenderedYDelta.toFixed(4)} — COPY LOG`;
+  movementDebugTrace.textContent = `Stop trace #${activeStopTrace.id}: ${activeStopTrace.frames.length} frames · screen Δ${maximumScreenDelta.toFixed(2)}px · idle world Δ${maximumIdleWorldDelta.toFixed(3)} · renderY Δ${maximumRenderedYDelta.toFixed(4)} — COPY LOG`;
   logMovementEvent(`STOP TRACE #${activeStopTrace.id} ready (${activeStopTrace.frames.length} frames)`);
   activeStopTrace = null;
 }
@@ -1053,12 +1060,18 @@ function updatePerformanceMetrics(now: number): void {
   };
 }
 
-function reconcileLocalPlayer(dt: number, moving: boolean, sequenceLag: number, grounded: boolean): { distance: number; rate: number } {
+function reconcileLocalPlayer(
+  dt: number,
+  moving: boolean,
+  sequenceLag: number,
+  grounded: boolean,
+  authoritativeInputReady: boolean,
+): { distance: number; rate: number } {
   const position = localPlayer.getPosition();
   const target = authoritativeLocalPosition.clone();
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
-  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag);
+  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady);
   if (!Number.isFinite(reconciliationRate)) {
     if (worldReady) logMovementEvent(`HARD CORRECTION d=${distance.toFixed(3)} lag=${sequenceLag}`);
     localVisualVerticalOffset += position.y - target.y;
@@ -1113,8 +1126,20 @@ app.on("update", (dt: number) => {
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   localPlayer.setEulerAngles(0, localFacingYaw, 0);
   const moving = Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01;
+  const lastSentMoving = Math.hypot(lastSentMovement.x, lastSentMovement.z) > 0.01;
+  const reconciliationNow = performance.now();
+  if (moving) pendingStopInputSequence = null;
+  else if (lastSentMoving && pendingStopInputSequence === null) {
+    pendingStopInputSequence = moveSequence + 1;
+    pendingStopDeadline = reconciliationNow + 1500;
+  }
+  if (pendingStopInputSequence !== null
+    && (lastProcessedInputSequence >= pendingStopInputSequence || reconciliationNow >= pendingStopDeadline)) {
+    pendingStopInputSequence = null;
+  }
+  const authoritativeInputReady = pendingStopInputSequence === null;
   const sequenceLag = Math.max(0, moveSequence - lastProcessedInputSequence);
-  const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded);
+  const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded, authoritativeInputReady);
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPlayerVisual.setLocalPosition(0, localVisualVerticalOffset, 0);
   const animationNow = performance.now();
@@ -1195,6 +1220,7 @@ app.on("update", (dt: number) => {
     hitVertical: predicted.hitVertical,
     sentSequence: moveSequence,
     acknowledgedSequence: lastProcessedInputSequence,
+    pendingStopSequence: pendingStopInputSequence,
   };
   const appliedMovement = Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01;
   if (previousAppliedMovement && !appliedMovement) {
@@ -1252,6 +1278,7 @@ app.on("update", (dt: number) => {
       `camera     screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
+      `stop ack   ${pendingStopInputSequence === null ? "ready" : `waiting for #${pendingStopInputSequence}`}`,
     ].join("\n");
   }
 });

@@ -72,7 +72,13 @@ describe("movement networking", () => {
     expect(localReconciliationRate(1.7, true, 6)).toBe(0);
     expect(localReconciliationRate(2.8, true, 6)).toBe(0.75);
     expect(localReconciliationRate(0.3, false)).toBe(8);
+    expect(localReconciliationRate(1.3, false, 6, false)).toBe(0);
     expect(localReconciliationRate(5, true, 6)).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("waits for the authoritative stop input before reconciling an idle player", () => {
+    expect(localReconciliationRate(1.3, false, 6, false)).toBe(0);
+    expect(localReconciliationRate(1.3, false, 6, true)).toBe(8);
   });
 
   it("expands the hard-correction window while server acknowledgements are delayed", () => {
