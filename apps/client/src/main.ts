@@ -27,7 +27,10 @@ import {
 import {
   REMOTE_INTERPOLATION_DELAY_MS,
   approachMovement,
+  approachYaw,
   cameraRelativeMovement,
+  localReconciliationRate,
+  movementDirectionChanged,
   movementYaw,
   quantizeMovementToEightDirections,
   sampleRemotePose,
@@ -579,6 +582,7 @@ let cutawaySliceY: number | null = null;
 let surfaceReferenceY: number | null = null;
 let surfaceReturnStartedAt: number | null = null;
 let smoothedMovement = { x: 0, z: 0 };
+let lastSentMovement = { x: 0, z: 0 };
 
 function resetMovementControls(): void {
   keys.clear();
@@ -586,6 +590,7 @@ function resetMovementControls(): void {
   touchStrafe = 0;
   touchForward = 0;
   smoothedMovement = { x: 0, z: 0 };
+  lastSentMovement = { x: 0, z: 0 };
   if (!room || !worldReady) return;
   moveSequence += 1;
   room.send("move", { sequence: moveSequence, strafe: 0, forward: 0, yaw: localFacingYaw });
@@ -776,14 +781,15 @@ function updatePerformanceMetrics(now: number): void {
   };
 }
 
-function reconcileLocalPlayer(dt: number): void {
+function reconcileLocalPlayer(dt: number, moving: boolean): void {
   const position = localPlayer.getPosition();
   const distance = position.distance(authoritativeLocalPosition);
-  if (distance > 1.5) {
+  const reconciliationRate = localReconciliationRate(distance, moving);
+  if (!Number.isFinite(reconciliationRate)) {
     localPlayer.setPosition(authoritativeLocalPosition);
     localVerticalVelocity = 0;
-  } else if (distance > 0.12) {
-    position.lerp(position, authoritativeLocalPosition, Math.min(1, dt * 4));
+  } else if (reconciliationRate > 0) {
+    position.lerp(position, authoritativeLocalPosition, Math.min(1, dt * reconciliationRate));
     localPlayer.setPosition(position);
   }
 }
@@ -800,7 +806,8 @@ app.on("update", (dt: number) => {
     cameraRelativeMovement(strafe, forward, CAMERA_OFFSET_X, CAMERA_OFFSET_Z),
   );
   smoothedMovement = approachMovement(smoothedMovement, desiredMovement, frameTime);
-  localFacingYaw = movementYaw(smoothedMovement.x, smoothedMovement.z, localFacingYaw);
+  const desiredFacingYaw = movementYaw(desiredMovement.x, desiredMovement.z, localFacingYaw);
+  localFacingYaw = approachYaw(localFacingYaw, desiredFacingYaw, frameTime);
   const current = localPlayer.getPosition();
   const grounded = isPlayerSupported(readCollisionWorldBlock, current.x, current.y, current.z);
   if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;
@@ -817,7 +824,7 @@ app.on("update", (dt: number) => {
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   localPlayer.setEulerAngles(0, localFacingYaw, 0);
-  reconcileLocalPlayer(dt);
+  reconcileLocalPlayer(dt, Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01);
 
   const player = localPlayer.getPosition();
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
@@ -846,7 +853,8 @@ app.on("update", (dt: number) => {
     pendingPings.set(id, now);
     room.send("ping", { id });
   }
-  if (room && worldReady && now - lastMoveSentAt >= 50) {
+  const directionChanged = movementDirectionChanged(lastSentMovement, smoothedMovement);
+  if (room && worldReady && (directionChanged || now - lastMoveSentAt >= 50)) {
     lastMoveSentAt = now;
     moveSequence += 1;
     room.send("move", {
@@ -855,6 +863,7 @@ app.on("update", (dt: number) => {
       forward: smoothedMovement.z,
       yaw: localFacingYaw,
     });
+    lastSentMovement = { ...smoothedMovement };
   }
 });
 

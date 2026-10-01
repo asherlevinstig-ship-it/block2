@@ -73,6 +73,27 @@ export function movementYaw(strafe: number, forward: number, fallback: number): 
     : Math.atan2(strafe, forward) * 180 / Math.PI;
 }
 
+export function approachYaw(current: number, target: number, deltaTime: number, turnSpeed = 720): number {
+  const delta = ((target - current + 540) % 360) - 180;
+  const maximumTurn = turnSpeed * deltaTime;
+  if (Math.abs(delta) <= maximumTurn) return current + delta;
+  return current + Math.sign(delta) * maximumTurn;
+}
+
+export function movementDirectionChanged(previous: MovementVector, next: MovementVector, dotThreshold = 0.98): boolean {
+  const previousSpeed = Math.hypot(previous.x, previous.z);
+  const nextSpeed = Math.hypot(next.x, next.z);
+  if (previousSpeed < 0.01 || nextSpeed < 0.01) return previousSpeed < 0.01 !== nextSpeed < 0.01;
+  const dot = (previous.x * next.x + previous.z * next.z) / (previousSpeed * nextSpeed);
+  return dot < dotThreshold;
+}
+
+export function localReconciliationRate(distance: number, moving: boolean): number {
+  if (distance > 1.5) return Number.POSITIVE_INFINITY;
+  if (moving) return distance > 0.65 ? 2 : 0;
+  return distance > 0.05 ? 8 : 0;
+}
+
 function lerpAngle(start: number, end: number, fraction: number): number {
   const delta = ((end - start + 540) % 360) - 180;
   return start + delta * fraction;

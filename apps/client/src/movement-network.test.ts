@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   approachMovement,
+  approachYaw,
   cameraRelativeMovement,
+  localReconciliationRate,
+  movementDirectionChanged,
   movementYaw,
   quantizeMovementToEightDirections,
   sampleRemotePose,
@@ -48,6 +51,25 @@ describe("movement networking", () => {
     const reversed = approachMovement({ x: 1, z: 0 }, { x: -1, z: 0 }, 0.016);
     expect(reversed.x).toBeCloseTo(-1);
     expect(reversed.z).toBeCloseTo(0);
+  });
+
+  it("turns the visual smoothly along the shortest angle", () => {
+    expect(approachYaw(0, 90, 0.05)).toBe(36);
+    expect(approachYaw(350, 10, 0.05)).toBe(370);
+    expect(approachYaw(0, 20, 0.05)).toBe(20);
+  });
+
+  it("detects direction switches independently of speed changes", () => {
+    expect(movementDirectionChanged({ x: 1, z: 0 }, { x: 0, z: 1 })).toBe(true);
+    expect(movementDirectionChanged({ x: 0.4, z: 0 }, { x: 1, z: 0 })).toBe(false);
+    expect(movementDirectionChanged({ x: 0, z: 0 }, { x: 0.2, z: 0 })).toBe(true);
+  });
+
+  it("does not pull normal predicted movement toward stale server positions", () => {
+    expect(localReconciliationRate(0.3, true)).toBe(0);
+    expect(localReconciliationRate(0.8, true)).toBe(2);
+    expect(localReconciliationRate(0.3, false)).toBe(8);
+    expect(localReconciliationRate(2, true)).toBe(Number.POSITIVE_INFINITY);
   });
 
   it("snaps analogue input to one of eight directions while preserving speed", () => {
