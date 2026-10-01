@@ -34,6 +34,7 @@ import {
   trimRemoteSnapshots,
   type RemoteSnapshot,
 } from "./movement-network.js";
+import { isVoxelHiddenForPlayer, type PlayerCutaway } from "./player-visibility.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -131,9 +132,14 @@ interface ClientChunk {
 }
 
 const chunks = new Map<string, ClientChunk>();
-let cutawayY: number | null = null;
-let cutawayX = 0;
-let cutawayZ = 0;
+const playerCutaway: PlayerCutaway = {
+  active: false,
+  playerX: 0,
+  playerY: 0,
+  playerZ: 0,
+  cameraOffsetX: CAMERA_OFFSET_X,
+  cameraOffsetZ: CAMERA_OFFSET_Z,
+};
 
 function chunkKey(chunkX: number, chunkZ: number): string {
   return `${chunkX},${chunkZ}`;
@@ -157,7 +163,7 @@ function readCollisionWorldBlock(x: number, y: number, z: number): BlockId {
 }
 
 function isCutawayHidden(x: number, y: number, z: number): boolean {
-  return cutawayY !== null && y > cutawayY && Math.hypot(x + 0.5 - cutawayX, z + 0.5 - cutawayZ) < 8;
+  return isVoxelHiddenForPlayer(x, y, z, playerCutaway);
 }
 
 function readVisibleWorldBlock(x: number, y: number, z: number): BlockId {
@@ -269,18 +275,37 @@ const localPlayer = new pc.Entity("local-player");
 const playerMaterial = new pc.StandardMaterial();
 playerMaterial.diffuse = new pc.Color(0.95, 0.73, 0.28);
 playerMaterial.update();
+const silhouetteMaterial = new pc.StandardMaterial();
+silhouetteMaterial.diffuse = new pc.Color(1, 0.72, 0.18);
+silhouetteMaterial.emissive = new pc.Color(1, 0.42, 0.04);
+silhouetteMaterial.opacity = 0.22;
+silhouetteMaterial.blendType = pc.BLEND_NORMAL;
+silhouetteMaterial.depthTest = false;
+silhouetteMaterial.depthWrite = false;
+silhouetteMaterial.update();
 
-function addPlayerBody(player: pc.Entity, material: pc.StandardMaterial): void {
+function addPlayerBody(player: pc.Entity, material: pc.StandardMaterial, withSilhouette = false): pc.Entity | null {
   const body = new pc.Entity("player-body");
   body.addComponent("render", { type: "capsule", castShadows: true });
   if (body.render) body.render.material = material;
   body.setLocalScale(PLAYER_RADIUS * 2, PLAYER_HEIGHT / 2, PLAYER_RADIUS * 2);
   body.setLocalPosition(0, PLAYER_HEIGHT / 2, 0);
   player.addChild(body);
+  let silhouette: pc.Entity | null = null;
+  if (withSilhouette) {
+    silhouette = new pc.Entity("player-silhouette");
+    silhouette.addComponent("render", { type: "capsule", castShadows: false });
+    if (silhouette.render) silhouette.render.material = silhouetteMaterial;
+    silhouette.setLocalScale(PLAYER_RADIUS * 2.3, PLAYER_HEIGHT * 0.56, PLAYER_RADIUS * 2.3);
+    silhouette.setLocalPosition(0, PLAYER_HEIGHT / 2, 0);
+    silhouette.enabled = false;
+    player.addChild(silhouette);
+  }
   addFacingMarker(player);
+  return silhouette;
 }
 
-addPlayerBody(localPlayer, playerMaterial);
+const localPlayerSilhouette = addPlayerBody(localPlayer, playerMaterial, true);
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
@@ -425,7 +450,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
   cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
   localVerticalVelocity = 0;
-  cutawayY = null;
+  playerCutaway.active = false;
   cutawayStateKey = "surface";
   worldReady = true;
   status.textContent = "Connected. Walk to a corner of the hill, point at a nearby block, then mine.";
@@ -520,19 +545,21 @@ function hasCeilingAbove(position: pc.Vec3): boolean {
 
 function updateUndergroundPresentation(position: pc.Vec3): void {
   const underground = hasCeilingAbove(position);
-  const nextCutawayY = underground ? Math.floor(position.y + 1.6) : null;
-  const nextX = underground ? Math.round(position.x / 2) * 2 : 0;
-  const nextZ = underground ? Math.round(position.z / 2) * 2 : 0;
-  const nextKey = underground ? `${nextCutawayY}:${nextX}:${nextZ}` : "surface";
+  const nextX = underground ? Math.round(position.x) : 0;
+  const nextY = underground ? Math.round(position.y * 2) / 2 : 0;
+  const nextZ = underground ? Math.round(position.z) : 0;
+  const nextKey = underground ? `${nextX}:${nextY}:${nextZ}` : "surface";
   caveLight.enabled = underground;
+  if (localPlayerSilhouette) localPlayerSilhouette.enabled = underground;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
   if (light.light) light.light.intensity = underground ? 0.5 : 1.35;
   app.scene.ambientLight = underground ? new pc.Color(0.16, 0.18, 0.2) : new pc.Color(0.36, 0.42, 0.38);
   if (nextKey === cutawayStateKey) return;
   cutawayStateKey = nextKey;
-  cutawayY = nextCutawayY;
-  cutawayX = nextX;
-  cutawayZ = nextZ;
+  playerCutaway.active = underground;
+  playerCutaway.playerX = nextX;
+  playerCutaway.playerY = nextY;
+  playerCutaway.playerZ = nextZ;
   for (const chunk of chunks.values()) rebuildChunk(chunk);
   status.textContent = underground
     ? `Underground · depth ${Math.max(0, 6 - Math.floor(position.y))} · roof cutaway active`
