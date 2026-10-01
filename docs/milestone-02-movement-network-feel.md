@@ -20,6 +20,8 @@ Make movement dependable before adding combat. Local control must remain respons
 - underground roof opening plus a camera-facing occlusion corridor that preserves the supporting floor
 - a subtle depth-independent underground player silhouette as a final visibility fallback
 - the same visibility treatment activates in open-air shafts and trenches when the player drops below surrounding ground level
+- cutaway anchoring uses a horizontal dead zone, recentering only at its boundary or on height changes instead of rebuilding every step
+- operating-system reduced-motion preference expands the dead zone further
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
 - keyboard and joystick reset on browser blur or page visibility loss

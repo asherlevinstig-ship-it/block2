@@ -37,6 +37,8 @@ import {
 import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
+  stableCutawayAnchor,
+  type CutawayAnchor,
   type PlayerCutaway,
 } from "./player-visibility.js";
 import "./styles.css";
@@ -456,6 +458,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localVerticalVelocity = 0;
   playerCutaway.active = false;
   cutawayStateKey = "surface";
+  cutawayMode = "surface";
+  cutawayAnchor = null;
   worldReady = true;
   status.textContent = "Connected. Walk to a corner of the hill, point at a nearby block, then mine.";
 }
@@ -520,6 +524,9 @@ let moveSequence = 0;
 let mineSequence = 0;
 let localVerticalVelocity = 0;
 let cutawayStateKey = "surface";
+let cutawayMode: "surface" | "excavation" | "underground" = "surface";
+let cutawayAnchor: CutawayAnchor | null = null;
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let smoothedMovement = { x: 0, z: 0 };
 
 function resetMovementControls(): void {
@@ -571,11 +578,16 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
   const underground = hasCeilingAbove(position);
   const excavating = !underground && isInOpenExcavation(position);
   const visibilityCutaway = underground || excavating;
-  const nextX = visibilityCutaway ? Math.round(position.x) : 0;
-  const nextY = visibilityCutaway ? Math.round(position.y * 2) / 2 : 0;
-  const nextZ = visibilityCutaway ? Math.round(position.z) : 0;
-  const mode = underground ? "underground" : excavating ? "excavation" : "surface";
-  const nextKey = visibilityCutaway ? `${mode}:${nextX}:${nextY}:${nextZ}` : "surface";
+  const mode: typeof cutawayMode = underground ? "underground" : excavating ? "excavation" : "surface";
+  const modeChanged = mode !== cutawayMode;
+  const nextAnchor = visibilityCutaway
+    ? stableCutawayAnchor(
+        modeChanged ? null : cutawayAnchor,
+        { x: position.x, y: position.y, z: position.z },
+        prefersReducedMotion ? 5 : 2,
+      )
+    : null;
+  const nextKey = nextAnchor ? `${mode}:${nextAnchor.x}:${nextAnchor.y}:${nextAnchor.z}` : "surface";
   caveLight.enabled = underground;
   if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
@@ -583,10 +595,12 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
   app.scene.ambientLight = underground ? new pc.Color(0.16, 0.18, 0.2) : new pc.Color(0.36, 0.42, 0.38);
   if (nextKey === cutawayStateKey) return;
   cutawayStateKey = nextKey;
+  cutawayMode = mode;
+  cutawayAnchor = nextAnchor;
   playerCutaway.active = visibilityCutaway;
-  playerCutaway.playerX = nextX;
-  playerCutaway.playerY = nextY;
-  playerCutaway.playerZ = nextZ;
+  playerCutaway.playerX = nextAnchor?.x ?? 0;
+  playerCutaway.playerY = nextAnchor?.y ?? 0;
+  playerCutaway.playerZ = nextAnchor?.z ?? 0;
   for (const chunk of chunks.values()) rebuildChunk(chunk);
   status.textContent = underground
     ? `Underground · depth ${Math.max(0, 6 - Math.floor(position.y))} · roof cutaway active`

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
+  stableCutawayAnchor,
   type PlayerCutaway,
 } from "./player-visibility.js";
 
@@ -44,5 +45,23 @@ describe("underground player visibility", () => {
 
   it("ignores an isolated tall column beside a surface player", () => {
     expect(isBelowSurroundingSurface(8, [10, 7, 7, 7, 7, 7, 7, 7])).toBe(false);
+  });
+
+  it("keeps the cutaway fixed while the player remains inside its dead zone", () => {
+    const anchor = { x: 8, y: 4, z: 8 };
+    expect(stableCutawayAnchor(anchor, { x: 9.2, y: 4, z: 8.9 })).toBe(anchor);
+  });
+
+  it("recentres after the player crosses the dead-zone boundary", () => {
+    expect(stableCutawayAnchor({ x: 8, y: 4, z: 8 }, { x: 10.4, y: 4, z: 8.2 })).toEqual({ x: 10, y: 4, z: 8 });
+  });
+
+  it("recentres immediately when the player changes height", () => {
+    expect(stableCutawayAnchor({ x: 8, y: 4, z: 8 }, { x: 8.2, y: 3, z: 8.1 })).toEqual({ x: 8, y: 3, z: 8 });
+  });
+
+  it("supports a larger reduced-motion dead zone", () => {
+    const anchor = { x: 8, y: 4, z: 8 };
+    expect(stableCutawayAnchor(anchor, { x: 11.5, y: 4, z: 8 }, 5)).toBe(anchor);
   });
 });

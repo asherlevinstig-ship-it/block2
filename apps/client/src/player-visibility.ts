@@ -7,6 +7,28 @@ export interface PlayerCutaway {
   cameraOffsetZ: number;
 }
 
+export interface CutawayAnchor {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export function stableCutawayAnchor(
+  current: CutawayAnchor | null,
+  player: CutawayAnchor,
+  horizontalDeadZone = 2,
+): CutawayAnchor {
+  const roundedPlayer = {
+    x: Math.round(player.x),
+    y: Math.round(player.y * 2) / 2,
+    z: Math.round(player.z),
+  };
+  if (!current) return roundedPlayer;
+  if (roundedPlayer.y !== current.y) return roundedPlayer;
+  if (Math.hypot(player.x - current.x, player.z - current.z) > horizontalDeadZone) return roundedPlayer;
+  return current;
+}
+
 export function isVoxelHiddenForPlayer(x: number, y: number, z: number, cutaway: PlayerCutaway): boolean {
   if (!cutaway.active) return false;
 
