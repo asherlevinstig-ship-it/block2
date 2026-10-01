@@ -12,6 +12,7 @@ import {
   CHUNK_HEIGHT,
   CHUNK_SIZE,
   GRAVITY,
+  SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
   chunkIndex,
   isProtectedVoxel,
@@ -615,7 +616,6 @@ let networkRttMs: number | null = null;
 function renderBootstrap(payload: WorldBootstrap): void {
   const buildStartedAt = performance.now();
   const previousSliceY = cutawaySliceY;
-  const previousSurfaceReferenceY = surfaceReferenceY;
   worldPayloadBytes = new Blob([JSON.stringify(payload)]).size;
   for (const chunk of chunks.values()) for (const mesh of chunk.meshes) mesh.destroy();
   for (const child of [...worldRoot.children]) child.destroy();
@@ -632,8 +632,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localVerticalVelocity = 0;
   localVisualVerticalOffset = 0;
   localPlayerVisual.setLocalPosition(0, 0, 0);
-  const detectedSurfaceY = estimatedSurfaceY(initialPosition);
-  surfaceReferenceY = Math.max(previousSurfaceReferenceY ?? initialPosition.y, detectedSurfaceY);
+  surfaceReferenceY = SURFACE_HEIGHT + 1;
   const bootstrapUnderground = hasCeilingAbove(initialPosition);
   const bootstrapExcavating = !bootstrapUnderground && isInOpenExcavation(initialPosition);
   cutawaySliceY = bootstrapSliceHeight(
@@ -914,29 +913,14 @@ function isInOpenExcavation(position: pc.Vec3): boolean {
   return isBelowSurroundingSurface(position.y, surroundingHeights);
 }
 
-function estimatedSurfaceY(position: pc.Vec3): number {
-  const centerX = Math.floor(position.x);
-  const centerZ = Math.floor(position.z);
-  const surfaceLevels: number[] = [];
-  for (const offsetX of [-3, 0, 3]) {
-    for (const offsetZ of [-3, 0, 3]) {
-      if (offsetX === 0 && offsetZ === 0) continue;
-      const solidY = highestLoadedSolidY(centerX + offsetX, centerZ + offsetZ);
-      if (solidY >= 0) surfaceLevels.push(solidY + 1);
-    }
-  }
-  surfaceLevels.sort((a, b) => a - b);
-  return Math.max(position.y, surfaceLevels[Math.floor(surfaceLevels.length / 2)] ?? position.y);
-}
-
 function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const underground = hasCeilingAbove(position);
   const excavating = !underground && isInOpenExcavation(position);
   undergroundClassification = underground;
   excavationClassification = excavating;
-  if (surfaceReferenceY === null) surfaceReferenceY = position.y;
+  if (surfaceReferenceY === null) surfaceReferenceY = SURFACE_HEIGHT + 1;
   if (cutawaySliceY === null && underground && position.y >= surfaceReferenceY - 0.65) {
-    surfaceReferenceY = estimatedSurfaceY(position);
+    surfaceReferenceY = SURFACE_HEIGHT + 1;
   }
   let visibilityCutaway = shouldUseDepthSlice(
     cutawaySliceY,
@@ -996,7 +980,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   );
   cutawayStateKey = nextKey;
   cutawaySliceY = nextSliceY;
-  if (!visibilityCutaway) surfaceReferenceY = position.y;
+  if (!visibilityCutaway) surfaceReferenceY = SURFACE_HEIGHT + 1;
   playerCutaway.active = visibilityCutaway;
   playerCutaway.sliceY = nextSliceY ?? CHUNK_HEIGHT;
   for (const chunk of chunks.values()) rebuildChunk(chunk);
