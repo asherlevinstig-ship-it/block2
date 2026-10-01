@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { PRIMARY_ACTION_DURATION_MS, primaryActionPose, voxelCharacterPose } from "./character-animation.js";
+import {
+  PRIMARY_ACTION_DURATION_MS,
+  advanceLocomotionAnimation,
+  primaryActionPose,
+  voxelCharacterPose,
+} from "./character-animation.js";
 
 describe("voxel character animation", () => {
   it("keeps opposing arms and legs in a readable walk cycle", () => {
@@ -35,5 +40,17 @@ describe("voxel character animation", () => {
     expect(strike.rightArmPitch).toBeLessThan(-100);
     expect(strike.torsoYaw).toBeLessThan(0);
     expect(recovered).toEqual({ active: false, torsoYaw: 0, rightArmPitch: 0, rightArmRoll: 0 });
+  });
+
+  it("blends walk animation out after movement stops without resetting its phase", () => {
+    const moving = { phase: 1.25, weight: 1 };
+    const firstStoppedFrame = advanceLocomotionAnimation(moving, 0, 1 / 60);
+    const laterStoppedFrame = advanceLocomotionAnimation(firstStoppedFrame, 0, 1 / 60);
+
+    expect(firstStoppedFrame.weight).toBeGreaterThan(0.8);
+    expect(firstStoppedFrame.weight).toBeLessThan(1);
+    expect(firstStoppedFrame.phase).toBeGreaterThan(moving.phase);
+    expect(laterStoppedFrame.phase).toBeGreaterThan(firstStoppedFrame.phase);
+    expect(laterStoppedFrame.weight).toBeLessThan(firstStoppedFrame.weight);
   });
 });

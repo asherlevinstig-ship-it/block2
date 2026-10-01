@@ -47,7 +47,12 @@ import {
 } from "./player-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
 import { createVoxelTexturePixels, type VoxelTextureKind } from "./voxel-textures.js";
-import { PRIMARY_ACTION_DURATION_MS, primaryActionPose, voxelCharacterPose } from "./character-animation.js";
+import {
+  PRIMARY_ACTION_DURATION_MS,
+  advanceLocomotionAnimation,
+  primaryActionPose,
+  voxelCharacterPose,
+} from "./character-animation.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -357,6 +362,8 @@ interface VoxelCharacterRig {
   leftLeg: pc.Entity;
   rightLeg: pc.Entity;
   silhouette: pc.Entity | null;
+  locomotionPhase: number;
+  locomotionWeight: number;
 }
 
 function addBox(
@@ -416,18 +423,26 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     silhouette.enabled = false;
     root.addChild(silhouette);
   }
-  return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, silhouette };
+  return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, silhouette, locomotionPhase: 0, locomotionWeight: 0 };
 }
 
 function animateVoxelCharacter(
   rig: VoxelCharacterRig,
   speed: number,
   time: number,
+  deltaTime: number,
   verticalVelocity: number,
   grounded: boolean,
   actionElapsedMilliseconds: number | null,
 ): void {
-  const pose = voxelCharacterPose(speed, time, verticalVelocity, grounded);
+  const locomotion = advanceLocomotionAnimation(
+    { phase: rig.locomotionPhase, weight: rig.locomotionWeight },
+    speed,
+    deltaTime,
+  );
+  rig.locomotionPhase = locomotion.phase;
+  rig.locomotionWeight = locomotion.weight;
+  const pose = voxelCharacterPose(speed, time, verticalVelocity, grounded, 4.2, locomotion);
   const action = primaryActionPose(actionElapsedMilliseconds);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
   rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw, pose.torsoRoll);
@@ -994,7 +1009,7 @@ app.on("update", (dt: number) => {
   const animationNow = performance.now();
   const animationTime = animationNow / 1000;
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
-  animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed);
+  animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed);
   if (localActionElapsed !== null && localActionElapsed >= PRIMARY_ACTION_DURATION_MS) {
     localActionStartedAt = null;
     localActionFacingYaw = null;
@@ -1011,7 +1026,7 @@ app.on("update", (dt: number) => {
       remote.entity.setPosition(pose.x, pose.y, pose.z);
       remote.entity.setEulerAngles(0, pose.yaw, 0);
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
-      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, remoteVerticalVelocity, true, remoteActionElapsed);
+      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed);
       if (remoteActionElapsed !== null && remoteActionElapsed >= PRIMARY_ACTION_DURATION_MS) remote.actionStartedAt = null;
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);

@@ -18,6 +18,26 @@ export interface PrimaryActionPose {
 
 export const PRIMARY_ACTION_DURATION_MS = 360;
 
+export interface LocomotionAnimationSample {
+  phase: number;
+  weight: number;
+}
+
+export function advanceLocomotionAnimation(
+  previous: LocomotionAnimationSample,
+  speed: number,
+  deltaSeconds: number,
+  maximumSpeed = 4.2,
+): LocomotionAnimationSample {
+  const targetWeight = Math.max(0, Math.min(1, speed / maximumSpeed));
+  const response = targetWeight > previous.weight ? 12 : 7;
+  const weight = previous.weight + (targetWeight - previous.weight) * Math.min(1, deltaSeconds * response);
+  return {
+    weight: weight < 0.001 ? 0 : weight,
+    phase: previous.phase + deltaSeconds * (4.5 + weight * 5.5),
+  };
+}
+
 export function primaryActionPose(elapsedMilliseconds: number | null): PrimaryActionPose {
   if (elapsedMilliseconds === null || elapsedMilliseconds < 0 || elapsedMilliseconds >= PRIMARY_ACTION_DURATION_MS) {
     return { active: false, torsoYaw: 0, rightArmPitch: 0, rightArmRoll: 0 };
@@ -40,8 +60,9 @@ export function voxelCharacterPose(
   verticalVelocity: number,
   grounded: boolean,
   maximumSpeed = 4.2,
+  locomotion?: LocomotionAnimationSample,
 ): VoxelCharacterPose {
-  const movement = Math.max(0, Math.min(1, speed / maximumSpeed));
+  const movement = locomotion?.weight ?? Math.max(0, Math.min(1, speed / maximumSpeed));
   if (!grounded) {
     const rising = verticalVelocity > 0;
     return {
@@ -56,7 +77,7 @@ export function voxelCharacterPose(
     };
   }
 
-  const phase = elapsedSeconds * (4.5 + movement * 5.5);
+  const phase = locomotion?.phase ?? elapsedSeconds * (4.5 + movement * 5.5);
   const stride = Math.sin(phase) * 40 * movement;
   const idle = Math.sin(elapsedSeconds * 2.2) * 0.008 * (1 - movement);
   return {
