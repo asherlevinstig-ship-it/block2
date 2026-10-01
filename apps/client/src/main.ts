@@ -43,6 +43,7 @@ import {
   type PlayerCutaway,
 } from "./player-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
+import { createVoxelTexturePixels, type VoxelTextureKind } from "./voxel-textures.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -118,23 +119,48 @@ for (const step of MILESTONE_EXIT_STEPS) {
 exitTrail.enabled = false;
 app.root.addChild(exitTrail);
 
-const palette: Record<number, pc.Color> = {
-  [Block.Bedrock]: new pc.Color(0.14, 0.16, 0.18),
-  [Block.Stone]: new pc.Color(0.38, 0.42, 0.44),
-  [Block.Dirt]: new pc.Color(0.42, 0.28, 0.16),
-  [Block.Grass]: new pc.Color(0.28, 0.58, 0.25),
-  [Block.IronOre]: new pc.Color(0.7, 0.48, 0.29),
-};
+const materials = new Map<VoxelTextureKind, pc.StandardMaterial>();
 
-const materials = new Map<number, pc.StandardMaterial>();
+function textureKindFor(block: number, normalY: number): VoxelTextureKind {
+  if (block === Block.Bedrock) return "bedrock";
+  if (block === Block.Stone) return "stone";
+  if (block === Block.Dirt) return "dirt";
+  if (block === Block.Grass) return normalY > 0 ? "grass-top" : "grass-side";
+  return "iron";
+}
 
-function materialFor(block: number): pc.StandardMaterial {
-  let material = materials.get(block);
+function createVoxelTexture(kind: VoxelTextureKind): pc.Texture {
+  const size = 16;
+  const canvasTexture = document.createElement("canvas");
+  canvasTexture.width = size;
+  canvasTexture.height = size;
+  const context = canvasTexture.getContext("2d")!;
+  const imageData = context.createImageData(size, size);
+  imageData.data.set(createVoxelTexturePixels(kind, size));
+  context.putImageData(imageData, 0, 0);
+  const texture = new pc.Texture(app.graphicsDevice, {
+    width: size,
+    height: size,
+    mipmaps: true,
+    minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR,
+    magFilter: pc.FILTER_NEAREST,
+    addressU: pc.ADDRESS_REPEAT,
+    addressV: pc.ADDRESS_REPEAT,
+  });
+  texture.setSource(canvasTexture);
+  return texture;
+}
+
+function materialFor(kind: VoxelTextureKind): pc.StandardMaterial {
+  let material = materials.get(kind);
   if (!material) {
     material = new pc.StandardMaterial();
-    material.diffuse = palette[block] ?? new pc.Color(1, 0, 1);
+    material.diffuse = new pc.Color(1, 1, 1);
+    material.diffuseMap = createVoxelTexture(kind);
+    material.specular = new pc.Color(0.05, 0.05, 0.05);
+    material.gloss = 8;
     material.update();
-    materials.set(block, material);
+    materials.set(kind, material);
   }
   return material;
 }
@@ -200,7 +226,7 @@ function rebuildChunk(chunk: ClientChunk): void {
   for (const child of [...chunk.root.children]) child.destroy();
   chunk.visibleBlocks = 0;
   chunk.visibleFaces = 0;
-  const buffers = new Map<number, { positions: number[]; normals: number[]; indices: number[] }>();
+  const buffers = new Map<VoxelTextureKind, { positions: number[]; normals: number[]; uvs: number[]; indices: number[] }>();
   for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
     for (let localZ = 0; localZ < CHUNK_SIZE; localZ += 1) {
       for (let localX = 0; localX < CHUNK_SIZE; localX += 1) {
@@ -210,35 +236,38 @@ function rebuildChunk(chunk: ClientChunk): void {
         const z = chunk.chunkZ * CHUNK_SIZE + localZ;
         if (isCutawayHidden(x, y, z)) continue;
         chunk.visibleBlocks += 1;
-        let buffer = buffers.get(block);
-        if (!buffer) {
-          buffer = { positions: [], normals: [], indices: [] };
-          buffers.set(block, buffer);
-        }
         for (const face of faces) {
           const neighbor = readVisibleWorldBlock(x + face.normal[0], y + face.normal[1], z + face.normal[2]);
           if (neighbor !== Block.Air) continue;
+          const textureKind = textureKindFor(block, face.normal[1]);
+          let buffer = buffers.get(textureKind);
+          if (!buffer) {
+            buffer = { positions: [], normals: [], uvs: [], indices: [] };
+            buffers.set(textureKind, buffer);
+          }
           chunk.visibleFaces += 1;
           const base = buffer.positions.length / 3;
           for (const corner of face.corners) {
             buffer.positions.push(x + corner[0], y + corner[1], z + corner[2]);
             buffer.normals.push(...face.normal);
           }
+          buffer.uvs.push(0, 0, 0, 1, 1, 1, 1, 0);
           buffer.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
         }
       }
     }
   }
   const meshInstances: pc.MeshInstance[] = [];
-  for (const [block, buffer] of buffers) {
+  for (const [textureKind, buffer] of buffers) {
     if (buffer.indices.length === 0) continue;
     const geometry = new pc.Geometry();
     geometry.positions = buffer.positions;
     geometry.normals = buffer.normals;
+    geometry.uvs = buffer.uvs;
     geometry.indices = buffer.indices;
     const mesh = pc.Mesh.fromGeometry(app.graphicsDevice, geometry);
     chunk.meshes.push(mesh);
-    meshInstances.push(new pc.MeshInstance(mesh, materialFor(block)));
+    meshInstances.push(new pc.MeshInstance(mesh, materialFor(textureKind)));
   }
   if (meshInstances.length === 0) return;
   const entity = new pc.Entity(`chunk-mesh:${chunk.chunkX},${chunk.chunkZ}`);
