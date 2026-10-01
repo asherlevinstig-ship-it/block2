@@ -20,4 +20,10 @@ describe("mob combat behavior", () => {
     });
     expect(pursueTarget({ x: 0, y: 8, z: 0 }, { x: 0, y: 8, z: 1 }, 1).inAttackRange).toBe(true);
   });
+
+  it("enters attack range on the same tick it reaches the melee boundary", () => {
+    const result = pursueTarget({ x: 0, y: 8, z: 0 }, { x: 0, y: 8, z: 1.4 }, 1);
+    expect(result.z).toBeCloseTo(0.05);
+    expect(result.inAttackRange).toBe(true);
+  });
 });

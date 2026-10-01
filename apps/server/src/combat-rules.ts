@@ -36,10 +36,11 @@ export function pursueTarget(
   const yaw = distance < 0.001 ? 0 : Math.atan2(deltaX, deltaZ) * 180 / Math.PI;
   if (distance <= stopDistance || distance < 0.001) return { x: mob.x, z: mob.z, yaw, inAttackRange: true };
   const travel = Math.min(distance - stopDistance, Math.max(0, deltaSeconds) * speed);
+  const remainingDistance = distance - travel;
   return {
     x: mob.x + deltaX / distance * travel,
     z: mob.z + deltaZ / distance * travel,
     yaw,
-    inAttackRange: false,
+    inAttackRange: remainingDistance <= stopDistance + 0.001,
   };
 }
