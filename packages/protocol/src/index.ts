@@ -22,9 +22,17 @@ export const AttackRequestSchema = z.object({
   yaw: z.number().finite(),
 });
 
+export const DodgeRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  strafe: z.number().finite().min(-1).max(1),
+  forward: z.number().finite().min(-1).max(1),
+  yaw: z.number().finite(),
+});
+
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
+export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
 
 export interface ChunkSnapshot {
   chunkX: number;
@@ -66,8 +74,14 @@ export interface PlayerHit {
   defeated: boolean;
 }
 
+export interface CombatStagger {
+  attackerId: string;
+  mobId: string;
+  durationMs: number;
+}
+
 export interface ActionRejected {
   requestId?: string;
-  action: "move" | "mine" | "attack";
-  reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate";
+  action: "move" | "mine" | "attack" | "dodge";
+  reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate" | "stamina";
 }

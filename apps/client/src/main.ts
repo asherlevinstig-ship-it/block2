@@ -6,6 +6,7 @@ import {
   type BlockChanged,
   type ChunkSnapshot,
   type CombatHit,
+  type CombatStagger,
   type PlayerHit,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
@@ -79,6 +80,8 @@ const movementDebugCopy = document.querySelector<HTMLButtonElement>("#movement-d
 const movementDebugTrace = document.querySelector<HTMLElement>("#movement-debug-trace")!;
 const playerHealthFill = document.querySelector<HTMLElement>("#player-health-fill")!;
 const playerHealthValue = document.querySelector<HTMLElement>("#player-health-value")!;
+const playerStaminaFill = document.querySelector<HTMLElement>("#player-stamina-fill")!;
+const playerStaminaValue = document.querySelector<HTMLElement>("#player-stamina-value")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
 const performanceFields = {
@@ -95,8 +98,9 @@ const performanceFields = {
 const joystickZone = document.querySelector<HTMLElement>("#joystick-zone")!;
 const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
+const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !playerHealthFill || !playerHealthValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -486,6 +490,10 @@ interface NetworkPlayer {
   actionSequence: number;
   health: number;
   maxHealth: number;
+  stamina: number;
+  maxStamina: number;
+  dodgeSequence: number;
+  invulnerableUntil: number;
   name: string;
 }
 
@@ -506,6 +514,10 @@ interface NetworkMob {
   alive: boolean;
   hitSequence: number;
   actionSequence: number;
+  combatState: string;
+  stateUntil: number;
+  targetId: string;
+  staggerSequence: number;
   yaw: number;
   name: string;
 }
@@ -520,6 +532,8 @@ interface MobVisual {
   hitAt: number;
   lastActionSequence: number;
   actionAt: number;
+  lastStaggerSequence: number;
+  staggerAt: number;
 }
 
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
@@ -530,6 +544,7 @@ let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
 let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
+let localDodgeStartedAt: number | null = null;
 let lastProcessedInputSequence = 0;
 let pendingStopInputSequence: number | null = null;
 let pendingStopDeadline = 0;
@@ -542,11 +557,17 @@ function updatePlayerHealth(health: number, maximumHealth: number): void {
   playerHealthValue.textContent = `${health} / ${maximumHealth}`;
 }
 
-function showCombatFeedback(text: string, hurt = false): void {
+function updatePlayerStamina(stamina: number, maximumStamina: number): void {
+  const fraction = Math.max(0, Math.min(1, stamina / Math.max(1, maximumStamina)));
+  playerStaminaFill.style.width = `${fraction * 100}%`;
+  playerStaminaValue.textContent = `${Math.round(stamina)}`;
+}
+
+function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" = "hit"): void {
   combatFeedback.textContent = text;
-  combatFeedback.classList.remove("show", "hurt");
+  combatFeedback.classList.remove("show", "hurt", "dodge");
   void combatFeedback.offsetWidth;
-  if (hurt) combatFeedback.classList.add("hurt");
+  if (style !== "hit") combatFeedback.classList.add(style);
   combatFeedback.classList.add("show");
 }
 
@@ -602,6 +623,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     hitAt: 0,
     lastActionSequence: mob.actionSequence,
     actionAt: 0,
+    lastStaggerSequence: mob.staggerSequence,
+    staggerAt: 0,
   };
 }
 
@@ -617,6 +640,10 @@ function updateMobVisual(mob: MobVisual): void {
     mob.lastActionSequence = mob.state.actionSequence;
     mob.actionAt = performance.now();
   }
+  if (mob.state.staggerSequence > mob.lastStaggerSequence) {
+    mob.lastStaggerSequence = mob.state.staggerSequence;
+    mob.staggerAt = performance.now();
+  }
 }
 
 function bindMobs(joinedRoom: Room): void {
@@ -626,7 +653,7 @@ function bindMobs(joinedRoom: Room): void {
     const visual = createMobVisual(mobId, mob);
     mobVisuals.set(mobId, visual);
     const mobCallbacks = callbacks(mob);
-    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "yaw"] as const) {
+    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "stateUntil", "targetId", "staggerSequence", "yaw"] as const) {
       mobCallbacks.listen(field, () => updateMobVisual(visual), true);
     }
   }, true);
@@ -684,6 +711,12 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("maxHealth", () => {
       if (isLocal) updatePlayerHealth(player.health, player.maxHealth);
     }, true);
+    playerCallbacks.listen("stamina", () => {
+      if (isLocal) updatePlayerStamina(player.stamina, player.maxStamina);
+    }, true);
+    playerCallbacks.listen("maxStamina", () => {
+      if (isLocal) updatePlayerStamina(player.stamina, player.maxStamina);
+    }, true);
   }, true);
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {
     const remote = remotePlayers.get(sessionId);
@@ -735,12 +768,17 @@ function updateTarget(): void {
   if (currentTarget) targetMarker.setPosition(currentTarget.x + 0.5, currentTarget.y + 0.5, currentTarget.z + 0.5);
 
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
-  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}` : "none";
+  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}` : "none";
   const nextKey = `${interactionMode}:${targetKey}:${combatKey}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   if (interactionMode === "combat" && combatMob) {
-    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m`;
+    const intent = combatMob.visual.state.combatState === "windup"
+      ? " · LUNGE INCOMING"
+      : combatMob.visual.state.combatState === "stagger"
+        ? " · STAGGERED"
+        : "";
+    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m${intent}`;
   } else if (interactionMode === "combat") targetLabel.textContent = "Combat: approach the Moss Crawler and click to swing";
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
@@ -856,6 +894,7 @@ let lastMoveSentAt = 0;
 let moveSequence = 0;
 let mineSequence = 0;
 let attackSequence = 0;
+let dodgeSequence = 0;
 let localVerticalVelocity = 0;
 let cutawayStateKey = "surface";
 let cutawaySliceY: number | null = null;
@@ -1187,6 +1226,35 @@ function requestAttack(): void {
     : "Combat swing missed · move closer to the Moss Crawler.";
 }
 
+function requestDodge(): void {
+  if (!room || !worldReady) return;
+  const movementLength = Math.hypot(smoothedMovement.x, smoothedMovement.z);
+  const direction = movementLength > 0.05
+    ? { x: smoothedMovement.x / movementLength, z: smoothedMovement.z / movementLength }
+    : {
+        x: Math.sin(localFacingYaw * Math.PI / 180),
+        z: Math.cos(localFacingYaw * Math.PI / 180),
+      };
+  const current = localPlayer.getPosition();
+  const predicted = resolvePlayerMotion(
+    { x: current.x, y: current.y, z: current.z },
+    { x: direction.x * 1.8, y: 0, z: direction.z * 1.8 },
+    readCollisionWorldBlock,
+  );
+  localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
+  localDodgeStartedAt = performance.now();
+  dodgeSequence += 1;
+  room.send("dodge", {
+    requestId: `dodge-${dodgeSequence}`,
+    strafe: direction.x,
+    forward: direction.z,
+    yaw: localFacingYaw,
+  });
+  showCombatFeedback("DODGE", "dodge");
+  logMovementEvent(`DODGE ${direction.x.toFixed(2)}, ${direction.z.toFixed(2)}`);
+  status.textContent = "Dodging · brief invulnerability active.";
+}
+
 function requestPrimaryAction(): void {
   if (primaryActionForMode(interactionMode) === "mine") requestMine();
   else requestAttack();
@@ -1215,6 +1283,10 @@ window.addEventListener("keydown", event => {
   if (event.repeat) return;
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyE") requestPrimaryAction();
+  if (event.code === "Space") {
+    event.preventDefault();
+    requestDodge();
+  }
 });
 canvas.addEventListener("pointerdown", event => {
   if (event.button !== 0) return;
@@ -1225,6 +1297,10 @@ canvas.addEventListener("pointerdown", event => {
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestPrimaryAction();
+});
+dodgeButton.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  requestDodge();
 });
 
 const frameSamples: number[] = [];
@@ -1372,6 +1448,14 @@ app.on("update", (dt: number) => {
   const animationTime = animationNow / 1000;
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
   animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed);
+  const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
+  if (dodgeElapsed !== null && dodgeElapsed < 320) {
+    const dodgeProgress = dodgeElapsed / 320;
+    localPlayerVisual.setLocalEulerAngles(0, 0, -Math.sin(dodgeProgress * Math.PI) * 13);
+  } else {
+    localPlayerVisual.setLocalEulerAngles(0, 0, 0);
+    if (dodgeElapsed !== null) localDodgeStartedAt = null;
+  }
   if (localActionElapsed !== null && localActionElapsed >= PRIMARY_ACTION_DURATION_MS) {
     localActionStartedAt = null;
     localActionFacingYaw = null;
@@ -1406,8 +1490,20 @@ app.on("update", (dt: number) => {
     const hitStrength = Math.max(0, 1 - (animationNow - mob.hitAt) / 180);
     const attackElapsed = animationNow - mob.actionAt;
     const attackStrength = attackElapsed >= 0 && attackElapsed < 460 ? Math.sin(attackElapsed / 460 * Math.PI) : 0;
-    mob.bodyRoot.setLocalPosition(0, Math.sin(animationTime * 4.5) * 0.055 - hitStrength * 0.08, attackStrength * 0.24);
-    mob.bodyMaterial.emissive = new pc.Color(0.55 * hitStrength, 0.08 * hitStrength, 0.04 * hitStrength);
+    const staggerElapsed = animationNow - mob.staggerAt;
+    const staggerStrength = staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
+    const windupStrength = mob.state.combatState === "windup" ? 0.55 + Math.sin(animationTime * 18) * 0.2 : 0;
+    mob.bodyRoot.setLocalPosition(
+      0,
+      Math.sin(animationTime * 4.5) * 0.055 - hitStrength * 0.08,
+      attackStrength * 0.24 - windupStrength * 0.16,
+    );
+    mob.bodyRoot.setLocalEulerAngles(0, 0, Math.sin(animationTime * 35) * staggerStrength * 12);
+    mob.bodyMaterial.emissive = new pc.Color(
+      0.55 * hitStrength + 0.34 * windupStrength,
+      0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
+      0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
+    );
     mob.bodyMaterial.update();
   }
   cameraTarget.set(player.x, player.y + localVisualVerticalOffset, player.z);
@@ -1582,9 +1678,15 @@ async function connect(): Promise<void> {
     logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
     if (message.attackerId === room?.sessionId) showCombatFeedback(message.defeated ? "DEFEATED" : `HIT  −${message.damage}`);
   });
+  room.onMessage("combat:stagger", (message: CombatStagger) => {
+    if (message.attackerId !== room?.sessionId) return;
+    showCombatFeedback("STAGGER!", "dodge");
+    status.textContent = `Perfect counter · enemy staggered for ${(message.durationMs / 1000).toFixed(1)}s.`;
+    logMovementEvent(`STAGGER ${message.mobId} ${message.durationMs}ms`);
+  });
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
     if (message.playerId !== room?.sessionId) return;
-    showCombatFeedback(message.defeated ? "DEFEATED · RESPAWNING" : `HURT  −${message.damage}`, true);
+    showCombatFeedback(message.defeated ? "DEFEATED · RESPAWNING" : `HURT  −${message.damage}`, "hurt");
     status.textContent = message.defeated
       ? "You were defeated and returned to the surface camp."
       : `The Moss Crawler hit you · ${message.health} HP remaining.`;
@@ -1600,6 +1702,12 @@ async function connect(): Promise<void> {
   room.onMessage("action:rejected", (message: ActionRejected) => {
     status.textContent = `Server rejected ${message.action}: ${message.reason}`;
     if (message.action === "move") localPlayer.setPosition(authoritativeLocalPosition);
+    if (message.action === "dodge") {
+      localPlayer.setPosition(authoritativeLocalPosition);
+      localDodgeStartedAt = null;
+      localPlayerVisual.setLocalEulerAngles(0, 0, 0);
+      showCombatFeedback(message.reason === "stamina" ? "NO STAMINA" : "DODGE BLOCKED", "hurt");
+    }
     if (message.reason === "stale") {
       worldReady = false;
       room?.send("world:ready");

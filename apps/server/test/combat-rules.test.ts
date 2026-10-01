@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pursueTarget, selectAggroTarget } from "../src/combat-rules.js";
+import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "../src/combat-rules.js";
 
 describe("mob combat behavior", () => {
   it("selects the closest living surface player", () => {
@@ -25,5 +25,19 @@ describe("mob combat behavior", () => {
     const result = pursueTarget({ x: 0, y: 8, z: 0 }, { x: 0, y: 8, z: 1.4 }, 1);
     expect(result.z).toBeCloseTo(0.05);
     expect(result.inAttackRange).toBe(true);
+  });
+
+  it("normalizes directional dodges and falls back to facing", () => {
+    expect(dodgeDirection(1, 1, 0).x).toBeCloseTo(Math.SQRT1_2);
+    expect(dodgeDirection(1, 1, 0).z).toBeCloseTo(Math.SQRT1_2);
+    expect(dodgeDirection(0, 0, 90).x).toBeCloseTo(1);
+    expect(dodgeDirection(0, 0, 90).z).toBeCloseTo(0);
+  });
+
+  it("lets invulnerability avoid an otherwise valid lunge", () => {
+    const mob = { x: 0, y: 8, z: 0 };
+    const player = { x: 0, y: 8, z: 1.5 };
+    expect(canMobLungeHit(mob, player, 0, 1000)).toBe(true);
+    expect(canMobLungeHit(mob, player, 1200, 1000)).toBe(false);
   });
 });

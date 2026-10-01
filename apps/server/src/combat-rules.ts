@@ -5,6 +5,25 @@ export interface Combatant extends Position {
   health: number;
 }
 
+export function dodgeDirection(strafe: number, forward: number, yaw: number): { x: number; z: number } {
+  const length = Math.hypot(strafe, forward);
+  if (length > 0.05) return { x: strafe / length, z: forward / length };
+  const radians = yaw * Math.PI / 180;
+  return { x: Math.sin(radians), z: Math.cos(radians) };
+}
+
+export function canMobLungeHit(
+  mob: Position,
+  player: Position,
+  invulnerableUntil: number,
+  now: number,
+  range = 2.1,
+): boolean {
+  return now >= invulnerableUntil
+    && Math.abs(player.y - mob.y) <= 1.75
+    && Math.hypot(player.x - mob.x, player.z - mob.z) <= range;
+}
+
 export function selectAggroTarget(
   mob: Position,
   players: readonly Combatant[],

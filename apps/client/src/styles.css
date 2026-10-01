@@ -68,6 +68,19 @@ button { font: inherit; }
 #player-health > div { height: 8px; overflow: hidden; border-radius: 999px; background: rgb(78 19 17 / 85%); }
 #player-health-fill { display: block; width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff5c45, #ff9d68); transition: width 180ms ease; }
 #player-health-value { color: #ffd4ca; font-variant-numeric: tabular-nums; }
+#player-stamina {
+  display: grid;
+  grid-template-columns: auto 1fr 28px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  color: #9edfff;
+  font-size: .68rem;
+  font-weight: 900;
+}
+#player-stamina > div { height: 6px; overflow: hidden; border-radius: 999px; background: rgb(15 48 66 / 85%); }
+#player-stamina-fill { display: block; width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #35aedd, #8ff2ff); transition: width 100ms linear; }
+#player-stamina-value { color: #c6f4ff; font-variant-numeric: tabular-nums; text-align: right; }
 #exit-guide {
   margin-top: 9px !important;
   padding: 7px 9px;
@@ -151,10 +164,17 @@ button { font: inherit; }
 }
 #combat-feedback.show { animation: combat-feedback 620ms ease-out; }
 #combat-feedback.hurt { color: #ff9a86; font-size: 1.2rem; }
+#combat-feedback.dodge { color: #9cecff; text-shadow: 0 2px 4px #000, 0 0 18px #35bce9; }
 @keyframes combat-feedback {
   0% { opacity: 0; transform: translate(-50%, 8px) scale(.85); }
   18% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
   100% { opacity: 0; transform: translate(-50%, -20px) scale(1); }
+}
+
+#dodge-button {
+  border-color: rgb(79 201 238 / 45%) !important;
+  background: rgb(17 76 98 / 82%) !important;
+  color: #c5f3ff !important;
 }
 
 #performance-toggle {
@@ -258,7 +278,8 @@ button { font: inherit; }
   }
 
   #joystick-zone,
-  #mine-button { pointer-events: auto; touch-action: none; user-select: none; }
+  #mine-button,
+  #dodge-button { pointer-events: auto; touch-action: none; user-select: none; }
 
   #joystick-zone {
     position: relative;
@@ -284,7 +305,8 @@ button { font: inherit; }
     transform: translate(-50%, -50%);
   }
 
-  #mine-button {
+  #mine-button,
+  #dodge-button {
     width: 92px;
     height: 92px;
     border: 2px solid rgb(255 226 131 / 62%);
@@ -300,6 +322,7 @@ button { font: inherit; }
   }
 
   #mine-button:active { transform: scale(.94); background: rgb(184 111 24 / 92%); }
+  #dodge-button:active { transform: scale(.94); background: rgb(23 111 143 / 92%) !important; }
   #mine-button[data-mode="combat"] {
     border-color: rgb(255 126 106 / 70%);
     background: rgb(135 35 27 / 88%);
@@ -312,5 +335,6 @@ button { font: inherit; }
   #hud h1 { margin-bottom: 4px; font-size: 1rem; }
   #target { margin-top: 5px !important; }
   #joystick-zone { width: 96px; height: 96px; }
-  #mine-button { width: 78px; height: 78px; }
+  #mine-button,
+  #dodge-button { width: 72px; height: 72px; font-size: .78rem; }
 }

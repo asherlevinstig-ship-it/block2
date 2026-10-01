@@ -18,12 +18,15 @@
       <div id="player-health" aria-label="Player health">
         <span>HP</span><div><i id="player-health-fill"></i></div><strong id="player-health-value">5 / 5</strong>
       </div>
+      <div id="player-stamina" aria-label="Player stamina">
+        <span>ST</span><div><i id="player-stamina-fill"></i></div><strong id="player-stamina-value">100</strong>
+      </div>
       <p id="exit-guide" hidden>EXIT ↑ · FOLLOW THE GOLD BLOCKS</p>
       <div id="mode-toggle" role="group" aria-label="Primary action mode">
         <button type="button" data-mode="build" aria-pressed="true">BUILD</button>
         <button type="button" data-mode="combat" aria-pressed="false">COMBAT</button>
       </div>
-      <p class="controls">WASD to move · Q changes mode · E or click acts</p>
+      <p class="controls">WASD move · Space dodge · Q mode · E/click acts</p>
     </section>
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="combat-feedback" aria-live="polite"></div>
@@ -52,6 +55,7 @@
     <section id="touch-controls" aria-label="Touch controls">
       <div id="joystick-zone" aria-label="Movement joystick"><div id="joystick-knob"></div></div>
       <button id="mine-button" type="button" data-mode="build">Mine</button>
+      <button id="dodge-button" type="button">Dodge</button>
     </section>
     <script type="module" src="/src/main.ts"></script>
   </body>

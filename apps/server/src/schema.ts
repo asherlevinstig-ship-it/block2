@@ -9,6 +9,10 @@ export const PlayerState = schema({
   actionSequence: t.int32().default(0),
   health: t.int8().default(5),
   maxHealth: t.int8().default(5),
+  stamina: t.float32().default(100),
+  maxStamina: t.float32().default(100),
+  dodgeSequence: t.int32().default(0),
+  invulnerableUntil: t.float64().default(0),
   name: t.string().default("Explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
@@ -23,6 +27,10 @@ export const MobState = schema({
   hitSequence: t.int32().default(0),
   actionSequence: t.int32().default(0),
   yaw: t.float32().default(0),
+  combatState: t.string().default("idle"),
+  stateUntil: t.float64().default(0),
+  targetId: t.string().default(""),
+  staggerSequence: t.int32().default(0),
   respawnAt: t.float64().default(0),
   name: t.string().default("Moss Crawler"),
 }, "MobState");

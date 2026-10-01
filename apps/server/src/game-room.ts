@@ -1,12 +1,14 @@
 import { Client, Room } from "@colyseus/core";
 import {
   AttackRequestSchema,
+  DodgeRequestSchema,
   MineBlockRequestSchema,
   MoveRequestSchema,
   type ActionRejected,
   type BlockChanged,
   type ChunkSnapshot,
   type CombatHit,
+  type CombatStagger,
   type PlayerHit,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
@@ -27,7 +29,7 @@ import {
 } from "@blockcraft/voxel-world";
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { attackRejectionReason, miningRejectionReason, movementRejectionReason, selectAttackTarget } from "./action-rules.js";
-import { pursueTarget, selectAggroTarget } from "./combat-rules.js";
+import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -49,6 +51,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly verticalVelocities = new Map<string, number>();
   private readonly lastAttackAt = new Map<string, number>();
   private readonly lastMobAttackAt = new Map<string, number>();
+  private readonly lastDodgeAt = new Map<string, number>();
   private worldSeed = "blockcraft-dev";
 
   override onCreate(): void {
@@ -65,6 +68,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("move", (client, payload) => this.handleMove(client, payload));
     this.onMessage("mine", (client, payload) => this.handleMine(client, payload));
     this.onMessage("attack", (client, payload) => this.handleAttack(client, payload));
+    this.onMessage("dodge", (client, payload) => this.handleDodge(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -90,6 +94,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.movementRateWindows.delete(client.sessionId);
     this.verticalVelocities.delete(client.sessionId);
     this.lastAttackAt.delete(client.sessionId);
+    this.lastDodgeAt.delete(client.sessionId);
   }
 
   private chunkKey(chunkX: number, chunkZ: number): string {
@@ -168,8 +173,56 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.health = mob.maxHealth;
         mob.alive = true;
         mob.respawnAt = 0;
+        mob.combatState = "idle";
+        mob.stateUntil = 0;
+        mob.targetId = "";
       }
       if (!mob.alive) continue;
+      if (mob.combatState === "stagger" || mob.combatState === "recover") {
+        if (now < mob.stateUntil) continue;
+        mob.combatState = "idle";
+        mob.stateUntil = 0;
+      }
+      if (mob.combatState === "windup") {
+        const targetPlayer = this.state.players.get(mob.targetId);
+        if (targetPlayer) {
+          mob.yaw = Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI;
+        }
+        if (now < mob.stateUntil) continue;
+        mob.combatState = "recover";
+        mob.stateUntil = now + 450;
+        mob.actionSequence += 1;
+        this.lastMobAttackAt.set(mobId, now);
+        if (!targetPlayer) continue;
+        const deltaX = targetPlayer.x - mob.x;
+        const deltaZ = targetPlayer.z - mob.z;
+        const distance = Math.hypot(deltaX, deltaZ);
+        if (distance > 0.001) {
+          const lungeDistance = Math.min(0.85, Math.max(0, distance - 0.8));
+          mob.x += deltaX / distance * lungeDistance;
+          mob.z += deltaZ / distance * lungeDistance;
+        }
+        if (!canMobLungeHit(mob, targetPlayer, targetPlayer.invulnerableUntil, now)) continue;
+        targetPlayer.health = Math.max(0, targetPlayer.health - 1);
+        const defeated = targetPlayer.health === 0;
+        const hit: PlayerHit = { mobId, playerId: mob.targetId, damage: 1, health: targetPlayer.health, defeated };
+        this.broadcast("combat:player-hit", hit);
+        if (defeated) {
+          const spawn = this.spawnPoint();
+          targetPlayer.x = spawn.x;
+          targetPlayer.y = spawn.y;
+          targetPlayer.z = spawn.z;
+          targetPlayer.health = targetPlayer.maxHealth;
+          targetPlayer.stamina = targetPlayer.maxStamina;
+          this.movementInputs.set(mob.targetId, { request: idleMovementInput(), receivedAt: now });
+          this.verticalVelocities.set(mob.targetId, 0);
+          mob.x = 13.5;
+          mob.y = 8;
+          mob.z = 11.5;
+          mob.combatState = "recover";
+        }
+        continue;
+      }
       const players = [...this.state.players.entries()].map(([id, player]) => ({
         id,
         x: player.x,
@@ -191,28 +244,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.yaw = pursuit.yaw;
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
       if (!pursuit.inAttackRange || now - lastAttackAt < 1100) continue;
-      const player = this.state.players.get(target.id);
-      if (!player) continue;
-      this.lastMobAttackAt.set(mobId, now);
-      mob.actionSequence += 1;
-      player.health = Math.max(0, player.health - 1);
-      const defeated = player.health === 0;
-      const hit: PlayerHit = { mobId, playerId: target.id, damage: 1, health: player.health, defeated };
-      this.broadcast("combat:player-hit", hit);
-      if (defeated) {
-        const spawn = this.spawnPoint();
-        player.x = spawn.x;
-        player.y = spawn.y;
-        player.z = spawn.z;
-        player.health = player.maxHealth;
-        this.movementInputs.set(target.id, { request: idleMovementInput(), receivedAt: now });
-        this.verticalVelocities.set(target.id, 0);
-        mob.x = 13.5;
-        mob.y = 8;
-        mob.z = 11.5;
-      }
+      mob.combatState = "windup";
+      mob.stateUntil = now + 650;
+      mob.targetId = target.id;
     }
     for (const [sessionId, player] of this.state.players) {
+      player.stamina = Math.min(player.maxStamina, player.stamina + 18 * deltaTime);
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
@@ -238,6 +275,31 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.z = next.z;
       player.lastProcessedInput = input.sequence;
     }
+  }
+
+  private handleDodge(client: Client, payload: unknown): void {
+    const parsed = DodgeRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "dodge", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const now = Date.now();
+    const lastDodgeAt = this.lastDodgeAt.get(client.sessionId) ?? 0;
+    if (now - lastDodgeAt < 350) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "rate" });
+    if (player.stamina < 35) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "stamina" });
+    const direction = dodgeDirection(parsed.data.strafe, parsed.data.forward, parsed.data.yaw);
+    const next = resolvePlayerMotion(
+      { x: player.x, y: player.y, z: player.z },
+      { x: direction.x * 1.8, y: 0, z: direction.z * 1.8 },
+      this.readWorldBlock,
+    );
+    player.x = next.x;
+    player.y = next.y;
+    player.z = next.z;
+    player.yaw = parsed.data.yaw;
+    player.stamina -= 35;
+    player.invulnerableUntil = now + 320;
+    player.dodgeSequence += 1;
+    this.lastDodgeAt.set(client.sessionId, now);
   }
 
   private handleMine(client: Client, payload: unknown): void {
@@ -289,9 +351,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!mob || !mob.alive) return;
     mob.health = Math.max(0, mob.health - 1);
     mob.hitSequence += 1;
+    if (mob.combatState === "windup") {
+      mob.combatState = "stagger";
+      mob.stateUntil = now + 900;
+      mob.targetId = "";
+      mob.staggerSequence += 1;
+      const stagger: CombatStagger = { attackerId: client.sessionId, mobId: target.id, durationMs: 900 };
+      this.broadcast("combat:stagger", stagger);
+    }
     if (mob.health === 0) {
       mob.alive = false;
       mob.respawnAt = now + 5000;
+      mob.combatState = "idle";
+      mob.stateUntil = 0;
+      mob.targetId = "";
     }
     const hit: CombatHit = {
       attackerId: client.sessionId,
