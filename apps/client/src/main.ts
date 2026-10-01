@@ -1493,10 +1493,14 @@ async function connect(): Promise<void> {
   const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
-  const client = new Client(endpoint);
   const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
   room = await retryConnection(
-    () => client.joinOrCreate(WORLD_ROOM, { name: "Explorer", ...(qaSpawn === "cave" ? { qaSpawn } : {}) }),
+    signal => {
+      const client = new Client(endpoint, {
+        fetchFn: (input, init) => fetch(input, { ...init, signal }),
+      });
+      return client.joinOrCreate(WORLD_ROOM, { name: "Explorer", ...(qaSpawn === "cave" ? { qaSpawn } : {}) });
+    },
     (attempt, delay) => {
       status.textContent = `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/5)`;
     },

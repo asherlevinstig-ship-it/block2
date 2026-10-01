@@ -1,7 +1,7 @@
 export const CONNECTION_RETRY_DELAYS_MS = [0, 1000, 2000, 4000, 8000] as const;
 
 export async function retryConnection<T>(
-  operation: () => Promise<T>,
+  operation: (signal: AbortSignal) => Promise<T>,
   onRetry: (attempt: number, delayMilliseconds: number, error: unknown) => void,
   delays: readonly number[] = CONNECTION_RETRY_DELAYS_MS,
   attemptTimeoutMilliseconds = 10000,
@@ -15,12 +15,16 @@ export async function retryConnection<T>(
     }
     try {
       let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+      const controller = new AbortController();
       try {
         return await Promise.race([
-          operation(),
+          operation(controller.signal),
           new Promise<never>((_resolve, reject) => {
             timeoutId = globalThis.setTimeout(
-              () => reject(new Error("Matchmaking timed out")),
+              () => {
+                controller.abort();
+                reject(new Error("Matchmaking timed out"));
+              },
               attemptTimeoutMilliseconds,
             );
           }),
