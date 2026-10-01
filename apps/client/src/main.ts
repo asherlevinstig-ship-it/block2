@@ -47,6 +47,7 @@ import {
 } from "./player-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
 import { createVoxelTexturePixels, type VoxelTextureKind } from "./voxel-textures.js";
+import { retryConnection } from "./connection-retry.js";
 import {
   PRIMARY_ACTION_DURATION_MS,
   advanceLocomotionAnimation,
@@ -1307,7 +1308,12 @@ async function connect(): Promise<void> {
     || (localHost ? "ws://localhost:2567" : "wss://us-mia-ea26ba04.colyseus.cloud");
   const client = new Client(endpoint);
   const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
-  room = await client.joinOrCreate(WORLD_ROOM, { name: "Explorer", ...(qaSpawn === "cave" ? { qaSpawn } : {}) });
+  room = await retryConnection(
+    () => client.joinOrCreate(WORLD_ROOM, { name: "Explorer", ...(qaSpawn === "cave" ? { qaSpawn } : {}) }),
+    (attempt, delay) => {
+      status.textContent = `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/5)`;
+    },
+  );
   bindPlayers(room);
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
