@@ -30,3 +30,9 @@ export function isVoxelHiddenForPlayer(x: number, y: number, z: number, cutaway:
   const distanceFromSightline = Math.abs(dx * cameraDirectionZ - dz * cameraDirectionX);
   return distanceTowardCamera > 0.25 && distanceTowardCamera < 10 && distanceFromSightline < 2.25;
 }
+
+export function isBelowSurroundingSurface(playerY: number, surroundingSurfaceHeights: readonly number[]): boolean {
+  const comparableHeights = surroundingSurfaceHeights.filter(height => Number.isFinite(height) && height >= 0);
+  const columnsAtOrAboveFeet = comparableHeights.filter(height => height >= Math.floor(playerY)).length;
+  return columnsAtOrAboveFeet >= 3;
+}

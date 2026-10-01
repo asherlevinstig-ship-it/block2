@@ -34,7 +34,11 @@ import {
   trimRemoteSnapshots,
   type RemoteSnapshot,
 } from "./movement-network.js";
-import { isVoxelHiddenForPlayer, type PlayerCutaway } from "./player-visibility.js";
+import {
+  isBelowSurroundingSurface,
+  isVoxelHiddenForPlayer,
+  type PlayerCutaway,
+} from "./player-visibility.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -543,27 +547,52 @@ function hasCeilingAbove(position: pc.Vec3): boolean {
   return false;
 }
 
+function highestLoadedSolidY(x: number, z: number): number {
+  for (let y = CHUNK_HEIGHT - 1; y >= 0; y -= 1) {
+    if (readWorldBlock(x, y, z) !== Block.Air) return y;
+  }
+  return -1;
+}
+
+function isInOpenExcavation(position: pc.Vec3): boolean {
+  const centerX = Math.floor(position.x);
+  const centerZ = Math.floor(position.z);
+  const surroundingHeights: number[] = [];
+  for (const offsetX of [-3, 0, 3]) {
+    for (const offsetZ of [-3, 0, 3]) {
+      if (offsetX === 0 && offsetZ === 0) continue;
+      surroundingHeights.push(highestLoadedSolidY(centerX + offsetX, centerZ + offsetZ));
+    }
+  }
+  return isBelowSurroundingSurface(position.y, surroundingHeights);
+}
+
 function updateUndergroundPresentation(position: pc.Vec3): void {
   const underground = hasCeilingAbove(position);
-  const nextX = underground ? Math.round(position.x) : 0;
-  const nextY = underground ? Math.round(position.y * 2) / 2 : 0;
-  const nextZ = underground ? Math.round(position.z) : 0;
-  const nextKey = underground ? `${nextX}:${nextY}:${nextZ}` : "surface";
+  const excavating = !underground && isInOpenExcavation(position);
+  const visibilityCutaway = underground || excavating;
+  const nextX = visibilityCutaway ? Math.round(position.x) : 0;
+  const nextY = visibilityCutaway ? Math.round(position.y * 2) / 2 : 0;
+  const nextZ = visibilityCutaway ? Math.round(position.z) : 0;
+  const mode = underground ? "underground" : excavating ? "excavation" : "surface";
+  const nextKey = visibilityCutaway ? `${mode}:${nextX}:${nextY}:${nextZ}` : "surface";
   caveLight.enabled = underground;
-  if (localPlayerSilhouette) localPlayerSilhouette.enabled = underground;
+  if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
   if (light.light) light.light.intensity = underground ? 0.5 : 1.35;
   app.scene.ambientLight = underground ? new pc.Color(0.16, 0.18, 0.2) : new pc.Color(0.36, 0.42, 0.38);
   if (nextKey === cutawayStateKey) return;
   cutawayStateKey = nextKey;
-  playerCutaway.active = underground;
+  playerCutaway.active = visibilityCutaway;
   playerCutaway.playerX = nextX;
   playerCutaway.playerY = nextY;
   playerCutaway.playerZ = nextZ;
   for (const chunk of chunks.values()) rebuildChunk(chunk);
   status.textContent = underground
     ? `Underground · depth ${Math.max(0, 6 - Math.floor(position.y))} · roof cutaway active`
-    : "Surface · find the stone hill east of spawn and mine through its exposed entrance.";
+    : excavating
+      ? `Excavation · depth ${Math.max(1, 8 - Math.floor(position.y))} · player visibility active`
+      : "Surface · find the stone hill east of spawn and mine through its exposed entrance.";
 }
 
 function requestMine(): void {

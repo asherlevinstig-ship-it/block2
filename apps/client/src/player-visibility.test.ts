@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isVoxelHiddenForPlayer, type PlayerCutaway } from "./player-visibility.js";
+import {
+  isBelowSurroundingSurface,
+  isVoxelHiddenForPlayer,
+  type PlayerCutaway,
+} from "./player-visibility.js";
 
 const underground: PlayerCutaway = {
   active: true,
@@ -31,5 +35,14 @@ describe("underground player visibility", () => {
 
   it("does not alter terrain on the surface", () => {
     expect(isVoxelHiddenForPlayer(8, 8, 8, { ...underground, active: false })).toBe(false);
+  });
+
+  it("activates after stepping down into an open excavation", () => {
+    expect(isBelowSurroundingSurface(7, [7, 7, 7, 7, 6, 6, 6, 6])).toBe(true);
+    expect(isBelowSurroundingSurface(8, [7, 7, 7, 7, 7, 7, 7, 7])).toBe(false);
+  });
+
+  it("ignores an isolated tall column beside a surface player", () => {
+    expect(isBelowSurroundingSurface(8, [10, 7, 7, 7, 7, 7, 7, 7])).toBe(false);
   });
 });
