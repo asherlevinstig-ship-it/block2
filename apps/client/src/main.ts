@@ -41,7 +41,7 @@ import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
-  shouldReleaseDepthSlice,
+  restoredSliceHeight,
   shouldUseDepthSlice,
   type PlayerCutaway,
 } from "./player-visibility.js";
@@ -635,6 +635,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   cutawaySliceY = null;
   surfaceReferenceY = initialPosition.y;
   surfaceReturnStartedAt = null;
+  surfaceRestoreStartSliceY = null;
+  undergroundLightingBlend = 0;
   exitTrail.enabled = false;
   exitGuide.hidden = true;
   worldReady = true;
@@ -704,6 +706,8 @@ let cutawayStateKey = "surface";
 let cutawaySliceY: number | null = null;
 let surfaceReferenceY: number | null = null;
 let surfaceReturnStartedAt: number | null = null;
+let surfaceRestoreStartSliceY: number | null = null;
+let undergroundLightingBlend = 0;
 let smoothedMovement = { x: 0, z: 0 };
 let lastSentMovement = { x: 0, z: 0 };
 let lastMovementDebugUpdateAt = 0;
@@ -905,7 +909,7 @@ function estimatedSurfaceY(position: pc.Vec3): number {
   return Math.max(position.y, surfaceLevels[Math.floor(surfaceLevels.length / 2)] ?? position.y);
 }
 
-function updateUndergroundPresentation(position: pc.Vec3): void {
+function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const underground = hasCeilingAbove(position);
   const excavating = !underground && isInOpenExcavation(position);
   if (surfaceReferenceY === null) surfaceReferenceY = position.y;
@@ -919,36 +923,63 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
     underground,
     excavating,
   );
+  let atSurface = false;
+  let surfaceDurationMs = 0;
   if (cutawaySliceY !== null) {
     const supported = isPlayerSupported(readCollisionWorldBlock, position.x, position.y, position.z);
-    const atSurface = !underground && supported && position.y >= surfaceReferenceY - 0.1;
-    if (atSurface) surfaceReturnStartedAt ??= performance.now();
-    else surfaceReturnStartedAt = null;
-    const surfaceDurationMs = surfaceReturnStartedAt === null ? 0 : performance.now() - surfaceReturnStartedAt;
-    if (shouldReleaseDepthSlice(position.y, surfaceReferenceY, underground, supported, surfaceDurationMs)) {
-      visibilityCutaway = false;
+    atSurface = !underground && supported && position.y >= surfaceReferenceY - 0.1;
+    if (atSurface) {
+      if (surfaceReturnStartedAt === null) {
+        surfaceReturnStartedAt = performance.now();
+        surfaceRestoreStartSliceY = cutawaySliceY;
+      }
+      surfaceDurationMs = performance.now() - surfaceReturnStartedAt;
+    } else {
       surfaceReturnStartedAt = null;
+      surfaceRestoreStartSliceY = null;
     }
   } else {
     surfaceReturnStartedAt = null;
+    surfaceRestoreStartSliceY = null;
   }
-  const nextSliceY = visibilityCutaway ? loweredSliceHeight(cutawaySliceY, position.y) : null;
+  let nextSliceY = visibilityCutaway ? loweredSliceHeight(cutawaySliceY, position.y) : null;
+  if (visibilityCutaway && atSurface && surfaceRestoreStartSliceY !== null) {
+    nextSliceY = restoredSliceHeight(surfaceRestoreStartSliceY, surfaceReferenceY, surfaceDurationMs);
+    if (nextSliceY === null) {
+      visibilityCutaway = false;
+      surfaceReturnStartedAt = null;
+      surfaceRestoreStartSliceY = null;
+    }
+  }
   const nextKey = nextSliceY === null ? "surface" : `slice:${nextSliceY}`;
-  caveLight.enabled = underground;
+  const lightingTarget = visibilityCutaway ? 1 : 0;
+  const lightingResponse = 1 - Math.exp(-Math.max(0, dt) * 5);
+  undergroundLightingBlend += (lightingTarget - undergroundLightingBlend) * lightingResponse;
+  if (Math.abs(lightingTarget - undergroundLightingBlend) < 0.001) undergroundLightingBlend = lightingTarget;
+  caveLight.enabled = undergroundLightingBlend > 0.001;
   if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
   exitTrail.enabled = visibilityCutaway;
   exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
-  if (light.light) light.light.intensity = underground ? 0.5 : 1.35;
-  app.scene.ambientLight = underground ? new pc.Color(0.16, 0.18, 0.2) : new pc.Color(0.36, 0.42, 0.38);
+  if (light.light) light.light.intensity = 1.35 + (0.5 - 1.35) * undergroundLightingBlend;
+  app.scene.ambientLight = new pc.Color(
+    0.36 + (0.16 - 0.36) * undergroundLightingBlend,
+    0.42 + (0.18 - 0.42) * undergroundLightingBlend,
+    0.38 + (0.2 - 0.38) * undergroundLightingBlend,
+  );
   if (nextKey === cutawayStateKey) return;
+  logMovementEvent(
+    `SLICE ${cutawayStateKey} → ${nextKey} y=${position.y.toFixed(3)} underground=${underground} return=${Math.round(surfaceDurationMs)}ms`,
+  );
   cutawayStateKey = nextKey;
   cutawaySliceY = nextSliceY;
   if (!visibilityCutaway) surfaceReferenceY = position.y;
   playerCutaway.active = visibilityCutaway;
   playerCutaway.sliceY = nextSliceY ?? CHUNK_HEIGHT;
   for (const chunk of chunks.values()) rebuildChunk(chunk);
-  status.textContent = underground
+  status.textContent = atSurface && visibilityCutaway
+    ? `Returning to surface · restoring slice ${nextSliceY}`
+    : underground
     ? `Underground · slice ${nextSliceY ?? "off"} · lowers only when descending`
     : excavating
       ? `Excavation · slice ${nextSliceY ?? "off"} · lowers only when descending`
@@ -1176,7 +1207,7 @@ app.on("update", (dt: number) => {
   const bodyY = localPlayerRig.root.getLocalPosition().y;
   const renderedPlayerPosition = new pc.Vec3(player.x, player.y + localVisualVerticalOffset + bodyY, player.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
-  updateUndergroundPresentation(player);
+  updateUndergroundPresentation(player, frameTime);
   updateTarget();
 
   const now = performance.now();

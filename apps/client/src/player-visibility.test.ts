@@ -3,6 +3,7 @@ import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
+  restoredSliceHeight,
   shouldReleaseDepthSlice,
   shouldUseDepthSlice,
   type PlayerCutaway,
@@ -71,5 +72,14 @@ describe("underground player visibility", () => {
     expect(shouldReleaseDepthSlice(8, 8, false, true, 1200)).toBe(true);
     expect(shouldReleaseDepthSlice(8, 8, true, true, 2000)).toBe(false);
     expect(shouldReleaseDepthSlice(8, 8, false, false, 2000)).toBe(false);
+  });
+
+  it("restores an underground slice one voxel layer at a time", () => {
+    expect(restoredSliceHeight(3, 8, 200)).toBe(3);
+    expect(restoredSliceHeight(3, 8, 240)).toBe(4);
+    expect(restoredSliceHeight(3, 8, 420)).toBe(5);
+    expect(restoredSliceHeight(3, 8, 600)).toBe(6);
+    expect(restoredSliceHeight(3, 8, 780)).toBe(7);
+    expect(restoredSliceHeight(3, 8, 960)).toBeNull();
   });
 });

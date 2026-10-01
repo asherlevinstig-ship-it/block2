@@ -30,6 +30,20 @@ export function shouldReleaseDepthSlice(
   return !underground && supported && playerY >= surfaceY - 0.1 && surfaceDurationMs >= releaseDelayMs;
 }
 
+export function restoredSliceHeight(
+  startingSliceY: number,
+  surfaceY: number,
+  surfaceDurationMs: number,
+  holdMs = 240,
+  layerDurationMs = 180,
+): number | null {
+  if (surfaceDurationMs < holdMs) return startingSliceY;
+  const restoredLayers = Math.floor((surfaceDurationMs - holdMs) / layerDurationMs) + 1;
+  const nextSliceY = startingSliceY + restoredLayers;
+  const surfaceSliceY = Math.ceil(surfaceY);
+  return nextSliceY >= surfaceSliceY ? null : nextSliceY;
+}
+
 export function isVoxelHiddenForPlayer(_x: number, y: number, _z: number, cutaway: PlayerCutaway): boolean {
   return cutaway.active && y >= cutaway.sliceY;
 }
