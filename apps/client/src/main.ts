@@ -37,8 +37,7 @@ import {
 import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
-  stableCutawayAnchor,
-  type CutawayAnchor,
+  loweredSliceHeight,
   type PlayerCutaway,
 } from "./player-visibility.js";
 import "./styles.css";
@@ -140,11 +139,7 @@ interface ClientChunk {
 const chunks = new Map<string, ClientChunk>();
 const playerCutaway: PlayerCutaway = {
   active: false,
-  playerX: 0,
-  playerY: 0,
-  playerZ: 0,
-  cameraOffsetX: CAMERA_OFFSET_X,
-  cameraOffsetZ: CAMERA_OFFSET_Z,
+  sliceY: CHUNK_HEIGHT,
 };
 
 function chunkKey(chunkX: number, chunkZ: number): string {
@@ -457,9 +452,10 @@ function renderBootstrap(payload: WorldBootstrap): void {
   cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
   localVerticalVelocity = 0;
   playerCutaway.active = false;
+  playerCutaway.sliceY = CHUNK_HEIGHT;
   cutawayStateKey = "surface";
-  cutawayMode = "surface";
-  cutawayAnchor = null;
+  cutawaySliceY = null;
+  surfaceReferenceY = initialPosition.y;
   worldReady = true;
   status.textContent = "Connected. Walk to a corner of the hill, point at a nearby block, then mine.";
 }
@@ -524,9 +520,8 @@ let moveSequence = 0;
 let mineSequence = 0;
 let localVerticalVelocity = 0;
 let cutawayStateKey = "surface";
-let cutawayMode: "surface" | "excavation" | "underground" = "surface";
-let cutawayAnchor: CutawayAnchor | null = null;
-const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let cutawaySliceY: number | null = null;
+let surfaceReferenceY: number | null = null;
 let smoothedMovement = { x: 0, z: 0 };
 
 function resetMovementControls(): void {
@@ -577,17 +572,11 @@ function isInOpenExcavation(position: pc.Vec3): boolean {
 function updateUndergroundPresentation(position: pc.Vec3): void {
   const underground = hasCeilingAbove(position);
   const excavating = !underground && isInOpenExcavation(position);
-  const visibilityCutaway = underground || excavating;
-  const mode: typeof cutawayMode = underground ? "underground" : excavating ? "excavation" : "surface";
-  const modeChanged = mode !== cutawayMode;
-  const nextAnchor = visibilityCutaway
-    ? stableCutawayAnchor(
-        modeChanged ? null : cutawayAnchor,
-        { x: position.x, y: position.y, z: position.z },
-        prefersReducedMotion ? 5 : 2,
-      )
-    : null;
-  const nextKey = nextAnchor ? `${mode}:${nextAnchor.x}:${nextAnchor.y}:${nextAnchor.z}` : "surface";
+  if (surfaceReferenceY === null) surfaceReferenceY = position.y;
+  const descendedFromSurface = position.y < surfaceReferenceY - 0.65;
+  const visibilityCutaway = underground || (excavating && descendedFromSurface);
+  const nextSliceY = visibilityCutaway ? loweredSliceHeight(cutawaySliceY, position.y) : null;
+  const nextKey = nextSliceY === null ? "surface" : `slice:${nextSliceY}`;
   caveLight.enabled = underground;
   if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
@@ -595,17 +584,15 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
   app.scene.ambientLight = underground ? new pc.Color(0.16, 0.18, 0.2) : new pc.Color(0.36, 0.42, 0.38);
   if (nextKey === cutawayStateKey) return;
   cutawayStateKey = nextKey;
-  cutawayMode = mode;
-  cutawayAnchor = nextAnchor;
+  cutawaySliceY = nextSliceY;
+  if (!visibilityCutaway) surfaceReferenceY = position.y;
   playerCutaway.active = visibilityCutaway;
-  playerCutaway.playerX = nextAnchor?.x ?? 0;
-  playerCutaway.playerY = nextAnchor?.y ?? 0;
-  playerCutaway.playerZ = nextAnchor?.z ?? 0;
+  playerCutaway.sliceY = nextSliceY ?? CHUNK_HEIGHT;
   for (const chunk of chunks.values()) rebuildChunk(chunk);
   status.textContent = underground
-    ? `Underground · depth ${Math.max(0, 6 - Math.floor(position.y))} · roof cutaway active`
+    ? `Underground · slice ${nextSliceY ?? "off"} · lowers only when descending`
     : excavating
-      ? `Excavation · depth ${Math.max(1, 8 - Math.floor(position.y))} · player visibility active`
+      ? `Excavation · slice ${nextSliceY ?? "off"} · lowers only when descending`
       : "Surface · find the stone hill east of spawn and mine through its exposed entrance.";
 }
 

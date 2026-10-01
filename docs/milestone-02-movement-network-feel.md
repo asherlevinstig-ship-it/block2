@@ -17,11 +17,10 @@ Make movement dependable before adding combat. Local control must remain respons
 - immediate directional steering so turns do not carry momentum from the previous direction
 - a visible facing marker on local and remote player capsules
 - player visuals sized to the shared collision height/radius and offset above their feet-position roots so step-up never embeds the capsule in terrain
-- underground roof opening plus a camera-facing occlusion corridor that preserves the supporting floor
+- a horizontal sliced-world view that removes every voxel at and above the active depth while preserving the supporting floor
 - a subtle depth-independent underground player silhouette as a final visibility fallback
-- the same visibility treatment activates in open-air shafts and trenches when the player drops below surrounding ground level
-- cutaway anchoring uses a horizontal dead zone, recentering only at its boundary or on height changes instead of rebuilding every step
-- operating-system reduced-motion preference expands the dead zone further
+- the slice activates in caves or after the player genuinely descends into an open-air shaft or trench
+- underground visibility uses a world-space horizontal voxel slice with no X/Z tracking; it lowers only when the player descends and leaves surface hills intact
 - a 200 ms server timeout that converts stale held input to idle input
 - a 30-message-per-second movement rate limit
 - keyboard and joystick reset on browser blur or page visibility loss

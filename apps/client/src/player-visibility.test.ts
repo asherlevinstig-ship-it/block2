@@ -2,17 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
-  stableCutawayAnchor,
+  loweredSliceHeight,
   type PlayerCutaway,
 } from "./player-visibility.js";
 
 const underground: PlayerCutaway = {
   active: true,
-  playerX: 8.5,
-  playerY: 4,
-  playerZ: 8.5,
-  cameraOffsetX: 16,
-  cameraOffsetZ: 16,
+  sliceY: 5,
 };
 
 describe("underground player visibility", () => {
@@ -21,17 +17,10 @@ describe("underground player visibility", () => {
     expect(isVoxelHiddenForPlayer(10, 3, 10, underground)).toBe(false);
   });
 
-  it("opens the roof above the player", () => {
+  it("removes every block at and above the selected slice", () => {
     expect(isVoxelHiddenForPlayer(8, 5, 8, underground)).toBe(true);
-  });
-
-  it("clears walls between the camera and player", () => {
-    expect(isVoxelHiddenForPlayer(10, 4, 10, underground)).toBe(true);
-    expect(isVoxelHiddenForPlayer(5, 4, 5, underground)).toBe(false);
-  });
-
-  it("keeps terrain away from the viewing corridor", () => {
-    expect(isVoxelHiddenForPlayer(14, 4, 7, underground)).toBe(false);
+    expect(isVoxelHiddenForPlayer(100, 9, -100, underground)).toBe(true);
+    expect(isVoxelHiddenForPlayer(10, 4, 10, underground)).toBe(false);
   });
 
   it("does not alter terrain on the surface", () => {
@@ -47,21 +36,19 @@ describe("underground player visibility", () => {
     expect(isBelowSurroundingSurface(8, [10, 7, 7, 7, 7, 7, 7, 7])).toBe(false);
   });
 
-  it("keeps the cutaway fixed while the player remains inside its dead zone", () => {
-    const anchor = { x: 8, y: 4, z: 8 };
-    expect(stableCutawayAnchor(anchor, { x: 9.2, y: 4, z: 8.9 })).toBe(anchor);
+  it("keeps the slice fixed while the player stays at the same height", () => {
+    expect(loweredSliceHeight(5, 4.4)).toBe(5);
   });
 
-  it("recentres after the player crosses the dead-zone boundary", () => {
-    expect(stableCutawayAnchor({ x: 8, y: 4, z: 8 }, { x: 10.4, y: 4, z: 8.2 })).toEqual({ x: 10, y: 4, z: 8 });
+  it("does not raise the slice when the player climbs", () => {
+    expect(loweredSliceHeight(5, 8)).toBe(5);
   });
 
-  it("recentres immediately when the player changes height", () => {
-    expect(stableCutawayAnchor({ x: 8, y: 4, z: 8 }, { x: 8.2, y: 3, z: 8.1 })).toEqual({ x: 8, y: 3, z: 8 });
+  it("lowers the slice by whole voxel levels as the player descends", () => {
+    expect(loweredSliceHeight(5, 2.4)).toBe(3);
   });
 
-  it("supports a larger reduced-motion dead zone", () => {
-    const anchor = { x: 8, y: 4, z: 8 };
-    expect(stableCutawayAnchor(anchor, { x: 11.5, y: 4, z: 8 }, 5)).toBe(anchor);
+  it("chooses the initial slice from the player's height", () => {
+    expect(loweredSliceHeight(null, 4)).toBe(5);
   });
 });
