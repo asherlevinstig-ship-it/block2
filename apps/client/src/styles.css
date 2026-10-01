@@ -55,6 +55,18 @@ button { font: inherit; }
 #status { color: #d2dfce; line-height: 1.45; }
 #target { margin-top: 9px !important; color: #f0cb67; font-size: .82rem; line-height: 1.4; }
 #players { margin-top: 5px !important; color: #7ec9f4; font-size: .78rem; }
+#exit-guide {
+  margin-top: 9px !important;
+  padding: 7px 9px;
+  border: 1px solid rgb(255 211 92 / 58%);
+  border-radius: 8px;
+  background: rgb(113 68 5 / 62%);
+  color: #ffe38a;
+  font-size: .76rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+#exit-guide[hidden] { display: none; }
 .controls { margin-top: 12px !important; color: #94aa90; font-size: .82rem; }
 
 #performance-toggle {

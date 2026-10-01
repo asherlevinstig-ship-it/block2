@@ -42,12 +42,14 @@ import {
   shouldUseDepthSlice,
   type PlayerCutaway,
 } from "./player-visibility.js";
+import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const playerCount = document.querySelector<HTMLElement>("#players")!;
+const exitGuide = document.querySelector<HTMLElement>("#exit-guide")!;
 const performanceToggle = document.querySelector<HTMLButtonElement>("#performance-toggle")!;
 const performancePanel = document.querySelector<HTMLElement>("#performance-panel")!;
 const performanceFields = {
@@ -64,7 +66,7 @@ const performanceFields = {
 const joystickZone = document.querySelector<HTMLElement>("#joystick-zone")!;
 const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
-if (!canvas || !status || !targetLabel || !playerCount || !performanceToggle || !performancePanel || !joystickZone || !joystickKnob || !mineButton) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !joystickZone || !joystickKnob || !mineButton) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -96,6 +98,25 @@ app.root.addChild(caveLight);
 
 const worldRoot = new pc.Entity("voxel-world");
 app.root.addChild(worldRoot);
+
+const exitTrail = new pc.Entity("exit-trail");
+const exitTrailMaterial = new pc.StandardMaterial();
+exitTrailMaterial.diffuse = new pc.Color(1, 0.72, 0.08);
+exitTrailMaterial.emissive = new pc.Color(0.82, 0.34, 0.01);
+exitTrailMaterial.opacity = 0.88;
+exitTrailMaterial.blendType = pc.BLEND_NORMAL;
+exitTrailMaterial.depthWrite = false;
+exitTrailMaterial.update();
+for (const step of MILESTONE_EXIT_STEPS) {
+  const marker = new pc.Entity("exit-step");
+  marker.addComponent("render", { type: "box", castShadows: false });
+  if (marker.render) marker.render.material = exitTrailMaterial;
+  marker.setLocalScale(0.72, 0.06, 0.72);
+  marker.setPosition(step.x, step.topY + 0.04, step.z);
+  exitTrail.addChild(marker);
+}
+exitTrail.enabled = false;
+app.root.addChild(exitTrail);
 
 const palette: Record<number, pc.Color> = {
   [Block.Bedrock]: new pc.Color(0.14, 0.16, 0.18),
@@ -459,6 +480,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   cutawaySliceY = null;
   surfaceReferenceY = initialPosition.y;
   surfaceReturnStartedAt = null;
+  exitTrail.enabled = false;
+  exitGuide.hidden = true;
   worldReady = true;
   status.textContent = "Connected. Cross the flat ground to the mine entrance east of spawn.";
 }
@@ -619,6 +642,8 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
   const nextKey = nextSliceY === null ? "surface" : `slice:${nextSliceY}`;
   caveLight.enabled = underground;
   if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
+  exitTrail.enabled = visibilityCutaway;
+  exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
   if (light.light) light.light.intensity = underground ? 0.5 : 1.35;
   app.scene.ambientLight = underground ? new pc.Color(0.16, 0.18, 0.2) : new pc.Color(0.36, 0.42, 0.38);
