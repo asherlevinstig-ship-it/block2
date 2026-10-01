@@ -3,10 +3,16 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
+const SERVER_BUILD = "combat-v2";
+
 const gameServer = defineServer({
   rooms: { [WORLD_ROOM]: defineRoom(WorldRoom) },
   express: app => {
-    app.get("/health", (_request, response) => response.json({ ok: true, service: "blockcraft-server" }));
+    app.get("/health", (_request, response) => response.json({
+      ok: true,
+      service: "blockcraft-server",
+      build: SERVER_BUILD,
+    }));
   },
 });
 
