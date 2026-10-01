@@ -55,19 +55,6 @@ button { font: inherit; }
 #status { color: #d2dfce; line-height: 1.45; }
 #target { margin-top: 9px !important; color: #f0cb67; font-size: .82rem; line-height: 1.4; }
 #players { margin-top: 5px !important; color: #7ec9f4; font-size: .78rem; }
-#player-health {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 8px;
-  margin-top: 9px;
-  color: #ffb8aa;
-  font-size: .7rem;
-  font-weight: 900;
-}
-#player-health > div { height: 8px; overflow: hidden; border-radius: 999px; background: rgb(78 19 17 / 85%); }
-#player-health-fill { display: block; width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff5c45, #ff9d68); transition: width 180ms ease; }
-#player-health-value { color: #ffd4ca; font-variant-numeric: tabular-nums; }
 #exit-guide {
   margin-top: 9px !important;
   padding: 7px 9px;
@@ -114,47 +101,6 @@ button { font: inherit; }
   border-color: rgb(255 118 96 / 48%);
   background: rgb(126 31 24 / 76%);
   color: #ffc1b5;
-}
-
-#combat-reticle {
-  position: fixed;
-  z-index: 16;
-  top: 50%;
-  left: 50%;
-  width: 34px;
-  height: 34px;
-  border: 2px solid rgb(255 120 98 / 78%);
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgb(75 8 5 / 24%), 0 0 18px rgb(255 80 55 / 24%);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-#combat-reticle[hidden] { display: none; }
-#combat-reticle span,
-#combat-reticle span::before { position: absolute; content: ""; background: #ffc4b8; }
-#combat-reticle span { top: 15px; left: 8px; width: 14px; height: 2px; }
-#combat-reticle span::before { top: -6px; left: 6px; width: 2px; height: 14px; }
-
-#combat-feedback {
-  position: fixed;
-  z-index: 25;
-  top: 43%;
-  left: 50%;
-  color: #fff2dc;
-  font-size: 1.05rem;
-  font-weight: 1000;
-  letter-spacing: .08em;
-  opacity: 0;
-  pointer-events: none;
-  text-shadow: 0 2px 4px #000, 0 0 18px #ff4e32;
-  transform: translate(-50%, 6px) scale(.9);
-}
-#combat-feedback.show { animation: combat-feedback 620ms ease-out; }
-#combat-feedback.hurt { color: #ff9a86; font-size: 1.2rem; }
-@keyframes combat-feedback {
-  0% { opacity: 0; transform: translate(-50%, 8px) scale(.85); }
-  18% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
-  100% { opacity: 0; transform: translate(-50%, -20px) scale(1); }
 }
 
 #performance-toggle {

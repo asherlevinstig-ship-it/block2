@@ -7,7 +7,6 @@ import {
   type BlockChanged,
   type ChunkSnapshot,
   type CombatHit,
-  type PlayerHit,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
 import {
@@ -27,7 +26,6 @@ import {
 } from "@blockcraft/voxel-world";
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { attackRejectionReason, miningRejectionReason, movementRejectionReason, selectAttackTarget } from "./action-rules.js";
-import { pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -48,7 +46,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly movementRateWindows = new Map<string, MovementRateWindow>();
   private readonly verticalVelocities = new Map<string, number>();
   private readonly lastAttackAt = new Map<string, number>();
-  private readonly lastMobAttackAt = new Map<string, number>();
   private worldSeed = "blockcraft-dev";
 
   override onCreate(): void {
@@ -160,56 +157,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private simulatePlayers(deltaTime: number): void {
     const now = Date.now();
-    for (const [mobId, mob] of this.state.mobs) {
+    for (const mob of this.state.mobs.values()) {
       if (!mob.alive && now >= mob.respawnAt) {
-        mob.x = 13.5;
-        mob.y = 8;
-        mob.z = 11.5;
         mob.health = mob.maxHealth;
         mob.alive = true;
         mob.respawnAt = 0;
-      }
-      if (!mob.alive) continue;
-      const players = [...this.state.players.entries()].map(([id, player]) => ({
-        id,
-        x: player.x,
-        y: player.y,
-        z: player.z,
-        health: player.health,
-      }));
-      const target = selectAggroTarget(mob, players);
-      if (!target) {
-        const homeward = pursueTarget(mob, { x: 13.5, y: 8, z: 11.5 }, deltaTime, 0.9, 0.05);
-        mob.x = homeward.x;
-        mob.z = homeward.z;
-        if (Math.hypot(13.5 - mob.x, 11.5 - mob.z) > 0.05) mob.yaw = homeward.yaw;
-        continue;
-      }
-      const pursuit = pursueTarget(mob, target, deltaTime);
-      mob.x = pursuit.x;
-      mob.z = pursuit.z;
-      mob.yaw = pursuit.yaw;
-      const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
-      if (!pursuit.inAttackRange || now - lastAttackAt < 1100) continue;
-      const player = this.state.players.get(target.id);
-      if (!player) continue;
-      this.lastMobAttackAt.set(mobId, now);
-      mob.actionSequence += 1;
-      player.health = Math.max(0, player.health - 1);
-      const defeated = player.health === 0;
-      const hit: PlayerHit = { mobId, playerId: target.id, damage: 1, health: player.health, defeated };
-      this.broadcast("combat:player-hit", hit);
-      if (defeated) {
-        const spawn = this.spawnPoint();
-        player.x = spawn.x;
-        player.y = spawn.y;
-        player.z = spawn.z;
-        player.health = player.maxHealth;
-        this.movementInputs.set(target.id, { request: idleMovementInput(), receivedAt: now });
-        this.verticalVelocities.set(target.id, 0);
-        mob.x = 13.5;
-        mob.y = 8;
-        mob.z = 11.5;
       }
     }
     for (const [sessionId, player] of this.state.players) {

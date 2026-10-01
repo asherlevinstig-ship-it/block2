@@ -58,14 +58,6 @@ export interface CombatHit {
   defeated: boolean;
 }
 
-export interface PlayerHit {
-  mobId: string;
-  playerId: string;
-  damage: number;
-  health: number;
-  defeated: boolean;
-}
-
 export interface ActionRejected {
   requestId?: string;
   action: "move" | "mine" | "attack";

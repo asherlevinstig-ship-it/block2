@@ -7,8 +7,6 @@ export const PlayerState = schema({
   yaw: t.float32().default(0),
   lastProcessedInput: t.int32().default(0),
   actionSequence: t.int32().default(0),
-  health: t.int8().default(5),
-  maxHealth: t.int8().default(5),
   name: t.string().default("Explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
@@ -21,8 +19,6 @@ export const MobState = schema({
   maxHealth: t.int8().default(3),
   alive: t.boolean().default(true),
   hitSequence: t.int32().default(0),
-  actionSequence: t.int32().default(0),
-  yaw: t.float32().default(0),
   respawnAt: t.float64().default(0),
   name: t.string().default("Moss Crawler"),
 }, "MobState");
