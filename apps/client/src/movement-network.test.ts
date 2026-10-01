@@ -8,6 +8,7 @@ import {
   movementYaw,
   quantizeMovementToEightDirections,
   sampleRemotePose,
+  smoothVerticalOffset,
   trimRemoteSnapshots,
 } from "./movement-network.js";
 
@@ -70,6 +71,13 @@ describe("movement networking", () => {
     expect(localReconciliationRate(0.8, true)).toBe(2);
     expect(localReconciliationRate(0.3, false)).toBe(8);
     expect(localReconciliationRate(2, true)).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("smooths a one-block visual step without changing collision height", () => {
+    const firstFrame = smoothVerticalOffset(-1, 1 / 60);
+    expect(firstFrame).toBeGreaterThan(-1);
+    expect(firstFrame).toBeLessThan(0);
+    expect(smoothVerticalOffset(firstFrame, 0.5)).toBeCloseTo(0, 2);
   });
 
   it("snaps analogue input to one of eight directions while preserving speed", () => {

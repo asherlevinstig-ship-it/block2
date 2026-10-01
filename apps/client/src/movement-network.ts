@@ -94,6 +94,11 @@ export function localReconciliationRate(distance: number, moving: boolean): numb
   return distance > 0.05 ? 8 : 0;
 }
 
+export function smoothVerticalOffset(offset: number, deltaTime: number, response = 12): number {
+  const next = offset * Math.exp(-response * Math.max(0, deltaTime));
+  return Math.abs(next) < 0.001 ? 0 : next;
+}
+
 function lerpAngle(start: number, end: number, fraction: number): number {
   const delta = ((end - start + 540) % 360) - 180;
   return start + delta * fraction;

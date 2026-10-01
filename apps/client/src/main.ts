@@ -34,6 +34,7 @@ import {
   movementYaw,
   quantizeMovementToEightDirections,
   sampleRemotePose,
+  smoothVerticalOffset,
   trimRemoteSnapshots,
   type RemoteSnapshot,
 } from "./movement-network.js";
@@ -361,7 +362,9 @@ function addPlayerBody(player: pc.Entity, material: pc.StandardMaterial, withSil
   return silhouette;
 }
 
-const localPlayerSilhouette = addPlayerBody(localPlayer, playerMaterial, true);
+const localPlayerVisual = new pc.Entity("local-player-visual");
+localPlayer.addChild(localPlayerVisual);
+const localPlayerSilhouette = addPlayerBody(localPlayerVisual, playerMaterial, true);
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
@@ -385,7 +388,9 @@ remoteMaterial.update();
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
+let localVisualVerticalOffset = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
+const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
 
 function updatePlayerCount(): void {
   const count = room ? remotePlayers.size + 1 : 0;
@@ -506,6 +511,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
   cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
   localVerticalVelocity = 0;
+  localVisualVerticalOffset = 0;
+  localPlayerVisual.setLocalPosition(0, 0, 0);
   playerCutaway.active = false;
   playerCutaway.sliceY = CHUNK_HEIGHT;
   cutawayStateKey = "surface";
@@ -786,10 +793,13 @@ function reconcileLocalPlayer(dt: number, moving: boolean): void {
   const distance = position.distance(authoritativeLocalPosition);
   const reconciliationRate = localReconciliationRate(distance, moving);
   if (!Number.isFinite(reconciliationRate)) {
+    localVisualVerticalOffset += position.y - authoritativeLocalPosition.y;
     localPlayer.setPosition(authoritativeLocalPosition);
     localVerticalVelocity = 0;
   } else if (reconciliationRate > 0) {
+    const previousY = position.y;
     position.lerp(position, authoritativeLocalPosition, Math.min(1, dt * reconciliationRate));
+    localVisualVerticalOffset += previousY - position.y;
     localPlayer.setPosition(position);
   }
 }
@@ -822,9 +832,12 @@ app.on("update", (dt: number) => {
     readCollisionWorldBlock,
   );
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
+  if (predicted.stepped) localVisualVerticalOffset += current.y - predicted.y;
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   localPlayer.setEulerAngles(0, localFacingYaw, 0);
   reconcileLocalPlayer(dt, Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01);
+  localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
+  localPlayerVisual.setLocalPosition(0, localVisualVerticalOffset, 0);
 
   const player = localPlayer.getPosition();
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
@@ -836,7 +849,8 @@ app.on("update", (dt: number) => {
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
-  cameraFocus.lerp(cameraFocus, player, Math.min(1, dt * 6));
+  cameraTarget.set(player.x, player.y + localVisualVerticalOffset, player.z);
+  cameraFocus.lerp(cameraFocus, cameraTarget, Math.min(1, dt * 6));
   const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
   const cameraPosition = camera.getPosition();
   camera.setPosition(cameraPosition.lerp(cameraPosition, desiredCamera, Math.min(1, dt * 7)));
