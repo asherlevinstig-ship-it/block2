@@ -14,6 +14,11 @@ export const PlayerState = schema({
   maxStamina: t.float32().default(100),
   dodgeSequence: t.int32().default(0),
   invulnerableUntil: t.float64().default(0),
+  mainHandTag: t.string().default("melee"),
+  equippedPower: t.string().default("seismic_cleave"),
+  powerCooldownUntil: t.float64().default(0),
+  powerSequence: t.int32().default(0),
+  powerCastStartedAt: t.float64().default(0),
   name: t.string().default("Explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;

@@ -129,6 +129,36 @@ button { font: inherit; }
   color: #ffc1b5;
 }
 
+#power-slot {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 10px;
+  overflow: hidden;
+  border: 1px solid rgb(240 158 67 / 48%);
+  border-radius: 9px;
+  background: rgb(64 34 13 / 78%);
+  color: #ffe0aa;
+  text-align: left;
+}
+#power-slot span { position: relative; z-index: 1; color: #f6a147; font-size: .62rem; font-weight: 1000; letter-spacing: .11em; }
+#power-slot strong { position: relative; z-index: 1; font-size: .76rem; }
+#power-slot em { position: relative; z-index: 1; color: #ffd17e; font-size: .6rem; font-style: normal; font-weight: 900; }
+#power-cooldown-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: rgb(7 14 12 / 72%);
+  pointer-events: none;
+  transition: width 80ms linear;
+}
+#power-slot.ready { box-shadow: inset 0 0 18px rgb(255 155 52 / 16%), 0 0 12px rgb(255 147 42 / 12%); }
+#power-slot:active { transform: scale(.985); }
+
 #combat-reticle {
   position: fixed;
   z-index: 16;
@@ -171,10 +201,16 @@ button { font: inherit; }
   100% { opacity: 0; transform: translate(-50%, -20px) scale(1); }
 }
 
-#dodge-button {
+#dodge-button,
+#power-button {
   border-color: rgb(79 201 238 / 45%) !important;
   background: rgb(17 76 98 / 82%) !important;
   color: #c5f3ff !important;
+}
+#power-button {
+  border-color: rgb(240 158 67 / 58%) !important;
+  background: rgb(105 53 14 / 88%) !important;
+  color: #ffe0a1 !important;
 }
 
 #performance-toggle {
@@ -277,9 +313,12 @@ button { font: inherit; }
     pointer-events: none;
   }
 
+  #touch-actions { display: flex; align-items: flex-end; gap: 9px; pointer-events: none; }
+
   #joystick-zone,
   #mine-button,
-  #dodge-button { pointer-events: auto; touch-action: none; user-select: none; }
+  #dodge-button,
+  #power-button { pointer-events: auto; touch-action: none; user-select: none; }
 
   #joystick-zone {
     position: relative;
@@ -306,7 +345,8 @@ button { font: inherit; }
   }
 
   #mine-button,
-  #dodge-button {
+  #dodge-button,
+  #power-button {
     width: 92px;
     height: 92px;
     border: 2px solid rgb(255 226 131 / 62%);
@@ -321,8 +361,12 @@ button { font: inherit; }
     backdrop-filter: blur(8px);
   }
 
+  #dodge-button,
+  #power-button { width: 72px; height: 72px; font-size: .76rem; }
+
   #mine-button:active { transform: scale(.94); background: rgb(184 111 24 / 92%); }
   #dodge-button:active { transform: scale(.94); background: rgb(23 111 143 / 92%) !important; }
+  #power-button:active { transform: scale(.94); background: rgb(144 77 17 / 94%) !important; }
   #mine-button[data-mode="combat"] {
     border-color: rgb(255 126 106 / 70%);
     background: rgb(135 35 27 / 88%);
@@ -336,5 +380,6 @@ button { font: inherit; }
   #target { margin-top: 5px !important; }
   #joystick-zone { width: 96px; height: 96px; }
   #mine-button,
-  #dodge-button { width: 72px; height: 72px; font-size: .78rem; }
+  #dodge-button,
+  #power-button { width: 66px; height: 66px; font-size: .7rem; }
 }

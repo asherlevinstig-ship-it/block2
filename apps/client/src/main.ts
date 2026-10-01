@@ -3,6 +3,7 @@ import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   COMBAT_ATTACKS,
   COMBO_CHAIN_WINDOW_MS,
+  POWER_DEFINITIONS,
   WORLD_ROOM,
   type ActionRejected,
   type BlockChanged,
@@ -11,6 +12,8 @@ import {
   type CombatMiss,
   type CombatStagger,
   type PlayerHit,
+  type PowerCast,
+  type PowerResolved,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
 import {
@@ -64,8 +67,10 @@ import {
 } from "./interaction-mode.js";
 import {
   PRIMARY_ACTION_DURATION_MS,
+  SEISMIC_POWER_DURATION_MS,
   advanceLocomotionAnimation,
   primaryActionPose,
+  seismicPowerPose,
   voxelCharacterPose,
 } from "./character-animation.js";
 import "./styles.css";
@@ -85,6 +90,9 @@ const playerHealthFill = document.querySelector<HTMLElement>("#player-health-fil
 const playerHealthValue = document.querySelector<HTMLElement>("#player-health-value")!;
 const playerStaminaFill = document.querySelector<HTMLElement>("#player-stamina-fill")!;
 const playerStaminaValue = document.querySelector<HTMLElement>("#player-stamina-value")!;
+const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
+const powerCooldownFill = document.querySelector<HTMLElement>("#power-cooldown-fill")!;
+const powerCooldownLabel = document.querySelector<HTMLElement>("#power-cooldown-label")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
 const performanceFields = {
@@ -102,8 +110,9 @@ const joystickZone = document.querySelector<HTMLElement>("#joystick-zone")!;
 const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
 const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
+const powerButton = document.querySelector<HTMLButtonElement>("#power-button")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !powerSlot || !powerCooldownFill || !powerCooldownLabel || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -459,6 +468,7 @@ function animateVoxelCharacter(
   grounded: boolean,
   actionElapsedMilliseconds: number | null,
   actionStep = 0,
+  powerElapsedMilliseconds: number | null = null,
 ): void {
   const locomotion = advanceLocomotionAnimation(
     { phase: rig.locomotionPhase, weight: rig.locomotionWeight },
@@ -468,7 +478,8 @@ function animateVoxelCharacter(
   rig.locomotionPhase = locomotion.phase;
   rig.locomotionWeight = locomotion.weight;
   const pose = voxelCharacterPose(speed, time, verticalVelocity, grounded, 4.2, locomotion);
-  const action = primaryActionPose(actionElapsedMilliseconds, actionStep);
+  const powerPose = seismicPowerPose(powerElapsedMilliseconds);
+  const action = powerPose.active ? powerPose : primaryActionPose(actionElapsedMilliseconds, actionStep);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
   rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw, pose.torsoRoll);
   rig.head.setLocalEulerAngles(0, pose.headYaw, 0);
@@ -499,6 +510,11 @@ interface NetworkPlayer {
   maxStamina: number;
   dodgeSequence: number;
   invulnerableUntil: number;
+  mainHandTag: string;
+  equippedPower: string;
+  powerCooldownUntil: number;
+  powerSequence: number;
+  powerCastStartedAt: number;
   name: string;
 }
 
@@ -509,6 +525,8 @@ interface RemotePlayerVisual {
   actionStartedAt: number | null;
   actionStep: number;
   lastActionSequence: number;
+  powerStartedAt: number | null;
+  lastPowerSequence: number;
 }
 
 interface NetworkMob {
@@ -557,6 +575,12 @@ let localComboStep = 0;
 let localComboExpiresAt = 0;
 let localHitPauseUntil = 0;
 let localDodgeStartedAt: number | null = null;
+let localPowerStartedAt: number | null = null;
+let localPowerFacingYaw: number | null = null;
+let localPowerStepApplied = false;
+let localPowerCooldownUntil = 0;
+let powerSequence = 0;
+let localLastPowerSequence = 0;
 let lastProcessedInputSequence = 0;
 let pendingStopInputSequence: number | null = null;
 let pendingStopDeadline = 0;
@@ -587,6 +611,68 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" = "hit
   combatFeedback.classList.add("show");
 }
 
+interface PowerTelegraphVisual {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  startedAt: number;
+  windupMs: number;
+}
+
+interface PowerImpactVisual {
+  root: pc.Entity;
+  fractureRoot: pc.Entity;
+  material: pc.StandardMaterial;
+  startedAt: number;
+}
+
+const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
+const powerImpactVisuals: PowerImpactVisual[] = [];
+
+function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
+  const material = new pc.StandardMaterial();
+  material.diffuse = color;
+  material.emissive = color.clone().mulScalar(0.72);
+  material.opacity = opacity;
+  material.blendType = pc.BLEND_NORMAL;
+  material.depthWrite = false;
+  material.update();
+  return material;
+}
+
+function startPowerTelegraph(casterId: string, x: number, y: number, z: number, yaw: number, windupMs: number): void {
+  powerTelegraphs.get(casterId)?.root.destroy();
+  const root = new pc.Entity(`power-telegraph:${casterId}`);
+  const material = powerMaterial(new pc.Color(1, 0.43, 0.06), 0.28);
+  const definition = POWER_DEFINITIONS.seismic_cleave;
+  for (let distance = 0.8; distance <= definition.range; distance += 0.8) {
+    addBox(root, "seismic-warning", material, [definition.width, 0.025, 0.66], [0, 0.035, distance]);
+  }
+  root.setPosition(x, y, z);
+  root.setEulerAngles(0, yaw, 0);
+  app.root.addChild(root);
+  powerTelegraphs.set(casterId, { root, material, startedAt: performance.now(), windupMs });
+}
+
+function createPowerImpact(message: PowerResolved): void {
+  powerTelegraphs.get(message.casterId)?.root.destroy();
+  powerTelegraphs.delete(message.casterId);
+  const root = new pc.Entity(`power-impact:${message.casterId}`);
+  const fractureRoot = new pc.Entity(`power-fractures:${message.casterId}`);
+  const material = powerMaterial(new pc.Color(1, 0.68, 0.14), 0.78);
+  const definition = POWER_DEFINITIONS.seismic_cleave;
+  for (let distance = 0.65; distance <= definition.range; distance += 0.65) {
+    addBox(root, "seismic-wave", material, [definition.width * 0.84, 0.12, 0.42], [0, 0.12, distance]);
+  }
+  for (const fracture of message.fractures) {
+    addBox(fractureRoot, "terrain-fracture", material, [0.72, 0.035, 0.16], [fracture.x + 0.5, fracture.y + 1.025, fracture.z + 0.5]);
+  }
+  root.setPosition(message.x, message.y, message.z);
+  root.setEulerAngles(0, message.yaw, 0);
+  app.root.addChild(root);
+  app.root.addChild(fractureRoot);
+  powerImpactVisuals.push({ root, fractureRoot, material, startedAt: performance.now() });
+}
+
 function updatePlayerCount(): void {
   const count = room ? remotePlayers.size + 1 : 0;
   playerCount.textContent = `${count} player${count === 1 ? "" : "s"} online`;
@@ -604,6 +690,8 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
     actionStartedAt: null,
     actionStep: player.attackStep,
     lastActionSequence: player.actionSequence,
+    powerStartedAt: null,
+    lastPowerSequence: player.powerSequence,
   };
 }
 
@@ -738,6 +826,20 @@ function bindPlayers(joinedRoom: Room): void {
       remote.lastActionSequence = player.actionSequence;
       remote.actionStep = player.attackStep;
       remote.actionStartedAt = performance.now();
+    }, true);
+    playerCallbacks.listen("powerSequence", () => {
+      if (isLocal) {
+        if (player.powerSequence <= localLastPowerSequence) return;
+        localLastPowerSequence = player.powerSequence;
+        localPowerStartedAt ??= performance.now();
+        return;
+      }
+      if (!remote || player.powerSequence <= remote.lastPowerSequence) return;
+      remote.lastPowerSequence = player.powerSequence;
+      remote.powerStartedAt = performance.now();
+    }, true);
+    playerCallbacks.listen("powerCooldownUntil", () => {
+      if (isLocal) localPowerCooldownUntil = player.powerCooldownUntil;
     }, true);
     playerCallbacks.listen("health", () => {
       if (isLocal) updatePlayerHealth(player.health, player.maxHealth);
@@ -1300,6 +1402,32 @@ function requestDodge(): void {
   status.textContent = "Dodging · brief invulnerability active.";
 }
 
+function requestPower(): void {
+  if (!room || !worldReady) return;
+  const definition = POWER_DEFINITIONS.seismic_cleave;
+  const remaining = localPowerCooldownUntil - Date.now();
+  if (remaining > 0) {
+    status.textContent = `${definition.name} recharging · ${(remaining / 1000).toFixed(1)}s.`;
+    return;
+  }
+  const player = localPlayer.getPosition();
+  const targetMob = nearestLivingMob(player, definition.range + 1.2);
+  const yaw = targetMob
+    ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
+    : localFacingYaw;
+  localFacingYaw = yaw;
+  localPowerFacingYaw = yaw;
+  localPowerStartedAt = performance.now();
+  localPowerStepApplied = false;
+  localPowerCooldownUntil = Date.now() + definition.cooldownMs;
+  powerSequence += 1;
+  startPowerTelegraph(room.sessionId, player.x, player.y, player.z, yaw, definition.windupMs);
+  room.send("power", { requestId: `power-${powerSequence}`, powerId: definition.id, yaw });
+  showCombatFeedback("SEISMIC CLEAVE", "dodge");
+  logMovementEvent(`POWER ${definition.id} yaw=${yaw.toFixed(1)}`);
+  status.textContent = `${definition.name} winding up · line impact in ${(definition.windupMs / 1000).toFixed(2)}s.`;
+}
+
 function requestPrimaryAction(): void {
   if (primaryActionForMode(interactionMode) === "mine") requestMine();
   else requestAttack();
@@ -1328,6 +1456,7 @@ window.addEventListener("keydown", event => {
   if (event.repeat) return;
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyE") requestPrimaryAction();
+  if (event.code === "KeyR") requestPower();
   if (event.code === "Space") {
     event.preventDefault();
     requestDodge();
@@ -1347,6 +1476,11 @@ dodgeButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestDodge();
 });
+powerButton.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  requestPower();
+});
+powerSlot.addEventListener("click", requestPower);
 
 const frameSamples: number[] = [];
 const pendingPings = new Map<string, number>();
@@ -1445,10 +1579,15 @@ app.on("update", (dt: number) => {
     cameraRelativeMovement(strafe, forward, CAMERA_OFFSET_X, CAMERA_OFFSET_Z),
   );
   smoothedMovement = approachMovement(smoothedMovement, desiredMovement, frameTime);
+  const powerFacingActive = localPowerStartedAt !== null
+    && performance.now() - localPowerStartedAt < SEISMIC_POWER_DURATION_MS
+    && localPowerFacingYaw !== null;
   const actionFacingActive = localActionStartedAt !== null
     && performance.now() - localActionStartedAt < actionDuration(localActionStep)
     && localActionFacingYaw !== null;
-  const desiredFacingYaw = actionFacingActive
+  const desiredFacingYaw = powerFacingActive
+    ? localPowerFacingYaw!
+    : actionFacingActive
     ? localActionFacingYaw!
     : movementYaw(desiredMovement.x, desiredMovement.z, localFacingYaw);
   localFacingYaw = approachYaw(localFacingYaw, desiredFacingYaw, frameTime);
@@ -1492,8 +1631,27 @@ app.on("update", (dt: number) => {
   const animationNow = performance.now();
   const animationTime = animationNow / 1000;
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
+  const localPowerElapsed = localPowerStartedAt === null ? null : animationNow - localPowerStartedAt;
+  if (localPowerElapsed !== null
+    && localPowerElapsed >= POWER_DEFINITIONS.seismic_cleave.windupMs
+    && !localPowerStepApplied
+    && localPowerFacingYaw !== null) {
+    const radians = localPowerFacingYaw * Math.PI / 180;
+    const powerPosition = localPlayer.getPosition();
+    const stepped = resolvePlayerMotion(
+      powerPosition,
+      {
+        x: Math.sin(radians) * POWER_DEFINITIONS.seismic_cleave.forwardStep,
+        y: 0,
+        z: Math.cos(radians) * POWER_DEFINITIONS.seismic_cleave.forwardStep,
+      },
+      readCollisionWorldBlock,
+    );
+    localPlayer.setPosition(stepped.x, stepped.y, stepped.z);
+    localPowerStepApplied = true;
+  }
   if (animationNow >= localHitPauseUntil) {
-    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep);
+    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localPowerElapsed);
   }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
   if (dodgeElapsed !== null && dodgeElapsed < 320) {
@@ -1508,6 +1666,11 @@ app.on("update", (dt: number) => {
     localActionFacingYaw = null;
     localActionStep = 0;
   }
+  if (localPowerElapsed !== null && localPowerElapsed >= SEISMIC_POWER_DURATION_MS) {
+    localPowerStartedAt = null;
+    localPowerFacingYaw = null;
+    localPowerStepApplied = false;
+  }
 
   const player = localPlayer.getPosition();
   const renderAt = performance.now() - REMOTE_INTERPOLATION_DELAY_MS;
@@ -1520,8 +1683,10 @@ app.on("update", (dt: number) => {
       remote.entity.setPosition(pose.x, pose.y, pose.z);
       remote.entity.setEulerAngles(0, pose.yaw, 0);
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
-      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep);
+      const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
+      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remotePowerElapsed);
       if (remoteActionElapsed !== null && remoteActionElapsed >= actionDuration(remote.actionStep)) remote.actionStartedAt = null;
+      if (remotePowerElapsed !== null && remotePowerElapsed >= SEISMIC_POWER_DURATION_MS) remote.powerStartedAt = null;
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
@@ -1561,6 +1726,37 @@ app.on("update", (dt: number) => {
     );
     mob.bodyMaterial.update();
   }
+  for (const [casterId, telegraph] of powerTelegraphs) {
+    const elapsed = animationNow - telegraph.startedAt;
+    if (elapsed > telegraph.windupMs + 900) {
+      telegraph.root.destroy();
+      powerTelegraphs.delete(casterId);
+      continue;
+    }
+    const progress = Math.max(0, Math.min(1, elapsed / telegraph.windupMs));
+    telegraph.material.opacity = 0.18 + progress * 0.38 + Math.sin(animationTime * 28) * 0.05;
+    telegraph.material.update();
+  }
+  for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
+    const impact = powerImpactVisuals[index]!;
+    const elapsed = animationNow - impact.startedAt;
+    if (elapsed >= 650) {
+      impact.root.destroy();
+      impact.fractureRoot.destroy();
+      powerImpactVisuals.splice(index, 1);
+      continue;
+    }
+    const strength = 1 - elapsed / 650;
+    impact.root.setLocalScale(1 + (1 - strength) * 0.08, 0.65 + strength * 1.8, 1);
+    impact.material.opacity = Math.max(0, strength * 0.82);
+    impact.material.update();
+  }
+  const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
+  const powerFraction = powerRemaining / POWER_DEFINITIONS.seismic_cleave.cooldownMs;
+  powerCooldownFill.style.width = `${Math.max(0, Math.min(1, powerFraction)) * 100}%`;
+  powerCooldownLabel.textContent = powerRemaining > 0 ? `${(powerRemaining / 1000).toFixed(1)}s` : "READY · R";
+  powerSlot.classList.toggle("ready", powerRemaining <= 0);
+  powerButton.textContent = powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
   cameraTarget.set(player.x, player.y + localVisualVerticalOffset, player.z);
   cameraFocus.copy(cameraTarget);
   const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
@@ -1724,6 +1920,32 @@ async function connect(): Promise<void> {
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("block:changed", applyBlockChange);
+  room.onMessage("power:cast", (message: PowerCast) => {
+    if (message.casterId !== room?.sessionId) {
+      startPowerTelegraph(message.casterId, message.x, message.y, message.z, message.yaw, message.windupMs);
+      const remote = remotePlayers.get(message.casterId);
+      if (remote) remote.powerStartedAt = performance.now();
+    }
+    logMovementEvent(`POWER CAST ${message.casterId} ${message.powerId}`);
+  });
+  room.onMessage("power:resolved", (message: PowerResolved) => {
+    createPowerImpact(message);
+    const isLocal = message.casterId === room?.sessionId;
+    if (isLocal) {
+      localHitPauseUntil = performance.now() + (message.hitCount > 0 ? 85 : 40);
+      showCombatFeedback(
+        message.defeatedMobIds.length > 0
+          ? "SEISMIC DEFEAT"
+          : message.hitCount > 0
+            ? `SEISMIC HIT ×${message.hitCount}`
+            : "SEISMIC CLEAVE",
+      );
+      status.textContent = message.hitCount > 0
+        ? `Seismic Cleave struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage.`
+        : `Seismic Cleave fractured ${message.fractures.length} terrain block${message.fractures.length === 1 ? "" : "s"}.`;
+    }
+    logMovementEvent(`POWER RESOLVE hits=${message.hitCount} fractures=${message.fractures.length}`);
+  });
   room.onMessage("combat:hit", (message: CombatHit) => {
     const mob = mobVisuals.get(message.mobId);
     const name = mob?.state.name ?? "Mob";
@@ -1779,6 +2001,16 @@ async function connect(): Promise<void> {
       localPlayerVisual.setLocalEulerAngles(0, 0, 0);
       showCombatFeedback(message.reason === "stamina" ? "NO STAMINA" : "DODGE BLOCKED", "hurt");
     }
+    if (message.action === "power") {
+      localPowerCooldownUntil = 0;
+      localPowerStartedAt = null;
+      localPowerFacingYaw = null;
+      localPowerStepApplied = false;
+      const localTelegraph = room ? powerTelegraphs.get(room.sessionId) : undefined;
+      localTelegraph?.root.destroy();
+      if (room) powerTelegraphs.delete(room.sessionId);
+      showCombatFeedback(message.reason === "cooldown" ? "POWER RECHARGING" : "POWER BLOCKED", "hurt");
+    }
     if (message.reason === "stale") {
       worldReady = false;
       room?.send("world:ready");
@@ -1792,6 +2024,13 @@ async function connect(): Promise<void> {
     remotePlayers.clear();
     for (const mob of mobVisuals.values()) mob.entity.destroy();
     mobVisuals.clear();
+    for (const telegraph of powerTelegraphs.values()) telegraph.root.destroy();
+    powerTelegraphs.clear();
+    for (const impact of powerImpactVisuals) {
+      impact.root.destroy();
+      impact.fractureRoot.destroy();
+    }
+    powerImpactVisuals.length = 0;
     updatePlayerCount();
   });
   room.send("world:ready");

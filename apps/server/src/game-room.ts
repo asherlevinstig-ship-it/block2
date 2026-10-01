@@ -6,6 +6,8 @@ import {
   DodgeRequestSchema,
   MineBlockRequestSchema,
   MoveRequestSchema,
+  POWER_DEFINITIONS,
+  PowerRequestSchema,
   type ActionRejected,
   type BlockChanged,
   type ChunkSnapshot,
@@ -13,6 +15,10 @@ import {
   type CombatMiss,
   type CombatStagger,
   type PlayerHit,
+  type PowerCast,
+  type PowerFracture,
+  type PowerId,
+  type PowerResolved,
   type WorldBootstrap,
 } from "@blockcraft/protocol";
 import {
@@ -24,6 +30,7 @@ import {
   generateChunk,
   getBlock,
   highestSolidY,
+  isProtectedVoxel,
   isPlayerSupported,
   resolvePlayerMotion,
   setBlock,
@@ -33,6 +40,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
+import { isPowerCompatible, lineFractureColumns, powerDirection, selectLinePowerTargets } from "./power-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -59,6 +67,13 @@ interface PendingAttack {
   impactAt: number;
 }
 
+interface PendingPower {
+  requestId: string;
+  powerId: PowerId;
+  yaw: number;
+  impactAt: number;
+}
+
 export class WorldRoom extends Room<{ state: WorldState }> {
   override maxClients = 20;
   private readonly chunks = new Map<string, MutableChunk>();
@@ -67,6 +82,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly verticalVelocities = new Map<string, number>();
   private readonly attackChains = new Map<string, AttackChainState>();
   private readonly pendingAttacks = new Map<string, PendingAttack>();
+  private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly lastMobAttackAt = new Map<string, number>();
   private readonly lastDodgeAt = new Map<string, number>();
   private worldSeed = "blockcraft-dev";
@@ -86,6 +102,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("mine", (client, payload) => this.handleMine(client, payload));
     this.onMessage("attack", (client, payload) => this.handleAttack(client, payload));
     this.onMessage("dodge", (client, payload) => this.handleDodge(client, payload));
+    this.onMessage("power", (client, payload) => this.handlePower(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -112,6 +129,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.verticalVelocities.delete(client.sessionId);
     this.attackChains.delete(client.sessionId);
     this.pendingAttacks.delete(client.sessionId);
+    this.pendingPowers.delete(client.sessionId);
     this.lastDodgeAt.delete(client.sessionId);
   }
 
@@ -183,6 +201,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private simulatePlayers(deltaTime: number): void {
     const now = Date.now();
+    this.resolvePendingPowers(now);
     this.resolvePendingAttacks(now);
     for (const [mobId, mob] of this.state.mobs) {
       if (!mob.alive && now >= mob.respawnAt) {
@@ -234,6 +253,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           targetPlayer.health = targetPlayer.maxHealth;
           targetPlayer.stamina = targetPlayer.maxStamina;
           this.pendingAttacks.delete(mob.targetId);
+          this.pendingPowers.delete(mob.targetId);
           this.attackChains.delete(mob.targetId);
           this.movementInputs.set(mob.targetId, { request: idleMovementInput(), receivedAt: now });
           this.verticalVelocities.set(mob.targetId, 0);
@@ -321,6 +341,144 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.invulnerableUntil = now + 320;
     player.dodgeSequence += 1;
     this.lastDodgeAt.set(client.sessionId, now);
+  }
+
+  private handlePower(client: Client, payload: unknown): void {
+    const parsed = PowerRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const powerId = parsed.data.powerId as PowerId;
+    const definition = POWER_DEFINITIONS[powerId];
+    if (!definition || player.equippedPower !== powerId) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
+    }
+    if (!isPowerCompatible(definition, player.mainHandTag)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "compatibility" });
+    }
+    const now = Date.now();
+    if (now < player.powerCooldownUntil) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "cooldown" });
+    }
+    player.yaw = parsed.data.yaw;
+    player.powerCooldownUntil = now + definition.cooldownMs;
+    player.powerCastStartedAt = now;
+    player.powerSequence += 1;
+    this.pendingPowers.set(client.sessionId, {
+      requestId: parsed.data.requestId,
+      powerId,
+      yaw: parsed.data.yaw,
+      impactAt: now + definition.windupMs,
+    });
+    const cast: PowerCast = {
+      casterId: client.sessionId,
+      powerId,
+      x: player.x,
+      y: player.y,
+      z: player.z,
+      yaw: parsed.data.yaw,
+      startedAt: now,
+      windupMs: definition.windupMs,
+    };
+    this.broadcast("power:cast", cast);
+  }
+
+  private fractureTerrain(requestId: string, x: number, z: number, playerY: number): PowerFracture | null {
+    if (isProtectedVoxel(x, z)) return null;
+    const top = Math.min(CHUNK_HEIGHT - 1, Math.floor(playerY));
+    const bottom = Math.max(1, top - 4);
+    for (let y = top; y >= bottom; y -= 1) {
+      const block = this.readWorldBlock(x, y, z);
+      if (block === Block.Air) continue;
+      if (block === Block.Bedrock) return null;
+      if (block === Block.Grass) {
+        const address = worldToChunk(x, z);
+        const stored = this.getChunk(address.chunkX, address.chunkZ);
+        setBlock(stored.chunk, address.localX, y, address.localZ, Block.Dirt);
+        stored.revision += 1;
+        this.broadcast("block:changed", {
+          requestId: `${requestId}-fracture-${x}-${z}`,
+          x,
+          y,
+          z,
+          block: Block.Dirt,
+          revision: stored.revision,
+        } satisfies BlockChanged);
+      }
+      return { x, y, z };
+    }
+    return null;
+  }
+
+  private resolvePendingPowers(now: number): void {
+    for (const [sessionId, pending] of this.pendingPowers) {
+      if (now < pending.impactAt) continue;
+      this.pendingPowers.delete(sessionId);
+      const player = this.state.players.get(sessionId);
+      const definition = POWER_DEFINITIONS[pending.powerId];
+      if (!player || !definition) continue;
+      const direction = powerDirection(pending.yaw);
+      const stepped = resolvePlayerMotion(
+        { x: player.x, y: player.y, z: player.z },
+        { x: direction.x * definition.forwardStep, y: 0, z: direction.z * definition.forwardStep },
+        this.readWorldBlock,
+      );
+      player.x = stepped.x;
+      player.y = stepped.y;
+      player.z = stepped.z;
+      const targets = selectLinePowerTargets(
+        player,
+        pending.yaw,
+        [...this.state.mobs.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive })),
+        definition.range,
+        definition.width,
+      );
+      const defeatedMobIds: string[] = [];
+      for (const target of targets) {
+        const mob = this.state.mobs.get(target.id);
+        if (!mob || !mob.alive) continue;
+        mob.health = Math.max(0, mob.health - definition.damage);
+        mob.hitSequence += 1;
+        const knockedBack = resolvePlayerMotion(
+          { x: mob.x, y: mob.y, z: mob.z },
+          { x: direction.x * definition.knockback, y: 0, z: direction.z * definition.knockback },
+          this.readWorldBlock,
+        );
+        mob.x = knockedBack.x;
+        mob.z = knockedBack.z;
+        if (mob.health === 0) {
+          mob.alive = false;
+          mob.respawnAt = now + 5000;
+          mob.combatState = "idle";
+          mob.stateUntil = 0;
+          mob.targetId = "";
+          defeatedMobIds.push(target.id);
+        } else {
+          mob.combatState = "stagger";
+          mob.stateUntil = now + definition.staggerMs;
+          mob.targetId = "";
+          mob.staggerSequence += 1;
+        }
+      }
+      const fractures = definition.fracturesTerrain
+        ? lineFractureColumns(player, pending.yaw, definition.range)
+            .map(column => this.fractureTerrain(pending.requestId, column.x, column.z, player.y))
+            .filter((fracture): fracture is PowerFracture => fracture !== null)
+        : [];
+      const resolved: PowerResolved = {
+        casterId: sessionId,
+        powerId: pending.powerId,
+        x: player.x,
+        y: player.y,
+        z: player.z,
+        yaw: pending.yaw,
+        hitCount: targets.length,
+        damage: definition.damage,
+        defeatedMobIds,
+        fractures,
+      };
+      this.broadcast("power:resolved", resolved);
+    }
   }
 
   private handleMine(client: Client, payload: unknown): void {

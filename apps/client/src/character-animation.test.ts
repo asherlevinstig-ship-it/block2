@@ -3,6 +3,7 @@ import {
   PRIMARY_ACTION_DURATION_MS,
   advanceLocomotionAnimation,
   primaryActionPose,
+  seismicPowerPose,
   voxelCharacterPose,
 } from "./character-animation.js";
 
@@ -57,6 +58,16 @@ describe("voxel character animation", () => {
     expect(second.rightArmRoll).toBeLessThan(-50);
     expect(finisher.leftArmPitch).toBeLessThan(-100);
     expect(finisher.rightArmPitch).toBeLessThan(-120);
+  });
+
+  it("holds Seismic Cleave through its active impact window", () => {
+    const windup = seismicPowerPose(225);
+    const impact = seismicPowerPose(500);
+    const recovered = seismicPowerPose(1160);
+    expect(windup.leftArmPitch).toBeLessThan(-80);
+    expect(impact.leftArmPitch).toBeCloseTo(-132);
+    expect(impact.rightArmPitch).toBeCloseTo(-132);
+    expect(recovered.active).toBe(false);
   });
 
   it("blends walk animation out after movement stops without resetting its phase", () => {

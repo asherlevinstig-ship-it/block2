@@ -19,6 +19,7 @@ export interface PrimaryActionPose {
 }
 
 export const PRIMARY_ACTION_DURATION_MS = 360;
+export const SEISMIC_POWER_DURATION_MS = 1160;
 
 export interface LocomotionAnimationSample {
   phase: number;
@@ -74,6 +75,27 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
     leftArmRoll: 0,
     rightArmPitch: -116 * strength,
     rightArmRoll: -9 * strength,
+  };
+}
+
+export function seismicPowerPose(elapsedMilliseconds: number | null): PrimaryActionPose {
+  if (elapsedMilliseconds === null || elapsedMilliseconds < 0 || elapsedMilliseconds >= SEISMIC_POWER_DURATION_MS) {
+    return { active: false, torsoYaw: 0, leftArmPitch: 0, leftArmRoll: 0, rightArmPitch: 0, rightArmRoll: 0 };
+  }
+  const windupMs = 450;
+  const activeEndMs = 610;
+  const strength = elapsedMilliseconds <= windupMs
+    ? Math.sin(elapsedMilliseconds / windupMs * Math.PI / 2)
+    : elapsedMilliseconds <= activeEndMs
+      ? 1
+      : Math.cos((elapsedMilliseconds - activeEndMs) / (SEISMIC_POWER_DURATION_MS - activeEndMs) * Math.PI / 2);
+  return {
+    active: true,
+    torsoYaw: 0,
+    leftArmPitch: -132 * strength,
+    leftArmRoll: 14 * strength,
+    rightArmPitch: -132 * strength,
+    rightArmRoll: -14 * strength,
   };
 }
 

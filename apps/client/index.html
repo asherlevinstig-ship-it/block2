@@ -26,7 +26,10 @@
         <button type="button" data-mode="build" aria-pressed="true">BUILD</button>
         <button type="button" data-mode="combat" aria-pressed="false">COMBAT</button>
       </div>
-      <p class="controls">WASD move · Space dodge · Q mode · E/click acts</p>
+      <button id="power-slot" type="button" aria-label="Use Seismic Cleave">
+        <span>POWER</span><strong>Seismic Cleave</strong><em id="power-cooldown-label">READY · R</em><i id="power-cooldown-fill"></i>
+      </button>
+      <p class="controls">WASD move · Space dodge · R Power · Q mode · E/click acts</p>
     </section>
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="combat-feedback" aria-live="polite"></div>
@@ -54,8 +57,11 @@
     </details>
     <section id="touch-controls" aria-label="Touch controls">
       <div id="joystick-zone" aria-label="Movement joystick"><div id="joystick-knob"></div></div>
-      <button id="mine-button" type="button" data-mode="build">Mine</button>
-      <button id="dodge-button" type="button">Dodge</button>
+      <div id="touch-actions">
+        <button id="power-button" type="button">Power</button>
+        <button id="dodge-button" type="button">Dodge</button>
+        <button id="mine-button" type="button" data-mode="build">Mine</button>
+      </div>
     </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
