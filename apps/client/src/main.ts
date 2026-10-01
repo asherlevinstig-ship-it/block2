@@ -38,6 +38,7 @@ import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
+  shouldReleaseDepthSlice,
   shouldUseDepthSlice,
   type PlayerCutaway,
 } from "./player-visibility.js";
@@ -457,6 +458,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   cutawayStateKey = "surface";
   cutawaySliceY = null;
   surfaceReferenceY = initialPosition.y;
+  surfaceReturnStartedAt = null;
   worldReady = true;
   status.textContent = "Connected. Walk to a corner of the hill, point at a nearby block, then mine.";
 }
@@ -523,6 +525,7 @@ let localVerticalVelocity = 0;
 let cutawayStateKey = "surface";
 let cutawaySliceY: number | null = null;
 let surfaceReferenceY: number | null = null;
+let surfaceReturnStartedAt: number | null = null;
 let smoothedMovement = { x: 0, z: 0 };
 
 function resetMovementControls(): void {
@@ -592,13 +595,26 @@ function updateUndergroundPresentation(position: pc.Vec3): void {
   if (cutawaySliceY === null && underground && position.y >= surfaceReferenceY - 0.65) {
     surfaceReferenceY = estimatedSurfaceY(position);
   }
-  const visibilityCutaway = shouldUseDepthSlice(
+  let visibilityCutaway = shouldUseDepthSlice(
     cutawaySliceY,
     position.y,
     surfaceReferenceY,
     underground,
     excavating,
   );
+  if (cutawaySliceY !== null) {
+    const supported = isPlayerSupported(readCollisionWorldBlock, position.x, position.y, position.z);
+    const atSurface = !underground && supported && position.y >= surfaceReferenceY - 0.1;
+    if (atSurface) surfaceReturnStartedAt ??= performance.now();
+    else surfaceReturnStartedAt = null;
+    const surfaceDurationMs = surfaceReturnStartedAt === null ? 0 : performance.now() - surfaceReturnStartedAt;
+    if (shouldReleaseDepthSlice(position.y, surfaceReferenceY, underground, supported, surfaceDurationMs)) {
+      visibilityCutaway = false;
+      surfaceReturnStartedAt = null;
+    }
+  } else {
+    surfaceReturnStartedAt = null;
+  }
   const nextSliceY = visibilityCutaway ? loweredSliceHeight(cutawaySliceY, position.y) : null;
   const nextKey = nextSliceY === null ? "surface" : `slice:${nextSliceY}`;
   caveLight.enabled = underground;

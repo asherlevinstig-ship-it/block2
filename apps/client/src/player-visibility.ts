@@ -15,8 +15,19 @@ export function shouldUseDepthSlice(
   underground: boolean,
   excavating: boolean,
 ): boolean {
-  if (currentSliceY !== null) return underground || playerY < surfaceY - 0.25;
+  if (currentSliceY !== null) return true;
   return underground || (excavating && playerY < surfaceY - 0.65);
+}
+
+export function shouldReleaseDepthSlice(
+  playerY: number,
+  surfaceY: number,
+  underground: boolean,
+  supported: boolean,
+  surfaceDurationMs: number,
+  releaseDelayMs = 1200,
+): boolean {
+  return !underground && supported && playerY >= surfaceY - 0.1 && surfaceDurationMs >= releaseDelayMs;
 }
 
 export function isVoxelHiddenForPlayer(_x: number, y: number, _z: number, cutaway: PlayerCutaway): boolean {

@@ -3,6 +3,7 @@ import {
   isBelowSurroundingSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
+  shouldReleaseDepthSlice,
   shouldUseDepthSlice,
   type PlayerCutaway,
 } from "./player-visibility.js";
@@ -61,8 +62,14 @@ describe("underground player visibility", () => {
     expect(shouldUseDepthSlice(null, 8, 8, false, true)).toBe(false);
   });
 
-  it("releases the slice only after the player climbs back to the surface", () => {
-    expect(shouldUseDepthSlice(5, 7.5, 8, false, false)).toBe(true);
-    expect(shouldUseDepthSlice(5, 7.8, 8, false, false)).toBe(false);
+  it("keeps an active slice latched through a temporary surface correction", () => {
+    expect(shouldUseDepthSlice(5, 8, 8, false, false)).toBe(true);
+    expect(shouldReleaseDepthSlice(8, 8, false, true, 400)).toBe(false);
+  });
+
+  it("releases only after a sustained, supported return to the surface", () => {
+    expect(shouldReleaseDepthSlice(8, 8, false, true, 1200)).toBe(true);
+    expect(shouldReleaseDepthSlice(8, 8, true, true, 2000)).toBe(false);
+    expect(shouldReleaseDepthSlice(8, 8, false, false, 2000)).toBe(false);
   });
 });
