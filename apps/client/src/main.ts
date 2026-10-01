@@ -65,6 +65,7 @@ const performancePanel = document.querySelector<HTMLElement>("#performance-panel
 const movementDebugLive = document.querySelector<HTMLElement>("#movement-debug-live")!;
 const movementDebugEvents = document.querySelector<HTMLOListElement>("#movement-debug-events")!;
 const movementDebugCopy = document.querySelector<HTMLButtonElement>("#movement-debug-copy")!;
+const movementDebugTrace = document.querySelector<HTMLElement>("#movement-debug-trace")!;
 const performanceFields = {
   frame: document.querySelector<HTMLElement>("#perf-frame")!,
   fps: document.querySelector<HTMLElement>("#perf-fps")!,
@@ -705,6 +706,113 @@ let lastSentMovement = { x: 0, z: 0 };
 let lastMovementDebugUpdateAt = 0;
 const movementEventLog: string[] = [];
 
+interface StopTraceFrame {
+  at: number;
+  dtMs: number;
+  rawX: number;
+  rawZ: number;
+  desiredX: number;
+  desiredZ: number;
+  appliedX: number;
+  appliedZ: number;
+  localX: number;
+  localY: number;
+  localZ: number;
+  renderedY: number;
+  serverX: number;
+  serverY: number;
+  serverZ: number;
+  screenX: number;
+  screenY: number;
+  cameraX: number;
+  cameraY: number;
+  cameraZ: number;
+  focusX: number;
+  focusY: number;
+  focusZ: number;
+  animationWeight: number;
+  animationPhase: number;
+  bodyY: number;
+  rightArmPitch: number;
+  leftLegPitch: number;
+  reconciliationDistance: number;
+  reconciliationRate: number;
+  verticalVelocity: number;
+  visualOffset: number;
+  grounded: boolean;
+  stepped: boolean;
+  hitVertical: boolean;
+  sentSequence: number;
+  acknowledgedSequence: number;
+}
+
+interface StopTrace {
+  id: number;
+  releasedAt: number;
+  captureUntil: number;
+  frames: StopTraceFrame[];
+}
+
+const STOP_TRACE_HISTORY_FRAMES = 30;
+const STOP_TRACE_AFTER_RELEASE_MS = 1200;
+const stopTraceHistory: StopTraceFrame[] = [];
+let activeStopTrace: StopTrace | null = null;
+let completedStopTrace = "No completed stop trace yet.";
+let stopTraceSequence = 0;
+let previousAppliedMovement = false;
+
+function fixed(value: number, digits = 3): string {
+  return Number.isFinite(value) ? value.toFixed(digits) : String(value);
+}
+
+function formatStopTrace(trace: StopTrace): string {
+  const lines = [
+    `STOP TRACE #${trace.id} frames=${trace.frames.length} pre=${STOP_TRACE_HISTORY_FRAMES} post=${STOP_TRACE_AFTER_RELEASE_MS}ms`,
+    `viewport=${canvas.width}x${canvas.height} dpr=${window.devicePixelRatio.toFixed(2)} release_at=${trace.releasedAt.toFixed(1)}ms`,
+    "t_ms dt raw_x raw_z desired_x desired_z applied_x applied_z local_x local_y local_z render_y server_x server_y server_z screen_x screen_y ds_x ds_y camera_x camera_y camera_z focus_x focus_y focus_z anim_weight anim_phase body_y arm_r leg_l reconcile rate vertical visual grounded stepped hit_y sent ack lag",
+  ];
+  let previous: StopTraceFrame | undefined;
+  for (const frame of trace.frames) {
+    const deltaScreenX = previous ? frame.screenX - previous.screenX : 0;
+    const deltaScreenY = previous ? frame.screenY - previous.screenY : 0;
+    lines.push([
+      fixed(frame.at - trace.releasedAt, 1), fixed(frame.dtMs, 1),
+      fixed(frame.rawX, 2), fixed(frame.rawZ, 2), fixed(frame.desiredX, 2), fixed(frame.desiredZ, 2),
+      fixed(frame.appliedX, 2), fixed(frame.appliedZ, 2),
+      fixed(frame.localX), fixed(frame.localY), fixed(frame.localZ), fixed(frame.renderedY),
+      fixed(frame.serverX), fixed(frame.serverY), fixed(frame.serverZ),
+      fixed(frame.screenX, 1), fixed(frame.screenY, 1), fixed(deltaScreenX, 2), fixed(deltaScreenY, 2),
+      fixed(frame.cameraX), fixed(frame.cameraY), fixed(frame.cameraZ),
+      fixed(frame.focusX), fixed(frame.focusY), fixed(frame.focusZ),
+      fixed(frame.animationWeight), fixed(frame.animationPhase), fixed(frame.bodyY),
+      fixed(frame.rightArmPitch, 1), fixed(frame.leftLegPitch, 1),
+      fixed(frame.reconciliationDistance), Number.isFinite(frame.reconciliationRate) ? fixed(frame.reconciliationRate, 1) : "HARD",
+      fixed(frame.verticalVelocity), fixed(frame.visualOffset),
+      Number(frame.grounded), Number(frame.stepped), Number(frame.hitVertical),
+      frame.sentSequence, frame.acknowledgedSequence, Math.max(0, frame.sentSequence - frame.acknowledgedSequence),
+    ].join(" "));
+    previous = frame;
+  }
+  return lines.join("\n");
+}
+
+function finishStopTrace(): void {
+  if (!activeStopTrace) return;
+  let maximumScreenDelta = 0;
+  let maximumRenderedYDelta = 0;
+  for (let index = 1; index < activeStopTrace.frames.length; index += 1) {
+    const previous = activeStopTrace.frames[index - 1]!;
+    const current = activeStopTrace.frames[index]!;
+    if (current.at < activeStopTrace.releasedAt) continue;
+    maximumScreenDelta = Math.max(maximumScreenDelta, Math.hypot(current.screenX - previous.screenX, current.screenY - previous.screenY));
+    maximumRenderedYDelta = Math.max(maximumRenderedYDelta, Math.abs(current.renderedY - previous.renderedY));
+  }
+  completedStopTrace = formatStopTrace(activeStopTrace);
+  movementDebugTrace.textContent = `Stop trace #${activeStopTrace.id}: ${activeStopTrace.frames.length} frames · max screen Δ${maximumScreenDelta.toFixed(2)}px · renderY Δ${maximumRenderedYDelta.toFixed(4)} — COPY LOG`;
+  logMovementEvent(`STOP TRACE #${activeStopTrace.id} ready (${activeStopTrace.frames.length} frames)`);
+  activeStopTrace = null;
+}
+
 function movementVectorLabel(vector: { x: number; z: number }): string {
   return `${vector.x.toFixed(2)}, ${vector.z.toFixed(2)}`;
 }
@@ -721,7 +829,8 @@ function logMovementEvent(message: string): void {
 }
 
 movementDebugCopy.addEventListener("click", async () => {
-  const text = `${movementDebugLive.textContent ?? ""}\n\n${movementEventLog.join("\n")}`;
+  const trace = activeStopTrace ? formatStopTrace(activeStopTrace) : completedStopTrace;
+  const text = `${movementDebugLive.textContent ?? ""}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${trace}`;
   await navigator.clipboard.writeText(text);
   movementDebugCopy.textContent = "COPIED";
   window.setTimeout(() => { movementDebugCopy.textContent = "COPY LOG"; }, 1000);
@@ -1038,11 +1147,74 @@ app.on("update", (dt: number) => {
   const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
   camera.setPosition(desiredCamera);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
-  const playerScreen = camera.camera?.worldToScreen(cameraTarget);
+  const bodyY = localPlayerRig.root.getLocalPosition().y;
+  const renderedPlayerPosition = new pc.Vec3(player.x, player.y + localVisualVerticalOffset + bodyY, player.z);
+  const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
   updateUndergroundPresentation(player);
   updateTarget();
 
   const now = performance.now();
+  const cameraWorldPosition = camera.getPosition();
+  const rightArmPitch = localPlayerRig.rightArm.getLocalEulerAngles().x;
+  const leftLegPitch = localPlayerRig.leftLeg.getLocalEulerAngles().x;
+  const traceFrame: StopTraceFrame = {
+    at: now,
+    dtMs: dt * 1000,
+    rawX: strafe,
+    rawZ: forward,
+    desiredX: desiredMovement.x,
+    desiredZ: desiredMovement.z,
+    appliedX: smoothedMovement.x,
+    appliedZ: smoothedMovement.z,
+    localX: player.x,
+    localY: player.y,
+    localZ: player.z,
+    renderedY: renderedPlayerPosition.y,
+    serverX: authoritativeLocalPosition.x,
+    serverY: authoritativeLocalPosition.y,
+    serverZ: authoritativeLocalPosition.z,
+    screenX: playerScreen?.x ?? Number.NaN,
+    screenY: playerScreen?.y ?? Number.NaN,
+    cameraX: cameraWorldPosition.x,
+    cameraY: cameraWorldPosition.y,
+    cameraZ: cameraWorldPosition.z,
+    focusX: cameraFocus.x,
+    focusY: cameraFocus.y,
+    focusZ: cameraFocus.z,
+    animationWeight: localPlayerRig.locomotionWeight,
+    animationPhase: localPlayerRig.locomotionPhase,
+    bodyY,
+    rightArmPitch,
+    leftLegPitch,
+    reconciliationDistance: reconciliation.distance,
+    reconciliationRate: reconciliation.rate,
+    verticalVelocity: localVerticalVelocity,
+    visualOffset: localVisualVerticalOffset,
+    grounded: predicted.grounded || grounded,
+    stepped: predicted.stepped,
+    hitVertical: predicted.hitVertical,
+    sentSequence: moveSequence,
+    acknowledgedSequence: lastProcessedInputSequence,
+  };
+  const appliedMovement = Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01;
+  if (previousAppliedMovement && !appliedMovement) {
+    if (activeStopTrace) finishStopTrace();
+    stopTraceSequence += 1;
+    activeStopTrace = {
+      id: stopTraceSequence,
+      releasedAt: now,
+      captureUntil: now + STOP_TRACE_AFTER_RELEASE_MS,
+      frames: [...stopTraceHistory],
+    };
+    movementDebugTrace.textContent = `Stop trace #${stopTraceSequence}: recording ${STOP_TRACE_AFTER_RELEASE_MS}ms after release…`;
+    logMovementEvent(`STOP TRACE #${stopTraceSequence} recording`);
+  }
+  activeStopTrace?.frames.push(traceFrame);
+  stopTraceHistory.push(traceFrame);
+  if (stopTraceHistory.length > STOP_TRACE_HISTORY_FRAMES) stopTraceHistory.shift();
+  previousAppliedMovement = appliedMovement;
+  if (activeStopTrace && now >= activeStopTrace.captureUntil) finishStopTrace();
+
   updatePerformanceMetrics(now);
   if (room && worldReady && now - lastPingSentAt >= 2000) {
     lastPingSentAt = now;
@@ -1076,7 +1248,7 @@ app.on("update", (dt: number) => {
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
-      `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} bodyY=${localPlayerRig.root.getLocalPosition().y.toFixed(3)}`,
+      `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,

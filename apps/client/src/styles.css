@@ -138,6 +138,7 @@ button { font: inherit; }
   color: #bee8ff;
   font: inherit;
 }
+#movement-debug-trace { margin: 7px 0 0; color: #8ed9ff; font-size: .62rem; }
 #movement-debug ol { margin: 8px 0 0; padding-left: 22px; color: #f5ce72; }
 #movement-debug li { margin-top: 2px; }
 
