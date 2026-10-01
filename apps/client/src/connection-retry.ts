@@ -1,10 +1,10 @@
 export const CONNECTION_RETRY_DELAYS_MS = [0, 1000, 2000, 4000, 8000] as const;
 
 export async function retryConnection<T>(
-  operation: (signal: AbortSignal) => Promise<T>,
+  operation: (signal: AbortSignal, attempt: number) => Promise<T>,
   onRetry: (attempt: number, delayMilliseconds: number, error: unknown) => void,
   delays: readonly number[] = CONNECTION_RETRY_DELAYS_MS,
-  attemptTimeoutMilliseconds = 10000,
+  attemptTimeoutMilliseconds = 5000,
 ): Promise<T> {
   let lastError: unknown;
   for (let index = 0; index < delays.length; index += 1) {
@@ -18,7 +18,7 @@ export async function retryConnection<T>(
       const controller = new AbortController();
       try {
         return await Promise.race([
-          operation(controller.signal),
+          operation(controller.signal, index + 1),
           new Promise<never>((_resolve, reject) => {
             timeoutId = globalThis.setTimeout(
               () => {

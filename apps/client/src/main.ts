@@ -1494,15 +1494,20 @@ async function connect(): Promise<void> {
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
   const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
+  const joinOptions = { name: "Explorer", ...(qaSpawn === "cave" ? { qaSpawn } : {}) };
   room = await retryConnection(
-    signal => {
+    (signal, attempt) => {
       const client = new Client(endpoint, {
         fetchFn: (input, init) => fetch(input, { ...init, signal }),
       });
-      return client.joinOrCreate(WORLD_ROOM, { name: "Explorer", ...(qaSpawn === "cave" ? { qaSpawn } : {}) });
+      return attempt === 1
+        ? client.joinOrCreate(WORLD_ROOM, joinOptions)
+        : client.create(WORLD_ROOM, joinOptions);
     },
     (attempt, delay) => {
-      status.textContent = `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/5)`;
+      status.textContent = attempt === 2
+        ? `Shared world is delayed. Starting a recovery world in ${Math.round(delay / 1000)}s…`
+        : `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/5)`;
     },
   );
   bindPlayers(room);
