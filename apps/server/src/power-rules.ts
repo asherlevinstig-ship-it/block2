@@ -64,6 +64,23 @@ export function selectBurstPowerTargets(
     .map(candidate => candidate.target);
 }
 
+export function selectGroundPowerTargets(
+  center: PowerPosition,
+  targets: readonly PowerTarget[],
+  radius: number,
+): PowerTarget[] {
+  return selectBurstPowerTargets(center, targets, radius);
+}
+
+export function isGroundPowerTargetInRange(
+  origin: PowerPosition,
+  target: PowerPosition,
+  range: number,
+): boolean {
+  return Math.hypot(target.x - origin.x, target.z - origin.z) <= range + 0.05
+    && Math.abs(target.y - origin.y) <= 1.75;
+}
+
 export function lineFractureColumns(origin: PowerPosition, yaw: number, range: number): { x: number; z: number }[] {
   const direction = powerDirection(yaw);
   const columns = new Map<string, { x: number; z: number }>();

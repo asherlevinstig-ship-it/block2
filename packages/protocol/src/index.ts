@@ -65,6 +65,24 @@ export const POWER_DEFINITIONS = {
     forwardStep: 0.65,
     fracturesTerrain: true,
   },
+  eruption: {
+    id: "eruption",
+    name: "Eruption",
+    core: "ground",
+    castType: "ground-release",
+    compatibility: ["universal"],
+    windupMs: 900,
+    activeMs: 180,
+    recoveryMs: 520,
+    cooldownMs: 8000,
+    range: 6.5,
+    width: 2.25,
+    damage: 2,
+    knockback: 0.65,
+    staggerMs: 950,
+    forwardStep: 0,
+    fracturesTerrain: false,
+  },
 } as const satisfies Record<string, PowerDefinition>;
 
 export type PowerId = keyof typeof POWER_DEFINITIONS;
@@ -100,6 +118,11 @@ export const PowerRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   powerId: z.string().min(1).max(64),
   yaw: z.number().finite(),
+  target: z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    z: z.number().finite(),
+  }).optional(),
 });
 
 export const PowerCancelRequestSchema = z.object({
@@ -108,7 +131,7 @@ export const PowerCancelRequestSchema = z.object({
 
 export const PowerEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  powerId: z.enum(["shockwave", "seismic_cleave"]),
+  powerId: z.enum(["shockwave", "seismic_cleave", "eruption"]),
 });
 
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;
@@ -181,6 +204,7 @@ export interface PowerCast {
   yaw: number;
   startedAt: number;
   windupMs: number;
+  target?: { x: number; y: number; z: number };
 }
 
 export interface PowerFracture {

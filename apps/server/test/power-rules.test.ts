@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POWER_DEFINITIONS } from "@blockcraft/protocol";
-import { isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectLinePowerTargets } from "../src/power-rules.js";
+import { isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets } from "../src/power-rules.js";
 
 describe("Power rules", () => {
   it("resolves facing direction from yaw", () => {
@@ -54,5 +54,26 @@ describe("Power rules", () => {
       POWER_DEFINITIONS.shockwave.range,
     );
     expect(targets.map(target => target.id)).toEqual(["near", "edge"]);
+  });
+
+  it("resolves ground Power targets around the selected impact point", () => {
+    const targets = selectGroundPowerTargets(
+      { x: 12, y: 8, z: 10 },
+      [
+        { id: "center", x: 12.2, y: 8, z: 10.1, alive: true },
+        { id: "edge", x: 14.2, y: 8, z: 10, alive: true },
+        { id: "outside", x: 14.4, y: 8, z: 10, alive: true },
+        { id: "above", x: 12, y: 10, z: 10, alive: true },
+      ],
+      POWER_DEFINITIONS.eruption.width,
+    );
+    expect(targets.map(target => target.id)).toEqual(["center", "edge"]);
+  });
+
+  it("rejects ground targets outside horizontal or vertical casting range", () => {
+    const origin = { x: 8.5, y: 8, z: 8.5 };
+    expect(isGroundPowerTargetInRange(origin, { x: 14, y: 8, z: 8.5 }, POWER_DEFINITIONS.eruption.range)).toBe(true);
+    expect(isGroundPowerTargetInRange(origin, { x: 16, y: 8, z: 8.5 }, POWER_DEFINITIONS.eruption.range)).toBe(false);
+    expect(isGroundPowerTargetInRange(origin, { x: 10, y: 10, z: 8.5 }, POWER_DEFINITIONS.eruption.range)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PRIMARY_ACTION_DURATION_MS,
   advanceLocomotionAnimation,
+  eruptionPowerPose,
   primaryActionPose,
   seismicPowerPose,
   shockwavePowerPose,
@@ -78,6 +79,16 @@ describe("voxel character animation", () => {
     expect(windup.active).toBe(true);
     expect(impact.leftArmRoll).toBeGreaterThan(60);
     expect(impact.rightArmRoll).toBeLessThan(-60);
+    expect(recovered.active).toBe(false);
+  });
+
+  it("raises both arms to call down Eruption", () => {
+    const windup = eruptionPowerPose(450);
+    const impact = eruptionPowerPose(980);
+    const recovered = eruptionPowerPose(1600);
+    expect(windup.active).toBe(true);
+    expect(impact.leftArmPitch).toBeLessThan(-150);
+    expect(impact.rightArmPitch).toBeLessThan(-150);
     expect(recovered.active).toBe(false);
   });
 

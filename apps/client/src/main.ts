@@ -70,6 +70,7 @@ import {
 import {
   PRIMARY_ACTION_DURATION_MS,
   advanceLocomotionAnimation,
+  eruptionPowerPose,
   primaryActionPose,
   seismicPowerPose,
   shockwavePowerPose,
@@ -117,7 +118,7 @@ const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
 const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
 const powerButton = document.querySelector<HTMLButtonElement>("#power-button")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !powerSlot || !powerName || powerPickerButtons.length !== 2 || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !powerSlot || !powerName || powerPickerButtons.length !== 3 || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -486,7 +487,9 @@ function animateVoxelCharacter(
   const pose = voxelCharacterPose(speed, time, verticalVelocity, grounded, 4.2, locomotion);
   const powerPose = powerId === "shockwave"
     ? shockwavePowerPose(powerElapsedMilliseconds)
-    : seismicPowerPose(powerElapsedMilliseconds);
+    : powerId === "eruption"
+      ? eruptionPowerPose(powerElapsedMilliseconds)
+      : seismicPowerPose(powerElapsedMilliseconds);
   const action = powerPose.active ? powerPose : primaryActionPose(actionElapsedMilliseconds, actionStep);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
   rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw, pose.torsoRoll);
@@ -597,6 +600,8 @@ let powerServerReady = false;
 let powerAimActive = false;
 let powerAimYaw = 0;
 let powerAimPointerId: number | null = null;
+const powerAimTarget = new pc.Vec3();
+let powerAimTargetValid = true;
 let cameraShakeUntil = 0;
 let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
@@ -616,7 +621,9 @@ function updatePowerLoadout(powerId: PowerId): void {
   powerSlot.setAttribute("aria-label", `Use ${definition.name}`);
   controlsHelp.textContent = definition.castType === "tap"
     ? `WASD move · Space dodge · Tap R for ${definition.name} · Q mode · E/click acts`
-    : `WASD move · Space dodge/cancel · Hold R aim, release ${definition.name} · Q mode · E/click acts`;
+    : definition.castType === "ground-release"
+      ? `WASD move · Space dodge/cancel · Hold R place, release ${definition.name} · Q mode · E/click acts`
+      : `WASD move · Space dodge/cancel · Hold R aim, release ${definition.name} · Q mode · E/click acts`;
   for (const button of powerPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.power === powerId));
   }
@@ -688,6 +695,7 @@ interface PowerAimVisual {
   validMaterial: pc.StandardMaterial;
   blockedMaterial: pc.StandardMaterial;
   segments: PowerAimSegment[];
+  kind: "line" | "ground";
 }
 
 interface PowerDebrisVisual {
@@ -718,7 +726,11 @@ function startPowerTelegraph(casterId: string, powerId: PowerId, x: number, y: n
   const root = new pc.Entity(`power-telegraph:${casterId}`);
   const definition = POWER_DEFINITIONS[powerId];
   const material = powerMaterial(
-    powerId === "shockwave" ? new pc.Color(0.18, 0.72, 1) : new pc.Color(1, 0.43, 0.06),
+    powerId === "shockwave"
+      ? new pc.Color(0.18, 0.72, 1)
+      : powerId === "eruption"
+        ? new pc.Color(1, 0.18, 0.04)
+        : new pc.Color(1, 0.43, 0.06),
     0.28,
   );
   if (definition.core === "burst") {
@@ -733,12 +745,25 @@ function startPowerTelegraph(casterId: string, powerId: PowerId, x: number, y: n
       );
       segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
     }
+  } else if (definition.core === "ground") {
+    for (let index = 0; index < 24; index += 1) {
+      const angle = index / 24 * Math.PI * 2;
+      const segment = addBox(
+        root,
+        "eruption-warning",
+        material,
+        [0.42, 0.03, 0.13],
+        [Math.sin(angle) * definition.width, 0.04, Math.cos(angle) * definition.width],
+      );
+      segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+    }
+    addBox(root, "eruption-center", material, [0.34, 0.035, 0.34], [0, 0.045, 0]);
   } else {
     for (let distance = 0.8; distance <= definition.range; distance += 0.8) {
       addBox(root, "seismic-warning", material, [definition.width, 0.025, 0.66], [0, 0.035, distance]);
     }
   }
-  root.setPosition(x, y, z);
+  root.setPosition(x, y + 0.08, z);
   root.setEulerAngles(0, yaw, 0);
   app.root.addChild(root);
   powerTelegraphs.set(casterId, { root, material, startedAt: performance.now(), windupMs });
@@ -755,18 +780,44 @@ function createPowerAimVisual(): void {
   const validMaterial = powerMaterial(new pc.Color(0.2, 0.95, 0.52), 0.42);
   const blockedMaterial = powerMaterial(new pc.Color(1, 0.16, 0.08), 0.5);
   const segments: PowerAimSegment[] = [];
-  const definition = POWER_DEFINITIONS.seismic_cleave;
-  for (let distance = 0.8; distance <= definition.range; distance += 0.8) {
-    const entity = addBox(root, "seismic-aim", validMaterial, [definition.width, 0.028, 0.66], [0, 0.045, distance]);
-    segments.push({ entity, distance });
+  const definition = POWER_DEFINITIONS[localEquippedPower];
+  const kind = definition.core === "ground" ? "ground" : "line";
+  if (kind === "ground") {
+    for (let index = 0; index < 24; index += 1) {
+      const angle = index / 24 * Math.PI * 2;
+      const entity = addBox(
+        root,
+        "eruption-aim",
+        validMaterial,
+        [0.42, 0.028, 0.13],
+        [Math.sin(angle) * definition.width, 0.045, Math.cos(angle) * definition.width],
+      );
+      entity.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+      segments.push({ entity, distance: definition.width });
+    }
+    segments.push({ entity: addBox(root, "eruption-aim-center", validMaterial, [0.32, 0.03, 0.32], [0, 0.05, 0]), distance: 0 });
+  } else {
+    for (let distance = 0.8; distance <= definition.range; distance += 0.8) {
+      const entity = addBox(root, "seismic-aim", validMaterial, [definition.width, 0.028, 0.66], [0, 0.045, distance]);
+      segments.push({ entity, distance });
+    }
   }
   app.root.addChild(root);
-  powerAimVisual = { root, validMaterial, blockedMaterial, segments };
+  powerAimVisual = { root, validMaterial, blockedMaterial, segments, kind };
 }
 
 function updatePowerAimVisual(): void {
   if (!powerAimActive || !powerAimVisual) return;
   const player = localPlayer.getPosition();
+  if (powerAimVisual.kind === "ground") {
+    powerAimTargetValid = Math.hypot(powerAimTarget.x - player.x, powerAimTarget.z - player.z) <= POWER_DEFINITIONS.eruption.range + 0.05
+      && isPlayerSupported(readCollisionWorldBlock, powerAimTarget.x, powerAimTarget.y, powerAimTarget.z);
+    powerAimVisual.root.setPosition(powerAimTarget.x, powerAimTarget.y + 0.08, powerAimTarget.z);
+    for (const segment of powerAimVisual.segments) {
+      if (segment.entity.render) segment.entity.render.material = powerAimTargetValid ? powerAimVisual.validMaterial : powerAimVisual.blockedMaterial;
+    }
+    return;
+  }
   powerAimVisual.root.setPosition(player.x, player.y, player.z);
   powerAimVisual.root.setEulerAngles(0, powerAimYaw, 0);
   const radians = powerAimYaw * Math.PI / 180;
@@ -790,13 +841,35 @@ function createPowerImpact(message: PowerResolved): void {
   const fractureRoot = new pc.Entity(`power-fractures:${message.casterId}`);
   const definition = POWER_DEFINITIONS[message.powerId];
   const material = powerMaterial(
-    message.powerId === "shockwave" ? new pc.Color(0.2, 0.76, 1) : new pc.Color(1, 0.68, 0.14),
+    message.powerId === "shockwave"
+      ? new pc.Color(0.2, 0.76, 1)
+      : message.powerId === "eruption"
+        ? new pc.Color(1, 0.22, 0.035)
+        : new pc.Color(1, 0.68, 0.14),
     0.78,
   );
   if (definition.core === "burst") {
     for (let index = 0; index < 24; index += 1) {
       const angle = index / 24 * Math.PI * 2;
       const segment = addBox(root, "shockwave-ring", material, [0.55, 0.12, 0.18], [Math.sin(angle) * 1.15, 0.12, Math.cos(angle) * 1.15]);
+      segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+    }
+  } else if (definition.core === "ground") {
+    for (let index = 0; index < 28; index += 1) {
+      const angle = index / 28 * Math.PI * 2;
+      const radius = 0.65 + (index % 2) * 0.42;
+      const pillar = addBox(
+        root,
+        "eruption-pillar",
+        material,
+        [0.24 + (index % 3) * 0.05, 0.8 + (index % 5) * 0.22, 0.24 + (index % 2) * 0.05],
+        [Math.sin(angle) * radius, 0.2, Math.cos(angle) * radius],
+      );
+      pillar.setLocalEulerAngles((index % 3 - 1) * 8, angle * 180 / Math.PI, (index % 2 ? 1 : -1) * 6);
+    }
+    for (let index = 0; index < 24; index += 1) {
+      const angle = index / 24 * Math.PI * 2;
+      const segment = addBox(root, "eruption-ring", material, [0.5, 0.1, 0.16], [Math.sin(angle) * definition.width, 0.1, Math.cos(angle) * definition.width]);
       segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
     }
   } else {
@@ -807,19 +880,21 @@ function createPowerImpact(message: PowerResolved): void {
   for (const fracture of message.fractures) {
     addBox(fractureRoot, "terrain-fracture", material, [0.72, 0.035, 0.16], [fracture.x + 0.5, fracture.y + 1.025, fracture.z + 0.5]);
   }
-  root.setPosition(message.x, message.y, message.z);
+  root.setPosition(message.x, message.y + 0.04, message.z);
   root.setEulerAngles(0, message.yaw, 0);
   app.root.addChild(root);
   app.root.addChild(fractureRoot);
   powerImpactVisuals.push({ root, fractureRoot, material, startedAt: performance.now(), powerId: message.powerId });
   const radians = message.yaw * Math.PI / 180;
   for (let index = 0; index < 14; index += 1) {
-    const debrisAngle = message.powerId === "shockwave" ? index / 14 * Math.PI * 2 : radians;
+    const debrisAngle = message.powerId === "shockwave" || message.powerId === "eruption" ? index / 14 * Math.PI * 2 : radians;
     const directionX = Math.sin(debrisAngle);
     const directionZ = Math.cos(debrisAngle);
-    const distance = 0.5 + (index % 7) * 0.66;
+    const distance = message.powerId === "eruption"
+      ? 0.45 + (index % 7) * 0.26
+      : 0.5 + (index % 7) * 0.66;
     const side = index % 2 === 0 ? -1 : 1;
-    const debris = new pc.Entity("seismic-debris");
+    const debris = new pc.Entity(`${message.powerId}-debris`);
     debris.addComponent("render", { type: "box" });
     if (debris.render) debris.render.material = material;
     const size = 0.09 + (index % 3) * 0.035;
@@ -1614,7 +1689,17 @@ function updatePowerAimFromPointer(): void {
   if (distanceAlongRay <= 0) return;
   const worldX = start.x + (end.x - start.x) * distanceAlongRay;
   const worldZ = start.z + (end.z - start.z) * distanceAlongRay;
-  powerAimYaw = movementYaw(worldX - player.x, worldZ - player.z, powerAimYaw);
+  const definition = POWER_DEFINITIONS[localEquippedPower];
+  const deltaX = worldX - player.x;
+  const deltaZ = worldZ - player.z;
+  const pointerDistance = Math.hypot(deltaX, deltaZ);
+  const scale = definition.core === "ground" && pointerDistance > definition.range
+    ? definition.range / pointerDistance
+    : 1;
+  const targetX = player.x + deltaX * scale;
+  const targetZ = player.z + deltaZ * scale;
+  powerAimYaw = movementYaw(targetX - player.x, targetZ - player.z, powerAimYaw);
+  if (definition.core === "ground") powerAimTarget.set(targetX, player.y, targetZ);
   localFacingYaw = powerAimYaw;
   updatePowerAimVisual();
 }
@@ -1638,10 +1723,20 @@ function beginPowerAim(pointerId: number | null = null): void {
     return;
   }
   const player = localPlayer.getPosition();
-  const targetMob = nearestLivingMob(player, definition.range + 1.2);
+  const targetMob = nearestLivingMob(player, definition.core === "ground" ? definition.range : definition.range + 1.2);
   powerAimYaw = targetMob
     ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
     : localFacingYaw;
+  if (definition.core === "ground") {
+    const radians = powerAimYaw * Math.PI / 180;
+    const preferredDistance = targetMob ? Math.min(definition.range, targetMob.distance) : Math.min(definition.range, 3.5);
+    powerAimTarget.set(
+      targetMob ? targetMob.visual.state.x : player.x + Math.sin(radians) * preferredDistance,
+      player.y,
+      targetMob ? targetMob.visual.state.z : player.z + Math.cos(radians) * preferredDistance,
+    );
+    powerAimTargetValid = isPlayerSupported(readCollisionWorldBlock, powerAimTarget.x, powerAimTarget.y, powerAimTarget.z);
+  }
   powerAimActive = true;
   powerAimPointerId = pointerId;
   localFacingYaw = powerAimYaw;
@@ -1650,7 +1745,9 @@ function beginPowerAim(pointerId: number | null = null): void {
   powerSlot.classList.add("aiming");
   powerButton.classList.add("aiming");
   showCombatFeedback(`AIM ${definition.name.toUpperCase()}`, "dodge");
-  status.textContent = `Aiming ${definition.name} · drag to adjust, release to cast, dodge to cancel.`;
+  status.textContent = definition.core === "ground"
+    ? `Placing ${definition.name} · point within range, release to cast, dodge to cancel.`
+    : `Aiming ${definition.name} · drag to adjust, release to cast, dodge to cancel.`;
 }
 
 function cancelPowerAim(): void {
@@ -1674,7 +1771,7 @@ function cancelLocalPowerPresentation(): void {
   if (room) powerTelegraphs.delete(room.sessionId);
 }
 
-function castPower(yaw: number): void {
+function castPower(yaw: number, target?: { x: number; y: number; z: number }): void {
   if (!room) return;
   const powerId = localEquippedPower;
   const definition = POWER_DEFINITIONS[powerId];
@@ -1685,24 +1782,36 @@ function castPower(yaw: number): void {
   localPowerStepApplied = false;
   localPowerCooldownUntil = Date.now() + definition.cooldownMs;
   powerSequence += 1;
-  startPowerTelegraph(room.sessionId, powerId, player.x, player.y, player.z, yaw, definition.windupMs);
-  room.send("power", { requestId: `power-${powerSequence}`, powerId, yaw });
+  const telegraphPosition = definition.core === "ground" && target ? target : player;
+  startPowerTelegraph(room.sessionId, powerId, telegraphPosition.x, telegraphPosition.y, telegraphPosition.z, yaw, definition.windupMs);
+  room.send("power", { requestId: `power-${powerSequence}`, powerId, yaw, ...(target ? { target } : {}) });
   showCombatFeedback(definition.name.toUpperCase(), "dodge");
   logMovementEvent(`POWER ${definition.id} yaw=${yaw.toFixed(1)}`);
   status.textContent = definition.core === "burst"
     ? `${definition.name} charging · radial impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
-    : `${definition.name} winding up · line impact in ${(definition.windupMs / 1000).toFixed(2)}s.`;
+    : definition.core === "ground"
+      ? `${definition.name} marked · ground impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
+      : `${definition.name} winding up · line impact in ${(definition.windupMs / 1000).toFixed(2)}s.`;
 }
 
 function commitPowerAim(): void {
   if (!powerAimActive || !room) return;
   const yaw = powerAimYaw;
+  const definition = POWER_DEFINITIONS[localEquippedPower];
+  if (definition.core === "ground" && !powerAimTargetValid) {
+    status.textContent = `${definition.name} needs solid ground within range.`;
+    showCombatFeedback("INVALID GROUND", "hurt");
+    return;
+  }
+  const target = definition.core === "ground"
+    ? { x: powerAimTarget.x, y: powerAimTarget.y, z: powerAimTarget.z }
+    : undefined;
   powerAimActive = false;
   powerAimPointerId = null;
   destroyPowerAimVisual();
   powerSlot.classList.remove("aiming");
   powerButton.classList.remove("aiming");
-  castPower(yaw);
+  castPower(yaw, target);
 }
 
 function requestPrimaryAction(): void {
@@ -2055,19 +2164,25 @@ app.on("update", (dt: number) => {
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
-    if (elapsed >= 650) {
+    const impactLifetime = impact.powerId === "eruption" ? 900 : 650;
+    if (elapsed >= impactLifetime) {
       impact.root.destroy();
       impact.fractureRoot.destroy();
       powerImpactVisuals.splice(index, 1);
       continue;
     }
-    const strength = 1 - elapsed / 650;
+    const strength = 1 - elapsed / impactLifetime;
     const radialScale = impact.powerId === "shockwave" ? 1 + (1 - strength) * 1.75 : 1;
-    impact.root.setLocalScale(
-      radialScale + (impact.powerId === "shockwave" ? 0 : (1 - strength) * 0.08),
-      0.65 + strength * 1.8,
-      radialScale,
-    );
+    if (impact.powerId === "eruption") {
+      const eruptionRise = Math.sin(Math.min(1, elapsed / 260) * Math.PI / 2);
+      impact.root.setLocalScale(0.82 + eruptionRise * 0.3, 0.15 + eruptionRise * 1.45, 0.82 + eruptionRise * 0.3);
+    } else {
+      impact.root.setLocalScale(
+        radialScale + (impact.powerId === "shockwave" ? 0 : (1 - strength) * 0.08),
+        0.65 + strength * 1.8,
+        radialScale,
+      );
+    }
     impact.material.opacity = Math.max(0, strength * 0.82);
     impact.material.update();
   }
@@ -2272,7 +2387,8 @@ async function connect(): Promise<void> {
   room.onMessage("block:changed", applyBlockChange);
   room.onMessage("power:cast", (message: PowerCast) => {
     if (message.casterId !== room?.sessionId) {
-      startPowerTelegraph(message.casterId, message.powerId, message.x, message.y, message.z, message.yaw, message.windupMs);
+      const telegraphPosition = message.target ?? message;
+      startPowerTelegraph(message.casterId, message.powerId, telegraphPosition.x, telegraphPosition.y, telegraphPosition.z, message.yaw, message.windupMs);
       const remote = remotePlayers.get(message.casterId);
       if (remote) {
         remote.powerId = message.powerId;

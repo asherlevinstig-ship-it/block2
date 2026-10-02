@@ -43,7 +43,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
-import { isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectLinePowerTargets } from "./power-rules.js";
+import { isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets } from "./power-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -75,6 +75,7 @@ interface PendingPower {
   powerId: PowerId;
   yaw: number;
   impactAt: number;
+  target?: { x: number; y: number; z: number };
 }
 
 export class WorldRoom extends Room<{ state: WorldState }> {
@@ -372,6 +373,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (now < player.powerCooldownUntil) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "cooldown" });
     }
+    const target = parsed.data.target;
+    if (definition.core === "ground") {
+      if (!target) {
+        return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "payload" });
+      }
+      if (!isGroundPowerTargetInRange(player, target, definition.range)) {
+        return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "range" });
+      }
+      if (!isPlayerSupported(this.readWorldBlock, target.x, target.y, target.z)) {
+        return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "collision" });
+      }
+    } else if (target) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "payload" });
+    }
     player.yaw = parsed.data.yaw;
     player.powerCooldownUntil = now + definition.cooldownMs;
     player.powerCastStartedAt = now;
@@ -381,6 +396,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       powerId,
       yaw: parsed.data.yaw,
       impactAt: now + definition.windupMs,
+      ...(target ? { target } : {}),
     });
     if (definition.core === "line") {
       const threatened = selectLinePowerTargets(
@@ -414,6 +430,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       yaw: parsed.data.yaw,
       startedAt: now,
       windupMs: definition.windupMs,
+      ...(target ? { target } : {}),
     };
     this.broadcast("power:cast", cast);
   }
@@ -506,19 +523,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         z: mob.z,
         alive: mob.alive,
       }));
+      const impactCenter = definition.core === "ground" && pending.target ? pending.target : player;
       const targets = definition.core === "burst"
         ? selectBurstPowerTargets(player, availableTargets, definition.range)
-        : selectLinePowerTargets(player, pending.yaw, availableTargets, definition.range, definition.width);
+        : definition.core === "ground"
+          ? selectGroundPowerTargets(impactCenter, availableTargets, definition.width)
+          : selectLinePowerTargets(player, pending.yaw, availableTargets, definition.range, definition.width);
       const defeatedMobIds: string[] = [];
       for (const target of targets) {
         const mob = this.state.mobs.get(target.id);
         if (!mob || !mob.alive) continue;
         mob.health = Math.max(0, mob.health - definition.damage);
         mob.hitSequence += 1;
-        const radialX = mob.x - player.x;
-        const radialZ = mob.z - player.z;
+        const radialX = mob.x - impactCenter.x;
+        const radialZ = mob.z - impactCenter.z;
         const radialLength = Math.hypot(radialX, radialZ);
-        const knockbackDirection = definition.core === "burst" && radialLength > 0.001
+        const knockbackDirection = (definition.core === "burst" || definition.core === "ground") && radialLength > 0.001
           ? { x: radialX / radialLength, z: radialZ / radialLength }
           : direction;
         const knockedBack = resolvePlayerMotion(
@@ -550,9 +570,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const resolved: PowerResolved = {
         casterId: sessionId,
         powerId: pending.powerId,
-        x: player.x,
-        y: player.y,
-        z: player.z,
+        x: impactCenter.x,
+        y: impactCenter.y,
+        z: impactCenter.z,
         yaw: pending.yaw,
         hitCount: targets.length,
         damage: definition.damage,
