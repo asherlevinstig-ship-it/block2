@@ -118,9 +118,10 @@ export function defeatReward(
   stamina: number,
   maxStamina: number,
   definition: MobArchetypeDefinition,
+  rewardMultiplier = 1,
 ): { health: number; stamina: number; healthRestored: number; staminaRestored: number } {
-  const nextHealth = Math.min(maxHealth, health + definition.rewardHealth);
-  const nextStamina = Math.min(maxStamina, stamina + definition.rewardStamina);
+  const nextHealth = Math.min(maxHealth, health + Math.round(definition.rewardHealth * rewardMultiplier));
+  const nextStamina = Math.min(maxStamina, stamina + Math.round(definition.rewardStamina * rewardMultiplier));
   return {
     health: nextHealth,
     stamina: nextStamina,

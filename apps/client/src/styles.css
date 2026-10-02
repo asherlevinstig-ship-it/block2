@@ -55,6 +55,23 @@ button { font: inherit; }
 #status { color: #d2dfce; line-height: 1.45; }
 #target { margin-top: 9px !important; color: #f0cb67; font-size: .82rem; line-height: 1.4; }
 #players { margin-top: 5px !important; color: #7ec9f4; font-size: .78rem; }
+#danger-zone {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  margin-top: 9px;
+  padding: 7px 9px;
+  border: 1px solid rgb(126 201 244 / 30%);
+  border-radius: 8px;
+  background: rgb(21 70 86 / 36%);
+  color: #aeeaff;
+  transition: border-color 220ms ease, background 220ms ease, color 220ms ease;
+}
+#danger-zone span, #danger-zone strong { font-size: .68rem; font-weight: 900; letter-spacing: .1em; }
+#danger-zone small { grid-column: 1 / -1; color: #a8bbb1; font-size: .65rem; }
+#danger-zone[data-tier="1"] { border-color: rgb(174 222 142 / 42%); background: rgb(35 77 33 / 44%); color: #c9f2a9; }
+#danger-zone[data-tier="2"] { border-color: rgb(245 183 67 / 52%); background: rgb(100 61 11 / 48%); color: #ffd978; }
+#danger-zone[data-tier="3"] { border-color: rgb(255 91 70 / 62%); background: rgb(104 25 21 / 54%); color: #ff9a88; box-shadow: inset 0 0 18px rgb(255 56 35 / 9%); }
 #player-health {
   display: grid;
   grid-template-columns: auto 1fr auto;

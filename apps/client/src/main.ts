@@ -99,6 +99,10 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const playerCount = document.querySelector<HTMLElement>("#players")!;
+const dangerZone = document.querySelector<HTMLElement>("#danger-zone")!;
+const dangerZoneName = document.querySelector<HTMLElement>("#danger-zone-name")!;
+const dangerZoneTier = document.querySelector<HTMLElement>("#danger-zone-tier")!;
+const dangerZoneDetail = document.querySelector<HTMLElement>("#danger-zone-detail")!;
 const exitGuide = document.querySelector<HTMLElement>("#exit-guide")!;
 const performanceToggle = document.querySelector<HTMLButtonElement>("#performance-toggle")!;
 const performancePanel = document.querySelector<HTMLElement>("#performance-panel")!;
@@ -147,7 +151,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -601,6 +605,7 @@ interface NetworkPlayer {
   powerCastStartedAt: number;
   specialCooldownUntil: number;
   equippedSpecial: string;
+  dangerTier: number;
   name: string;
 }
 
@@ -634,6 +639,10 @@ interface NetworkMob {
   name: string;
   archetype: string;
   armor: number;
+  difficultyTier: number;
+  attackDamage: number;
+  speedMultiplier: number;
+  rewardMultiplier: number;
 }
 
 interface MobVisual {
@@ -844,6 +853,22 @@ function updatePlayerStamina(stamina: number, maximumStamina: number): void {
   const fraction = Math.max(0, Math.min(1, stamina / Math.max(1, maximumStamina)));
   playerStaminaFill.style.width = `${fraction * 100}%`;
   playerStaminaValue.textContent = `${Math.round(stamina)}`;
+}
+
+const DANGER_ZONE_LABELS = [
+  { name: "SAFE CORE", detail: "No enemy scaling near the world centre" },
+  { name: "OUTSKIRTS", detail: "Standard enemies and standard rewards" },
+  { name: "WILDS", detail: "Tougher, faster enemies · improved rewards" },
+  { name: "DEEP FRONTIER", detail: "Elite enemies · highest danger and rewards" },
+] as const;
+
+function updateDangerZone(tierValue: number): void {
+  const tier = Math.max(0, Math.min(3, Math.floor(tierValue)));
+  const label = DANGER_ZONE_LABELS[tier]!;
+  dangerZone.dataset.tier = String(tier);
+  dangerZoneName.textContent = label.name;
+  dangerZoneTier.textContent = `TIER ${tier}`;
+  dangerZoneDetail.textContent = label.detail;
 }
 
 function actionDuration(step: number): number {
@@ -1433,6 +1458,11 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   entity.addChild(bodyRoot);
   const isBrute = mob.archetype === "stone_brute";
   const isSpitter = mob.archetype === "cave_spitter";
+  const tierColor = mob.difficultyTier >= 3
+    ? new pc.Color(1, 0.2, 0.08)
+    : mob.difficultyTier === 2
+      ? new pc.Color(1, 0.62, 0.08)
+      : new pc.Color(0.35, 0.9, 0.28);
   const bodyMaterial = coloredMaterial(
     isBrute ? new pc.Color(0.34, 0.36, 0.35) : isSpitter ? new pc.Color(0.24, 0.38, 0.16) : new pc.Color(0.22, 0.62, 0.24),
   );
@@ -1443,7 +1473,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     isBrute ? new pc.Color(1, 0.38, 0.04) : isSpitter ? new pc.Color(0.78, 1, 0.3) : new pc.Color(0.03, 0.045, 0.035),
   );
   const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
-  const healthMaterial = coloredMaterial(isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : new pc.Color(0.35, 0.9, 0.28));
+  const healthMaterial = coloredMaterial(mob.difficultyTier > 1 ? tierColor : isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : tierColor);
   const warningMaterial = new pc.StandardMaterial();
   warningMaterial.diffuse = new pc.Color(0.9, 0.16, 0.06);
   warningMaterial.emissive = new pc.Color(0.7, 0.08, 0.02);
@@ -1493,6 +1523,12 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const healthBarY = isBrute ? 2.18 : isSpitter ? 1.48 : 1.34;
   addBox(entity, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(entity, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
+  const tierMaterial = coloredMaterial(tierColor);
+  for (let index = 0; index < mob.difficultyTier; index += 1) {
+    const pipX = (index - (mob.difficultyTier - 1) / 2) * 0.22;
+    const pip = addBox(entity, `danger-tier-${index + 1}`, tierMaterial, [0.12, 0.12, 0.12], [pipX, healthBarY + 0.2, 0]);
+    pip.setLocalEulerAngles(0, 45, 45);
+  }
   const warning = new pc.Entity("lunge-warning");
   warning.addComponent("render", { type: "cylinder" });
   if (warning.render) warning.render.material = warningMaterial;
@@ -1592,7 +1628,7 @@ function bindMobs(joinedRoom: Room): void {
     const visual = createMobVisual(mobId, mob);
     mobVisuals.set(mobId, visual);
     const mobCallbacks = callbacks(mob);
-    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name"] as const) {
+    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => updateMobVisual(visual), true);
     }
   }, true);
@@ -1705,6 +1741,9 @@ function bindPlayers(joinedRoom: Room): void {
     }, true);
     playerCallbacks.listen("maxStamina", () => {
       if (isLocal) updatePlayerStamina(player.stamina, player.maxStamina);
+    }, true);
+    playerCallbacks.listen("dangerTier", () => {
+      if (isLocal) updateDangerZone(player.dangerTier);
     }, true);
   }, true);
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {

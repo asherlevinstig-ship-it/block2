@@ -22,6 +22,7 @@ export const PlayerState = schema({
   powerCastStartedAt: t.float64().default(0),
   specialCooldownUntil: t.float64().default(0),
   equippedSpecial: t.string().default(""),
+  dangerTier: t.int8().default(0),
   name: t.string().default("Explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
@@ -44,6 +45,10 @@ export const MobState = schema({
   name: t.string().default("Moss Crawler"),
   archetype: t.string().default("moss_crawler"),
   armor: t.int8().default(0),
+  difficultyTier: t.int8().default(1),
+  attackDamage: t.int8().default(1),
+  speedMultiplier: t.float32().default(1),
+  rewardMultiplier: t.float32().default(1),
 }, "MobState");
 export type MobState = SchemaType<typeof MobState>;
 
