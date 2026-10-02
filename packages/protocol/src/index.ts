@@ -254,6 +254,12 @@ export const DodgeRequestSchema = z.object({
   yaw: z.number().finite(),
 });
 
+export const DefenseRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  active: z.boolean(),
+  yaw: z.number().finite(),
+});
+
 export const PowerRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   powerId: z.string().min(1).max(64),
@@ -304,6 +310,7 @@ export type MoveRequest = z.infer<typeof MoveRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
 export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
+export type DefenseRequest = z.infer<typeof DefenseRequestSchema>;
 export type PowerRequest = z.infer<typeof PowerRequestSchema>;
 export type PowerCancelRequest = z.infer<typeof PowerCancelRequestSchema>;
 export type PowerEquipRequest = z.infer<typeof PowerEquipRequestSchema>;
@@ -394,6 +401,17 @@ export interface PlayerHit {
   damage: number;
   health: number;
   defeated: boolean;
+  guarded?: boolean;
+  parried?: boolean;
+}
+
+export interface DefenseResolved {
+  playerId: string;
+  mobId: string;
+  guarded: boolean;
+  parried: boolean;
+  damage: number;
+  stamina: number;
 }
 
 export interface CombatReward {
@@ -503,6 +521,6 @@ export interface BrambleSnareTriggered {
 
 export interface ActionRejected {
   requestId?: string;
-  action: "move" | "mine" | "attack" | "dodge" | "power" | "special" | "loadout";
+  action: "move" | "mine" | "attack" | "dodge" | "defense" | "power" | "special" | "loadout";
   reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate" | "stamina" | "cooldown" | "compatibility";
 }

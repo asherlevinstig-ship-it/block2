@@ -98,6 +98,24 @@ button { font: inherit; }
 #player-stamina > div { height: 6px; overflow: hidden; border-radius: 999px; background: rgb(15 48 66 / 85%); }
 #player-stamina-fill { display: block; width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #35aedd, #8ff2ff); transition: width 100ms linear; }
 #player-stamina-value { color: #c6f4ff; font-variant-numeric: tabular-nums; text-align: right; }
+#defense-slot {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  margin-top: 7px;
+  padding: 7px 9px;
+  border: 1px solid rgb(95 190 255 / 34%);
+  border-radius: 8px;
+  background: rgb(17 50 67 / 58%);
+  color: #c8efff;
+  text-align: left;
+}
+#defense-slot span { color: #72cfff; font-size: .54rem; font-weight: 1000; letter-spacing: .1em; }
+#defense-slot strong { font-size: .66rem; }
+#defense-slot em { color: #9bdfff; font-size: .54rem; font-style: normal; font-weight: 900; }
+#defense-slot[aria-pressed="true"] { border-color: #91e5ff; background: rgb(18 91 119 / 90%); box-shadow: 0 0 16px rgb(81 203 255 / 20%); }
 #exit-guide {
   margin-top: 9px !important;
   padding: 7px 9px;
@@ -508,10 +526,10 @@ button { font: inherit; }
 
   #touch-actions {
     display: grid;
-    grid-template: 64px 84px / 68px 76px 96px;
+    grid-template: 64px 84px / 62px 68px 68px 96px;
     grid-template-areas:
-      "special power primary"
-      "mode dodge primary";
+      "special power defense primary"
+      "mode dodge defense primary";
     align-items: center;
     gap: 8px;
     pointer-events: none;
@@ -520,6 +538,7 @@ button { font: inherit; }
   #joystick-zone,
   #mine-button,
   #dodge-button,
+  #defense-button,
   #power-button,
   #touch-mode-button,
   #special-button { pointer-events: auto; touch-action: none; user-select: none; }
@@ -550,6 +569,7 @@ button { font: inherit; }
 
   #mine-button,
   #dodge-button,
+  #defense-button,
   #power-button,
   #touch-mode-button,
   #special-button {
@@ -575,6 +595,7 @@ button { font: inherit; }
   #power-button { grid-area: power; }
   #special-button { grid-area: special; width: 68px; height: 68px; font-size: .64rem; }
   #dodge-button { grid-area: dodge; }
+  #defense-button { grid-area: defense; width: 68px; height: 68px; border-color: rgb(111 211 255 / 62%); background: rgb(18 79 107 / 86%); font-size: .64rem; }
   #touch-mode-button {
     grid-area: mode;
     width: 68px;
@@ -596,6 +617,7 @@ button { font: inherit; }
 
   #mine-button:active { transform: scale(.94); background: rgb(184 111 24 / 92%); }
   #dodge-button:active { transform: scale(.94); background: rgb(23 111 143 / 92%) !important; }
+  #defense-button[aria-pressed="true"] { transform: scale(.94); background: rgb(30 137 179 / 96%) !important; box-shadow: 0 0 22px rgb(91 213 255 / 34%); }
   #power-button:active { transform: scale(.94); background: rgb(144 77 17 / 94%) !important; }
   #special-button:active { transform: scale(.94); background: rgb(101 45 137 / 96%) !important; }
   #touch-mode-button:active { transform: scale(.94); }
@@ -613,15 +635,17 @@ button { font: inherit; }
   #joystick-zone { width: 96px; height: 96px; }
   #mine-button,
   #dodge-button,
+  #defense-button,
   #power-button { width: 66px; height: 66px; font-size: .7rem; }
   #special-button { width: 58px; height: 58px; font-size: .56rem; }
   #touch-actions {
     grid-template-rows: 56px 70px;
-    grid-template-columns: 58px 68px 78px;
+    grid-template-columns: 52px 58px 58px 78px;
     gap: 6px;
   }
   #mine-button { width: 78px; height: 78px; font-size: .78rem; }
   #touch-mode-button { width: 58px; height: 58px; }
+  #defense-button { width: 58px; height: 58px; }
 }
 
 @media (max-width: 520px) {
@@ -635,7 +659,7 @@ button { font: inherit; }
   #joystick-knob { width: 40px; height: 40px; }
   #touch-actions {
     grid-template-rows: 48px 62px;
-    grid-template-columns: 52px 58px 68px;
+    grid-template-columns: 48px 52px 52px 68px;
     gap: 6px;
   }
   #mine-button { width: 68px; height: 68px; font-size: .68rem; }
@@ -643,5 +667,6 @@ button { font: inherit; }
   #power-button { width: 58px; height: 58px; font-size: .61rem; }
   #special-button { width: 52px; height: 52px; font-size: .52rem; }
   #touch-mode-button { width: 52px; height: 52px; font-size: .48rem; }
+  #defense-button { width: 52px; height: 52px; font-size: .48rem; }
   #touch-mode-button strong { font-size: .58rem; }
 }

@@ -18,6 +18,7 @@ import {
   type CombatMiss,
   type CombatReward,
   type CombatStagger,
+  type DefenseResolved,
   type MainHandId,
   type MobHazardPlaced,
   type MobProjectileReleased,
@@ -117,6 +118,7 @@ const playerHealthFill = document.querySelector<HTMLElement>("#player-health-fil
 const playerHealthValue = document.querySelector<HTMLElement>("#player-health-value")!;
 const playerStaminaFill = document.querySelector<HTMLElement>("#player-stamina-fill")!;
 const playerStaminaValue = document.querySelector<HTMLElement>("#player-stamina-value")!;
+const defenseSlot = document.querySelector<HTMLButtonElement>("#defense-slot")!;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerName = document.querySelector<HTMLElement>("#power-name")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
@@ -150,13 +152,20 @@ const joystickZone = document.querySelector<HTMLElement>("#joystick-zone")!;
 const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
 const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
+const defenseButton = document.querySelector<HTMLButtonElement>("#defense-button")!;
 const powerButton = document.querySelector<HTMLButtonElement>("#power-button")!;
 const specialButton = document.querySelector<HTMLButtonElement>("#special-button")!;
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
+}
+
+function applyDefensePose(rig: VoxelCharacterRig): void {
+  rig.torso.setLocalEulerAngles(7, 0, 0);
+  rig.leftArm.setLocalEulerAngles(-82, 0, -32);
+  rig.rightArm.setLocalEulerAngles(-68, 0, 28);
 }
 
 if (window.matchMedia("(pointer: coarse), (max-width: 820px)").matches) {
@@ -612,6 +621,8 @@ interface NetworkPlayer {
   equippedSpecial: string;
   dangerTier: number;
   name: string;
+  defending: boolean;
+  defenseStartedAt: number;
 }
 
 interface RemotePlayerVisual {
@@ -625,6 +636,7 @@ interface RemotePlayerVisual {
   powerStartedAt: number | null;
   powerId: PowerId | null;
   lastPowerSequence: number;
+  defending: boolean;
 }
 
 interface NetworkMob {
@@ -702,6 +714,7 @@ let localComboStep = 0;
 let localComboExpiresAt = 0;
 let localHitPauseUntil = 0;
 let localDodgeStartedAt: number | null = null;
+let localDefending = false;
 let localPowerStartedAt: number | null = null;
 let localPowerFacingYaw: number | null = null;
 let localPowerStepApplied = false;
@@ -718,6 +731,7 @@ let specialEquipSequence = 0;
 let powerEquipSequence = 0;
 let seismicMasterySequence = 0;
 let mainHandEquipSequence = 0;
+let defenseSequence = 0;
 let localLastPowerSequence = 0;
 let powerServerReady = false;
 let powerAimActive = false;
@@ -828,7 +842,7 @@ function updateControlsHelp(): void {
   const special = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
   const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
-  controlsHelp.textContent = `WASD move · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
+  controlsHelp.textContent = `WASD move · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
@@ -1512,6 +1526,7 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
     powerStartedAt: null,
     powerId: isPowerId(player.equippedPower) ? player.equippedPower : null,
     lastPowerSequence: player.powerSequence,
+    defending: player.defending,
   };
 }
 
@@ -1771,6 +1786,10 @@ function bindPlayers(joinedRoom: Room): void {
       remote.lastPowerSequence = player.powerSequence;
       remote.powerId = isPowerId(player.equippedPower) ? player.equippedPower : null;
       remote.powerStartedAt = performance.now();
+    }, true);
+    playerCallbacks.listen("defending", () => {
+      if (isLocal) setDefensePresentation(player.defending);
+      else if (remote) remote.defending = player.defending;
     }, true);
     playerCallbacks.listen("powerCooldownUntil", () => {
       if (isLocal) localPowerCooldownUntil = player.powerCooldownUntil;
@@ -2092,6 +2111,29 @@ let completedStopTrace = "No completed stop trace yet.";
 let stopTraceSequence = 0;
 let previousAppliedMovement = false;
 
+function setDefensePresentation(active: boolean): void {
+  localDefending = active;
+  defenseSlot.setAttribute("aria-pressed", String(active));
+  defenseButton.setAttribute("aria-pressed", String(active));
+  defenseSlot.classList.toggle("active", active);
+  defenseButton.classList.toggle("active", active);
+}
+
+function requestDefense(active: boolean): void {
+  if (!room || !worldReady || active === localDefending) return;
+  if (active && (powerAimActive || specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null)) {
+    status.textContent = "Finish or cancel the current action before guarding.";
+    return;
+  }
+  defenseSequence += 1;
+  setDefensePresentation(active);
+  room.send("defense", { requestId: `defense-${defenseSequence}`, active, yaw: localFacingYaw });
+  if (active) {
+    showCombatFeedback("GUARD", "dodge");
+    status.textContent = "Guarding · time the opening 0.24 seconds to parry frontal attacks.";
+  }
+}
+
 function fixed(value: number, digits = 3): string {
   return Number.isFinite(value) ? value.toFixed(digits) : String(value);
 }
@@ -2377,6 +2419,7 @@ function requestAttack(): void {
 
 function requestDodge(): void {
   if (!room || !worldReady) return;
+  if (localDefending) requestDefense(false);
   if (powerAimActive) cancelPowerAim();
   if (specialAimActive) cancelSpecialAim();
   const activePowerElapsed = localPowerStartedAt === null ? null : performance.now() - localPowerStartedAt;
@@ -2461,6 +2504,7 @@ function updatePowerAimFromPointer(): void {
 
 function beginPowerAim(pointerId: number | null = null): void {
   if (!room || !worldReady) return;
+  if (localDefending) requestDefense(false);
   if (!powerServerReady) {
     status.textContent = "Power server is updating · Powers will unlock automatically.";
     showCombatFeedback("POWER SERVER UPDATING", "hurt");
@@ -2636,6 +2680,7 @@ function updateSpecialAimFromPointer(): void {
 
 function beginSpecialAim(pointerId: number | null = null): void {
   if (!room || !worldReady || specialAimActive) return;
+  if (localDefending) requestDefense(false);
   const definition = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const remaining = localSpecialCooldownUntil - Date.now();
   if (remaining > 0) {
@@ -2708,6 +2753,7 @@ function commitSpecialAim(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (localDefending) requestDefense(false);
   if (primaryActionForMode(interactionMode) === "mine") requestMine();
   else requestAttack();
 }
@@ -2765,6 +2811,7 @@ window.addEventListener("keydown", event => {
   if (event.repeat) return;
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyE") requestPrimaryAction();
+  if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyR") beginPowerAim();
   if (event.code === "KeyF") beginSpecialAim();
   if (event.code === "Space") {
@@ -2773,15 +2820,26 @@ window.addEventListener("keydown", event => {
   }
 });
 window.addEventListener("keyup", event => {
+  if (event.code === "KeyC") requestDefense(false);
   if (event.code === "KeyR") commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
 canvas.addEventListener("pointerdown", event => {
+  if (event.button === 2) {
+    event.preventDefault();
+    requestDefense(true);
+    return;
+  }
   if (event.button !== 0) return;
   updatePointerPosition(event);
   updateTarget();
   requestPrimaryAction();
 });
+canvas.addEventListener("pointerup", event => {
+  if (event.button === 2) requestDefense(false);
+});
+canvas.addEventListener("pointercancel", () => requestDefense(false));
+canvas.addEventListener("contextmenu", event => event.preventDefault());
 mineButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestPrimaryAction();
@@ -2790,6 +2848,18 @@ dodgeButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestDodge();
 });
+for (const button of [defenseButton, defenseSlot]) {
+  button.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    button.setPointerCapture(event.pointerId);
+    requestDefense(true);
+  });
+  button.addEventListener("pointerup", event => {
+    if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+    requestDefense(false);
+  });
+  button.addEventListener("pointercancel", () => requestDefense(false));
+}
 specialButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   specialButton.setPointerCapture(event.pointerId);
@@ -2968,9 +3038,9 @@ app.on("update", (dt: number) => {
   const predicted = resolvePlayerMotion(
     current,
     {
-      x: smoothedMovement.x * 4.2 * frameTime,
+      x: smoothedMovement.x * (localDefending ? 2.1 : 4.2) * frameTime,
       y: localVerticalVelocity * frameTime,
-      z: smoothedMovement.z * 4.2 * frameTime,
+      z: smoothedMovement.z * (localDefending ? 2.1 : 4.2) * frameTime,
     },
     readCollisionWorldBlock,
   );
@@ -3024,7 +3094,8 @@ app.on("update", (dt: number) => {
     localPowerStepApplied = true;
   }
   if (animationNow >= localHitPauseUntil) {
-    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower);
+    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * (localDefending ? 2.1 : 4.2), animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower);
+    if (localDefending) applyDefensePose(localPlayerRig);
   }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
   if (dodgeElapsed !== null && dodgeElapsed < 320) {
@@ -3060,6 +3131,7 @@ app.on("update", (dt: number) => {
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
       animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remote.actionMainHandId, remotePowerElapsed, remote.powerId);
+      if (remote.defending) applyDefensePose(remote.rig);
       if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {
         remote.actionStartedAt = null;
         remote.actionMainHandId = null;
@@ -3633,12 +3705,22 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
     if (message.playerId !== room?.sessionId) return;
+    if (message.guarded) return;
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
     showCombatFeedback(message.defeated ? "DEFEATED · RESPAWNING" : `HURT  −${message.damage}`, "hurt");
     status.textContent = message.defeated
       ? "You were defeated and returned to the surface camp."
       : `${attackerName} hit you for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HURT hp=${message.health} defeated=${message.defeated}`);
+  });
+  room.onMessage("combat:defense", (message: DefenseResolved) => {
+    if (message.playerId !== room?.sessionId) return;
+    const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
+    showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "dodge");
+    status.textContent = message.parried
+      ? `${attackerName} parried and staggered · counter now.`
+      : `${attackerName} guarded · ${message.damage} damage taken · ${message.stamina} stamina remaining.`;
+    logMovementEvent(`${message.parried ? "PARRY" : "GUARD"} ${message.mobId} damage=${message.damage} stamina=${message.stamina}`);
   });
   room.onMessage("combat:reward", (message: CombatReward) => {
     if (message.playerId !== room?.sessionId) return;
@@ -3666,6 +3748,10 @@ async function connect(): Promise<void> {
       localDodgeStartedAt = null;
       localPlayerVisual.setLocalEulerAngles(0, 0, 0);
       showCombatFeedback(message.reason === "stamina" ? "NO STAMINA" : "DODGE BLOCKED", "hurt");
+    }
+    if (message.action === "defense") {
+      setDefensePresentation(false);
+      showCombatFeedback(message.reason === "stamina" ? "NO STAMINA" : "GUARD BLOCKED", "hurt");
     }
     if (message.action === "power") {
       const isEquipRejection = message.requestId?.startsWith("power-equip-") ?? false;
@@ -3697,6 +3783,7 @@ async function connect(): Promise<void> {
     worldReady = false;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
+    setDefensePresentation(false);
     cancelPowerAim();
     cancelSpecialAim();
     cancelLocalPowerPresentation();

@@ -3,6 +3,7 @@ import {
   AttackRequestSchema,
   BRAMBLE_SNARE,
   DodgeRequestSchema,
+  DefenseRequestSchema,
   HUNTERS_MARK,
   MAIN_HAND_DEFINITIONS,
   MainHandEquipRequestSchema,
@@ -26,6 +27,7 @@ import {
   type CombatMiss,
   type CombatReward,
   type CombatStagger,
+  type DefenseResolved,
   type MainHandId,
   type MobHazardPlaced,
   type MobProjectileReleased,
@@ -62,6 +64,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
+import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { dangerBandAt, scaledMobStats } from "./radial-difficulty.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
@@ -171,6 +174,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("mine", (client, payload) => this.handleMine(client, payload));
     this.onMessage("attack", (client, payload) => this.handleAttack(client, payload));
     this.onMessage("dodge", (client, payload) => this.handleDodge(client, payload));
+    this.onMessage("defense", (client, payload) => this.handleDefense(client, payload));
     this.onMessage("power", (client, payload) => this.handlePower(client, payload));
     this.onMessage("power:cancel", (client, payload) => this.handlePowerCancel(client, payload));
     this.onMessage("power:equip", (client, payload) => this.handlePowerEquip(client, payload));
@@ -344,18 +348,42 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     } satisfies CombatReward);
   }
 
-  private damagePlayer(mobId: string, playerId: string, damage: number, now: number): boolean {
+  private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true): boolean {
     const player = this.state.players.get(playerId);
     if (!player || now < player.invulnerableUntil) return false;
-    player.health = Math.max(0, player.health - damage);
+    const mob = this.state.mobs.get(mobId);
+    const defense = blockable && mob
+      ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
+      : { damage, guarded: false, parried: false };
+    if (defense.guarded) player.stamina = Math.max(0, player.stamina - (defense.parried ? 8 : 14));
+    if (defense.parried && mob) {
+      mob.combatState = "stagger";
+      mob.stateUntil = now + PARRY_STAGGER_MS;
+      mob.targetId = "";
+      mob.staggerSequence += 1;
+    }
+    if (player.stamina <= 0) player.defending = false;
+    player.health = Math.max(0, player.health - defense.damage);
     const defeated = player.health === 0;
     this.broadcast("combat:player-hit", {
       mobId,
       playerId,
-      damage,
+      damage: defense.damage,
       health: player.health,
       defeated,
+      guarded: defense.guarded,
+      parried: defense.parried,
     } satisfies PlayerHit);
+    if (defense.guarded) {
+      this.broadcast("combat:defense", {
+        playerId,
+        mobId,
+        guarded: true,
+        parried: defense.parried,
+        damage: defense.damage,
+        stamina: Math.round(player.stamina),
+      } satisfies DefenseResolved);
+    }
     if (!defeated) return true;
     const spawn = this.spawnPoint();
     player.x = spawn.x;
@@ -371,7 +399,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.attackChains.delete(playerId);
     this.movementInputs.set(playerId, { request: idleMovementInput(), receivedAt: now });
     this.verticalVelocities.set(playerId, 0);
-    const mob = this.state.mobs.get(mobId);
     if (mob) {
       const definition = mobArchetype(mob.archetype);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
@@ -431,7 +458,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const lastDamageAt = hazard.lastDamageAt.get(playerId) ?? 0;
         if (now - lastDamageAt < 900 || !isInsideImpact(player, hazard, hazard.radius, 1.25)) continue;
         const damage = this.state.mobs.get(hazard.mobId)?.attackDamage ?? 1;
-        if (this.damagePlayer(hazard.mobId, playerId, damage, now)) hazard.lastDamageAt.set(playerId, now);
+        if (this.damagePlayer(hazard.mobId, playerId, damage, now, false)) hazard.lastDamageAt.set(playerId, now);
       }
     }
   }
@@ -599,11 +626,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     for (const [sessionId, player] of this.state.players) {
       player.dangerTier = dangerBandAt(player).tier;
-      player.stamina = Math.min(player.maxStamina, player.stamina + 18 * deltaTime);
+      if (player.defending) {
+        player.stamina = Math.max(0, player.stamina - GUARD_STAMINA_DRAIN_PER_SECOND * deltaTime);
+        if (player.stamina <= 0) player.defending = false;
+      } else {
+        player.stamina = Math.min(player.maxStamina, player.stamina + 18 * deltaTime);
+      }
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
-      const speed = 4.2;
+      const speed = player.defending ? 2.1 : 4.2;
       const grounded = isPlayerSupported(this.readWorldBlock, player.x, player.y, player.z);
       let verticalVelocity = this.verticalVelocities.get(sessionId) ?? 0;
       if (grounded && verticalVelocity < 0) verticalVelocity = 0;
@@ -633,6 +665,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     const now = Date.now();
+    player.defending = false;
     const lastDodgeAt = this.lastDodgeAt.get(client.sessionId) ?? 0;
     if (now - lastDodgeAt < 350) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "rate" });
     if (player.stamina < 35) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "stamina" });
@@ -653,11 +686,32 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.lastDodgeAt.set(client.sessionId, now);
   }
 
+  private handleDefense(client: Client, payload: unknown): void {
+    const parsed = DefenseRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "defense", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    player.yaw = parsed.data.yaw;
+    if (!parsed.data.active) {
+      player.defending = false;
+      return;
+    }
+    if (player.stamina < GUARD_MINIMUM_STAMINA) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "defense", reason: "stamina" });
+    }
+    if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "defense", reason: "rate" });
+    }
+    player.defending = true;
+    player.defenseStartedAt = Date.now();
+  }
+
   private handlePower(client: Client, payload: unknown): void {
     const parsed = PowerRequestSchema.safeParse(payload);
     if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    player.defending = false;
     const powerId = parsed.data.powerId as PowerId;
     const definition = POWER_DEFINITIONS[powerId];
     if (!definition || player.equippedPower !== powerId) {
@@ -744,6 +798,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    player.defending = false;
     if (parsed.data.specialId !== player.equippedSpecial) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "compatibility" });
     }
@@ -1066,6 +1121,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success) return this.reject(client, { action: "attack", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    player.defending = false;
     if (this.pendingPowers.has(client.sessionId)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "rate" });
     }
