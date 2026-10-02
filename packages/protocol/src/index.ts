@@ -2,13 +2,33 @@ import { z } from "zod";
 
 export const WORLD_ROOM = "world";
 
-export const MOMENTUM_TRAIT = {
-  id: "momentum",
-  name: "Momentum",
-  maxStacks: 3,
-  movementSpeedBonusPerStack: 0.04,
-  staminaRecoveryPerStack: 2,
+export const TRAIT_DEFINITIONS = {
+  momentum: {
+    id: "momentum",
+    name: "Momentum",
+    description: "Hits build movement speed and stamina recovery",
+    maxStacks: 3,
+    movementSpeedBonusPerStack: 0.04,
+    staminaRecoveryPerStack: 2,
+  },
+  bulwark: {
+    id: "bulwark",
+    name: "Bulwark",
+    description: "Guard costs less stamina; parries restore stamina",
+    guardCostMultiplier: 0.65,
+    parryStaminaRestore: 18,
+  },
+  executioner: {
+    id: "executioner",
+    name: "Executioner",
+    description: "Finishers and Powers punish vulnerable enemies",
+    healthThreshold: 0.35,
+    bonusDamage: 1,
+  },
 } as const;
+
+export type TraitId = keyof typeof TRAIT_DEFINITIONS;
+export const MOMENTUM_TRAIT = TRAIT_DEFINITIONS.momentum;
 
 export const COMBO_CHAIN_WINDOW_MS = 520;
 export const COMBAT_ATTACKS = [
@@ -314,6 +334,11 @@ export const MainHandEquipRequestSchema = z.object({
   mainHandId: z.enum(["longsword", "bow", "magic_focus"]),
 });
 
+export const TraitEquipRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  traitId: z.enum(["momentum", "bulwark", "executioner"]),
+});
+
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
@@ -326,6 +351,7 @@ export type SeismicMasteryEquipRequest = z.infer<typeof SeismicMasteryEquipReque
 export type SpecialRequest = z.infer<typeof SpecialRequestSchema>;
 export type SpecialEquipRequest = z.infer<typeof SpecialEquipRequestSchema>;
 export type MainHandEquipRequest = z.infer<typeof MainHandEquipRequestSchema>;
+export type TraitEquipRequest = z.infer<typeof TraitEquipRequestSchema>;
 
 export interface ChunkSnapshot {
   chunkX: number;
@@ -361,6 +387,7 @@ export interface CombatHit {
   comboStep: number;
   knockback: number;
   momentumStacks: number;
+  traitBonusDamage?: number;
 }
 
 export interface CombatMiss {
@@ -475,6 +502,7 @@ export interface PowerResolved {
   range?: number;
   width?: number;
   aftershockHitCount?: number;
+  traitBonusHitCount?: number;
   seismicMastery?: SeismicMasteryId;
 }
 

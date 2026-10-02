@@ -18,6 +18,7 @@ import {
   SeismicMasteryEquipRequestSchema,
   SpecialRequestSchema,
   SpecialEquipRequestSchema,
+  TraitEquipRequestSchema,
   type ActionRejected,
   type BlockChanged,
   type BrambleSnarePlaced,
@@ -41,6 +42,7 @@ import {
   type SpecialApplied,
   type SpecialConsumed,
   type SpecialProgressed,
+  type TraitId,
   type WorldBootstrap,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
@@ -67,7 +69,7 @@ import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance,
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { dangerBandAt, scaledMobStats } from "./radial-difficulty.js";
-import { gainMomentum, momentumAfterDefense, movementSpeedWithMomentum, staminaRecoveryWithMomentum } from "./trait-rules.js";
+import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import {
@@ -183,6 +185,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("special", (client, payload) => this.handleSpecial(client, payload));
     this.onMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
     this.onMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
+    this.onMessage("trait:equip", (client, payload) => this.handleTraitEquip(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -195,6 +198,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.mainHandId = "longsword";
     player.mainHandTag = "melee";
     player.equippedSpecial = "hunters_mark";
+    player.equippedTrait = "momentum";
     const requestedName = typeof options === "object" && options && "name" in options ? String(options.name) : "Explorer";
     player.name = requestedName.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer";
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
@@ -356,7 +360,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const defense = blockable && mob
       ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
       : { damage, guarded: false, parried: false };
-    if (defense.guarded) player.stamina = Math.max(0, player.stamina - (defense.parried ? 8 : 14));
+    const traitId = player.equippedTrait as TraitId;
+    if (defense.guarded) {
+      const cost = guardStaminaCost(defense.parried ? 8 : 14, traitId);
+      player.stamina = Math.max(0, player.stamina - cost);
+      if (defense.parried) player.stamina = Math.min(player.maxStamina, player.stamina + parryStaminaRestore(traitId));
+    }
     if (defense.parried && mob) {
       mob.combatState = "stagger";
       mob.stateUntil = now + PARRY_STAGGER_MS;
@@ -364,7 +373,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.staggerSequence += 1;
     }
     if (player.stamina <= 0) player.defending = false;
-    player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried);
+    player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
     player.health = Math.max(0, player.health - defense.damage);
     const defeated = player.health === 0;
     this.broadcast("combat:player-hit", {
@@ -632,15 +641,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const [sessionId, player] of this.state.players) {
       player.dangerTier = dangerBandAt(player).tier;
       if (player.defending) {
-        player.stamina = Math.max(0, player.stamina - GUARD_STAMINA_DRAIN_PER_SECOND * deltaTime);
+        player.stamina = Math.max(0, player.stamina - guardStaminaCost(GUARD_STAMINA_DRAIN_PER_SECOND, player.equippedTrait as TraitId) * deltaTime);
         if (player.stamina <= 0) player.defending = false;
       } else {
-        player.stamina = Math.min(player.maxStamina, player.stamina + staminaRecoveryWithMomentum(18, player.momentumStacks) * deltaTime);
+        player.stamina = Math.min(player.maxStamina, player.stamina + staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId) * deltaTime);
       }
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
-      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks);
+      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId);
       const grounded = isPlayerSupported(this.readWorldBlock, player.x, player.y, player.z);
       let verticalVelocity = this.verticalVelocities.get(sessionId) ?? 0;
       if (grounded && verticalVelocity < 0) verticalVelocity = 0;
@@ -917,6 +926,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.equippedPower = compatiblePowerOrFallback(player.equippedPower, mainHand.tag);
   }
 
+  private handleTraitEquip(client: Client, payload: unknown): void {
+    const parsed = TraitEquipRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "loadout", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "rate" });
+    }
+    player.equippedTrait = parsed.data.traitId;
+    player.momentumStacks = 0;
+  }
+
   private cancelPendingPower(sessionId: string, reason: PowerCancelled["reason"]): boolean {
     const pending = this.pendingPowers.get(sessionId);
     if (!pending) return false;
@@ -1014,6 +1035,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const consumedMarks: SpecialConsumed[] = [];
       let resolvedDamage: number = definition.damage;
       let aftershockHitCount = 0;
+      let traitBonusHitCount = 0;
       for (const target of targets) {
         const mob = this.state.mobs.get(target.id);
         if (!mob || !mob.alive) continue;
@@ -1030,7 +1052,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             staggerMs: definition.staggerMs + payoff.staggerBonusMs,
           });
         }
-        const damage = damageAfterArmor(definition.damage + payoff.bonusDamage, mob.armor, true);
+        const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { power: true });
+        if (traitBonusDamage > 0) traitBonusHitCount += 1;
+        const damage = damageAfterArmor(definition.damage + payoff.bonusDamage, mob.armor, true) + traitBonusDamage;
         const aftershock = pending.powerId === "seismic_cleave"
           && isSeismicAftershockTarget(impactCenter, pending.yaw, mob, resolvedRange);
         if (aftershock) aftershockHitCount += 1;
@@ -1077,6 +1101,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         damage: resolvedDamage,
         defeatedMobIds,
         fractures,
+        traitBonusHitCount,
         ...(seismicProfile ? {
           range: resolvedRange,
           width: resolvedWidth,
@@ -1213,13 +1238,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       const mob = this.state.mobs.get(target.id);
       if (!mob || !mob.alive) continue;
+      const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
       const damage = damageAfterArmor(
         timing.damage + this.specialDamageBonus(sessionId, target.id, now),
         mob.armor,
-      );
+      ) + traitBonusDamage;
       mob.health = Math.max(0, mob.health - damage);
       mob.hitSequence += 1;
-      player.momentumStacks = gainMomentum(player.momentumStacks);
+      player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
       if (mob.combatState === "windup") {
         mob.combatState = "stagger";
         mob.stateUntil = now + 900;
@@ -1253,6 +1279,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         comboStep: pending.step,
         knockback: timing.knockback,
         momentumStacks: player.momentumStacks,
+        traitBonusDamage,
       };
       this.broadcast("combat:hit", hit);
       if (mob.alive) this.progressSpecialMark(sessionId, target.id, now);

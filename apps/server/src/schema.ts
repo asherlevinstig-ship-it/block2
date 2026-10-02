@@ -16,6 +16,7 @@ export const PlayerState = schema({
   defending: t.boolean().default(false),
   defenseStartedAt: t.float64().default(0),
   momentumStacks: t.int8().default(0),
+  equippedTrait: t.string().default("momentum"),
   invulnerableUntil: t.float64().default(0),
   mainHandId: t.string().default("longsword"),
   mainHandTag: t.string().default("melee"),

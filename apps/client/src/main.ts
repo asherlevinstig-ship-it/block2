@@ -4,6 +4,7 @@ import {
   BRAMBLE_SNARE,
   MAIN_HAND_DEFINITIONS,
   MOMENTUM_TRAIT,
+  TRAIT_DEFINITIONS,
   HUNTERS_MARK,
   POWER_DEFINITIONS,
   SEISMIC_CLEAVE_UPGRADES,
@@ -33,6 +34,7 @@ import {
   type SpecialConsumed,
   type SpecialProgressed,
   type SpecialId,
+  type TraitId,
   type WorldBootstrap,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
@@ -121,6 +123,10 @@ const playerStaminaFill = document.querySelector<HTMLElement>("#player-stamina-f
 const playerStaminaValue = document.querySelector<HTMLElement>("#player-stamina-value")!;
 const defenseSlot = document.querySelector<HTMLButtonElement>("#defense-slot")!;
 const traitSlot = document.querySelector<HTMLElement>("#trait-slot")!;
+const traitName = document.querySelector<HTMLElement>("#trait-name")!;
+const traitDetail = document.querySelector<HTMLElement>("#trait-detail")!;
+const traitBonus = document.querySelector<HTMLElement>("#trait-bonus")!;
+const traitPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#trait-picker [data-trait]")];
 const momentumPips = [...document.querySelectorAll<HTMLElement>("#momentum-pips i")];
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerName = document.querySelector<HTMLElement>("#power-name")!;
@@ -161,7 +167,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -627,6 +633,7 @@ interface NetworkPlayer {
   defending: boolean;
   defenseStartedAt: number;
   momentumStacks: number;
+  equippedTrait: string;
 }
 
 interface RemotePlayerVisual {
@@ -720,6 +727,7 @@ let localHitPauseUntil = 0;
 let localDodgeStartedAt: number | null = null;
 let localDefending = false;
 let localMomentumStacks = 0;
+let localTraitId: TraitId = "momentum";
 let localPowerStartedAt: number | null = null;
 let localPowerFacingYaw: number | null = null;
 let localPowerStepApplied = false;
@@ -737,6 +745,7 @@ let powerEquipSequence = 0;
 let seismicMasterySequence = 0;
 let mainHandEquipSequence = 0;
 let defenseSequence = 0;
+let traitEquipSequence = 0;
 let localLastPowerSequence = 0;
 let powerServerReady = false;
 let powerAimActive = false;
@@ -785,6 +794,10 @@ function isSpecialId(value: string): value is SpecialId {
 
 function isMainHandId(value: string): value is MainHandId {
   return value in MAIN_HAND_DEFINITIONS;
+}
+
+function isTraitId(value: string): value is TraitId {
+  return value in TRAIT_DEFINITIONS;
 }
 
 function refreshPowerCompatibility(): void {
@@ -909,6 +922,31 @@ function requestMainHandEquip(mainHandId: MainHandId): void {
   status.textContent = `Equipping ${MAIN_HAND_DEFINITIONS[mainHandId].name}...`;
 }
 
+function updateTraitLoadout(traitId: TraitId): void {
+  localTraitId = traitId;
+  const definition = TRAIT_DEFINITIONS[traitId];
+  traitName.textContent = definition.name;
+  traitDetail.textContent = definition.description;
+  traitSlot.dataset.trait = traitId;
+  momentumPips[0]?.parentElement?.toggleAttribute("hidden", traitId !== "momentum");
+  traitBonus.hidden = traitId === "momentum";
+  traitBonus.textContent = traitId === "bulwark" ? "−35% GUARD" : traitId === "executioner" ? "+1 VULNERABLE" : "";
+  for (const button of traitPickerButtons) button.setAttribute("aria-pressed", String(button.dataset.trait === traitId));
+  if (traitId !== "momentum") updateMomentum(0);
+  else updateMomentum(localMomentumStacks);
+}
+
+function requestTraitEquip(traitId: TraitId): void {
+  if (!room || !worldReady || traitId === localTraitId) return;
+  if (powerAimActive || specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null || localDefending) {
+    status.textContent = "Finish the current combat action before changing Trait.";
+    return;
+  }
+  traitEquipSequence += 1;
+  room.send("trait:equip", { requestId: `trait-equip-${traitEquipSequence}`, traitId });
+  status.textContent = `Equipping ${TRAIT_DEFINITIONS[traitId].name}...`;
+}
+
 function updatePlayerHealth(health: number, maximumHealth: number): void {
   const fraction = Math.max(0, Math.min(1, health / Math.max(1, maximumHealth)));
   playerHealthFill.style.width = `${fraction * 100}%`;
@@ -925,13 +963,17 @@ function updateMomentum(stacksValue: number): void {
   const safeStacks = Number.isFinite(stacksValue) ? stacksValue : 0;
   localMomentumStacks = Math.max(0, Math.min(MOMENTUM_TRAIT.maxStacks, Math.floor(safeStacks)));
   momentumPips.forEach((pip, index) => pip.classList.toggle("active", index < localMomentumStacks));
-  traitSlot.setAttribute("aria-label", `${MOMENTUM_TRAIT.name} trait, ${localMomentumStacks} of ${MOMENTUM_TRAIT.maxStacks} stacks`);
+  traitSlot.setAttribute("aria-label", localTraitId === "momentum"
+    ? `${MOMENTUM_TRAIT.name} trait, ${localMomentumStacks} of ${MOMENTUM_TRAIT.maxStacks} stacks`
+    : `${TRAIT_DEFINITIONS[localTraitId].name} trait. ${TRAIT_DEFINITIONS[localTraitId].description}`);
   traitSlot.dataset.stacks = String(localMomentumStacks);
 }
 
 function localMovementSpeed(): number {
   const baseSpeed = localDefending ? 2.1 : 4.2;
-  return baseSpeed * (1 + localMomentumStacks * MOMENTUM_TRAIT.movementSpeedBonusPerStack);
+  return localTraitId === "momentum"
+    ? baseSpeed * (1 + localMomentumStacks * MOMENTUM_TRAIT.movementSpeedBonusPerStack)
+    : baseSpeed;
 }
 
 const DANGER_ZONE_LABELS = [
@@ -1763,6 +1805,7 @@ function bindPlayers(joinedRoom: Room): void {
       powerServerReady = isPowerId(player.equippedPower);
       if (isPowerId(player.equippedPower)) updatePowerLoadout(player.equippedPower);
       if (isSpecialId(player.equippedSpecial)) updateSpecialLoadout(player.equippedSpecial);
+      if (isTraitId(player.equippedTrait)) updateTraitLoadout(player.equippedTrait);
     }
     let remote = isLocal ? undefined : remotePlayers.get(sessionId);
     if (!isLocal && !remote) {
@@ -1811,6 +1854,12 @@ function bindPlayers(joinedRoom: Room): void {
     }, true);
     playerCallbacks.listen("momentumStacks", () => {
       if (isLocal) updateMomentum(player.momentumStacks);
+    }, true);
+    playerCallbacks.listen("equippedTrait", () => {
+      if (!isLocal || !isTraitId(player.equippedTrait)) return;
+      updateTraitLoadout(player.equippedTrait);
+      updateMomentum(player.momentumStacks);
+      status.textContent = `${TRAIT_DEFINITIONS[player.equippedTrait].name} Trait equipped.`;
     }, true);
     playerCallbacks.listen("powerCooldownUntil", () => {
       if (isLocal) localPowerCooldownUntil = player.powerCooldownUntil;
@@ -2827,6 +2876,12 @@ for (const button of mainHandPickerButtons) {
     if (mainHandId && isMainHandId(mainHandId)) requestMainHandEquip(mainHandId);
   });
 }
+for (const button of traitPickerButtons) {
+  button.addEventListener("click", () => {
+    const traitId = button.dataset.trait;
+    if (traitId && isTraitId(traitId)) requestTraitEquip(traitId);
+  });
+}
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
@@ -3509,7 +3564,7 @@ app.on("update", (dt: number) => {
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
       `mode       ${interactionMode} · click=${primaryActionForMode(interactionMode)}`,
-      `trait      momentum=${localMomentumStacks}/${MOMENTUM_TRAIT.maxStacks} speed=${localMovementSpeed().toFixed(2)}`,
+      `trait      ${localTraitId} momentum=${localMomentumStacks}/${MOMENTUM_TRAIT.maxStacks} speed=${localMovementSpeed().toFixed(2)}`,
       `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
@@ -3601,12 +3656,14 @@ async function connect(): Promise<void> {
       showCombatFeedback(
         message.defeatedMobIds.length > 0
           ? `${powerLabel} DEFEAT`
+          : (message.traitBonusHitCount ?? 0) > 0
+            ? `EXECUTION! ×${message.traitBonusHitCount}`
           : message.hitCount > 0
             ? `${powerLabel} HIT ×${message.hitCount}`
             : powerLabel,
       );
       status.textContent = message.hitCount > 0
-        ? `${definition.name} struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage${(message.aftershockHitCount ?? 0) > 0 ? ` · AFTERSHOCK ×${message.aftershockHitCount}` : ""}.`
+        ? `${definition.name} struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage${(message.aftershockHitCount ?? 0) > 0 ? ` · AFTERSHOCK ×${message.aftershockHitCount}` : ""}${(message.traitBonusHitCount ?? 0) > 0 ? ` · EXECUTIONER ×${message.traitBonusHitCount}` : ""}.`
         : definition.fracturesTerrain
           ? `${definition.name} fractured ${message.fractures.length} terrain block${message.fractures.length === 1 ? "" : "s"}.`
           : `${definition.name} released with no targets in range.`;
@@ -3709,9 +3766,12 @@ async function connect(): Promise<void> {
       showCombatFeedback(
         message.defeated
           ? "DEFEATED"
+          : (message.traitBonusDamage ?? 0) > 0
+            ? `EXECUTION!  −${message.damage}`
           : hitLabel,
       );
-      status.textContent += ` · Momentum ${message.momentumStacks}/${MOMENTUM_TRAIT.maxStacks}.`;
+      if (localTraitId === "momentum") status.textContent += ` · Momentum ${message.momentumStacks}/${MOMENTUM_TRAIT.maxStacks}.`;
+      else if ((message.traitBonusDamage ?? 0) > 0) status.textContent += ` · Executioner +${message.traitBonusDamage} damage.`;
     }
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {
@@ -3744,7 +3804,9 @@ async function connect(): Promise<void> {
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
     showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "dodge");
     status.textContent = message.parried
-      ? `${attackerName} parried and staggered · counter now.`
+      ? localTraitId === "bulwark"
+        ? `${attackerName} parried and staggered · Bulwark restored stamina · counter now.`
+        : `${attackerName} parried and staggered · counter now.`
       : `${attackerName} guarded · ${message.damage} damage taken · ${message.stamina} stamina remaining.`;
     logMovementEvent(`${message.parried ? "PARRY" : "GUARD"} ${message.mobId} damage=${message.damage} stamina=${message.stamina}`);
   });

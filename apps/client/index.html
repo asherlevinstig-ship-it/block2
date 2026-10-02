@@ -26,10 +26,16 @@
         <span>ST</span><div><i id="player-stamina-fill"></i></div><strong id="player-stamina-value">100</strong>
       </div>
       <button id="defense-slot" type="button" aria-pressed="false"><span>DEFENSE</span><strong>Guard / Parry</strong><em>HOLD C</em></button>
-      <div id="trait-slot" aria-label="Momentum trait, zero of three stacks">
-        <span>TRAIT</span><strong>Momentum</strong>
+      <div id="trait-slot" data-trait="momentum" aria-label="Momentum trait, zero of three stacks">
+        <span>TRAIT</span><strong id="trait-name">Momentum</strong>
         <div id="momentum-pips" aria-hidden="true"><i></i><i></i><i></i></div>
-        <small>Hits build speed + stamina</small>
+        <em id="trait-bonus" hidden></em>
+        <div id="trait-picker" role="group" aria-label="Equipped Trait">
+          <button type="button" data-trait="momentum" aria-pressed="true">MOMENTUM</button>
+          <button type="button" data-trait="bulwark" aria-pressed="false">BULWARK</button>
+          <button type="button" data-trait="executioner" aria-pressed="false">EXECUTIONER</button>
+        </div>
+        <small id="trait-detail">Hits build movement speed and stamina recovery</small>
       </div>
       <p id="exit-guide" hidden>EXIT ↑ · FOLLOW THE GOLD BLOCKS</p>
       <div id="mode-toggle" role="group" aria-label="Primary action mode">
