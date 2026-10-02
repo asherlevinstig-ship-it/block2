@@ -1522,7 +1522,6 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("equippedSpecial", () => {
       if (!isLocal || !isSpecialId(player.equippedSpecial)) return;
       updateSpecialLoadout(player.equippedSpecial);
-      localSpecialCooldownUntil = 0;
       status.textContent = `${SPECIAL_DEFINITIONS[player.equippedSpecial].name} equipped.`;
     }, true);
     playerCallbacks.listen("mainHandId", () => {

@@ -601,7 +601,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "rate" });
     }
     player.equippedSpecial = parsed.data.specialId;
-    player.specialCooldownUntil = 0;
     this.specialMarks.delete(client.sessionId);
     this.brambleSnares.delete(client.sessionId);
   }
