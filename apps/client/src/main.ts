@@ -1522,6 +1522,7 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("equippedSpecial", () => {
       if (!isLocal || !isSpecialId(player.equippedSpecial)) return;
       updateSpecialLoadout(player.equippedSpecial);
+      localSpecialCooldownUntil = player.specialCooldownUntil;
       status.textContent = `${SPECIAL_DEFINITIONS[player.equippedSpecial].name} equipped.`;
     }, true);
     playerCallbacks.listen("mainHandId", () => {
@@ -3312,9 +3313,13 @@ async function connect(): Promise<void> {
     }
     if (message.action === "special") {
       const isEquipRejection = message.requestId?.startsWith("special-equip-") ?? false;
-      if (!isEquipRejection) cancelSpecialAim();
-      if (message.reason !== "cooldown") localSpecialCooldownUntil = 0;
-      showCombatFeedback(message.reason === "cooldown" ? "SPECIAL RECHARGING" : "SPECIAL BLOCKED", "hurt");
+      if (!isEquipRejection) {
+        cancelSpecialAim();
+        if (message.reason !== "cooldown") localSpecialCooldownUntil = 0;
+        showCombatFeedback(message.reason === "cooldown" ? "SPECIAL RECHARGING" : "SPECIAL BLOCKED", "hurt");
+      } else {
+        showCombatFeedback("LOADOUT BLOCKED", "hurt");
+      }
     }
     if (message.action === "loadout") {
       showCombatFeedback("LOADOUT BLOCKED", "hurt");
