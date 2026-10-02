@@ -342,6 +342,15 @@ export interface PlayerHit {
   defeated: boolean;
 }
 
+export interface CombatReward {
+  playerId: string;
+  mobId: string;
+  healthRestored: number;
+  staminaRestored: number;
+  health: number;
+  stamina: number;
+}
+
 export interface CombatStagger {
   attackerId: string;
   mobId: string;

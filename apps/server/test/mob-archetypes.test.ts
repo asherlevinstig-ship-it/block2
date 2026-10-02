@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype } from "../src/mob-archetypes.js";
+
+describe("mob archetypes", () => {
+  it("gives the Stone Brute a slower, heavier and more readable attack", () => {
+    const crawler = MOB_ARCHETYPES.moss_crawler;
+    const brute = MOB_ARCHETYPES.stone_brute;
+    expect(brute.maxHealth).toBeGreaterThan(crawler.maxHealth);
+    expect(brute.speed).toBeLessThan(crawler.speed);
+    expect(brute.windupMs).toBeGreaterThan(crawler.windupMs);
+    expect(brute.damage).toBeGreaterThan(crawler.damage);
+    expect(brute.rewardStamina).toBeGreaterThan(crawler.rewardStamina);
+  });
+
+  it("mitigates weapon damage but lets Powers pierce armour", () => {
+    expect(damageAfterArmor(1, 1)).toBe(1);
+    expect(damageAfterArmor(3, 1)).toBe(2);
+    expect(damageAfterArmor(3, 1, true)).toBe(3);
+    expect(damageAfterArmor(0, 1)).toBe(0);
+  });
+
+  it("falls back safely to the crawler profile", () => {
+    expect(mobArchetype("unknown").id).toBe("moss_crawler");
+    expect(mobArchetype("stone_brute").id).toBe("stone_brute");
+  });
+
+  it("caps Brute defeat rewards at the player's health and stamina maximums", () => {
+    expect(defeatReward(3, 5, 72, 100, MOB_ARCHETYPES.stone_brute)).toEqual({
+      health: 4,
+      stamina: 100,
+      healthRestored: 1,
+      staminaRestored: 28,
+    });
+  });
+});

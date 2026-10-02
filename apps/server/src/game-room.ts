@@ -22,6 +22,7 @@ import {
   type ChunkSnapshot,
   type CombatHit,
   type CombatMiss,
+  type CombatReward,
   type CombatStagger,
   type MainHandId,
   type PlayerHit,
@@ -56,6 +57,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
+import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import {
@@ -119,8 +121,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   override onCreate(): void {
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
     this.setState(new WorldState());
-    const crawler = new MobState();
-    this.state.mobs.set("moss-crawler", crawler);
+    this.state.mobs.set("moss-crawler", this.createMob("moss_crawler"));
+    this.state.mobs.set("stone-brute", this.createMob("stone_brute"));
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
@@ -252,6 +254,43 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
+  private createMob(archetypeId: MobArchetypeId): MobState {
+    const definition = MOB_ARCHETYPES[archetypeId];
+    const mob = new MobState();
+    mob.archetype = definition.id;
+    mob.name = definition.name;
+    mob.x = definition.spawn.x;
+    mob.y = definition.spawn.y;
+    mob.z = definition.spawn.z;
+    mob.health = definition.maxHealth;
+    mob.maxHealth = definition.maxHealth;
+    mob.armor = definition.armor;
+    return mob;
+  }
+
+  private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
+    const definition = mobArchetype(mob.archetype);
+    mob.alive = false;
+    mob.respawnAt = now + definition.respawnMs;
+    mob.combatState = "idle";
+    mob.stateUntil = 0;
+    mob.targetId = "";
+    this.clearMarksForMob(mobId);
+    const player = this.state.players.get(attackerId);
+    if (!player) return;
+    const reward = defeatReward(player.health, player.maxHealth, player.stamina, player.maxStamina, definition);
+    player.health = reward.health;
+    player.stamina = reward.stamina;
+    this.broadcast("combat:reward", {
+      playerId: attackerId,
+      mobId,
+      healthRestored: reward.healthRestored,
+      staminaRestored: reward.staminaRestored,
+      health: player.health,
+      stamina: Math.round(player.stamina),
+    } satisfies CombatReward);
+  }
+
   private handleMove(client: Client, payload: unknown): void {
     const parsed = MoveRequestSchema.safeParse(payload);
     if (!parsed.success) return this.reject(client, { action: "move", reason: "payload" });
@@ -310,11 +349,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.resolvePendingAttacks(now);
     this.resolveBrambleSnares(now);
     for (const [mobId, mob] of this.state.mobs) {
+      const definition = mobArchetype(mob.archetype);
       if (!mob.alive && now >= mob.respawnAt) {
-        mob.x = 13.5;
-        mob.y = 8;
-        mob.z = 11.5;
-        mob.health = mob.maxHealth;
+        mob.x = definition.spawn.x;
+        mob.y = definition.spawn.y;
+        mob.z = definition.spawn.z;
+        mob.health = definition.maxHealth;
+        mob.maxHealth = definition.maxHealth;
+        mob.armor = definition.armor;
         mob.alive = true;
         mob.respawnAt = 0;
         mob.combatState = "idle";
@@ -334,7 +376,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         }
         if (now < mob.stateUntil) continue;
         mob.combatState = "recover";
-        mob.stateUntil = now + 450;
+        mob.stateUntil = now + definition.recoverMs;
         mob.actionSequence += 1;
         this.lastMobAttackAt.set(mobId, now);
         if (!targetPlayer) continue;
@@ -342,14 +384,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const deltaZ = targetPlayer.z - mob.z;
         const distance = Math.hypot(deltaX, deltaZ);
         if (distance > 0.001) {
-          const lungeDistance = Math.min(0.85, Math.max(0, distance - 0.8));
+          const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
           mob.x += deltaX / distance * lungeDistance;
           mob.z += deltaZ / distance * lungeDistance;
         }
-        if (!canMobLungeHit(mob, targetPlayer, targetPlayer.invulnerableUntil, now)) continue;
-        targetPlayer.health = Math.max(0, targetPlayer.health - 1);
+        if (!canMobLungeHit(mob, targetPlayer, targetPlayer.invulnerableUntil, now, definition.hitRange)) continue;
+        targetPlayer.health = Math.max(0, targetPlayer.health - definition.damage);
         const defeated = targetPlayer.health === 0;
-        const hit: PlayerHit = { mobId, playerId: mob.targetId, damage: 1, health: targetPlayer.health, defeated };
+        const hit: PlayerHit = { mobId, playerId: mob.targetId, damage: definition.damage, health: targetPlayer.health, defeated };
         this.broadcast("combat:player-hit", hit);
         if (defeated) {
           const spawn = this.spawnPoint();
@@ -365,9 +407,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           this.attackChains.delete(mob.targetId);
           this.movementInputs.set(mob.targetId, { request: idleMovementInput(), receivedAt: now });
           this.verticalVelocities.set(mob.targetId, 0);
-          mob.x = 13.5;
-          mob.y = 8;
-          mob.z = 11.5;
+          mob.x = definition.spawn.x;
+          mob.y = definition.spawn.y;
+          mob.z = definition.spawn.z;
           mob.combatState = "recover";
         }
         continue;
@@ -379,22 +421,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         z: player.z,
         health: player.health,
       }));
-      const target = selectAggroTarget(mob, players);
+      const target = selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
-        const homeward = pursueTarget(mob, { x: 13.5, y: 8, z: 11.5 }, deltaTime, 0.9, 0.05);
+        const homeward = pursueTarget(mob, definition.spawn, deltaTime, Math.min(0.9, definition.speed), 0.05);
         mob.x = homeward.x;
         mob.z = homeward.z;
-        if (Math.hypot(13.5 - mob.x, 11.5 - mob.z) > 0.05) mob.yaw = homeward.yaw;
+        if (Math.hypot(definition.spawn.x - mob.x, definition.spawn.z - mob.z) > 0.05) mob.yaw = homeward.yaw;
         continue;
       }
-      const pursuit = pursueTarget(mob, target, deltaTime);
+      const pursuit = pursueTarget(mob, target, deltaTime, definition.speed, definition.stopDistance);
       mob.x = pursuit.x;
       mob.z = pursuit.z;
       mob.yaw = pursuit.yaw;
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
-      if (!pursuit.inAttackRange || now - lastAttackAt < 1100) continue;
+      if (!pursuit.inAttackRange || now - lastAttackAt < definition.cooldownMs) continue;
       mob.combatState = "windup";
-      mob.stateUntil = now + 650;
+      mob.stateUntil = now + definition.windupMs;
       mob.targetId = target.id;
     }
     for (const [sessionId, player] of this.state.players) {
@@ -747,7 +789,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             staggerMs: definition.staggerMs + payoff.staggerBonusMs,
           });
         }
-        const damage = definition.damage + payoff.bonusDamage;
+        const damage = damageAfterArmor(definition.damage + payoff.bonusDamage, mob.armor, true);
         resolvedDamage = Math.max(resolvedDamage, damage);
         mob.health = Math.max(0, mob.health - damage);
         mob.hitSequence += 1;
@@ -765,13 +807,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.x = knockedBack.x;
         mob.z = knockedBack.z;
         if (mob.health === 0) {
-          mob.alive = false;
-          mob.respawnAt = now + 5000;
-          mob.combatState = "idle";
-          mob.stateUntil = 0;
-          mob.targetId = "";
+          this.defeatMob(target.id, mob, sessionId, now);
           defeatedMobIds.push(target.id);
-          this.clearMarksForMob(target.id);
         } else {
           mob.combatState = "stagger";
           mob.stateUntil = now + definition.staggerMs + payoff.staggerBonusMs;
@@ -924,7 +961,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       const mob = this.state.mobs.get(target.id);
       if (!mob || !mob.alive) continue;
-      const damage = timing.damage + this.specialDamageBonus(sessionId, target.id, now);
+      const damage = damageAfterArmor(
+        timing.damage + this.specialDamageBonus(sessionId, target.id, now),
+        mob.armor,
+      );
       mob.health = Math.max(0, mob.health - damage);
       mob.hitSequence += 1;
       if (mob.combatState === "windup") {
@@ -948,12 +988,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.z = next.z;
       }
       if (mob.health === 0) {
-        mob.alive = false;
-        mob.respawnAt = now + 5000;
-        mob.combatState = "idle";
-        mob.stateUntil = 0;
-        mob.targetId = "";
-        this.clearMarksForMob(target.id);
+        this.defeatMob(target.id, mob, sessionId, now);
       }
       const hit: CombatHit = {
         attackerId: sessionId,

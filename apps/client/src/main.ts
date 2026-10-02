@@ -15,6 +15,7 @@ import {
   type ChunkSnapshot,
   type CombatHit,
   type CombatMiss,
+  type CombatReward,
   type CombatStagger,
   type MainHandId,
   type PlayerHit,
@@ -629,6 +630,8 @@ interface NetworkMob {
   staggerSequence: number;
   yaw: number;
   name: string;
+  archetype: string;
+  armor: number;
 }
 
 interface MobVisual {
@@ -637,7 +640,11 @@ interface MobVisual {
   bodyMaterial: pc.StandardMaterial;
   warning: pc.Entity;
   warningMaterial: pc.StandardMaterial;
+  warningScale: number;
   healthFill: pc.Entity;
+  healthWidth: number;
+  healthBarY: number;
+  isBrute: boolean;
   mark: pc.Entity;
   markMaterial: pc.StandardMaterial;
   markPips: pc.Entity[];
@@ -1309,6 +1316,33 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
   cameraShakeUntil = performance.now() + 420;
 }
 
+function createBruteSlamImpact(mob: MobVisual): void {
+  const root = new pc.Entity("stone-brute-slam");
+  const material = powerMaterial(new pc.Color(0.92, 0.34, 0.07), 0.9);
+  for (let index = 0; index < 28; index += 1) {
+    const angle = index / 28 * Math.PI * 2;
+    const radius = index % 2 === 0 ? 1.15 : 1.55;
+    const segment = addBox(
+      root,
+      "brute-slam-ring",
+      material,
+      [0.36 + index % 3 * 0.08, 0.1, 0.18],
+      [Math.sin(angle) * radius, 0.1, Math.cos(angle) * radius],
+    );
+    segment.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 === 0 ? 8 : -8);
+  }
+  root.setPosition(mob.state.x, mob.state.y + 0.03, mob.state.z);
+  app.root.addChild(root);
+  markPayoffVisuals.push({ root, material, startedAt: performance.now() });
+  const playerPosition = localPlayer.getPosition();
+  const distance = Math.hypot(playerPosition.x - mob.state.x, playerPosition.z - mob.state.z);
+  if (distance <= 9) {
+    cameraShakeStrength = Math.max(cameraShakeStrength, Math.max(0.12, 0.36 - distance * 0.025));
+    cameraShakeUntil = performance.now() + 420;
+    combatAudio.play("seismicImpact", enemyCuePan(mob.state.x, playerPosition.x, 9));
+  }
+}
+
 function updatePlayerCount(): void {
   const count = room ? remotePlayers.size + 1 : 0;
   playerCount.textContent = `${count} player${count === 1 ? "" : "s"} online`;
@@ -1345,10 +1379,12 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const entity = new pc.Entity(`mob:${mobId}`);
   const bodyRoot = new pc.Entity("mob-body");
   entity.addChild(bodyRoot);
-  const bodyMaterial = coloredMaterial(new pc.Color(0.22, 0.62, 0.24));
-  const eyeMaterial = coloredMaterial(new pc.Color(0.03, 0.045, 0.035));
+  const isBrute = mob.archetype === "stone_brute";
+  const bodyMaterial = coloredMaterial(isBrute ? new pc.Color(0.34, 0.36, 0.35) : new pc.Color(0.22, 0.62, 0.24));
+  const accentMaterial = coloredMaterial(isBrute ? new pc.Color(0.62, 0.35, 0.09) : new pc.Color(0.3, 0.72, 0.25));
+  const eyeMaterial = coloredMaterial(isBrute ? new pc.Color(1, 0.38, 0.04) : new pc.Color(0.03, 0.045, 0.035));
   const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
-  const healthMaterial = coloredMaterial(new pc.Color(0.35, 0.9, 0.28));
+  const healthMaterial = coloredMaterial(isBrute ? new pc.Color(0.94, 0.48, 0.12) : new pc.Color(0.35, 0.9, 0.28));
   const warningMaterial = new pc.StandardMaterial();
   warningMaterial.diffuse = new pc.Color(0.9, 0.16, 0.06);
   warningMaterial.emissive = new pc.Color(0.7, 0.08, 0.02);
@@ -1363,17 +1399,35 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.blendType = pc.BLEND_NORMAL;
   markMaterial.depthWrite = false;
   markMaterial.update();
-  addBox(bodyRoot, "crawler-body", bodyMaterial, [0.92, 0.58, 0.86], [0, 0.32, 0]);
-  addBox(bodyRoot, "crawler-head", bodyMaterial, [0.68, 0.48, 0.62], [0, 0.76, 0.08]);
-  addBox(bodyRoot, "crawler-eye-left", eyeMaterial, [0.1, 0.12, 0.06], [-0.17, 0.8, 0.39]);
-  addBox(bodyRoot, "crawler-eye-right", eyeMaterial, [0.1, 0.12, 0.06], [0.17, 0.8, 0.39]);
-  addBox(entity, "health-back", healthBackMaterial, [1.02, 0.1, 0.08], [0, 1.34, 0]);
-  const healthFill = addBox(entity, "health-fill", healthMaterial, [0.96, 0.065, 0.09], [0, 1.34, 0.01]);
+  if (isBrute) {
+    addBox(bodyRoot, "brute-body", bodyMaterial, [1.18, 1.05, 0.92], [0, 0.67, 0]);
+    addBox(bodyRoot, "brute-head", bodyMaterial, [0.76, 0.66, 0.7], [0, 1.43, 0.08]);
+    addBox(bodyRoot, "brute-shoulder-left", bodyMaterial, [0.54, 0.52, 0.62], [-0.78, 1.12, 0]);
+    addBox(bodyRoot, "brute-shoulder-right", bodyMaterial, [0.54, 0.52, 0.62], [0.78, 1.12, 0]);
+    addBox(bodyRoot, "brute-arm-left", bodyMaterial, [0.42, 0.8, 0.46], [-0.82, 0.55, 0.1]);
+    addBox(bodyRoot, "brute-arm-right", bodyMaterial, [0.42, 0.8, 0.46], [0.82, 0.55, 0.1]);
+    addBox(bodyRoot, "brute-fist-left", accentMaterial, [0.58, 0.45, 0.62], [-0.82, 0.16, 0.2]);
+    addBox(bodyRoot, "brute-fist-right", accentMaterial, [0.58, 0.45, 0.62], [0.82, 0.16, 0.2]);
+    addBox(bodyRoot, "brute-brow", accentMaterial, [0.62, 0.15, 0.16], [0, 1.56, 0.39]);
+    addBox(bodyRoot, "brute-eye-left", eyeMaterial, [0.12, 0.11, 0.07], [-0.2, 1.43, 0.44]);
+    addBox(bodyRoot, "brute-eye-right", eyeMaterial, [0.12, 0.11, 0.07], [0.2, 1.43, 0.44]);
+    addBox(bodyRoot, "brute-crystal", accentMaterial, [0.24, 0.48, 0.24], [0, 1.06, -0.48]).setLocalEulerAngles(12, 0, 45);
+  } else {
+    addBox(bodyRoot, "crawler-body", bodyMaterial, [0.92, 0.58, 0.86], [0, 0.32, 0]);
+    addBox(bodyRoot, "crawler-head", bodyMaterial, [0.68, 0.48, 0.62], [0, 0.76, 0.08]);
+    addBox(bodyRoot, "crawler-eye-left", eyeMaterial, [0.1, 0.12, 0.06], [-0.17, 0.8, 0.39]);
+    addBox(bodyRoot, "crawler-eye-right", eyeMaterial, [0.1, 0.12, 0.06], [0.17, 0.8, 0.39]);
+  }
+  const healthWidth = isBrute ? 1.46 : 0.96;
+  const healthBarY = isBrute ? 2.18 : 1.34;
+  addBox(entity, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
+  const healthFill = addBox(entity, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const warning = new pc.Entity("lunge-warning");
   warning.addComponent("render", { type: "cylinder" });
   if (warning.render) warning.render.material = warningMaterial;
   warning.setLocalPosition(0, 0.035, 0);
-  warning.setLocalScale(4.2, 0.025, 4.2);
+  const warningScale = isBrute ? 5.5 : 4.2;
+  warning.setLocalScale(warningScale, 0.025, warningScale);
   warning.enabled = false;
   entity.addChild(warning);
   const mark = new pc.Entity("hunters-mark");
@@ -1384,7 +1438,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   mark.enabled = false;
   entity.addChild(mark);
   const markPips = [-0.24, 0, 0.24].map((x, index) => {
-    const pip = addBox(entity, `hunters-mark-stack-${index + 1}`, markMaterial, [0.14, 0.14, 0.14], [x, 1.55, 0]);
+    const pip = addBox(entity, `hunters-mark-stack-${index + 1}`, markMaterial, [0.14, 0.14, 0.14], [x, healthBarY + 0.21, 0]);
     pip.setLocalEulerAngles(0, 45, 45);
     pip.enabled = false;
     return pip;
@@ -1397,7 +1451,11 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     bodyMaterial,
     warning,
     warningMaterial,
+    warningScale,
     healthFill,
+    healthWidth,
+    healthBarY,
+    isBrute,
     mark,
     markMaterial,
     markPips,
@@ -1436,8 +1494,8 @@ function updateMobVisual(mob: MobVisual): void {
   };
   for (const cue of enemyCuesForTransition(previousCueState, currentCueState)) playMobCue(mob, cue);
   const healthFraction = Math.max(0, Math.min(1, mob.state.health / Math.max(1, mob.state.maxHealth)));
-  mob.healthFill.setLocalScale(0.96 * healthFraction, 0.065, 0.09);
-  mob.healthFill.setLocalPosition(-0.48 * (1 - healthFraction), 1.34, 0.01);
+  mob.healthFill.setLocalScale(mob.healthWidth * healthFraction, 0.065, 0.09);
+  mob.healthFill.setLocalPosition(-mob.healthWidth * 0.5 * (1 - healthFraction), mob.healthBarY, 0.01);
   if (mob.state.hitSequence > mob.lastHitSequence) {
     mob.lastHitSequence = mob.state.hitSequence;
     mob.hitAt = performance.now();
@@ -1445,6 +1503,7 @@ function updateMobVisual(mob: MobVisual): void {
   if (mob.state.actionSequence > mob.lastActionSequence) {
     mob.lastActionSequence = mob.state.actionSequence;
     mob.actionAt = performance.now();
+    if (mob.isBrute) createBruteSlamImpact(mob);
   }
   if (mob.state.staggerSequence > mob.lastStaggerSequence) {
     mob.lastStaggerSequence = mob.state.staggerSequence;
@@ -1461,7 +1520,7 @@ function bindMobs(joinedRoom: Room): void {
     const visual = createMobVisual(mobId, mob);
     mobVisuals.set(mobId, visual);
     const mobCallbacks = callbacks(mob);
-    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "stateUntil", "targetId", "staggerSequence", "yaw"] as const) {
+    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name"] as const) {
       mobCallbacks.listen(field, () => updateMobVisual(visual), true);
     }
   }, true);
@@ -2827,10 +2886,13 @@ app.on("update", (dt: number) => {
     mob.entity.setEulerAngles(0, approachYaw(currentMobYaw, mob.state.yaw, frameTime, 420), 0);
     const hitStrength = Math.max(0, 1 - (animationNow - mob.hitAt) / 180);
     const attackElapsed = animationNow - mob.actionAt;
-    const attackStrength = attackElapsed >= 0 && attackElapsed < 460 ? Math.sin(attackElapsed / 460 * Math.PI) : 0;
+    const attackDuration = mob.isBrute ? 760 : 460;
+    const attackStrength = attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackElapsed / attackDuration * Math.PI) : 0;
     const staggerElapsed = animationNow - mob.staggerAt;
     const staggerStrength = staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
-    const windupStrength = mob.state.combatState === "windup" ? 0.55 + Math.sin(animationTime * 18) * 0.2 : 0;
+    const windupStrength = mob.state.combatState === "windup"
+      ? (mob.isBrute ? 0.72 + Math.sin(animationTime * 12) * 0.13 : 0.55 + Math.sin(animationTime * 18) * 0.2)
+      : 0;
     const markState = visibleMarkState(mob);
     const exposed = Boolean(markState && markState.stacks >= markState.maxStacks);
     mob.mark.enabled = Boolean(markState);
@@ -2852,16 +2914,20 @@ app.on("update", (dt: number) => {
     mob.warning.enabled = mob.state.combatState === "windup";
     if (mob.warning.enabled) {
       const warningPulse = 1 + Math.sin(animationTime * 18) * 0.045;
-      mob.warning.setLocalScale(4.2 * warningPulse, 0.025, 4.2 * warningPulse);
+      mob.warning.setLocalScale(mob.warningScale * warningPulse, 0.025, mob.warningScale * warningPulse);
       mob.warningMaterial.opacity = 0.25 + windupStrength * 0.22;
       mob.warningMaterial.update();
     }
     mob.bodyRoot.setLocalPosition(
       0,
-      Math.sin(animationTime * 4.5) * 0.055 - hitStrength * 0.08,
-      attackStrength * 0.24 - windupStrength * 0.16,
+      Math.sin(animationTime * (mob.isBrute ? 2.8 : 4.5)) * (mob.isBrute ? 0.035 : 0.055) - hitStrength * 0.08 - attackStrength * (mob.isBrute ? 0.14 : 0),
+      attackStrength * (mob.isBrute ? 0.42 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : 0.16),
     );
-    mob.bodyRoot.setLocalEulerAngles(0, 0, Math.sin(animationTime * 35) * staggerStrength * 12);
+    mob.bodyRoot.setLocalEulerAngles(
+      mob.isBrute ? windupStrength * -11 + attackStrength * 18 : 0,
+      0,
+      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12),
+    );
     mob.bodyMaterial.emissive = new pc.Color(
       0.55 * hitStrength + 0.34 * windupStrength,
       0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
@@ -3310,8 +3376,9 @@ async function connect(): Promise<void> {
     const mob = mobVisuals.get(message.mobId);
     if (message.defeated) mob?.marks.clear();
     const name = mob?.state.name ?? "Mob";
+    const respawnSeconds = mob?.state.archetype === "stone_brute" ? 8.5 : 5;
     status.textContent = message.defeated
-      ? `${name} defeated · respawning in 5 seconds.`
+      ? `${name} defeated · respawning in ${respawnSeconds} seconds.`
       : `${name} hit for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
     if (message.attackerId === room?.sessionId) {
@@ -3346,11 +3413,23 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
     if (message.playerId !== room?.sessionId) return;
+    const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
     showCombatFeedback(message.defeated ? "DEFEATED · RESPAWNING" : `HURT  −${message.damage}`, "hurt");
     status.textContent = message.defeated
       ? "You were defeated and returned to the surface camp."
-      : `The Moss Crawler hit you · ${message.health} HP remaining.`;
+      : `${attackerName} hit you for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HURT hp=${message.health} defeated=${message.defeated}`);
+  });
+  room.onMessage("combat:reward", (message: CombatReward) => {
+    if (message.playerId !== room?.sessionId) return;
+    const defeatedName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
+    const rewards = [
+      message.healthRestored > 0 ? `+${message.healthRestored} HP` : "",
+      message.staminaRestored > 0 ? `+${message.staminaRestored} stamina` : "",
+    ].filter(Boolean).join(" · ");
+    showCombatFeedback(rewards || "VICTORY", "dodge");
+    status.textContent = `${defeatedName} reward${rewards ? ` · ${rewards}` : " claimed"}.`;
+    logMovementEvent(`REWARD ${message.mobId} hp=${message.healthRestored} stamina=${message.staminaRestored}`);
   });
   room.onMessage("pong", (message: { id?: unknown }) => {
     if (typeof message.id !== "string") return;
