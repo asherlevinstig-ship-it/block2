@@ -15,13 +15,12 @@ export interface MainHandDefinition {
   id: string;
   name: string;
   tag: MainHandTag;
-  attackName: string;
 }
 
 export const MAIN_HAND_DEFINITIONS = {
-  longsword: { id: "longsword", name: "Longsword", tag: "melee", attackName: "Sword Combo" },
-  bow: { id: "bow", name: "Hunting Bow", tag: "ranged", attackName: "Bow Shot" },
-  magic_focus: { id: "magic_focus", name: "Magic Focus", tag: "focus", attackName: "Arcane Bolt" },
+  longsword: { id: "longsword", name: "Longsword", tag: "melee" },
+  bow: { id: "bow", name: "Hunting Bow", tag: "ranged" },
+  magic_focus: { id: "magic_focus", name: "Magic Focus", tag: "focus" },
 } as const satisfies Record<string, MainHandDefinition>;
 
 export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;

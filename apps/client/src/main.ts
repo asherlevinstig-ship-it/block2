@@ -670,7 +670,7 @@ function isMainHandId(value: string): value is MainHandId {
 function refreshPowerCompatibility(): void {
   const mainHand = MAIN_HAND_DEFINITIONS[localMainHandId];
   mainHandName.textContent = mainHand.name;
-  mainHandAttack.textContent = mainHand.attackName;
+  mainHandAttack.textContent = mainHand.tag.toUpperCase();
   for (const button of mainHandPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.mainHand === localMainHandId));
   }
@@ -1221,7 +1221,7 @@ function bindPlayers(joinedRoom: Room): void {
       if (isLocal && isMainHandId(player.mainHandId)) {
         updateMainHandLoadout(player.mainHandId);
         const mainHand = MAIN_HAND_DEFINITIONS[player.mainHandId];
-        status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
+        status.textContent = `${mainHand.name} equipped · ${mainHand.tag.toUpperCase()} Power compatibility active.`;
       } else if (remote && isMainHandId(player.mainHandId)) {
         setRigMainHand(remote.rig, player.mainHandId);
       }
