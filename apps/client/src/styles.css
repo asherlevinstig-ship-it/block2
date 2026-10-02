@@ -276,7 +276,8 @@ button { font: inherit; }
 }
 
 #dodge-button,
-#power-button {
+#power-button,
+#touch-mode-button {
   border-color: rgb(79 201 238 / 45%) !important;
   background: rgb(17 76 98 / 82%) !important;
   color: #c5f3ff !important;
@@ -352,6 +353,7 @@ button { font: inherit; }
 }
 
 #movement-debug summary { cursor: pointer; letter-spacing: .11em; user-select: none; }
+#movement-debug:not([open]) { width: auto; max-height: none; overflow: hidden; }
 #movement-debug pre { margin: 9px 0 7px; color: #d9f2ff; white-space: pre-wrap; }
 #movement-debug button {
   padding: 4px 7px;
@@ -392,12 +394,22 @@ button { font: inherit; }
     pointer-events: none;
   }
 
-  #touch-actions { display: flex; align-items: flex-end; gap: 9px; pointer-events: none; }
+  #touch-actions {
+    display: grid;
+    grid-template: 64px 84px / 68px 76px 96px;
+    grid-template-areas:
+      ". power primary"
+      "mode dodge primary";
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+  }
 
   #joystick-zone,
   #mine-button,
   #dodge-button,
-  #power-button { pointer-events: auto; touch-action: none; user-select: none; }
+  #power-button,
+  #touch-mode-button { pointer-events: auto; touch-action: none; user-select: none; }
 
   #joystick-zone {
     position: relative;
@@ -425,7 +437,8 @@ button { font: inherit; }
 
   #mine-button,
   #dodge-button,
-  #power-button {
+  #power-button,
+  #touch-mode-button {
     width: 92px;
     height: 92px;
     border: 2px solid rgb(255 226 131 / 62%);
@@ -443,9 +456,32 @@ button { font: inherit; }
   #dodge-button,
   #power-button { width: 72px; height: 72px; font-size: .76rem; }
 
+  #mine-button { grid-area: primary; width: 96px; height: 96px; }
+  #power-button { grid-area: power; }
+  #dodge-button { grid-area: dodge; }
+  #touch-mode-button {
+    grid-area: mode;
+    width: 68px;
+    height: 68px;
+    padding: 0;
+    border-color: rgb(184 206 196 / 42%) !important;
+    background: rgb(22 41 35 / 86%) !important;
+    color: #d4e3da !important;
+    font-size: .56rem;
+    line-height: 1.05;
+  }
+  #touch-mode-button span,
+  #touch-mode-button strong { display: block; }
+  #touch-mode-button strong { margin-top: 3px; color: #fff2bd; font-size: .7rem; }
+  #touch-mode-button[data-mode="combat"] {
+    border-color: rgb(255 126 106 / 58%) !important;
+    background: rgb(91 30 25 / 88%) !important;
+  }
+
   #mine-button:active { transform: scale(.94); background: rgb(184 111 24 / 92%); }
   #dodge-button:active { transform: scale(.94); background: rgb(23 111 143 / 92%) !important; }
   #power-button:active { transform: scale(.94); background: rgb(144 77 17 / 94%) !important; }
+  #touch-mode-button:active { transform: scale(.94); }
   #mine-button[data-mode="combat"] {
     border-color: rgb(255 126 106 / 70%);
     background: rgb(135 35 27 / 88%);
@@ -461,4 +497,32 @@ button { font: inherit; }
   #mine-button,
   #dodge-button,
   #power-button { width: 66px; height: 66px; font-size: .7rem; }
+  #touch-actions {
+    grid-template-rows: 56px 70px;
+    grid-template-columns: 58px 68px 78px;
+    gap: 6px;
+  }
+  #mine-button { width: 78px; height: 78px; font-size: .78rem; }
+  #touch-mode-button { width: 58px; height: 58px; }
+}
+
+@media (max-width: 520px) {
+  #touch-controls {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: max(10px, env(safe-area-inset-left));
+  }
+  #movement-debug { bottom: calc(108px + env(safe-area-inset-bottom)); }
+  #joystick-zone { width: 88px; height: 88px; }
+  #joystick-knob { width: 40px; height: 40px; }
+  #touch-actions {
+    grid-template-rows: 48px 62px;
+    grid-template-columns: 52px 58px 68px;
+    gap: 6px;
+  }
+  #mine-button { width: 68px; height: 68px; font-size: .68rem; }
+  #dodge-button,
+  #power-button { width: 58px; height: 58px; font-size: .61rem; }
+  #touch-mode-button { width: 52px; height: 52px; font-size: .48rem; }
+  #touch-mode-button strong { font-size: .58rem; }
 }

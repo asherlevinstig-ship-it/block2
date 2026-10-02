@@ -89,6 +89,7 @@ const playerCount = document.querySelector<HTMLElement>("#players")!;
 const exitGuide = document.querySelector<HTMLElement>("#exit-guide")!;
 const performanceToggle = document.querySelector<HTMLButtonElement>("#performance-toggle")!;
 const performancePanel = document.querySelector<HTMLElement>("#performance-panel")!;
+const movementDebug = document.querySelector<HTMLDetailsElement>("#movement-debug")!;
 const movementDebugLive = document.querySelector<HTMLElement>("#movement-debug-live")!;
 const movementDebugEvents = document.querySelector<HTMLOListElement>("#movement-debug-events")!;
 const movementDebugCopy = document.querySelector<HTMLButtonElement>("#movement-debug-copy")!;
@@ -124,9 +125,15 @@ const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
 const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
 const powerButton = document.querySelector<HTMLButtonElement>("#power-button")!;
+const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
+const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !powerSlot || !powerName || powerPickerButtons.length !== 4 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || powerPickerButtons.length !== 4 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
+}
+
+if (window.matchMedia("(pointer: coarse), (max-width: 820px)").matches) {
+  movementDebug.open = false;
 }
 
 const app = new pc.Application(canvas, {
@@ -2013,6 +2020,9 @@ function setInteractionMode(mode: InteractionMode): void {
   for (const button of modeButtons) button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
   mineButton.textContent = mode === "build" ? "Mine" : "Attack";
   mineButton.dataset.mode = mode;
+  touchModeLabel.textContent = mode === "build" ? "Build" : "Combat";
+  touchModeButton.dataset.mode = mode;
+  touchModeButton.setAttribute("aria-label", `Switch to ${alternateInteractionMode(mode)} mode`);
   combatReticle.hidden = mode !== "combat";
   targetStateKey = "";
   updateTarget();
@@ -2025,6 +2035,9 @@ function setInteractionMode(mode: InteractionMode): void {
 for (const button of modeButtons) {
   button.addEventListener("click", () => setInteractionMode(button.dataset.mode as InteractionMode));
 }
+touchModeButton.addEventListener("click", () => {
+  setInteractionMode(alternateInteractionMode(interactionMode));
+});
 for (const button of powerPickerButtons) {
   button.addEventListener("click", () => {
     const powerId = button.dataset.power;
