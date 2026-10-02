@@ -83,6 +83,24 @@ export const POWER_DEFINITIONS = {
     forwardStep: 0,
     fracturesTerrain: false,
   },
+  lunge_strike: {
+    id: "lunge_strike",
+    name: "Lunge Strike",
+    core: "mobility",
+    castType: "aim-release",
+    compatibility: ["melee"],
+    windupMs: 260,
+    activeMs: 160,
+    recoveryMs: 460,
+    cooldownMs: 6500,
+    range: 3.8,
+    width: 1.25,
+    damage: 2,
+    knockback: 1.05,
+    staggerMs: 760,
+    forwardStep: 3.1,
+    fracturesTerrain: false,
+  },
 } as const satisfies Record<string, PowerDefinition>;
 
 export type PowerId = keyof typeof POWER_DEFINITIONS;
@@ -131,7 +149,7 @@ export const PowerCancelRequestSchema = z.object({
 
 export const PowerEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  powerId: z.enum(["shockwave", "seismic_cleave", "eruption"]),
+  powerId: z.enum(["shockwave", "seismic_cleave", "eruption", "lunge_strike"]),
 });
 
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;

@@ -36,6 +36,7 @@ import {
   isProtectedVoxel,
   isPlayerSupported,
   resolvePlayerMotion,
+  resolveSweptHorizontalMotion,
   setBlock,
   worldToChunk,
   type GeneratedChunk,
@@ -43,7 +44,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
-import { isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets } from "./power-rules.js";
+import { isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -508,14 +509,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const definition = POWER_DEFINITIONS[pending.powerId];
       if (!player || !definition) continue;
       const direction = powerDirection(pending.yaw);
-      const stepped = resolvePlayerMotion(
-        { x: player.x, y: player.y, z: player.z },
-        { x: direction.x * definition.forwardStep, y: 0, z: direction.z * definition.forwardStep },
-        this.readWorldBlock,
-      );
-      player.x = stepped.x;
-      player.y = stepped.y;
-      player.z = stepped.z;
+      const origin = { x: player.x, y: player.y, z: player.z };
       const availableTargets = [...this.state.mobs.entries()].map(([id, mob]) => ({
         id,
         x: mob.x,
@@ -523,11 +517,33 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         z: mob.z,
         alive: mob.alive,
       }));
+      const mobilityTarget = definition.core === "mobility"
+        ? selectMobilityPowerTarget(origin, pending.yaw, availableTargets, definition.range, definition.width)
+        : null;
+      const advanceDistance = definition.core === "mobility"
+        ? mobilityAdvanceDistance(origin, pending.yaw, mobilityTarget, definition.forwardStep)
+        : definition.forwardStep;
+      const stepped = definition.core === "mobility"
+        ? resolveSweptHorizontalMotion(
+            origin,
+            { x: direction.x * advanceDistance, z: direction.z * advanceDistance },
+            this.readWorldBlock,
+          )
+        : resolvePlayerMotion(
+            origin,
+            { x: direction.x * definition.forwardStep, y: 0, z: direction.z * definition.forwardStep },
+            this.readWorldBlock,
+          );
+      player.x = stepped.x;
+      player.y = stepped.y;
+      player.z = stepped.z;
       const impactCenter = definition.core === "ground" && pending.target ? pending.target : player;
       const targets = definition.core === "burst"
         ? selectBurstPowerTargets(player, availableTargets, definition.range)
         : definition.core === "ground"
           ? selectGroundPowerTargets(impactCenter, availableTargets, definition.width)
+          : definition.core === "mobility"
+            ? mobilityTarget ? [mobilityTarget] : []
           : selectLinePowerTargets(player, pending.yaw, availableTargets, definition.range, definition.width);
       const defeatedMobIds: string[] = [];
       for (const target of targets) {

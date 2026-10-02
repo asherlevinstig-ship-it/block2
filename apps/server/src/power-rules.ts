@@ -81,6 +81,29 @@ export function isGroundPowerTargetInRange(
     && Math.abs(target.y - origin.y) <= 1.75;
 }
 
+export function selectMobilityPowerTarget(
+  origin: PowerPosition,
+  yaw: number,
+  targets: readonly PowerTarget[],
+  range: number,
+  width: number,
+): PowerTarget | null {
+  return selectLinePowerTargets(origin, yaw, targets, range, width)[0] ?? null;
+}
+
+export function mobilityAdvanceDistance(
+  origin: PowerPosition,
+  yaw: number,
+  target: PowerPosition | null,
+  maximumDistance: number,
+  standoffDistance = 0.8,
+): number {
+  if (!target) return maximumDistance;
+  const direction = powerDirection(yaw);
+  const forward = (target.x - origin.x) * direction.x + (target.z - origin.z) * direction.z;
+  return Math.min(maximumDistance, Math.max(0, forward - standoffDistance));
+}
+
 export function lineFractureColumns(origin: PowerPosition, yaw: number, range: number): { x: number; z: number }[] {
   const direction = powerDirection(yaw);
   const columns = new Map<string, { x: number; z: number }>();

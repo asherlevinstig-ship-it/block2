@@ -3,6 +3,7 @@ import {
   PRIMARY_ACTION_DURATION_MS,
   advanceLocomotionAnimation,
   eruptionPowerPose,
+  lungePowerPose,
   primaryActionPose,
   seismicPowerPose,
   shockwavePowerPose,
@@ -89,6 +90,16 @@ describe("voxel character animation", () => {
     expect(windup.active).toBe(true);
     expect(impact.leftArmPitch).toBeLessThan(-150);
     expect(impact.rightArmPitch).toBeLessThan(-150);
+    expect(recovered.active).toBe(false);
+  });
+
+  it("drives the weapon arm forward during Lunge Strike", () => {
+    const windup = lungePowerPose(130);
+    const impact = lungePowerPose(340);
+    const recovered = lungePowerPose(880);
+    expect(windup.active).toBe(true);
+    expect(impact.rightArmPitch).toBeLessThan(-120);
+    expect(impact.leftArmPitch).toBeGreaterThan(35);
     expect(recovered.active).toBe(false);
   });
 

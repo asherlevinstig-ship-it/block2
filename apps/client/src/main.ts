@@ -71,6 +71,7 @@ import {
   PRIMARY_ACTION_DURATION_MS,
   advanceLocomotionAnimation,
   eruptionPowerPose,
+  lungePowerPose,
   primaryActionPose,
   seismicPowerPose,
   shockwavePowerPose,
@@ -118,7 +119,7 @@ const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
 const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
 const powerButton = document.querySelector<HTMLButtonElement>("#power-button")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !powerSlot || !powerName || powerPickerButtons.length !== 3 || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !powerSlot || !powerName || powerPickerButtons.length !== 4 || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -489,6 +490,8 @@ function animateVoxelCharacter(
     ? shockwavePowerPose(powerElapsedMilliseconds)
     : powerId === "eruption"
       ? eruptionPowerPose(powerElapsedMilliseconds)
+      : powerId === "lunge_strike"
+        ? lungePowerPose(powerElapsedMilliseconds)
       : seismicPowerPose(powerElapsedMilliseconds);
   const action = powerPose.active ? powerPose : primaryActionPose(actionElapsedMilliseconds, actionStep);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
@@ -580,6 +583,7 @@ const mobVisuals = new Map<string, MobVisual>();
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
+const localPowerVisualOffset = new pc.Vec3();
 let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
 let localActionStep = 0;
@@ -730,6 +734,8 @@ function startPowerTelegraph(casterId: string, powerId: PowerId, x: number, y: n
       ? new pc.Color(0.18, 0.72, 1)
       : powerId === "eruption"
         ? new pc.Color(1, 0.18, 0.04)
+        : powerId === "lunge_strike"
+          ? new pc.Color(0.2, 1, 0.62)
         : new pc.Color(1, 0.43, 0.06),
     0.28,
   );
@@ -845,6 +851,8 @@ function createPowerImpact(message: PowerResolved): void {
       ? new pc.Color(0.2, 0.76, 1)
       : message.powerId === "eruption"
         ? new pc.Color(1, 0.22, 0.035)
+        : message.powerId === "lunge_strike"
+          ? new pc.Color(0.24, 1, 0.68)
         : new pc.Color(1, 0.68, 0.14),
     0.78,
   );
@@ -872,6 +880,19 @@ function createPowerImpact(message: PowerResolved): void {
       const segment = addBox(root, "eruption-ring", material, [0.5, 0.1, 0.16], [Math.sin(angle) * definition.width, 0.1, Math.cos(angle) * definition.width]);
       segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
     }
+  } else if (definition.core === "mobility") {
+    for (let index = -5; index <= 5; index += 1) {
+      const angle = index / 5 * Math.PI * 0.34;
+      const segment = addBox(
+        root,
+        "lunge-impact",
+        material,
+        [0.18, 0.18, 0.52],
+        [Math.sin(angle) * 1.05, 0.22, Math.cos(angle) * 1.05],
+      );
+      segment.setLocalEulerAngles(0, angle * 180 / Math.PI, -index * 4);
+    }
+    addBox(root, "lunge-core", material, [definition.width, 0.16, 0.35], [0, 0.18, 0.42]);
   } else {
     for (let distance = 0.65; distance <= definition.range; distance += 0.65) {
       addBox(root, "seismic-wave", material, [definition.width * 0.84, 0.12, 0.42], [0, 0.12, distance]);
@@ -1204,6 +1225,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   camera.lookAt(initialPosition.x, initialPosition.y - 2, initialPosition.z);
   localVerticalVelocity = 0;
   localVisualVerticalOffset = 0;
+  localPowerVisualOffset.set(0, 0, 0);
   localPlayerVisual.setLocalPosition(0, 0, 0);
   surfaceReferenceY = SURFACE_HEIGHT + 1;
   const bootstrapUnderground = hasCeilingAbove(initialPosition);
@@ -1791,6 +1813,8 @@ function castPower(yaw: number, target?: { x: number; y: number; z: number }): v
     ? `${definition.name} charging · radial impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
     : definition.core === "ground"
       ? `${definition.name} marked · ground impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
+      : definition.core === "mobility"
+        ? `${definition.name} committed · lunge impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
       : `${definition.name} winding up · line impact in ${(definition.windupMs / 1000).toFixed(2)}s.`;
 }
 
@@ -1970,7 +1994,14 @@ function reconcileLocalPlayer(
   const distance = position.distance(target);
   const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady);
   if (!Number.isFinite(reconciliationRate)) {
-    if (worldReady) logMovementEvent(`HARD CORRECTION d=${distance.toFixed(3)} lag=${sequenceLag}`);
+    const mobilityAdvance = localActivePower !== null
+      && POWER_DEFINITIONS[localActivePower].core === "mobility"
+      && localPowerStartedAt !== null;
+    if (worldReady) logMovementEvent(`${mobilityAdvance ? "MOBILITY ADVANCE" : "HARD CORRECTION"} d=${distance.toFixed(3)} lag=${sequenceLag}`);
+    if (mobilityAdvance) {
+      localPowerVisualOffset.x += position.x - target.x;
+      localPowerVisualOffset.z += position.z - target.z;
+    }
     localVisualVerticalOffset += position.y - target.y;
     localPlayer.setPosition(target);
     localVerticalVelocity = 0;
@@ -2043,7 +2074,8 @@ app.on("update", (dt: number) => {
   const sequenceLag = Math.max(0, moveSequence - lastProcessedInputSequence);
   const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded, authoritativeInputReady);
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
-  localPlayerVisual.setLocalPosition(0, localVisualVerticalOffset, 0);
+  localPowerVisualOffset.mulScalar(Math.max(0, 1 - frameTime * 11));
+  localPlayerVisual.setLocalPosition(localPowerVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z);
   const animationNow = performance.now();
   const animationTime = animationNow / 1000;
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
@@ -2055,18 +2087,16 @@ app.on("update", (dt: number) => {
     && localPowerElapsed >= activePowerDefinition.windupMs
     && !localPowerStepApplied
     && localPowerFacingYaw !== null) {
-    const radians = localPowerFacingYaw * Math.PI / 180;
-    const powerPosition = localPlayer.getPosition();
-    const stepped = resolvePlayerMotion(
-      powerPosition,
-      {
+    if (activePowerDefinition.core !== "mobility") {
+      const radians = localPowerFacingYaw * Math.PI / 180;
+      const powerPosition = localPlayer.getPosition();
+      const horizontalPowerMovement = {
         x: Math.sin(radians) * activePowerDefinition.forwardStep,
-        y: 0,
         z: Math.cos(radians) * activePowerDefinition.forwardStep,
-      },
-      readCollisionWorldBlock,
-    );
-    localPlayer.setPosition(stepped.x, stepped.y, stepped.z);
+      };
+      const stepped = resolvePlayerMotion(powerPosition, { ...horizontalPowerMovement, y: 0 }, readCollisionWorldBlock);
+      localPlayer.setPosition(stepped.x, stepped.y, stepped.z);
+    }
     localPowerStepApplied = true;
   }
   if (animationNow >= localHitPauseUntil) {
@@ -2215,7 +2245,11 @@ app.on("update", (dt: number) => {
       : "READY · R";
   powerSlot.classList.toggle("ready", powerServerReady && powerRemaining <= 0 && !powerAimActive);
   powerButton.textContent = !powerServerReady ? "Wait" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
-  cameraTarget.set(player.x, player.y + localVisualVerticalOffset, player.z);
+  cameraTarget.set(
+    player.x + localPowerVisualOffset.x,
+    player.y + localVisualVerticalOffset,
+    player.z + localPowerVisualOffset.z,
+  );
   cameraFocus.copy(cameraTarget);
   const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
   if (animationNow < cameraShakeUntil) {

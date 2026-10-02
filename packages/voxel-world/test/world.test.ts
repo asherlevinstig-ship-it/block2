@@ -13,6 +13,7 @@ import {
   isProtectedVoxel,
   playerCollides,
   resolvePlayerMotion,
+  resolveSweptHorizontalMotion,
   voxelRaycast,
   worldToChunk,
 } from "../src/index.js";
@@ -126,6 +127,13 @@ describe("deterministic voxel world", () => {
     const blocked = resolvePlayerMotion(approach, { x: 0.21, y: 0, z: 0 }, crampedStep);
     expect(blocked.x).toBe(approach.x);
     expect(blocked.stepped).toBe(false);
+  });
+
+  it("sweeps long horizontal movement so a lunge cannot tunnel through walls", () => {
+    const wall = (x: number, y: number) => (y === 0 || (x === 2 && (y === 1 || y === 2)) ? Block.Stone : Block.Air);
+    const lunged = resolveSweptHorizontalMotion({ x: 0.5, y: 1, z: 0.5 }, { x: 4, z: 0 }, wall);
+    expect(lunged.x).toBeLessThan(2);
+    expect(playerCollides(wall, lunged.x, lunged.y, lunged.z)).toBe(false);
   });
 
   it("keeps the complete underground entrance and chamber route supported", () => {

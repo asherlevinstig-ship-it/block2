@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POWER_DEFINITIONS } from "@blockcraft/protocol";
-import { isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets } from "../src/power-rules.js";
+import { isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "../src/power-rules.js";
 
 describe("Power rules", () => {
   it("resolves facing direction from yaw", () => {
@@ -75,5 +75,21 @@ describe("Power rules", () => {
     expect(isGroundPowerTargetInRange(origin, { x: 14, y: 8, z: 8.5 }, POWER_DEFINITIONS.eruption.range)).toBe(true);
     expect(isGroundPowerTargetInRange(origin, { x: 16, y: 8, z: 8.5 }, POWER_DEFINITIONS.eruption.range)).toBe(false);
     expect(isGroundPowerTargetInRange(origin, { x: 10, y: 10, z: 8.5 }, POWER_DEFINITIONS.eruption.range)).toBe(false);
+  });
+
+  it("selects only the nearest target along a mobility strike path", () => {
+    const target = selectMobilityPowerTarget(
+      { x: 0, y: 8, z: 0 },
+      0,
+      [
+        { id: "far", x: 0.1, y: 8, z: 3.4, alive: true },
+        { id: "near", x: -0.2, y: 8, z: 1.8, alive: true },
+        { id: "wide", x: 1, y: 8, z: 1, alive: true },
+      ],
+      POWER_DEFINITIONS.lunge_strike.range,
+      POWER_DEFINITIONS.lunge_strike.width,
+    );
+    expect(target?.id).toBe("near");
+    expect(mobilityAdvanceDistance({ x: 0, y: 8, z: 0 }, 0, target, POWER_DEFINITIONS.lunge_strike.forwardStep)).toBeCloseTo(1);
   });
 });

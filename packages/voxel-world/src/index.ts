@@ -247,6 +247,32 @@ export function resolvePlayerMotion(
   };
 }
 
+export function resolveSweptHorizontalMotion(
+  start: PlayerPosition,
+  delta: Pick<PlayerPosition, "x" | "z">,
+  readBlock: WorldBlockReader,
+  maximumStep = 0.3,
+): PlayerMotionResult {
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(delta.x), Math.abs(delta.z)) / maximumStep));
+  const stepX = delta.x / steps;
+  const stepZ = delta.z / steps;
+  let position: PlayerPosition = { ...start };
+  let stepped = false;
+  for (let index = 0; index < steps; index += 1) {
+    const next = resolvePlayerMotion(position, { x: stepX, y: 0, z: stepZ }, readBlock);
+    stepped ||= next.stepped;
+    const moved = Math.hypot(next.x - position.x, next.z - position.z);
+    position = next;
+    if (moved < 0.0001) break;
+  }
+  return {
+    ...position,
+    grounded: isPlayerSupported(readBlock, position.x, position.y, position.z),
+    hitVertical: false,
+    stepped,
+  };
+}
+
 export function voxelRaycast(
   origin: VoxelPoint,
   direction: VoxelPoint,
