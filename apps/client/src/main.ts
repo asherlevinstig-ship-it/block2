@@ -6,6 +6,7 @@ import {
   MOMENTUM_TRAIT,
   TRAIT_DEFINITIONS,
   HUNTERS_MARK,
+  ITEM_DEFINITIONS,
   POWER_DEFINITIONS,
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
@@ -21,6 +22,8 @@ import {
   type CombatReward,
   type CombatStagger,
   type DefenseResolved,
+  type ItemId,
+  type LootPickedUp,
   type MainHandId,
   type MobHazardPlaced,
   type MobProjectileReleased,
@@ -146,6 +149,11 @@ const specialCooldownLabel = document.querySelector<HTMLElement>("#special-coold
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
+const inventoryPanel = document.querySelector<HTMLElement>("#inventory-panel")!;
+const inventoryTotal = document.querySelector<HTMLElement>("#inventory-total")!;
+const inventoryCountElements = new Map<ItemId, HTMLElement>(
+  [...document.querySelectorAll<HTMLElement>("[data-item-count]")].map(element => [element.dataset.itemCount as ItemId, element]),
+);
 const performanceFields = {
   frame: document.querySelector<HTMLElement>("#perf-frame")!,
   fps: document.querySelector<HTMLElement>("#perf-fps")!,
@@ -167,7 +175,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -673,6 +681,21 @@ interface NetworkMob {
   rewardMultiplier: number;
 }
 
+interface NetworkLootDrop {
+  itemId: string;
+  quantity: number;
+  x: number;
+  y: number;
+  z: number;
+  expiresAt: number;
+}
+
+interface LootVisual {
+  root: pc.Entity;
+  state: NetworkLootDrop;
+  phase: number;
+}
+
 interface MobVisual {
   entity: pc.Entity;
   bodyRoot: pc.Entity;
@@ -709,6 +732,8 @@ interface MarkVisualState {
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const mobVisuals = new Map<string, MobVisual>();
+const lootVisuals = new Map<string, LootVisual>();
+const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 const combatAudio = new CombatAudio();
 const unlockCombatAudio = (): void => combatAudio.unlock();
 window.addEventListener("pointerdown", unlockCombatAudio, { once: true, capture: true });
@@ -1723,6 +1748,68 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     lastCombatState: mob.combatState,
     lastAlive: mob.alive,
   };
+}
+
+const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
+  moss_fibre: coloredMaterial(new pc.Color(0.28, 0.68, 0.2)),
+  crawler_fang: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
+  stone_core: coloredMaterial(new pc.Color(0.38, 0.52, 0.62)),
+  acid_gland: coloredMaterial(new pc.Color(0.58, 0.9, 0.1)),
+};
+
+function isItemId(value: string): value is ItemId {
+  return value in ITEM_DEFINITIONS;
+}
+
+function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
+  const root = new pc.Entity(`loot:${dropId}`);
+  const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
+  const material = lootMaterials[itemId];
+  if (itemId === "crawler_fang") {
+    addBox(root, "fang", material, [0.17, 0.48, 0.17], [0, 0, 0]).setLocalEulerAngles(0, 0, 32);
+    addBox(root, "fang-tip", material, [0.12, 0.2, 0.12], [0.13, -0.2, 0]).setLocalEulerAngles(0, 0, 45);
+  } else if (itemId === "stone_core") {
+    addBox(root, "core", material, [0.38, 0.38, 0.38], [0, 0, 0]).setLocalEulerAngles(20, 45, 15);
+    addBox(root, "core-shard", material, [0.16, 0.28, 0.16], [0.22, 0.08, 0]).setLocalEulerAngles(0, 0, 38);
+  } else if (itemId === "acid_gland") {
+    addBox(root, "gland", material, [0.38, 0.32, 0.38], [0, 0, 0]).setLocalEulerAngles(15, 45, 0);
+    addBox(root, "gland-neck", material, [0.15, 0.24, 0.15], [0, 0.24, 0]);
+  } else {
+    addBox(root, "fibre-a", material, [0.12, 0.48, 0.12], [-0.08, 0, 0]).setLocalEulerAngles(28, 0, 18);
+    addBox(root, "fibre-b", material, [0.12, 0.42, 0.12], [0.09, 0.02, 0]).setLocalEulerAngles(-22, 0, -18);
+  }
+  root.setPosition(drop.x, drop.y + 0.36, drop.z);
+  app.root.addChild(root);
+  return { root, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17 };
+}
+
+function bindLootDrops(joinedRoom: Room): void {
+  const callbacks = getStateCallbacks(joinedRoom as Room<any, any>) as any;
+  const state = joinedRoom.state as any;
+  if (!state.lootDrops) return;
+  const drops = callbacks(joinedRoom.state).lootDrops;
+  drops.onAdd((drop: NetworkLootDrop, dropId: string) => {
+    lootVisuals.get(dropId)?.root.destroy();
+    lootVisuals.set(dropId, createLootVisual(dropId, drop));
+  }, true);
+  drops.onRemove((_drop: NetworkLootDrop, dropId: string) => {
+    lootVisuals.get(dropId)?.root.destroy();
+    lootVisuals.delete(dropId);
+  });
+}
+
+function updateInventoryItem(itemId: ItemId, total: number): void {
+  inventoryCounts.set(itemId, total);
+  const count = inventoryCountElements.get(itemId);
+  if (count) count.textContent = String(total);
+  const grandTotal = [...inventoryCounts.values()].reduce((sum, quantity) => sum + quantity, 0);
+  inventoryTotal.textContent = grandTotal === 0 ? "EMPTY" : `${grandTotal} ITEM${grandTotal === 1 ? "" : "S"}`;
+  const card = inventoryPanel.querySelector<HTMLElement>(`[data-item="${itemId}"]`);
+  if (card) {
+    card.classList.remove("loot-added");
+    requestAnimationFrame(() => card.classList.add("loot-added"));
+    window.setTimeout(() => card.classList.remove("loot-added"), 650);
+  }
 }
 
 function playMobCue(mob: MobVisual, cue: EnemyCue): void {
@@ -3219,6 +3306,14 @@ app.on("update", (dt: number) => {
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
+  for (const loot of lootVisuals.values()) {
+    const visible = !isCutawayHidden(Math.floor(loot.state.x), Math.floor(loot.state.y), Math.floor(loot.state.z));
+    loot.root.enabled = visible;
+    if (!visible) continue;
+    const bob = Math.sin(animationTime * 3.2 + loot.phase) * 0.08;
+    loot.root.setPosition(loot.state.x, loot.state.y + 0.36 + bob, loot.state.z);
+    loot.root.setEulerAngles(0, (animationTime * 58 + loot.phase * 23) % 360, 0);
+  }
   for (const mob of mobVisuals.values()) {
     const visible = mob.state.alive && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
@@ -3614,6 +3709,7 @@ async function connect(): Promise<void> {
   );
   bindPlayers(room);
   bindMobs(room);
+  bindLootDrops(room);
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
@@ -3821,6 +3917,14 @@ async function connect(): Promise<void> {
     status.textContent = `${defeatedName} reward${rewards ? ` · ${rewards}` : " claimed"}.`;
     logMovementEvent(`REWARD ${message.mobId} hp=${message.healthRestored} stamina=${message.staminaRestored}`);
   });
+  room.onMessage("loot:picked-up", (message: LootPickedUp) => {
+    if (message.playerId !== room?.sessionId || !isItemId(message.itemId)) return;
+    updateInventoryItem(message.itemId, message.total);
+    const item = ITEM_DEFINITIONS[message.itemId];
+    showCombatFeedback(`+${message.quantity} ${item.name.toUpperCase()}`, "dodge");
+    status.textContent = `Picked up ${item.name} · ${message.total} total.`;
+    logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
+  });
   room.onMessage("pong", (message: { id?: unknown }) => {
     if (typeof message.id !== "string") return;
     const sentAt = pendingPings.get(message.id);
@@ -3881,6 +3985,9 @@ async function connect(): Promise<void> {
     remotePlayers.clear();
     for (const mob of mobVisuals.values()) mob.entity.destroy();
     mobVisuals.clear();
+    for (const loot of lootVisuals.values()) loot.root.destroy();
+    lootVisuals.clear();
+    for (const itemId of inventoryCounts.keys()) updateInventoryItem(itemId, 0);
     for (const telegraph of powerTelegraphs.values()) telegraph.root.destroy();
     powerTelegraphs.clear();
     for (const impact of powerImpactVisuals) {

@@ -2,6 +2,15 @@ import { z } from "zod";
 
 export const WORLD_ROOM = "world";
 
+export const ITEM_DEFINITIONS = {
+  moss_fibre: { id: "moss_fibre", name: "Moss Fibre", description: "Soft living fibre gathered from Moss Crawlers" },
+  crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang shed by a defeated crawler" },
+  stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core from a Stone Brute" },
+  acid_gland: { id: "acid_gland", name: "Acid Gland", description: "A volatile gland taken from a Cave Spitter" },
+} as const;
+
+export type ItemId = keyof typeof ITEM_DEFINITIONS;
+
 export const TRAIT_DEFINITIONS = {
   momentum: {
     id: "momentum",
@@ -459,6 +468,14 @@ export interface CombatReward {
   staminaRestored: number;
   health: number;
   stamina: number;
+}
+
+export interface LootPickedUp {
+  playerId: string;
+  dropId: string;
+  itemId: ItemId;
+  quantity: number;
+  total: number;
 }
 
 export interface CombatStagger {

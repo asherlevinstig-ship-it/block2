@@ -45,6 +45,8 @@ import {
   type TraitId,
   type WorldBootstrap,
   type WeaponAttackReleased,
+  type ItemId,
+  type LootPickedUp,
 } from "@blockcraft/protocol";
 import {
   Block,
@@ -63,7 +65,7 @@ import {
   worldToChunk,
   type GeneratedChunk,
 } from "@blockcraft/voxel-world";
-import { MobState, PlayerState, WorldState } from "./schema.js";
+import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
@@ -72,6 +74,7 @@ import { dangerBandAt, scaledMobStats } from "./radial-difficulty.js";
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
+import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS } from "./loot-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -155,6 +158,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
   private mobProjectileSequence = 0;
+  private lootDropSequence = 0;
   private worldSeed = "blockcraft-dev";
 
   override onCreate(): void {
@@ -332,6 +336,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     const definition = mobArchetype(mob.archetype);
+    this.spawnLootDrops(mobId, mob, now);
     mob.alive = false;
     mob.respawnAt = now + definition.respawnMs;
     mob.combatState = "idle";
@@ -351,6 +356,50 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       health: player.health,
       stamina: Math.round(player.stamina),
     } satisfies CombatReward);
+  }
+
+  private spawnLootDrops(mobId: string, mob: MobState, now: number): void {
+    const drops = lootForArchetype(mob.archetype as MobArchetypeId);
+    for (const [index, entry] of drops.entries()) {
+      const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
+      const drop = new LootDropState();
+      drop.itemId = entry.itemId;
+      drop.quantity = entry.quantity;
+      drop.x = mob.x + Math.cos(angle) * 0.42;
+      drop.y = mob.y + 0.22;
+      drop.z = mob.z + Math.sin(angle) * 0.42;
+      drop.expiresAt = now + LOOT_DESPAWN_MS;
+      this.state.lootDrops.set(`${mobId}:${now}:${++this.lootDropSequence}`, drop);
+    }
+  }
+
+  private resolveLootPickups(now: number): void {
+    for (const [dropId, drop] of this.state.lootDrops) {
+      if (now >= drop.expiresAt) {
+        this.state.lootDrops.delete(dropId);
+        continue;
+      }
+      for (const [playerId, player] of this.state.players) {
+        if (!isLootInPickupRange(player, drop)) continue;
+        const itemId = drop.itemId as ItemId;
+        let inventoryItem = player.inventory.get(itemId);
+        const total = inventoryTotal(inventoryItem?.quantity, drop.quantity);
+        if (!inventoryItem) {
+          inventoryItem = new InventoryItemState();
+          player.inventory.set(itemId, inventoryItem);
+        }
+        inventoryItem.quantity = total;
+        this.state.lootDrops.delete(dropId);
+        this.broadcast("loot:picked-up", {
+          playerId,
+          dropId,
+          itemId,
+          quantity: drop.quantity,
+          total,
+        } satisfies LootPickedUp);
+        break;
+      }
+    }
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true): boolean {
@@ -671,6 +720,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.z = next.z;
       player.lastProcessedInput = input.sequence;
     }
+    this.resolveLootPickups(now);
   }
 
   private handleDodge(client: Client, payload: unknown): void {

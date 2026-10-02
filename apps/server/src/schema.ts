@@ -1,5 +1,10 @@
 import { schema, t, type SchemaType } from "@colyseus/schema";
 
+export const InventoryItemState = schema({
+  quantity: t.uint16().default(0),
+}, "InventoryItemState");
+export type InventoryItemState = SchemaType<typeof InventoryItemState>;
+
 export const PlayerState = schema({
   x: t.float32().default(8.5),
   y: t.float32().default(11),
@@ -17,6 +22,7 @@ export const PlayerState = schema({
   defenseStartedAt: t.float64().default(0),
   momentumStacks: t.int8().default(0),
   equippedTrait: t.string().default("momentum"),
+  inventory: t.map(InventoryItemState),
   invulnerableUntil: t.float64().default(0),
   mainHandId: t.string().default("longsword"),
   mainHandTag: t.string().default("melee"),
@@ -31,6 +37,16 @@ export const PlayerState = schema({
   name: t.string().default("Explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
+
+export const LootDropState = schema({
+  itemId: t.string(),
+  quantity: t.uint8().default(1),
+  x: t.float32(),
+  y: t.float32(),
+  z: t.float32(),
+  expiresAt: t.float64(),
+}, "LootDropState");
+export type LootDropState = SchemaType<typeof LootDropState>;
 
 export const MobState = schema({
   x: t.float32().default(13.5),
@@ -60,5 +76,6 @@ export type MobState = SchemaType<typeof MobState>;
 export const WorldState = schema({
   players: t.map(PlayerState),
   mobs: t.map(MobState),
+  lootDrops: t.map(LootDropState),
 }, "WorldState");
 export type WorldState = SchemaType<typeof WorldState>;
