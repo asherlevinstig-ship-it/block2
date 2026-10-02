@@ -80,6 +80,7 @@ import {
   voxelCharacterPose,
 } from "./character-animation.js";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
+import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -627,11 +628,17 @@ interface MobVisual {
   actionAt: number;
   lastStaggerSequence: number;
   staggerAt: number;
+  lastCombatState: string;
+  lastAlive: boolean;
 }
 
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const mobVisuals = new Map<string, MobVisual>();
+const combatAudio = new CombatAudio();
+const unlockCombatAudio = (): void => combatAudio.unlock();
+window.addEventListener("pointerdown", unlockCombatAudio, { once: true, capture: true });
+window.addEventListener("keydown", unlockCombatAudio, { once: true, capture: true });
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
@@ -1164,10 +1171,32 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     actionAt: 0,
     lastStaggerSequence: mob.staggerSequence,
     staggerAt: 0,
+    lastCombatState: mob.combatState,
+    lastAlive: mob.alive,
   };
 }
 
+function playMobCue(mob: MobVisual, cue: EnemyCue): void {
+  const player = localPlayer.getPosition();
+  combatAudio.play(cue, enemyCuePan(mob.state.x, player.x));
+}
+
 function updateMobVisual(mob: MobVisual): void {
+  const previousCueState: EnemyCueSnapshot = {
+    alive: mob.lastAlive,
+    health: mob.state.health,
+    hitSequence: mob.lastHitSequence,
+    staggerSequence: mob.lastStaggerSequence,
+    combatState: mob.lastCombatState,
+  };
+  const currentCueState: EnemyCueSnapshot = {
+    alive: mob.state.alive,
+    health: mob.state.health,
+    hitSequence: mob.state.hitSequence,
+    staggerSequence: mob.state.staggerSequence,
+    combatState: mob.state.combatState,
+  };
+  for (const cue of enemyCuesForTransition(previousCueState, currentCueState)) playMobCue(mob, cue);
   const healthFraction = Math.max(0, Math.min(1, mob.state.health / Math.max(1, mob.state.maxHealth)));
   mob.healthFill.setLocalScale(0.96 * healthFraction, 0.065, 0.09);
   mob.healthFill.setLocalPosition(-0.48 * (1 - healthFraction), 1.34, 0.01);
@@ -1183,6 +1212,8 @@ function updateMobVisual(mob: MobVisual): void {
     mob.lastStaggerSequence = mob.state.staggerSequence;
     mob.staggerAt = performance.now();
   }
+  mob.lastCombatState = mob.state.combatState;
+  mob.lastAlive = mob.state.alive;
 }
 
 function bindMobs(joinedRoom: Room): void {
