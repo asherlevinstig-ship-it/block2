@@ -1,4 +1,4 @@
-import { HUNTERS_MARK } from "@blockcraft/protocol";
+import { BRAMBLE_SNARE, HUNTERS_MARK } from "@blockcraft/protocol";
 import { selectAttackTarget } from "./action-rules.js";
 
 export interface SpecialPosition {
@@ -65,4 +65,15 @@ export function huntersMarkPowerPayoff(
     staggerBonusMs: consumed ? HUNTERS_MARK.exposedStaggerBonusMs : 0,
     consumed,
   };
+}
+
+export function isBrambleSnareTargetInRange(origin: SpecialPosition, target: SpecialPosition): boolean {
+  return Math.hypot(target.x - origin.x, target.z - origin.z) <= BRAMBLE_SNARE.range
+    && Math.abs(target.y - origin.y) <= 2.5;
+}
+
+export function isInsideBrambleSnare(snare: SpecialPosition, target: SpecialTarget): boolean {
+  return target.alive
+    && Math.hypot(target.x - snare.x, target.z - snare.z) <= BRAMBLE_SNARE.radius
+    && Math.abs(target.y - snare.y) <= 2.5;
 }

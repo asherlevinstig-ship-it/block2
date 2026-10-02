@@ -169,6 +169,8 @@ export type PowerId = keyof typeof POWER_DEFINITIONS;
 export const HUNTERS_MARK = {
   id: "hunters_mark",
   name: "Hunter's Mark",
+  core: "mark",
+  castType: "tap",
   range: 8,
   minimumFacingDot: 0.25,
   durationMs: 10000,
@@ -179,6 +181,25 @@ export const HUNTERS_MARK = {
   exposedPowerBonusDamage: 2,
   exposedStaggerBonusMs: 900,
 } as const;
+
+export const BRAMBLE_SNARE = {
+  id: "bramble_snare",
+  name: "Bramble Snare",
+  core: "trap",
+  castType: "ground-release",
+  cooldownMs: 12000,
+  range: 6,
+  radius: 1.35,
+  lifetimeMs: 8000,
+  rootMs: 2000,
+} as const;
+
+export const SPECIAL_DEFINITIONS = {
+  hunters_mark: HUNTERS_MARK,
+  bramble_snare: BRAMBLE_SNARE,
+} as const;
+
+export type SpecialId = keyof typeof SPECIAL_DEFINITIONS;
 
 export const MoveRequestSchema = z.object({
   sequence: z.number().int().positive(),
@@ -229,7 +250,18 @@ export const PowerEquipRequestSchema = z.object({
 
 export const SpecialRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
+  specialId: z.enum(["hunters_mark", "bramble_snare"]),
   yaw: z.number().finite(),
+  target: z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    z: z.number().finite(),
+  }).optional(),
+});
+
+export const SpecialEquipRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  specialId: z.enum(["hunters_mark", "bramble_snare"]),
 });
 
 export const MainHandEquipRequestSchema = z.object({
@@ -245,6 +277,7 @@ export type PowerRequest = z.infer<typeof PowerRequestSchema>;
 export type PowerCancelRequest = z.infer<typeof PowerCancelRequestSchema>;
 export type PowerEquipRequest = z.infer<typeof PowerEquipRequestSchema>;
 export type SpecialRequest = z.infer<typeof SpecialRequestSchema>;
+export type SpecialEquipRequest = z.infer<typeof SpecialEquipRequestSchema>;
 export type MainHandEquipRequest = z.infer<typeof MainHandEquipRequestSchema>;
 
 export interface ChunkSnapshot {
@@ -377,6 +410,25 @@ export interface SpecialConsumed {
   powerId: PowerId;
   bonusDamage: number;
   staggerMs: number;
+}
+
+export interface BrambleSnarePlaced {
+  casterId: string;
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  expiresAt: number;
+  cooldownUntil: number;
+}
+
+export interface BrambleSnareTriggered {
+  casterId: string;
+  mobId: string;
+  x: number;
+  y: number;
+  z: number;
+  rootMs: number;
 }
 
 export interface ActionRejected {

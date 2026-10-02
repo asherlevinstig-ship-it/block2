@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { HUNTERS_MARK } from "@blockcraft/protocol";
-import { huntersMarkDamageBonus, huntersMarkPowerPayoff, progressHuntersMark, selectHuntersMarkTarget } from "../src/special-rules.js";
+import { BRAMBLE_SNARE, HUNTERS_MARK } from "@blockcraft/protocol";
+import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget } from "../src/special-rules.js";
 
 describe("Hunter's Mark", () => {
   it("selects the nearest living target inside the facing cone", () => {
@@ -54,5 +54,20 @@ describe("Hunter's Mark", () => {
       consumed: true,
     });
     expect(huntersMarkPowerPayoff(exposed, "crawler", 7000).consumed).toBe(false);
+  });
+});
+
+describe("Bramble Snare", () => {
+  it("accepts supported-style ground targets inside its cast range", () => {
+    expect(isBrambleSnareTargetInRange({ x: 0, y: 8, z: 0 }, { x: BRAMBLE_SNARE.range, y: 8, z: 0 })).toBe(true);
+    expect(isBrambleSnareTargetInRange({ x: 0, y: 8, z: 0 }, { x: BRAMBLE_SNARE.range + 0.01, y: 8, z: 0 })).toBe(false);
+    expect(isBrambleSnareTargetInRange({ x: 0, y: 8, z: 0 }, { x: 1, y: 11, z: 0 })).toBe(false);
+  });
+
+  it("triggers only for living enemies inside its radius", () => {
+    const snare = { x: 4, y: 8, z: 4 };
+    expect(isInsideBrambleSnare(snare, { id: "inside", x: 4.8, y: 8, z: 4, alive: true })).toBe(true);
+    expect(isInsideBrambleSnare(snare, { id: "outside", x: 4 + BRAMBLE_SNARE.radius + 0.01, y: 8, z: 4, alive: true })).toBe(false);
+    expect(isInsideBrambleSnare(snare, { id: "dead", x: 4, y: 8, z: 4, alive: false })).toBe(false);
   });
 });

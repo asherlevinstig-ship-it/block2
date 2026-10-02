@@ -1,13 +1,17 @@
 import * as pc from "playcanvas";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
+  BRAMBLE_SNARE,
   MAIN_HAND_DEFINITIONS,
   HUNTERS_MARK,
   POWER_DEFINITIONS,
+  SPECIAL_DEFINITIONS,
   WEAPON_ATTACK_DEFINITIONS,
   WORLD_ROOM,
   type ActionRejected,
   type BlockChanged,
+  type BrambleSnarePlaced,
+  type BrambleSnareTriggered,
   type ChunkSnapshot,
   type CombatHit,
   type CombatMiss,
@@ -21,6 +25,7 @@ import {
   type SpecialApplied,
   type SpecialConsumed,
   type SpecialProgressed,
+  type SpecialId,
   type WorldBootstrap,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
@@ -112,6 +117,8 @@ const mainHandAttack = document.querySelector<HTMLElement>("#main-hand-attack")!
 const powerCooldownFill = document.querySelector<HTMLElement>("#power-cooldown-fill")!;
 const powerCooldownLabel = document.querySelector<HTMLElement>("#power-cooldown-label")!;
 const specialSlot = document.querySelector<HTMLButtonElement>("#special-slot")!;
+const specialName = document.querySelector<HTMLElement>("#special-name")!;
+const specialPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#special-picker [data-special]")];
 const specialCooldownFill = document.querySelector<HTMLElement>("#special-cooldown-fill")!;
 const specialCooldownLabel = document.querySelector<HTMLElement>("#special-cooldown-label")!;
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
@@ -137,7 +144,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || !specialSlot || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -590,6 +597,7 @@ interface NetworkPlayer {
   powerSequence: number;
   powerCastStartedAt: number;
   specialCooldownUntil: number;
+  equippedSpecial: string;
   name: string;
 }
 
@@ -677,9 +685,11 @@ let localPowerCooldownUntil = 0;
 let localSpecialCooldownUntil = 0;
 let localMainHandId: MainHandId = "longsword";
 let localEquippedPower: PowerId = "shockwave";
+let localEquippedSpecial: SpecialId = "hunters_mark";
 let localActivePower: PowerId | null = null;
 let powerSequence = 0;
 let specialSequence = 0;
+let specialEquipSequence = 0;
 let powerEquipSequence = 0;
 let mainHandEquipSequence = 0;
 let localLastPowerSequence = 0;
@@ -689,6 +699,11 @@ let powerAimYaw = 0;
 let powerAimPointerId: number | null = null;
 const powerAimTarget = new pc.Vec3();
 let powerAimTargetValid = true;
+let specialAimActive = false;
+let specialAimPointerId: number | null = null;
+let specialAimYaw = 0;
+const specialAimTarget = new pc.Vec3();
+let specialAimTargetValid = true;
 let cameraShakeUntil = 0;
 let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
@@ -699,6 +714,10 @@ const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
 
 function isPowerId(value: string): value is PowerId {
   return value in POWER_DEFINITIONS;
+}
+
+function isSpecialId(value: string): value is SpecialId {
+  return value in SPECIAL_DEFINITIONS;
 }
 
 function isMainHandId(value: string): value is MainHandId {
@@ -731,15 +750,42 @@ function updatePowerLoadout(powerId: PowerId): void {
   const definition = POWER_DEFINITIONS[powerId];
   powerName.textContent = definition.name;
   powerSlot.setAttribute("aria-label", `Use ${definition.name}`);
-  controlsHelp.textContent = definition.castType === "tap"
-    ? `WASD move · Space dodge · R ${definition.name} · F Mark · Q mode · E/click acts`
-    : definition.castType === "ground-release"
-      ? `WASD move · Space dodge/cancel · Hold R place ${definition.name} · F Mark · Q mode · E/click acts`
-      : `WASD move · Space dodge/cancel · Hold R aim ${definition.name} · F Mark · Q mode · E/click acts`;
+  updateControlsHelp();
   for (const button of powerPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.power === powerId));
   }
   refreshPowerCompatibility();
+}
+
+function updateControlsHelp(): void {
+  const power = POWER_DEFINITIONS[localEquippedPower];
+  const special = SPECIAL_DEFINITIONS[localEquippedSpecial];
+  const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
+  const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
+  controlsHelp.textContent = `WASD move · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
+}
+
+function updateSpecialLoadout(specialId: SpecialId): void {
+  localEquippedSpecial = specialId;
+  const definition = SPECIAL_DEFINITIONS[specialId];
+  specialName.textContent = definition.name;
+  specialSlot.setAttribute("aria-label", `Use ${definition.name}`);
+  specialButton.textContent = specialId === "hunters_mark" ? "Mark" : "Snare";
+  for (const button of specialPickerButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.special === specialId));
+  }
+  updateControlsHelp();
+}
+
+function requestSpecialEquip(specialId: SpecialId): void {
+  if (!room || !worldReady || specialId === localEquippedSpecial) return;
+  if (specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null) {
+    status.textContent = "Finish or cancel the current action before changing Special.";
+    return;
+  }
+  specialEquipSequence += 1;
+  room.send("special:equip", { requestId: `special-equip-${specialEquipSequence}`, specialId });
+  status.textContent = `Equipping ${SPECIAL_DEFINITIONS[specialId].name}...`;
 }
 
 function updateMainHandLoadout(mainHandId: MainHandId): void {
@@ -855,6 +901,13 @@ interface MarkPayoffVisual {
   startedAt: number;
 }
 
+interface BrambleSnareVisual {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  expiresAt: number;
+  triggeredAt: number | null;
+}
+
 interface WeaponProjectileVisual {
   entity: pc.Entity;
   material: pc.StandardMaterial;
@@ -869,8 +922,10 @@ const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
+const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
 let powerAimVisual: PowerAimVisual | null = null;
+let specialAimVisual: PowerAimVisual | null = null;
 
 function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -1021,6 +1076,82 @@ function updatePowerAimVisual(): void {
     if (segment.entity.render) {
       segment.entity.render.material = pathBlocked ? powerAimVisual.blockedMaterial : powerAimVisual.validMaterial;
     }
+  }
+}
+
+function destroySpecialAimVisual(): void {
+  specialAimVisual?.root.destroy();
+  specialAimVisual = null;
+}
+
+function createSpecialAimVisual(): void {
+  destroySpecialAimVisual();
+  const root = new pc.Entity("special-aim-preview");
+  const validMaterial = powerMaterial(new pc.Color(0.22, 0.95, 0.34), 0.48);
+  const blockedMaterial = powerMaterial(new pc.Color(1, 0.16, 0.08), 0.52);
+  const segments: PowerAimSegment[] = [];
+  for (let index = 0; index < 24; index += 1) {
+    const angle = index / 24 * Math.PI * 2;
+    const entity = addBox(
+      root,
+      "bramble-aim",
+      validMaterial,
+      [0.32, 0.035, 0.11],
+      [Math.sin(angle) * BRAMBLE_SNARE.radius, 0.05, Math.cos(angle) * BRAMBLE_SNARE.radius],
+    );
+    entity.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+    segments.push({ entity, distance: BRAMBLE_SNARE.radius });
+  }
+  segments.push({ entity: addBox(root, "bramble-aim-center", validMaterial, [0.24, 0.04, 0.24], [0, 0.05, 0]), distance: 0 });
+  app.root.addChild(root);
+  specialAimVisual = { root, validMaterial, blockedMaterial, segments, kind: "ground" };
+}
+
+function updateSpecialAimVisual(): void {
+  if (!specialAimActive || !specialAimVisual) return;
+  const player = localPlayer.getPosition();
+  specialAimTargetValid = Math.hypot(specialAimTarget.x - player.x, specialAimTarget.z - player.z) <= BRAMBLE_SNARE.range + 0.05
+    && isPlayerSupported(readCollisionWorldBlock, specialAimTarget.x, specialAimTarget.y, specialAimTarget.z);
+  specialAimVisual.root.setPosition(specialAimTarget.x, specialAimTarget.y + 0.08, specialAimTarget.z);
+  for (const segment of specialAimVisual.segments) {
+    if (segment.entity.render) segment.entity.render.material = specialAimTargetValid ? specialAimVisual.validMaterial : specialAimVisual.blockedMaterial;
+  }
+}
+
+function createBrambleSnareVisual(message: BrambleSnarePlaced): void {
+  brambleSnareVisuals.get(message.casterId)?.root.destroy();
+  const root = new pc.Entity(`bramble-snare:${message.casterId}`);
+  const material = powerMaterial(new pc.Color(0.18, 0.72, 0.22), 0.72);
+  for (let index = 0; index < 20; index += 1) {
+    const angle = index / 20 * Math.PI * 2;
+    const radius = message.radius * (0.66 + (index % 2) * 0.28);
+    const thorn = addBox(root, "bramble-thorn", material, [0.12, 0.18 + (index % 3) * 0.06, 0.36], [Math.sin(angle) * radius, 0.1, Math.cos(angle) * radius]);
+    thorn.setLocalEulerAngles(index % 2 ? 24 : -24, angle * 180 / Math.PI, 0);
+  }
+  root.setPosition(message.x, message.y + 0.04, message.z);
+  app.root.addChild(root);
+  brambleSnareVisuals.set(message.casterId, { root, material, expiresAt: message.expiresAt, triggeredAt: null });
+}
+
+function triggerBrambleSnareVisual(message: BrambleSnareTriggered): void {
+  const visual = brambleSnareVisuals.get(message.casterId);
+  if (visual) {
+    visual.triggeredAt = performance.now();
+    visual.expiresAt = Date.now() + 700;
+  }
+  const mob = mobVisuals.get(message.mobId);
+  if (!mob) return;
+  const material = visual?.material ?? powerMaterial(new pc.Color(0.18, 0.82, 0.25), 0.8);
+  for (let index = 0; index < 12; index += 1) {
+    const angle = index / 12 * Math.PI * 2;
+    const vine = new pc.Entity("bramble-root-vine");
+    vine.addComponent("render", { type: "box" });
+    if (vine.render) vine.render.material = material;
+    vine.setLocalScale(0.1, 0.65 + (index % 3) * 0.18, 0.1);
+    vine.setPosition(mob.state.x + Math.sin(angle) * 0.52, mob.state.y + 0.3, mob.state.z + Math.cos(angle) * 0.52);
+    vine.setEulerAngles(index % 2 ? 20 : -20, angle * 180 / Math.PI, 0);
+    app.root.addChild(vine);
+    powerDebrisVisuals.push({ entity: vine, velocity: new pc.Vec3(0, 0.3, 0), spin: new pc.Vec3(0, 40, 0), startedAt: performance.now() });
   }
 }
 
@@ -1331,6 +1462,7 @@ function bindPlayers(joinedRoom: Room): void {
       if (isMainHandId(player.mainHandId)) updateMainHandLoadout(player.mainHandId);
       powerServerReady = isPowerId(player.equippedPower);
       if (isPowerId(player.equippedPower)) updatePowerLoadout(player.equippedPower);
+      if (isSpecialId(player.equippedSpecial)) updateSpecialLoadout(player.equippedSpecial);
     }
     let remote = isLocal ? undefined : remotePlayers.get(sessionId);
     if (!isLocal && !remote) {
@@ -1387,6 +1519,12 @@ function bindPlayers(joinedRoom: Room): void {
         status.textContent = `${POWER_DEFINITIONS[player.equippedPower].name} equipped.`;
       }
     }, true);
+    playerCallbacks.listen("equippedSpecial", () => {
+      if (!isLocal || !isSpecialId(player.equippedSpecial)) return;
+      updateSpecialLoadout(player.equippedSpecial);
+      localSpecialCooldownUntil = 0;
+      status.textContent = `${SPECIAL_DEFINITIONS[player.equippedSpecial].name} equipped.`;
+    }, true);
     playerCallbacks.listen("mainHandId", () => {
       if (isLocal && isMainHandId(player.mainHandId)) {
         updateMainHandLoadout(player.mainHandId);
@@ -1442,6 +1580,7 @@ function updatePointerPosition(event: PointerEvent): void {
   pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
   pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
   if (powerAimActive) updatePowerAimFromPointer();
+  if (specialAimActive) updateSpecialAimFromPointer();
 }
 
 canvas.addEventListener("pointermove", updatePointerPosition);
@@ -1964,6 +2103,7 @@ function requestAttack(): void {
 function requestDodge(): void {
   if (!room || !worldReady) return;
   if (powerAimActive) cancelPowerAim();
+  if (specialAimActive) cancelSpecialAim();
   const activePowerElapsed = localPowerStartedAt === null ? null : performance.now() - localPowerStartedAt;
   if (activePowerElapsed !== null
     && localActivePower !== null
@@ -2030,7 +2170,7 @@ function beginPowerAim(pointerId: number | null = null): void {
     showCombatFeedback("POWER SERVER UPDATING", "hurt");
     return;
   }
-  if (powerAimActive || localPowerStartedAt !== null) return;
+  if (powerAimActive || specialAimActive || localPowerStartedAt !== null) return;
   const definition = POWER_DEFINITIONS[localEquippedPower];
   if (!isPowerCompatibleWithMainHand(definition, localMainHandId)) {
     status.textContent = `${definition.name} is not compatible with ${MAIN_HAND_DEFINITIONS[localMainHandId].name}.`;
@@ -2140,7 +2280,7 @@ function commitPowerAim(): void {
   castPower(yaw, target);
 }
 
-function requestSpecial(): void {
+function requestHuntersMark(): void {
   if (!room || !worldReady) return;
   const remaining = localSpecialCooldownUntil - Date.now();
   if (remaining > 0) {
@@ -2167,9 +2307,103 @@ function requestSpecial(): void {
   localFacingYaw = yaw;
   localSpecialCooldownUntil = Date.now() + HUNTERS_MARK.cooldownMs;
   specialSequence += 1;
-  room.send("special", { requestId: `special-${specialSequence}`, yaw });
+  room.send("special", { requestId: `special-${specialSequence}`, specialId: "hunters_mark", yaw });
   status.textContent = `Marking ${target.visual.state.name}...`;
   logMovementEvent(`SPECIAL ${HUNTERS_MARK.id} target=${target.id} yaw=${yaw.toFixed(1)}`);
+}
+
+function updateSpecialAimFromPointer(): void {
+  if (!specialAimActive || !camera.camera) return;
+  const player = localPlayer.getPosition();
+  const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
+  const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
+  const rayY = end.y - start.y;
+  if (Math.abs(rayY) < 0.0001) return;
+  const distanceAlongRay = (player.y - start.y) / rayY;
+  if (distanceAlongRay <= 0) return;
+  const worldX = start.x + (end.x - start.x) * distanceAlongRay;
+  const worldZ = start.z + (end.z - start.z) * distanceAlongRay;
+  const deltaX = worldX - player.x;
+  const deltaZ = worldZ - player.z;
+  const pointerDistance = Math.hypot(deltaX, deltaZ);
+  const scale = pointerDistance > BRAMBLE_SNARE.range ? BRAMBLE_SNARE.range / pointerDistance : 1;
+  specialAimTarget.set(player.x + deltaX * scale, player.y, player.z + deltaZ * scale);
+  specialAimYaw = movementYaw(specialAimTarget.x - player.x, specialAimTarget.z - player.z, specialAimYaw);
+  localFacingYaw = specialAimYaw;
+  updateSpecialAimVisual();
+}
+
+function beginSpecialAim(pointerId: number | null = null): void {
+  if (!room || !worldReady || specialAimActive) return;
+  const definition = SPECIAL_DEFINITIONS[localEquippedSpecial];
+  const remaining = localSpecialCooldownUntil - Date.now();
+  if (remaining > 0) {
+    status.textContent = `${definition.name} recharging · ${(remaining / 1000).toFixed(1)}s.`;
+    return;
+  }
+  if (powerAimActive || localPowerStartedAt !== null || localActionStartedAt !== null) {
+    status.textContent = `${definition.name} needs a clear action window.`;
+    showCombatFeedback("SPECIAL BLOCKED", "hurt");
+    return;
+  }
+  if (localEquippedSpecial === "hunters_mark") {
+    requestHuntersMark();
+    return;
+  }
+  const player = localPlayer.getPosition();
+  const targetMob = nearestLivingMob(player, BRAMBLE_SNARE.range);
+  specialAimYaw = targetMob
+    ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
+    : localFacingYaw;
+  const radians = specialAimYaw * Math.PI / 180;
+  const preferredDistance = targetMob ? Math.min(BRAMBLE_SNARE.range, targetMob.distance) : Math.min(BRAMBLE_SNARE.range, 3.5);
+  specialAimTarget.set(
+    targetMob ? targetMob.visual.state.x : player.x + Math.sin(radians) * preferredDistance,
+    player.y,
+    targetMob ? targetMob.visual.state.z : player.z + Math.cos(radians) * preferredDistance,
+  );
+  specialAimTargetValid = isPlayerSupported(readCollisionWorldBlock, specialAimTarget.x, specialAimTarget.y, specialAimTarget.z);
+  specialAimActive = true;
+  specialAimPointerId = pointerId;
+  localFacingYaw = specialAimYaw;
+  createSpecialAimVisual();
+  updateSpecialAimVisual();
+  specialSlot.classList.add("aiming");
+  specialButton.classList.add("aiming");
+  showCombatFeedback("AIM BRAMBLE SNARE", "dodge");
+  status.textContent = "Placing Bramble Snare · point within range, release to arm, dodge to cancel.";
+}
+
+function cancelSpecialAim(): void {
+  if (!specialAimActive) return;
+  specialAimActive = false;
+  specialAimPointerId = null;
+  destroySpecialAimVisual();
+  specialSlot.classList.remove("aiming");
+  specialButton.classList.remove("aiming");
+  showCombatFeedback("SPECIAL CANCELLED", "dodge");
+}
+
+function commitSpecialAim(): void {
+  if (!specialAimActive || !room) return;
+  if (!specialAimTargetValid) {
+    status.textContent = "Bramble Snare needs solid ground within range.";
+    showCombatFeedback("INVALID GROUND", "hurt");
+    return;
+  }
+  const target = { x: specialAimTarget.x, y: specialAimTarget.y, z: specialAimTarget.z };
+  const yaw = specialAimYaw;
+  specialAimActive = false;
+  specialAimPointerId = null;
+  destroySpecialAimVisual();
+  specialSlot.classList.remove("aiming");
+  specialButton.classList.remove("aiming");
+  localSpecialCooldownUntil = Date.now() + BRAMBLE_SNARE.cooldownMs;
+  specialSequence += 1;
+  room.send("special", { requestId: `special-${specialSequence}`, specialId: "bramble_snare", yaw, target });
+  showCombatFeedback("SNARE ARMED", "dodge");
+  status.textContent = "Bramble Snare armed · the first enemy entering it will be rooted.";
+  logMovementEvent(`SPECIAL ${BRAMBLE_SNARE.id} ${target.x.toFixed(1)},${target.z.toFixed(1)}`);
 }
 
 function requestPrimaryAction(): void {
@@ -2207,6 +2441,12 @@ for (const button of powerPickerButtons) {
     if (powerId && isPowerId(powerId)) requestPowerEquip(powerId);
   });
 }
+for (const button of specialPickerButtons) {
+  button.addEventListener("click", () => {
+    const specialId = button.dataset.special;
+    if (specialId && isSpecialId(specialId)) requestSpecialEquip(specialId);
+  });
+}
 for (const button of mainHandPickerButtons) {
   button.addEventListener("click", () => {
     const mainHandId = button.dataset.mainHand;
@@ -2219,7 +2459,7 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyE") requestPrimaryAction();
   if (event.code === "KeyR") beginPowerAim();
-  if (event.code === "KeyF") requestSpecial();
+  if (event.code === "KeyF") beginSpecialAim();
   if (event.code === "Space") {
     event.preventDefault();
     requestDodge();
@@ -2227,6 +2467,7 @@ window.addEventListener("keydown", event => {
 });
 window.addEventListener("keyup", event => {
   if (event.code === "KeyR") commitPowerAim();
+  if (event.code === "KeyF") commitSpecialAim();
 });
 canvas.addEventListener("pointerdown", event => {
   if (event.button !== 0) return;
@@ -2244,12 +2485,30 @@ dodgeButton.addEventListener("pointerdown", event => {
 });
 specialButton.addEventListener("pointerdown", event => {
   event.preventDefault();
-  requestSpecial();
+  specialButton.setPointerCapture(event.pointerId);
+  beginSpecialAim(event.pointerId);
 });
 specialSlot.addEventListener("pointerdown", event => {
   event.preventDefault();
-  requestSpecial();
+  specialSlot.setPointerCapture(event.pointerId);
+  beginSpecialAim(event.pointerId);
 });
+specialButton.addEventListener("pointermove", event => {
+  if (specialAimPointerId !== event.pointerId) return;
+  updatePointerPosition(event);
+});
+specialButton.addEventListener("pointerup", event => {
+  if (specialAimPointerId === event.pointerId) commitSpecialAim();
+});
+specialButton.addEventListener("pointercancel", cancelSpecialAim);
+specialSlot.addEventListener("pointermove", event => {
+  if (specialAimPointerId !== event.pointerId) return;
+  updatePointerPosition(event);
+});
+specialSlot.addEventListener("pointerup", event => {
+  if (specialAimPointerId === event.pointerId) commitSpecialAim();
+});
+specialSlot.addEventListener("pointercancel", cancelSpecialAim);
 powerButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   powerButton.setPointerCapture(event.pointerId);
@@ -2387,7 +2646,9 @@ app.on("update", (dt: number) => {
   const actionFacingActive = localActionStartedAt !== null
     && performance.now() - localActionStartedAt < actionDuration(localActionStep)
     && localActionFacingYaw !== null;
-  const desiredFacingYaw = powerFacingActive
+  const desiredFacingYaw = specialAimActive
+    ? specialAimYaw
+    : powerFacingActive
     ? powerAimActive ? powerAimYaw : localPowerFacingYaw!
     : actionFacingActive
     ? localActionFacingYaw!
@@ -2568,6 +2829,7 @@ app.on("update", (dt: number) => {
     telegraph.material.update();
   }
   updatePowerAimVisual();
+  updateSpecialAimVisual();
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
@@ -2625,6 +2887,25 @@ app.on("update", (dt: number) => {
     payoff.material.opacity = Math.max(0, strength * 0.92);
     payoff.material.update();
   }
+  for (const [casterId, snare] of brambleSnareVisuals) {
+    const expired = Date.now() >= snare.expiresAt;
+    const triggerElapsed = snare.triggeredAt === null ? null : animationNow - snare.triggeredAt;
+    if (expired || (triggerElapsed !== null && triggerElapsed >= 700)) {
+      snare.root.destroy();
+      brambleSnareVisuals.delete(casterId);
+      continue;
+    }
+    if (triggerElapsed !== null) {
+      const progress = Math.min(1, triggerElapsed / 700);
+      snare.root.setLocalScale(1 + progress * 0.75, 1 + Math.sin(progress * Math.PI) * 1.4, 1 + progress * 0.75);
+      snare.material.opacity = Math.max(0, (1 - progress) * 0.86);
+    } else {
+      const pulse = 1 + Math.sin(animationTime * 7) * 0.055;
+      snare.root.setLocalScale(pulse, 1 + Math.sin(animationTime * 9) * 0.08, pulse);
+      snare.material.opacity = 0.62 + Math.sin(animationTime * 7) * 0.1;
+    }
+    snare.material.update();
+  }
   for (let index = weaponProjectileVisuals.length - 1; index >= 0; index -= 1) {
     const projectile = weaponProjectileVisuals[index]!;
     const progress = Math.min(1, (animationNow - projectile.startedAt) / projectile.durationMs);
@@ -2657,11 +2938,20 @@ app.on("update", (dt: number) => {
   powerSlot.classList.toggle("ready", powerServerReady && powerCompatible && powerRemaining <= 0 && !powerAimActive);
   powerButton.textContent = !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
   const specialRemaining = Math.max(0, localSpecialCooldownUntil - Date.now());
-  const specialFraction = specialRemaining / HUNTERS_MARK.cooldownMs;
+  const specialDefinition = SPECIAL_DEFINITIONS[localEquippedSpecial];
+  const specialFraction = specialRemaining / specialDefinition.cooldownMs;
   specialCooldownFill.style.width = `${Math.max(0, Math.min(1, specialFraction)) * 100}%`;
-  specialCooldownLabel.textContent = specialRemaining > 0 ? `${(specialRemaining / 1000).toFixed(1)}s` : "READY · F";
-  specialSlot.classList.toggle("ready", specialRemaining <= 0);
-  specialButton.textContent = specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s` : "Mark";
+  specialCooldownLabel.textContent = specialAimActive
+    ? "RELEASE TO ARM"
+    : specialRemaining > 0
+      ? `${(specialRemaining / 1000).toFixed(1)}s`
+      : "READY · F";
+  specialSlot.classList.toggle("ready", specialRemaining <= 0 && !specialAimActive);
+  specialButton.textContent = specialAimActive
+    ? "Release"
+    : specialRemaining > 0
+      ? `${Math.ceil(specialRemaining / 1000)}s`
+      : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
   cameraTarget.set(
     player.x + localPowerVisualOffset.x,
     player.y + localVisualVerticalOffset,
@@ -2893,6 +3183,24 @@ async function connect(): Promise<void> {
     }
     logMovementEvent(`SPECIAL APPLIED ${message.mobId} ${message.stacks}/${message.maxStacks} +${message.bonusDamage}`);
   });
+  room.onMessage("special:snare-placed", (message: BrambleSnarePlaced) => {
+    createBrambleSnareVisual(message);
+    if (message.casterId === room?.sessionId) {
+      localSpecialCooldownUntil = message.cooldownUntil;
+      showCombatFeedback("SNARE ARMED", "dodge");
+      status.textContent = `Bramble Snare armed for ${(BRAMBLE_SNARE.lifetimeMs / 1000).toFixed(0)}s · lure an enemy into the ring.`;
+    }
+    logMovementEvent(`SNARE PLACED ${message.casterId} ${message.x.toFixed(1)},${message.z.toFixed(1)}`);
+  });
+  room.onMessage("special:snare-triggered", (message: BrambleSnareTriggered) => {
+    triggerBrambleSnareVisual(message);
+    if (message.casterId === room?.sessionId) {
+      const name = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
+      showCombatFeedback(`SNARED · ${(message.rootMs / 1000).toFixed(1)}S`, "dodge");
+      status.textContent = `${name} rooted by Bramble Snare for ${(message.rootMs / 1000).toFixed(1)}s.`;
+    }
+    logMovementEvent(`SNARE TRIGGERED ${message.mobId} ${message.rootMs}ms`);
+  });
   room.onMessage("special:progressed", (message: SpecialProgressed) => {
     const mob = mobVisuals.get(message.mobId);
     mob?.marks.set(message.casterId, {
@@ -3004,6 +3312,8 @@ async function connect(): Promise<void> {
       showCombatFeedback(message.reason === "cooldown" ? "POWER RECHARGING" : "POWER BLOCKED", "hurt");
     }
     if (message.action === "special") {
+      const isEquipRejection = message.requestId?.startsWith("special-equip-") ?? false;
+      if (!isEquipRejection) cancelSpecialAim();
       if (message.reason !== "cooldown") localSpecialCooldownUntil = 0;
       showCombatFeedback(message.reason === "cooldown" ? "SPECIAL RECHARGING" : "SPECIAL BLOCKED", "hurt");
     }
@@ -3020,6 +3330,7 @@ async function connect(): Promise<void> {
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
     cancelPowerAim();
+    cancelSpecialAim();
     cancelLocalPowerPresentation();
     room = null;
     status.textContent = "Disconnected from the world.";
@@ -3038,6 +3349,8 @@ async function connect(): Promise<void> {
     powerDebrisVisuals.length = 0;
     for (const payoff of markPayoffVisuals) payoff.root.destroy();
     markPayoffVisuals.length = 0;
+    for (const snare of brambleSnareVisuals.values()) snare.root.destroy();
+    brambleSnareVisuals.clear();
     for (const projectile of weaponProjectileVisuals) projectile.entity.destroy();
     weaponProjectileVisuals.length = 0;
     updatePlayerCount();

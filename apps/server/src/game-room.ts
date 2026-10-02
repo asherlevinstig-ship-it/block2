@@ -1,6 +1,7 @@
 import { Client, Room } from "@colyseus/core";
 import {
   AttackRequestSchema,
+  BRAMBLE_SNARE,
   DodgeRequestSchema,
   HUNTERS_MARK,
   MAIN_HAND_DEFINITIONS,
@@ -13,8 +14,11 @@ import {
   PowerEquipRequestSchema,
   PowerRequestSchema,
   SpecialRequestSchema,
+  SpecialEquipRequestSchema,
   type ActionRejected,
   type BlockChanged,
+  type BrambleSnarePlaced,
+  type BrambleSnareTriggered,
   type ChunkSnapshot,
   type CombatHit,
   type CombatMiss,
@@ -53,7 +57,7 @@ import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { compatiblePowerOrFallback, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
-import { huntersMarkDamageBonus, huntersMarkPowerPayoff, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
+import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -82,6 +86,13 @@ interface PendingAttack {
   impactAt: number;
 }
 
+interface ActiveBrambleSnare {
+  x: number;
+  y: number;
+  z: number;
+  expiresAt: number;
+}
+
 interface PendingPower {
   requestId: string;
   powerId: PowerId;
@@ -100,6 +111,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly pendingAttacks = new Map<string, PendingAttack>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
+  private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
   private readonly lastMobAttackAt = new Map<string, number>();
   private readonly lastDodgeAt = new Map<string, number>();
   private worldSeed = "blockcraft-dev";
@@ -123,6 +135,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("power:cancel", (client, payload) => this.handlePowerCancel(client, payload));
     this.onMessage("power:equip", (client, payload) => this.handlePowerEquip(client, payload));
     this.onMessage("special", (client, payload) => this.handleSpecial(client, payload));
+    this.onMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
     this.onMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
@@ -134,6 +147,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.equippedPower = "shockwave";
     player.mainHandId = "longsword";
     player.mainHandTag = "melee";
+    player.equippedSpecial = "hunters_mark";
     const requestedName = typeof options === "object" && options && "name" in options ? String(options.name) : "Explorer";
     player.name = requestedName.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer";
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
@@ -160,6 +174,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.pendingAttacks.delete(client.sessionId);
     this.pendingPowers.delete(client.sessionId);
     this.specialMarks.delete(client.sessionId);
+    this.brambleSnares.delete(client.sessionId);
     this.lastDodgeAt.delete(client.sessionId);
   }
 
@@ -261,10 +276,39 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     return getBlock(this.getChunk(address.chunkX, address.chunkZ).chunk, address.localX, y, address.localZ);
   };
 
+  private resolveBrambleSnares(now: number): void {
+    for (const [casterId, snare] of this.brambleSnares) {
+      if (now >= snare.expiresAt) {
+        this.brambleSnares.delete(casterId);
+        continue;
+      }
+      const target = [...this.state.mobs.entries()]
+        .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive }))
+        .find(mob => isInsideBrambleSnare(snare, mob));
+      if (!target) continue;
+      const mob = this.state.mobs.get(target.id);
+      if (!mob) continue;
+      mob.combatState = "stagger";
+      mob.stateUntil = now + BRAMBLE_SNARE.rootMs;
+      mob.targetId = "";
+      mob.staggerSequence += 1;
+      this.brambleSnares.delete(casterId);
+      this.broadcast("special:snare-triggered", {
+        casterId,
+        mobId: target.id,
+        x: snare.x,
+        y: snare.y,
+        z: snare.z,
+        rootMs: BRAMBLE_SNARE.rootMs,
+      } satisfies BrambleSnareTriggered);
+    }
+  }
+
   private simulatePlayers(deltaTime: number): void {
     const now = Date.now();
     this.resolvePendingPowers(now);
     this.resolvePendingAttacks(now);
+    this.resolveBrambleSnares(now);
     for (const [mobId, mob] of this.state.mobs) {
       if (!mob.alive && now >= mob.respawnAt) {
         mob.x = 13.5;
@@ -317,6 +361,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           this.pendingAttacks.delete(mob.targetId);
           this.pendingPowers.delete(mob.targetId);
           this.specialMarks.delete(mob.targetId);
+          this.brambleSnares.delete(mob.targetId);
           this.attackChains.delete(mob.targetId);
           this.movementInputs.set(mob.targetId, { request: idleMovementInput(), receivedAt: now });
           this.verticalVelocities.set(mob.targetId, 0);
@@ -494,6 +539,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (parsed.data.specialId !== player.equippedSpecial) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "compatibility" });
+    }
     const now = Date.now();
     if (now < player.specialCooldownUntil) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "cooldown" });
@@ -501,16 +549,36 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "rate" });
     }
+    player.yaw = parsed.data.yaw;
+    if (parsed.data.specialId === "bramble_snare") {
+      const target = parsed.data.target;
+      if (!target) return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "payload" });
+      if (!isBrambleSnareTargetInRange(player, target)) {
+        return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "range" });
+      }
+      if (!isPlayerSupported(this.readWorldBlock, target.x, target.y, target.z)) {
+        return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "collision" });
+      }
+      const expiresAt = now + BRAMBLE_SNARE.lifetimeMs;
+      player.specialCooldownUntil = now + BRAMBLE_SNARE.cooldownMs;
+      this.brambleSnares.set(client.sessionId, { ...target, expiresAt });
+      this.broadcast("special:snare-placed", {
+        casterId: client.sessionId,
+        ...target,
+        radius: BRAMBLE_SNARE.radius,
+        expiresAt,
+        cooldownUntil: player.specialCooldownUntil,
+      } satisfies BrambleSnarePlaced);
+      return;
+    }
+    if (parsed.data.target) return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "payload" });
     const target = selectHuntersMarkTarget(
       player,
       parsed.data.yaw,
       [...this.state.mobs.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive })),
     );
-    if (!target) {
-      return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "range" });
-    }
+    if (!target) return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "range" });
     const expiresAt = now + HUNTERS_MARK.durationMs;
-    player.yaw = parsed.data.yaw;
     player.specialCooldownUntil = now + HUNTERS_MARK.cooldownMs;
     this.specialMarks.set(client.sessionId, { mobId: target.id, expiresAt, stacks: HUNTERS_MARK.initialStacks });
     this.broadcast("special:applied", {
@@ -522,6 +590,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       stacks: HUNTERS_MARK.initialStacks,
       maxStacks: HUNTERS_MARK.maxStacks,
     } satisfies SpecialApplied);
+  }
+
+  private handleSpecialEquip(client: Client, payload: unknown): void {
+    const parsed = SpecialEquipRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "rate" });
+    }
+    player.equippedSpecial = parsed.data.specialId;
+    player.specialCooldownUntil = 0;
+    this.specialMarks.delete(client.sessionId);
+    this.brambleSnares.delete(client.sessionId);
   }
 
   private handlePowerCancel(client: Client, payload: unknown): void {
