@@ -2,6 +2,7 @@ import * as pc from "playcanvas";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   MAIN_HAND_DEFINITIONS,
+  HUNTERS_MARK,
   POWER_DEFINITIONS,
   WEAPON_ATTACK_DEFINITIONS,
   WORLD_ROOM,
@@ -17,6 +18,7 @@ import {
   type PowerCancelled,
   type PowerId,
   type PowerResolved,
+  type SpecialApplied,
   type WorldBootstrap,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
@@ -107,6 +109,9 @@ const mainHandName = document.querySelector<HTMLElement>("#main-hand-name")!;
 const mainHandAttack = document.querySelector<HTMLElement>("#main-hand-attack")!;
 const powerCooldownFill = document.querySelector<HTMLElement>("#power-cooldown-fill")!;
 const powerCooldownLabel = document.querySelector<HTMLElement>("#power-cooldown-label")!;
+const specialSlot = document.querySelector<HTMLButtonElement>("#special-slot")!;
+const specialCooldownFill = document.querySelector<HTMLElement>("#special-cooldown-fill")!;
+const specialCooldownLabel = document.querySelector<HTMLElement>("#special-cooldown-label")!;
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
@@ -126,10 +131,11 @@ const joystickKnob = document.querySelector<HTMLElement>("#joystick-knob")!;
 const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
 const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
 const powerButton = document.querySelector<HTMLButtonElement>("#power-button")!;
+const specialButton = document.querySelector<HTMLButtonElement>("#special-button")!;
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || powerPickerButtons.length !== 4 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || !specialSlot || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -581,6 +587,7 @@ interface NetworkPlayer {
   powerCooldownUntil: number;
   powerSequence: number;
   powerCastStartedAt: number;
+  specialCooldownUntil: number;
   name: string;
 }
 
@@ -621,6 +628,8 @@ interface MobVisual {
   warning: pc.Entity;
   warningMaterial: pc.StandardMaterial;
   healthFill: pc.Entity;
+  mark: pc.Entity;
+  markMaterial: pc.StandardMaterial;
   state: NetworkMob;
   lastHitSequence: number;
   hitAt: number;
@@ -630,6 +639,7 @@ interface MobVisual {
   staggerAt: number;
   lastCombatState: string;
   lastAlive: boolean;
+  markedUntil: number;
 }
 
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
@@ -655,10 +665,12 @@ let localPowerStartedAt: number | null = null;
 let localPowerFacingYaw: number | null = null;
 let localPowerStepApplied = false;
 let localPowerCooldownUntil = 0;
+let localSpecialCooldownUntil = 0;
 let localMainHandId: MainHandId = "longsword";
 let localEquippedPower: PowerId = "shockwave";
 let localActivePower: PowerId | null = null;
 let powerSequence = 0;
+let specialSequence = 0;
 let powerEquipSequence = 0;
 let mainHandEquipSequence = 0;
 let localLastPowerSequence = 0;
@@ -711,10 +723,10 @@ function updatePowerLoadout(powerId: PowerId): void {
   powerName.textContent = definition.name;
   powerSlot.setAttribute("aria-label", `Use ${definition.name}`);
   controlsHelp.textContent = definition.castType === "tap"
-    ? `WASD move · Space dodge · Tap R for ${definition.name} · Q mode · E/click acts`
+    ? `WASD move · Space dodge · R ${definition.name} · F Mark · Q mode · E/click acts`
     : definition.castType === "ground-release"
-      ? `WASD move · Space dodge/cancel · Hold R place, release ${definition.name} · Q mode · E/click acts`
-      : `WASD move · Space dodge/cancel · Hold R aim, release ${definition.name} · Q mode · E/click acts`;
+      ? `WASD move · Space dodge/cancel · Hold R place ${definition.name} · F Mark · Q mode · E/click acts`
+      : `WASD move · Space dodge/cancel · Hold R aim ${definition.name} · F Mark · Q mode · E/click acts`;
   for (const button of powerPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.power === powerId));
   }
@@ -1142,6 +1154,13 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   warningMaterial.blendType = pc.BLEND_NORMAL;
   warningMaterial.depthWrite = false;
   warningMaterial.update();
+  const markMaterial = new pc.StandardMaterial();
+  markMaterial.diffuse = new pc.Color(0.48, 0.12, 0.78);
+  markMaterial.emissive = new pc.Color(0.42, 0.08, 0.74);
+  markMaterial.opacity = 0.48;
+  markMaterial.blendType = pc.BLEND_NORMAL;
+  markMaterial.depthWrite = false;
+  markMaterial.update();
   addBox(bodyRoot, "crawler-body", bodyMaterial, [0.92, 0.58, 0.86], [0, 0.32, 0]);
   addBox(bodyRoot, "crawler-head", bodyMaterial, [0.68, 0.48, 0.62], [0, 0.76, 0.08]);
   addBox(bodyRoot, "crawler-eye-left", eyeMaterial, [0.1, 0.12, 0.06], [-0.17, 0.8, 0.39]);
@@ -1155,6 +1174,13 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   warning.setLocalScale(4.2, 0.025, 4.2);
   warning.enabled = false;
   entity.addChild(warning);
+  const mark = new pc.Entity("hunters-mark");
+  mark.addComponent("render", { type: "cylinder" });
+  if (mark.render) mark.render.material = markMaterial;
+  mark.setLocalPosition(0, 0.055, 0);
+  mark.setLocalScale(1.55, 0.022, 1.55);
+  mark.enabled = false;
+  entity.addChild(mark);
   entity.setPosition(mob.x, mob.y, mob.z);
   app.root.addChild(entity);
   return {
@@ -1164,6 +1190,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warning,
     warningMaterial,
     healthFill,
+    mark,
+    markMaterial,
     state: mob,
     lastHitSequence: mob.hitSequence,
     hitAt: 0,
@@ -1173,6 +1201,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     staggerAt: 0,
     lastCombatState: mob.combatState,
     lastAlive: mob.alive,
+    markedUntil: 0,
   };
 }
 
@@ -1298,6 +1327,9 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("powerCooldownUntil", () => {
       if (isLocal) localPowerCooldownUntil = player.powerCooldownUntil;
     }, true);
+    playerCallbacks.listen("specialCooldownUntil", () => {
+      if (isLocal) localSpecialCooldownUntil = player.specialCooldownUntil;
+    }, true);
     playerCallbacks.listen("equippedPower", () => {
       if (!isLocal) return;
       powerServerReady = isPowerId(player.equippedPower);
@@ -1379,7 +1411,8 @@ function updateTarget(): void {
   if (currentTarget) targetMarker.setPosition(currentTarget.x + 0.5, currentTarget.y + 0.5, currentTarget.z + 0.5);
 
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
-  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}` : "none";
+  const combatMarked = combatMob ? Date.now() < combatMob.visual.markedUntil : false;
+  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMarked}` : "none";
   const nextKey = `${interactionMode}:${targetKey}:${combatKey}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
@@ -1389,7 +1422,7 @@ function updateTarget(): void {
       : combatMob.visual.state.combatState === "stagger"
         ? " · STAGGERED"
         : "";
-    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m${intent}`;
+    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m${combatMarked ? " · MARKED +1" : ""}${intent}`;
   } else if (interactionMode === "combat") targetLabel.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name}: aim toward the Moss Crawler and attack`;
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
@@ -2040,6 +2073,38 @@ function commitPowerAim(): void {
   castPower(yaw, target);
 }
 
+function requestSpecial(): void {
+  if (!room || !worldReady) return;
+  const remaining = localSpecialCooldownUntil - Date.now();
+  if (remaining > 0) {
+    status.textContent = `${HUNTERS_MARK.name} recharging · ${(remaining / 1000).toFixed(1)}s.`;
+    return;
+  }
+  if (powerAimActive || localPowerStartedAt !== null || localActionStartedAt !== null) {
+    status.textContent = `${HUNTERS_MARK.name} needs a clear action window.`;
+    showCombatFeedback("SPECIAL BLOCKED", "hurt");
+    return;
+  }
+  const player = localPlayer.getPosition();
+  const target = nearestLivingMob(player, HUNTERS_MARK.range);
+  if (!target) {
+    status.textContent = `${HUNTERS_MARK.name} needs a living enemy within ${HUNTERS_MARK.range}m.`;
+    showCombatFeedback("NO MARK TARGET", "hurt");
+    return;
+  }
+  const yaw = movementYaw(
+    target.visual.state.x - player.x,
+    target.visual.state.z - player.z,
+    localFacingYaw,
+  );
+  localFacingYaw = yaw;
+  localSpecialCooldownUntil = Date.now() + HUNTERS_MARK.cooldownMs;
+  specialSequence += 1;
+  room.send("special", { requestId: `special-${specialSequence}`, yaw });
+  status.textContent = `Marking ${target.visual.state.name}...`;
+  logMovementEvent(`SPECIAL ${HUNTERS_MARK.id} target=${target.id} yaw=${yaw.toFixed(1)}`);
+}
+
 function requestPrimaryAction(): void {
   if (primaryActionForMode(interactionMode) === "mine") requestMine();
   else requestAttack();
@@ -2087,6 +2152,7 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyE") requestPrimaryAction();
   if (event.code === "KeyR") beginPowerAim();
+  if (event.code === "KeyF") requestSpecial();
   if (event.code === "Space") {
     event.preventDefault();
     requestDodge();
@@ -2108,6 +2174,14 @@ mineButton.addEventListener("pointerdown", event => {
 dodgeButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   requestDodge();
+});
+specialButton.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  requestSpecial();
+});
+specialSlot.addEventListener("pointerdown", event => {
+  event.preventDefault();
+  requestSpecial();
 });
 powerButton.addEventListener("pointerdown", event => {
   event.preventDefault();
@@ -2377,6 +2451,13 @@ app.on("update", (dt: number) => {
     const staggerElapsed = animationNow - mob.staggerAt;
     const staggerStrength = staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
     const windupStrength = mob.state.combatState === "windup" ? 0.55 + Math.sin(animationTime * 18) * 0.2 : 0;
+    mob.mark.enabled = Date.now() < mob.markedUntil;
+    if (mob.mark.enabled) {
+      const markPulse = 1 + Math.sin(animationTime * 8) * 0.08;
+      mob.mark.setLocalScale(1.55 * markPulse, 0.022, 1.55 * markPulse);
+      mob.markMaterial.opacity = 0.38 + Math.sin(animationTime * 8) * 0.1;
+      mob.markMaterial.update();
+    }
     mob.warning.enabled = mob.state.combatState === "windup";
     if (mob.warning.enabled) {
       const warningPulse = 1 + Math.sin(animationTime * 18) * 0.045;
@@ -2482,6 +2563,12 @@ app.on("update", (dt: number) => {
       : "READY · R";
   powerSlot.classList.toggle("ready", powerServerReady && powerCompatible && powerRemaining <= 0 && !powerAimActive);
   powerButton.textContent = !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
+  const specialRemaining = Math.max(0, localSpecialCooldownUntil - Date.now());
+  const specialFraction = specialRemaining / HUNTERS_MARK.cooldownMs;
+  specialCooldownFill.style.width = `${Math.max(0, Math.min(1, specialFraction)) * 100}%`;
+  specialCooldownLabel.textContent = specialRemaining > 0 ? `${(specialRemaining / 1000).toFixed(1)}s` : "READY · F";
+  specialSlot.classList.toggle("ready", specialRemaining <= 0);
+  specialButton.textContent = specialRemaining > 0 ? `${Math.ceil(specialRemaining / 1000)}s` : "Mark";
   cameraTarget.set(
     player.x + localPowerVisualOffset.x,
     player.y + localVisualVerticalOffset,
@@ -2674,6 +2761,10 @@ async function connect(): Promise<void> {
   });
   room.onMessage("power:resolved", (message: PowerResolved) => {
     createPowerImpact(message);
+    for (const mobId of message.defeatedMobIds) {
+      const defeatedMob = mobVisuals.get(mobId);
+      if (defeatedMob) defeatedMob.markedUntil = 0;
+    }
     const isLocal = message.casterId === room?.sessionId;
     if (isLocal) {
       const definition = POWER_DEFINITIONS[message.powerId];
@@ -2694,6 +2785,17 @@ async function connect(): Promise<void> {
     }
     logMovementEvent(`POWER RESOLVE hits=${message.hitCount} fractures=${message.fractures.length}`);
   });
+  room.onMessage("special:applied", (message: SpecialApplied) => {
+    const mob = mobVisuals.get(message.mobId);
+    if (mob) mob.markedUntil = Math.max(mob.markedUntil, message.expiresAt);
+    if (message.casterId === room?.sessionId) {
+      localSpecialCooldownUntil = message.cooldownUntil;
+      const name = mob?.state.name ?? "Enemy";
+      showCombatFeedback("HUNTER'S MARK", "dodge");
+      status.textContent = `${name} marked for ${(HUNTERS_MARK.durationMs / 1000).toFixed(0)}s · hits deal +${message.bonusDamage} damage.`;
+    }
+    logMovementEvent(`SPECIAL APPLIED ${message.mobId} +${message.bonusDamage}`);
+  });
   room.onMessage("power:cancelled", (message: PowerCancelled) => {
     const telegraph = powerTelegraphs.get(message.casterId);
     telegraph?.root.destroy();
@@ -2709,6 +2811,7 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:hit", (message: CombatHit) => {
     const mob = mobVisuals.get(message.mobId);
+    if (message.defeated && mob) mob.markedUntil = 0;
     const name = mob?.state.name ?? "Mob";
     status.textContent = message.defeated
       ? `${name} defeated · respawning in 5 seconds.`
@@ -2776,6 +2879,10 @@ async function connect(): Promise<void> {
       }
       showCombatFeedback(message.reason === "cooldown" ? "POWER RECHARGING" : "POWER BLOCKED", "hurt");
     }
+    if (message.action === "special") {
+      if (message.reason !== "cooldown") localSpecialCooldownUntil = 0;
+      showCombatFeedback(message.reason === "cooldown" ? "SPECIAL RECHARGING" : "SPECIAL BLOCKED", "hurt");
+    }
     if (message.action === "loadout") {
       showCombatFeedback("LOADOUT BLOCKED", "hurt");
     }
@@ -2787,6 +2894,7 @@ async function connect(): Promise<void> {
   room.onLeave(() => {
     worldReady = false;
     powerServerReady = false;
+    localSpecialCooldownUntil = 0;
     cancelPowerAim();
     cancelLocalPowerPresentation();
     room = null;

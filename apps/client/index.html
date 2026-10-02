@@ -43,7 +43,10 @@
       <button id="power-slot" type="button" aria-label="Use Shockwave">
         <span>POWER</span><strong id="power-name">Shockwave</strong><em id="power-cooldown-label">READY · R</em><i id="power-cooldown-fill"></i>
       </button>
-      <p id="controls-help" class="controls">WASD move · Space dodge/cancel · Tap R for Shockwave · Q mode · E/click acts</p>
+      <button id="special-slot" type="button" aria-label="Use Hunter's Mark">
+        <span>SPECIAL</span><strong>Hunter's Mark</strong><em id="special-cooldown-label">READY · F</em><i id="special-cooldown-fill"></i>
+      </button>
+      <p id="controls-help" class="controls">WASD move · Space dodge/cancel · R Power · F Special · Q mode · E/click acts</p>
     </section>
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="combat-feedback" aria-live="polite"></div>
@@ -72,6 +75,7 @@
     <section id="touch-controls" aria-label="Touch controls">
       <div id="joystick-zone" aria-label="Movement joystick"><div id="joystick-knob"></div></div>
       <div id="touch-actions">
+        <button id="special-button" type="button">Mark</button>
         <button id="power-button" type="button">Power</button>
         <button id="touch-mode-button" type="button" aria-label="Switch to combat mode">
           <span>Mode</span><strong id="touch-mode-label">Build</strong>

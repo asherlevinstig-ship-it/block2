@@ -20,6 +20,7 @@ export const PlayerState = schema({
   powerCooldownUntil: t.float64().default(0),
   powerSequence: t.int32().default(0),
   powerCastStartedAt: t.float64().default(0),
+  specialCooldownUntil: t.float64().default(0),
   name: t.string().default("Explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;

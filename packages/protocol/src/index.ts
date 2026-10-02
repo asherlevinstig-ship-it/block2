@@ -166,6 +166,16 @@ export const POWER_DEFINITIONS = {
 
 export type PowerId = keyof typeof POWER_DEFINITIONS;
 
+export const HUNTERS_MARK = {
+  id: "hunters_mark",
+  name: "Hunter's Mark",
+  range: 8,
+  minimumFacingDot: 0.25,
+  durationMs: 6000,
+  cooldownMs: 10000,
+  bonusDamage: 1,
+} as const;
+
 export const MoveRequestSchema = z.object({
   sequence: z.number().int().positive(),
   strafe: z.number().finite().min(-1).max(1),
@@ -213,6 +223,11 @@ export const PowerEquipRequestSchema = z.object({
   powerId: z.enum(["shockwave", "seismic_cleave", "eruption", "lunge_strike"]),
 });
 
+export const SpecialRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  yaw: z.number().finite(),
+});
+
 export const MainHandEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   mainHandId: z.enum(["longsword", "bow", "magic_focus"]),
@@ -225,6 +240,7 @@ export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
 export type PowerRequest = z.infer<typeof PowerRequestSchema>;
 export type PowerCancelRequest = z.infer<typeof PowerCancelRequestSchema>;
 export type PowerEquipRequest = z.infer<typeof PowerEquipRequestSchema>;
+export type SpecialRequest = z.infer<typeof SpecialRequestSchema>;
 export type MainHandEquipRequest = z.infer<typeof MainHandEquipRequestSchema>;
 
 export interface ChunkSnapshot {
@@ -332,8 +348,16 @@ export interface PowerCancelled {
   reason: "dodge" | "cancel";
 }
 
+export interface SpecialApplied {
+  casterId: string;
+  mobId: string;
+  expiresAt: number;
+  cooldownUntil: number;
+  bonusDamage: number;
+}
+
 export interface ActionRejected {
   requestId?: string;
-  action: "move" | "mine" | "attack" | "dodge" | "power" | "loadout";
+  action: "move" | "mine" | "attack" | "dodge" | "power" | "special" | "loadout";
   reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate" | "stamina" | "cooldown" | "compatibility";
 }
