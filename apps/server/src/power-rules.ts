@@ -1,4 +1,4 @@
-import { POWER_DEFINITIONS, type MainHandTag, type PowerDefinition, type PowerId } from "@blockcraft/protocol";
+import { POWER_DEFINITIONS, SEISMIC_CLEAVE_UPGRADES, type MainHandTag, type PowerDefinition, type PowerId, type SeismicMasteryId } from "@blockcraft/protocol";
 import { Block, type BlockId } from "@blockcraft/voxel-world";
 
 export interface PowerPosition {
@@ -117,6 +117,56 @@ export function lineFractureColumns(origin: PowerPosition, yaw: number, range: n
     const x = Math.floor(origin.x + direction.x * distance);
     const z = Math.floor(origin.z + direction.z * distance);
     columns.set(`${x},${z}`, { x, z });
+  }
+  return [...columns.values()];
+}
+
+export function seismicCleaveProfile(masteryId: SeismicMasteryId): {
+  range: number;
+  width: number;
+  forwardStep: number;
+  fractureWidth: number;
+  staggerMs: number;
+} {
+  const definition = POWER_DEFINITIONS.seismic_cleave;
+  const mastery = SEISMIC_CLEAVE_UPGRADES.masteries[masteryId];
+  return {
+    range: definition.range + SEISMIC_CLEAVE_UPGRADES.faultReachBonus,
+    width: mastery.width,
+    forwardStep: mastery.forwardStep,
+    fractureWidth: mastery.fractureWidth,
+    staggerMs: definition.staggerMs,
+  };
+}
+
+export function isSeismicAftershockTarget(
+  origin: PowerPosition,
+  yaw: number,
+  target: PowerPosition,
+  range: number,
+): boolean {
+  const direction = powerDirection(yaw);
+  const forward = (target.x - origin.x) * direction.x + (target.z - origin.z) * direction.z;
+  return forward >= range * SEISMIC_CLEAVE_UPGRADES.aftershockStartRatio && forward <= range + 0.05;
+}
+
+export function widenedLineFractureColumns(
+  origin: PowerPosition,
+  yaw: number,
+  range: number,
+  fractureWidth: number,
+): { x: number; z: number }[] {
+  const center = lineFractureColumns(origin, yaw, range);
+  if (fractureWidth <= 1) return center;
+  const direction = powerDirection(yaw);
+  const lateral = { x: direction.z, z: -direction.x };
+  const columns = new Map<string, { x: number; z: number }>();
+  for (const column of center) {
+    for (let offset = -1; offset <= 1; offset += 1) {
+      const x = Math.floor(column.x + lateral.x * offset);
+      const z = Math.floor(column.z + lateral.z * offset);
+      columns.set(`${x},${z}`, { x, z });
+    }
   }
   return [...columns.values()];
 }

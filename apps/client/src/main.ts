@@ -5,6 +5,7 @@ import {
   MAIN_HAND_DEFINITIONS,
   HUNTERS_MARK,
   POWER_DEFINITIONS,
+  SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
   WEAPON_ATTACK_DEFINITIONS,
   WORLD_ROOM,
@@ -25,6 +26,7 @@ import {
   type PowerCancelled,
   type PowerId,
   type PowerResolved,
+  type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
   type SpecialProgressed,
@@ -123,6 +125,8 @@ const mainHandName = document.querySelector<HTMLElement>("#main-hand-name")!;
 const mainHandAttack = document.querySelector<HTMLElement>("#main-hand-attack")!;
 const powerCooldownFill = document.querySelector<HTMLElement>("#power-cooldown-fill")!;
 const powerCooldownLabel = document.querySelector<HTMLElement>("#power-cooldown-label")!;
+const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
+const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("#seismic-mastery-picker [data-seismic-mastery]")];
 const specialSlot = document.querySelector<HTMLButtonElement>("#special-slot")!;
 const specialName = document.querySelector<HTMLElement>("#special-name")!;
 const specialPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#special-picker [data-special]")];
@@ -151,7 +155,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -600,6 +604,7 @@ interface NetworkPlayer {
   mainHandId: string;
   mainHandTag: string;
   equippedPower: string;
+  seismicMastery: string;
   powerCooldownUntil: number;
   powerSequence: number;
   powerCastStartedAt: number;
@@ -704,12 +709,14 @@ let localPowerCooldownUntil = 0;
 let localSpecialCooldownUntil = 0;
 let localMainHandId: MainHandId = "longsword";
 let localEquippedPower: PowerId = "shockwave";
+let localSeismicMastery: SeismicMasteryId = "advancing_fault";
 let localEquippedSpecial: SpecialId = "hunters_mark";
 let localActivePower: PowerId | null = null;
 let powerSequence = 0;
 let specialSequence = 0;
 let specialEquipSequence = 0;
 let powerEquipSequence = 0;
+let seismicMasterySequence = 0;
 let mainHandEquipSequence = 0;
 let localLastPowerSequence = 0;
 let powerServerReady = false;
@@ -733,6 +740,24 @@ const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
 
 function isPowerId(value: string): value is PowerId {
   return value in POWER_DEFINITIONS;
+}
+
+function isSeismicMasteryId(value: string): value is SeismicMasteryId {
+  return value === "advancing_fault" || value === "tectonic_stand";
+}
+
+function seismicPowerShape(masteryId = localSeismicMastery): { range: number; width: number; forwardStep: number } {
+  const mastery = SEISMIC_CLEAVE_UPGRADES.masteries[masteryId];
+  return {
+    range: POWER_DEFINITIONS.seismic_cleave.range + SEISMIC_CLEAVE_UPGRADES.faultReachBonus,
+    width: mastery.width,
+    forwardStep: mastery.forwardStep,
+  };
+}
+
+function activePowerShape(powerId: PowerId): { range: number; width: number; forwardStep: number } {
+  const definition = POWER_DEFINITIONS[powerId];
+  return powerId === "seismic_cleave" ? seismicPowerShape() : definition;
 }
 
 function isSpecialId(value: string): value is SpecialId {
@@ -769,11 +794,33 @@ function updatePowerLoadout(powerId: PowerId): void {
   const definition = POWER_DEFINITIONS[powerId];
   powerName.textContent = definition.name;
   powerSlot.setAttribute("aria-label", `Use ${definition.name}`);
+  seismicUpgrades.hidden = powerId !== "seismic_cleave";
   updateControlsHelp();
   for (const button of powerPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.power === powerId));
   }
   refreshPowerCompatibility();
+}
+
+function updateSeismicMastery(masteryId: SeismicMasteryId): void {
+  localSeismicMastery = masteryId;
+  for (const button of seismicMasteryButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.seismicMastery === masteryId));
+  }
+}
+
+function requestSeismicMastery(masteryId: SeismicMasteryId): void {
+  if (!room || !worldReady || masteryId === localSeismicMastery) return;
+  if (powerAimActive || localPowerStartedAt !== null) {
+    status.textContent = "Finish or cancel Seismic Cleave before changing its mastery.";
+    return;
+  }
+  seismicMasterySequence += 1;
+  room.send("power:seismic-mastery", {
+    requestId: `seismic-mastery-${seismicMasterySequence}`,
+    masteryId,
+  });
+  status.textContent = `Equipping ${SEISMIC_CLEAVE_UPGRADES.masteries[masteryId].name}...`;
 }
 
 function updateControlsHelp(): void {
@@ -1051,10 +1098,21 @@ function createMobHazard(message: MobHazardPlaced): void {
   mobHazardVisuals.set(message.hazardId, { root, material, expiresAt: message.expiresAt });
 }
 
-function startPowerTelegraph(casterId: string, powerId: PowerId, x: number, y: number, z: number, yaw: number, windupMs: number): void {
+function startPowerTelegraph(
+  casterId: string,
+  powerId: PowerId,
+  x: number,
+  y: number,
+  z: number,
+  yaw: number,
+  windupMs: number,
+  shape?: { range?: number; width?: number },
+): void {
   powerTelegraphs.get(casterId)?.root.destroy();
   const root = new pc.Entity(`power-telegraph:${casterId}`);
   const definition = POWER_DEFINITIONS[powerId];
+  const range = shape?.range ?? definition.range;
+  const width = shape?.width ?? definition.width;
   const material = powerMaterial(
     powerId === "shockwave"
       ? new pc.Color(0.18, 0.72, 1)
@@ -1073,7 +1131,7 @@ function startPowerTelegraph(casterId: string, powerId: PowerId, x: number, y: n
         "shockwave-warning",
         material,
         [0.46, 0.025, 0.14],
-        [Math.sin(angle) * definition.range, 0.035, Math.cos(angle) * definition.range],
+        [Math.sin(angle) * range, 0.035, Math.cos(angle) * range],
       );
       segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
     }
@@ -1085,14 +1143,14 @@ function startPowerTelegraph(casterId: string, powerId: PowerId, x: number, y: n
         "eruption-warning",
         material,
         [0.42, 0.03, 0.13],
-        [Math.sin(angle) * definition.width, 0.04, Math.cos(angle) * definition.width],
+        [Math.sin(angle) * width, 0.04, Math.cos(angle) * width],
       );
       segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
     }
     addBox(root, "eruption-center", material, [0.34, 0.035, 0.34], [0, 0.045, 0]);
   } else {
-    for (let distance = 0.8; distance <= definition.range; distance += 0.8) {
-      addBox(root, "seismic-warning", material, [definition.width, 0.025, 0.66], [0, 0.035, distance]);
+    for (let distance = 0.8; distance <= range; distance += 0.8) {
+      addBox(root, "seismic-warning", material, [width, 0.025, 0.66], [0, 0.035, distance]);
     }
   }
   root.setPosition(x, y + 0.08, z);
@@ -1113,6 +1171,7 @@ function createPowerAimVisual(): void {
   const blockedMaterial = powerMaterial(new pc.Color(1, 0.16, 0.08), 0.5);
   const segments: PowerAimSegment[] = [];
   const definition = POWER_DEFINITIONS[localEquippedPower];
+  const shape = activePowerShape(localEquippedPower);
   const kind = definition.core === "ground" ? "ground" : "line";
   if (kind === "ground") {
     for (let index = 0; index < 24; index += 1) {
@@ -1129,8 +1188,8 @@ function createPowerAimVisual(): void {
     }
     segments.push({ entity: addBox(root, "eruption-aim-center", validMaterial, [0.32, 0.03, 0.32], [0, 0.05, 0]), distance: 0 });
   } else {
-    for (let distance = 0.8; distance <= definition.range; distance += 0.8) {
-      const entity = addBox(root, "seismic-aim", validMaterial, [definition.width, 0.028, 0.66], [0, 0.045, distance]);
+    for (let distance = 0.8; distance <= shape.range; distance += 0.8) {
+      const entity = addBox(root, "seismic-aim", validMaterial, [shape.width, 0.028, 0.66], [0, 0.045, distance]);
       segments.push({ entity, distance });
     }
   }
@@ -1248,6 +1307,8 @@ function createPowerImpact(message: PowerResolved): void {
   const root = new pc.Entity(`power-impact:${message.casterId}`);
   const fractureRoot = new pc.Entity(`power-fractures:${message.casterId}`);
   const definition = POWER_DEFINITIONS[message.powerId];
+  const impactRange = message.range ?? definition.range;
+  const impactWidth = message.width ?? definition.width;
   const waveSegments: PowerAimSegment[] = [];
   const fractureSegments: PowerAimSegment[] = [];
   const material = powerMaterial(
@@ -1257,7 +1318,9 @@ function createPowerImpact(message: PowerResolved): void {
         ? new pc.Color(1, 0.22, 0.035)
         : message.powerId === "lunge_strike"
           ? new pc.Color(0.24, 1, 0.68)
-        : new pc.Color(1, 0.68, 0.14),
+        : message.seismicMastery === "tectonic_stand"
+          ? new pc.Color(1, 0.38, 0.08)
+          : new pc.Color(1, 0.68, 0.14),
     0.78,
   );
   if (definition.core === "burst") {
@@ -1298,8 +1361,8 @@ function createPowerImpact(message: PowerResolved): void {
     }
     addBox(root, "lunge-core", material, [definition.width, 0.16, 0.35], [0, 0.18, 0.42]);
   } else {
-    for (let distance = 0.65; distance <= definition.range; distance += 0.65) {
-      const wave = addBox(root, "seismic-wave", material, [definition.width * 0.84, 0.12, 0.42], [0, 0.12, distance]);
+    for (let distance = 0.65; distance <= impactRange; distance += 0.65) {
+      const wave = addBox(root, "seismic-wave", material, [impactWidth * 0.84, 0.12, 0.42], [0, 0.12, distance]);
       wave.enabled = false;
       waveSegments.push({ entity: wave, distance });
       for (const side of [-1, 1]) {
@@ -1308,11 +1371,18 @@ function createPowerImpact(message: PowerResolved): void {
           "seismic-branch",
           material,
           [0.32 + (Math.floor(distance * 10) % 3) * 0.07, 0.06, 0.1],
-          [side * (definition.width * 0.45 + (Math.floor(distance * 10) % 2) * 0.16), 0.08, distance + side * 0.08],
+          [side * (impactWidth * 0.45 + (Math.floor(distance * 10) % 2) * 0.16), 0.08, distance + side * 0.08],
         );
         branch.setLocalEulerAngles(0, side * (24 + distance * 3), 0);
         branch.enabled = false;
         waveSegments.push({ entity: branch, distance });
+      }
+    }
+    if ((message.aftershockHitCount ?? 0) > 0) {
+      for (let index = 0; index < 12; index += 1) {
+        const angle = index / 12 * Math.PI * 2;
+        const burst = addBox(root, "seismic-aftershock", material, [0.28, 0.22, 0.28], [Math.sin(angle) * 0.8, 0.22, impactRange + Math.cos(angle) * 0.8]);
+        burst.setLocalEulerAngles(index * 11, angle * 180 / Math.PI, 45);
       }
     }
   }
@@ -1346,7 +1416,7 @@ function createPowerImpact(message: PowerResolved): void {
       message.y + 0.12,
       message.z + directionZ * distance - directionX * side * 0.22,
     );
-    const delayMs = message.powerId === "seismic_cleave" ? Math.max(0, distance / definition.range * 360 - 40) : 0;
+    const delayMs = message.powerId === "seismic_cleave" ? Math.max(0, distance / impactRange * 360 - 40) : 0;
     if (delayMs > 0) debris.enabled = false;
     app.root.addChild(debris);
     powerDebrisVisuals.push({
@@ -1656,6 +1726,7 @@ function bindPlayers(joinedRoom: Room): void {
     const isLocal = sessionId === joinedRoom.sessionId;
     if (isLocal) {
       if (isMainHandId(player.mainHandId)) updateMainHandLoadout(player.mainHandId);
+      if (isSeismicMasteryId(player.seismicMastery)) updateSeismicMastery(player.seismicMastery);
       powerServerReady = isPowerId(player.equippedPower);
       if (isPowerId(player.equippedPower)) updatePowerLoadout(player.equippedPower);
       if (isSpecialId(player.equippedSpecial)) updateSpecialLoadout(player.equippedSpecial);
@@ -1714,6 +1785,11 @@ function bindPlayers(joinedRoom: Room): void {
         updatePowerLoadout(player.equippedPower);
         status.textContent = `${POWER_DEFINITIONS[player.equippedPower].name} equipped.`;
       }
+    }, true);
+    playerCallbacks.listen("seismicMastery", () => {
+      if (!isLocal || !isSeismicMasteryId(player.seismicMastery)) return;
+      updateSeismicMastery(player.seismicMastery);
+      status.textContent = `${SEISMIC_CLEAVE_UPGRADES.masteries[player.seismicMastery].name} equipped for Seismic Cleave.`;
     }, true);
     playerCallbacks.listen("equippedSpecial", () => {
       if (!isLocal || !isSpecialId(player.equippedSpecial)) return;
@@ -2348,6 +2424,7 @@ function updatePowerAimFromPointer(): void {
   const worldX = start.x + (end.x - start.x) * distanceAlongRay;
   const worldZ = start.z + (end.z - start.z) * distanceAlongRay;
   const definition = POWER_DEFINITIONS[localEquippedPower];
+  const shape = activePowerShape(localEquippedPower);
   const deltaX = worldX - player.x;
   const deltaZ = worldZ - player.z;
   const pointerDistance = Math.hypot(deltaX, deltaZ);
@@ -2367,7 +2444,7 @@ function updatePowerAimFromPointer(): void {
       const mobDeltaX = mob.state.x - player.x;
       const mobDeltaZ = mob.state.z - player.z;
       const forwardDistance = mobDeltaX * directionX + mobDeltaZ * directionZ;
-      if (forwardDistance <= 0 || forwardDistance > definition.range) continue;
+      if (forwardDistance <= 0 || forwardDistance > shape.range) continue;
       const lateralDistance = Math.abs(mobDeltaX * directionZ - mobDeltaZ * directionX);
       if (lateralDistance >= closestLateralDistance) continue;
       closestLateralDistance = lateralDistance;
@@ -2391,6 +2468,7 @@ function beginPowerAim(pointerId: number | null = null): void {
   }
   if (powerAimActive || specialAimActive || localPowerStartedAt !== null) return;
   const definition = POWER_DEFINITIONS[localEquippedPower];
+  const shape = activePowerShape(localEquippedPower);
   if (!isPowerCompatibleWithMainHand(definition, localMainHandId)) {
     status.textContent = `${definition.name} is not compatible with ${MAIN_HAND_DEFINITIONS[localMainHandId].name}.`;
     showCombatFeedback("INCOMPATIBLE POWER", "hurt");
@@ -2406,13 +2484,13 @@ function beginPowerAim(pointerId: number | null = null): void {
     return;
   }
   const player = localPlayer.getPosition();
-  const targetMob = nearestLivingMob(player, definition.core === "ground" ? definition.range : definition.range + 1.2);
+  const targetMob = nearestLivingMob(player, definition.core === "ground" ? shape.range : shape.range + 1.2);
   powerAimYaw = targetMob
     ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
     : localFacingYaw;
   if (definition.core === "ground") {
     const radians = powerAimYaw * Math.PI / 180;
-    const preferredDistance = targetMob ? Math.min(definition.range, targetMob.distance) : Math.min(definition.range, 3.5);
+    const preferredDistance = targetMob ? Math.min(shape.range, targetMob.distance) : Math.min(shape.range, 3.5);
     powerAimTarget.set(
       targetMob ? targetMob.visual.state.x : player.x + Math.sin(radians) * preferredDistance,
       player.y,
@@ -2458,6 +2536,7 @@ function castPower(yaw: number, target?: { x: number; y: number; z: number }): v
   if (!room) return;
   const powerId = localEquippedPower;
   const definition = POWER_DEFINITIONS[powerId];
+  const shape = activePowerShape(powerId);
   const player = localPlayer.getPosition();
   localActivePower = powerId;
   localPowerFacingYaw = yaw;
@@ -2466,7 +2545,7 @@ function castPower(yaw: number, target?: { x: number; y: number; z: number }): v
   localPowerCooldownUntil = Date.now() + definition.cooldownMs;
   powerSequence += 1;
   const telegraphPosition = definition.core === "ground" && target ? target : player;
-  startPowerTelegraph(room.sessionId, powerId, telegraphPosition.x, telegraphPosition.y, telegraphPosition.z, yaw, definition.windupMs);
+  startPowerTelegraph(room.sessionId, powerId, telegraphPosition.x, telegraphPosition.y, telegraphPosition.z, yaw, definition.windupMs, shape);
   room.send("power", { requestId: `power-${powerSequence}`, powerId, yaw, ...(target ? { target } : {}) });
   if (powerId === "seismic_cleave") combatAudio.play("seismicWindup");
   showCombatFeedback(definition.name.toUpperCase(), "dodge");
@@ -2661,6 +2740,12 @@ for (const button of powerPickerButtons) {
   button.addEventListener("click", () => {
     const powerId = button.dataset.power;
     if (powerId && isPowerId(powerId)) requestPowerEquip(powerId);
+  });
+}
+for (const button of seismicMasteryButtons) {
+  button.addEventListener("click", () => {
+    const masteryId = button.dataset.seismicMastery;
+    if (masteryId && isSeismicMasteryId(masteryId)) requestSeismicMastery(masteryId);
   });
 }
 for (const button of specialPickerButtons) {
@@ -2919,9 +3004,10 @@ app.on("update", (dt: number) => {
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
   const localPowerElapsed = localPowerStartedAt === null ? null : animationNow - localPowerStartedAt;
   const activePowerDefinition = localActivePower ? POWER_DEFINITIONS[localActivePower] : null;
+  const activePowerForwardStep = localActivePower ? activePowerShape(localActivePower).forwardStep : 0;
   if (localPowerElapsed !== null
     && activePowerDefinition !== null
-    && activePowerDefinition.forwardStep > 0
+    && activePowerForwardStep > 0
     && localPowerElapsed >= activePowerDefinition.windupMs
     && !localPowerStepApplied
     && localPowerFacingYaw !== null) {
@@ -2929,8 +3015,8 @@ app.on("update", (dt: number) => {
       const radians = localPowerFacingYaw * Math.PI / 180;
       const powerPosition = localPlayer.getPosition();
       const horizontalPowerMovement = {
-        x: Math.sin(radians) * activePowerDefinition.forwardStep,
-        z: Math.cos(radians) * activePowerDefinition.forwardStep,
+        x: Math.sin(radians) * activePowerForwardStep,
+        z: Math.cos(radians) * activePowerForwardStep,
       };
       const stepped = resolvePlayerMotion(powerPosition, { ...horizontalPowerMovement, y: 0 }, readCollisionWorldBlock);
       localPlayer.setPosition(stepped.x, stepped.y, stepped.z);
@@ -3398,7 +3484,7 @@ async function connect(): Promise<void> {
   room.onMessage("power:cast", (message: PowerCast) => {
     if (message.casterId !== room?.sessionId) {
       const telegraphPosition = message.target ?? message;
-      startPowerTelegraph(message.casterId, message.powerId, telegraphPosition.x, telegraphPosition.y, telegraphPosition.z, message.yaw, message.windupMs);
+      startPowerTelegraph(message.casterId, message.powerId, telegraphPosition.x, telegraphPosition.y, telegraphPosition.z, message.yaw, message.windupMs, message);
       const remote = remotePlayers.get(message.casterId);
       if (remote) {
         remote.powerId = message.powerId;
@@ -3426,7 +3512,7 @@ async function connect(): Promise<void> {
             : powerLabel,
       );
       status.textContent = message.hitCount > 0
-        ? `${definition.name} struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage.`
+        ? `${definition.name} struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage${(message.aftershockHitCount ?? 0) > 0 ? ` · AFTERSHOCK ×${message.aftershockHitCount}` : ""}.`
         : definition.fracturesTerrain
           ? `${definition.name} fractured ${message.fractures.length} terrain block${message.fractures.length === 1 ? "" : "s"}.`
           : `${definition.name} released with no targets in range.`;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { POWER_DEFINITIONS } from "@blockcraft/protocol";
 import { Block } from "@blockcraft/voxel-world";
-import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "../src/power-rules.js";
+import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "../src/power-rules.js";
 
 describe("Power rules", () => {
   it("resolves facing direction from yaw", () => {
@@ -49,6 +49,29 @@ describe("Power rules", () => {
       { x: 8, z: 12 },
       { x: 8, z: 13 },
     ]);
+  });
+
+  it("gives Seismic Cleave distinct movement and width masteries", () => {
+    const advancing = seismicCleaveProfile("advancing_fault");
+    const tectonic = seismicCleaveProfile("tectonic_stand");
+    expect(advancing.range).toBeGreaterThan(POWER_DEFINITIONS.seismic_cleave.range);
+    expect(advancing.forwardStep).toBeGreaterThan(0);
+    expect(advancing.width).toBeLessThan(tectonic.width);
+    expect(tectonic.forwardStep).toBe(0);
+    expect(tectonic.fractureWidth).toBe(3);
+  });
+
+  it("applies Aftershock only near the far end of the upgraded fissure", () => {
+    const profile = seismicCleaveProfile("advancing_fault");
+    const origin = { x: 0, y: 8, z: 0 };
+    expect(isSeismicAftershockTarget(origin, 0, { x: 0, y: 8, z: profile.range * 0.8 }, profile.range)).toBe(true);
+    expect(isSeismicAftershockTarget(origin, 0, { x: 0, y: 8, z: 2 }, profile.range)).toBe(false);
+  });
+
+  it("widens Tectonic Stand terrain fractures without duplicate columns", () => {
+    const columns = widenedLineFractureColumns({ x: 8.5, y: 8, z: 8.5 }, 0, 2.2, 3);
+    expect(columns).toHaveLength(6);
+    expect(new Set(columns.map(column => `${column.x},${column.z}`)).size).toBe(columns.length);
   });
 
   it("damages only fragile terrain in two readable stages", () => {

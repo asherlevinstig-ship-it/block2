@@ -166,6 +166,32 @@ export const POWER_DEFINITIONS = {
 
 export type PowerId = keyof typeof POWER_DEFINITIONS;
 
+export type SeismicMasteryId = "advancing_fault" | "tectonic_stand";
+
+export const SEISMIC_CLEAVE_UPGRADES = {
+  faultReachBonus: 1.4,
+  aftershockStartRatio: 0.68,
+  aftershockStaggerBonusMs: 700,
+  masteries: {
+    advancing_fault: {
+      id: "advancing_fault",
+      name: "Advancing Fault",
+      description: "Drive forward through a focused rupture.",
+      width: 1.2,
+      forwardStep: 1.45,
+      fractureWidth: 1,
+    },
+    tectonic_stand: {
+      id: "tectonic_stand",
+      name: "Tectonic Stand",
+      description: "Hold position and tear open a much wider fault.",
+      width: 2.65,
+      forwardStep: 0,
+      fractureWidth: 3,
+    },
+  },
+} as const;
+
 export const HUNTERS_MARK = {
   id: "hunters_mark",
   name: "Hunter's Mark",
@@ -248,6 +274,11 @@ export const PowerEquipRequestSchema = z.object({
   powerId: z.enum(["shockwave", "seismic_cleave", "eruption", "lunge_strike"]),
 });
 
+export const SeismicMasteryEquipRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  masteryId: z.enum(["advancing_fault", "tectonic_stand"]),
+});
+
 export const SpecialRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   specialId: z.enum(["hunters_mark", "bramble_snare"]),
@@ -276,6 +307,7 @@ export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
 export type PowerRequest = z.infer<typeof PowerRequestSchema>;
 export type PowerCancelRequest = z.infer<typeof PowerCancelRequestSchema>;
 export type PowerEquipRequest = z.infer<typeof PowerEquipRequestSchema>;
+export type SeismicMasteryEquipRequest = z.infer<typeof SeismicMasteryEquipRequestSchema>;
 export type SpecialRequest = z.infer<typeof SpecialRequestSchema>;
 export type SpecialEquipRequest = z.infer<typeof SpecialEquipRequestSchema>;
 export type MainHandEquipRequest = z.infer<typeof MainHandEquipRequestSchema>;
@@ -388,6 +420,9 @@ export interface PowerCast {
   yaw: number;
   startedAt: number;
   windupMs: number;
+  range?: number;
+  width?: number;
+  seismicMastery?: SeismicMasteryId;
   target?: { x: number; y: number; z: number };
 }
 
@@ -408,6 +443,10 @@ export interface PowerResolved {
   damage: number;
   defeatedMobIds: string[];
   fractures: PowerFracture[];
+  range?: number;
+  width?: number;
+  aftershockHitCount?: number;
+  seismicMastery?: SeismicMasteryId;
 }
 
 export interface PowerCancelled {

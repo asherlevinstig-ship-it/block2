@@ -13,6 +13,8 @@ import {
   PowerCancelRequestSchema,
   PowerEquipRequestSchema,
   PowerRequestSchema,
+  SEISMIC_CLEAVE_UPGRADES,
+  SeismicMasteryEquipRequestSchema,
   SpecialRequestSchema,
   SpecialEquipRequestSchema,
   type ActionRejected,
@@ -33,6 +35,7 @@ import {
   type PowerFracture,
   type PowerId,
   type PowerResolved,
+  type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
   type SpecialProgressed,
@@ -61,7 +64,7 @@ import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAt
 import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { dangerBandAt, scaledMobStats } from "./radial-difficulty.js";
-import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
+import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import {
   activeMovementInput,
@@ -103,6 +106,7 @@ interface PendingPower {
   powerId: PowerId;
   yaw: number;
   impactAt: number;
+  seismicMastery?: SeismicMasteryId;
   target?: { x: number; y: number; z: number };
 }
 
@@ -170,6 +174,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("power", (client, payload) => this.handlePower(client, payload));
     this.onMessage("power:cancel", (client, payload) => this.handlePowerCancel(client, payload));
     this.onMessage("power:equip", (client, payload) => this.handlePowerEquip(client, payload));
+    this.onMessage("power:seismic-mastery", (client, payload) => this.handleSeismicMasteryEquip(client, payload));
     this.onMessage("special", (client, payload) => this.handleSpecial(client, payload));
     this.onMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
     this.onMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
@@ -181,6 +186,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     // Assign after construction so Colyseus includes the loadout in the initial
     // patch instead of eliding it as an unchanged schema default.
     player.equippedPower = "shockwave";
+    player.seismicMastery = "advancing_fault";
     player.mainHandId = "longsword";
     player.mainHandTag = "melee";
     player.equippedSpecial = "hunters_mark";
@@ -661,6 +667,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "compatibility" });
     }
     const now = Date.now();
+    const seismicMastery = player.seismicMastery as SeismicMasteryId;
+    const seismicProfile = powerId === "seismic_cleave" ? seismicCleaveProfile(seismicMastery) : null;
     if (this.pendingPowers.has(client.sessionId)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "rate" });
     }
@@ -690,6 +698,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       powerId,
       yaw: parsed.data.yaw,
       impactAt: now + definition.windupMs,
+      ...(seismicProfile ? { seismicMastery } : {}),
       ...(target ? { target } : {}),
     });
     if (definition.core === "line") {
@@ -697,8 +706,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         player,
         parsed.data.yaw,
         [...this.state.mobs.entries()].map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, alive: mob.alive })),
-        definition.range,
-        definition.width,
+        seismicProfile?.range ?? definition.range,
+        seismicProfile?.width ?? definition.width,
       );
       for (const target of threatened) {
         const mob = this.state.mobs.get(target.id);
@@ -724,6 +733,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       yaw: parsed.data.yaw,
       startedAt: now,
       windupMs: definition.windupMs,
+      ...(seismicProfile ? { range: seismicProfile.range, width: seismicProfile.width, seismicMastery } : {}),
       ...(target ? { target } : {}),
     };
     this.broadcast("power:cast", cast);
@@ -821,6 +831,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.equippedPower = parsed.data.powerId;
   }
 
+  private handleSeismicMasteryEquip(client: Client, payload: unknown): void {
+    const parsed = SeismicMasteryEquipRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "power", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (this.pendingPowers.has(client.sessionId)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "rate" });
+    }
+    player.seismicMastery = parsed.data.masteryId;
+  }
+
   private handleMainHandEquip(client: Client, payload: unknown): void {
     const parsed = MainHandEquipRequestSchema.safeParse(payload);
     if (!parsed.success) return this.reject(client, { action: "loadout", reason: "payload" });
@@ -886,6 +907,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const player = this.state.players.get(sessionId);
       const definition = POWER_DEFINITIONS[pending.powerId];
       if (!player || !definition) continue;
+      const seismicProfile = pending.powerId === "seismic_cleave"
+        ? seismicCleaveProfile(pending.seismicMastery ?? "advancing_fault")
+        : null;
+      const resolvedRange = seismicProfile?.range ?? definition.range;
+      const resolvedWidth = seismicProfile?.width ?? definition.width;
+      const resolvedForwardStep = seismicProfile?.forwardStep ?? definition.forwardStep;
       const direction = powerDirection(pending.yaw);
       const origin = { x: player.x, y: player.y, z: player.z };
       const availableTargets = [...this.state.mobs.entries()].map(([id, mob]) => ({
@@ -896,11 +923,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         alive: mob.alive,
       }));
       const mobilityTarget = definition.core === "mobility"
-        ? selectMobilityPowerTarget(origin, pending.yaw, availableTargets, definition.range, definition.width)
+        ? selectMobilityPowerTarget(origin, pending.yaw, availableTargets, resolvedRange, resolvedWidth)
         : null;
       const advanceDistance = definition.core === "mobility"
-        ? mobilityAdvanceDistance(origin, pending.yaw, mobilityTarget, definition.forwardStep)
-        : definition.forwardStep;
+        ? mobilityAdvanceDistance(origin, pending.yaw, mobilityTarget, resolvedForwardStep)
+        : resolvedForwardStep;
       const stepped = definition.core === "mobility"
         ? resolveSweptHorizontalMotion(
             origin,
@@ -917,15 +944,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.z = stepped.z;
       const impactCenter = definition.core === "ground" && pending.target ? pending.target : player;
       const targets = definition.core === "burst"
-        ? selectBurstPowerTargets(player, availableTargets, definition.range)
+        ? selectBurstPowerTargets(player, availableTargets, resolvedRange)
         : definition.core === "ground"
-          ? selectGroundPowerTargets(impactCenter, availableTargets, definition.width)
+          ? selectGroundPowerTargets(impactCenter, availableTargets, resolvedWidth)
           : definition.core === "mobility"
             ? mobilityTarget ? [mobilityTarget] : []
-          : selectLinePowerTargets(player, pending.yaw, availableTargets, definition.range, definition.width);
+          : selectLinePowerTargets(player, pending.yaw, availableTargets, resolvedRange, resolvedWidth);
       const defeatedMobIds: string[] = [];
       const consumedMarks: SpecialConsumed[] = [];
       let resolvedDamage: number = definition.damage;
+      let aftershockHitCount = 0;
       for (const target of targets) {
         const mob = this.state.mobs.get(target.id);
         if (!mob || !mob.alive) continue;
@@ -943,6 +971,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           });
         }
         const damage = damageAfterArmor(definition.damage + payoff.bonusDamage, mob.armor, true);
+        const aftershock = pending.powerId === "seismic_cleave"
+          && isSeismicAftershockTarget(impactCenter, pending.yaw, mob, resolvedRange);
+        if (aftershock) aftershockHitCount += 1;
         resolvedDamage = Math.max(resolvedDamage, damage);
         mob.health = Math.max(0, mob.health - damage);
         mob.hitSequence += 1;
@@ -964,13 +995,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           defeatedMobIds.push(target.id);
         } else {
           mob.combatState = "stagger";
-          mob.stateUntil = now + definition.staggerMs + payoff.staggerBonusMs;
+          mob.stateUntil = now + definition.staggerMs + payoff.staggerBonusMs
+            + (aftershock ? SEISMIC_CLEAVE_UPGRADES.aftershockStaggerBonusMs : 0);
           mob.targetId = "";
           mob.staggerSequence += 1;
         }
       }
       const fractures = definition.fracturesTerrain && definition.core === "line"
-        ? lineFractureColumns(player, pending.yaw, definition.range)
+        ? widenedLineFractureColumns(player, pending.yaw, resolvedRange, seismicProfile?.fractureWidth ?? 1)
             .map(column => this.fractureTerrain(pending.requestId, column.x, column.z, player.y))
             .filter((fracture): fracture is PowerFracture => fracture !== null)
         : [];
@@ -985,6 +1017,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         damage: resolvedDamage,
         defeatedMobIds,
         fractures,
+        ...(seismicProfile ? {
+          range: resolvedRange,
+          width: resolvedWidth,
+          aftershockHitCount,
+          seismicMastery: pending.seismicMastery ?? "advancing_fault",
+        } : {}),
       };
       this.broadcast("power:resolved", resolved);
       for (const consumed of consumedMarks) this.broadcast("special:consumed", consumed);

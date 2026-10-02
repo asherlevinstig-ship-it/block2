@@ -250,6 +250,37 @@ button { font: inherit; }
 }
 #power-slot:active { transform: scale(.985); }
 
+#seismic-upgrades {
+  margin-top: 6px;
+  padding: 7px;
+  border: 1px solid rgb(255 174 72 / 30%);
+  border-radius: 9px;
+  background: rgb(60 34 13 / 54%);
+}
+#seismic-upgrades[hidden] { display: none; }
+#seismic-upgrades p { display: flex; justify-content: space-between; gap: 8px; margin: 0 1px 6px; }
+#seismic-upgrades p span { color: #cf8d42; font-size: .49rem; font-weight: 1000; letter-spacing: .1em; }
+#seismic-upgrades p strong { color: #ffd18a; font-size: .52rem; }
+#seismic-mastery-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+#seismic-mastery-picker button {
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid rgb(255 175 75 / 24%);
+  border-radius: 7px;
+  background: rgb(30 25 20 / 78%);
+  color: #9d8e7a;
+  text-align: left;
+}
+#seismic-mastery-picker button strong { font-size: .52rem; letter-spacing: .07em; }
+#seismic-mastery-picker button small { font-size: .48rem; }
+#seismic-mastery-picker button[aria-pressed="true"] {
+  border-color: rgb(255 178 69 / 68%);
+  background: rgb(112 56 13 / 88%);
+  color: #ffe1a4;
+  box-shadow: inset 0 0 12px rgb(255 158 48 / 14%);
+}
+
 #special-slot {
   position: relative;
   display: grid;
