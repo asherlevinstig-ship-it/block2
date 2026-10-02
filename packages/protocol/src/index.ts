@@ -171,9 +171,13 @@ export const HUNTERS_MARK = {
   name: "Hunter's Mark",
   range: 8,
   minimumFacingDot: 0.25,
-  durationMs: 6000,
+  durationMs: 10000,
   cooldownMs: 10000,
   bonusDamage: 1,
+  initialStacks: 1,
+  maxStacks: 3,
+  exposedPowerBonusDamage: 2,
+  exposedStaggerBonusMs: 900,
 } as const;
 
 export const MoveRequestSchema = z.object({
@@ -354,6 +358,25 @@ export interface SpecialApplied {
   expiresAt: number;
   cooldownUntil: number;
   bonusDamage: number;
+  stacks: number;
+  maxStacks: number;
+}
+
+export interface SpecialProgressed {
+  casterId: string;
+  mobId: string;
+  expiresAt: number;
+  stacks: number;
+  maxStacks: number;
+  exposed: boolean;
+}
+
+export interface SpecialConsumed {
+  casterId: string;
+  mobId: string;
+  powerId: PowerId;
+  bonusDamage: number;
+  staggerMs: number;
 }
 
 export interface ActionRejected {

@@ -27,6 +27,8 @@ import {
   type PowerId,
   type PowerResolved,
   type SpecialApplied,
+  type SpecialConsumed,
+  type SpecialProgressed,
   type WorldBootstrap,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
@@ -51,7 +53,7 @@ import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { compatiblePowerOrFallback, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
-import { huntersMarkDamageBonus, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
+import { huntersMarkDamageBonus, huntersMarkPowerPayoff, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -141,6 +143,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.x = spawn.x;
     player.y = spawn.y;
     player.z = spawn.z;
+    if (process.env.NODE_ENV !== "production" && requestedQaSpawn === "combat") {
+      player.invulnerableUntil = Date.now() + 60 * 60 * 1000;
+    }
     this.state.players.set(client.sessionId, player);
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
     this.verticalVelocities.set(client.sessionId, 0);
@@ -205,6 +210,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const bonus = huntersMarkDamageBonus(mark, mobId, now);
     if (mark && now >= mark.expiresAt) this.specialMarks.delete(sessionId);
     return bonus;
+  }
+
+  private progressSpecialMark(sessionId: string, mobId: string, now: number): void {
+    const current = this.specialMarks.get(sessionId);
+    const progressed = progressHuntersMark(current, mobId, now);
+    if (!progressed) {
+      if (current && now >= current.expiresAt) this.specialMarks.delete(sessionId);
+      return;
+    }
+    if (progressed.stacks === current?.stacks) return;
+    this.specialMarks.set(sessionId, progressed);
+    this.broadcast("special:progressed", {
+      casterId: sessionId,
+      mobId,
+      expiresAt: progressed.expiresAt,
+      stacks: progressed.stacks,
+      maxStacks: HUNTERS_MARK.maxStacks,
+      exposed: progressed.stacks >= HUNTERS_MARK.maxStacks,
+    } satisfies SpecialProgressed);
   }
 
   private clearMarksForMob(mobId: string): void {
@@ -488,13 +512,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const expiresAt = now + HUNTERS_MARK.durationMs;
     player.yaw = parsed.data.yaw;
     player.specialCooldownUntil = now + HUNTERS_MARK.cooldownMs;
-    this.specialMarks.set(client.sessionId, { mobId: target.id, expiresAt });
+    this.specialMarks.set(client.sessionId, { mobId: target.id, expiresAt, stacks: HUNTERS_MARK.initialStacks });
     this.broadcast("special:applied", {
       casterId: client.sessionId,
       mobId: target.id,
       expiresAt,
       cooldownUntil: player.specialCooldownUntil,
       bonusDamage: HUNTERS_MARK.bonusDamage,
+      stacks: HUNTERS_MARK.initialStacks,
+      maxStacks: HUNTERS_MARK.maxStacks,
     } satisfies SpecialApplied);
   }
 
@@ -623,11 +649,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             ? mobilityTarget ? [mobilityTarget] : []
           : selectLinePowerTargets(player, pending.yaw, availableTargets, definition.range, definition.width);
       const defeatedMobIds: string[] = [];
+      const consumedMarks: SpecialConsumed[] = [];
       let resolvedDamage: number = definition.damage;
       for (const target of targets) {
         const mob = this.state.mobs.get(target.id);
         if (!mob || !mob.alive) continue;
-        const damage = definition.damage + this.specialDamageBonus(sessionId, target.id, now);
+        const mark = this.specialMarks.get(sessionId);
+        const payoff = huntersMarkPowerPayoff(mark, target.id, now);
+        if (mark && now >= mark.expiresAt) this.specialMarks.delete(sessionId);
+        if (payoff.consumed) {
+          this.specialMarks.delete(sessionId);
+          consumedMarks.push({
+            casterId: sessionId,
+            mobId: target.id,
+            powerId: pending.powerId,
+            bonusDamage: payoff.bonusDamage,
+            staggerMs: definition.staggerMs + payoff.staggerBonusMs,
+          });
+        }
+        const damage = definition.damage + payoff.bonusDamage;
         resolvedDamage = Math.max(resolvedDamage, damage);
         mob.health = Math.max(0, mob.health - damage);
         mob.hitSequence += 1;
@@ -654,7 +694,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           this.clearMarksForMob(target.id);
         } else {
           mob.combatState = "stagger";
-          mob.stateUntil = now + definition.staggerMs;
+          mob.stateUntil = now + definition.staggerMs + payoff.staggerBonusMs;
           mob.targetId = "";
           mob.staggerSequence += 1;
         }
@@ -677,6 +717,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         fractures,
       };
       this.broadcast("power:resolved", resolved);
+      for (const consumed of consumedMarks) this.broadcast("special:consumed", consumed);
     }
   }
 
@@ -810,7 +851,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.combatState = "stagger";
         mob.stateUntil = now + 900;
         mob.targetId = "";
-        this.clearMarksForMob(target.id);
         mob.staggerSequence += 1;
         const stagger: CombatStagger = { attackerId: sessionId, mobId: target.id, durationMs: 900 };
         this.broadcast("combat:stagger", stagger);
@@ -833,6 +873,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.combatState = "idle";
         mob.stateUntil = 0;
         mob.targetId = "";
+        this.clearMarksForMob(target.id);
       }
       const hit: CombatHit = {
         attackerId: sessionId,
@@ -845,6 +886,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         knockback: timing.knockback,
       };
       this.broadcast("combat:hit", hit);
+      if (mob.alive) this.progressSpecialMark(sessionId, target.id, now);
     }
   }
 }

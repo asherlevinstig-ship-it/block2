@@ -19,6 +19,8 @@ import {
   type PowerId,
   type PowerResolved,
   type SpecialApplied,
+  type SpecialConsumed,
+  type SpecialProgressed,
   type WorldBootstrap,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
@@ -630,6 +632,8 @@ interface MobVisual {
   healthFill: pc.Entity;
   mark: pc.Entity;
   markMaterial: pc.StandardMaterial;
+  markPips: pc.Entity[];
+  marks: Map<string, MarkVisualState>;
   state: NetworkMob;
   lastHitSequence: number;
   hitAt: number;
@@ -639,7 +643,12 @@ interface MobVisual {
   staggerAt: number;
   lastCombatState: string;
   lastAlive: boolean;
-  markedUntil: number;
+}
+
+interface MarkVisualState {
+  expiresAt: number;
+  stacks: number;
+  maxStacks: number;
 }
 
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
@@ -840,6 +849,12 @@ interface PowerDebrisVisual {
   startedAt: number;
 }
 
+interface MarkPayoffVisual {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  startedAt: number;
+}
+
 interface WeaponProjectileVisual {
   entity: pc.Entity;
   material: pc.StandardMaterial;
@@ -853,6 +868,7 @@ interface WeaponProjectileVisual {
 const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
+const markPayoffVisuals: MarkPayoffVisual[] = [];
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
 let powerAimVisual: PowerAimVisual | null = null;
 
@@ -1107,6 +1123,32 @@ function createPowerImpact(message: PowerResolved): void {
   cameraShakeUntil = performance.now() + 360;
 }
 
+function createHuntersMarkPayoff(mob: MobVisual): void {
+  const root = new pc.Entity("hunters-mark-payoff");
+  const material = powerMaterial(new pc.Color(0.72, 0.16, 1), 0.92);
+  for (let index = 0; index < 18; index += 1) {
+    const angle = index / 18 * Math.PI * 2;
+    const radius = index % 2 === 0 ? 0.78 : 1.08;
+    const shard = addBox(
+      root,
+      "mark-payoff-shard",
+      material,
+      [0.12, 0.5 + (index % 3) * 0.12, 0.12],
+      [Math.sin(angle) * radius, 0.45 + (index % 4) * 0.16, Math.cos(angle) * radius],
+    );
+    shard.setLocalEulerAngles(index % 2 === 0 ? -24 : 24, angle * 180 / Math.PI, 45);
+  }
+  for (let index = 0; index < HUNTERS_MARK.maxStacks; index += 1) {
+    const angle = index / HUNTERS_MARK.maxStacks * Math.PI * 2;
+    addBox(root, "mark-payoff-core", material, [0.28, 0.28, 0.28], [Math.sin(angle) * 0.42, 1.18, Math.cos(angle) * 0.42]);
+  }
+  root.setPosition(mob.state.x, mob.state.y + 0.04, mob.state.z);
+  app.root.addChild(root);
+  markPayoffVisuals.push({ root, material, startedAt: performance.now() });
+  cameraShakeStrength = Math.max(cameraShakeStrength, 0.26);
+  cameraShakeUntil = performance.now() + 420;
+}
+
 function updatePlayerCount(): void {
   const count = room ? remotePlayers.size + 1 : 0;
   playerCount.textContent = `${count} player${count === 1 ? "" : "s"} online`;
@@ -1181,6 +1223,12 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   mark.setLocalScale(1.55, 0.022, 1.55);
   mark.enabled = false;
   entity.addChild(mark);
+  const markPips = [-0.24, 0, 0.24].map((x, index) => {
+    const pip = addBox(entity, `hunters-mark-stack-${index + 1}`, markMaterial, [0.14, 0.14, 0.14], [x, 1.55, 0]);
+    pip.setLocalEulerAngles(0, 45, 45);
+    pip.enabled = false;
+    return pip;
+  });
   entity.setPosition(mob.x, mob.y, mob.z);
   app.root.addChild(entity);
   return {
@@ -1192,6 +1240,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     healthFill,
     mark,
     markMaterial,
+    markPips,
+    marks: new Map(),
     state: mob,
     lastHitSequence: mob.hitSequence,
     hitAt: 0,
@@ -1201,7 +1251,6 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     staggerAt: 0,
     lastCombatState: mob.combatState,
     lastAlive: mob.alive,
-    markedUntil: 0,
   };
 }
 
@@ -1397,6 +1446,19 @@ function updatePointerPosition(event: PointerEvent): void {
 
 canvas.addEventListener("pointermove", updatePointerPosition);
 
+function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | null {
+  for (const [casterId, mark] of mob.marks) {
+    if (now >= mark.expiresAt) mob.marks.delete(casterId);
+  }
+  const localMark = room?.sessionId ? mob.marks.get(room.sessionId) : undefined;
+  if (localMark) return localMark;
+  let strongest: MarkVisualState | null = null;
+  for (const mark of mob.marks.values()) {
+    if (!strongest || mark.stacks > strongest.stacks) strongest = mark;
+  }
+  return strongest;
+}
+
 function updateTarget(): void {
   if (!camera.camera) return;
   const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
@@ -1411,8 +1473,8 @@ function updateTarget(): void {
   if (currentTarget) targetMarker.setPosition(currentTarget.x + 0.5, currentTarget.y + 0.5, currentTarget.z + 0.5);
 
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
-  const combatMarked = combatMob ? Date.now() < combatMob.visual.markedUntil : false;
-  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMarked}` : "none";
+  const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
+  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMark?.stacks ?? 0}` : "none";
   const nextKey = `${interactionMode}:${targetKey}:${combatKey}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
@@ -1422,7 +1484,12 @@ function updateTarget(): void {
       : combatMob.visual.state.combatState === "stagger"
         ? " · STAGGERED"
         : "";
-    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m${combatMarked ? " · MARKED +1" : ""}${intent}`;
+    const markLabel = combatMark
+      ? combatMark.stacks >= combatMark.maxStacks
+        ? ` · EXPOSED ${combatMark.stacks}/${combatMark.maxStacks}`
+        : ` · HUNT ${combatMark.stacks}/${combatMark.maxStacks}`
+      : "";
+    targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m${markLabel}${intent}`;
   } else if (interactionMode === "combat") targetLabel.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name}: aim toward the Moss Crawler and attack`;
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
@@ -2451,12 +2518,23 @@ app.on("update", (dt: number) => {
     const staggerElapsed = animationNow - mob.staggerAt;
     const staggerStrength = staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
     const windupStrength = mob.state.combatState === "windup" ? 0.55 + Math.sin(animationTime * 18) * 0.2 : 0;
-    mob.mark.enabled = Date.now() < mob.markedUntil;
+    const markState = visibleMarkState(mob);
+    const exposed = Boolean(markState && markState.stacks >= markState.maxStacks);
+    mob.mark.enabled = Boolean(markState);
     if (mob.mark.enabled) {
-      const markPulse = 1 + Math.sin(animationTime * 8) * 0.08;
+      const markPulse = 1 + Math.sin(animationTime * (exposed ? 14 : 8)) * (exposed ? 0.15 : 0.08);
       mob.mark.setLocalScale(1.55 * markPulse, 0.022, 1.55 * markPulse);
-      mob.markMaterial.opacity = 0.38 + Math.sin(animationTime * 8) * 0.1;
+      mob.markMaterial.emissive = exposed ? new pc.Color(0.78, 0.16, 1) : new pc.Color(0.42, 0.08, 0.74);
+      mob.markMaterial.opacity = (exposed ? 0.58 : 0.38) + Math.sin(animationTime * (exposed ? 14 : 8)) * 0.1;
       mob.markMaterial.update();
+    }
+    for (let index = 0; index < mob.markPips.length; index += 1) {
+      const pip = mob.markPips[index]!;
+      pip.enabled = Boolean(markState && index < markState.stacks);
+      if (pip.enabled) {
+        const pipPulse = exposed ? 1 + Math.sin(animationTime * 16 + index * 1.7) * 0.22 : 1;
+        pip.setLocalScale(0.14 * pipPulse, 0.14 * pipPulse, 0.14 * pipPulse);
+      }
     }
     mob.warning.enabled = mob.state.combatState === "windup";
     if (mob.warning.enabled) {
@@ -2531,6 +2609,21 @@ app.on("update", (dt: number) => {
       position.z + debris.velocity.z * frameTime,
     );
     debris.entity.rotate(debris.spin.x * frameTime, debris.spin.y * frameTime, debris.spin.z * frameTime);
+  }
+  for (let index = markPayoffVisuals.length - 1; index >= 0; index -= 1) {
+    const payoff = markPayoffVisuals[index]!;
+    const elapsed = animationNow - payoff.startedAt;
+    if (elapsed >= 760) {
+      payoff.root.destroy();
+      markPayoffVisuals.splice(index, 1);
+      continue;
+    }
+    const progress = elapsed / 760;
+    const strength = 1 - progress;
+    payoff.root.setLocalScale(0.55 + progress * 1.25, 0.8 + Math.sin(progress * Math.PI) * 1.25, 0.55 + progress * 1.25);
+    payoff.root.rotate(0, frameTime * 210, 0);
+    payoff.material.opacity = Math.max(0, strength * 0.92);
+    payoff.material.update();
   }
   for (let index = weaponProjectileVisuals.length - 1; index >= 0; index -= 1) {
     const projectile = weaponProjectileVisuals[index]!;
@@ -2721,7 +2814,7 @@ async function connect(): Promise<void> {
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
   const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
-  const joinOptions = { name: "Explorer", ...(qaSpawn === "cave" ? { qaSpawn } : {}) };
+  const joinOptions = { name: "Explorer", ...(qaSpawn ? { qaSpawn } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
       const client = new Client(endpoint, {
@@ -2763,7 +2856,7 @@ async function connect(): Promise<void> {
     createPowerImpact(message);
     for (const mobId of message.defeatedMobIds) {
       const defeatedMob = mobVisuals.get(mobId);
-      if (defeatedMob) defeatedMob.markedUntil = 0;
+      defeatedMob?.marks.clear();
     }
     const isLocal = message.casterId === room?.sessionId;
     if (isLocal) {
@@ -2787,14 +2880,45 @@ async function connect(): Promise<void> {
   });
   room.onMessage("special:applied", (message: SpecialApplied) => {
     const mob = mobVisuals.get(message.mobId);
-    if (mob) mob.markedUntil = Math.max(mob.markedUntil, message.expiresAt);
+    mob?.marks.set(message.casterId, {
+      expiresAt: message.expiresAt,
+      stacks: message.stacks,
+      maxStacks: message.maxStacks,
+    });
     if (message.casterId === room?.sessionId) {
       localSpecialCooldownUntil = message.cooldownUntil;
       const name = mob?.state.name ?? "Enemy";
       showCombatFeedback("HUNTER'S MARK", "dodge");
-      status.textContent = `${name} marked for ${(HUNTERS_MARK.durationMs / 1000).toFixed(0)}s · hits deal +${message.bonusDamage} damage.`;
+      status.textContent = `${name} marked ${message.stacks}/${message.maxStacks} · land two Attacks, then cash in with Power.`;
     }
-    logMovementEvent(`SPECIAL APPLIED ${message.mobId} +${message.bonusDamage}`);
+    logMovementEvent(`SPECIAL APPLIED ${message.mobId} ${message.stacks}/${message.maxStacks} +${message.bonusDamage}`);
+  });
+  room.onMessage("special:progressed", (message: SpecialProgressed) => {
+    const mob = mobVisuals.get(message.mobId);
+    mob?.marks.set(message.casterId, {
+      expiresAt: message.expiresAt,
+      stacks: message.stacks,
+      maxStacks: message.maxStacks,
+    });
+    if (message.casterId === room?.sessionId) {
+      const name = mob?.state.name ?? "Enemy";
+      showCombatFeedback(message.exposed ? "EXPOSED · USE POWER" : `HUNT ${message.stacks}/${message.maxStacks}`, "dodge");
+      status.textContent = message.exposed
+        ? `${name} is Exposed · Power will consume the mark for bonus damage and heavy stagger.`
+        : `${name} Hunt stack ${message.stacks}/${message.maxStacks} · keep attacking.`;
+    }
+    logMovementEvent(`SPECIAL STACK ${message.mobId} ${message.stacks}/${message.maxStacks}`);
+  });
+  room.onMessage("special:consumed", (message: SpecialConsumed) => {
+    const mob = mobVisuals.get(message.mobId);
+    mob?.marks.delete(message.casterId);
+    if (mob) createHuntersMarkPayoff(mob);
+    if (message.casterId === room?.sessionId) {
+      const name = mob?.state.name ?? "Enemy";
+      showCombatFeedback(`MARK CASHED IN  +${message.bonusDamage}`, "dodge");
+      status.textContent = `${name} Exposed payoff · +${message.bonusDamage} Power damage and ${(message.staggerMs / 1000).toFixed(1)}s stagger.`;
+    }
+    logMovementEvent(`SPECIAL CONSUMED ${message.mobId} +${message.bonusDamage}`);
   });
   room.onMessage("power:cancelled", (message: PowerCancelled) => {
     const telegraph = powerTelegraphs.get(message.casterId);
@@ -2811,7 +2935,7 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:hit", (message: CombatHit) => {
     const mob = mobVisuals.get(message.mobId);
-    if (message.defeated && mob) mob.markedUntil = 0;
+    if (message.defeated) mob?.marks.clear();
     const name = mob?.state.name ?? "Mob";
     status.textContent = message.defeated
       ? `${name} defeated · respawning in 5 seconds.`
@@ -2912,6 +3036,8 @@ async function connect(): Promise<void> {
     powerImpactVisuals.length = 0;
     for (const debris of powerDebrisVisuals) debris.entity.destroy();
     powerDebrisVisuals.length = 0;
+    for (const payoff of markPayoffVisuals) payoff.root.destroy();
+    markPayoffVisuals.length = 0;
     for (const projectile of weaponProjectileVisuals) projectile.entity.destroy();
     weaponProjectileVisuals.length = 0;
     updatePlayerCount();
