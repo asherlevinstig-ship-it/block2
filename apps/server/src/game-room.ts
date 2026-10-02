@@ -10,6 +10,7 @@ import {
   MineBlockRequestSchema,
   MoveRequestSchema,
   POWER_DEFINITIONS,
+  PlayerProfileTokenSchema,
   WEAPON_ATTACK_DEFINITIONS,
   PowerCancelRequestSchema,
   PowerEquipRequestSchema,
@@ -76,6 +77,7 @@ import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInR
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS } from "./loot-rules.js";
 import { canEquipMainHand } from "./equipment-rules.js";
+import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -158,6 +160,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
+  private readonly profileTokens = new Map<string, string>();
+  private readonly profileSaveFingerprints = new Map<string, string>();
+  private readonly profileSaveQueues = new Map<string, Promise<void>>();
+  private lastProfileSaveSweepAt = 0;
   private mobProjectileSequence = 0;
   private lootDropSequence = 0;
   private worldSeed = "blockcraft-dev";
@@ -194,7 +200,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
-  override onJoin(client: Client, options: unknown): void {
+  override async onJoin(client: Client, options: unknown): Promise<void> {
     const player = new PlayerState();
     // Assign after construction so Colyseus includes the loadout in the initial
     // patch instead of eliding it as an unchanged schema default.
@@ -204,8 +210,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.mainHandTag = "melee";
     player.equippedSpecial = "hunters_mark";
     player.equippedTrait = "momentum";
+    const profileTokenResult = PlayerProfileTokenSchema.safeParse(
+      typeof options === "object" && options && "profileToken" in options ? options.profileToken : undefined,
+    );
+    const profileToken = profileTokenResult.success ? profileTokenResult.data : null;
     const requestedName = typeof options === "object" && options && "name" in options ? String(options.name) : "Explorer";
     player.name = requestedName.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer";
+    if (profileToken) {
+      try {
+        const save = parsePlayerSave(await this.presence.hget(PLAYER_SAVE_HASH, profileToken));
+        if (save) applyPlayerSave(player, save);
+      } catch (error) {
+        console.warn("Player save could not be loaded; starting with safe defaults.", error);
+      }
+      this.profileTokens.set(client.sessionId, profileToken);
+      this.profileSaveFingerprints.set(client.sessionId, serializePlayerSave(player, 0));
+    }
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
     const spawn = process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
       ? { x: 23.5, y: 3, z: 8.5 }
@@ -221,9 +241,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.state.players.set(client.sessionId, player);
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
     this.verticalVelocities.set(client.sessionId, 0);
+    if (profileToken) {
+      try {
+        await this.persistPlayer(client.sessionId, player, true);
+      } catch {
+        // The queued writer already logged the failure and will retry while connected.
+      }
+    }
   }
 
-  override onLeave(client: Client): void {
+  override async onLeave(client: Client): Promise<void> {
+    const player = this.state.players.get(client.sessionId);
+    try {
+      if (player) await this.persistPlayer(client.sessionId, player, true);
+    } catch {
+      // Always finish room cleanup even if external save storage is unavailable.
+    }
     this.state.players.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
     this.movementRateWindows.delete(client.sessionId);
@@ -234,6 +267,42 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.specialMarks.delete(client.sessionId);
     this.brambleSnares.delete(client.sessionId);
     this.lastDodgeAt.delete(client.sessionId);
+    this.profileTokens.delete(client.sessionId);
+    this.profileSaveFingerprints.delete(client.sessionId);
+  }
+
+  override async onDispose(): Promise<void> {
+    await Promise.allSettled(this.profileSaveQueues.values());
+  }
+
+  private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
+    const profileToken = this.profileTokens.get(sessionId);
+    if (!profileToken) return Promise.resolve();
+    const fingerprint = serializePlayerSave(player, 0);
+    if (!force && fingerprint === this.profileSaveFingerprints.get(sessionId)) {
+      return this.profileSaveQueues.get(profileToken) ?? Promise.resolve();
+    }
+    this.profileSaveFingerprints.set(sessionId, fingerprint);
+    const serialized = serializePlayerSave(player);
+    const previous = this.profileSaveQueues.get(profileToken) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(async () => {
+      await this.presence.hset(PLAYER_SAVE_HASH, profileToken, serialized);
+    });
+    this.profileSaveQueues.set(profileToken, queued);
+    void queued.then(() => {
+      if (this.profileSaveQueues.get(profileToken) === queued) this.profileSaveQueues.delete(profileToken);
+    }).catch(error => {
+      if (this.profileSaveQueues.get(profileToken) === queued) this.profileSaveQueues.delete(profileToken);
+      this.profileSaveFingerprints.delete(sessionId);
+      console.error("Player save could not be written; it will be retried.", error);
+    });
+    return queued;
+  }
+
+  private flushDirtyPlayerSaves(now: number): void {
+    if (now - this.lastProfileSaveSweepAt < 1_000) return;
+    this.lastProfileSaveSweepAt = now;
+    for (const [sessionId, player] of this.state.players) void this.persistPlayer(sessionId, player);
   }
 
   private chunkKey(chunkX: number, chunkZ: number): string {
@@ -722,6 +791,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.lastProcessedInput = input.sequence;
     }
     this.resolveLootPickups(now);
+    this.flushDirtyPlayerSaves(now);
   }
 
   private handleDodge(client: Client, payload: unknown): void {

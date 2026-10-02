@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const WORLD_ROOM = "world";
 
+export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
+export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
+
 export const ITEM_DEFINITIONS = {
   moss_fibre: { id: "moss_fibre", name: "Moss Fibre", description: "Soft living fibre gathered from Moss Crawlers" },
   crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang shed by a defeated crawler" },

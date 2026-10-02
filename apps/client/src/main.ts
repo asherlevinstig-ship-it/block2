@@ -101,8 +101,23 @@ import {
   voxelCharacterPose,
 } from "./character-animation.js";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
+import { createGuestProfileToken, getOrCreateProfileToken } from "./player-profile.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import "./styles.css";
+
+function newGuestProfileToken() {
+  return createGuestProfileToken(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+function browserProfileToken() {
+  try {
+    return getOrCreateProfileToken(window.localStorage, newGuestProfileToken);
+  } catch {
+    return newGuestProfileToken();
+  }
+}
+
+const profileToken = browserProfileToken();
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -3763,7 +3778,7 @@ async function connect(): Promise<void> {
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
   const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
-  const joinOptions = { name: "Explorer", ...(qaSpawn ? { qaSpawn } : {}) };
+  const joinOptions = { name: "Explorer", profileToken, ...(qaSpawn ? { qaSpawn } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
       const client = new Client(endpoint, {
