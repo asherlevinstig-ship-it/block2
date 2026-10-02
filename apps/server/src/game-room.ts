@@ -64,6 +64,7 @@ import {
   resolveSweptHorizontalMotion,
   setBlock,
   worldToChunk,
+  type BlockId,
   type GeneratedChunk,
 } from "@blockcraft/voxel-world";
 import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
@@ -78,6 +79,13 @@ import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInR
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS } from "./loot-rules.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
+import {
+  applyWorldDeltasToChunk,
+  parseWorldDeltas,
+  worldDeltaField,
+  worldDeltaHashKey,
+  type WorldBlockDelta,
+} from "./world-save.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -163,13 +171,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly profileTokens = new Map<string, string>();
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
+  private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
+  private readonly pendingWorldDeltaWrites = new Map<string, BlockId>();
+  private worldDeltaStorageKey = "";
+  private worldDeltaFlush: Promise<void> | null = null;
+  private lastWorldDeltaRetryAt = 0;
   private lastProfileSaveSweepAt = 0;
   private mobProjectileSequence = 0;
   private lootDropSequence = 0;
   private worldSeed = "blockcraft-dev";
 
-  override onCreate(): void {
+  override async onCreate(): Promise<void> {
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
+    this.worldDeltaStorageKey = worldDeltaHashKey(this.worldSeed);
+    try {
+      const storedDeltas = parseWorldDeltas(await this.presence.hgetall(this.worldDeltaStorageKey));
+      for (const delta of storedDeltas) this.indexWorldDelta(delta);
+    } catch (error) {
+      console.warn("Persistent terrain could not be loaded; using the generated world for this room.", error);
+    }
     this.setState(new WorldState());
     this.registerMob("moss-crawler", "moss_crawler", { x: 13.5, y: 8, z: 11.5 });
     this.registerMob("stone-brute", "stone_brute", { x: 16.5, y: 8, z: 15.5 });
@@ -272,7 +292,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   override async onDispose(): Promise<void> {
-    await Promise.allSettled(this.profileSaveQueues.values());
+    await Promise.allSettled([...this.profileSaveQueues.values(), this.flushWorldDeltaWrites()]);
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
@@ -309,11 +329,53 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     return `${chunkX},${chunkZ}`;
   }
 
+  private indexWorldDelta(delta: WorldBlockDelta): void {
+    const address = worldToChunk(delta.x, delta.z);
+    const chunkKey = this.chunkKey(address.chunkX, address.chunkZ);
+    let deltas = this.worldDeltasByChunk.get(chunkKey);
+    if (!deltas) {
+      deltas = new Map();
+      this.worldDeltasByChunk.set(chunkKey, deltas);
+    }
+    deltas.set(worldDeltaField(delta.x, delta.y, delta.z), delta);
+  }
+
+  private recordWorldDelta(x: number, y: number, z: number, block: BlockId): void {
+    const delta = { x, y, z, block } satisfies WorldBlockDelta;
+    const field = worldDeltaField(x, y, z);
+    this.indexWorldDelta(delta);
+    this.pendingWorldDeltaWrites.set(field, block);
+    this.lastWorldDeltaRetryAt = Date.now();
+    void this.flushWorldDeltaWrites();
+  }
+
+  private flushWorldDeltaWrites(): Promise<void> {
+    if (this.worldDeltaFlush) return this.worldDeltaFlush;
+    const flush = (async () => {
+      while (this.pendingWorldDeltaWrites.size > 0) {
+        const batch = [...this.pendingWorldDeltaWrites.entries()];
+        for (const [field, block] of batch) {
+          await this.presence.hset(this.worldDeltaStorageKey, field, String(block));
+          if (this.pendingWorldDeltaWrites.get(field) === block) this.pendingWorldDeltaWrites.delete(field);
+        }
+      }
+    })();
+    this.worldDeltaFlush = flush;
+    void flush.catch(error => {
+      console.error("Persistent terrain could not be written; it will be retried.", error);
+    }).finally(() => {
+      if (this.worldDeltaFlush === flush) this.worldDeltaFlush = null;
+    });
+    return flush;
+  }
+
   private getChunk(chunkX: number, chunkZ: number): MutableChunk {
     const key = this.chunkKey(chunkX, chunkZ);
     let stored = this.chunks.get(key);
     if (!stored) {
-      stored = { chunk: generateChunk(this.worldSeed, chunkX, chunkZ), revision: 0 };
+      const chunk = generateChunk(this.worldSeed, chunkX, chunkZ);
+      const revision = applyWorldDeltasToChunk(chunk, this.worldDeltasByChunk.get(key)?.values() ?? []);
+      stored = { chunk, revision };
       this.chunks.set(key, stored);
     }
     return stored;
@@ -650,6 +712,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private simulatePlayers(deltaTime: number): void {
     const now = Date.now();
+    if (this.pendingWorldDeltaWrites.size > 0 && now - this.lastWorldDeltaRetryAt >= 5_000) {
+      this.lastWorldDeltaRetryAt = now;
+      void this.flushWorldDeltaWrites();
+    }
     this.resolvePendingPowers(now);
     this.resolvePendingAttacks(now);
     this.resolveBrambleSnares(now);
@@ -1092,6 +1158,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const stored = this.getChunk(address.chunkX, address.chunkZ);
       setBlock(stored.chunk, address.localX, y, address.localZ, nextBlock);
       stored.revision += 1;
+      this.recordWorldDelta(x, y, z, nextBlock);
       this.broadcast("block:changed", {
         requestId: `${requestId}-fracture-${x}-${z}`,
         x,
@@ -1259,6 +1326,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (rejection) return this.reject(client, { requestId: request.requestId, action: "mine", reason: rejection });
     setBlock(stored.chunk, address.localX, request.y, address.localZ, Block.Air);
     stored.revision += 1;
+    this.recordWorldDelta(request.x, request.y, request.z, Block.Air);
     const changed: BlockChanged = {
       requestId: request.requestId,
       x: request.x,
