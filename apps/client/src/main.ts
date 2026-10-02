@@ -18,6 +18,8 @@ import {
   type CombatReward,
   type CombatStagger,
   type MainHandId,
+  type MobHazardPlaced,
+  type MobProjectileReleased,
   type PlayerHit,
   type PowerCast,
   type PowerCancelled,
@@ -645,6 +647,7 @@ interface MobVisual {
   healthWidth: number;
   healthBarY: number;
   isBrute: boolean;
+  isSpitter: boolean;
   mark: pc.Entity;
   markMaterial: pc.StandardMaterial;
   markPips: pc.Entity[];
@@ -928,12 +931,19 @@ interface WeaponProjectileVisual {
   hit: boolean;
 }
 
+interface MobHazardVisual {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  expiresAt: number;
+}
+
 const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
+const mobHazardVisuals = new Map<string, MobHazardVisual>();
 let powerAimVisual: PowerAimVisual | null = null;
 let specialAimVisual: PowerAimVisual | null = null;
 
@@ -972,6 +982,48 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
     durationMs: Math.max(80, message.travelMs),
     hit: message.hit,
   });
+}
+
+function createMobProjectile(message: MobProjectileReleased): void {
+  const entity = new pc.Entity("acid-projectile");
+  entity.addComponent("render", { type: "sphere" });
+  const material = powerMaterial(new pc.Color(0.54, 1, 0.08), 0.94);
+  if (entity.render) entity.render.material = material;
+  entity.setLocalScale(0.3, 0.3, 0.3);
+  const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
+  const end = new pc.Vec3(message.targetX, message.targetY + 0.08, message.targetZ);
+  entity.setPosition(start);
+  app.root.addChild(entity);
+  weaponProjectileVisuals.push({
+    entity,
+    material,
+    start,
+    end,
+    startedAt: performance.now(),
+    durationMs: Math.max(160, message.travelMs),
+    hit: true,
+  });
+}
+
+function createMobHazard(message: MobHazardPlaced): void {
+  mobHazardVisuals.get(message.hazardId)?.root.destroy();
+  const root = new pc.Entity(`mob-hazard:${message.hazardId}`);
+  const material = powerMaterial(new pc.Color(0.4, 0.9, 0.06), 0.58);
+  for (let index = 0; index < 18; index += 1) {
+    const angle = index / 18 * Math.PI * 2;
+    const radius = message.radius * (0.38 + (index % 3) * 0.22);
+    const blob = addBox(
+      root,
+      "acid-puddle",
+      material,
+      [0.32 + index % 2 * 0.16, 0.035, 0.3 + (index + 1) % 2 * 0.16],
+      [Math.sin(angle) * radius, 0.035, Math.cos(angle) * radius],
+    );
+    blob.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+  }
+  root.setPosition(message.x, message.y + 0.015, message.z);
+  app.root.addChild(root);
+  mobHazardVisuals.set(message.hazardId, { root, material, expiresAt: message.expiresAt });
 }
 
 function startPowerTelegraph(casterId: string, powerId: PowerId, x: number, y: number, z: number, yaw: number, windupMs: number): void {
@@ -1380,11 +1432,18 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const bodyRoot = new pc.Entity("mob-body");
   entity.addChild(bodyRoot);
   const isBrute = mob.archetype === "stone_brute";
-  const bodyMaterial = coloredMaterial(isBrute ? new pc.Color(0.34, 0.36, 0.35) : new pc.Color(0.22, 0.62, 0.24));
-  const accentMaterial = coloredMaterial(isBrute ? new pc.Color(0.62, 0.35, 0.09) : new pc.Color(0.3, 0.72, 0.25));
-  const eyeMaterial = coloredMaterial(isBrute ? new pc.Color(1, 0.38, 0.04) : new pc.Color(0.03, 0.045, 0.035));
+  const isSpitter = mob.archetype === "cave_spitter";
+  const bodyMaterial = coloredMaterial(
+    isBrute ? new pc.Color(0.34, 0.36, 0.35) : isSpitter ? new pc.Color(0.24, 0.38, 0.16) : new pc.Color(0.22, 0.62, 0.24),
+  );
+  const accentMaterial = coloredMaterial(
+    isBrute ? new pc.Color(0.62, 0.35, 0.09) : isSpitter ? new pc.Color(0.52, 0.92, 0.08) : new pc.Color(0.3, 0.72, 0.25),
+  );
+  const eyeMaterial = coloredMaterial(
+    isBrute ? new pc.Color(1, 0.38, 0.04) : isSpitter ? new pc.Color(0.78, 1, 0.3) : new pc.Color(0.03, 0.045, 0.035),
+  );
   const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
-  const healthMaterial = coloredMaterial(isBrute ? new pc.Color(0.94, 0.48, 0.12) : new pc.Color(0.35, 0.9, 0.28));
+  const healthMaterial = coloredMaterial(isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : new pc.Color(0.35, 0.9, 0.28));
   const warningMaterial = new pc.StandardMaterial();
   warningMaterial.diffuse = new pc.Color(0.9, 0.16, 0.06);
   warningMaterial.emissive = new pc.Color(0.7, 0.08, 0.02);
@@ -1412,21 +1471,33 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     addBox(bodyRoot, "brute-eye-left", eyeMaterial, [0.12, 0.11, 0.07], [-0.2, 1.43, 0.44]);
     addBox(bodyRoot, "brute-eye-right", eyeMaterial, [0.12, 0.11, 0.07], [0.2, 1.43, 0.44]);
     addBox(bodyRoot, "brute-crystal", accentMaterial, [0.24, 0.48, 0.24], [0, 1.06, -0.48]).setLocalEulerAngles(12, 0, 45);
+  } else if (isSpitter) {
+    addBox(bodyRoot, "spitter-body", bodyMaterial, [0.96, 0.55, 1.16], [0, 0.38, -0.08]);
+    addBox(bodyRoot, "spitter-head", bodyMaterial, [0.72, 0.58, 0.68], [0, 0.58, 0.58]);
+    addBox(bodyRoot, "spitter-mouth", accentMaterial, [0.42, 0.16, 0.12], [0, 0.46, 0.94]);
+    addBox(bodyRoot, "spitter-eye-left", eyeMaterial, [0.12, 0.13, 0.08], [-0.2, 0.7, 0.89]);
+    addBox(bodyRoot, "spitter-eye-right", eyeMaterial, [0.12, 0.13, 0.08], [0.2, 0.7, 0.89]);
+    addBox(bodyRoot, "spitter-sac-left", accentMaterial, [0.42, 0.5, 0.48], [-0.3, 0.7, -0.52]);
+    addBox(bodyRoot, "spitter-sac-right", accentMaterial, [0.42, 0.5, 0.48], [0.3, 0.7, -0.52]);
+    for (const side of [-1, 1]) {
+      addBox(bodyRoot, `spitter-leg-front-${side}`, bodyMaterial, [0.22, 0.28, 0.5], [side * 0.52, 0.18, 0.42]);
+      addBox(bodyRoot, `spitter-leg-back-${side}`, bodyMaterial, [0.22, 0.28, 0.5], [side * 0.52, 0.18, -0.42]);
+    }
   } else {
     addBox(bodyRoot, "crawler-body", bodyMaterial, [0.92, 0.58, 0.86], [0, 0.32, 0]);
     addBox(bodyRoot, "crawler-head", bodyMaterial, [0.68, 0.48, 0.62], [0, 0.76, 0.08]);
     addBox(bodyRoot, "crawler-eye-left", eyeMaterial, [0.1, 0.12, 0.06], [-0.17, 0.8, 0.39]);
     addBox(bodyRoot, "crawler-eye-right", eyeMaterial, [0.1, 0.12, 0.06], [0.17, 0.8, 0.39]);
   }
-  const healthWidth = isBrute ? 1.46 : 0.96;
-  const healthBarY = isBrute ? 2.18 : 1.34;
+  const healthWidth = isBrute ? 1.46 : isSpitter ? 1.12 : 0.96;
+  const healthBarY = isBrute ? 2.18 : isSpitter ? 1.48 : 1.34;
   addBox(entity, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(entity, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const warning = new pc.Entity("lunge-warning");
   warning.addComponent("render", { type: "cylinder" });
   if (warning.render) warning.render.material = warningMaterial;
   warning.setLocalPosition(0, 0.035, 0);
-  const warningScale = isBrute ? 5.5 : 4.2;
+  const warningScale = isBrute ? 5.5 : isSpitter ? 3.6 : 4.2;
   warning.setLocalScale(warningScale, 0.025, warningScale);
   warning.enabled = false;
   entity.addChild(warning);
@@ -1456,6 +1527,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     healthWidth,
     healthBarY,
     isBrute,
+    isSpitter,
     mark,
     markMaterial,
     markPips,
@@ -2886,12 +2958,16 @@ app.on("update", (dt: number) => {
     mob.entity.setEulerAngles(0, approachYaw(currentMobYaw, mob.state.yaw, frameTime, 420), 0);
     const hitStrength = Math.max(0, 1 - (animationNow - mob.hitAt) / 180);
     const attackElapsed = animationNow - mob.actionAt;
-    const attackDuration = mob.isBrute ? 760 : 460;
+    const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
     const attackStrength = attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackElapsed / attackDuration * Math.PI) : 0;
     const staggerElapsed = animationNow - mob.staggerAt;
     const staggerStrength = staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
     const windupStrength = mob.state.combatState === "windup"
-      ? (mob.isBrute ? 0.72 + Math.sin(animationTime * 12) * 0.13 : 0.55 + Math.sin(animationTime * 18) * 0.2)
+      ? (mob.isBrute
+          ? 0.72 + Math.sin(animationTime * 12) * 0.13
+          : mob.isSpitter
+            ? 0.68 + Math.sin(animationTime * 15) * 0.12
+            : 0.55 + Math.sin(animationTime * 18) * 0.2)
       : 0;
     const markState = visibleMarkState(mob);
     const exposed = Boolean(markState && markState.stacks >= markState.maxStacks);
@@ -2920,11 +2996,11 @@ app.on("update", (dt: number) => {
     }
     mob.bodyRoot.setLocalPosition(
       0,
-      Math.sin(animationTime * (mob.isBrute ? 2.8 : 4.5)) * (mob.isBrute ? 0.035 : 0.055) - hitStrength * 0.08 - attackStrength * (mob.isBrute ? 0.14 : 0),
-      attackStrength * (mob.isBrute ? 0.42 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : 0.16),
+      Math.sin(animationTime * (mob.isBrute ? 2.8 : mob.isSpitter ? 5.5 : 4.5)) * (mob.isBrute ? 0.035 : 0.055) - hitStrength * 0.08 - attackStrength * (mob.isBrute ? 0.14 : 0),
+      attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16),
     );
     mob.bodyRoot.setLocalEulerAngles(
-      mob.isBrute ? windupStrength * -11 + attackStrength * 18 : 0,
+      mob.isBrute ? windupStrength * -11 + attackStrength * 18 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : 0,
       0,
       Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12),
     );
@@ -3052,6 +3128,17 @@ app.on("update", (dt: number) => {
     projectile.material.update();
     projectile.entity.destroy();
     weaponProjectileVisuals.splice(index, 1);
+  }
+  for (const [hazardId, hazard] of mobHazardVisuals) {
+    if (Date.now() >= hazard.expiresAt) {
+      hazard.root.destroy();
+      mobHazardVisuals.delete(hazardId);
+      continue;
+    }
+    const pulse = 1 + Math.sin(animationTime * 8) * 0.07;
+    hazard.root.setLocalScale(pulse, 1 + Math.sin(animationTime * 11) * 0.12, pulse);
+    hazard.material.opacity = 0.5 + Math.sin(animationTime * 9) * 0.1;
+    hazard.material.update();
   }
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
@@ -3260,6 +3347,14 @@ async function connect(): Promise<void> {
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
     createWeaponProjectile(message);
     logMovementEvent(`${message.mainHandId === "bow" ? "ARROW" : "ARCANE"} ${message.hit ? "HIT" : "MISS"}`);
+  });
+  room.onMessage("combat:mob-projectile", (message: MobProjectileReleased) => {
+    createMobProjectile(message);
+    logMovementEvent(`ACID SHOT ${message.mobId}`);
+  });
+  room.onMessage("combat:mob-hazard", (message: MobHazardPlaced) => {
+    createMobHazard(message);
+    logMovementEvent(`ACID POOL ${message.hazardId}`);
   });
   room.onMessage("power:cast", (message: PowerCast) => {
     if (message.casterId !== room?.sessionId) {
@@ -3501,6 +3596,8 @@ async function connect(): Promise<void> {
     brambleSnareVisuals.clear();
     for (const projectile of weaponProjectileVisuals) projectile.entity.destroy();
     weaponProjectileVisuals.length = 0;
+    for (const hazard of mobHazardVisuals.values()) hazard.root.destroy();
+    mobHazardVisuals.clear();
     updatePlayerCount();
   });
   room.send("world:ready");

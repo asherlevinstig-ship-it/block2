@@ -334,6 +334,28 @@ export interface WeaponAttackReleased {
   hit: boolean;
 }
 
+export interface MobProjectileReleased {
+  projectileId: string;
+  mobId: string;
+  x: number;
+  y: number;
+  z: number;
+  targetX: number;
+  targetY: number;
+  targetZ: number;
+  travelMs: number;
+}
+
+export interface MobHazardPlaced {
+  hazardId: string;
+  mobId: string;
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  expiresAt: number;
+}
+
 export interface PlayerHit {
   mobId: string;
   playerId: string;

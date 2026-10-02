@@ -22,6 +22,15 @@ describe("mob archetypes", () => {
   it("falls back safely to the crawler profile", () => {
     expect(mobArchetype("unknown").id).toBe("moss_crawler");
     expect(mobArchetype("stone_brute").id).toBe("stone_brute");
+    expect(mobArchetype("cave_spitter").attackKind).toBe("projectile");
+  });
+
+  it("gives the Cave Spitter a dodgeable projectile and lingering hazard", () => {
+    const spitter = MOB_ARCHETYPES.cave_spitter;
+    expect(spitter.minimumAttackRange).toBeGreaterThan(0);
+    expect(spitter.projectileTravelMs).toBeGreaterThan(500);
+    expect(spitter.hazardDurationMs).toBeGreaterThan(3000);
+    expect(spitter.maxHealth).toBeLessThan(MOB_ARCHETYPES.moss_crawler.maxHealth);
   });
 
   it("caps Brute defeat rewards at the player's health and stamina maximums", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "../src/combat-rules.js";
+import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "../src/combat-rules.js";
 
 describe("mob combat behavior", () => {
   it("selects the closest living surface player", () => {
@@ -39,5 +39,23 @@ describe("mob combat behavior", () => {
     const player = { x: 0, y: 8, z: 1.5 };
     expect(canMobLungeHit(mob, player, 0, 1000)).toBe(true);
     expect(canMobLungeHit(mob, player, 1200, 1000)).toBe(false);
+  });
+
+  it("keeps ranged mobs inside their preferred attack band", () => {
+    const target = { x: 0, y: 8, z: 0 };
+    const close = maintainRangedDistance({ x: 0, y: 8, z: 2 }, target, 1, 1, 4, 7);
+    expect(close.z).toBeCloseTo(3);
+    expect(close.inAttackRange).toBe(false);
+    const far = maintainRangedDistance({ x: 0, y: 8, z: 9 }, target, 1, 1, 4, 7);
+    expect(far.z).toBeCloseTo(8);
+    expect(far.inAttackRange).toBe(false);
+    expect(maintainRangedDistance({ x: 0, y: 8, z: 6 }, target, 1, 1, 4, 7).inAttackRange).toBe(true);
+  });
+
+  it("resolves projectile and hazard radii in three dimensions", () => {
+    const impact = { x: 4, y: 8, z: 4 };
+    expect(isInsideImpact({ x: 4.7, y: 8, z: 4.4 }, impact, 0.9)).toBe(true);
+    expect(isInsideImpact({ x: 5, y: 8, z: 4 }, impact, 0.9)).toBe(false);
+    expect(isInsideImpact({ x: 4, y: 5, z: 4 }, impact, 1.3)).toBe(false);
   });
 });

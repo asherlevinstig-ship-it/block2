@@ -25,6 +25,8 @@ import {
   type CombatReward,
   type CombatStagger,
   type MainHandId,
+  type MobHazardPlaced,
+  type MobProjectileReleased,
   type PlayerHit,
   type PowerCast,
   type PowerCancelled,
@@ -56,7 +58,7 @@ import {
 } from "@blockcraft/voxel-world";
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
-import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
+import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
@@ -103,6 +105,28 @@ interface PendingPower {
   target?: { x: number; y: number; z: number };
 }
 
+interface PendingMobProjectile {
+  projectileId: string;
+  mobId: string;
+  playerId: string;
+  x: number;
+  y: number;
+  z: number;
+  impactAt: number;
+}
+
+interface ActiveMobHazard {
+  hazardId: string;
+  mobId: string;
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  expiresAt: number;
+  nextDamageAt: number;
+  lastDamageAt: Map<string, number>;
+}
+
 export class WorldRoom extends Room<{ state: WorldState }> {
   override maxClients = 20;
   private readonly chunks = new Map<string, MutableChunk>();
@@ -116,6 +140,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
   private readonly lastMobAttackAt = new Map<string, number>();
   private readonly lastDodgeAt = new Map<string, number>();
+  private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
+  private readonly mobHazards = new Map<string, ActiveMobHazard>();
+  private mobProjectileSequence = 0;
   private worldSeed = "blockcraft-dev";
 
   override onCreate(): void {
@@ -123,6 +150,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.setState(new WorldState());
     this.state.mobs.set("moss-crawler", this.createMob("moss_crawler"));
     this.state.mobs.set("stone-brute", this.createMob("stone_brute"));
+    this.state.mobs.set("cave-spitter", this.createMob("cave_spitter"));
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
@@ -155,11 +183,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
     const spawn = process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
       ? { x: 23.5, y: 3, z: 8.5 }
-      : this.spawnPoint();
+      : process.env.NODE_ENV !== "production" && requestedQaSpawn === "spitter"
+        ? { x: 14.5, y: 8, z: 8.5 }
+        : this.spawnPoint();
     player.x = spawn.x;
     player.y = spawn.y;
     player.z = spawn.z;
-    if (process.env.NODE_ENV !== "production" && requestedQaSpawn === "combat") {
+    if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter")) {
       player.invulnerableUntil = Date.now() + 60 * 60 * 1000;
     }
     this.state.players.set(client.sessionId, player);
@@ -291,6 +321,96 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     } satisfies CombatReward);
   }
 
+  private damagePlayer(mobId: string, playerId: string, damage: number, now: number): boolean {
+    const player = this.state.players.get(playerId);
+    if (!player || now < player.invulnerableUntil) return false;
+    player.health = Math.max(0, player.health - damage);
+    const defeated = player.health === 0;
+    this.broadcast("combat:player-hit", {
+      mobId,
+      playerId,
+      damage,
+      health: player.health,
+      defeated,
+    } satisfies PlayerHit);
+    if (!defeated) return true;
+    const spawn = this.spawnPoint();
+    player.x = spawn.x;
+    player.y = spawn.y;
+    player.z = spawn.z;
+    player.health = player.maxHealth;
+    player.stamina = player.maxStamina;
+    player.invulnerableUntil = now + 1500;
+    this.pendingAttacks.delete(playerId);
+    this.pendingPowers.delete(playerId);
+    this.specialMarks.delete(playerId);
+    this.brambleSnares.delete(playerId);
+    this.attackChains.delete(playerId);
+    this.movementInputs.set(playerId, { request: idleMovementInput(), receivedAt: now });
+    this.verticalVelocities.set(playerId, 0);
+    const mob = this.state.mobs.get(mobId);
+    if (mob) {
+      const definition = mobArchetype(mob.archetype);
+      mob.x = definition.spawn.x;
+      mob.y = definition.spawn.y;
+      mob.z = definition.spawn.z;
+      mob.combatState = "recover";
+      mob.stateUntil = now + definition.recoverMs;
+      mob.targetId = "";
+    }
+    return true;
+  }
+
+  private resolveMobProjectiles(now: number): void {
+    for (const [projectileId, projectile] of this.pendingMobProjectiles) {
+      if (now < projectile.impactAt) continue;
+      this.pendingMobProjectiles.delete(projectileId);
+      const mob = this.state.mobs.get(projectile.mobId);
+      const definition = mobArchetype(mob?.archetype ?? "cave_spitter");
+      const hazardId = `acid:${projectileId}`;
+      const expiresAt = now + definition.hazardDurationMs;
+      this.mobHazards.set(hazardId, {
+        hazardId,
+        mobId: projectile.mobId,
+        x: projectile.x,
+        y: projectile.y,
+        z: projectile.z,
+        radius: definition.hazardRadius,
+        expiresAt,
+        nextDamageAt: now + 700,
+        lastDamageAt: new Map(),
+      });
+      this.broadcast("combat:mob-hazard", {
+        hazardId,
+        mobId: projectile.mobId,
+        x: projectile.x,
+        y: projectile.y,
+        z: projectile.z,
+        radius: definition.hazardRadius,
+        expiresAt,
+      } satisfies MobHazardPlaced);
+      const target = this.state.players.get(projectile.playerId);
+      if (target && isInsideImpact(target, projectile, definition.hitRange)) {
+        this.damagePlayer(projectile.mobId, projectile.playerId, definition.damage, now);
+      }
+    }
+  }
+
+  private resolveMobHazards(now: number): void {
+    for (const [hazardId, hazard] of this.mobHazards) {
+      if (now >= hazard.expiresAt) {
+        this.mobHazards.delete(hazardId);
+        continue;
+      }
+      if (now < hazard.nextDamageAt) continue;
+      for (const [playerId, player] of this.state.players) {
+        const lastDamageAt = hazard.lastDamageAt.get(playerId) ?? 0;
+        if (now - lastDamageAt < 900 || !isInsideImpact(player, hazard, hazard.radius, 1.25)) continue;
+        if (this.damagePlayer(hazard.mobId, playerId, 1, now)) hazard.lastDamageAt.set(playerId, now);
+      }
+    }
+  }
+
   private handleMove(client: Client, payload: unknown): void {
     const parsed = MoveRequestSchema.safeParse(payload);
     if (!parsed.success) return this.reject(client, { action: "move", reason: "payload" });
@@ -348,6 +468,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.resolvePendingPowers(now);
     this.resolvePendingAttacks(now);
     this.resolveBrambleSnares(now);
+    this.resolveMobProjectiles(now);
+    this.resolveMobHazards(now);
     for (const [mobId, mob] of this.state.mobs) {
       const definition = mobArchetype(mob.archetype);
       if (!mob.alive && now >= mob.respawnAt) {
@@ -380,6 +502,32 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.actionSequence += 1;
         this.lastMobAttackAt.set(mobId, now);
         if (!targetPlayer) continue;
+        if (definition.attackKind === "projectile") {
+          const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
+          const projectile: PendingMobProjectile = {
+            projectileId,
+            mobId,
+            playerId: mob.targetId,
+            x: targetPlayer.x,
+            y: targetPlayer.y,
+            z: targetPlayer.z,
+            impactAt: now + definition.projectileTravelMs,
+          };
+          this.pendingMobProjectiles.set(projectileId, projectile);
+          this.broadcast("combat:mob-projectile", {
+            projectileId,
+            mobId,
+            x: mob.x,
+            y: mob.y,
+            z: mob.z,
+            targetX: projectile.x,
+            targetY: projectile.y,
+            targetZ: projectile.z,
+            travelMs: definition.projectileTravelMs,
+          } satisfies MobProjectileReleased);
+          mob.targetId = "";
+          continue;
+        }
         const deltaX = targetPlayer.x - mob.x;
         const deltaZ = targetPlayer.z - mob.z;
         const distance = Math.hypot(deltaX, deltaZ);
@@ -389,29 +537,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           mob.z += deltaZ / distance * lungeDistance;
         }
         if (!canMobLungeHit(mob, targetPlayer, targetPlayer.invulnerableUntil, now, definition.hitRange)) continue;
-        targetPlayer.health = Math.max(0, targetPlayer.health - definition.damage);
-        const defeated = targetPlayer.health === 0;
-        const hit: PlayerHit = { mobId, playerId: mob.targetId, damage: definition.damage, health: targetPlayer.health, defeated };
-        this.broadcast("combat:player-hit", hit);
-        if (defeated) {
-          const spawn = this.spawnPoint();
-          targetPlayer.x = spawn.x;
-          targetPlayer.y = spawn.y;
-          targetPlayer.z = spawn.z;
-          targetPlayer.health = targetPlayer.maxHealth;
-          targetPlayer.stamina = targetPlayer.maxStamina;
-          this.pendingAttacks.delete(mob.targetId);
-          this.pendingPowers.delete(mob.targetId);
-          this.specialMarks.delete(mob.targetId);
-          this.brambleSnares.delete(mob.targetId);
-          this.attackChains.delete(mob.targetId);
-          this.movementInputs.set(mob.targetId, { request: idleMovementInput(), receivedAt: now });
-          this.verticalVelocities.set(mob.targetId, 0);
-          mob.x = definition.spawn.x;
-          mob.y = definition.spawn.y;
-          mob.z = definition.spawn.z;
-          mob.combatState = "recover";
-        }
+        this.damagePlayer(mobId, mob.targetId, definition.damage, now);
         continue;
       }
       const players = [...this.state.players.entries()].map(([id, player]) => ({
@@ -429,7 +555,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if (Math.hypot(definition.spawn.x - mob.x, definition.spawn.z - mob.z) > 0.05) mob.yaw = homeward.yaw;
         continue;
       }
-      const pursuit = pursueTarget(mob, target, deltaTime, definition.speed, definition.stopDistance);
+      const pursuit = definition.attackKind === "projectile"
+        ? maintainRangedDistance(mob, target, deltaTime, definition.speed, definition.minimumAttackRange, definition.stopDistance)
+        : pursueTarget(mob, target, deltaTime, definition.speed, definition.stopDistance);
       mob.x = pursuit.x;
       mob.z = pursuit.z;
       mob.yaw = pursuit.yaw;

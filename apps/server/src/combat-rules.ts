@@ -63,3 +63,34 @@ export function pursueTarget(
     inAttackRange: remainingDistance <= stopDistance + 0.001,
   };
 }
+
+export function maintainRangedDistance(
+  mob: Position,
+  target: Position,
+  deltaSeconds: number,
+  speed: number,
+  minimumRange: number,
+  maximumRange: number,
+): { x: number; z: number; yaw: number; inAttackRange: boolean } {
+  const deltaX = target.x - mob.x;
+  const deltaZ = target.z - mob.z;
+  const distance = Math.hypot(deltaX, deltaZ);
+  const yaw = distance < 0.001 ? 0 : Math.atan2(deltaX, deltaZ) * 180 / Math.PI;
+  if (distance >= minimumRange && distance <= maximumRange) return { x: mob.x, z: mob.z, yaw, inAttackRange: true };
+  if (distance < 0.001) return { x: mob.x, z: mob.z, yaw, inAttackRange: false };
+  const direction = distance < minimumRange ? -1 : 1;
+  const boundary = distance < minimumRange ? minimumRange : maximumRange;
+  const travel = Math.min(Math.abs(distance - boundary), Math.max(0, deltaSeconds) * speed);
+  const nextDistance = distance - direction * travel;
+  return {
+    x: mob.x + deltaX / distance * travel * direction,
+    z: mob.z + deltaZ / distance * travel * direction,
+    yaw,
+    inAttackRange: nextDistance >= minimumRange - 0.001 && nextDistance <= maximumRange + 0.001,
+  };
+}
+
+export function isInsideImpact(position: Position, impact: Position, radius: number, verticalRange = 1.75): boolean {
+  return Math.abs(position.y - impact.y) <= verticalRange
+    && Math.hypot(position.x - impact.x, position.z - impact.z) <= radius;
+}
