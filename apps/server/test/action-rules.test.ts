@@ -60,4 +60,14 @@ describe("authoritative action rules", () => {
       { id: "far", x: 0, y: 8, z: 4, alive: true },
     ])).toBeNull();
   });
+
+  it("uses strict Bow aim and wider Magic Focus tracking at range", () => {
+    const targets = [
+      { id: "center", x: 0.25, y: 8, z: 7.5, alive: true },
+      { id: "wide", x: 4, y: 8, z: 5, alive: true },
+    ];
+    expect(selectAttackTarget({ x: 0, y: 8, z: 0 }, 0, targets, 9, 0.92)?.id).toBe("center");
+    expect(selectAttackTarget({ x: 0, y: 8, z: 0 }, 0, targets.slice(1), 9, 0.92)).toBeNull();
+    expect(selectAttackTarget({ x: 0, y: 8, z: 0 }, 0, targets.slice(1), 7, 0.58)?.id).toBe("wide");
+  });
 });

@@ -1,14 +1,13 @@
 import { Client, Room } from "@colyseus/core";
 import {
   AttackRequestSchema,
-  COMBAT_ATTACKS,
-  COMBO_CHAIN_WINDOW_MS,
   DodgeRequestSchema,
   MAIN_HAND_DEFINITIONS,
   MainHandEquipRequestSchema,
   MineBlockRequestSchema,
   MoveRequestSchema,
   POWER_DEFINITIONS,
+  WEAPON_ATTACK_DEFINITIONS,
   PowerCancelRequestSchema,
   PowerEquipRequestSchema,
   PowerRequestSchema,
@@ -18,6 +17,7 @@ import {
   type CombatHit,
   type CombatMiss,
   type CombatStagger,
+  type MainHandId,
   type PlayerHit,
   type PowerCast,
   type PowerCancelled,
@@ -25,6 +25,7 @@ import {
   type PowerId,
   type PowerResolved,
   type WorldBootstrap,
+  type WeaponAttackReleased,
 } from "@blockcraft/protocol";
 import {
   Block,
@@ -62,12 +63,14 @@ interface MutableChunk {
 
 interface AttackChainState {
   step: 1 | 2 | 3;
+  mainHandId: MainHandId;
   recoveryUntil: number;
   comboExpiresAt: number;
 }
 
 interface PendingAttack {
   requestId: string;
+  mainHandId: MainHandId;
   yaw: number;
   step: 1 | 2 | 3;
   impactAt: number;
@@ -473,6 +476,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const mainHand = MAIN_HAND_DEFINITIONS[parsed.data.mainHandId];
     player.mainHandId = mainHand.id;
     player.mainHandTag = mainHand.tag;
+    this.attackChains.delete(client.sessionId);
     player.equippedPower = compatiblePowerOrFallback(player.equippedPower, mainHand.tag);
   }
 
@@ -659,19 +663,29 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "rate" });
     }
     const now = Date.now();
+    const mainHandId = player.mainHandId as MainHandId;
+    const attackDefinition = WEAPON_ATTACK_DEFINITIONS[mainHandId];
+    if (!attackDefinition) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "missing" });
+    }
     const chain = this.attackChains.get(client.sessionId);
     if (chain && now < chain.recoveryUntil) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "attack", reason: "rate" });
     }
-    const step = chain ? nextComboStep(chain.step, chain.comboExpiresAt, now) : 1;
-    const timing = COMBAT_ATTACKS[step - 1]!;
+    const step = attackDefinition.combo && chain?.mainHandId === mainHandId
+      ? nextComboStep(chain.step, chain.comboExpiresAt, now)
+      : 1;
+    const timing = attackDefinition.attacks[step - 1] ?? attackDefinition.attacks[0];
+    if (!timing) return;
     this.attackChains.set(client.sessionId, {
       step,
+      mainHandId,
       recoveryUntil: now + timing.durationMs,
-      comboExpiresAt: now + timing.durationMs + COMBO_CHAIN_WINDOW_MS,
+      comboExpiresAt: now + timing.durationMs + attackDefinition.comboWindowMs,
     });
     this.pendingAttacks.set(client.sessionId, {
       requestId: parsed.data.requestId,
+      mainHandId,
       yaw: parsed.data.yaw,
       step,
       impactAt: now + timing.impactMs,
@@ -687,7 +701,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.pendingAttacks.delete(sessionId);
       const player = this.state.players.get(sessionId);
       if (!player) continue;
-      const timing = COMBAT_ATTACKS[pending.step - 1]!;
+      const attackDefinition = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId];
+      const timing = attackDefinition.attacks[pending.step - 1] ?? attackDefinition.attacks[0];
+      if (!timing) continue;
       const targets = [...this.state.mobs.entries()].map(([id, mob]) => ({
         id,
         x: mob.x,
@@ -695,9 +711,35 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         z: mob.z,
         alive: mob.alive,
       }));
-      const target = selectAttackTarget(player, pending.yaw, targets);
+      const target = selectAttackTarget(
+        player,
+        pending.yaw,
+        targets,
+        attackDefinition.range,
+        attackDefinition.minimumFacingDot,
+      );
+      if (attackDefinition.projectileTravelMs > 0) {
+        const radians = pending.yaw * Math.PI / 180;
+        const endpoint = target ?? {
+          x: player.x + Math.sin(radians) * attackDefinition.range,
+          y: player.y,
+          z: player.z + Math.cos(radians) * attackDefinition.range,
+        };
+        this.broadcast("combat:projectile", {
+          attackerId: sessionId,
+          mainHandId: pending.mainHandId,
+          x: player.x,
+          y: player.y,
+          z: player.z,
+          targetX: endpoint.x,
+          targetY: endpoint.y,
+          targetZ: endpoint.z,
+          travelMs: attackDefinition.projectileTravelMs,
+          hit: Boolean(target),
+        } satisfies WeaponAttackReleased);
+      }
       if (!target) {
-        const miss: CombatMiss = { attackerId: sessionId, comboStep: pending.step };
+        const miss: CombatMiss = { attackerId: sessionId, mainHandId: pending.mainHandId, comboStep: pending.step };
         this.broadcast("combat:miss", miss);
         continue;
       }
@@ -734,6 +776,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       const hit: CombatHit = {
         attackerId: sessionId,
+        mainHandId: pending.mainHandId,
         mobId: target.id,
         damage: timing.damage,
         health: mob.health,

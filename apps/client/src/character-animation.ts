@@ -1,3 +1,5 @@
+import { COMBAT_ATTACKS, WEAPON_ATTACK_DEFINITIONS, type MainHandId } from "@blockcraft/protocol";
+
 export interface VoxelCharacterPose {
   bodyY: number;
   torsoPitch: number;
@@ -44,8 +46,11 @@ export function advanceLocomotionAnimation(
   };
 }
 
-export function primaryActionPose(elapsedMilliseconds: number | null, comboStep = 0): PrimaryActionPose {
-  const combatTiming = comboStep >= 1 && comboStep <= 3 ? COMBAT_ATTACKS[comboStep - 1] : null;
+export function primaryActionPose(elapsedMilliseconds: number | null, comboStep = 0, mainHandId: MainHandId | null = null): PrimaryActionPose {
+  const attackDefinition = mainHandId ? WEAPON_ATTACK_DEFINITIONS[mainHandId] : null;
+  const combatTiming = comboStep >= 1 && comboStep <= 3
+    ? attackDefinition?.attacks[comboStep - 1] ?? COMBAT_ATTACKS[comboStep - 1]
+    : null;
   const duration = combatTiming?.durationMs ?? PRIMARY_ACTION_DURATION_MS;
   if (elapsedMilliseconds === null || elapsedMilliseconds < 0 || elapsedMilliseconds >= duration) {
     return { active: false, torsoYaw: 0, leftArmPitch: 0, leftArmRoll: 0, rightArmPitch: 0, rightArmRoll: 0 };
@@ -55,6 +60,22 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   const strength = elapsedMilliseconds <= impact
     ? Math.sin(elapsedMilliseconds / impact * Math.PI / 2)
     : Math.cos((elapsedMilliseconds - impact) / (duration - impact) * Math.PI / 2);
+  if (mainHandId === "bow") return {
+    active: true,
+    torsoYaw: -4 * strength,
+    leftArmPitch: -102 * strength,
+    leftArmRoll: 18 * strength,
+    rightArmPitch: -82 * strength,
+    rightArmRoll: -68 * strength,
+  };
+  if (mainHandId === "magic_focus") return {
+    active: true,
+    torsoYaw: -8 * strength,
+    leftArmPitch: -42 * strength,
+    leftArmRoll: 28 * strength,
+    rightArmPitch: -138 * strength,
+    rightArmRoll: -12 * strength,
+  };
   if (comboStep === 2) return {
     active: true,
     torsoYaw: 18 * strength,
@@ -203,4 +224,3 @@ export function voxelCharacterPose(
     rightLegPitch: -stride,
   };
 }
-import { COMBAT_ATTACKS } from "@blockcraft/protocol";

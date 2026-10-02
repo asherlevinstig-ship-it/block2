@@ -15,15 +15,60 @@ export interface MainHandDefinition {
   id: string;
   name: string;
   tag: MainHandTag;
+  attackName: string;
 }
 
 export const MAIN_HAND_DEFINITIONS = {
-  longsword: { id: "longsword", name: "Longsword", tag: "melee" },
-  bow: { id: "bow", name: "Hunting Bow", tag: "ranged" },
-  magic_focus: { id: "magic_focus", name: "Magic Focus", tag: "focus" },
+  longsword: { id: "longsword", name: "Longsword", tag: "melee", attackName: "Sword Combo" },
+  bow: { id: "bow", name: "Hunting Bow", tag: "ranged", attackName: "Bow Shot" },
+  magic_focus: { id: "magic_focus", name: "Magic Focus", tag: "focus", attackName: "Arcane Bolt" },
 } as const satisfies Record<string, MainHandDefinition>;
 
 export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
+
+export interface WeaponAttackStep {
+  step: 1 | 2 | 3;
+  durationMs: number;
+  impactMs: number;
+  damage: number;
+  knockback: number;
+}
+
+export interface WeaponAttackDefinition {
+  combo: boolean;
+  comboWindowMs: number;
+  range: number;
+  minimumFacingDot: number;
+  projectileTravelMs: number;
+  attacks: readonly WeaponAttackStep[];
+}
+
+export const WEAPON_ATTACK_DEFINITIONS = {
+  longsword: {
+    combo: true,
+    comboWindowMs: COMBO_CHAIN_WINDOW_MS,
+    range: 2.6,
+    minimumFacingDot: 0.35,
+    projectileTravelMs: 0,
+    attacks: COMBAT_ATTACKS,
+  },
+  bow: {
+    combo: false,
+    comboWindowMs: 0,
+    range: 9,
+    minimumFacingDot: 0.92,
+    projectileTravelMs: 190,
+    attacks: [{ step: 1, durationMs: 640, impactMs: 330, damage: 1, knockback: 0.18 }],
+  },
+  magic_focus: {
+    combo: false,
+    comboWindowMs: 0,
+    range: 7,
+    minimumFacingDot: 0.58,
+    projectileTravelMs: 230,
+    attacks: [{ step: 1, durationMs: 470, impactMs: 190, damage: 1, knockback: 0.28 }],
+  },
+} as const satisfies Record<MainHandId, WeaponAttackDefinition>;
 
 export interface PowerDefinition {
   id: string;
@@ -208,6 +253,7 @@ export interface BlockChanged {
 
 export interface CombatHit {
   attackerId: string;
+  mainHandId: MainHandId;
   mobId: string;
   damage: number;
   health: number;
@@ -218,7 +264,21 @@ export interface CombatHit {
 
 export interface CombatMiss {
   attackerId: string;
+  mainHandId: MainHandId;
   comboStep: number;
+}
+
+export interface WeaponAttackReleased {
+  attackerId: string;
+  mainHandId: MainHandId;
+  x: number;
+  y: number;
+  z: number;
+  targetX: number;
+  targetY: number;
+  targetZ: number;
+  travelMs: number;
+  hit: boolean;
 }
 
 export interface PlayerHit {

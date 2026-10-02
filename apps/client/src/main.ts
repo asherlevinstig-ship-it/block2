@@ -1,10 +1,9 @@
 import * as pc from "playcanvas";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
-  COMBAT_ATTACKS,
-  COMBO_CHAIN_WINDOW_MS,
   MAIN_HAND_DEFINITIONS,
   POWER_DEFINITIONS,
+  WEAPON_ATTACK_DEFINITIONS,
   WORLD_ROOM,
   type ActionRejected,
   type BlockChanged,
@@ -19,6 +18,7 @@ import {
   type PowerId,
   type PowerResolved,
   type WorldBootstrap,
+  type WeaponAttackReleased,
 } from "@blockcraft/protocol";
 import {
   Block,
@@ -517,6 +517,7 @@ function animateVoxelCharacter(
   grounded: boolean,
   actionElapsedMilliseconds: number | null,
   actionStep = 0,
+  actionMainHandId: MainHandId | null = null,
   powerElapsedMilliseconds: number | null = null,
   powerId: PowerId | null = null,
 ): void {
@@ -535,7 +536,7 @@ function animateVoxelCharacter(
       : powerId === "lunge_strike"
         ? lungePowerPose(powerElapsedMilliseconds)
       : seismicPowerPose(powerElapsedMilliseconds);
-  const action = powerPose.active ? powerPose : primaryActionPose(actionElapsedMilliseconds, actionStep);
+  const action = powerPose.active ? powerPose : primaryActionPose(actionElapsedMilliseconds, actionStep, actionMainHandId);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
   rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw, pose.torsoRoll);
   rig.head.setLocalEulerAngles(0, pose.headYaw, 0);
@@ -581,6 +582,7 @@ interface RemotePlayerVisual {
   snapshots: RemoteSnapshot[];
   actionStartedAt: number | null;
   actionStep: number;
+  actionMainHandId: MainHandId | null;
   lastActionSequence: number;
   powerStartedAt: number | null;
   powerId: PowerId | null;
@@ -630,6 +632,7 @@ const localPowerVisualOffset = new pc.Vec3();
 let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
 let localActionStep = 0;
+let localActionMainHandId: MainHandId | null = null;
 let localComboStep = 0;
 let localComboExpiresAt = 0;
 let localHitPauseUntil = 0;
@@ -670,7 +673,7 @@ function isMainHandId(value: string): value is MainHandId {
 function refreshPowerCompatibility(): void {
   const mainHand = MAIN_HAND_DEFINITIONS[localMainHandId];
   mainHandName.textContent = mainHand.name;
-  mainHandAttack.textContent = mainHand.tag.toUpperCase();
+  mainHandAttack.textContent = mainHand.attackName;
   for (const button of mainHandPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.mainHand === localMainHandId));
   }
@@ -706,6 +709,9 @@ function updatePowerLoadout(powerId: PowerId): void {
 
 function updateMainHandLoadout(mainHandId: MainHandId): void {
   localMainHandId = mainHandId;
+  localComboStep = 0;
+  localComboExpiresAt = 0;
+  targetStateKey = "";
   refreshPowerCompatibility();
 }
 
@@ -750,7 +756,13 @@ function updatePlayerStamina(stamina: number, maximumStamina: number): void {
 }
 
 function actionDuration(step: number): number {
-  return step >= 1 && step <= 3 ? COMBAT_ATTACKS[step - 1]!.durationMs : PRIMARY_ACTION_DURATION_MS;
+  if (step < 1 || step > 3 || localActionMainHandId === null) return PRIMARY_ACTION_DURATION_MS;
+  return WEAPON_ATTACK_DEFINITIONS[localActionMainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS;
+}
+
+function remoteActionDuration(mainHandId: MainHandId | null, step: number): number {
+  if (!mainHandId || step < 1 || step > 3) return PRIMARY_ACTION_DURATION_MS;
+  return WEAPON_ATTACK_DEFINITIONS[mainHandId].attacks[step - 1]?.durationMs ?? PRIMARY_ACTION_DURATION_MS;
 }
 
 function powerDuration(powerId: PowerId | null): number {
@@ -802,9 +814,20 @@ interface PowerDebrisVisual {
   startedAt: number;
 }
 
+interface WeaponProjectileVisual {
+  entity: pc.Entity;
+  material: pc.StandardMaterial;
+  start: pc.Vec3;
+  end: pc.Vec3;
+  startedAt: number;
+  durationMs: number;
+  hit: boolean;
+}
+
 const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
+const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
 let powerAimVisual: PowerAimVisual | null = null;
 
 function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
@@ -816,6 +839,32 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
   material.depthWrite = false;
   material.update();
   return material;
+}
+
+function createWeaponProjectile(message: WeaponAttackReleased): void {
+  const entity = new pc.Entity(message.mainHandId === "bow" ? "arrow-projectile" : "arcane-projectile");
+  entity.addComponent("render", { type: message.mainHandId === "bow" ? "box" : "sphere" });
+  const material = powerMaterial(
+    message.mainHandId === "bow" ? new pc.Color(0.93, 0.76, 0.34) : new pc.Color(0.28, 0.68, 1),
+    0.96,
+  );
+  if (entity.render) entity.render.material = material;
+  if (message.mainHandId === "bow") entity.setLocalScale(0.07, 0.07, 0.58);
+  else entity.setLocalScale(0.24, 0.24, 0.24);
+  const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
+  const end = new pc.Vec3(message.targetX, message.targetY + 0.72, message.targetZ);
+  entity.setPosition(start);
+  if (message.mainHandId === "bow") entity.lookAt(end);
+  app.root.addChild(entity);
+  weaponProjectileVisuals.push({
+    entity,
+    material,
+    start,
+    end,
+    startedAt: performance.now(),
+    durationMs: Math.max(80, message.travelMs),
+    hit: message.hit,
+  });
 }
 
 function startPowerTelegraph(casterId: string, powerId: PowerId, x: number, y: number, z: number, yaw: number, windupMs: number): void {
@@ -1049,6 +1098,7 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
     snapshots: [{ receivedAt: performance.now(), x: player.x, y: player.y, z: player.z, yaw: player.yaw }],
     actionStartedAt: null,
     actionStep: player.attackStep,
+    actionMainHandId: isMainHandId(player.mainHandId) ? player.mainHandId : null,
     lastActionSequence: player.actionSequence,
     powerStartedAt: null,
     powerId: isPowerId(player.equippedPower) ? player.equippedPower : null,
@@ -1191,6 +1241,7 @@ function bindPlayers(joinedRoom: Room): void {
       if (!remote || player.actionSequence <= remote.lastActionSequence) return;
       remote.lastActionSequence = player.actionSequence;
       remote.actionStep = player.attackStep;
+      remote.actionMainHandId = player.attackStep > 0 && isMainHandId(player.mainHandId) ? player.mainHandId : null;
       remote.actionStartedAt = performance.now();
     }, true);
     playerCallbacks.listen("powerSequence", () => {
@@ -1221,7 +1272,7 @@ function bindPlayers(joinedRoom: Room): void {
       if (isLocal && isMainHandId(player.mainHandId)) {
         updateMainHandLoadout(player.mainHandId);
         const mainHand = MAIN_HAND_DEFINITIONS[player.mainHandId];
-        status.textContent = `${mainHand.name} equipped · ${mainHand.tag.toUpperCase()} Power compatibility active.`;
+        status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
       } else if (remote && isMainHandId(player.mainHandId)) {
         setRigMainHand(remote.rig, player.mainHandId);
       }
@@ -1285,7 +1336,7 @@ function updateTarget(): void {
   const player = localPlayer.getPosition();
   const inRange = Boolean(hit) && Math.hypot(hit!.x + 0.5 - player.x, hit!.y + 0.5 - player.y, hit!.z + 0.5 - player.z) <= 4.5;
   currentTarget = inRange ? hit : null;
-  const combatMob = nearestLivingMob(player, 4.5);
+  const combatMob = nearestLivingMob(player, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range);
   targetMarker.enabled = interactionMode === "build" && Boolean(currentTarget);
   if (currentTarget) targetMarker.setPosition(currentTarget.x + 0.5, currentTarget.y + 0.5, currentTarget.z + 0.5);
 
@@ -1301,7 +1352,7 @@ function updateTarget(): void {
         ? " · STAGGERED"
         : "";
     targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m${intent}`;
-  } else if (interactionMode === "combat") targetLabel.textContent = "Combat: approach the Moss Crawler and click to swing";
+  } else if (interactionMode === "combat") targetLabel.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name}: aim toward the Moss Crawler and attack`;
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
   else targetLabel.textContent = `Target: ${targetKey} · mineable`;
@@ -1712,6 +1763,7 @@ function requestMine(): void {
   );
   localActionStartedAt = performance.now();
   localActionStep = 0;
+  localActionMainHandId = null;
   localComboStep = 0;
   localComboExpiresAt = 0;
   const proximity = Math.hypot(
@@ -1742,30 +1794,33 @@ function requestAttack(): void {
     return;
   }
   if (localActionStartedAt !== null && now - localActionStartedAt < actionDuration(localActionStep)) {
-    status.textContent = "Recovering from the previous swing...";
+    status.textContent = "Recovering from the previous attack...";
     return;
   }
+  const attackDefinition = WEAPON_ATTACK_DEFINITIONS[localMainHandId];
   const player = localPlayer.getPosition();
-  const targetMob = nearestLivingMob(player, 3.1);
+  const targetMob = nearestLivingMob(player, attackDefinition.range);
   localActionFacingYaw = targetMob
     ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
     : currentTarget
       ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
       : localFacingYaw;
-  const comboStep = now <= localComboExpiresAt ? localComboStep % 3 + 1 : 1;
-  const timing = COMBAT_ATTACKS[comboStep - 1]!;
+  const comboStep = attackDefinition.combo && now <= localComboExpiresAt ? localComboStep % 3 + 1 : 1;
+  const timing = attackDefinition.attacks[comboStep - 1] ?? attackDefinition.attacks[0]!;
   localActionStartedAt = now;
   localActionStep = comboStep;
+  localActionMainHandId = localMainHandId;
   localComboStep = comboStep;
-  localComboExpiresAt = now + timing.durationMs + COMBO_CHAIN_WINDOW_MS;
+  localComboExpiresAt = attackDefinition.combo ? now + timing.durationMs + attackDefinition.comboWindowMs : 0;
   attackSequence += 1;
   room.send("attack", { requestId: `attack-${attackSequence}`, yaw: localActionFacingYaw });
-  logMovementEvent(`ACTION attack combo=${comboStep} impact=${timing.impactMs}ms yaw=${localActionFacingYaw.toFixed(1)}`);
+  logMovementEvent(`ACTION ${localMainHandId} step=${comboStep} impact=${timing.impactMs}ms yaw=${localActionFacingYaw.toFixed(1)}`);
+  const attackName = localMainHandId === "bow" ? "Bow shot" : localMainHandId === "magic_focus" ? "Arcane bolt" : `Combo ${comboStep}`;
   status.textContent = targetMob
-    ? comboStep === 3
+    ? localMainHandId === "longsword" && comboStep === 3
       ? `Heavy finisher aimed at ${targetMob.visual.state.name}...`
-      : `Combo ${comboStep} aimed at ${targetMob.visual.state.name}...`
-    : `Combo ${comboStep} swing · no target in reach.`;
+      : `${attackName} aimed at ${targetMob.visual.state.name}...`
+    : `${attackName} · no target in reach.`;
 }
 
 function requestDodge(): void {
@@ -1964,7 +2019,7 @@ function setInteractionMode(mode: InteractionMode): void {
   logMovementEvent(`MODE ${mode.toUpperCase()}`);
   status.textContent = mode === "build"
     ? "Build mode · clicks mine nearby targeted blocks."
-    : "Combat mode · clicks perform a melee swing without changing blocks.";
+    : `Combat mode · clicks use the ${MAIN_HAND_DEFINITIONS[localMainHandId].name} Attack without changing blocks.`;
 }
 
 for (const button of modeButtons) {
@@ -2215,7 +2270,7 @@ app.on("update", (dt: number) => {
     localPowerStepApplied = true;
   }
   if (animationNow >= localHitPauseUntil) {
-    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localPowerElapsed, localActivePower);
+    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * 4.2, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower);
   }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
   if (dodgeElapsed !== null && dodgeElapsed < 320) {
@@ -2229,6 +2284,7 @@ app.on("update", (dt: number) => {
     localActionStartedAt = null;
     localActionFacingYaw = null;
     localActionStep = 0;
+    localActionMainHandId = null;
   }
   if (localPowerElapsed !== null && localPowerElapsed >= powerDuration(localActivePower)) {
     localPowerStartedAt = null;
@@ -2249,8 +2305,11 @@ app.on("update", (dt: number) => {
       remote.entity.setEulerAngles(0, pose.yaw, 0);
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
-      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remotePowerElapsed, remote.powerId);
-      if (remoteActionElapsed !== null && remoteActionElapsed >= actionDuration(remote.actionStep)) remote.actionStartedAt = null;
+      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remote.actionMainHandId, remotePowerElapsed, remote.powerId);
+      if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {
+        remote.actionStartedAt = null;
+        remote.actionMainHandId = null;
+      }
       if (remotePowerElapsed !== null && remotePowerElapsed >= powerDuration(remote.powerId)) {
         remote.powerStartedAt = null;
         remote.powerId = null;
@@ -2347,6 +2406,22 @@ app.on("update", (dt: number) => {
       position.z + debris.velocity.z * frameTime,
     );
     debris.entity.rotate(debris.spin.x * frameTime, debris.spin.y * frameTime, debris.spin.z * frameTime);
+  }
+  for (let index = weaponProjectileVisuals.length - 1; index >= 0; index -= 1) {
+    const projectile = weaponProjectileVisuals[index]!;
+    const progress = Math.min(1, (animationNow - projectile.startedAt) / projectile.durationMs);
+    const eased = 1 - (1 - progress) * (1 - progress);
+    projectile.entity.setPosition(
+      projectile.start.x + (projectile.end.x - projectile.start.x) * eased,
+      projectile.start.y + (projectile.end.y - projectile.start.y) * eased + Math.sin(progress * Math.PI) * 0.16,
+      projectile.start.z + (projectile.end.z - projectile.start.z) * eased,
+    );
+    if (progress < 1) continue;
+    projectile.entity.setLocalScale(projectile.hit ? 0.34 : 0.08, projectile.hit ? 0.34 : 0.08, projectile.hit ? 0.34 : 0.08);
+    projectile.material.opacity = 0;
+    projectile.material.update();
+    projectile.entity.destroy();
+    weaponProjectileVisuals.splice(index, 1);
   }
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
@@ -2537,6 +2612,10 @@ async function connect(): Promise<void> {
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("block:changed", applyBlockChange);
+  room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
+    createWeaponProjectile(message);
+    logMovementEvent(`${message.mainHandId === "bow" ? "ARROW" : "ARCANE"} ${message.hit ? "HIT" : "MISS"}`);
+  });
   room.onMessage("power:cast", (message: PowerCast) => {
     if (message.casterId !== room?.sessionId) {
       const telegraphPosition = message.target ?? message;
@@ -2594,20 +2673,26 @@ async function connect(): Promise<void> {
     if (message.attackerId === room?.sessionId) {
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
       localHitPauseUntil = performance.now() + (comboStep === 3 ? 75 : 48);
+      const hitLabel = message.mainHandId === "bow"
+        ? `BOW HIT  −${message.damage}`
+        : message.mainHandId === "magic_focus"
+          ? `ARCANE HIT  −${message.damage}`
+          : comboStep === 3
+            ? `FINISHER  −${message.damage}`
+            : `COMBO ${comboStep}  −${message.damage}`;
       showCombatFeedback(
         message.defeated
           ? "DEFEATED"
-          : comboStep === 3
-            ? `FINISHER  −${message.damage}`
-            : `COMBO ${comboStep}  −${message.damage}`,
+          : hitLabel,
       );
     }
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {
     if (message.attackerId !== room?.sessionId) return;
     showCombatFeedback("MISS", "hurt");
-    status.textContent = `Combo ${message.comboStep} missed · recovery leaves you open.`;
-    logMovementEvent(`MISS combo=${message.comboStep}`);
+    const attackName = message.mainHandId === "bow" ? "Bow shot" : message.mainHandId === "magic_focus" ? "Arcane bolt" : `Combo ${message.comboStep}`;
+    status.textContent = `${attackName} missed · recovery leaves you open.`;
+    logMovementEvent(`MISS ${message.mainHandId} step=${message.comboStep}`);
   });
   room.onMessage("combat:stagger", (message: CombatStagger) => {
     if (message.attackerId !== room?.sessionId) return;
@@ -2675,6 +2760,8 @@ async function connect(): Promise<void> {
     powerImpactVisuals.length = 0;
     for (const debris of powerDebrisVisuals) debris.entity.destroy();
     powerDebrisVisuals.length = 0;
+    for (const projectile of weaponProjectileVisuals) projectile.entity.destroy();
+    weaponProjectileVisuals.length = 0;
     updatePlayerCount();
   });
   room.send("world:ready");
