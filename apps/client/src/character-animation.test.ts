@@ -72,6 +72,16 @@ describe("voxel character animation", () => {
     expect(focus.leftArmRoll).toBeGreaterThan(25);
   });
 
+  it("gives dropped weapons their matching combat silhouettes", () => {
+    const dagger = primaryActionPose(90, 1, "fang_dagger");
+    const hammer = primaryActionPose(430, 1, "stone_core_hammer");
+    const acidFocus = primaryActionPose(235, 1, "acid_gland_focus");
+    expect(dagger.rightArmPitch).toBeLessThan(-100);
+    expect(hammer.leftArmPitch).toBeLessThan(-130);
+    expect(hammer.rightArmPitch).toBeLessThan(-140);
+    expect(acidFocus.rightArmPitch).toBeLessThan(-120);
+  });
+
   it("raises the weapon before snapping into a committed Seismic Cleave slam", () => {
     const windup = seismicPowerPose(225);
     const impact = seismicPowerPose(500);

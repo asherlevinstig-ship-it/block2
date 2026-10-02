@@ -75,6 +75,7 @@ import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDe
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS } from "./loot-rules.js";
+import { canEquipMainHand } from "./equipment-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -970,6 +971,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "rate" });
     }
     const mainHand = MAIN_HAND_DEFINITIONS[parsed.data.mainHandId];
+    if (!canEquipMainHand(parsed.data.mainHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "missing" });
+    }
     player.mainHandId = mainHand.id;
     player.mainHandTag = mainHand.tag;
     this.attackChains.delete(client.sessionId);

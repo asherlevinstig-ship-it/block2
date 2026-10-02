@@ -154,6 +154,7 @@ const inventoryTotal = document.querySelector<HTMLElement>("#inventory-total")!;
 const inventoryCountElements = new Map<ItemId, HTMLElement>(
   [...document.querySelectorAll<HTMLElement>("[data-item-count]")].map(element => [element.dataset.itemCount as ItemId, element]),
 );
+const inventoryEquipButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-equip-main-hand]")];
 const performanceFields = {
   frame: document.querySelector<HTMLElement>("#perf-frame")!,
   fps: document.querySelector<HTMLElement>("#perf-fps")!,
@@ -175,7 +176,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -453,6 +454,16 @@ faceMaterial.emissive = new pc.Color(0.02, 0.03, 0.035);
 faceMaterial.update();
 const bladeMaterial = coloredMaterial(new pc.Color(0.62, 0.72, 0.76));
 const weaponWoodMaterial = coloredMaterial(new pc.Color(0.34, 0.19, 0.08));
+const fangWeaponMaterial = coloredMaterial(new pc.Color(0.9, 0.84, 0.66));
+const coreWeaponMaterial = coloredMaterial(new pc.Color(0.42, 0.52, 0.56));
+const coreGlowMaterial = new pc.StandardMaterial();
+coreGlowMaterial.diffuse = new pc.Color(0.95, 0.48, 0.08);
+coreGlowMaterial.emissive = new pc.Color(0.55, 0.18, 0.02);
+coreGlowMaterial.update();
+const acidWeaponMaterial = new pc.StandardMaterial();
+acidWeaponMaterial.diffuse = new pc.Color(0.48, 0.82, 0.12);
+acidWeaponMaterial.emissive = new pc.Color(0.2, 0.55, 0.04);
+acidWeaponMaterial.update();
 const focusMaterial = new pc.StandardMaterial();
 focusMaterial.diffuse = new pc.Color(0.2, 0.52, 0.96);
 focusMaterial.emissive = new pc.Color(0.08, 0.3, 0.85);
@@ -537,9 +548,42 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(magicFocus, "focus-handle", weaponWoodMaterial, [0.09, 0.45, 0.09], [0, 0, 0]);
   addBox(magicFocus, "focus-crystal", focusMaterial, [0.25, 0.25, 0.25], [0, -0.34, 0]);
   rightArm.addChild(magicFocus);
-  const mainHands = { longsword, bow, magic_focus: magicFocus };
+
+  const fangDagger = new pc.Entity("main-hand-fang-dagger");
+  fangDagger.setLocalPosition(0, -0.6, 0.1);
+  addBox(fangDagger, "dagger-grip", weaponWoodMaterial, [0.09, 0.25, 0.09], [0, 0, 0]);
+  addBox(fangDagger, "dagger-guard", fangWeaponMaterial, [0.25, 0.07, 0.11], [0, -0.12, 0]);
+  const fangBlade = addBox(fangDagger, "dagger-fang", fangWeaponMaterial, [0.16, 0.46, 0.11], [0, -0.38, 0]);
+  fangBlade.setLocalEulerAngles(0, 0, 8);
+  rightArm.addChild(fangDagger);
+
+  const stoneCoreHammer = new pc.Entity("main-hand-stone-core-hammer");
+  stoneCoreHammer.setLocalPosition(0, -0.66, 0.1);
+  addBox(stoneCoreHammer, "hammer-handle", weaponWoodMaterial, [0.11, 0.74, 0.11], [0, -0.2, 0]);
+  addBox(stoneCoreHammer, "hammer-head", coreWeaponMaterial, [0.62, 0.34, 0.38], [0, -0.62, 0]);
+  addBox(stoneCoreHammer, "hammer-core", coreGlowMaterial, [0.2, 0.22, 0.4], [0, -0.62, 0]);
+  rightArm.addChild(stoneCoreHammer);
+
+  const acidGlandFocus = new pc.Entity("main-hand-acid-gland-focus");
+  acidGlandFocus.setLocalPosition(0, -0.68, 0.11);
+  addBox(acidGlandFocus, "acid-focus-handle", weaponWoodMaterial, [0.1, 0.48, 0.1], [0, 0, 0]);
+  addBox(acidGlandFocus, "acid-focus-cage", coreWeaponMaterial, [0.34, 0.1, 0.34], [0, -0.34, 0]);
+  addBox(acidGlandFocus, "acid-focus-gland", acidWeaponMaterial, [0.25, 0.3, 0.25], [0, -0.42, 0]);
+  rightArm.addChild(acidGlandFocus);
+
+  const mainHands = {
+    longsword,
+    bow,
+    magic_focus: magicFocus,
+    fang_dagger: fangDagger,
+    stone_core_hammer: stoneCoreHammer,
+    acid_gland_focus: acidGlandFocus,
+  };
   bow.enabled = false;
   magicFocus.enabled = false;
+  fangDagger.enabled = false;
+  stoneCoreHammer.enabled = false;
+  acidGlandFocus.enabled = false;
 
   const leftLeg = new pc.Entity("left-leg-pivot");
   leftLeg.setLocalPosition(-0.13, 0.56, 0);
@@ -831,6 +875,11 @@ function refreshPowerCompatibility(): void {
   mainHandAttack.textContent = mainHand.attackName;
   for (const button of mainHandPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.mainHand === localMainHandId));
+  }
+  for (const button of inventoryEquipButtons) {
+    const equipped = button.dataset.equipMainHand === localMainHandId;
+    button.setAttribute("aria-pressed", String(equipped));
+    button.textContent = equipped ? "EQUIPPED" : "EQUIP";
   }
   for (const button of powerPickerButtons) {
     const powerId = button.dataset.power;
@@ -1130,10 +1179,11 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
 }
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
-  const entity = new pc.Entity(message.mainHandId === "bow" ? "arrow-projectile" : "arcane-projectile");
+  const acid = message.mainHandId === "acid_gland_focus";
+  const entity = new pc.Entity(message.mainHandId === "bow" ? "arrow-projectile" : acid ? "corrosive-projectile" : "arcane-projectile");
   entity.addComponent("render", { type: message.mainHandId === "bow" ? "box" : "sphere" });
   const material = powerMaterial(
-    message.mainHandId === "bow" ? new pc.Color(0.93, 0.76, 0.34) : new pc.Color(0.28, 0.68, 1),
+    message.mainHandId === "bow" ? new pc.Color(0.93, 0.76, 0.34) : acid ? new pc.Color(0.58, 1, 0.08) : new pc.Color(0.28, 0.68, 1),
     0.96,
   );
   if (entity.render) entity.render.material = material;
@@ -1755,6 +1805,9 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   crawler_fang: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
   stone_core: coloredMaterial(new pc.Color(0.38, 0.52, 0.62)),
   acid_gland: coloredMaterial(new pc.Color(0.58, 0.9, 0.1)),
+  fang_dagger: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
+  stone_core_hammer: coloredMaterial(new pc.Color(0.42, 0.52, 0.58)),
+  acid_gland_focus: coloredMaterial(new pc.Color(0.62, 0.96, 0.12)),
 };
 
 function isItemId(value: string): value is ItemId {
@@ -1765,7 +1818,16 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
   const material = lootMaterials[itemId];
-  if (itemId === "crawler_fang") {
+  if (itemId === "fang_dagger") {
+    addBox(root, "dropped-dagger-grip", weaponWoodMaterial, [0.1, 0.26, 0.1], [0, 0.17, 0]);
+    addBox(root, "dropped-dagger-fang", material, [0.18, 0.48, 0.12], [0, -0.18, 0]).setLocalEulerAngles(0, 0, 8);
+  } else if (itemId === "stone_core_hammer") {
+    addBox(root, "dropped-hammer-handle", weaponWoodMaterial, [0.11, 0.7, 0.11], [0, 0, 0]);
+    addBox(root, "dropped-hammer-head", material, [0.64, 0.34, 0.4], [0, -0.38, 0]);
+  } else if (itemId === "acid_gland_focus") {
+    addBox(root, "dropped-focus-handle", weaponWoodMaterial, [0.1, 0.48, 0.1], [0, 0.08, 0]);
+    addBox(root, "dropped-focus-gland", material, [0.3, 0.32, 0.3], [0, -0.3, 0]);
+  } else if (itemId === "crawler_fang") {
     addBox(root, "fang", material, [0.17, 0.48, 0.17], [0, 0, 0]).setLocalEulerAngles(0, 0, 32);
     addBox(root, "fang-tip", material, [0.12, 0.2, 0.12], [0.13, -0.2, 0]).setLocalEulerAngles(0, 0, 45);
   } else if (itemId === "stone_core") {
@@ -1802,6 +1864,8 @@ function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryCounts.set(itemId, total);
   const count = inventoryCountElements.get(itemId);
   if (count) count.textContent = String(total);
+  const equipButton = inventoryPanel.querySelector<HTMLButtonElement>(`[data-item="${itemId}"] [data-equip-main-hand]`);
+  if (equipButton) equipButton.disabled = total <= 0;
   const grandTotal = [...inventoryCounts.values()].reduce((sum, quantity) => sum + quantity, 0);
   inventoryTotal.textContent = grandTotal === 0 ? "EMPTY" : `${grandTotal} ITEM${grandTotal === 1 ? "" : "S"}`;
   const card = inventoryPanel.querySelector<HTMLElement>(`[data-item="${itemId}"]`);
@@ -2566,9 +2630,11 @@ function requestAttack(): void {
   attackSequence += 1;
   room.send("attack", { requestId: `attack-${attackSequence}`, yaw: localActionFacingYaw });
   logMovementEvent(`ACTION ${localMainHandId} step=${comboStep} impact=${timing.impactMs}ms yaw=${localActionFacingYaw.toFixed(1)}`);
-  const attackName = localMainHandId === "bow" ? "Bow shot" : localMainHandId === "magic_focus" ? "Arcane bolt" : `Combo ${comboStep}`;
+  const attackName = attackDefinition.combo
+    ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
+    : MAIN_HAND_DEFINITIONS[localMainHandId].attackName;
   status.textContent = targetMob
-    ? localMainHandId === "longsword" && comboStep === 3
+    ? attackDefinition.combo && comboStep === 3
       ? `Heavy finisher aimed at ${targetMob.visual.state.name}...`
       : `${attackName} aimed at ${targetMob.visual.state.name}...`
     : `${attackName} · no target in reach.`;
@@ -2960,6 +3026,12 @@ for (const button of specialPickerButtons) {
 for (const button of mainHandPickerButtons) {
   button.addEventListener("click", () => {
     const mainHandId = button.dataset.mainHand;
+    if (mainHandId && isMainHandId(mainHandId)) requestMainHandEquip(mainHandId);
+  });
+}
+for (const button of inventoryEquipButtons) {
+  button.addEventListener("click", () => {
+    const mainHandId = button.dataset.equipMainHand;
     if (mainHandId && isMainHandId(mainHandId)) requestMainHandEquip(mainHandId);
   });
 }
@@ -3852,13 +3924,9 @@ async function connect(): Promise<void> {
       updateMomentum(message.momentumStacks);
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
       localHitPauseUntil = performance.now() + (comboStep === 3 ? 75 : 48);
-      const hitLabel = message.mainHandId === "bow"
-        ? `BOW HIT  −${message.damage}`
-        : message.mainHandId === "magic_focus"
-          ? `ARCANE HIT  −${message.damage}`
-          : comboStep === 3
-            ? `FINISHER  −${message.damage}`
-            : `COMBO ${comboStep}  −${message.damage}`;
+      const hitLabel = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo && comboStep === 3
+        ? `FINISHER  −${message.damage}`
+        : `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName.toUpperCase()}  −${message.damage}`;
       showCombatFeedback(
         message.defeated
           ? "DEFEATED"
@@ -3873,7 +3941,9 @@ async function connect(): Promise<void> {
   room.onMessage("combat:miss", (message: CombatMiss) => {
     if (message.attackerId !== room?.sessionId) return;
     showCombatFeedback("MISS", "hurt");
-    const attackName = message.mainHandId === "bow" ? "Bow shot" : message.mainHandId === "magic_focus" ? "Arcane bolt" : `Combo ${message.comboStep}`;
+    const attackName = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo
+      ? `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName} ${message.comboStep}`
+      : MAIN_HAND_DEFINITIONS[message.mainHandId].attackName;
     status.textContent = `${attackName} missed · recovery leaves you open.`;
     logMovementEvent(`MISS ${message.mainHandId} step=${message.comboStep}`);
   });
@@ -3964,7 +4034,8 @@ async function connect(): Promise<void> {
       }
     }
     if (message.action === "loadout") {
-      showCombatFeedback("LOADOUT BLOCKED", "hurt");
+      showCombatFeedback(message.reason === "missing" ? "ITEM REQUIRED" : "LOADOUT BLOCKED", "hurt");
+      if (message.reason === "missing") status.textContent = "Collect that weapon from its enemy before equipping it.";
     }
     if (message.reason === "stale") {
       worldReady = false;

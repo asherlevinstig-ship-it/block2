@@ -6,9 +6,16 @@ describe("item loot", () => {
     expect(lootForArchetype("moss_crawler")).toEqual([
       { itemId: "moss_fibre", quantity: 1 },
       { itemId: "crawler_fang", quantity: 1 },
+      { itemId: "fang_dagger", quantity: 1 },
     ]);
-    expect(lootForArchetype("stone_brute")).toEqual([{ itemId: "stone_core", quantity: 1 }]);
-    expect(lootForArchetype("cave_spitter")).toEqual([{ itemId: "acid_gland", quantity: 1 }]);
+    expect(lootForArchetype("stone_brute")).toEqual([
+      { itemId: "stone_core", quantity: 1 },
+      { itemId: "stone_core_hammer", quantity: 1 },
+    ]);
+    expect(lootForArchetype("cave_spitter")).toEqual([
+      { itemId: "acid_gland", quantity: 1 },
+      { itemId: "acid_gland_focus", quantity: 1 },
+    ]);
   });
 
   it("collects only inside the pickup radius", () => {

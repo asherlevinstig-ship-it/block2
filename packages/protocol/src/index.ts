@@ -7,6 +7,9 @@ export const ITEM_DEFINITIONS = {
   crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang shed by a defeated crawler" },
   stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core from a Stone Brute" },
   acid_gland: { id: "acid_gland", name: "Acid Gland", description: "A volatile gland taken from a Cave Spitter" },
+  fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", description: "A fast three-hit melee weapon" },
+  stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", description: "A slow crushing weapon with heavy knockback" },
+  acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", description: "A ranged focus that fires corrosive bolts" },
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
@@ -53,12 +56,16 @@ export interface MainHandDefinition {
   name: string;
   tag: MainHandTag;
   attackName: string;
+  requiredItemId?: ItemId;
 }
 
 export const MAIN_HAND_DEFINITIONS = {
   longsword: { id: "longsword", name: "Longsword", tag: "melee", attackName: "Sword Combo" },
   bow: { id: "bow", name: "Hunting Bow", tag: "ranged", attackName: "Bow Shot" },
   magic_focus: { id: "magic_focus", name: "Magic Focus", tag: "focus", attackName: "Arcane Bolt" },
+  fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", tag: "melee", attackName: "Fang Flurry", requiredItemId: "fang_dagger" },
+  stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", tag: "melee", attackName: "Core Smash", requiredItemId: "stone_core_hammer" },
+  acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", tag: "focus", attackName: "Corrosive Bolt", requiredItemId: "acid_gland_focus" },
 } as const satisfies Record<string, MainHandDefinition>;
 
 export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
@@ -104,6 +111,34 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     minimumFacingDot: 0.58,
     projectileTravelMs: 230,
     attacks: [{ step: 1, durationMs: 470, impactMs: 190, damage: 1, knockback: 0.28 }],
+  },
+  fang_dagger: {
+    combo: true,
+    comboWindowMs: 420,
+    range: 2.2,
+    minimumFacingDot: 0.42,
+    projectileTravelMs: 0,
+    attacks: [
+      { step: 1, durationMs: 260, impactMs: 90, damage: 1, knockback: 0.1 },
+      { step: 2, durationMs: 280, impactMs: 105, damage: 1, knockback: 0.16 },
+      { step: 3, durationMs: 390, impactMs: 145, damage: 2, knockback: 0.42 },
+    ],
+  },
+  stone_core_hammer: {
+    combo: false,
+    comboWindowMs: 0,
+    range: 2.75,
+    minimumFacingDot: 0.28,
+    projectileTravelMs: 0,
+    attacks: [{ step: 1, durationMs: 820, impactMs: 430, damage: 3, knockback: 1.35 }],
+  },
+  acid_gland_focus: {
+    combo: false,
+    comboWindowMs: 0,
+    range: 7.5,
+    minimumFacingDot: 0.58,
+    projectileTravelMs: 220,
+    attacks: [{ step: 1, durationMs: 560, impactMs: 235, damage: 2, knockback: 0.22 }],
   },
 } as const satisfies Record<MainHandId, WeaponAttackDefinition>;
 
@@ -340,7 +375,7 @@ export const SpecialEquipRequestSchema = z.object({
 
 export const MainHandEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  mainHandId: z.enum(["longsword", "bow", "magic_focus"]),
+  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "acid_gland_focus"]),
 });
 
 export const TraitEquipRequestSchema = z.object({

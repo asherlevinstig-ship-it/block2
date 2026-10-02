@@ -68,13 +68,21 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
     rightArmPitch: -82 * strength,
     rightArmRoll: -68 * strength,
   };
-  if (mainHandId === "magic_focus") return {
+  if (mainHandId === "magic_focus" || mainHandId === "acid_gland_focus") return {
     active: true,
     torsoYaw: -8 * strength,
     leftArmPitch: -42 * strength,
     leftArmRoll: 28 * strength,
     rightArmPitch: -138 * strength,
     rightArmRoll: -12 * strength,
+  };
+  if (mainHandId === "stone_core_hammer") return {
+    active: true,
+    torsoYaw: -6 * strength,
+    leftArmPitch: -142 * strength,
+    leftArmRoll: 14 * strength,
+    rightArmPitch: -154 * strength,
+    rightArmRoll: -14 * strength,
   };
   if (comboStep === 2) return {
     active: true,

@@ -8,9 +8,16 @@ const LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: ItemId; quant
   moss_crawler: [
     { itemId: "moss_fibre", quantity: 1 },
     { itemId: "crawler_fang", quantity: 1 },
+    { itemId: "fang_dagger", quantity: 1 },
   ],
-  stone_brute: [{ itemId: "stone_core", quantity: 1 }],
-  cave_spitter: [{ itemId: "acid_gland", quantity: 1 }],
+  stone_brute: [
+    { itemId: "stone_core", quantity: 1 },
+    { itemId: "stone_core_hammer", quantity: 1 },
+  ],
+  cave_spitter: [
+    { itemId: "acid_gland", quantity: 1 },
+    { itemId: "acid_gland_focus", quantity: 1 },
+  ],
 };
 
 export function lootForArchetype(archetypeId: MobArchetypeId): readonly { itemId: ItemId; quantity: number }[] {
