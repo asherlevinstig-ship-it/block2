@@ -56,7 +56,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
-import { compatiblePowerOrFallback, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
+import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import {
   activeMovementInput,
@@ -665,21 +665,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (let y = top; y >= bottom; y -= 1) {
       const block = this.readWorldBlock(x, y, z);
       if (block === Block.Air) continue;
-      if (block === Block.Bedrock) return null;
-      if (block === Block.Grass) {
-        const address = worldToChunk(x, z);
-        const stored = this.getChunk(address.chunkX, address.chunkZ);
-        setBlock(stored.chunk, address.localX, y, address.localZ, Block.Dirt);
-        stored.revision += 1;
-        this.broadcast("block:changed", {
-          requestId: `${requestId}-fracture-${x}-${z}`,
-          x,
-          y,
-          z,
-          block: Block.Dirt,
-          revision: stored.revision,
-        } satisfies BlockChanged);
-      }
+      const nextBlock = fracturedBlockResult(block);
+      if (nextBlock === null) return null;
+      const address = worldToChunk(x, z);
+      const stored = this.getChunk(address.chunkX, address.chunkZ);
+      setBlock(stored.chunk, address.localX, y, address.localZ, nextBlock);
+      stored.revision += 1;
+      this.broadcast("block:changed", {
+        requestId: `${requestId}-fracture-${x}-${z}`,
+        x,
+        y,
+        z,
+        block: nextBlock,
+        revision: stored.revision,
+      } satisfies BlockChanged);
       return { x, y, z };
     }
     return null;

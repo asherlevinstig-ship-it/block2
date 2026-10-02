@@ -108,18 +108,37 @@ export function seismicPowerPose(elapsedMilliseconds: number | null): PrimaryAct
   }
   const windupMs = 450;
   const activeEndMs = 610;
-  const strength = elapsedMilliseconds <= windupMs
-    ? Math.sin(elapsedMilliseconds / windupMs * Math.PI / 2)
-    : elapsedMilliseconds <= activeEndMs
-      ? 1
-      : Math.cos((elapsedMilliseconds - activeEndMs) / (SEISMIC_POWER_DURATION_MS - activeEndMs) * Math.PI / 2);
+  if (elapsedMilliseconds <= windupMs) {
+    const strength = Math.sin(elapsedMilliseconds / windupMs * Math.PI / 2);
+    return {
+      active: true,
+      torsoYaw: -24 * strength,
+      leftArmPitch: -148 * strength,
+      leftArmRoll: 18 * strength,
+      rightArmPitch: -158 * strength,
+      rightArmRoll: -18 * strength,
+    };
+  }
+  if (elapsedMilliseconds <= activeEndMs) {
+    const progress = (elapsedMilliseconds - windupMs) / (activeEndMs - windupMs);
+    const slam = 1 - Math.pow(1 - progress, 3);
+    return {
+      active: true,
+      torsoYaw: -24 + 34 * slam,
+      leftArmPitch: -148 + 172 * slam,
+      leftArmRoll: 18 * (1 - slam),
+      rightArmPitch: -158 + 184 * slam,
+      rightArmRoll: -18 * (1 - slam),
+    };
+  }
+  const recovery = Math.cos((elapsedMilliseconds - activeEndMs) / (SEISMIC_POWER_DURATION_MS - activeEndMs) * Math.PI / 2);
   return {
     active: true,
-    torsoYaw: 0,
-    leftArmPitch: -132 * strength,
-    leftArmRoll: 14 * strength,
-    rightArmPitch: -132 * strength,
-    rightArmRoll: -14 * strength,
+    torsoYaw: 10 * recovery,
+    leftArmPitch: 24 * recovery,
+    leftArmRoll: 0,
+    rightArmPitch: 26 * recovery,
+    rightArmRoll: 0,
   };
 }
 

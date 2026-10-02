@@ -1,4 +1,5 @@
 import { POWER_DEFINITIONS, type MainHandTag, type PowerDefinition, type PowerId } from "@blockcraft/protocol";
+import { Block, type BlockId } from "@blockcraft/voxel-world";
 
 export interface PowerPosition {
   x: number;
@@ -118,6 +119,12 @@ export function lineFractureColumns(origin: PowerPosition, yaw: number, range: n
     columns.set(`${x},${z}`, { x, z });
   }
   return [...columns.values()];
+}
+
+export function fracturedBlockResult(block: BlockId): BlockId | null {
+  if (block === Block.Grass) return Block.Dirt;
+  if (block === Block.Dirt) return Block.Air;
+  return null;
 }
 
 export function powerEvadeDirection(origin: PowerPosition, yaw: number, target: PowerPosition): { x: number; z: number } {

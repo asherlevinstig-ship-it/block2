@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { POWER_DEFINITIONS } from "@blockcraft/protocol";
-import { compatiblePowerOrFallback, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "../src/power-rules.js";
+import { Block } from "@blockcraft/voxel-world";
+import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "../src/power-rules.js";
 
 describe("Power rules", () => {
   it("resolves facing direction from yaw", () => {
@@ -48,6 +49,14 @@ describe("Power rules", () => {
       { x: 8, z: 12 },
       { x: 8, z: 13 },
     ]);
+  });
+
+  it("damages only fragile terrain in two readable stages", () => {
+    expect(fracturedBlockResult(Block.Grass)).toBe(Block.Dirt);
+    expect(fracturedBlockResult(Block.Dirt)).toBe(Block.Air);
+    expect(fracturedBlockResult(Block.Stone)).toBeNull();
+    expect(fracturedBlockResult(Block.IronOre)).toBeNull();
+    expect(fracturedBlockResult(Block.Bedrock)).toBeNull();
   });
 
   it("chooses the shortest lateral escape side from a line", () => {

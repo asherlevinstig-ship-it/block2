@@ -1,4 +1,6 @@
 export type EnemyCue = "warning" | "hurt" | "stagger" | "defeat";
+export type PowerCue = "seismicWindup" | "seismicImpact";
+type CombatCue = EnemyCue | PowerCue;
 
 interface ToneLayer {
   wave: OscillatorType;
@@ -45,6 +47,29 @@ export const ENEMY_CUE_DEFINITIONS: Record<EnemyCue, EnemyCueDefinition> = {
   },
 };
 
+export const POWER_CUE_DEFINITIONS: Record<PowerCue, EnemyCueDefinition> = {
+  seismicWindup: {
+    minimumIntervalMs: 300,
+    tones: [
+      { wave: "sawtooth", startHz: 92, endHz: 48, gain: 0.055, delayMs: 0, durationMs: 390 },
+      { wave: "triangle", startHz: 180, endHz: 88, gain: 0.035, delayMs: 80, durationMs: 310 },
+    ],
+  },
+  seismicImpact: {
+    minimumIntervalMs: 220,
+    tones: [
+      { wave: "square", startHz: 82, endHz: 34, gain: 0.095, delayMs: 0, durationMs: 260 },
+      { wave: "sawtooth", startHz: 190, endHz: 52, gain: 0.045, delayMs: 15, durationMs: 340 },
+      { wave: "sine", startHz: 54, endHz: 28, gain: 0.12, delayMs: 35, durationMs: 410 },
+    ],
+  },
+};
+
+const COMBAT_CUE_DEFINITIONS: Record<CombatCue, EnemyCueDefinition> = {
+  ...ENEMY_CUE_DEFINITIONS,
+  ...POWER_CUE_DEFINITIONS,
+};
+
 export interface EnemyCueSnapshot {
   alive: boolean;
   health: number;
@@ -75,7 +100,7 @@ export class CombatAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private unlocked = false;
-  private readonly lastPlayedAt = new Map<EnemyCue, number>();
+  private readonly lastPlayedAt = new Map<CombatCue, number>();
 
   unlock(): void {
     if (!this.context) {
@@ -90,11 +115,11 @@ export class CombatAudio {
     if (this.context.state === "suspended") void this.context.resume();
   }
 
-  play(cue: EnemyCue, pan = 0): void {
+  play(cue: CombatCue, pan = 0): void {
     const context = this.context;
     const master = this.master;
     if (!this.unlocked || !context || !master || context.state === "closed") return;
-    const definition = ENEMY_CUE_DEFINITIONS[cue];
+    const definition = COMBAT_CUE_DEFINITIONS[cue];
     const nowMs = performance.now();
     const lastPlayedAt = this.lastPlayedAt.get(cue) ?? -Infinity;
     if (nowMs - lastPlayedAt < definition.minimumIntervalMs) return;

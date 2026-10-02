@@ -72,13 +72,15 @@ describe("voxel character animation", () => {
     expect(focus.leftArmRoll).toBeGreaterThan(25);
   });
 
-  it("holds Seismic Cleave through its active impact window", () => {
+  it("raises the weapon before snapping into a committed Seismic Cleave slam", () => {
     const windup = seismicPowerPose(225);
     const impact = seismicPowerPose(500);
     const recovered = seismicPowerPose(1160);
-    expect(windup.leftArmPitch).toBeLessThan(-80);
-    expect(impact.leftArmPitch).toBeCloseTo(-132);
-    expect(impact.rightArmPitch).toBeCloseTo(-132);
+    expect(windup.leftArmPitch).toBeLessThan(-100);
+    expect(windup.torsoYaw).toBeLessThan(-15);
+    expect(impact.leftArmPitch).toBeGreaterThan(-50);
+    expect(impact.rightArmPitch).toBeGreaterThan(-50);
+    expect(impact.torsoYaw).toBeGreaterThan(-5);
     expect(recovered.active).toBe(false);
   });
 

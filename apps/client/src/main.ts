@@ -873,6 +873,8 @@ interface PowerImpactVisual {
   material: pc.StandardMaterial;
   startedAt: number;
   powerId: PowerId;
+  waveSegments: PowerAimSegment[];
+  fractureSegments: PowerAimSegment[];
 }
 
 interface PowerAimSegment {
@@ -893,6 +895,7 @@ interface PowerDebrisVisual {
   velocity: pc.Vec3;
   spin: pc.Vec3;
   startedAt: number;
+  delayMs?: number;
 }
 
 interface MarkPayoffVisual {
@@ -1161,6 +1164,8 @@ function createPowerImpact(message: PowerResolved): void {
   const root = new pc.Entity(`power-impact:${message.casterId}`);
   const fractureRoot = new pc.Entity(`power-fractures:${message.casterId}`);
   const definition = POWER_DEFINITIONS[message.powerId];
+  const waveSegments: PowerAimSegment[] = [];
+  const fractureSegments: PowerAimSegment[] = [];
   const material = powerMaterial(
     message.powerId === "shockwave"
       ? new pc.Color(0.2, 0.76, 1)
@@ -1210,17 +1215,34 @@ function createPowerImpact(message: PowerResolved): void {
     addBox(root, "lunge-core", material, [definition.width, 0.16, 0.35], [0, 0.18, 0.42]);
   } else {
     for (let distance = 0.65; distance <= definition.range; distance += 0.65) {
-      addBox(root, "seismic-wave", material, [definition.width * 0.84, 0.12, 0.42], [0, 0.12, distance]);
+      const wave = addBox(root, "seismic-wave", material, [definition.width * 0.84, 0.12, 0.42], [0, 0.12, distance]);
+      wave.enabled = false;
+      waveSegments.push({ entity: wave, distance });
+      for (const side of [-1, 1]) {
+        const branch = addBox(
+          root,
+          "seismic-branch",
+          material,
+          [0.32 + (Math.floor(distance * 10) % 3) * 0.07, 0.06, 0.1],
+          [side * (definition.width * 0.45 + (Math.floor(distance * 10) % 2) * 0.16), 0.08, distance + side * 0.08],
+        );
+        branch.setLocalEulerAngles(0, side * (24 + distance * 3), 0);
+        branch.enabled = false;
+        waveSegments.push({ entity: branch, distance });
+      }
     }
   }
   for (const fracture of message.fractures) {
-    addBox(fractureRoot, "terrain-fracture", material, [0.72, 0.035, 0.16], [fracture.x + 0.5, fracture.y + 1.025, fracture.z + 0.5]);
+    const fractureEntity = addBox(fractureRoot, "terrain-fracture", material, [0.72, 0.035, 0.16], [fracture.x + 0.5, fracture.y + 1.025, fracture.z + 0.5]);
+    const fractureDistance = Math.hypot(fracture.x + 0.5 - message.x, fracture.z + 0.5 - message.z);
+    if (message.powerId === "seismic_cleave") fractureEntity.enabled = false;
+    fractureSegments.push({ entity: fractureEntity, distance: fractureDistance });
   }
   root.setPosition(message.x, message.y + 0.04, message.z);
   root.setEulerAngles(0, message.yaw, 0);
   app.root.addChild(root);
   app.root.addChild(fractureRoot);
-  powerImpactVisuals.push({ root, fractureRoot, material, startedAt: performance.now(), powerId: message.powerId });
+  powerImpactVisuals.push({ root, fractureRoot, material, startedAt: performance.now(), powerId: message.powerId, waveSegments, fractureSegments });
   const radians = message.yaw * Math.PI / 180;
   for (let index = 0; index < 14; index += 1) {
     const debrisAngle = message.powerId === "shockwave" || message.powerId === "eruption" ? index / 14 * Math.PI * 2 : radians;
@@ -1240,18 +1262,25 @@ function createPowerImpact(message: PowerResolved): void {
       message.y + 0.12,
       message.z + directionZ * distance - directionX * side * 0.22,
     );
+    const delayMs = message.powerId === "seismic_cleave" ? Math.max(0, distance / definition.range * 360 - 40) : 0;
+    if (delayMs > 0) debris.enabled = false;
     app.root.addChild(debris);
     powerDebrisVisuals.push({
       entity: debris,
       velocity: new pc.Vec3(directionX * (0.5 + index % 3 * 0.18) + directionZ * side * 0.55, 2.1 + index % 4 * 0.28, directionZ * (0.5 + index % 3 * 0.18) - directionX * side * 0.55),
       spin: new pc.Vec3(170 + index * 13, 120 + index * 17, 90 + index * 19),
       startedAt: performance.now(),
+      delayMs,
     });
   }
   const player = localPlayer.getPosition();
   const distanceToImpact = Math.hypot(player.x - message.x, player.z - message.z);
-  cameraShakeStrength = Math.max(cameraShakeStrength, Math.max(0.08, 0.28 - distanceToImpact * 0.025));
-  cameraShakeUntil = performance.now() + 360;
+  const seismicBoost = message.powerId === "seismic_cleave" ? 0.09 : 0;
+  cameraShakeStrength = Math.max(cameraShakeStrength, Math.max(0.08, 0.28 + seismicBoost - distanceToImpact * 0.025));
+  cameraShakeUntil = performance.now() + (message.powerId === "seismic_cleave" ? 440 : 360);
+  if (message.powerId === "seismic_cleave" && distanceToImpact <= 14) {
+    combatAudio.play("seismicImpact", enemyCuePan(message.x, player.x, 14));
+  }
 }
 
 function createHuntersMarkPayoff(mob: MobVisual): void {
@@ -2158,6 +2187,26 @@ function updatePowerAimFromPointer(): void {
   const targetX = player.x + deltaX * scale;
   const targetZ = player.z + deltaZ * scale;
   powerAimYaw = movementYaw(targetX - player.x, targetZ - player.z, powerAimYaw);
+  if (localEquippedPower === "seismic_cleave" && pointerDistance > 0.1) {
+    const directionX = deltaX / pointerDistance;
+    const directionZ = deltaZ / pointerDistance;
+    let assistedTarget: MobVisual | null = null;
+    let closestLateralDistance = 0.72;
+    for (const mob of mobVisuals.values()) {
+      if (!mob.state.alive) continue;
+      const mobDeltaX = mob.state.x - player.x;
+      const mobDeltaZ = mob.state.z - player.z;
+      const forwardDistance = mobDeltaX * directionX + mobDeltaZ * directionZ;
+      if (forwardDistance <= 0 || forwardDistance > definition.range) continue;
+      const lateralDistance = Math.abs(mobDeltaX * directionZ - mobDeltaZ * directionX);
+      if (lateralDistance >= closestLateralDistance) continue;
+      closestLateralDistance = lateralDistance;
+      assistedTarget = mob;
+    }
+    if (assistedTarget) {
+      powerAimYaw = movementYaw(assistedTarget.state.x - player.x, assistedTarget.state.z - player.z, powerAimYaw);
+    }
+  }
   if (definition.core === "ground") powerAimTarget.set(targetX, player.y, targetZ);
   localFacingYaw = powerAimYaw;
   updatePowerAimVisual();
@@ -2249,6 +2298,7 @@ function castPower(yaw: number, target?: { x: number; y: number; z: number }): v
   const telegraphPosition = definition.core === "ground" && target ? target : player;
   startPowerTelegraph(room.sessionId, powerId, telegraphPosition.x, telegraphPosition.y, telegraphPosition.z, yaw, definition.windupMs);
   room.send("power", { requestId: `power-${powerSequence}`, powerId, yaw, ...(target ? { target } : {}) });
+  if (powerId === "seismic_cleave") combatAudio.play("seismicWindup");
   showCombatFeedback(definition.name.toUpperCase(), "dodge");
   logMovementEvent(`POWER ${definition.id} yaw=${yaw.toFixed(1)}`);
   status.textContent = definition.core === "burst"
@@ -2257,7 +2307,9 @@ function castPower(yaw: number, target?: { x: number; y: number; z: number }): v
       ? `${definition.name} marked · ground impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
       : definition.core === "mobility"
         ? `${definition.name} committed · lunge impact in ${(definition.windupMs / 1000).toFixed(2)}s.`
-      : `${definition.name} winding up · line impact in ${(definition.windupMs / 1000).toFixed(2)}s.`;
+      : powerId === "seismic_cleave"
+        ? `${definition.name} committed · brace for the travelling faultline.`
+        : `${definition.name} winding up · line impact in ${(definition.windupMs / 1000).toFixed(2)}s.`;
 }
 
 function commitPowerAim(): void {
@@ -2833,7 +2885,7 @@ app.on("update", (dt: number) => {
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
-    const impactLifetime = impact.powerId === "eruption" ? 900 : 650;
+    const impactLifetime = impact.powerId === "eruption" ? 900 : impact.powerId === "seismic_cleave" ? 980 : 650;
     if (elapsed >= impactLifetime) {
       impact.root.destroy();
       impact.fractureRoot.destroy();
@@ -2841,6 +2893,17 @@ app.on("update", (dt: number) => {
       continue;
     }
     const strength = 1 - elapsed / impactLifetime;
+    if (impact.powerId === "seismic_cleave") {
+      const revealDistance = POWER_DEFINITIONS.seismic_cleave.range * Math.min(1, elapsed / 360);
+      for (const segment of impact.waveSegments) {
+        segment.entity.enabled = segment.distance <= revealDistance;
+      }
+      for (const segment of impact.fractureSegments) segment.entity.enabled = segment.distance <= revealDistance + 0.25;
+      impact.root.setLocalScale(1, 0.8 + Math.max(0, 1 - elapsed / 540) * 1.7, 1);
+      impact.material.opacity = Math.max(0, Math.min(0.92, strength * 1.18));
+      impact.material.update();
+      continue;
+    }
     const radialScale = impact.powerId === "shockwave" ? 1 + (1 - strength) * 1.75 : 1;
     if (impact.powerId === "eruption") {
       const eruptionRise = Math.sin(Math.min(1, elapsed / 260) * Math.PI / 2);
@@ -2857,7 +2920,9 @@ app.on("update", (dt: number) => {
   }
   for (let index = powerDebrisVisuals.length - 1; index >= 0; index -= 1) {
     const debris = powerDebrisVisuals[index]!;
-    const elapsed = animationNow - debris.startedAt;
+    const elapsed = animationNow - debris.startedAt - (debris.delayMs ?? 0);
+    if (elapsed < 0) continue;
+    debris.entity.enabled = true;
     if (elapsed >= 720) {
       debris.entity.destroy();
       powerDebrisVisuals.splice(index, 1);
