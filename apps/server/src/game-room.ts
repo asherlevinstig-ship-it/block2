@@ -113,6 +113,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   override onJoin(client: Client, options: unknown): void {
     const player = new PlayerState();
+    // Assign after construction so Colyseus includes the loadout in the initial
+    // patch instead of eliding it as an unchanged schema default.
+    player.equippedPower = "shockwave";
     const requestedName = typeof options === "object" && options && "name" in options ? String(options.name) : "Explorer";
     player.name = requestedName.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer";
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";

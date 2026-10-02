@@ -15,7 +15,7 @@ export const PlayerState = schema({
   dodgeSequence: t.int32().default(0),
   invulnerableUntil: t.float64().default(0),
   mainHandTag: t.string().default("melee"),
-  equippedPower: t.string().default("shockwave"),
+  equippedPower: t.string().default(""),
   powerCooldownUntil: t.float64().default(0),
   powerSequence: t.int32().default(0),
   powerCastStartedAt: t.float64().default(0),
