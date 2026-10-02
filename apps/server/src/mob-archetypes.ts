@@ -48,7 +48,7 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     armor: 1,
     speed: 0.72,
     stopDistance: 1.8,
-    aggroRange: 12,
+    aggroRange: 10,
     windupMs: 1150,
     recoverMs: 850,
     cooldownMs: 2400,
