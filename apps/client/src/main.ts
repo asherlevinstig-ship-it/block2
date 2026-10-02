@@ -3,6 +3,7 @@ import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   BRAMBLE_SNARE,
   MAIN_HAND_DEFINITIONS,
+  MOMENTUM_TRAIT,
   HUNTERS_MARK,
   POWER_DEFINITIONS,
   SEISMIC_CLEAVE_UPGRADES,
@@ -119,6 +120,8 @@ const playerHealthValue = document.querySelector<HTMLElement>("#player-health-va
 const playerStaminaFill = document.querySelector<HTMLElement>("#player-stamina-fill")!;
 const playerStaminaValue = document.querySelector<HTMLElement>("#player-stamina-value")!;
 const defenseSlot = document.querySelector<HTMLButtonElement>("#defense-slot")!;
+const traitSlot = document.querySelector<HTMLElement>("#trait-slot")!;
+const momentumPips = [...document.querySelectorAll<HTMLElement>("#momentum-pips i")];
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerName = document.querySelector<HTMLElement>("#power-name")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
@@ -158,7 +161,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -623,6 +626,7 @@ interface NetworkPlayer {
   name: string;
   defending: boolean;
   defenseStartedAt: number;
+  momentumStacks: number;
 }
 
 interface RemotePlayerVisual {
@@ -715,6 +719,7 @@ let localComboExpiresAt = 0;
 let localHitPauseUntil = 0;
 let localDodgeStartedAt: number | null = null;
 let localDefending = false;
+let localMomentumStacks = 0;
 let localPowerStartedAt: number | null = null;
 let localPowerFacingYaw: number | null = null;
 let localPowerStepApplied = false;
@@ -914,6 +919,19 @@ function updatePlayerStamina(stamina: number, maximumStamina: number): void {
   const fraction = Math.max(0, Math.min(1, stamina / Math.max(1, maximumStamina)));
   playerStaminaFill.style.width = `${fraction * 100}%`;
   playerStaminaValue.textContent = `${Math.round(stamina)}`;
+}
+
+function updateMomentum(stacksValue: number): void {
+  const safeStacks = Number.isFinite(stacksValue) ? stacksValue : 0;
+  localMomentumStacks = Math.max(0, Math.min(MOMENTUM_TRAIT.maxStacks, Math.floor(safeStacks)));
+  momentumPips.forEach((pip, index) => pip.classList.toggle("active", index < localMomentumStacks));
+  traitSlot.setAttribute("aria-label", `${MOMENTUM_TRAIT.name} trait, ${localMomentumStacks} of ${MOMENTUM_TRAIT.maxStacks} stacks`);
+  traitSlot.dataset.stacks = String(localMomentumStacks);
+}
+
+function localMovementSpeed(): number {
+  const baseSpeed = localDefending ? 2.1 : 4.2;
+  return baseSpeed * (1 + localMomentumStacks * MOMENTUM_TRAIT.movementSpeedBonusPerStack);
 }
 
 const DANGER_ZONE_LABELS = [
@@ -1790,6 +1808,9 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("defending", () => {
       if (isLocal) setDefensePresentation(player.defending);
       else if (remote) remote.defending = player.defending;
+    }, true);
+    playerCallbacks.listen("momentumStacks", () => {
+      if (isLocal) updateMomentum(player.momentumStacks);
     }, true);
     playerCallbacks.listen("powerCooldownUntil", () => {
       if (isLocal) localPowerCooldownUntil = player.powerCooldownUntil;
@@ -3038,9 +3059,9 @@ app.on("update", (dt: number) => {
   const predicted = resolvePlayerMotion(
     current,
     {
-      x: smoothedMovement.x * (localDefending ? 2.1 : 4.2) * frameTime,
+      x: smoothedMovement.x * localMovementSpeed() * frameTime,
       y: localVerticalVelocity * frameTime,
-      z: smoothedMovement.z * (localDefending ? 2.1 : 4.2) * frameTime,
+      z: smoothedMovement.z * localMovementSpeed() * frameTime,
     },
     readCollisionWorldBlock,
   );
@@ -3094,7 +3115,7 @@ app.on("update", (dt: number) => {
     localPowerStepApplied = true;
   }
   if (animationNow >= localHitPauseUntil) {
-    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * (localDefending ? 2.1 : 4.2), animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower);
+    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed(), animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower);
     if (localDefending) applyDefensePose(localPlayerRig);
   }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
@@ -3488,6 +3509,7 @@ app.on("update", (dt: number) => {
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
       `mode       ${interactionMode} · click=${primaryActionForMode(interactionMode)}`,
+      `trait      momentum=${localMomentumStacks}/${MOMENTUM_TRAIT.maxStacks} speed=${localMovementSpeed().toFixed(2)}`,
       `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
@@ -3674,6 +3696,7 @@ async function connect(): Promise<void> {
       : `${name} hit for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
     if (message.attackerId === room?.sessionId) {
+      updateMomentum(message.momentumStacks);
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
       localHitPauseUntil = performance.now() + (comboStep === 3 ? 75 : 48);
       const hitLabel = message.mainHandId === "bow"
@@ -3688,6 +3711,7 @@ async function connect(): Promise<void> {
           ? "DEFEATED"
           : hitLabel,
       );
+      status.textContent += ` · Momentum ${message.momentumStacks}/${MOMENTUM_TRAIT.maxStacks}.`;
     }
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {
@@ -3705,6 +3729,7 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
     if (message.playerId !== room?.sessionId) return;
+    if (message.momentumStacks !== undefined) updateMomentum(message.momentumStacks);
     if (message.guarded) return;
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
     showCombatFeedback(message.defeated ? "DEFEATED · RESPAWNING" : `HURT  −${message.damage}`, "hurt");
@@ -3715,6 +3740,7 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:defense", (message: DefenseResolved) => {
     if (message.playerId !== room?.sessionId) return;
+    updateMomentum(message.momentumStacks);
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
     showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "dodge");
     status.textContent = message.parried

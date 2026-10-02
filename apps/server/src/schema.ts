@@ -15,6 +15,7 @@ export const PlayerState = schema({
   dodgeSequence: t.int32().default(0),
   defending: t.boolean().default(false),
   defenseStartedAt: t.float64().default(0),
+  momentumStacks: t.int8().default(0),
   invulnerableUntil: t.float64().default(0),
   mainHandId: t.string().default("longsword"),
   mainHandTag: t.string().default("melee"),

@@ -2,6 +2,14 @@ import { z } from "zod";
 
 export const WORLD_ROOM = "world";
 
+export const MOMENTUM_TRAIT = {
+  id: "momentum",
+  name: "Momentum",
+  maxStacks: 3,
+  movementSpeedBonusPerStack: 0.04,
+  staminaRecoveryPerStack: 2,
+} as const;
+
 export const COMBO_CHAIN_WINDOW_MS = 520;
 export const COMBAT_ATTACKS = [
   { step: 1, durationMs: 380, impactMs: 135, damage: 1, knockback: 0.22 },
@@ -352,6 +360,7 @@ export interface CombatHit {
   defeated: boolean;
   comboStep: number;
   knockback: number;
+  momentumStacks: number;
 }
 
 export interface CombatMiss {
@@ -403,6 +412,7 @@ export interface PlayerHit {
   defeated: boolean;
   guarded?: boolean;
   parried?: boolean;
+  momentumStacks?: number;
 }
 
 export interface DefenseResolved {
@@ -412,6 +422,7 @@ export interface DefenseResolved {
   parried: boolean;
   damage: number;
   stamina: number;
+  momentumStacks: number;
 }
 
 export interface CombatReward {

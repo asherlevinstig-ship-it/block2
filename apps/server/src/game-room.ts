@@ -67,6 +67,7 @@ import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance,
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { dangerBandAt, scaledMobStats } from "./radial-difficulty.js";
+import { gainMomentum, momentumAfterDefense, movementSpeedWithMomentum, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import {
@@ -363,6 +364,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.staggerSequence += 1;
     }
     if (player.stamina <= 0) player.defending = false;
+    player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried);
     player.health = Math.max(0, player.health - defense.damage);
     const defeated = player.health === 0;
     this.broadcast("combat:player-hit", {
@@ -373,6 +375,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       defeated,
       guarded: defense.guarded,
       parried: defense.parried,
+      momentumStacks: player.momentumStacks,
     } satisfies PlayerHit);
     if (defense.guarded) {
       this.broadcast("combat:defense", {
@@ -382,6 +385,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         parried: defense.parried,
         damage: defense.damage,
         stamina: Math.round(player.stamina),
+        momentumStacks: player.momentumStacks,
       } satisfies DefenseResolved);
     }
     if (!defeated) return true;
@@ -391,6 +395,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.z = spawn.z;
     player.health = player.maxHealth;
     player.stamina = player.maxStamina;
+    player.momentumStacks = 0;
     player.invulnerableUntil = now + 1500;
     this.pendingAttacks.delete(playerId);
     this.pendingPowers.delete(playerId);
@@ -630,12 +635,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         player.stamina = Math.max(0, player.stamina - GUARD_STAMINA_DRAIN_PER_SECOND * deltaTime);
         if (player.stamina <= 0) player.defending = false;
       } else {
-        player.stamina = Math.min(player.maxStamina, player.stamina + 18 * deltaTime);
+        player.stamina = Math.min(player.maxStamina, player.stamina + staminaRecoveryWithMomentum(18, player.momentumStacks) * deltaTime);
       }
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
-      const speed = player.defending ? 2.1 : 4.2;
+      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks);
       const grounded = isPlayerSupported(this.readWorldBlock, player.x, player.y, player.z);
       let verticalVelocity = this.verticalVelocities.get(sessionId) ?? 0;
       if (grounded && verticalVelocity < 0) verticalVelocity = 0;
@@ -1214,6 +1219,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       );
       mob.health = Math.max(0, mob.health - damage);
       mob.hitSequence += 1;
+      player.momentumStacks = gainMomentum(player.momentumStacks);
       if (mob.combatState === "windup") {
         mob.combatState = "stagger";
         mob.stateUntil = now + 900;
@@ -1246,6 +1252,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         defeated: !mob.alive,
         comboStep: pending.step,
         knockback: timing.knockback,
+        momentumStacks: player.momentumStacks,
       };
       this.broadcast("combat:hit", hit);
       if (mob.alive) this.progressSpecialMark(sessionId, target.id, now);
