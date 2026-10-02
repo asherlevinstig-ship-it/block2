@@ -50,8 +50,8 @@ export function approachMovement(
   current: MovementVector,
   target: MovementVector,
   deltaTime: number,
-  acceleration = 6,
-  deceleration = 10,
+  acceleration = 16,
+  deceleration = 22,
 ): MovementVector {
   const currentSpeed = Math.hypot(current.x, current.z);
   const targetSpeed = Math.hypot(target.x, target.z);

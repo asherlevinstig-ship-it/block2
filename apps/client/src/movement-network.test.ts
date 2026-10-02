@@ -38,11 +38,19 @@ describe("movement networking", () => {
     expect(directions[2]?.z).toBeCloseTo(-Math.SQRT1_2);
   });
 
-  it("ramps movement up and down instead of snapping velocity", () => {
-    const accelerating = approachMovement({ x: 0, z: 0 }, { x: 1, z: 0 }, 0.05);
-    expect(accelerating.x).toBeCloseTo(0.3);
-    const decelerating = approachMovement({ x: 1, z: 0 }, { x: 0, z: 0 }, 0.05);
-    expect(decelerating.x).toBeCloseTo(0.5);
+  it("responds within a few frames without snapping the first acceleration frame", () => {
+    const accelerating = approachMovement({ x: 0, z: 0 }, { x: 1, z: 0 }, 1 / 60);
+    expect(accelerating.x).toBeCloseTo(16 / 60);
+    const decelerating = approachMovement({ x: 1, z: 0 }, { x: 0, z: 0 }, 1 / 60);
+    expect(decelerating.x).toBeCloseTo(1 - 22 / 60);
+  });
+
+  it("reaches full movement and a full stop quickly", () => {
+    let movement = { x: 0, z: 0 };
+    for (let frame = 0; frame < 4; frame += 1) movement = approachMovement(movement, { x: 1, z: 0 }, 1 / 60);
+    expect(movement.x).toBe(1);
+    for (let frame = 0; frame < 3; frame += 1) movement = approachMovement(movement, { x: 0, z: 0 }, 1 / 60);
+    expect(movement).toEqual({ x: 0, z: 0 });
   });
 
   it("changes direction immediately without carrying sideways momentum", () => {
