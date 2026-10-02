@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POWER_DEFINITIONS } from "@blockcraft/protocol";
-import { isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "../src/power-rules.js";
+import { compatiblePowerOrFallback, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "../src/power-rules.js";
 
 describe("Power rules", () => {
   it("resolves facing direction from yaw", () => {
@@ -9,8 +9,25 @@ describe("Power rules", () => {
   });
 
   it("enforces weapon compatibility", () => {
+    expect(isPowerCompatible(POWER_DEFINITIONS.shockwave, "melee")).toBe(true);
+    expect(isPowerCompatible(POWER_DEFINITIONS.shockwave, "ranged")).toBe(true);
+    expect(isPowerCompatible(POWER_DEFINITIONS.shockwave, "focus")).toBe(true);
     expect(isPowerCompatible(POWER_DEFINITIONS.seismic_cleave, "melee")).toBe(true);
     expect(isPowerCompatible(POWER_DEFINITIONS.seismic_cleave, "ranged")).toBe(false);
+    expect(isPowerCompatible(POWER_DEFINITIONS.seismic_cleave, "focus")).toBe(false);
+    expect(isPowerCompatible(POWER_DEFINITIONS.eruption, "melee")).toBe(true);
+    expect(isPowerCompatible(POWER_DEFINITIONS.eruption, "ranged")).toBe(true);
+    expect(isPowerCompatible(POWER_DEFINITIONS.eruption, "focus")).toBe(true);
+    expect(isPowerCompatible(POWER_DEFINITIONS.lunge_strike, "melee")).toBe(true);
+    expect(isPowerCompatible(POWER_DEFINITIONS.lunge_strike, "ranged")).toBe(false);
+    expect(isPowerCompatible(POWER_DEFINITIONS.lunge_strike, "focus")).toBe(false);
+  });
+
+  it("keeps a compatible Power or falls back to universal Shockwave", () => {
+    expect(compatiblePowerOrFallback("lunge_strike", "melee")).toBe("lunge_strike");
+    expect(compatiblePowerOrFallback("lunge_strike", "ranged")).toBe("shockwave");
+    expect(compatiblePowerOrFallback("seismic_cleave", "focus")).toBe("shockwave");
+    expect(compatiblePowerOrFallback("eruption", "focus")).toBe("eruption");
   });
 
   it("selects only living targets inside the forward line", () => {

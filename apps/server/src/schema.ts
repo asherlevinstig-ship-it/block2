@@ -14,6 +14,7 @@ export const PlayerState = schema({
   maxStamina: t.float32().default(100),
   dodgeSequence: t.int32().default(0),
   invulnerableUntil: t.float64().default(0),
+  mainHandId: t.string().default("longsword"),
   mainHandTag: t.string().default("melee"),
   equippedPower: t.string().default(""),
   powerCooldownUntil: t.float64().default(0),

@@ -129,6 +129,41 @@ button { font: inherit; }
   color: #ffc1b5;
 }
 
+#main-hand-loadout {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid rgb(133 196 239 / 24%);
+  border-radius: 9px;
+  background: rgb(8 23 27 / 62%);
+}
+#main-hand-loadout p {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0 1px 6px;
+}
+#main-hand-loadout p span { color: #74b7dc; font-size: .55rem; font-weight: 1000; letter-spacing: .12em; }
+#main-hand-loadout p strong { color: #d7f1ff; font-size: .7rem; }
+#main-hand-loadout p em { color: #90a9b5; font-size: .55rem; font-style: normal; }
+#main-hand-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+#main-hand-picker button {
+  padding: 6px 5px;
+  border: 1px solid rgb(116 183 220 / 22%);
+  border-radius: 6px;
+  background: rgb(13 29 33 / 75%);
+  color: #7d969f;
+  font-size: .55rem;
+  font-weight: 1000;
+  letter-spacing: .08em;
+}
+#main-hand-picker button[aria-pressed="true"] {
+  border-color: rgb(116 210 255 / 62%);
+  background: rgb(20 77 104 / 86%);
+  color: #d8f4ff;
+  box-shadow: inset 0 0 12px rgb(83 196 255 / 12%);
+}
+
 #power-slot {
   position: relative;
   display: grid;
@@ -165,6 +200,19 @@ button { font: inherit; }
   border-color: rgb(240 158 67 / 58%);
   background: rgb(96 49 13 / 86%);
   color: #ffe0a1;
+}
+#power-picker button:disabled {
+  border-color: rgb(255 103 82 / 18%);
+  background: repeating-linear-gradient(135deg, rgb(51 28 25 / 72%) 0 5px, rgb(34 25 23 / 72%) 5px 10px);
+  color: #765d59;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+#power-picker button:disabled::after { content: "  LOCKED"; color: #b4675b; font-size: .43rem; text-decoration: none; }
+#power-slot.incompatible {
+  border-color: rgb(255 103 82 / 45%);
+  background: rgb(67 27 22 / 82%);
+  color: #ffb4a8;
 }
 #power-slot span { position: relative; z-index: 1; color: #f6a147; font-size: .62rem; font-weight: 1000; letter-spacing: .11em; }
 #power-slot strong { position: relative; z-index: 1; font-size: .76rem; }

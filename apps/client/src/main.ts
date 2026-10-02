@@ -3,6 +3,7 @@ import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   COMBAT_ATTACKS,
   COMBO_CHAIN_WINDOW_MS,
+  MAIN_HAND_DEFINITIONS,
   POWER_DEFINITIONS,
   WORLD_ROOM,
   type ActionRejected,
@@ -11,6 +12,7 @@ import {
   type CombatHit,
   type CombatMiss,
   type CombatStagger,
+  type MainHandId,
   type PlayerHit,
   type PowerCast,
   type PowerCancelled,
@@ -77,6 +79,7 @@ import {
   shockwavePowerPose,
   voxelCharacterPose,
 } from "./character-animation.js";
+import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import "./styles.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -97,6 +100,9 @@ const playerStaminaValue = document.querySelector<HTMLElement>("#player-stamina-
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerName = document.querySelector<HTMLElement>("#power-name")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
+const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
+const mainHandName = document.querySelector<HTMLElement>("#main-hand-name")!;
+const mainHandAttack = document.querySelector<HTMLElement>("#main-hand-attack")!;
 const powerCooldownFill = document.querySelector<HTMLElement>("#power-cooldown-fill")!;
 const powerCooldownLabel = document.querySelector<HTMLElement>("#power-cooldown-label")!;
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
@@ -119,7 +125,7 @@ const mineButton = document.querySelector<HTMLButtonElement>("#mine-button")!;
 const dodgeButton = document.querySelector<HTMLButtonElement>("#dodge-button")!;
 const powerButton = document.querySelector<HTMLButtonElement>("#power-button")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !powerSlot || !powerName || powerPickerButtons.length !== 4 || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !playerCount || !exitGuide || !performanceToggle || !performancePanel || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !powerButton || !powerSlot || !powerName || powerPickerButtons.length !== 4 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -385,6 +391,12 @@ const faceMaterial = new pc.StandardMaterial();
 faceMaterial.diffuse = new pc.Color(0.035, 0.045, 0.05);
 faceMaterial.emissive = new pc.Color(0.02, 0.03, 0.035);
 faceMaterial.update();
+const bladeMaterial = coloredMaterial(new pc.Color(0.62, 0.72, 0.76));
+const weaponWoodMaterial = coloredMaterial(new pc.Color(0.34, 0.19, 0.08));
+const focusMaterial = new pc.StandardMaterial();
+focusMaterial.diffuse = new pc.Color(0.2, 0.52, 0.96);
+focusMaterial.emissive = new pc.Color(0.08, 0.3, 0.85);
+focusMaterial.update();
 
 function coloredMaterial(color: pc.Color): pc.StandardMaterial {
   const material = new pc.StandardMaterial();
@@ -402,6 +414,7 @@ interface VoxelCharacterRig {
   leftLeg: pc.Entity;
   rightLeg: pc.Entity;
   silhouette: pc.Entity | null;
+  mainHands: Record<MainHandId, pc.Entity>;
   locomotionPhase: number;
   locomotionWeight: number;
 }
@@ -443,6 +456,31 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(rightArm, "right-arm", clothing, [0.17, 0.46, 0.18], [0, -0.22, 0]);
   addBox(rightArm, "right-hand", skinMaterial, [0.18, 0.14, 0.19], [0, -0.48, 0]);
 
+  const longsword = new pc.Entity("main-hand-longsword");
+  longsword.setLocalPosition(0, -0.62, 0.1);
+  addBox(longsword, "sword-grip", weaponWoodMaterial, [0.08, 0.28, 0.08], [0, 0, 0]);
+  addBox(longsword, "sword-guard", weaponWoodMaterial, [0.32, 0.07, 0.1], [0, -0.13, 0]);
+  addBox(longsword, "sword-blade", bladeMaterial, [0.12, 0.72, 0.08], [0, -0.54, 0]);
+  rightArm.addChild(longsword);
+
+  const bow = new pc.Entity("main-hand-bow");
+  bow.setLocalPosition(0, -0.64, 0.1);
+  addBox(bow, "bow-center", weaponWoodMaterial, [0.08, 0.34, 0.08], [0, 0, 0]);
+  const bowTop = addBox(bow, "bow-top", weaponWoodMaterial, [0.08, 0.42, 0.08], [0.1, -0.31, 0]);
+  bowTop.setLocalEulerAngles(0, 0, 24);
+  const bowBottom = addBox(bow, "bow-bottom", weaponWoodMaterial, [0.08, 0.42, 0.08], [-0.1, 0.31, 0]);
+  bowBottom.setLocalEulerAngles(0, 0, 24);
+  rightArm.addChild(bow);
+
+  const magicFocus = new pc.Entity("main-hand-magic-focus");
+  magicFocus.setLocalPosition(0, -0.68, 0.11);
+  addBox(magicFocus, "focus-handle", weaponWoodMaterial, [0.09, 0.45, 0.09], [0, 0, 0]);
+  addBox(magicFocus, "focus-crystal", focusMaterial, [0.25, 0.25, 0.25], [0, -0.34, 0]);
+  rightArm.addChild(magicFocus);
+  const mainHands = { longsword, bow, magic_focus: magicFocus };
+  bow.enabled = false;
+  magicFocus.enabled = false;
+
   const leftLeg = new pc.Entity("left-leg-pivot");
   leftLeg.setLocalPosition(-0.13, 0.56, 0);
   root.addChild(leftLeg);
@@ -463,7 +501,11 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     silhouette.enabled = false;
     root.addChild(silhouette);
   }
-  return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, silhouette, locomotionPhase: 0, locomotionWeight: 0 };
+  return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, silhouette, mainHands, locomotionPhase: 0, locomotionWeight: 0 };
+}
+
+function setRigMainHand(rig: VoxelCharacterRig, mainHandId: MainHandId): void {
+  for (const [id, entity] of Object.entries(rig.mainHands)) entity.enabled = id === mainHandId;
 }
 
 function animateVoxelCharacter(
@@ -524,6 +566,7 @@ interface NetworkPlayer {
   maxStamina: number;
   dodgeSequence: number;
   invulnerableUntil: number;
+  mainHandId: string;
   mainHandTag: string;
   equippedPower: string;
   powerCooldownUntil: number;
@@ -595,10 +638,12 @@ let localPowerStartedAt: number | null = null;
 let localPowerFacingYaw: number | null = null;
 let localPowerStepApplied = false;
 let localPowerCooldownUntil = 0;
+let localMainHandId: MainHandId = "longsword";
 let localEquippedPower: PowerId = "shockwave";
 let localActivePower: PowerId | null = null;
 let powerSequence = 0;
 let powerEquipSequence = 0;
+let mainHandEquipSequence = 0;
 let localLastPowerSequence = 0;
 let powerServerReady = false;
 let powerAimActive = false;
@@ -618,6 +663,31 @@ function isPowerId(value: string): value is PowerId {
   return value in POWER_DEFINITIONS;
 }
 
+function isMainHandId(value: string): value is MainHandId {
+  return value in MAIN_HAND_DEFINITIONS;
+}
+
+function refreshPowerCompatibility(): void {
+  const mainHand = MAIN_HAND_DEFINITIONS[localMainHandId];
+  mainHandName.textContent = mainHand.name;
+  mainHandAttack.textContent = mainHand.attackName;
+  for (const button of mainHandPickerButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.mainHand === localMainHandId));
+  }
+  for (const button of powerPickerButtons) {
+    const powerId = button.dataset.power;
+    if (!powerId || !isPowerId(powerId)) continue;
+    const compatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[powerId], localMainHandId);
+    button.disabled = !compatible;
+    button.title = compatible
+      ? `${POWER_DEFINITIONS[powerId].name} is compatible with ${mainHand.name}`
+      : `${POWER_DEFINITIONS[powerId].name} requires a melee main hand`;
+  }
+  const equippedCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
+  powerSlot.classList.toggle("incompatible", !equippedCompatible);
+  setRigMainHand(localPlayerRig, localMainHandId);
+}
+
 function updatePowerLoadout(powerId: PowerId): void {
   localEquippedPower = powerId;
   const definition = POWER_DEFINITIONS[powerId];
@@ -631,6 +701,12 @@ function updatePowerLoadout(powerId: PowerId): void {
   for (const button of powerPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.power === powerId));
   }
+  refreshPowerCompatibility();
+}
+
+function updateMainHandLoadout(mainHandId: MainHandId): void {
+  localMainHandId = mainHandId;
+  refreshPowerCompatibility();
 }
 
 function requestPowerEquip(powerId: PowerId): void {
@@ -639,9 +715,26 @@ function requestPowerEquip(powerId: PowerId): void {
     status.textContent = "Finish or cancel the current Power before changing it.";
     return;
   }
+  if (!isPowerCompatibleWithMainHand(POWER_DEFINITIONS[powerId], localMainHandId)) {
+    const mainHand = MAIN_HAND_DEFINITIONS[localMainHandId];
+    status.textContent = `${POWER_DEFINITIONS[powerId].name} is not compatible with ${mainHand.name}.`;
+    showCombatFeedback("INCOMPATIBLE POWER", "hurt");
+    return;
+  }
   powerEquipSequence += 1;
   room.send("power:equip", { requestId: `power-equip-${powerEquipSequence}`, powerId });
   status.textContent = `Equipping ${POWER_DEFINITIONS[powerId].name}...`;
+}
+
+function requestMainHandEquip(mainHandId: MainHandId): void {
+  if (!room || !worldReady || mainHandId === localMainHandId) return;
+  if (powerAimActive || localPowerStartedAt !== null) {
+    status.textContent = "Finish or cancel the current Power before changing main hand.";
+    return;
+  }
+  mainHandEquipSequence += 1;
+  room.send("main-hand:equip", { requestId: `main-hand-equip-${mainHandEquipSequence}`, mainHandId });
+  status.textContent = `Equipping ${MAIN_HAND_DEFINITIONS[mainHandId].name}...`;
 }
 
 function updatePlayerHealth(health: number, maximumHealth: number): void {
@@ -947,6 +1040,7 @@ function updatePlayerCount(): void {
 function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePlayerVisual {
   const entity = new pc.Entity(`remote-player:${sessionId}`);
   const rig = createVoxelCharacter(entity, remoteMaterial);
+  if (isMainHandId(player.mainHandId)) setRigMainHand(rig, player.mainHandId);
   entity.setPosition(player.x, player.y, player.z);
   app.root.addChild(entity);
   return {
@@ -1068,6 +1162,7 @@ function bindPlayers(joinedRoom: Room): void {
   players.onAdd((player: NetworkPlayer, sessionId: string) => {
     const isLocal = sessionId === joinedRoom.sessionId;
     if (isLocal) {
+      if (isMainHandId(player.mainHandId)) updateMainHandLoadout(player.mainHandId);
       powerServerReady = isPowerId(player.equippedPower);
       if (isPowerId(player.equippedPower)) updatePowerLoadout(player.equippedPower);
     }
@@ -1120,6 +1215,15 @@ function bindPlayers(joinedRoom: Room): void {
       if (isPowerId(player.equippedPower)) {
         updatePowerLoadout(player.equippedPower);
         status.textContent = `${POWER_DEFINITIONS[player.equippedPower].name} equipped.`;
+      }
+    }, true);
+    playerCallbacks.listen("mainHandId", () => {
+      if (isLocal && isMainHandId(player.mainHandId)) {
+        updateMainHandLoadout(player.mainHandId);
+        const mainHand = MAIN_HAND_DEFINITIONS[player.mainHandId];
+        status.textContent = `${mainHand.name} equipped · Attack: ${mainHand.attackName}.`;
+      } else if (remote && isMainHandId(player.mainHandId)) {
+        setRigMainHand(remote.rig, player.mainHandId);
       }
     }, true);
     playerCallbacks.listen("health", () => {
@@ -1735,6 +1839,11 @@ function beginPowerAim(pointerId: number | null = null): void {
   }
   if (powerAimActive || localPowerStartedAt !== null) return;
   const definition = POWER_DEFINITIONS[localEquippedPower];
+  if (!isPowerCompatibleWithMainHand(definition, localMainHandId)) {
+    status.textContent = `${definition.name} is not compatible with ${MAIN_HAND_DEFINITIONS[localMainHandId].name}.`;
+    showCombatFeedback("INCOMPATIBLE POWER", "hurt");
+    return;
+  }
   const remaining = localPowerCooldownUntil - Date.now();
   if (remaining > 0) {
     status.textContent = `${definition.name} recharging · ${(remaining / 1000).toFixed(1)}s.`;
@@ -1865,6 +1974,12 @@ for (const button of powerPickerButtons) {
   button.addEventListener("click", () => {
     const powerId = button.dataset.power;
     if (powerId && isPowerId(powerId)) requestPowerEquip(powerId);
+  });
+}
+for (const button of mainHandPickerButtons) {
+  button.addEventListener("click", () => {
+    const mainHandId = button.dataset.mainHand;
+    if (mainHandId && isMainHandId(mainHandId)) requestMainHandEquip(mainHandId);
   });
 }
 
@@ -2234,17 +2349,20 @@ app.on("update", (dt: number) => {
     debris.entity.rotate(debris.spin.x * frameTime, debris.spin.y * frameTime, debris.spin.z * frameTime);
   }
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
+  const powerCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
   const powerFraction = powerRemaining / POWER_DEFINITIONS[localEquippedPower].cooldownMs;
   powerCooldownFill.style.width = `${Math.max(0, Math.min(1, powerFraction)) * 100}%`;
   powerCooldownLabel.textContent = !powerServerReady
     ? "SERVER UPDATE"
+    : !powerCompatible
+      ? "INCOMPATIBLE"
     : powerAimActive
       ? "RELEASE TO CAST"
     : powerRemaining > 0
       ? `${(powerRemaining / 1000).toFixed(1)}s`
       : "READY · R";
-  powerSlot.classList.toggle("ready", powerServerReady && powerRemaining <= 0 && !powerAimActive);
-  powerButton.textContent = !powerServerReady ? "Wait" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
+  powerSlot.classList.toggle("ready", powerServerReady && powerCompatible && powerRemaining <= 0 && !powerAimActive);
+  powerButton.textContent = !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
   cameraTarget.set(
     player.x + localPowerVisualOffset.x,
     player.y + localVisualVerticalOffset,
@@ -2528,6 +2646,9 @@ async function connect(): Promise<void> {
         cancelLocalPowerPresentation();
       }
       showCombatFeedback(message.reason === "cooldown" ? "POWER RECHARGING" : "POWER BLOCKED", "hurt");
+    }
+    if (message.action === "loadout") {
+      showCombatFeedback("LOADOUT BLOCKED", "hurt");
     }
     if (message.reason === "stale") {
       worldReady = false;

@@ -4,6 +4,8 @@ import {
   COMBAT_ATTACKS,
   COMBO_CHAIN_WINDOW_MS,
   DodgeRequestSchema,
+  MAIN_HAND_DEFINITIONS,
+  MainHandEquipRequestSchema,
   MineBlockRequestSchema,
   MoveRequestSchema,
   POWER_DEFINITIONS,
@@ -44,7 +46,7 @@ import {
 import { MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
 import { canMobLungeHit, dodgeDirection, pursueTarget, selectAggroTarget } from "./combat-rules.js";
-import { isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
+import { compatiblePowerOrFallback, isGroundPowerTargetInRange, isPowerCompatible, lineFractureColumns, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget } from "./power-rules.js";
 import {
   activeMovementInput,
   idleMovementInput,
@@ -110,6 +112,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("power", (client, payload) => this.handlePower(client, payload));
     this.onMessage("power:cancel", (client, payload) => this.handlePowerCancel(client, payload));
     this.onMessage("power:equip", (client, payload) => this.handlePowerEquip(client, payload));
+    this.onMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -118,6 +121,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     // Assign after construction so Colyseus includes the loadout in the initial
     // patch instead of eliding it as an unchanged schema default.
     player.equippedPower = "shockwave";
+    player.mainHandId = "longsword";
+    player.mainHandTag = "melee";
     const requestedName = typeof options === "object" && options && "name" in options ? String(options.name) : "Explorer";
     player.name = requestedName.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer";
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
@@ -455,6 +460,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "rate" });
     }
     player.equippedPower = parsed.data.powerId;
+  }
+
+  private handleMainHandEquip(client: Client, payload: unknown): void {
+    const parsed = MainHandEquipRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "loadout", reason: "payload" });
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "rate" });
+    }
+    const mainHand = MAIN_HAND_DEFINITIONS[parsed.data.mainHandId];
+    player.mainHandId = mainHand.id;
+    player.mainHandTag = mainHand.tag;
+    player.equippedPower = compatiblePowerOrFallback(player.equippedPower, mainHand.tag);
   }
 
   private cancelPendingPower(sessionId: string, reason: PowerCancelled["reason"]): boolean {

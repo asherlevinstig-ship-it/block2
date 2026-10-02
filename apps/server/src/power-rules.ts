@@ -1,4 +1,4 @@
-import type { PowerDefinition } from "@blockcraft/protocol";
+import { POWER_DEFINITIONS, type MainHandTag, type PowerDefinition, type PowerId } from "@blockcraft/protocol";
 
 export interface PowerPosition {
   x: number;
@@ -18,7 +18,12 @@ export function powerDirection(yaw: number): { x: number; z: number } {
 
 export function isPowerCompatible(definition: PowerDefinition, mainHandTag: string): boolean {
   return definition.compatibility.includes("universal")
-    || definition.compatibility.includes(mainHandTag as "melee" | "ranged" | "focus" | "tool");
+    || definition.compatibility.includes(mainHandTag as MainHandTag);
+}
+
+export function compatiblePowerOrFallback(powerId: string, mainHandTag: MainHandTag): PowerId {
+  const definition = POWER_DEFINITIONS[powerId as PowerId];
+  return definition && isPowerCompatible(definition, mainHandTag) ? definition.id as PowerId : "shockwave";
 }
 
 export function selectLinePowerTargets(

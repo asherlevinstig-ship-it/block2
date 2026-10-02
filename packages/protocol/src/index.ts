@@ -9,12 +9,29 @@ export const COMBAT_ATTACKS = [
   { step: 3, durationMs: 560, impactMs: 210, damage: 2, knockback: 0.82 },
 ] as const;
 
+export type MainHandTag = "melee" | "ranged" | "focus" | "tool";
+
+export interface MainHandDefinition {
+  id: string;
+  name: string;
+  tag: MainHandTag;
+  attackName: string;
+}
+
+export const MAIN_HAND_DEFINITIONS = {
+  longsword: { id: "longsword", name: "Longsword", tag: "melee", attackName: "Sword Combo" },
+  bow: { id: "bow", name: "Hunting Bow", tag: "ranged", attackName: "Bow Shot" },
+  magic_focus: { id: "magic_focus", name: "Magic Focus", tag: "focus", attackName: "Arcane Bolt" },
+} as const satisfies Record<string, MainHandDefinition>;
+
+export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
+
 export interface PowerDefinition {
   id: string;
   name: string;
   core: "burst" | "line" | "ground" | "mobility";
   castType: "tap" | "aim-release" | "ground-release";
-  compatibility: readonly ("universal" | "melee" | "ranged" | "focus" | "tool")[];
+  compatibility: readonly ("universal" | MainHandTag)[];
   windupMs: number;
   activeMs: number;
   recoveryMs: number;
@@ -152,6 +169,11 @@ export const PowerEquipRequestSchema = z.object({
   powerId: z.enum(["shockwave", "seismic_cleave", "eruption", "lunge_strike"]),
 });
 
+export const MainHandEquipRequestSchema = z.object({
+  requestId: z.string().min(1).max(64),
+  mainHandId: z.enum(["longsword", "bow", "magic_focus"]),
+});
+
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
@@ -159,6 +181,7 @@ export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
 export type PowerRequest = z.infer<typeof PowerRequestSchema>;
 export type PowerCancelRequest = z.infer<typeof PowerCancelRequestSchema>;
 export type PowerEquipRequest = z.infer<typeof PowerEquipRequestSchema>;
+export type MainHandEquipRequest = z.infer<typeof MainHandEquipRequestSchema>;
 
 export interface ChunkSnapshot {
   chunkX: number;
@@ -252,6 +275,6 @@ export interface PowerCancelled {
 
 export interface ActionRejected {
   requestId?: string;
-  action: "move" | "mine" | "attack" | "dodge" | "power";
+  action: "move" | "mine" | "attack" | "dodge" | "power" | "loadout";
   reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate" | "stamina" | "cooldown" | "compatibility";
 }
