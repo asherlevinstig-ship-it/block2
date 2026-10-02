@@ -1066,7 +1066,7 @@ function localMovementSpeed(): number {
 }
 
 const DANGER_ZONE_LABELS = [
-  { name: "SAFE CORE", detail: "No enemy scaling near the world centre" },
+  { name: "TOWN OF BEGINNINGS", detail: "Protected sanctuary · enemies cannot attack here" },
   { name: "OUTSKIRTS", detail: "Standard enemies and standard rewards" },
   { name: "WILDS", detail: "Tougher, faster enemies · improved rewards" },
   { name: "DEEP FRONTIER", detail: "Elite enemies · highest danger and rewards" },
@@ -1077,7 +1077,7 @@ function updateDangerZone(tierValue: number): void {
   const label = DANGER_ZONE_LABELS[tier]!;
   dangerZone.dataset.tier = String(tier);
   dangerZoneName.textContent = label.name;
-  dangerZoneTier.textContent = `TIER ${tier}`;
+  dangerZoneTier.textContent = tier === 0 ? "SAFE" : `TIER ${tier}`;
   dangerZoneDetail.textContent = label.detail;
 }
 
@@ -2213,7 +2213,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)}`,
   );
   worldReady = true;
-  status.textContent = "Connected. Cross the flat ground to the mine entrance east of spawn.";
+  status.textContent = "Welcome to the Town of Beginnings. The mine road leaves through the east gate.";
 }
 
 const keys = new Set<string>();

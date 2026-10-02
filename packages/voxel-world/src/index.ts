@@ -1,7 +1,10 @@
 export const CHUNK_SIZE = 16;
 export const CHUNK_HEIGHT = 24;
 export const SURFACE_HEIGHT = 7;
-export const SPAWN_PROTECTION_RADIUS = 6;
+export const TOWN_CENTER_X = CHUNK_SIZE / 2 + 0.5;
+export const TOWN_CENTER_Z = CHUNK_SIZE / 2 + 0.5;
+export const TOWN_SAFE_RADIUS = 8;
+export const SPAWN_PROTECTION_RADIUS = TOWN_SAFE_RADIUS;
 export const PLAYER_RADIUS = 0.28;
 export const PLAYER_HEIGHT = 1.45;
 export const GRAVITY = 18;
@@ -97,6 +100,49 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
   return null;
 }
 
+function townBuildingBlock(
+  worldX: number,
+  y: number,
+  worldZ: number,
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number; doorX: number; doorZ: number },
+): BlockId | null {
+  const inside = worldX >= bounds.minX && worldX <= bounds.maxX && worldZ >= bounds.minZ && worldZ <= bounds.maxZ;
+  if (!inside) return null;
+  if (y === 10) return Block.Stone;
+  if (y !== 8 && y !== 9) return null;
+  if (worldX === bounds.doorX && worldZ === bounds.doorZ) return Block.Air;
+  const perimeter = worldX === bounds.minX || worldX === bounds.maxX || worldZ === bounds.minZ || worldZ === bounds.maxZ;
+  return perimeter ? Block.Dirt : Block.Air;
+}
+
+export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number): BlockId | null {
+  const westLodge = townBuildingBlock(worldX, y, worldZ, { minX: 2, maxX: 5, minZ: 4, maxZ: 7, doorX: 5, doorZ: 6 });
+  if (westLodge !== null) return westLodge;
+  const eastLodge = townBuildingBlock(worldX, y, worldZ, { minX: 11, maxX: 14, minZ: 9, maxZ: 12, doorX: 11, doorZ: 10 });
+  if (eastLodge !== null) return eastLodge;
+
+  const gatePost = [
+    [7, 1], [10, 1], [7, 16], [10, 16],
+    [1, 7], [1, 10], [16, 7], [16, 10],
+  ].some(([x, z]) => worldX === x && worldZ === z);
+  if (gatePost && (y === 8 || y === 9)) return Block.Stone;
+  if (gatePost && y === 10) return Block.IronOre;
+
+  const beaconCenter = worldX === 8 && worldZ === 4;
+  const beaconBase = Math.abs(worldX - 8) <= 1 && Math.abs(worldZ - 4) <= 1;
+  if (beaconCenter && y >= 8 && y <= 11) return Block.IronOre;
+  if (beaconBase && y === 8) return Block.Stone;
+
+  if (y === SURFACE_HEIGHT) {
+    const plaza = worldX >= 6 && worldX <= 10 && worldZ >= 6 && worldZ <= 10;
+    if (plaza) return Block.Stone;
+    const road = (worldX === 8 || worldX === 9) && worldZ >= 1 && worldZ <= 16
+      || (worldZ === 8 || worldZ === 9) && worldX >= 1 && worldX <= 16;
+    if (road) return Block.Dirt;
+  }
+  return null;
+}
+
 export function chunkIndex(x: number, y: number, z: number): number {
   return y * CHUNK_SIZE * CHUNK_SIZE + z * CHUNK_SIZE + x;
 }
@@ -113,9 +159,7 @@ export function worldToChunk(x: number, z: number): ChunkAddress {
 }
 
 export function isProtectedVoxel(x: number, z: number): boolean {
-  const spawnX = CHUNK_SIZE / 2;
-  const spawnZ = CHUNK_SIZE / 2;
-  return Math.hypot(x - spawnX, z - spawnZ) <= SPAWN_PROTECTION_RADIUS;
+  return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS;
 }
 
 export function generateChunk(seedText: string, chunkX: number, chunkZ: number): GeneratedChunk {
@@ -139,6 +183,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
       for (let y = 1; y < CHUNK_HEIGHT; y += 1) {
         const caveBlock = milestoneCaveBlock(worldX, y, worldZ);
         if (caveBlock !== null) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
+        const townBlock = townOfBeginningsBlock(worldX, y, worldZ);
+        if (townBlock !== null) blocks[chunkIndex(localX, y, localZ)] = townBlock;
       }
     }
   }

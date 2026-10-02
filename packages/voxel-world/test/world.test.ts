@@ -38,7 +38,22 @@ describe("deterministic voxel world", () => {
 
   it("protects the spawn but not the surrounding wilderness", () => {
     expect(isProtectedVoxel(8, 8)).toBe(true);
+    expect(isProtectedVoxel(16, 8)).toBe(true);
+    expect(isProtectedVoxel(17, 8)).toBe(false);
     expect(isProtectedVoxel(20, 20)).toBe(false);
+  });
+
+  it("builds a navigable Town of Beginnings around the spawn", () => {
+    const centre = generateChunk("test-world", 0, 0);
+    const eastGate = generateChunk("test-world", 1, 0);
+    expect(getBlock(centre, 8, SURFACE_HEIGHT, 8)).toBe(Block.Stone);
+    expect(getBlock(centre, 8, SURFACE_HEIGHT + 1, 8)).toBe(Block.Air);
+    expect(getBlock(centre, 2, 8, 4)).toBe(Block.Dirt);
+    expect(getBlock(centre, 5, 8, 6)).toBe(Block.Air);
+    expect(getBlock(centre, 2, 10, 4)).toBe(Block.Stone);
+    expect(getBlock(centre, 8, 11, 4)).toBe(Block.IronOre);
+    expect(getBlock(eastGate, 0, 10, 7)).toBe(Block.IronOre);
+    expect(getBlock(eastGate, 0, 8, 8)).toBe(Block.Air);
   });
 
   it("finds a stable standing surface inside a generated column", () => {

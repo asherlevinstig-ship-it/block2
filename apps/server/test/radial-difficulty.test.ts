@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { MOB_ARCHETYPES } from "../src/mob-archetypes.js";
-import { DANGER_BANDS, dangerBandAt, radiusFromSafeCenter, scaledMobStats } from "../src/radial-difficulty.js";
+import { DANGER_BANDS, dangerBandAt, isInsideTownSafeZone, radiusFromSafeCenter, scaledMobStats } from "../src/radial-difficulty.js";
 
 describe("radial danger progression", () => {
   it("increases the danger band as players travel from the safe centre", () => {
     expect(dangerBandAt({ x: 8.5, z: 8.5 }).tier).toBe(0);
-    expect(dangerBandAt({ x: 14.5, z: 8.5 }).tier).toBe(1);
+    expect(dangerBandAt({ x: 14.5, z: 8.5 }).tier).toBe(0);
+    expect(dangerBandAt({ x: 17.5, z: 8.5 }).tier).toBe(1);
     expect(dangerBandAt({ x: 20.5, z: 8.5 }).tier).toBe(2);
     expect(dangerBandAt({ x: 28.5, z: 8.5 }).tier).toBe(3);
     expect(radiusFromSafeCenter({ x: 11.5, z: 12.5 })).toBe(5);
+    expect(isInsideTownSafeZone({ x: 15.5, z: 8.5 })).toBe(true);
+    expect(isInsideTownSafeZone({ x: 17.5, z: 8.5 })).toBe(false);
   });
 
   it("makes frontier mobs tougher, faster and more rewarding", () => {

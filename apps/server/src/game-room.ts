@@ -72,7 +72,7 @@ import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAt
 import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
-import { dangerBandAt, scaledMobStats } from "./radial-difficulty.js";
+import { dangerBandAt, isInsideTownSafeZone, scaledMobStats } from "./radial-difficulty.js";
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
@@ -191,7 +191,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       console.warn("Persistent terrain could not be loaded; using the generated world for this room.", error);
     }
     this.setState(new WorldState());
-    this.registerMob("moss-crawler", "moss_crawler", { x: 13.5, y: 8, z: 11.5 });
+    this.registerMob("moss-crawler", "moss_crawler", { x: 16.5, y: 8, z: 12.5 });
     this.registerMob("stone-brute", "stone_brute", { x: 16.5, y: 8, z: 15.5 });
     this.registerMob("cave-spitter", "cave_spitter", { x: 19.5, y: 8, z: 8.5 });
     this.registerMob("wild-crawler", "moss_crawler", { x: 22.5, y: 8, z: 14.5 });
@@ -536,7 +536,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true): boolean {
     const player = this.state.players.get(playerId);
-    if (!player || now < player.invulnerableUntil) return false;
+    if (!player || now < player.invulnerableUntil || isInsideTownSafeZone(player)) return false;
     const mob = this.state.mobs.get(mobId);
     const defense = blockable && mob
       ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
@@ -802,7 +802,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         y: player.y,
         z: player.z,
         health: player.health,
-      }));
+      })).filter(player => !isInsideTownSafeZone(player));
       const target = selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
         const homeward = pursueTarget(mob, home, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier), 0.05);
