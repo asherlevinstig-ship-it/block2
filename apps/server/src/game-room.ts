@@ -194,10 +194,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("moss-crawler", "moss_crawler", MOB_ARCHETYPES.moss_crawler.spawn);
     this.registerMob("stone-brute", "stone_brute", MOB_ARCHETYPES.stone_brute.spawn);
     this.registerMob("cave-spitter", "cave_spitter", MOB_ARCHETYPES.cave_spitter.spawn);
-    this.registerMob("wild-crawler", "moss_crawler", { x: 26.5, y: 8, z: 15.5 });
-    this.registerMob("frontier-crawler", "moss_crawler", { x: 25.5, y: 8, z: 27.5 });
-    this.registerMob("frontier-brute", "stone_brute", { x: 27.5, y: 8, z: 25.5 });
-    this.registerMob("frontier-spitter", "cave_spitter", { x: 28.5, y: 8, z: 5.5 });
+    this.registerMob("wild-crawler", "moss_crawler", { x: 31.5, y: 8, z: 18.5 });
+    this.registerMob("frontier-crawler", "moss_crawler", { x: 34.5, y: 8, z: 29.5 });
+    this.registerMob("frontier-brute", "stone_brute", { x: 41.5, y: 8, z: 31.5 });
+    this.registerMob("frontier-spitter", "cave_spitter", { x: 38.5, y: 8, z: 4.5 });
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
@@ -388,8 +388,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private bootstrapPayload(): WorldBootstrap {
     const chunks: ChunkSnapshot[] = [];
-    for (let chunkZ = -1; chunkZ <= 1; chunkZ += 1) {
-      for (let chunkX = -1; chunkX <= 1; chunkX += 1) chunks.push(this.snapshot(chunkX, chunkZ));
+    for (let chunkZ = -2; chunkZ <= 2; chunkZ += 1) {
+      for (let chunkX = -2; chunkX <= 2; chunkX += 1) chunks.push(this.snapshot(chunkX, chunkZ));
     }
     return {
       seed: this.worldSeed,

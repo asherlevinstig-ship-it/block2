@@ -21,9 +21,8 @@ function vary(color: Rgb, amount: number): Rgb {
 
 /** Only authored town blocks get architectural finishes; mining keeps the real block IDs. */
 export function voxelTextureKind(block: number, normalY: number, x: number, y: number, z: number): VoxelTextureKind {
-  // The current authored town fits this small box. Most rebuilt faces belong
-  // to wilderness or underground slices, so skip the allocating town lookup.
-  const withinTown = x >= 1 && x <= 16 && z >= 1 && z <= 16 && y >= SURFACE_HEIGHT && y <= 11;
+  // Skip the authored lookup for wilderness and underground faces.
+  const withinTown = x >= -4 && x <= 21 && z >= -4 && z <= 21 && y >= SURFACE_HEIGHT && y <= 11;
   if (withinTown && townOfBeginningsBlock(x, y, z) === block) {
     if (block === Block.Dirt) return y > SURFACE_HEIGHT ? "timber" : "path";
     if (block === Block.IronOre) return "bronze";

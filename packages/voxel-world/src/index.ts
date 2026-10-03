@@ -3,8 +3,20 @@ export const CHUNK_HEIGHT = 24;
 export const SURFACE_HEIGHT = 7;
 export const TOWN_CENTER_X = CHUNK_SIZE / 2 + 0.5;
 export const TOWN_CENTER_Z = CHUNK_SIZE / 2 + 0.5;
-export const TOWN_SAFE_RADIUS = 8;
+export const TOWN_SAFE_RADIUS = 14;
 export const SPAWN_PROTECTION_RADIUS = TOWN_SAFE_RADIUS;
+export const TOWN_LODGES = [
+  { minX: 2, maxX: 5, minZ: 4, maxZ: 7, doorX: 5, doorZ: 6 },
+  { minX: 11, maxX: 14, minZ: 9, maxZ: 12, doorX: 11, doorZ: 10 },
+  { minX: -3, maxX: 0, minZ: 10, maxZ: 13, doorX: 0, doorZ: 11 },
+  { minX: 4, maxX: 7, minZ: -3, maxZ: 0, doorX: 5, doorZ: 0 },
+  { minX: 4, maxX: 7, minZ: 16, maxZ: 19, doorX: 5, doorZ: 16 },
+  { minX: 16, maxX: 19, minZ: 12, maxZ: 15, doorX: 16, doorZ: 13 },
+] as const;
+export const TOWN_GATE_POSTS = [
+  [-4, 7], [-4, 10], [17, 7], [17, 10],
+  [7, -4], [10, -4], [7, 21], [10, 21],
+] as const;
 export const PLAYER_RADIUS = 0.28;
 export const PLAYER_HEIGHT = 1.45;
 export const GRAVITY = 18;
@@ -116,15 +128,12 @@ function townBuildingBlock(
 }
 
 export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number): BlockId | null {
-  const westLodge = townBuildingBlock(worldX, y, worldZ, { minX: 2, maxX: 5, minZ: 4, maxZ: 7, doorX: 5, doorZ: 6 });
-  if (westLodge !== null) return westLodge;
-  const eastLodge = townBuildingBlock(worldX, y, worldZ, { minX: 11, maxX: 14, minZ: 9, maxZ: 12, doorX: 11, doorZ: 10 });
-  if (eastLodge !== null) return eastLodge;
+  for (const lodge of TOWN_LODGES) {
+    const block = townBuildingBlock(worldX, y, worldZ, lodge);
+    if (block !== null) return block;
+  }
 
-  const gatePost = [
-    [7, 1], [10, 1], [7, 16], [10, 16],
-    [1, 7], [1, 10], [16, 7], [16, 10],
-  ].some(([x, z]) => worldX === x && worldZ === z);
+  const gatePost = TOWN_GATE_POSTS.some(([x, z]) => worldX === x && worldZ === z);
   if (gatePost && (y === 8 || y === 9)) return Block.Stone;
   if (gatePost && y === 10) return Block.IronOre;
 
@@ -134,10 +143,14 @@ export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number)
   if (beaconBase && y === 8) return Block.Stone;
 
   if (y === SURFACE_HEIGHT) {
-    const plaza = worldX >= 6 && worldX <= 10 && worldZ >= 6 && worldZ <= 10;
+    const plaza = worldX >= 5 && worldX <= 11 && worldZ >= 5 && worldZ <= 11;
     if (plaza) return Block.Stone;
-    const road = (worldX === 8 || worldX === 9) && worldZ >= 1 && worldZ <= 16
-      || (worldZ === 8 || worldZ === 9) && worldX >= 1 && worldX <= 16;
+    const road = ((worldX === 8 || worldX === 9) && worldZ >= -4 && worldZ <= 21)
+      || ((worldZ === 8 || worldZ === 9) && worldX >= -4 && worldX <= 17)
+      || (worldZ === 1 && worldX >= 5 && worldX <= 8)
+      || (worldZ === 16 && worldX >= 5 && worldX <= 8)
+      || (worldX === 1 && worldZ >= 9 && worldZ <= 11)
+      || (worldZ === 13 && worldX >= 8 && worldX <= 16);
     if (road) return Block.Dirt;
   }
   return null;

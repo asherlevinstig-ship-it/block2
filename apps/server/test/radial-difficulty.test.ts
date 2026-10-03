@@ -6,12 +6,13 @@ describe("radial danger progression", () => {
   it("increases the danger band as players travel from the safe centre", () => {
     expect(dangerBandAt({ x: 8.5, z: 8.5 }).tier).toBe(0);
     expect(dangerBandAt({ x: 14.5, z: 8.5 }).tier).toBe(0);
-    expect(dangerBandAt({ x: 17.5, z: 8.5 }).tier).toBe(1);
-    expect(dangerBandAt({ x: 20.5, z: 8.5 }).tier).toBe(2);
-    expect(dangerBandAt({ x: 28.5, z: 8.5 }).tier).toBe(3);
+    expect(dangerBandAt({ x: 23.5, z: 8.5 }).tier).toBe(1);
+    expect(dangerBandAt({ x: 35.5, z: 8.5 }).tier).toBe(2);
+    expect(dangerBandAt({ x: 46.5, z: 8.5 }).tier).toBe(3);
     expect(radiusFromSafeCenter({ x: 11.5, z: 12.5 })).toBe(5);
     expect(isInsideTownSafeZone({ x: 15.5, z: 8.5 })).toBe(true);
-    expect(isInsideTownSafeZone({ x: 17.5, z: 8.5 })).toBe(false);
+    expect(isInsideTownSafeZone({ x: 17.5, z: 8.5 })).toBe(true);
+    expect(isInsideTownSafeZone({ x: 23.5, z: 8.5 })).toBe(false);
   });
 
   it("makes frontier mobs tougher, faster and more rewarding", () => {
@@ -31,6 +32,6 @@ describe("radial danger progression", () => {
     const approaching = keepMobOutsideTown({ x: 18, z: 8.5 });
     expect(radiusFromSafeCenter(approaching)).toBeCloseTo(MOB_TOWN_MINIMUM_RADIUS);
     expect(approaching.x).toBeGreaterThan(18);
-    expect(keepMobOutsideTown({ x: 26, z: 8.5 })).toEqual({ x: 26, z: 8.5 });
+    expect(keepMobOutsideTown({ x: 32, z: 8.5 })).toEqual({ x: 32, z: 8.5 });
   });
 });

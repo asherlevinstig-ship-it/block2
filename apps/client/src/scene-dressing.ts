@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { Block, CHUNK_SIZE, SURFACE_HEIGHT, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_LODGES, type WorldBlockReader } from "@blockcraft/voxel-world";
 
 type Color = readonly [number, number, number];
 const WOOD: Color = [0.24, 0.17, 0.12];
@@ -93,29 +93,31 @@ export class SceneDressing {
       }
     }
 
-    for (const lodge of [{ x: 2, z: 4 }, { x: 11, z: 9 }]) {
-      const cx = lodge.x + 2;
-      const cz = lodge.z + 2;
+    for (const lodge of TOWN_LODGES) {
+      const lodgeX = lodge.minX;
+      const lodgeZ = lodge.minZ;
+      const cx = lodgeX + 2;
+      const cz = lodgeZ + 2;
       // Keep details tied to their authoritative supporting voxels.
-      for (const x of [lodge.x + 0.05, lodge.x + 3.95]) {
-        for (const z of [lodge.z + 0.05, lodge.z + 3.95]) {
+      for (const x of [lodgeX + 0.05, lodgeX + 3.95]) {
+        for (const z of [lodgeZ + 0.05, lodgeZ + 3.95]) {
           if (read(Math.floor(x), 8, Math.floor(z)) !== Block.Dirt) continue;
           solid.box(x, 9, z, 0.16, 2, 0.16, WOOD);
           solid.box(x, 8.12, z, 0.21, 0.24, 0.21, SLATE);
         }
       }
-      if (read(lodge.x, 10, lodge.z) === Block.Stone) {
-        solid.box(cx, 10.98, lodge.z + 0.03, 4.12, 0.1, 0.16, SLATE);
-        solid.box(cx, 10.98, lodge.z + 3.97, 4.12, 0.1, 0.16, SLATE);
-        solid.box(lodge.x + 0.03, 10.98, cz, 0.16, 0.1, 4.12, SLATE);
-        solid.box(lodge.x + 3.97, 10.98, cz, 0.16, 0.1, 4.12, SLATE);
-        solid.box(cx, 10.045, lodge.z - 0.025, 4.08, 0.14, 0.12, WOOD);
-        solid.box(cx, 10.045, lodge.z + 4.025, 4.08, 0.14, 0.12, WOOD);
+      if (read(lodgeX, 10, lodgeZ) === Block.Stone) {
+        solid.box(cx, 10.98, lodgeZ + 0.03, 4.12, 0.1, 0.16, SLATE);
+        solid.box(cx, 10.98, lodgeZ + 3.97, 4.12, 0.1, 0.16, SLATE);
+        solid.box(lodgeX + 0.03, 10.98, cz, 0.16, 0.1, 4.12, SLATE);
+        solid.box(lodgeX + 3.97, 10.98, cz, 0.16, 0.1, 4.12, SLATE);
+        solid.box(cx, 10.045, lodgeZ - 0.025, 4.08, 0.14, 0.12, WOOD);
+        solid.box(cx, 10.045, lodgeZ + 4.025, 4.08, 0.14, 0.12, WOOD);
       }
       // Inlaid amber windows on solid walls, with timber mullions and a sill.
-      for (const wz of [lodge.z - 0.025, lodge.z + 4.025]) {
-        const supportZ = Math.max(lodge.z, Math.min(lodge.z + 3, Math.floor(wz)));
-        if (read(lodge.x + 1, 9, supportZ) !== Block.Dirt) continue;
+      for (const wz of [lodgeZ - 0.025, lodgeZ + 4.025]) {
+        const supportZ = Math.max(lodgeZ, Math.min(lodgeZ + 3, Math.floor(wz)));
+        if (read(lodgeX + 1, 9, supportZ) !== Block.Dirt) continue;
         solid.box(cx, 9.24, wz, 1.18, 0.92, 0.07, WOOD);
         glow.box(cx, 9.24, wz + (wz < cz ? -0.04 : 0.04), 0.94, 0.69, 0.035, GOLD);
         solid.box(cx, 9.24, wz + (wz < cz ? -0.065 : 0.065), 0.09, 0.72, 0.04, WOOD);
@@ -124,8 +126,7 @@ export class SceneDressing {
       }
     }
 
-    const gatePosts = [[7, 1], [10, 1], [7, 16], [10, 16], [1, 7], [1, 10], [16, 7], [16, 10]];
-    for (const [x, z] of gatePosts) {
+    for (const [x, z] of TOWN_GATE_POSTS) {
       if (x === undefined || z === undefined || read(x, 10, z) !== Block.IronOre) continue;
       solid.box(x + 0.5, 10.05, z + 0.5, 1.04, 0.12, 1.04, COPPER);
       solid.box(x + 0.5, 11.015, z + 0.5, 1.07, 0.1, 1.07, SLATE);

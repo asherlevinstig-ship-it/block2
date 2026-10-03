@@ -334,9 +334,11 @@ interface ClientChunk {
   meshes: pc.Mesh[];
   visibleBlocks: number;
   visibleFaces: number;
+  renderedSliceKey: string | null;
 }
 
 const chunks = new Map<string, ClientChunk>();
+let activeChunkViewKey: string | null = null;
 const playerCutaway: PlayerCutaway = {
   active: false,
   sliceY: CHUNK_HEIGHT,
@@ -377,6 +379,7 @@ function rebuildChunk(chunk: ClientChunk): void {
   for (const child of [...chunk.root.children]) child.destroy();
   chunk.visibleBlocks = 0;
   chunk.visibleFaces = 0;
+  chunk.renderedSliceKey = cutawayStateKey;
   const buffers = new Map<VoxelTextureKind, { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; indices: number[] }>();
   // One padded snapshot amortizes AO lookups and includes adjacent chunks. Hidden
   // roof blocks must not leave dark shadows floating on the player's depth slice.
@@ -477,13 +480,15 @@ function installChunk(snapshot: ChunkSnapshot): ClientChunk {
     meshes: [],
     visibleBlocks: 0,
     visibleFaces: 0,
+    renderedSliceKey: null,
   };
   chunks.set(key, chunk);
   return chunk;
 }
 
 function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): void {
-  rebuildChunk(chunk);
+  if (chunk.root.enabled) rebuildChunk(chunk);
+  else chunk.renderedSliceKey = null;
   const address = worldToChunk(x, z);
   const neighborKeys = new Set<string>();
   if (address.localX === 0) neighborKeys.add(chunkKey(address.chunkX - 1, address.chunkZ));
@@ -496,7 +501,20 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
   if (edgeX && edgeZ) neighborKeys.add(chunkKey(address.chunkX + edgeX, address.chunkZ + edgeZ));
   for (const key of neighborKeys) {
     const neighbor = chunks.get(key);
-    if (neighbor) rebuildChunk(neighbor);
+    if (neighbor?.root.enabled) rebuildChunk(neighbor);
+    else if (neighbor) neighbor.renderedSliceKey = null;
+  }
+}
+
+function updateActiveChunkMeshes(position: { x: number; z: number }): void {
+  const address = worldToChunk(position.x, position.z);
+  const viewKey = `${address.chunkX},${address.chunkZ}:${cutawayStateKey}`;
+  if (viewKey === activeChunkViewKey) return;
+  activeChunkViewKey = viewKey;
+  for (const chunk of chunks.values()) {
+    const nearby = Math.abs(chunk.chunkX - address.chunkX) <= 1 && Math.abs(chunk.chunkZ - address.chunkZ) <= 1;
+    chunk.root.enabled = nearby;
+    if (nearby && chunk.renderedSliceKey !== cutawayStateKey) rebuildChunk(chunk);
   }
 }
 
@@ -2307,7 +2325,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   for (const chunk of chunks.values()) for (const mesh of chunk.meshes) mesh.destroy();
   for (const child of [...worldRoot.children]) child.destroy();
   chunks.clear();
-  const installed = payload.chunks.map(installChunk);
+  payload.chunks.forEach(installChunk);
   const ownPlayer = room ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId) : undefined;
   const initialPose = ownPlayer ?? payload.spawn;
   const initialPosition = new pc.Vec3(initialPose.x, initialPose.y, initialPose.z);
@@ -2338,7 +2356,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   undergroundLightingBlend = playerCutaway.active ? 1 : 0;
   exitTrail.enabled = playerCutaway.active;
   exitGuide.hidden = !playerCutaway.active;
-  for (const chunk of installed) rebuildChunk(chunk);
+  activeChunkViewKey = null;
+  updateActiveChunkMeshes(initialPosition);
   sceneDressing.rebuild(readWorldBlock, payload.chunks);
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
   lastChunkBuildMs = performance.now() - buildStartedAt;
@@ -2701,7 +2720,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   playerCutaway.active = visibilityCutaway;
   playerCutaway.sliceY = nextSliceY ?? CHUNK_HEIGHT;
   sceneDressing.setSurfaceVisible(!visibilityCutaway);
-  for (const chunk of chunks.values()) rebuildChunk(chunk);
+  updateActiveChunkMeshes(position);
   status.textContent = atSurface && visibilityCutaway
     ? `Returning to surface · restoring slice ${nextSliceY}`
     : underground
@@ -2816,6 +2835,7 @@ function requestDodge(): void {
     readCollisionWorldBlock,
   );
   localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
+  updateActiveChunkMeshes(predicted);
   localDodgeStartedAt = performance.now();
   dodgeSequence += 1;
   room.send("dodge", {
@@ -3452,6 +3472,7 @@ app.on("update", (dt: number) => {
   const authoritativeInputReady = pendingStopInputSequence === null;
   const sequenceLag = Math.max(0, moveSequence - lastProcessedInputSequence);
   const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded, authoritativeInputReady);
+  updateActiveChunkMeshes(localPlayer.getPosition());
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPowerVisualOffset.mulScalar(Math.max(0, 1 - frameTime * 11));
   localPlayerVisual.setLocalPosition(localPowerVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z);
