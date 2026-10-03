@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PRIMARY_ACTION_DURATION_MS,
+  actionArmSwingWeight,
   advanceLocomotionAnimation,
   eruptionPowerPose,
   lungePowerPose,
@@ -134,5 +135,47 @@ describe("voxel character animation", () => {
     expect(firstStoppedFrame.phase).toBeGreaterThan(moving.phase);
     expect(laterStoppedFrame.phase).toBeGreaterThan(firstStoppedFrame.phase);
     expect(laterStoppedFrame.weight).toBeLessThan(firstStoppedFrame.weight);
+  });
+
+  it("settles locomotion equally at high and low frame rates", () => {
+    const step = (frames: number) => {
+      let sample = { phase: 1.25, weight: 1 };
+      for (let frame = 0; frame < frames; frame++) {
+        sample = advanceLocomotionAnimation(sample, 0, 0.5 / frames);
+      }
+      return sample.weight;
+    };
+    expect(step(15)).toBeCloseTo(step(60), 8);
+  });
+
+  it("finishes attack recovery without an abrupt pose reset", () => {
+    const nearEnd = primaryActionPose(PRIMARY_ACTION_DURATION_MS - 1);
+    expect(Math.abs(nearEnd.rightArmPitch)).toBeLessThan(0.01);
+    expect(Math.abs(nearEnd.torsoYaw)).toBeLessThan(0.2);
+    expect(Math.abs(nearEnd.rightArmRoll)).toBeLessThan(0.2);
+  });
+
+  it("preserves walk-arm motion at the start and end of an action", () => {
+    expect(actionArmSwingWeight(primaryActionPose(null))).toBe(1);
+    expect(actionArmSwingWeight(primaryActionPose(0))).toBe(1);
+    expect(actionArmSwingWeight(primaryActionPose(PRIMARY_ACTION_DURATION_MS))).toBe(1);
+  });
+
+  it("retains a small gait contribution during the strongest action poses", () => {
+    expect(actionArmSwingWeight(primaryActionPose(95))).toBeCloseTo(0.2, 12);
+    expect(actionArmSwingWeight(seismicPowerPose(450))).toBeCloseTo(0.2, 12);
+  });
+
+  it("blends nearby arm poses continuously through action activation and recovery", () => {
+    const beforeStart = actionArmSwingWeight(primaryActionPose(null));
+    const afterStart = actionArmSwingWeight(primaryActionPose(0.1));
+    const beforeEnd = actionArmSwingWeight(primaryActionPose(PRIMARY_ACTION_DURATION_MS - 0.1));
+    const afterEnd = actionArmSwingWeight(primaryActionPose(PRIMARY_ACTION_DURATION_MS));
+    expect(afterStart).toBeCloseTo(beforeStart, 8);
+    expect(beforeEnd).toBeCloseTo(afterEnd, 6);
+    const sample = primaryActionPose(48);
+    const nearby = { ...sample, rightArmPitch: sample.rightArmPitch + 0.001 };
+    expect(Math.abs(actionArmSwingWeight(nearby) - actionArmSwingWeight(sample))).toBeLessThan(0.0001);
+    expect(actionArmSwingWeight({ ...sample, active: false })).toBe(actionArmSwingWeight(sample));
   });
 });

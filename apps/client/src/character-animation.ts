@@ -5,6 +5,12 @@ export interface VoxelCharacterPose {
   torsoPitch: number;
   torsoRoll: number;
   headYaw: number;
+  headPitch: number;
+  leftElbowPitch: number;
+  rightElbowPitch: number;
+  leftKneePitch: number;
+  rightKneePitch: number;
+  scarfPitch: number;
   leftArmPitch: number;
   rightArmPitch: number;
   leftLegPitch: number;
@@ -18,6 +24,15 @@ export interface PrimaryActionPose {
   leftArmRoll: number;
   rightArmPitch: number;
   rightArmRoll: number;
+}
+
+/** Blend out gait using pose strength, not the discontinuous active flag. */
+export function actionArmSwingWeight(action: PrimaryActionPose): number {
+  const actionAmount = Math.min(1, Math.max(
+    Math.abs(action.leftArmPitch), Math.abs(action.rightArmPitch),
+    Math.abs(action.leftArmRoll), Math.abs(action.rightArmRoll),
+  ) / 90);
+  return 1 - 0.8 * actionAmount * actionAmount * (3 - 2 * actionAmount);
 }
 
 export const PRIMARY_ACTION_DURATION_MS = 360;
@@ -39,7 +54,8 @@ export function advanceLocomotionAnimation(
 ): LocomotionAnimationSample {
   const targetWeight = Math.max(0, Math.min(1, speed / maximumSpeed));
   const response = targetWeight > previous.weight ? 12 : 7;
-  const weight = previous.weight + (targetWeight - previous.weight) * Math.min(1, deltaSeconds * response);
+  // Exponential damping keeps the gait consistent on both fast and slow frames.
+  const weight = previous.weight + (targetWeight - previous.weight) * (1 - Math.exp(-Math.max(0, deltaSeconds) * response));
   return {
     weight: weight < 0.001 ? 0 : weight,
     phase: previous.phase + deltaSeconds * (4.5 + weight * 5.5),
@@ -57,9 +73,14 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   }
 
   const impact = combatTiming?.impactMs ?? 95;
-  const strength = elapsedMilliseconds <= impact
-    ? Math.sin(elapsedMilliseconds / impact * Math.PI / 2)
-    : Math.cos((elapsedMilliseconds - impact) / (duration - impact) * Math.PI / 2);
+  const progress = elapsedMilliseconds <= impact
+    ? elapsedMilliseconds / impact
+    : 1 - (elapsedMilliseconds - impact) / (duration - impact);
+  // Ease into the windup and ease out of recovery without a last-frame pop.
+  const strength = progress * progress * (3 - 2 * progress);
+  const followThrough = elapsedMilliseconds > impact
+    ? Math.sin((elapsedMilliseconds - impact) / (duration - impact) * Math.PI) * 0.5
+    : 0;
   if (mainHandId === "bow") return {
     active: true,
     torsoYaw: -4 * strength,
@@ -78,7 +99,7 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   };
   if (mainHandId === "stone_core_hammer") return {
     active: true,
-    torsoYaw: -6 * strength,
+    torsoYaw: -6 * strength + 12 * followThrough,
     leftArmPitch: -142 * strength,
     leftArmRoll: 14 * strength,
     rightArmPitch: -154 * strength,
@@ -86,15 +107,15 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   };
   if (comboStep === 2) return {
     active: true,
-    torsoYaw: 18 * strength,
+    torsoYaw: 18 * strength - 22 * followThrough,
     leftArmPitch: 0,
     leftArmRoll: 0,
     rightArmPitch: -78 * strength,
-    rightArmRoll: -58 * strength,
+    rightArmRoll: -58 * strength + 28 * followThrough,
   };
   if (comboStep === 3) return {
     active: true,
-    torsoYaw: -5 * strength,
+    torsoYaw: -5 * strength + 14 * followThrough,
     leftArmPitch: -108 * strength,
     leftArmRoll: 10 * strength,
     rightArmPitch: -124 * strength,
@@ -102,11 +123,11 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   };
   return {
     active: true,
-    torsoYaw: -12 * strength,
+    torsoYaw: -12 * strength + 24 * followThrough,
     leftArmPitch: 0,
     leftArmRoll: 0,
     rightArmPitch: -116 * strength,
-    rightArmRoll: -9 * strength,
+    rightArmRoll: -9 * strength + 30 * followThrough,
   };
 }
 
@@ -225,10 +246,16 @@ export function voxelCharacterPose(
   if (!grounded) {
     const rising = verticalVelocity > 0;
     return {
-      bodyY: 0.025,
+      bodyY: 0,
       torsoPitch: rising ? -7 : 6,
       torsoRoll: 0,
       headYaw: 0,
+      headPitch: rising ? -4 : 5,
+      leftElbowPitch: -18,
+      rightElbowPitch: -22,
+      leftKneePitch: rising ? 28 : 12,
+      rightKneePitch: rising ? 36 : 18,
+      scarfPitch: rising ? -26 : -14,
       leftArmPitch: rising ? -34 : -18,
       rightArmPitch: rising ? -34 : -18,
       leftLegPitch: rising ? 16 : 8,
@@ -237,16 +264,23 @@ export function voxelCharacterPose(
   }
 
   const phase = locomotion?.phase ?? elapsedSeconds * (4.5 + movement * 5.5);
-  const stride = Math.sin(phase) * 40 * movement;
+  const stride = Math.sin(phase) * 32 * movement;
+  const breath = Math.sin(elapsedSeconds * 1.9);
   return {
     // Keep the feet planted. In an angled top-down view even a small whole-body
     // bob reads as a hop when locomotion settles back to idle.
     bodyY: 0,
-    torsoPitch: -4 * movement,
-    torsoRoll: Math.sin(phase) * 2.5 * movement,
-    headYaw: Math.sin(phase * 0.5) * 2 * movement,
-    leftArmPitch: -stride * 0.82,
-    rightArmPitch: stride * 0.82,
+    torsoPitch: -5 * movement + breath * 0.55 * (1 - movement),
+    torsoRoll: Math.sin(phase) * 1.6 * movement,
+    headYaw: Math.sin(phase * 0.5) * 1.5 * movement,
+    headPitch: 3 * movement - breath * 0.4 * (1 - movement),
+    leftElbowPitch: -8 - Math.max(0, Math.sin(phase)) * 17 * movement,
+    rightElbowPitch: -8 - Math.max(0, -Math.sin(phase)) * 17 * movement,
+    leftKneePitch: Math.max(0, -Math.sin(phase)) * 34 * movement,
+    rightKneePitch: Math.max(0, Math.sin(phase)) * 34 * movement,
+    scarfPitch: -10 - 28 * movement + Math.sin(phase - 0.8) * 7 * movement + breath * 2,
+    leftArmPitch: -stride * 0.7,
+    rightArmPitch: stride * 0.7,
     leftLegPitch: stride,
     rightLegPitch: -stride,
   };

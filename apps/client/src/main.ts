@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   BRAMBLE_SNARE,
@@ -83,7 +84,7 @@ import {
   type PlayerCutaway,
 } from "./player-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
-import { createVoxelTexturePixels, type VoxelTextureKind } from "./voxel-textures.js";
+import { createVoxelTexturePixels, voxelCornerLight, voxelTextureKind, voxelTint, type VoxelTextureKind } from "./voxel-textures.js";
 import { retryConnection } from "./connection-retry.js";
 import {
   alternateInteractionMode,
@@ -92,6 +93,7 @@ import {
 } from "./interaction-mode.js";
 import {
   PRIMARY_ACTION_DURATION_MS,
+  actionArmSwingWeight,
   advanceLocomotionAnimation,
   eruptionPowerPose,
   lungePowerPose,
@@ -103,6 +105,7 @@ import {
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { createGuestProfileToken, getOrCreateProfileToken } from "./player-profile.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
+import { SceneDressing } from "./scene-dressing.js";
 import "./styles.css";
 
 function newGuestProfileToken() {
@@ -212,27 +215,44 @@ const app = new pc.Application(canvas, {
 });
 app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
 app.setCanvasResolution(pc.RESOLUTION_AUTO);
-app.scene.ambientLight = new pc.Color(0.36, 0.42, 0.38);
+app.scene.ambientLight = new pc.Color(0.43, 0.48, 0.54);
+app.scene.fog.type = pc.FOG_LINEAR;
+app.scene.fog.color = new pc.Color(0.21, 0.3, 0.32);
+app.scene.fog.start = 55;
+app.scene.fog.end = 100;
 app.start();
 
 const camera = new pc.Entity("camera");
-camera.addComponent("camera", { clearColor: new pc.Color(0.055, 0.09, 0.075), farClip: 120 });
+camera.addComponent("camera", {
+  clearColor: new pc.Color(0.21, 0.3, 0.32), farClip: 120, fov: 42,
+  toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB,
+});
 app.root.addChild(camera);
 const CAMERA_OFFSET_X = 16;
 const CAMERA_OFFSET_Z = 16;
 
 const light = new pc.Entity("sun");
-light.addComponent("light", { type: "directional", intensity: 1.35, castShadows: true, shadowResolution: 1024 });
-light.setEulerAngles(48, 32, 0);
+light.addComponent("light", {
+  type: "directional", color: new pc.Color(1, 0.93, 0.82), intensity: 1.45,
+  castShadows: true, shadowResolution: 2048, shadowType: pc.SHADOW_PCF3_32F,
+  shadowDistance: 55, normalOffsetBias: 0.06, shadowBias: 0.2, numCascades: 1,
+});
+light.setEulerAngles(52, -28, 0);
 app.root.addChild(light);
 
+const skyFill = new pc.Entity("cool-sky-fill");
+skyFill.addComponent("light", { type: "directional", color: new pc.Color(0.53, 0.7, 1), intensity: 0.32, castShadows: false });
+skyFill.setEulerAngles(35, 145, 0);
+app.root.addChild(skyFill);
+
 const caveLight = new pc.Entity("explorer-lantern");
-caveLight.addComponent("light", { type: "omni", color: new pc.Color(1, 0.72, 0.38), intensity: 1.1, range: 10 });
+caveLight.addComponent("light", { type: "omni", color: new pc.Color(1, 0.76, 0.44), intensity: 1.7, range: 12, castShadows: false });
 caveLight.enabled = false;
 app.root.addChild(caveLight);
 
 const worldRoot = new pc.Entity("voxel-world");
 app.root.addChild(worldRoot);
+const sceneDressing = new SceneDressing(app);
 
 const exitTrail = new pc.Entity("exit-trail");
 const exitTrailMaterial = new pc.StandardMaterial();
@@ -255,16 +275,8 @@ app.root.addChild(exitTrail);
 
 const materials = new Map<VoxelTextureKind, pc.StandardMaterial>();
 
-function textureKindFor(block: number, normalY: number): VoxelTextureKind {
-  if (block === Block.Bedrock) return "bedrock";
-  if (block === Block.Stone) return "stone";
-  if (block === Block.Dirt) return "dirt";
-  if (block === Block.Grass) return normalY > 0 ? "grass-top" : "grass-side";
-  return "iron";
-}
-
 function createVoxelTexture(kind: VoxelTextureKind): pc.Texture {
-  const size = 16;
+  const size = 32;
   const canvasTexture = document.createElement("canvas");
   canvasTexture.width = size;
   canvasTexture.height = size;
@@ -291,8 +303,11 @@ function materialFor(kind: VoxelTextureKind): pc.StandardMaterial {
     material = new pc.StandardMaterial();
     material.diffuse = new pc.Color(1, 1, 1);
     material.diffuseMap = createVoxelTexture(kind);
-    material.specular = new pc.Color(0.05, 0.05, 0.05);
-    material.gloss = 8;
+    material.diffuseVertexColor = true;
+    const metal = kind === "bronze" || kind === "iron";
+    material.specular = new pc.Color(metal ? 0.26 : 0.035, metal ? 0.2 : 0.035, metal ? 0.12 : 0.035);
+    material.gloss = metal ? 0.28 : 0.06;
+    if (kind === "bronze") material.emissive = new pc.Color(0.05, 0.029, 0.008);
     material.update();
     materials.set(kind, material);
   }
@@ -300,13 +315,15 @@ function materialFor(kind: VoxelTextureKind): pc.StandardMaterial {
 }
 
 const faces = [
-  { normal: [1, 0, 0], corners: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]] },
-  { normal: [-1, 0, 0], corners: [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]] },
-  { normal: [0, 1, 0], corners: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]] },
-  { normal: [0, -1, 0], corners: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]] },
-  { normal: [0, 0, 1], corners: [[1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1]] },
-  { normal: [0, 0, -1], corners: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]] },
+  { normal: [1, 0, 0], tangentAxes: [1, 2], corners: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]] },
+  { normal: [-1, 0, 0], tangentAxes: [1, 2], corners: [[0, 0, 1], [0, 1, 1], [0, 1, 0], [0, 0, 0]] },
+  { normal: [0, 1, 0], tangentAxes: [0, 2], corners: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]] },
+  { normal: [0, -1, 0], tangentAxes: [0, 2], corners: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]] },
+  { normal: [0, 0, 1], tangentAxes: [0, 1], corners: [[1, 0, 1], [1, 1, 1], [0, 1, 1], [0, 0, 1]] },
+  { normal: [0, 0, -1], tangentAxes: [0, 1], corners: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]] },
 ] as const;
+
+const faceUvCorners = [[0, 0], [0, 1], [1, 1], [1, 0]] as const;
 
 interface ClientChunk {
   chunkX: number;
@@ -360,7 +377,22 @@ function rebuildChunk(chunk: ClientChunk): void {
   for (const child of [...chunk.root.children]) child.destroy();
   chunk.visibleBlocks = 0;
   chunk.visibleFaces = 0;
-  const buffers = new Map<VoxelTextureKind, { positions: number[]; normals: number[]; uvs: number[]; indices: number[] }>();
+  const buffers = new Map<VoxelTextureKind, { positions: number[]; normals: number[]; uvs: number[]; colors: number[]; indices: number[] }>();
+  // One padded snapshot amortizes AO lookups and includes adjacent chunks. Hidden
+  // roof blocks must not leave dark shadows floating on the player's depth slice.
+  const span = CHUNK_SIZE + 2;
+  const plane = span * span;
+  const strides = [1, plane, span];
+  const visible = new Uint8Array(plane * (CHUNK_HEIGHT + 2));
+  for (let y = -1; y <= CHUNK_HEIGHT; y += 1) {
+    for (let z = -1; z <= CHUNK_SIZE; z += 1) {
+      for (let x = -1; x <= CHUNK_SIZE; x += 1) {
+        visible[(y + 1) * plane + (z + 1) * span + x + 1] = readVisibleWorldBlock(
+          chunk.chunkX * CHUNK_SIZE + x, y, chunk.chunkZ * CHUNK_SIZE + z,
+        );
+      }
+    }
+  }
   for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
     for (let localZ = 0; localZ < CHUNK_SIZE; localZ += 1) {
       for (let localX = 0; localX < CHUNK_SIZE; localX += 1) {
@@ -371,22 +403,41 @@ function rebuildChunk(chunk: ClientChunk): void {
         if (isCutawayHidden(x, y, z)) continue;
         chunk.visibleBlocks += 1;
         for (const face of faces) {
-          const neighbor = readVisibleWorldBlock(x + face.normal[0], y + face.normal[1], z + face.normal[2]);
+          const outsideIndex = (y + face.normal[1] + 1) * plane
+            + (localZ + face.normal[2] + 1) * span + localX + face.normal[0] + 1;
+          const neighbor = visible[outsideIndex];
           if (neighbor !== Block.Air) continue;
-          const textureKind = textureKindFor(block, face.normal[1]);
+          const textureKind = voxelTextureKind(block, face.normal[1], x, y, z);
           let buffer = buffers.get(textureKind);
           if (!buffer) {
-            buffer = { positions: [], normals: [], uvs: [], indices: [] };
+            buffer = { positions: [], normals: [], uvs: [], colors: [], indices: [] };
             buffers.set(textureKind, buffer);
           }
           chunk.visibleFaces += 1;
           const base = buffer.positions.length / 3;
+          const tint = voxelTint(x, y, z, textureKind);
           for (const corner of face.corners) {
             buffer.positions.push(x + corner[0], y + corner[1], z + corner[2]);
             buffer.normals.push(...face.normal);
+            const axisA = face.tangentAxes[0];
+            const axisB = face.tangentAxes[1];
+            const offsetA = (corner[axisA] === 0 ? -1 : 1) * strides[axisA]!;
+            const offsetB = (corner[axisB] === 0 ? -1 : 1) * strides[axisB]!;
+            const shade = voxelCornerLight(
+              visible[outsideIndex + offsetA] !== Block.Air,
+              visible[outsideIndex + offsetB] !== Block.Air,
+              visible[outsideIndex + offsetA + offsetB] !== Block.Air,
+            );
+            buffer.colors.push(Math.round(tint[0] * shade * 255), Math.round(tint[1] * shade * 255), Math.round(tint[2] * shade * 255), 255);
           }
-          buffer.uvs.push(0, 0, 0, 1, 1, 1, 1, 0);
-          buffer.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          const rotate = face.normal[1] > 0 && (textureKind === "grass-top" || textureKind === "dirt" || textureKind === "stone")
+            ? (Math.imul(x, 73856093) ^ Math.imul(z, 19349663)) & 3 : 0;
+          for (let i = 0; i < 4; i += 1) buffer.uvs.push(...faceUvCorners[(i + rotate) % 4]!);
+          // The less-occluded diagonal avoids a bright triangle through dark corners.
+          if (buffer.colors[base * 4]! + buffer.colors[(base + 2) * 4]!
+            > buffer.colors[(base + 1) * 4]! + buffer.colors[(base + 3) * 4]!) {
+            buffer.indices.push(base, base + 1, base + 3, base + 1, base + 2, base + 3);
+          } else buffer.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
         }
       }
     }
@@ -398,6 +449,7 @@ function rebuildChunk(chunk: ClientChunk): void {
     geometry.positions = buffer.positions;
     geometry.normals = buffer.normals;
     geometry.uvs = buffer.uvs;
+    geometry.colors = buffer.colors;
     geometry.indices = buffer.indices;
     const mesh = pc.Mesh.fromGeometry(app.graphicsDevice, geometry);
     chunk.meshes.push(mesh);
@@ -438,6 +490,10 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
   if (address.localX === CHUNK_SIZE - 1) neighborKeys.add(chunkKey(address.chunkX + 1, address.chunkZ));
   if (address.localZ === 0) neighborKeys.add(chunkKey(address.chunkX, address.chunkZ - 1));
   if (address.localZ === CHUNK_SIZE - 1) neighborKeys.add(chunkKey(address.chunkX, address.chunkZ + 1));
+  // A changed corner also changes the diagonal chunk's baked contact shadow.
+  const edgeX = address.localX === 0 ? -1 : address.localX === CHUNK_SIZE - 1 ? 1 : 0;
+  const edgeZ = address.localZ === 0 ? -1 : address.localZ === CHUNK_SIZE - 1 ? 1 : 0;
+  if (edgeX && edgeZ) neighborKeys.add(chunkKey(address.chunkX + edgeX, address.chunkZ + edgeZ));
   for (const key of neighborKeys) {
     const neighbor = chunks.get(key);
     if (neighbor) rebuildChunk(neighbor);
@@ -455,19 +511,29 @@ silhouetteMaterial.depthWrite = false;
 silhouetteMaterial.update();
 
 const skinMaterial = new pc.StandardMaterial();
-skinMaterial.diffuse = new pc.Color(0.78, 0.53, 0.32);
+skinMaterial.diffuse = new pc.Color(0.86, 0.61, 0.4);
+skinMaterial.shininess = 12;
 skinMaterial.update();
 const hairMaterial = new pc.StandardMaterial();
-hairMaterial.diffuse = new pc.Color(0.12, 0.075, 0.045);
+hairMaterial.diffuse = new pc.Color(0.16, 0.095, 0.065);
 hairMaterial.update();
 const bootMaterial = new pc.StandardMaterial();
-bootMaterial.diffuse = new pc.Color(0.12, 0.14, 0.16);
+bootMaterial.diffuse = new pc.Color(0.23, 0.15, 0.105);
 bootMaterial.update();
 const faceMaterial = new pc.StandardMaterial();
 faceMaterial.diffuse = new pc.Color(0.035, 0.045, 0.05);
 faceMaterial.emissive = new pc.Color(0.02, 0.03, 0.035);
 faceMaterial.update();
-const bladeMaterial = coloredMaterial(new pc.Color(0.62, 0.72, 0.76));
+const trousersMaterial = coloredMaterial(new pc.Color(0.12, 0.19, 0.24));
+const coatTrimMaterial = coloredMaterial(new pc.Color(0.12, 0.25, 0.28));
+const brassMaterial = coloredMaterial(new pc.Color(0.83, 0.59, 0.27));
+const scarfMaterial = coloredMaterial(new pc.Color(0.84, 0.36, 0.16));
+const eyeWhiteMaterial = coloredMaterial(new pc.Color(0.93, 0.87, 0.73));
+const bladeMaterial = coloredMaterial(new pc.Color(0.72, 0.84, 0.87));
+bladeMaterial.metalness = 0.55;
+bladeMaterial.useMetalness = true;
+bladeMaterial.shininess = 55;
+bladeMaterial.update();
 const weaponWoodMaterial = coloredMaterial(new pc.Color(0.34, 0.19, 0.08));
 const fangWeaponMaterial = coloredMaterial(new pc.Color(0.9, 0.84, 0.66));
 const coreWeaponMaterial = coloredMaterial(new pc.Color(0.42, 0.52, 0.56));
@@ -499,6 +565,11 @@ interface VoxelCharacterRig {
   rightArm: pc.Entity;
   leftLeg: pc.Entity;
   rightLeg: pc.Entity;
+  leftElbow: pc.Entity;
+  rightElbow: pc.Entity;
+  leftKnee: pc.Entity;
+  rightKnee: pc.Entity;
+  scarf: pc.Entity;
   silhouette: pc.Entity | null;
   mainHands: Record<MainHandId, pc.Entity>;
   locomotionPhase: number;
@@ -524,67 +595,106 @@ function addBox(
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false): VoxelCharacterRig {
   const root = new pc.Entity("voxel-character");
   parent.addChild(root);
-  const torso = addBox(root, "torso", clothing, [0.48, 0.55, 0.3], [0, 0.82, 0]);
-  const head = addBox(root, "head", skinMaterial, [0.38, 0.38, 0.38], [0, 1.28, 0]);
-  addBox(head, "hair", hairMaterial, [0.4, 0.1, 0.4], [0, 0.2, 0]);
-  addBox(head, "left-eye", faceMaterial, [0.055, 0.055, 0.025], [-0.09, 0.045, 0.2]);
-  addBox(head, "right-eye", faceMaterial, [0.055, 0.055, 0.025], [0.09, 0.045, 0.2]);
+
+  // Transform pivots stay at unit scale: attachments retain their real voxel
+  // dimensions instead of inheriting the dimensions of a head or torso box.
+  const torso = new pc.Entity("torso-pivot");
+  torso.setLocalPosition(0, 0.82, 0);
+  root.addChild(torso);
+  addBox(torso, "expedition-coat", clothing, [0.5, 0.54, 0.32], [0, 0, 0]);
+  addBox(torso, "left-lapel", coatTrimMaterial, [0.075, 0.34, 0.025], [-0.065, 0.055, 0.173]);
+  addBox(torso, "right-lapel", coatTrimMaterial, [0.075, 0.34, 0.025], [0.065, 0.055, 0.173]);
+  addBox(torso, "leather-belt", bootMaterial, [0.515, 0.075, 0.335], [0, -0.185, 0]);
+  addBox(torso, "belt-buckle", brassMaterial, [0.105, 0.085, 0.035], [0, -0.185, 0.184]);
+  addBox(torso, "field-pack", bootMaterial, [0.35, 0.38, 0.16], [0, 0.025, -0.235]);
+  addBox(torso, "pack-flap", brassMaterial, [0.37, 0.08, 0.18], [0, 0.17, -0.245]);
+  addBox(torso, "scarf-collar", scarfMaterial, [0.34, 0.1, 0.35], [0, 0.28, 0]);
+  const scarf = new pc.Entity("scarf-pivot");
+  scarf.setLocalPosition(-0.12, 0.29, -0.2);
+  torso.addChild(scarf);
+  addBox(scarf, "trailing-scarf", scarfMaterial, [0.15, 0.32, 0.045], [0, -0.15, 0]);
+
+  const head = new pc.Entity("head-pivot");
+  head.setLocalPosition(0, 0.46, 0.015);
+  torso.addChild(head);
+  addBox(head, "face", skinMaterial, [0.4, 0.38, 0.38], [0, 0, 0]);
+  addBox(head, "hair-cap", hairMaterial, [0.43, 0.105, 0.415], [0, 0.2, -0.006]);
+  addBox(head, "swept-fringe", hairMaterial, [0.26, 0.085, 0.055], [-0.08, 0.13, 0.191]);
+  addBox(head, "left-eye", eyeWhiteMaterial, [0.077, 0.055, 0.022], [-0.09, 0.025, 0.195]);
+  addBox(head, "right-eye", eyeWhiteMaterial, [0.077, 0.055, 0.022], [0.09, 0.025, 0.195]);
+  addBox(head, "left-pupil", faceMaterial, [0.035, 0.05, 0.025], [-0.076, 0.025, 0.209]);
+  addBox(head, "right-pupil", faceMaterial, [0.035, 0.05, 0.025], [0.104, 0.025, 0.209]);
 
   const leftArm = new pc.Entity("left-arm-pivot");
-  leftArm.setLocalPosition(-0.34, 1.03, 0);
-  root.addChild(leftArm);
-  addBox(leftArm, "left-arm", clothing, [0.17, 0.46, 0.18], [0, -0.22, 0]);
-  addBox(leftArm, "left-hand", skinMaterial, [0.18, 0.14, 0.19], [0, -0.48, 0]);
+  leftArm.setLocalPosition(-0.34, 0.22, 0);
+  torso.addChild(leftArm);
+  addBox(leftArm, "left-sleeve", clothing, [0.19, 0.27, 0.23], [0, -0.105, 0]);
+  const leftElbow = new pc.Entity("left-elbow-pivot");
+  leftElbow.setLocalPosition(0, -0.23, 0);
+  leftArm.addChild(leftElbow);
+  addBox(leftElbow, "left-forearm", clothing, [0.17, 0.22, 0.2], [0, -0.09, 0]);
+  addBox(leftElbow, "left-cuff", brassMaterial, [0.18, 0.055, 0.21], [0, -0.18, 0]);
+  addBox(leftElbow, "left-hand", skinMaterial, [0.17, 0.13, 0.19], [0, -0.26, 0]);
 
   const rightArm = new pc.Entity("right-arm-pivot");
-  rightArm.setLocalPosition(0.34, 1.03, 0);
-  root.addChild(rightArm);
-  addBox(rightArm, "right-arm", clothing, [0.17, 0.46, 0.18], [0, -0.22, 0]);
-  addBox(rightArm, "right-hand", skinMaterial, [0.18, 0.14, 0.19], [0, -0.48, 0]);
+  rightArm.setLocalPosition(0.34, 0.22, 0);
+  torso.addChild(rightArm);
+  addBox(rightArm, "right-sleeve", clothing, [0.19, 0.27, 0.23], [0, -0.105, 0]);
+  const rightElbow = new pc.Entity("right-elbow-pivot");
+  rightElbow.setLocalPosition(0, -0.23, 0);
+  rightArm.addChild(rightElbow);
+  addBox(rightElbow, "right-forearm", clothing, [0.17, 0.22, 0.2], [0, -0.09, 0]);
+  addBox(rightElbow, "right-cuff", brassMaterial, [0.18, 0.055, 0.21], [0, -0.18, 0]);
+  addBox(rightElbow, "right-hand", skinMaterial, [0.17, 0.13, 0.19], [0, -0.26, 0]);
 
   const longsword = new pc.Entity("main-hand-longsword");
-  longsword.setLocalPosition(0, -0.62, 0.1);
-  addBox(longsword, "sword-grip", weaponWoodMaterial, [0.08, 0.28, 0.08], [0, 0, 0]);
-  addBox(longsword, "sword-guard", weaponWoodMaterial, [0.32, 0.07, 0.1], [0, -0.13, 0]);
-  addBox(longsword, "sword-blade", bladeMaterial, [0.12, 0.72, 0.08], [0, -0.54, 0]);
-  rightArm.addChild(longsword);
+  longsword.setLocalPosition(0, -0.29, 0.085);
+  addBox(longsword, "sword-grip", weaponWoodMaterial, [0.085, 0.2, 0.09], [0, 0, 0]);
+  addBox(longsword, "sword-pommel", brassMaterial, [0.12, 0.075, 0.12], [0, 0.115, 0]);
+  addBox(longsword, "sword-guard", brassMaterial, [0.33, 0.07, 0.115], [0, -0.105, 0]);
+  addBox(longsword, "sword-blade", bladeMaterial, [0.115, 0.44, 0.065], [0, -0.335, 0]);
+  addBox(longsword, "sword-tip", bladeMaterial, [0.065, 0.075, 0.055], [0, -0.59, 0]);
+  rightElbow.addChild(longsword);
 
   const bow = new pc.Entity("main-hand-bow");
-  bow.setLocalPosition(0, -0.64, 0.1);
+  bow.setLocalPosition(0, -0.27, 0.1);
   addBox(bow, "bow-center", weaponWoodMaterial, [0.08, 0.34, 0.08], [0, 0, 0]);
-  const bowTop = addBox(bow, "bow-top", weaponWoodMaterial, [0.08, 0.42, 0.08], [0.1, -0.31, 0]);
-  bowTop.setLocalEulerAngles(0, 0, 24);
-  const bowBottom = addBox(bow, "bow-bottom", weaponWoodMaterial, [0.08, 0.42, 0.08], [-0.1, 0.31, 0]);
+  const bowTop = addBox(bow, "bow-top", weaponWoodMaterial, [0.08, 0.42, 0.08], [0.075, 0.32, 0]);
+  bowTop.setLocalEulerAngles(0, 0, -24);
+  const bowBottom = addBox(bow, "bow-bottom", weaponWoodMaterial, [0.08, 0.42, 0.08], [0.075, -0.32, 0]);
   bowBottom.setLocalEulerAngles(0, 0, 24);
-  rightArm.addChild(bow);
+  addBox(bow, "bow-string", eyeWhiteMaterial, [0.014, 1.02, 0.014], [0.16, 0, 0]);
+  addBox(bow, "bow-grip-wrap", brassMaterial, [0.095, 0.13, 0.095], [0, 0, 0]);
+  rightElbow.addChild(bow);
 
   const magicFocus = new pc.Entity("main-hand-magic-focus");
-  magicFocus.setLocalPosition(0, -0.68, 0.11);
+  magicFocus.setLocalPosition(0, -0.28, 0.11);
   addBox(magicFocus, "focus-handle", weaponWoodMaterial, [0.09, 0.45, 0.09], [0, 0, 0]);
   addBox(magicFocus, "focus-crystal", focusMaterial, [0.25, 0.25, 0.25], [0, -0.34, 0]);
-  rightArm.addChild(magicFocus);
+  addBox(magicFocus, "focus-collar", brassMaterial, [0.3, 0.06, 0.3], [0, -0.19, 0]);
+  rightElbow.addChild(magicFocus);
 
   const fangDagger = new pc.Entity("main-hand-fang-dagger");
-  fangDagger.setLocalPosition(0, -0.6, 0.1);
+  fangDagger.setLocalPosition(0, -0.28, 0.1);
   addBox(fangDagger, "dagger-grip", weaponWoodMaterial, [0.09, 0.25, 0.09], [0, 0, 0]);
   addBox(fangDagger, "dagger-guard", fangWeaponMaterial, [0.25, 0.07, 0.11], [0, -0.12, 0]);
   const fangBlade = addBox(fangDagger, "dagger-fang", fangWeaponMaterial, [0.16, 0.46, 0.11], [0, -0.38, 0]);
   fangBlade.setLocalEulerAngles(0, 0, 8);
-  rightArm.addChild(fangDagger);
+  rightElbow.addChild(fangDagger);
 
   const stoneCoreHammer = new pc.Entity("main-hand-stone-core-hammer");
-  stoneCoreHammer.setLocalPosition(0, -0.66, 0.1);
-  addBox(stoneCoreHammer, "hammer-handle", weaponWoodMaterial, [0.11, 0.74, 0.11], [0, -0.2, 0]);
-  addBox(stoneCoreHammer, "hammer-head", coreWeaponMaterial, [0.62, 0.34, 0.38], [0, -0.62, 0]);
-  addBox(stoneCoreHammer, "hammer-core", coreGlowMaterial, [0.2, 0.22, 0.4], [0, -0.62, 0]);
-  rightArm.addChild(stoneCoreHammer);
+  stoneCoreHammer.setLocalPosition(0, -0.28, 0.1);
+  addBox(stoneCoreHammer, "hammer-handle", weaponWoodMaterial, [0.11, 0.52, 0.11], [0, -0.12, 0]);
+  addBox(stoneCoreHammer, "hammer-head", coreWeaponMaterial, [0.62, 0.3, 0.36], [0, -0.42, 0]);
+  addBox(stoneCoreHammer, "hammer-core", coreGlowMaterial, [0.17, 0.22, 0.38], [0, -0.42, 0]);
+  rightElbow.addChild(stoneCoreHammer);
 
   const acidGlandFocus = new pc.Entity("main-hand-acid-gland-focus");
-  acidGlandFocus.setLocalPosition(0, -0.68, 0.11);
+  acidGlandFocus.setLocalPosition(0, -0.28, 0.11);
   addBox(acidGlandFocus, "acid-focus-handle", weaponWoodMaterial, [0.1, 0.48, 0.1], [0, 0, 0]);
   addBox(acidGlandFocus, "acid-focus-cage", coreWeaponMaterial, [0.34, 0.1, 0.34], [0, -0.34, 0]);
   addBox(acidGlandFocus, "acid-focus-gland", acidWeaponMaterial, [0.25, 0.3, 0.25], [0, -0.42, 0]);
-  rightArm.addChild(acidGlandFocus);
+  rightElbow.addChild(acidGlandFocus);
 
   const mainHands = {
     longsword,
@@ -601,16 +711,26 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   acidGlandFocus.enabled = false;
 
   const leftLeg = new pc.Entity("left-leg-pivot");
-  leftLeg.setLocalPosition(-0.13, 0.56, 0);
+  leftLeg.setLocalPosition(-0.135, 0.57, 0);
   root.addChild(leftLeg);
-  addBox(leftLeg, "left-leg", bootMaterial, [0.2, 0.5, 0.22], [0, -0.25, 0]);
-  addBox(leftLeg, "left-boot", bootMaterial, [0.21, 0.16, 0.31], [0, -0.48, 0.055]);
+  addBox(leftLeg, "left-trousers", trousersMaterial, [0.205, 0.28, 0.23], [0, -0.12, 0]);
+  const leftKnee = new pc.Entity("left-knee-pivot");
+  leftKnee.setLocalPosition(0, -0.25, 0);
+  leftLeg.addChild(leftKnee);
+  addBox(leftKnee, "left-shin", bootMaterial, [0.21, 0.23, 0.24], [0, -0.12, 0]);
+  addBox(leftKnee, "left-boot-cuff", brassMaterial, [0.22, 0.045, 0.25], [0, -0.035, 0]);
+  addBox(leftKnee, "left-boot", bootMaterial, [0.23, 0.14, 0.33], [0, -0.25, 0.045]);
 
   const rightLeg = new pc.Entity("right-leg-pivot");
-  rightLeg.setLocalPosition(0.13, 0.56, 0);
+  rightLeg.setLocalPosition(0.135, 0.57, 0);
   root.addChild(rightLeg);
-  addBox(rightLeg, "right-leg", bootMaterial, [0.2, 0.5, 0.22], [0, -0.25, 0]);
-  addBox(rightLeg, "right-boot", bootMaterial, [0.21, 0.16, 0.31], [0, -0.48, 0.055]);
+  addBox(rightLeg, "right-trousers", trousersMaterial, [0.205, 0.28, 0.23], [0, -0.12, 0]);
+  const rightKnee = new pc.Entity("right-knee-pivot");
+  rightKnee.setLocalPosition(0, -0.25, 0);
+  rightLeg.addChild(rightKnee);
+  addBox(rightKnee, "right-shin", bootMaterial, [0.21, 0.23, 0.24], [0, -0.12, 0]);
+  addBox(rightKnee, "right-boot-cuff", brassMaterial, [0.22, 0.045, 0.25], [0, -0.035, 0]);
+  addBox(rightKnee, "right-boot", bootMaterial, [0.23, 0.14, 0.33], [0, -0.25, 0.045]);
 
   let silhouette: pc.Entity | null = null;
   if (withSilhouette) {
@@ -620,7 +740,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     silhouette.enabled = false;
     root.addChild(silhouette);
   }
-  return { root, torso, head, leftArm, rightArm, leftLeg, rightLeg, silhouette, mainHands, locomotionPhase: 0, locomotionWeight: 0 };
+  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, silhouette, mainHands, locomotionPhase: 0, locomotionWeight: 0 };
 }
 
 function setRigMainHand(rig: VoxelCharacterRig, mainHandId: MainHandId): void {
@@ -658,16 +778,24 @@ function animateVoxelCharacter(
   const action = powerPose.active ? powerPose : primaryActionPose(actionElapsedMilliseconds, actionStep, actionMainHandId);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
   rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw, pose.torsoRoll);
-  rig.head.setLocalEulerAngles(0, pose.headYaw, 0);
-  rig.leftArm.setLocalEulerAngles(pose.leftArmPitch + action.leftArmPitch, 0, action.leftArmRoll);
-  rig.rightArm.setLocalEulerAngles(pose.rightArmPitch + action.rightArmPitch, 0, action.rightArmRoll);
+  rig.head.setLocalEulerAngles(pose.headPitch, pose.headYaw - action.torsoYaw * 0.25, -pose.torsoRoll * 0.5);
+  // Ease walking arms out and back in with the actual action pose. A boolean
+  // active switch snaps the gait at both ends of an otherwise smooth attack.
+  const armSwing = actionArmSwingWeight(action);
+  rig.leftArm.setLocalEulerAngles(pose.leftArmPitch * armSwing + action.leftArmPitch, 0, action.leftArmRoll + 4);
+  rig.rightArm.setLocalEulerAngles(-12 + pose.rightArmPitch * armSwing + action.rightArmPitch, 0, action.rightArmRoll - 4);
+  rig.leftElbow.setLocalEulerAngles(pose.leftElbowPitch, 0, 0);
+  rig.rightElbow.setLocalEulerAngles(pose.rightElbowPitch - 8, 0, 0);
   rig.leftLeg.setLocalEulerAngles(pose.leftLegPitch, 0, 0);
   rig.rightLeg.setLocalEulerAngles(pose.rightLegPitch, 0, 0);
+  rig.leftKnee.setLocalEulerAngles(pose.leftKneePitch, 0, 0);
+  rig.rightKnee.setLocalEulerAngles(pose.rightKneePitch, 0, 0);
+  rig.scarf.setLocalEulerAngles(pose.scarfPitch, 0, pose.torsoRoll * -1.5);
 }
 
 const localPlayerVisual = new pc.Entity("local-player-visual");
 localPlayer.addChild(localPlayerVisual);
-const localPlayerRig = createVoxelCharacter(localPlayerVisual, coloredMaterial(new pc.Color(0.88, 0.58, 0.12)), true);
+const localPlayerRig = createVoxelCharacter(localPlayerVisual, coloredMaterial(new pc.Color(0.12, 0.45, 0.46)), true);
 const localPlayerSilhouette = localPlayerRig.silhouette;
 localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
@@ -759,6 +887,10 @@ interface MobVisual {
   entity: pc.Entity;
   bodyRoot: pc.Entity;
   bodyMaterial: pc.StandardMaterial;
+  art: MobArtRig;
+  statusRoot: pc.Entity;
+  frameAlive: boolean;
+  defeatAt: number;
   warning: pc.Entity;
   warningMaterial: pc.StandardMaterial;
   warningScale: number;
@@ -1699,14 +1831,12 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
       ? new pc.Color(1, 0.62, 0.08)
       : new pc.Color(0.35, 0.9, 0.28);
   const bodyMaterial = coloredMaterial(
-    isBrute ? new pc.Color(0.34, 0.36, 0.35) : isSpitter ? new pc.Color(0.24, 0.38, 0.16) : new pc.Color(0.22, 0.62, 0.24),
+    isBrute ? new pc.Color(0.38, 0.43, 0.48) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : new pc.Color(0.28, 0.42, 0.21),
   );
-  const accentMaterial = coloredMaterial(
-    isBrute ? new pc.Color(0.62, 0.35, 0.09) : isSpitter ? new pc.Color(0.52, 0.92, 0.08) : new pc.Color(0.3, 0.72, 0.25),
-  );
-  const eyeMaterial = coloredMaterial(
-    isBrute ? new pc.Color(1, 0.38, 0.04) : isSpitter ? new pc.Color(0.78, 1, 0.3) : new pc.Color(0.03, 0.045, 0.035),
-  );
+  bodyMaterial.shininess = 12;
+  // Keep the emissive shader feature active while varying cue intensity.
+  bodyMaterial.emissive.set(0.001, 0.001, 0.001);
+  bodyMaterial.update();
   const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
   const healthMaterial = coloredMaterial(mob.difficultyTier > 1 ? tierColor : isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : tierColor);
   const warningMaterial = new pc.StandardMaterial();
@@ -1723,45 +1853,17 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.blendType = pc.BLEND_NORMAL;
   markMaterial.depthWrite = false;
   markMaterial.update();
-  if (isBrute) {
-    addBox(bodyRoot, "brute-body", bodyMaterial, [1.18, 1.05, 0.92], [0, 0.67, 0]);
-    addBox(bodyRoot, "brute-head", bodyMaterial, [0.76, 0.66, 0.7], [0, 1.43, 0.08]);
-    addBox(bodyRoot, "brute-shoulder-left", bodyMaterial, [0.54, 0.52, 0.62], [-0.78, 1.12, 0]);
-    addBox(bodyRoot, "brute-shoulder-right", bodyMaterial, [0.54, 0.52, 0.62], [0.78, 1.12, 0]);
-    addBox(bodyRoot, "brute-arm-left", bodyMaterial, [0.42, 0.8, 0.46], [-0.82, 0.55, 0.1]);
-    addBox(bodyRoot, "brute-arm-right", bodyMaterial, [0.42, 0.8, 0.46], [0.82, 0.55, 0.1]);
-    addBox(bodyRoot, "brute-fist-left", accentMaterial, [0.58, 0.45, 0.62], [-0.82, 0.16, 0.2]);
-    addBox(bodyRoot, "brute-fist-right", accentMaterial, [0.58, 0.45, 0.62], [0.82, 0.16, 0.2]);
-    addBox(bodyRoot, "brute-brow", accentMaterial, [0.62, 0.15, 0.16], [0, 1.56, 0.39]);
-    addBox(bodyRoot, "brute-eye-left", eyeMaterial, [0.12, 0.11, 0.07], [-0.2, 1.43, 0.44]);
-    addBox(bodyRoot, "brute-eye-right", eyeMaterial, [0.12, 0.11, 0.07], [0.2, 1.43, 0.44]);
-    addBox(bodyRoot, "brute-crystal", accentMaterial, [0.24, 0.48, 0.24], [0, 1.06, -0.48]).setLocalEulerAngles(12, 0, 45);
-  } else if (isSpitter) {
-    addBox(bodyRoot, "spitter-body", bodyMaterial, [0.96, 0.55, 1.16], [0, 0.38, -0.08]);
-    addBox(bodyRoot, "spitter-head", bodyMaterial, [0.72, 0.58, 0.68], [0, 0.58, 0.58]);
-    addBox(bodyRoot, "spitter-mouth", accentMaterial, [0.42, 0.16, 0.12], [0, 0.46, 0.94]);
-    addBox(bodyRoot, "spitter-eye-left", eyeMaterial, [0.12, 0.13, 0.08], [-0.2, 0.7, 0.89]);
-    addBox(bodyRoot, "spitter-eye-right", eyeMaterial, [0.12, 0.13, 0.08], [0.2, 0.7, 0.89]);
-    addBox(bodyRoot, "spitter-sac-left", accentMaterial, [0.42, 0.5, 0.48], [-0.3, 0.7, -0.52]);
-    addBox(bodyRoot, "spitter-sac-right", accentMaterial, [0.42, 0.5, 0.48], [0.3, 0.7, -0.52]);
-    for (const side of [-1, 1]) {
-      addBox(bodyRoot, `spitter-leg-front-${side}`, bodyMaterial, [0.22, 0.28, 0.5], [side * 0.52, 0.18, 0.42]);
-      addBox(bodyRoot, `spitter-leg-back-${side}`, bodyMaterial, [0.22, 0.28, 0.5], [side * 0.52, 0.18, -0.42]);
-    }
-  } else {
-    addBox(bodyRoot, "crawler-body", bodyMaterial, [0.92, 0.58, 0.86], [0, 0.32, 0]);
-    addBox(bodyRoot, "crawler-head", bodyMaterial, [0.68, 0.48, 0.62], [0, 0.76, 0.08]);
-    addBox(bodyRoot, "crawler-eye-left", eyeMaterial, [0.1, 0.12, 0.06], [-0.17, 0.8, 0.39]);
-    addBox(bodyRoot, "crawler-eye-right", eyeMaterial, [0.1, 0.12, 0.06], [0.17, 0.8, 0.39]);
-  }
+  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial);
+  const statusRoot = new pc.Entity("mob-status");
+  entity.addChild(statusRoot);
   const healthWidth = isBrute ? 1.46 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = isBrute ? 2.18 : isSpitter ? 1.48 : 1.34;
-  addBox(entity, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
-  const healthFill = addBox(entity, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
+  const healthBarY = isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
+  addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
+  const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);
   for (let index = 0; index < mob.difficultyTier; index += 1) {
     const pipX = (index - (mob.difficultyTier - 1) / 2) * 0.22;
-    const pip = addBox(entity, `danger-tier-${index + 1}`, tierMaterial, [0.12, 0.12, 0.12], [pipX, healthBarY + 0.2, 0]);
+    const pip = addBox(statusRoot, `danger-tier-${index + 1}`, tierMaterial, [0.12, 0.12, 0.12], [pipX, healthBarY + 0.2, 0]);
     pip.setLocalEulerAngles(0, 45, 45);
   }
   const warning = new pc.Entity("lunge-warning");
@@ -1780,7 +1882,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   mark.enabled = false;
   entity.addChild(mark);
   const markPips = [-0.24, 0, 0.24].map((x, index) => {
-    const pip = addBox(entity, `hunters-mark-stack-${index + 1}`, markMaterial, [0.14, 0.14, 0.14], [x, healthBarY + 0.21, 0]);
+    const pip = addBox(statusRoot, `hunters-mark-stack-${index + 1}`, markMaterial, [0.14, 0.14, 0.14], [x, healthBarY + 0.21, 0]);
     pip.setLocalEulerAngles(0, 45, 45);
     pip.enabled = false;
     return pip;
@@ -1791,6 +1893,10 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     entity,
     bodyRoot,
     bodyMaterial,
+    art,
+    statusRoot,
+    frameAlive: mob.alive,
+    defeatAt: -Infinity,
     warning,
     warningMaterial,
     warningScale,
@@ -2208,6 +2314,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   exitTrail.enabled = playerCutaway.active;
   exitGuide.hidden = !playerCutaway.active;
   for (const chunk of installed) rebuildChunk(chunk);
+  sceneDressing.rebuild(readWorldBlock, payload.chunks);
+  sceneDressing.setSurfaceVisible(!playerCutaway.active);
   lastChunkBuildMs = performance.now() - buildStartedAt;
   logMovementEvent(
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)}`,
@@ -2550,11 +2658,13 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   exitTrail.enabled = visibilityCutaway;
   exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
-  if (light.light) light.light.intensity = 1.35 + (0.5 - 1.35) * undergroundLightingBlend;
-  app.scene.ambientLight = new pc.Color(
-    0.36 + (0.16 - 0.36) * undergroundLightingBlend,
-    0.42 + (0.18 - 0.42) * undergroundLightingBlend,
-    0.38 + (0.2 - 0.38) * undergroundLightingBlend,
+  if (light.light) light.light.intensity = 1.45 + (0.45 - 1.45) * undergroundLightingBlend;
+  if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend);
+  if (caveLight.light) caveLight.light.intensity = 1.7 * undergroundLightingBlend;
+  app.scene.ambientLight.set(
+    0.43 + (0.2 - 0.43) * undergroundLightingBlend,
+    0.48 + (0.24 - 0.48) * undergroundLightingBlend,
+    0.54 + (0.31 - 0.54) * undergroundLightingBlend,
   );
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(
@@ -2565,6 +2675,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   if (!visibilityCutaway) surfaceReferenceY = SURFACE_HEIGHT + 1;
   playerCutaway.active = visibilityCutaway;
   playerCutaway.sliceY = nextSliceY ?? CHUNK_HEIGHT;
+  sceneDressing.setSurfaceVisible(!visibilityCutaway);
   for (const chunk of chunks.values()) rebuildChunk(chunk);
   status.textContent = atSurface && visibilityCutaway
     ? `Returning to surface · restoring slice ${nextSliceY}`
@@ -3402,22 +3513,31 @@ app.on("update", (dt: number) => {
     loot.root.setEulerAngles(0, (animationTime * 58 + loot.phase * 23) % 360, 0);
   }
   for (const mob of mobVisuals.values()) {
-    const visible = mob.state.alive && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
+    if (mob.frameAlive !== mob.state.alive) {
+      mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
+      mob.frameAlive = mob.state.alive;
+      if (mob.state.alive) mob.art.walk = 0;
+    }
+    const defeat = mob.state.alive ? 0 : Math.min(1, (animationNow - mob.defeatAt) / 580);
+    const visible = (mob.state.alive || defeat < 1) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
     if (!visible) continue;
+    mob.statusRoot.enabled = mob.state.alive;
     const currentMobPosition = mob.entity.getPosition();
-    const targetMobPosition = new pc.Vec3(mob.state.x, mob.state.y, mob.state.z);
-    currentMobPosition.lerp(currentMobPosition, targetMobPosition, Math.min(1, frameTime * 10));
-    mob.entity.setPosition(currentMobPosition);
+    const follow = Math.min(1, frameTime * 10);
+    const moveX = (mob.state.x - currentMobPosition.x) * follow;
+    const moveZ = (mob.state.z - currentMobPosition.z) * follow;
+    const moveSpeed = Math.hypot(moveX, moveZ) / Math.max(0.001, frameTime);
+    mob.entity.setPosition(currentMobPosition.x + moveX, currentMobPosition.y + (mob.state.y - currentMobPosition.y) * follow, currentMobPosition.z + moveZ);
     const currentMobYaw = mob.entity.getEulerAngles().y;
     mob.entity.setEulerAngles(0, approachYaw(currentMobYaw, mob.state.yaw, frameTime, 420), 0);
-    const hitStrength = Math.max(0, 1 - (animationNow - mob.hitAt) / 180);
+    const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
     const attackElapsed = animationNow - mob.actionAt;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
-    const attackStrength = attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackElapsed / attackDuration * Math.PI) : 0;
+    const attackStrength = mob.actionAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackElapsed / attackDuration * Math.PI) : 0;
     const staggerElapsed = animationNow - mob.staggerAt;
-    const staggerStrength = staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
-    const windupStrength = mob.state.combatState === "windup"
+    const staggerStrength = mob.staggerAt > 0 && mob.state.alive && staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
+    const windupStrength = mob.state.alive && mob.state.combatState === "windup"
       ? (mob.isBrute
           ? 0.72 + Math.sin(animationTime * 12) * 0.13
           : mob.isSpitter
@@ -3426,11 +3546,11 @@ app.on("update", (dt: number) => {
       : 0;
     const markState = visibleMarkState(mob);
     const exposed = Boolean(markState && markState.stacks >= markState.maxStacks);
-    mob.mark.enabled = Boolean(markState);
+    mob.mark.enabled = mob.state.alive && Boolean(markState);
     if (mob.mark.enabled) {
       const markPulse = 1 + Math.sin(animationTime * (exposed ? 14 : 8)) * (exposed ? 0.15 : 0.08);
       mob.mark.setLocalScale(1.55 * markPulse, 0.022, 1.55 * markPulse);
-      mob.markMaterial.emissive = exposed ? new pc.Color(0.78, 0.16, 1) : new pc.Color(0.42, 0.08, 0.74);
+      mob.markMaterial.emissive.set(exposed ? 0.78 : 0.42, exposed ? 0.16 : 0.08, exposed ? 1 : 0.74);
       mob.markMaterial.opacity = (exposed ? 0.58 : 0.38) + Math.sin(animationTime * (exposed ? 14 : 8)) * 0.1;
       mob.markMaterial.update();
     }
@@ -3442,27 +3562,30 @@ app.on("update", (dt: number) => {
         pip.setLocalScale(0.14 * pipPulse, 0.14 * pipPulse, 0.14 * pipPulse);
       }
     }
-    mob.warning.enabled = mob.state.combatState === "windup";
+    mob.warning.enabled = mob.state.alive && mob.state.combatState === "windup";
     if (mob.warning.enabled) {
       const warningPulse = 1 + Math.sin(animationTime * 18) * 0.045;
       mob.warning.setLocalScale(mob.warningScale * warningPulse, 0.025, mob.warningScale * warningPulse);
       mob.warningMaterial.opacity = 0.25 + windupStrength * 0.22;
       mob.warningMaterial.update();
     }
+    animateMobArt(mob.art, frameTime, animationTime, moveSpeed, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
+    const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
+    mob.bodyRoot.setLocalScale(1 + defeat * 0.13, 1 - defeat * (mob.isBrute ? 0.42 : 0.58), 1 + defeat * 0.1);
     mob.bodyRoot.setLocalPosition(
       0,
-      Math.sin(animationTime * (mob.isBrute ? 2.8 : mob.isSpitter ? 5.5 : 4.5)) * (mob.isBrute ? 0.035 : 0.055) - hitStrength * 0.08 - attackStrength * (mob.isBrute ? 0.14 : 0),
+      gaitBob - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0),
       attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16),
     );
     mob.bodyRoot.setLocalEulerAngles(
-      mob.isBrute ? windupStrength * -11 + attackStrength * 18 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : 0,
+      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9) + defeat * (mob.isBrute ? 17 : 5),
       0,
-      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12),
+      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3) + defeat * (mob.isBrute ? 7 : 12),
     );
-    mob.bodyMaterial.emissive = new pc.Color(
-      0.55 * hitStrength + 0.34 * windupStrength,
-      0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
-      0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
+    mob.bodyMaterial.emissive.set(
+      0.001 + 0.55 * hitStrength + 0.34 * windupStrength,
+      0.001 + 0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
+      0.001 + 0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
     );
     mob.bodyMaterial.update();
   }
@@ -3769,6 +3892,7 @@ function applyBlockChange(message: BlockChanged): void {
   chunk.revision = message.revision;
   const buildStartedAt = performance.now();
   rebuildChunkAndNeighbors(chunk, message.x, message.z);
+  if (message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()]);
   lastChunkBuildMs = performance.now() - buildStartedAt;
   status.textContent = `Block removed · chunk revision ${chunk.revision}`;
 }
