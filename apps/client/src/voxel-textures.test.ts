@@ -25,8 +25,9 @@ describe("procedural voxel textures", () => {
   });
 
   it("keeps building finishes distinct from mineable wilderness materials", () => {
-    expect(voxelTextureKind(Block.Dirt, 0, 2, 8, 4)).toBe("timber");
-    expect(voxelTextureKind(Block.Stone, 1, 2, 10, 4)).toBe("slate-roof");
+    expect(voxelTextureKind(Block.Dirt, 0, 8, 7, 14)).toBe("timber");
+    expect(voxelTextureKind(Block.Dirt, 0, 0, 10, 12)).toBe("timber");
+    expect(voxelTextureKind(Block.Stone, 1, 8, 12, 14)).toBe("slate-roof");
     expect(voxelTextureKind(Block.Stone, 1, 8, 7, 8)).toBe("paving");
     expect(voxelTextureKind(Block.Dirt, 0, 22, 6, 6)).toBe("dirt");
     expect(voxelTextureKind(Block.IronOre, 0, 22, 3, 6)).toBe("iron");

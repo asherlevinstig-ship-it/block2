@@ -5,14 +5,8 @@ export const TOWN_CENTER_X = CHUNK_SIZE / 2 + 0.5;
 export const TOWN_CENTER_Z = CHUNK_SIZE / 2 + 0.5;
 export const TOWN_SAFE_RADIUS = 14;
 export const SPAWN_PROTECTION_RADIUS = TOWN_SAFE_RADIUS;
-export const TOWN_LODGES = [
-  { minX: 2, maxX: 5, minZ: 4, maxZ: 7, doorX: 5, doorZ: 6 },
-  { minX: 11, maxX: 14, minZ: 9, maxZ: 12, doorX: 11, doorZ: 10 },
-  { minX: -3, maxX: 0, minZ: 10, maxZ: 13, doorX: 0, doorZ: 11 },
-  { minX: 4, maxX: 7, minZ: -3, maxZ: 0, doorX: 5, doorZ: 0 },
-  { minX: 4, maxX: 7, minZ: 16, maxZ: 19, doorX: 5, doorZ: 16 },
-  { minX: 16, maxX: 19, minZ: 12, maxZ: 15, doorX: 16, doorZ: 13 },
-] as const;
+export const TOWN_TAVERN = { minX: 0, maxX: 16, minZ: 10, maxZ: 19, roofBaseY: 12, roofTopY: 16 } as const;
+export const TOWN_BUILDINGS = [TOWN_TAVERN] as const;
 export const TOWN_GATE_POSTS = [
   [-6, 7], [-6, 10], [22, 7], [22, 10],
   [7, -6], [10, -6], [7, 22], [10, 22],
@@ -112,19 +106,36 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
   return null;
 }
 
-function townBuildingBlock(
-  worldX: number,
-  y: number,
-  worldZ: number,
-  bounds: { minX: number; maxX: number; minZ: number; maxZ: number; doorX: number; doorZ: number },
-): BlockId | null {
-  const inside = worldX >= bounds.minX && worldX <= bounds.maxX && worldZ >= bounds.minZ && worldZ <= bounds.maxZ;
-  if (!inside) return null;
-  if (y === 10) return Block.Stone;
-  if (y !== 8 && y !== 9) return null;
-  if (worldX === bounds.doorX && worldZ === bounds.doorZ) return Block.Air;
-  const perimeter = worldX === bounds.minX || worldX === bounds.maxX || worldZ === bounds.minZ || worldZ === bounds.maxZ;
-  return perimeter ? Block.Dirt : Block.Air;
+export function isTownTavernFootprint(worldX: number, worldZ: number): boolean {
+  return worldX >= TOWN_TAVERN.minX && worldX <= TOWN_TAVERN.maxX
+    && worldZ >= TOWN_TAVERN.minZ && worldZ <= TOWN_TAVERN.maxZ
+    && (worldZ < 18 || (worldX >= 2 && worldX <= 14));
+}
+
+export function townTavernBlock(worldX: number, y: number, worldZ: number): BlockId | null {
+  if (!isTownTavernFootprint(worldX, worldZ)) return null;
+  if (y === SURFACE_HEIGHT) return Block.Dirt;
+  if (y === 12) return Block.Stone;
+  if (y === 13) return worldX >= 1 && worldX <= 15 && worldZ >= 11 && worldZ <= 18 ? Block.Stone : null;
+  if (y === 14) return worldX >= 3 && worldX <= 13 && worldZ >= 13 && worldZ <= 16 ? Block.Stone : null;
+  if (y === 15 || y === 16) return worldX === 3 && worldZ === 16 ? Block.Stone : null;
+  if (y < 8 || y > 11) return null;
+
+  const edgeX = worldZ >= 18 ? worldX === 2 || worldX === 14 : worldX === 0 || worldX === 16;
+  const perimeter = edgeX || worldZ === 10 || worldZ === 19
+    || (worldZ === 17 && (worldX <= 2 || worldX >= 14));
+  const doorway = (worldZ === 10 || worldZ === 19) && worldX >= 7 && worldX <= 9 && y <= 10;
+  if (doorway) return Block.Air;
+  if (perimeter) {
+    const window = y === 9 && ((worldX === 0 || worldX === 16) && (worldZ === 12 || worldZ === 15)
+      || (worldZ === 10 || worldZ === 19) && (worldX === 4 || worldX === 12));
+    return window ? Block.Air : y === 8 ? Block.Stone : Block.Dirt;
+  }
+  const table = y === 8 && (worldZ === 13 || worldZ === 16)
+    && ((worldX >= 3 && worldX <= 5) || (worldX >= 11 && worldX <= 13));
+  if (table) return Block.Dirt;
+  if (worldX === 3 && worldZ === 16 && y >= 9) return Block.Stone;
+  return Block.Air;
 }
 
 /** A continuous voxel rampart, with two-block-wide passages at the four cardinal gates. */
@@ -145,10 +156,8 @@ export function townWallBlock(worldX: number, y: number, worldZ: number): BlockI
 }
 
 export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number): BlockId | null {
-  for (const lodge of TOWN_LODGES) {
-    const block = townBuildingBlock(worldX, y, worldZ, lodge);
-    if (block !== null) return block;
-  }
+  const tavern = townTavernBlock(worldX, y, worldZ);
+  if (tavern !== null) return tavern;
 
   const wall = townWallBlock(worldX, y, worldZ);
   if (wall !== null) return wall;

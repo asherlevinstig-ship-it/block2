@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_LODGES, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_TAVERN, type WorldBlockReader } from "@blockcraft/voxel-world";
 
 type Color = readonly [number, number, number];
 const WOOD: Color = [0.24, 0.17, 0.12];
@@ -97,37 +97,51 @@ export class SceneDressing {
       }
     }
 
-    for (const lodge of TOWN_LODGES) {
-      const lodgeX = lodge.minX;
-      const lodgeZ = lodge.minZ;
-      const cx = lodgeX + 2;
-      const cz = lodgeZ + 2;
-      // Keep details tied to their authoritative supporting voxels.
-      for (const x of [lodgeX + 0.05, lodgeX + 3.95]) {
-        for (const z of [lodgeZ + 0.05, lodgeZ + 3.95]) {
-          if (read(Math.floor(x), 8, Math.floor(z)) !== Block.Dirt) continue;
-          solid.box(x, 9, z, 0.16, 2, 0.16, WOOD);
-          solid.box(x, 8.12, z, 0.21, 0.24, 0.21, SLATE);
-        }
+    // The tavern is the town's single landmark: a broad timber hall with a raised slate roof.
+    for (const [x, z] of [[0, 10], [16, 10], [0, 17], [16, 17], [2, 19], [14, 19]]) {
+      if (read(x!, 10, z!) !== Block.Dirt) continue;
+      solid.box(x! + 0.5, 10, z! + 0.5, 0.22, 4.05, 0.22, WOOD);
+      solid.box(x! + 0.5, 8.15, z! + 0.5, 0.32, 0.3, 0.32, SLATE);
+    }
+    if (read(8, 12, 10) === Block.Stone && (hiddenRoof?.minX !== TOWN_TAVERN.minX || hiddenRoof.minZ !== TOWN_TAVERN.minZ)) {
+      solid.box(8.5, 13.04, 10.02, 17.14, 0.12, 0.18, SLATE);
+      solid.box(8.5, 13.04, 18.02, 17.14, 0.12, 0.18, SLATE);
+      solid.box(8.5, 13.04, 19.98, 13.14, 0.12, 0.18, SLATE);
+      solid.box(0.02, 13.04, 14, 0.18, 0.12, 8.1, SLATE);
+      solid.box(16.98, 13.04, 14, 0.18, 0.12, 8.1, SLATE);
+      solid.box(8.5, 15.05, 15, 11.1, 0.12, 4.1, COPPER);
+    }
+    for (const x of [0, 16]) {
+      for (const z of [12, 15]) {
+        if (read(x, 9, z) !== Block.Air) continue;
+        const outsideX = x === 0 ? -0.04 : 17.04;
+        glow.box(outsideX, 9.5, z + 0.5, 0.045, 0.72, 0.74, GOLD);
+        solid.box(outsideX + (x === 0 ? -0.03 : 0.03), 9.5, z + 0.5, 0.055, 0.83, 0.09, WOOD);
       }
-      if (read(lodgeX, 10, lodgeZ) === Block.Stone && (hiddenRoof?.minX !== lodgeX || hiddenRoof.minZ !== lodgeZ)) {
-        solid.box(cx, 10.98, lodgeZ + 0.03, 4.12, 0.1, 0.16, SLATE);
-        solid.box(cx, 10.98, lodgeZ + 3.97, 4.12, 0.1, 0.16, SLATE);
-        solid.box(lodgeX + 0.03, 10.98, cz, 0.16, 0.1, 4.12, SLATE);
-        solid.box(lodgeX + 3.97, 10.98, cz, 0.16, 0.1, 4.12, SLATE);
-        solid.box(cx, 10.045, lodgeZ - 0.025, 4.08, 0.14, 0.12, WOOD);
-        solid.box(cx, 10.045, lodgeZ + 4.025, 4.08, 0.14, 0.12, WOOD);
+    }
+    for (const z of [10, 19]) {
+      for (const x of [4, 12]) {
+        if (read(x, 9, z) !== Block.Air) continue;
+        const outsideZ = z === 10 ? 9.96 : 20.04;
+        glow.box(x + 0.5, 9.5, outsideZ, 0.74, 0.72, 0.045, GOLD);
+        solid.box(x + 0.5, 9.5, outsideZ + (z === 10 ? -0.03 : 0.03), 0.09, 0.83, 0.055, WOOD);
       }
-      // Inlaid amber windows on solid walls, with timber mullions and a sill.
-      for (const wz of [lodgeZ - 0.025, lodgeZ + 4.025]) {
-        const supportZ = Math.max(lodgeZ, Math.min(lodgeZ + 3, Math.floor(wz)));
-        if (read(lodgeX + 1, 9, supportZ) !== Block.Dirt) continue;
-        solid.box(cx, 9.24, wz, 1.18, 0.92, 0.07, WOOD);
-        glow.box(cx, 9.24, wz + (wz < cz ? -0.04 : 0.04), 0.94, 0.69, 0.035, GOLD);
-        solid.box(cx, 9.24, wz + (wz < cz ? -0.065 : 0.065), 0.09, 0.72, 0.04, WOOD);
-        solid.box(cx, 9.24, wz + (wz < cz ? -0.065 : 0.065), 0.98, 0.08, 0.04, WOOD);
-        solid.box(cx, 8.76, wz, 1.32, 0.12, 0.25, COPPER);
+    }
+    if (read(8, 11, 10) === Block.Dirt) {
+      solid.box(8.5, 11.25, 9.94, 3.4, 0.64, 0.16, WOOD);
+      solid.box(8.5, 11.25, 9.84, 2.9, 0.1, 0.04, COPPER);
+      glow.box(8.5, 11.25, 9.79, 0.24, 0.38, 0.04, GOLD);
+    }
+    for (const z of [13, 16]) {
+      for (const x of [3, 11]) {
+        if (read(x, 8, z) !== Block.Dirt) continue;
+        solid.box(x + 1.5, 9.03, z + 0.5, 3.1, 0.12, 0.92, WOOD);
+        solid.box(x + 1.5, 9.1, z + 0.5, 2.84, 0.05, 0.68, COPPER);
       }
+    }
+    if (read(3, 10, 16) === Block.Stone) {
+      glow.box(3.5, 9.4, 15.96, 0.62, 0.8, 0.06, GOLD);
+      solid.box(3.5, 8.98, 15.86, 1.12, 0.13, 0.38, SLATE);
     }
 
     for (const [x, z] of TOWN_GATE_POSTS) {

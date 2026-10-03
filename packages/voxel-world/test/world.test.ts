@@ -6,6 +6,7 @@ import {
   GRAVITY,
   SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
+  TOWN_BUILDINGS,
   generateChunk,
   getBlock,
   highestSolidY,
@@ -55,16 +56,23 @@ describe("deterministic voxel world", () => {
     const southQuarter = generateChunk("test-world", 0, 1);
     expect(getBlock(centre, 8, SURFACE_HEIGHT, 8)).toBe(Block.Stone);
     expect(getBlock(centre, 8, SURFACE_HEIGHT + 1, 8)).toBe(Block.Air);
-    expect(getBlock(centre, 2, 8, 4)).toBe(Block.Dirt);
-    expect(getBlock(centre, 5, 8, 6)).toBe(Block.Air);
-    expect(getBlock(centre, 2, 10, 4)).toBe(Block.Stone);
+    expect(TOWN_BUILDINGS).toHaveLength(1);
+    expect(getBlock(centre, 2, 8, 4)).toBe(Block.Air);
+    expect(getBlock(centre, 2, 10, 4)).toBe(Block.Air);
     expect(getBlock(centre, 8, 11, 4)).toBe(Block.IronOre);
+    expect(getBlock(centre, 8, 7, 10)).toBe(Block.Dirt);
+    expect(getBlock(centre, 8, 8, 10)).toBe(Block.Air);
+    expect(getBlock(centre, 8, 10, 10)).toBe(Block.Air);
+    expect(getBlock(centre, 8, 11, 10)).toBe(Block.Dirt);
+    expect(getBlock(centre, 8, 12, 14)).toBe(Block.Stone);
+    expect(getBlock(centre, 8, 14, 14)).toBe(Block.Stone);
     expect(getBlock(eastGate, 6, 11, 7)).toBe(Block.IronOre);
     expect(getBlock(eastGate, 0, 8, 8)).toBe(Block.Air);
-    expect(getBlock(westQuarter, 13, 10, 10)).toBe(Block.Stone);
-    expect(getBlock(northQuarter, 5, 10, 13)).toBe(Block.Stone);
-    expect(getBlock(southQuarter, 5, 10, 0)).toBe(Block.Stone);
-    expect(getBlock(eastGate, 0, 10, 12)).toBe(Block.Stone);
+    expect(getBlock(westQuarter, 13, 10, 10)).toBe(Block.Air);
+    expect(getBlock(northQuarter, 5, 10, 13)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 8, 8, 3)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 8, 12, 3)).toBe(Block.Stone);
+    expect(getBlock(eastGate, 0, 10, 12)).toBe(Block.Dirt);
     expect(getBlock(eastGate, 2, SURFACE_HEIGHT, 8)).toBe(Block.Air);
   });
 
@@ -95,6 +103,19 @@ describe("deterministic voxel world", () => {
     const throughGate = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: -4.5 }, { x: 0, z: -3 }, read);
     expect(blocked.z).toBeGreaterThan(-6);
     expect(throughGate.z).toBeLessThan(-7);
+  });
+
+  it("lets a player walk from the plaza into the tavern through its wide entrance", () => {
+    const loaded = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const address = worldToChunk(x, z);
+      const key = `${address.chunkX},${address.chunkZ}`;
+      if (!loaded.has(key)) loaded.set(key, generateChunk("test-world", address.chunkX, address.chunkZ));
+      return getBlock(loaded.get(key)!, address.localX, y, address.localZ);
+    };
+    const entered = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: 8.5 }, { x: 0, z: 5 }, read);
+    expect(entered.z).toBeGreaterThan(13);
+    expect(entered.y).toBe(8);
   });
 
   it("finds a stable standing surface inside a generated column", () => {
