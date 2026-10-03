@@ -72,6 +72,7 @@ import {
   reconciliationVerticalTarget,
   sampleRemotePose,
   smoothVerticalOffset,
+  smoothNetworkVisualOffset,
   trimRemoteSnapshots,
   type RemoteSnapshot,
 } from "./movement-network.js";
@@ -956,6 +957,7 @@ window.addEventListener("keydown", unlockCombatAudio, { once: true, capture: tru
 const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
+let localNetworkVisualOffset = { x: 0, z: 0 };
 const localPowerVisualOffset = new pc.Vec3();
 let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
@@ -2341,6 +2343,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   camera.lookAt(initialPosition.x, initialPosition.y - 2, initialPosition.z);
   localVerticalVelocity = 0;
   localVisualVerticalOffset = 0;
+  localNetworkVisualOffset = { x: 0, z: 0 };
   localPowerVisualOffset.set(0, 0, 0);
   localPlayerVisual.setLocalPosition(0, 0, 0);
   surfaceReferenceY = SURFACE_HEIGHT + 1;
@@ -3504,10 +3507,20 @@ app.on("update", (dt: number) => {
   const authoritativeInputReady = pendingStopInputSequence === null;
   const sequenceLag = Math.max(0, moveSequence - lastProcessedInputSequence);
   const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded, authoritativeInputReady);
+  if (!Number.isFinite(reconciliation.rate)) localNetworkVisualOffset = { x: 0, z: 0 };
+  else {
+    const reconciledPosition = localPlayer.getPosition();
+    localNetworkVisualOffset = smoothNetworkVisualOffset(
+      localNetworkVisualOffset,
+      { x: predicted.x - reconciledPosition.x, z: predicted.z - reconciledPosition.z },
+      moving,
+      frameTime,
+    );
+  }
   updateActiveChunkMeshes(localPlayer.getPosition());
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPowerVisualOffset.mulScalar(Math.max(0, 1 - frameTime * 11));
-  localPlayerVisual.setLocalPosition(localPowerVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z);
+  localPlayerVisual.setLocalPosition(localPowerVisualOffset.x + localNetworkVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z + localNetworkVisualOffset.z);
   const animationNow = performance.now();
   const animationTime = animationNow / 1000;
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
@@ -3832,9 +3845,9 @@ app.on("update", (dt: number) => {
       ? `${Math.ceil(specialRemaining / 1000)}s`
       : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
   cameraTarget.set(
-    player.x + localPowerVisualOffset.x,
+    player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x,
     player.y + localVisualVerticalOffset,
-    player.z + localPowerVisualOffset.z,
+    player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z,
   );
   cameraFocus.copy(cameraTarget);
   const desiredCamera = new pc.Vec3(cameraFocus.x + cameraOffset.x, cameraFocus.y - 2 + cameraOffset.y, cameraFocus.z + cameraOffset.z);
@@ -3848,7 +3861,7 @@ app.on("update", (dt: number) => {
   camera.setPosition(desiredCamera);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   const bodyY = localPlayerRig.root.getLocalPosition().y;
-  const renderedPlayerPosition = new pc.Vec3(player.x, player.y + localVisualVerticalOffset + bodyY, player.z);
+  const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
   updateUndergroundPresentation(player, frameTime);
   updateIndoorRoof(player);
@@ -3949,6 +3962,7 @@ app.on("update", (dt: number) => {
       `local      ${player.x.toFixed(3)}, ${player.y.toFixed(3)}, ${player.z.toFixed(3)}`,
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
+      `net visual ${localNetworkVisualOffset.x.toFixed(3)}, ${localNetworkVisualOffset.z.toFixed(3)}`,
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     yaw=${(cameraOrbit.yaw * 180 / Math.PI).toFixed(1)} pitch=${(cameraOrbit.pitch * 180 / Math.PI).toFixed(1)} screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,

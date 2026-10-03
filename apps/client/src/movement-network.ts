@@ -116,6 +116,28 @@ export function smoothVerticalOffset(offset: number, deltaTime: number, response
   return Math.abs(next) < 0.001 ? 0 : next;
 }
 
+/** Keep an idle avatar visually planted while a small server stop correction settles. */
+export function smoothNetworkVisualOffset(
+  offset: MovementVector,
+  correction: MovementVector,
+  moving: boolean,
+  deltaTime: number,
+  maximumOffset = 0.6,
+): MovementVector {
+  if (moving) {
+    const decay = Math.exp(-12 * Math.max(0, deltaTime));
+    return {
+      x: Math.abs(offset.x * decay) < 0.001 ? 0 : offset.x * decay,
+      z: Math.abs(offset.z * decay) < 0.001 ? 0 : offset.z * decay,
+    };
+  }
+  const x = offset.x + correction.x;
+  const z = offset.z + correction.z;
+  const length = Math.hypot(x, z);
+  const scale = length > maximumOffset ? maximumOffset / length : 1;
+  return { x: x * scale, z: z * scale };
+}
+
 function lerpAngle(start: number, end: number, fraction: number): number {
   const delta = ((end - start + 540) % 360) - 180;
   return start + delta * fraction;

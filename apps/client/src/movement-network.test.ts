@@ -10,6 +10,7 @@ import {
   reconciliationVerticalTarget,
   sampleRemotePose,
   smoothVerticalOffset,
+  smoothNetworkVisualOffset,
   trimRemoteSnapshots,
 } from "./movement-network.js";
 
@@ -98,6 +99,19 @@ describe("movement networking", () => {
     expect(reconciliationVerticalTarget(7.94, 7.95, true)).toBe(7.94);
     expect(reconciliationVerticalTarget(7.7, 7.95, true)).toBe(7.95);
     expect(reconciliationVerticalTarget(7.94, 7.95, false)).toBe(7.95);
+  });
+
+  it("holds the visible position through an idle server correction, then blends it back while moving", () => {
+    const offset = smoothNetworkVisualOffset({ x: 0, z: 0 }, { x: -0.2, z: 0.1 }, false, 1 / 60);
+    expect(offset).toEqual({ x: -0.2, z: 0.1 });
+    expect(0.2 + offset.x).toBeCloseTo(0);
+    const movingOffset = smoothNetworkVisualOffset(offset, { x: 0, z: 0 }, true, 1 / 60);
+    expect(Math.hypot(movingOffset.x, movingOffset.z)).toBeLessThan(Math.hypot(offset.x, offset.z));
+  });
+
+  it("caps visual-only correction so major server corrections remain visible", () => {
+    const offset = smoothNetworkVisualOffset({ x: 0, z: 0 }, { x: -2, z: 0 }, false, 1 / 60);
+    expect(offset.x).toBeCloseTo(-0.6);
   });
 
   it("smooths a one-block visual step without changing collision height", () => {
