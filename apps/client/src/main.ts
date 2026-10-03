@@ -885,6 +885,7 @@ interface LootVisual {
 
 interface MobVisual {
   entity: pc.Entity;
+  snapshots: RemoteSnapshot[];
   bodyRoot: pc.Entity;
   bodyMaterial: pc.StandardMaterial;
   art: MobArtRig;
@@ -923,6 +924,7 @@ interface MarkVisualState {
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const mobVisuals = new Map<string, MobVisual>();
+const MOB_INTERPOLATION_DELAY_MS = 150;
 const lootVisuals = new Map<string, LootVisual>();
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 const combatAudio = new CombatAudio();
@@ -1891,6 +1893,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   app.root.addChild(entity);
   return {
     entity,
+    snapshots: [{ receivedAt: performance.now(), x: mob.x, y: mob.y, z: mob.z, yaw: mob.yaw }],
     bodyRoot,
     bodyMaterial,
     art,
@@ -2045,8 +2048,30 @@ function bindMobs(joinedRoom: Room): void {
     const visual = createMobVisual(mobId, mob);
     mobVisuals.set(mobId, visual);
     const mobCallbacks = callbacks(mob);
+    let snapshotQueued = false;
+    const queueSnapshot = (): void => {
+      if (snapshotQueued) return;
+      snapshotQueued = true;
+      // Colyseus invokes each field listener separately. Capture the complete
+      // patch after those listeners finish so X and Z move together.
+      queueMicrotask(() => {
+        snapshotQueued = false;
+        if (mobVisuals.get(mobId) !== visual) return;
+        const snapshot = { receivedAt: performance.now(), x: mob.x, y: mob.y, z: mob.z, yaw: mob.yaw };
+        const latest = visual.snapshots[visual.snapshots.length - 1];
+        if (latest && Math.hypot(snapshot.x - latest.x, snapshot.z - latest.z) > 2.5) {
+          visual.snapshots.length = 0;
+          visual.entity.setPosition(snapshot.x, snapshot.y, snapshot.z);
+          visual.entity.setEulerAngles(0, snapshot.yaw, 0);
+        }
+        visual.snapshots.push(snapshot);
+      });
+    };
     for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
-      mobCallbacks.listen(field, () => updateMobVisual(visual), true);
+      mobCallbacks.listen(field, () => {
+        if (field === "x" || field === "y" || field === "z" || field === "yaw") queueSnapshot();
+        updateMobVisual(visual);
+      }, true);
     }
   }, true);
   mobs.onRemove((_mob: NetworkMob, mobId: string) => {
@@ -3516,7 +3541,12 @@ app.on("update", (dt: number) => {
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
       mob.frameAlive = mob.state.alive;
-      if (mob.state.alive) mob.art.walk = 0;
+      if (mob.state.alive) {
+        mob.art.walk = 0;
+        mob.snapshots.length = 0;
+        mob.snapshots.push({ receivedAt: animationNow, x: mob.state.x, y: mob.state.y, z: mob.state.z, yaw: mob.state.yaw });
+        mob.entity.setPosition(mob.state.x, mob.state.y, mob.state.z);
+      }
     }
     const defeat = mob.state.alive ? 0 : Math.min(1, (animationNow - mob.defeatAt) / 580);
     const visible = (mob.state.alive || defeat < 1) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
@@ -3524,13 +3554,13 @@ app.on("update", (dt: number) => {
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
     const currentMobPosition = mob.entity.getPosition();
-    const follow = Math.min(1, frameTime * 10);
-    const moveX = (mob.state.x - currentMobPosition.x) * follow;
-    const moveZ = (mob.state.z - currentMobPosition.z) * follow;
+    const sampled = sampleRemotePose(mob.snapshots, animationNow - MOB_INTERPOLATION_DELAY_MS) ?? mob.state;
+    const moveX = sampled.x - currentMobPosition.x;
+    const moveZ = sampled.z - currentMobPosition.z;
     const moveSpeed = Math.hypot(moveX, moveZ) / Math.max(0.001, frameTime);
-    mob.entity.setPosition(currentMobPosition.x + moveX, currentMobPosition.y + (mob.state.y - currentMobPosition.y) * follow, currentMobPosition.z + moveZ);
-    const currentMobYaw = mob.entity.getEulerAngles().y;
-    mob.entity.setEulerAngles(0, approachYaw(currentMobYaw, mob.state.yaw, frameTime, 420), 0);
+    mob.entity.setPosition(sampled.x, sampled.y, sampled.z);
+    mob.entity.setEulerAngles(0, sampled.yaw, 0);
+    trimRemoteSnapshots(mob.snapshots, animationNow - MOB_INTERPOLATION_DELAY_MS);
     const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
     const attackElapsed = animationNow - mob.actionAt;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;

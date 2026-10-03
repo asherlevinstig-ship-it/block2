@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MOB_ARCHETYPES } from "../src/mob-archetypes.js";
-import { DANGER_BANDS, dangerBandAt, isInsideTownSafeZone, radiusFromSafeCenter, scaledMobStats } from "../src/radial-difficulty.js";
+import { DANGER_BANDS, MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "../src/radial-difficulty.js";
 
 describe("radial danger progression", () => {
   it("increases the danger band as players travel from the safe centre", () => {
@@ -22,5 +22,15 @@ describe("radial danger progression", () => {
     expect(frontier.armor).toBeGreaterThan(normal.armor);
     expect(frontier.speedMultiplier).toBeGreaterThan(normal.speedMultiplier);
     expect(frontier.rewardMultiplier).toBeGreaterThan(normal.rewardMultiplier);
+  });
+
+  it("keeps every archetype spawn and a pursuing mob outside the town buffer", () => {
+    for (const archetype of Object.values(MOB_ARCHETYPES)) {
+      expect(radiusFromSafeCenter(archetype.spawn)).toBeGreaterThanOrEqual(MOB_TOWN_MINIMUM_RADIUS);
+    }
+    const approaching = keepMobOutsideTown({ x: 18, z: 8.5 });
+    expect(radiusFromSafeCenter(approaching)).toBeCloseTo(MOB_TOWN_MINIMUM_RADIUS);
+    expect(approaching.x).toBeGreaterThan(18);
+    expect(keepMobOutsideTown({ x: 26, z: 8.5 })).toEqual({ x: 26, z: 8.5 });
   });
 });

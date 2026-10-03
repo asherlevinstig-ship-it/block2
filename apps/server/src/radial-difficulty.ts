@@ -2,6 +2,7 @@ import type { MobArchetypeDefinition } from "./mob-archetypes.js";
 import { TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS } from "@blockcraft/voxel-world";
 
 export const WORLD_SAFE_CENTER = { x: TOWN_CENTER_X, z: TOWN_CENTER_Z } as const;
+export const MOB_TOWN_MINIMUM_RADIUS = TOWN_SAFE_RADIUS * 2;
 
 export type DangerTier = 0 | 1 | 2 | 3;
 
@@ -29,6 +30,16 @@ export function radiusFromSafeCenter(position: { x: number; z: number }): number
 
 export function isInsideTownSafeZone(position: { x: number; z: number }): boolean {
   return radiusFromSafeCenter(position) < TOWN_SAFE_RADIUS;
+}
+
+/** Mobs can fight players near a gate without wandering back into the sanctuary. */
+export function keepMobOutsideTown(position: { x: number; z: number }): { x: number; z: number } {
+  const dx = position.x - WORLD_SAFE_CENTER.x;
+  const dz = position.z - WORLD_SAFE_CENTER.z;
+  const radius = Math.hypot(dx, dz);
+  if (radius >= MOB_TOWN_MINIMUM_RADIUS) return position;
+  const scale = MOB_TOWN_MINIMUM_RADIUS / (radius || 1);
+  return { x: WORLD_SAFE_CENTER.x + (radius ? dx : 1) * scale, z: WORLD_SAFE_CENTER.z + dz * scale };
 }
 
 export function dangerBandAt(position: { x: number; z: number }): DangerBand {

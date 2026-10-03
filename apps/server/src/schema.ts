@@ -49,9 +49,9 @@ export const LootDropState = schema({
 export type LootDropState = SchemaType<typeof LootDropState>;
 
 export const MobState = schema({
-  x: t.float32().default(13.5),
+  x: t.float32().default(24.5),
   y: t.float32().default(8),
-  z: t.float32().default(11.5),
+  z: t.float32().default(14.5),
   health: t.int8().default(8),
   maxHealth: t.int8().default(8),
   alive: t.boolean().default(true),

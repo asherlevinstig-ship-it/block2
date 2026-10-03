@@ -72,7 +72,7 @@ import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAt
 import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
-import { dangerBandAt, isInsideTownSafeZone, scaledMobStats } from "./radial-difficulty.js";
+import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "./radial-difficulty.js";
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
@@ -191,10 +191,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       console.warn("Persistent terrain could not be loaded; using the generated world for this room.", error);
     }
     this.setState(new WorldState());
-    this.registerMob("moss-crawler", "moss_crawler", { x: 16.5, y: 8, z: 12.5 });
-    this.registerMob("stone-brute", "stone_brute", { x: 16.5, y: 8, z: 15.5 });
-    this.registerMob("cave-spitter", "cave_spitter", { x: 19.5, y: 8, z: 8.5 });
-    this.registerMob("wild-crawler", "moss_crawler", { x: 22.5, y: 8, z: 14.5 });
+    this.registerMob("moss-crawler", "moss_crawler", MOB_ARCHETYPES.moss_crawler.spawn);
+    this.registerMob("stone-brute", "stone_brute", MOB_ARCHETYPES.stone_brute.spawn);
+    this.registerMob("cave-spitter", "cave_spitter", MOB_ARCHETYPES.cave_spitter.spawn);
+    this.registerMob("wild-crawler", "moss_crawler", { x: 26.5, y: 8, z: 15.5 });
     this.registerMob("frontier-crawler", "moss_crawler", { x: 25.5, y: 8, z: 27.5 });
     this.registerMob("frontier-brute", "stone_brute", { x: 27.5, y: 8, z: 25.5 });
     this.registerMob("frontier-spitter", "cave_spitter", { x: 28.5, y: 8, z: 5.5 });
@@ -250,7 +250,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const spawn = process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
       ? { x: 23.5, y: 3, z: 8.5 }
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "spitter"
-        ? { x: 14.5, y: 8, z: 8.5 }
+        ? { x: 24.5, y: 8, z: 6.5 }
         : this.spawnPoint();
     player.x = spawn.x;
     player.y = spawn.y;
@@ -789,8 +789,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const distance = Math.hypot(deltaX, deltaZ);
         if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
-          mob.x += deltaX / distance * lungeDistance;
-          mob.z += deltaZ / distance * lungeDistance;
+          const lunge = keepMobOutsideTown({
+            x: mob.x + deltaX / distance * lungeDistance,
+            z: mob.z + deltaZ / distance * lungeDistance,
+          });
+          mob.x = lunge.x;
+          mob.z = lunge.z;
         }
         if (!canMobLungeHit(mob, targetPlayer, targetPlayer.invulnerableUntil, now, definition.hitRange)) continue;
         this.damagePlayer(mobId, mob.targetId, mob.attackDamage, now);
@@ -802,23 +806,29 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         y: player.y,
         z: player.z,
         health: player.health,
-      })).filter(player => !isInsideTownSafeZone(player));
+      })).filter(player => !isInsideTownSafeZone(player) && radiusFromSafeCenter(player) >= MOB_TOWN_MINIMUM_RADIUS);
       const target = selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
         const homeward = pursueTarget(mob, home, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier), 0.05);
-        mob.x = homeward.x;
-        mob.z = homeward.z;
+        const next = keepMobOutsideTown(homeward);
+        mob.x = next.x;
+        mob.z = next.z;
         if (Math.hypot(home.x - mob.x, home.z - mob.z) > 0.05) mob.yaw = homeward.yaw;
         continue;
       }
       const pursuit = definition.attackKind === "projectile"
         ? maintainRangedDistance(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.minimumAttackRange, definition.stopDistance)
         : pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
-      mob.x = pursuit.x;
-      mob.z = pursuit.z;
+      const next = keepMobOutsideTown(pursuit);
+      mob.x = next.x;
+      mob.z = next.z;
       mob.yaw = pursuit.yaw;
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
-      if (!pursuit.inAttackRange || now - lastAttackAt < definition.cooldownMs) continue;
+      const actualDistance = Math.hypot(target.x - mob.x, target.z - mob.z);
+      const inAttackRange = definition.attackKind === "projectile"
+        ? actualDistance >= definition.minimumAttackRange - 0.05 && actualDistance <= definition.stopDistance + 0.05
+        : actualDistance <= definition.stopDistance + 0.05;
+      if (!pursuit.inAttackRange || !inAttackRange || now - lastAttackAt < definition.cooldownMs) continue;
       mob.combatState = "windup";
       mob.stateUntil = now + definition.windupMs;
       mob.targetId = target.id;
