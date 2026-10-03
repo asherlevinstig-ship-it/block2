@@ -3522,6 +3522,7 @@ app.on("update", (dt: number) => {
   localPowerVisualOffset.mulScalar(Math.max(0, 1 - frameTime * 11));
   localPlayerVisual.setLocalPosition(localPowerVisualOffset.x + localNetworkVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z + localNetworkVisualOffset.z);
   const animationNow = performance.now();
+  sceneDressing.update(animationNow);
   const animationTime = animationNow / 1000;
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
   const localPowerElapsed = localPowerStartedAt === null ? null : animationNow - localPowerStartedAt;

@@ -7,6 +7,11 @@ const COPPER: Color = [0.72, 0.45, 0.22];
 const SLATE: Color = [0.24, 0.31, 0.35];
 const CLOTH: Color = [0.08, 0.42, 0.44];
 const GOLD: Color = [0.94, 0.72, 0.31];
+const OAK: Color = [0.42, 0.27, 0.16];
+const DARK_OAK: Color = [0.15, 0.10, 0.075];
+const RUG: Color = [0.37, 0.09, 0.10];
+const CREAM: Color = [0.83, 0.72, 0.54];
+const EMBER: Color = [1, 0.28, 0.045];
 
 // Decorative geometry is baked into two draws, rather than one entity per sprig
 // or architectural trim. It never participates in collision or target picking.
@@ -46,6 +51,7 @@ export class SceneDressing {
   private readonly material = new pc.StandardMaterial();
   private readonly glow = new pc.StandardMaterial();
   private meshes: pc.Mesh[] = [];
+  private fireLight: pc.Entity | null = null;
 
   constructor(private readonly app: pc.Application) {
     this.material.diffuse.set(1, 1, 1);
@@ -65,6 +71,12 @@ export class SceneDressing {
     this.root.enabled = visible;
   }
 
+  update(timeMilliseconds: number): void {
+    if (!this.fireLight?.light || !this.root.enabled) return;
+    const time = timeMilliseconds * 0.001;
+    this.fireLight.light.intensity = 1.35 + Math.sin(time * 8.3) * 0.11 + Math.sin(time * 13.7) * 0.055;
+  }
+
   rebuild(
     read: WorldBlockReader,
     chunks: ReadonlyArray<{ chunkX: number; chunkZ: number }>,
@@ -73,6 +85,7 @@ export class SceneDressing {
     for (const child of [...this.root.children]) child.destroy();
     for (const mesh of this.meshes) mesh.destroy();
     this.meshes = [];
+    this.fireLight = null;
     const solid = new BoxBatch();
     const glow = new BoxBatch();
     const surface = SURFACE_HEIGHT + 1;
@@ -132,16 +145,79 @@ export class SceneDressing {
       solid.box(8.5, 11.25, 9.84, 2.9, 0.1, 0.04, COPPER);
       glow.box(8.5, 11.25, 9.79, 0.24, 0.38, 0.04, GOLD);
     }
-    for (const z of [13, 16]) {
-      for (const x of [3, 11]) {
-        if (read(x, 8, z) !== Block.Dirt) continue;
-        solid.box(x + 1.5, 9.03, z + 0.5, 3.1, 0.12, 0.92, WOOD);
-        solid.box(x + 1.5, 9.1, z + 0.5, 2.84, 0.05, 0.68, COPPER);
+    if (read(8, 12, 14) === Block.Stone && read(8, 8, 14) === Block.Air) {
+      // Warm plank floor and a runner guide players between both doors.
+      for (let z = 11; z <= 18; z += 1) {
+        for (let x = 1; x <= 15; x += 1) {
+          if (read(x, 8, z) !== Block.Air) continue;
+          solid.box(x + 0.5, 8.012, z + 0.5, 0.975, 0.024, 0.975, (x + z) % 3 === 0 ? OAK : WOOD);
+          solid.box(x + 0.5, 8.029, z + 0.04, 0.84, 0.006, 0.018, DARK_OAK);
+        }
+      }
+      solid.box(8.5, 8.045, 14.75, 2.45, 0.035, 6.5, GOLD);
+      solid.box(8.5, 8.066, 14.75, 2.22, 0.013, 6.26, RUG);
+      for (const z of [12.1, 14.7, 17.3]) {
+        solid.box(8.5, 8.079, z, 1.9, 0.006, 0.055, GOLD);
+      }
+
+      // Three communal tables leave the central route and rear doorway clear.
+      for (const [cx, cz] of [[4.5, 13.5], [12.5, 13.5], [12.5, 16.5]] as const) {
+        solid.box(cx, 8.78, cz, 2.72, 0.14, 0.88, OAK);
+        solid.box(cx, 8.875, cz, 2.55, 0.045, 0.7, COPPER);
+        for (const dx of [-1.05, 1.05]) {
+          for (const dz of [-0.28, 0.28]) solid.box(cx + dx, 8.37, cz + dz, 0.15, 0.69, 0.15, DARK_OAK);
+        }
+        for (const side of [-1, 1]) {
+          solid.box(cx, 8.43, cz + side * 0.9, 2.62, 0.11, 0.28, OAK);
+          for (const dx of [-1.08, 1.08]) solid.box(cx + dx, 8.22, cz + side * 0.9, 0.13, 0.39, 0.16, DARK_OAK);
+        }
+        for (const dx of [-0.64, 0.64]) {
+          solid.box(cx + dx, 8.935, cz + 0.06, 0.19, 0.14, 0.19, CREAM);
+          solid.box(cx + dx + 0.12, 8.935, cz + 0.06, 0.065, 0.075, 0.08, GOLD);
+        }
+        glow.box(cx, 8.91, cz - 0.1, 0.34, 0.04, 0.3, GOLD);
+      }
+
+      // A serving bar, bottle shelf, and barrels give the rear corner a purpose.
+      solid.box(4.9, 8.62, 17.75, 3.6, 1.2, 0.48, DARK_OAK);
+      solid.box(4.9, 9.28, 17.73, 3.92, 0.12, 0.7, OAK);
+      solid.box(4.9, 9.355, 17.73, 3.74, 0.025, 0.56, COPPER);
+      for (const y of [9.15, 10.0]) {
+        solid.box(4.9, y, 18.78, 3.35, 0.11, 0.36, OAK);
+        for (const x of [3.6, 4.25, 4.9, 5.55, 6.2]) {
+          glow.box(x, y + 0.18, 18.7, 0.14, 0.25, 0.14, x === 4.9 ? CLOTH : GOLD);
+          solid.box(x, y + 0.32, 18.7, 0.1, 0.04, 0.1, CREAM);
+        }
+      }
+      for (const x of [2.2, 6.6]) {
+        solid.box(x, 8.44, 18.0, 0.52, 0.82, 0.52, OAK);
+        for (const y of [8.17, 8.65]) solid.box(x, y, 18.0, 0.56, 0.055, 0.56, SLATE);
+      }
+
+      // Beams and hanging lamps remain visible when the roof cuts away.
+      for (const z of [11.25, 14.75, 18.15]) solid.box(8.5, 11.78, z, 15.1, 0.22, 0.22, DARK_OAK);
+      for (const [x, z] of [[4.5, 13.5], [12.5, 14.7]] as const) {
+        solid.box(x, 11.12, z, 0.065, 1.0, 0.065, DARK_OAK);
+        solid.box(x, 10.59, z, 0.52, 0.08, 0.52, SLATE);
+        glow.box(x, 10.42, z, 0.27, 0.3, 0.27, GOLD);
+        solid.box(x, 10.24, z, 0.5, 0.07, 0.5, SLATE);
+      }
+      for (const [x, z] of [[1.1, 12.5], [15.9, 16.5]] as const) {
+        solid.box(x, 10.17, z, 0.26, 0.55, 0.2, SLATE);
+        glow.box(x, 10.2, z, 0.18, 0.34, 0.11, GOLD);
       }
     }
     if (read(3, 10, 16) === Block.Stone) {
-      glow.box(3.5, 9.4, 15.96, 0.62, 0.8, 0.06, GOLD);
-      solid.box(3.5, 8.98, 15.86, 1.12, 0.13, 0.38, SLATE);
+      // Solid voxel chimney, with a shallow decorative hearth facing the hall.
+      solid.box(4.025, 8.14, 16.5, 0.62, 0.22, 1.38, SLATE);
+      solid.box(4.045, 9.15, 16.04, 0.16, 1.45, 0.15, SLATE);
+      solid.box(4.045, 9.15, 16.96, 0.16, 1.45, 0.15, SLATE);
+      solid.box(4.09, 9.93, 16.5, 0.25, 0.17, 1.22, SLATE);
+      glow.box(4.13, 8.75, 16.5, 0.17, 0.5, 0.75, EMBER);
+      glow.box(4.23, 8.92, 16.32, 0.15, 0.63, 0.2, GOLD);
+      glow.box(4.23, 8.91, 16.68, 0.15, 0.59, 0.2, GOLD);
+      glow.box(4.28, 9.02, 16.5, 0.13, 0.72, 0.15, CREAM);
+      for (const z of [16.2, 16.5, 16.8]) solid.box(4.31, 8.38, z, 0.19, 0.13, 0.13, DARK_OAK);
     }
 
     for (const [x, z] of TOWN_GATE_POSTS) {
@@ -178,6 +254,18 @@ export class SceneDressing {
       const entity = new pc.Entity("batched-world-details");
       entity.addComponent("render", { meshInstances: [new pc.MeshInstance(mesh, material)], castShadows: castsShadow, receiveShadows: true });
       this.root.addChild(entity);
+    }
+    if (read(3, 10, 16) === Block.Stone) {
+      this.fireLight = new pc.Entity("tavern-hearth-light");
+      this.fireLight.addComponent("light", { type: "omni", color: new pc.Color(1, 0.39, 0.13), intensity: 1.35, range: 7, castShadows: false });
+      this.fireLight.setPosition(4.3, 9.3, 16.5);
+      this.root.addChild(this.fireLight);
+      for (const [x, z] of [[4.5, 13.5], [12.5, 14.7]] as const) {
+        const lantern = new pc.Entity("tavern-lantern-light");
+        lantern.addComponent("light", { type: "omni", color: new pc.Color(1, 0.64, 0.31), intensity: 0.5, range: 5, castShadows: false });
+        lantern.setPosition(x, 10.4, z);
+        this.root.addChild(lantern);
+      }
     }
   }
 }

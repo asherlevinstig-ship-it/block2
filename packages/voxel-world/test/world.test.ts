@@ -66,6 +66,10 @@ describe("deterministic voxel world", () => {
     expect(getBlock(centre, 8, 11, 10)).toBe(Block.Dirt);
     expect(getBlock(centre, 8, 12, 14)).toBe(Block.Stone);
     expect(getBlock(centre, 8, 14, 14)).toBe(Block.Stone);
+    expect(getBlock(centre, 4, 8, 13)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 12, 8, 0)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 3, 8, 0)).toBe(Block.Stone);
+    expect(getBlock(southQuarter, 3, 9, 0)).toBe(Block.Stone);
     expect(getBlock(eastGate, 6, 11, 7)).toBe(Block.IronOre);
     expect(getBlock(eastGate, 0, 8, 8)).toBe(Block.Air);
     expect(getBlock(westQuarter, 13, 10, 10)).toBe(Block.Air);

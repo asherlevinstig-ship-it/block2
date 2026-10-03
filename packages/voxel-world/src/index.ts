@@ -131,10 +131,9 @@ export function townTavernBlock(worldX: number, y: number, worldZ: number): Bloc
       || (worldZ === 10 || worldZ === 19) && (worldX === 4 || worldX === 12));
     return window ? Block.Air : y === 8 ? Block.Stone : Block.Dirt;
   }
-  const table = y === 8 && (worldZ === 13 || worldZ === 16)
-    && ((worldX >= 3 && worldX <= 5) || (worldX >= 11 && worldX <= 13));
-  if (table) return Block.Dirt;
-  if (worldX === 3 && worldZ === 16 && y >= 9) return Block.Stone;
+  // Furniture is low visual geometry rather than a full voxel: otherwise the
+  // player auto-steps onto every table and visibly jolts inside the hall.
+  if (worldX === 3 && worldZ === 16 && y >= 8) return Block.Stone;
   return Block.Air;
 }
 
