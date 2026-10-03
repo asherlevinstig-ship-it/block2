@@ -49,6 +49,7 @@ import {
   GRAVITY,
   SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
+  TOWN_LODGES,
   chunkIndex,
   isProtectedVoxel,
   isPlayerSupported,
@@ -77,12 +78,14 @@ import {
   bootstrapSliceHeight,
   isAtSurfaceReturnHeight,
   isBelowSurroundingSurface,
+  isBelowTerrainSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
   restoredSliceHeight,
   shouldUseDepthSlice,
   type PlayerCutaway,
 } from "./player-visibility.js";
+import { hidesTownRoof, roofCutawayLodge } from "./town-roof-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
 import { createVoxelTexturePixels, voxelCornerLight, voxelTextureKind, voxelTint, type VoxelTextureKind } from "./voxel-textures.js";
 import { retryConnection } from "./connection-retry.js";
@@ -339,6 +342,7 @@ interface ClientChunk {
 
 const chunks = new Map<string, ClientChunk>();
 let activeChunkViewKey: string | null = null;
+let indoorRoofLodge: (typeof TOWN_LODGES)[number] | null = null;
 const playerCutaway: PlayerCutaway = {
   active: false,
   sliceY: CHUNK_HEIGHT,
@@ -366,7 +370,7 @@ function readCollisionWorldBlock(x: number, y: number, z: number): BlockId {
 }
 
 function isCutawayHidden(x: number, y: number, z: number): boolean {
-  return isVoxelHiddenForPlayer(x, y, z, playerCutaway);
+  return isVoxelHiddenForPlayer(x, y, z, playerCutaway) || hidesTownRoof(indoorRoofLodge, x, y, z);
 }
 
 function readVisibleWorldBlock(x: number, y: number, z: number): BlockId {
@@ -2339,6 +2343,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localPowerVisualOffset.set(0, 0, 0);
   localPlayerVisual.setLocalPosition(0, 0, 0);
   surfaceReferenceY = SURFACE_HEIGHT + 1;
+  indoorRoofLodge = roofCutawayLodge(initialPosition, null, TOWN_LODGES, surfaceReferenceY);
   const bootstrapUnderground = hasCeilingAbove(initialPosition);
   const bootstrapExcavating = !bootstrapUnderground && isInOpenExcavation(initialPosition);
   cutawaySliceY = bootstrapSliceHeight(
@@ -2358,7 +2363,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   exitGuide.hidden = !playerCutaway.active;
   activeChunkViewKey = null;
   updateActiveChunkMeshes(initialPosition);
-  sceneDressing.rebuild(readWorldBlock, payload.chunks);
+  sceneDressing.rebuild(readWorldBlock, payload.chunks, indoorRoofLodge);
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
   lastChunkBuildMs = performance.now() - buildStartedAt;
   logMovementEvent(
@@ -2619,12 +2624,25 @@ document.addEventListener("visibilitychange", () => {
 });
 
 function hasCeilingAbove(position: pc.Vec3): boolean {
+  if (!isBelowTerrainSurface(position.y, SURFACE_HEIGHT + 1)) return false;
   const x = Math.floor(position.x);
   const z = Math.floor(position.z);
   for (let y = Math.floor(position.y + 1.5); y < CHUNK_HEIGHT; y += 1) {
     if (readWorldBlock(x, y, z) !== Block.Air) return true;
   }
   return false;
+}
+
+function updateIndoorRoof(position: pc.Vec3): void {
+  const next = roofCutawayLodge(position, indoorRoofLodge, TOWN_LODGES, SURFACE_HEIGHT + 1);
+  if (next === indoorRoofLodge) return;
+  indoorRoofLodge = next;
+  for (const chunk of chunks.values()) {
+    chunk.renderedSliceKey = null;
+    if (chunk.root.enabled) rebuildChunk(chunk);
+  }
+  sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofLodge);
+  sceneDressing.setSurfaceVisible(!playerCutaway.active);
 }
 
 function highestLoadedSolidY(x: number, z: number): number {
@@ -3819,6 +3837,7 @@ app.on("update", (dt: number) => {
   const renderedPlayerPosition = new pc.Vec3(player.x, player.y + localVisualVerticalOffset + bodyY, player.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
   updateUndergroundPresentation(player, frameTime);
+  updateIndoorRoof(player);
   updateTarget();
 
   const now = performance.now();
@@ -3943,7 +3962,7 @@ function applyBlockChange(message: BlockChanged): void {
   chunk.revision = message.revision;
   const buildStartedAt = performance.now();
   rebuildChunkAndNeighbors(chunk, message.x, message.z);
-  if (message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()]);
+  if (message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofLodge);
   lastChunkBuildMs = performance.now() - buildStartedAt;
   status.textContent = `Block removed · chunk revision ${chunk.revision}`;
 }

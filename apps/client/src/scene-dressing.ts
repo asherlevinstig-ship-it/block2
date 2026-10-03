@@ -65,7 +65,11 @@ export class SceneDressing {
     this.root.enabled = visible;
   }
 
-  rebuild(read: WorldBlockReader, chunks: ReadonlyArray<{ chunkX: number; chunkZ: number }>): void {
+  rebuild(
+    read: WorldBlockReader,
+    chunks: ReadonlyArray<{ chunkX: number; chunkZ: number }>,
+    hiddenRoof: { minX: number; minZ: number } | null = null,
+  ): void {
     for (const child of [...this.root.children]) child.destroy();
     for (const mesh of this.meshes) mesh.destroy();
     this.meshes = [];
@@ -106,7 +110,7 @@ export class SceneDressing {
           solid.box(x, 8.12, z, 0.21, 0.24, 0.21, SLATE);
         }
       }
-      if (read(lodgeX, 10, lodgeZ) === Block.Stone) {
+      if (read(lodgeX, 10, lodgeZ) === Block.Stone && (hiddenRoof?.minX !== lodgeX || hiddenRoof.minZ !== lodgeZ)) {
         solid.box(cx, 10.98, lodgeZ + 0.03, 4.12, 0.1, 0.16, SLATE);
         solid.box(cx, 10.98, lodgeZ + 3.97, 4.12, 0.1, 0.16, SLATE);
         solid.box(lodgeX + 0.03, 10.98, cz, 0.16, 0.1, 4.12, SLATE);

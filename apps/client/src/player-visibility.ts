@@ -74,3 +74,8 @@ export function isBelowSurroundingSurface(playerY: number, surroundingSurfaceHei
   const columnsAtOrAboveFeet = comparableHeights.filter(height => height >= Math.floor(playerY)).length;
   return columnsAtOrAboveFeet >= 3;
 }
+
+/** A roof above someone standing on the overworld is not an underground ceiling. */
+export function isBelowTerrainSurface(playerY: number, surfaceY: number): boolean {
+  return playerY < surfaceY - 0.65;
+}

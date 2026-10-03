@@ -3,6 +3,7 @@ import {
   bootstrapSliceHeight,
   isAtSurfaceReturnHeight,
   isBelowSurroundingSurface,
+  isBelowTerrainSurface,
   isVoxelHiddenForPlayer,
   loweredSliceHeight,
   restoredSliceHeight,
@@ -39,6 +40,12 @@ describe("underground player visibility", () => {
 
   it("ignores an isolated tall column beside a surface player", () => {
     expect(isBelowSurroundingSurface(8, [10, 7, 7, 7, 7, 7, 7, 7])).toBe(false);
+  });
+
+  it("does not treat a building roof above the surface as a cave ceiling", () => {
+    expect(isBelowTerrainSurface(8, 8)).toBe(false);
+    expect(isBelowTerrainSurface(7.7, 8)).toBe(false);
+    expect(isBelowTerrainSurface(7.2, 8)).toBe(true);
   });
 
   it("keeps the slice fixed while the player stays at the same height", () => {
