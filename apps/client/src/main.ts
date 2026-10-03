@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
@@ -231,8 +232,7 @@ camera.addComponent("camera", {
   toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB,
 });
 app.root.addChild(camera);
-const CAMERA_OFFSET_X = 16;
-const CAMERA_OFFSET_Z = 16;
+let cameraOrbit = initialCameraOrbit();
 
 const light = new pc.Entity("sun");
 light.addComponent("light", {
@@ -1105,7 +1105,7 @@ function updateControlsHelp(): void {
   const special = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
   const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
-  controlsHelp.textContent = `WASD move · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
+  controlsHelp.textContent = `WASD move · Arrows camera · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
@@ -2336,7 +2336,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
   cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
-  camera.setPosition(initialPosition.x + CAMERA_OFFSET_X, initialPosition.y + 18, initialPosition.z + CAMERA_OFFSET_Z);
+  const cameraOffset = cameraOrbitOffset(cameraOrbit);
+  camera.setPosition(initialPosition.x + cameraOffset.x, initialPosition.y - 2 + cameraOffset.y, initialPosition.z + cameraOffset.z);
   camera.lookAt(initialPosition.x, initialPosition.y - 2, initialPosition.z);
   localVerticalVelocity = 0;
   localVisualVerticalOffset = 0;
@@ -2374,8 +2375,14 @@ function renderBootstrap(payload: WorldBootstrap): void {
 }
 
 const keys = new Set<string>();
-window.addEventListener("keydown", event => keys.add(event.code));
-window.addEventListener("keyup", event => keys.delete(event.code));
+window.addEventListener("keydown", event => {
+  if (event.code.startsWith("Arrow")) event.preventDefault();
+  keys.add(event.code);
+});
+window.addEventListener("keyup", event => {
+  if (event.code.startsWith("Arrow")) event.preventDefault();
+  keys.delete(event.code);
+});
 
 performanceToggle.addEventListener("click", () => {
   const opening = performancePanel.hidden;
@@ -3437,8 +3444,15 @@ app.on("update", (dt: number) => {
   const strafe = Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe));
   const forward = Math.max(-1, Math.min(1, keyboardForward - touchForward));
   const frameTime = Math.min(dt, 0.05);
+  cameraOrbit = advanceCameraOrbit(
+    cameraOrbit,
+    Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft")),
+    Number(keys.has("ArrowUp")) - Number(keys.has("ArrowDown")),
+    frameTime,
+  );
+  const cameraOffset = cameraOrbitOffset(cameraOrbit);
   const desiredMovement = quantizeMovementToEightDirections(
-    cameraRelativeMovement(strafe, forward, CAMERA_OFFSET_X, CAMERA_OFFSET_Z),
+    cameraRelativeMovement(strafe, forward, cameraOffset.x, cameraOffset.z),
   );
   smoothedMovement = approachMovement(smoothedMovement, desiredMovement, frameTime);
   const powerFacingActive = powerAimActive || (localPowerStartedAt !== null
@@ -3823,7 +3837,7 @@ app.on("update", (dt: number) => {
     player.z + localPowerVisualOffset.z,
   );
   cameraFocus.copy(cameraTarget);
-  const desiredCamera = new pc.Vec3(cameraFocus.x + CAMERA_OFFSET_X, cameraFocus.y + 18, cameraFocus.z + CAMERA_OFFSET_Z);
+  const desiredCamera = new pc.Vec3(cameraFocus.x + cameraOffset.x, cameraFocus.y - 2 + cameraOffset.y, cameraFocus.z + cameraOffset.z);
   if (animationNow < cameraShakeUntil) {
     const remaining = Math.max(0, (cameraShakeUntil - animationNow) / 360);
     const amplitude = cameraShakeStrength * remaining;
@@ -3937,7 +3951,7 @@ app.on("update", (dt: number) => {
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
-      `camera     screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
+      `camera     yaw=${(cameraOrbit.yaw * 180 / Math.PI).toFixed(1)} pitch=${(cameraOrbit.pitch * 180 / Math.PI).toFixed(1)} screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
       `mode       ${interactionMode} · click=${primaryActionForMode(interactionMode)}`,
       `trait      ${localTraitId} momentum=${localMomentumStacks}/${MOMENTUM_TRAIT.maxStacks} speed=${localMovementSpeed().toFixed(2)}`,
       `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
