@@ -40,8 +40,8 @@ describe("procedural voxel textures", () => {
   });
 
   it("keeps the town lookup bounds inclusive of all authored structures", () => {
-    for (let z = -4; z <= 21; z += 1) {
-      for (let x = -4; x <= 21; x += 1) {
+    for (let z = -6; z <= 22; z += 1) {
+      for (let x = -6; x <= 22; x += 1) {
         for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
           const block = townOfBeginningsBlock(x, y, z);
           if (block === null || block === Block.Air) continue;

@@ -14,6 +14,7 @@ import {
   playerCollides,
   resolvePlayerMotion,
   resolveSweptHorizontalMotion,
+  townWallBlock,
   voxelRaycast,
   worldToChunk,
 } from "../src/index.js";
@@ -42,6 +43,8 @@ describe("deterministic voxel world", () => {
     expect(isProtectedVoxel(17, 8)).toBe(true);
     expect(isProtectedVoxel(23, 8)).toBe(false);
     expect(isProtectedVoxel(20, 20)).toBe(false);
+    expect(isProtectedVoxel(-6, 8)).toBe(true);
+    expect(isProtectedVoxel(-7, 8)).toBe(false);
   });
 
   it("builds a navigable Town of Beginnings around the spawn", () => {
@@ -56,13 +59,42 @@ describe("deterministic voxel world", () => {
     expect(getBlock(centre, 5, 8, 6)).toBe(Block.Air);
     expect(getBlock(centre, 2, 10, 4)).toBe(Block.Stone);
     expect(getBlock(centre, 8, 11, 4)).toBe(Block.IronOre);
-    expect(getBlock(eastGate, 1, 10, 7)).toBe(Block.IronOre);
+    expect(getBlock(eastGate, 6, 11, 7)).toBe(Block.IronOre);
     expect(getBlock(eastGate, 0, 8, 8)).toBe(Block.Air);
     expect(getBlock(westQuarter, 13, 10, 10)).toBe(Block.Stone);
     expect(getBlock(northQuarter, 5, 10, 13)).toBe(Block.Stone);
     expect(getBlock(southQuarter, 5, 10, 0)).toBe(Block.Stone);
     expect(getBlock(eastGate, 0, 10, 12)).toBe(Block.Stone);
     expect(getBlock(eastGate, 2, SURFACE_HEIGHT, 8)).toBe(Block.Air);
+  });
+
+  it("surrounds the town with solid walls while keeping each cardinal gate passable", () => {
+    for (const [wallX, wallZ, gateX, gateZ] of [
+      [-6, 5, -6, 8], [22, 5, 22, 8], [5, -6, 8, -6], [5, 22, 8, 22],
+    ]) {
+      expect(townWallBlock(wallX, 8, wallZ)).toBe(Block.Stone);
+      expect(townWallBlock(wallX, 9, wallZ)).toBe(Block.Stone);
+      expect(townWallBlock(gateX, 8, gateZ)).toBe(Block.Air);
+      expect(townWallBlock(gateX, 9, gateZ)).toBe(Block.Air);
+      expect(townWallBlock(gateX, 10, gateZ)).toBe(Block.Stone);
+    }
+    const north = generateChunk("test-world", 0, -1);
+    expect(getBlock(north, 5, 8, 10)).toBe(Block.Stone);
+    expect(getBlock(north, 8, 8, 10)).toBe(Block.Air);
+  });
+
+  it("blocks a walking player at the rampart but lets them leave through a gate", () => {
+    const loaded = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const address = worldToChunk(x, z);
+      const key = `${address.chunkX},${address.chunkZ}`;
+      if (!loaded.has(key)) loaded.set(key, generateChunk("test-world", address.chunkX, address.chunkZ));
+      return getBlock(loaded.get(key)!, address.localX, y, address.localZ);
+    };
+    const blocked = resolveSweptHorizontalMotion({ x: 5.5, y: 8, z: -4.5 }, { x: 0, z: -3 }, read);
+    const throughGate = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: -4.5 }, { x: 0, z: -3 }, read);
+    expect(blocked.z).toBeGreaterThan(-6);
+    expect(throughGate.z).toBeLessThan(-7);
   });
 
   it("finds a stable standing surface inside a generated column", () => {

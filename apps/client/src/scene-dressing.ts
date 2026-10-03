@@ -127,15 +127,22 @@ export class SceneDressing {
     }
 
     for (const [x, z] of TOWN_GATE_POSTS) {
-      if (x === undefined || z === undefined || read(x, 10, z) !== Block.IronOre) continue;
-      solid.box(x + 0.5, 10.05, z + 0.5, 1.04, 0.12, 1.04, COPPER);
-      solid.box(x + 0.5, 11.015, z + 0.5, 1.07, 0.1, 1.07, SLATE);
-      glow.box(x + 0.5, 11.1, z + 0.5, 0.4, 0.08, 0.4, GOLD);
+      if (read(x, 11, z) !== Block.IronOre) continue;
+      solid.box(x + 0.5, 11.05, z + 0.5, 1.04, 0.12, 1.04, COPPER);
+      solid.box(x + 0.5, 12.015, z + 0.5, 1.07, 0.1, 1.07, SLATE);
+      glow.box(x + 0.5, 12.1, z + 0.5, 0.4, 0.08, 0.4, GOLD);
       // Shallow fabric panels sit against the stone rather than across paths.
       solid.box(x + 0.5, 9.23, z + 1.025, 0.61, 1.26, 0.025, CLOTH);
       solid.box(x + 0.5, 9.88, z + 1.04, 0.79, 0.09, 0.09, COPPER);
       solid.box(x + 0.5, 9.35, z + 1.045, 0.1, 0.52, 0.025, GOLD);
       solid.box(x + 0.5, 9.35, z + 1.045, 0.32, 0.1, 0.03, GOLD);
+    }
+    for (const gate of [
+      { x: -6, z: 8, sx: 1, sz: 2 }, { x: 22, z: 8, sx: 1, sz: 2 },
+      { x: 8, z: -6, sx: 2, sz: 1 }, { x: 8, z: 22, sx: 2, sz: 1 },
+    ]) {
+      if (read(gate.x, 10, gate.z) !== Block.Stone) continue;
+      solid.box(gate.x + gate.sx / 2, 11.035, gate.z + gate.sz / 2, gate.sx + 0.12, 0.12, gate.sz + 0.12, COPPER);
     }
     if (read(8, 11, 4) === Block.IronOre) {
       for (const y of [9, 10, 11]) {

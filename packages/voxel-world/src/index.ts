@@ -14,8 +14,8 @@ export const TOWN_LODGES = [
   { minX: 16, maxX: 19, minZ: 12, maxZ: 15, doorX: 16, doorZ: 13 },
 ] as const;
 export const TOWN_GATE_POSTS = [
-  [-4, 7], [-4, 10], [17, 7], [17, 10],
-  [7, -4], [10, -4], [7, 21], [10, 21],
+  [-6, 7], [-6, 10], [22, 7], [22, 10],
+  [7, -6], [10, -6], [7, 22], [10, 22],
 ] as const;
 export const PLAYER_RADIUS = 0.28;
 export const PLAYER_HEIGHT = 1.45;
@@ -127,15 +127,31 @@ function townBuildingBlock(
   return perimeter ? Block.Dirt : Block.Air;
 }
 
+/** A continuous voxel rampart, with two-block-wide passages at the four cardinal gates. */
+export function townWallBlock(worldX: number, y: number, worldZ: number): BlockId | null {
+  if (y < 8 || y > 11) return null;
+  const dx = worldX - (TOWN_CENTER_X - 0.5);
+  const dz = worldZ - (TOWN_CENTER_Z - 0.5);
+  const radius = Math.hypot(dx, dz);
+  if (radius < TOWN_SAFE_RADIUS - 0.5 || radius >= TOWN_SAFE_RADIUS + 0.5) return null;
+
+  const gatePost = TOWN_GATE_POSTS.some(([x, z]) => worldX === x && worldZ === z);
+  if (gatePost) return y === 11 ? Block.IronOre : Block.Stone;
+  const gateOpening = (Math.abs(dx) === TOWN_SAFE_RADIUS && (worldZ === 8 || worldZ === 9))
+    || (Math.abs(dz) === TOWN_SAFE_RADIUS && (worldX === 8 || worldX === 9));
+  if (gateOpening) return y <= 9 ? Block.Air : y === 10 ? Block.Stone : Block.Air;
+  if (y <= 10) return Block.Stone;
+  return (worldX + worldZ + 72) % 3 === 0 ? Block.Stone : Block.Air;
+}
+
 export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number): BlockId | null {
   for (const lodge of TOWN_LODGES) {
     const block = townBuildingBlock(worldX, y, worldZ, lodge);
     if (block !== null) return block;
   }
 
-  const gatePost = TOWN_GATE_POSTS.some(([x, z]) => worldX === x && worldZ === z);
-  if (gatePost && (y === 8 || y === 9)) return Block.Stone;
-  if (gatePost && y === 10) return Block.IronOre;
+  const wall = townWallBlock(worldX, y, worldZ);
+  if (wall !== null) return wall;
 
   const beaconCenter = worldX === 8 && worldZ === 4;
   const beaconBase = Math.abs(worldX - 8) <= 1 && Math.abs(worldZ - 4) <= 1;
@@ -145,8 +161,8 @@ export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number)
   if (y === SURFACE_HEIGHT) {
     const plaza = worldX >= 5 && worldX <= 11 && worldZ >= 5 && worldZ <= 11;
     if (plaza) return Block.Stone;
-    const road = ((worldX === 8 || worldX === 9) && worldZ >= -4 && worldZ <= 21)
-      || ((worldZ === 8 || worldZ === 9) && worldX >= -4 && worldX <= 17)
+    const road = ((worldX === 8 || worldX === 9) && worldZ >= -6 && worldZ <= 22)
+      || ((worldZ === 8 || worldZ === 9) && worldX >= -6 && worldX <= 17)
       || (worldZ === 1 && worldX >= 5 && worldX <= 8)
       || (worldZ === 16 && worldX >= 5 && worldX <= 8)
       || (worldX === 1 && worldZ >= 9 && worldZ <= 11)
@@ -172,7 +188,8 @@ export function worldToChunk(x: number, z: number): ChunkAddress {
 }
 
 export function isProtectedVoxel(x: number, z: number): boolean {
-  return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS;
+  return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS
+    || townWallBlock(x, 8, z) !== null;
 }
 
 export function generateChunk(seedText: string, chunkX: number, chunkZ: number): GeneratedChunk {
