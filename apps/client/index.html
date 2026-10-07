@@ -82,9 +82,32 @@
       <h2>Mara <small>Tavernkeeper</small></h2>
       <p id="tavern-dialogue-line"></p>
       <div class="tavern-dialogue-actions">
+        <button id="tavern-dialogue-play" type="button">Play Double or Quit</button>
         <button id="tavern-dialogue-next" type="button">Continue</button>
         <button id="tavern-dialogue-close" type="button">Close</button>
       </div>
+    </section>
+    <section id="tavern-quiz" role="dialog" aria-label="Double or Quit tavern quiz" hidden>
+      <p class="eyebrow">MARA'S TABLE · IN-GAME COINS ONLY</p>
+      <h2>Double or Quit</h2>
+      <p class="tavern-quiz-rules">Correct answers double the pot. Collect it or risk it on another question; one wrong answer loses it. Max stake 10 coins, max pot 1,024.</p>
+      <p id="tavern-quiz-balance">Purse: 20 coins</p>
+      <p id="tavern-quiz-message" aria-live="polite">Place a stake, then answer Mara's question.</p>
+      <div id="tavern-quiz-stakes" class="tavern-quiz-actions">
+        <button type="button" data-quiz-stake="1">Stake 1</button>
+        <button type="button" data-quiz-stake="5">Stake 5</button>
+        <button type="button" data-quiz-stake="10">Stake 10</button>
+      </div>
+      <div id="tavern-quiz-question" hidden>
+        <p id="tavern-quiz-pot"></p>
+        <p id="tavern-quiz-prompt"></p>
+        <div id="tavern-quiz-choices" class="tavern-quiz-choices"></div>
+      </div>
+      <div id="tavern-quiz-decision" class="tavern-quiz-actions" hidden>
+        <button id="tavern-quiz-double" type="button">Double · next question</button>
+        <button id="tavern-quiz-quit" type="button">Quit · collect pot</button>
+      </div>
+      <button id="tavern-quiz-close" type="button">Close</button>
     </section>
     <button id="performance-toggle" type="button" aria-controls="performance-panel" aria-expanded="false">PERF</button>
     <aside id="performance-panel" aria-label="Performance metrics" hidden>
@@ -103,6 +126,7 @@
     </aside>
     <aside id="inventory-panel" aria-label="Inventory">
       <header><span>INVENTORY</span><strong id="inventory-total">EMPTY</strong></header>
+      <p id="tavern-coins" class="coin-balance">Tavern coins: 20</p>
       <div id="inventory-grid">
         <article data-item="moss_fibre"><i></i><div><strong>Moss Fibre</strong><small>Crawler material</small></div><em data-item-count="moss_fibre">0</em></article>
         <article data-item="crawler_fang"><i></i><div><strong>Crawler Fang</strong><small>Crawler material</small></div><em data-item-count="crawler_fang">0</em></article>

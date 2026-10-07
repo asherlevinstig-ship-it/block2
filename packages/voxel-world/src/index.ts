@@ -17,6 +17,7 @@ export const GRAVITY = 18;
 export const TERMINAL_VELOCITY = 12;
 
 export const TOWN_TAVERN_TABLE_CENTERS = [[4.5, 13.5], [12.5, 13.5], [12.5, 16.5]] as const;
+export const TOWN_TAVERN_KEEPER_POSITION = { x: 5.1, y: 8, z: 18.35 } as const;
 
 type FurnitureCollider = { x: number; z: number; width: number; depth: number; minY: number; maxY: number };
 export const TOWN_TAVERN_FURNITURE_COLLIDERS: readonly FurnitureCollider[] = [

@@ -20,6 +20,11 @@ import {
   SpecialRequestSchema,
   SpecialEquipRequestSchema,
   TraitEquipRequestSchema,
+  TavernQuizAnswerSchema,
+  TavernQuizDecisionSchema,
+  TavernQuizStartSchema,
+  TAVERN_QUIZ_MAX_PAYOUT,
+  TAVERN_QUIZ_STARTING_COINS,
   type ActionRejected,
   type BlockChanged,
   type BrambleSnarePlaced,
@@ -48,6 +53,7 @@ import {
   type WeaponAttackReleased,
   type ItemId,
   type LootPickedUp,
+  type TavernQuizUpdate,
 } from "@blockcraft/protocol";
 import {
   Block,
@@ -79,6 +85,7 @@ import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInR
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS } from "./loot-rules.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
+import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -171,6 +178,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly profileTokens = new Map<string, string>();
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
+  private readonly quizRounds = new Map<string, QuizRound>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, BlockId>();
   private worldDeltaStorageKey = "";
@@ -217,11 +225,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
     this.onMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
     this.onMessage("trait:equip", (client, payload) => this.handleTraitEquip(client, payload));
+    this.onMessage("quiz:sync", client => this.sendQuizState(client));
+    this.onMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
+    this.onMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
+    this.onMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
   override async onJoin(client: Client, options: unknown): Promise<void> {
     const player = new PlayerState();
+    player.coins = TAVERN_QUIZ_STARTING_COINS;
     // Assign after construction so Colyseus includes the loadout in the initial
     // patch instead of eliding it as an unchanged schema default.
     player.equippedPower = "shockwave";
@@ -272,6 +285,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   override async onLeave(client: Client): Promise<void> {
     const player = this.state.players.get(client.sessionId);
+    const quizRound = this.quizRounds.get(client.sessionId);
+    // A confirmed answer has already earned a pot. Treat disconnecting at the
+    // decision screen as quitting, while an unanswered question forfeits it.
+    if (player && quizRound?.phase === "decision") player.coins = Math.min(1_000_000, player.coins + quizRound.payout);
     try {
       if (player) await this.persistPlayer(client.sessionId, player, true);
     } catch {
@@ -289,10 +306,108 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.lastDodgeAt.delete(client.sessionId);
     this.profileTokens.delete(client.sessionId);
     this.profileSaveFingerprints.delete(client.sessionId);
+    this.quizRounds.delete(client.sessionId);
   }
 
   override async onDispose(): Promise<void> {
     await Promise.allSettled([...this.profileSaveQueues.values(), this.flushWorldDeltaWrites()]);
+  }
+
+  private sendQuizState(client: Client, message?: string): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const round = this.quizRounds.get(client.sessionId);
+    if (!round) {
+      client.send("quiz:update", { phase: "idle", coins: player.coins, message } satisfies TavernQuizUpdate);
+      return;
+    }
+    client.send("quiz:update", {
+      phase: round.phase,
+      coins: player.coins,
+      stake: round.stake,
+      payout: round.payout,
+      ...(round.phase === "question" ? { question: {
+        id: round.question.id,
+        prompt: round.question.prompt,
+        choices: round.question.choices,
+      } } : {}),
+      message,
+    } satisfies TavernQuizUpdate);
+  }
+
+  private quizError(client: Client, message: string): void {
+    if (this.quizRounds.has(client.sessionId)) return this.sendQuizState(client, message);
+    const player = this.state.players.get(client.sessionId);
+    client.send("quiz:update", { phase: "error", coins: player?.coins ?? 0, message } satisfies TavernQuizUpdate);
+  }
+
+  private handleQuizStart(client: Client, payload: unknown): void {
+    const parsed = TavernQuizStartSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return this.quizError(client, "Choose a stake of 1, 5, or 10 coins.");
+    if (this.quizRounds.has(client.sessionId)) return this.sendQuizState(client);
+    if (!canStartTavernQuiz(player, player.coins, parsed.data.stake)) {
+      return this.quizError(client, "Stand by Mara with enough coins to place that stake.");
+    }
+    const question = drawQuizQuestion([]);
+    if (!question) return this.quizError(client, "Mara has run out of questions for now.");
+    player.coins -= parsed.data.stake;
+    this.quizRounds.set(client.sessionId, {
+      stake: parsed.data.stake,
+      payout: parsed.data.stake,
+      askedIds: [question.id],
+      question,
+      phase: "question",
+    });
+    void this.persistPlayer(client.sessionId, player);
+    this.sendQuizState(client, "Your stake is on the table. Choose an answer.");
+  }
+
+  private settleQuiz(client: Client, player: PlayerState, round: QuizRound, message: string): void {
+    player.coins = Math.min(1_000_000, player.coins + round.payout);
+    this.quizRounds.delete(client.sessionId);
+    void this.persistPlayer(client.sessionId, player);
+    client.send("quiz:update", {
+      phase: "won", coins: player.coins, stake: round.stake, payout: round.payout, message,
+    } satisfies TavernQuizUpdate);
+  }
+
+  private handleQuizAnswer(client: Client, payload: unknown): void {
+    const parsed = TavernQuizAnswerSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    const round = this.quizRounds.get(client.sessionId);
+    if (!parsed.success || !player || !round) return this.quizError(client, "Start a round with Mara first.");
+    if (round.phase !== "question" || parsed.data.questionId !== round.question.id) return this.sendQuizState(client);
+    if (parsed.data.choice !== round.question.correctChoice) {
+      this.quizRounds.delete(client.sessionId);
+      client.send("quiz:update", {
+        phase: "lost", coins: player.coins, stake: round.stake, payout: 0,
+        message: `Not quite. The answer was ${round.question.choices[round.question.correctChoice]}. The pot is lost.`,
+      } satisfies TavernQuizUpdate);
+      return;
+    }
+    round.payout = doubledPayout(round.payout);
+    round.phase = "decision";
+    if (mustSettleQuiz(round)) {
+      this.settleQuiz(client, player, round, `Correct! You reached the ${TAVERN_QUIZ_MAX_PAYOUT}-coin table limit and collected the pot.`);
+    } else {
+      this.sendQuizState(client, "Correct! Take the pot, or double it on another question.");
+    }
+  }
+
+  private handleQuizDecision(client: Client, payload: unknown): void {
+    const parsed = TavernQuizDecisionSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    const round = this.quizRounds.get(client.sessionId);
+    if (!parsed.success || !player || !round) return this.quizError(client, "Start a round with Mara first.");
+    if (round.phase !== "decision") return this.sendQuizState(client);
+    if (parsed.data.decision === "quit") return this.settleQuiz(client, player, round, "You took the pot. Well played!");
+    const question = drawQuizQuestion(round.askedIds);
+    if (!question) return this.settleQuiz(client, player, round, "No questions left. You collected the pot!");
+    round.question = question;
+    round.askedIds.push(question.id);
+    round.phase = "question";
+    this.sendQuizState(client, "Double or nothing. Here's your next question.");
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
@@ -480,9 +595,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const reward = defeatReward(player.health, player.maxHealth, player.stamina, player.maxStamina, definition, mob.rewardMultiplier);
     player.health = reward.health;
     player.stamina = reward.stamina;
+    const coinsBefore = player.coins;
+    player.coins = Math.min(1_000_000, player.coins + 2);
+    void this.persistPlayer(attackerId, player);
     this.broadcast("combat:reward", {
       playerId: attackerId,
       mobId,
+      coinsGranted: player.coins - coinsBefore,
       healthRestored: reward.healthRestored,
       staminaRestored: reward.staminaRestored,
       health: player.health,

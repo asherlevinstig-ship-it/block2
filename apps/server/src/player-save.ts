@@ -5,6 +5,7 @@ import {
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
   TRAIT_DEFINITIONS,
+  TAVERN_QUIZ_STARTING_COINS,
   type ItemId,
   type MainHandId,
   type PowerId,
@@ -27,6 +28,7 @@ export interface PlayerSaveData {
   maxHealth: number;
   stamina: number;
   maxStamina: number;
+  coins: number;
   inventory: Partial<Record<ItemId, number>>;
   mainHandId: MainHandId;
   equippedPower: PowerId;
@@ -63,6 +65,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     maxHealth: player.maxHealth,
     stamina: player.stamina,
     maxStamina: player.maxStamina,
+    coins: player.coins,
     inventory,
     mainHandId: player.mainHandId as MainHandId,
     equippedPower: player.equippedPower as PowerId,
@@ -107,6 +110,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     maxHealth,
     stamina: finiteNumber(value.stamina, maxStamina, 0, maxStamina),
     maxStamina,
+    coins: Math.floor(finiteNumber(value.coins, TAVERN_QUIZ_STARTING_COINS, 0, 1_000_000)),
     inventory,
     mainHandId,
     equippedPower,
@@ -121,6 +125,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.maxHealth = save.maxHealth;
   player.health = save.health;
   player.maxStamina = save.maxStamina;
+  player.coins = save.coins;
   player.stamina = save.stamina;
   for (const [itemId, quantity] of Object.entries(save.inventory) as [ItemId, number][]) {
     const item = new InventoryItemState();

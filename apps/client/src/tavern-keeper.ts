@@ -1,8 +1,8 @@
+import { TOWN_TAVERN_KEEPER_POSITION } from "@blockcraft/voxel-world";
+
 export const TAVERN_KEEPER = {
   name: "Mara",
-  x: 5.1,
-  y: 8,
-  z: 18.35,
+  ...TOWN_TAVERN_KEEPER_POSITION,
   talkRange: 2.6,
 } as const;
 

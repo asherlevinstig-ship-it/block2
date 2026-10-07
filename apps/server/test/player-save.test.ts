@@ -10,6 +10,7 @@ describe("player saves", () => {
     player.inventory.set("fang_dagger", dagger);
     player.health = 3;
     player.stamina = 47;
+    player.coins = 73;
     player.mainHandId = "fang_dagger";
     player.mainHandTag = "melee";
     player.equippedPower = "seismic_cleave";
@@ -24,6 +25,7 @@ describe("player saves", () => {
     expect(restored.inventory.get("fang_dagger")?.quantity).toBe(1);
     expect(restored.health).toBe(3);
     expect(restored.stamina).toBe(47);
+    expect(restored.coins).toBe(73);
     expect(restored.mainHandId).toBe("fang_dagger");
     expect(restored.equippedPower).toBe("seismic_cleave");
     expect(restored.seismicMastery).toBe("tectonic_stand");
@@ -46,6 +48,7 @@ describe("player saves", () => {
     expect(parsed?.inventory).toEqual({ fang_dagger: 2 });
     expect(parsed?.mainHandId).toBe("longsword");
     expect(parsed?.equippedPower).toBe("shockwave");
+    expect(parsed?.coins).toBe(20);
   });
 
   it("does not restore a dropped weapon unless it is owned", () => {

@@ -17,6 +17,7 @@ export const PlayerState = schema({
   maxHealth: t.int8().default(5),
   stamina: t.float32().default(100),
   maxStamina: t.float32().default(100),
+  coins: t.uint32().default(20),
   dodgeSequence: t.int32().default(0),
   defending: t.boolean().default(false),
   defenseStartedAt: t.float64().default(0),

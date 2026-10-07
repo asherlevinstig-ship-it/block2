@@ -3,10 +3,25 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-town-v3";
+export const WORLD_ROOM = "world-town-v4";
 
 export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
 export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
+
+export const TAVERN_QUIZ_STARTING_COINS = 20;
+export const TAVERN_QUIZ_MAX_STAKE = 10;
+export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
+export const TavernQuizStartSchema = z.object({ stake: z.number().int().min(1).max(TAVERN_QUIZ_MAX_STAKE) });
+export const TavernQuizAnswerSchema = z.object({ questionId: z.string().min(1).max(40), choice: z.number().int().min(0).max(3) });
+export const TavernQuizDecisionSchema = z.object({ decision: z.enum(["double", "quit"]) });
+export type TavernQuizUpdate = {
+  phase: "idle" | "question" | "decision" | "won" | "lost" | "error";
+  coins: number;
+  stake?: number;
+  payout?: number;
+  question?: { id: string; prompt: string; choices: string[] };
+  message?: string;
+};
 
 export const ITEM_DEFINITIONS = {
   moss_fibre: { id: "moss_fibre", name: "Moss Fibre", description: "Soft living fibre gathered from Moss Crawlers" },
@@ -505,6 +520,7 @@ export interface DefenseResolved {
 export interface CombatReward {
   playerId: string;
   mobId: string;
+  coinsGranted: number;
   healthRestored: number;
   staminaRestored: number;
   health: number;

@@ -26,6 +26,8 @@ import {
   type DefenseResolved,
   type ItemId,
   type LootPickedUp,
+  type TavernQuizUpdate,
+  TAVERN_QUIZ_STARTING_COINS,
   type MainHandId,
   type MobHazardPlaced,
   type MobProjectileReleased,
@@ -136,6 +138,20 @@ const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
 const tavernDialogueLine = document.querySelector<HTMLElement>("#tavern-dialogue-line")!;
 const tavernDialogueNext = document.querySelector<HTMLButtonElement>("#tavern-dialogue-next")!;
 const tavernDialogueClose = document.querySelector<HTMLButtonElement>("#tavern-dialogue-close")!;
+const tavernDialoguePlay = document.querySelector<HTMLButtonElement>("#tavern-dialogue-play")!;
+const quizPanel = document.querySelector<HTMLElement>("#tavern-quiz")!;
+const quizBalance = document.querySelector<HTMLElement>("#tavern-quiz-balance")!;
+const quizMessage = document.querySelector<HTMLElement>("#tavern-quiz-message")!;
+const quizStakes = document.querySelector<HTMLElement>("#tavern-quiz-stakes")!;
+const quizQuestion = document.querySelector<HTMLElement>("#tavern-quiz-question")!;
+const quizPot = document.querySelector<HTMLElement>("#tavern-quiz-pot")!;
+const quizPrompt = document.querySelector<HTMLElement>("#tavern-quiz-prompt")!;
+const quizChoices = document.querySelector<HTMLElement>("#tavern-quiz-choices")!;
+const quizDecision = document.querySelector<HTMLElement>("#tavern-quiz-decision")!;
+const quizDouble = document.querySelector<HTMLButtonElement>("#tavern-quiz-double")!;
+const quizQuit = document.querySelector<HTMLButtonElement>("#tavern-quiz-quit")!;
+const quizClose = document.querySelector<HTMLButtonElement>("#tavern-quiz-close")!;
+const tavernCoins = document.querySelector<HTMLElement>("#tavern-coins")!;
 const playerCount = document.querySelector<HTMLElement>("#players")!;
 const dangerZone = document.querySelector<HTMLElement>("#danger-zone")!;
 const dangerZoneName = document.querySelector<HTMLElement>("#danger-zone-name")!;
@@ -207,6 +223,9 @@ const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
+}
+if ([tavernDialoguePlay, quizPanel, quizBalance, quizMessage, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
+  throw new Error("Tavern quiz shell is missing required elements");
 }
 
 function applyDefensePose(rig: VoxelCharacterRig): void {
@@ -844,6 +863,7 @@ interface NetworkPlayer {
   maxHealth: number;
   stamina: number;
   maxStamina: number;
+  coins: number;
   dodgeSequence: number;
   invulnerableUntil: number;
   mainHandId: string;
@@ -2130,6 +2150,7 @@ function bindPlayers(joinedRoom: Room): void {
   players.onAdd((player: NetworkPlayer, sessionId: string) => {
     const isLocal = sessionId === joinedRoom.sessionId;
     if (isLocal) {
+      updateTavernCoins(player.coins);
       if (isMainHandId(player.mainHandId)) updateMainHandLoadout(player.mainHandId);
       if (isSeismicMasteryId(player.seismicMastery)) updateSeismicMastery(player.seismicMastery);
       powerServerReady = isPowerId(player.equippedPower);
@@ -2237,6 +2258,9 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("maxStamina", () => {
       if (isLocal) updatePlayerStamina(player.stamina, player.maxStamina);
     }, true);
+    playerCallbacks.listen("coins", () => {
+      if (isLocal) updateTavernCoins(player.coins);
+    }, true);
     playerCallbacks.listen("dangerTier", () => {
       if (isLocal) updateDangerZone(player.dangerTier);
     }, true);
@@ -2288,6 +2312,76 @@ function advanceTavernDialogue(): void {
 
 tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
+
+let tavernCoinBalance = TAVERN_QUIZ_STARTING_COINS;
+let quizPending = false;
+const coinLabel = (amount: number): string => `${amount} ${amount === 1 ? "coin" : "coins"}`;
+
+function updateTavernCoins(coins: number): void {
+  tavernCoinBalance = Math.max(0, Math.floor(coins));
+  tavernCoins.textContent = `Tavern coins: ${tavernCoinBalance}`;
+  quizBalance.textContent = `Purse: ${coinLabel(tavernCoinBalance)}`;
+  for (const button of quizStakes.querySelectorAll<HTMLButtonElement>("[data-quiz-stake]")) {
+    button.disabled = quizPending || Number(button.dataset.quizStake) > tavernCoinBalance;
+  }
+}
+
+function renderTavernQuiz(update: TavernQuizUpdate): void {
+  quizPending = false;
+  updateTavernCoins(update.coins);
+  quizMessage.textContent = update.message ?? "Place a stake, then answer Mara's question.";
+  if (update.phase === "error") return;
+  quizStakes.hidden = update.phase === "question" || update.phase === "decision";
+  quizQuestion.hidden = update.phase !== "question";
+  quizDecision.hidden = update.phase !== "decision";
+  quizDouble.disabled = false;
+  quizQuit.disabled = false;
+  quizChoices.replaceChildren();
+  if (update.phase === "question" && update.question) {
+    quizPot.textContent = `Pot: ${coinLabel(update.payout ?? 0)} · a correct answer doubles it`;
+    quizPrompt.textContent = update.question.prompt;
+    update.question.choices.forEach((choice, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = choice;
+      button.addEventListener("click", () => {
+        if (!room || quizPending) return;
+        quizPending = true;
+        for (const answer of quizChoices.querySelectorAll<HTMLButtonElement>("button")) answer.disabled = true;
+        room.send("quiz:answer", { questionId: update.question!.id, choice: index });
+      });
+      quizChoices.append(button);
+    });
+  }
+  if (update.phase === "decision") {
+    quizMessage.textContent = `${update.message ?? "Correct!"} Pot: ${coinLabel(update.payout ?? 0)}.`;
+  }
+}
+
+tavernDialoguePlay.addEventListener("click", () => {
+  closeTavernDialogue();
+  quizPanel.hidden = false;
+  if (room) room.send("quiz:sync");
+  else quizMessage.textContent = "Connecting to Mara's table...";
+});
+quizClose.addEventListener("click", () => { quizPanel.hidden = true; });
+for (const button of quizStakes.querySelectorAll<HTMLButtonElement>("[data-quiz-stake]")) {
+  button.addEventListener("click", () => {
+    if (!room || quizPending) return;
+    quizPending = true;
+    updateTavernCoins(tavernCoinBalance);
+    room.send("quiz:start", { stake: Number(button.dataset.quizStake) });
+  });
+}
+for (const [button, decision] of [[quizDouble, "double"], [quizQuit, "quit"]] as const) {
+  button.addEventListener("click", () => {
+    if (!room || quizPending) return;
+    quizPending = true;
+    quizDouble.disabled = true;
+    quizQuit.disabled = true;
+    room.send("quiz:decision", { decision });
+  });
+}
 
 function updatePointerPosition(event: PointerEvent): void {
   const rect = canvas.getBoundingClientRect();
@@ -3282,6 +3376,11 @@ for (const button of traitPickerButtons) {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (!quizPanel.hidden) {
+    if (event.code === "Escape") quizPanel.hidden = true;
+    if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyC"].includes(event.code)) event.preventDefault();
+    return;
+  }
   if (event.code === "Escape" && !tavernDialogue.hidden) {
     closeTavernDialogue();
     return;
@@ -3487,8 +3586,8 @@ app.on("update", (dt: number) => {
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const strafe = Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe));
-  const forward = Math.max(-1, Math.min(1, keyboardForward - touchForward));
+  const strafe = quizPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
+  const forward = quizPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
@@ -4071,6 +4170,7 @@ async function connect(): Promise<void> {
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
+  room.onMessage("quiz:update", (update: TavernQuizUpdate) => renderTavernQuiz(update));
   room.onMessage("block:changed", applyBlockChange);
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
     createWeaponProjectile(message);
@@ -4266,6 +4366,7 @@ async function connect(): Promise<void> {
     if (message.playerId !== room?.sessionId) return;
     const defeatedName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
     const rewards = [
+      message.coinsGranted > 0 ? `+${message.coinsGranted} coins` : "",
       message.healthRestored > 0 ? `+${message.healthRestored} HP` : "",
       message.staminaRestored > 0 ? `+${message.staminaRestored} stamina` : "",
     ].filter(Boolean).join(" · ");
@@ -4329,6 +4430,7 @@ async function connect(): Promise<void> {
     }
   });
   room.onLeave(() => {
+    quizPanel.hidden = true;
     worldReady = false;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
