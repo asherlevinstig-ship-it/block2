@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "tavern-interior-v28";
+const SERVER_BUILD = "tavern-furniture-collision-v29";
 
 const gameServer = defineServer({
   rooms: { [WORLD_ROOM]: defineRoom(WorldRoom) },

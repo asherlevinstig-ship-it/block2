@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_TAVERN, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 
 type Color = readonly [number, number, number];
@@ -237,7 +237,7 @@ export class SceneDressing {
       }
 
       // Three communal tables leave the central route and rear doorway clear.
-      for (const [cx, cz] of [[4.5, 13.5], [12.5, 13.5], [12.5, 16.5]] as const) {
+      for (const [cx, cz] of TOWN_TAVERN_TABLE_CENTERS) {
         solid.box(cx, 8.78, cz, 2.72, 0.14, 0.88, OAK);
         solid.box(cx, 8.875, cz, 2.55, 0.045, 0.7, COPPER);
         for (const dx of [-1.05, 1.05]) {

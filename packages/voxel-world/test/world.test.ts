@@ -122,6 +122,31 @@ describe("deterministic voxel world", () => {
     expect(entered.y).toBe(8);
   });
 
+  it("blocks tables, benches, the bar, and hearth without stepping onto them", () => {
+    const loaded = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const address = worldToChunk(x, z);
+      const key = `${address.chunkX},${address.chunkZ}`;
+      if (!loaded.has(key)) loaded.set(key, generateChunk("test-world", address.chunkX, address.chunkZ));
+      return getBlock(loaded.get(key)!, address.localX, y, address.localZ);
+    };
+    const table = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: 13.5 }, { x: -4, z: 0 }, read);
+    const bench = resolveSweptHorizontalMotion({ x: 4.5, y: 8, z: 11 }, { x: 0, z: 3 }, read);
+    const bar = resolveSweptHorizontalMotion({ x: 5.1, y: 8, z: 16.3 }, { x: 0, z: 2 }, read);
+    const hearth = resolveSweptHorizontalMotion({ x: 5.5, y: 8, z: 16.5 }, { x: -2, z: 0 }, read);
+    expect(table.x).toBeGreaterThan(6);
+    expect(bench.z).toBeLessThan(12.5);
+    expect(bar.z).toBeLessThan(17.4);
+    expect(hearth.x).toBeGreaterThan(4.3);
+    for (const result of [table, bench, bar, hearth]) {
+      expect(result.y).toBe(8);
+      expect(result.stepped).toBe(false);
+      expect(playerCollides(read, result.x, result.y, result.z)).toBe(false);
+    }
+    const aisle = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: 10.5 }, { x: 0, z: 7.5 }, read);
+    expect(aisle.z).toBeGreaterThan(17.8);
+  });
+
   it("finds a stable standing surface inside a generated column", () => {
     const chunk = generateChunk("test-world", 0, 0);
     const surface = highestSolidY(chunk, 8, 8);

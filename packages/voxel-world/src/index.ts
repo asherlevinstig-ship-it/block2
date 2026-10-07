@@ -16,6 +16,15 @@ export const PLAYER_HEIGHT = 1.45;
 export const GRAVITY = 18;
 export const TERMINAL_VELOCITY = 12;
 
+export const TOWN_TAVERN_TABLE_CENTERS = [[4.5, 13.5], [12.5, 13.5], [12.5, 16.5]] as const;
+
+type FurnitureCollider = { x: number; z: number; width: number; depth: number; minY: number; maxY: number };
+export const TOWN_TAVERN_FURNITURE_COLLIDERS: readonly FurnitureCollider[] = [
+  ...TOWN_TAVERN_TABLE_CENTERS.map(([x, z]) => ({ x, z, width: 2.72, depth: 2.08, minY: 8.1, maxY: 9.05 })),
+  { x: 4.9, z: 17.73, width: 3.92, depth: 0.7, minY: 8, maxY: 9.45 },
+  { x: 4.025, z: 16.5, width: 0.62, depth: 1.38, minY: 8, maxY: 9.95 },
+];
+
 export const Block = {
   Air: 0,
   Bedrock: 1,
@@ -248,6 +257,18 @@ export function highestSolidY(chunk: GeneratedChunk, localX: number, localZ: num
 }
 
 export function playerCollides(readBlock: WorldBlockReader, x: number, y: number, z: number): boolean {
+  // Tavern details are rendered below voxel resolution. Keep their physical footprints
+  // shared by the authoritative server and client prediction without creating stepable blocks.
+  if (x >= TOWN_TAVERN.minX && x <= TOWN_TAVERN.maxX + 1
+    && z >= TOWN_TAVERN.minZ && z <= TOWN_TAVERN.maxZ + 1
+    && y < 10 && y + PLAYER_HEIGHT > 8
+    && readBlock(8, 12, 14) === Block.Stone && readBlock(8, 8, 14) === Block.Air
+    && TOWN_TAVERN_FURNITURE_COLLIDERS.some(box => {
+      if (y + PLAYER_HEIGHT - 0.06 <= box.minY || y + 0.06 >= box.maxY) return false;
+      const nearestX = Math.max(box.x - box.width / 2, Math.min(x, box.x + box.width / 2));
+      const nearestZ = Math.max(box.z - box.depth / 2, Math.min(z, box.z + box.depth / 2));
+      return Math.hypot(x - nearestX, z - nearestZ) < PLAYER_RADIUS;
+    })) return true;
   const minX = Math.floor(x - PLAYER_RADIUS);
   const maxX = Math.floor(x + PLAYER_RADIUS);
   const minY = Math.floor(y + 0.06);
