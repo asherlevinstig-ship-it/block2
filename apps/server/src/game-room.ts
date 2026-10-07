@@ -347,7 +347,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success || !player) return this.quizError(client, "Choose a stake of 1, 5, or 10 coins.");
     if (this.quizRounds.has(client.sessionId)) return this.sendQuizState(client);
     if (!canStartTavernQuiz(player, player.coins, parsed.data.stake)) {
-      return this.quizError(client, "Stand by Mara with enough coins to place that stake.");
+      return this.quizError(client, "Stand by the blue-and-gold quiz table with enough coins to place that stake.");
     }
     const question = drawQuizQuestion([]);
     if (!question) return this.quizError(client, "Mara has run out of questions for now.");

@@ -399,6 +399,23 @@ button { font: inherit; }
   transform: translate(-50%, -50%);
 }
 #combat-reticle[hidden] { display: none; }
+#quiz-table-prompt {
+  position: fixed;
+  z-index: 21;
+  padding: 7px 10px;
+  border: 1px solid #eec377;
+  border-radius: 8px;
+  background: rgb(31 22 17 / 92%);
+  color: #ffdda0;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+#quiz-table-prompt small { display: block; margin-top: 3px; color: white; font-size: .7rem; font-weight: 600; letter-spacing: 0; }
+#quiz-table-prompt[hidden] { display: none; }
 #combat-reticle span,
 #combat-reticle span::before { position: absolute; content: ""; background: #ffc4b8; }
 #combat-reticle span { top: 15px; left: 8px; width: 14px; height: 2px; }

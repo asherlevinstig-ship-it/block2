@@ -114,7 +114,7 @@ import { createGuestProfileToken, getOrCreateProfileToken } from "./player-profi
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
-import { canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES } from "./tavern-keeper.js";
+import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE } from "./tavern-keeper.js";
 import "./styles.css";
 
 function newGuestProfileToken() {
@@ -135,10 +135,10 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
+const quizTablePrompt = document.querySelector<HTMLElement>("#quiz-table-prompt")!;
 const tavernDialogueLine = document.querySelector<HTMLElement>("#tavern-dialogue-line")!;
 const tavernDialogueNext = document.querySelector<HTMLButtonElement>("#tavern-dialogue-next")!;
 const tavernDialogueClose = document.querySelector<HTMLButtonElement>("#tavern-dialogue-close")!;
-const tavernDialoguePlay = document.querySelector<HTMLButtonElement>("#tavern-dialogue-play")!;
 const quizPanel = document.querySelector<HTMLElement>("#tavern-quiz")!;
 const quizBalance = document.querySelector<HTMLElement>("#tavern-quiz-balance")!;
 const quizMessage = document.querySelector<HTMLElement>("#tavern-quiz-message")!;
@@ -224,7 +224,7 @@ const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-togg
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
-if ([tavernDialoguePlay, quizPanel, quizBalance, quizMessage, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
+if ([quizTablePrompt, quizPanel, quizBalance, quizMessage, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
 
@@ -2358,12 +2358,12 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
   }
 }
 
-tavernDialoguePlay.addEventListener("click", () => {
+function openTavernQuiz(): void {
   closeTavernDialogue();
   quizPanel.hidden = false;
   if (room) room.send("quiz:sync");
-  else quizMessage.textContent = "Connecting to Mara's table...";
-});
+  else quizMessage.textContent = "Connecting to the quiz table...";
+}
 quizClose.addEventListener("click", () => { quizPanel.hidden = true; });
 for (const button of quizStakes.querySelectorAll<HTMLButtonElement>("[data-quiz-stake]")) {
   button.addEventListener("click", () => {
@@ -2413,6 +2413,14 @@ function updateTarget(): void {
   const direction = end.clone().sub(start);
   const hit = voxelRaycast(start, direction, camera.camera.farClip, readVisibleWorldBlock);
   const player = localPlayer.getPosition();
+  const quizTableNearby = canPlayAtTavernTable(player, sceneDressing.keeperVisible);
+  quizTablePrompt.hidden = !quizTableNearby || !quizPanel.hidden;
+  if (!quizTablePrompt.hidden) {
+    const screen = camera.camera.worldToScreen(new pc.Vec3(TAVERN_QUIZ_TABLE.x, 9.5, TAVERN_QUIZ_TABLE.z));
+    const rect = canvas.getBoundingClientRect();
+    quizTablePrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
+    quizTablePrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+  }
   const keeperNearby = canTalkToTavernKeeper(player, sceneDressing.keeperVisible);
   if (!keeperNearby && !tavernDialogue.hidden) closeTavernDialogue();
   const inRange = Boolean(hit) && Math.hypot(hit!.x + 0.5 - player.x, hit!.y + 0.5 - player.y, hit!.z + 0.5 - player.z) <= 4.5;
@@ -2424,11 +2432,12 @@ function updateTarget(): void {
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMark?.stacks ?? 0}` : "none";
-  const nextKey = `${interactionMode}:${targetKey}:${combatKey}:${keeperNearby}`;
+  const nextKey = `${interactionMode}:${targetKey}:${combatKey}:${keeperNearby}:${quizTableNearby}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
-  mineButton.textContent = keeperNearby ? "Talk" : interactionMode === "build" ? "Mine" : "Attack";
-  if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
+  mineButton.textContent = quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? "Mine" : "Attack";
+  if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
+  else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
     const intent = combatMob.visual.state.combatState === "windup"
       ? " · LUNGE INCOMING"
@@ -3304,6 +3313,10 @@ function commitSpecialAim(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (canPlayAtTavernTable(localPlayer.getPosition(), sceneDressing.keeperVisible)) {
+    openTavernQuiz();
+    return;
+  }
   if (canTalkToTavernKeeper(localPlayer.getPosition(), sceneDressing.keeperVisible)) {
     advanceTavernDialogue();
     return;

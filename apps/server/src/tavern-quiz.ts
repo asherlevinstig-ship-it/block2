@@ -1,5 +1,5 @@
 import { TAVERN_QUIZ_MAX_PAYOUT, TAVERN_QUIZ_MAX_STAKE } from "@blockcraft/protocol";
-import { TOWN_TAVERN_KEEPER_POSITION } from "@blockcraft/voxel-world";
+import { TOWN_TAVERN_QUIZ_TABLE_POSITION } from "@blockcraft/voxel-world";
 
 type Question = { id: string; prompt: string; choices: readonly [string, string, string, string]; answer: string };
 const QUESTIONS: readonly Question[] = [
@@ -32,8 +32,8 @@ export type QuizRound = {
 
 export function canStartTavernQuiz(player: { x: number; y: number; z: number }, coins: number, stake: number): boolean {
   return Number.isInteger(stake) && stake >= 1 && stake <= TAVERN_QUIZ_MAX_STAKE && coins >= stake
-    && Math.abs(player.y - TOWN_TAVERN_KEEPER_POSITION.y) <= 1.6
-    && Math.hypot(player.x - TOWN_TAVERN_KEEPER_POSITION.x, player.z - TOWN_TAVERN_KEEPER_POSITION.z) <= 2.6;
+    && Math.abs(player.y - TOWN_TAVERN_QUIZ_TABLE_POSITION.y) <= 1.6
+    && Math.hypot(player.x - TOWN_TAVERN_QUIZ_TABLE_POSITION.x, player.z - TOWN_TAVERN_QUIZ_TABLE_POSITION.z) <= 2.6;
 }
 
 export function drawQuizQuestion(askedIds: readonly string[], random = Math.random): QuizQuestion | null {

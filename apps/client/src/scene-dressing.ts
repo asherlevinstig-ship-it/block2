@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 
 type Color = readonly [number, number, number];
@@ -286,11 +286,20 @@ export class SceneDressing {
           solid.box(cx, 8.43, cz + side * 0.9, 2.62, 0.11, 0.28, OAK);
           for (const dx of [-1.08, 1.08]) solid.box(cx + dx, 8.22, cz + side * 0.9, 0.13, 0.39, 0.16, DARK_OAK);
         }
-        for (const dx of [-0.64, 0.64]) {
-          solid.box(cx + dx, 8.935, cz + 0.06, 0.19, 0.14, 0.19, CREAM);
-          solid.box(cx + dx + 0.12, 8.935, cz + 0.06, 0.065, 0.075, 0.08, GOLD);
+        if (cx === TOWN_TAVERN_QUIZ_TABLE_POSITION.x && cz === TOWN_TAVERN_QUIZ_TABLE_POSITION.z) {
+          // Blue felt and gold tokens distinguish the playable table from dining tables.
+          solid.box(cx, 8.91, cz, 2.31, 0.025, 0.56, CLOTH);
+          for (const dx of [-0.68, -0.34, 0.34, 0.68]) {
+            glow.box(cx + dx, 8.94, cz, 0.21, 0.035, 0.21, GOLD);
+          }
+          glow.box(cx, 9.04, cz - 0.1, 0.28, 0.2, 0.28, GOLD);
+        } else {
+          for (const dx of [-0.64, 0.64]) {
+            solid.box(cx + dx, 8.935, cz + 0.06, 0.19, 0.14, 0.19, CREAM);
+            solid.box(cx + dx + 0.12, 8.935, cz + 0.06, 0.065, 0.075, 0.08, GOLD);
+          }
+          glow.box(cx, 8.91, cz - 0.1, 0.34, 0.04, 0.3, GOLD);
         }
-        glow.box(cx, 8.91, cz - 0.1, 0.34, 0.04, 0.3, GOLD);
       }
 
       // A serving bar, bottle shelf, and barrels give the rear corner a purpose.
