@@ -29,7 +29,7 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
   moss_crawler: {
     id: "moss_crawler",
     name: "Moss Crawler",
-    spawn: { x: 30.5, y: 8, z: 15.5 },
+    spawn: { x: 40.5, y: 8, z: 15.5 },
     maxHealth: 8,
     armor: 0,
     attackKind: "melee",
@@ -53,7 +53,7 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
   stone_brute: {
     id: "stone_brute",
     name: "Stone Brute",
-    spawn: { x: 26.5, y: 8, z: 22.5 },
+    spawn: { x: 37.5, y: 8, z: 31.5 },
     maxHealth: 18,
     armor: 1,
     attackKind: "melee",
@@ -77,7 +77,7 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
   cave_spitter: {
     id: "cave_spitter",
     name: "Cave Spitter",
-    spawn: { x: 30.5, y: 8, z: 5.5 },
+    spawn: { x: 40.5, y: 8, z: 5.5 },
     maxHealth: 6,
     armor: 0,
     attackKind: "projectile",

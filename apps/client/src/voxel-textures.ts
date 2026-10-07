@@ -1,4 +1,4 @@
-import { Block, SURFACE_HEIGHT, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
+import { Block, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
 
 export type VoxelTextureKind = "bedrock" | "stone" | "dirt" | "grass-top" | "grass-side" | "iron"
   | "timber" | "slate-roof" | "paving" | "path" | "dressed-stone" | "bronze";
@@ -22,7 +22,9 @@ function vary(color: Rgb, amount: number): Rgb {
 /** Only authored town blocks get architectural finishes; mining keeps the real block IDs. */
 export function voxelTextureKind(block: number, normalY: number, x: number, y: number, z: number): VoxelTextureKind {
   // Skip the authored lookup for wilderness and underground faces.
-  const withinTown = x >= -6 && x <= 22 && z >= -6 && z <= 22 && y >= SURFACE_HEIGHT && y <= 16;
+  const withinTown = x >= TOWN_CENTER_X - TOWN_SAFE_RADIUS - 1 && x <= TOWN_CENTER_X + TOWN_SAFE_RADIUS
+    && z >= TOWN_CENTER_Z - TOWN_SAFE_RADIUS - 1 && z <= TOWN_CENTER_Z + TOWN_SAFE_RADIUS
+    && y >= SURFACE_HEIGHT && y <= 16;
   if (withinTown && townOfBeginningsBlock(x, y, z) === block) {
     if (townWallBlock(x, y, z) === block) return block === Block.IronOre ? "bronze" : "dressed-stone";
     if (townTavernBlock(x, y, z) === block) {

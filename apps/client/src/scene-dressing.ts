@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 
 type Color = readonly [number, number, number];
@@ -30,13 +30,14 @@ class BoxBatch {
   private readonly colors: number[] = [];
   private readonly indices: number[] = [];
   private readonly cube = new pc.BoxGeometry();
+  offsetZ = 0;
 
   box(x: number, y: number, z: number, sx: number, sy: number, sz: number, color: Color): void {
     const base = this.positions.length / 3;
     const p = this.cube.positions!;
     const n = this.cube.normals!;
     for (let i = 0; i < p.length; i += 3) {
-      this.positions.push(x + p[i]! * sx, y + p[i + 1]! * sy, z + p[i + 2]! * sz);
+      this.positions.push(x + p[i]! * sx, y + p[i + 1]! * sy, z + this.offsetZ + p[i + 2]! * sz);
       this.normals.push(n[i]!, n[i + 1]!, n[i + 2]!);
       // Mesh.fromGeometry uses normalized byte vertex colors.
       this.colors.push(Math.round(color[0] * 255), Math.round(color[1] * 255), Math.round(color[2] * 255), 255);
@@ -182,7 +183,7 @@ export class SceneDressing {
         batch.box(x + side * 0.36, 8.84, z + facing * 0.37, 0.19, 0.11, 0.31, skin);
       }
       const head = new pc.Entity(`tavern-patron-${index + 1}-head`);
-      head.setPosition(x, 9.10, z);
+      head.setPosition(x, 9.10, z + TOWN_TAVERN_Z_OFFSET);
       head.setEulerAngles(0, facing === 1 ? 0 : 180, 0);
       this.root.addChild(head);
       this.keeperBox(head, "face", [0.43, 0.43, 0.42], [0, 0, 0], skin);
@@ -211,6 +212,7 @@ export class SceneDressing {
     const solid = new BoxBatch();
     const glow = new BoxBatch();
     const surface = SURFACE_HEIGHT + 1;
+    const tavernRead = (x: number, y: number, z: number) => read(x, y, z + TOWN_TAVERN_Z_OFFSET);
 
     for (const chunk of chunks) {
       for (let z = chunk.chunkZ * CHUNK_SIZE; z < (chunk.chunkZ + 1) * CHUNK_SIZE; z += 1) {
@@ -232,13 +234,16 @@ export class SceneDressing {
       }
     }
 
+    // Keep the existing hall art in local coordinates while moving the entire tavern south.
+    solid.offsetZ = TOWN_TAVERN_Z_OFFSET;
+    glow.offsetZ = TOWN_TAVERN_Z_OFFSET;
     // The tavern is the town's single landmark: a broad timber hall with a raised slate roof.
     for (const [x, z] of [[0, 10], [16, 10], [0, 17], [16, 17], [2, 19], [14, 19]]) {
-      if (read(x!, 10, z!) !== Block.Dirt) continue;
+      if (tavernRead(x!, 10, z!) !== Block.Dirt) continue;
       solid.box(x! + 0.5, 10, z! + 0.5, 0.22, 4.05, 0.22, WOOD);
       solid.box(x! + 0.5, 8.15, z! + 0.5, 0.32, 0.3, 0.32, SLATE);
     }
-    if (read(8, 12, 10) === Block.Stone && (hiddenRoof?.minX !== TOWN_TAVERN.minX || hiddenRoof.minZ !== TOWN_TAVERN.minZ)) {
+    if (tavernRead(8, 12, 10) === Block.Stone && (hiddenRoof?.minX !== TOWN_TAVERN.minX || hiddenRoof.minZ !== TOWN_TAVERN.minZ)) {
       solid.box(8.5, 13.04, 10.02, 17.14, 0.12, 0.18, SLATE);
       solid.box(8.5, 13.04, 18.02, 17.14, 0.12, 0.18, SLATE);
       solid.box(8.5, 13.04, 19.98, 13.14, 0.12, 0.18, SLATE);
@@ -248,7 +253,7 @@ export class SceneDressing {
     }
     for (const x of [0, 16]) {
       for (const z of [12, 15]) {
-        if (read(x, 9, z) !== Block.Air) continue;
+        if (tavernRead(x, 9, z) !== Block.Air) continue;
         const outsideX = x === 0 ? -0.04 : 17.04;
         glow.box(outsideX, 9.5, z + 0.5, 0.045, 0.72, 0.74, GOLD);
         solid.box(outsideX + (x === 0 ? -0.03 : 0.03), 9.5, z + 0.5, 0.055, 0.83, 0.09, WOOD);
@@ -256,22 +261,22 @@ export class SceneDressing {
     }
     for (const z of [10, 19]) {
       for (const x of [4, 12]) {
-        if (read(x, 9, z) !== Block.Air) continue;
+        if (tavernRead(x, 9, z) !== Block.Air) continue;
         const outsideZ = z === 10 ? 9.96 : 20.04;
         glow.box(x + 0.5, 9.5, outsideZ, 0.74, 0.72, 0.045, GOLD);
         solid.box(x + 0.5, 9.5, outsideZ + (z === 10 ? -0.03 : 0.03), 0.09, 0.83, 0.055, WOOD);
       }
     }
-    if (read(8, 11, 10) === Block.Dirt) {
+    if (tavernRead(8, 11, 10) === Block.Dirt) {
       solid.box(8.5, 11.25, 9.94, 3.4, 0.64, 0.16, WOOD);
       solid.box(8.5, 11.25, 9.84, 2.9, 0.1, 0.04, COPPER);
       glow.box(8.5, 11.25, 9.79, 0.24, 0.38, 0.04, GOLD);
     }
-    if (read(8, 12, 14) === Block.Stone && read(8, 8, 14) === Block.Air) {
+    if (tavernRead(8, 12, 14) === Block.Stone && tavernRead(8, 8, 14) === Block.Air) {
       // Warm plank floor and a runner guide players between both doors.
       for (let z = 11; z <= 18; z += 1) {
         for (let x = 1; x <= 15; x += 1) {
-          if (read(x, 8, z) !== Block.Air) continue;
+          if (tavernRead(x, 8, z) !== Block.Air) continue;
           solid.box(x + 0.5, 8.012, z + 0.5, 0.975, 0.024, 0.975, (x + z) % 3 === 0 ? OAK : WOOD);
           solid.box(x + 0.5, 8.029, z + 0.04, 0.84, 0.006, 0.018, DARK_OAK);
         }
@@ -283,7 +288,8 @@ export class SceneDressing {
       }
 
       // Three communal tables leave the central route and rear doorway clear.
-      for (const [cx, cz] of TOWN_TAVERN_TABLE_CENTERS) {
+      for (const [cx, worldZ] of TOWN_TAVERN_TABLE_CENTERS) {
+        const cz = worldZ - TOWN_TAVERN_Z_OFFSET;
         solid.box(cx, 8.78, cz, 2.72, 0.14, 0.88, OAK);
         solid.box(cx, 8.875, cz, 2.55, 0.045, 0.7, COPPER);
         for (const dx of [-1.05, 1.05]) {
@@ -293,7 +299,7 @@ export class SceneDressing {
           solid.box(cx, 8.43, cz + side * 0.9, 2.62, 0.11, 0.28, OAK);
           for (const dx of [-1.08, 1.08]) solid.box(cx + dx, 8.22, cz + side * 0.9, 0.13, 0.39, 0.16, DARK_OAK);
         }
-        if (cx === TOWN_TAVERN_QUIZ_TABLE_POSITION.x && cz === TOWN_TAVERN_QUIZ_TABLE_POSITION.z) {
+        if (cx === TOWN_TAVERN_QUIZ_TABLE_POSITION.x && worldZ === TOWN_TAVERN_QUIZ_TABLE_POSITION.z) {
           // Blue felt and gold tokens distinguish the playable table from dining tables.
           solid.box(cx, 8.91, cz, 2.31, 0.025, 0.56, CLOTH);
           for (const dx of [-0.68, -0.34, 0.34, 0.68]) {
@@ -338,7 +344,7 @@ export class SceneDressing {
         glow.box(x, 10.2, z, 0.18, 0.34, 0.11, GOLD);
       }
     }
-    if (read(3, 10, 16) === Block.Stone) {
+    if (tavernRead(3, 10, 16) === Block.Stone) {
       // Solid voxel chimney, with a shallow decorative hearth facing the hall.
       solid.box(4.025, 8.14, 16.5, 0.62, 0.22, 1.38, SLATE);
       solid.box(4.045, 9.15, 16.04, 0.16, 1.45, 0.15, SLATE);
@@ -351,8 +357,10 @@ export class SceneDressing {
       for (const z of [16.2, 16.5, 16.8]) solid.box(4.31, 8.38, z, 0.19, 0.13, 0.13, DARK_OAK);
     }
 
-    // The open-air stall faces the plaza; the glowing forge and iron display identify the ore buyer.
-    if (read(14, SURFACE_HEIGHT, 5) === Block.Grass) {
+    solid.offsetZ = 0;
+    glow.offsetZ = 0;
+    // The open-air stall now sits across the east quarter from the tavern.
+    if (read(Math.floor(TOWN_BLACKSMITH_STALL_POSITION.x), SURFACE_HEIGHT, Math.floor(TOWN_BLACKSMITH_STALL_POSITION.z)) !== Block.Air) {
       this.blacksmithBuilt = true;
       const { x, z } = TOWN_BLACKSMITH_STALL_POSITION;
       solid.box(x, 8.56, z, 3.1, 1.12, 0.7, DARK_OAK);
@@ -388,23 +396,29 @@ export class SceneDressing {
       solid.box(x + 0.5, 9.35, z + 1.045, 0.32, 0.1, 0.03, GOLD);
     }
     for (const gate of [
-      { x: -6, z: 8, sx: 1, sz: 2 }, { x: 22, z: 8, sx: 1, sz: 2 },
-      { x: 8, z: -6, sx: 2, sz: 1 }, { x: 8, z: 22, sx: 2, sz: 1 },
+      { x: -14, z: 8, sx: 1, sz: 2 }, { x: 30, z: 8, sx: 1, sz: 2 },
+      { x: 8, z: -14, sx: 2, sz: 1 }, { x: 8, z: 30, sx: 2, sz: 1 },
     ]) {
       if (read(gate.x, 10, gate.z) !== Block.Stone) continue;
       solid.box(gate.x + gate.sx / 2, 11.035, gate.z + gate.sz / 2, gate.sx + 0.12, 0.12, gate.sz + 0.12, COPPER);
     }
-    if (read(8, 11, 4) === Block.IronOre) {
+    if (read(TOWN_BEACON_POSITION.x, 11, TOWN_BEACON_POSITION.z) === Block.IronOre) {
+      const beaconX = TOWN_BEACON_POSITION.x + 0.5;
+      const beaconZ = TOWN_BEACON_POSITION.z + 0.5;
       for (const y of [9, 10, 11]) {
-        solid.box(8.5, y + 0.05, 4.5, 1.055, 0.12, 1.055, COPPER);
-        glow.box(8.5, y + 0.47, 5.015, 0.23, 0.56, 0.035, GOLD);
-        glow.box(9.015, y + 0.47, 4.5, 0.035, 0.56, 0.23, GOLD);
+        solid.box(beaconX, y + 0.05, beaconZ, 1.055, 0.12, 1.055, COPPER);
+        glow.box(beaconX, y + 0.47, beaconZ + 0.515, 0.23, 0.56, 0.035, GOLD);
+        glow.box(beaconX + 0.515, y + 0.47, beaconZ, 0.035, 0.56, 0.23, GOLD);
       }
-      solid.box(8.5, 12.015, 4.5, 1.1, 0.12, 1.1, SLATE);
+      solid.box(beaconX, 12.015, beaconZ, 1.1, 0.12, 1.1, SLATE);
     }
 
-    const furnishedTavern = read(5, 8, 18) === Block.Air && read(8, 12, 14) === Block.Stone;
-    if (furnishedTavern) this.createSeatedPatrons(solid);
+    const furnishedTavern = tavernRead(5, 8, 18) === Block.Air && tavernRead(8, 12, 14) === Block.Stone;
+    if (furnishedTavern) {
+      solid.offsetZ = TOWN_TAVERN_Z_OFFSET;
+      this.createSeatedPatrons(solid);
+      solid.offsetZ = 0;
+    }
     for (const [batch, material, castsShadow] of [[solid, this.material, true], [glow, this.glow, false]] as const) {
       const mesh = batch.mesh(this.app.graphicsDevice);
       if (!mesh) continue;
@@ -413,15 +427,15 @@ export class SceneDressing {
       entity.addComponent("render", { meshInstances: [new pc.MeshInstance(mesh, material)], castShadows: castsShadow, receiveShadows: true });
       this.root.addChild(entity);
     }
-    if (read(3, 10, 16) === Block.Stone) {
+    if (tavernRead(3, 10, 16) === Block.Stone) {
       this.fireLight = new pc.Entity("tavern-hearth-light");
       this.fireLight.addComponent("light", { type: "omni", color: new pc.Color(1, 0.39, 0.13), intensity: 1.35, range: 7, castShadows: false });
-      this.fireLight.setPosition(4.3, 9.3, 16.5);
+      this.fireLight.setPosition(4.3, 9.3, 16.5 + TOWN_TAVERN_Z_OFFSET);
       this.root.addChild(this.fireLight);
       for (const [x, z] of [[4.5, 13.5], [12.5, 14.7]] as const) {
         const lantern = new pc.Entity("tavern-lantern-light");
         lantern.addComponent("light", { type: "omni", color: new pc.Color(1, 0.64, 0.31), intensity: 0.5, range: 5, castShadows: false });
-        lantern.setPosition(x, 10.4, z);
+        lantern.setPosition(x, 10.4, z + TOWN_TAVERN_Z_OFFSET);
         this.root.addChild(lantern);
       }
     }

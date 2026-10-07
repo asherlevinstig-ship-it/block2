@@ -25,12 +25,12 @@ describe("procedural voxel textures", () => {
   });
 
   it("keeps building finishes distinct from mineable wilderness materials", () => {
-    expect(voxelTextureKind(Block.Dirt, 0, 8, 7, 14)).toBe("timber");
-    expect(voxelTextureKind(Block.Dirt, 0, 0, 10, 12)).toBe("timber");
-    expect(voxelTextureKind(Block.Stone, 1, 8, 12, 14)).toBe("slate-roof");
+    expect(voxelTextureKind(Block.Dirt, 0, 8, 7, 20)).toBe("timber");
+    expect(voxelTextureKind(Block.Dirt, 0, 0, 10, 18)).toBe("timber");
+    expect(voxelTextureKind(Block.Stone, 1, 8, 12, 20)).toBe("slate-roof");
     expect(voxelTextureKind(Block.Stone, 1, 8, 7, 8)).toBe("paving");
-    expect(voxelTextureKind(Block.Dirt, 0, 22, 6, 6)).toBe("dirt");
-    expect(voxelTextureKind(Block.IronOre, 0, 22, 3, 6)).toBe("iron");
+    expect(voxelTextureKind(Block.Dirt, 0, 32, 6, 6)).toBe("dirt");
+    expect(voxelTextureKind(Block.IronOre, 0, 32, 3, 6)).toBe("iron");
   });
 
   it("shades enclosed voxel corners without darkening open surfaces", () => {
@@ -41,8 +41,8 @@ describe("procedural voxel textures", () => {
   });
 
   it("keeps the town lookup bounds inclusive of all authored structures", () => {
-    for (let z = -6; z <= 22; z += 1) {
-      for (let x = -6; x <= 22; x += 1) {
+    for (let z = -14; z <= 30; z += 1) {
+      for (let x = -14; x <= 30; x += 1) {
         for (let y = 0; y < CHUNK_HEIGHT; y += 1) {
           const block = townOfBeginningsBlock(x, y, z);
           if (block === null || block === Block.Air) continue;

@@ -206,10 +206,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("moss-crawler", "moss_crawler", MOB_ARCHETYPES.moss_crawler.spawn);
     this.registerMob("stone-brute", "stone_brute", MOB_ARCHETYPES.stone_brute.spawn);
     this.registerMob("cave-spitter", "cave_spitter", MOB_ARCHETYPES.cave_spitter.spawn);
-    this.registerMob("wild-crawler", "moss_crawler", { x: 31.5, y: 8, z: 18.5 });
-    this.registerMob("frontier-crawler", "moss_crawler", { x: 34.5, y: 8, z: 29.5 });
-    this.registerMob("frontier-brute", "stone_brute", { x: 41.5, y: 8, z: 31.5 });
-    this.registerMob("frontier-spitter", "cave_spitter", { x: 38.5, y: 8, z: 4.5 });
+    this.registerMob("wild-crawler", "moss_crawler", { x: 39.5, y: 8, z: 18.5 });
+    this.registerMob("frontier-crawler", "moss_crawler", { x: 40.5, y: 8, z: 35.5 });
+    this.registerMob("frontier-brute", "stone_brute", { x: 43.5, y: 8, z: 41.5 });
+    this.registerMob("frontier-spitter", "cave_spitter", { x: 43.5, y: 8, z: -4.5 });
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
@@ -267,11 +267,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
     const spawn = process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
-      ? { x: 23.5, y: 3, z: 8.5 }
+      ? { x: 37.5, y: 3, z: 8.5 }
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "spitter"
-        ? { x: 24.5, y: 8, z: 6.5 }
+        ? { x: 40.5, y: 8, z: 6.5 }
         : process.env.NODE_ENV !== "production" && requestedQaSpawn === "blacksmith"
-          ? { x: 14.5, y: 8, z: 7.3 }
+          ? { x: 22.5, y: 8, z: 4.3 }
+          : process.env.NODE_ENV !== "production" && requestedQaSpawn === "tavern"
+            ? { x: 8.5, y: 8, z: 20.5 }
         : this.spawnPoint();
     player.x = spawn.x;
     player.y = spawn.y;

@@ -9,9 +9,9 @@ describe("blacksmith trading", () => {
   });
 
   it("requires the player to stand at the stall", () => {
-    expect(canTradeAtBlacksmith({ x: 14.5, y: 8, z: 7.3 })).toBe(true);
+    expect(canTradeAtBlacksmith({ x: 22.5, y: 8, z: 4.3 })).toBe(true);
     expect(canTradeAtBlacksmith({ x: 8.5, y: 8, z: 8.5 })).toBe(false);
-    expect(canTradeAtBlacksmith({ x: 14.5, y: 4, z: 5.5 })).toBe(false);
+    expect(canTradeAtBlacksmith({ x: 22.5, y: 4, z: 2.5 })).toBe(false);
   });
 
   it("sells held ore for gold without exceeding the gold cap", () => {

@@ -3,30 +3,33 @@ export const CHUNK_HEIGHT = 24;
 export const SURFACE_HEIGHT = 7;
 export const TOWN_CENTER_X = CHUNK_SIZE / 2 + 0.5;
 export const TOWN_CENTER_Z = CHUNK_SIZE / 2 + 0.5;
-export const TOWN_SAFE_RADIUS = 14;
+export const TOWN_SAFE_RADIUS = 22;
 export const SPAWN_PROTECTION_RADIUS = TOWN_SAFE_RADIUS;
-export const TOWN_TAVERN = { minX: 0, maxX: 16, minZ: 10, maxZ: 19, roofBaseY: 12, roofTopY: 16 } as const;
+export const TOWN_TAVERN_Z_OFFSET = 6;
+export const TOWN_TAVERN = { minX: 0, maxX: 16, minZ: 16, maxZ: 25, roofBaseY: 12, roofTopY: 16 } as const;
 export const TOWN_BUILDINGS = [TOWN_TAVERN] as const;
 export const TOWN_GATE_POSTS = [
-  [-6, 7], [-6, 10], [22, 7], [22, 10],
-  [7, -6], [10, -6], [7, 22], [10, 22],
+  [-14, 7], [-14, 10], [30, 7], [30, 10],
+  [7, -14], [10, -14], [7, 30], [10, 30],
 ] as const;
 export const PLAYER_RADIUS = 0.28;
 export const PLAYER_HEIGHT = 1.45;
 export const GRAVITY = 18;
 export const TERMINAL_VELOCITY = 12;
 
-export const TOWN_TAVERN_TABLE_CENTERS = [[4.5, 13.5], [12.5, 13.5], [12.5, 16.5]] as const;
-export const TOWN_TAVERN_QUIZ_TABLE_POSITION = { x: 12.5, y: 8, z: 16.5 } as const;
-export const TOWN_TAVERN_KEEPER_POSITION = { x: 5.1, y: 8, z: 18.35 } as const;
-export const TOWN_BLACKSMITH_STALL_POSITION = { x: 14.5, y: 8, z: 5.5 } as const;
-export const TOWN_BLACKSMITH_STALL_COLLIDER = { x: 14.5, z: 5.5, width: 3.1, depth: 0.7, minY: 8, maxY: 9.15 } as const;
+export const TOWN_TAVERN_TABLE_CENTERS = [[4.5, 19.5], [12.5, 19.5], [12.5, 22.5]] as const;
+export const TOWN_TAVERN_QUIZ_TABLE_POSITION = { x: 12.5, y: 8, z: 22.5 } as const;
+export const TOWN_TAVERN_KEEPER_POSITION = { x: 5.1, y: 8, z: 24.35 } as const;
+export const TOWN_BLACKSMITH_STALL_POSITION = { x: 22.5, y: 8, z: 2.5 } as const;
+export const TOWN_BLACKSMITH_STALL_COLLIDER = { x: 22.5, z: 2.5, width: 3.1, depth: 0.7, minY: 8, maxY: 9.15 } as const;
+export const TOWN_BEACON_POSITION = { x: -2, z: 1 } as const;
+export const MILESTONE_CAVE_X_OFFSET = 14;
 
 type FurnitureCollider = { x: number; z: number; width: number; depth: number; minY: number; maxY: number };
 export const TOWN_TAVERN_FURNITURE_COLLIDERS: readonly FurnitureCollider[] = [
   ...TOWN_TAVERN_TABLE_CENTERS.map(([x, z]) => ({ x, z, width: 2.72, depth: 2.08, minY: 8.1, maxY: 9.05 })),
-  { x: 4.9, z: 17.73, width: 3.92, depth: 0.7, minY: 8, maxY: 9.45 },
-  { x: 4.025, z: 16.5, width: 0.62, depth: 1.38, minY: 8, maxY: 9.95 },
+  { x: 4.9, z: 23.73, width: 3.92, depth: 0.7, minY: 8, maxY: 9.45 },
+  { x: 4.025, z: 22.5, width: 0.62, depth: 1.38, minY: 8, maxY: 9.95 },
 ];
 
 export const Block = {
@@ -99,11 +102,12 @@ function noise(seed: number, x: number, y: number, z: number): number {
 }
 
 function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId | null {
-  const inChamberFootprint = worldX >= 22 && worldX <= 27 && worldZ >= 5 && worldZ <= 11;
+  const caveX = worldX - MILESTONE_CAVE_X_OFFSET;
+  const inChamberFootprint = caveX >= 22 && caveX <= 27 && worldZ >= 5 && worldZ <= 11;
   if (inChamberFootprint && y === 2) return Block.Stone;
 
   if (worldZ >= 7 && worldZ <= 9) {
-    const entranceFloorY = worldX === 18 ? 6 : worldX === 19 ? 5 : worldX === 20 ? 4 : worldX === 21 ? 3 : null;
+    const entranceFloorY = caveX === 18 ? 6 : caveX === 19 ? 5 : caveX === 20 ? 4 : caveX === 21 ? 3 : null;
     if (entranceFloorY === y) return Block.Stone;
   }
 
@@ -111,22 +115,23 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
     const inChamber = inChamberFootprint && y >= 3 && y <= 5;
     return inChamber ? Block.Air : null;
   }
-  if (worldX === 18 && y === SURFACE_HEIGHT) return Block.Air;
-  if (worldX === 19 && y >= 6 && y <= SURFACE_HEIGHT) return Block.Air;
-  if (worldX === 20 && y >= 5 && y <= SURFACE_HEIGHT) return Block.Air;
-  if (worldX === 21 && y >= 4 && y <= 6) return Block.Air;
-  if (worldX >= 22 && worldX <= 27 && y >= 3 && y <= 5) return Block.Air;
+  if (caveX === 18 && y === SURFACE_HEIGHT) return Block.Air;
+  if (caveX === 19 && y >= 6 && y <= SURFACE_HEIGHT) return Block.Air;
+  if (caveX === 20 && y >= 5 && y <= SURFACE_HEIGHT) return Block.Air;
+  if (caveX === 21 && y >= 4 && y <= 6) return Block.Air;
+  if (caveX >= 22 && caveX <= 27 && y >= 3 && y <= 5) return Block.Air;
   return null;
 }
 
 export function isTownTavernFootprint(worldX: number, worldZ: number): boolean {
   return worldX >= TOWN_TAVERN.minX && worldX <= TOWN_TAVERN.maxX
     && worldZ >= TOWN_TAVERN.minZ && worldZ <= TOWN_TAVERN.maxZ
-    && (worldZ < 18 || (worldX >= 2 && worldX <= 14));
+    && (worldZ < 18 + TOWN_TAVERN_Z_OFFSET || (worldX >= 2 && worldX <= 14));
 }
 
 export function townTavernBlock(worldX: number, y: number, worldZ: number): BlockId | null {
   if (!isTownTavernFootprint(worldX, worldZ)) return null;
+  worldZ -= TOWN_TAVERN_Z_OFFSET;
   if (y === SURFACE_HEIGHT) return Block.Dirt;
   if (y === 12) return Block.Stone;
   if (y === 13) return worldX >= 1 && worldX <= 15 && worldZ >= 11 && worldZ <= 18 ? Block.Stone : null;
@@ -174,20 +179,19 @@ export function townOfBeginningsBlock(worldX: number, y: number, worldZ: number)
   const wall = townWallBlock(worldX, y, worldZ);
   if (wall !== null) return wall;
 
-  const beaconCenter = worldX === 8 && worldZ === 4;
-  const beaconBase = Math.abs(worldX - 8) <= 1 && Math.abs(worldZ - 4) <= 1;
+  const beaconCenter = worldX === TOWN_BEACON_POSITION.x && worldZ === TOWN_BEACON_POSITION.z;
+  const beaconBase = Math.abs(worldX - TOWN_BEACON_POSITION.x) <= 1 && Math.abs(worldZ - TOWN_BEACON_POSITION.z) <= 1;
   if (beaconCenter && y >= 8 && y <= 11) return Block.IronOre;
   if (beaconBase && y === 8) return Block.Stone;
 
   if (y === SURFACE_HEIGHT) {
-    const plaza = worldX >= 5 && worldX <= 11 && worldZ >= 5 && worldZ <= 11;
+    const plaza = worldX >= 3 && worldX <= 13 && worldZ >= 3 && worldZ <= 13;
     if (plaza) return Block.Stone;
-    const road = ((worldX === 8 || worldX === 9) && worldZ >= -6 && worldZ <= 22)
-      || ((worldZ === 8 || worldZ === 9) && worldX >= -6 && worldX <= 17)
-      || (worldZ === 1 && worldX >= 5 && worldX <= 8)
-      || (worldZ === 16 && worldX >= 5 && worldX <= 8)
-      || (worldX === 1 && worldZ >= 9 && worldZ <= 11)
-      || (worldZ === 13 && worldX >= 8 && worldX <= 16);
+    const road = ((worldX === 8 || worldX === 9) && worldZ >= -14 && worldZ <= 30)
+      || ((worldZ === 8 || worldZ === 9) && worldX >= -14 && worldX <= 30)
+      || ((worldZ === 1 || worldZ === 2) && worldX >= -2 && worldX <= 23)
+      || ((worldX === 21 || worldX === 22) && worldZ >= 2 && worldZ <= 9)
+      || (worldZ === 19 && worldX >= 8 && worldX <= 16);
     if (road) return Block.Dirt;
   }
   return null;
@@ -263,7 +267,7 @@ export function highestSolidY(chunk: GeneratedChunk, localX: number, localZ: num
 export function playerCollides(readBlock: WorldBlockReader, x: number, y: number, z: number): boolean {
   if (y + PLAYER_HEIGHT - 0.06 > TOWN_BLACKSMITH_STALL_COLLIDER.minY
     && y + 0.06 < TOWN_BLACKSMITH_STALL_COLLIDER.maxY
-    && readBlock(14, SURFACE_HEIGHT, 5) === Block.Grass) {
+    && readBlock(Math.floor(TOWN_BLACKSMITH_STALL_POSITION.x), SURFACE_HEIGHT, Math.floor(TOWN_BLACKSMITH_STALL_POSITION.z)) !== Block.Air) {
     const box = TOWN_BLACKSMITH_STALL_COLLIDER;
     const nearestX = Math.max(box.x - box.width / 2, Math.min(x, box.x + box.width / 2));
     const nearestZ = Math.max(box.z - box.depth / 2, Math.min(z, box.z + box.depth / 2));
@@ -274,7 +278,8 @@ export function playerCollides(readBlock: WorldBlockReader, x: number, y: number
   if (x >= TOWN_TAVERN.minX && x <= TOWN_TAVERN.maxX + 1
     && z >= TOWN_TAVERN.minZ && z <= TOWN_TAVERN.maxZ + 1
     && y < 10 && y + PLAYER_HEIGHT > 8
-    && readBlock(8, 12, 14) === Block.Stone && readBlock(8, 8, 14) === Block.Air
+    && readBlock(8, 12, 14 + TOWN_TAVERN_Z_OFFSET) === Block.Stone
+    && readBlock(8, 8, 14 + TOWN_TAVERN_Z_OFFSET) === Block.Air
     && TOWN_TAVERN_FURNITURE_COLLIDERS.some(box => {
       if (y + PLAYER_HEIGHT - 0.06 <= box.minY || y + 0.06 >= box.maxY) return false;
       const nearestX = Math.max(box.x - box.width / 2, Math.min(x, box.x + box.width / 2));

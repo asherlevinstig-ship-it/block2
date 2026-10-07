@@ -3,13 +3,13 @@ import { canStartTavernQuiz, doubledPayout, drawQuizQuestion } from "./tavern-qu
 
 describe("tavern quiz", () => {
   it("requires a funded stake and proximity to the quiz table", () => {
-    const player = { x: 10.8, y: 8, z: 16.5 };
+    const player = { x: 10.8, y: 8, z: 22.5 };
     expect(canStartTavernQuiz(player, 20, 5)).toBe(true);
     expect(canStartTavernQuiz(player, 2, 5)).toBe(false);
     expect(canStartTavernQuiz(player, 20, 0)).toBe(false);
     expect(canStartTavernQuiz(player, 20, 11)).toBe(false);
-    expect(canStartTavernQuiz({ x: 5.1, y: 8, z: 16.5 }, 20, 5)).toBe(false);
-    expect(canStartTavernQuiz({ x: 12.5, y: 5, z: 16.5 }, 20, 5)).toBe(false);
+    expect(canStartTavernQuiz({ x: 5.1, y: 8, z: 22.5 }, 20, 5)).toBe(false);
+    expect(canStartTavernQuiz({ x: 12.5, y: 5, z: 22.5 }, 20, 5)).toBe(false);
   });
 
   it("never repeats a question or exposes an invalid answer index", () => {

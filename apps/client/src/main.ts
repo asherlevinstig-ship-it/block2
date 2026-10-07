@@ -2647,8 +2647,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   surfaceReferenceY = SURFACE_HEIGHT + 1;
   indoorRoofBuilding = roofCutawayBuilding(initialPosition, null, TOWN_BUILDINGS, surfaceReferenceY);
   indoorCameraBlend = indoorRoofBuilding ? 1 : 0;
-  const bootstrapUnderground = hasCeilingAbove(initialPosition);
-  const bootstrapExcavating = !bootstrapUnderground && isInOpenExcavation(initialPosition);
+  const bootstrapUnderground = indoorRoofBuilding === null && hasCeilingAbove(initialPosition);
+  const bootstrapExcavating = indoorRoofBuilding === null && !bootstrapUnderground && isInOpenExcavation(initialPosition);
   cutawaySliceY = bootstrapSliceHeight(
     previousSliceY,
     initialPosition.y,
@@ -2975,8 +2975,8 @@ function isInOpenExcavation(position: pc.Vec3): boolean {
 }
 
 function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
-  const underground = hasCeilingAbove(position);
-  const excavating = !underground && isInOpenExcavation(position);
+  const underground = indoorRoofBuilding === null && hasCeilingAbove(position);
+  const excavating = indoorRoofBuilding === null && !underground && isInOpenExcavation(position);
   undergroundClassification = underground;
   excavationClassification = excavating;
   if (surfaceReferenceY === null) surfaceReferenceY = SURFACE_HEIGHT + 1;

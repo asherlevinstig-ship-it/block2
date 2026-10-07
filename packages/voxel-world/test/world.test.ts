@@ -4,9 +4,13 @@ import {
   CHUNK_HEIGHT,
   CHUNK_SIZE,
   GRAVITY,
+  MILESTONE_CAVE_X_OFFSET,
   SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
   TOWN_BUILDINGS,
+  TOWN_BEACON_POSITION,
+  TOWN_BLACKSMITH_STALL_POSITION,
+  TOWN_TAVERN,
   generateChunk,
   getBlock,
   highestSolidY,
@@ -42,10 +46,11 @@ describe("deterministic voxel world", () => {
     expect(isProtectedVoxel(8, 8)).toBe(true);
     expect(isProtectedVoxel(16, 8)).toBe(true);
     expect(isProtectedVoxel(17, 8)).toBe(true);
-    expect(isProtectedVoxel(23, 8)).toBe(false);
-    expect(isProtectedVoxel(20, 20)).toBe(false);
-    expect(isProtectedVoxel(-6, 8)).toBe(true);
-    expect(isProtectedVoxel(-7, 8)).toBe(false);
+    expect(isProtectedVoxel(23, 8)).toBe(true);
+    expect(isProtectedVoxel(30, 8)).toBe(true);
+    expect(isProtectedVoxel(31, 8)).toBe(false);
+    expect(isProtectedVoxel(-14, 8)).toBe(true);
+    expect(isProtectedVoxel(-15, 8)).toBe(false);
   });
 
   it("builds a navigable Town of Beginnings around the spawn", () => {
@@ -59,38 +64,52 @@ describe("deterministic voxel world", () => {
     expect(TOWN_BUILDINGS).toHaveLength(1);
     expect(getBlock(centre, 2, 8, 4)).toBe(Block.Air);
     expect(getBlock(centre, 2, 10, 4)).toBe(Block.Air);
-    expect(getBlock(centre, 8, 11, 4)).toBe(Block.IronOre);
-    expect(getBlock(centre, 8, 7, 10)).toBe(Block.Dirt);
-    expect(getBlock(centre, 8, 8, 10)).toBe(Block.Air);
-    expect(getBlock(centre, 8, 10, 10)).toBe(Block.Air);
-    expect(getBlock(centre, 8, 11, 10)).toBe(Block.Dirt);
-    expect(getBlock(centre, 8, 12, 14)).toBe(Block.Stone);
-    expect(getBlock(centre, 8, 14, 14)).toBe(Block.Stone);
-    expect(getBlock(centre, 4, 8, 13)).toBe(Block.Air);
-    expect(getBlock(southQuarter, 12, 8, 0)).toBe(Block.Air);
+    expect(getBlock(westQuarter, TOWN_BEACON_POSITION.x + 16, 11, TOWN_BEACON_POSITION.z)).toBe(Block.IronOre);
+    expect(getBlock(southQuarter, 8, 7, 0)).toBe(Block.Dirt);
+    expect(getBlock(southQuarter, 8, 8, 0)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 8, 10, 0)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 8, 11, 0)).toBe(Block.Dirt);
+    expect(getBlock(southQuarter, 8, 12, 4)).toBe(Block.Stone);
+    expect(getBlock(southQuarter, 8, 14, 4)).toBe(Block.Stone);
+    expect(getBlock(southQuarter, 4, 8, 3)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 12, 8, 0)).toBe(Block.Stone);
     expect(getBlock(southQuarter, 3, 8, 0)).toBe(Block.Stone);
-    expect(getBlock(southQuarter, 3, 9, 0)).toBe(Block.Stone);
-    expect(getBlock(eastGate, 6, 11, 7)).toBe(Block.IronOre);
-    expect(getBlock(eastGate, 0, 8, 8)).toBe(Block.Air);
-    expect(getBlock(westQuarter, 13, 10, 10)).toBe(Block.Air);
-    expect(getBlock(northQuarter, 5, 10, 13)).toBe(Block.Air);
-    expect(getBlock(southQuarter, 8, 8, 3)).toBe(Block.Air);
-    expect(getBlock(southQuarter, 8, 12, 3)).toBe(Block.Stone);
-    expect(getBlock(eastGate, 0, 10, 12)).toBe(Block.Dirt);
-    expect(getBlock(eastGate, 2, SURFACE_HEIGHT, 8)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 3, 9, 0)).toBe(Block.Dirt);
+    expect(getBlock(eastGate, 14, 11, 7)).toBe(Block.IronOre);
+    expect(getBlock(eastGate, 14, 8, 8)).toBe(Block.Air);
+    expect(getBlock(westQuarter, 3, 10, 10)).toBe(Block.Air);
+    expect(getBlock(northQuarter, 8, 8, 2)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 8, 8, 9)).toBe(Block.Air);
+    expect(getBlock(southQuarter, 8, 12, 9)).toBe(Block.Stone);
+    expect(getBlock(eastGate, 0, SURFACE_HEIGHT, 8)).toBe(Block.Dirt);
   });
 
   it("keeps the blacksmith stall on solid ground and its counter physically blocked", () => {
     const centre = generateChunk("test-world", 0, 0);
-    const read = (x: number, y: number, z: number) => getBlock(centre, x, y, z);
-    expect(read(14, SURFACE_HEIGHT, 5)).toBe(Block.Grass);
-    expect(playerCollides(read, 14.5, 8, 5.5)).toBe(true);
-    expect(playerCollides(read, 14.5, 8, 7.3)).toBe(false);
+    const east = generateChunk("test-world", 1, 0);
+    const read = (x: number, y: number, z: number) => getBlock(x >= 16 ? east : centre, x >= 16 ? x - 16 : x, y, z);
+    expect(read(22, SURFACE_HEIGHT, 2)).toBe(Block.Dirt);
+    expect(playerCollides(read, 22.5, 8, 2.5)).toBe(true);
+    expect(playerCollides(read, 22.5, 8, 4.3)).toBe(false);
+  });
+
+  it("spaces the tavern, blacksmith, and beacon across connected safe-town paths", () => {
+    const tavernFront = { x: (TOWN_TAVERN.minX + TOWN_TAVERN.maxX + 1) / 2, z: TOWN_TAVERN.minZ };
+    expect(Math.hypot(tavernFront.x - TOWN_BLACKSMITH_STALL_POSITION.x, tavernFront.z - TOWN_BLACKSMITH_STALL_POSITION.z)).toBeGreaterThan(18);
+    expect(Math.hypot(TOWN_BEACON_POSITION.x - TOWN_BLACKSMITH_STALL_POSITION.x, TOWN_BEACON_POSITION.z - TOWN_BLACKSMITH_STALL_POSITION.z)).toBeGreaterThan(20);
+    for (const point of [tavernFront, TOWN_BLACKSMITH_STALL_POSITION, TOWN_BEACON_POSITION]) {
+      expect(isProtectedVoxel(point.x, point.z)).toBe(true);
+    }
+    const center = generateChunk("test-world", 0, 0);
+    const east = generateChunk("test-world", 1, 0);
+    expect(getBlock(center, 8, SURFACE_HEIGHT, 14)).toBe(Block.Dirt);
+    expect(getBlock(east, 6, SURFACE_HEIGHT, 8)).toBe(Block.Dirt);
+    expect(getBlock(east, 6, SURFACE_HEIGHT, 2)).toBe(Block.Dirt);
   });
 
   it("surrounds the town with solid walls while keeping each cardinal gate passable", () => {
     for (const [wallX, wallZ, gateX, gateZ] of [
-      [-6, 5, -6, 8], [22, 5, 22, 8], [5, -6, 8, -6], [5, 22, 8, 22],
+      [-14, 5, -14, 8], [30, 5, 30, 8], [5, -14, 8, -14], [5, 30, 8, 30],
     ]) {
       expect(townWallBlock(wallX, 8, wallZ)).toBe(Block.Stone);
       expect(townWallBlock(wallX, 9, wallZ)).toBe(Block.Stone);
@@ -99,8 +118,8 @@ describe("deterministic voxel world", () => {
       expect(townWallBlock(gateX, 10, gateZ)).toBe(Block.Stone);
     }
     const north = generateChunk("test-world", 0, -1);
-    expect(getBlock(north, 5, 8, 10)).toBe(Block.Stone);
-    expect(getBlock(north, 8, 8, 10)).toBe(Block.Air);
+    expect(getBlock(north, 5, 8, 2)).toBe(Block.Stone);
+    expect(getBlock(north, 8, 8, 2)).toBe(Block.Air);
   });
 
   it("blocks a walking player at the rampart but lets them leave through a gate", () => {
@@ -111,10 +130,10 @@ describe("deterministic voxel world", () => {
       if (!loaded.has(key)) loaded.set(key, generateChunk("test-world", address.chunkX, address.chunkZ));
       return getBlock(loaded.get(key)!, address.localX, y, address.localZ);
     };
-    const blocked = resolveSweptHorizontalMotion({ x: 5.5, y: 8, z: -4.5 }, { x: 0, z: -3 }, read);
-    const throughGate = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: -4.5 }, { x: 0, z: -3 }, read);
-    expect(blocked.z).toBeGreaterThan(-6);
-    expect(throughGate.z).toBeLessThan(-7);
+    const blocked = resolveSweptHorizontalMotion({ x: 5.5, y: 8, z: -12.5 }, { x: 0, z: -4 }, read);
+    const throughGate = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: -12.5 }, { x: 0, z: -4 }, read);
+    expect(blocked.z).toBeGreaterThan(-14);
+    expect(throughGate.z).toBeLessThan(-15);
   });
 
   it("lets a player walk from the plaza into the tavern through its wide entrance", () => {
@@ -138,21 +157,21 @@ describe("deterministic voxel world", () => {
       if (!loaded.has(key)) loaded.set(key, generateChunk("test-world", address.chunkX, address.chunkZ));
       return getBlock(loaded.get(key)!, address.localX, y, address.localZ);
     };
-    const table = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: 13.5 }, { x: -4, z: 0 }, read);
-    const bench = resolveSweptHorizontalMotion({ x: 4.5, y: 8, z: 11 }, { x: 0, z: 3 }, read);
-    const bar = resolveSweptHorizontalMotion({ x: 5.1, y: 8, z: 16.3 }, { x: 0, z: 2 }, read);
-    const hearth = resolveSweptHorizontalMotion({ x: 5.5, y: 8, z: 16.5 }, { x: -2, z: 0 }, read);
+    const table = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: 19.5 }, { x: -4, z: 0 }, read);
+    const bench = resolveSweptHorizontalMotion({ x: 4.5, y: 8, z: 17 }, { x: 0, z: 3 }, read);
+    const bar = resolveSweptHorizontalMotion({ x: 5.1, y: 8, z: 22.3 }, { x: 0, z: 2 }, read);
+    const hearth = resolveSweptHorizontalMotion({ x: 5.5, y: 8, z: 22.5 }, { x: -2, z: 0 }, read);
     expect(table.x).toBeGreaterThan(6);
-    expect(bench.z).toBeLessThan(12.5);
-    expect(bar.z).toBeLessThan(17.4);
+    expect(bench.z).toBeLessThan(18.5);
+    expect(bar.z).toBeLessThan(23.4);
     expect(hearth.x).toBeGreaterThan(4.3);
     for (const result of [table, bench, bar, hearth]) {
       expect(result.y).toBe(8);
       expect(result.stepped).toBe(false);
       expect(playerCollides(read, result.x, result.y, result.z)).toBe(false);
     }
-    const aisle = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: 10.5 }, { x: 0, z: 7.5 }, read);
-    expect(aisle.z).toBeGreaterThan(17.8);
+    const aisle = resolveSweptHorizontalMotion({ x: 8.5, y: 8, z: 16.5 }, { x: 0, z: 7.5 }, read);
+    expect(aisle.z).toBeGreaterThan(23.8);
   });
 
   it("finds a stable standing surface inside a generated column", () => {
@@ -196,15 +215,15 @@ describe("deterministic voxel world", () => {
   });
 
   it("cuts a guaranteed descending entrance into the flat ground east of spawn", () => {
-    const chunk = generateChunk("test-world", 1, 0);
-    expect(getBlock(chunk, 2, 7, 8)).toBe(Block.Air);
-    expect(getBlock(chunk, 2, 6, 8)).not.toBe(Block.Air);
-    expect(getBlock(chunk, 3, 6, 8)).toBe(Block.Air);
-    expect(getBlock(chunk, 3, 5, 8)).not.toBe(Block.Air);
-    expect(getBlock(chunk, 4, 5, 8)).toBe(Block.Air);
-    expect(getBlock(chunk, 5, 7, 8)).not.toBe(Block.Air);
-    expect(getBlock(chunk, 6, 3, 8)).toBe(Block.Air);
-    expect(getBlock(chunk, 6, 2, 8)).not.toBe(Block.Air);
+    const chunk = generateChunk("test-world", 2, 0);
+    expect(getBlock(chunk, 0, 7, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 0, 6, 8)).not.toBe(Block.Air);
+    expect(getBlock(chunk, 1, 6, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 1, 5, 8)).not.toBe(Block.Air);
+    expect(getBlock(chunk, 2, 5, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 3, 7, 8)).not.toBe(Block.Air);
+    expect(getBlock(chunk, 4, 3, 8)).toBe(Block.Air);
+    expect(getBlock(chunk, 4, 2, 8)).not.toBe(Block.Air);
   });
 
   it("steps onto a one-block ledge but cannot pass through a two-block wall", () => {
@@ -266,14 +285,14 @@ describe("deterministic voxel world", () => {
     };
 
     for (const [x, y] of [[17.5, 8], [18.5, 7], [19.5, 6], [20.5, 5], [21.5, 4], [22.5, 3], [26.5, 3]]) {
-      expect(playerCollides(readWorld, x, y, 8.5)).toBe(false);
-      expect(isPlayerSupported(readWorld, x, y, 8.5)).toBe(true);
+      expect(playerCollides(readWorld, x + MILESTONE_CAVE_X_OFFSET, y, 8.5)).toBe(false);
+      expect(isPlayerSupported(readWorld, x + MILESTONE_CAVE_X_OFFSET, y, 8.5)).toBe(true);
     }
     for (let z = 5; z <= 11; z += 1) {
-      for (let x = 22; x <= 27; x += 1) expect(readWorld(x, 2, z)).toBe(Block.Stone);
+      for (let x = 22; x <= 27; x += 1) expect(readWorld(x + MILESTONE_CAVE_X_OFFSET, 2, z)).toBe(Block.Stone);
     }
 
-    let position = { x: 17.5, y: 8, z: 8.5 };
+    let position = { x: 17.5 + MILESTONE_CAVE_X_OFFSET, y: 8, z: 8.5 };
     let verticalVelocity = 0;
     const simulate = (direction: number, frames: number) => {
       for (let frame = 0; frame < frames; frame += 1) {
@@ -289,10 +308,10 @@ describe("deterministic voxel world", () => {
     };
 
     simulate(1, 48);
-    expect(position.x).toBeGreaterThan(26);
+    expect(position.x).toBeGreaterThan(26 + MILESTONE_CAVE_X_OFFSET);
     expect(position.y).toBeCloseTo(3, 1);
     simulate(-1, 55);
-    expect(position.x).toBeLessThan(18);
+    expect(position.x).toBeLessThan(18 + MILESTONE_CAVE_X_OFFSET);
     expect(position.y).toBeCloseTo(8, 1);
   });
 
