@@ -14,6 +14,13 @@ const RUG: Color = [0.37, 0.09, 0.10];
 const CREAM: Color = [0.83, 0.72, 0.54];
 const EMBER: Color = [1, 0.28, 0.045];
 
+const TAVERN_PATRONS = [
+  { x: 3.8, z: 12.6, facing: 1, skin: [0.65, 0.38, 0.23], shirt: [0.20, 0.31, 0.52], hair: [0.11, 0.08, 0.06], phase: 0 },
+  { x: 5.2, z: 14.4, facing: -1, skin: [0.83, 0.57, 0.39], shirt: [0.54, 0.26, 0.18], hair: [0.36, 0.19, 0.08], phase: 1.7 },
+  { x: 11.8, z: 12.6, facing: 1, skin: [0.48, 0.31, 0.22], shirt: [0.29, 0.43, 0.23], hair: [0.14, 0.13, 0.12], phase: 3.1 },
+  { x: 13.2, z: 17.4, facing: -1, skin: [0.72, 0.49, 0.34], shirt: [0.39, 0.27, 0.48], hair: [0.25, 0.15, 0.10], phase: 4.6 },
+] as const satisfies ReadonlyArray<{ x: number; z: number; facing: number; skin: Color; shirt: Color; hair: Color; phase: number }>;
+
 // Decorative geometry is baked into two draws, rather than one entity per sprig
 // or architectural trim. It never participates in collision or target picking.
 class BoxBatch {
@@ -57,6 +64,7 @@ export class SceneDressing {
   private keeperHead: pc.Entity | null = null;
   private keeperArm: pc.Entity | null = null;
   private readonly keeperMaterials = new Map<string, pc.StandardMaterial>();
+  private readonly patronHeads: Array<{ entity: pc.Entity; baseYaw: number; phase: number }> = [];
 
   constructor(private readonly app: pc.Application) {
     this.material.diffuse.set(1, 1, 1);
@@ -86,6 +94,9 @@ export class SceneDressing {
     if (this.fireLight?.light) this.fireLight.light.intensity = 1.35 + Math.sin(time * 8.3) * 0.11 + Math.sin(time * 13.7) * 0.055;
     if (this.keeperHead) this.keeperHead.setLocalEulerAngles(0, Math.sin(time * 0.72) * 5, 0);
     if (this.keeperArm) this.keeperArm.setLocalEulerAngles(Math.sin(time * 1.65) * 8 - 8, 0, -6);
+    for (const patron of this.patronHeads) {
+      patron.entity.setEulerAngles(0, patron.baseYaw + Math.sin(time * 0.47 + patron.phase) * 9, 0);
+    }
   }
 
   private keeperMaterial(color: Color): pc.StandardMaterial {
@@ -150,6 +161,33 @@ export class SceneDressing {
     this.keeperHead = head;
   }
 
+  private createSeatedPatrons(batch: BoxBatch): void {
+    for (const [index, patron] of TAVERN_PATRONS.entries()) {
+      const { x, z, facing, skin, shirt, hair, phase } = patron;
+      const trousers: Color = [0.17, 0.16, 0.17];
+      const boots: Color = [0.11, 0.085, 0.07];
+      // Bodies remain batched with the tavern art; only heads turn gently.
+      batch.box(x, 8.71, z, 0.55, 0.47, 0.37, shirt);
+      batch.box(x, 8.53, z, 0.58, 0.16, 0.43, trousers);
+      for (const side of [-1, 1]) {
+        batch.box(x + side * 0.15, 8.48, z + facing * 0.37, 0.19, 0.17, 0.64, trousers);
+        batch.box(x + side * 0.15, 8.41, z + facing * 0.69, 0.21, 0.13, 0.28, boots);
+        batch.box(x + side * 0.37, 8.76, z + facing * 0.12, 0.20, 0.24, 0.28, shirt);
+        batch.box(x + side * 0.36, 8.84, z + facing * 0.37, 0.19, 0.11, 0.31, skin);
+      }
+      const head = new pc.Entity(`tavern-patron-${index + 1}-head`);
+      head.setPosition(x, 9.10, z);
+      head.setEulerAngles(0, facing === 1 ? 0 : 180, 0);
+      this.root.addChild(head);
+      this.keeperBox(head, "face", [0.43, 0.43, 0.42], [0, 0, 0], skin);
+      this.keeperBox(head, "hair", [0.47, 0.15, 0.45], [0, 0.23, -0.01], hair);
+      this.keeperBox(head, "left-eye", [0.05, 0.05, 0.025], [-0.1, 0.025, 0.22], boots);
+      this.keeperBox(head, "right-eye", [0.05, 0.05, 0.025], [0.1, 0.025, 0.22], boots);
+      if (index === 2) this.keeperBox(head, "cap-brim", [0.53, 0.07, 0.16], [0, 0.2, 0.22], hair);
+      this.patronHeads.push({ entity: head, baseYaw: facing === 1 ? 0 : 180, phase });
+    }
+  }
+
   rebuild(
     read: WorldBlockReader,
     chunks: ReadonlyArray<{ chunkX: number; chunkZ: number }>,
@@ -162,6 +200,7 @@ export class SceneDressing {
     this.keeper = null;
     this.keeperHead = null;
     this.keeperArm = null;
+    this.patronHeads.length = 0;
     const solid = new BoxBatch();
     const glow = new BoxBatch();
     const surface = SURFACE_HEIGHT + 1;
@@ -323,6 +362,8 @@ export class SceneDressing {
       solid.box(8.5, 12.015, 4.5, 1.1, 0.12, 1.1, SLATE);
     }
 
+    const furnishedTavern = read(5, 8, 18) === Block.Air && read(8, 12, 14) === Block.Stone;
+    if (furnishedTavern) this.createSeatedPatrons(solid);
     for (const [batch, material, castsShadow] of [[solid, this.material, true], [glow, this.glow, false]] as const) {
       const mesh = batch.mesh(this.app.graphicsDevice);
       if (!mesh) continue;
@@ -343,6 +384,6 @@ export class SceneDressing {
         this.root.addChild(lantern);
       }
     }
-    if (read(5, 8, 18) === Block.Air && read(8, 12, 14) === Block.Stone) this.createTavernKeeper();
+    if (furnishedTavern) this.createTavernKeeper();
   }
 }
