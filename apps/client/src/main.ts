@@ -145,7 +145,12 @@ const quizBalanceAmount = document.querySelector<HTMLElement>("#tavern-quiz-bala
 const quizPotDisplay = document.querySelector<HTMLElement>("#tavern-quiz-pot-display")!;
 const quizPotLabel = document.querySelector<HTMLElement>(".quiz-pot-label")!;
 const quizWinToast = document.querySelector<HTMLElement>("#quiz-win-toast")!;
+const quizAnswerFeedback = document.querySelector<HTMLElement>("#quiz-answer-feedback")!;
+const quizFeedbackIcon = document.querySelector<HTMLElement>("#quiz-feedback-icon")!;
+const quizFeedbackTitle = document.querySelector<HTMLElement>("#quiz-feedback-title")!;
+const quizFeedbackDetail = document.querySelector<HTMLElement>("#quiz-feedback-detail")!;
 const quizMessage = document.querySelector<HTMLElement>("#tavern-quiz-message")!;
+const quizStakeHeading = document.querySelector<HTMLElement>("#quiz-stake-heading")!;
 const quizStakes = document.querySelector<HTMLElement>("#tavern-quiz-stakes")!;
 const quizQuestion = document.querySelector<HTMLElement>("#tavern-quiz-question")!;
 const quizPot = document.querySelector<HTMLElement>("#tavern-quiz-pot")!;
@@ -228,7 +233,7 @@ const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-togg
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
-if ([quizTablePrompt, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizMessage, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
+if ([quizTablePrompt, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
 
@@ -2385,16 +2390,39 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
   quizPending = false;
   updateTavernCoins(update.coins);
   quizMessage.textContent = update.message ?? "Place a stake, then answer Mara's question.";
-  if (update.phase === "error") return;
+  if (update.phase === "error") {
+    quizPanel.dataset.phase = "error";
+    quizAnswerFeedback.hidden = true;
+    return;
+  }
+  const previousPhase = quizPanel.dataset.phase;
   quizPanel.dataset.phase = update.phase;
   quizPotDisplay.textContent = (update.payout ?? 0).toLocaleString();
   quizPotLabel.textContent = update.phase === "won" ? "COLLECTED" : update.phase === "lost" ? "POT LOST" : update.phase === "decision" ? "POT AT RISK" : "CURRENT POT";
   quizStakes.hidden = update.phase === "question" || update.phase === "decision";
+  quizStakeHeading.textContent = update.phase === "lost" ? "TRY AGAIN" : update.phase === "won" ? "PLAY AGAIN" : "CHOOSE YOUR STAKE";
   quizQuestion.hidden = update.phase !== "question";
   quizDecision.hidden = update.phase !== "decision";
   quizDouble.disabled = false;
   quizQuit.disabled = false;
   quizChoices.replaceChildren();
+  quizAnswerFeedback.hidden = !["decision", "lost", "won"].includes(update.phase);
+  if (!quizAnswerFeedback.hidden) {
+    const feedback = update.phase === "decision" || (update.phase === "won" && previousPhase === "question")
+      ? { kind: "correct", icon: "✓", title: "CORRECT ANSWER!", detail: `The pot doubled to ${coinLabel(update.payout ?? 0)}. ${update.phase === "decision" ? "Collect it or risk another question." : "You collected the table limit!"}` }
+      : update.phase === "lost"
+        ? { kind: "wrong", icon: "×", title: "WRONG ANSWER", detail: update.message ?? "The pot is lost. Try another round." }
+        : { kind: "collected", icon: "✦", title: "COINS COLLECTED!", detail: `${coinLabel(update.payout ?? 0)} added to your purse.` };
+    quizPanel.dataset.feedback = feedback.kind;
+    quizFeedbackIcon.textContent = feedback.icon;
+    quizFeedbackTitle.textContent = feedback.title;
+    quizFeedbackDetail.textContent = feedback.detail;
+    quizAnswerFeedback.classList.remove("reveal");
+    void quizAnswerFeedback.offsetWidth;
+    quizAnswerFeedback.classList.add("reveal");
+  } else {
+    delete quizPanel.dataset.feedback;
+  }
   if (update.phase === "question" && update.question) {
     quizPot.textContent = "Choose one answer · correct doubles the pot";
     quizPrompt.textContent = update.question.prompt;
@@ -2416,9 +2444,6 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
       });
       quizChoices.append(button);
     });
-  }
-  if (update.phase === "decision") {
-    quizMessage.textContent = `${update.message ?? "Correct!"} Pot: ${coinLabel(update.payout ?? 0)}.`;
   }
   if (update.phase === "won") animateQuizPayout(update.payout ?? 0, update.coins);
 }

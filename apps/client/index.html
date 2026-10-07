@@ -97,8 +97,13 @@
         <div class="quiz-pot-wrap"><span class="quiz-pot-label">CURRENT POT</span><div id="tavern-quiz-pot-display">0</div><span class="quiz-pot-unit">COINS</span></div>
         <div id="quiz-win-toast" class="quiz-win-toast" aria-live="polite" hidden></div>
       </div>
+      <div id="quiz-answer-feedback" class="quiz-answer-feedback" role="status" aria-live="polite" hidden>
+        <span id="quiz-feedback-icon" class="quiz-feedback-icon" aria-hidden="true"></span>
+        <div><strong id="quiz-feedback-title"></strong><p id="quiz-feedback-detail"></p></div>
+      </div>
       <p id="tavern-quiz-message" aria-live="polite">Place a stake, then answer Mara's question.</p>
       <p class="tavern-quiz-rules">Answer right to double the pot. Collect it or risk another question. One wrong answer loses the pot.</p>
+      <p id="quiz-stake-heading" class="quiz-stake-heading">CHOOSE YOUR STAKE</p>
       <div id="tavern-quiz-stakes" class="tavern-quiz-actions">
         <button type="button" data-quiz-stake="1"><small>STAKE</small><strong>1</strong><span>coin</span></button>
         <button type="button" data-quiz-stake="5"><small>STAKE</small><strong>5</strong><span>coins</span></button>
