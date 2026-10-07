@@ -595,8 +595,19 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #blacksmith-panel button { min-height: 42px; margin-top: 14px; padding: 9px 12px; border: 1px solid #d7a461; border-radius: 8px; background: linear-gradient(#aa7138, #74451f); color: #fff3d8; cursor: pointer; font: inherit; font-weight: 800; }
 #blacksmith-panel button:disabled { opacity: .42; cursor: not-allowed; }
 #blacksmith-sell { display: block; width: 100%; }
+.blacksmith-shop-heading { margin: 18px 0 8px; color: #d4ad79; font-size: .67rem; letter-spacing: .12em; }
+#blacksmith-upgrades { display: grid; gap: 7px; }
+#blacksmith-upgrades article { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 9px; padding: 9px; border: 1px solid #8c6a454d; border-radius: 9px; background: linear-gradient(90deg, #ffffff0a, #00000018); }
+#blacksmith-upgrades .upgrade-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #bd854d; border-radius: 7px; background: #1b2020; color: #f2b86f; font-size: 1.1rem; }
+#blacksmith-upgrades article div strong, #blacksmith-upgrades article div small { display: block; }
+#blacksmith-upgrades article div strong { color: #f0dfc5; font-size: .78rem; }
+#blacksmith-upgrades article div small { margin-top: 2px; color: #a99e8e; font-size: .62rem; line-height: 1.25; }
+#blacksmith-upgrades article button { min-height: 32px; margin: 0; padding: 6px 9px; font-size: .64rem; white-space: nowrap; }
+#blacksmith-upgrades article.owned { border-color: #76a85c80; background: linear-gradient(90deg, #3b6b2c2e, #00000018); }
+#blacksmith-upgrades article.owned button { border-color: #5d8750; background: #294423; color: #bfe2a5; }
 #blacksmith-close { display: block; margin-left: auto; border-color: #736b5e !important; background: #352e28 !important; font-size: .75rem !important; }
 #blacksmith-panel[data-phase="traded"] #blacksmith-message { color: #bff4ac; }
+#blacksmith-panel[data-phase="purchased"] #blacksmith-message { color: #ffe08b; }
 #blacksmith-panel[data-phase="error"] #blacksmith-message { color: #ffaf92; }
 #combat-feedback.hurt { color: #ff9a86; font-size: 1.2rem; }
 #combat-feedback.dodge { color: #9cecff; text-shadow: 0 2px 4px #000, 0 0 18px #35bce9; }

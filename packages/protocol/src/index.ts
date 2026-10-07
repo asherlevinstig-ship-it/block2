@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-town-v6";
+export const WORLD_ROOM = "world-town-v7";
 
 export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
 export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
@@ -12,10 +12,20 @@ export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;
 export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
 export const IRON_ORE_GOLD_PRICE = 3;
+export const BLACKSMITH_UPGRADES = {
+  reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", price: 30, description: "Extract 2 iron ore from every iron block" },
+  iron_sword: { id: "iron_sword", name: "Iron Sword", price: 45, description: "+1 damage with every main-hand attack" },
+  miners_pack: { id: "miners_pack", name: "Miner's Pack", price: 25, description: "Carry up to 30 iron ore instead of 12" },
+} as const;
+export type BlacksmithUpgradeId = keyof typeof BLACKSMITH_UPGRADES;
+export const BlacksmithBuySchema = z.object({ upgradeId: z.enum(["reinforced_pickaxe", "iron_sword", "miners_pack"]) });
 export type BlacksmithUpdate = {
-  phase: "idle" | "traded" | "error";
+  phase: "idle" | "traded" | "purchased" | "error";
   ironOre: number;
+  ironCapacity: number;
   gold: number;
+  ownedUpgrades: BlacksmithUpgradeId[];
+  purchasedUpgradeId?: BlacksmithUpgradeId;
   sold?: number;
   goldGranted?: number;
   message: string;

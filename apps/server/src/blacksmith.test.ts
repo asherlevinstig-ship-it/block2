@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { canTradeAtBlacksmith, ironOreSale, minedMineral } from "./blacksmith.js";
+import { BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, buyBlacksmithUpgrade, canTradeAtBlacksmith, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
 
 describe("blacksmith trading", () => {
   it("only awards iron ore for actual iron ore blocks", () => {
@@ -18,5 +18,20 @@ describe("blacksmith trading", () => {
     expect(ironOreSale(4, 10)).toEqual({ sold: 4, goldGranted: 12 });
     expect(ironOreSale(4, 999_995)).toEqual({ sold: 1, goldGranted: 3 });
     expect(ironOreSale(4, 1_000_000)).toEqual({ sold: 0, goldGranted: 0 });
+  });
+
+  it("purchases permanent upgrades once and applies their effects", () => {
+    const pickaxe = buyBlacksmithUpgrade(0, 30, "reinforced_pickaxe");
+    expect(pickaxe).toEqual({ flags: 1, gold: 0, purchased: true });
+    expect(minedIronQuantity(pickaxe.flags)).toBe(2);
+    expect(buyBlacksmithUpgrade(pickaxe.flags, 100, "reinforced_pickaxe").reason).toBe("owned");
+    expect(buyBlacksmithUpgrade(0, 29, "reinforced_pickaxe").reason).toBe("gold");
+    expect(ironSwordDamageBonus(2)).toBe(1);
+    expect(ownedBlacksmithUpgrades(7)).toEqual(["reinforced_pickaxe", "iron_sword", "miners_pack"]);
+  });
+
+  it("raises the ore capacity with the miner's pack", () => {
+    expect(ironCapacity(0)).toBe(BASE_IRON_CAPACITY);
+    expect(ironCapacity(4)).toBe(UPGRADED_IRON_CAPACITY);
   });
 });

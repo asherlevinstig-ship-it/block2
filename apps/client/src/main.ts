@@ -4,6 +4,7 @@ import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   BRAMBLE_SNARE,
+  BLACKSMITH_UPGRADES,
   IRON_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
   MOMENTUM_TRAIT,
@@ -17,6 +18,7 @@ import {
   WORLD_ROOM,
   type ActionRejected,
   type BlacksmithUpdate,
+  type BlacksmithUpgradeId,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -148,6 +150,7 @@ const blacksmithGold = document.querySelector<HTMLElement>("#blacksmith-gold")!;
 const blacksmithPrice = document.querySelector<HTMLElement>("#blacksmith-price")!;
 const blacksmithSell = document.querySelector<HTMLButtonElement>("#blacksmith-sell")!;
 const blacksmithClose = document.querySelector<HTMLButtonElement>("#blacksmith-close")!;
+const blacksmithUpgradeCards = [...document.querySelectorAll<HTMLElement>("[data-blacksmith-upgrade]")];
 const tavernDialogueLine = document.querySelector<HTMLElement>("#tavern-dialogue-line")!;
 const tavernDialogueNext = document.querySelector<HTMLButtonElement>("#tavern-dialogue-next")!;
 const tavernDialogueClose = document.querySelector<HTMLButtonElement>("#tavern-dialogue-close")!;
@@ -245,7 +248,7 @@ const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-togg
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
-if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
+if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
 
@@ -2368,17 +2371,33 @@ function updateTavernCoins(coins: number): void {
 }
 
 let blacksmithPending = false;
+let blacksmithIronCapacity = 12;
 blacksmithPrice.textContent = `${IRON_ORE_GOLD_PRICE} gold`;
 
 function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithPending = false;
   blacksmithPanel.dataset.phase = update.phase;
   blacksmithMessage.textContent = update.message;
+  blacksmithIronCapacity = update.ironCapacity;
   updateInventoryItem("iron_ore", update.ironOre);
+  blacksmithOre.textContent = `${update.ironOre.toLocaleString()} / ${update.ironCapacity.toLocaleString()}`;
   updateTavernCoins(update.gold);
   blacksmithSell.disabled = update.ironOre <= 0 || blacksmithPending || update.gold >= 1_000_000;
+  const owned = new Set(update.ownedUpgrades);
+  for (const card of blacksmithUpgradeCards) {
+    const upgradeId = card.dataset.blacksmithUpgrade as BlacksmithUpgradeId;
+    const button = card.querySelector<HTMLButtonElement>("button")!;
+    const isOwned = owned.has(upgradeId);
+    card.classList.toggle("owned", isOwned);
+    button.disabled = isOwned || blacksmithPending || update.gold < BLACKSMITH_UPGRADES[upgradeId].price;
+    button.textContent = isOwned ? "OWNED" : `${BLACKSMITH_UPGRADES[upgradeId].price} GOLD`;
+  }
   if (update.phase === "traded" && update.goldGranted) {
     showCombatFeedback(`+${update.goldGranted} GOLD`, "dodge");
+    status.textContent = update.message;
+  }
+  if (update.phase === "purchased" && update.purchasedUpgradeId) {
+    showCombatFeedback("UPGRADE ACQUIRED", "dodge");
     status.textContent = update.message;
   }
 }
@@ -2397,6 +2416,17 @@ blacksmithSell.addEventListener("click", () => {
   blacksmithSell.disabled = true;
   room.send("blacksmith:sell");
 });
+for (const card of blacksmithUpgradeCards) {
+  const button = card.querySelector<HTMLButtonElement>("button")!;
+  button.addEventListener("click", () => {
+    if (!room || blacksmithPending) return;
+    const upgradeId = card.dataset.blacksmithUpgrade as BlacksmithUpgradeId;
+    blacksmithPending = true;
+    button.disabled = true;
+    blacksmithMessage.textContent = `Forging ${BLACKSMITH_UPGRADES[upgradeId].name}...`;
+    room.send("blacksmith:buy", { upgradeId });
+  });
+}
 
 function animateQuizPayout(payout: number, total: number): void {
   if (payout <= 0 || quizPanel.hidden) return;
@@ -4574,7 +4604,7 @@ async function connect(): Promise<void> {
     updateInventoryItem("iron_ore", message.total);
     if (message.quantity > 0) {
       showCombatFeedback(`+${message.quantity} IRON ORE`, "dodge");
-      status.textContent = `Mined iron ore · ${message.total} carried. Trade it at the blacksmith stall.`;
+      status.textContent = `Mined iron ore · ${message.total}/${blacksmithIronCapacity} carried. Trade it at the blacksmith stall.`;
     } else {
       status.textContent = "Your iron ore pack is full. Visit the blacksmith stall to sell it.";
     }

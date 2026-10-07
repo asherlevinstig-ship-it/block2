@@ -1,6 +1,8 @@
 import { Client, Room } from "@colyseus/core";
 import {
   AttackRequestSchema,
+  BLACKSMITH_UPGRADES,
+  BlacksmithBuySchema,
   IRON_ORE_GOLD_PRICE,
   BRAMBLE_SNARE,
   DodgeRequestSchema,
@@ -28,6 +30,7 @@ import {
   TAVERN_QUIZ_STARTING_COINS,
   type ActionRejected,
   type BlacksmithUpdate,
+  type BlacksmithUpgradeId,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -89,7 +92,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS 
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
-import { canTradeAtBlacksmith, ironOreSale, minedMineral } from "./blacksmith.js";
+import { buyBlacksmithUpgrade, canTradeAtBlacksmith, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -235,6 +238,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
     this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
     this.onMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
+    this.onMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -280,6 +284,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.z = spawn.z;
     if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter")) {
       player.invulnerableUntil = Date.now() + 60 * 60 * 1000;
+    }
+    if (process.env.NODE_ENV !== "production" && requestedQaSpawn === "blacksmith") {
+      player.coins = 100;
+      const testOre = new InventoryItemState();
+      testOre.quantity = 4;
+      player.inventory.set("iron_ore", testOre);
     }
     this.state.players.set(client.sessionId, player);
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
@@ -420,15 +430,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.sendQuizState(client, "Double or nothing. Here's your next question.");
   }
 
-  private sendBlacksmithState(client: Client, message = `Iron ore sells for ${IRON_ORE_GOLD_PRICE} gold each.`, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0): void {
+  private sendBlacksmithState(client: Client, message = `Iron ore sells for ${IRON_ORE_GOLD_PRICE} gold each. Buy upgrades below.`, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     client.send("blacksmith:update", {
       phase,
       ironOre: player.inventory.get("iron_ore")?.quantity ?? 0,
+      ironCapacity: ironCapacity(player.blacksmithUpgrades),
       gold: player.coins,
+      ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
       sold,
       goldGranted,
+      purchasedUpgradeId,
       message,
     } satisfies BlacksmithUpdate);
   }
@@ -445,6 +458,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.coins += goldGranted;
     void this.persistPlayer(client.sessionId, player);
     this.sendBlacksmithState(client, `Sold ${sold} iron ore for ${goldGranted} gold.`, "traded", sold, goldGranted);
+  }
+
+  private handleBlacksmithBuy(client: Client, payload: unknown): void {
+    const parsed = BlacksmithBuySchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return;
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to buy upgrades.", "error");
+    const upgradeId = parsed.data.upgradeId as BlacksmithUpgradeId;
+    const purchase = buyBlacksmithUpgrade(player.blacksmithUpgrades, player.coins, upgradeId);
+    if (!purchase.purchased) {
+      const message = purchase.reason === "owned"
+        ? `${BLACKSMITH_UPGRADES[upgradeId].name} is already yours.`
+        : `You need ${BLACKSMITH_UPGRADES[upgradeId].price} gold for ${BLACKSMITH_UPGRADES[upgradeId].name}.`;
+      return this.sendBlacksmithState(client, message, "error");
+    }
+    player.blacksmithUpgrades = purchase.flags;
+    player.coins = purchase.gold;
+    void this.persistPlayer(client.sessionId, player);
+    this.sendBlacksmithState(client, `${BLACKSMITH_UPGRADES[upgradeId].name} purchased. ${BLACKSMITH_UPGRADES[upgradeId].description}.`, "purchased", 0, 0, upgradeId);
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
@@ -1490,6 +1522,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const current = getBlock(stored.chunk, address.localX, request.y, address.localZ);
     const rejection = miningRejectionReason(player, request, current, stored.revision);
     if (rejection) return this.reject(client, { requestId: request.requestId, action: "mine", reason: rejection });
+    const mineral = minedMineral(current);
+    if (mineral) {
+      const carried = player.inventory.get(mineral)?.quantity ?? 0;
+      if (carried >= ironCapacity(player.blacksmithUpgrades)) {
+        client.send("mineral:mined", { itemId: mineral, quantity: 0, total: carried } satisfies MineralMined);
+        return;
+      }
+    }
     setBlock(stored.chunk, address.localX, request.y, address.localZ, Block.Air);
     stored.revision += 1;
     this.recordWorldDelta(request.x, request.y, request.z, Block.Air);
@@ -1502,7 +1542,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       revision: stored.revision,
     };
     this.broadcast("block:changed", changed);
-    const mineral = minedMineral(current);
     if (mineral) {
       let item = player.inventory.get(mineral);
       if (!item) {
@@ -1510,7 +1549,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         player.inventory.set(mineral, item);
       }
       const before = item.quantity;
-      item.quantity = inventoryTotal(before, 1);
+      item.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), inventoryTotal(before, minedIronQuantity(player.blacksmithUpgrades)));
       void this.persistPlayer(client.sessionId, player);
       client.send("mineral:mined", { itemId: mineral, quantity: item.quantity - before, total: item.quantity } satisfies MineralMined);
     }
@@ -1610,7 +1649,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (!mob || !mob.alive) continue;
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
       const damage = damageAfterArmor(
-        timing.damage + this.specialDamageBonus(sessionId, target.id, now),
+        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades) + this.specialDamageBonus(sessionId, target.id, now),
         mob.armor,
       ) + traitBonusDamage;
       mob.health = Math.max(0, mob.health - damage);
