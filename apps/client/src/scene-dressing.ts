@@ -270,8 +270,8 @@ export class SceneDressing {
         for (const y of [8.17, 8.65]) solid.box(x, y, 18.0, 0.56, 0.055, 0.56, SLATE);
       }
 
-      // Beams and hanging lamps remain visible when the roof cuts away.
-      for (const z of [11.25, 14.75, 18.15]) solid.box(8.5, 11.78, z, 15.1, 0.22, 0.22, DARK_OAK);
+      // Keep hanging lamps, but clear the overhead beams in the interior camera view.
+      if (!hiddenRoof) for (const z of [11.25, 14.75, 18.15]) solid.box(8.5, 11.78, z, 15.1, 0.22, 0.22, DARK_OAK);
       for (const [x, z] of [[4.5, 13.5], [12.5, 14.7]] as const) {
         solid.box(x, 11.12, z, 0.065, 1.0, 0.065, DARK_OAK);
         solid.box(x, 10.59, z, 0.52, 0.08, 0.52, SLATE);

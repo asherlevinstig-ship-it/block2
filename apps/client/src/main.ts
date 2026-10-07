@@ -87,7 +87,7 @@ import {
   shouldUseDepthSlice,
   type PlayerCutaway,
 } from "./player-visibility.js";
-import { hidesTownRoof, roofCutawayBuilding } from "./town-roof-visibility.js";
+import { hidesTownRoof, hidesTownUpperWall, roofCutawayBuilding } from "./town-roof-visibility.js";
 import { MILESTONE_EXIT_STEPS } from "./exit-guidance.js";
 import { createVoxelTexturePixels, voxelCornerLight, voxelTextureKind, voxelTint, type VoxelTextureKind } from "./voxel-textures.js";
 import { retryConnection } from "./connection-retry.js";
@@ -111,6 +111,7 @@ import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { createGuestProfileToken, getOrCreateProfileToken } from "./player-profile.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
+import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
 import { canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES } from "./tavern-keeper.js";
 import "./styles.css";
 
@@ -239,6 +240,7 @@ camera.addComponent("camera", {
 });
 app.root.addChild(camera);
 let cameraOrbit = initialCameraOrbit();
+let indoorCameraBlend = 0;
 
 const light = new pc.Entity("sun");
 light.addComponent("light", {
@@ -376,7 +378,9 @@ function readCollisionWorldBlock(x: number, y: number, z: number): BlockId {
 }
 
 function isCutawayHidden(x: number, y: number, z: number): boolean {
-  return isVoxelHiddenForPlayer(x, y, z, playerCutaway) || hidesTownRoof(indoorRoofBuilding, x, y, z);
+  return isVoxelHiddenForPlayer(x, y, z, playerCutaway)
+    || hidesTownRoof(indoorRoofBuilding, x, y, z)
+    || hidesTownUpperWall(indoorRoofBuilding, x, y, z);
 }
 
 function readVisibleWorldBlock(x: number, y: number, z: number): BlockId {
@@ -2378,6 +2382,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localPlayerVisual.setLocalPosition(0, 0, 0);
   surfaceReferenceY = SURFACE_HEIGHT + 1;
   indoorRoofBuilding = roofCutawayBuilding(initialPosition, null, TOWN_BUILDINGS, surfaceReferenceY);
+  indoorCameraBlend = indoorRoofBuilding ? 1 : 0;
   const bootstrapUnderground = hasCeilingAbove(initialPosition);
   const bootstrapExcavating = !bootstrapUnderground && isInOpenExcavation(initialPosition);
   cutawaySliceY = bootstrapSliceHeight(
@@ -3888,8 +3893,13 @@ app.on("update", (dt: number) => {
     player.y + localVisualVerticalOffset,
     player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z,
   );
+  indoorCameraBlend = advanceIndoorCameraBlend(indoorCameraBlend, indoorRoofBuilding !== null && !playerCutaway.active, frameTime);
   cameraFocus.copy(cameraTarget);
-  const desiredCamera = new pc.Vec3(cameraFocus.x + cameraOffset.x, cameraFocus.y - 2 + cameraOffset.y, cameraFocus.z + cameraOffset.z);
+  // A small, fixed room-center bias keeps the bar and tables in view without tracking furniture as the player walks.
+  cameraFocus.x += (8.5 - cameraFocus.x) * indoorCameraBlend * 0.16;
+  cameraFocus.z += (15 - cameraFocus.z) * indoorCameraBlend * 0.16;
+  const viewOffset = indoorCameraOffset(cameraOrbit, indoorCameraBlend);
+  const desiredCamera = new pc.Vec3(cameraFocus.x + viewOffset.x, cameraFocus.y - 2 + viewOffset.y, cameraFocus.z + viewOffset.z);
   if (animationNow < cameraShakeUntil) {
     const remaining = Math.max(0, (cameraShakeUntil - animationNow) / 360);
     const amplitude = cameraShakeStrength * remaining;

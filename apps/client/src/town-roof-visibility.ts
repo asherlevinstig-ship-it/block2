@@ -28,3 +28,12 @@ export function hidesTownRoof(building: TownRoofFootprint | null, x: number, y: 
     && x >= building.minX && x <= building.maxX
     && z >= building.minZ && z <= building.maxZ;
 }
+
+/** Open the top of the tavern walls like a dollhouse, leaving their lower silhouette intact. */
+export function hidesTownUpperWall(building: TownRoofFootprint | null, x: number, y: number, z: number): boolean {
+  if (!building || y < 10 || y >= building.roofBaseY) return false;
+  const { minX, maxX, minZ, maxZ } = building;
+  if (z < minZ || z > maxZ || x < minX || x > maxX) return false;
+  return z === minZ || z === maxZ || x === minX || x === maxX
+    || (z >= maxZ - 1 && (x === minX + 2 || x === maxX - 2));
+}
