@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_TAVERN, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { TAVERN_KEEPER } from "./tavern-keeper.js";
 
 type Color = readonly [number, number, number];
 const WOOD: Color = [0.24, 0.17, 0.12];
@@ -52,6 +53,10 @@ export class SceneDressing {
   private readonly glow = new pc.StandardMaterial();
   private meshes: pc.Mesh[] = [];
   private fireLight: pc.Entity | null = null;
+  private keeper: pc.Entity | null = null;
+  private keeperHead: pc.Entity | null = null;
+  private keeperArm: pc.Entity | null = null;
+  private readonly keeperMaterials = new Map<string, pc.StandardMaterial>();
 
   constructor(private readonly app: pc.Application) {
     this.material.diffuse.set(1, 1, 1);
@@ -71,10 +76,78 @@ export class SceneDressing {
     this.root.enabled = visible;
   }
 
+  get keeperVisible(): boolean {
+    return this.root.enabled && this.keeper !== null;
+  }
+
   update(timeMilliseconds: number): void {
-    if (!this.fireLight?.light || !this.root.enabled) return;
+    if (!this.root.enabled) return;
     const time = timeMilliseconds * 0.001;
-    this.fireLight.light.intensity = 1.35 + Math.sin(time * 8.3) * 0.11 + Math.sin(time * 13.7) * 0.055;
+    if (this.fireLight?.light) this.fireLight.light.intensity = 1.35 + Math.sin(time * 8.3) * 0.11 + Math.sin(time * 13.7) * 0.055;
+    if (this.keeperHead) this.keeperHead.setLocalEulerAngles(0, Math.sin(time * 0.72) * 5, 0);
+    if (this.keeperArm) this.keeperArm.setLocalEulerAngles(Math.sin(time * 1.65) * 8 - 8, 0, -6);
+  }
+
+  private keeperMaterial(color: Color): pc.StandardMaterial {
+    const key = color.join(",");
+    let material = this.keeperMaterials.get(key);
+    if (!material) {
+      material = new pc.StandardMaterial();
+      material.diffuse.set(...color);
+      material.specular.set(0.04, 0.04, 0.04);
+      material.gloss = 0.1;
+      material.update();
+      this.keeperMaterials.set(key, material);
+    }
+    return material;
+  }
+
+  private keeperBox(parent: pc.Entity, name: string, size: [number, number, number], position: [number, number, number], color: Color): pc.Entity {
+    const box = new pc.Entity(name);
+    box.addComponent("render", { type: "box", castShadows: true, receiveShadows: true });
+    if (box.render) box.render.material = this.keeperMaterial(color);
+    box.setLocalScale(...size);
+    box.setLocalPosition(...position);
+    parent.addChild(box);
+    return box;
+  }
+
+  private createTavernKeeper(): void {
+    const skin: Color = [0.72, 0.45, 0.28];
+    const shirt: Color = [0.22, 0.38, 0.34];
+    const apron: Color = [0.82, 0.72, 0.52];
+    const hair: Color = [0.18, 0.10, 0.07];
+    const boots: Color = [0.13, 0.10, 0.09];
+    const keeper = new pc.Entity("Mara-the-tavernkeeper");
+    keeper.setPosition(TAVERN_KEEPER.x, TAVERN_KEEPER.y, TAVERN_KEEPER.z);
+    keeper.setEulerAngles(0, 180, 0); // Face customers across the bar.
+    this.root.addChild(keeper);
+    this.keeperBox(keeper, "left-boot", [0.22, 0.38, 0.29], [-0.15, 0.19, 0], boots);
+    this.keeperBox(keeper, "right-boot", [0.22, 0.38, 0.29], [0.15, 0.19, 0], boots);
+    this.keeperBox(keeper, "tunic", [0.67, 0.74, 0.38], [0, 0.83, 0], shirt);
+    this.keeperBox(keeper, "apron", [0.53, 0.65, 0.055], [0, 0.68, 0.22], apron);
+    this.keeperBox(keeper, "apron-belt", [0.72, 0.09, 0.44], [0, 0.85, 0.02], hair);
+    this.keeperBox(keeper, "apron-clasp", [0.13, 0.12, 0.05], [0, 0.85, 0.25], GOLD);
+    for (const side of [-1, 1]) {
+      const arm = new pc.Entity(side < 0 ? "left-arm" : "right-arm");
+      arm.setLocalPosition(side * 0.44, 1.07, 0);
+      keeper.addChild(arm);
+      this.keeperBox(arm, "sleeve", [0.23, 0.45, 0.3], [0, -0.2, 0], shirt);
+      this.keeperBox(arm, "hand", [0.2, 0.18, 0.23], [0, -0.48, 0], skin);
+      if (side > 0) this.keeperArm = arm;
+    }
+    const head = new pc.Entity("head");
+    head.setLocalPosition(0, 1.43, 0);
+    keeper.addChild(head);
+    this.keeperBox(head, "face", [0.46, 0.43, 0.43], [0, 0, 0], skin);
+    this.keeperBox(head, "hair", [0.5, 0.14, 0.47], [0, 0.24, -0.01], hair);
+    this.keeperBox(head, "hair-bun", [0.29, 0.28, 0.24], [0, 0.22, -0.27], hair);
+    this.keeperBox(head, "left-eye", [0.055, 0.055, 0.025], [-0.105, 0.035, 0.222], boots);
+    this.keeperBox(head, "right-eye", [0.055, 0.055, 0.025], [0.105, 0.035, 0.222], boots);
+    this.keeperBox(head, "smile", [0.18, 0.035, 0.025], [0, -0.12, 0.223], hair);
+    this.keeperBox(keeper, "welcome-badge", [0.16, 0.16, 0.07], [-0.2, 1.12, 0.23], GOLD);
+    this.keeper = keeper;
+    this.keeperHead = head;
   }
 
   rebuild(
@@ -86,6 +159,9 @@ export class SceneDressing {
     for (const mesh of this.meshes) mesh.destroy();
     this.meshes = [];
     this.fireLight = null;
+    this.keeper = null;
+    this.keeperHead = null;
+    this.keeperArm = null;
     const solid = new BoxBatch();
     const glow = new BoxBatch();
     const surface = SURFACE_HEIGHT + 1;
@@ -267,5 +343,6 @@ export class SceneDressing {
         this.root.addChild(lantern);
       }
     }
+    if (read(5, 8, 18) === Block.Air && read(8, 12, 14) === Block.Stone) this.createTavernKeeper();
   }
 }

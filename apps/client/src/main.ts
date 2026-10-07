@@ -111,6 +111,7 @@ import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { createGuestProfileToken, getOrCreateProfileToken } from "./player-profile.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
+import { canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES } from "./tavern-keeper.js";
 import "./styles.css";
 
 function newGuestProfileToken() {
@@ -130,6 +131,10 @@ const profileToken = browserProfileToken();
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
+const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
+const tavernDialogueLine = document.querySelector<HTMLElement>("#tavern-dialogue-line")!;
+const tavernDialogueNext = document.querySelector<HTMLButtonElement>("#tavern-dialogue-next")!;
+const tavernDialogueClose = document.querySelector<HTMLButtonElement>("#tavern-dialogue-close")!;
 const playerCount = document.querySelector<HTMLElement>("#players")!;
 const dangerZone = document.querySelector<HTMLElement>("#danger-zone")!;
 const dangerZoneName = document.querySelector<HTMLElement>("#danger-zone-name")!;
@@ -199,7 +204,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 
@@ -2259,6 +2264,26 @@ const pointer = { x: canvas.width / 2, y: canvas.height / 2 };
 let currentTarget: VoxelRaycastHit | null = null;
 let targetStateKey = "";
 let interactionMode: InteractionMode = "build";
+let tavernDialogueIndex = -1;
+
+function closeTavernDialogue(): void {
+  tavernDialogue.hidden = true;
+  tavernDialogueIndex = -1;
+}
+
+function advanceTavernDialogue(): void {
+  if (tavernDialogueIndex >= TAVERN_KEEPER_LINES.length - 1) {
+    closeTavernDialogue();
+    return;
+  }
+  tavernDialogueIndex += 1;
+  tavernDialogueLine.textContent = TAVERN_KEEPER_LINES[tavernDialogueIndex]!;
+  tavernDialogueNext.textContent = tavernDialogueIndex === TAVERN_KEEPER_LINES.length - 1 ? "Goodbye" : "Continue";
+  tavernDialogue.hidden = false;
+}
+
+tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
+tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function updatePointerPosition(event: PointerEvent): void {
   const rect = canvas.getBoundingClientRect();
@@ -2290,6 +2315,8 @@ function updateTarget(): void {
   const direction = end.clone().sub(start);
   const hit = voxelRaycast(start, direction, camera.camera.farClip, readVisibleWorldBlock);
   const player = localPlayer.getPosition();
+  const keeperNearby = canTalkToTavernKeeper(player, sceneDressing.keeperVisible);
+  if (!keeperNearby && !tavernDialogue.hidden) closeTavernDialogue();
   const inRange = Boolean(hit) && Math.hypot(hit!.x + 0.5 - player.x, hit!.y + 0.5 - player.y, hit!.z + 0.5 - player.z) <= 4.5;
   currentTarget = inRange ? hit : null;
   const combatMob = nearestLivingMob(player, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range);
@@ -2299,10 +2326,12 @@ function updateTarget(): void {
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMark?.stacks ?? 0}` : "none";
-  const nextKey = `${interactionMode}:${targetKey}:${combatKey}`;
+  const nextKey = `${interactionMode}:${targetKey}:${combatKey}:${keeperNearby}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
-  if (interactionMode === "combat" && combatMob) {
+  mineButton.textContent = keeperNearby ? "Talk" : interactionMode === "build" ? "Mine" : "Attack";
+  if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
+  else if (interactionMode === "combat" && combatMob) {
     const intent = combatMob.visual.state.combatState === "windup"
       ? " · LUNGE INCOMING"
       : combatMob.visual.state.combatState === "stagger"
@@ -2325,6 +2354,7 @@ let worldPayloadBytes = 0;
 let networkRttMs: number | null = null;
 
 function renderBootstrap(payload: WorldBootstrap): void {
+  closeTavernDialogue();
   const buildStartedAt = performance.now();
   const previousSliceY = cutawaySliceY;
   worldPayloadBytes = new Blob([JSON.stringify(payload)]).size;
@@ -3175,6 +3205,10 @@ function commitSpecialAim(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (canTalkToTavernKeeper(localPlayer.getPosition(), sceneDressing.keeperVisible)) {
+    advanceTavernDialogue();
+    return;
+  }
   if (localDefending) requestDefense(false);
   if (primaryActionForMode(interactionMode) === "mine") requestMine();
   else requestAttack();
@@ -3243,6 +3277,10 @@ for (const button of traitPickerButtons) {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (event.code === "Escape" && !tavernDialogue.hidden) {
+    closeTavernDialogue();
+    return;
+  }
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyE") requestPrimaryAction();
   if (event.code === "KeyC") requestDefense(true);
