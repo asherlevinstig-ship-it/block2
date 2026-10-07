@@ -73,7 +73,7 @@
       <button id="special-slot" type="button" aria-label="Use Hunter's Mark">
         <span>SPECIAL</span><strong id="special-name">Hunter's Mark</strong><em id="special-cooldown-label">READY · F</em><i id="special-cooldown-fill"></i>
       </button>
-      <p id="controls-help" class="controls">WASD move · Arrows camera · Space dodge/cancel · R Power · F Special · Q mode · E/click acts</p>
+      <p id="controls-help" class="controls">WASD move · Arrows camera · I inventory · Space dodge/cancel · R Power · F Special · Q mode · E/click acts</p>
     </section>
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="quiz-table-prompt" hidden>DOUBLE OR QUIT <small>Press E to play</small></div>
@@ -137,6 +137,7 @@
       </div>
       <button id="blacksmith-close" type="button">Leave stall</button>
     </section>
+    <button id="inventory-toggle" type="button" aria-controls="inventory-panel" aria-expanded="false"><span>▣</span> PACK <strong id="inventory-badge">0</strong><kbd>I</kbd></button>
     <button id="performance-toggle" type="button" aria-controls="performance-panel" aria-expanded="false">PERF</button>
     <aside id="performance-panel" aria-label="Performance metrics" hidden>
       <p class="eyebrow">LIVE PERFORMANCE</p>
@@ -152,20 +153,36 @@
       </dl>
       <p id="perf-budget">Collecting a stable sample…</p>
     </aside>
-    <aside id="inventory-panel" aria-label="Inventory">
-      <header><span>INVENTORY</span><strong id="inventory-total">EMPTY</strong></header>
-      <p id="tavern-coins" class="coin-balance">Gold: 20</p>
-      <div id="inventory-grid">
-        <article data-item="iron_ore"><i></i><div><strong>Iron Ore</strong><small>Mined mineral · sell at blacksmith</small></div><em data-item-count="iron_ore">0</em></article>
-        <article data-item="moss_fibre"><i></i><div><strong>Moss Fibre</strong><small>Crawler material</small></div><em data-item-count="moss_fibre">0</em></article>
-        <article data-item="crawler_fang"><i></i><div><strong>Crawler Fang</strong><small>Crawler material</small></div><em data-item-count="crawler_fang">0</em></article>
-        <article data-item="stone_core"><i></i><div><strong>Stone Core</strong><small>Brute material</small></div><em data-item-count="stone_core">0</em></article>
-        <article data-item="acid_gland"><i></i><div><strong>Acid Gland</strong><small>Spitter material</small></div><em data-item-count="acid_gland">0</em></article>
-        <article class="equipment" data-item="fang_dagger"><i></i><div><strong>Fang Dagger</strong><small>Fast · 3-hit melee</small></div><em data-item-count="fang_dagger">0</em><button type="button" data-equip-main-hand="fang_dagger" disabled>EQUIP</button></article>
-        <article class="equipment" data-item="stone_core_hammer"><i></i><div><strong>Core Hammer</strong><small>Heavy · knockback</small></div><em data-item-count="stone_core_hammer">0</em><button type="button" data-equip-main-hand="stone_core_hammer" disabled>EQUIP</button></article>
-        <article class="equipment" data-item="acid_gland_focus"><i></i><div><strong>Acid Focus</strong><small>Ranged · 2 damage</small></div><em data-item-count="acid_gland_focus">0</em><button type="button" data-equip-main-hand="acid_gland_focus" disabled>EQUIP</button></article>
+    <section id="inventory-panel" role="dialog" aria-modal="true" aria-labelledby="inventory-title" hidden>
+      <header class="inventory-header">
+        <div><p class="eyebrow">EXPLORER'S PACK</p><h2 id="inventory-title">Inventory</h2></div>
+        <button id="inventory-close" type="button" aria-label="Close inventory">×</button>
+      </header>
+      <div class="inventory-summary">
+        <div><span>GOLD</span><strong id="tavern-coins">20</strong></div>
+        <div><span>CARRIED</span><strong id="inventory-total">EMPTY</strong></div>
+        <div><span>EQUIPPED</span><strong id="inventory-equipped">Longsword</strong></div>
       </div>
-    </aside>
+      <section class="inventory-section" aria-labelledby="inventory-materials-title">
+        <h3 id="inventory-materials-title"><span>Materials</span><small>Mine, collect and trade</small></h3>
+        <div class="inventory-grid materials">
+          <article data-item="iron_ore"><i></i><div><strong>Iron Ore</strong><small>Mineral · sell at the blacksmith</small></div><em data-item-count="iron_ore">0</em></article>
+          <article data-item="moss_fibre"><i></i><div><strong>Moss Fibre</strong><small>Soft crawler crafting material</small></div><em data-item-count="moss_fibre">0</em></article>
+          <article data-item="crawler_fang"><i></i><div><strong>Crawler Fang</strong><small>Sharp creature material</small></div><em data-item-count="crawler_fang">0</em></article>
+          <article data-item="stone_core"><i></i><div><strong>Stone Core</strong><small>Dense brute crafting material</small></div><em data-item-count="stone_core">0</em></article>
+          <article data-item="acid_gland"><i></i><div><strong>Acid Gland</strong><small>Volatile spitter material</small></div><em data-item-count="acid_gland">0</em></article>
+        </div>
+      </section>
+      <section class="inventory-section equipment-section" aria-labelledby="inventory-equipment-title">
+        <h3 id="inventory-equipment-title"><span>Equipment</span><small>Select your main hand</small></h3>
+        <div class="inventory-grid equipment-grid">
+          <article class="equipment" data-item="fang_dagger"><i></i><div><strong>Fang Dagger</strong><small>Fast · three-hit melee combo</small></div><em data-item-count="fang_dagger">0</em><button type="button" data-equip-main-hand="fang_dagger" disabled>EQUIP</button></article>
+          <article class="equipment" data-item="stone_core_hammer"><i></i><div><strong>Core Hammer</strong><small>Heavy · high knockback</small></div><em data-item-count="stone_core_hammer">0</em><button type="button" data-equip-main-hand="stone_core_hammer" disabled>EQUIP</button></article>
+          <article class="equipment" data-item="acid_gland_focus"><i></i><div><strong>Acid Focus</strong><small>Ranged · corrosive bolts</small></div><em data-item-count="acid_gland_focus">0</em><button type="button" data-equip-main-hand="acid_gland_focus" disabled>EQUIP</button></article>
+        </div>
+      </section>
+      <footer class="inventory-footer"><span>Press <kbd>I</kbd> or <kbd>ESC</kbd> to close</span></footer>
+    </section>
     <details id="movement-debug">
       <summary>MOVE DEBUG</summary>
       <pre id="movement-debug-live">Waiting for player state…</pre>

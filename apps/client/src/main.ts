@@ -220,6 +220,10 @@ const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
 const inventoryPanel = document.querySelector<HTMLElement>("#inventory-panel")!;
 const inventoryTotal = document.querySelector<HTMLElement>("#inventory-total")!;
+const inventoryToggle = document.querySelector<HTMLButtonElement>("#inventory-toggle")!;
+const inventoryClose = document.querySelector<HTMLButtonElement>("#inventory-close")!;
+const inventoryBadge = document.querySelector<HTMLElement>("#inventory-badge")!;
+const inventoryEquipped = document.querySelector<HTMLElement>("#inventory-equipped")!;
 const inventoryCountElements = new Map<ItemId, HTMLElement>(
   [...document.querySelectorAll<HTMLElement>("[data-item-count]")].map(element => [element.dataset.itemCount as ItemId, element]),
 );
@@ -245,7 +249,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -1100,6 +1104,7 @@ function refreshPowerCompatibility(): void {
   const mainHand = MAIN_HAND_DEFINITIONS[localMainHandId];
   mainHandName.textContent = mainHand.name;
   mainHandAttack.textContent = mainHand.attackName;
+  inventoryEquipped.textContent = mainHand.name;
   for (const button of mainHandPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.mainHand === localMainHandId));
   }
@@ -1161,7 +1166,7 @@ function updateControlsHelp(): void {
   const special = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
   const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
-  controlsHelp.textContent = `WASD move · Arrows camera · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
+  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
@@ -2075,8 +2080,11 @@ function updateInventoryItem(itemId: ItemId, total: number): void {
   if (equipButton) equipButton.disabled = total <= 0;
   const grandTotal = [...inventoryCounts.values()].reduce((sum, quantity) => sum + quantity, 0);
   inventoryTotal.textContent = grandTotal === 0 ? "EMPTY" : `${grandTotal} ITEM${grandTotal === 1 ? "" : "S"}`;
+  inventoryBadge.textContent = grandTotal > 999 ? "999+" : String(grandTotal);
+  inventoryToggle.setAttribute("aria-label", `Open inventory, ${grandTotal} item${grandTotal === 1 ? "" : "s"}`);
   const card = inventoryPanel.querySelector<HTMLElement>(`[data-item="${itemId}"]`);
   if (card) {
+    card.classList.toggle("empty", total <= 0);
     card.classList.remove("loot-added");
     requestAnimationFrame(() => card.classList.add("loot-added"));
     window.setTimeout(() => card.classList.remove("loot-added"), 650);
@@ -2353,6 +2361,23 @@ function advanceTavernDialogue(): void {
 tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
+function setInventoryOpen(open: boolean): void {
+  inventoryPanel.hidden = !open;
+  inventoryToggle.setAttribute("aria-expanded", String(open));
+  if (open) {
+    closeTavernDialogue();
+    performancePanel.hidden = true;
+    performanceToggle.setAttribute("aria-expanded", "false");
+    resetMovementControls();
+    inventoryClose.focus();
+  } else {
+    inventoryToggle.focus();
+  }
+}
+
+inventoryToggle.addEventListener("click", () => setInventoryOpen(inventoryPanel.hasAttribute("hidden")));
+inventoryClose.addEventListener("click", () => setInventoryOpen(false));
+
 let tavernCoinBalance = TAVERN_QUIZ_STARTING_COINS;
 let quizPending = false;
 let coinCountAnimationActive = false;
@@ -2361,7 +2386,7 @@ const coinLabel = (amount: number): string => `${amount} ${amount === 1 ? "coin"
 
 function updateTavernCoins(coins: number): void {
   tavernCoinBalance = Math.max(0, Math.floor(coins));
-  tavernCoins.textContent = `Gold: ${tavernCoinBalance}`;
+  tavernCoins.textContent = tavernCoinBalance.toLocaleString();
   blacksmithGold.textContent = tavernCoinBalance.toLocaleString();
   blacksmithSell.disabled = blacksmithPending || (inventoryCounts.get("iron_ore") ?? 0) <= 0 || tavernCoinBalance >= 1_000_000;
   if (!coinCountAnimationActive) quizBalanceAmount.textContent = tavernCoinBalance.toLocaleString();
@@ -2404,6 +2429,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
 
 function openBlacksmith(): void {
   closeTavernDialogue();
+  setInventoryOpen(false);
   blacksmithPanel.hidden = false;
   blacksmithMessage.textContent = "Checking your iron ore...";
   if (room) room.send("blacksmith:sync");
@@ -2541,6 +2567,7 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
 
 function openTavernQuiz(): void {
   closeTavernDialogue();
+  setInventoryOpen(false);
   quizPanel.hidden = false;
   if (room) room.send("quiz:sync");
   else quizMessage.textContent = "Connecting to the quiz table...";
@@ -2653,6 +2680,8 @@ let networkRttMs: number | null = null;
 function renderBootstrap(payload: WorldBootstrap): void {
   closeTavernDialogue();
   blacksmithPanel.hidden = true;
+  inventoryPanel.hidden = true;
+  inventoryToggle.setAttribute("aria-expanded", "false");
   const buildStartedAt = performance.now();
   const previousSliceY = cutawaySliceY;
   worldPayloadBytes = new Blob([JSON.stringify(payload)]).size;
@@ -3584,6 +3613,11 @@ for (const button of traitPickerButtons) {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (!inventoryPanel.hidden) {
+    if (event.code === "Escape" || event.code === "KeyI") setInventoryOpen(false);
+    event.preventDefault();
+    return;
+  }
   if (!blacksmithPanel.hidden) {
     if (event.code === "Escape") blacksmithPanel.hidden = true;
     if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyC"].includes(event.code)) event.preventDefault();
@@ -3596,6 +3630,11 @@ window.addEventListener("keydown", event => {
   }
   if (event.code === "Escape" && !tavernDialogue.hidden) {
     closeTavernDialogue();
+    return;
+  }
+  if (event.code === "KeyI") {
+    event.preventDefault();
+    setInventoryOpen(true);
     return;
   }
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
@@ -3799,8 +3838,8 @@ app.on("update", (dt: number) => {
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const strafe = quizPanel.hidden && blacksmithPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
-  const forward = quizPanel.hidden && blacksmithPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
+  const strafe = quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
+  const forward = quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
@@ -4659,6 +4698,8 @@ async function connect(): Promise<void> {
   room.onLeave(() => {
     quizPanel.hidden = true;
     blacksmithPanel.hidden = true;
+    inventoryPanel.hidden = true;
+    inventoryToggle.setAttribute("aria-expanded", "false");
     worldReady = false;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
