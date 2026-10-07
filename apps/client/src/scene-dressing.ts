@@ -14,6 +14,10 @@ const RUG: Color = [0.37, 0.09, 0.10];
 const CREAM: Color = [0.83, 0.72, 0.54];
 const EMBER: Color = [1, 0.28, 0.045];
 const IRON: Color = [0.39, 0.47, 0.51];
+const SOOT: Color = [0.12, 0.15, 0.16];
+const FORGE_STONE: Color = [0.29, 0.30, 0.29];
+const CANVAS: Color = [0.53, 0.15, 0.10];
+const CANVAS_LIGHT: Color = [0.74, 0.27, 0.14];
 
 const TAVERN_PATRONS = [
   { x: 3.8, z: 12.6, facing: 1, skin: [0.65, 0.38, 0.23], shirt: [0.20, 0.31, 0.52], hair: [0.11, 0.08, 0.06], phase: 0 },
@@ -62,6 +66,7 @@ export class SceneDressing {
   private readonly glow = new pc.StandardMaterial();
   private meshes: pc.Mesh[] = [];
   private fireLight: pc.Entity | null = null;
+  private forgeLight: pc.Entity | null = null;
   private keeper: pc.Entity | null = null;
   private keeperHead: pc.Entity | null = null;
   private keeperArm: pc.Entity | null = null;
@@ -99,6 +104,7 @@ export class SceneDressing {
     if (!this.root.enabled) return;
     const time = timeMilliseconds * 0.001;
     if (this.fireLight?.light) this.fireLight.light.intensity = 1.35 + Math.sin(time * 8.3) * 0.11 + Math.sin(time * 13.7) * 0.055;
+    if (this.forgeLight?.light) this.forgeLight.light.intensity = 0.85 + Math.sin(time * 10.1) * 0.08 + Math.sin(time * 17.3) * 0.035;
     if (this.keeperHead) this.keeperHead.setLocalEulerAngles(0, Math.sin(time * 0.72) * 5, 0);
     if (this.keeperArm) this.keeperArm.setLocalEulerAngles(Math.sin(time * 1.65) * 8 - 8, 0, -6);
     for (const patron of this.patronHeads) {
@@ -204,6 +210,7 @@ export class SceneDressing {
     for (const mesh of this.meshes) mesh.destroy();
     this.meshes = [];
     this.fireLight = null;
+    this.forgeLight = null;
     this.keeper = null;
     this.keeperHead = null;
     this.keeperArm = null;
@@ -359,29 +366,101 @@ export class SceneDressing {
 
     solid.offsetZ = 0;
     glow.offsetZ = 0;
-    // The open-air stall now sits across the east quarter from the tavern.
+    // A compact, readable smithy: heavy timber, a striped awning, working forge,
+    // and metal goods. Everything stays in the two shared decorative batches.
     if (read(Math.floor(TOWN_BLACKSMITH_STALL_POSITION.x), SURFACE_HEIGHT, Math.floor(TOWN_BLACKSMITH_STALL_POSITION.z)) !== Block.Air) {
       this.blacksmithBuilt = true;
       const { x, z } = TOWN_BLACKSMITH_STALL_POSITION;
-      solid.box(x, 8.56, z, 3.1, 1.12, 0.7, DARK_OAK);
-      solid.box(x, 9.16, z, 3.34, 0.13, 0.86, OAK);
-      solid.box(x, 9.24, z, 3.15, 0.025, 0.72, COPPER);
-      for (const dx of [-1.65, 1.65]) {
-        for (const dz of [-0.96, 0.96]) solid.box(x + dx, 9.34, z + dz, 0.18, 2.7, 0.18, WOOD);
+      // Counter panels and separate planks give the front a crafted texture.
+      solid.box(x, 8.54, z, 3.1, 1.08, 0.7, DARK_OAK);
+      for (const dx of [-1.24, -0.62, 0, 0.62, 1.24]) {
+        solid.box(x + dx, 8.54, z + 0.365, 0.55, 0.93, 0.035, WOOD);
+        solid.box(x + dx - 0.16, 8.38, z + 0.389, 0.22, 0.025, 0.01, OAK);
       }
-      solid.box(x, 10.72, z, 3.7, 0.13, 2.22, DARK_OAK);
-      for (const dx of [-1.28, -0.43, 0.43, 1.28]) solid.box(x + dx, 10.81, z, 0.79, 0.055, 2.12, dx < 0 ? RUG : COPPER);
-      solid.box(x, 10.12, z + 1.06, 2.2, 0.68, 0.1, IRON);
-      glow.box(x, 10.12, z + 1.12, 1.64, 0.37, 0.035, GOLD);
-      // Blacksmith behind the counter, plus an anvil and a small forge.
-      solid.box(x - 0.5, 8.84, z - 1.02, 0.58, 0.86, 0.36, IRON);
-      solid.box(x - 0.5, 9.47, z - 1.02, 0.42, 0.42, 0.42, CREAM);
-      solid.box(x - 0.5, 9.72, z - 1.02, 0.48, 0.16, 0.47, DARK_OAK);
-      solid.box(x + 0.65, 9.34, z - 0.12, 0.72, 0.15, 0.42, IRON);
-      solid.box(x + 0.65, 9.46, z - 0.12, 0.31, 0.08, 0.31, SLATE);
-      solid.box(x + 1.06, 8.45, z - 0.89, 0.65, 0.9, 0.65, SLATE);
-      glow.box(x + 1.06, 8.93, z - 0.89, 0.48, 0.11, 0.48, EMBER);
-      for (const dx of [-0.78, 0.78]) solid.box(x + dx, 9.4, z + 0.22, 0.28, 0.22, 0.28, IRON);
+      for (const dx of [-1.48, 1.48]) {
+        solid.box(x + dx, 8.54, z + 0.39, 0.07, 1.03, 0.07, SOOT);
+        for (const y of [8.18, 8.86]) solid.box(x + dx, y, z + 0.43, 0.08, 0.075, 0.025, COPPER);
+      }
+      solid.box(x, 9.13, z, 3.52, 0.15, 0.97, OAK);
+      for (const dz of [-0.31, 0, 0.31]) solid.box(x, 9.225, z + dz, 3.34, 0.035, 0.27, dz === 0 ? COPPER : WOOD);
+      solid.box(x, 9.16, z + 0.51, 3.6, 0.09, 0.07, SOOT);
+
+      // The posts and canopy are broad enough to read from the game camera.
+      for (const dx of [-1.78, 1.78]) for (const dz of [-1.2, 1.12]) {
+        solid.box(x + dx, 9.34, z + dz, 0.19, 2.7, 0.19, WOOD);
+        solid.box(x + dx, 8.12, z + dz, 0.3, 0.24, 0.3, FORGE_STONE);
+        for (const y of [8.4, 10.32]) solid.box(x + dx, y, z + dz, 0.215, 0.09, 0.215, SOOT);
+      }
+      for (const dz of [-1.2, 1.12]) solid.box(x, 10.63, z + dz, 3.84, 0.15, 0.2, DARK_OAK);
+      solid.box(x, 10.75, z - 0.05, 3.94, 0.13, 2.68, DARK_OAK);
+      for (const dx of [-1.58, -1.05, -0.52, 0.01, 0.54, 1.07, 1.6]) {
+        const stripe = Math.round((dx + 1.58) / 0.53) % 2 === 0;
+        solid.box(x + dx, 10.84, z - 0.04, 0.49, 0.055, 2.54, stripe ? CANVAS : CANVAS_LIGHT);
+        solid.box(x + dx, 10.48, z + 1.22, 0.49, 0.53, 0.055, stripe ? CANVAS : CANVAS_LIGHT);
+        solid.box(x + dx, 10.48, z - 1.31, 0.49, 0.53, 0.055, stripe ? CANVAS : CANVAS_LIGHT);
+        for (const seamZ of [-0.8, 0.6]) solid.box(x + dx, 10.874, z + seamZ, 0.42, 0.009, 0.016, stripe ? CANVAS_LIGHT : CREAM);
+      }
+      solid.box(x, 10.91, z - 0.05, 3.98, 0.08, 0.13, COPPER);
+      solid.box(x, 10.18, z + 1.25, 3.84, 0.07, 0.09, GOLD);
+      for (const dx of [-1.78, 1.78]) solid.box(x + dx, 10.47, z + 1.26, 0.09, 0.58, 0.07, COPPER);
+
+      // Front-facing hanging sign: framed metal field with a simple hammer mark.
+      solid.box(x, 10.09, z + 1.31, 1.84, 0.61, 0.08, DARK_OAK);
+      solid.box(x, 10.09, z + 1.36, 1.65, 0.47, 0.025, SOOT);
+      solid.box(x - 0.32, 10.08, z + 1.38, 0.44, 0.12, 0.03, IRON);
+      solid.box(x - 0.14, 9.99, z + 1.39, 0.09, 0.3, 0.03, OAK);
+      solid.box(x + 0.39, 10.04, z + 1.38, 0.52, 0.09, 0.03, IRON);
+      glow.box(x + 0.39, 10.12, z + 1.38, 0.34, 0.04, 0.03, GOLD);
+      for (const dx of [-0.85, 0.85]) for (const dy of [-0.2, 0.2]) solid.box(x + dx, 10.09 + dy, z + 1.39, 0.06, 0.06, 0.03, COPPER);
+
+      // Stone forge with a dark mouth, ember bed, chimney and iron rim.
+      const forgeX = x + 1.05;
+      const forgeZ = z - 0.86;
+      solid.box(forgeX, 8.12, forgeZ, 0.96, 0.24, 0.84, FORGE_STONE);
+      for (const y of [8.32, 8.56, 8.8]) {
+        for (const dx of [-0.38, 0.38]) solid.box(forgeX + dx, y, forgeZ, 0.22, 0.24, 0.76, y === 8.56 ? SLATE : FORGE_STONE);
+        solid.box(forgeX, y, forgeZ - 0.28, 0.58, 0.23, 0.18, FORGE_STONE);
+      }
+      solid.box(forgeX, 8.68, forgeZ + 0.03, 0.56, 0.43, 0.52, SOOT);
+      glow.box(forgeX, 8.59, forgeZ + 0.27, 0.48, 0.14, 0.09, EMBER);
+      glow.box(forgeX - 0.13, 8.79, forgeZ + 0.28, 0.12, 0.28, 0.08, GOLD);
+      glow.box(forgeX + 0.12, 8.76, forgeZ + 0.28, 0.11, 0.21, 0.08, EMBER);
+      solid.box(forgeX, 9.06, forgeZ, 1.02, 0.14, 0.9, IRON);
+      solid.box(forgeX + 0.3, 9.59, forgeZ - 0.32, 0.36, 1.0, 0.38, FORGE_STONE);
+      solid.box(forgeX + 0.3, 10.12, forgeZ - 0.32, 0.45, 0.1, 0.46, SOOT);
+      // The stack rises above the awning so the workshop reads from a distance.
+      solid.box(forgeX + 0.3, 11.38, forgeZ - 0.32, 0.42, 1.0, 0.42, FORGE_STONE);
+      for (const y of [11.02, 11.48, 11.84]) solid.box(forgeX + 0.3, y, forgeZ - 0.32, 0.47, 0.08, 0.47, SLATE);
+      solid.box(forgeX + 0.3, 11.93, forgeZ - 0.32, 0.56, 0.11, 0.56, SOOT);
+
+      // Anvil on a banded stump, with a narrow horn and polished working face.
+      const anvilX = x - 1.02;
+      const anvilZ = z - 0.75;
+      solid.box(anvilX, 8.36, anvilZ, 0.56, 0.72, 0.56, WOOD);
+      for (const y of [8.14, 8.6]) solid.box(anvilX, y, anvilZ, 0.61, 0.075, 0.61, SOOT);
+      solid.box(anvilX, 8.77, anvilZ, 0.64, 0.12, 0.46, SOOT);
+      solid.box(anvilX, 8.94, anvilZ, 0.34, 0.32, 0.3, IRON);
+      solid.box(anvilX, 9.13, anvilZ, 0.79, 0.13, 0.48, IRON);
+      solid.box(anvilX - 0.49, 9.1, anvilZ, 0.27, 0.11, 0.21, SLATE);
+      solid.box(anvilX, 9.205, anvilZ, 0.7, 0.025, 0.37, CREAM);
+
+      // The smith stands behind the counter in a leather apron with a raised hammer.
+      solid.box(x - 0.2, 8.34, z - 1.06, 0.48, 0.62, 0.35, SOOT);
+      solid.box(x - 0.2, 8.92, z - 1.06, 0.57, 0.63, 0.36, WOOD);
+      solid.box(x - 0.2, 8.84, z - 0.85, 0.4, 0.57, 0.035, COPPER);
+      solid.box(x - 0.2, 9.48, z - 1.06, 0.42, 0.41, 0.42, CREAM);
+      solid.box(x - 0.2, 9.73, z - 1.06, 0.49, 0.15, 0.48, DARK_OAK);
+      solid.box(x + 0.17, 9.13, z - 1.03, 0.18, 0.52, 0.23, WOOD);
+      solid.box(x + 0.17, 9.43, z - 0.96, 0.16, 0.2, 0.18, CREAM);
+      solid.box(x + 0.17, 9.64, z - 0.96, 0.065, 0.35, 0.065, OAK);
+      solid.box(x + 0.17, 9.83, z - 0.96, 0.32, 0.13, 0.18, IRON);
+
+      // Iron stock and ore samples on the counter make the trade legible.
+      for (const dx of [-1.12, -0.86, 0.48, 0.76]) {
+        solid.box(x + dx, 9.36, z + 0.05, 0.19, 0.2, 0.2, dx < 0 ? FORGE_STONE : IRON);
+        solid.box(x + dx - 0.035, 9.48, z + 0.07, 0.08, 0.07, 0.09, dx < 0 ? COPPER : SLATE);
+      }
+      for (const dx of [-0.68, -0.47, -0.26]) glow.box(x + dx, 9.28, z + 0.27, 0.15, 0.045, 0.15, GOLD);
     }
 
     for (const [x, z] of TOWN_GATE_POSTS) {
@@ -438,6 +517,12 @@ export class SceneDressing {
         lantern.setPosition(x, 10.4, z + TOWN_TAVERN_Z_OFFSET);
         this.root.addChild(lantern);
       }
+    }
+    if (this.blacksmithBuilt) {
+      this.forgeLight = new pc.Entity("blacksmith-forge-light");
+      this.forgeLight.addComponent("light", { type: "omni", color: new pc.Color(1, 0.35, 0.09), intensity: 0.85, range: 4.5, castShadows: false });
+      this.forgeLight.setPosition(TOWN_BLACKSMITH_STALL_POSITION.x + 1.05, 8.75, TOWN_BLACKSMITH_STALL_POSITION.z - 0.58);
+      this.root.addChild(this.forgeLight);
     }
     if (furnishedTavern) this.createTavernKeeper();
   }
