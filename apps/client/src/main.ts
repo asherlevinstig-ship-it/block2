@@ -141,6 +141,10 @@ const tavernDialogueNext = document.querySelector<HTMLButtonElement>("#tavern-di
 const tavernDialogueClose = document.querySelector<HTMLButtonElement>("#tavern-dialogue-close")!;
 const quizPanel = document.querySelector<HTMLElement>("#tavern-quiz")!;
 const quizBalance = document.querySelector<HTMLElement>("#tavern-quiz-balance")!;
+const quizBalanceAmount = document.querySelector<HTMLElement>("#tavern-quiz-balance-amount")!;
+const quizPotDisplay = document.querySelector<HTMLElement>("#tavern-quiz-pot-display")!;
+const quizPotLabel = document.querySelector<HTMLElement>(".quiz-pot-label")!;
+const quizWinToast = document.querySelector<HTMLElement>("#quiz-win-toast")!;
 const quizMessage = document.querySelector<HTMLElement>("#tavern-quiz-message")!;
 const quizStakes = document.querySelector<HTMLElement>("#tavern-quiz-stakes")!;
 const quizQuestion = document.querySelector<HTMLElement>("#tavern-quiz-question")!;
@@ -224,7 +228,7 @@ const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-togg
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
-if ([quizTablePrompt, quizPanel, quizBalance, quizMessage, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
+if ([quizTablePrompt, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizMessage, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
 
@@ -2315,15 +2319,66 @@ tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 let tavernCoinBalance = TAVERN_QUIZ_STARTING_COINS;
 let quizPending = false;
+let coinCountAnimationActive = false;
+let coinCountAnimationFrame = 0;
 const coinLabel = (amount: number): string => `${amount} ${amount === 1 ? "coin" : "coins"}`;
 
 function updateTavernCoins(coins: number): void {
   tavernCoinBalance = Math.max(0, Math.floor(coins));
   tavernCoins.textContent = `Tavern coins: ${tavernCoinBalance}`;
-  quizBalance.textContent = `Purse: ${coinLabel(tavernCoinBalance)}`;
+  if (!coinCountAnimationActive) quizBalanceAmount.textContent = tavernCoinBalance.toLocaleString();
   for (const button of quizStakes.querySelectorAll<HTMLButtonElement>("[data-quiz-stake]")) {
     button.disabled = quizPending || Number(button.dataset.quizStake) > tavernCoinBalance;
   }
+}
+
+function animateQuizPayout(payout: number, total: number): void {
+  if (payout <= 0 || quizPanel.hidden) return;
+  quizWinToast.textContent = `+${payout.toLocaleString()} coins`;
+  quizWinToast.hidden = false;
+  quizWinToast.classList.remove("pop");
+  void quizWinToast.offsetWidth;
+  quizWinToast.classList.add("pop");
+  window.setTimeout(() => { quizWinToast.hidden = true; }, 1150);
+
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const source = quizPotDisplay.getBoundingClientRect();
+  const destination = quizBalance.getBoundingClientRect();
+  const sourceX = source.left + source.width / 2;
+  const sourceY = source.top + source.height / 2;
+  const endX = destination.left + 16;
+  const endY = destination.top + destination.height / 2;
+  for (let index = 0; index < 7; index += 1) {
+    const coin = document.createElement("span");
+    coin.className = "coin-fly";
+    coin.textContent = "✦";
+    coin.setAttribute("aria-hidden", "true");
+    const jitterX = (index - 3) * 11;
+    const jitterY = (index % 3 - 1) * 7;
+    coin.style.left = `${sourceX + jitterX}px`;
+    coin.style.top = `${sourceY + jitterY}px`;
+    coin.style.setProperty("--coin-dx", `${endX - sourceX - jitterX}px`);
+    coin.style.setProperty("--coin-dy", `${endY - sourceY - jitterY}px`);
+    coin.style.animationDelay = `${index * 65}ms`;
+    coin.addEventListener("animationend", () => coin.remove(), { once: true });
+    document.body.append(coin);
+  }
+
+  window.cancelAnimationFrame(coinCountAnimationFrame);
+  coinCountAnimationActive = true;
+  const start = Math.max(0, total - payout);
+  const began = performance.now();
+  const tick = (now: number): void => {
+    const fraction = Math.min(1, (now - began) / 800);
+    const eased = 1 - Math.pow(1 - fraction, 3);
+    quizBalanceAmount.textContent = Math.round(start + (total - start) * eased).toLocaleString();
+    if (fraction < 1) coinCountAnimationFrame = window.requestAnimationFrame(tick);
+    else {
+      coinCountAnimationActive = false;
+      quizBalanceAmount.textContent = tavernCoinBalance.toLocaleString();
+    }
+  };
+  coinCountAnimationFrame = window.requestAnimationFrame(tick);
 }
 
 function renderTavernQuiz(update: TavernQuizUpdate): void {
@@ -2331,6 +2386,9 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
   updateTavernCoins(update.coins);
   quizMessage.textContent = update.message ?? "Place a stake, then answer Mara's question.";
   if (update.phase === "error") return;
+  quizPanel.dataset.phase = update.phase;
+  quizPotDisplay.textContent = (update.payout ?? 0).toLocaleString();
+  quizPotLabel.textContent = update.phase === "won" ? "COLLECTED" : update.phase === "lost" ? "POT LOST" : update.phase === "decision" ? "POT AT RISK" : "CURRENT POT";
   quizStakes.hidden = update.phase === "question" || update.phase === "decision";
   quizQuestion.hidden = update.phase !== "question";
   quizDecision.hidden = update.phase !== "decision";
@@ -2338,12 +2396,18 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
   quizQuit.disabled = false;
   quizChoices.replaceChildren();
   if (update.phase === "question" && update.question) {
-    quizPot.textContent = `Pot: ${coinLabel(update.payout ?? 0)} · a correct answer doubles it`;
+    quizPot.textContent = "Choose one answer · correct doubles the pot";
     quizPrompt.textContent = update.question.prompt;
     update.question.choices.forEach((choice, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = choice;
+      const letter = document.createElement("span");
+      letter.className = "quiz-choice-letter";
+      letter.textContent = String.fromCharCode(65 + index);
+      const answer = document.createElement("span");
+      answer.className = "quiz-choice-text";
+      answer.textContent = choice;
+      button.append(letter, answer);
       button.addEventListener("click", () => {
         if (!room || quizPending) return;
         quizPending = true;
@@ -2356,6 +2420,7 @@ function renderTavernQuiz(update: TavernQuizUpdate): void {
   if (update.phase === "decision") {
     quizMessage.textContent = `${update.message ?? "Correct!"} Pot: ${coinLabel(update.payout ?? 0)}.`;
   }
+  if (update.phase === "won") animateQuizPayout(update.payout ?? 0, update.coins);
 }
 
 function openTavernQuiz(): void {
