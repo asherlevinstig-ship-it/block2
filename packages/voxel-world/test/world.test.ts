@@ -80,6 +80,14 @@ describe("deterministic voxel world", () => {
     expect(getBlock(eastGate, 2, SURFACE_HEIGHT, 8)).toBe(Block.Air);
   });
 
+  it("keeps the blacksmith stall on solid ground and its counter physically blocked", () => {
+    const centre = generateChunk("test-world", 0, 0);
+    const read = (x: number, y: number, z: number) => getBlock(centre, x, y, z);
+    expect(read(14, SURFACE_HEIGHT, 5)).toBe(Block.Grass);
+    expect(playerCollides(read, 14.5, 8, 5.5)).toBe(true);
+    expect(playerCollides(read, 14.5, 8, 7.3)).toBe(false);
+  });
+
   it("surrounds the town with solid walls while keeping each cardinal gate passable", () => {
     for (const [wallX, wallZ, gateX, gateZ] of [
       [-6, 5, -6, 8], [22, 5, 22, 8], [5, -6, 8, -6], [5, 22, 8, 22],

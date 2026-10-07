@@ -1,6 +1,7 @@
 import { Client, Room } from "@colyseus/core";
 import {
   AttackRequestSchema,
+  IRON_ORE_GOLD_PRICE,
   BRAMBLE_SNARE,
   DodgeRequestSchema,
   DefenseRequestSchema,
@@ -26,6 +27,7 @@ import {
   TAVERN_QUIZ_MAX_PAYOUT,
   TAVERN_QUIZ_STARTING_COINS,
   type ActionRejected,
+  type BlacksmithUpdate,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -53,6 +55,7 @@ import {
   type WeaponAttackReleased,
   type ItemId,
   type LootPickedUp,
+  type MineralMined,
   type TavernQuizUpdate,
 } from "@blockcraft/protocol";
 import {
@@ -86,6 +89,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS 
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
+import { canTradeAtBlacksmith, ironOreSale, minedMineral } from "./blacksmith.js";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -229,6 +233,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
     this.onMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
     this.onMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
+    this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
+    this.onMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -264,6 +270,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       ? { x: 23.5, y: 3, z: 8.5 }
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "spitter"
         ? { x: 24.5, y: 8, z: 6.5 }
+        : process.env.NODE_ENV !== "production" && requestedQaSpawn === "blacksmith"
+          ? { x: 14.5, y: 8, z: 7.3 }
         : this.spawnPoint();
     player.x = spawn.x;
     player.y = spawn.y;
@@ -408,6 +416,33 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     round.askedIds.push(question.id);
     round.phase = "question";
     this.sendQuizState(client, "Double or nothing. Here's your next question.");
+  }
+
+  private sendBlacksmithState(client: Client, message = `Iron ore sells for ${IRON_ORE_GOLD_PRICE} gold each.`, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    client.send("blacksmith:update", {
+      phase,
+      ironOre: player.inventory.get("iron_ore")?.quantity ?? 0,
+      gold: player.coins,
+      sold,
+      goldGranted,
+      message,
+    } satisfies BlacksmithUpdate);
+  }
+
+  private handleBlacksmithSell(client: Client): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to trade.", "error");
+    const ore = player.inventory.get("iron_ore");
+    if (!ore?.quantity) return this.sendBlacksmithState(client, "You have no iron ore to sell. Mine iron ore underground first.", "error");
+    const { sold, goldGranted } = ironOreSale(ore.quantity, player.coins);
+    if (sold === 0) return this.sendBlacksmithState(client, "Your gold purse is full.", "error");
+    ore.quantity -= sold;
+    player.coins += goldGranted;
+    void this.persistPlayer(client.sessionId, player);
+    this.sendBlacksmithState(client, `Sold ${sold} iron ore for ${goldGranted} gold.`, "traded", sold, goldGranted);
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
@@ -1465,6 +1500,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       revision: stored.revision,
     };
     this.broadcast("block:changed", changed);
+    const mineral = minedMineral(current);
+    if (mineral) {
+      let item = player.inventory.get(mineral);
+      if (!item) {
+        item = new InventoryItemState();
+        player.inventory.set(mineral, item);
+      }
+      const before = item.quantity;
+      item.quantity = inventoryTotal(before, 1);
+      void this.persistPlayer(client.sessionId, player);
+      client.send("mineral:mined", { itemId: mineral, quantity: item.quantity - before, total: item.quantity } satisfies MineralMined);
+    }
   }
 
   private handleAttack(client: Client, payload: unknown): void {

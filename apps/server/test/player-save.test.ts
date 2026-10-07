@@ -8,6 +8,9 @@ describe("player saves", () => {
     const dagger = new InventoryItemState();
     dagger.quantity = 1;
     player.inventory.set("fang_dagger", dagger);
+    const ironOre = new InventoryItemState();
+    ironOre.quantity = 7;
+    player.inventory.set("iron_ore", ironOre);
     player.health = 3;
     player.stamina = 47;
     player.coins = 73;
@@ -23,6 +26,7 @@ describe("player saves", () => {
     const restored = new PlayerState();
     applyPlayerSave(restored, parsed!);
     expect(restored.inventory.get("fang_dagger")?.quantity).toBe(1);
+    expect(restored.inventory.get("iron_ore")?.quantity).toBe(7);
     expect(restored.health).toBe(3);
     expect(restored.stamina).toBe(47);
     expect(restored.coins).toBe(73);

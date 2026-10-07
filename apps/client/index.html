@@ -77,6 +77,7 @@
     </section>
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="quiz-table-prompt" hidden>DOUBLE OR QUIT <small>Press E to play</small></div>
+    <div id="blacksmith-prompt" hidden>BLACKSMITH <small>Press E to trade</small></div>
     <div id="combat-feedback" aria-live="polite"></div>
     <section id="tavern-dialogue" role="dialog" aria-label="Mara the Tavernkeeper" hidden>
       <p class="eyebrow">HEARTH & HAMMER</p>
@@ -120,6 +121,16 @@
       </div>
       <div class="quiz-footer"><span>MAX POT · 1,024 COINS</span><button id="tavern-quiz-close" type="button">Leave table</button></div>
     </section>
+    <section id="blacksmith-panel" role="dialog" aria-label="Blacksmith ore trading" hidden>
+      <p class="eyebrow">TOWN OF BEGINNINGS · BLACKSMITH</p>
+      <h2>Ore for Gold</h2>
+      <p id="blacksmith-message" aria-live="polite">Bring iron ore from the mines. I pay a fair price.</p>
+      <div class="blacksmith-trade-row"><span>IRON ORE IN PACK</span><strong id="blacksmith-ore">0</strong></div>
+      <div class="blacksmith-trade-row"><span>PRICE PER ORE</span><strong id="blacksmith-price">3 gold</strong></div>
+      <div class="blacksmith-trade-row gold"><span>YOUR GOLD</span><strong id="blacksmith-gold">20</strong></div>
+      <button id="blacksmith-sell" type="button">Sell all iron ore</button>
+      <button id="blacksmith-close" type="button">Leave stall</button>
+    </section>
     <button id="performance-toggle" type="button" aria-controls="performance-panel" aria-expanded="false">PERF</button>
     <aside id="performance-panel" aria-label="Performance metrics" hidden>
       <p class="eyebrow">LIVE PERFORMANCE</p>
@@ -137,8 +148,9 @@
     </aside>
     <aside id="inventory-panel" aria-label="Inventory">
       <header><span>INVENTORY</span><strong id="inventory-total">EMPTY</strong></header>
-      <p id="tavern-coins" class="coin-balance">Tavern coins: 20</p>
+      <p id="tavern-coins" class="coin-balance">Gold: 20</p>
       <div id="inventory-grid">
+        <article data-item="iron_ore"><i></i><div><strong>Iron Ore</strong><small>Mined mineral · sell at blacksmith</small></div><em data-item-count="iron_ore">0</em></article>
         <article data-item="moss_fibre"><i></i><div><strong>Moss Fibre</strong><small>Crawler material</small></div><em data-item-count="moss_fibre">0</em></article>
         <article data-item="crawler_fang"><i></i><div><strong>Crawler Fang</strong><small>Crawler material</small></div><em data-item-count="crawler_fang">0</em></article>
         <article data-item="stone_core"><i></i><div><strong>Stone Core</strong><small>Brute material</small></div><em data-item-count="stone_core">0</em></article>

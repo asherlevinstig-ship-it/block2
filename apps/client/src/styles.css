@@ -399,7 +399,7 @@ button { font: inherit; }
   transform: translate(-50%, -50%);
 }
 #combat-reticle[hidden] { display: none; }
-#quiz-table-prompt {
+#quiz-table-prompt, #blacksmith-prompt {
   position: fixed;
   z-index: 21;
   padding: 7px 10px;
@@ -414,8 +414,9 @@ button { font: inherit; }
   pointer-events: none;
   transform: translate(-50%, -100%);
 }
-#quiz-table-prompt small { display: block; margin-top: 3px; color: white; font-size: .7rem; font-weight: 600; letter-spacing: 0; }
-#quiz-table-prompt[hidden] { display: none; }
+#quiz-table-prompt small, #blacksmith-prompt small { display: block; margin-top: 3px; color: white; font-size: .7rem; font-weight: 600; letter-spacing: 0; }
+#quiz-table-prompt[hidden], #blacksmith-prompt[hidden] { display: none; }
+#blacksmith-prompt { border-color: #f3aa63; color: #ffc88a; }
 #combat-reticle span,
 #combat-reticle span::before { position: absolute; content: ""; background: #ffc4b8; }
 #combat-reticle span { top: 15px; left: 8px; width: 14px; height: 2px; }
@@ -483,7 +484,8 @@ button { font: inherit; }
 }
 #tavern-quiz[hidden], #tavern-quiz-question[hidden], #tavern-quiz-decision[hidden], #tavern-quiz-stakes[hidden] { display: none; }
 body:has(#tavern-quiz:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 23; background: rgb(4 10 8 / 67%); backdrop-filter: blur(2px); pointer-events: none; }
-body:has(#tavern-quiz:not([hidden])) #touch-controls { opacity: 0; pointer-events: none; }
+body:has(#blacksmith-panel:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 23; background: rgb(4 10 8 / 67%); backdrop-filter: blur(2px); pointer-events: none; }
+body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel:not([hidden])) #touch-controls { opacity: 0; pointer-events: none; }
 #tavern-quiz .eyebrow { margin: 0 0 3px; color: #b9d8c0; font-size: .59rem; letter-spacing: .14em; }
 .tavern-quiz-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 3px 4px 16px; }
 #tavern-quiz h2 { margin: 0; color: #ffe4a4; font-family: Georgia, serif; font-size: clamp(1.55rem, 4.5vw, 2.15rem); line-height: 1; text-shadow: 0 2px 0 #6e3f17; white-space: nowrap; }
@@ -566,6 +568,36 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls { opacity: 0; pointer-event
 @keyframes quiz-wrong-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
 @media (prefers-reduced-motion: reduce) { .coin-fly, .quiz-win-toast.pop, .quiz-answer-feedback.reveal, #tavern-quiz[data-feedback="wrong"] .quiz-table-felt, #tavern-quiz[data-phase="decision"] #tavern-quiz-pot-display { animation: none; } #tavern-quiz button { transition: none; } }
 .coin-balance { margin: 2px 0 8px; font-size: .7rem; }
+#blacksmith-panel {
+  position: fixed;
+  z-index: 24;
+  top: 50%;
+  left: 50%;
+  width: min(420px, calc(100vw - 28px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 2px solid #a66834;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #30251c, #171b1b);
+  box-shadow: 0 20px 70px #000b, inset 0 0 0 4px #49301e;
+  color: #f4e4cb;
+  transform: translate(-50%, -50%);
+}
+#blacksmith-panel[hidden] { display: none; }
+#blacksmith-panel .eyebrow { margin: 0; color: #ecb982; font-size: .63rem; letter-spacing: .13em; }
+#blacksmith-panel h2 { margin: 4px 0 15px; color: #ffe2aa; font-family: Georgia, serif; font-size: 1.8rem; }
+#blacksmith-message { min-height: 2.5em; margin: 0 0 13px; color: #d9d2c2; font-size: .85rem; line-height: 1.4; }
+.blacksmith-trade-row { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 10px 12px; border-top: 1px solid #b8a18447; background: #ffffff08; }
+.blacksmith-trade-row span { color: #bcb4a4; font-size: .68rem; font-weight: 800; letter-spacing: .08em; }
+.blacksmith-trade-row strong { color: #e5e9e9; font-size: 1.06rem; font-variant-numeric: tabular-nums; }
+.blacksmith-trade-row.gold strong { color: #ffd47d; }
+#blacksmith-panel button { min-height: 42px; margin-top: 14px; padding: 9px 12px; border: 1px solid #d7a461; border-radius: 8px; background: linear-gradient(#aa7138, #74451f); color: #fff3d8; cursor: pointer; font: inherit; font-weight: 800; }
+#blacksmith-panel button:disabled { opacity: .42; cursor: not-allowed; }
+#blacksmith-sell { display: block; width: 100%; }
+#blacksmith-close { display: block; margin-left: auto; border-color: #736b5e !important; background: #352e28 !important; font-size: .75rem !important; }
+#blacksmith-panel[data-phase="traded"] #blacksmith-message { color: #bff4ac; }
+#blacksmith-panel[data-phase="error"] #blacksmith-message { color: #ffaf92; }
 #combat-feedback.hurt { color: #ff9a86; font-size: 1.2rem; }
 #combat-feedback.dodge { color: #9cecff; text-shadow: 0 2px 4px #000, 0 0 18px #35bce9; }
 @keyframes combat-feedback {
@@ -709,6 +741,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls { opacity: 0; pointer-event
 #inventory-grid article small { margin-top: 1px; color: #718078; font-size: .45rem; }
 #inventory-grid article em { color: #93a299; font-size: .68rem; font-style: normal; font-weight: 1000; font-variant-numeric: tabular-nums; }
 #inventory-grid article[data-item="moss_fibre"] i { background: #58a749; }
+#inventory-grid article[data-item="iron_ore"] i { background: linear-gradient(135deg, #a5b4bc, #815433); }
 #inventory-grid article[data-item="crawler_fang"] i { background: #e6d9aa; }
 #inventory-grid article[data-item="stone_core"] i { background: #7791a0; }
 #inventory-grid article[data-item="acid_gland"] i { background: #a3dd31; }

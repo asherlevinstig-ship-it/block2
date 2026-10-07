@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-town-v4";
+export const WORLD_ROOM = "world-town-v5";
 
 export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
 export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
@@ -11,6 +11,16 @@ export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
 export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;
 export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
+export const IRON_ORE_GOLD_PRICE = 3;
+export type BlacksmithUpdate = {
+  phase: "idle" | "traded" | "error";
+  ironOre: number;
+  gold: number;
+  sold?: number;
+  goldGranted?: number;
+  message: string;
+};
+export type MineralMined = { itemId: "iron_ore"; quantity: number; total: number };
 export const TavernQuizStartSchema = z.object({ stake: z.number().int().min(1).max(TAVERN_QUIZ_MAX_STAKE) });
 export const TavernQuizAnswerSchema = z.object({ questionId: z.string().min(1).max(40), choice: z.number().int().min(0).max(3) });
 export const TavernQuizDecisionSchema = z.object({ decision: z.enum(["double", "quit"]) });
@@ -24,6 +34,7 @@ export type TavernQuizUpdate = {
 };
 
 export const ITEM_DEFINITIONS = {
+  iron_ore: { id: "iron_ore", name: "Iron Ore", description: "Mined iron ore that can be sold to the town blacksmith" },
   moss_fibre: { id: "moss_fibre", name: "Moss Fibre", description: "Soft living fibre gathered from Moss Crawlers" },
   crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang shed by a defeated crawler" },
   stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core from a Stone Brute" },

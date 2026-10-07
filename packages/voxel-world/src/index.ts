@@ -19,6 +19,8 @@ export const TERMINAL_VELOCITY = 12;
 export const TOWN_TAVERN_TABLE_CENTERS = [[4.5, 13.5], [12.5, 13.5], [12.5, 16.5]] as const;
 export const TOWN_TAVERN_QUIZ_TABLE_POSITION = { x: 12.5, y: 8, z: 16.5 } as const;
 export const TOWN_TAVERN_KEEPER_POSITION = { x: 5.1, y: 8, z: 18.35 } as const;
+export const TOWN_BLACKSMITH_STALL_POSITION = { x: 14.5, y: 8, z: 5.5 } as const;
+export const TOWN_BLACKSMITH_STALL_COLLIDER = { x: 14.5, z: 5.5, width: 3.1, depth: 0.7, minY: 8, maxY: 9.15 } as const;
 
 type FurnitureCollider = { x: number; z: number; width: number; depth: number; minY: number; maxY: number };
 export const TOWN_TAVERN_FURNITURE_COLLIDERS: readonly FurnitureCollider[] = [
@@ -259,6 +261,14 @@ export function highestSolidY(chunk: GeneratedChunk, localX: number, localZ: num
 }
 
 export function playerCollides(readBlock: WorldBlockReader, x: number, y: number, z: number): boolean {
+  if (y + PLAYER_HEIGHT - 0.06 > TOWN_BLACKSMITH_STALL_COLLIDER.minY
+    && y + 0.06 < TOWN_BLACKSMITH_STALL_COLLIDER.maxY
+    && readBlock(14, SURFACE_HEIGHT, 5) === Block.Grass) {
+    const box = TOWN_BLACKSMITH_STALL_COLLIDER;
+    const nearestX = Math.max(box.x - box.width / 2, Math.min(x, box.x + box.width / 2));
+    const nearestZ = Math.max(box.z - box.depth / 2, Math.min(z, box.z + box.depth / 2));
+    if (Math.hypot(x - nearestX, z - nearestZ) < PLAYER_RADIUS) return true;
+  }
   // Tavern details are rendered below voxel resolution. Keep their physical footprints
   // shared by the authoritative server and client prediction without creating stepable blocks.
   if (x >= TOWN_TAVERN.minX && x <= TOWN_TAVERN.maxX + 1

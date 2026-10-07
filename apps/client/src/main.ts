@@ -4,6 +4,7 @@ import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   BRAMBLE_SNARE,
+  IRON_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
   MOMENTUM_TRAIT,
   TRAIT_DEFINITIONS,
@@ -15,6 +16,7 @@ import {
   WEAPON_ATTACK_DEFINITIONS,
   WORLD_ROOM,
   type ActionRejected,
+  type BlacksmithUpdate,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -26,6 +28,7 @@ import {
   type DefenseResolved,
   type ItemId,
   type LootPickedUp,
+  type MineralMined,
   type TavernQuizUpdate,
   TAVERN_QUIZ_STARTING_COINS,
   type MainHandId,
@@ -115,6 +118,7 @@ import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type E
 import { SceneDressing } from "./scene-dressing.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
 import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE } from "./tavern-keeper.js";
+import { BLACKSMITH_STALL, canTradeAtBlacksmithStall } from "./blacksmith.js";
 import "./styles.css";
 
 function newGuestProfileToken() {
@@ -136,6 +140,14 @@ const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
 const quizTablePrompt = document.querySelector<HTMLElement>("#quiz-table-prompt")!;
+const blacksmithPrompt = document.querySelector<HTMLElement>("#blacksmith-prompt")!;
+const blacksmithPanel = document.querySelector<HTMLElement>("#blacksmith-panel")!;
+const blacksmithMessage = document.querySelector<HTMLElement>("#blacksmith-message")!;
+const blacksmithOre = document.querySelector<HTMLElement>("#blacksmith-ore")!;
+const blacksmithGold = document.querySelector<HTMLElement>("#blacksmith-gold")!;
+const blacksmithPrice = document.querySelector<HTMLElement>("#blacksmith-price")!;
+const blacksmithSell = document.querySelector<HTMLButtonElement>("#blacksmith-sell")!;
+const blacksmithClose = document.querySelector<HTMLButtonElement>("#blacksmith-close")!;
 const tavernDialogueLine = document.querySelector<HTMLElement>("#tavern-dialogue-line")!;
 const tavernDialogueNext = document.querySelector<HTMLButtonElement>("#tavern-dialogue-next")!;
 const tavernDialogueClose = document.querySelector<HTMLButtonElement>("#tavern-dialogue-close")!;
@@ -233,7 +245,7 @@ const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-togg
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
-if ([quizTablePrompt, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
+if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element)) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
 
@@ -890,6 +902,7 @@ interface NetworkPlayer {
   defenseStartedAt: number;
   momentumStacks: number;
   equippedTrait: string;
+  inventory: unknown;
 }
 
 interface RemotePlayerVisual {
@@ -1987,6 +2000,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 }
 
 const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
+  iron_ore: coloredMaterial(new pc.Color(0.57, 0.65, 0.68)),
   moss_fibre: coloredMaterial(new pc.Color(0.28, 0.68, 0.2)),
   crawler_fang: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
   stone_core: coloredMaterial(new pc.Color(0.38, 0.52, 0.62)),
@@ -2048,6 +2062,10 @@ function bindLootDrops(joinedRoom: Room): void {
 
 function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryCounts.set(itemId, total);
+  if (itemId === "iron_ore") {
+    blacksmithOre.textContent = total.toLocaleString();
+    blacksmithSell.disabled = total <= 0 || blacksmithPending || tavernCoinBalance >= 1_000_000;
+  }
   const count = inventoryCountElements.get(itemId);
   if (count) count.textContent = String(total);
   const equipButton = inventoryPanel.querySelector<HTMLButtonElement>(`[data-item="${itemId}"] [data-equip-main-hand]`);
@@ -2179,6 +2197,16 @@ function bindPlayers(joinedRoom: Room): void {
       else if (remote) recordRemoteSnapshot(remote, player);
     };
     const playerCallbacks = callbacks(player);
+    if (isLocal) {
+      playerCallbacks.inventory.onAdd((item: { quantity: number }, itemId: string) => {
+        if (!isItemId(itemId)) return;
+        updateInventoryItem(itemId, item.quantity);
+        callbacks(item).listen("quantity", () => updateInventoryItem(itemId, item.quantity));
+      }, true);
+      playerCallbacks.inventory.onRemove((_item: { quantity: number }, itemId: string) => {
+        if (isItemId(itemId)) updateInventoryItem(itemId, 0);
+      });
+    }
     playerCallbacks.listen("x", updatePosition, true);
     playerCallbacks.listen("y", updatePosition, true);
     playerCallbacks.listen("z", updatePosition, true);
@@ -2330,12 +2358,45 @@ const coinLabel = (amount: number): string => `${amount} ${amount === 1 ? "coin"
 
 function updateTavernCoins(coins: number): void {
   tavernCoinBalance = Math.max(0, Math.floor(coins));
-  tavernCoins.textContent = `Tavern coins: ${tavernCoinBalance}`;
+  tavernCoins.textContent = `Gold: ${tavernCoinBalance}`;
+  blacksmithGold.textContent = tavernCoinBalance.toLocaleString();
+  blacksmithSell.disabled = blacksmithPending || (inventoryCounts.get("iron_ore") ?? 0) <= 0 || tavernCoinBalance >= 1_000_000;
   if (!coinCountAnimationActive) quizBalanceAmount.textContent = tavernCoinBalance.toLocaleString();
   for (const button of quizStakes.querySelectorAll<HTMLButtonElement>("[data-quiz-stake]")) {
     button.disabled = quizPending || Number(button.dataset.quizStake) > tavernCoinBalance;
   }
 }
+
+let blacksmithPending = false;
+blacksmithPrice.textContent = `${IRON_ORE_GOLD_PRICE} gold`;
+
+function renderBlacksmith(update: BlacksmithUpdate): void {
+  blacksmithPending = false;
+  blacksmithPanel.dataset.phase = update.phase;
+  blacksmithMessage.textContent = update.message;
+  updateInventoryItem("iron_ore", update.ironOre);
+  updateTavernCoins(update.gold);
+  blacksmithSell.disabled = update.ironOre <= 0 || blacksmithPending || update.gold >= 1_000_000;
+  if (update.phase === "traded" && update.goldGranted) {
+    showCombatFeedback(`+${update.goldGranted} GOLD`, "dodge");
+    status.textContent = update.message;
+  }
+}
+
+function openBlacksmith(): void {
+  closeTavernDialogue();
+  blacksmithPanel.hidden = false;
+  blacksmithMessage.textContent = "Checking your iron ore...";
+  if (room) room.send("blacksmith:sync");
+}
+
+blacksmithClose.addEventListener("click", () => { blacksmithPanel.hidden = true; });
+blacksmithSell.addEventListener("click", () => {
+  if (!room || blacksmithPending) return;
+  blacksmithPending = true;
+  blacksmithSell.disabled = true;
+  room.send("blacksmith:sell");
+});
 
 function animateQuizPayout(payout: number, total: number): void {
   if (payout <= 0 || quizPanel.hidden) return;
@@ -2503,6 +2564,14 @@ function updateTarget(): void {
   const direction = end.clone().sub(start);
   const hit = voxelRaycast(start, direction, camera.camera.farClip, readVisibleWorldBlock);
   const player = localPlayer.getPosition();
+  const blacksmithNearby = worldReady && room !== null && canTradeAtBlacksmithStall(player, sceneDressing.blacksmithVisible);
+  blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden;
+  if (!blacksmithPrompt.hidden) {
+    const screen = camera.camera.worldToScreen(new pc.Vec3(BLACKSMITH_STALL.x, 10.35, BLACKSMITH_STALL.z));
+    const rect = canvas.getBoundingClientRect();
+    blacksmithPrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
+    blacksmithPrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+  }
   const quizTableNearby = canPlayAtTavernTable(player, sceneDressing.keeperVisible);
   quizTablePrompt.hidden = !quizTableNearby || !quizPanel.hidden;
   if (!quizTablePrompt.hidden) {
@@ -2522,11 +2591,12 @@ function updateTarget(): void {
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMark?.stacks ?? 0}` : "none";
-  const nextKey = `${interactionMode}:${targetKey}:${combatKey}:${keeperNearby}:${quizTableNearby}`;
+  const nextKey = `${interactionMode}:${targetKey}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
-  mineButton.textContent = quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? "Mine" : "Attack";
-  if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
+  mineButton.textContent = blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? "Mine" : "Attack";
+  if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E or Trade iron ore for gold";
+  else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
     const intent = combatMob.visual.state.combatState === "windup"
@@ -2552,6 +2622,7 @@ let networkRttMs: number | null = null;
 
 function renderBootstrap(payload: WorldBootstrap): void {
   closeTavernDialogue();
+  blacksmithPanel.hidden = true;
   const buildStartedAt = performance.now();
   const previousSliceY = cutawaySliceY;
   worldPayloadBytes = new Blob([JSON.stringify(payload)]).size;
@@ -3403,6 +3474,10 @@ function commitSpecialAim(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
+    openBlacksmith();
+    return;
+  }
   if (canPlayAtTavernTable(localPlayer.getPosition(), sceneDressing.keeperVisible)) {
     openTavernQuiz();
     return;
@@ -3479,6 +3554,11 @@ for (const button of traitPickerButtons) {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (!blacksmithPanel.hidden) {
+    if (event.code === "Escape") blacksmithPanel.hidden = true;
+    if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyC"].includes(event.code)) event.preventDefault();
+    return;
+  }
   if (!quizPanel.hidden) {
     if (event.code === "Escape") quizPanel.hidden = true;
     if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyC"].includes(event.code)) event.preventDefault();
@@ -3689,8 +3769,8 @@ app.on("update", (dt: number) => {
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const strafe = quizPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
-  const forward = quizPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
+  const strafe = quizPanel.hidden && blacksmithPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
+  const forward = quizPanel.hidden && blacksmithPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
@@ -4274,6 +4354,10 @@ async function connect(): Promise<void> {
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("quiz:update", (update: TavernQuizUpdate) => renderTavernQuiz(update));
+  room.onMessage("blacksmith:update", (update: BlacksmithUpdate) => {
+    renderBlacksmith(update);
+    if (update.phase === "traded") status.textContent = update.message;
+  });
   room.onMessage("block:changed", applyBlockChange);
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
     createWeaponProjectile(message);
@@ -4485,6 +4569,16 @@ async function connect(): Promise<void> {
     status.textContent = `Picked up ${item.name} · ${message.total} total.`;
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
   });
+  room.onMessage("mineral:mined", (message: MineralMined) => {
+    if (message.itemId !== "iron_ore") return;
+    updateInventoryItem("iron_ore", message.total);
+    if (message.quantity > 0) {
+      showCombatFeedback(`+${message.quantity} IRON ORE`, "dodge");
+      status.textContent = `Mined iron ore · ${message.total} carried. Trade it at the blacksmith stall.`;
+    } else {
+      status.textContent = "Your iron ore pack is full. Visit the blacksmith stall to sell it.";
+    }
+  });
   room.onMessage("pong", (message: { id?: unknown }) => {
     if (typeof message.id !== "string") return;
     const sentAt = pendingPings.get(message.id);
@@ -4534,6 +4628,7 @@ async function connect(): Promise<void> {
   });
   room.onLeave(() => {
     quizPanel.hidden = true;
+    blacksmithPanel.hidden = true;
     worldReady = false;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;

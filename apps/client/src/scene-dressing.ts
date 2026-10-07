@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 
 type Color = readonly [number, number, number];
@@ -13,6 +13,7 @@ const DARK_OAK: Color = [0.15, 0.10, 0.075];
 const RUG: Color = [0.37, 0.09, 0.10];
 const CREAM: Color = [0.83, 0.72, 0.54];
 const EMBER: Color = [1, 0.28, 0.045];
+const IRON: Color = [0.39, 0.47, 0.51];
 
 const TAVERN_PATRONS = [
   { x: 3.8, z: 12.6, facing: 1, skin: [0.65, 0.38, 0.23], shirt: [0.20, 0.31, 0.52], hair: [0.11, 0.08, 0.06], phase: 0 },
@@ -63,6 +64,7 @@ export class SceneDressing {
   private keeper: pc.Entity | null = null;
   private keeperHead: pc.Entity | null = null;
   private keeperArm: pc.Entity | null = null;
+  private blacksmithBuilt = false;
   private readonly keeperMaterials = new Map<string, pc.StandardMaterial>();
   private readonly patronHeads: Array<{ entity: pc.Entity; baseYaw: number; phase: number }> = [];
 
@@ -86,6 +88,10 @@ export class SceneDressing {
 
   get keeperVisible(): boolean {
     return this.root.enabled && this.keeper !== null;
+  }
+
+  get blacksmithVisible(): boolean {
+    return this.root.enabled && this.blacksmithBuilt;
   }
 
   update(timeMilliseconds: number): void {
@@ -200,6 +206,7 @@ export class SceneDressing {
     this.keeper = null;
     this.keeperHead = null;
     this.keeperArm = null;
+    this.blacksmithBuilt = false;
     this.patronHeads.length = 0;
     const solid = new BoxBatch();
     const glow = new BoxBatch();
@@ -342,6 +349,31 @@ export class SceneDressing {
       glow.box(4.23, 8.91, 16.68, 0.15, 0.59, 0.2, GOLD);
       glow.box(4.28, 9.02, 16.5, 0.13, 0.72, 0.15, CREAM);
       for (const z of [16.2, 16.5, 16.8]) solid.box(4.31, 8.38, z, 0.19, 0.13, 0.13, DARK_OAK);
+    }
+
+    // The open-air stall faces the plaza; the glowing forge and iron display identify the ore buyer.
+    if (read(14, SURFACE_HEIGHT, 5) === Block.Grass) {
+      this.blacksmithBuilt = true;
+      const { x, z } = TOWN_BLACKSMITH_STALL_POSITION;
+      solid.box(x, 8.56, z, 3.1, 1.12, 0.7, DARK_OAK);
+      solid.box(x, 9.16, z, 3.34, 0.13, 0.86, OAK);
+      solid.box(x, 9.24, z, 3.15, 0.025, 0.72, COPPER);
+      for (const dx of [-1.65, 1.65]) {
+        for (const dz of [-0.96, 0.96]) solid.box(x + dx, 9.34, z + dz, 0.18, 2.7, 0.18, WOOD);
+      }
+      solid.box(x, 10.72, z, 3.7, 0.13, 2.22, DARK_OAK);
+      for (const dx of [-1.28, -0.43, 0.43, 1.28]) solid.box(x + dx, 10.81, z, 0.79, 0.055, 2.12, dx < 0 ? RUG : COPPER);
+      solid.box(x, 10.12, z + 1.06, 2.2, 0.68, 0.1, IRON);
+      glow.box(x, 10.12, z + 1.12, 1.64, 0.37, 0.035, GOLD);
+      // Blacksmith behind the counter, plus an anvil and a small forge.
+      solid.box(x - 0.5, 8.84, z - 1.02, 0.58, 0.86, 0.36, IRON);
+      solid.box(x - 0.5, 9.47, z - 1.02, 0.42, 0.42, 0.42, CREAM);
+      solid.box(x - 0.5, 9.72, z - 1.02, 0.48, 0.16, 0.47, DARK_OAK);
+      solid.box(x + 0.65, 9.34, z - 0.12, 0.72, 0.15, 0.42, IRON);
+      solid.box(x + 0.65, 9.46, z - 0.12, 0.31, 0.08, 0.31, SLATE);
+      solid.box(x + 1.06, 8.45, z - 0.89, 0.65, 0.9, 0.65, SLATE);
+      glow.box(x + 1.06, 8.93, z - 0.89, 0.48, 0.11, 0.48, EMBER);
+      for (const dx of [-0.78, 0.78]) solid.box(x + dx, 9.4, z + 0.22, 0.28, 0.22, 0.28, IRON);
     }
 
     for (const [x, z] of TOWN_GATE_POSTS) {
