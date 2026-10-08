@@ -82,14 +82,17 @@ export function navigateMob(start: Position, desired: { x: number; z: number }, 
   const travel = Math.hypot(desired.x - start.x, desired.z - start.z);
   if (travel < 0.00001 || !isPlayerSupported(read, start.x, start.y, start.z)) return copyPose(start);
   const goalKey = `${Math.floor(goal.x)},${Math.floor(goal.y)},${Math.floor(goal.z)}`;
-  if (goalKey !== state.goalKey) { state.waypoints = []; state.goalKey = goalKey; }
-  if (now >= state.nextPlanAt) state.waypoints = [];
+  // A moving target must not discard a usable detour and then wait for the
+  // planner cooldown. Keep walking it until a replacement can be computed.
+  if (goalKey !== state.goalKey && now >= state.nextPlanAt) {
+    state.waypoints = []; state.goalKey = goalKey;
+  }
   while (state.waypoints[0] && horizontalDistance(start, state.waypoints[0]) < 0.12) state.waypoints.shift();
   if (!state.waypoints.length) {
     const direct = moveMobSafely(start, { x: desired.x - start.x, z: desired.z - start.z }, read, allowed);
     if (horizontalDistance(start, direct) >= travel * 0.8 && hasSafeLanding(direct, read)) return direct;
     if (now < state.nextPlanAt) return copyPose(start);
-    state.nextPlanAt = now + 750;
+    state.nextPlanAt = now + 250;
     state.waypoints = findMobPath(start, goal, read, allowed);
   }
   const waypoint = state.waypoints[0];

@@ -9,6 +9,25 @@ const wall: WorldBlockReader = (x, y, z) => x === 102 && z >= 99 && z <= 101 && 
 const start = { x: 100.5, y: 1, z: 100.5 };
 
 describe("terrain-aware mob navigation", () => {
+  it("keeps a usable detour moving when the target crosses a cell before replanning is allowed", () => {
+    const nearWall = { x: 101.7, y: 1, z: 100.5 };
+    const state = createMobNavigationState();
+    state.waypoints = [{ x: 101.7, y: 1, z: 102.5 }];
+    state.goalKey = "105,1,100"; state.nextPlanAt = 750;
+    const goal = { x: 106.5, y: 1, z: 100.5 };
+    const next = navigateMob(nearWall, { x: 101.75, z: 100.5 }, goal, state, 100, wall);
+    expect(next.z).toBeGreaterThan(nearWall.z);
+    expect(state.waypoints.length).toBe(1);
+  });
+  it("does not periodically discard a valid route to a stationary target", () => {
+    const state = createMobNavigationState();
+    state.waypoints = [{ x: 101.7, y: 1, z: 102.5 }];
+    state.goalKey = "105,1,100"; state.nextPlanAt = 750;
+    const next = navigateMob({ x: 101.7, y: 1, z: 100.5 }, { x: 101.75, z: 100.5 },
+      { x: 105.5, y: 1, z: 100.5 }, state, 800, wall);
+    expect(next.z).toBeGreaterThan(100.5);
+    expect(state.waypoints[0]?.z).toBe(102.5);
+  });
   it("accepts live Colyseus schema poses without copying schema internals", () => {
     const mob = new MobState();
     mob.x = start.x; mob.y = start.y; mob.z = start.z;

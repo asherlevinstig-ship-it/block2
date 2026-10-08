@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
@@ -1057,6 +1058,7 @@ interface LootVisual {
 }
 
 interface MobVisual {
+  locomotionSpeed: number;
   entity: pc.Entity;
   snapshots: RemoteSnapshot[];
   bodyRoot: pc.Entity;
@@ -1098,11 +1100,6 @@ interface MarkVisualState {
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const mobVisuals = new Map<string, MobVisual>();
-// Keep enemies responsive while retaining enough history to smooth 30 Hz state
-// patches. A short, speed-capped prediction bridges occasional late packets.
-const MOB_INTERPOLATION_DELAY_MS = 75;
-const MOB_MAX_EXTRAPOLATION_MS = 100;
-const MOB_MAX_EXTRAPOLATION_SPEED = 2.2;
 const lootVisuals = new Map<string, LootVisual>();
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 const combatAudio = new CombatAudio();
@@ -2118,6 +2115,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     markPips,
     marks: new Map(),
     state: mob,
+    locomotionSpeed: 0,
     lastHitSequence: mob.hitSequence,
     hitAt: 0,
     lastActionSequence: mob.actionSequence,
@@ -4300,6 +4298,7 @@ app.on("update", (dt: number) => {
       mob.frameAlive = mob.state.alive;
       if (mob.state.alive) {
         mob.art.walk = 0;
+        mob.locomotionSpeed = 0;
         mob.snapshots.length = 0;
         mob.snapshots.push({ receivedAt: animationNow, x: mob.state.x, y: mob.state.y, z: mob.state.z, yaw: mob.state.yaw });
         mob.entity.setPosition(mob.state.x, mob.state.y, mob.state.z);
@@ -4311,18 +4310,16 @@ app.on("update", (dt: number) => {
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
     const currentMobPosition = mob.entity.getPosition();
-    const sampled = sampleRemotePose(
-      mob.snapshots,
-      animationNow - MOB_INTERPOLATION_DELAY_MS,
-      mob.state.alive && mob.state.combatState === "idle" ? MOB_MAX_EXTRAPOLATION_MS : 0,
-      MOB_MAX_EXTRAPOLATION_SPEED,
-    ) ?? mob.state;
-    const moveX = sampled.x - currentMobPosition.x;
-    const moveZ = sampled.z - currentMobPosition.z;
-    const moveSpeed = Math.hypot(moveX, moveZ) / Math.max(0.001, frameTime);
+    const motion = advanceMobMotion({ x: currentMobPosition.x, y: currentMobPosition.y,
+      z: currentMobPosition.z, yaw: mob.entity.getEulerAngles().y }, mob.locomotionSpeed,
+      mob.snapshots, animationNow, frameTime, mob.state.alive && mob.state.combatState === "idle",
+      mob.state.combatState === "strike" || (mob.hitAt > 0 && animationNow - mob.hitAt < 180));
+    const sampled = motion.pose;
+    mob.locomotionSpeed = motion.gaitSpeed;
+    const moveSpeed = motion.gaitSpeed;
     mob.entity.setPosition(sampled.x, sampled.y, sampled.z);
     mob.entity.setEulerAngles(0, sampled.yaw, 0);
-    trimRemoteSnapshots(mob.snapshots, animationNow - MOB_INTERPOLATION_DELAY_MS);
+    trimMobSnapshots(mob.snapshots, animationNow);
     const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
     const presentation = enemyAttackPresentation(mob.state, animationNow + serverClock.offset);
     if (presentation.aimLocked) mob.entity.setEulerAngles(0, mob.state.yaw, 0);
