@@ -8,6 +8,10 @@ describe("item loot", () => {
       { itemId: "crawler_fang", quantity: 1 },
       { itemId: "fang_dagger", quantity: 1 },
     ]);
+    expect(lootForArchetype("briar_crawler")).toEqual([
+      { itemId: "moss_fibre", quantity: 1 },
+      { itemId: "crawler_fang", quantity: 1 },
+    ]);
     expect(lootForArchetype("stone_brute")).toEqual([
       { itemId: "stone_core", quantity: 1 },
       { itemId: "stone_core_hammer", quantity: 1 },

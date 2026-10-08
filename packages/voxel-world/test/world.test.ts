@@ -4,6 +4,7 @@ import {
   CHUNK_HEIGHT,
   CHUNK_SIZE,
   GRAVITY,
+  GREENWOOD_CAMP,
   MILESTONE_CAVE_X_OFFSET,
   SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
@@ -14,6 +15,7 @@ import {
   generateChunk,
   getBlock,
   highestSolidY,
+  isInGreenwoodRegion,
   isPlayerSupported,
   isProtectedVoxel,
   playerCollides,
@@ -182,15 +184,28 @@ describe("deterministic voxel world", () => {
     expect(getBlock(chunk, 8, surface + 1, 8)).toBe(Block.Air);
   });
 
-  it("generates one flat surface height across the overworld", () => {
+  it("keeps the terrain plane flat beneath authored wilderness features", () => {
     for (const [chunkX, chunkZ] of [[-2, -1], [-1, 2], [0, -2], [2, 2]]) {
       const chunk = generateChunk("test-world", chunkX, chunkZ);
       for (let z = 0; z < CHUNK_SIZE; z += 1) {
         for (let x = 0; x < CHUNK_SIZE; x += 1) {
-          expect(highestSolidY(chunk, x, z)).toBe(SURFACE_HEIGHT);
+          expect(getBlock(chunk, x, SURFACE_HEIGHT, z)).not.toBe(Block.Air);
+          const above = getBlock(chunk, x, SURFACE_HEIGHT + 1, z);
+          expect([Block.Air, Block.OakLog, Block.Leaves]).toContain(above);
         }
       }
     }
+  });
+
+  it("authors a harvestable Greenwood region beyond the east gate", () => {
+    expect(isInGreenwoodRegion(31, 8)).toBe(true);
+    expect(isInGreenwoodRegion(30, 8)).toBe(false);
+    const chunks = [generateChunk("test-world", 2, -1), generateChunk("test-world", 2, 0), generateChunk("test-world", 2, 1)];
+    const blocks = chunks.flatMap(chunk => [...chunk.blocks]);
+    expect(blocks.filter(block => block === Block.OakLog).length).toBeGreaterThan(6);
+    expect(blocks.filter(block => block === Block.Leaves).length).toBeGreaterThan(20);
+    const camp = generateChunk("test-world", 2, 0);
+    expect(getBlock(camp, GREENWOOD_CAMP.minX - 32, SURFACE_HEIGHT, GREENWOOD_CAMP.minZ)).toBe(Block.Dirt);
   });
 
   it("raycasts to the first solid voxel and reports the preceding cell", () => {

@@ -24,6 +24,8 @@ export const TOWN_BLACKSMITH_STALL_POSITION = { x: 22.5, y: 8, z: 2.5 } as const
 export const TOWN_BLACKSMITH_STALL_COLLIDER = { x: 22.5, z: 2.5, width: 3.1, depth: 0.7, minY: 8, maxY: 9.15 } as const;
 export const TOWN_BEACON_POSITION = { x: -2, z: 1 } as const;
 export const MILESTONE_CAVE_X_OFFSET = 14;
+export const GREENWOOD_REGION = { minX: 31, maxX: 47, minZ: -10, maxZ: 27 } as const;
+export const GREENWOOD_CAMP = { minX: 37, maxX: 45, minZ: 15, maxZ: 22 } as const;
 
 type FurnitureCollider = { x: number; z: number; width: number; depth: number; minY: number; maxY: number };
 export const TOWN_TAVERN_FURNITURE_COLLIDERS: readonly FurnitureCollider[] = [
@@ -39,6 +41,8 @@ export const Block = {
   Dirt: 3,
   Grass: 4,
   IronOre: 5,
+  OakLog: 6,
+  Leaves: 7,
 } as const;
 
 export type BlockId = (typeof Block)[keyof typeof Block];
@@ -99,6 +103,52 @@ export function hashSeed(seed: string): number {
 
 function noise(seed: number, x: number, y: number, z: number): number {
   return hash32(seed ^ Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) / 0xffffffff;
+}
+
+export function isInGreenwoodRegion(x: number, z: number): boolean {
+  return x >= GREENWOOD_REGION.minX && x <= GREENWOOD_REGION.maxX
+    && z >= GREENWOOD_REGION.minZ && z <= GREENWOOD_REGION.maxZ;
+}
+
+function isGreenwoodRoad(x: number, z: number): boolean {
+  return (x >= GREENWOOD_REGION.minX && x <= GREENWOOD_REGION.maxX && (z === 8 || z === 9))
+    || ((x === 39 || x === 40) && z >= 9 && z <= GREENWOOD_CAMP.minZ);
+}
+
+function isGreenwoodCampClearing(x: number, z: number): boolean {
+  return x >= GREENWOOD_CAMP.minX - 1 && x <= GREENWOOD_CAMP.maxX + 1
+    && z >= GREENWOOD_CAMP.minZ - 1 && z <= GREENWOOD_CAMP.maxZ + 1;
+}
+
+function isGreenwoodTreeCenter(seed: number, x: number, z: number): boolean {
+  if (x < GREENWOOD_REGION.minX + 2 || x > GREENWOOD_REGION.maxX - 2
+    || z < GREENWOOD_REGION.minZ + 2 || z > GREENWOOD_REGION.maxZ - 2
+    || isGreenwoodRoad(x, z) || isGreenwoodCampClearing(x, z)) return false;
+  return hash32(seed ^ Math.imul(x, 0x45d9f3b) ^ Math.imul(z, 0x119de1f3)) % 13 === 0;
+}
+
+/** Deterministic authored layer for the first Phase 1 wilderness region. */
+export function greenwoodRegionBlock(seedText: string, worldX: number, y: number, worldZ: number): BlockId | null {
+  if (!isInGreenwoodRegion(worldX, worldZ)) return null;
+  if (y === SURFACE_HEIGHT) return isGreenwoodRoad(worldX, worldZ) || isGreenwoodCampClearing(worldX, worldZ)
+    ? Block.Dirt
+    : Block.Grass;
+  if (y <= SURFACE_HEIGHT) return null;
+
+  const seed = hashSeed(seedText) ^ 0x6a09e667;
+  for (let dz = -2; dz <= 2; dz += 1) {
+    for (let dx = -2; dx <= 2; dx += 1) {
+      const centerX = worldX - dx;
+      const centerZ = worldZ - dz;
+      if (!isGreenwoodTreeCenter(seed, centerX, centerZ)) continue;
+      const trunkTop = 10 + (hash32(seed ^ Math.imul(centerX, 97) ^ Math.imul(centerZ, 193)) % 2);
+      if (dx === 0 && dz === 0 && y >= SURFACE_HEIGHT + 1 && y <= trunkTop) return Block.OakLog;
+      const canopyY = trunkTop + 1;
+      const horizontal = Math.abs(dx) + Math.abs(dz);
+      if (y >= trunkTop && y <= canopyY + 1 && horizontal <= (y === canopyY + 1 ? 1 : 3)) return Block.Leaves;
+    }
+  }
+  return null;
 }
 
 function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId | null {
@@ -238,6 +288,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
       for (let y = 1; y < CHUNK_HEIGHT; y += 1) {
         const caveBlock = milestoneCaveBlock(worldX, y, worldZ);
         if (caveBlock !== null) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
+        const greenwoodBlock = greenwoodRegionBlock(seedText, worldX, y, worldZ);
+        if (greenwoodBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = greenwoodBlock;
         const townBlock = townOfBeginningsBlock(worldX, y, worldZ);
         if (townBlock !== null) blocks[chunkIndex(localX, y, localZ)] = townBlock;
       }

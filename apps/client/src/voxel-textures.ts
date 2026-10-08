@@ -1,6 +1,7 @@
-import { Block, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
+import { Block, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, isInGreenwoodRegion, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
 
 export type VoxelTextureKind = "bedrock" | "stone" | "dirt" | "grass-top" | "grass-side" | "iron"
+  | "forest-grass-top" | "forest-grass-side" | "oak-bark" | "oak-rings" | "leaves"
   | "timber" | "slate-roof" | "paving" | "path" | "dressed-stone" | "bronze";
 
 type Rgb = readonly [number, number, number];
@@ -40,6 +41,9 @@ export function voxelTextureKind(block: number, normalY: number, x: number, y: n
   if (block === Block.Bedrock) return "bedrock";
   if (block === Block.Stone) return "stone";
   if (block === Block.Dirt) return "dirt";
+  if (block === Block.OakLog) return normalY === 0 ? "oak-bark" : "oak-rings";
+  if (block === Block.Leaves) return "leaves";
+  if (block === Block.Grass && isInGreenwoodRegion(x, z)) return normalY > 0 ? "forest-grass-top" : normalY < 0 ? "dirt" : "forest-grass-side";
   if (block === Block.Grass) return normalY > 0 ? "grass-top" : normalY < 0 ? "dirt" : "grass-side";
   return "iron";
 }
@@ -48,7 +52,7 @@ export function voxelTextureKind(block: number, normalY: number, x: number, y: n
 export function voxelTint(x: number, y: number, z: number, kind: VoxelTextureKind): Rgb {
   const broad = (hashPixel(Math.floor(x / 4), Math.floor(z / 4), 71) % 9 - 4) * 0.004;
   const detail = (hashPixel(x, z, y * 97) % 9 - 4) * 0.004;
-  const amount = 0.96 + detail + (kind.startsWith("grass") ? broad : 0);
+  const amount = 0.96 + detail + (kind.includes("grass") || kind === "leaves" ? broad : 0);
   return [amount, amount, amount];
 }
 
@@ -81,6 +85,31 @@ function grassPixel(x: number, y: number): Rgb {
   if ((x === 5 && y >= 5 && y <= 7) || (x === 6 && y === 6) || (x === 23 && y >= 22 && y <= 24)) color = [125, 151, 102];
   if ((x === 19 && y === 11) || (x === 20 && y === 10)) color = [99, 128, 82];
   return color;
+}
+
+function forestPixel(x: number, y: number): Rgb {
+  const cluster = hashPixel(Math.floor(x / 3), Math.floor(y / 3), 0x33aa77);
+  if (cluster % 11 === 0) return [57, 100, 54];
+  if (cluster % 7 === 0) return [72, 118, 60];
+  return (x + y) % 5 === 0 ? [64, 109, 56] : [68, 113, 58];
+}
+
+function oakPixel(kind: "oak-bark" | "oak-rings", x: number, y: number): Rgb {
+  if (kind === "oak-rings") {
+    const distance = Math.hypot(x - 15.5, y - 15.5);
+    return Math.floor(distance / 3) % 2 === 0 ? [156, 111, 59] : [115, 73, 37];
+  }
+  const groove = (x + Math.floor(y / 5) * 3) % 9;
+  if (groove <= 1) return [61, 40, 27];
+  if (groove === 2) return [119, 78, 42];
+  return vary([91, 58, 34], hashPixel(Math.floor(x / 3), Math.floor(y / 4), 91) % 9 - 4);
+}
+
+function leavesPixel(x: number, y: number): Rgb {
+  const cluster = hashPixel(Math.floor(x / 4), Math.floor(y / 4), 0x667733);
+  if (cluster % 9 === 0) return [112, 145, 64];
+  if (cluster % 5 === 0) return [48, 91, 45];
+  return [69, 116, 51];
 }
 
 function stonePixel(x: number, y: number): Rgb {
@@ -144,10 +173,17 @@ export function createVoxelTexturePixels(kind: VoxelTextureKind, size = 32): Uin
       let color = architecturalPixel(kind, x, y);
       if (!color) {
         if (kind === "grass-top") color = grassPixel(x, y);
+        else if (kind === "forest-grass-top") color = forestPixel(x, y);
+        else if (kind === "oak-bark" || kind === "oak-rings") color = oakPixel(kind, x, y);
+        else if (kind === "leaves") color = leavesPixel(x, y);
         else if (kind === "grass-side") {
           const grassDepth = 5 + (hashPixel(Math.floor(x / 4), 0, 19) % 3);
           color = y < grassDepth ? grassPixel(x, y) : earthPixel(x, y);
           if (y === grassDepth) color = [93, 101, 61];
+        } else if (kind === "forest-grass-side") {
+          const grassDepth = 7 + (hashPixel(Math.floor(x / 4), 0, 29) % 3);
+          color = y < grassDepth ? forestPixel(x, y) : earthPixel(x, y);
+          if (y === grassDepth) color = [62, 91, 48];
         } else if (kind === "dirt") color = earthPixel(x, y);
         else if (kind === "bedrock") color = vary(stonePixel(x, y), -60);
         else {

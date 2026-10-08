@@ -1,4 +1,4 @@
-export type MobArchetypeId = "moss_crawler" | "stone_brute" | "cave_spitter";
+export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter";
 
 export interface MobArchetypeDefinition {
   id: MobArchetypeId;
@@ -49,6 +49,30 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     respawnMs: 5000,
     rewardHealth: 0,
     rewardStamina: 12,
+  },
+  briar_crawler: {
+    id: "briar_crawler",
+    name: "Briar Crawler",
+    spawn: { x: 37.5, y: 8, z: 17.5 },
+    maxHealth: 10,
+    armor: 0,
+    attackKind: "melee",
+    speed: 1.5,
+    stopDistance: 1.4,
+    minimumAttackRange: 0,
+    aggroRange: 8,
+    windupMs: 720,
+    recoverMs: 470,
+    cooldownMs: 1250,
+    damage: 1,
+    lungeDistance: 1.05,
+    hitRange: 2.2,
+    projectileTravelMs: 0,
+    hazardDurationMs: 0,
+    hazardRadius: 0,
+    respawnMs: 6000,
+    rewardHealth: 0,
+    rewardStamina: 16,
   },
   stone_brute: {
     id: "stone_brute",
@@ -101,6 +125,7 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
 };
 
 export function mobArchetype(value: string): MobArchetypeDefinition {
+  if (value === "briar_crawler") return MOB_ARCHETYPES.briar_crawler;
   if (value === "stone_brute") return MOB_ARCHETYPES.stone_brute;
   if (value === "cave_spitter") return MOB_ARCHETYPES.cave_spitter;
   return MOB_ARCHETYPES.moss_crawler;

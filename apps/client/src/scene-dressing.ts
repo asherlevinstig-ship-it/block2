@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { Block, CHUNK_SIZE, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 
 type Color = readonly [number, number, number];
@@ -67,6 +67,7 @@ export class SceneDressing {
   private meshes: pc.Mesh[] = [];
   private fireLight: pc.Entity | null = null;
   private forgeLight: pc.Entity | null = null;
+  private campfireLight: pc.Entity | null = null;
   private keeper: pc.Entity | null = null;
   private keeperHead: pc.Entity | null = null;
   private keeperArm: pc.Entity | null = null;
@@ -105,6 +106,7 @@ export class SceneDressing {
     const time = timeMilliseconds * 0.001;
     if (this.fireLight?.light) this.fireLight.light.intensity = 1.35 + Math.sin(time * 8.3) * 0.11 + Math.sin(time * 13.7) * 0.055;
     if (this.forgeLight?.light) this.forgeLight.light.intensity = 0.85 + Math.sin(time * 10.1) * 0.08 + Math.sin(time * 17.3) * 0.035;
+    if (this.campfireLight?.light) this.campfireLight.light.intensity = 0.9 + Math.sin(time * 7.7) * 0.12 + Math.sin(time * 14.9) * 0.05;
     if (this.keeperHead) this.keeperHead.setLocalEulerAngles(0, Math.sin(time * 0.72) * 5, 0);
     if (this.keeperArm) this.keeperArm.setLocalEulerAngles(Math.sin(time * 1.65) * 8 - 8, 0, -6);
     for (const patron of this.patronHeads) {
@@ -211,6 +213,7 @@ export class SceneDressing {
     this.meshes = [];
     this.fireLight = null;
     this.forgeLight = null;
+    this.campfireLight = null;
     this.keeper = null;
     this.keeperHead = null;
     this.keeperArm = null;
@@ -239,6 +242,47 @@ export class SceneDressing {
           }
         }
       }
+    }
+
+    const campVisible = read(GREENWOOD_CAMP.minX, SURFACE_HEIGHT, GREENWOOD_CAMP.minZ) === Block.Dirt;
+    if (campVisible) {
+      const centerX = (GREENWOOD_CAMP.minX + GREENWOOD_CAMP.maxX) / 2 + 0.5;
+      const centerZ = (GREENWOOD_CAMP.minZ + GREENWOOD_CAMP.maxZ) / 2 + 0.5;
+      // An open forester lean-to keeps the player visible while reading as a landmark.
+      for (const x of [GREENWOOD_CAMP.minX + 0.5, GREENWOOD_CAMP.maxX + 0.5]) {
+        for (const z of [GREENWOOD_CAMP.minZ + 0.5, GREENWOOD_CAMP.maxZ + 0.5]) {
+          solid.box(x, 9.15, z, 0.24, 2.3, 0.24, DARK_OAK);
+          solid.box(x, 8.08, z, 0.36, 0.16, 0.36, FORGE_STONE);
+        }
+      }
+      for (let x = GREENWOOD_CAMP.minX; x <= GREENWOOD_CAMP.maxX; x += 1) {
+        solid.box(x + 0.5, 10.36, GREENWOOD_CAMP.maxZ + 0.48, 0.88, 0.12, 0.36, x % 2 ? OAK : WOOD);
+      }
+      solid.box(centerX + 2.3, 9.75, GREENWOOD_CAMP.maxZ + 0.47, 0.18, 1.5, 0.18, OAK);
+      solid.box(centerX - 2.3, 9.75, GREENWOOD_CAMP.maxZ + 0.47, 0.18, 1.5, 0.18, OAK);
+      for (const x of [GREENWOOD_CAMP.minX + 1.2, GREENWOOD_CAMP.minX + 2.0, GREENWOOD_CAMP.minX + 2.8]) {
+        solid.box(x, 8.28, GREENWOOD_CAMP.maxZ - 0.1, 0.62, 0.38, 0.62, OAK);
+        solid.box(x, 8.28, GREENWOOD_CAMP.maxZ - 0.1, 0.68, 0.08, 0.68, DARK_OAK);
+      }
+      // Campfire ring, chopping block, stacked timber and a trail-facing sign.
+      for (let index = 0; index < 8; index += 1) {
+        const angle = index / 8 * Math.PI * 2;
+        solid.box(centerX + Math.cos(angle) * 0.72, 8.12, centerZ + Math.sin(angle) * 0.72, 0.28, 0.22, 0.28, FORGE_STONE);
+      }
+      glow.box(centerX, 8.31, centerZ, 0.72, 0.5, 0.72, EMBER);
+      glow.box(centerX - 0.13, 8.58, centerZ, 0.18, 0.7, 0.18, GOLD);
+      glow.box(centerX + 0.16, 8.52, centerZ + 0.08, 0.16, 0.58, 0.16, CREAM);
+      solid.box(centerX - 2.1, 8.42, centerZ + 1.2, 0.72, 0.82, 0.72, OAK);
+      solid.box(centerX - 2.1, 8.85, centerZ + 1.2, 0.78, 0.08, 0.78, DARK_OAK);
+      for (const [x, z, yaw] of [[centerX + 2.0, centerZ + 1.3, 18], [centerX + 2.25, centerZ + 1.05, -8], [centerX + 1.72, centerZ + 1.0, 32]] as const) {
+        solid.box(x, 8.25, z, 0.34, 0.34, 1.65, OAK);
+        solid.box(x, 8.25, z, 0.38, 0.08, 1.72, DARK_OAK);
+        void yaw;
+      }
+      solid.box(39.5, 9.25, 14.35, 0.18, 2.45, 0.18, DARK_OAK);
+      solid.box(39.5, 10.0, 14.28, 2.3, 0.72, 0.16, OAK);
+      glow.box(39.5, 10.0, 14.18, 1.92, 0.44, 0.035, GOLD);
+      solid.box(39.5, 10.0, 14.13, 1.5, 0.09, 0.025, DARK_OAK);
     }
 
     // Keep the existing hall art in local coordinates while moving the entire tavern south.
@@ -523,6 +567,12 @@ export class SceneDressing {
       this.forgeLight.addComponent("light", { type: "omni", color: new pc.Color(1, 0.35, 0.09), intensity: 0.85, range: 4.5, castShadows: false });
       this.forgeLight.setPosition(TOWN_BLACKSMITH_STALL_POSITION.x + 1.05, 8.75, TOWN_BLACKSMITH_STALL_POSITION.z - 0.58);
       this.root.addChild(this.forgeLight);
+    }
+    if (campVisible) {
+      this.campfireLight = new pc.Entity("greenwood-campfire-light");
+      this.campfireLight.addComponent("light", { type: "omni", color: new pc.Color(1, 0.42, 0.12), intensity: 0.9, range: 6, castShadows: false });
+      this.campfireLight.setPosition((GREENWOOD_CAMP.minX + GREENWOOD_CAMP.maxX) / 2 + 0.5, 8.7, (GREENWOOD_CAMP.minZ + GREENWOOD_CAMP.maxZ) / 2 + 0.5);
+      this.root.addChild(this.campfireLight);
     }
     if (furnishedTavern) this.createTavernKeeper();
   }

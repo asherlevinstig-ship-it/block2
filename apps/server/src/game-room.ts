@@ -58,7 +58,7 @@ import {
   type WeaponAttackReleased,
   type ItemId,
   type LootPickedUp,
-  type MineralMined,
+  type ResourceGathered,
   type TavernQuizUpdate,
 } from "@blockcraft/protocol";
 import {
@@ -208,6 +208,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.setState(new WorldState());
     this.registerMob("moss-crawler", "moss_crawler", MOB_ARCHETYPES.moss_crawler.spawn);
+    this.registerMob("greenwood-briar", "briar_crawler", MOB_ARCHETYPES.briar_crawler.spawn);
+    this.registerMob("greenwood-briar-north", "briar_crawler", { x: 43.5, y: 8, z: 23.5 });
     this.registerMob("stone-brute", "stone_brute", MOB_ARCHETYPES.stone_brute.spawn);
     this.registerMob("cave-spitter", "cave_spitter", MOB_ARCHETYPES.cave_spitter.spawn);
     this.registerMob("wild-crawler", "moss_crawler", { x: 39.5, y: 8, z: 18.5 });
@@ -277,13 +279,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         ? { x: 40.5, y: 8, z: 6.5 }
         : process.env.NODE_ENV !== "production" && requestedQaSpawn === "blacksmith"
           ? { x: 22.5, y: 8, z: 4.3 }
-          : process.env.NODE_ENV !== "production" && requestedQaSpawn === "tavern"
-            ? { x: 8.5, y: 8, z: 20.5 }
+        : process.env.NODE_ENV !== "production" && requestedQaSpawn === "tavern"
+          ? { x: 8.5, y: 8, z: 20.5 }
+        : process.env.NODE_ENV !== "production" && requestedQaSpawn === "greenwood"
+          ? { x: 39.5, y: 8, z: 13.5 }
         : this.spawnPoint();
     player.x = spawn.x;
     player.y = spawn.y;
     player.z = spawn.z;
-    if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter")) {
+    if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter" || requestedQaSpawn === "greenwood")) {
       player.invulnerableUntil = Date.now() + 60 * 60 * 1000;
     }
     if (process.env.NODE_ENV !== "production" && requestedQaSpawn === "blacksmith") {
@@ -1566,7 +1570,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (mineral) {
       const carried = player.inventory.get(mineral)?.quantity ?? 0;
       if (carried >= ironCapacity(player.blacksmithUpgrades)) {
-        client.send("mineral:mined", { itemId: mineral, quantity: 0, total: carried } satisfies MineralMined);
+        client.send("resource:gathered", { itemId: mineral, quantity: 0, total: carried } satisfies ResourceGathered);
         return;
       }
     }
@@ -1591,7 +1595,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const before = item.quantity;
       item.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), inventoryTotal(before, minedIronQuantity(player.blacksmithUpgrades)));
       void this.persistPlayer(client.sessionId, player);
-      client.send("mineral:mined", { itemId: mineral, quantity: item.quantity - before, total: item.quantity } satisfies MineralMined);
+      client.send("resource:gathered", { itemId: mineral, quantity: item.quantity - before, total: item.quantity } satisfies ResourceGathered);
+    } else if (current === Block.OakLog) {
+      let item = player.inventory.get("timber");
+      if (!item) {
+        item = new InventoryItemState();
+        player.inventory.set("timber", item);
+      }
+      item.quantity = inventoryTotal(item.quantity, 1);
+      void this.persistPlayer(client.sessionId, player);
+      client.send("resource:gathered", { itemId: "timber", quantity: 1, total: item.quantity } satisfies ResourceGathered);
     }
   }
 

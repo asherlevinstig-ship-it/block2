@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Block, CHUNK_HEIGHT, townOfBeginningsBlock } from "@blockcraft/voxel-world";
 import { createVoxelTexturePixels, voxelCornerLight, voxelTextureKind, type VoxelTextureKind } from "./voxel-textures.js";
 
-const kinds: VoxelTextureKind[] = ["bedrock", "stone", "dirt", "grass-top", "grass-side", "iron", "timber", "slate-roof", "paving", "path", "dressed-stone", "bronze"];
+const kinds: VoxelTextureKind[] = ["bedrock", "stone", "dirt", "grass-top", "grass-side", "forest-grass-top", "forest-grass-side", "oak-bark", "oak-rings", "leaves", "iron", "timber", "slate-roof", "paving", "path", "dressed-stone", "bronze"];
 
 describe("procedural voxel textures", () => {
   it("generates deterministic opaque pixel maps with visible variation", () => {
@@ -31,6 +31,10 @@ describe("procedural voxel textures", () => {
     expect(voxelTextureKind(Block.Stone, 1, 8, 7, 8)).toBe("paving");
     expect(voxelTextureKind(Block.Dirt, 0, 32, 6, 6)).toBe("dirt");
     expect(voxelTextureKind(Block.IronOre, 0, 32, 3, 6)).toBe("iron");
+    expect(voxelTextureKind(Block.Grass, 1, 36, 7, 18)).toBe("forest-grass-top");
+    expect(voxelTextureKind(Block.OakLog, 0, 36, 8, 18)).toBe("oak-bark");
+    expect(voxelTextureKind(Block.OakLog, 1, 36, 10, 18)).toBe("oak-rings");
+    expect(voxelTextureKind(Block.Leaves, 0, 36, 11, 18)).toBe("leaves");
   });
 
   it("shades enclosed voxel corners without darkening open surfaces", () => {

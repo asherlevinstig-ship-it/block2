@@ -10,6 +10,10 @@ const LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: ItemId; quant
     { itemId: "crawler_fang", quantity: 1 },
     { itemId: "fang_dagger", quantity: 1 },
   ],
+  briar_crawler: [
+    { itemId: "moss_fibre", quantity: 1 },
+    { itemId: "crawler_fang", quantity: 1 },
+  ],
   stone_brute: [
     { itemId: "stone_core", quantity: 1 },
     { itemId: "stone_core_hammer", quantity: 1 },

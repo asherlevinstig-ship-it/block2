@@ -30,7 +30,7 @@ import {
   type DefenseResolved,
   type ItemId,
   type LootPickedUp,
-  type MineralMined,
+  type ResourceGathered,
   type TavernQuizUpdate,
   TAVERN_QUIZ_STARTING_COINS,
   type MainHandId,
@@ -59,6 +59,7 @@ import {
   TERMINAL_VELOCITY,
   TOWN_BUILDINGS,
   chunkIndex,
+  isInGreenwoodRegion,
   isProtectedVoxel,
   isPlayerSupported,
   resolvePlayerMotion,
@@ -1294,9 +1295,19 @@ const DANGER_ZONE_LABELS = [
   { name: "DEEP FRONTIER", detail: "Elite enemies · highest danger and rewards" },
 ] as const;
 
-function updateDangerZone(tierValue: number): void {
+let localDangerTier = 0;
+let dangerZoneKey = "";
+
+function updateDangerZone(tierValue: number, position = localPlayer.getPosition()): void {
   const tier = Math.max(0, Math.min(3, Math.floor(tierValue)));
-  const label = DANGER_ZONE_LABELS[tier]!;
+  localDangerTier = tier;
+  const greenwood = tier > 0 && isInGreenwoodRegion(position.x, position.z);
+  const label = greenwood
+    ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
+    : DANGER_ZONE_LABELS[tier]!;
+  const nextKey = `${tier}:${greenwood}`;
+  if (nextKey === dangerZoneKey) return;
+  dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
   dangerZoneName.textContent = label.name;
   dangerZoneTier.textContent = tier === 0 ? "SAFE" : `TIER ${tier}`;
@@ -1915,13 +1926,14 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   entity.addChild(bodyRoot);
   const isBrute = mob.archetype === "stone_brute";
   const isSpitter = mob.archetype === "cave_spitter";
+  const isBriar = mob.archetype === "briar_crawler";
   const tierColor = mob.difficultyTier >= 3
     ? new pc.Color(1, 0.2, 0.08)
     : mob.difficultyTier === 2
       ? new pc.Color(1, 0.62, 0.08)
       : new pc.Color(0.35, 0.9, 0.28);
   const bodyMaterial = coloredMaterial(
-    isBrute ? new pc.Color(0.38, 0.43, 0.48) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : new pc.Color(0.28, 0.42, 0.21),
+    isBrute ? new pc.Color(0.38, 0.43, 0.48) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
   );
   bodyMaterial.shininess = 12;
   // Keep the emissive shader feature active while varying cue intensity.
@@ -2014,6 +2026,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 
 const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   iron_ore: coloredMaterial(new pc.Color(0.57, 0.65, 0.68)),
+  timber: coloredMaterial(new pc.Color(0.48, 0.3, 0.14)),
   reinforced_pickaxe: coloredMaterial(new pc.Color(0.76, 0.8, 0.78)),
   moss_fibre: coloredMaterial(new pc.Color(0.28, 0.68, 0.2)),
   crawler_fang: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
@@ -2666,10 +2679,11 @@ function updateTarget(): void {
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMark?.stacks ?? 0}` : "none";
-  const nextKey = `${interactionMode}:${targetKey}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}`;
+  const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
-  mineButton.textContent = blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? "Mine" : "Attack";
+  mineButton.textContent = blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
@@ -2688,6 +2702,8 @@ function updateTarget(): void {
   } else if (interactionMode === "combat") targetLabel.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name}: aim toward the Moss Crawler and attack`;
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
+  else if (currentTarget.block === Block.OakLog) targetLabel.textContent = `Greenwood oak · ${targetKey} · chop for timber`;
+  else if (currentTarget.block === Block.Leaves) targetLabel.textContent = `Greenwood canopy · ${targetKey} · clear foliage`;
   else targetLabel.textContent = `Target: ${targetKey} · mineable`;
 }
 
@@ -2750,7 +2766,9 @@ function renderBootstrap(payload: WorldBootstrap): void {
     `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)}`,
   );
   worldReady = true;
-  status.textContent = "Welcome to the Town of Beginnings. The mine road leaves through the east gate.";
+  status.textContent = isInGreenwoodRegion(initialPosition.x, initialPosition.z)
+    ? "Greenwood Outskirts · harvest oak timber and investigate the abandoned forester camp."
+    : "Welcome to the Town of Beginnings. The mine road leaves through the east gate.";
 }
 
 const keys = new Set<string>();
@@ -2826,6 +2844,7 @@ let surfaceReferenceY: number | null = null;
 let surfaceReturnStartedAt: number | null = null;
 let surfaceRestoreStartSliceY: number | null = null;
 let undergroundLightingBlend = 0;
+let greenwoodLightingBlend = 0;
 let undergroundClassification = false;
 let excavationClassification = false;
 let surfaceReturnClassification = false;
@@ -3101,6 +3120,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const lightingResponse = 1 - Math.exp(-Math.max(0, dt) * 5);
   undergroundLightingBlend += (lightingTarget - undergroundLightingBlend) * lightingResponse;
   if (Math.abs(lightingTarget - undergroundLightingBlend) < 0.001) undergroundLightingBlend = lightingTarget;
+  const greenwoodTarget = !visibilityCutaway && isInGreenwoodRegion(position.x, position.z) ? 1 : 0;
+  greenwoodLightingBlend += (greenwoodTarget - greenwoodLightingBlend) * (1 - Math.exp(-Math.max(0, dt) * 2.2));
+  if (Math.abs(greenwoodTarget - greenwoodLightingBlend) < 0.001) greenwoodLightingBlend = greenwoodTarget;
+  updateDangerZone(localDangerTier, position);
   caveLight.enabled = undergroundLightingBlend > 0.001;
   if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
   exitTrail.enabled = visibilityCutaway;
@@ -3109,10 +3132,20 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   if (light.light) light.light.intensity = 1.45 + (0.45 - 1.45) * undergroundLightingBlend;
   if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend);
   if (caveLight.light) caveLight.light.intensity = 1.7 * undergroundLightingBlend;
+  const surfaceAmbient = {
+    r: 0.43 + (0.3 - 0.43) * greenwoodLightingBlend,
+    g: 0.48 + (0.43 - 0.48) * greenwoodLightingBlend,
+    b: 0.54 + (0.36 - 0.54) * greenwoodLightingBlend,
+  };
   app.scene.ambientLight.set(
-    0.43 + (0.2 - 0.43) * undergroundLightingBlend,
-    0.48 + (0.24 - 0.48) * undergroundLightingBlend,
-    0.54 + (0.31 - 0.54) * undergroundLightingBlend,
+    surfaceAmbient.r + (0.2 - surfaceAmbient.r) * undergroundLightingBlend,
+    surfaceAmbient.g + (0.24 - surfaceAmbient.g) * undergroundLightingBlend,
+    surfaceAmbient.b + (0.31 - surfaceAmbient.b) * undergroundLightingBlend,
+  );
+  app.scene.fog.color.set(
+    0.21 + (0.11 - 0.21) * greenwoodLightingBlend,
+    0.3 + (0.24 - 0.3) * greenwoodLightingBlend,
+    0.32 + (0.2 - 0.32) * greenwoodLightingBlend,
   );
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(
@@ -4660,9 +4693,13 @@ async function connect(): Promise<void> {
     status.textContent = `Picked up ${item.name} · ${message.total} total.`;
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
   });
-  room.onMessage("mineral:mined", (message: MineralMined) => {
-    if (message.itemId !== "iron_ore") return;
-    updateInventoryItem("iron_ore", message.total);
+  room.onMessage("resource:gathered", (message: ResourceGathered) => {
+    updateInventoryItem(message.itemId, message.total);
+    if (message.itemId === "timber") {
+      showCombatFeedback(`+${message.quantity} GREENWOOD TIMBER`, "dodge");
+      status.textContent = `Chopped Greenwood oak · ${message.total} timber carried.`;
+      return;
+    }
     if (message.quantity > 0) {
       const reinforced = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0;
       showCombatFeedback(`${reinforced ? "REINFORCED STRIKE · " : ""}+${message.quantity} IRON ORE`, "dodge");

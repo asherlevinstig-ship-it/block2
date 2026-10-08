@@ -23,6 +23,14 @@ describe("mob archetypes", () => {
     expect(mobArchetype("unknown").id).toBe("moss_crawler");
     expect(mobArchetype("stone_brute").id).toBe("stone_brute");
     expect(mobArchetype("cave_spitter").attackKind).toBe("projectile");
+    expect(mobArchetype("briar_crawler").name).toBe("Briar Crawler");
+  });
+
+  it("makes the regional Briar Crawler a quicker Greenwood threat", () => {
+    const briar = MOB_ARCHETYPES.briar_crawler;
+    expect(briar.speed).toBeGreaterThan(MOB_ARCHETYPES.moss_crawler.speed);
+    expect(briar.maxHealth).toBeGreaterThan(MOB_ARCHETYPES.moss_crawler.maxHealth);
+    expect(briar.spawn.x).toBeGreaterThan(30);
   });
 
   it("gives the Cave Spitter a dodgeable projectile and lingering hazard", () => {
