@@ -94,8 +94,12 @@ export function localReconciliationRate(
   sequenceLag = 0,
   authoritativeInputReady = true,
   authoritativeAgeMs = 0,
+  acknowledgementAgeMs = 0,
 ): number {
   if (!moving && !authoritativeInputReady) return 0;
+  // Freshness must be checked before both soft and hard corrections. A large
+  // distance from an old snapshot is not evidence of an invalid local position.
+  if (authoritativeAgeMs > 200 || (moving && acknowledgementAgeMs > 350)) return 0;
   const boundedLag = Math.max(0, Math.min(12, sequenceLag));
   const hardCorrectionDistance = moving ? 2.5 + boundedLag * 0.4 : 3;
   if (distance > hardCorrectionDistance) return Number.POSITIVE_INFINITY;
@@ -103,10 +107,19 @@ export function localReconciliationRate(
     // Each outstanding 50 ms input represents about .21 m of normal travel.
     // Allow .25 m including speed bonuses; older snapshots must not act like
     // ground friction. Large invalid divergences still use the hard bound above.
-    if (authoritativeAgeMs > 200) return 0;
     return distance > 1.75 + boundedLag * 0.25 ? 0.75 : 0;
   }
   return distance > 0.05 ? 8 : 0;
+}
+
+/** Ease a visual recovery without moving its collision position off the server. */
+export function smoothRecoveryOffset(offset: MovementVector, deltaTime: number): MovementVector {
+  const length = Math.hypot(offset.x, offset.z);
+  if (length < 0.001) return { x: 0, z: 0 };
+  const dt = Math.max(0, Math.min(deltaTime, 0.05));
+  const travel = Math.min(length * (1 - Math.exp(-8 * dt)), 7 * dt);
+  const fraction = 1 - travel / length;
+  return { x: offset.x * fraction, z: offset.z * fraction };
 }
 
 export function reconciliationVerticalTarget(

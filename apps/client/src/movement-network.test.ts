@@ -11,6 +11,7 @@ import {
   sampleRemotePose,
   smoothVerticalOffset,
   smoothNetworkVisualOffset,
+  smoothRecoveryOffset,
   trimRemoteSnapshots,
 } from "./movement-network.js";
 
@@ -99,8 +100,22 @@ describe("movement networking", () => {
   it("does not apply friction against a stalled authoritative snapshot", () => {
     expect(localReconciliationRate(2, true, 0, true, 350)).toBe(0);
     expect(localReconciliationRate(2, true, 0, true, 30)).toBe(0.75);
-    expect(localReconciliationRate(8, true, 6, true, 350)).toBe(Infinity);
-    expect(localReconciliationRate(0.3, false, 0, true, 350)).toBe(8);
+    expect(localReconciliationRate(8, true, 6, true, 350)).toBe(0);
+    expect(localReconciliationRate(0.3, false, 0, true, 350)).toBe(0);
+  });
+
+  it("ignores the captured 7.33-block snap while acknowledgements are stalled", () => {
+    expect(localReconciliationRate(7.33, true, 23, true, 1055, 1437)).toBe(0);
+    expect(localReconciliationRate(7.33, true, 23, true, 6, 1437)).toBe(0);
+    expect(localReconciliationRate(7.447, false, 4, true, 6, 6)).toBe(Infinity);
+  });
+
+  it("bounds each visible recovery frame after fresh server data arrives", () => {
+    let offset = { x: 0, z: -7.447 };
+    const next = smoothRecoveryOffset(offset, .0424);
+    expect(Math.abs(next.z - offset.z)).toBeLessThanOrEqual(7 * .0424 + .000001);
+    for (let index = 0; index < 150; index += 1) offset = smoothRecoveryOffset(offset, 1 / 60);
+    expect(Math.abs(offset.z)).toBeLessThan(.001);
   });
 
   it.each([[2.835, 5], [2.979, 6], [3.487, 9], [3.834, 12]])(

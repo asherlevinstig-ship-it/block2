@@ -84,6 +84,7 @@ import {
   sampleRemotePose,
   smoothVerticalOffset,
   smoothNetworkVisualOffset,
+  smoothRecoveryOffset,
   trimRemoteSnapshots,
   type RemoteSnapshot,
 } from "./movement-network.js";
@@ -1068,6 +1069,7 @@ const authoritativeLocalPosition = new pc.Vec3(8.5, 11, 8.5);
 let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
 let localNetworkVisualOffset = { x: 0, z: 0 };
+let localRecoveryVisualOffset = { x: 0, z: 0 };
 const localPowerVisualOffset = new pc.Vec3();
 let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
@@ -2797,6 +2799,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localVerticalVelocity = 0;
   localVisualVerticalOffset = 0;
   localNetworkVisualOffset = { x: 0, z: 0 };
+  localRecoveryVisualOffset = { x: 0, z: 0 };
   localPowerVisualOffset.set(0, 0, 0);
   localPlayerVisual.setLocalPosition(0, 0, 0);
   surfaceReferenceY = SURFACE_HEIGHT + 1;
@@ -4010,7 +4013,7 @@ function reconcileLocalPlayer(
   const target = authoritativeLocalPosition.clone();
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
-  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, performance.now() - lastAuthoritativeMovementAt);
+  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, performance.now() - lastAuthoritativeMovementAt, performance.now() - lastAcknowledgementAdvancedAt);
   if (!Number.isFinite(reconciliationRate)) {
     const mobilityAdvance = localActivePower !== null
       && POWER_DEFINITIONS[localActivePower].core === "mobility"
@@ -4019,6 +4022,11 @@ function reconcileLocalPlayer(
     if (mobilityAdvance) {
       localPowerVisualOffset.x += position.x - target.x;
       localPowerVisualOffset.z += position.z - target.z;
+    } else {
+      // Preserve the rendered location on receipt, then recover at a bounded
+      // speed. Collision and combat remain at the authoritative location.
+      localRecoveryVisualOffset.x += position.x - target.x + localNetworkVisualOffset.x;
+      localRecoveryVisualOffset.z += position.z - target.z + localNetworkVisualOffset.z;
     }
     localVisualVerticalOffset += position.y - target.y;
     localPlayer.setPosition(target);
@@ -4121,7 +4129,8 @@ app.on("update", (dt: number) => {
   updateActiveChunkMeshes(localPlayer.getPosition());
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPowerVisualOffset.mulScalar(Math.max(0, 1 - frameTime * 11));
-  localPlayerVisual.setLocalPosition(localPowerVisualOffset.x + localNetworkVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z + localNetworkVisualOffset.z);
+  localRecoveryVisualOffset = smoothRecoveryOffset(localRecoveryVisualOffset, frameTime);
+  localPlayerVisual.setLocalPosition(localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z);
   const animationNow = performance.now();
   sceneDressing.update(animationNow);
   const animationTime = animationNow / 1000;
@@ -4452,9 +4461,9 @@ app.on("update", (dt: number) => {
       ? `${Math.ceil(specialRemaining / 1000)}s`
       : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
   cameraTarget.set(
-    player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x,
+    player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x,
     player.y + localVisualVerticalOffset,
-    player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z,
+    player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z,
   );
   indoorCameraBlend = advanceIndoorCameraBlend(indoorCameraBlend, indoorRoofBuilding !== null && !playerCutaway.active, frameTime);
   cameraFocus.copy(cameraTarget);
@@ -4474,7 +4483,7 @@ app.on("update", (dt: number) => {
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   updateObjectiveGuidance();
   const bodyY = localPlayerRig.root.getLocalPosition().y;
-  const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z);
+  const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
   updateUndergroundPresentation(player, frameTime);
   updateIndoorRoof(player);
@@ -4605,6 +4614,7 @@ app.on("update", (dt: number) => {
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `net visual ${localNetworkVisualOffset.x.toFixed(3)}, ${localNetworkVisualOffset.z.toFixed(3)}`,
+      `recovery   ${localRecoveryVisualOffset.x.toFixed(3)}, ${localRecoveryVisualOffset.z.toFixed(3)}`,
       `vertical   v=${localVerticalVelocity.toFixed(3)} visual=${localVisualVerticalOffset.toFixed(3)}`,
       `animation  weight=${localPlayerRig.locomotionWeight.toFixed(3)} phase=${localPlayerRig.locomotionPhase.toFixed(2)} bodyY=${bodyY.toFixed(3)}`,
       `camera     yaw=${(cameraOrbit.yaw * 180 / Math.PI).toFixed(1)} pitch=${(cameraOrbit.pitch * 180 / Math.PI).toFixed(1)} screen=${playerScreen ? `${playerScreen.x.toFixed(1)}, ${playerScreen.y.toFixed(1)}` : "n/a"}`,
