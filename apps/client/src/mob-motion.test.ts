@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { advanceMobMotion, mobLocomotionSpeed, trimMobSnapshots } from "./mob-motion.js";
+import { advanceMobMotion, advanceMobYaw, mobLocomotionSpeed, trimMobSnapshots } from "./mob-motion.js";
 import type { RemoteSnapshot } from "./movement-network.js";
 
 const sample = (receivedAt: number, x: number): RemoteSnapshot => ({ receivedAt, x, y: 8, z: 0, yaw: 90 });
 describe("mob movement presentation", () => {
+  it("follows a full circle without folding at the engine's 90-degree Euler boundary", () => {
+    let yaw = 0;
+    for (let frame = 1; frame <= 720; frame++) {
+      const target = frame * 0.5;
+      const next = advanceMobYaw(yaw, target, 1 / 60);
+      expect(next).toBeGreaterThan(yaw);
+      expect(next - yaw).toBeLessThanOrEqual(6);
+      yaw = next;
+    }
+    expect(yaw).toBeGreaterThan(350);
+    for (let frame = 0; frame < 120; frame++) yaw = advanceMobYaw(yaw, 0, 1 / 60);
+    expect(yaw).toBeCloseTo(360, 4);
+  });
+  it("takes the shortest turn across wraparound and caps a delayed-packet turn", () => {
+    expect(advanceMobYaw(179, -179, 1 / 60)).toBeGreaterThan(179);
+    expect(advanceMobYaw(-179, 179, 1 / 60)).toBeLessThan(-179);
+    expect(Math.abs(advanceMobYaw(0, 180, 1 / 60))).toBeLessThanOrEqual(6);
+    expect(advanceMobYaw(-1080, -1070, 1 / 60)).toBeGreaterThan(-1080);
+    expect(advanceMobYaw(0, 180, 0)).toBe(0);
+  });
   it("removes the pause-then-5.82-blocks/sec jump caused by a delayed patch", () => {
     const packets = [sample(0, 0), sample(33, 0.04455), sample(66, 0.0891), sample(300, 0.405), sample(333, 0.44955), sample(366, 0.4941)];
     let pose = { x: 0, y: 8, z: 0, yaw: 90 }; let gait = 0; const speeds: number[] = [];

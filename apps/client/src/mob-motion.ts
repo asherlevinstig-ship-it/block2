@@ -1,5 +1,13 @@
 import { sampleRemotePose, type RemoteSnapshot, type SampledRemotePose } from "./movement-network.js";
 
+/** Store this scalar between frames: an engine Euler Y is ambiguous past 90°. */
+export function advanceMobYaw(current: number, target: number, dt: number): number {
+  const elapsed = Math.max(0, Math.min(dt, 0.1));
+  const angle = ((target - current) % 360 + 540) % 360 - 180;
+  const turn = angle * (1 - Math.exp(-14 * elapsed));
+  return current + Math.max(-360 * elapsed, Math.min(360 * elapsed, turn));
+}
+
 export function mobLocomotionSpeed(snapshots: readonly RemoteSnapshot[], moving: boolean): number {
   if (!moving || snapshots.length < 2) return 0;
   const last = snapshots[snapshots.length - 1]!;
@@ -23,9 +31,8 @@ export function advanceMobMotion(current: SampledRemotePose, previousGait: numbe
   const alpha = 1 - Math.exp(-(impulse ? 35 : 24) * elapsed);
   const maximumTravel = (impulse ? 12 : Math.max(speed, gaitSpeed) + 1.2) * elapsed;
   const scale = distance > 0 ? Math.min(alpha, maximumTravel / distance) : 0;
-  const angle = ((target.yaw - current.yaw + 540) % 360) - 180;
   return { pose: { x: current.x + dx * scale, z: current.z + dz * scale,
-    y: current.y + (target.y - current.y) * alpha, yaw: current.yaw + angle * alpha }, gaitSpeed };
+    y: current.y + (target.y - current.y) * alpha, yaw: advanceMobYaw(current.yaw, target.yaw, elapsed) }, gaitSpeed };
 }
 
 export function trimMobSnapshots(snapshots: RemoteSnapshot[], now: number): void {

@@ -1063,6 +1063,7 @@ interface LootVisual {
 
 interface MobVisual {
   locomotionSpeed: number;
+  renderYaw: number;
   entity: pc.Entity;
   snapshots: RemoteSnapshot[];
   bodyRoot: pc.Entity;
@@ -2141,6 +2142,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     marks: new Map(),
     state: mob,
     locomotionSpeed: 0,
+    renderYaw: mob.yaw,
     lastHitSequence: mob.hitSequence,
     hitAt: 0,
     lastActionSequence: mob.actionSequence,
@@ -2301,6 +2303,7 @@ function bindMobs(joinedRoom: Room): void {
         if (latest && Math.hypot(snapshot.x - latest.x, snapshot.z - latest.z) > 2.5) {
           visual.snapshots.length = 0;
           visual.entity.setPosition(snapshot.x, snapshot.y, snapshot.z);
+          visual.renderYaw = snapshot.yaw;
           visual.entity.setEulerAngles(0, snapshot.yaw, 0);
         }
         visual.snapshots.push(snapshot);
@@ -4328,6 +4331,7 @@ app.on("update", (dt: number) => {
         mob.snapshots.length = 0;
         mob.snapshots.push({ receivedAt: animationNow, x: mob.state.x, y: mob.state.y, z: mob.state.z, yaw: mob.state.yaw });
         mob.entity.setPosition(mob.state.x, mob.state.y, mob.state.z);
+        mob.renderYaw = mob.state.yaw;
       }
     }
     const defeat = mob.state.alive ? 0 : Math.min(1, (animationNow - mob.defeatAt) / 580);
@@ -4337,18 +4341,21 @@ app.on("update", (dt: number) => {
     mob.statusRoot.enabled = mob.state.alive;
     const currentMobPosition = mob.entity.getPosition();
     const motion = advanceMobMotion({ x: currentMobPosition.x, y: currentMobPosition.y,
-      z: currentMobPosition.z, yaw: mob.entity.getEulerAngles().y }, mob.locomotionSpeed,
+      z: currentMobPosition.z, yaw: mob.renderYaw }, mob.locomotionSpeed,
       mob.snapshots, animationNow, frameTime, mob.state.alive && mob.state.combatState === "idle",
       mob.state.combatState === "strike" || (mob.hitAt > 0 && animationNow - mob.hitAt < 180));
     const sampled = motion.pose;
     mob.locomotionSpeed = motion.gaitSpeed;
     const moveSpeed = motion.gaitSpeed;
     mob.entity.setPosition(sampled.x, sampled.y, sampled.z);
-    mob.entity.setEulerAngles(0, sampled.yaw, 0);
+    mob.renderYaw = sampled.yaw;
     trimMobSnapshots(mob.snapshots, animationNow);
     const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
     const presentation = enemyAttackPresentation(mob.state, animationNow + serverClock.offset);
-    if (presentation.aimLocked) mob.entity.setEulerAngles(0, mob.state.yaw, 0);
+    // Committed attacks must match the authoritative strike direction. Keep
+    // the scalar in sync so recovery never resumes from an aliased Euler Y.
+    if (presentation.aimLocked) mob.renderYaw = mob.state.yaw;
+    mob.entity.setEulerAngles(0, mob.renderYaw, 0);
     const attackElapsed = presentation.elapsed;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
     const attackPeak = mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
