@@ -5,6 +5,8 @@ import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   BRAMBLE_SNARE,
+  playerMeleeStrike,
+  sampleMeleeStrike,
   BLACKSMITH_UPGRADES,
   IRON_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
@@ -896,6 +898,7 @@ function animateVoxelCharacter(
   actionMainHandId: MainHandId | null = null,
   powerElapsedMilliseconds: number | null = null,
   powerId: PowerId | null = null,
+  actionYaw?: number | null,
 ): void {
   const locomotion = advanceLocomotionAnimation(
     { phase: rig.locomotionPhase, weight: rig.locomotionWeight },
@@ -928,6 +931,29 @@ function animateVoxelCharacter(
   rig.leftKnee.setLocalEulerAngles(pose.leftKneePitch, 0, 0);
   rig.rightKnee.setLocalEulerAngles(pose.rightKneePitch, 0, 0);
   rig.scarf.setLocalEulerAngles(pose.scarfPitch, 0, pose.torsoRoll * -1.5);
+  for (const id of ["longsword", "fang_dagger", "stone_core_hammer"] as const) {
+    const weapon = rig.mainHands[id];
+    weapon.setLocalPosition(0, id === "longsword" ? -0.29 : -0.28, id === "longsword" ? 0.085 : 0.1);
+    weapon.setLocalEulerAngles(0, 0, 0);
+    weapon.setLocalScale(1, 1, 1);
+  }
+  const strike = actionMainHandId ? playerMeleeStrike(actionMainHandId, actionStep) : null;
+  if (strike && actionMainHandId && actionElapsedMilliseconds !== null && !powerPose.active) {
+    const timing = WEAPON_ATTACK_DEFINITIONS[actionMainHandId].attacks[actionStep - 1];
+    if (timing) {
+      const start = timing.impactMs - strike.beforeImpactMs;
+      const end = timing.impactMs + strike.afterImpactMs;
+      const elapsed = actionElapsedMilliseconds;
+      const blend = Math.max(0, Math.min(1, elapsed / Math.max(1, start), (timing.durationMs - elapsed) / Math.max(1, timing.durationMs - end)));
+      const blade = sampleMeleeStrike(rig.root.getPosition(), actionYaw ?? rig.root.getEulerAngles().y, strike, (elapsed - start) / (end - start));
+      const weapon = rig.mainHands[actionMainHandId];
+      const delta = new pc.Vec3(blade.tip.x - blade.base.x, blade.tip.y - blade.base.y, blade.tip.z - blade.base.z);
+      const rotation = new pc.Quat().setFromEulerAngles(-90 - Math.atan2(delta.y, Math.hypot(delta.x, delta.z)) * 180 / Math.PI, Math.atan2(delta.x, delta.z) * 180 / Math.PI, 0);
+      weapon.setPosition(new pc.Vec3().lerp(weapon.getPosition(), new pc.Vec3(blade.base.x, blade.base.y, blade.base.z), blend));
+      weapon.setRotation(new pc.Quat().slerp(weapon.getRotation(), rotation, blend));
+      weapon.setLocalScale(1, 1 + (delta.length() / strike.weaponLength - 1) * blend, 1);
+    }
+  }
 }
 
 const localPlayerVisual = new pc.Entity("local-player-visual");
@@ -4200,7 +4226,7 @@ app.on("update", (dt: number) => {
     localPowerStepApplied = true;
   }
   if (animationNow >= localHitPauseUntil) {
-    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed(), animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower);
+    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed(), animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower, localActionFacingYaw);
     if (localDefending) applyDefensePose(localPlayerRig);
   }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
@@ -4236,7 +4262,7 @@ app.on("update", (dt: number) => {
       remote.entity.setEulerAngles(0, pose.yaw, 0);
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
-      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remote.actionMainHandId, remotePowerElapsed, remote.powerId);
+      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remote.actionMainHandId, remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y);
       if (remote.defending) applyDefensePose(remote.rig);
       if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {
         remote.actionStartedAt = null;
@@ -4289,7 +4315,10 @@ app.on("update", (dt: number) => {
     const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
     const attackElapsed = animationNow - mob.actionAt;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
-    const attackStrength = mob.actionAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackElapsed / attackDuration * Math.PI) : 0;
+    const attackPeak = mob.isSpitter ? attackDuration / 2 : mob.isBrute ? 280 : 150;
+    const attackPhase = attackElapsed < attackPeak ? attackElapsed / attackPeak * 0.5
+      : 0.5 + (attackElapsed - attackPeak) / (attackDuration - attackPeak) * 0.5;
+    const attackStrength = mob.actionAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
     const staggerElapsed = animationNow - mob.staggerAt;
     const staggerStrength = mob.staggerAt > 0 && mob.state.alive && mob.state.combatState === "stagger" && staggerElapsed >= 0
       ? 0.25 + 0.75 * Math.exp(-staggerElapsed / 600) : 0;

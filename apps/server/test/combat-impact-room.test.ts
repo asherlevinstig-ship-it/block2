@@ -12,6 +12,8 @@ interface Internals {
   pendingMobProjectiles: Map<string, { end: Pose }>;
   mobHazards: Map<string, unknown>;
   mobCommittedAim: Map<string, Pose & { yaw: number }>;
+  pendingMobMelee: Map<string, { targetId: string; yaw: number; impactAt: number }>;
+  resolveMobMelee(now: number): void;
   resolvePendingAttacks(now: number): void;
   resolveWeaponProjectiles(now: number): void;
   resolveMobProjectiles(now: number): void;
@@ -39,6 +41,38 @@ function fixture(read = flat) {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("authoritative combat impacts", () => {
+  it("only damages during the blade contact window and never twice", () => {
+    const { mob, internal } = fixture(); mob.x = 102;
+    internal.pendingAttacks.set("player", { requestId: "sweep", mainHandId: "longsword", step: 1, yaw: 90, impactAt: 10_135 });
+    internal.resolvePendingAttacks(10_090); expect(mob.health).toBe(30);
+    internal.resolvePendingAttacks(10_225); expect(mob.health).toBe(29);
+    internal.resolvePendingAttacks(10_500); expect(mob.health).toBe(29);
+    expect(internal.pendingAttacks.size).toBe(0);
+  });
+  it("ends a missed swing without recovery damage", () => {
+    const { mob, internal, release, events } = fixture();
+    release("longsword"); internal.resolvePendingAttacks(10_090);
+    expect(events.filter(event => event.type === "combat:miss")).toHaveLength(1);
+    mob.x = 102; internal.resolvePendingAttacks(10_300);
+    expect(mob.health).toBe(30);
+  });
+  it("delays enemy melee contact until its strike and consumes it once", () => {
+    const { player, mob, internal } = fixture(); mob.x = 99.2; mob.combatState = "recover";
+    internal.pendingMobMelee.set("mob", { targetId: "player", yaw: 90, impactAt: 10_150 });
+    internal.resolveMobMelee(10_090); expect(player.health).toBe(5);
+    internal.resolveMobMelee(10_235); expect(player.health).toBe(4);
+    internal.resolveMobMelee(10_300); expect(player.health).toBe(4);
+  });
+  it("lets a sidestep or stagger cancel an enemy contact", () => {
+    const { player, mob, internal } = fixture(); mob.x = 99.2; mob.combatState = "recover";
+    internal.pendingMobMelee.set("mob", { targetId: "player", yaw: 90, impactAt: 10_150 });
+    player.z += 2; internal.resolveMobMelee(10_235); expect(player.health).toBe(5);
+    player.z -= 2;
+    internal.pendingMobMelee.set("mob", { targetId: "player", yaw: 90, impactAt: 10_150 });
+    internal.staggerMob("mob", mob, 10_000, 650);
+    internal.resolveMobMelee(10_235); expect(player.health).toBe(5);
+    expect(internal.pendingMobMelee.size).toBe(0);
+  });
   it("deals no projectile damage at release or before contact, then damages exactly once on contact", () => {
     const { mob, internal, release } = fixture();
     release(); expect(mob.health).toBe(30);
@@ -150,6 +184,7 @@ describe("authoritative combat impacts", () => {
     internal.simulatePlayers(0.033);
     expect(mob.combatState).toBe("windup");
     blocked = true; vi.setSystemTime(10_800); internal.simulatePlayers(0.033);
+    internal.resolveMobMelee(11_050);
     expect(player.health).toBe(5);
   });
 });

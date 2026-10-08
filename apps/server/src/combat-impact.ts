@@ -1,6 +1,20 @@
 import { voxelRaycast, type WorldBlockReader } from "@blockcraft/voxel-world";
 import type { Position } from "./action-rules.js";
-import type { MainHandId } from "@blockcraft/protocol";
+import { sampleMeleeStrike, type MeleeStrikeProfile, type MainHandId } from "@blockcraft/protocol";
+
+/** Sample the blade's swept contact window, not a range/facing cone. */
+export function meleeSweepImpact(origin: Position, yaw: number, profile: MeleeStrikeProfile,
+  from: number, to: number, targets: readonly ProjectileTarget[], read: WorldBlockReader): string | null {
+  const visible = targets.filter(target => hasCombatLineOfSight(origin, target, read))
+    .map(target => ({ ...target, radius: (target.radius ?? 0.38) + profile.radius }));
+  const steps = Math.max(1, Math.ceil(Math.abs(to - from) * 32));
+  for (let i = 0; i <= steps; i++) {
+    const blade = sampleMeleeStrike(origin, yaw, profile, from + (to - from) * i / steps);
+    const impact = projectileImpact(blade.base, blade.tip, visible, read);
+    if (impact?.kind === "entity") return impact.targetId ?? null;
+  }
+  return null;
+}
 
 export const ENEMY_AIM_COMMIT_MS = 250;
 export const STAGGER_IMMUNITY_MS = 800;

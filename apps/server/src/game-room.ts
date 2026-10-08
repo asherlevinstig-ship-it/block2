@@ -1,6 +1,8 @@
 import { Client, Room } from "@colyseus/core";
 import {
   AttackRequestSchema,
+  playerMeleeStrike,
+  mobMeleeStrike,
   BLACKSMITH_UPGRADES,
   BlacksmithForgeSchema,
   ChunkRegionRequestSchema,
@@ -88,7 +90,7 @@ import {
 } from "@blockcraft/voxel-world";
 import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
-import { canMobLungeHit, dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
+import { dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "./radial-difficulty.js";
@@ -117,7 +119,7 @@ import {
 } from "./movement-input.js";
 import { activeObjective, createObjectiveProgress, creditObjectiveDefeat, nextObjectiveTarget, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
-import { ENEMY_AIM_COMMIT_MS, STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, isInsideCommittedArc, projectileImpact } from "./combat-impact.js";
+import { ENEMY_AIM_COMMIT_MS, STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -137,6 +139,7 @@ interface PendingAttack {
   yaw: number;
   step: 1 | 2 | 3;
   impactAt: number;
+  lastSweepAt?: number;
 }
 
 interface ActiveBrambleSnare {
@@ -198,6 +201,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly verticalVelocities = new Map<string, number>();
   private readonly attackChains = new Map<string, AttackChainState>();
   private readonly pendingAttacks = new Map<string, PendingAttack>();
+  private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
@@ -764,6 +768,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.staggerSequence += 1;
     this.mobCommittedAim.delete(mobId);
     this.mobStaggerImmuneUntil.set(mobId, mob.stateUntil + STAGGER_IMMUNITY_MS);
+    this.pendingMobMelee.delete(mobId);
     return true;
   }
 
@@ -783,6 +788,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = mobArchetype(mob.archetype);
     this.spawnLootDrops(mobId, mob, now);
     mob.alive = false;
+    this.pendingMobMelee.delete(mobId);
     mob.respawnAt = now + definition.respawnMs;
     mob.combatState = "idle";
     mob.stateUntil = 0;
@@ -1111,6 +1117,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.resolvePendingPowers(now);
     this.resolvePendingAttacks(now);
+    this.resolveMobMelee(now);
     this.resolveWeaponProjectiles(now);
     this.resolveBrambleSnares(now);
     this.resolveMobProjectiles(now);
@@ -1203,9 +1210,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             x: Math.sin(aim.yaw * Math.PI / 180) * lungeDistance, z: Math.cos(aim.yaw * Math.PI / 180) * lungeDistance,
           });
         }
-        if (!canMobLungeHit(mob, targetPlayer, targetPlayer.invulnerableUntil, now, definition.hitRange)) continue;
-        if (!isInsideCommittedArc(mob, targetPlayer, aim.yaw) || !hasCombatLineOfSight(mob, targetPlayer, this.readWorldBlock)) continue;
-        this.damagePlayer(mobId, mob.targetId, mob.attackDamage, now);
+        this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw,
+          impactAt: now + (mob.archetype === "stone_brute" ? 280 : 150) });
         continue;
       }
       const players = [...this.state.players.entries()].map(([id, player]) => ({
@@ -1824,8 +1830,48 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.actionSequence += 1;
   }
 
+  private resolveMobMelee(now: number): void {
+    for (const [mobId, pending] of this.pendingMobMelee) {
+      const mob = this.state.mobs.get(mobId);
+      const player = this.state.players.get(pending.targetId);
+      if (!mob?.alive || mob.combatState !== "recover" || !player) { this.pendingMobMelee.delete(mobId); continue; }
+      const strike = mobMeleeStrike(mob.archetype);
+      const start = pending.impactAt - strike.beforeImpactMs;
+      const end = pending.impactAt + strike.afterImpactMs;
+      if (now < start) continue;
+      const hit = meleeSweepImpact(mob, pending.yaw, strike,
+        (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
+        (Math.min(now, end) - start) / (end - start), [{ id: pending.targetId, x: player.x, y: player.y, z: player.z }], this.readWorldBlock);
+      pending.lastSweepAt = Math.min(now, end);
+      if (hit || now >= end) this.pendingMobMelee.delete(mobId);
+      if (hit) this.damagePlayer(mobId, hit, mob.attackDamage, now);
+    }
+  }
+
   private resolvePendingAttacks(now: number): void {
     for (const [sessionId, pending] of this.pendingAttacks) {
+      const strike = playerMeleeStrike(pending.mainHandId, pending.step);
+      if (strike) {
+        const start = pending.impactAt - strike.beforeImpactMs;
+        const end = pending.impactAt + strike.afterImpactMs;
+        if (now < start) continue;
+        const player = this.state.players.get(sessionId);
+        if (!player) { this.pendingAttacks.delete(sessionId); continue; }
+        const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive)
+          .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38 }));
+        const hit = meleeSweepImpact(player, pending.yaw, strike,
+          (Math.max(start, pending.lastSweepAt ?? start) - start) / (end - start),
+          (Math.min(now, end) - start) / (end - start), targets, this.readWorldBlock);
+        pending.lastSweepAt = Math.min(now, end);
+        if (hit) {
+          this.pendingAttacks.delete(sessionId);
+          this.applyWeaponHit(sessionId, pending, hit, now);
+        } else if (now >= end) {
+          this.pendingAttacks.delete(sessionId);
+          this.broadcast("combat:miss", { attackerId: sessionId, mainHandId: pending.mainHandId, comboStep: pending.step } satisfies CombatMiss);
+        }
+        continue;
+      }
       if (now < pending.impactAt) continue;
       this.pendingAttacks.delete(sessionId);
       const player = this.state.players.get(sessionId);

@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-combat-impact-v17";
+export const WORLD_ROOM = "world-melee-sweep-v18";
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
 export const WORLD_STREAM_CHUNK_RADIUS = 2;
 
@@ -137,7 +137,7 @@ export const WEAPON_ATTACK_DEFINITIONS = {
   longsword: {
     combo: true,
     comboWindowMs: COMBO_CHAIN_WINDOW_MS,
-    range: 2.6,
+    range: 2.1,
     minimumFacingDot: 0.35,
     projectileTravelMs: 0,
     attacks: COMBAT_ATTACKS,
@@ -161,7 +161,7 @@ export const WEAPON_ATTACK_DEFINITIONS = {
   fang_dagger: {
     combo: true,
     comboWindowMs: 420,
-    range: 2.2,
+    range: 1.65,
     minimumFacingDot: 0.42,
     projectileTravelMs: 0,
     attacks: [
@@ -173,7 +173,7 @@ export const WEAPON_ATTACK_DEFINITIONS = {
   stone_core_hammer: {
     combo: false,
     comboWindowMs: 0,
-    range: 2.75,
+    range: 2.1,
     minimumFacingDot: 0.28,
     projectileTravelMs: 0,
     attacks: [{ step: 1, durationMs: 820, impactMs: 430, damage: 3, knockback: 1.35 }],
@@ -708,3 +708,5 @@ export interface ActionRejected {
   action: "move" | "mine" | "attack" | "dodge" | "defense" | "power" | "special" | "loadout";
   reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate" | "stamina" | "cooldown" | "compatibility";
 }
+
+export * from "./melee-strikes.js";
