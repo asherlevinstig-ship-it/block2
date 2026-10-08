@@ -60,6 +60,7 @@ import {
   type LootPickedUp,
   type ResourceGathered,
   type TavernQuizUpdate,
+  WORLD_BOOTSTRAP_CHUNK_RADIUS,
 } from "@blockcraft/protocol";
 import {
   Block,
@@ -594,8 +595,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private bootstrapPayload(): WorldBootstrap {
     const chunks: ChunkSnapshot[] = [];
-    for (let chunkZ = -2; chunkZ <= 2; chunkZ += 1) {
-      for (let chunkX = -2; chunkX <= 2; chunkX += 1) chunks.push(this.snapshot(chunkX, chunkZ));
+    for (let chunkZ = -WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkZ <= WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkZ += 1) {
+      for (let chunkX = -WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkX <= WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkX += 1) {
+        chunks.push(this.snapshot(chunkX, chunkZ));
+      }
     }
     return {
       seed: this.worldSeed,

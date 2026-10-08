@@ -277,8 +277,8 @@ app.setCanvasResolution(pc.RESOLUTION_AUTO);
 app.scene.ambientLight = new pc.Color(0.43, 0.48, 0.54);
 app.scene.fog.type = pc.FOG_LINEAR;
 app.scene.fog.color = new pc.Color(0.21, 0.3, 0.32);
-app.scene.fog.start = 55;
-app.scene.fog.end = 100;
+app.scene.fog.start = 34;
+app.scene.fog.end = 58;
 app.start();
 
 const camera = new pc.Entity("camera");
@@ -398,6 +398,7 @@ interface ClientChunk {
 
 const chunks = new Map<string, ClientChunk>();
 let activeChunkViewKey: string | null = null;
+const ACTIVE_CHUNK_RENDER_RADIUS = 2;
 let indoorRoofBuilding: (typeof TOWN_BUILDINGS)[number] | null = null;
 const playerCutaway: PlayerCutaway = {
   active: false,
@@ -574,7 +575,8 @@ function updateActiveChunkMeshes(position: { x: number; z: number }): void {
   if (viewKey === activeChunkViewKey) return;
   activeChunkViewKey = viewKey;
   for (const chunk of chunks.values()) {
-    const nearby = Math.abs(chunk.chunkX - address.chunkX) <= 1 && Math.abs(chunk.chunkZ - address.chunkZ) <= 1;
+    const nearby = Math.abs(chunk.chunkX - address.chunkX) <= ACTIVE_CHUNK_RENDER_RADIUS
+      && Math.abs(chunk.chunkZ - address.chunkZ) <= ACTIVE_CHUNK_RENDER_RADIUS;
     chunk.root.enabled = nearby;
     if (nearby && chunk.renderedSliceKey !== cutawayStateKey) rebuildChunk(chunk);
   }

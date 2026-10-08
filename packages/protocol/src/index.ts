@@ -3,7 +3,8 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-greenwood-v9";
+export const WORLD_ROOM = "world-greenwood-v10";
+export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 4;
 
 export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
 export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
