@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { playerMeleeStrike, sampleMeleeStrike } from "@blockcraft/protocol";
+import { playerMeleeStrike, sampleMeleeStrike, mobMeleeStrike, mobStrikeGroundOutline } from "@blockcraft/protocol";
 import { Block, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { meleeSweepImpact } from "../src/combat-impact.js";
 
@@ -7,6 +7,20 @@ const origin = { x: 10.5, y: 1, z: 10.5 };
 const flat: WorldBlockReader = (_x, y) => y < 1 ? Block.Stone : Block.Air;
 const sword = playerMeleeStrike("longsword", 1)!;
 describe("animated melee sweep", () => {
+  it.each([0, 45, 90, 180])("keeps every brute body contact inside its ground marker at yaw %s", yaw => {
+    const outline = mobStrikeGroundOutline("stone_brute", yaw);
+    const center = { x: 0, y: 1, z: 0 };
+    let contacts = 0;
+    for (let x = -3; x <= 3; x += 0.25) for (let z = -3; z <= 3; z += 0.25) {
+      if (!meleeSweepImpact(center, yaw, mobMeleeStrike("stone_brute"), 0, 1, [{ id: "target", x, y: 1, z }], flat)) continue;
+      contacts++;
+      expect(outline.every((a, i) => {
+        const b = outline[(i + 1) % outline.length]!;
+        return (b.x - a.x) * (z - a.z) - (b.z - a.z) * (x - a.x) >= -0.001;
+      })).toBe(true);
+    }
+    expect(contacts).toBeGreaterThan(0);
+  });
   it("sweeps a forward target, not targets behind or beyond the blade", () => {
     const hit = (x: number, z: number) => meleeSweepImpact(origin, 0, sword, 0, 1,
       [{ id: "target", x, y: 1, z }], flat);

@@ -1,3 +1,4 @@
+import { mobAimCommitMs } from "@blockcraft/protocol";
 /** Offset against performance.now(), so client wall-clock changes cannot shift attacks. */
 export interface ServerClock { offset: number; bestRtt: number; synchronized: boolean }
 export const createServerClock = (localNow: number, epochNow: number): ServerClock => ({
@@ -15,6 +16,7 @@ export function sampleServerClock(clock: ServerClock, sentAt: number, receivedAt
 
 export interface EnemyTimeline {
   alive: boolean; combatState: string; aimCommitted: boolean;
+  archetype?: string;
   attackStartedAt: number; attackReleaseAt: number; attackContactAt: number;
   attackContactEndAt: number; attackRecoveryEndAt: number;
 }
@@ -27,7 +29,7 @@ export function enemyAttackPresentation(mob: EnemyTimeline, serverNow: number) {
   return {
     phase,
     warning: mob.alive && (phase === "windup" || phase === "strike"),
-    aimLocked: phase === "strike" || (phase === "windup" && (mob.aimCommitted || serverNow >= mob.attackReleaseAt - 250)),
+    aimLocked: phase === "strike" || (phase === "windup" && (mob.aimCommitted || serverNow >= mob.attackReleaseAt - mobAimCommitMs(mob.archetype ?? ""))),
     elapsed: valid ? serverNow - mob.attackReleaseAt : -1,
     // Don't replay effects for an old attack when joining or resuming a background tab.
     impactDue: valid && serverNow >= mob.attackContactAt && serverNow <= mob.attackContactEndAt + 200,

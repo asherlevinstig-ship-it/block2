@@ -10,6 +10,7 @@ import {
   playerMeleeStrike,
   sampleMeleeStrike,
   mobMeleeImpactMs,
+  mobStrikeGroundOutline,
   BLACKSMITH_UPGRADES,
   IRON_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
@@ -1027,6 +1028,9 @@ interface NetworkMob {
   attackStartedAt: number;
   attackReleaseAt: number;
   attackContactAt: number;
+  attackStrikeX: number;
+  attackStrikeY: number;
+  attackStrikeZ: number;
   attackContactEndAt: number;
   attackRecoveryEndAt: number;
   stateUntil: number;
@@ -1070,6 +1074,8 @@ interface MobVisual {
   warning: pc.Entity;
   warningMaterial: pc.StandardMaterial;
   warningScale: number;
+  warningMesh: pc.Mesh | null;
+  warningYaw: number;
   healthFill: pc.Entity;
   healthWidth: number;
   healthBarY: number;
@@ -1957,6 +1963,15 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
   cameraShakeUntil = performance.now() + 420;
 }
 
+function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number): void {
+  const outline = mobStrikeGroundOutline(archetype, yaw);
+  mesh.setPositions(outline.flatMap(point => [point.x, 0, point.z]));
+  mesh.setNormals(outline.flatMap(() => [0, 1, 0]));
+  const indices: number[] = [];
+  for (let i = 1; i < outline.length - 1; i++) indices.push(0, i + 1, i);
+  mesh.setIndices(indices); mesh.update(pc.PRIMITIVE_TRIANGLES);
+}
+
 function createBruteSlamImpact(mob: MobVisual): void {
   const root = new pc.Entity("stone-brute-slam");
   const material = powerMaterial(new pc.Color(0.92, 0.34, 0.07), 0.9);
@@ -2066,17 +2081,25 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     pip.setLocalEulerAngles(0, 45, 45);
   }
   const warning = new pc.Entity("lunge-warning");
-  warning.addComponent("render", { type: "cylinder" });
-  if (warning.render) warning.render.material = warningMaterial;
+  const warningMesh = isBrute ? new pc.Mesh(app.graphicsDevice) : null;
+  if (warningMesh) {
+    updateStrikeWarningMesh(warningMesh, mob.archetype, mob.yaw);
+    warning.addComponent("render", { meshInstances: [new pc.MeshInstance(warningMesh, warningMaterial)], castShadows: false, receiveShadows: false });
+  } else {
+    warning.addComponent("render", { type: "cylinder" });
+    if (warning.render) warning.render.material = warningMaterial;
+  }
   warning.setLocalPosition(0, 0.035, 0);
   const warningScale = isBrute ? 5.5 : isSpitter ? 3.6 : 4.2;
-  warning.setLocalScale(warningScale, 0.025, warningScale);
+  warning.setLocalScale(isBrute ? 1 : warningScale, isBrute ? 1 : 0.025, isBrute ? 1 : warningScale);
   warning.enabled = false;
-  addBox(warning, "attack-direction", warningMaterial, [0.06, 1.2, 0.46], [0, 0.8, 0.25]);
-  const arrowLeft = addBox(warning, "attack-direction-left", warningMaterial, [0.06, 1.2, 0.18], [-0.05, 0.8, 0.43]);
-  const arrowRight = addBox(warning, "attack-direction-right", warningMaterial, [0.06, 1.2, 0.18], [0.05, 0.8, 0.43]);
-  arrowLeft.setLocalEulerAngles(0, -40, 0);
-  arrowRight.setLocalEulerAngles(0, 40, 0);
+  if (!isBrute) {
+    addBox(warning, "attack-direction", warningMaterial, [0.06, 1.2, 0.46], [0, 0.8, 0.25]);
+    const arrowLeft = addBox(warning, "attack-direction-left", warningMaterial, [0.06, 1.2, 0.18], [-0.05, 0.8, 0.43]);
+    const arrowRight = addBox(warning, "attack-direction-right", warningMaterial, [0.06, 1.2, 0.18], [0.05, 0.8, 0.43]);
+    arrowLeft.setLocalEulerAngles(0, -40, 0);
+    arrowRight.setLocalEulerAngles(0, 40, 0);
+  }
   entity.addChild(warning);
   const mark = new pc.Entity("hunters-mark");
   mark.addComponent("render", { type: "cylinder" });
@@ -2105,6 +2128,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warning,
     warningMaterial,
     warningScale,
+    warningMesh,
+    warningYaw: mob.yaw,
     healthFill,
     healthWidth,
     healthBarY,
@@ -2282,7 +2307,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -2291,6 +2316,7 @@ function bindMobs(joinedRoom: Room): void {
     }
   }, true);
   mobs.onRemove((_mob: NetworkMob, mobId: string) => {
+    mobVisuals.get(mobId)?.warningMesh?.destroy();
     mobVisuals.get(mobId)?.entity.destroy();
     mobVisuals.delete(mobId);
   });
@@ -4364,7 +4390,15 @@ app.on("update", (dt: number) => {
     mob.warning.enabled = presentation.warning;
     if (mob.warning.enabled) {
       const warningPulse = 1 + Math.sin(animationTime * 18) * 0.045;
-      mob.warning.setLocalScale(mob.warningScale * warningPulse, 0.025, mob.warningScale * warningPulse);
+      if (mob.warningMesh) {
+        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25) {
+          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw);
+          mob.warningYaw = mob.state.yaw;
+        }
+        mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
+        mob.warning.setEulerAngles(0, 0, 0);
+        mob.warning.setLocalScale(1, 1, 1);
+      } else mob.warning.setLocalScale(mob.warningScale * warningPulse, 0.025, mob.warningScale * warningPulse);
       mob.warningMaterial.diffuse.set(0.95, presentation.aimLocked ? 0.12 : 0.58, 0.06);
       mob.warningMaterial.emissive.set(0.7, presentation.aimLocked ? 0.04 : 0.28, 0.02);
       mob.warningMaterial.opacity = (presentation.aimLocked ? 0.4 : 0.25) + windupStrength * 0.22;
@@ -5090,7 +5124,7 @@ async function connect(): Promise<void> {
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
     remotePlayers.clear();
-    for (const mob of mobVisuals.values()) mob.entity.destroy();
+    for (const mob of mobVisuals.values()) { mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();

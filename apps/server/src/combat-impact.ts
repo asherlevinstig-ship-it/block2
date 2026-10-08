@@ -16,7 +16,6 @@ export function meleeSweepImpact(origin: Position, yaw: number, profile: MeleeSt
   return null;
 }
 
-export const ENEMY_AIM_COMMIT_MS = 250;
 export const STAGGER_IMMUNITY_MS = 800;
 export const bodyPoint = (pose: Position): Position => ({ x: pose.x, y: pose.y + 0.72, z: pose.z });
 export const flightPoint = (start: Position, end: Position, fraction: number): Position => ({

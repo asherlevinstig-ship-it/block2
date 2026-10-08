@@ -47,6 +47,32 @@ export function mobMeleeStrike(archetype: string): MeleeStrikeProfile {
 }
 
 export const mobMeleeImpactMs = (archetype: string): number => archetype === "stone_brute" ? 280 : 150;
+export const mobAimCommitMs = (archetype: string): number => archetype === "stone_brute" ? 650 : 250;
+
+/** Conservative XZ danger boundary, including the player's body contact margin. */
+export function mobStrikeGroundOutline(archetype: string, yaw: number): { x: number; z: number }[] {
+  const profile = mobMeleeStrike(archetype);
+  const padding = profile.radius + 0.38 + 0.02;
+  const points: { x: number; z: number }[] = [];
+  for (let i = 0; i <= 24; i++) {
+    const blade = sampleMeleeStrike({ x: 0, y: 0, z: 0 }, yaw, profile, i / 24);
+    for (const point of [blade.base, blade.tip]) for (const x of [-padding, padding]) for (const z of [-padding, padding]) {
+      points.push({ x: point.x + x, z: point.z + z });
+    }
+  }
+  points.sort((a, b) => a.x - b.x || a.z - b.z);
+  const cross = (a: { x: number; z: number }, b: { x: number; z: number }, c: { x: number; z: number }) =>
+    (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+  const half = (list: typeof points) => {
+    const hull: typeof points = [];
+    for (const point of list) {
+      while (hull.length >= 2 && cross(hull[hull.length - 2]!, hull[hull.length - 1]!, point) <= 0) hull.pop();
+      hull.push(point);
+    }
+    return hull.slice(0, -1);
+  };
+  return [...half(points), ...half([...points].reverse())];
+}
 
 export function sampleMeleeStrike(origin: StrikePoint, yaw: number, profile: MeleeStrikeProfile, progress: number):
   { base: StrikePoint; tip: StrikePoint } {

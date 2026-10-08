@@ -5,6 +5,10 @@ const mob: EnemyTimeline = { alive: true, combatState: "windup", aimCommitted: f
   attackStartedAt: 10_000, attackReleaseAt: 11_150, attackContactAt: 11_430,
   attackContactEndAt: 11_530, attackRecoveryEndAt: 12_380 };
 describe("authoritative enemy presentation", () => {
+  it("shows the brute's early aim-lock cue, without changing other enemies", () => {
+    expect(enemyAttackPresentation({ ...mob, archetype: "stone_brute" }, 10_550).aimLocked).toBe(true);
+    expect(enemyAttackPresentation({ ...mob, archetype: "moss_crawler" }, 10_550).aimLocked).toBe(false);
+  });
   it("estimates the server clock from 300 ms RTT without relying on client wall-clock accuracy", () => {
     const clock = sampleServerClock(createServerClock(100, 999999), 100, 400, 10_150);
     expect(clock.synchronized).toBe(true); expect(clock.offset).toBe(9900);

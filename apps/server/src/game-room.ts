@@ -4,6 +4,7 @@ import {
   playerMeleeStrike,
   mobMeleeStrike,
   mobMeleeImpactMs,
+  mobAimCommitMs,
   BLACKSMITH_UPGRADES,
   BlacksmithForgeSchema,
   ChunkRegionRequestSchema,
@@ -120,7 +121,7 @@ import {
 } from "./movement-input.js";
 import { activeObjective, createObjectiveProgress, creditObjectiveDefeat, nextObjectiveTarget, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
-import { ENEMY_AIM_COMMIT_MS, STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
+import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -1171,11 +1172,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       if (mob.combatState === "windup") {
         const targetPlayer = this.state.players.get(mob.targetId);
-        if (targetPlayer && now < mob.stateUntil - ENEMY_AIM_COMMIT_MS) {
+        if (targetPlayer && now < mob.stateUntil - mobAimCommitMs(mob.archetype)) {
           mob.yaw = Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI;
           this.mobCommittedAim.set(mobId, { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: mob.yaw });
         }
-        if (now >= mob.stateUntil - ENEMY_AIM_COMMIT_MS) mob.aimCommitted = true;
+        if (now >= mob.stateUntil - mobAimCommitMs(mob.archetype)) mob.aimCommitted = true;
+        this.updateMobStrikeOrigin(mobId, mob);
         if (now < mob.stateUntil) continue;
         const aim = this.mobCommittedAim.get(mobId) ?? { x: mob.x + Math.sin(mob.yaw * Math.PI / 180) * definition.stopDistance,
           y: mob.y, z: mob.z + Math.cos(mob.yaw * Math.PI / 180) * definition.stopDistance, yaw: mob.yaw };
@@ -1231,6 +1233,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         }
         this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw,
           impactAt: mob.attackContactAt });
+        mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
         continue;
       }
       const players = [...this.state.players.entries()].map(([id, player]) => ({
@@ -1271,6 +1274,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.aimCommitted = false;
       mob.yaw = Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI;
       this.mobCommittedAim.set(mobId, { x: target.x, y: target.y, z: target.z, yaw: mob.yaw });
+      this.updateMobStrikeOrigin(mobId, mob);
     }
     for (const [sessionId, player] of this.state.players) {
       player.dangerTier = dangerBandAt(player).tier;
@@ -1852,6 +1856,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private clearMobAttackTimeline(mob: MobState): void {
     mob.attackStartedAt = mob.attackReleaseAt = mob.attackContactAt = mob.attackContactEndAt = mob.attackRecoveryEndAt = 0;
+  }
+
+  private updateMobStrikeOrigin(mobId: string, mob: MobState): void {
+    const aim = this.mobCommittedAim.get(mobId);
+    const definition = mobArchetype(mob.archetype);
+    const distance = aim ? Math.hypot(aim.x - mob.x, aim.z - mob.z) : 0;
+    const lunge = definition.attackKind === "melee" ? Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6)) : 0;
+    const yaw = aim?.yaw ?? mob.yaw;
+    const origin = moveMobSafely(mob, { x: Math.sin(yaw * Math.PI / 180) * lunge,
+      z: Math.cos(yaw * Math.PI / 180) * lunge }, this.readWorldBlock, this.mobPositionAllowed);
+    mob.attackStrikeX = origin.x; mob.attackStrikeY = origin.y; mob.attackStrikeZ = origin.z;
   }
 
   private setMobAttackTimeline(mob: MobState, startedAt: number, releaseAt: number): void {

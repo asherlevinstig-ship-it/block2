@@ -64,7 +64,7 @@ for (const scenario of (process.argv.slice(2).length ? process.argv.slice(2) : [
         trace.push({ at: elapsed, event: "state", state: brute.combatState, yaw: brute.yaw, distance: Math.hypot(player.x - brute.x, player.z - brute.z),
           timeline: { startedAt: brute.attackStartedAt, releaseAt: brute.attackReleaseAt, contactAt: brute.attackContactAt,
             contactEndAt: brute.attackContactEndAt, recoveryEndAt: brute.attackRecoveryEndAt } });
-        if (brute.combatState === "windup") mode = "observe";
+        if (brute.combatState === "windup") mode = scenario.includes("far") ? "retreat" : "observe";
         if (releaseAt !== null && previousState === "recover" && brute.combatState !== "recover") sawRecoveryEnd = true;
         previousState = brute.combatState;
       }
@@ -72,7 +72,7 @@ for (const scenario of (process.argv.slice(2).length ? process.argv.slice(2) : [
         trace.push({ at: elapsed, event: "committed", active: brute.aimCommitted, yaw: brute.yaw });
         if (brute.aimCommitted && commitmentAt === null) {
           commitmentAt = now;
-          if (scenario !== "stationary") reactionAt = now + (scenario === "late-sidestep" ? 200 : 0);
+          if (scenario !== "stationary") reactionAt = now + (scenario === "late-sidestep" ? 200 : scenario.startsWith("walk-") ? 100 : 0);
         }
         previousCommit = brute.aimCommitted;
       }
@@ -86,7 +86,7 @@ for (const scenario of (process.argv.slice(2).length ? process.argv.slice(2) : [
           const angle = brute.yaw * Math.PI / 180;
           room.send("dodge", { requestId: "latency-dodge", strafe: Math.cos(angle), forward: -Math.sin(angle), yaw: player.yaw });
           mode = "observe";
-        } else { sideUntil = now + 600; mode = "sidestep"; }
+        } else { sideUntil = now + 900; mode = "sidestep"; }
         reactionAt = Infinity;
       }
       if (now >= nextPing) {
@@ -100,7 +100,11 @@ for (const scenario of (process.argv.slice(2).length ? process.argv.slice(2) : [
           const dx = target.x - player.x; const dz = target.z - player.z; const distance = Math.hypot(dx, dz);
           if (distance > 0.1) { const strength = Math.min(1, distance / 2); x = dx / distance * strength; z = dz / distance * strength; }
         } else if (mode === "sidestep" && now < sideUntil) {
-          const angle = brute.yaw * Math.PI / 180; x = Math.cos(angle); z = -Math.sin(angle);
+          const angle = brute.yaw * Math.PI / 180; const side = scenario.includes("left") ? -1 : 1;
+          x = Math.cos(angle) * side; z = -Math.sin(angle) * side;
+        } else if (mode === "retreat") {
+          const dx = player.x - brute.x; const dz = player.z - brute.z; const distance = Math.hypot(dx, dz);
+          x = dx / Math.max(0.001, distance) * 0.45; z = dz / Math.max(0.001, distance) * 0.45;
         }
         room.send("move", { sequence: ++sequence, strafe: x, forward: z, yaw: Math.atan2(brute.x - player.x, brute.z - player.z) * 180 / Math.PI });
         nextSend = now + 66;
