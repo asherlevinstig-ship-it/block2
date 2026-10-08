@@ -121,6 +121,7 @@ import {
 } from "./movement-input.js";
 import { activeObjective, createObjectiveProgress, creditObjectiveDefeat, nextObjectiveTarget, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
+import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
 
 interface MutableChunk {
@@ -217,6 +218,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
   private readonly mobVerticalVelocities = new Map<string, number>();
   private readonly mobNavigation = new Map<string, MobNavigationState>();
+  private readonly mobPatrols = new Map<string, MobPatrolState>();
   private readonly profileTokens = new Map<string, string>();
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
@@ -721,16 +723,49 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private moveNavigatingMob(mobId: string, mob: MobState, desired: { x: number; z: number },
-    goal: { x: number; y: number; z: number }, now: number): void {
+    goal: { x: number; y: number; z: number }, now: number, allowed = this.mobPositionAllowed): void {
     const navigation = this.mobNavigation.get(mobId) ?? createMobNavigationState();
     this.mobNavigation.set(mobId, navigation);
-    const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock, this.mobPositionAllowed);
+    const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock, allowed);
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
     if (Math.hypot(dx, dz) > 0.0001) mob.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
     mob.x = next.x;
     mob.y = next.y;
     mob.z = next.z;
+  }
+
+  private patrolMob(mobId: string, mob: MobState, home: { x: number; y: number; z: number },
+    now: number, dt: number, speed: number): void {
+    let patrol = this.mobPatrols.get(mobId);
+    if (!patrol) {
+      patrol = { goal: null, pauseUntil: now + 800, expiresAt: 0, sequence: 0 };
+      this.mobPatrols.set(mobId, patrol);
+      this.mobNavigation.set(mobId, createMobNavigationState());
+    }
+    if (Math.hypot(mob.x - home.x, mob.z - home.z) > MOB_PATROL_RADIUS + 0.5) {
+      patrol.goal = null;
+      const returning = pursueTarget(mob, home, dt, speed, 0.15);
+      this.moveNavigatingMob(mobId, mob, returning, home, now);
+      patrol.pauseUntil = now + 800;
+      return;
+    }
+    const allowed = (pose: { x: number; z: number }) => this.mobPositionAllowed(pose)
+      && Math.hypot(pose.x - home.x, pose.z - home.z) <= MOB_PATROL_RADIUS + 0.5;
+    if (patrol.goal && (Math.hypot(mob.x - patrol.goal.x, mob.z - patrol.goal.z) < 0.2
+      || now >= patrol.expiresAt)) {
+      patrol.goal = null;
+      patrol.pauseUntil = now + 1200 + (patrol.sequence % 3) * 400;
+      this.mobNavigation.set(mobId, createMobNavigationState());
+    }
+    if (now < patrol.pauseUntil) return;
+    if (!patrol.goal) {
+      patrol.goal = patrolDestination(mobId, home, patrol.sequence++, this.readWorldBlock, allowed);
+      patrol.expiresAt = now + 12_000;
+      if (!patrol.goal) { patrol.pauseUntil = now + 2000; return; }
+    }
+    const walking = pursueTarget(mob, patrol.goal, dt, speed, 0.1);
+    this.moveNavigatingMob(mobId, mob, walking, patrol.goal, now, allowed);
   }
 
   private displaceMob(mobId: string, mob: MobState, delta: { x: number; z: number }): void {
@@ -1138,6 +1173,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.z = spawn.z;
         this.mobVerticalVelocities.set(mobId, 0);
         this.mobNavigation.set(mobId, createMobNavigationState());
+        this.mobPatrols.delete(mobId);
         this.mobStaggerImmuneUntil.delete(mobId);
         this.mobCommittedAim.delete(mobId);
         mob.aimCommitted = false;
@@ -1245,10 +1281,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       })).filter(player => !isInsideTownSafeZone(player) && radiusFromSafeCenter(player) >= MOB_TOWN_MINIMUM_RADIUS);
       const target = selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
-        const homeward = pursueTarget(mob, home, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier), 0.05);
-        this.moveNavigatingMob(mobId, mob, homeward, home, now);
+        this.patrolMob(mobId, mob, home, now, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier * 0.65));
         continue;
       }
+      if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const pursuit = definition.attackKind === "projectile"
         ? maintainRangedDistance(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.minimumAttackRange, definition.stopDistance)
         : pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
