@@ -115,6 +115,7 @@ import {
   type StoredMovementInput,
 } from "./movement-input.js";
 import { activeObjective, createObjectiveProgress, creditObjectiveDefeat, nextObjectiveTarget, type WorldObjectiveProgress } from "./world-objectives.js";
+import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -191,6 +192,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
+  private readonly mobVerticalVelocities = new Map<string, number>();
+  private readonly mobNavigation = new Map<string, MobNavigationState>();
   private readonly profileTokens = new Map<string, string>();
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
@@ -682,8 +685,35 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private registerMob(mobId: string, archetypeId: MobArchetypeId, spawn: { x: number; y: number; z: number }): void {
-    this.mobHomes.set(mobId, spawn);
-    this.state.mobs.set(mobId, this.createMob(archetypeId, spawn));
+    const outside = keepMobOutsideTown(spawn);
+    const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, this.mobPositionAllowed);
+    this.mobHomes.set(mobId, home);
+    this.mobNavigation.set(mobId, createMobNavigationState());
+    this.state.mobs.set(mobId, this.createMob(archetypeId, home));
+  }
+
+  private readonly mobPositionAllowed = (position: { x: number; z: number }): boolean =>
+    radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
+
+  private moveNavigatingMob(mobId: string, mob: MobState, desired: { x: number; z: number },
+    goal: { x: number; y: number; z: number }, now: number): void {
+    const navigation = this.mobNavigation.get(mobId) ?? createMobNavigationState();
+    this.mobNavigation.set(mobId, navigation);
+    const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock, this.mobPositionAllowed);
+    const dx = next.x - mob.x;
+    const dz = next.z - mob.z;
+    if (Math.hypot(dx, dz) > 0.0001) mob.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
+    mob.x = next.x;
+    mob.y = next.y;
+    mob.z = next.z;
+  }
+
+  private displaceMob(mobId: string, mob: MobState, delta: { x: number; z: number }): void {
+    const next = moveMobSafely(mob, delta, this.readWorldBlock, this.mobPositionAllowed);
+    mob.x = next.x;
+    mob.y = next.y;
+    mob.z = next.z;
+    this.mobNavigation.set(mobId, createMobNavigationState());
   }
 
   private createMob(archetypeId: MobArchetypeId, spawn = MOB_ARCHETYPES[archetypeId].spawn): MobState {
@@ -1041,9 +1071,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
         const stats = scaledMobStats(definition, dangerBandAt(home));
-        mob.x = home.x;
-        mob.y = home.y;
-        mob.z = home.z;
+        const spawn = walkableMobSpawn(home, this.readWorldBlock, this.mobPositionAllowed);
+        mob.x = spawn.x;
+        mob.y = spawn.y;
+        mob.z = spawn.z;
+        this.mobVerticalVelocities.set(mobId, 0);
+        this.mobNavigation.set(mobId, createMobNavigationState());
         mob.health = stats.maxHealth;
         mob.maxHealth = stats.maxHealth;
         mob.armor = stats.armor;
@@ -1057,6 +1090,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.targetId = "";
       }
       if (!mob.alive) continue;
+      const gravity = advanceMobGravity(mob, this.mobVerticalVelocities.get(mobId) ?? 0, deltaTime, this.readWorldBlock);
+      mob.y = gravity.y;
+      this.mobVerticalVelocities.set(mobId, gravity.velocity);
       if (mob.combatState === "stagger" || mob.combatState === "recover") {
         if (now < mob.stateUntil) continue;
         mob.combatState = "idle";
@@ -1104,12 +1140,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const distance = Math.hypot(deltaX, deltaZ);
         if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
-          const lunge = keepMobOutsideTown({
-            x: mob.x + deltaX / distance * lungeDistance,
-            z: mob.z + deltaZ / distance * lungeDistance,
-          });
-          mob.x = lunge.x;
-          mob.z = lunge.z;
+          this.displaceMob(mobId, mob, { x: deltaX / distance * lungeDistance, z: deltaZ / distance * lungeDistance });
         }
         if (!canMobLungeHit(mob, targetPlayer, targetPlayer.invulnerableUntil, now, definition.hitRange)) continue;
         this.damagePlayer(mobId, mob.targetId, mob.attackDamage, now);
@@ -1125,25 +1156,26 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const target = selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
         const homeward = pursueTarget(mob, home, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier), 0.05);
-        const next = keepMobOutsideTown(homeward);
-        mob.x = next.x;
-        mob.z = next.z;
-        if (Math.hypot(home.x - mob.x, home.z - mob.z) > 0.05) mob.yaw = homeward.yaw;
+        this.moveNavigatingMob(mobId, mob, homeward, home, now);
         continue;
       }
       const pursuit = definition.attackKind === "projectile"
         ? maintainRangedDistance(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.minimumAttackRange, definition.stopDistance)
         : pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
-      const next = keepMobOutsideTown(pursuit);
-      mob.x = next.x;
-      mob.z = next.z;
-      mob.yaw = pursuit.yaw;
+      const retreating = definition.attackKind === "projectile"
+        && Math.hypot(target.x - mob.x, target.z - mob.z) < definition.minimumAttackRange;
+      const goal = retreating
+        ? { x: mob.x + (mob.x - target.x), y: mob.y, z: mob.z + (mob.z - target.z) }
+        : target;
+      this.moveNavigatingMob(mobId, mob, pursuit, goal, now);
+      // A ranged mob may walk backwards, but still aims its attacks at the player.
+      if (definition.attackKind === "projectile" || pursuit.inAttackRange) mob.yaw = pursuit.yaw;
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
       const actualDistance = Math.hypot(target.x - mob.x, target.z - mob.z);
       const inAttackRange = definition.attackKind === "projectile"
         ? actualDistance >= definition.minimumAttackRange - 0.05 && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
-      if (!pursuit.inAttackRange || !inAttackRange || now - lastAttackAt < definition.cooldownMs) continue;
+      if (!inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs) continue;
       mob.combatState = "windup";
       mob.stateUntil = now + definition.windupMs;
       mob.targetId = target.id;
@@ -1293,14 +1325,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const mob = this.state.mobs.get(target.id);
         if (!mob || !mob.alive || mob.combatState === "stagger") continue;
         const evade = powerEvadeDirection(player, parsed.data.yaw, mob);
-        const sidestep = resolvePlayerMotion(
-          { x: mob.x, y: mob.y, z: mob.z },
-          { x: evade.x * 0.58, y: 0, z: evade.z * 0.58 },
-          this.readWorldBlock,
-        );
-        mob.x = sidestep.x;
-        mob.y = sidestep.y;
-        mob.z = sidestep.z;
+        this.displaceMob(target.id, mob, { x: evade.x * 0.58, z: evade.z * 0.58 });
         mob.yaw = Math.atan2(player.x - mob.x, player.z - mob.z) * 180 / Math.PI;
       }
     }
@@ -1583,13 +1608,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const knockbackDirection = (definition.core === "burst" || definition.core === "ground") && radialLength > 0.001
           ? { x: radialX / radialLength, z: radialZ / radialLength }
           : direction;
-        const knockedBack = resolvePlayerMotion(
-          { x: mob.x, y: mob.y, z: mob.z },
-          { x: knockbackDirection.x * definition.knockback, y: 0, z: knockbackDirection.z * definition.knockback },
-          this.readWorldBlock,
-        );
-        mob.x = knockedBack.x;
-        mob.z = knockedBack.z;
+        this.displaceMob(target.id, mob, {
+          x: knockbackDirection.x * definition.knockback, z: knockbackDirection.z * definition.knockback,
+        });
         if (mob.health === 0) {
           this.defeatMob(target.id, mob, sessionId, now);
           defeatedMobIds.push(target.id);
@@ -1803,13 +1824,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const deltaZ = mob.z - player.z;
       const distance = Math.hypot(deltaX, deltaZ);
       if (distance > 0.001 && timing.knockback > 0) {
-        const next = resolvePlayerMotion(
-          { x: mob.x, y: mob.y, z: mob.z },
-          { x: deltaX / distance * timing.knockback, y: 0, z: deltaZ / distance * timing.knockback },
-          this.readWorldBlock,
-        );
-        mob.x = next.x;
-        mob.z = next.z;
+        this.displaceMob(target.id, mob, {
+          x: deltaX / distance * timing.knockback, z: deltaZ / distance * timing.knockback,
+        });
       }
       if (mob.health === 0) {
         this.defeatMob(target.id, mob, sessionId, now);
