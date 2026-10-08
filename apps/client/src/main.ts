@@ -1114,6 +1114,7 @@ let cameraShakeUntil = 0;
 let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
 let lastAuthoritativeMovementAt = 0;
+let lastAcknowledgementAdvancedAt = 0;
 let pendingStopInputSequence: number | null = null;
 let pendingStopDeadline = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
@@ -2303,6 +2304,7 @@ function bindPlayers(joinedRoom: Room): void {
     }, true);
     playerCallbacks.listen("lastProcessedInput", () => {
       if (isLocal) {
+        if (player.lastProcessedInput > lastProcessedInputSequence) lastAcknowledgementAdvancedAt = performance.now();
         lastProcessedInputSequence = player.lastProcessedInput;
         lastAuthoritativeMovementAt = performance.now();
       }
@@ -3010,6 +3012,12 @@ interface StopTraceFrame {
   sentSequence: number;
   acknowledgedSequence: number;
   pendingStopSequence: number | null;
+  networkAgeMs: number;
+  acknowledgementAgeMs: number;
+  requestedTravel: number;
+  collisionTravel: number;
+  netVisualX: number;
+  netVisualZ: number;
 }
 
 interface StopTrace {
@@ -3026,6 +3034,25 @@ let activeStopTrace: StopTrace | null = null;
 let completedStopTrace = "No completed stop trace yet.";
 let stopTraceSequence = 0;
 let previousAppliedMovement = false;
+const snapDiagnosticEvents: string[] = [];
+const snapFrameHistory: StopTraceFrame[] = [];
+const completedSnapTraces: string[] = [];
+let activeSnapTrace: StopTrace | null = null;
+let snapSequence = 0;
+
+function recordSnapDiagnostic(cause: string, before: pc.Vec3, after: pc.Vec3): void {
+  if (!worldReady) return;
+  const now = performance.now();
+  const positionLabel = (value: pc.Vec3) => `${fixed(value.x)},${fixed(value.y)},${fixed(value.z)}`;
+  const delta = before.distance(after);
+  const line = `${fixed(now / 1000, 2)}s ${cause} delta=${fixed(delta)} before=[${positionLabel(before)}] after=[${positionLabel(after)}] server=[${positionLabel(authoritativeLocalPosition)}] sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${moveSequence - lastProcessedInputSequence} age=${fixed(now - lastAuthoritativeMovementAt, 0)}ms ack_age=${fixed(now - lastAcknowledgementAdvancedAt, 0)}ms input=[${movementVectorLabel(smoothedMovement)}] dt=${fixed(frameSamples.at(-1) ?? 0, 1)}ms rtt=${networkRttMs === null ? "unknown" : fixed(networkRttMs, 0)}ms chunk_build=${fixed(lastChunkBuildMs, 1)}ms slice=${cutawayStateKey}`;
+  snapDiagnosticEvents.push(line);
+  if (snapDiagnosticEvents.length > 30) snapDiagnosticEvents.shift();
+  if (!activeSnapTrace) {
+    snapSequence += 1;
+    activeSnapTrace = { id: snapSequence, releasedAt: now, captureUntil: now + 900, frames: [...snapFrameHistory] };
+  }
+}
 
 function setDefensePresentation(active: boolean): void {
   localDefending = active;
@@ -3054,11 +3081,11 @@ function fixed(value: number, digits = 3): string {
   return Number.isFinite(value) ? value.toFixed(digits) : String(value);
 }
 
-function formatStopTrace(trace: StopTrace): string {
+function formatStopTrace(trace: StopTrace, kind: "STOP" | "SNAP" = "STOP"): string {
   const lines = [
-    `STOP TRACE #${trace.id} frames=${trace.frames.length} pre=${STOP_TRACE_HISTORY_FRAMES} post=${STOP_TRACE_AFTER_RELEASE_MS}ms`,
+    `${kind} TRACE #${trace.id} frames=${trace.frames.length} pre=${kind === "SNAP" ? 60 : STOP_TRACE_HISTORY_FRAMES} post=${kind === "SNAP" ? 900 : STOP_TRACE_AFTER_RELEASE_MS}ms`,
     `viewport=${canvas.width}x${canvas.height} dpr=${window.devicePixelRatio.toFixed(2)} release_at=${trace.releasedAt.toFixed(1)}ms`,
-    "t_ms dt raw_x raw_z desired_x desired_z applied_x applied_z local_x local_y local_z render_y server_x server_y server_z screen_x screen_y ds_x ds_y camera_x camera_y camera_z focus_x focus_y focus_z anim_weight anim_phase body_y arm_r leg_l reconcile rate vertical visual grounded stepped hit_y sent ack lag stop_wait",
+    "t_ms dt raw_x raw_z desired_x desired_z applied_x applied_z local_x local_y local_z render_y server_x server_y server_z screen_x screen_y ds_x ds_y camera_x camera_y camera_z focus_x focus_y focus_z anim_weight anim_phase body_y arm_r leg_l reconcile rate vertical visual grounded stepped hit_y sent ack lag stop_wait net_age_ms ack_age_ms requested_travel collision_travel net_visual_x net_visual_z",
   ];
   let previous: StopTraceFrame | undefined;
   for (const frame of trace.frames) {
@@ -3079,6 +3106,7 @@ function formatStopTrace(trace: StopTrace): string {
       fixed(frame.verticalVelocity), fixed(frame.visualOffset),
       Number(frame.grounded), Number(frame.stepped), Number(frame.hitVertical),
       frame.sentSequence, frame.acknowledgedSequence, Math.max(0, frame.sentSequence - frame.acknowledgedSequence), frame.pendingStopSequence ?? "-",
+      fixed(frame.networkAgeMs, 0), fixed(frame.acknowledgementAgeMs, 0), fixed(frame.requestedTravel), fixed(frame.collisionTravel), fixed(frame.netVisualX), fixed(frame.netVisualZ),
     ].join(" "));
     previous = frame;
   }
@@ -3113,8 +3141,8 @@ function movementVectorLabel(vector: { x: number; z: number }): string {
 function logMovementEvent(message: string): void {
   const elapsed = (performance.now() / 1000).toFixed(2);
   movementEventLog.unshift(`${elapsed}s  ${message}`);
-  movementEventLog.splice(8);
-  movementDebugEvents.replaceChildren(...movementEventLog.map(entry => {
+  movementEventLog.splice(64);
+  movementDebugEvents.replaceChildren(...movementEventLog.slice(0, 12).map(entry => {
     const item = document.createElement("li");
     item.textContent = entry;
     return item;
@@ -3123,7 +3151,8 @@ function logMovementEvent(message: string): void {
 
 movementDebugCopy.addEventListener("click", async () => {
   const trace = activeStopTrace ? formatStopTrace(activeStopTrace) : completedStopTrace;
-  const text = `${movementDebugLive.textContent ?? ""}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${trace}`;
+  const snapTrace = activeSnapTrace ? formatStopTrace(activeSnapTrace, "SNAP") : "";
+  const text = `SNAP DIAGNOSTICS v1\nurl=${window.location.origin}${window.location.pathname} room=${WORLD_ROOM}\n${movementDebugLive.textContent ?? ""}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
   await navigator.clipboard.writeText(text);
   movementDebugCopy.textContent = "COPIED";
   window.setTimeout(() => { movementDebugCopy.textContent = "COPY LOG"; }, 1000);
@@ -3977,6 +4006,7 @@ function reconcileLocalPlayer(
   authoritativeInputReady: boolean,
 ): { distance: number; rate: number } {
   const position = localPlayer.getPosition();
+  const beforeCorrection = position.clone();
   const target = authoritativeLocalPosition.clone();
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
@@ -3999,6 +4029,12 @@ function reconcileLocalPlayer(
     localVisualVerticalOffset += previousY - position.y;
     localPlayer.setPosition(position);
   }
+  const correctionDistance = beforeCorrection.distance(localPlayer.getPosition());
+  if (correctionDistance >= 0.2) recordSnapDiagnostic(
+    !Number.isFinite(reconciliationRate) ? "HARD_RECONCILE" : "SOFT_RECONCILE",
+    beforeCorrection,
+    localPlayer.getPosition().clone(),
+  );
   return { distance, rate: reconciliationRate };
 }
 
@@ -4487,7 +4523,32 @@ app.on("update", (dt: number) => {
     sentSequence: moveSequence,
     acknowledgedSequence: lastProcessedInputSequence,
     pendingStopSequence: pendingStopInputSequence,
+    networkAgeMs: now - lastAuthoritativeMovementAt,
+    acknowledgementAgeMs: now - lastAcknowledgementAdvancedAt,
+    requestedTravel,
+    collisionTravel,
+    netVisualX: localNetworkVisualOffset.x,
+    netVisualZ: localNetworkVisualOffset.z,
   };
+  const previousSnapFrame = snapFrameHistory.at(-1);
+  if (worldReady && previousSnapFrame) {
+    const worldDelta = Math.hypot(player.x - previousSnapFrame.localX, player.y - previousSnapFrame.localY, player.z - previousSnapFrame.localZ);
+    const cameraDelta = Math.hypot(cameraWorldPosition.x - previousSnapFrame.cameraX, cameraWorldPosition.y - previousSnapFrame.cameraY, cameraWorldPosition.z - previousSnapFrame.cameraZ);
+    const jumpThreshold = Math.max(0.65, requestedTravel * 3);
+    if (worldDelta > jumpThreshold || cameraDelta > jumpThreshold) recordSnapDiagnostic(
+      `FRAME_JUMP world=${fixed(worldDelta)} camera=${fixed(cameraDelta)} dodge=${localDodgeStartedAt !== null} power=${localActivePower ?? "none"}`,
+      new pc.Vec3(previousSnapFrame.localX, previousSnapFrame.localY, previousSnapFrame.localZ),
+      player.clone(),
+    );
+  }
+  activeSnapTrace?.frames.push(traceFrame);
+  snapFrameHistory.push(traceFrame);
+  if (snapFrameHistory.length > 60) snapFrameHistory.shift();
+  if (activeSnapTrace && now >= activeSnapTrace.captureUntil) {
+    completedSnapTraces.push(formatStopTrace(activeSnapTrace, "SNAP"));
+    if (completedSnapTraces.length > 3) completedSnapTraces.shift();
+    activeSnapTrace = null;
+  }
   const appliedMovement = Math.hypot(smoothedMovement.x, smoothedMovement.z) > 0.01;
   if (previousAppliedMovement && !appliedMovement) {
     if (activeStopTrace) finishStopTrace();
@@ -4553,6 +4614,8 @@ app.on("update", (dt: number) => {
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
       `net age    ${Math.round(performance.now() - lastAuthoritativeMovementAt)}ms`,
+      `ack age    ${Math.round(performance.now() - lastAcknowledgementAdvancedAt)}ms`,
+      `snap log   ${snapDiagnosticEvents.length} events · ${activeSnapTrace ? "recording" : `${completedSnapTraces.length} saved traces`} · COPY LOG`,
       `travel     collision=${collisionTravel.toFixed(3)} requested=${requestedTravel.toFixed(3)} blocked=${requestedTravel > 0.001 && collisionTravel < requestedTravel * 0.9}`,
       `stop ack   ${pendingStopInputSequence === null ? "ready" : `waiting for #${pendingStopInputSequence}`}`,
     ].join("\n");
@@ -4850,6 +4913,12 @@ async function connect(): Promise<void> {
   });
   room.onMessage("action:rejected", (message: ActionRejected) => {
     status.textContent = `Server rejected ${message.action}: ${message.reason}`;
+    logMovementEvent(`REJECT ${message.action} reason=${message.reason}`);
+    if (message.action === "move" || message.action === "dodge") recordSnapDiagnostic(
+      `ACTION_REJECT action=${message.action} reason=${message.reason}`,
+      localPlayer.getPosition().clone(),
+      authoritativeLocalPosition.clone(),
+    );
     if (message.action === "move") localPlayer.setPosition(authoritativeLocalPosition);
     if (message.action === "dodge") {
       localPlayer.setPosition(authoritativeLocalPosition);
