@@ -46,6 +46,8 @@ export function mobMeleeStrike(archetype: string): MeleeStrikeProfile {
   };
 }
 
+export const mobMeleeImpactMs = (archetype: string): number => archetype === "stone_brute" ? 280 : 150;
+
 export function sampleMeleeStrike(origin: StrikePoint, yaw: number, profile: MeleeStrikeProfile, progress: number):
   { base: StrikePoint; tip: StrikePoint } {
   const t = Math.max(0, Math.min(1, progress));

@@ -3,6 +3,7 @@ import {
   AttackRequestSchema,
   playerMeleeStrike,
   mobMeleeStrike,
+  mobMeleeImpactMs,
   BLACKSMITH_UPGRADES,
   BlacksmithForgeSchema,
   ChunkRegionRequestSchema,
@@ -255,7 +256,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("objective:sync", client => this.sendObjectiveState(client));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
-        client.send("pong", { id: payload.id });
+        client.send("pong", { id: payload.id, serverTime: Date.now() });
       }
     });
     this.onMessage("move", (client, payload) => this.handleMove(client, payload));
@@ -765,6 +766,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.stateUntil = now + duration;
     mob.targetId = "";
     mob.aimCommitted = false;
+    this.clearMobAttackTimeline(mob);
     mob.staggerSequence += 1;
     this.mobCommittedAim.delete(mobId);
     this.mobStaggerImmuneUntil.set(mobId, mob.stateUntil + STAGGER_IMMUNITY_MS);
@@ -788,6 +790,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = mobArchetype(mob.archetype);
     this.spawnLootDrops(mobId, mob, now);
     mob.alive = false;
+    this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
     mob.respawnAt = now + definition.respawnMs;
     mob.combatState = "idle";
@@ -973,6 +976,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.y = home.y;
       mob.z = home.z;
       mob.combatState = "recover";
+      this.clearMobAttackTimeline(mob);
       mob.stateUntil = now + definition.recoverMs;
       mob.targetId = "";
     }
@@ -1152,10 +1156,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const gravity = advanceMobGravity(mob, this.mobVerticalVelocities.get(mobId) ?? 0, deltaTime, this.readWorldBlock);
       mob.y = gravity.y;
       this.mobVerticalVelocities.set(mobId, gravity.velocity);
+      if (mob.combatState === "strike") {
+        if (now < mob.attackContactEndAt) continue;
+        mob.combatState = "recover";
+        mob.stateUntil = mob.attackRecoveryEndAt;
+        mob.aimCommitted = false;
+        mob.targetId = "";
+      }
       if (mob.combatState === "stagger" || mob.combatState === "recover") {
         if (now < mob.stateUntil) continue;
         mob.combatState = "idle";
         mob.stateUntil = 0;
+        this.clearMobAttackTimeline(mob);
       }
       if (mob.combatState === "windup") {
         const targetPlayer = this.state.players.get(mob.targetId);
@@ -1168,12 +1180,19 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const aim = this.mobCommittedAim.get(mobId) ?? { x: mob.x + Math.sin(mob.yaw * Math.PI / 180) * definition.stopDistance,
           y: mob.y, z: mob.z + Math.cos(mob.yaw * Math.PI / 180) * definition.stopDistance, yaw: mob.yaw };
         this.mobCommittedAim.delete(mobId);
-        mob.aimCommitted = false;
-        mob.combatState = "recover";
-        mob.stateUntil = now + definition.recoverMs;
+        this.setMobAttackTimeline(mob, mob.attackStartedAt, now);
+        mob.aimCommitted = definition.attackKind === "melee";
+        mob.combatState = definition.attackKind === "melee" ? "strike" : "recover";
+        mob.stateUntil = definition.attackKind === "melee" ? mob.attackContactEndAt : mob.attackRecoveryEndAt;
         mob.actionSequence += 1;
         this.lastMobAttackAt.set(mobId, now);
-        if (!targetPlayer) continue;
+        if (!targetPlayer) {
+          mob.combatState = "recover";
+          mob.stateUntil = now + definition.recoverMs;
+          mob.aimCommitted = false;
+          this.clearMobAttackTimeline(mob);
+          continue;
+        }
         if (definition.attackKind === "projectile") {
           const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
           const start = { x: mob.x, y: mob.y + 1.05, z: mob.z };
@@ -1211,7 +1230,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           });
         }
         this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw,
-          impactAt: now + (mob.archetype === "stone_brute" ? 280 : 150) });
+          impactAt: mob.attackContactAt });
         continue;
       }
       const players = [...this.state.players.entries()].map(([id, player]) => ({
@@ -1247,6 +1266,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       mob.combatState = "windup";
       mob.stateUntil = now + definition.windupMs;
+      this.setMobAttackTimeline(mob, now, mob.stateUntil);
       mob.targetId = target.id;
       mob.aimCommitted = false;
       mob.yaw = Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI;
@@ -1830,11 +1850,24 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.actionSequence += 1;
   }
 
+  private clearMobAttackTimeline(mob: MobState): void {
+    mob.attackStartedAt = mob.attackReleaseAt = mob.attackContactAt = mob.attackContactEndAt = mob.attackRecoveryEndAt = 0;
+  }
+
+  private setMobAttackTimeline(mob: MobState, startedAt: number, releaseAt: number): void {
+    const definition = mobArchetype(mob.archetype);
+    mob.attackStartedAt = startedAt;
+    mob.attackReleaseAt = releaseAt;
+    mob.attackContactAt = releaseAt + (definition.attackKind === "melee" ? mobMeleeImpactMs(mob.archetype) : 0);
+    mob.attackContactEndAt = mob.attackContactAt + (definition.attackKind === "melee" ? mobMeleeStrike(mob.archetype).afterImpactMs : 0);
+    mob.attackRecoveryEndAt = mob.attackContactEndAt + definition.recoverMs;
+  }
+
   private resolveMobMelee(now: number): void {
     for (const [mobId, pending] of this.pendingMobMelee) {
       const mob = this.state.mobs.get(mobId);
       const player = this.state.players.get(pending.targetId);
-      if (!mob?.alive || mob.combatState !== "recover" || !player) { this.pendingMobMelee.delete(mobId); continue; }
+      if (!mob?.alive || mob.combatState !== "strike" || !player) { this.pendingMobMelee.delete(mobId); continue; }
       const strike = mobMeleeStrike(mob.archetype);
       const start = pending.impactAt - strike.beforeImpactMs;
       const end = pending.impactAt + strike.afterImpactMs;

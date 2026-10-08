@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
@@ -7,6 +8,7 @@ import {
   BRAMBLE_SNARE,
   playerMeleeStrike,
   sampleMeleeStrike,
+  mobMeleeImpactMs,
   BLACKSMITH_UPGRADES,
   IRON_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
@@ -1021,6 +1023,11 @@ interface NetworkMob {
   actionSequence: number;
   combatState: string;
   aimCommitted: boolean;
+  attackStartedAt: number;
+  attackReleaseAt: number;
+  attackContactAt: number;
+  attackContactEndAt: number;
+  attackRecoveryEndAt: number;
   stateUntil: number;
   targetId: string;
   staggerSequence: number;
@@ -1075,6 +1082,7 @@ interface MobVisual {
   hitAt: number;
   lastActionSequence: number;
   actionAt: number;
+  lastImpactStartedAt: number;
   lastStaggerSequence: number;
   staggerAt: number;
   lastCombatState: string;
@@ -2114,6 +2122,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     hitAt: 0,
     lastActionSequence: mob.actionSequence,
     actionAt: 0,
+    lastImpactStartedAt: 0,
     lastStaggerSequence: mob.staggerSequence,
     staggerAt: 0,
     lastCombatState: mob.combatState,
@@ -2239,7 +2248,6 @@ function updateMobVisual(mob: MobVisual): void {
   if (mob.state.actionSequence > mob.lastActionSequence) {
     mob.lastActionSequence = mob.state.actionSequence;
     mob.actionAt = performance.now();
-    if (mob.isBrute) createBruteSlamImpact(mob);
   }
   if (mob.state.staggerSequence > mob.lastStaggerSequence) {
     mob.lastStaggerSequence = mob.state.staggerSequence;
@@ -2276,7 +2284,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -2805,10 +2813,12 @@ function updateTarget(): void {
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
     const intent = combatMob.visual.state.combatState === "windup"
-      ? combatMob.visual.state.aimCommitted ? " · AIM LOCKED — SIDESTEP" : " · ATTACK WINDUP"
-      : combatMob.visual.state.combatState === "stagger"
-        ? " · STAGGERED"
-        : "";
+      ? combatMob.visual.state.aimCommitted ? " · AIM LOCKED — DODGE OR MOVE CLEAR" : " · ATTACK WINDUP"
+      : combatMob.visual.state.combatState === "strike"
+        ? " · STRIKE ACTIVE — DODGE"
+        : combatMob.visual.state.combatState === "recover"
+          ? " · RECOVERING — COUNTER"
+          : combatMob.visual.state.combatState === "stagger" ? " · STAGGERED" : "";
     const markLabel = combatMark
       ? combatMark.stacks >= combatMark.maxStacks
         ? ` · EXPOSED ${combatMark.stacks}/${combatMark.maxStacks}`
@@ -3997,6 +4007,7 @@ powerSlot.addEventListener("pointercancel", cancelPowerAim);
 
 const frameSamples: number[] = [];
 const pendingPings = new Map<string, number>();
+let serverClock = createServerClock(performance.now(), Date.now());
 let pingSequence = 0;
 let lastPingSentAt = 0;
 let lastPerformanceUpdateAt = 0;
@@ -4313,16 +4324,22 @@ app.on("update", (dt: number) => {
     mob.entity.setEulerAngles(0, sampled.yaw, 0);
     trimRemoteSnapshots(mob.snapshots, animationNow - MOB_INTERPOLATION_DELAY_MS);
     const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
-    const attackElapsed = animationNow - mob.actionAt;
+    const presentation = enemyAttackPresentation(mob.state, animationNow + serverClock.offset);
+    if (presentation.aimLocked) mob.entity.setEulerAngles(0, mob.state.yaw, 0);
+    const attackElapsed = presentation.elapsed;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
-    const attackPeak = mob.isSpitter ? attackDuration / 2 : mob.isBrute ? 280 : 150;
+    const attackPeak = mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
     const attackPhase = attackElapsed < attackPeak ? attackElapsed / attackPeak * 0.5
       : 0.5 + (attackElapsed - attackPeak) / (attackDuration - attackPeak) * 0.5;
-    const attackStrength = mob.actionAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
+    const attackStrength = mob.state.attackStartedAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
+    if (mob.isBrute && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
+      mob.lastImpactStartedAt = mob.state.attackStartedAt;
+      createBruteSlamImpact(mob);
+    }
     const staggerElapsed = animationNow - mob.staggerAt;
     const staggerStrength = mob.staggerAt > 0 && mob.state.alive && mob.state.combatState === "stagger" && staggerElapsed >= 0
       ? 0.25 + 0.75 * Math.exp(-staggerElapsed / 600) : 0;
-    const windupStrength = mob.state.alive && mob.state.combatState === "windup"
+    const windupStrength = mob.state.alive && presentation.phase === "windup"
       ? (mob.isBrute
           ? 0.72 + Math.sin(animationTime * 12) * 0.13
           : mob.isSpitter
@@ -4347,13 +4364,13 @@ app.on("update", (dt: number) => {
         pip.setLocalScale(0.14 * pipPulse, 0.14 * pipPulse, 0.14 * pipPulse);
       }
     }
-    mob.warning.enabled = mob.state.alive && mob.state.combatState === "windup";
+    mob.warning.enabled = presentation.warning;
     if (mob.warning.enabled) {
       const warningPulse = 1 + Math.sin(animationTime * 18) * 0.045;
       mob.warning.setLocalScale(mob.warningScale * warningPulse, 0.025, mob.warningScale * warningPulse);
-      mob.warningMaterial.diffuse.set(0.95, mob.state.aimCommitted ? 0.12 : 0.58, 0.06);
-      mob.warningMaterial.emissive.set(0.7, mob.state.aimCommitted ? 0.04 : 0.28, 0.02);
-      mob.warningMaterial.opacity = (mob.state.aimCommitted ? 0.4 : 0.25) + windupStrength * 0.22;
+      mob.warningMaterial.diffuse.set(0.95, presentation.aimLocked ? 0.12 : 0.58, 0.06);
+      mob.warningMaterial.emissive.set(0.7, presentation.aimLocked ? 0.04 : 0.28, 0.02);
+      mob.warningMaterial.opacity = (presentation.aimLocked ? 0.4 : 0.25) + windupStrength * 0.22;
       mob.warningMaterial.update();
     }
     animateMobArt(mob.art, frameTime, animationTime, moveSpeed, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
@@ -4999,11 +5016,13 @@ async function connect(): Promise<void> {
       status.textContent = "Your iron ore pack is full. Visit the blacksmith stall to sell it.";
     }
   });
-  room.onMessage("pong", (message: { id?: unknown }) => {
+  room.onMessage("pong", (message: { id?: unknown; serverTime?: unknown }) => {
     if (typeof message.id !== "string") return;
     const sentAt = pendingPings.get(message.id);
     if (sentAt === undefined) return;
-    networkRttMs = performance.now() - sentAt;
+    const receivedAt = performance.now();
+    networkRttMs = receivedAt - sentAt;
+    if (typeof message.serverTime === "number") serverClock = sampleServerClock(serverClock, sentAt, receivedAt, message.serverTime);
     pendingPings.delete(message.id);
   });
   room.onMessage("action:rejected", (message: ActionRejected) => {
@@ -5069,6 +5088,8 @@ async function connect(): Promise<void> {
     cancelSpecialAim();
     cancelLocalPowerPresentation();
     room = null;
+    pendingPings.clear();
+    serverClock = createServerClock(performance.now(), Date.now());
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
     remotePlayers.clear();
@@ -5098,6 +5119,9 @@ async function connect(): Promise<void> {
   });
   room.send("world:ready");
   room.send("objective:sync");
+  const clockPingId = `ping-${++pingSequence}`;
+  pendingPings.set(clockPingId, performance.now());
+  room.send("ping", { id: clockPingId });
 }
 
 connect().catch(error => {

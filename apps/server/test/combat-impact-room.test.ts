@@ -41,6 +41,33 @@ function fixture(read = flat) {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("authoritative combat impacts", () => {
+  it("publishes the brute timeline during windup and recovers only after contact closes", () => {
+    const { mob, internal } = fixture(); mob.archetype = "stone_brute"; mob.x = 99.2;
+    internal.simulatePlayers(0.033);
+    expect(mob.combatState).toBe("windup");
+    expect(mob.attackStartedAt).toBe(10_000);
+    expect(mob.attackReleaseAt).toBe(11_150);
+    expect(mob.attackContactAt).toBe(11_430);
+    expect(mob.attackContactEndAt).toBe(11_530);
+    expect(mob.attackRecoveryEndAt).toBe(12_380);
+    vi.setSystemTime(10_950); internal.simulatePlayers(0.033); expect(mob.aimCommitted).toBe(true);
+    const lockedYaw = mob.yaw;
+    vi.setSystemTime(11_150); internal.simulatePlayers(0.033);
+    expect(mob.combatState).toBe("strike"); expect(mob.aimCommitted).toBe(true); expect(mob.yaw).toBe(lockedYaw);
+    vi.setSystemTime(11_500); internal.simulatePlayers(0.033); expect(mob.combatState).toBe("strike");
+    vi.setSystemTime(11_550); internal.simulatePlayers(0.033);
+    expect(mob.combatState).toBe("recover"); expect(mob.aimCommitted).toBe(false); expect(mob.stateUntil).toBe(12_380);
+    vi.setSystemTime(12_400); internal.simulatePlayers(0.033);
+    expect(mob.combatState).toBe("idle"); expect(mob.attackStartedAt).toBe(0);
+  });
+  it("clears a cancelled timeline so it cannot produce a phantom strike", () => {
+    const { mob, internal } = fixture(); mob.archetype = "stone_brute"; mob.x = 99.2;
+    internal.simulatePlayers(0.033);
+    expect(mob.attackContactAt).toBeGreaterThan(0);
+    internal.staggerMob("mob", mob, 10_200, 650, true);
+    expect(mob.attackStartedAt).toBe(0); expect(mob.attackContactAt).toBe(0);
+    expect(mob.aimCommitted).toBe(false);
+  });
   it("only damages during the blade contact window and never twice", () => {
     const { mob, internal } = fixture(); mob.x = 102;
     internal.pendingAttacks.set("player", { requestId: "sweep", mainHandId: "longsword", step: 1, yaw: 90, impactAt: 10_135 });
@@ -57,14 +84,14 @@ describe("authoritative combat impacts", () => {
     expect(mob.health).toBe(30);
   });
   it("delays enemy melee contact until its strike and consumes it once", () => {
-    const { player, mob, internal } = fixture(); mob.x = 99.2; mob.combatState = "recover";
+    const { player, mob, internal } = fixture(); mob.x = 99.2; mob.combatState = "strike";
     internal.pendingMobMelee.set("mob", { targetId: "player", yaw: 90, impactAt: 10_150 });
     internal.resolveMobMelee(10_090); expect(player.health).toBe(5);
     internal.resolveMobMelee(10_235); expect(player.health).toBe(4);
     internal.resolveMobMelee(10_300); expect(player.health).toBe(4);
   });
   it("lets a sidestep or stagger cancel an enemy contact", () => {
-    const { player, mob, internal } = fixture(); mob.x = 99.2; mob.combatState = "recover";
+    const { player, mob, internal } = fixture(); mob.x = 99.2; mob.combatState = "strike";
     internal.pendingMobMelee.set("mob", { targetId: "player", yaw: 90, impactAt: 10_150 });
     player.z += 2; internal.resolveMobMelee(10_235); expect(player.health).toBe(5);
     player.z -= 2;
