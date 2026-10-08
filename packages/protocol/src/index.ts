@@ -3,8 +3,9 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-greenwood-v10";
-export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 4;
+export const WORLD_ROOM = "world-greenwood-v11";
+export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
+export const WORLD_STREAM_CHUNK_RADIUS = 2;
 
 export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
 export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
@@ -354,6 +355,11 @@ export const MoveRequestSchema = z.object({
   stopZ: z.number().finite().optional(),
 });
 
+export const ChunkRegionRequestSchema = z.object({
+  chunkX: z.number().int().min(-10_000).max(10_000),
+  chunkZ: z.number().int().min(-10_000).max(10_000),
+});
+
 export const MineBlockRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   expectedRevision: z.number().int().nonnegative(),
@@ -432,6 +438,7 @@ export const TraitEquipRequestSchema = z.object({
 });
 
 export type MoveRequest = z.infer<typeof MoveRequestSchema>;
+export type ChunkRegionRequest = z.infer<typeof ChunkRegionRequestSchema>;
 export type MineBlockRequest = z.infer<typeof MineBlockRequestSchema>;
 export type AttackRequest = z.infer<typeof AttackRequestSchema>;
 export type DodgeRequest = z.infer<typeof DodgeRequestSchema>;
@@ -457,6 +464,10 @@ export interface WorldBootstrap {
   chunkSize: number;
   chunkHeight: number;
   spawn: { x: number; y: number; z: number };
+  chunks: ChunkSnapshot[];
+}
+
+export interface ChunkRegion {
   chunks: ChunkSnapshot[];
 }
 

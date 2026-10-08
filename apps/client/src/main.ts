@@ -22,6 +22,7 @@ import {
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
+  type ChunkRegion,
   type ChunkSnapshot,
   type CombatHit,
   type CombatMiss,
@@ -398,7 +399,9 @@ interface ClientChunk {
 
 const chunks = new Map<string, ClientChunk>();
 let activeChunkViewKey: string | null = null;
+let requestedChunkRegionKey: string | null = null;
 const ACTIVE_CHUNK_RENDER_RADIUS = 2;
+const CACHED_CHUNK_RADIUS = 4;
 let indoorRoofBuilding: (typeof TOWN_BUILDINGS)[number] | null = null;
 const playerCutaway: PlayerCutaway = {
   active: false,
@@ -530,6 +533,7 @@ function rebuildChunk(chunk: ClientChunk): void {
 function installChunk(snapshot: ChunkSnapshot): ClientChunk {
   const key = chunkKey(snapshot.chunkX, snapshot.chunkZ);
   const previous = chunks.get(key);
+  if (previous && previous.revision >= snapshot.revision) return previous;
   for (const mesh of previous?.meshes ?? []) mesh.destroy();
   previous?.root.destroy();
   const root = new pc.Entity(`chunk:${key}`);
@@ -571,6 +575,11 @@ function rebuildChunkAndNeighbors(chunk: ClientChunk, x: number, z: number): voi
 
 function updateActiveChunkMeshes(position: { x: number; z: number }): void {
   const address = worldToChunk(position.x, position.z);
+  const regionKey = chunkKey(address.chunkX, address.chunkZ);
+  if (regionKey !== requestedChunkRegionKey && room && worldReady) {
+    requestedChunkRegionKey = regionKey;
+    room.send("world:chunks", { chunkX: address.chunkX, chunkZ: address.chunkZ });
+  }
   const viewKey = `${address.chunkX},${address.chunkZ}:${cutawayStateKey}`;
   if (viewKey === activeChunkViewKey) return;
   activeChunkViewKey = viewKey;
@@ -580,6 +589,25 @@ function updateActiveChunkMeshes(position: { x: number; z: number }): void {
     chunk.root.enabled = nearby;
     if (nearby && chunk.renderedSliceKey !== cutawayStateKey) rebuildChunk(chunk);
   }
+}
+
+function applyChunkRegion(payload: ChunkRegion): void {
+  const buildStartedAt = performance.now();
+  payload.chunks.forEach(installChunk);
+  const position = localPlayer.getPosition();
+  const center = worldToChunk(position.x, position.z);
+  for (const [key, chunk] of chunks) {
+    if (Math.abs(chunk.chunkX - center.chunkX) <= CACHED_CHUNK_RADIUS
+      && Math.abs(chunk.chunkZ - center.chunkZ) <= CACHED_CHUNK_RADIUS) continue;
+    for (const mesh of chunk.meshes) mesh.destroy();
+    chunk.root.destroy();
+    chunks.delete(key);
+  }
+  activeChunkViewKey = null;
+  updateActiveChunkMeshes(position);
+  sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
+  sceneDressing.setSurfaceVisible(!playerCutaway.active);
+  lastChunkBuildMs = performance.now() - buildStartedAt;
 }
 
 const localPlayer = new pc.Entity("local-player");
@@ -2761,6 +2789,9 @@ function renderBootstrap(payload: WorldBootstrap): void {
   exitGuide.hidden = !playerCutaway.active;
   activeChunkViewKey = null;
   updateActiveChunkMeshes(initialPosition);
+  const initialChunk = worldToChunk(initialPosition.x, initialPosition.z);
+  const initialChunkKey = chunkKey(initialChunk.chunkX, initialChunk.chunkZ);
+  requestedChunkRegionKey = chunks.has(initialChunkKey) ? initialChunkKey : null;
   sceneDressing.rebuild(readWorldBlock, payload.chunks, indoorRoofBuilding);
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
   lastChunkBuildMs = performance.now() - buildStartedAt;
@@ -4479,6 +4510,7 @@ async function connect(): Promise<void> {
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
+  room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("quiz:update", (update: TavernQuizUpdate) => renderTavernQuiz(update));
   room.onMessage("blacksmith:update", (update: BlacksmithUpdate) => {
     renderBlacksmith(update);

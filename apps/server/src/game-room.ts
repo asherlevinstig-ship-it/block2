@@ -3,6 +3,7 @@ import {
   AttackRequestSchema,
   BLACKSMITH_UPGRADES,
   BlacksmithForgeSchema,
+  ChunkRegionRequestSchema,
   IRON_ORE_GOLD_PRICE,
   BRAMBLE_SNARE,
   DodgeRequestSchema,
@@ -61,6 +62,8 @@ import {
   type ResourceGathered,
   type TavernQuizUpdate,
   WORLD_BOOTSTRAP_CHUNK_RADIUS,
+  WORLD_STREAM_CHUNK_RADIUS,
+  type ChunkRegion,
 } from "@blockcraft/protocol";
 import {
   Block,
@@ -218,6 +221,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("frontier-brute", "stone_brute", { x: 43.5, y: 8, z: 41.5 });
     this.registerMob("frontier-spitter", "cave_spitter", { x: 43.5, y: 8, z: -4.5 });
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
+    this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
         client.send("pong", { id: payload.id });
@@ -284,11 +288,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           ? { x: 8.5, y: 8, z: 20.5 }
         : process.env.NODE_ENV !== "production" && requestedQaSpawn === "greenwood"
           ? { x: 39.5, y: 8, z: 13.5 }
+        : process.env.NODE_ENV !== "production" && requestedQaSpawn === "stream"
+          ? { x: -75.5, y: 8, z: -7.5 }
         : this.spawnPoint();
     player.x = spawn.x;
     player.y = spawn.y;
     player.z = spawn.z;
-    if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter" || requestedQaSpawn === "greenwood")) {
+    if (process.env.NODE_ENV !== "production" && (requestedQaSpawn === "combat" || requestedQaSpawn === "spitter" || requestedQaSpawn === "greenwood" || requestedQaSpawn === "stream")) {
       player.invulnerableUntil = Date.now() + 60 * 60 * 1000;
     }
     if (process.env.NODE_ENV !== "production" && requestedQaSpawn === "blacksmith") {
@@ -607,6 +613,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       spawn: this.spawnPoint(),
       chunks,
     };
+  }
+
+  private handleChunkRegionRequest(client: Client, payload: unknown): void {
+    const parsed = ChunkRegionRequestSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return;
+    const playerChunk = worldToChunk(player.x, player.z);
+    if (Math.abs(parsed.data.chunkX - playerChunk.chunkX) > 1
+      || Math.abs(parsed.data.chunkZ - playerChunk.chunkZ) > 1) return;
+    const chunks: ChunkSnapshot[] = [];
+    for (let chunkZ = parsed.data.chunkZ - WORLD_STREAM_CHUNK_RADIUS; chunkZ <= parsed.data.chunkZ + WORLD_STREAM_CHUNK_RADIUS; chunkZ += 1) {
+      for (let chunkX = parsed.data.chunkX - WORLD_STREAM_CHUNK_RADIUS; chunkX <= parsed.data.chunkX + WORLD_STREAM_CHUNK_RADIUS; chunkX += 1) {
+        chunks.push(this.snapshot(chunkX, chunkZ));
+      }
+    }
+    client.send("world:chunks", { chunks } satisfies ChunkRegion);
   }
 
   private spawnPoint(): { x: number; y: number; z: number } {
