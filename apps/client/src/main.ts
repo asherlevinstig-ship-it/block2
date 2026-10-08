@@ -49,6 +49,8 @@ import {
   type SpecialId,
   type TraitId,
   type WorldBootstrap,
+  type WorldObjectiveCompleted,
+  type WorldObjectiveUpdate,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
 import {
@@ -220,6 +222,18 @@ const specialCooldownLabel = document.querySelector<HTMLElement>("#special-coold
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
+const worldObjective = document.querySelector<HTMLElement>("#world-objective")!;
+const objectiveTier = document.querySelector<HTMLElement>("#objective-tier")!;
+const objectiveTitle = document.querySelector<HTMLElement>("#objective-title")!;
+const objectiveDetail = document.querySelector<HTMLElement>("#objective-detail")!;
+const objectiveProgress = document.querySelector<HTMLElement>("#objective-progress")!;
+const objectiveDistance = document.querySelector<HTMLElement>("#objective-distance")!;
+const objectiveMarker = document.querySelector<HTMLElement>("#objective-marker")!;
+const objectiveMarkerDistance = document.querySelector<HTMLElement>("#objective-marker-distance")!;
+const objectiveMarkerLabel = document.querySelector<HTMLElement>("#objective-marker-label")!;
+const objectiveComplete = document.querySelector<HTMLElement>("#objective-complete")!;
+const objectiveCompleteTitle = document.querySelector<HTMLElement>("#objective-complete-title")!;
+const objectiveCompleteReward = document.querySelector<HTMLElement>("#objective-complete-reward")!;
 const inventoryPanel = document.querySelector<HTMLElement>("#inventory-panel")!;
 const inventoryTotal = document.querySelector<HTMLElement>("#inventory-total")!;
 const inventoryToggle = document.querySelector<HTMLButtonElement>("#inventory-toggle")!;
@@ -256,6 +270,9 @@ if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine
 }
 if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
+}
+if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
+  throw new Error("World objective shell is missing required elements");
 }
 
 function applyDefensePose(rig: VoxelCharacterRig): void {
@@ -2864,6 +2881,8 @@ joystickZone.addEventListener("pointerup", event => releaseJoystick(event.pointe
 joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.pointerId));
 
 let room: Room | null = null;
+let currentWorldObjective: WorldObjectiveUpdate | null = null;
+let objectiveCompleteTimer = 0;
 let worldReady = false;
 let lastMoveSentAt = 0;
 let moveSequence = 0;
@@ -2885,6 +2904,59 @@ let smoothedMovement = { x: 0, z: 0 };
 let lastSentMovement = { x: 0, z: 0 };
 let lastMovementDebugUpdateAt = 0;
 const movementEventLog: string[] = [];
+
+function renderWorldObjective(update: WorldObjectiveUpdate): void {
+  currentWorldObjective = update;
+  worldObjective.hidden = false;
+  objectiveMarker.hidden = false;
+  objectiveTier.textContent = `TIER ${update.tier}`;
+  objectiveTitle.textContent = update.title;
+  objectiveDetail.textContent = update.detail;
+  objectiveProgress.textContent = `${update.completedMobIds.length} / ${update.targetMobIds.length}`;
+  objectiveMarkerLabel.textContent = update.title.toUpperCase();
+}
+
+function showObjectiveComplete(message: WorldObjectiveCompleted): void {
+  window.clearTimeout(objectiveCompleteTimer);
+  objectiveCompleteTitle.textContent = message.title;
+  objectiveCompleteReward.textContent = message.rewardLabel;
+  objectiveComplete.hidden = false;
+  objectiveComplete.animate(
+    [{ opacity: 0, transform: "translate(-50%, -40%) scale(.92)" }, { opacity: 1, transform: "translate(-50%, -50%) scale(1)" }],
+    { duration: 260, easing: "ease-out" },
+  );
+  objectiveCompleteTimer = window.setTimeout(() => { objectiveComplete.hidden = true; }, 2700);
+  showCombatFeedback(`+${message.coinsGranted} GOLD`, "dodge");
+}
+
+function updateObjectiveGuidance(): void {
+  const objective = currentWorldObjective;
+  if (!objective || !camera.camera) return;
+  const trackedMob = mobVisuals.get(objective.targetMobId);
+  const targetPosition = trackedMob?.state.alive
+    ? trackedMob.entity.getPosition()
+    : new pc.Vec3(objective.targetX, objective.targetY, objective.targetZ);
+  const playerPosition = localPlayer.getPosition();
+  const distance = Math.hypot(targetPosition.x - playerPosition.x, targetPosition.z - playerPosition.z);
+  const distanceLabel = `${Math.max(0, Math.round(distance))}m`;
+  objectiveDistance.textContent = distanceLabel;
+  objectiveMarkerDistance.textContent = distanceLabel;
+  const screen = camera.camera.worldToScreen(targetPosition);
+  const centerX = window.innerWidth / 2;
+  const centerY = window.innerHeight / 2;
+  const safeLeft = window.innerWidth > 820 ? Math.min(410, window.innerWidth * .32) : 44;
+  const safeRight = window.innerWidth - 52;
+  const safeTop = 130;
+  const safeBottom = window.innerHeight - 70;
+  const onScreen = screen.z > 0 && screen.x >= safeLeft && screen.x <= safeRight && screen.y >= safeTop && screen.y <= safeBottom;
+  const x = Math.max(safeLeft, Math.min(safeRight, screen.x));
+  const y = Math.max(safeTop, Math.min(safeBottom, screen.y));
+  const angle = Math.atan2(screen.y - centerY, screen.x - centerX) * 180 / Math.PI + 90;
+  objectiveMarker.style.left = `${x}px`;
+  objectiveMarker.style.top = `${y}px`;
+  objectiveMarker.style.setProperty("--marker-rotation", onScreen ? "0deg" : `${angle}deg`);
+  objectiveMarker.dataset.onscreen = String(onScreen);
+}
 
 interface StopTraceFrame {
   at: number;
@@ -4344,6 +4416,7 @@ app.on("update", (dt: number) => {
   }
   camera.setPosition(desiredCamera);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
+  updateObjectiveGuidance();
   const bodyY = localPlayerRig.root.getLocalPosition().y;
   const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
@@ -4511,6 +4584,8 @@ async function connect(): Promise<void> {
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
+  room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
+  room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
   room.onMessage("quiz:update", (update: TavernQuizUpdate) => renderTavernQuiz(update));
   room.onMessage("blacksmith:update", (update: BlacksmithUpdate) => {
     renderBlacksmith(update);
@@ -4797,6 +4872,10 @@ async function connect(): Promise<void> {
     inventoryPanel.hidden = true;
     inventoryToggle.setAttribute("aria-expanded", "false");
     worldReady = false;
+    currentWorldObjective = null;
+    worldObjective.hidden = true;
+    objectiveMarker.hidden = true;
+    objectiveComplete.hidden = true;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
     setDefensePresentation(false);
@@ -4832,6 +4911,7 @@ async function connect(): Promise<void> {
     updatePlayerCount();
   });
   room.send("world:ready");
+  room.send("objective:sync");
 }
 
 connect().catch(error => {

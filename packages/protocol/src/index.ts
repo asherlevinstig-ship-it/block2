@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-greenwood-v11";
+export const WORLD_ROOM = "world-objectives-v12";
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
 export const WORLD_STREAM_CHUNK_RADIUS = 2;
 
@@ -466,6 +466,26 @@ export interface WorldBootstrap {
   spawn: { x: number; y: number; z: number };
   chunks: ChunkSnapshot[];
 }
+
+export type WorldObjectiveUpdate = {
+  objectiveId: string;
+  title: string;
+  detail: string;
+  tier: number;
+  targetMobId: string;
+  targetMobIds: string[];
+  completedMobIds: string[];
+  targetX: number;
+  targetY: number;
+  targetZ: number;
+};
+
+export type WorldObjectiveCompleted = {
+  objectiveId: string;
+  title: string;
+  rewardLabel: string;
+  coinsGranted: number;
+};
 
 export interface ChunkRegion {
   chunks: ChunkSnapshot[];

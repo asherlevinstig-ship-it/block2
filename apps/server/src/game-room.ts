@@ -56,6 +56,8 @@ import {
   type SpecialProgressed,
   type TraitId,
   type WorldBootstrap,
+  type WorldObjectiveCompleted,
+  type WorldObjectiveUpdate,
   type WeaponAttackReleased,
   type ItemId,
   type LootPickedUp,
@@ -112,6 +114,7 @@ import {
   type MovementRateWindow,
   type StoredMovementInput,
 } from "./movement-input.js";
+import { activeObjective, createObjectiveProgress, creditObjectiveDefeat, nextObjectiveTarget, type WorldObjectiveProgress } from "./world-objectives.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -191,6 +194,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
   private readonly quizRounds = new Map<string, QuizRound>();
+  private readonly objectiveProgress = new Map<string, WorldObjectiveProgress>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, BlockId>();
   private worldDeltaStorageKey = "";
@@ -222,6 +226,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("frontier-spitter", "cave_spitter", { x: 43.5, y: 8, z: -4.5 });
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
+    this.onMessage("objective:sync", client => this.sendObjectiveState(client));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
         client.send("pong", { id: payload.id });
@@ -309,6 +314,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.inventory.set("reinforced_pickaxe", forgedPickaxe);
     }
     this.state.players.set(client.sessionId, player);
+    this.objectiveProgress.set(client.sessionId, createObjectiveProgress());
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
     this.verticalVelocities.set(client.sessionId, 0);
     if (profileToken) {
@@ -344,6 +350,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.profileTokens.delete(client.sessionId);
     this.profileSaveFingerprints.delete(client.sessionId);
     this.quizRounds.delete(client.sessionId);
+    this.objectiveProgress.delete(client.sessionId);
   }
 
   override async onDispose(): Promise<void> {
@@ -706,6 +713,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.stateUntil = 0;
     mob.targetId = "";
     this.clearMarksForMob(mobId);
+    this.progressWorldObjectives(mobId, mob, attackerId);
     const player = this.state.players.get(attackerId);
     if (!player) return;
     const reward = defeatReward(player.health, player.maxHealth, player.stamina, player.maxStamina, definition, mob.rewardMultiplier);
@@ -723,6 +731,54 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       health: player.health,
       stamina: Math.round(player.stamina),
     } satisfies CombatReward);
+  }
+
+  private sendObjectiveState(client: Client): void {
+    const progress = this.objectiveProgress.get(client.sessionId);
+    if (!progress) return;
+    const objective = activeObjective(progress);
+    const targetMobId = nextObjectiveTarget(progress);
+    const target = this.state.mobs.get(targetMobId);
+    const home = this.mobHomes.get(targetMobId);
+    client.send("objective:update", {
+      objectiveId: objective.id,
+      title: objective.title,
+      detail: objective.detail,
+      tier: objective.tier,
+      targetMobId,
+      targetMobIds: [...objective.targetMobIds],
+      completedMobIds: [...progress.completedMobIds],
+      targetX: target?.x ?? home?.x ?? 8.5,
+      targetY: target?.y ?? home?.y ?? 8,
+      targetZ: target?.z ?? home?.z ?? 8.5,
+    } satisfies WorldObjectiveUpdate);
+  }
+
+  private progressWorldObjectives(mobId: string, mob: MobState, attackerId: string): void {
+    const participationRadius = 22;
+    for (const [playerId, player] of this.state.players) {
+      const distance = Math.hypot(player.x - mob.x, player.z - mob.z);
+      if (playerId !== attackerId && distance > participationRadius) continue;
+      const progress = this.objectiveProgress.get(playerId);
+      if (!progress) continue;
+      const completedBefore = progress.completedMobIds.size;
+      const result = creditObjectiveDefeat(progress, mobId);
+      const client = this.clients.find(candidate => candidate.sessionId === playerId);
+      if (!result.completed) {
+        if (progress.completedMobIds.size !== completedBefore && client) this.sendObjectiveState(client);
+        continue;
+      }
+      const coinsBefore = player.coins;
+      player.coins = Math.min(1_000_000, player.coins + result.completed.coins);
+      client?.send("objective:completed", {
+        objectiveId: result.completed.id,
+        title: result.completed.title,
+        rewardLabel: result.completed.rewardLabel,
+        coinsGranted: player.coins - coinsBefore,
+      } satisfies WorldObjectiveCompleted);
+      if (client) this.sendObjectiveState(client);
+      void this.persistPlayer(playerId, player);
+    }
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number): void {
