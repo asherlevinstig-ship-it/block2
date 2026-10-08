@@ -44,7 +44,9 @@ for (const scenario of (process.argv.slice(2).length ? process.argv.slice(2) : [
       for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const next = resolvePlayerMotion(node.pose, { x, y: 0, z }, read);
         if (!isPlayerSupported(read, next.x, next.y, next.z) || Math.abs(next.x - node.pose.x - x) > 0.05 || Math.abs(next.z - node.pose.z - z) > 0.05
-          || next.x < -18 || next.x > 55 || next.z < -18 || next.z > 55) continue;
+          || next.x < -18 || next.x > 55 || next.z < -18 || next.z > 55
+          // Avoid the crawler/spitter forest during approach; only test the brute.
+          || (next.x > 32 && next.z < 29)) continue;
         const key = `${Math.round(next.x)},${Math.round(next.y)},${Math.round(next.z)}`;
         if (visited.has(key)) continue;
         visited.add(key); queue.push({ pose: { x: next.x, y: next.y, z: next.z }, parent: index });
@@ -57,7 +59,7 @@ for (const scenario of (process.argv.slice(2).length ? process.argv.slice(2) : [
       const now = performance.now(); const elapsed = Math.round(now - started);
       player = room.state.players.get(room.sessionId); brute = room.state.mobs.get("stone-brute");
       if (elapsed > nextProgress) {
-        console.log(JSON.stringify({ progress: scenario, elapsed, position: { x: player.x, y: player.y, z: player.z }, waypoint, target: path[waypoint], ack: player.lastProcessedInput }));
+        console.log(JSON.stringify({ progress: scenario, elapsed, position: { x: player.x, y: player.y, z: player.z }, waypoint, target: path[waypoint], ack: player.lastProcessedInput, recentRttMs: rtts.slice(-5).map(Math.round) }));
         nextProgress += 10000;
       }
       if (brute.combatState !== previousState) {
@@ -98,7 +100,7 @@ for (const scenario of (process.argv.slice(2).length ? process.argv.slice(2) : [
           while (path[waypoint] && Math.hypot(player.x - path[waypoint].x, player.z - path[waypoint].z) < 0.65) waypoint++;
           const target = path[waypoint] ?? brute;
           const dx = target.x - player.x; const dz = target.z - player.z; const distance = Math.hypot(dx, dz);
-          if (distance > 0.1) { const strength = Math.min(1, distance / 2); x = dx / distance * strength; z = dz / distance * strength; }
+          if (distance > 0.1) { const strength = Math.min(1, distance / 4); x = dx / distance * strength; z = dz / distance * strength; }
         } else if (mode === "sidestep" && now < sideUntil) {
           const angle = brute.yaw * Math.PI / 180; const side = scenario.includes("left") ? -1 : 1;
           x = Math.cos(angle) * side; z = -Math.sin(angle) * side;

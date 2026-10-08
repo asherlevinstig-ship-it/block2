@@ -42,7 +42,7 @@ function fixture(read = flat) {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("authoritative combat impacts", () => {
-  it.each([1.2, 2.6].flatMap(distance => [-1, 1].map(side => [distance, side] as const)))(
+  it.each([1.2, 3.05].flatMap(distance => [-1, 1].map(side => [distance, side] as const)))(
     "allows a walking escape at distance %s in direction %s with 300 ms RTT and 100 ms reaction", (distance, side) => {
       const { player, mob, internal } = fixture();
       mob.archetype = "stone_brute"; mob.x = player.x - distance;
@@ -51,6 +51,7 @@ describe("authoritative combat impacts", () => {
       internal.mobCommittedAim.set("mob", { x: player.x, y: player.y, z: player.z, yaw: 90 });
       let sequence = 0;
       // Aim lock: 10500. Cue delivery + human reaction + return trip: 400 ms.
+      // Initial 3.05 minus the 0.45 lunge leaves 2.6 at contact: outer reach.
       for (let now = 10_000; now < 12_000; now += 33) {
         vi.setSystemTime(now);
         if (now >= 10_900 && now < 11_650 && sequence % 2 === 0) {
