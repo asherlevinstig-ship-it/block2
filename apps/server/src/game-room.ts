@@ -104,6 +104,7 @@ import {
   activeMovementInput,
   idleMovementInput,
   recordMovementMessage,
+  requestedStopPosition,
   type MovementRateWindow,
   type StoredMovementInput,
 } from "./movement-input.js";
@@ -859,6 +860,28 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (previous && parsed.data.sequence <= previous.request.sequence) return;
     const rejection = movementRejectionReason(player, parsed.data);
     if (rejection) return this.reject(client, { action: "move", reason: rejection });
+    const requestedStop = requestedStopPosition(previous, parsed.data, player);
+    if (requestedStop) {
+      const correctedStop = resolvePlayerMotion(
+        { x: player.x, y: player.y, z: player.z },
+        {
+          x: requestedStop.x - player.x,
+          y: requestedStop.y - player.y,
+          z: requestedStop.z - player.z,
+        },
+        this.readWorldBlock,
+      );
+      const reachedRequestedStop = Math.hypot(
+        correctedStop.x - requestedStop.x,
+        correctedStop.y - requestedStop.y,
+        correctedStop.z - requestedStop.z,
+      ) <= 0.02;
+      if (reachedRequestedStop) {
+        player.x = correctedStop.x;
+        player.y = correctedStop.y;
+        player.z = correctedStop.z;
+      }
+    }
     player.yaw = parsed.data.yaw;
     this.movementInputs.set(client.sessionId, { request: parsed.data, receivedAt: now });
   }

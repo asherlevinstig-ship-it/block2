@@ -346,6 +346,9 @@ export const MoveRequestSchema = z.object({
   strafe: z.number().finite().min(-1).max(1),
   forward: z.number().finite().min(-1).max(1),
   yaw: z.number().finite().default(0),
+  stopX: z.number().finite().optional(),
+  stopY: z.number().finite().optional(),
+  stopZ: z.number().finite().optional(),
 });
 
 export const MineBlockRequestSchema = z.object({

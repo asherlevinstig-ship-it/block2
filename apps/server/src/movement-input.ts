@@ -3,6 +3,7 @@ import type { MoveRequest } from "@blockcraft/protocol";
 export const MOVEMENT_INPUT_TIMEOUT_MS = 200;
 export const MOVEMENT_RATE_WINDOW_MS = 1_000;
 export const MOVEMENT_RATE_LIMIT = 30;
+export const MAX_STOP_POSITION_CORRECTION = 0.45;
 
 export interface StoredMovementInput {
   request: MoveRequest;
@@ -37,4 +38,22 @@ export function recordMovementMessage(
     : window;
   current.count += 1;
   return { window: current, allowed: current.count <= MOVEMENT_RATE_LIMIT };
+}
+
+export function requestedStopPosition(
+  previous: StoredMovementInput | undefined,
+  next: MoveRequest,
+  authoritative: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } | null {
+  if (!previous) return null;
+  const previousMoving = Math.hypot(previous.request.strafe, previous.request.forward) > 0.01;
+  const nextMoving = Math.hypot(next.strafe, next.forward) > 0.01;
+  if (!previousMoving || nextMoving || next.stopX === undefined || next.stopY === undefined || next.stopZ === undefined) return null;
+  const distance = Math.hypot(
+    next.stopX - authoritative.x,
+    next.stopY - authoritative.y,
+    next.stopZ - authoritative.z,
+  );
+  if (distance > MAX_STOP_POSITION_CORRECTION) return null;
+  return { x: next.stopX, y: next.stopY, z: next.stopZ };
 }

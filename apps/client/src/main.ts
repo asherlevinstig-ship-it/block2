@@ -4342,11 +4342,15 @@ app.on("update", (dt: number) => {
   if (room && worldReady && (directionChanged || now - lastMoveSentAt >= 50)) {
     lastMoveSentAt = now;
     moveSequence += 1;
+    const stopPosition = Math.hypot(smoothedMovement.x, smoothedMovement.z) <= 0.01
+      ? localPlayer.getPosition()
+      : null;
     room.send("move", {
       sequence: moveSequence,
       strafe: smoothedMovement.x,
       forward: smoothedMovement.z,
       yaw: localFacingYaw,
+      ...(stopPosition ? { stopX: stopPosition.x, stopY: stopPosition.y, stopZ: stopPosition.z } : {}),
     });
     if (directionChanged) logMovementEvent(`DIR #${moveSequence} ${movementVectorLabel(lastSentMovement)} → ${movementVectorLabel(smoothedMovement)}`);
     lastSentMovement = { ...smoothedMovement };
