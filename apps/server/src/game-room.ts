@@ -633,7 +633,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const chunks: ChunkSnapshot[] = [];
     for (let chunkZ = parsed.data.chunkZ - WORLD_STREAM_CHUNK_RADIUS; chunkZ <= parsed.data.chunkZ + WORLD_STREAM_CHUNK_RADIUS; chunkZ += 1) {
       for (let chunkX = parsed.data.chunkX - WORLD_STREAM_CHUNK_RADIUS; chunkX <= parsed.data.chunkX + WORLD_STREAM_CHUNK_RADIUS; chunkX += 1) {
-        chunks.push(this.snapshot(chunkX, chunkZ));
+        const chunk = this.getChunk(chunkX, chunkZ);
+        if (!parsed.data.knownChunks.some(known => known.chunkX === chunkX && known.chunkZ === chunkZ && known.revision === chunk.revision)) chunks.push(this.snapshot(chunkX, chunkZ));
       }
     }
     client.send("world:chunks", { chunks } satisfies ChunkRegion);

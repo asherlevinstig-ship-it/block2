@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-movement-stall-v14";
+export const WORLD_ROOM = "world-prediction-replay-v15";
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
 export const WORLD_STREAM_CHUNK_RADIUS = 2;
 
@@ -358,6 +358,11 @@ export const MoveRequestSchema = z.object({
 export const ChunkRegionRequestSchema = z.object({
   chunkX: z.number().int().min(-10_000).max(10_000),
   chunkZ: z.number().int().min(-10_000).max(10_000),
+  knownChunks: z.array(z.object({
+    chunkX: z.number().int().min(-10_000).max(10_000),
+    chunkZ: z.number().int().min(-10_000).max(10_000),
+    revision: z.number().int().nonnegative(),
+  })).max(121).default([]),
 });
 
 export const MineBlockRequestSchema = z.object({

@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
@@ -596,7 +597,12 @@ function updateActiveChunkMeshes(position: { x: number; z: number }): void {
   const regionKey = chunkKey(address.chunkX, address.chunkZ);
   if (regionKey !== requestedChunkRegionKey && room && worldReady) {
     requestedChunkRegionKey = regionKey;
-    room.send("world:chunks", { chunkX: address.chunkX, chunkZ: address.chunkZ });
+    room.send("world:chunks", {
+      chunkX: address.chunkX, chunkZ: address.chunkZ,
+      knownChunks: [...chunks.values()].slice(0, 121).map(chunk => ({
+        chunkX: chunk.chunkX, chunkZ: chunk.chunkZ, revision: chunk.revision,
+      })),
+    });
   }
   const viewKey = `${address.chunkX},${address.chunkZ}:${cutawayStateKey}`;
   if (viewKey === activeChunkViewKey) return;
@@ -610,6 +616,7 @@ function updateActiveChunkMeshes(position: { x: number; z: number }): void {
 }
 
 function applyChunkRegion(payload: ChunkRegion): void {
+  if (payload.chunks.length === 0) return;
   const buildStartedAt = performance.now();
   payload.chunks.forEach(installChunk);
   const position = localPlayer.getPosition();
@@ -626,6 +633,7 @@ function applyChunkRegion(payload: ChunkRegion): void {
   sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
   lastChunkBuildMs = performance.now() - buildStartedAt;
+  logMovementEvent(`CHUNK STREAM count=${payload.chunks.length} build=${lastChunkBuildMs.toFixed(1)}ms`);
 }
 
 const localPlayer = new pc.Entity("local-player");
@@ -1115,6 +1123,7 @@ let specialAimTargetValid = true;
 let cameraShakeUntil = 0;
 let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
+const pendingPredictionFrames: PredictionFrame[] = [];
 let lastAuthoritativeMovementAt = 0;
 let lastAcknowledgementAdvancedAt = 0;
 let pendingStopInputSequence: number | null = null;
@@ -2282,10 +2291,22 @@ function bindPlayers(joinedRoom: Room): void {
 
     const updatePosition = () => {
       if (isLocal) {
-        authoritativeLocalPosition.set(player.x, player.y, player.z);
-        lastAuthoritativeMovementAt = performance.now();
+        captureLocalSnapshot();
       }
       else if (remote) recordRemoteSnapshot(remote, player);
+    };
+    let snapshotQueued = false;
+    const captureLocalSnapshot = () => {
+      if (snapshotQueued) return;
+      snapshotQueued = true;
+      queueMicrotask(() => {
+        snapshotQueued = false;
+        if (room !== joinedRoom) return;
+        authoritativeLocalPosition.set(player.x, player.y, player.z);
+        if (player.lastProcessedInput > lastProcessedInputSequence) lastAcknowledgementAdvancedAt = performance.now();
+        lastProcessedInputSequence = player.lastProcessedInput;
+        lastAuthoritativeMovementAt = performance.now();
+      });
     };
     const playerCallbacks = callbacks(player);
     if (isLocal) {
@@ -2306,9 +2327,7 @@ function bindPlayers(joinedRoom: Room): void {
     }, true);
     playerCallbacks.listen("lastProcessedInput", () => {
       if (isLocal) {
-        if (player.lastProcessedInput > lastProcessedInputSequence) lastAcknowledgementAdvancedAt = performance.now();
-        lastProcessedInputSequence = player.lastProcessedInput;
-        lastAuthoritativeMovementAt = performance.now();
+        captureLocalSnapshot();
       }
     }, true);
     playerCallbacks.listen("actionSequence", () => {
@@ -2800,6 +2819,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localVisualVerticalOffset = 0;
   localNetworkVisualOffset = { x: 0, z: 0 };
   localRecoveryVisualOffset = { x: 0, z: 0 };
+  pendingPredictionFrames.length = 0;
   localPowerVisualOffset.set(0, 0, 0);
   localPlayerVisual.setLocalPosition(0, 0, 0);
   surfaceReferenceY = SURFACE_HEIGHT + 1;
@@ -4011,6 +4031,11 @@ function reconcileLocalPlayer(
   const position = localPlayer.getPosition();
   const beforeCorrection = position.clone();
   const target = authoritativeLocalPosition.clone();
+  if (moving) {
+    const projected = replayPendingMovement(target, lastProcessedInputSequence, pendingPredictionFrames,
+      (pose, delta) => resolvePlayerMotion(pose, delta, readCollisionWorldBlock));
+    target.set(projected.x, projected.y, projected.z);
+  }
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
   const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, performance.now() - lastAuthoritativeMovementAt, performance.now() - lastAcknowledgementAdvancedAt);
@@ -4093,6 +4118,17 @@ app.on("update", (dt: number) => {
     readCollisionWorldBlock,
   );
   const requestedTravel = Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed() * frameTime;
+  const sendMovementThisFrame = movementDirectionChanged(lastSentMovement, smoothedMovement)
+    || performance.now() - lastMoveSentAt >= 50;
+  if (room && worldReady) {
+    pendingPredictionFrames.push({
+      sequence: moveSequence + Number(sendMovementThisFrame),
+      x: smoothedMovement.x * localMovementSpeed() * frameTime,
+      z: smoothedMovement.z * localMovementSpeed() * frameTime,
+    });
+    while (pendingPredictionFrames.length > 240
+      || (pendingPredictionFrames[0]?.sequence ?? Infinity) <= lastProcessedInputSequence) pendingPredictionFrames.shift();
+  }
   const collisionTravel = Math.hypot(predicted.x - current.x, predicted.z - current.z);
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
   if (predicted.stepped) {
@@ -4586,7 +4622,7 @@ app.on("update", (dt: number) => {
     room.send("ping", { id });
   }
   const directionChanged = movementDirectionChanged(lastSentMovement, smoothedMovement);
-  if (room && worldReady && (directionChanged || now - lastMoveSentAt >= 50)) {
+  if (room && worldReady && sendMovementThisFrame) {
     lastMoveSentAt = now;
     moveSequence += 1;
     const stopPosition = Math.hypot(smoothedMovement.x, smoothedMovement.z) <= 0.01
@@ -4612,6 +4648,7 @@ app.on("update", (dt: number) => {
       `yaw        ${localFacingYaw.toFixed(1)} → ${desiredFacingYaw.toFixed(1)}`,
       `local      ${player.x.toFixed(3)}, ${player.y.toFixed(3)}, ${player.z.toFixed(3)}`,
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
+      `pending    ${pendingPredictionFrames.length} prediction frames · raw d=${localPlayer.getPosition().distance(authoritativeLocalPosition).toFixed(3)}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `net visual ${localNetworkVisualOffset.x.toFixed(3)}, ${localNetworkVisualOffset.z.toFixed(3)}`,
       `recovery   ${localRecoveryVisualOffset.x.toFixed(3)}, ${localRecoveryVisualOffset.z.toFixed(3)}`,
