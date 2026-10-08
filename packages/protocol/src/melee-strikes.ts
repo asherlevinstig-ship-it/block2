@@ -36,8 +36,8 @@ export function mobMeleeStrike(archetype: string): MeleeStrikeProfile {
   return {
     reach: brute ? 2.05 : 1.55,
     radius: brute ? 0.25 : 0.16,
-    startAngle: brute ? 8 : 38,
-    endAngle: brute ? -8 : -38,
+    startAngle: brute ? 8 : 12,
+    endAngle: brute ? -8 : -12,
     startHeight: brute ? 1.95 : 0.9,
     endHeight: brute ? 0.25 : 0.65,
     beforeImpactMs: brute ? 70 : 50,
@@ -47,7 +47,8 @@ export function mobMeleeStrike(archetype: string): MeleeStrikeProfile {
 }
 
 export const mobMeleeImpactMs = (archetype: string): number => archetype === "stone_brute" ? 280 : 150;
-export const mobAimCommitMs = (archetype: string): number => archetype === "stone_brute" ? 650 : 250;
+export const mobAimCommitMs = (archetype: string): number => archetype === "stone_brute" ? 650
+  : archetype === "moss_crawler" || archetype === "briar_crawler" ? 550 : 250;
 
 /** Conservative XZ danger boundary, including the player's body contact margin. */
 export function mobStrikeGroundOutline(archetype: string, yaw: number): { x: number; z: number }[] {

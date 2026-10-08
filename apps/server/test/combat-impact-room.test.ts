@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, type WorldBlockReader } from "@blockcraft/voxel-world";
 import type { MainHandId, PowerId } from "@blockcraft/protocol";
+import { MOB_ARCHETYPES } from "../src/mob-archetypes.js";
 import { WorldRoom } from "../src/game-room.js";
 import { MobState, PlayerState, WorldState } from "../src/schema.js";
 
@@ -42,6 +43,38 @@ function fixture(read = flat) {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("authoritative combat impacts", () => {
+  it.each(["moss_crawler", "briar_crawler"] as const)("%s bites once, freezes its aim, and leaves a harmless recovery window", archetype => {
+    const { player, mob, internal, events } = fixture();
+    mob.archetype = archetype; mob.x = player.x - 1.3;
+    internal.simulatePlayers(0.033);
+    const release = mob.attackReleaseAt;
+    vi.setSystemTime(release - 550); internal.simulatePlayers(0.033);
+    expect(mob.aimCommitted).toBe(true); const yaw = mob.yaw;
+    player.z += 0.1;
+    vi.setSystemTime(release - 100); internal.simulatePlayers(0.033); expect(mob.yaw).toBe(yaw);
+    vi.setSystemTime(release); internal.simulatePlayers(0.033);
+    const contactEnd = mob.attackContactEndAt; const recoveryEnd = mob.attackRecoveryEndAt;
+    vi.setSystemTime(contactEnd); internal.simulatePlayers(0.033);
+    expect(player.health).toBe(4); expect(mob.combatState).toBe("recover");
+    expect(recoveryEnd - contactEnd).toBe(MOB_ARCHETYPES[archetype].recoverMs);
+    vi.setSystemTime(recoveryEnd - 1); internal.simulatePlayers(0.033);
+    expect(player.health).toBe(4); expect(mob.combatState).toBe("recover");
+    expect(events.filter(e => e.type === "combat:player-hit")).toHaveLength(1);
+  });
+  it.each(["moss_crawler", "briar_crawler"].flatMap(archetype => [-1, 1].map(side => [archetype, side] as const)))(
+    "%s permits walking sidestep %s after commitment with 300 ms RTT and 100 ms reaction", (archetype, side) => {
+      const { player, mob, internal } = fixture(); mob.archetype = archetype; mob.x = player.x - 1.3;
+      internal.simulatePlayers(0.033);
+      const release = mob.attackReleaseAt; const moveAt = release - 550 + 150 + 100 + 150;
+      let sequence = 0;
+      for (let now = 10_033; now < release + 600; now += 33) {
+        vi.setSystemTime(now);
+        if (now >= moveAt && sequence % 2 === 0) internal.handleMove({ sessionId: "player" },
+          { sequence: sequence + 1, strafe: 0, forward: side, yaw: 90 });
+        sequence++; internal.simulatePlayers(0.033);
+      }
+      expect(player.health).toBe(5);
+    });
   it.each([1.2, 3.05].flatMap(distance => [-1, 1].map(side => [distance, side] as const)))(
     "allows a walking escape at distance %s in direction %s with 300 ms RTT and 100 ms reaction", (distance, side) => {
       const { player, mob, internal } = fixture();

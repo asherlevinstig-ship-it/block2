@@ -7,12 +7,12 @@ const origin = { x: 10.5, y: 1, z: 10.5 };
 const flat: WorldBlockReader = (_x, y) => y < 1 ? Block.Stone : Block.Air;
 const sword = playerMeleeStrike("longsword", 1)!;
 describe("animated melee sweep", () => {
-  it.each([0, 45, 90, 180])("keeps every brute body contact inside its ground marker at yaw %s", yaw => {
-    const outline = mobStrikeGroundOutline("stone_brute", yaw);
+  it.each(["stone_brute", "moss_crawler", "briar_crawler"].flatMap(archetype => [0, 45, 90, 180].map(yaw => [archetype, yaw] as const)))("keeps every %s body contact inside its ground marker at yaw %s", (archetype, yaw) => {
+    const outline = mobStrikeGroundOutline(archetype, yaw);
     const center = { x: 0, y: 1, z: 0 };
     let contacts = 0;
     for (let x = -3; x <= 3; x += 0.25) for (let z = -3; z <= 3; z += 0.25) {
-      if (!meleeSweepImpact(center, yaw, mobMeleeStrike("stone_brute"), 0, 1, [{ id: "target", x, y: 1, z }], flat)) continue;
+      if (!meleeSweepImpact(center, yaw, mobMeleeStrike(archetype), 0, 1, [{ id: "target", x, y: 1, z }], flat)) continue;
       contacts++;
       expect(outline.every((a, i) => {
         const b = outline[(i + 1) % outline.length]!;

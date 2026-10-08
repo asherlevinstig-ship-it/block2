@@ -15,6 +15,14 @@ describe("authoritative enemy presentation", () => {
     expect(400 + clock.offset).toBe(10_300);
     expect(sampleServerClock(clock, 500, 1400, 11_300)).toEqual(clock);
   });
+  it("shows crawler commitment 550 ms before release and keeps its warning until contact ends", () => {
+    for (const archetype of ["moss_crawler", "briar_crawler"]) {
+      expect(enemyAttackPresentation({ ...mob, archetype }, 10_599).aimLocked).toBe(false);
+      expect(enemyAttackPresentation({ ...mob, archetype }, 10_600).aimLocked).toBe(true);
+      expect(enemyAttackPresentation({ ...mob, archetype }, 11_530).warning).toBe(true);
+      expect(enemyAttackPresentation({ ...mob, archetype }, 11_531).warning).toBe(false);
+    }
+  });
   it("rejects invalid and excessively delayed clock samples", () => {
     const clock = createServerClock(100, 10000);
     expect(sampleServerClock(clock, 100, 99, 10000)).toEqual(clock);

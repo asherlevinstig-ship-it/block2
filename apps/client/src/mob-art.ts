@@ -177,7 +177,8 @@ export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: n
     Math.sin(time * 1.3) * 3 * (1 - rig.walk) * (1 - windup) * (1 - defeat),
     Math.sin(time * 21) * stagger * 8,
   );
-  rig.jaw.setLocalEulerAngles((spitter ? windup * 36 + attack * 18 : windup * 11 - attack * 13) + defeat * 18, 0, 0);
+  rig.jaw.setLocalEulerAngles((spitter ? windup * 36 + attack * 18 : brute ? windup * 11 - attack * 13
+    : windup * 32 - attack * 28) + defeat * 18, 0, 0);
   for (let index = 0; index < rig.sacs.length; index += 1) {
     const inflate = 1 + Math.sin(time * 2.5 + index * 0.4) * 0.035 + windup * 0.22 - attack * 0.16;
     rig.sacs[index]!.setLocalScale(inflate, inflate * (1 - defeat * 0.3), inflate);

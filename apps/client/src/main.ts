@@ -2082,7 +2082,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     pip.setLocalEulerAngles(0, 45, 45);
   }
   const warning = new pc.Entity("lunge-warning");
-  const warningMesh = isBrute ? new pc.Mesh(app.graphicsDevice) : null;
+  const warningMesh = !isSpitter ? new pc.Mesh(app.graphicsDevice) : null;
   if (warningMesh) {
     updateStrikeWarningMesh(warningMesh, mob.archetype, mob.yaw);
     warning.addComponent("render", { meshInstances: [new pc.MeshInstance(warningMesh, warningMaterial)], castShadows: false, receiveShadows: false });
@@ -2092,9 +2092,9 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   }
   warning.setLocalPosition(0, 0.035, 0);
   const warningScale = isBrute ? 5.5 : isSpitter ? 3.6 : 4.2;
-  warning.setLocalScale(isBrute ? 1 : warningScale, isBrute ? 1 : 0.025, isBrute ? 1 : warningScale);
+  warning.setLocalScale(warningMesh ? 1 : warningScale, warningMesh ? 1 : 0.025, warningMesh ? 1 : warningScale);
   warning.enabled = false;
-  if (!isBrute) {
+  if (isSpitter) {
     addBox(warning, "attack-direction", warningMaterial, [0.06, 1.2, 0.46], [0, 0.8, 0.25]);
     const arrowLeft = addBox(warning, "attack-direction-left", warningMaterial, [0.06, 1.2, 0.18], [-0.05, 0.8, 0.43]);
     const arrowRight = addBox(warning, "attack-direction-right", warningMaterial, [0.06, 1.2, 0.18], [0.05, 0.8, 0.43]);
@@ -4374,7 +4374,8 @@ app.on("update", (dt: number) => {
           ? 0.72 + Math.sin(animationTime * 12) * 0.13
           : mob.isSpitter
             ? 0.68 + Math.sin(animationTime * 15) * 0.12
-            : 0.55 + Math.sin(animationTime * 18) * 0.2)
+            : 0.45 + Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackStartedAt)
+              / Math.max(1, mob.state.attackReleaseAt - mob.state.attackStartedAt))) * 0.5)
       : 0;
     const markState = visibleMarkState(mob);
     const exposed = Boolean(markState && markState.stacks >= markState.maxStacks);
@@ -4412,15 +4413,18 @@ app.on("update", (dt: number) => {
       mob.warningMaterial.update();
     }
     animateMobArt(mob.art, frameTime, animationTime, moveSpeed, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
+    const crawlerRecovery = !mob.isBrute && !mob.isSpitter && presentation.phase === "recover"
+      ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
+        / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
     mob.bodyRoot.setLocalScale(1 + defeat * 0.13, 1 - defeat * (mob.isBrute ? 0.42 : 0.58), 1 + defeat * 0.1);
     mob.bodyRoot.setLocalPosition(
       0,
-      gaitBob - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0),
+      gaitBob - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06,
       attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16),
     );
     mob.bodyRoot.setLocalEulerAngles(
-      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9) + defeat * (mob.isBrute ? 17 : 5),
+      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5),
       0,
       Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3) + defeat * (mob.isBrute ? 7 : 12),
     );
