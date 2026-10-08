@@ -61,6 +61,7 @@ export const MobState = schema({
   actionSequence: t.int32().default(0),
   yaw: t.float32().default(0),
   combatState: t.string().default("idle"),
+  aimCommitted: t.boolean().default(false),
   stateUntil: t.float64().default(0),
   targetId: t.string().default(""),
   staggerSequence: t.int32().default(0),

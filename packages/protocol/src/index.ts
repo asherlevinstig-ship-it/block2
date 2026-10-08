@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-mob-navigation-v16";
+export const WORLD_ROOM = "world-combat-impact-v17";
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
 export const WORLD_STREAM_CHUNK_RADIUS = 2;
 
@@ -525,6 +525,7 @@ export interface CombatMiss {
 }
 
 export interface WeaponAttackReleased {
+  projectileId: string;
   attackerId: string;
   mainHandId: MainHandId;
   x: number;
@@ -534,7 +535,14 @@ export interface WeaponAttackReleased {
   targetY: number;
   targetZ: number;
   travelMs: number;
-  hit: boolean;
+}
+
+export interface ProjectileResolved {
+  projectileId: string;
+  reason: "hit" | "terrain" | "miss";
+  x: number;
+  y: number;
+  z: number;
 }
 
 export interface MobProjectileReleased {

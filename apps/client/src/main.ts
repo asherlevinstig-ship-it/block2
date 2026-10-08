@@ -39,6 +39,7 @@ import {
   type MobHazardPlaced,
   type MobProjectileReleased,
   type PlayerHit,
+  type ProjectileResolved,
   type PowerCast,
   type PowerCancelled,
   type PowerId,
@@ -993,6 +994,7 @@ interface NetworkMob {
   hitSequence: number;
   actionSequence: number;
   combatState: string;
+  aimCommitted: boolean;
   stateUntil: number;
   targetId: string;
   staggerSequence: number;
@@ -1454,13 +1456,13 @@ interface BrambleSnareVisual {
 }
 
 interface WeaponProjectileVisual {
+  projectileId: string;
   entity: pc.Entity;
   material: pc.StandardMaterial;
   start: pc.Vec3;
   end: pc.Vec3;
   startedAt: number;
   durationMs: number;
-  hit: boolean;
 }
 
 interface MobHazardVisual {
@@ -1507,13 +1509,13 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
   if (message.mainHandId === "bow") entity.lookAt(end);
   app.root.addChild(entity);
   weaponProjectileVisuals.push({
+    projectileId: message.projectileId,
     entity,
     material,
     start,
     end,
     startedAt: performance.now(),
     durationMs: Math.max(80, message.travelMs),
-    hit: message.hit,
   });
 }
 
@@ -1528,13 +1530,13 @@ function createMobProjectile(message: MobProjectileReleased): void {
   entity.setPosition(start);
   app.root.addChild(entity);
   weaponProjectileVisuals.push({
+    projectileId: message.projectileId,
     entity,
     material,
     start,
     end,
     startedAt: performance.now(),
     durationMs: Math.max(160, message.travelMs),
-    hit: true,
   });
 }
 
@@ -2039,6 +2041,11 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const warningScale = isBrute ? 5.5 : isSpitter ? 3.6 : 4.2;
   warning.setLocalScale(warningScale, 0.025, warningScale);
   warning.enabled = false;
+  addBox(warning, "attack-direction", warningMaterial, [0.06, 1.2, 0.46], [0, 0.8, 0.25]);
+  const arrowLeft = addBox(warning, "attack-direction-left", warningMaterial, [0.06, 1.2, 0.18], [-0.05, 0.8, 0.43]);
+  const arrowRight = addBox(warning, "attack-direction-right", warningMaterial, [0.06, 1.2, 0.18], [0.05, 0.8, 0.43]);
+  arrowLeft.setLocalEulerAngles(0, -40, 0);
+  arrowRight.setLocalEulerAngles(0, 40, 0);
   entity.addChild(warning);
   const mark = new pc.Entity("hunters-mark");
   mark.addComponent("render", { type: "cylinder" });
@@ -2761,7 +2768,7 @@ function updateTarget(): void {
 
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
-  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMark?.stacks ?? 0}` : "none";
+  const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
   const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}`;
   if (nextKey === targetStateKey) return;
@@ -2772,7 +2779,7 @@ function updateTarget(): void {
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
     const intent = combatMob.visual.state.combatState === "windup"
-      ? " · LUNGE INCOMING"
+      ? combatMob.visual.state.aimCommitted ? " · AIM LOCKED — SIDESTEP" : " · ATTACK WINDUP"
       : combatMob.visual.state.combatState === "stagger"
         ? " · STAGGERED"
         : "";
@@ -4284,7 +4291,8 @@ app.on("update", (dt: number) => {
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
     const attackStrength = mob.actionAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackElapsed / attackDuration * Math.PI) : 0;
     const staggerElapsed = animationNow - mob.staggerAt;
-    const staggerStrength = mob.staggerAt > 0 && mob.state.alive && staggerElapsed >= 0 && staggerElapsed < 900 ? 1 - staggerElapsed / 900 : 0;
+    const staggerStrength = mob.staggerAt > 0 && mob.state.alive && mob.state.combatState === "stagger" && staggerElapsed >= 0
+      ? 0.25 + 0.75 * Math.exp(-staggerElapsed / 600) : 0;
     const windupStrength = mob.state.alive && mob.state.combatState === "windup"
       ? (mob.isBrute
           ? 0.72 + Math.sin(animationTime * 12) * 0.13
@@ -4314,7 +4322,9 @@ app.on("update", (dt: number) => {
     if (mob.warning.enabled) {
       const warningPulse = 1 + Math.sin(animationTime * 18) * 0.045;
       mob.warning.setLocalScale(mob.warningScale * warningPulse, 0.025, mob.warningScale * warningPulse);
-      mob.warningMaterial.opacity = 0.25 + windupStrength * 0.22;
+      mob.warningMaterial.diffuse.set(0.95, mob.state.aimCommitted ? 0.12 : 0.58, 0.06);
+      mob.warningMaterial.emissive.set(0.7, mob.state.aimCommitted ? 0.04 : 0.28, 0.02);
+      mob.warningMaterial.opacity = (mob.state.aimCommitted ? 0.4 : 0.25) + windupStrength * 0.22;
       mob.warningMaterial.update();
     }
     animateMobArt(mob.art, frameTime, animationTime, moveSpeed, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
@@ -4442,17 +4452,17 @@ app.on("update", (dt: number) => {
   for (let index = weaponProjectileVisuals.length - 1; index >= 0; index -= 1) {
     const projectile = weaponProjectileVisuals[index]!;
     const progress = Math.min(1, (animationNow - projectile.startedAt) / projectile.durationMs);
-    const eased = 1 - (1 - progress) * (1 - progress);
-    projectile.entity.setPosition(
-      projectile.start.x + (projectile.end.x - projectile.start.x) * eased,
-      projectile.start.y + (projectile.end.y - projectile.start.y) * eased + Math.sin(progress * Math.PI) * 0.16,
-      projectile.start.z + (projectile.end.z - projectile.start.z) * eased,
-    );
-    if (progress < 1) continue;
-    projectile.entity.setLocalScale(projectile.hit ? 0.34 : 0.08, projectile.hit ? 0.34 : 0.08, projectile.hit ? 0.34 : 0.08);
+    const next = new pc.Vec3().lerp(projectile.start, projectile.end, progress);
+    const from = projectile.entity.getPosition().clone();
+    const direction = next.clone().sub(from);
+    const hit = direction.length() > 0.00001 ? voxelRaycast(from, direction, direction.length(), readCollisionWorldBlock) : null;
+    if (hit) next.copy(from).add(direction.normalize().mulScalar(hit.distance));
+    projectile.entity.setPosition(next);
+    if (progress < 1 && !hit) continue;
     projectile.material.opacity = 0;
     projectile.material.update();
     projectile.entity.destroy();
+    projectile.material.destroy();
     weaponProjectileVisuals.splice(index, 1);
   }
   for (const [hazardId, hazard] of mobHazardVisuals) {
@@ -4726,7 +4736,16 @@ async function connect(): Promise<void> {
   room.onMessage("block:changed", applyBlockChange);
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
     createWeaponProjectile(message);
-    logMovementEvent(`${message.mainHandId === "bow" ? "ARROW" : "ARCANE"} ${message.hit ? "HIT" : "MISS"}`);
+    logMovementEvent(`${message.mainHandId === "bow" ? "ARROW" : "ARCANE"} RELEASED`);
+  });
+  room.onMessage("combat:projectile-resolved", (message: ProjectileResolved) => {
+    const index = weaponProjectileVisuals.findIndex(projectile => projectile.projectileId === message.projectileId);
+    if (index >= 0) {
+      weaponProjectileVisuals[index]!.entity.destroy();
+      weaponProjectileVisuals[index]!.material.destroy();
+      weaponProjectileVisuals.splice(index, 1);
+    }
+    logMovementEvent(`PROJECTILE ${message.reason.toUpperCase()} ${message.projectileId}`);
   });
   room.onMessage("combat:mob-projectile", (message: MobProjectileReleased) => {
     createMobProjectile(message);
@@ -4888,7 +4907,7 @@ async function connect(): Promise<void> {
   room.onMessage("combat:stagger", (message: CombatStagger) => {
     if (message.attackerId !== room?.sessionId) return;
     showCombatFeedback("STAGGER!", "dodge");
-    status.textContent = `Perfect counter · enemy staggered for ${(message.durationMs / 1000).toFixed(1)}s.`;
+    status.textContent = `Heavy interrupt · enemy staggered for ${(message.durationMs / 1000).toFixed(1)}s.`;
     logMovementEvent(`STAGGER ${message.mobId} ${message.durationMs}ms`);
   });
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
@@ -5042,7 +5061,7 @@ async function connect(): Promise<void> {
     markPayoffVisuals.length = 0;
     for (const snare of brambleSnareVisuals.values()) snare.root.destroy();
     brambleSnareVisuals.clear();
-    for (const projectile of weaponProjectileVisuals) projectile.entity.destroy();
+    for (const projectile of weaponProjectileVisuals) { projectile.entity.destroy(); projectile.material.destroy(); }
     weaponProjectileVisuals.length = 0;
     for (const hazard of mobHazardVisuals.values()) hazard.root.destroy();
     mobHazardVisuals.clear();

@@ -45,6 +45,7 @@ import {
   type MobHazardPlaced,
   type MobProjectileReleased,
   type PlayerHit,
+  type ProjectileResolved,
   type PowerCast,
   type PowerCancelled,
   type PowerFracture,
@@ -116,6 +117,7 @@ import {
 } from "./movement-input.js";
 import { activeObjective, createObjectiveProgress, creditObjectiveDefeat, nextObjectiveTarget, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
+import { ENEMY_AIM_COMMIT_MS, STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, isInsideCommittedArc, projectileImpact } from "./combat-impact.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -156,11 +158,22 @@ interface PendingPower {
 interface PendingMobProjectile {
   projectileId: string;
   mobId: string;
-  playerId: string;
-  x: number;
-  y: number;
-  z: number;
+  archetype: string;
+  damage: number;
+  start: { x: number; y: number; z: number };
+  end: { x: number; y: number; z: number };
+  position: { x: number; y: number; z: number };
+  startedAt: number;
   impactAt: number;
+}
+
+interface PendingWeaponProjectile extends PendingAttack {
+  projectileId: string;
+  attackerId: string;
+  start: { x: number; y: number; z: number };
+  end: { x: number; y: number; z: number };
+  position: { x: number; y: number; z: number };
+  startedAt: number;
 }
 
 interface ActiveMobHazard {
@@ -170,6 +183,7 @@ interface ActiveMobHazard {
   y: number;
   z: number;
   radius: number;
+  damage: number;
   expiresAt: number;
   nextDamageAt: number;
   lastDamageAt: Map<string, number>;
@@ -190,6 +204,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly lastMobAttackAt = new Map<string, number>();
   private readonly lastDodgeAt = new Map<string, number>();
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
+  private readonly pendingWeaponProjectiles = new Map<string, PendingWeaponProjectile>();
+  private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
+  private readonly mobStaggerImmuneUntil = new Map<string, number>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
   private readonly mobVerticalVelocities = new Map<string, number>();
@@ -206,6 +223,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private lastWorldDeltaRetryAt = 0;
   private lastProfileSaveSweepAt = 0;
   private mobProjectileSequence = 0;
+  private weaponProjectileSequence = 0;
   private lootDropSequence = 0;
   private worldSeed = "blockcraft-dev";
 
@@ -347,6 +365,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.verticalVelocities.delete(client.sessionId);
     this.attackChains.delete(client.sessionId);
     this.pendingAttacks.delete(client.sessionId);
+    this.cancelWeaponProjectiles(client.sessionId);
     this.pendingPowers.delete(client.sessionId);
     this.specialMarks.delete(client.sessionId);
     this.brambleSnares.delete(client.sessionId);
@@ -736,6 +755,30 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     return mob;
   }
 
+  private staggerMob(mobId: string, mob: MobState, now: number, duration: number, force = false): boolean {
+    if (!mob.alive || mob.health <= 0 || duration <= 0 || (!force && now < (this.mobStaggerImmuneUntil.get(mobId) ?? 0))) return false;
+    mob.combatState = "stagger";
+    mob.stateUntil = now + duration;
+    mob.targetId = "";
+    mob.aimCommitted = false;
+    mob.staggerSequence += 1;
+    this.mobCommittedAim.delete(mobId);
+    this.mobStaggerImmuneUntil.set(mobId, mob.stateUntil + STAGGER_IMMUNITY_MS);
+    return true;
+  }
+
+  private resolveProjectileVisual(projectileId: string, point: { x: number; y: number; z: number }, reason: ProjectileResolved["reason"]): void {
+    this.broadcast("combat:projectile-resolved", { projectileId, ...point, reason } satisfies ProjectileResolved);
+  }
+
+  private cancelWeaponProjectiles(attackerId: string): void {
+    for (const [id, projectile] of this.pendingWeaponProjectiles) {
+      if (projectile.attackerId !== attackerId) continue;
+      this.pendingWeaponProjectiles.delete(id);
+      this.resolveProjectileVisual(id, projectile.position, "miss");
+    }
+  }
+
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     const definition = mobArchetype(mob.archetype);
     this.spawnLootDrops(mobId, mob, now);
@@ -744,6 +787,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.combatState = "idle";
     mob.stateUntil = 0;
     mob.targetId = "";
+    mob.aimCommitted = false;
+    this.mobCommittedAim.delete(mobId);
     this.clearMarksForMob(mobId);
     this.progressWorldObjectives(mobId, mob, attackerId);
     const player = this.state.players.get(attackerId);
@@ -871,10 +916,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (defense.parried) player.stamina = Math.min(player.maxStamina, player.stamina + parryStaminaRestore(traitId));
     }
     if (defense.parried && mob) {
-      mob.combatState = "stagger";
-      mob.stateUntil = now + PARRY_STAGGER_MS;
-      mob.targetId = "";
-      mob.staggerSequence += 1;
+      this.staggerMob(mobId, mob, now, PARRY_STAGGER_MS, true);
     }
     if (player.stamina <= 0) player.defending = false;
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
@@ -911,6 +953,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.momentumStacks = 0;
     player.invulnerableUntil = now + 1500;
     this.pendingAttacks.delete(playerId);
+    this.cancelWeaponProjectiles(playerId);
     this.pendingPowers.delete(playerId);
     this.specialMarks.delete(playerId);
     this.brambleSnares.delete(playerId);
@@ -932,19 +975,30 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private resolveMobProjectiles(now: number): void {
     for (const [projectileId, projectile] of this.pendingMobProjectiles) {
-      if (now < projectile.impactAt) continue;
+      const progress = Math.max(0, Math.min(1, (now - projectile.startedAt) / (projectile.impactAt - projectile.startedAt)));
+      const next = flightPoint(projectile.start, projectile.end, progress);
+      const targets = [...this.state.players.entries()]
+        .filter(([, player]) => player.health > 0 && !isInsideTownSafeZone(player))
+        .map(([id, player]) => ({ id, x: player.x, y: player.y, z: player.z }));
+      const collision = projectileImpact(projectile.position, next, targets, this.readWorldBlock);
+      projectile.position = next;
+      if (!collision && progress < 1) continue;
       this.pendingMobProjectiles.delete(projectileId);
-      const mob = this.state.mobs.get(projectile.mobId);
-      const definition = mobArchetype(mob?.archetype ?? "cave_spitter");
+      const impact = collision?.point ?? next;
+      this.resolveProjectileVisual(projectileId, impact, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss");
+      if (collision?.kind === "terrain") continue;
+      const definition = mobArchetype(projectile.archetype);
+      const target = collision?.targetId ? this.state.players.get(collision.targetId) : undefined;
+      const puddle = target ? { x: impact.x, y: target.y, z: impact.z }
+        : { x: projectile.end.x, y: projectile.end.y - 0.08, z: projectile.end.z };
       const hazardId = `acid:${projectileId}`;
       const expiresAt = now + definition.hazardDurationMs;
       this.mobHazards.set(hazardId, {
         hazardId,
         mobId: projectile.mobId,
-        x: projectile.x,
-        y: projectile.y,
-        z: projectile.z,
+        ...puddle,
         radius: definition.hazardRadius,
+        damage: projectile.damage,
         expiresAt,
         nextDamageAt: now + 700,
         lastDamageAt: new Map(),
@@ -952,15 +1006,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.broadcast("combat:mob-hazard", {
         hazardId,
         mobId: projectile.mobId,
-        x: projectile.x,
-        y: projectile.y,
-        z: projectile.z,
+        ...puddle,
         radius: definition.hazardRadius,
         expiresAt,
       } satisfies MobHazardPlaced);
-      const target = this.state.players.get(projectile.playerId);
-      if (target && isInsideImpact(target, projectile, definition.hitRange)) {
-        this.damagePlayer(projectile.mobId, projectile.playerId, mob?.attackDamage ?? definition.damage, now);
+      if (target && collision?.targetId) {
+        this.damagePlayer(projectile.mobId, collision.targetId, projectile.damage, now);
       }
     }
   }
@@ -974,9 +1025,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (now < hazard.nextDamageAt) continue;
       for (const [playerId, player] of this.state.players) {
         const lastDamageAt = hazard.lastDamageAt.get(playerId) ?? 0;
-        if (now - lastDamageAt < 900 || !isInsideImpact(player, hazard, hazard.radius, 1.25)) continue;
-        const damage = this.state.mobs.get(hazard.mobId)?.attackDamage ?? 1;
-        if (this.damagePlayer(hazard.mobId, playerId, damage, now, false)) hazard.lastDamageAt.set(playerId, now);
+        if (now - lastDamageAt < 900 || !isInsideImpact(player, hazard, hazard.radius, 1.25)
+          || !hasCombatLineOfSight(hazard, player, this.readWorldBlock)) continue;
+        if (this.damagePlayer(hazard.mobId, playerId, hazard.damage, now, false)) hazard.lastDamageAt.set(playerId, now);
       }
     }
   }
@@ -1038,11 +1089,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         .find(mob => isInsideBrambleSnare(snare, mob));
       if (!target) continue;
       const mob = this.state.mobs.get(target.id);
-      if (!mob) continue;
-      mob.combatState = "stagger";
-      mob.stateUntil = now + BRAMBLE_SNARE.rootMs;
-      mob.targetId = "";
-      mob.staggerSequence += 1;
+      if (!mob || !hasCombatLineOfSight(snare, mob, this.readWorldBlock)) continue;
+      this.staggerMob(target.id, mob, now, BRAMBLE_SNARE.rootMs, true);
       this.brambleSnares.delete(casterId);
       this.broadcast("special:snare-triggered", {
         casterId,
@@ -1063,6 +1111,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.resolvePendingPowers(now);
     this.resolvePendingAttacks(now);
+    this.resolveWeaponProjectiles(now);
     this.resolveBrambleSnares(now);
     this.resolveMobProjectiles(now);
     this.resolveMobHazards(now);
@@ -1077,6 +1126,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.z = spawn.z;
         this.mobVerticalVelocities.set(mobId, 0);
         this.mobNavigation.set(mobId, createMobNavigationState());
+        this.mobStaggerImmuneUntil.delete(mobId);
+        this.mobCommittedAim.delete(mobId);
+        mob.aimCommitted = false;
         mob.health = stats.maxHealth;
         mob.maxHealth = stats.maxHealth;
         mob.armor = stats.armor;
@@ -1100,10 +1152,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       if (mob.combatState === "windup") {
         const targetPlayer = this.state.players.get(mob.targetId);
-        if (targetPlayer) {
+        if (targetPlayer && now < mob.stateUntil - ENEMY_AIM_COMMIT_MS) {
           mob.yaw = Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI;
+          this.mobCommittedAim.set(mobId, { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: mob.yaw });
         }
+        if (now >= mob.stateUntil - ENEMY_AIM_COMMIT_MS) mob.aimCommitted = true;
         if (now < mob.stateUntil) continue;
+        const aim = this.mobCommittedAim.get(mobId) ?? { x: mob.x + Math.sin(mob.yaw * Math.PI / 180) * definition.stopDistance,
+          y: mob.y, z: mob.z + Math.cos(mob.yaw * Math.PI / 180) * definition.stopDistance, yaw: mob.yaw };
+        this.mobCommittedAim.delete(mobId);
+        mob.aimCommitted = false;
         mob.combatState = "recover";
         mob.stateUntil = now + definition.recoverMs;
         mob.actionSequence += 1;
@@ -1111,13 +1169,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if (!targetPlayer) continue;
         if (definition.attackKind === "projectile") {
           const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
+          const start = { x: mob.x, y: mob.y + 1.05, z: mob.z };
+          const end = { x: aim.x, y: aim.y + 0.08, z: aim.z };
           const projectile: PendingMobProjectile = {
             projectileId,
             mobId,
-            playerId: mob.targetId,
-            x: targetPlayer.x,
-            y: targetPlayer.y,
-            z: targetPlayer.z,
+            archetype: mob.archetype,
+            damage: mob.attackDamage,
+            start, end, position: start, startedAt: now,
             impactAt: now + definition.projectileTravelMs,
           };
           this.pendingMobProjectiles.set(projectileId, projectile);
@@ -1127,22 +1186,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             x: mob.x,
             y: mob.y,
             z: mob.z,
-            targetX: projectile.x,
-            targetY: projectile.y,
-            targetZ: projectile.z,
+            targetX: aim.x,
+            targetY: aim.y,
+            targetZ: aim.z,
             travelMs: definition.projectileTravelMs,
           } satisfies MobProjectileReleased);
           mob.targetId = "";
           continue;
         }
-        const deltaX = targetPlayer.x - mob.x;
-        const deltaZ = targetPlayer.z - mob.z;
+        const deltaX = aim.x - mob.x;
+        const deltaZ = aim.z - mob.z;
         const distance = Math.hypot(deltaX, deltaZ);
         if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
-          this.displaceMob(mobId, mob, { x: deltaX / distance * lungeDistance, z: deltaZ / distance * lungeDistance });
+          this.displaceMob(mobId, mob, {
+            x: Math.sin(aim.yaw * Math.PI / 180) * lungeDistance, z: Math.cos(aim.yaw * Math.PI / 180) * lungeDistance,
+          });
         }
         if (!canMobLungeHit(mob, targetPlayer, targetPlayer.invulnerableUntil, now, definition.hitRange)) continue;
+        if (!isInsideCommittedArc(mob, targetPlayer, aim.yaw) || !hasCombatLineOfSight(mob, targetPlayer, this.readWorldBlock)) continue;
         this.damagePlayer(mobId, mob.targetId, mob.attackDamage, now);
         continue;
       }
@@ -1175,10 +1237,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const inAttackRange = definition.attackKind === "projectile"
         ? actualDistance >= definition.minimumAttackRange - 0.05 && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
-      if (!inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs) continue;
+      if (!inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
+        || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       mob.combatState = "windup";
       mob.stateUntil = now + definition.windupMs;
       mob.targetId = target.id;
+      mob.aimCommitted = false;
+      mob.yaw = Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI;
+      this.mobCommittedAim.set(mobId, { x: target.x, y: target.y, z: target.z, yaw: mob.yaw });
     }
     for (const [sessionId, player] of this.state.players) {
       player.dangerTier = dangerBandAt(player).tier;
@@ -1543,7 +1609,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         y: mob.y,
         z: mob.z,
         alive: mob.alive,
-      }));
+      })).filter(target => hasCombatLineOfSight(origin, target, this.readWorldBlock));
       const mobilityTarget = definition.core === "mobility"
         ? selectMobilityPowerTarget(origin, pending.yaw, availableTargets, resolvedRange, resolvedWidth)
         : null;
@@ -1565,13 +1631,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.y = stepped.y;
       player.z = stepped.z;
       const impactCenter = definition.core === "ground" && pending.target ? pending.target : player;
-      const targets = definition.core === "burst"
+      const targets = (definition.core === "burst"
         ? selectBurstPowerTargets(player, availableTargets, resolvedRange)
         : definition.core === "ground"
           ? selectGroundPowerTargets(impactCenter, availableTargets, resolvedWidth)
           : definition.core === "mobility"
             ? mobilityTarget ? [mobilityTarget] : []
-          : selectLinePowerTargets(player, pending.yaw, availableTargets, resolvedRange, resolvedWidth);
+          : selectLinePowerTargets(player, pending.yaw, availableTargets, resolvedRange, resolvedWidth))
+        .filter(target => hasCombatLineOfSight(impactCenter, target, this.readWorldBlock));
       const defeatedMobIds: string[] = [];
       const consumedMarks: SpecialConsumed[] = [];
       let resolvedDamage: number = definition.damage;
@@ -1579,7 +1646,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       let traitBonusHitCount = 0;
       for (const target of targets) {
         const mob = this.state.mobs.get(target.id);
-        if (!mob || !mob.alive) continue;
+        if (!mob || !mob.alive || !hasCombatLineOfSight(impactCenter, mob, this.readWorldBlock)) continue;
         const mark = this.specialMarks.get(sessionId);
         const payoff = huntersMarkPowerPayoff(mark, target.id, now);
         if (mark && now >= mark.expiresAt) this.specialMarks.delete(sessionId);
@@ -1614,12 +1681,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if (mob.health === 0) {
           this.defeatMob(target.id, mob, sessionId, now);
           defeatedMobIds.push(target.id);
+          const consumed = consumedMarks.find(mark => mark.mobId === target.id);
+          if (consumed) consumed.staggerMs = 0;
         } else {
-          mob.combatState = "stagger";
-          mob.stateUntil = now + definition.staggerMs + payoff.staggerBonusMs
+          const duration = definition.staggerMs + payoff.staggerBonusMs
             + (aftershock ? SEISMIC_CLEAVE_UPGRADES.aftershockStaggerBonusMs : 0);
-          mob.targetId = "";
-          mob.staggerSequence += 1;
+          const resistedDuration = Math.round(duration * (mob.archetype === "stone_brute" ? 0.65 : 1));
+          const staggered = this.staggerMob(target.id, mob, now, resistedDuration);
+          const consumed = consumedMarks.find(mark => mark.mobId === target.id);
+          if (consumed) consumed.staggerMs = staggered ? resistedDuration : 0;
         }
       }
       const fractures = definition.fracturesTerrain && definition.core === "line"
@@ -1773,7 +1843,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const target = selectAttackTarget(
         player,
         pending.yaw,
-        targets,
+        attackDefinition.projectileTravelMs > 0 ? targets : targets.filter(target => hasCombatLineOfSight(player, target, this.readWorldBlock)),
         attackDefinition.range,
         attackDefinition.minimumFacingDot,
       );
@@ -1784,7 +1854,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           y: player.y,
           z: player.z + Math.cos(radians) * attackDefinition.range,
         };
+        const projectileId = `weapon:${sessionId}:${++this.weaponProjectileSequence}`;
+        const start = { x: player.x, y: player.y + 1.05, z: player.z };
+        const end = bodyPoint(endpoint);
+        this.pendingWeaponProjectiles.set(projectileId, {
+          ...pending, projectileId, attackerId: sessionId,
+          start, end, position: start, startedAt: now, impactAt: now + attackDefinition.projectileTravelMs,
+        });
         this.broadcast("combat:projectile", {
+          projectileId,
           attackerId: sessionId,
           mainHandId: pending.mainHandId,
           x: player.x,
@@ -1794,47 +1872,78 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           targetY: endpoint.y,
           targetZ: endpoint.z,
           travelMs: attackDefinition.projectileTravelMs,
-          hit: Boolean(target),
         } satisfies WeaponAttackReleased);
+        continue;
       }
       if (!target) {
         const miss: CombatMiss = { attackerId: sessionId, mainHandId: pending.mainHandId, comboStep: pending.step };
         this.broadcast("combat:miss", miss);
         continue;
       }
-      const mob = this.state.mobs.get(target.id);
-      if (!mob || !mob.alive) continue;
+      this.applyWeaponHit(sessionId, pending, target.id, now);
+    }
+  }
+
+  private resolveWeaponProjectiles(now: number): void {
+    for (const [projectileId, projectile] of this.pendingWeaponProjectiles) {
+      if (!this.state.players.has(projectile.attackerId)) {
+        this.pendingWeaponProjectiles.delete(projectileId);
+        this.resolveProjectileVisual(projectileId, projectile.position, "miss");
+        continue;
+      }
+      const progress = Math.max(0, Math.min(1, (now - projectile.startedAt) / (projectile.impactAt - projectile.startedAt)));
+      const next = flightPoint(projectile.start, projectile.end, progress);
+      const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive)
+        .map(([id, mob]) => ({ id, x: mob.x, y: mob.y, z: mob.z, radius: mob.archetype === "stone_brute" ? 0.55 : 0.38 }));
+      const collision = projectileImpact(projectile.position, next, targets, this.readWorldBlock);
+      projectile.position = next;
+      if (!collision && progress < 1) continue;
+      this.pendingWeaponProjectiles.delete(projectileId);
+      const point = collision?.point ?? next;
+      this.resolveProjectileVisual(projectileId, point, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss");
+      if (collision?.kind === "entity" && collision.targetId) {
+        this.applyWeaponHit(projectile.attackerId, projectile, collision.targetId, now, projectile.start);
+      } else this.broadcast("combat:miss", {
+        attackerId: projectile.attackerId, mainHandId: projectile.mainHandId, comboStep: projectile.step,
+      } satisfies CombatMiss);
+    }
+  }
+
+  private applyWeaponHit(sessionId: string, pending: PendingAttack, mobId: string, now: number,
+    source?: { x: number; z: number }): void {
+      const player = this.state.players.get(sessionId);
+      const mob = this.state.mobs.get(mobId);
+      const timing = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[pending.step - 1]
+        ?? WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[0];
+      if (!player || !mob || !mob.alive || !timing) return;
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
       const damage = damageAfterArmor(
-        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades) + this.specialDamageBonus(sessionId, target.id, now),
+        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades) + this.specialDamageBonus(sessionId, mobId, now),
         mob.armor,
       ) + traitBonusDamage;
       mob.health = Math.max(0, mob.health - damage);
       mob.hitSequence += 1;
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
-      if (mob.combatState === "windup") {
-        mob.combatState = "stagger";
-        mob.stateUntil = now + 900;
-        mob.targetId = "";
-        mob.staggerSequence += 1;
-        const stagger: CombatStagger = { attackerId: sessionId, mobId: target.id, durationMs: 900 };
+      const staggerDuration = basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState);
+      if (this.staggerMob(mobId, mob, now, staggerDuration)) {
+        const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };
         this.broadcast("combat:stagger", stagger);
       }
-      const deltaX = mob.x - player.x;
-      const deltaZ = mob.z - player.z;
+      const deltaX = mob.x - (source?.x ?? player.x);
+      const deltaZ = mob.z - (source?.z ?? player.z);
       const distance = Math.hypot(deltaX, deltaZ);
       if (distance > 0.001 && timing.knockback > 0) {
-        this.displaceMob(target.id, mob, {
+        this.displaceMob(mobId, mob, {
           x: deltaX / distance * timing.knockback, z: deltaZ / distance * timing.knockback,
         });
       }
       if (mob.health === 0) {
-        this.defeatMob(target.id, mob, sessionId, now);
+        this.defeatMob(mobId, mob, sessionId, now);
       }
       const hit: CombatHit = {
         attackerId: sessionId,
         mainHandId: pending.mainHandId,
-        mobId: target.id,
+        mobId,
         damage,
         health: mob.health,
         defeated: !mob.alive,
@@ -1844,7 +1953,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         traitBonusDamage,
       };
       this.broadcast("combat:hit", hit);
-      if (mob.alive) this.progressSpecialMark(sessionId, target.id, now);
-    }
+      if (mob.alive) this.progressSpecialMark(sessionId, mobId, now);
   }
 }
