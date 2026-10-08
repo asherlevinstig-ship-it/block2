@@ -158,4 +158,21 @@ describe("movement networking", () => {
     expect(pose?.x).toBeCloseTo(5);
     expect(pose?.yaw).toBe(90);
   });
+
+  it("briefly predicts enemy movement when the next patch is late", () => {
+    const snapshots = [
+      { receivedAt: 100, x: 0, y: 8, z: 0, yaw: 90 },
+      { receivedAt: 150, x: 0.075, y: 8, z: 0, yaw: 90 },
+    ];
+    expect(sampleRemotePose(snapshots, 200, 100, 2)?.x).toBeCloseTo(0.15);
+    expect(sampleRemotePose(snapshots, 400, 100, 2)?.x).toBeCloseTo(0.225);
+  });
+
+  it("caps prediction speed so knockback and lunges cannot overshoot", () => {
+    const snapshots = [
+      { receivedAt: 100, x: 0, y: 8, z: 0, yaw: 90 },
+      { receivedAt: 150, x: 2, y: 8, z: 0, yaw: 90 },
+    ];
+    expect(sampleRemotePose(snapshots, 250, 100, 2)?.x).toBeCloseTo(2.2);
+  });
 });

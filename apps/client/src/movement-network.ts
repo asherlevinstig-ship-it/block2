@@ -143,7 +143,12 @@ function lerpAngle(start: number, end: number, fraction: number): number {
   return start + delta * fraction;
 }
 
-export function sampleRemotePose(snapshots: readonly RemoteSnapshot[], renderAt: number): SampledRemotePose | null {
+export function sampleRemotePose(
+  snapshots: readonly RemoteSnapshot[],
+  renderAt: number,
+  maxExtrapolationMs = 0,
+  maxExtrapolationSpeed = Number.POSITIVE_INFINITY,
+): SampledRemotePose | null {
   if (snapshots.length === 0) return null;
   const first = snapshots[0]!;
   if (renderAt <= first.receivedAt) return first;
@@ -160,7 +165,22 @@ export function sampleRemotePose(snapshots: readonly RemoteSnapshot[], renderAt:
       yaw: lerpAngle(previous.yaw, next.yaw, fraction),
     };
   }
-  return snapshots[snapshots.length - 1]!;
+  const last = snapshots[snapshots.length - 1]!;
+  if (maxExtrapolationMs <= 0 || snapshots.length < 2 || renderAt <= last.receivedAt) return last;
+  const previous = snapshots[snapshots.length - 2]!;
+  const sampleDuration = last.receivedAt - previous.receivedAt;
+  if (sampleDuration <= 0) return last;
+  const extrapolationMs = Math.min(maxExtrapolationMs, renderAt - last.receivedAt);
+  const velocityX = (last.x - previous.x) / sampleDuration;
+  const velocityZ = (last.z - previous.z) / sampleDuration;
+  const speed = Math.hypot(velocityX, velocityZ) * 1000;
+  const speedScale = speed > maxExtrapolationSpeed ? maxExtrapolationSpeed / speed : 1;
+  return {
+    x: last.x + velocityX * extrapolationMs * speedScale,
+    y: last.y,
+    z: last.z + velocityZ * extrapolationMs * speedScale,
+    yaw: last.yaw,
+  };
 }
 
 export function trimRemoteSnapshots(snapshots: RemoteSnapshot[], renderAt: number): void {

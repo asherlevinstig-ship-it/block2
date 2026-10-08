@@ -1053,7 +1053,11 @@ interface MarkVisualState {
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const mobVisuals = new Map<string, MobVisual>();
-const MOB_INTERPOLATION_DELAY_MS = 150;
+// Keep enemies responsive while retaining enough history to smooth 30 Hz state
+// patches. A short, speed-capped prediction bridges occasional late packets.
+const MOB_INTERPOLATION_DELAY_MS = 75;
+const MOB_MAX_EXTRAPOLATION_MS = 100;
+const MOB_MAX_EXTRAPOLATION_SPEED = 2.2;
 const lootVisuals = new Map<string, LootVisual>();
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 const combatAudio = new CombatAudio();
@@ -2223,12 +2227,14 @@ function bindMobs(joinedRoom: Room): void {
           visual.entity.setEulerAngles(0, snapshot.yaw, 0);
         }
         visual.snapshots.push(snapshot);
+        updateMobVisual(visual);
       });
     };
     for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
-        if (field === "x" || field === "y" || field === "z" || field === "yaw") queueSnapshot();
-        updateMobVisual(visual);
+        // Capture movement and combat transitions once from the complete patch.
+        // State changes also supply a stationary sample when pursuit stops.
+        queueSnapshot();
       }, true);
     }
   }, true);
@@ -4171,7 +4177,12 @@ app.on("update", (dt: number) => {
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
     const currentMobPosition = mob.entity.getPosition();
-    const sampled = sampleRemotePose(mob.snapshots, animationNow - MOB_INTERPOLATION_DELAY_MS) ?? mob.state;
+    const sampled = sampleRemotePose(
+      mob.snapshots,
+      animationNow - MOB_INTERPOLATION_DELAY_MS,
+      mob.state.alive && mob.state.combatState === "idle" ? MOB_MAX_EXTRAPOLATION_MS : 0,
+      MOB_MAX_EXTRAPOLATION_SPEED,
+    ) ?? mob.state;
     const moveX = sampled.x - currentMobPosition.x;
     const moveZ = sampled.z - currentMobPosition.z;
     const moveSpeed = Math.hypot(moveX, moveZ) / Math.max(0.001, frameTime);

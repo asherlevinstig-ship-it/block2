@@ -176,6 +176,7 @@ interface ActiveMobHazard {
 
 export class WorldRoom extends Room<{ state: WorldState }> {
   override maxClients = 20;
+  override patchRate = 33;
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
   private readonly movementRateWindows = new Map<string, MovementRateWindow>();
@@ -252,7 +253,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
     this.onMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     this.onMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
-    this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
+    this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 33);
   }
 
   override async onJoin(client: Client, options: unknown): Promise<void> {
