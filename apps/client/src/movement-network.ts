@@ -93,12 +93,19 @@ export function localReconciliationRate(
   moving: boolean,
   sequenceLag = 0,
   authoritativeInputReady = true,
+  authoritativeAgeMs = 0,
 ): number {
   if (!moving && !authoritativeInputReady) return 0;
   const boundedLag = Math.max(0, Math.min(12, sequenceLag));
   const hardCorrectionDistance = moving ? 2.5 + boundedLag * 0.4 : 3;
   if (distance > hardCorrectionDistance) return Number.POSITIVE_INFINITY;
-  if (moving) return distance > 1.75 + boundedLag * 0.15 ? 0.75 : 0;
+  if (moving) {
+    // Each outstanding 50 ms input represents about .21 m of normal travel.
+    // Allow .25 m including speed bonuses; older snapshots must not act like
+    // ground friction. Large invalid divergences still use the hard bound above.
+    if (authoritativeAgeMs > 200) return 0;
+    return distance > 1.75 + boundedLag * 0.25 ? 0.75 : 0;
+  }
   return distance > 0.05 ? 8 : 0;
 }
 

@@ -79,7 +79,8 @@ describe("movement networking", () => {
   it("does not pull normal predicted movement toward stale server positions", () => {
     expect(localReconciliationRate(0.3, true)).toBe(0);
     expect(localReconciliationRate(1.7, true, 6)).toBe(0);
-    expect(localReconciliationRate(2.8, true, 6)).toBe(0.75);
+    expect(localReconciliationRate(2.8, true, 6)).toBe(0);
+    expect(localReconciliationRate(3.4, true, 6)).toBe(0.75);
     expect(localReconciliationRate(0.3, false)).toBe(8);
     expect(localReconciliationRate(1.3, false, 6, false)).toBe(0);
     expect(localReconciliationRate(5, true, 6)).toBe(Number.POSITIVE_INFINITY);
@@ -92,8 +93,20 @@ describe("movement networking", () => {
 
   it("expands the hard-correction window while server acknowledgements are delayed", () => {
     expect(localReconciliationRate(3, true, 0)).toBe(Number.POSITIVE_INFINITY);
-    expect(localReconciliationRate(3, true, 6)).toBe(0.75);
+    expect(localReconciliationRate(3, true, 6)).toBe(0);
   });
+
+  it("does not apply friction against a stalled authoritative snapshot", () => {
+    expect(localReconciliationRate(2, true, 0, true, 350)).toBe(0);
+    expect(localReconciliationRate(2, true, 0, true, 30)).toBe(0.75);
+    expect(localReconciliationRate(8, true, 6, true, 350)).toBe(Infinity);
+    expect(localReconciliationRate(0.3, false, 0, true, 350)).toBe(8);
+  });
+
+  it.each([[2.835, 5], [2.979, 6], [3.487, 9], [3.834, 12]])(
+    "does not pull backwards during the reported town trace: distance %d, lag %d",
+    (distance, lag) => expect(localReconciliationRate(distance, true, lag)).toBe(0),
+  );
 
   it("ignores tiny grounded height differences without hiding real vertical corrections", () => {
     expect(reconciliationVerticalTarget(7.94, 7.95, true)).toBe(7.94);

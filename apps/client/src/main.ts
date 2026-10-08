@@ -1113,6 +1113,7 @@ let specialAimTargetValid = true;
 let cameraShakeUntil = 0;
 let cameraShakeStrength = 0;
 let lastProcessedInputSequence = 0;
+let lastAuthoritativeMovementAt = 0;
 let pendingStopInputSequence: number | null = null;
 let pendingStopDeadline = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
@@ -2277,7 +2278,10 @@ function bindPlayers(joinedRoom: Room): void {
     }
 
     const updatePosition = () => {
-      if (isLocal) authoritativeLocalPosition.set(player.x, player.y, player.z);
+      if (isLocal) {
+        authoritativeLocalPosition.set(player.x, player.y, player.z);
+        lastAuthoritativeMovementAt = performance.now();
+      }
       else if (remote) recordRemoteSnapshot(remote, player);
     };
     const playerCallbacks = callbacks(player);
@@ -2298,7 +2302,10 @@ function bindPlayers(joinedRoom: Room): void {
       if (remote) recordRemoteSnapshot(remote, player);
     }, true);
     playerCallbacks.listen("lastProcessedInput", () => {
-      if (isLocal) lastProcessedInputSequence = player.lastProcessedInput;
+      if (isLocal) {
+        lastProcessedInputSequence = player.lastProcessedInput;
+        lastAuthoritativeMovementAt = performance.now();
+      }
     }, true);
     playerCallbacks.listen("actionSequence", () => {
       if (!remote || player.actionSequence <= remote.lastActionSequence) return;
@@ -3973,7 +3980,7 @@ function reconcileLocalPlayer(
   const target = authoritativeLocalPosition.clone();
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
-  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady);
+  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, performance.now() - lastAuthoritativeMovementAt);
   if (!Number.isFinite(reconciliationRate)) {
     const mobilityAdvance = localActivePower !== null
       && POWER_DEFINITIONS[localActivePower].core === "mobility"
@@ -4041,6 +4048,8 @@ app.on("update", (dt: number) => {
     },
     readCollisionWorldBlock,
   );
+  const requestedTravel = Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed() * frameTime;
+  const collisionTravel = Math.hypot(predicted.x - current.x, predicted.z - current.z);
   if (predicted.hitVertical || predicted.grounded) localVerticalVelocity = 0;
   if (predicted.stepped) {
     localVisualVerticalOffset += current.y - predicted.y;
@@ -4543,6 +4552,8 @@ app.on("update", (dt: number) => {
       `cutaway    ${cutawaySliceY === null ? "surface" : `slice=${cutawaySliceY}`} ref=${surfaceReferenceY?.toFixed(3) ?? "n/a"} underground=${undergroundClassification} excavation=${excavationClassification} return=${surfaceReturnClassification}`,
       `collision  grounded=${grounded} stepped=${predicted.stepped} hitY=${predicted.hitVertical}`,
       `sequence   sent=${moveSequence} ack=${lastProcessedInputSequence} lag=${sequenceLag}`,
+      `net age    ${Math.round(performance.now() - lastAuthoritativeMovementAt)}ms`,
+      `travel     collision=${collisionTravel.toFixed(3)} requested=${requestedTravel.toFixed(3)} blocked=${requestedTravel > 0.001 && collisionTravel < requestedTravel * 0.9}`,
       `stop ack   ${pendingStopInputSequence === null ? "ready" : `waiting for #${pendingStopInputSequence}`}`,
     ].join("\n");
   }

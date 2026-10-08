@@ -9,6 +9,11 @@ import {
 } from "../src/movement-input.js";
 
 describe("movement input lifecycle", () => {
+  it("keeps held input through a short delivery stall and accepts an explicit stop immediately", () => {
+    const stored = { request: { sequence: 7, strafe: 1, forward: 0, yaw: 90 }, receivedAt: 1_000 };
+    expect(activeMovementInput(stored, 1_350).strafe).toBe(1);
+    expect(activeMovementInput({ request: { ...stored.request, sequence: 8, strafe: 0 }, receivedAt: 1_350 }, 1_351).strafe).toBe(0);
+  });
   it("stops a player when the latest movement packet becomes stale", () => {
     const stored = {
       request: { sequence: 7, strafe: 1, forward: 0, yaw: 90 },

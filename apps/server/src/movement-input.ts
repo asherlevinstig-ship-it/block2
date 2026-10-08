@@ -1,6 +1,9 @@
 import type { MoveRequest } from "@blockcraft/protocol";
 
-export const MOVEMENT_INPUT_TIMEOUT_MS = 200;
+// Bridge short delivery stalls without cancelling held movement every 200 ms.
+// Explicit stop messages still stop immediately; disconnects retain a bounded
+// half-second timeout instead of running indefinitely.
+export const MOVEMENT_INPUT_TIMEOUT_MS = 500;
 export const MOVEMENT_RATE_WINDOW_MS = 1_000;
 export const MOVEMENT_RATE_LIMIT = 30;
 export const MAX_STOP_POSITION_CORRECTION = 0.45;
