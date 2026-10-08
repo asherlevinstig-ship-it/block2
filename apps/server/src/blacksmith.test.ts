@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, buyBlacksmithUpgrade, canTradeAtBlacksmith, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
+import { BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
 
 describe("blacksmith trading", () => {
   it("only awards iron ore for actual iron ore blocks", () => {
@@ -20,12 +20,13 @@ describe("blacksmith trading", () => {
     expect(ironOreSale(4, 1_000_000)).toEqual({ sold: 0, goldGranted: 0 });
   });
 
-  it("purchases permanent upgrades once and applies their effects", () => {
-    const pickaxe = buyBlacksmithUpgrade(0, 30, "reinforced_pickaxe");
-    expect(pickaxe).toEqual({ flags: 1, gold: 0, purchased: true });
+  it("forges the reinforced pickaxe from iron and gold exactly once", () => {
+    const pickaxe = forgeBlacksmithUpgrade(0, 20, 8, "reinforced_pickaxe");
+    expect(pickaxe).toEqual({ flags: 1, gold: 8, ironOre: 2, forged: true });
     expect(minedIronQuantity(pickaxe.flags)).toBe(2);
-    expect(buyBlacksmithUpgrade(pickaxe.flags, 100, "reinforced_pickaxe").reason).toBe("owned");
-    expect(buyBlacksmithUpgrade(0, 29, "reinforced_pickaxe").reason).toBe("gold");
+    expect(forgeBlacksmithUpgrade(pickaxe.flags, 100, 20, "reinforced_pickaxe").reason).toBe("owned");
+    expect(forgeBlacksmithUpgrade(0, 100, 5, "reinforced_pickaxe").reason).toBe("iron_ore");
+    expect(forgeBlacksmithUpgrade(0, 11, 6, "reinforced_pickaxe").reason).toBe("gold");
     expect(ironSwordDamageBonus(2)).toBe(1);
     expect(ownedBlacksmithUpgrades(7)).toEqual(["reinforced_pickaxe", "iron_sword", "miners_pack"]);
   });

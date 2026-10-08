@@ -1104,7 +1104,7 @@ function refreshPowerCompatibility(): void {
   const mainHand = MAIN_HAND_DEFINITIONS[localMainHandId];
   mainHandName.textContent = mainHand.name;
   mainHandAttack.textContent = mainHand.attackName;
-  inventoryEquipped.textContent = mainHand.name;
+  refreshInventoryEquipped();
   for (const button of mainHandPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.mainHand === localMainHandId));
   }
@@ -1125,6 +1125,11 @@ function refreshPowerCompatibility(): void {
   const equippedCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
   powerSlot.classList.toggle("incompatible", !equippedCompatible);
   setRigMainHand(localPlayerRig, localMainHandId);
+}
+
+function refreshInventoryEquipped(): void {
+  const tool = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0 ? "Reinforced Pickaxe" : "Starter Pickaxe";
+  inventoryEquipped.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name} · ${tool}`;
 }
 
 function updatePowerLoadout(powerId: PowerId): void {
@@ -2009,6 +2014,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 
 const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   iron_ore: coloredMaterial(new pc.Color(0.57, 0.65, 0.68)),
+  reinforced_pickaxe: coloredMaterial(new pc.Color(0.76, 0.8, 0.78)),
   moss_fibre: coloredMaterial(new pc.Color(0.28, 0.68, 0.2)),
   crawler_fang: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
   stone_core: coloredMaterial(new pc.Color(0.38, 0.52, 0.62)),
@@ -2071,7 +2077,7 @@ function bindLootDrops(joinedRoom: Room): void {
 function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryCounts.set(itemId, total);
   if (itemId === "iron_ore") {
-    blacksmithOre.textContent = total.toLocaleString();
+    blacksmithOre.textContent = `${total.toLocaleString()} / ${blacksmithIronCapacity.toLocaleString()}`;
     blacksmithSell.disabled = total <= 0 || blacksmithPending || tavernCoinBalance >= 1_000_000;
   }
   const count = inventoryCountElements.get(itemId);
@@ -2082,6 +2088,7 @@ function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryTotal.textContent = grandTotal === 0 ? "EMPTY" : `${grandTotal} ITEM${grandTotal === 1 ? "" : "S"}`;
   inventoryBadge.textContent = grandTotal > 999 ? "999+" : String(grandTotal);
   inventoryToggle.setAttribute("aria-label", `Open inventory, ${grandTotal} item${grandTotal === 1 ? "" : "s"}`);
+  refreshInventoryEquipped();
   const card = inventoryPanel.querySelector<HTMLElement>(`[data-item="${itemId}"]`);
   if (card) {
     card.classList.toggle("empty", total <= 0);
@@ -2413,16 +2420,27 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     const upgradeId = card.dataset.blacksmithUpgrade as BlacksmithUpgradeId;
     const button = card.querySelector<HTMLButtonElement>("button")!;
     const isOwned = owned.has(upgradeId);
+    const recipe = BLACKSMITH_UPGRADES[upgradeId];
+    const ironCost = card.querySelector<HTMLElement>('[data-cost="iron"]');
+    const goldCost = card.querySelector<HTMLElement>('[data-cost="gold"]');
+    if (ironCost) {
+      ironCost.textContent = `${update.ironOre} / ${recipe.ironOre} IRON`;
+      ironCost.classList.toggle("met", update.ironOre >= recipe.ironOre);
+    }
+    if (goldCost) {
+      goldCost.textContent = `${update.gold} / ${recipe.price} GOLD`;
+      goldCost.classList.toggle("met", update.gold >= recipe.price);
+    }
     card.classList.toggle("owned", isOwned);
-    button.disabled = isOwned || blacksmithPending || update.gold < BLACKSMITH_UPGRADES[upgradeId].price;
-    button.textContent = isOwned ? "OWNED" : `${BLACKSMITH_UPGRADES[upgradeId].price} GOLD`;
+    button.disabled = isOwned || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre;
+    button.textContent = isOwned ? "EQUIPPED" : "FORGE";
   }
   if (update.phase === "traded" && update.goldGranted) {
     showCombatFeedback(`+${update.goldGranted} GOLD`, "dodge");
     status.textContent = update.message;
   }
   if (update.phase === "purchased" && update.purchasedUpgradeId) {
-    showCombatFeedback("UPGRADE ACQUIRED", "dodge");
+    showCombatFeedback(update.purchasedUpgradeId === "reinforced_pickaxe" ? "PICKAXE FORGED · EQUIPPED" : "EQUIPMENT FORGED", "dodge");
     status.textContent = update.message;
   }
 }
@@ -2450,7 +2468,7 @@ for (const card of blacksmithUpgradeCards) {
     blacksmithPending = true;
     button.disabled = true;
     blacksmithMessage.textContent = `Forging ${BLACKSMITH_UPGRADES[upgradeId].name}...`;
-    room.send("blacksmith:buy", { upgradeId });
+    room.send("blacksmith:forge", { upgradeId });
   });
 }
 
@@ -2652,7 +2670,7 @@ function updateTarget(): void {
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   mineButton.textContent = blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? "Mine" : "Attack";
-  if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E or Trade iron ore for gold";
+  if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
@@ -4646,8 +4664,11 @@ async function connect(): Promise<void> {
     if (message.itemId !== "iron_ore") return;
     updateInventoryItem("iron_ore", message.total);
     if (message.quantity > 0) {
-      showCombatFeedback(`+${message.quantity} IRON ORE`, "dodge");
-      status.textContent = `Mined iron ore · ${message.total}/${blacksmithIronCapacity} carried. Trade it at the blacksmith stall.`;
+      const reinforced = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0;
+      showCombatFeedback(`${reinforced ? "REINFORCED STRIKE · " : ""}+${message.quantity} IRON ORE`, "dodge");
+      status.textContent = reinforced
+        ? `Reinforced Pickaxe extracted ${message.quantity} iron ore · ${message.total}/${blacksmithIronCapacity} carried.`
+        : `Mined iron ore · ${message.total}/${blacksmithIronCapacity} carried. Keep 6 ore to forge a Reinforced Pickaxe.`;
     } else {
       status.textContent = "Your iron ore pack is full. Visit the blacksmith stall to sell it.";
     }

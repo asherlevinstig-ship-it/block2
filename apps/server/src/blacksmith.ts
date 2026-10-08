@@ -19,11 +19,22 @@ export function ownedBlacksmithUpgrades(flags: number): BlacksmithUpgradeId[] {
   return (Object.keys(BLACKSMITH_UPGRADES) as BlacksmithUpgradeId[]).filter(id => ownsBlacksmithUpgrade(flags, id));
 }
 
-export function buyBlacksmithUpgrade(flags: number, gold: number, upgradeId: BlacksmithUpgradeId): { flags: number; gold: number; purchased: boolean; reason?: "owned" | "gold" } {
-  if (ownsBlacksmithUpgrade(flags, upgradeId)) return { flags, gold, purchased: false, reason: "owned" };
-  const price = BLACKSMITH_UPGRADES[upgradeId].price;
-  if (gold < price) return { flags, gold, purchased: false, reason: "gold" };
-  return { flags: flags | UPGRADE_BITS[upgradeId], gold: gold - price, purchased: true };
+export function forgeBlacksmithUpgrade(
+  flags: number,
+  gold: number,
+  ironOre: number,
+  upgradeId: BlacksmithUpgradeId,
+): { flags: number; gold: number; ironOre: number; forged: boolean; reason?: "owned" | "gold" | "iron_ore" } {
+  if (ownsBlacksmithUpgrade(flags, upgradeId)) return { flags, gold, ironOre, forged: false, reason: "owned" };
+  const recipe = BLACKSMITH_UPGRADES[upgradeId];
+  if (ironOre < recipe.ironOre) return { flags, gold, ironOre, forged: false, reason: "iron_ore" };
+  if (gold < recipe.price) return { flags, gold, ironOre, forged: false, reason: "gold" };
+  return {
+    flags: flags | UPGRADE_BITS[upgradeId],
+    gold: gold - recipe.price,
+    ironOre: ironOre - recipe.ironOre,
+    forged: true,
+  };
 }
 
 export function ironCapacity(flags: number): number {

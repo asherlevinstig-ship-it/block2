@@ -596,12 +596,16 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #blacksmith-panel button:disabled { opacity: .42; cursor: not-allowed; }
 #blacksmith-sell { display: block; width: 100%; }
 .blacksmith-shop-heading { margin: 18px 0 8px; color: #d4ad79; font-size: .67rem; letter-spacing: .12em; }
+.blacksmith-shop-heading small { display: block; margin-top: 4px; color: #887d6c; font-size: .58rem; font-weight: 600; letter-spacing: .02em; text-transform: none; }
 #blacksmith-upgrades { display: grid; gap: 7px; }
 #blacksmith-upgrades article { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 9px; padding: 9px; border: 1px solid #8c6a454d; border-radius: 9px; background: linear-gradient(90deg, #ffffff0a, #00000018); }
 #blacksmith-upgrades .upgrade-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #bd854d; border-radius: 7px; background: #1b2020; color: #f2b86f; font-size: 1.1rem; }
 #blacksmith-upgrades article div strong, #blacksmith-upgrades article div small { display: block; }
 #blacksmith-upgrades article div strong { color: #f0dfc5; font-size: .78rem; }
 #blacksmith-upgrades article div small { margin-top: 2px; color: #a99e8e; font-size: .62rem; line-height: 1.25; }
+.forge-costs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.forge-costs b { padding: 3px 5px; border: 1px solid #794c304f; border-radius: 5px; background: #170f0b9c; color: #c77f69; font-size: .52rem; letter-spacing: .04em; }
+.forge-costs b.met { border-color: #6e9e5570; color: #b8df8c; }
 #blacksmith-upgrades article button { min-height: 32px; margin: 0; padding: 6px 9px; font-size: .64rem; white-space: nowrap; }
 #blacksmith-upgrades article.owned { border-color: #76a85c80; background: linear-gradient(90deg, #3b6b2c2e, #00000018); }
 #blacksmith-upgrades article.owned button { border-color: #5d8750; background: #294423; color: #bfe2a5; }
@@ -793,6 +797,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article em { display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 14px; background: #101b16; color: #b8c7bc; font-size: .76rem; font-style: normal; font-weight: 1000; font-variant-numeric: tabular-nums; }
 .inventory-grid article[data-item="moss_fibre"] i { background: #58a749; }
 .inventory-grid article[data-item="iron_ore"] i { background: linear-gradient(135deg, #a5b4bc, #815433); }
+.inventory-grid article[data-item="reinforced_pickaxe"] i { background: linear-gradient(135deg, #d6ddd8 0 38%, #98632f 40% 62%, #54351f 64%); }
 .inventory-grid article[data-item="crawler_fang"] i { background: #e6d9aa; }
 .inventory-grid article[data-item="stone_core"] i { background: #7791a0; }
 .inventory-grid article[data-item="acid_gland"] i { background: #a3dd31; }

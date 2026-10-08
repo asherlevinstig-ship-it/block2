@@ -77,7 +77,7 @@
     </section>
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
     <div id="quiz-table-prompt" hidden>DOUBLE OR QUIT <small>Press E to play</small></div>
-    <div id="blacksmith-prompt" hidden>BLACKSMITH <small>Press E to trade</small></div>
+    <div id="blacksmith-prompt" hidden>BLACKSMITH <small>Press E to trade or forge</small></div>
     <div id="combat-feedback" aria-live="polite"></div>
     <section id="tavern-dialogue" role="dialog" aria-label="Mara the Tavernkeeper" hidden>
       <p class="eyebrow">HEARTH & HAMMER</p>
@@ -121,19 +121,19 @@
       </div>
       <div class="quiz-footer"><span>MAX POT · 1,024 COINS</span><button id="tavern-quiz-close" type="button">Leave table</button></div>
     </section>
-    <section id="blacksmith-panel" role="dialog" aria-label="Blacksmith ore trading" hidden>
+    <section id="blacksmith-panel" role="dialog" aria-label="Blacksmith trading and forging" hidden>
       <p class="eyebrow">TOWN OF BEGINNINGS · BLACKSMITH</p>
-      <h2>Ore for Gold</h2>
-      <p id="blacksmith-message" aria-live="polite">Bring iron ore from the mines. I pay a fair price.</p>
+      <h2>Trade &amp; Forge</h2>
+      <p id="blacksmith-message" aria-live="polite">Sell ore for gold, or keep enough to forge lasting equipment.</p>
       <div class="blacksmith-trade-row"><span>IRON ORE IN PACK</span><strong id="blacksmith-ore">0</strong></div>
       <div class="blacksmith-trade-row"><span>PRICE PER ORE</span><strong id="blacksmith-price">3 gold</strong></div>
       <div class="blacksmith-trade-row gold"><span>YOUR GOLD</span><strong id="blacksmith-gold">20</strong></div>
       <button id="blacksmith-sell" type="button">Sell all iron ore</button>
-      <h3 class="blacksmith-shop-heading">PERMANENT UPGRADES</h3>
+      <h3 class="blacksmith-shop-heading">FORGE EQUIPMENT <small>Materials are taken directly from your pack</small></h3>
       <div id="blacksmith-upgrades">
-        <article data-blacksmith-upgrade="reinforced_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Reinforced Pickaxe</strong><small>Extract 2 ore from every iron block</small></div><button type="button">30 GOLD</button></article>
-        <article data-blacksmith-upgrade="iron_sword"><span class="upgrade-icon">⚔</span><div><strong>Iron Sword</strong><small>+1 main-hand attack damage</small></div><button type="button">45 GOLD</button></article>
-        <article data-blacksmith-upgrade="miners_pack"><span class="upgrade-icon">▣</span><div><strong>Miner's Pack</strong><small>Carry 30 iron ore instead of 12</small></div><button type="button">25 GOLD</button></article>
+        <article data-blacksmith-upgrade="reinforced_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Reinforced Pickaxe</strong><small>Auto-equips · mine 2 iron ore per block</small><span class="forge-costs"><b data-cost="iron">0 / 6 IRON</b><b data-cost="gold">0 / 12 GOLD</b></span></div><button type="button">FORGE</button></article>
+        <article data-blacksmith-upgrade="iron_sword"><span class="upgrade-icon">⚔</span><div><strong>Iron Sword</strong><small>+1 main-hand attack damage</small><span class="forge-costs"><b data-cost="gold">0 / 45 GOLD</b></span></div><button type="button">FORGE</button></article>
+        <article data-blacksmith-upgrade="miners_pack"><span class="upgrade-icon">▣</span><div><strong>Miner's Pack</strong><small>Carry 30 iron ore instead of 12</small><span class="forge-costs"><b data-cost="gold">0 / 25 GOLD</b></span></div><button type="button">FORGE</button></article>
       </div>
       <button id="blacksmith-close" type="button">Leave stall</button>
     </section>
@@ -171,6 +171,12 @@
           <article data-item="crawler_fang"><i></i><div><strong>Crawler Fang</strong><small>Sharp creature material</small></div><em data-item-count="crawler_fang">0</em></article>
           <article data-item="stone_core"><i></i><div><strong>Stone Core</strong><small>Dense brute crafting material</small></div><em data-item-count="stone_core">0</em></article>
           <article data-item="acid_gland"><i></i><div><strong>Acid Gland</strong><small>Volatile spitter material</small></div><em data-item-count="acid_gland">0</em></article>
+        </div>
+      </section>
+      <section class="inventory-section" aria-labelledby="inventory-tools-title">
+        <h3 id="inventory-tools-title"><span>Tools</span><small>Mining equipment auto-equips when forged</small></h3>
+        <div class="inventory-grid tools-grid">
+          <article data-item="reinforced_pickaxe"><i></i><div><strong>Reinforced Pickaxe</strong><small>Equipped tool · mine 2 iron ore per block</small></div><em data-item-count="reinforced_pickaxe">0</em></article>
         </div>
       </section>
       <section class="inventory-section equipment-section" aria-labelledby="inventory-equipment-title">

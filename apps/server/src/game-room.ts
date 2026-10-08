@@ -2,7 +2,7 @@ import { Client, Room } from "@colyseus/core";
 import {
   AttackRequestSchema,
   BLACKSMITH_UPGRADES,
-  BlacksmithBuySchema,
+  BlacksmithForgeSchema,
   IRON_ORE_GOLD_PRICE,
   BRAMBLE_SNARE,
   DodgeRequestSchema,
@@ -92,7 +92,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS 
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
-import { buyBlacksmithUpgrade, canTradeAtBlacksmith, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
+import { canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -239,7 +239,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
     this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
     this.onMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
-    this.onMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
+    this.onMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 50);
   }
 
@@ -289,8 +289,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (process.env.NODE_ENV !== "production" && requestedQaSpawn === "blacksmith") {
       player.coins = 100;
       const testOre = new InventoryItemState();
-      testOre.quantity = 4;
+      testOre.quantity = 8;
       player.inventory.set("iron_ore", testOre);
+    }
+    if (ownsBlacksmithUpgrade(player.blacksmithUpgrades, "reinforced_pickaxe") && !player.inventory.get("reinforced_pickaxe")) {
+      const forgedPickaxe = new InventoryItemState();
+      forgedPickaxe.quantity = 1;
+      player.inventory.set("reinforced_pickaxe", forgedPickaxe);
     }
     this.state.players.set(client.sessionId, player);
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
@@ -431,7 +436,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.sendQuizState(client, "Double or nothing. Here's your next question.");
   }
 
-  private sendBlacksmithState(client: Client, message = `Iron ore sells for ${IRON_ORE_GOLD_PRICE} gold each. Buy upgrades below.`, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId): void {
+  private sendBlacksmithState(client: Client, message = `Iron ore sells for ${IRON_ORE_GOLD_PRICE} gold each. Keep materials to forge equipment below.`, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     client.send("blacksmith:update", {
@@ -461,23 +466,35 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.sendBlacksmithState(client, `Sold ${sold} iron ore for ${goldGranted} gold.`, "traded", sold, goldGranted);
   }
 
-  private handleBlacksmithBuy(client: Client, payload: unknown): void {
-    const parsed = BlacksmithBuySchema.safeParse(payload);
+  private handleBlacksmithForge(client: Client, payload: unknown): void {
+    const parsed = BlacksmithForgeSchema.safeParse(payload);
     const player = this.state.players.get(client.sessionId);
     if (!parsed.success || !player) return;
-    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to buy upgrades.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to forge equipment.", "error");
     const upgradeId = parsed.data.upgradeId as BlacksmithUpgradeId;
-    const purchase = buyBlacksmithUpgrade(player.blacksmithUpgrades, player.coins, upgradeId);
-    if (!purchase.purchased) {
-      const message = purchase.reason === "owned"
+    const ore = player.inventory.get("iron_ore");
+    const forge = forgeBlacksmithUpgrade(player.blacksmithUpgrades, player.coins, ore?.quantity ?? 0, upgradeId);
+    if (!forge.forged) {
+      const message = forge.reason === "owned"
         ? `${BLACKSMITH_UPGRADES[upgradeId].name} is already yours.`
+        : forge.reason === "iron_ore"
+          ? `You need ${BLACKSMITH_UPGRADES[upgradeId].ironOre} iron ore for ${BLACKSMITH_UPGRADES[upgradeId].name}.`
         : `You need ${BLACKSMITH_UPGRADES[upgradeId].price} gold for ${BLACKSMITH_UPGRADES[upgradeId].name}.`;
       return this.sendBlacksmithState(client, message, "error");
     }
-    player.blacksmithUpgrades = purchase.flags;
-    player.coins = purchase.gold;
+    player.blacksmithUpgrades = forge.flags;
+    player.coins = forge.gold;
+    if (ore) ore.quantity = forge.ironOre;
+    if (upgradeId === "reinforced_pickaxe") {
+      let pickaxe = player.inventory.get("reinforced_pickaxe");
+      if (!pickaxe) {
+        pickaxe = new InventoryItemState();
+        player.inventory.set("reinforced_pickaxe", pickaxe);
+      }
+      pickaxe.quantity = 1;
+    }
     void this.persistPlayer(client.sessionId, player);
-    this.sendBlacksmithState(client, `${BLACKSMITH_UPGRADES[upgradeId].name} purchased. ${BLACKSMITH_UPGRADES[upgradeId].description}.`, "purchased", 0, 0, upgradeId);
+    this.sendBlacksmithState(client, `${BLACKSMITH_UPGRADES[upgradeId].name} forged and equipped. ${BLACKSMITH_UPGRADES[upgradeId].description}.`, "purchased", 0, 0, upgradeId);
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
