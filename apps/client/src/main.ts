@@ -5332,6 +5332,7 @@ app.on("update", (dt: number) => {
   updatePerformanceMetrics(now);
   if (worldReady) {
     updateCaveNavigation(localPlayer.getPosition(), now);
+    minimap.setChampionState(mobVisuals.get("frontier-brute-west")?.state ?? null);
     minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden), cameraOrbit.yaw, Boolean(defeatScreen.hidden));
   }
   if (room && worldReady && now - lastPingSentAt >= 2000) {

@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { mineralStatusLabel } from "./minimap.js";
+import { mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
+  it("reveals the champion only when alive and nearby on the surface", () => {
+    const known = new Set<string>(); const champion = { ...CHAMPION_WAYPOINT, alive: true };
+    expect(discoverChampion({ ...champion, x: champion.x + 11 }, champion, known)).toBe(false);
+    expect(discoverChampion({ ...champion, y: 3 }, champion, known)).toBe(false);
+    expect(discoverChampion(champion, { ...champion, alive: false }, known)).toBe(false);
+    expect(discoverChampion(champion, null, known)).toBe(false);
+    expect(discoverChampion(champion, champion, known)).toBe(true);
+    expect(discoverChampion(champion, champion, known)).toBe(false);
+    expect(parseDiscoveries(JSON.stringify([...known]))).toEqual(known);
+    expect(knownWaypoints(known)).toContainEqual(CHAMPION_WAYPOINT);
+    expect(waypointAtMapPoint(champion, MAP_SIZE / 2, MAP_SIZE / 2, known)).toEqual(CHAMPION_WAYPOINT);
+  });
   it("labels available, recovering and occupied deposits", () => {
     expect(mineralStatusLabel({ id: "35,-5", available: 2, total: 18, readyAt: 5000 }, 1000)).toBe("Available · 2/18");
     expect(mineralStatusLabel({ id: "35,-5", available: 0, total: 18, readyAt: 5000 }, 1000)).toBe("Recovering · 4s");

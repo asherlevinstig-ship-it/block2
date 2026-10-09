@@ -18,8 +18,15 @@ export const depositKey = (deposit: Position): string => `${deposit.x},${deposit
 export const mapFacing = (yaw: number): { x: number; y: number } => ({ x: Math.sin(yaw * Math.PI / 180), y: Math.cos(yaw * Math.PI / 180) });
 export type Waypoint = Position & { y: number; id: string; name: string };
 export const HOME_WAYPOINT: Waypoint = { x: TOWN_CENTER_X, z: TOWN_CENTER_Z, y: SURFACE_HEIGHT + 1, id: "home", name: "Town of Beginnings" };
+export const CHAMPION_WAYPOINT: Waypoint = { x: -48.5, y: SURFACE_HEIGHT + 1, z: 12.5, id: "frontier-brute-west", name: "Frontier Stone Champion" };
+export function discoverChampion(player: Position & { y: number }, champion: (Position & { y: number; alive: boolean }) | null, discovered: Set<string>): boolean {
+  if (!champion?.alive || discovered.has(CHAMPION_WAYPOINT.id) || player.y < SURFACE_HEIGHT - 1
+    || Math.abs(player.y - champion.y) > 2 || Math.hypot(player.x - champion.x, player.z - champion.z) > DISCOVERY_RADIUS) return false;
+  discovered.add(CHAMPION_WAYPOINT.id); return true;
+}
 export function knownWaypoints(discovered: Set<string>): Waypoint[] {
   return [HOME_WAYPOINT, { ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" }, MINE_ENTRANCE,
+    ...(discovered.has(CHAMPION_WAYPOINT.id) ? [CHAMPION_WAYPOINT] : []),
     ...MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).map(point => ({ ...point, y: SURFACE_HEIGHT + 1, id: depositKey(point), name: `${point.block === Block.SilverOre ? "Silver" : "Iron"} deposit (${point.x}, ${point.z})` }))];
 }
 export function waypointAtMapPoint(player: Position, x: number, y: number, discovered: Set<string>): Waypoint | null {
@@ -53,6 +60,7 @@ export function parseDiscoveries(raw: string | null): Set<string> {
   try {
     const values: unknown = JSON.parse(raw ?? "[]");
     const allowed = new Set(MAP_DEPOSITS.map(depositKey));
+    allowed.add(CHAMPION_WAYPOINT.id);
     return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === "string" && allowed.has(value)) : []);
   } catch { return new Set(); }
 }
@@ -70,6 +78,7 @@ export function discoverDeposits(player: Position & { y: number }, discovered: S
 }
 
 export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, storageKey: string): {
+  setChampionState(champion: (Position & { y: number; alive: boolean }) | null): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   surfaceGuideEnabled(): boolean;
@@ -86,6 +95,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const surfaceButton = document.querySelector<HTMLButtonElement>("#minimap-surface")!;
   const depthLabel = document.querySelector<HTMLElement>("#minimap-depth")!;
   const statuses = new Map<string, MineralDepositStatus>();
+  let champion: (Position & { y: number; alive: boolean }) | null = null;
   let lastStatusSecond = 0;
   const homeButton = document.querySelector<HTMLButtonElement>("#minimap-home")!;
   const destinations = document.querySelector<HTMLSelectElement>("#minimap-destination")!;
@@ -105,7 +115,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     const targets = knownWaypoints(discovered);
     if (destinations.options.length !== targets.length + 1) destinations.replaceChildren(new Option("Choose a destination…", ""), ...targets.map(target => new Option(target.name, target.id)));
     targets.forEach((target, index) => {
-      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
+      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" || target.id === CHAMPION_WAYPOINT.id ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
     });
     destinations.value = waypoint?.id ?? "";
   };
@@ -137,6 +147,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const ratio = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = MAP_SIZE * ratio; canvas.height = MAP_SIZE * ratio;
   return {
+    setChampionState(value) { champion = value; },
     setCaveState(state) { caveState = state; },
     surfaceGuideEnabled() { return surfaceGuide; },
     setMineralStatus(values) {
@@ -155,7 +166,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (!underground && surfaceGuide) setWaypoint(null);
       const second = Math.floor(Date.now() / 1000);
       if (second !== lastStatusSecond) { lastStatusSecond = second; refreshDestinations(); }
-      if (discoverDeposits(player, discovered)) {
+      const depositsChanged = discoverDeposits(player, discovered);
+      const championChanged = discoverChampion(player, champion, discovered);
+      if (depositsChanged || championChanged) {
         refreshDestinations();
         try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
       }
@@ -217,12 +230,14 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         if (square) ctx.rect(p.x - 4, p.y - 4, 8, 8); else ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
         ctx.font = "bold 10px system-ui"; ctx.textAlign = "center";
-        ctx.strokeText(label, p.x, p.y - 8); ctx.fillText(label, p.x, p.y - 8);
+        const labelY = label === "♛ CHAMP" ? p.y + 18 : p.y - 8;
+        ctx.strokeText(label, p.x, labelY); ctx.fillText(label, p.x, labelY);
         if (p.offscreen) { ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke(); }
       };
       if (!underground) {
         marker({ x: TOWN_CENTER_X, z: TOWN_CENTER_Z }, "HOME", "#abe3a0", true);
         marker(TOWN_BLACKSMITH_STALL_POSITION, "SMITH", "#ffd173", true);
+        if (discovered.has(CHAMPION_WAYPOINT.id)) marker(CHAMPION_WAYPOINT, "♛ CHAMP", "#ffcf65", true);
       }
       marker(MINE_ENTRANCE, "MINE", "#ffe08c", true);
       for (const chamber of caveState.chambers) marker(chamber, `${chamber.label} · D${caveDepth(chamber.y)}`, "#a3dfeb", false);
@@ -254,7 +269,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       ctx.fillStyle = "#fff8da"; ctx.strokeStyle = "#111b17"; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
       ctx.fillStyle = "#fff8da"; ctx.textAlign = "center"; ctx.font = "bold 11px system-ui"; ctx.fillText("N", x, 13);
       const distance = Math.round(Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z));
-      detail.textContent = underground ? `Depth ${caveDepth(player.y)} · ${caveState.chambers.length} chambers discovered` : `${distance}m from town · ${discovered.size} deposits found`;
+      const depositCount = MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).length;
+      detail.textContent = underground ? `Depth ${caveDepth(player.y)} · ${caveState.chambers.length} chambers discovered` : `${distance}m from town · ${depositCount} deposits found`;
       canvas.setAttribute("aria-label", `North-up ${underground ? `underground map at depth ${caveDepth(player.y)}, explored cells only` : "surface map"}. ${caveState.chambers.length} chambers discovered. White arrow shows your facing.`);
     },
   };

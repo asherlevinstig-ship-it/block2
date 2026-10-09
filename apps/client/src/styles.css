@@ -1126,7 +1126,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #minimap-surface[aria-pressed="true"] { color: #192418; background: #ffe08c; }
 #minimap-surface[hidden] { display: none; }
 .minimap-legend, .minimap-danger { display: flex; justify-content: space-between; gap: 4px; font-size: 9px; }
-.map-home { color: #abe3a0; } .map-smith { color: #ffd173; } .map-iron { color: #e3a76b; } .map-silver { color: #b4eaff; }
+.minimap-legend { flex-wrap: wrap; justify-content: flex-start; gap: 5px 9px; }
+.minimap-legend span { white-space: nowrap; }
+.map-home { color: #abe3a0; } .map-smith { color: #ffd173; } .map-iron { color: #e3a76b; } .map-silver { color: #b4eaff; } .map-champion { color: #ffcf65; }
 .minimap-danger { margin-top: 7px; }
 .minimap-danger span { flex: 1; padding: 4px 1px; text-align: center; border-radius: 3px; background: #234a3c; }
 .minimap-danger span:nth-child(2) { background: #465038; } .minimap-danger span:nth-child(3) { background: #52432a; } .minimap-danger span:nth-child(4) { background: #482329; }
