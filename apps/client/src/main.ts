@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { createMinimap } from "./minimap.js";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
@@ -152,6 +153,8 @@ function browserProfileToken() {
 }
 
 const profileToken = browserProfileToken();
+const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
+const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`);
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -3040,6 +3043,11 @@ window.addEventListener("keydown", event => {
   if (event.code !== "KeyP" || event.repeat) return;
   performanceToggle.click();
 });
+window.addEventListener("keydown", event => {
+  if (event.code !== "KeyM" || event.repeat || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+  event.preventDefault();
+  minimapPanel.open = !minimapPanel.open;
+});
 
 let touchStrafe = 0;
 let touchForward = 0;
@@ -4817,6 +4825,7 @@ app.on("update", (dt: number) => {
   if (activeStopTrace && now >= activeStopTrace.captureUntil) finishStopTrace();
 
   updatePerformanceMetrics(now);
+  if (worldReady) minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden));
   if (room && worldReady && now - lastPingSentAt >= 2000) {
     lastPingSentAt = now;
     pingSequence += 1;

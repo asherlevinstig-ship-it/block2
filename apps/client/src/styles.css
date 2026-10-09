@@ -1087,3 +1087,23 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #return-to-town { width: 100%; padding: 16px; border: 1px solid #dbb76a; border-radius: 10px; background: #987030; color: #fff4d8; font: inherit; font-weight: 800; cursor: pointer; }
 #return-to-town:disabled { opacity: .55; cursor: wait; }
 .defeat-note { font-size: 13px; }
+
+#minimap { position: fixed; z-index: 20; top: calc(94px + env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); width: 240px; box-sizing: border-box; border: 1px solid #afc99a55; border-radius: 13px; background: #0b1916ed; color: #d9e8ce; box-shadow: 0 8px 26px #0005; padding: 9px; }
+#minimap summary { cursor: pointer; font-size: 11px; font-weight: 800; letter-spacing: .09em; padding: 3px 1px 9px; }
+#minimap:not([open]) summary { padding-bottom: 3px; }
+#minimap kbd { float: right; font-size: 10px; color: #b2c6b7; padding: 1px 4px; border: 1px solid #ffffff30; border-radius: 3px; }
+#minimap-canvas { width: 220px; height: 220px; display: block; border-radius: 7px; }
+#minimap-detail { margin: 8px 0; font-size: 10px; color: #d4dfd6; }
+.minimap-legend, .minimap-danger { display: flex; justify-content: space-between; gap: 4px; font-size: 9px; }
+.map-home { color: #abe3a0; } .map-smith { color: #ffd173; } .map-iron { color: #e3a76b; } .map-silver { color: #b4eaff; }
+.minimap-danger { margin-top: 7px; }
+.minimap-danger span { flex: 1; padding: 4px 1px; text-align: center; border-radius: 3px; background: #234a3c; }
+.minimap-danger span:nth-child(2) { background: #465038; } .minimap-danger span:nth-child(3) { background: #52432a; } .minimap-danger span:nth-child(4) { background: #482329; }
+#minimap > small { display: block; margin-top: 7px; font-size: 9px; color: #9cafa1; }
+@media (max-width: 820px) {
+  #minimap { width: 174px; padding: 7px; }
+  #minimap-canvas { width: 158px; height: 158px; }
+  #minimap summary { font-size: 9px; }
+  .minimap-legend, .minimap-danger { flex-wrap: wrap; font-size: 8px; }
+  #minimap > small { display: none; }
+}

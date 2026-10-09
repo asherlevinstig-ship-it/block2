@@ -1,5 +1,5 @@
 import type { MobArchetypeDefinition } from "./mob-archetypes.js";
-import { TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS } from "@blockcraft/voxel-world";
+import { TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
 
 export const WORLD_SAFE_CENTER = { x: TOWN_CENTER_X, z: TOWN_CENTER_Z } as const;
 export const MOB_TOWN_MINIMUM_RADIUS = TOWN_SAFE_RADIUS + 8;
@@ -20,8 +20,8 @@ export interface DangerBand {
 export const DANGER_BANDS: readonly DangerBand[] = [
   { tier: 0, name: "Town of Beginnings", minimumRadius: 0, healthMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1, rewardMultiplier: 1, armorBonus: 0 },
   { tier: 1, name: "Outskirts", minimumRadius: TOWN_SAFE_RADIUS, healthMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1, rewardMultiplier: 1, armorBonus: 0 },
-  { tier: 2, name: "Wilds", minimumRadius: 34, healthMultiplier: 1.4, damageMultiplier: 1.5, speedMultiplier: 1.08, rewardMultiplier: 1.35, armorBonus: 0 },
-  { tier: 3, name: "Deep Frontier", minimumRadius: 46, healthMultiplier: 1.85, damageMultiplier: 2, speedMultiplier: 1.15, rewardMultiplier: 1.8, armorBonus: 1 },
+  { tier: 2, name: "Wilds", minimumRadius: WILDS_MINIMUM_RADIUS, healthMultiplier: 1.4, damageMultiplier: 1.5, speedMultiplier: 1.08, rewardMultiplier: 1.35, armorBonus: 0 },
+  { tier: 3, name: "Deep Frontier", minimumRadius: FRONTIER_MINIMUM_RADIUS, healthMultiplier: 1.85, damageMultiplier: 2, speedMultiplier: 1.15, rewardMultiplier: 1.8, armorBonus: 1 },
 ] as const;
 
 export function radiusFromSafeCenter(position: { x: number; z: number }): number {

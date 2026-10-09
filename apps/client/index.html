@@ -153,6 +153,14 @@
     </section>
     <button id="inventory-toggle" type="button" aria-controls="inventory-panel" aria-expanded="false"><span>▣</span> PACK <strong id="inventory-badge">0</strong><kbd>I</kbd></button>
     <button id="performance-toggle" type="button" aria-controls="performance-panel" aria-expanded="false">PERF</button>
+    <details id="minimap" open>
+      <summary>EXPLORER MAP <kbd>M</kbd></summary>
+      <canvas id="minimap-canvas" width="220" height="220" role="img" aria-label="Explorer map loading"></canvas>
+      <p id="minimap-detail">Waiting for the world…</p>
+      <div class="minimap-legend"><span class="map-home">■ Town</span><span class="map-smith">■ Smith</span><span class="map-iron">● Fe 3g</span><span class="map-silver">● Ag 8g</span></div>
+      <div class="minimap-danger"><span>Safe</span><span>Outskirts</span><span>Wilds</span><span>Frontier</span></div>
+      <small>North-up · approach deposits to discover them</small>
+    </details>
     <aside id="performance-panel" aria-label="Performance metrics" hidden>
       <p class="eyebrow">LIVE PERFORMANCE</p>
       <dl>
