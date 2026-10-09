@@ -1,6 +1,8 @@
 import { Client, Room } from "@colyseus/core";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
+import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
+  createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
 import { BRUTE_SLAM, bruteSlamCenter, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
@@ -234,6 +236,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly mobVerticalVelocities = new Map<string, number>();
   private readonly mobNavigation = new Map<string, MobNavigationState>();
   private readonly mobPatrols = new Map<string, MobPatrolState>();
+  private readonly roamingRoutes = new Map<string, RoamingRouteState>();
+  private readonly roamingEngaged = new Set<string>();
+  private readonly roamingReturning = new Set<string>();
   private readonly spitterPositioning = new Map<string, SpitterPositioning>();
   private readonly profileTokens = new Map<string, string>();
   private readonly profileSaveFingerprints = new Map<string, string>();
@@ -273,6 +278,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.setState(new WorldState());
     if (this.pendingWorldDeltaWrites.size) void this.flushWorldDeltaWrites();
     for (const spawn of WILDERNESS_ENCOUNTERS) this.registerMob(spawn.id, spawn.archetype, spawn);
+    for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) {
+      this.registerMob(roamingMemberId(pack, index), pack.archetype, roamingGoal(pack, index, 0));
+    }
     this.registerMob("greenwood-briar", "briar_crawler", GREENWOOD_CRAWLER_HOMES[1]);
     this.registerMob("greenwood-briar-north", "briar_crawler", GREENWOOD_CRAWLER_HOMES[2]);
     this.registerMob("stone-brute", "stone_brute", STONE_BRUTE_ARENA_HOME);
@@ -837,23 +845,39 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private registerMob(mobId: string, archetypeId: MobArchetypeId, spawn: { x: number; y: number; z: number }): void {
     const outside = keepMobOutsideTown(spawn);
-    const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose));
+    const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose));
     this.mobHomes.set(mobId, home);
     this.mobNavigation.set(mobId, createMobNavigationState());
     const mob = this.createMob(archetypeId, home);
-    mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? mob.name;
+    mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     this.state.mobs.set(mobId, mob);
   }
 
   private readonly mobPositionAllowed = (position: { x: number; z: number }): boolean =>
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
+  private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    const membership = roamingMembership(id);
+    return !membership || roamingPackAllows(membership.pack, pose);
+  }
+
+  private patrolRoamingMember(id: string, mob: MobState, now: number, dt: number, speed: number): void {
+    const membership = roamingMembership(id)!;
+    const route = this.roamingRoutes.get(membership.pack.id)!;
+    const authored = roamingGoal(membership.pack, membership.index, route.index);
+    const allowed = (pose: { x: number; y: number; z: number }) => this.mobPositionAllowed(pose) && this.roamingAllowed(id, pose);
+    const goal = walkableMobSpawn(authored, this.readWorldBlock, allowed);
+    if (Math.hypot(goal.x - mob.x, goal.z - mob.z) < .65) { this.roamingReturning.delete(id); return; }
+    if (now < route.pauseUntil && !this.roamingReturning.has(id)) return;
+    this.moveNavigatingMob(id, mob, pursueTarget(mob, goal, dt, speed, .3), goal, now, allowed);
+  }
+
   private moveNavigatingMob(mobId: string, mob: MobState, desired: { x: number; z: number },
     goal: { x: number; y: number; z: number }, now: number, allowed: (pose: { x: number; y: number; z: number }) => boolean = this.mobPositionAllowed): void {
     const navigation = this.mobNavigation.get(mobId) ?? createMobNavigationState();
     this.mobNavigation.set(mobId, navigation);
     const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock,
-      pose => allowed(pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+      pose => allowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
     if (Math.hypot(dx, dz) > 0.0001) mob.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
@@ -897,7 +921,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private displaceMob(mobId: string, mob: MobState, delta: { x: number; z: number }): void {
     const next = moveMobSafely(mob, delta, this.readWorldBlock,
-      pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+      pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     mob.x = next.x;
     mob.y = next.y;
     mob.z = next.z;
@@ -1342,18 +1366,28 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.resolveBrambleSnares(now);
     this.resolveMobProjectiles(now);
     this.resolveMobHazards(now);
+    for (const pack of ROAMING_PACKS) {
+      const route = this.roamingRoutes.get(pack.id) ?? createRoamingRouteState(now);
+      this.roamingRoutes.set(pack.id, route);
+      const members = pack.offsets.flatMap((_, index) => {
+        const mob = this.state.mobs.get(roamingMemberId(pack, index));
+        return mob?.alive ? [{ index, pose: mob, idle: mob.combatState === "idle" && !this.roamingEngaged.has(roamingMemberId(pack, index)) && !this.roamingReturning.has(roamingMemberId(pack, index)) }] : [];
+      });
+      advanceRoamingRoute(pack, route, now, members);
+    }
     for (const [mobId, mob] of this.state.mobs) {
       const definition = mobArchetype(mob.archetype);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
         const stats = scaledMobStats(definition, dangerBandAt(home));
-        const spawn = walkableMobSpawn(home, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose));
+        const spawn = walkableMobSpawn(home, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose));
         mob.x = spawn.x;
         mob.y = spawn.y;
         mob.z = spawn.z;
         this.mobVerticalVelocities.set(mobId, 0);
         this.mobNavigation.set(mobId, createMobNavigationState());
         this.mobPatrols.delete(mobId);
+        this.roamingEngaged.delete(mobId); this.roamingReturning.delete(mobId);
         this.spitterPositioning.delete(mobId);
         this.mobStaggerImmuneUntil.delete(mobId);
         this.mobCommittedAim.delete(mobId);
@@ -1389,7 +1423,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       if (mob.combatState === "windup") {
         const targetPlayer = this.state.players.get(mob.targetId);
-        if (CAVE_ENCOUNTERS[mobId] && (!targetPlayer || targetPlayer.health <= 0 || !caveEncounterAllows(mobId, targetPlayer))) {
+        if ((CAVE_ENCOUNTERS[mobId] || roamingMembership(mobId)) && (!targetPlayer || targetPlayer.health <= 0 || !caveEncounterAllows(mobId, targetPlayer) || !this.roamingAllowed(mobId, targetPlayer))) {
           mob.targetId = "";
           mob.aimCommitted = false;
           mob.combatState = "recover";
@@ -1475,19 +1509,28 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         health: player.health,
       })).filter(player => !isInsideTownSafeZone(player) && radiusFromSafeCenter(player) >= MOB_TOWN_MINIMUM_RADIUS
         && caveEncounterAllows(mobId, player)
+        && this.roamingAllowed(mobId, player)
         && (mobId === "stone-brute" || !isInStoneBruteArena(player.x, player.z)));
-      const target = selectAggroTarget(mob, players, definition.aggroRange);
+      const target = this.roamingReturning.has(mobId) ? null : selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
         this.spitterPositioning.delete(mobId);
+        if (roamingMembership(mobId)) {
+          if (this.roamingEngaged.delete(mobId)) {
+            this.roamingReturning.add(mobId); this.mobNavigation.set(mobId, createMobNavigationState());
+          }
+          this.patrolRoamingMember(mobId, mob, now, deltaTime, Math.min(1.1, definition.speed * mob.speedMultiplier * .75));
+          continue;
+        }
         this.patrolMob(mobId, mob, home, now, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier * 0.65));
         continue;
       }
+      if (roamingMembership(mobId)) this.roamingEngaged.add(mobId);
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
       const rangedPursuit = definition.attackKind === "projectile"
         ? positionSpitter(mob, target, home, positioning, now, deltaTime, definition.speed * mob.speedMultiplier,
-          this.readWorldBlock, pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z))
+          this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z))
         : null;
       const pursuit = rangedPursuit ?? pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
       const goal = rangedPursuit?.goal ?? target;
@@ -2186,7 +2229,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const travel = rush.distance * (progress - rush.progress);
       const radians = rush.yaw * Math.PI / 180;
       const next = moveMobSafely(mob, { x: Math.sin(radians) * travel, z: Math.cos(radians) * travel }, this.readWorldBlock,
-        pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z)
+        pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z)
           && isPlayerSupported(this.readWorldBlock, pose.x, pose.y, pose.z));
       const moved = Math.hypot(next.x - mob.x, next.z - mob.z);
       mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = rush.yaw;
