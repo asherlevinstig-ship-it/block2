@@ -103,7 +103,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS 
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
-import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
+import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import {
   applyWorldDeltasToChunk,
@@ -498,6 +498,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     client.send("blacksmith:update", {
       phase,
       ironOre: player.inventory.get("iron_ore")?.quantity ?? 0,
+      silverOre: player.inventory.get("silver_ore")?.quantity ?? 0,
       ironCapacity: ironCapacity(player.blacksmithUpgrades),
       gold: player.coins,
       ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
@@ -513,13 +514,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!player) return;
     if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to trade.", "error");
     const ore = player.inventory.get("iron_ore");
-    if (!ore?.quantity) return this.sendBlacksmithState(client, "You have no iron ore to sell. Mine iron ore underground first.", "error");
-    const { sold, goldGranted } = ironOreSale(ore.quantity, player.coins);
+    const silver = player.inventory.get("silver_ore");
+    if (!ore?.quantity && !silver?.quantity) return this.sendBlacksmithState(client, "No minerals to sell. Look for exposed iron beyond the east gate; silver lies farther into the wilderness.", "error");
+    const { ironSold, silverSold, goldGranted } = mineralSale(ore?.quantity ?? 0, silver?.quantity ?? 0, player.coins);
+    const sold = ironSold + silverSold;
     if (sold === 0) return this.sendBlacksmithState(client, "Your gold purse is full.", "error");
-    ore.quantity -= sold;
+    if (ore) ore.quantity -= ironSold;
+    if (silver) silver.quantity -= silverSold;
     player.coins += goldGranted;
     void this.persistPlayer(client.sessionId, player);
-    this.sendBlacksmithState(client, `Sold ${sold} iron ore for ${goldGranted} gold.`, "traded", sold, goldGranted);
+    const minerals = [ironSold ? `${ironSold} iron ore` : "", silverSold ? `${silverSold} silver ore` : ""].filter(Boolean).join(" + ");
+    this.sendBlacksmithState(client, `Sold ${minerals} for ${goldGranted} gold.`, "traded", sold, goldGranted);
   }
 
   private handleBlacksmithForge(client: Client, payload: unknown): void {

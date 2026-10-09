@@ -1,6 +1,6 @@
 import { Block, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, isInGreenwoodRegion, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
 
-export type VoxelTextureKind = "bedrock" | "stone" | "dirt" | "grass-top" | "grass-side" | "iron"
+export type VoxelTextureKind = "bedrock" | "stone" | "dirt" | "grass-top" | "grass-side" | "iron" | "silver"
   | "forest-grass-top" | "forest-grass-side" | "oak-bark" | "oak-rings" | "leaves"
   | "timber" | "slate-roof" | "paving" | "path" | "dressed-stone" | "bronze";
 
@@ -39,6 +39,7 @@ export function voxelTextureKind(block: number, normalY: number, x: number, y: n
     }
   }
   if (block === Block.Bedrock) return "bedrock";
+  if (block === Block.SilverOre) return "silver";
   if (block === Block.Stone) return "stone";
   if (block === Block.Dirt) return "dirt";
   if (block === Block.OakLog) return normalY === 0 ? "oak-bark" : "oak-rings";
@@ -188,10 +189,12 @@ export function createVoxelTexturePixels(kind: VoxelTextureKind, size = 32): Uin
         else if (kind === "bedrock") color = vary(stonePixel(x, y), -60);
         else {
           color = stonePixel(x, y);
-          if (kind === "iron") {
+          if (kind === "iron" || kind === "silver") {
             const seam = Math.abs(x - (10 + Math.floor(y / 5) * 2)) < 3;
             const offshoot = y >= 16 && y <= 20 && x >= 6 && x <= 17;
-            if (seam || offshoot) color = x % 3 === 0 ? [244, 194, 101] : [183, 121, 59];
+            if (seam || offshoot) color = kind === "silver"
+              ? x % 3 === 0 ? [234, 250, 255] : [145, 205, 225]
+              : x % 3 === 0 ? [244, 194, 101] : [183, 121, 59];
           }
         }
       }

@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-town-return-v28";
+export const WORLD_ROOM = "world-mineral-outcrops-v29";
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
 export const WORLD_STREAM_CHUNK_RADIUS = 2;
 
@@ -14,16 +14,18 @@ export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;
 export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
 export const IRON_ORE_GOLD_PRICE = 3;
+export const SILVER_ORE_GOLD_PRICE = 8;
 export const BLACKSMITH_UPGRADES = {
-  reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", price: 12, ironOre: 6, description: "Auto-equipped tool · extract 2 iron ore from every iron block" },
+  reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", price: 12, ironOre: 6, description: "Auto-equipped tool · extract 2 minerals from every ore block" },
   iron_sword: { id: "iron_sword", name: "Iron Sword", price: 45, ironOre: 0, description: "Upgrades and equips your longsword · +1 sword damage" },
-  miners_pack: { id: "miners_pack", name: "Miner's Pack", price: 25, ironOre: 0, description: "Carry up to 30 iron ore instead of 12" },
+  miners_pack: { id: "miners_pack", name: "Miner's Pack", price: 25, ironOre: 0, description: "Carry up to 30 of each mineral instead of 12" },
 } as const;
 export type BlacksmithUpgradeId = keyof typeof BLACKSMITH_UPGRADES;
 export const BlacksmithForgeSchema = z.object({ upgradeId: z.enum(["reinforced_pickaxe", "iron_sword", "miners_pack"]) });
 export type BlacksmithUpdate = {
   phase: "idle" | "traded" | "purchased" | "error";
   ironOre: number;
+  silverOre?: number;
   ironCapacity: number;
   gold: number;
   ownedUpgrades: BlacksmithUpgradeId[];
@@ -32,7 +34,7 @@ export type BlacksmithUpdate = {
   goldGranted?: number;
   message: string;
 };
-export type ResourceGathered = { itemId: "iron_ore" | "timber"; quantity: number; total: number };
+export type ResourceGathered = { itemId: "iron_ore" | "silver_ore" | "timber"; quantity: number; total: number };
 export const TavernQuizStartSchema = z.object({ stake: z.number().int().min(1).max(TAVERN_QUIZ_MAX_STAKE) });
 export const TavernQuizAnswerSchema = z.object({ questionId: z.string().min(1).max(40), choice: z.number().int().min(0).max(3) });
 export const TavernQuizDecisionSchema = z.object({ decision: z.enum(["double", "quit"]) });
@@ -47,8 +49,9 @@ export type TavernQuizUpdate = {
 
 export const ITEM_DEFINITIONS = {
   iron_ore: { id: "iron_ore", name: "Iron Ore", description: "Mined iron ore that can be sold to the town blacksmith" },
+  silver_ore: { id: "silver_ore", name: "Silver Ore", description: "Wilderness mineral · sell to the blacksmith for 8 gold each" },
   timber: { id: "timber", name: "Greenwood Timber", description: "Fresh timber harvested from Greenwood oak trees" },
-  reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", description: "Forged mining tool that extracts two iron ore per block" },
+  reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", description: "Forged mining tool that extracts two minerals per ore block" },
   moss_fibre: { id: "moss_fibre", name: "Moss Fibre", description: "Soft living fibre gathered from Moss Crawlers" },
   crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang shed by a defeated crawler" },
   stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core from a Stone Brute" },

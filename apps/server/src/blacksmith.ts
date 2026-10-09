@@ -1,4 +1,4 @@
-import { BLACKSMITH_UPGRADES, IRON_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId } from "@blockcraft/protocol";
+import { BLACKSMITH_UPGRADES, IRON_ORE_GOLD_PRICE, SILVER_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId } from "@blockcraft/protocol";
 import { Block, TOWN_BLACKSMITH_STALL_POSITION, type BlockId } from "@blockcraft/voxel-world";
 
 export const MAX_GOLD = 1_000_000;
@@ -57,8 +57,8 @@ export function blacksmithNextStep(flags: number, gold: number, ore: number): st
   return `Mine ${needed - ore} more iron ore, sell it here for 3 gold each, then forge the Iron Sword for 45 gold.`;
 }
 
-export function minedMineral(block: BlockId): "iron_ore" | null {
-  return block === Block.IronOre ? "iron_ore" : null;
+export function minedMineral(block: BlockId): "iron_ore" | "silver_ore" | null {
+  return block === Block.IronOre ? "iron_ore" : block === Block.SilverOre ? "silver_ore" : null;
 }
 
 export function canTradeAtBlacksmith(player: { x: number; y: number; z: number }): boolean {
@@ -69,4 +69,10 @@ export function canTradeAtBlacksmith(player: { x: number; y: number; z: number }
 export function ironOreSale(available: number, gold: number): { sold: number; goldGranted: number } {
   const sold = Math.max(0, Math.min(Math.floor(available), Math.floor((MAX_GOLD - gold) / IRON_ORE_GOLD_PRICE)));
   return { sold, goldGranted: sold * IRON_ORE_GOLD_PRICE };
+}
+
+export function mineralSale(iron: number, silver: number, gold: number): { ironSold: number; silverSold: number; goldGranted: number } {
+  const ironSale = ironOreSale(iron, gold);
+  const silverSold = Math.max(0, Math.min(Math.floor(silver), Math.floor((MAX_GOLD - gold - ironSale.goldGranted) / SILVER_ORE_GOLD_PRICE)));
+  return { ironSold: ironSale.sold, silverSold, goldGranted: ironSale.goldGranted + silverSold * SILVER_ORE_GOLD_PRICE };
 }

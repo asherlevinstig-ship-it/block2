@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   Block,
+  MINERAL_DEPOSITS,
   CHUNK_HEIGHT,
   CHUNK_SIZE,
   GRAVITY,
@@ -32,6 +33,19 @@ import {
 } from "../src/index.js";
 
 describe("deterministic voxel world", () => {
+  it("exposes supported mineral deposits outside town, with silver farther than iron", () => {
+    for (const deposit of MINERAL_DEPOSITS) {
+      const address = worldToChunk(deposit.x, deposit.z);
+      const chunk = generateChunk("test-world", address.chunkX, address.chunkZ);
+      expect(getBlock(chunk, address.localX, SURFACE_HEIGHT, address.localZ)).toBe(deposit.block);
+      expect(getBlock(chunk, address.localX, SURFACE_HEIGHT - 1, address.localZ)).toBe(deposit.block);
+      expect(getBlock(chunk, address.localX, SURFACE_HEIGHT - 2, address.localZ)).toBe(Block.Stone);
+      expect(getBlock(chunk, address.localX, SURFACE_HEIGHT + 1, address.localZ)).toBe(Block.Air);
+      expect(isProtectedVoxel(deposit.x, deposit.z)).toBe(false);
+      const radius = Math.hypot(deposit.x - 8.5, deposit.z - 8.5);
+      expect(radius).toBeGreaterThan(deposit.block === Block.SilverOre ? 55 : 25);
+    }
+  });
   it("provides a flat open brute arena and a supported trail beyond the crawler camp", () => {
     const cache = new Map<string, ReturnType<typeof generateChunk>>();
     const read = (x: number, y: number, z: number) => {

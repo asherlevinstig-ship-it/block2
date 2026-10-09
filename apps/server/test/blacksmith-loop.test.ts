@@ -1,10 +1,36 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Block, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
+import { Block, TOWN_BLACKSMITH_STALL_POSITION, worldToChunk, getBlock } from "@blockcraft/voxel-world";
 import { WorldRoom } from "../src/game-room.js";
 import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/schema.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("ore to forged sword to item loot", () => {
+  it("mines visible silver once, preserves a full-pack block, and sells both minerals at the stall", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any;
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    vi.spyOn(internal, "recordWorldDelta").mockImplementation(() => {});
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    const player = new PlayerState(); Object.assign(player, { x: 68.5, y: 8, z: 27.5 });
+    room.state.players.set("visitor", player); const client = { sessionId: "visitor", send: vi.fn() };
+    const a = worldToChunk(68, 27); const stored = internal.getChunk(a.chunkX, a.chunkZ);
+    const request = { requestId: "silver", x: 68, y: 7, z: 27, expectedRevision: stored.revision };
+    internal.handleMine(client, request);
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(1);
+    expect(getBlock(stored.chunk, a.localX, 7, a.localZ)).toBe(Block.Air);
+    internal.handleMine(client, request);
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(1);
+    const silver = player.inventory.get("silver_ore")!; silver.quantity = 12;
+    internal.handleMine(client, { ...request, y: 6, expectedRevision: stored.revision });
+    expect(getBlock(stored.chunk, a.localX, 6, a.localZ)).toBe(Block.SilverOre);
+    expect(silver.quantity).toBe(12);
+    const iron = new InventoryItemState(); iron.quantity = 2; player.inventory.set("iron_ore", iron);
+    internal.handleBlacksmithSell(client); expect(player.coins).toBe(20);
+    Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION);
+    internal.handleBlacksmithSell(client);
+    expect(player.coins).toBe(122); expect(silver.quantity).toBe(0); expect(iron.quantity).toBe(0);
+    internal.handleBlacksmithSell(client); expect(player.coins).toBe(122);
+  });
   it("sells gathered ore, forges once, defeats a mob with upgraded sword damage, and collects its items", () => {
     vi.useFakeTimers(); vi.setSystemTime(10_000);
     const room = new WorldRoom(); room.setState(new WorldState());

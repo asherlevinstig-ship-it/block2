@@ -138,14 +138,16 @@
       <h2>Trade &amp; Forge</h2>
       <p id="blacksmith-message" aria-live="polite">Sell ore for gold, or keep enough to forge lasting equipment.</p>
       <div class="blacksmith-trade-row"><span>IRON ORE IN PACK</span><strong id="blacksmith-ore">0</strong></div>
-      <div class="blacksmith-trade-row"><span>PRICE PER ORE</span><strong id="blacksmith-price">3 gold</strong></div>
+      <div class="blacksmith-trade-row"><span>SILVER ORE IN PACK</span><strong id="blacksmith-silver">0</strong></div>
+      <div class="blacksmith-trade-row"><span>PRICE PER MINERAL</span><strong id="blacksmith-price">Iron 3 · Silver 8 gold</strong></div>
+      <div class="blacksmith-trade-row"><span>MINERALS VALUE</span><strong id="blacksmith-sale-value">0 gold</strong></div>
       <div class="blacksmith-trade-row gold"><span>YOUR GOLD</span><strong id="blacksmith-gold">20</strong></div>
-      <button id="blacksmith-sell" type="button">Sell all iron ore</button>
+      <button id="blacksmith-sell" type="button">Sell all minerals</button>
       <h3 class="blacksmith-shop-heading">FORGE EQUIPMENT <small>Materials are taken directly from your pack</small></h3>
       <div id="blacksmith-upgrades">
-        <article data-blacksmith-upgrade="reinforced_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Reinforced Pickaxe</strong><small>Auto-equips · mine 2 iron ore per block</small><span class="forge-costs"><b data-cost="iron">0 / 6 IRON</b><b data-cost="gold">0 / 12 GOLD</b></span></div><button type="button">FORGE</button></article>
+        <article data-blacksmith-upgrade="reinforced_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Reinforced Pickaxe</strong><small>Auto-equips · mine 2 minerals per ore block</small><span class="forge-costs"><b data-cost="iron">0 / 6 IRON</b><b data-cost="gold">0 / 12 GOLD</b></span></div><button type="button">FORGE</button></article>
         <article data-blacksmith-upgrade="iron_sword"><span class="upgrade-icon">⚔</span><div><strong>Iron Sword</strong><small>Equips your longsword · +1 sword damage</small><span class="forge-costs"><b data-cost="gold">0 / 45 GOLD</b></span></div><button type="button">FORGE</button></article>
-        <article data-blacksmith-upgrade="miners_pack"><span class="upgrade-icon">▣</span><div><strong>Miner's Pack</strong><small>Carry 30 iron ore instead of 12</small><span class="forge-costs"><b data-cost="gold">0 / 25 GOLD</b></span></div><button type="button">FORGE</button></article>
+        <article data-blacksmith-upgrade="miners_pack"><span class="upgrade-icon">▣</span><div><strong>Miner's Pack</strong><small>Carry 30 of each mineral instead of 12</small><span class="forge-costs"><b data-cost="gold">0 / 25 GOLD</b></span></div><button type="button">FORGE</button></article>
       </div>
       <button id="blacksmith-close" type="button">Leave stall</button>
     </section>
@@ -179,6 +181,7 @@
         <h3 id="inventory-materials-title"><span>Materials</span><small>Mine, collect and trade</small></h3>
         <div class="inventory-grid materials">
           <article data-item="iron_ore"><i></i><div><strong>Iron Ore</strong><small>Mineral · sell at the blacksmith</small></div><em data-item-count="iron_ore">0</em></article>
+          <article data-item="silver_ore"><i></i><div><strong>Silver Ore</strong><small>Outer wilderness · sell for 8 gold each</small></div><em data-item-count="silver_ore">0</em></article>
           <article data-item="timber"><i></i><div><strong>Greenwood Timber</strong><small>Harvested from oak trees beyond the east gate</small></div><em data-item-count="timber">0</em></article>
           <article data-item="moss_fibre"><i></i><div><strong>Moss Fibre</strong><small>Soft crawler crafting material</small></div><em data-item-count="moss_fibre">0</em></article>
           <article data-item="crawler_fang"><i></i><div><strong>Crawler Fang</strong><small>Sharp creature material</small></div><em data-item-count="crawler_fang">0</em></article>
@@ -189,7 +192,7 @@
       <section class="inventory-section" aria-labelledby="inventory-tools-title">
         <h3 id="inventory-tools-title"><span>Tools</span><small>Mining equipment auto-equips when forged</small></h3>
         <div class="inventory-grid tools-grid">
-          <article data-item="reinforced_pickaxe"><i></i><div><strong>Reinforced Pickaxe</strong><small>Equipped tool · mine 2 iron ore per block</small></div><em data-item-count="reinforced_pickaxe">0</em></article>
+          <article data-item="reinforced_pickaxe"><i></i><div><strong>Reinforced Pickaxe</strong><small>Equipped tool · mine 2 minerals per ore block</small></div><em data-item-count="reinforced_pickaxe">0</em></article>
         </div>
       </section>
       <section class="inventory-section equipment-section" aria-labelledby="inventory-equipment-title">

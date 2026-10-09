@@ -13,6 +13,7 @@ import {
   mobStrikeGroundOutline,
   BLACKSMITH_UPGRADES,
   IRON_ORE_GOLD_PRICE,
+  SILVER_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
   MOMENTUM_TRAIT,
   TRAIT_DEFINITIONS,
@@ -392,7 +393,7 @@ function materialFor(kind: VoxelTextureKind): pc.StandardMaterial {
     material.diffuse = new pc.Color(1, 1, 1);
     material.diffuseMap = createVoxelTexture(kind);
     material.diffuseVertexColor = true;
-    const metal = kind === "bronze" || kind === "iron";
+    const metal = kind === "bronze" || kind === "iron" || kind === "silver";
     material.specular = new pc.Color(metal ? 0.26 : 0.035, metal ? 0.2 : 0.035, metal ? 0.12 : 0.035);
     material.gloss = metal ? 0.28 : 0.06;
     if (kind === "bronze") material.emissive = new pc.Color(0.05, 0.029, 0.008);
@@ -2178,6 +2179,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 
 const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   iron_ore: coloredMaterial(new pc.Color(0.57, 0.65, 0.68)),
+  silver_ore: coloredMaterial(new pc.Color(0.7, 0.88, 0.98)),
   timber: coloredMaterial(new pc.Color(0.48, 0.3, 0.14)),
   reinforced_pickaxe: coloredMaterial(new pc.Color(0.76, 0.8, 0.78)),
   moss_fibre: coloredMaterial(new pc.Color(0.28, 0.68, 0.2)),
@@ -2241,9 +2243,13 @@ function bindLootDrops(joinedRoom: Room): void {
 
 function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryCounts.set(itemId, total);
-  if (itemId === "iron_ore") {
-    blacksmithOre.textContent = `${total.toLocaleString()} / ${blacksmithIronCapacity.toLocaleString()}`;
-    blacksmithSell.disabled = total <= 0 || blacksmithPending || tavernCoinBalance >= 1_000_000;
+  if (itemId === "iron_ore" || itemId === "silver_ore") {
+    const iron = inventoryCounts.get("iron_ore") ?? 0;
+    const silver = inventoryCounts.get("silver_ore") ?? 0;
+    blacksmithOre.textContent = `${iron} / ${blacksmithIronCapacity}`;
+    document.querySelector<HTMLElement>("#blacksmith-silver")!.textContent = `${silver} / ${blacksmithIronCapacity}`;
+    document.querySelector<HTMLElement>("#blacksmith-sale-value")!.textContent = `${iron * IRON_ORE_GOLD_PRICE + silver * SILVER_ORE_GOLD_PRICE} gold`;
+    blacksmithSell.disabled = iron + silver <= 0 || blacksmithPending || tavernCoinBalance >= 1_000_000;
   }
   const count = inventoryCountElements.get(itemId);
   if (count) count.textContent = String(total);
@@ -2589,7 +2595,7 @@ function updateTavernCoins(coins: number): void {
   tavernCoinBalance = Math.max(0, Math.floor(coins));
   tavernCoins.textContent = tavernCoinBalance.toLocaleString();
   blacksmithGold.textContent = tavernCoinBalance.toLocaleString();
-  blacksmithSell.disabled = blacksmithPending || (inventoryCounts.get("iron_ore") ?? 0) <= 0 || tavernCoinBalance >= 1_000_000;
+  blacksmithSell.disabled = blacksmithPending || ((inventoryCounts.get("iron_ore") ?? 0) + (inventoryCounts.get("silver_ore") ?? 0)) <= 0 || tavernCoinBalance >= 1_000_000;
   if (!coinCountAnimationActive) quizBalanceAmount.textContent = tavernCoinBalance.toLocaleString();
   for (const button of quizStakes.querySelectorAll<HTMLButtonElement>("[data-quiz-stake]")) {
     button.disabled = quizPending || Number(button.dataset.quizStake) > tavernCoinBalance;
@@ -2598,7 +2604,7 @@ function updateTavernCoins(coins: number): void {
 
 let blacksmithPending = false;
 let blacksmithIronCapacity = 12;
-blacksmithPrice.textContent = `${IRON_ORE_GOLD_PRICE} gold`;
+blacksmithPrice.textContent = `Iron ${IRON_ORE_GOLD_PRICE} · Silver ${SILVER_ORE_GOLD_PRICE} gold`;
 
 function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithPending = false;
@@ -2606,9 +2612,13 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithMessage.textContent = update.message;
   blacksmithIronCapacity = update.ironCapacity;
   updateInventoryItem("iron_ore", update.ironOre);
+  const silver = update.silverOre ?? 0;
+  updateInventoryItem("silver_ore", silver);
+  document.querySelector<HTMLElement>("#blacksmith-silver")!.textContent = `${silver} / ${update.ironCapacity}`;
+  document.querySelector<HTMLElement>("#blacksmith-sale-value")!.textContent = `${update.ironOre * IRON_ORE_GOLD_PRICE + silver * SILVER_ORE_GOLD_PRICE} gold`;
   blacksmithOre.textContent = `${update.ironOre.toLocaleString()} / ${update.ironCapacity.toLocaleString()}`;
   updateTavernCoins(update.gold);
-  blacksmithSell.disabled = update.ironOre <= 0 || blacksmithPending || update.gold >= 1_000_000;
+  blacksmithSell.disabled = update.ironOre + silver <= 0 || blacksmithPending || update.gold >= 1_000_000;
   const owned = new Set(update.ownedUpgrades);
   for (const card of blacksmithUpgradeCards) {
     const upgradeId = card.dataset.blacksmithUpgrade as BlacksmithUpgradeId;
@@ -2643,7 +2653,7 @@ function openBlacksmith(): void {
   closeTavernDialogue();
   setInventoryOpen(false);
   blacksmithPanel.hidden = false;
-  blacksmithMessage.textContent = "Checking your iron ore...";
+  blacksmithMessage.textContent = "Checking your minerals...";
   if (room) room.send("blacksmith:sync");
 }
 
@@ -2886,6 +2896,10 @@ function updateTarget(): void {
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
   else if (currentTarget.block === Block.OakLog) targetLabel.textContent = `Greenwood oak · ${targetKey} · chop for timber`;
+  else if (currentTarget.block === Block.IronOre || currentTarget.block === Block.SilverOre) {
+    const silver = currentTarget.block === Block.SilverOre;
+    targetLabel.textContent = `${silver ? "Silver" : "Iron"} deposit · ${silver ? SILVER_ORE_GOLD_PRICE : IRON_ORE_GOLD_PRICE} gold per ore · click to mine`;
+  }
   else if (currentTarget.block === Block.Leaves) targetLabel.textContent = `Greenwood canopy · ${targetKey} · clear foliage`;
   else targetLabel.textContent = `Target: ${targetKey} · mineable`;
 }
@@ -5158,12 +5172,13 @@ async function connect(): Promise<void> {
     }
     if (message.quantity > 0) {
       const reinforced = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0;
-      showCombatFeedback(`${reinforced ? "REINFORCED STRIKE · " : ""}+${message.quantity} IRON ORE`, "dodge");
-      status.textContent = reinforced
-        ? `Reinforced Pickaxe extracted ${message.quantity} iron ore · ${message.total}/${blacksmithIronCapacity} carried.`
-        : `Mined iron ore · ${message.total}/${blacksmithIronCapacity} carried. Keep 6 ore to forge a Reinforced Pickaxe.`;
+      const name = ITEM_DEFINITIONS[message.itemId].name;
+      const price = message.itemId === "silver_ore" ? SILVER_ORE_GOLD_PRICE : IRON_ORE_GOLD_PRICE;
+      showCombatFeedback(`+${message.quantity} ${name.toUpperCase()} · ${message.quantity * price} GOLD VALUE`, "dodge");
+      status.textContent = `${reinforced ? "Reinforced Pickaxe · " : ""}${name}: ${message.total}/${blacksmithIronCapacity} carried · worth ${message.total * price} gold at the town blacksmith.`;
     } else {
-      status.textContent = "Your iron ore pack is full. Visit the blacksmith stall to sell it.";
+      showCombatFeedback(`${ITEM_DEFINITIONS[message.itemId].name.toUpperCase()} PACK FULL`, "hurt");
+      status.textContent = `Your ${ITEM_DEFINITIONS[message.itemId].name} capacity is full. Sell minerals at the blacksmith. The block was not removed.`;
     }
   });
   room.onMessage("pong", (message: { id?: unknown; serverTime?: unknown }) => {

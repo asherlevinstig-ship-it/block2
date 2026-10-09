@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { blacksmithNextStep, BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
+import { blacksmithNextStep, BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
 
 describe("blacksmith trading", () => {
+  it("buys actual silver and iron at different fixed prices while respecting the purse cap", () => {
+    expect(minedMineral(Block.SilverOre)).toBe("silver_ore");
+    expect(mineralSale(2, 3, 20)).toEqual({ ironSold: 2, silverSold: 3, goldGranted: 30 });
+    expect(mineralSale(0, 3, 999_991)).toEqual({ ironSold: 0, silverSold: 1, goldGranted: 8 });
+    expect(mineralSale(0, 3, 1_000_000).goldGranted).toBe(0);
+    expect(mineralSale(2, 3, 999_986)).toEqual({ ironSold: 2, silverSold: 1, goldGranted: 14 });
+  });
   it("guides mining, selling, forging, and then item hunting without quests", () => {
     expect(blacksmithNextStep(0, 20, 0)).toContain("Mine 9 more");
     expect(blacksmithNextStep(0, 20, 9)).toContain("Sell your iron ore");

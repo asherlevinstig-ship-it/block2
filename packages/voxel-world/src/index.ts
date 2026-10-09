@@ -69,9 +69,25 @@ export const Block = {
   IronOre: 5,
   OakLog: 6,
   Leaves: 7,
+  SilverOre: 8,
 } as const;
 
 export type BlockId = (typeof Block)[keyof typeof Block];
+
+export const MINERAL_DEPOSITS = [
+  { x: 35, z: -5, block: Block.IronOre },
+  { x: 68, z: 27, block: Block.SilverOre },
+  { x: -48, z: 8, block: Block.SilverOre },
+] as const;
+
+/** Flat, exposed outcrops: visible ore, firm footing, no canopy or hidden drop. */
+export function mineralOutcropBlock(x: number, y: number, z: number): BlockId | null {
+  const deposit = MINERAL_DEPOSITS.find(point => Math.abs(x - point.x) <= 2 && Math.abs(z - point.z) <= 2);
+  if (!deposit || y < SURFACE_HEIGHT - 2) return null;
+  if (y > SURFACE_HEIGHT) return Block.Air;
+  const core = Math.abs(x - deposit.x) <= 1 && Math.abs(z - deposit.z) <= 1;
+  return core && y >= SURFACE_HEIGHT - 1 ? deposit.block : Block.Stone;
+}
 
 export interface ChunkAddress {
   chunkX: number;
@@ -327,6 +343,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (greenwoodBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = greenwoodBlock;
         const arenaBlock = stoneBruteArenaBlock(worldX, y, worldZ);
         if (arenaBlock !== null) blocks[chunkIndex(localX, y, localZ)] = arenaBlock;
+        const mineralBlock = mineralOutcropBlock(worldX, y, worldZ);
+        if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;
         const townBlock = townOfBeginningsBlock(worldX, y, worldZ);
         if (townBlock !== null) blocks[chunkIndex(localX, y, localZ)] = townBlock;
       }

@@ -5,6 +5,11 @@ import { createVoxelTexturePixels, voxelCornerLight, voxelTextureKind, type Voxe
 const kinds: VoxelTextureKind[] = ["bedrock", "stone", "dirt", "grass-top", "grass-side", "forest-grass-top", "forest-grass-side", "oak-bark", "oak-rings", "leaves", "iron", "timber", "slate-roof", "paving", "path", "dressed-stone", "bronze"];
 
 describe("procedural voxel textures", () => {
+  it("renders silver as a distinct bright blue-white mineral rather than iron", () => {
+    expect(voxelTextureKind(Block.SilverOre, 1, 68, 7, 27)).toBe("silver");
+    expect(createVoxelTexturePixels("silver")).not.toEqual(createVoxelTexturePixels("iron"));
+    expect(createVoxelTexturePixels("silver")).toEqual(createVoxelTexturePixels("silver"));
+  });
   it("generates deterministic opaque pixel maps with visible variation", () => {
     for (const kind of kinds) {
       const first = createVoxelTexturePixels(kind);

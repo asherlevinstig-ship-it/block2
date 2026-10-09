@@ -797,6 +797,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article em { display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 14px; background: #101b16; color: #b8c7bc; font-size: .76rem; font-style: normal; font-weight: 1000; font-variant-numeric: tabular-nums; }
 .inventory-grid article[data-item="moss_fibre"] i { background: #58a749; }
 .inventory-grid article[data-item="iron_ore"] i { background: linear-gradient(135deg, #a5b4bc, #815433); }
+.inventory-grid article[data-item="silver_ore"] i { background: linear-gradient(135deg, #f1fbff, #68a7c6); }
 .inventory-grid article[data-item="timber"] i { background: repeating-linear-gradient(90deg, #5b351c 0 5px, #9b6331 6px 12px); }
 .inventory-grid article[data-item="reinforced_pickaxe"] i { background: linear-gradient(135deg, #d6ddd8 0 38%, #98632f 40% 62%, #54351f 64%); }
 .inventory-grid article[data-item="crawler_fang"] i { background: #e6d9aa; }
