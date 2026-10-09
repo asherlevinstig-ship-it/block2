@@ -3,7 +3,9 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-mineral-outcrops-v29";
+export const WORLD_ROOM = "world-renewable-minerals-v30";
+export const MINERAL_REGROWTH_MS = 120_000;
+export interface MineralDepositStatus { id: string; available: number; total: number; readyAt: number | null }
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
 export const WORLD_STREAM_CHUNK_RADIUS = 2;
 

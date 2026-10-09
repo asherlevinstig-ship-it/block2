@@ -1,10 +1,18 @@
-import { Block, GREENWOOD_IRON_SEAM, MINERAL_DEPOSITS, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
+import { Block, RENEWABLE_MINERAL_DEPOSITS, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
+import type { MineralDepositStatus } from "@blockcraft/protocol";
 
 export const MAP_SIZE = 220;
 export const MAP_RANGE = 72;
 export const DISCOVERY_RADIUS = 10;
 type Position = { x: number; z: number };
-export const MAP_DEPOSITS = [...MINERAL_DEPOSITS, { x: (GREENWOOD_IRON_SEAM.minX + GREENWOOD_IRON_SEAM.maxX) / 2, z: (GREENWOOD_IRON_SEAM.minZ + GREENWOOD_IRON_SEAM.maxZ) / 2, block: Block.IronOre }];
+export const MAP_DEPOSITS = RENEWABLE_MINERAL_DEPOSITS;
+export function mineralStatusLabel(status: MineralDepositStatus | undefined, now: number): string {
+  if (!status) return "Unknown";
+  if (status.available > 0) return `Available · ${status.available}/${status.total}`;
+  if (status.readyAt === null) return "Depleted";
+  const seconds = Math.ceil((status.readyAt - now) / 1000);
+  return seconds > 0 ? `Recovering · ${seconds}s` : "Recovering · waiting for space";
+}
 export const depositKey = (deposit: Position): string => `${deposit.x},${deposit.z}`;
 export const mapFacing = (yaw: number): { x: number; y: number } => ({ x: Math.sin(yaw * Math.PI / 180), y: Math.cos(yaw * Math.PI / 180) });
 export type Waypoint = Position & { y: number; id: string; name: string };
@@ -61,6 +69,7 @@ export function discoverDeposits(player: Position & { y: number }, discovered: S
 }
 
 export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, storageKey: string): {
+  setMineralStatus(statuses: MineralDepositStatus[]): void;
   update(player: Position & { y: number }, yaw: number, now: number, visible: boolean, cameraYaw?: number, active?: boolean): void;
 } {
   const context = canvas.getContext("2d");
@@ -69,6 +78,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let lastUpdate = -Infinity;
   let lastPlayer: (Position & { y: number }) | null = null;
   let waypoint: Waypoint | null = null;
+  const statuses = new Map<string, MineralDepositStatus>();
+  let lastStatusSecond = 0;
   const homeButton = document.querySelector<HTMLButtonElement>("#minimap-home")!;
   const destinations = document.querySelector<HTMLSelectElement>("#minimap-destination")!;
   const guide = document.querySelector<HTMLElement>("#waypoint-guide")!;
@@ -82,7 +93,11 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     if (target) { guideName.textContent = target.name; guideDistance.textContent = "Guiding…"; }
   };
   const refreshDestinations = () => {
-    destinations.replaceChildren(new Option("Choose a destination…", ""), ...knownWaypoints(discovered).map(target => new Option(target.name, target.id)));
+    const targets = knownWaypoints(discovered);
+    if (destinations.options.length !== targets.length + 1) destinations.replaceChildren(new Option("Choose a destination…", ""), ...targets.map(target => new Option(target.name, target.id)));
+    targets.forEach((target, index) => {
+      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
+    });
     destinations.value = waypoint?.id ?? "";
   };
   refreshDestinations();
@@ -106,10 +121,18 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const ratio = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = MAP_SIZE * ratio; canvas.height = MAP_SIZE * ratio;
   return {
+    setMineralStatus(values) {
+      statuses.clear();
+      for (const value of values) statuses.set(value.id, value);
+      refreshDestinations();
+      lastUpdate = -Infinity;
+    },
     update(player, yaw, now, visible, cameraYaw = 0, active = true) {
       if (now - lastUpdate < 100 || !Number.isFinite(player.x + player.y + player.z + yaw)) return;
       lastUpdate = now;
       lastPlayer = { x: player.x, y: player.y, z: player.z };
+      const second = Math.floor(Date.now() / 1000);
+      if (second !== lastStatusSecond) { lastStatusSecond = second; refreshDestinations(); }
       if (discoverDeposits(player, discovered)) {
         refreshDestinations();
         try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
@@ -159,7 +182,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       for (const deposit of MAP_DEPOSITS) {
         if (!discovered.has(depositKey(deposit))) continue;
         const silver = deposit.block === Block.SilverOre;
-        marker(deposit, silver ? "Ag" : "Fe", silver ? "#b4eaff" : "#e3a76b", false);
+        const recovering = statuses.get(depositKey(deposit))?.available === 0;
+        marker(deposit, `${silver ? "Ag" : "Fe"}${recovering ? " · R" : ""}`, recovering ? "#8c929a" : silver ? "#b4eaff" : "#e3a76b", false);
       }
       if (waypoint) {
         const p = mapPoint(player, waypoint);

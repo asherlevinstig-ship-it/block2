@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { mineralStatusLabel } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
+  it("labels available, recovering and occupied deposits", () => {
+    expect(mineralStatusLabel({ id: "35,-5", available: 2, total: 18, readyAt: 5000 }, 1000)).toBe("Available · 2/18");
+    expect(mineralStatusLabel({ id: "35,-5", available: 0, total: 18, readyAt: 5000 }, 1000)).toBe("Recovering · 4s");
+    expect(mineralStatusLabel({ id: "35,-5", available: 0, total: 18, readyAt: 5000 }, 6000)).toContain("waiting for space");
+    expect(mineralStatusLabel(undefined, 1000)).toBe("Unknown");
+  });
   it("never exposes or selects undiscovered deposits", () => {
     const discovered = new Set<string>();
     expect(knownWaypoints(discovered).map(target => target.id)).toEqual(["home", "smith"]);

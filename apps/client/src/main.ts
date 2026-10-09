@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { createMinimap } from "./minimap.js";
+import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
@@ -4927,6 +4928,7 @@ async function connect(): Promise<void> {
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
+  room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));

@@ -81,6 +81,11 @@ export const MINERAL_DEPOSITS = [
   { x: 68, z: 27, block: Block.SilverOre },
   { x: -48, z: 8, block: Block.SilverOre },
 ] as const;
+export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, block: Block.IronOre }] as const;
+export function authoredMineralAt(x: number, y: number, z: number): BlockId | null {
+  if (y !== SURFACE_HEIGHT && y !== SURFACE_HEIGHT - 1) return null;
+  return RENEWABLE_MINERAL_DEPOSITS.find(deposit => Math.abs(x - deposit.x) <= 1 && Math.abs(z - deposit.z) <= 1)?.block ?? null;
+}
 
 /** Flat, exposed outcrops: visible ore, firm footing, no canopy or hidden drop. */
 export function mineralOutcropBlock(x: number, y: number, z: number): BlockId | null {

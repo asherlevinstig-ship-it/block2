@@ -15,6 +15,7 @@ export interface WorldBlockDelta {
   y: number;
   z: number;
   block: BlockId;
+  regrowAt?: number;
 }
 
 const VALID_BLOCKS = new Set<number>(Object.values(Block));
@@ -34,10 +35,19 @@ export function parseWorldDelta(field: string, value: string): WorldBlockDelta |
   const y = coordinates[1];
   const z = coordinates[2];
   if (x === undefined || y === undefined || z === undefined) return null;
-  const block = Number(value);
+  let block = Number(value);
+  let regrowAt: number | undefined;
+  if (value.startsWith("{")) {
+    try {
+      const saved = JSON.parse(value);
+      block = saved.block;
+      if (typeof saved.regrowAt !== "number" || !Number.isFinite(saved.regrowAt) || saved.regrowAt <= 0) return null;
+      regrowAt = saved.regrowAt;
+    } catch { return null; }
+  }
   if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z)) return null;
   if (y < 0 || y >= CHUNK_HEIGHT || !Number.isInteger(block) || !VALID_BLOCKS.has(block)) return null;
-  return { x, y, z, block: block as BlockId };
+  return { x, y, z, block: block as BlockId, ...(regrowAt === undefined ? {} : { regrowAt }) };
 }
 
 export function parseWorldDeltas(values: Record<string, string>): WorldBlockDelta[] {

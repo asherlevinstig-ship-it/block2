@@ -1,4 +1,7 @@
 import { Client, Room } from "@colyseus/core";
+import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT } from "@blockcraft/voxel-world";
+import { mineralCellOccupied } from "./mineral-regrowth.js";
 import {
   AttackRequestSchema,
   playerMeleeStrike,
@@ -226,7 +229,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly quizRounds = new Map<string, QuizRound>();
   private readonly objectiveProgress = new Map<string, WorldObjectiveProgress>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
-  private readonly pendingWorldDeltaWrites = new Map<string, BlockId>();
+  private readonly pendingWorldDeltaWrites = new Map<string, string>();
+  private readonly mineralRegrowth = new Map<string, WorldBlockDelta & { regrowAt: number }>();
+  private lastMineralRegrowthAt = 0;
   private worldDeltaStorageKey = "";
   private worldDeltaFlush: Promise<void> | null = null;
   private lastWorldDeltaRetryAt = 0;
@@ -241,11 +246,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.worldDeltaStorageKey = worldDeltaHashKey(this.worldSeed);
     try {
       const storedDeltas = parseWorldDeltas(await this.presence.hgetall(this.worldDeltaStorageKey));
-      for (const delta of storedDeltas) this.indexWorldDelta(delta);
+      for (const delta of storedDeltas) {
+        this.indexWorldDelta(delta);
+        if (delta.block === Block.Air && authoredMineralAt(delta.x, delta.y, delta.z) !== null) {
+          const regrowAt = delta.regrowAt ?? Date.now() + MINERAL_REGROWTH_MS;
+          const field = worldDeltaField(delta.x, delta.y, delta.z);
+          this.mineralRegrowth.set(field, { ...delta, regrowAt });
+          if (delta.regrowAt === undefined) this.pendingWorldDeltaWrites.set(field, JSON.stringify({ block: delta.block, regrowAt }));
+        }
+      }
     } catch (error) {
       console.warn("Persistent terrain could not be loaded; using the generated world for this room.", error);
     }
     this.setState(new WorldState());
+    if (this.pendingWorldDeltaWrites.size) void this.flushWorldDeltaWrites();
     this.registerMob("moss-crawler", "moss_crawler", { x: 40.5, y: 8, z: -6.5 });
     this.registerMob("greenwood-briar", "briar_crawler", GREENWOOD_CRAWLER_HOMES[1]);
     this.registerMob("greenwood-briar-north", "briar_crawler", GREENWOOD_CRAWLER_HOMES[2]);
@@ -255,7 +269,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
     this.registerMob("frontier-brute", "stone_brute", { x: 63.5, y: 8, z: 48.5 });
     this.registerMob("frontier-spitter", "cave_spitter", { x: 43.5, y: 8, z: -4.5 });
-    this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
+    this.onMessage("world:ready", client => {
+      client.send("world:bootstrap", this.bootstrapPayload());
+      client.send("mineral:status", this.mineralStatus());
+    });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
     this.onMessage("objective:sync", client => this.sendObjectiveState(client));
     this.onMessage("ping", (client, payload: unknown) => {
@@ -608,12 +625,56 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private recordWorldDelta(x: number, y: number, z: number, block: BlockId): void {
-    const delta = { x, y, z, block } satisfies WorldBlockDelta;
     const field = worldDeltaField(x, y, z);
+    const regrowAt = block === Block.Air && authoredMineralAt(x, y, z) !== null ? this.mineralRegrowth.get(field)?.regrowAt ?? Date.now() + MINERAL_REGROWTH_MS : undefined;
+    const delta: WorldBlockDelta = { x, y, z, block, ...(regrowAt === undefined ? {} : { regrowAt }) };
+    if (regrowAt !== undefined) this.mineralRegrowth.set(field, { ...delta, regrowAt });
+    else this.mineralRegrowth.delete(field);
     this.indexWorldDelta(delta);
-    this.pendingWorldDeltaWrites.set(field, block);
+    this.pendingWorldDeltaWrites.set(field, regrowAt === undefined ? String(block) : JSON.stringify({ block, regrowAt }));
     this.lastWorldDeltaRetryAt = Date.now();
     void this.flushWorldDeltaWrites();
+  }
+
+  private mineralStatus(): MineralDepositStatus[] {
+    return RENEWABLE_MINERAL_DEPOSITS.map(deposit => {
+      let available = 0;
+      let readyAt: number | null = null;
+      for (let x = deposit.x - 1; x <= deposit.x + 1; x++) {
+        for (let z = deposit.z - 1; z <= deposit.z + 1; z++) {
+          for (const y of [SURFACE_HEIGHT - 1, SURFACE_HEIGHT]) {
+            if (this.readWorldBlock(x, y, z) === deposit.block) available++;
+            const pending = this.mineralRegrowth.get(worldDeltaField(x, y, z));
+            if (pending) readyAt = Math.min(readyAt ?? Infinity, pending.regrowAt);
+          }
+        }
+      }
+      return { id: `${deposit.x},${deposit.z}`, available, total: 18, readyAt };
+    });
+  }
+
+  private regrowMinerals(now: number): void {
+    if (now - this.lastMineralRegrowthAt < 1000) return;
+    this.lastMineralRegrowthAt = now;
+    const occupants = [...this.state.players.values(), ...[...this.state.mobs.values()].filter(mob => mob.alive)];
+    let restored = 0;
+    for (const [field, cell] of this.mineralRegrowth) {
+      if (cell.regrowAt > now) continue;
+      const block = authoredMineralAt(cell.x, cell.y, cell.z);
+      if (block === null || this.readWorldBlock(cell.x, cell.y, cell.z) !== Block.Air) {
+        this.mineralRegrowth.delete(field);
+        continue;
+      }
+      if (mineralCellOccupied(cell, occupants)) continue;
+      const address = worldToChunk(cell.x, cell.z);
+      const stored = this.getChunk(address.chunkX, address.chunkZ);
+      setBlock(stored.chunk, address.localX, cell.y, address.localZ, block);
+      stored.revision++;
+      this.recordWorldDelta(cell.x, cell.y, cell.z, block);
+      this.broadcast("block:changed", { requestId: `regrow:${field}`, x: cell.x, y: cell.y, z: cell.z, block, revision: stored.revision } satisfies BlockChanged);
+      if (++restored >= 4) break;
+    }
+    if (restored || this.mineralRegrowth.size) this.broadcast("mineral:status", this.mineralStatus());
   }
 
   private flushWorldDeltaWrites(): Promise<void> {
@@ -1181,6 +1242,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private simulatePlayers(deltaTime: number): void {
     const now = Date.now();
+    this.regrowMinerals(now);
     if (this.pendingWorldDeltaWrites.size > 0 && now - this.lastWorldDeltaRetryAt >= 5_000) {
       this.lastWorldDeltaRetryAt = now;
       void this.flushWorldDeltaWrites();
@@ -1859,6 +1921,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       revision: stored.revision,
     };
     this.broadcast("block:changed", changed);
+    if (mineral) this.broadcast("mineral:status", this.mineralStatus());
     if (mineral) {
       let item = player.inventory.get(mineral);
       if (!item) {

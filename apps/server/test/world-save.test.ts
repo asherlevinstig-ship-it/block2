@@ -3,6 +3,11 @@ import { Block, generateChunk, getBlock, worldToChunk } from "@blockcraft/voxel-
 import { applyWorldDeltasToChunk, parseWorldDelta, parseWorldDeltas, worldDeltaField, worldDeltaHashKey } from "../src/world-save.js";
 
 describe("persistent world deltas", () => {
+  it("preserves renewable ore deadlines and rejects corrupt deadlines", () => {
+    expect(parseWorldDelta("35,7,-5", '{"block":0,"regrowAt":123000}')).toEqual({ x: 35, y: 7, z: -5, block: Block.Air, regrowAt: 123000 });
+    expect(parseWorldDelta("35,7,-5", '{"block":0,"regrowAt":-1}')).toBeNull();
+    expect(parseWorldDelta("35,7,-5", '{"block":200,"regrowAt":123000}')).toBeNull();
+  });
   it("uses a seed-specific storage key and stable coordinate fields", () => {
     expect(worldDeltaHashKey("shared world/01")).toBe("blockcraft:world-deltas:v1:shared%20world%2F01");
     expect(worldDeltaField(-2, 7, 19)).toBe("-2,7,19");
