@@ -1094,6 +1094,10 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #minimap kbd { float: right; font-size: 10px; color: #b2c6b7; padding: 1px 4px; border: 1px solid #ffffff30; border-radius: 3px; }
 #minimap-canvas { width: 220px; height: 220px; display: block; border-radius: 7px; }
 #minimap-detail { margin: 8px 0; font-size: 10px; color: #d4dfd6; }
+#minimap-depth { margin: 6px 0; color: #a3dfeb; font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+#minimap-surface { width: 100%; padding: 8px; border: 1px solid #ffe08c88; border-radius: 6px; color: #ffe8a8; background: #352b15; font: 800 11px system-ui; cursor: pointer; }
+#minimap-surface[aria-pressed="true"] { color: #192418; background: #ffe08c; }
+#minimap-surface[hidden] { display: none; }
 .minimap-legend, .minimap-danger { display: flex; justify-content: space-between; gap: 4px; font-size: 9px; }
 .map-home { color: #abe3a0; } .map-smith { color: #ffd173; } .map-iron { color: #e3a76b; } .map-silver { color: #b4eaff; }
 .minimap-danger { margin-top: 7px; }

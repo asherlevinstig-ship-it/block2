@@ -1,6 +1,7 @@
 import * as pc from "playcanvas";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
+import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } from "./cave-navigation.js";
 import { miningAvailability, miningReach, miningProgress, miningDurationMs, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
@@ -363,6 +364,27 @@ let caveDiscoveryRevision = 0;
 let lastCaveDiscoveryAt = -Infinity;
 let buriedChamberDiscovered = false;
 const caveLanterns: { root: pc.Entity; x: number; y: number; z: number }[] = [];
+const discoveredChambers = new Set<string>();
+let caveReturnRoute: CavePosition[] = [];
+let caveRouteKey = "";
+let lastCaveNavigationAt = -Infinity;
+
+function updateCaveNavigation(position: pc.Vec3, now: number): void {
+  if (now - lastCaveNavigationAt < 250) return;
+  lastCaveNavigationAt = now;
+  discoverChambers(caveDiscoveries, discoveredChambers, readCollisionWorldBlock);
+  const enabled = minimap.surfaceGuideEnabled();
+  const key = `${caveCellKey(position.x, position.z)}:${Math.floor(position.y + 0.1)}:${caveDiscoveryRevision}:${[...caveDiscoveries].map(([band, cells]) => `${band}:${cells.size}`).join(",")}:${enabled}`;
+  if (key !== caveRouteKey) {
+    caveRouteKey = key;
+    caveReturnRoute = enabled ? caveReturnPath(position, readCollisionWorldBlock, (x, y, z) => {
+      // Only the known entrance landing is permitted outside underground discovery bands.
+      if (y >= 7) return x >= 31 && x <= 35 && z >= 7 && z <= 9;
+      return Boolean(caveDiscoveries.get(caveDepthBand(y))?.has(caveCellKey(x, z)));
+    }) : [];
+  }
+  minimap.setCaveState({ known: caveDiscoveries.get(caveDepthBand(position.y)) ?? new Set(), chambers: CAVE_CHAMBERS.filter(chamber => discoveredChambers.has(chamber.id)), route: caveReturnRoute });
+}
 
 function undergroundKnown(x: number, y: number, z: number): boolean {
   if (!playerCutaway.active || localPlayer.getPosition().y >= SURFACE_HEIGHT) return true;
@@ -5062,7 +5084,10 @@ app.on("update", (dt: number) => {
   if (activeStopTrace && now >= activeStopTrace.captureUntil) finishStopTrace();
 
   updatePerformanceMetrics(now);
-  if (worldReady) minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden), cameraOrbit.yaw, Boolean(defeatScreen.hidden));
+  if (worldReady) {
+    updateCaveNavigation(localPlayer.getPosition(), now);
+    minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden), cameraOrbit.yaw, Boolean(defeatScreen.hidden));
+  }
   if (room && worldReady && now - lastPingSentAt >= 2000) {
     lastPingSentAt = now;
     pingSequence += 1;

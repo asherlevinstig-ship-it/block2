@@ -1,5 +1,6 @@
 import { Block, RENEWABLE_MINERAL_DEPOSITS, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
+import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 
 export const MAP_SIZE = 220;
 export const MAP_RANGE = 72;
@@ -18,14 +19,14 @@ export const mapFacing = (yaw: number): { x: number; y: number } => ({ x: Math.s
 export type Waypoint = Position & { y: number; id: string; name: string };
 export const HOME_WAYPOINT: Waypoint = { x: TOWN_CENTER_X, z: TOWN_CENTER_Z, y: SURFACE_HEIGHT + 1, id: "home", name: "Town of Beginnings" };
 export function knownWaypoints(discovered: Set<string>): Waypoint[] {
-  return [HOME_WAYPOINT, { ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" },
+  return [HOME_WAYPOINT, { ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" }, MINE_ENTRANCE,
     ...MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).map(point => ({ ...point, y: SURFACE_HEIGHT + 1, id: depositKey(point), name: `${point.block === Block.SilverOre ? "Silver" : "Iron"} deposit (${point.x}, ${point.z})` }))];
 }
 export function waypointAtMapPoint(player: Position, x: number, y: number, discovered: Set<string>): Waypoint | null {
   let closest: Waypoint | null = null, distance = 14;
   for (const target of knownWaypoints(discovered)) {
     const p = mapPoint(player, target);
-    if (target.id === "smith" && p.offscreen) continue;
+    if (target.id !== "home" && p.offscreen) continue;
     const delta = Math.hypot(p.x - x, p.y - y);
     if (delta <= distance) { closest = target; distance = delta; }
   }
@@ -70,6 +71,8 @@ export function discoverDeposits(player: Position & { y: number }, discovered: S
 
 export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, storageKey: string): {
   setMineralStatus(statuses: MineralDepositStatus[]): void;
+  setCaveState(state: CaveMapState): void;
+  surfaceGuideEnabled(): boolean;
   update(player: Position & { y: number }, yaw: number, now: number, visible: boolean, cameraYaw?: number, active?: boolean): void;
 } {
   const context = canvas.getContext("2d");
@@ -78,6 +81,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let lastUpdate = -Infinity;
   let lastPlayer: (Position & { y: number }) | null = null;
   let waypoint: Waypoint | null = null;
+  let surfaceGuide = false;
+  let caveState: CaveMapState = { known: new Set(), chambers: [], route: [] };
+  const surfaceButton = document.querySelector<HTMLButtonElement>("#minimap-surface")!;
+  const depthLabel = document.querySelector<HTMLElement>("#minimap-depth")!;
   const statuses = new Map<string, MineralDepositStatus>();
   let lastStatusSecond = 0;
   const homeButton = document.querySelector<HTMLButtonElement>("#minimap-home")!;
@@ -87,6 +94,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const guideDistance = document.querySelector<HTMLElement>("#waypoint-distance")!;
   const guideArrow = document.querySelector<HTMLElement>("#waypoint-arrow")!;
   const setWaypoint = (target: Waypoint | null) => {
+    surfaceGuide = false;
+    surfaceButton.setAttribute("aria-pressed", "false");
     waypoint = target; lastUpdate = -Infinity;
     destinations.value = target?.id ?? "";
     guide.hidden = target === null;
@@ -96,13 +105,20 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     const targets = knownWaypoints(discovered);
     if (destinations.options.length !== targets.length + 1) destinations.replaceChildren(new Option("Choose a destination…", ""), ...targets.map(target => new Option(target.name, target.id)));
     targets.forEach((target, index) => {
-      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
+      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
     });
     destinations.value = waypoint?.id ?? "";
   };
   refreshDestinations();
   homeButton.addEventListener("click", () => { setWaypoint(HOME_WAYPOINT); homeButton.blur(); });
-  for (const control of [homeButton, destinations, document.querySelector<HTMLButtonElement>("#waypoint-clear")!]) {
+  surfaceButton.addEventListener("click", () => {
+    const next = !surfaceGuide;
+    setWaypoint(null);
+    surfaceGuide = next;
+    surfaceButton.setAttribute("aria-pressed", String(next));
+    surfaceButton.blur();
+  });
+  for (const control of [homeButton, surfaceButton, destinations, document.querySelector<HTMLButtonElement>("#waypoint-clear")!]) {
     control.addEventListener("keydown", event => {
       if (control === destinations || (event instanceof KeyboardEvent && (event.code === "Space" || event.code === "Enter"))) event.stopPropagation();
     });
@@ -121,6 +137,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const ratio = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = MAP_SIZE * ratio; canvas.height = MAP_SIZE * ratio;
   return {
+    setCaveState(state) { caveState = state; },
+    surfaceGuideEnabled() { return surfaceGuide; },
     setMineralStatus(values) {
       statuses.clear();
       for (const value of values) statuses.set(value.id, value);
@@ -131,6 +149,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (now - lastUpdate < 100 || !Number.isFinite(player.x + player.y + player.z + yaw)) return;
       lastUpdate = now;
       lastPlayer = { x: player.x, y: player.y, z: player.z };
+      const underground = caveDepth(player.y) > 0;
+      depthLabel.textContent = underground ? `UNDERGROUND · DEPTH ${caveDepth(player.y)} BLOCKS` : "SURFACE";
+      surfaceButton.hidden = !underground;
+      if (!underground && surfaceGuide) setWaypoint(null);
       const second = Math.floor(Date.now() / 1000);
       if (second !== lastStatusSecond) { lastStatusSecond = second; refreshDestinations(); }
       if (discoverDeposits(player, discovered)) {
@@ -145,22 +167,43 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           detail.textContent = `Arrived · ${name}`;
         } else {
           guide.hidden = !active;
+          guideArrow.hidden = underground;
           guideArrow.style.transform = `rotate(${direction.angle}deg)`;
-          guideDistance.textContent = `${Math.ceil(direction.distance)}m${Math.abs(player.y - waypoint.y) > 1.6 ? " · return to surface" : ""}`;
+          guideDistance.textContent = underground ? "Use Guide to surface first" : `${Math.ceil(direction.distance)}m`;
         }
+      }
+      if (surfaceGuide) {
+        guide.hidden = !active;
+        guideName.textContent = "Return to surface";
+        const next = caveState.route[1];
+        guideArrow.hidden = !next;
+        if (next) {
+          const direction = waypointDirection(player, { ...next, id: "exit", name: "Return stairs" }, cameraYaw);
+          guideArrow.style.transform = `rotate(${direction.angle}deg)`;
+          const climb = next.y > Math.floor(player.y + 0.1);
+          guideDistance.textContent = `${caveState.route.length - 1} steps · ${climb ? "climb the next stair" : "follow the explored path"}`;
+        } else guideDistance.textContent = "No explored route · check nearby stairs or obstacles";
       }
       if (!visible || !context) return;
       const ctx = context;
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
-      ctx.fillStyle = "#482329"; ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+      ctx.fillStyle = underground ? "#071310" : "#482329"; ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
       // Draw the real radial zones in world coordinates, not the clamped marker coordinates.
       const scale = MAP_SIZE / (MAP_RANGE * 2);
       const townX = MAP_SIZE / 2 + (TOWN_CENTER_X - player.x) * scale;
       const townY = MAP_SIZE / 2 + (TOWN_CENTER_Z - player.z) * scale;
-      for (const [radius, fill] of [[FRONTIER_MINIMUM_RADIUS, "#52432a"], [WILDS_MINIMUM_RADIUS, "#465038"], [TOWN_SAFE_RADIUS, "#234a3c"]] as const) {
+      for (const [radius, fill] of (underground ? [] : [[FRONTIER_MINIMUM_RADIUS, "#52432a"], [WILDS_MINIMUM_RADIUS, "#465038"], [TOWN_SAFE_RADIUS, "#234a3c"]]) as [number, string][]) {
         ctx.beginPath(); ctx.arc(townX, townY, radius * scale, 0, Math.PI * 2);
         ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = "#dfd1a344"; ctx.lineWidth = 1; ctx.stroke();
+      }
+      if (underground) {
+        ctx.fillStyle = "#354a49";
+        for (const key of caveState.known) {
+          const [wx, wz] = key.split(",").map(Number);
+          const x = MAP_SIZE / 2 + (wx! - player.x) * scale, z = MAP_SIZE / 2 + (wz! - player.z) * scale;
+          ctx.fillRect(x, z, scale + 0.2, scale + 0.2);
+        }
       }
       ctx.strokeStyle = "#ffffff0b";
       for (let i = 0; i < MAP_SIZE; i += 22) {
@@ -168,7 +211,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       }
       const marker = (point: Position, label: string, color: string, square: boolean) => {
         const p = mapPoint(player, point);
-        if (p.offscreen && label === "SMITH") return;
+        if (p.offscreen && label !== "HOME") return;
         ctx.fillStyle = color; ctx.strokeStyle = "#071514"; ctx.lineWidth = 2;
         ctx.beginPath();
         if (square) ctx.rect(p.x - 4, p.y - 4, 8, 8); else ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
@@ -177,15 +220,27 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         ctx.strokeText(label, p.x, p.y - 8); ctx.fillText(label, p.x, p.y - 8);
         if (p.offscreen) { ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke(); }
       };
-      marker({ x: TOWN_CENTER_X, z: TOWN_CENTER_Z }, "HOME", "#abe3a0", true);
-      marker(TOWN_BLACKSMITH_STALL_POSITION, "SMITH", "#ffd173", true);
-      for (const deposit of MAP_DEPOSITS) {
+      if (!underground) {
+        marker({ x: TOWN_CENTER_X, z: TOWN_CENTER_Z }, "HOME", "#abe3a0", true);
+        marker(TOWN_BLACKSMITH_STALL_POSITION, "SMITH", "#ffd173", true);
+      }
+      marker(MINE_ENTRANCE, "MINE", "#ffe08c", true);
+      for (const chamber of caveState.chambers) marker(chamber, `${chamber.label} · D${caveDepth(chamber.y)}`, "#a3dfeb", false);
+      for (const deposit of underground ? [] : MAP_DEPOSITS) {
         if (!discovered.has(depositKey(deposit))) continue;
         const silver = deposit.block === Block.SilverOre;
         const recovering = statuses.get(depositKey(deposit))?.available === 0;
         marker(deposit, `${silver ? "Ag" : "Fe"}${recovering ? " · R" : ""}`, recovering ? "#8c929a" : silver ? "#b4eaff" : "#e3a76b", false);
       }
-      if (waypoint) {
+      if (surfaceGuide && caveState.route.length > 1) {
+        ctx.beginPath();
+        caveState.route.forEach((point, i) => {
+          const p = mapPoint(player, point);
+          if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        });
+        ctx.strokeStyle = "#ffe08c"; ctx.lineWidth = 2; ctx.stroke();
+      }
+      if (waypoint && !underground) {
         const p = mapPoint(player, waypoint);
         ctx.beginPath(); ctx.moveTo(MAP_SIZE / 2, MAP_SIZE / 2); ctx.lineTo(p.x, p.y);
         ctx.strokeStyle = "#fff4ad88"; ctx.setLineDash([3, 4]); ctx.stroke(); ctx.setLineDash([]);
@@ -199,8 +254,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       ctx.fillStyle = "#fff8da"; ctx.strokeStyle = "#111b17"; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
       ctx.fillStyle = "#fff8da"; ctx.textAlign = "center"; ctx.font = "bold 11px system-ui"; ctx.fillText("N", x, 13);
       const distance = Math.round(Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z));
-      detail.textContent = `${distance}m from town · ${discovered.size} deposits found${player.y < SURFACE_HEIGHT - 1 ? " · underground" : ""}`;
-      canvas.setAttribute("aria-label", `North-up map. Town ${distance} metres away. ${discovered.size} mineral deposits discovered. White arrow shows your facing.`);
+      detail.textContent = underground ? `Depth ${caveDepth(player.y)} · ${caveState.chambers.length} chambers discovered` : `${distance}m from town · ${discovered.size} deposits found`;
+      canvas.setAttribute("aria-label", `North-up ${underground ? `underground map at depth ${caveDepth(player.y)}, explored cells only` : "surface map"}. ${caveState.chambers.length} chambers discovered. White arrow shows your facing.`);
     },
   };
 }

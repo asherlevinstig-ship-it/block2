@@ -11,13 +11,13 @@ describe("north-up explorer minimap", () => {
   });
   it("never exposes or selects undiscovered deposits", () => {
     const discovered = new Set<string>();
-    expect(knownWaypoints(discovered).map(target => target.id)).toEqual(["home", "smith"]);
+    expect(knownWaypoints(discovered).map(target => target.id)).toEqual(["home", "smith", "mine"]);
     const deposit = MAP_DEPOSITS[0]!;
     const player = { x: deposit.x, z: deposit.z };
     expect(waypointAtMapPoint(player, MAP_SIZE / 2, MAP_SIZE / 2, discovered)).toBeNull();
     discovered.add(depositKey(deposit));
     expect(waypointAtMapPoint(player, MAP_SIZE / 2, MAP_SIZE / 2, discovered)?.id).toBe(depositKey(deposit));
-    expect(knownWaypoints(discovered)).toHaveLength(3);
+    expect(knownWaypoints(discovered)).toHaveLength(4);
   });
   it("selects known markers on the edge and ignores empty map clicks", () => {
     const player = { x: 200, z: 200 };
