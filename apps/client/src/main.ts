@@ -4187,6 +4187,7 @@ function reconcileLocalPlayer(
   grounded: boolean,
   authoritativeInputReady: boolean,
 ): { distance: number; rate: number } {
+  if (!worldReady || !defeatScreen.hidden || awaitingReturnState) return { distance: 0, rate: 0 };
   const position = localPlayer.getPosition();
   const beforeCorrection = position.clone();
   const target = authoritativeLocalPosition.clone();
