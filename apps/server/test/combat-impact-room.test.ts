@@ -10,7 +10,7 @@ interface Internals {
   pendingAttacks: Map<string, { requestId: string; mainHandId: MainHandId; yaw: number; step: 1 | 2 | 3; impactAt: number }>;
   pendingPowers: Map<string, { requestId: string; powerId: PowerId; yaw: number; impactAt: number }>;
   pendingWeaponProjectiles: Map<string, { end: Pose }>;
-  pendingMobProjectiles: Map<string, { end: Pose }>;
+  pendingMobProjectiles: Map<string, { end: Pose; mobId: string; startedAt: number; impactAt: number }>;
   mobHazards: Map<string, unknown>;
   mobCommittedAim: Map<string, Pose & { yaw: number }>;
   pendingMobMelee: Map<string, { targetId: string; yaw: number; impactAt: number }>;
@@ -266,8 +266,36 @@ describe("authoritative combat impacts", () => {
     vi.setSystemTime(10_950); internal.simulatePlayers(0.033);
     expect(player.health).toBe(5);
     internal.resolveMobProjectiles(11_150); expect(player.health).toBe(5);
-    internal.resolveMobProjectiles(11_700); expect(player.health).toBe(4);
-    expect(internal.mobHazards.size).toBe(1);
+    internal.resolveMobProjectiles(11_850); expect(player.health).toBe(4);
+    expect(internal.mobHazards.size).toBe(0);
+    internal.resolveMobProjectiles(12_000); expect(player.health).toBe(4);
+  });
+  it.each([4.7, 7].flatMap(distance => [-1, 1].map(side => [distance, side] as const)))(
+    "allows walking escape from a spitter at %s blocks in direction %s with 300 ms RTT", (distance, side) => {
+      const { player, mob, internal, events } = fixture(); mob.archetype = "cave_spitter";
+      mob.x = player.x + distance; internal.simulatePlayers(0.033);
+      const release = mob.attackReleaseAt; const moveAt = release - 450 + 150 + 100 + 150;
+      let sequence = 0;
+      for (let now = 10_033; now < release + 1100; now += 33) {
+        vi.setSystemTime(now);
+        if (now >= moveAt && sequence % 2 === 0) internal.handleMove({ sessionId: "player" },
+          { sequence: sequence + 1, strafe: 0, forward: side, yaw: 90 });
+        sequence++; internal.simulatePlayers(0.033);
+      }
+      expect(player.health).toBe(5); expect(internal.mobHazards.size).toBe(0);
+      expect(events.filter(e => e.type === "combat:mob-projectile")).toHaveLength(1);
+      expect(events.some(e => e.type === "combat:mob-hazard")).toBe(false);
+    });
+  it("holds still during the spitter recovery and does not start another charge with a shot in flight", () => {
+    const { mob, internal } = fixture(); mob.archetype = "cave_spitter"; mob.x = 106.5;
+    internal.simulatePlayers(0.033); vi.setSystemTime(10_900); internal.simulatePlayers(0.033);
+    expect(mob.combatState).toBe("recover"); const x = mob.x;
+    vi.setSystemTime(11_400); internal.simulatePlayers(0.1);
+    expect(mob.x).toBe(x); expect(mob.combatState).toBe("recover");
+    const shot = [...internal.pendingMobProjectiles.values()][0]!;
+    shot.startedAt = 13_000; shot.impactAt = 14_000;
+    vi.setSystemTime(13_100); internal.simulatePlayers(0.033);
+    expect(mob.combatState).toBe("idle"); expect(internal.pendingMobProjectiles.size).toBe(1);
   });
   it("a wall added during enemy melee windup stops the released attack", () => {
     let blocked = false;

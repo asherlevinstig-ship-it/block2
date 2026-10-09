@@ -23,6 +23,13 @@ describe("authoritative enemy presentation", () => {
       expect(enemyAttackPresentation({ ...mob, archetype }, 11_531).warning).toBe(false);
     }
   });
+  it("locks the spitter direction early and ends the charge cue on release", () => {
+    const spitter = { ...mob, archetype: "cave_spitter", attackReleaseAt: 10_900,
+      attackContactAt: 10_900, attackContactEndAt: 10_900, attackRecoveryEndAt: 11_900 };
+    expect(enemyAttackPresentation(spitter, 10_449).aimLocked).toBe(false);
+    expect(enemyAttackPresentation(spitter, 10_450)).toMatchObject({ aimLocked: true, warning: true });
+    expect(enemyAttackPresentation(spitter, 10_901)).toMatchObject({ phase: "recover", warning: false });
+  });
   it("rejects invalid and excessively delayed clock samples", () => {
     const clock = createServerClock(100, 10000);
     expect(sampleServerClock(clock, 100, 99, 10000)).toEqual(clock);

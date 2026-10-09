@@ -2086,18 +2086,15 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   if (warningMesh) {
     updateStrikeWarningMesh(warningMesh, mob.archetype, mob.yaw);
     warning.addComponent("render", { meshInstances: [new pc.MeshInstance(warningMesh, warningMaterial)], castShadows: false, receiveShadows: false });
-  } else {
-    warning.addComponent("render", { type: "cylinder" });
-    if (warning.render) warning.render.material = warningMaterial;
   }
   warning.setLocalPosition(0, 0.035, 0);
-  const warningScale = isBrute ? 5.5 : isSpitter ? 3.6 : 4.2;
-  warning.setLocalScale(warningMesh ? 1 : warningScale, warningMesh ? 1 : 0.025, warningMesh ? 1 : warningScale);
+  const warningScale = 1;
+  warning.setLocalScale(1, 1, 1);
   warning.enabled = false;
   if (isSpitter) {
-    addBox(warning, "attack-direction", warningMaterial, [0.06, 1.2, 0.46], [0, 0.8, 0.25]);
-    const arrowLeft = addBox(warning, "attack-direction-left", warningMaterial, [0.06, 1.2, 0.18], [-0.05, 0.8, 0.43]);
-    const arrowRight = addBox(warning, "attack-direction-right", warningMaterial, [0.06, 1.2, 0.18], [0.05, 0.8, 0.43]);
+    addBox(warning, "shot-direction", warningMaterial, [0.14, 0.02, 6.6], [0, 0, 3.6]);
+    const arrowLeft = addBox(warning, "shot-direction-left", warningMaterial, [0.12, 0.02, 0.6], [-0.18, 0, 6.65]);
+    const arrowRight = addBox(warning, "shot-direction-right", warningMaterial, [0.12, 0.02, 0.6], [0.18, 0, 6.65]);
     arrowLeft.setLocalEulerAngles(0, -40, 0);
     arrowRight.setLocalEulerAngles(0, 40, 0);
   }
@@ -4373,7 +4370,8 @@ app.on("update", (dt: number) => {
       ? (mob.isBrute
           ? 0.72 + Math.sin(animationTime * 12) * 0.13
           : mob.isSpitter
-            ? 0.68 + Math.sin(animationTime * 15) * 0.12
+            ? 0.35 + Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackStartedAt)
+              / Math.max(1, mob.state.attackReleaseAt - mob.state.attackStartedAt))) * 0.6
             : 0.45 + Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackStartedAt)
               / Math.max(1, mob.state.attackReleaseAt - mob.state.attackStartedAt))) * 0.5)
       : 0;
@@ -4397,7 +4395,6 @@ app.on("update", (dt: number) => {
     }
     mob.warning.enabled = presentation.warning;
     if (mob.warning.enabled) {
-      const warningPulse = 1 + Math.sin(animationTime * 18) * 0.045;
       if (mob.warningMesh) {
         if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25) {
           updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw);
@@ -4406,7 +4403,7 @@ app.on("update", (dt: number) => {
         mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
         mob.warning.setEulerAngles(0, 0, 0);
         mob.warning.setLocalScale(1, 1, 1);
-      } else mob.warning.setLocalScale(mob.warningScale * warningPulse, 0.025, mob.warningScale * warningPulse);
+      } else mob.warning.setLocalScale(1, 1, 1);
       mob.warningMaterial.diffuse.set(0.95, presentation.aimLocked ? 0.12 : 0.58, 0.06);
       mob.warningMaterial.emissive.set(0.7, presentation.aimLocked ? 0.04 : 0.28, 0.02);
       mob.warningMaterial.opacity = (presentation.aimLocked ? 0.4 : 0.25) + windupStrength * 0.22;

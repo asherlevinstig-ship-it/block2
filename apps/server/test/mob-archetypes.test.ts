@@ -33,11 +33,13 @@ describe("mob archetypes", () => {
     expect(briar.spawn.x).toBeGreaterThan(30);
   });
 
-  it("gives the Cave Spitter a dodgeable projectile and lingering hazard", () => {
+  it("gives the Cave Spitter one dodgeable projectile and a punishable pause, without a lingering hazard", () => {
     const spitter = MOB_ARCHETYPES.cave_spitter;
     expect(spitter.minimumAttackRange).toBeGreaterThan(0);
     expect(spitter.projectileTravelMs).toBeGreaterThan(500);
-    expect(spitter.hazardDurationMs).toBeGreaterThan(3000);
+    expect(spitter.recoverMs).toBeGreaterThanOrEqual(1000);
+    expect(spitter.hazardDurationMs).toBe(0);
+    expect(spitter.hazardRadius).toBe(0);
     expect(spitter.maxHealth).toBeLessThan(MOB_ARCHETYPES.moss_crawler.maxHealth);
   });
 

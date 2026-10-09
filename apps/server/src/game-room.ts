@@ -1035,6 +1035,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (collision?.kind === "terrain") continue;
       const definition = mobArchetype(projectile.archetype);
       const target = collision?.targetId ? this.state.players.get(collision.targetId) : undefined;
+      if (target && collision?.targetId) {
+        this.damagePlayer(projectile.mobId, collision.targetId, projectile.damage, now);
+      }
+      if (definition.hazardDurationMs <= 0 || definition.hazardRadius <= 0) continue;
       const puddle = target ? { x: impact.x, y: target.y, z: impact.z }
         : { x: projectile.end.x, y: projectile.end.y - 0.08, z: projectile.end.z };
       const hazardId = `acid:${projectileId}`;
@@ -1056,9 +1060,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         radius: definition.hazardRadius,
         expiresAt,
       } satisfies MobHazardPlaced);
-      if (target && collision?.targetId) {
-        this.damagePlayer(projectile.mobId, collision.targetId, projectile.damage, now);
-      }
     }
   }
 
@@ -1302,6 +1303,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         ? actualDistance >= definition.minimumAttackRange - 0.05 && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
       if (!inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
+        || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       mob.combatState = "windup";
       mob.stateUntil = now + definition.windupMs;
