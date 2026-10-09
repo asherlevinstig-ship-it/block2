@@ -3,7 +3,10 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-ore-cave-v45";
+export const WORLD_ROOM = "world-nearby-chat-v46";
+export const ChatSendSchema = z.object({ text: z.string().min(1).max(160) });
+export const PlayerNameSchema = z.string().trim().min(2).max(20).regex(/^[A-Za-z0-9 _-]+$/);
+export type NearbyChatMessage = { senderId: string; name: string; text: string };
 export const EQUIPMENT_LOOT_RANGE = 1.8;
 export const LootCollectRequestSchema = z.object({ dropId: z.string().min(1).max(160), equip: z.boolean() });
 export type LootCollectResult = { ok: boolean; dropId: string; message: string };

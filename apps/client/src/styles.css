@@ -1129,6 +1129,18 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .minimap-legend { flex-wrap: wrap; justify-content: flex-start; gap: 5px 9px; }
 .minimap-legend span { white-space: nowrap; }
 .map-home { color: #abe3a0; } .map-smith { color: #ffd173; } .map-iron { color: #e3a76b; } .map-silver { color: #b4eaff; } .map-champion { color: #ffcf65; }
+.player-nameplate { position: fixed; z-index: 15; transform: translate(-50%, -100%); pointer-events: none; background: #081715bc; color: #f0edda; border: 1px solid #ffffff22; border-radius: 5px; padding: 3px 7px; font: 700 11px system-ui; text-shadow: 0 1px 2px #000; }
+.player-nameplate[data-local="true"] { color: #bde6a8; }
+.player-nameplate[hidden] { display: none; }
+#nearby-chat { position: fixed; z-index: 25; bottom: max(16px, env(safe-area-inset-bottom)); left: max(16px, env(safe-area-inset-left)); width: min(300px, 80vw); padding: 10px; color: #dce6d8; background: #0b1916ed; border: 1px solid #afc99a55; border-radius: 10px; font: 12px system-ui; }
+#nearby-chat summary { cursor: pointer; font-weight: 800; letter-spacing: .05em; }
+#nearby-chat p, #nearby-chat small { font-size: 10px; color: #a9b6a6; }
+#nearby-chat ol { height: 125px; overflow-y: auto; padding: 0; margin: 8px 0; list-style: none; overflow-wrap: anywhere; }
+#nearby-chat li { margin: 5px 0; } #nearby-chat strong { color: #ffd78e; }
+#nearby-chat form { display: flex; gap: 5px; margin: 7px 0; }
+#nearby-chat input { min-width: 0; width: 100%; background: #14291f; color: #fff4db; border: 1px solid #ffffff33; border-radius: 5px; padding: 8px; }
+#nearby-chat button { white-space: nowrap; background: #435e31; color: #fff4db; border: 0; border-radius: 5px; padding: 8px; cursor: pointer; }
+@media (pointer: coarse) { #nearby-chat { bottom: 170px; } }
 .minimap-danger { margin-top: 7px; }
 .minimap-danger span { flex: 1; padding: 4px 1px; text-align: center; border-radius: 3px; background: #234a3c; }
 .minimap-danger span:nth-child(2) { background: #465038; } .minimap-danger span:nth-child(3) { background: #52432a; } .minimap-danger span:nth-child(4) { background: #482329; }

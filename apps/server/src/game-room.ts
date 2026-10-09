@@ -1,5 +1,6 @@
 import { Client, Room } from "@colyseus/core";
-import { CHAMPION_CHARGE } from "@blockcraft/protocol";
+import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, type NearbyChatMessage } from "@blockcraft/protocol";
+import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
@@ -246,6 +247,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly roamingReturning = new Set<string>();
   private readonly spitterPositioning = new Map<string, SpitterPositioning>();
   private readonly profileTokens = new Map<string, string>();
+  private readonly lastChatAt = new Map<string, number>();
+  private readonly lastNameAt = new Map<string, number>();
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
   private readonly quizRounds = new Map<string, QuizRound>();
@@ -299,6 +302,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       client.send("mineral:status", this.mineralStatus());
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
+    this.onMessage("chat:send", (client, payload: unknown) => this.handleNearbyChat(client, payload));
+    this.onMessage("player:name", (client, payload: unknown) => {
+      const player = this.state.players.get(client.sessionId), name = PlayerNameSchema.safeParse(payload);
+      if (!player || !name.success || Date.now() - (this.lastNameAt.get(client.sessionId) ?? -Infinity) < 2000) return;
+      this.lastNameAt.set(client.sessionId, Date.now()); player.name = name.data;
+      void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+      client.send("chat:notice", `Your name is now ${player.name}.`);
+    });
     this.onMessage("objective:sync", client => this.sendObjectiveState(client));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
@@ -413,6 +424,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.lastChatAt.delete(client.sessionId); this.lastNameAt.delete(client.sessionId);
     this.pendingMining.delete(client.sessionId);
     const player = this.state.players.get(client.sessionId);
     const quizRound = this.quizRounds.get(client.sessionId);
@@ -443,6 +455,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   override async onDispose(): Promise<void> {
     await Promise.allSettled([...this.profileSaveQueues.values(), this.flushWorldDeltaWrites()]);
+  }
+
+  private handleNearbyChat(client: Client, payload: unknown): void {
+    const parsed = ChatSendSchema.safeParse(payload), player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return;
+    const now = Date.now();
+    if (now - (this.lastChatAt.get(client.sessionId) ?? -Infinity) < 1200) { client.send("chat:notice", "Please wait a moment before sending again."); return; }
+    const text = cleanChatText(parsed.data.text); if (!text) return;
+    this.lastChatAt.set(client.sessionId, now);
+    const message: NearbyChatMessage = { senderId: client.sessionId, name: player.name, text };
+    for (const recipient of this.clients) {
+      const other = this.state.players.get(recipient.sessionId);
+      if (other && hearsNearbyChat(player, other)) recipient.send("chat:message", message);
+    }
   }
 
   private sendQuizState(client: Client, message?: string): void {

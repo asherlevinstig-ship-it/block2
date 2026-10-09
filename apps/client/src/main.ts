@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { createSocialUI } from "./social-ui.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison } from "./loot-comparison.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
@@ -1268,6 +1269,8 @@ interface MarkVisualState {
 
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
+const social = createSocialUI((type, payload) => { if (!room || !worldReady) return false; room.send(type, payload); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
+let lastNameplateSampleAt = -Infinity;
 const mobVisuals = new Map<string, MobVisual>();
 const lootVisuals = new Map<string, LootVisual>();
 const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
@@ -3488,6 +3491,7 @@ returnToTownButton.addEventListener("click", () => {
 });
 window.addEventListener("keydown", event => {
   if (!defeatScreen.hidden) return;
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.code.startsWith("Arrow")) event.preventDefault();
   keys.add(event.code);
 });
@@ -4490,6 +4494,8 @@ for (const button of traitPickerButtons) {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+  if (event.code === "Enter" && lootPanel.hidden && inventoryPanel.hidden && quizPanel.hidden && blacksmithPanel.hidden) { event.preventDefault(); social.open(); return; }
   if (!defeatScreen.hidden) return;
   if (!lootPanel.hidden) {
     if (event.code === "Escape") closeLoot();
@@ -5349,6 +5355,22 @@ app.on("update", (dt: number) => {
   if (worldReady) {
     updateCaveNavigation(localPlayer.getPosition(), now);
     minimap.setChampionState(mobVisuals.get("frontier-brute-west")?.state ?? null);
+    if (now - lastNameplateSampleAt >= 100) {
+    lastNameplateSampleAt = now;
+    const nameplates: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean }[] = [];
+    if (room && camera.camera) for (const [id, player] of room.state.players as Map<string, NetworkPlayer>) {
+      const isLocal = id === room.sessionId;
+      const pose = isLocal ? localPlayer.getPosition() : remotePlayers.get(id)?.entity.getPosition();
+      if (!pose) continue;
+      const eye = localPlayer.getPosition(); const rect = canvas.getBoundingClientRect();
+      const screen = camera.camera.worldToScreen(new pc.Vec3(pose.x, pose.y + 1.95, pose.z));
+      const visible = worldReady && defeatScreen.hidden && undergroundKnown(pose.x, pose.y, pose.z)
+        && Math.hypot(pose.x - eye.x, pose.z - eye.z) <= 24 && screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height
+        && (isLocal || enemyCueLineClear({ x: eye.x, y: eye.y + .8, z: eye.z }, { x: pose.x, y: pose.y + .8, z: pose.z }, readCollisionWorldBlock));
+      nameplates.push({ id, name: player.name, x: rect.left + screen.x, y: rect.top + screen.y, visible: Boolean(visible), local: isLocal });
+    }
+    social.update(now, nameplates);
+    }
     minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden), cameraOrbit.yaw, Boolean(defeatScreen.hidden));
   }
   if (room && worldReady && now - lastPingSentAt >= 2000) {
@@ -5462,6 +5484,8 @@ async function connect(): Promise<void> {
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
+  room.onMessage("chat:message", message => social.message(message));
+  room.onMessage("chat:notice", message => social.notice(String(message)));
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
@@ -5824,6 +5848,7 @@ async function connect(): Promise<void> {
     cancelSpecialAim();
     cancelLocalPowerPresentation();
     room = null;
+    social.clearNames();
     pendingPings.clear();
     serverClock = createServerClock(performance.now(), Date.now());
     status.textContent = "Disconnected from the world.";
