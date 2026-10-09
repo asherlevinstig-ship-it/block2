@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-spitter-shot-v24";
+export const WORLD_ROOM = "world-forged-sword-v25";
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
 export const WORLD_STREAM_CHUNK_RADIUS = 2;
 
@@ -16,7 +16,7 @@ export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
 export const IRON_ORE_GOLD_PRICE = 3;
 export const BLACKSMITH_UPGRADES = {
   reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", price: 12, ironOre: 6, description: "Auto-equipped tool · extract 2 iron ore from every iron block" },
-  iron_sword: { id: "iron_sword", name: "Iron Sword", price: 45, ironOre: 0, description: "+1 damage with every main-hand attack" },
+  iron_sword: { id: "iron_sword", name: "Iron Sword", price: 45, ironOre: 0, description: "Upgrades and equips your longsword · +1 sword damage" },
   miners_pack: { id: "miners_pack", name: "Miner's Pack", price: 25, ironOre: 0, description: "Carry up to 30 iron ore instead of 12" },
 } as const;
 export type BlacksmithUpgradeId = keyof typeof BLACKSMITH_UPGRADES;

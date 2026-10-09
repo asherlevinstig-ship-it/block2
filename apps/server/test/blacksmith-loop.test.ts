@@ -1,0 +1,36 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Block, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
+import { WorldRoom } from "../src/game-room.js";
+import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/schema.js";
+
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+describe("ore to forged sword to item loot", () => {
+  it("sells gathered ore, forges once, defeats a mob with upgraded sword damage, and collects its items", () => {
+    vi.useFakeTimers(); vi.setSystemTime(10_000);
+    const room = new WorldRoom(); room.setState(new WorldState());
+    Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 0 ? Block.Stone : Block.Air });
+    const internal = room as any;
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION);
+    player.coins = 20; player.mainHandId = "bow";
+    const ore = new InventoryItemState(); ore.quantity = 9; player.inventory.set("iron_ore", ore);
+    room.state.players.set("visitor", player); const client = { sessionId: "visitor", send: vi.fn() };
+    internal.handleBlacksmithSell(client);
+    expect(player.coins).toBe(47); expect(ore.quantity).toBe(0);
+    internal.handleBlacksmithForge(client, { upgradeId: "iron_sword" });
+    expect(player.coins).toBe(2); expect(player.blacksmithUpgrades).toBe(2);
+    expect(player.mainHandId).toBe("longsword"); expect(player.mainHandTag).toBe("melee");
+    internal.handleBlacksmithForge(client, { upgradeId: "iron_sword" }); expect(player.coins).toBe(2);
+    Object.assign(player, { x: 100.5, y: 1, z: 100.5 });
+    const mob = new MobState(); Object.assign(mob, { x: 102, y: 1, z: 100.5, health: 2 });
+    room.state.mobs.set("crawler", mob);
+    internal.pendingAttacks.set("visitor", { requestId: "sword", mainHandId: "longsword", step: 1, yaw: 90, impactAt: 10_135 });
+    internal.resolvePendingAttacks(10_225);
+    expect(mob.alive).toBe(false); expect(room.state.lootDrops.size).toBe(3);
+    Object.assign(player, { x: mob.x, y: mob.y, z: mob.z }); internal.resolveLootPickups(10_300);
+    expect(player.inventory.get("fang_dagger")?.quantity).toBe(1);
+    expect(player.inventory.get("crawler_fang")?.quantity).toBe(1);
+    expect(room.state.lootDrops.size).toBe(0);
+  });
+});

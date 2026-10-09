@@ -980,6 +980,7 @@ interface NetworkPlayer {
   stamina: number;
   maxStamina: number;
   coins: number;
+  blacksmithUpgrades: number;
   dodgeSequence: number;
   invulnerableUntil: number;
   mainHandId: string;
@@ -1136,6 +1137,7 @@ let localPowerStepApplied = false;
 let localPowerCooldownUntil = 0;
 let localSpecialCooldownUntil = 0;
 let localMainHandId: MainHandId = "longsword";
+let localIronSwordOwned = false;
 let localEquippedPower: PowerId = "shockwave";
 let localSeismicMastery: SeismicMasteryId = "advancing_fault";
 let localEquippedSpecial: SpecialId = "hunters_mark";
@@ -1207,7 +1209,7 @@ function isTraitId(value: string): value is TraitId {
 
 function refreshPowerCompatibility(): void {
   const mainHand = MAIN_HAND_DEFINITIONS[localMainHandId];
-  mainHandName.textContent = mainHand.name;
+  mainHandName.textContent = localMainHandId === "longsword" && localIronSwordOwned ? "Iron Sword · +1 DMG" : mainHand.name;
   mainHandAttack.textContent = mainHand.attackName;
   refreshInventoryEquipped();
   for (const button of mainHandPickerButtons) {
@@ -2461,6 +2463,11 @@ function bindPlayers(joinedRoom: Room): void {
       } else if (remote && isMainHandId(player.mainHandId)) {
         setRigMainHand(remote.rig, player.mainHandId);
       }
+    }, true);
+    playerCallbacks.listen("blacksmithUpgrades", () => {
+      if (!isLocal) return;
+      localIronSwordOwned = (player.blacksmithUpgrades & 2) !== 0;
+      refreshPowerCompatibility();
     }, true);
     playerCallbacks.listen("health", () => {
       if (isLocal) updatePlayerHealth(player.health, player.maxHealth);

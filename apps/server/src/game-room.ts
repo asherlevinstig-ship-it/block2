@@ -103,7 +103,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS 
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
-import { canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
+import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -485,7 +485,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.sendQuizState(client, "Double or nothing. Here's your next question.");
   }
 
-  private sendBlacksmithState(client: Client, message = `Iron ore sells for ${IRON_ORE_GOLD_PRICE} gold each. Keep materials to forge equipment below.`, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId): void {
+  private sendBlacksmithState(client: Client, message: string | undefined = undefined, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     client.send("blacksmith:update", {
@@ -497,7 +497,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       sold,
       goldGranted,
       purchasedUpgradeId,
-      message,
+      message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
     } satisfies BlacksmithUpdate);
   }
 
@@ -533,6 +533,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     player.blacksmithUpgrades = forge.flags;
     player.coins = forge.gold;
+    if (upgradeId === "iron_sword") {
+      player.mainHandId = "longsword";
+      player.mainHandTag = "melee";
+    }
     if (ore) ore.quantity = forge.ironOre;
     if (upgradeId === "reinforced_pickaxe") {
       let pickaxe = player.inventory.get("reinforced_pickaxe");
@@ -2050,7 +2054,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (!player || !mob || !mob.alive || !timing) return;
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
       const damage = damageAfterArmor(
-        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades) + this.specialDamageBonus(sessionId, mobId, now),
+        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId) + this.specialDamageBonus(sessionId, mobId, now),
         mob.armor,
       ) + traitBonusDamage;
       mob.health = Math.max(0, mob.health - damage);

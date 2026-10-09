@@ -1,4 +1,4 @@
-import { BLACKSMITH_UPGRADES, IRON_ORE_GOLD_PRICE, type BlacksmithUpgradeId } from "@blockcraft/protocol";
+import { BLACKSMITH_UPGRADES, IRON_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId } from "@blockcraft/protocol";
 import { Block, TOWN_BLACKSMITH_STALL_POSITION, type BlockId } from "@blockcraft/voxel-world";
 
 export const MAX_GOLD = 1_000_000;
@@ -45,8 +45,16 @@ export function minedIronQuantity(flags: number): number {
   return ownsBlacksmithUpgrade(flags, "reinforced_pickaxe") ? 2 : 1;
 }
 
-export function ironSwordDamageBonus(flags: number): number {
-  return ownsBlacksmithUpgrade(flags, "iron_sword") ? 1 : 0;
+export function ironSwordDamageBonus(flags: number, mainHandId: MainHandId = "longsword"): number {
+  return mainHandId === "longsword" && ownsBlacksmithUpgrade(flags, "iron_sword") ? 1 : 0;
+}
+
+export function blacksmithNextStep(flags: number, gold: number, ore: number): string {
+  if (ownsBlacksmithUpgrade(flags, "iron_sword")) return "Iron Sword ready: head beyond the town walls, defeat mobs, and collect their dropped items. Open your pack with I to equip loot.";
+  const needed = Math.max(0, Math.ceil((BLACKSMITH_UPGRADES.iron_sword.price - gold) / IRON_ORE_GOLD_PRICE));
+  if (needed === 0) return "You can forge the Iron Sword now for 45 gold. It equips your longsword and adds +1 sword damage.";
+  if (ore >= needed) return `Sell your iron ore, then forge the Iron Sword for 45 gold. You need ${needed} ore worth of gold.`;
+  return `Mine ${needed - ore} more iron ore, sell it here for 3 gold each, then forge the Iron Sword for 45 gold.`;
 }
 
 export function minedMineral(block: BlockId): "iron_ore" | null {

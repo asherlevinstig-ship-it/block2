@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
+import { blacksmithNextStep, BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
 
 describe("blacksmith trading", () => {
+  it("guides mining, selling, forging, and then item hunting without quests", () => {
+    expect(blacksmithNextStep(0, 20, 0)).toContain("Mine 9 more");
+    expect(blacksmithNextStep(0, 20, 9)).toContain("Sell your iron ore");
+    expect(blacksmithNextStep(0, 47, 0)).toContain("forge the Iron Sword now");
+    expect(blacksmithNextStep(2, 2, 0)).toContain("dropped items");
+  });
+  it("only upgrades sword damage, not looted weapons, bows, or magic", () => {
+    expect(ironSwordDamageBonus(2, "longsword")).toBe(1);
+    for (const weapon of ["bow", "magic_focus", "fang_dagger", "stone_core_hammer", "acid_gland_focus"] as const) {
+      expect(ironSwordDamageBonus(2, weapon)).toBe(0);
+    }
+  });
   it("only awards iron ore for actual iron ore blocks", () => {
     expect(minedMineral(Block.IronOre)).toBe("iron_ore");
     expect(minedMineral(Block.Stone)).toBeNull();
