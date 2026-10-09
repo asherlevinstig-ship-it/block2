@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { createSocialUI } from "./social-ui.js";
+import { createPartyUI } from "./party-ui.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison } from "./loot-comparison.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
@@ -1270,6 +1271,7 @@ interface MarkVisualState {
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const social = createSocialUI((type, payload) => { if (!room || !worldReady) return false; room.send(type, payload); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
+const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 let lastNameplateSampleAt = -Infinity;
 const mobVisuals = new Map<string, MobVisual>();
 const lootVisuals = new Map<string, LootVisual>();
@@ -5485,7 +5487,8 @@ async function connect(): Promise<void> {
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));
-  room.onMessage("chat:notice", message => social.notice(String(message)));
+  room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); });
+  room.onMessage("party:update", update => partyUI.update(update));
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
@@ -5849,6 +5852,7 @@ async function connect(): Promise<void> {
     cancelLocalPowerPresentation();
     room = null;
     social.clearNames();
+    partyUI.reset();
     pendingPings.clear();
     serverClock = createServerClock(performance.now(), Date.now());
     status.textContent = "Disconnected from the world.";

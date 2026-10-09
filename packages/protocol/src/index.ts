@@ -3,7 +3,15 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-nearby-chat-v46";
+export const WORLD_ROOM = "world-parties-v47";
+export const PartyRequestSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
+  z.object({ action: z.literal("respond"), inviteId: z.string().min(1).max(160), accept: z.boolean() }),
+  z.object({ action: z.literal("leave") }),
+]);
+export type PartyRequest = z.infer<typeof PartyRequestSchema>;
+export type PartyUpdate = { partyId: string | null; members: { id: string; name: string; health: number; maxHealth: number; distance: number; leader: boolean }[];
+  nearby: { id: string; name: string }[]; invite: { id: string; name: string; expiresAt: number } | null };
 export const ChatSendSchema = z.object({ text: z.string().min(1).max(160) });
 export const PlayerNameSchema = z.string().trim().min(2).max(20).regex(/^[A-Za-z0-9 _-]+$/);
 export type NearbyChatMessage = { senderId: string; name: string; text: string };
