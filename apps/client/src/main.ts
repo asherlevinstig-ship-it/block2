@@ -2922,14 +2922,14 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     }
     card.classList.toggle("owned", isOwned);
     button.disabled = isOwned || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre;
-    button.textContent = isOwned ? "EQUIPPED" : "FORGE";
+    button.textContent = isOwned ? "EQUIPPED" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
   }
   if (update.phase === "traded" && update.goldGranted) {
     showCombatFeedback(`+${update.goldGranted} GOLD`, "dodge");
     status.textContent = update.message;
   }
   if (update.phase === "purchased" && update.purchasedUpgradeId) {
-    showCombatFeedback(update.purchasedUpgradeId === "reinforced_pickaxe" ? "PICKAXE FORGED · EQUIPPED" : "EQUIPMENT FORGED", "dodge");
+    showCombatFeedback(update.purchasedUpgradeId === "reinforced_pickaxe" ? "PICKAXE BOUGHT · EQUIPPED" : "EQUIPMENT FORGED", "dodge");
     status.textContent = update.message;
   }
 }
@@ -2956,7 +2956,7 @@ for (const card of blacksmithUpgradeCards) {
     const upgradeId = card.dataset.blacksmithUpgrade as BlacksmithUpgradeId;
     blacksmithPending = true;
     button.disabled = true;
-    blacksmithMessage.textContent = `Forging ${BLACKSMITH_UPGRADES[upgradeId].name}...`;
+    blacksmithMessage.textContent = `${upgradeId === "reinforced_pickaxe" ? "Buying" : "Forging"} ${BLACKSMITH_UPGRADES[upgradeId].name}...`;
     room.send("blacksmith:forge", { upgradeId });
   });
 }

@@ -139,16 +139,16 @@
     <section id="blacksmith-panel" role="dialog" aria-label="Blacksmith trading and forging" hidden>
       <p class="eyebrow">TOWN OF BEGINNINGS · BLACKSMITH</p>
       <h2>Trade &amp; Forge</h2>
-      <p id="blacksmith-message" aria-live="polite">Sell ore for gold, or keep enough to forge lasting equipment.</p>
+      <p id="blacksmith-message" aria-live="polite">Sell minerals for gold, then buy a reinforced pickaxe for 12 gold. It auto-equips and doubles ore yield.</p>
       <div class="blacksmith-trade-row"><span>IRON ORE IN PACK</span><strong id="blacksmith-ore">0</strong></div>
       <div class="blacksmith-trade-row"><span>SILVER ORE IN PACK</span><strong id="blacksmith-silver">0</strong></div>
       <div class="blacksmith-trade-row"><span>PRICE PER MINERAL</span><strong id="blacksmith-price">Iron 3 · Silver 8 gold</strong></div>
       <div class="blacksmith-trade-row"><span>MINERALS VALUE</span><strong id="blacksmith-sale-value">0 gold</strong></div>
       <div class="blacksmith-trade-row gold"><span>YOUR GOLD</span><strong id="blacksmith-gold">20</strong></div>
       <button id="blacksmith-sell" type="button">Sell all minerals</button>
-      <h3 class="blacksmith-shop-heading">FORGE EQUIPMENT <small>Materials are taken directly from your pack</small></h3>
+      <h3 class="blacksmith-shop-heading">EQUIPMENT SHOP <small>Gold comes directly from your purse · upgrades auto-equip</small></h3>
       <div id="blacksmith-upgrades">
-        <article data-blacksmith-upgrade="reinforced_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Reinforced Pickaxe</strong><small>Auto-equips · mine 2 minerals per ore block</small><span class="forge-costs"><b data-cost="iron">0 / 6 IRON</b><b data-cost="gold">0 / 12 GOLD</b></span></div><button type="button">FORGE</button></article>
+        <article data-blacksmith-upgrade="reinforced_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Reinforced Pickaxe</strong><small>Auto-equips · mine 2 minerals per ore block · no ore required</small><span class="forge-costs"><b data-cost="gold">0 / 12 GOLD</b></span></div><button type="button">BUY · 12 GOLD</button></article>
         <article data-blacksmith-upgrade="iron_sword"><span class="upgrade-icon">⚔</span><div><strong>Iron Sword</strong><small>Equips your longsword · +1 sword damage</small><span class="forge-costs"><b data-cost="gold">0 / 45 GOLD</b></span></div><button type="button">FORGE</button></article>
         <article data-blacksmith-upgrade="miners_pack"><span class="upgrade-icon">▣</span><div><strong>Miner's Pack</strong><small>Carry 30 of each mineral instead of 12</small><span class="forge-costs"><b data-cost="gold">0 / 25 GOLD</b></span></div><button type="button">FORGE</button></article>
       </div>
@@ -209,7 +209,7 @@
         </div>
       </section>
       <section class="inventory-section" aria-labelledby="inventory-tools-title">
-        <h3 id="inventory-tools-title"><span>Tools</span><small>Mining equipment auto-equips when forged</small></h3>
+        <h3 id="inventory-tools-title"><span>Tools</span><small>Mining equipment auto-equips when acquired</small></h3>
         <div class="inventory-grid tools-grid">
           <article data-item="reinforced_pickaxe"><i></i><div><strong>Reinforced Pickaxe</strong><small>Equipped tool · mine 2 minerals per ore block</small></div><em data-item-count="reinforced_pickaxe">0</em></article>
         </div>

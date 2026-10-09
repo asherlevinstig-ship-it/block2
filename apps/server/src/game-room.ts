@@ -588,7 +588,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       pickaxe.quantity = 1;
     }
     void this.persistPlayer(client.sessionId, player);
-    this.sendBlacksmithState(client, `${BLACKSMITH_UPGRADES[upgradeId].name} forged and equipped. ${BLACKSMITH_UPGRADES[upgradeId].description}.`, "purchased", 0, 0, upgradeId);
+    this.sendBlacksmithState(client, `${BLACKSMITH_UPGRADES[upgradeId].name} ${upgradeId === "reinforced_pickaxe" ? "bought" : "forged"} and equipped. ${BLACKSMITH_UPGRADES[upgradeId].description}.`, "purchased", 0, 0, upgradeId);
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {

@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-cave-encounters-v34";
+export const WORLD_ROOM = "world-pickaxe-shop-v35";
 export const MINERAL_REGROWTH_MS = 120_000;
 export interface MineralDepositStatus { id: string; available: number; total: number; readyAt: number | null }
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
@@ -18,7 +18,7 @@ export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
 export const IRON_ORE_GOLD_PRICE = 3;
 export const SILVER_ORE_GOLD_PRICE = 8;
 export const BLACKSMITH_UPGRADES = {
-  reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", price: 12, ironOre: 6, description: "Auto-equipped tool · extract 2 minerals from every ore block" },
+  reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", price: 12, ironOre: 0, description: "Auto-equipped tool · extract 2 minerals from every ore block" },
   iron_sword: { id: "iron_sword", name: "Iron Sword", price: 45, ironOre: 0, description: "Upgrades and equips your longsword · +1 sword damage" },
   miners_pack: { id: "miners_pack", name: "Miner's Pack", price: 25, ironOre: 0, description: "Carry up to 30 of each mineral instead of 12" },
 } as const;

@@ -5,6 +5,32 @@ import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/sc
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("ore to forged sword to item loot", () => {
+  it("requires stall proximity and sufficient gold, buys once, auto-equips and doubles silver yield", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const internal = room as any;
+    const persist = vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    vi.spyOn(internal, "recordWorldDelta").mockImplementation(() => {});
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    const player = new PlayerState(); player.coins = 12;
+    room.state.players.set("buyer", player);
+    const client = { sessionId: "buyer", send: vi.fn() };
+    const buy = () => internal.handleBlacksmithForge(client, { upgradeId: "reinforced_pickaxe" });
+    Object.assign(player, { x: 8.5, y: 8, z: 8.5 }); buy();
+    expect(player.coins).toBe(12); expect(player.blacksmithUpgrades).toBe(0);
+    Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION); player.coins = 11; buy();
+    expect(player.coins).toBe(11); expect(player.inventory.has("reinforced_pickaxe")).toBe(false);
+    player.coins = 12; buy();
+    expect(player.coins).toBe(0); expect(player.blacksmithUpgrades).toBe(1);
+    expect(player.inventory.get("reinforced_pickaxe")?.quantity).toBe(1);
+    expect(persist).toHaveBeenCalledWith("buyer", player);
+    expect(client.send).toHaveBeenLastCalledWith("blacksmith:update", expect.objectContaining({ phase: "purchased", purchasedUpgradeId: "reinforced_pickaxe" }));
+    player.coins = 20; buy();
+    expect(player.coins).toBe(20); expect(player.inventory.get("reinforced_pickaxe")?.quantity).toBe(1);
+    Object.assign(player, { x: 68.5, y: 8, z: 27.5 });
+    const a = worldToChunk(68, 27); const stored = internal.getChunk(a.chunkX, a.chunkZ);
+    internal.handleMine(client, { requestId: "upgraded-silver", x: 68, y: 7, z: 27, expectedRevision: stored.revision });
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
+  });
   it("mines visible silver once, preserves a full-pack block, and sells both minerals at the stall", () => {
     const room = new WorldRoom(); room.setState(new WorldState());
     const internal = room as any;

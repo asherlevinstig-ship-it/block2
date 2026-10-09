@@ -39,12 +39,12 @@ describe("blacksmith trading", () => {
     expect(ironOreSale(4, 1_000_000)).toEqual({ sold: 0, goldGranted: 0 });
   });
 
-  it("forges the reinforced pickaxe from iron and gold exactly once", () => {
+  it("buys the reinforced pickaxe for gold only exactly once without consuming minerals", () => {
     const pickaxe = forgeBlacksmithUpgrade(0, 20, 8, "reinforced_pickaxe");
-    expect(pickaxe).toEqual({ flags: 1, gold: 8, ironOre: 2, forged: true });
+    expect(pickaxe).toEqual({ flags: 1, gold: 8, ironOre: 8, forged: true });
     expect(minedIronQuantity(pickaxe.flags)).toBe(2);
     expect(forgeBlacksmithUpgrade(pickaxe.flags, 100, 20, "reinforced_pickaxe").reason).toBe("owned");
-    expect(forgeBlacksmithUpgrade(0, 100, 5, "reinforced_pickaxe").reason).toBe("iron_ore");
+    expect(forgeBlacksmithUpgrade(0, 12, 0, "reinforced_pickaxe")).toEqual({ flags: 1, gold: 0, ironOre: 0, forged: true });
     expect(forgeBlacksmithUpgrade(0, 11, 6, "reinforced_pickaxe").reason).toBe("gold");
     expect(ironSwordDamageBonus(2)).toBe(1);
     expect(ownedBlacksmithUpgrades(7)).toEqual(["reinforced_pickaxe", "iron_sword", "miners_pack"]);
