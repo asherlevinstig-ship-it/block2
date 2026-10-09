@@ -1,5 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
+import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
@@ -101,7 +102,7 @@ import {
 } from "@blockcraft/voxel-world";
 import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
-import { dodgeDirection, isInsideImpact, maintainRangedDistance, pursueTarget, selectAggroTarget } from "./combat-rules.js";
+import { dodgeDirection, isInsideImpact, pursueTarget, selectAggroTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "./radial-difficulty.js";
@@ -230,6 +231,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly mobVerticalVelocities = new Map<string, number>();
   private readonly mobNavigation = new Map<string, MobNavigationState>();
   private readonly mobPatrols = new Map<string, MobPatrolState>();
+  private readonly spitterPositioning = new Map<string, SpitterPositioning>();
   private readonly profileTokens = new Map<string, string>();
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
@@ -1317,6 +1319,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         this.mobVerticalVelocities.set(mobId, 0);
         this.mobNavigation.set(mobId, createMobNavigationState());
         this.mobPatrols.delete(mobId);
+        this.spitterPositioning.delete(mobId);
         this.mobStaggerImmuneUntil.delete(mobId);
         this.mobCommittedAim.delete(mobId);
         mob.aimCommitted = false;
@@ -1436,19 +1439,21 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         && (mobId === "stone-brute" || !isInStoneBruteArena(player.x, player.z)));
       const target = selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
+        this.spitterPositioning.delete(mobId);
         this.patrolMob(mobId, mob, home, now, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier * 0.65));
         continue;
       }
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
-      const pursuit = definition.attackKind === "projectile"
-        ? maintainRangedDistance(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.minimumAttackRange, definition.stopDistance)
-        : pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
-      const retreating = definition.attackKind === "projectile"
-        && Math.hypot(target.x - mob.x, target.z - mob.z) < definition.minimumAttackRange;
-      const goal = retreating
-        ? { x: mob.x + (mob.x - target.x), y: mob.y, z: mob.z + (mob.z - target.z) }
-        : target;
-      this.moveNavigatingMob(mobId, mob, pursuit, goal, now);
+      const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
+      if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
+      const rangedPursuit = definition.attackKind === "projectile"
+        ? positionSpitter(mob, target, home, positioning, now, deltaTime, definition.speed * mob.speedMultiplier,
+          this.readWorldBlock, pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z))
+        : null;
+      const pursuit = rangedPursuit ?? pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
+      const goal = rangedPursuit?.goal ?? target;
+      this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
+        && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6));
       // A ranged mob may walk backwards, but still aims its attacks at the player.
       if (definition.attackKind === "projectile" || pursuit.inAttackRange) mob.yaw = pursuit.yaw;
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
@@ -1460,6 +1465,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       mob.combatState = "windup";
+      this.spitterPositioning.delete(mobId);
+      this.mobNavigation.set(mobId, createMobNavigationState());
       mob.stateUntil = now + definition.windupMs;
       this.setMobAttackTimeline(mob, now, mob.stateUntil);
       mob.targetId = target.id;
