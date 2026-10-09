@@ -1,6 +1,8 @@
 import type { MainHandId } from "./index.js";
 
 export interface StrikePoint { x: number; y: number; z: number }
+export const CRAWLER_RUSH_MS = 120;
+export const crawlerRushDistance = (archetype: string): number => archetype === "moss_crawler" ? .9 : archetype === "briar_crawler" ? 1.1 : 0;
 export const BRUTE_SLAM = { radius: 2.2, forward: 1.4, verticalRange: 1.1, recoveryMs: 1400 } as const;
 export function bruteSlamCenter(origin: StrikePoint, yaw: number): StrikePoint {
   const radians = yaw * Math.PI / 180;
@@ -72,6 +74,12 @@ export function mobStrikeGroundOutline(archetype: string, yaw: number): { x: num
     for (const point of [blade.base, blade.tip]) for (const x of [-padding, padding]) for (const z of [-padding, padding]) {
       points.push({ x: point.x + x, z: point.z + z });
     }
+  }
+  // Cover the whole committed rush, not only the final bite location.
+  const rush = crawlerRushDistance(archetype);
+  if (rush > 0) {
+    const radians = yaw * Math.PI / 180;
+    points.push(...points.map(point => ({ x: point.x + Math.sin(radians) * rush, z: point.z + Math.cos(radians) * rush })));
   }
   points.sort((a, b) => a.x - b.x || a.z - b.z);
   const cross = (a: { x: number; z: number }, b: { x: number; z: number }, c: { x: number; z: number }) =>

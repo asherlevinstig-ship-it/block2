@@ -6,7 +6,7 @@ const mob = { alive: true, combatState: "windup", aimCommitted: false, archetype
 describe("readable enemy combat cues", () => {
   it("distinguishes bite, shot and slam without changing the attack timeline", () => {
     for (const [archetype, kind] of [["moss_crawler", "bite"], ["cave_spitter", "shot"], ["stone_brute", "slam"]] as const) {
-      expect(enemyCombatCue({ ...mob, archetype }, 1200)).toMatchObject({ kind, label: `${kind.toUpperCase()} · AIMING`, progress: .2 });
+      expect(enemyCombatCue({ ...mob, archetype }, 1200)).toMatchObject({ kind, label: `${kind === "bite" ? "RUSH" : kind.toUpperCase()} · AIMING`, progress: .2 });
     }
     expect(enemyCombatCue(mob, 1400).label).toBe("SLAM · LOCKED");
     expect(enemyCombatCue(mob, 2300).label).toBe("SLAM · STRIKE");

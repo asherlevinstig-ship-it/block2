@@ -1,4 +1,4 @@
-import { BRUTE_SLAM } from "@blockcraft/protocol";
+import { BRUTE_SLAM, crawlerRushDistance } from "@blockcraft/protocol";
 export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter";
 
 export interface MobArchetypeDefinition {
@@ -35,14 +35,14 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     armor: 0,
     attackKind: "melee",
     speed: 1.35,
-    stopDistance: 1.35,
+    stopDistance: 2.1,
     minimumAttackRange: 0,
     aggroRange: 7,
     windupMs: 650,
     recoverMs: 650,
     cooldownMs: 1500,
     damage: 1,
-    lungeDistance: 0.4,
+    lungeDistance: crawlerRushDistance("moss_crawler"),
     hitRange: 2.1,
     projectileTravelMs: 0,
     hazardDurationMs: 0,
@@ -59,14 +59,14 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     armor: 0,
     attackKind: "melee",
     speed: 1.5,
-    stopDistance: 1.4,
+    stopDistance: 2.3,
     minimumAttackRange: 0,
     aggroRange: 8,
     windupMs: 720,
     recoverMs: 700,
     cooldownMs: 1650,
     damage: 1,
-    lungeDistance: 0.55,
+    lungeDistance: crawlerRushDistance("briar_crawler"),
     hitRange: 2.2,
     projectileTravelMs: 0,
     hazardDurationMs: 0,

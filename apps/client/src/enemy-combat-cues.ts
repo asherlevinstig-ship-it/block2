@@ -20,7 +20,7 @@ export function enemyCombatCue(mob: EnemyTimeline, now: number) {
   const fraction = (start: number, end: number) => Math.max(0, Math.min(1, (now - start) / Math.max(1, end - start)));
   return {
     kind, recovery, visible: presentation.warning || recovery,
-    label: recovery ? "RECOVER · COUNTER" : `${kind.toUpperCase()} · ${presentation.phase === "strike" ? "STRIKE" : presentation.aimLocked ? "LOCKED" : "AIMING"}`,
+    label: recovery ? "RECOVER · COUNTER" : `${kind === "bite" ? "RUSH" : kind.toUpperCase()} · ${presentation.phase === "strike" ? "STRIKE" : presentation.aimLocked ? "LOCKED" : "AIMING"}`,
     progress: recovery ? 1 - fraction(mob.attackContactEndAt, mob.attackRecoveryEndAt)
       : presentation.phase === "strike" ? 1 : fraction(mob.attackStartedAt, mob.attackReleaseAt),
   };

@@ -1,6 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
-import { BRUTE_SLAM, bruteSlamCenter } from "@blockcraft/protocol";
+import { BRUTE_SLAM, bruteSlamCenter, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
@@ -218,6 +218,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly pendingAttacks = new Map<string, PendingAttack>();
   private readonly pendingMining = new Map<string, { client: Client; request: MineBlockRequest; block: number; completesAt: number; origin: { x: number; y: number; z: number } }>();
   private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
+  private readonly crawlerRushes = new Map<string, { yaw: number; distance: number; startedAt: number; progress: number }>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
@@ -932,6 +933,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.mobCommittedAim.delete(mobId);
     this.mobStaggerImmuneUntil.set(mobId, mob.stateUntil + STAGGER_IMMUNITY_MS);
     this.pendingMobMelee.delete(mobId);
+    this.crawlerRushes.delete(mobId);
     return true;
   }
 
@@ -951,6 +953,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = mobArchetype(mob.archetype);
     this.spawnLootDrops(mobId, mob, now);
     mob.alive = false;
+    this.crawlerRushes.delete(mobId);
     this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
     mob.respawnAt = now + definition.respawnMs;
@@ -1303,6 +1306,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.resolvePendingPowers(now);
     this.resolvePendingAttacks(now);
+    this.advanceCrawlerRushes(now);
     this.resolveMobMelee(now);
     this.resolveWeaponProjectiles(now);
     this.resolveBrambleSnares(now);
@@ -1418,7 +1422,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const deltaX = aim.x - mob.x;
         const deltaZ = aim.z - mob.z;
         const distance = Math.hypot(deltaX, deltaZ);
-        if (distance > 0.001) {
+        if (crawlerRushDistance(mob.archetype) > 0) {
+          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype), startedAt: now, progress: 0 });
+        } else if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
           this.displaceMob(mobId, mob, {
             x: Math.sin(aim.yaw * Math.PI / 180) * lungeDistance, z: Math.cos(aim.yaw * Math.PI / 180) * lungeDistance,
@@ -2111,6 +2117,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private updateMobStrikeOrigin(mobId: string, mob: MobState): void {
+    if (crawlerRushDistance(mob.archetype) > 0) {
+      if (mob.aimCommitted) return;
+      mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
+      return;
+    }
     if (mob.archetype === "stone_brute") {
       // Once committed, neither player movement nor late snapshots move the impact circle.
       if (mob.aimCommitted) return;
@@ -2135,6 +2146,23 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.attackContactAt = releaseAt + (definition.attackKind === "melee" ? mobMeleeImpactMs(mob.archetype) : 0);
     mob.attackContactEndAt = mob.attackContactAt + (definition.attackKind === "melee" ? mobMeleeStrike(mob.archetype).afterImpactMs : 0);
     mob.attackRecoveryEndAt = mob.attackContactEndAt + definition.recoverMs;
+  }
+
+  private advanceCrawlerRushes(now: number): void {
+    for (const [mobId, rush] of this.crawlerRushes) {
+      const mob = this.state.mobs.get(mobId);
+      if (!mob?.alive || mob.combatState !== "strike") { this.crawlerRushes.delete(mobId); continue; }
+      const progress = Math.max(rush.progress, Math.min(1, Math.max(0, (now - rush.startedAt) / CRAWLER_RUSH_MS)));
+      const travel = rush.distance * (progress - rush.progress);
+      const radians = rush.yaw * Math.PI / 180;
+      const next = moveMobSafely(mob, { x: Math.sin(radians) * travel, z: Math.cos(radians) * travel }, this.readWorldBlock,
+        pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z)
+          && isPlayerSupported(this.readWorldBlock, pose.x, pose.y, pose.z));
+      const moved = Math.hypot(next.x - mob.x, next.z - mob.z);
+      mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = rush.yaw;
+      rush.progress = progress;
+      if (progress >= 1 || moved < travel * .8) this.crawlerRushes.delete(mobId);
+    }
   }
 
   private resolveMobMelee(now: number): void {
