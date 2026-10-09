@@ -1136,3 +1136,24 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .resource-toast[data-item="silver_ore"] { color: #d3f1ff; border-color: #9acfe6; background: #172d3ced; box-shadow: 0 0 18px #83c5e333; }
 @keyframes resource-pickup { 0% { opacity: 0; transform: translateY(12px) scale(.9); } 12%, 75% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-12px); } }
 @media (prefers-reduced-motion: reduce) { .resource-toast { animation: none; } }
+/* Small, steady enemy cues: no flashing or camera movement. */
+.enemy-combat-cue {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  z-index: 3;
+  pointer-events: none;
+  padding: 5px 8px;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  background: #0a1418ed;
+  color: #ffd36b;
+  font: 800 10px/1.3 system-ui, sans-serif;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.enemy-combat-cue[hidden] { display: none; }
+.enemy-combat-cue[data-kind="shot"] { color: #beff65; }
+.enemy-combat-cue[data-kind="slam"] { color: #ff9167; }
+.enemy-combat-cue[data-kind="recovery"] { color: #73efff; }
+.enemy-combat-cue-track { display: block; height: 3px; margin-top: 4px; background: #ffffff20; }
+.enemy-combat-cue-track > span { display: block; height: 100%; background: currentColor; transform-origin: left; }

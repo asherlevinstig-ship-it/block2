@@ -6,6 +6,7 @@ import { miningAvailability, miningReach, miningProgress, miningDurationMs, mini
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
+import { enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
@@ -1204,6 +1205,10 @@ interface MobVisual {
   warningScale: number;
   warningMesh: pc.Mesh | null;
   warningYaw: number;
+  combatCue: HTMLDivElement;
+  combatCueLabel: HTMLSpanElement;
+  combatCueFill: HTMLSpanElement;
+  recovery: pc.Entity;
   healthFill: pc.Entity;
   healthWidth: number;
   healthBarY: number;
@@ -2208,6 +2213,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   warningMaterial.opacity = 0.32;
   warningMaterial.blendType = pc.BLEND_NORMAL;
   warningMaterial.depthWrite = false;
+  warningMaterial.useLighting = false;
   warningMaterial.update();
   const markMaterial = new pc.StandardMaterial();
   markMaterial.diffuse = new pc.Color(0.48, 0.12, 0.78);
@@ -2247,6 +2253,28 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     arrowRight.setLocalEulerAngles(0, 40, 0);
   }
   entity.addChild(warning);
+  const combatCue = document.createElement("div");
+  combatCue.className = "enemy-combat-cue";
+  combatCue.hidden = true;
+  const combatCueLabel = document.createElement("span");
+  const combatCueTrack = document.createElement("span");
+  combatCueTrack.className = "enemy-combat-cue-track";
+  const combatCueFill = document.createElement("span");
+  combatCueTrack.append(combatCueFill);
+  combatCue.append(combatCueLabel, combatCueTrack);
+  document.body.append(combatCue);
+  const recovery = new pc.Entity("enemy-recovery-opening");
+  const recoveryMaterial = coloredMaterial(new pc.Color(0.15, 0.9, 1));
+  recoveryMaterial.useLighting = false;
+  recoveryMaterial.update();
+  for (let i = 0; i < 12; i++) {
+    const angle = i * Math.PI / 6;
+    const segment = addBox(recovery, "opening-ring", recoveryMaterial, [.22, .025, .075],
+      [Math.sin(angle) * .72, .045, Math.cos(angle) * .72]);
+    segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+  }
+  recovery.enabled = false;
+  entity.addChild(recovery);
   const mark = new pc.Entity("hunters-mark");
   mark.addComponent("render", { type: "cylinder" });
   if (mark.render) mark.render.material = markMaterial;
@@ -2276,6 +2304,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warningScale,
     warningMesh,
     warningYaw: mob.yaw,
+    combatCue, combatCueLabel, combatCueFill, recovery,
     healthFill,
     healthWidth,
     healthBarY,
@@ -2394,6 +2423,9 @@ function updateInventoryItem(itemId: ItemId, total: number): void {
 
 function playMobCue(mob: MobVisual, cue: EnemyCue): void {
   const player = localPlayer.getPosition();
+  if (!undergroundKnown(mob.state.x, mob.state.y, mob.state.z)
+    || !enemyCueLineClear({ x: player.x, y: player.y + .8, z: player.z },
+      { x: mob.state.x, y: mob.state.y + .8, z: mob.state.z }, readCollisionWorldBlock)) return;
   combatAudio.play(cue, enemyCuePan(mob.state.x, player.x));
 }
 
@@ -2470,6 +2502,7 @@ function bindMobs(joinedRoom: Room): void {
   }, true);
   mobs.onRemove((_mob: NetworkMob, mobId: string) => {
     mobVisuals.get(mobId)?.warningMesh?.destroy();
+    mobVisuals.get(mobId)?.combatCue.remove();
     mobVisuals.get(mobId)?.entity.destroy();
     mobVisuals.delete(mobId);
   });
@@ -4731,6 +4764,7 @@ app.on("update", (dt: number) => {
     const defeat = mob.state.alive ? 0 : Math.min(1, (animationNow - mob.defeatAt) / 580);
     const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || defeat < 1) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
+    mob.combatCue.hidden = true;
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
     const currentMobPosition = mob.entity.getPosition();
@@ -4790,7 +4824,24 @@ app.on("update", (dt: number) => {
         pip.setLocalScale(0.14 * pipPulse, 0.14 * pipPulse, 0.14 * pipPulse);
       }
     }
-    mob.warning.enabled = presentation.warning;
+    const cue = enemyCombatCue(mob.state, animationNow + serverClock.offset);
+    const playerEye = localPlayer.getPosition();
+    const cueVisible = cue.visible && Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z) <= 14
+      && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
+        { x: sampled.x, y: sampled.y + .8, z: sampled.z }, readCollisionWorldBlock);
+    mob.recovery.enabled = cueVisible && cue.recovery;
+    if (cueVisible && camera.camera) {
+      const screen = camera.camera.worldToScreen(new pc.Vec3(sampled.x, sampled.y + mob.healthBarY + .65, sampled.z));
+      const rect = canvas.getBoundingClientRect();
+      // PlayCanvas projects into CSS pixels, not the high-DPI backing buffer.
+      mob.combatCue.hidden = screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
+      mob.combatCue.style.left = `${rect.left + screen.x}px`;
+      mob.combatCue.style.top = `${rect.top + screen.y}px`;
+      mob.combatCue.dataset.kind = cue.recovery ? "recovery" : cue.kind;
+      mob.combatCueLabel.textContent = cue.label;
+      mob.combatCueFill.style.transform = `scaleX(${cue.progress})`;
+    }
+    mob.warning.enabled = presentation.warning && cueVisible;
     if (mob.warning.enabled) {
       if (mob.warningMesh) {
         if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25) {
@@ -4800,10 +4851,14 @@ app.on("update", (dt: number) => {
         mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
         mob.warning.setEulerAngles(0, 0, 0);
         mob.warning.setLocalScale(1, 1, 1);
-      } else mob.warning.setLocalScale(1, 1, 1);
-      mob.warningMaterial.diffuse.set(0.95, presentation.aimLocked ? 0.12 : 0.58, 0.06);
-      mob.warningMaterial.emissive.set(0.7, presentation.aimLocked ? 0.04 : 0.28, 0.02);
-      mob.warningMaterial.opacity = (presentation.aimLocked ? 0.4 : 0.25) + windupStrength * 0.22;
+      } else {
+        const length = enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + .8, z: mob.state.z }, mob.state.yaw, readCollisionWorldBlock);
+        mob.warning.setLocalScale(1, 1, length / 6.9);
+        mob.warning.setEulerAngles(0, mob.state.yaw, 0);
+      }
+      mob.warningMaterial.diffuse.set(mob.isSpitter ? .65 : 1, mob.isSpitter ? 1 : mob.isBrute ? .25 : .72, mob.isSpitter ? .16 : mob.isBrute ? .08 : .18);
+      mob.warningMaterial.emissive.copy(mob.warningMaterial.diffuse);
+      mob.warningMaterial.opacity = presentation.aimLocked ? .65 : .38;
       mob.warningMaterial.update();
     }
     animateMobArt(mob.art, frameTime, animationTime, moveSpeed, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
@@ -5576,7 +5631,7 @@ async function connect(): Promise<void> {
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
     remotePlayers.clear();
-    for (const mob of mobVisuals.values()) { mob.entity.destroy(); mob.warningMesh?.destroy(); }
+    for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();
