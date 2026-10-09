@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { createMinimap } from "./minimap.js";
+import { miningAvailability, miningReach, miningProgress, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
@@ -2551,6 +2552,71 @@ const pointer = { x: canvas.width / 2, y: canvas.height / 2 };
 let currentTarget: VoxelRaycastHit | null = null;
 let targetStateKey = "";
 let interactionMode: InteractionMode = "build";
+const miningHud = document.querySelector<HTMLElement>("#mining-progress")!;
+const miningFill = document.querySelector<HTMLElement>("#mining-progress-fill")!;
+const miningCaption = document.querySelector<HTMLElement>("#mining-progress-label")!;
+const resourceToasts = document.querySelector<HTMLElement>("#resource-toasts")!;
+let miningSwing: { cell: MiningCell; startedAt: number } | null = null;
+let pendingMine: { requestId: string; startedAt: number } | null = null;
+const miningChips: { entity: pc.Entity; origin: pc.Vec3; velocity: pc.Vec3; startedAt: number }[] = [];
+const chipStoneMaterial = coloredMaterial(new pc.Color(0.45, 0.53, 0.56));
+const chipIronMaterial = coloredMaterial(new pc.Color(0.94, 0.56, 0.22));
+const chipSilverMaterial = coloredMaterial(new pc.Color(0.68, 0.9, 1));
+
+function miningBurst(cell: MiningCell, count: number): void {
+  for (let i = 0; i < count; i++) {
+    if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
+    const angle = i * 2.4;
+    const material = cell.block === Block.IronOre ? chipIronMaterial : cell.block === Block.SilverOre ? chipSilverMaterial : chipStoneMaterial;
+    const origin = new pc.Vec3(cell.x + 0.5, cell.y + 0.85, cell.z + 0.5);
+    const entity = addBox(app.root, "mining-chip", material, [0.08, 0.08, 0.08], [origin.x, origin.y, origin.z]);
+    if (entity.render) entity.render.castShadows = false;
+    miningChips.push({ entity, origin, velocity: new pc.Vec3(Math.sin(angle) * 1.6, 1.6 + i % 3 * 0.3, Math.cos(angle) * 1.6), startedAt: performance.now() });
+  }
+}
+
+function showResourcePickup(name: string, quantity: number): void {
+  const toast = document.createElement("div");
+  toast.className = "resource-toast";
+  toast.textContent = `+${quantity} ${name}`;
+  resourceToasts.prepend(toast);
+  while (resourceToasts.children.length > 3) resourceToasts.lastElementChild!.remove();
+  setTimeout(() => toast.remove(), 2200);
+}
+
+function updateMining(now: number): void {
+  for (let i = miningChips.length - 1; i >= 0; i--) {
+    const chip = miningChips[i]!;
+    const t = (now - chip.startedAt) / 1000;
+    if (t >= 0.5) { chip.entity.destroy(); miningChips.splice(i, 1); continue; }
+    chip.entity.setPosition(chip.origin.x + chip.velocity.x * t, chip.origin.y + chip.velocity.y * t - 5 * t * t, chip.origin.z + chip.velocity.z * t);
+    chip.entity.setLocalScale(0.08 * (1 - t), 0.08 * (1 - t), 0.08 * (1 - t));
+  }
+  if (pendingMine && now - pendingMine.startedAt > 5000) pendingMine = null;
+  if (miningSwing) {
+    const { cell, startedAt } = miningSwing;
+    if (!worldReady || !room || interactionMode !== "build" || !defeatScreen.hidden || !inventoryPanel.hidden || !quizPanel.hidden || !blacksmithPanel.hidden || miningAvailability(localPlayer.getPosition(), cell) !== "ready" || readWorldBlock(cell.x, cell.y, cell.z) !== cell.block) {
+      miningSwing = null;
+    } else {
+      const progress = miningProgress(startedAt, now);
+      miningFill.style.width = `${progress * 100}%`;
+      miningCaption.textContent = `Mining · ${Math.round(progress * 100)}%`;
+      if (progress >= 1) {
+        const address = worldToChunk(cell.x, cell.z);
+        const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
+        miningSwing = null;
+        if (chunk) {
+          const requestId = `mine-${room.sessionId}-${++mineSequence}`;
+          pendingMine = { requestId, startedAt: now };
+          room.send("mine", { requestId, expectedRevision: chunk.revision, x: cell.x, y: cell.y, z: cell.z });
+          miningBurst(cell, 4);
+        }
+      }
+    }
+  }
+  miningHud.hidden = (!miningSwing && !pendingMine) || interactionMode !== "build" || !defeatScreen.hidden;
+  if (pendingMine) { miningFill.style.width = "100%"; miningCaption.textContent = "Impact · confirming…"; }
+}
 let tavernDialogueIndex = -1;
 
 function closeTavernDialogue(): void {
@@ -2865,19 +2931,25 @@ function updateTarget(): void {
   }
   const keeperNearby = canTalkToTavernKeeper(player, sceneDressing.keeperVisible);
   if (!keeperNearby && !tavernDialogue.hidden) closeTavernDialogue();
-  const inRange = Boolean(hit) && Math.hypot(hit!.x + 0.5 - player.x, hit!.y + 0.5 - player.y, hit!.z + 0.5 - player.z) <= 4.5;
+  const availability = hit ? miningAvailability(player, hit) : null;
+  const inRange = availability !== "far";
   currentTarget = inRange ? hit : null;
   const combatMob = nearestLivingMob(player, WEAPON_ATTACK_DEFINITIONS[localMainHandId].range);
-  targetMarker.enabled = interactionMode === "build" && Boolean(currentTarget);
-  if (currentTarget) targetMarker.setPosition(currentTarget.x + 0.5, currentTarget.y + 0.5, currentTarget.z + 0.5);
+  targetMarker.enabled = worldReady && interactionMode === "build" && Boolean(hit);
+  if (hit) targetMarker.setPosition(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
 
   const targetKey = currentTarget ? `${currentTarget.x},${currentTarget.y},${currentTarget.z}` : "none";
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}`;
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
+  const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
+  targetMaterial.diffuse = tint;
+  targetMaterial.emissive = tint.clone().mulScalar(0.3);
+  targetMaterial.opacity = 0.2;
+  targetMaterial.update();
   mineButton.textContent = blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
@@ -2897,6 +2969,8 @@ function updateTarget(): void {
       : "";
     targetLabel.textContent = `${combatMob.visual.state.name}: ${combatMob.visual.state.health}/${combatMob.visual.state.maxHealth} HP · ${combatMob.distance.toFixed(1)}m${markLabel}${intent}`;
   } else if (interactionMode === "combat") targetLabel.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name}: aim toward the Moss Crawler and attack`;
+  else if (availability === "far") targetLabel.textContent = "Out of reach · move closer (4.5m reach)";
+  else if (availability === "unbreakable") targetLabel.textContent = "Bedrock · cannot be mined";
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
   else if (currentTarget.block === Block.OakLog) targetLabel.textContent = `Greenwood oak · ${targetKey} · chop for timber`;
@@ -2913,6 +2987,9 @@ let worldPayloadBytes = 0;
 let networkRttMs: number | null = null;
 
 function renderBootstrap(payload: WorldBootstrap): void {
+  miningSwing = null;
+  pendingMine = null;
+  miningHud.hidden = true;
   closeTavernDialogue();
   blacksmithPanel.hidden = true;
   inventoryPanel.hidden = true;
@@ -3511,6 +3588,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
 function requestMine(): void {
   if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
+  if (miningSwing || pendingMine) return;
   if (powerAimActive || localPowerStartedAt !== null) {
     status.textContent = `Committed to ${POWER_DEFINITIONS[localActivePower ?? localEquippedPower].name} · dodge to cancel.`;
     return;
@@ -3520,6 +3598,15 @@ function requestMine(): void {
     return;
   }
   const player = localPlayer.getPosition();
+  if (miningAvailability(player, currentTarget) !== "ready") {
+    status.textContent = "That block is protected or unbreakable.";
+    return;
+  }
+  const mineralId = currentTarget.block === Block.IronOre ? "iron_ore" : currentTarget.block === Block.SilverOre ? "silver_ore" : null;
+  if (mineralId && (inventoryCounts.get(mineralId) ?? 0) >= blacksmithIronCapacity) {
+    status.textContent = "Mineral pack full · sell ore at the blacksmith.";
+    return;
+  }
   localActionFacingYaw = movementYaw(
     currentTarget.x + 0.5 - player.x,
     currentTarget.z + 0.5 - player.z,
@@ -3530,23 +3617,9 @@ function requestMine(): void {
   localActionMainHandId = null;
   localComboStep = 0;
   localComboExpiresAt = 0;
-  const proximity = Math.hypot(
-    currentTarget.x + 0.5 - player.x,
-    currentTarget.y + 0.5 - player.y,
-    currentTarget.z + 0.5 - player.z,
-  );
+  const proximity = miningReach(player, currentTarget);
   logMovementEvent(`ACTION mine reach=${proximity.toFixed(2)}`);
-  const address = worldToChunk(currentTarget.x, currentTarget.z);
-  const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
-  if (!chunk) return;
-  mineSequence += 1;
-  room.send("mine", {
-    requestId: `mine-${mineSequence}`,
-    expectedRevision: chunk.revision,
-    x: currentTarget.x,
-    y: currentTarget.y,
-    z: currentTarget.z,
-  });
+  miningSwing = { cell: { ...currentTarget }, startedAt: performance.now() };
   status.textContent = `Mining ${currentTarget.x}, ${currentTarget.y}, ${currentTarget.z}...`;
 }
 
@@ -4738,6 +4811,7 @@ app.on("update", (dt: number) => {
   updateTarget();
 
   const now = performance.now();
+  updateMining(now);
   const cameraWorldPosition = camera.getPosition();
   const rightArmPitch = localPlayerRig.rightArm.getLocalEulerAngles().x;
   const leftLegPitch = localPlayerRig.leftLeg.getLocalEulerAngles().x;
@@ -4892,13 +4966,16 @@ function applyBlockChange(message: BlockChanged): void {
     room?.send("world:ready");
     return;
   }
+  const previousBlock = chunk.blocks[chunkIndex(address.localX, message.y, address.localZ)]!;
+  if (message.block === Block.Air && previousBlock !== Block.Air && message.requestId.startsWith("mine-")) miningBurst({ ...message, block: previousBlock }, 8);
+  if (message.requestId === pendingMine?.requestId) pendingMine = null;
   chunk.blocks[chunkIndex(address.localX, message.y, address.localZ)] = message.block;
   chunk.revision = message.revision;
   const buildStartedAt = performance.now();
   rebuildChunkAndNeighbors(chunk, message.x, message.z);
   if (message.y >= SURFACE_HEIGHT) sceneDressing.rebuild(readWorldBlock, [...chunks.values()], indoorRoofBuilding);
   lastChunkBuildMs = performance.now() - buildStartedAt;
-  status.textContent = `Block removed · chunk revision ${chunk.revision}`;
+  if (message.block === Block.Air) status.textContent = "Block broken.";
 }
 
 async function connect(): Promise<void> {
@@ -5175,6 +5252,8 @@ async function connect(): Promise<void> {
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
   });
   room.onMessage("resource:gathered", (message: ResourceGathered) => {
+    pendingMine = null;
+    if (message.quantity > 0) showResourcePickup(ITEM_DEFINITIONS[message.itemId].name, message.quantity);
     updateInventoryItem(message.itemId, message.total);
     if (message.itemId === "timber") {
       showCombatFeedback(`+${message.quantity} GREENWOOD TIMBER`, "dodge");
@@ -5202,6 +5281,7 @@ async function connect(): Promise<void> {
     pendingPings.delete(message.id);
   });
   room.onMessage("action:rejected", (message: ActionRejected) => {
+    if (message.action === "mine" && message.requestId === pendingMine?.requestId) pendingMine = null;
     status.textContent = `Server rejected ${message.action}: ${message.reason}`;
     logMovementEvent(`REJECT ${message.action} reason=${message.reason}`);
     if (message.action === "move" || message.action === "dodge") recordSnapDiagnostic(

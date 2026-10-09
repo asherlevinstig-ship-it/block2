@@ -21,6 +21,14 @@ describe("procedural voxel textures", () => {
     }
   });
 
+  it("separates warm iron nodules from pale crystalline silver", () => {
+    const iron = createVoxelTexturePixels("iron");
+    const silver = createVoxelTexturePixels("silver");
+    const index = (11 * 32 + 9) * 4;
+    expect(iron[index]).toBeGreaterThan(iron[index + 2]!);
+    expect(silver[index + 2]).toBeGreaterThanOrEqual(silver[index]!);
+    expect(iron).not.toEqual(silver);
+  });
   it("gives grass a green top and dirt-backed side", () => {
     const top = createVoxelTexturePixels("grass-top");
     const side = createVoxelTexturePixels("grass-side");

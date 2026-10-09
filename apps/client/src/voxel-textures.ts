@@ -190,11 +190,16 @@ export function createVoxelTexturePixels(kind: VoxelTextureKind, size = 32): Uin
         else {
           color = stonePixel(x, y);
           if (kind === "iron" || kind === "silver") {
-            const seam = Math.abs(x - (10 + Math.floor(y / 5) * 2)) < 3;
-            const offshoot = y >= 16 && y <= 20 && x >= 6 && x <= 17;
-            if (seam || offshoot) color = kind === "silver"
-              ? x % 3 === 0 ? [234, 250, 255] : [145, 205, 225]
-              : x % 3 === 0 ? [244, 194, 101] : [183, 121, 59];
+            // Rust nodules versus angular icy crystals: readable without hue alone.
+            if (kind === "iron") {
+              const nodule = ((x - 8) ** 2 + (y - 9) ** 2 < 26) || ((x - 23) ** 2 + (y - 22) ** 2 < 38) || ((x - 9) ** 2 + (y - 27) ** 2 < 12);
+              if (nodule) color = (x + y) % 7 < 2 ? [246, 185, 104] : y % 5 === 0 ? [125, 67, 39] : [197, 115, 54];
+            } else {
+              color = vary(color, -17);
+              const crystal = Math.abs(x - 9) + Math.abs(y - 11) < 7 || Math.abs(x - 24) + Math.abs(y - 22) < 9;
+              const vein = Math.abs(x - (27 - Math.floor(y * 0.6))) < 2;
+              if (crystal || vein) color = (x + y) % 6 < 2 ? [242, 253, 255] : x < 16 ? [164, 222, 242] : [115, 169, 205];
+            }
           }
         }
       }

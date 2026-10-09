@@ -1119,3 +1119,11 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   .minimap-legend, .minimap-danger { flex-wrap: wrap; font-size: 8px; }
   #minimap > small { display: none; }
 }
+#mining-progress { position: fixed; z-index: 22; left: 50%; bottom: 100px; transform: translateX(-50%); width: 210px; padding: 10px 14px; border: 1px solid #e6c97688; border-radius: 10px; background: #14251ef2; color: #ffe1a0; text-align: center; pointer-events: none; font: 700 12px system-ui; }
+#mining-progress[hidden] { display: none; }
+#mining-progress > div { height: 6px; margin-top: 8px; border-radius: 4px; background: #0a1512; overflow: hidden; }
+#mining-progress-fill { display: block; height: 100%; background: linear-gradient(90deg, #c28436, #ffdf86); }
+#resource-toasts { position: fixed; z-index: 23; top: 115px; left: 50%; transform: translateX(-50%); pointer-events: none; display: grid; gap: 6px; }
+.resource-toast { padding: 9px 18px; border: 1px solid #cbdcaa88; border-radius: 20px; color: #f6edbc; background: #163026ed; font: 800 15px system-ui; text-align: center; animation: resource-pickup 2.2s both; }
+@keyframes resource-pickup { 0% { opacity: 0; transform: translateY(12px) scale(.9); } 12%, 75% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-12px); } }
+@media (prefers-reduced-motion: reduce) { .resource-toast { animation: none; } }
