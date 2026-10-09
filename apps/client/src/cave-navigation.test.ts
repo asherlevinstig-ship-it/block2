@@ -17,6 +17,15 @@ function world() {
   };
 }
 describe("explored underground navigation", () => {
+  it("returns from freshly excavated iron and silver pockets without mining the stairs", () => {
+    const w = world();
+    for (const [x, floor, startZ, endZ] of [[39, 3, 3, 4], [48, 1, 13, 15]]) {
+      for (let z = startZ!; z <= endZ!; z++) for (let y = floor!; y <= floor! + 1; y++) w.write(x!, y, z, Block.Air);
+      const route = caveReturnPath({ x: x! + .5, y: floor!, z: (floor === 3 ? startZ! : endZ!) + .5 }, w.read, () => true);
+      expect(route.at(-1)).toEqual({ x: 31.5, y: 8, z: 8.5 });
+      expect(route.every(point => w.read(Math.floor(point.x), point.y - 1, Math.floor(point.z)) !== Block.Air)).toBe(true);
+    }
+  });
   it("reports stable depth despite grounded epsilon", () => {
     expect(caveDepth(7.95)).toBe(0); expect(caveDepth(2.95)).toBe(5); expect(caveDepth(0.95)).toBe(7);
   });

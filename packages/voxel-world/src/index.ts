@@ -29,6 +29,11 @@ export const MILESTONE_CAVE_X_OFFSET = 14;
 export const CAVE_SHALLOW_HOME = { x: 39.5, y: 3, z: 6.5 } as const;
 export const CAVE_DEEP_HOME = { x: 48.5, y: 1, z: 10.5 } as const;
 export const CAVE_HIDDEN_HOME = { x: 56.5, y: 1, z: 9.5 } as const;
+/** Side veins are excavated horizontally, leaving the main stairway intact. */
+export const CAVE_ORE_POCKETS = [
+  { id: "shallow-iron", minX: 38, maxX: 40, minZ: 3, maxZ: 4, floorY: 2, block: 5 },
+  { id: "deep-silver", minX: 46, maxX: 49, minZ: 14, maxZ: 15, floorY: 0, block: 8 },
+] as const;
 export function isCaveReturnRoute(x: number, z: number): boolean {
   return z >= 7 && z <= 9 && ((x >= 32 && x <= 35) || (x >= 42 && x <= 43));
 }
@@ -294,6 +299,15 @@ export function greenwoodRegionBlock(seedText: string, worldX: number, y: number
 }
 
 function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId | null {
+  for (const pocket of CAVE_ORE_POCKETS) {
+    if (worldX < pocket.minX - 1 || worldX > pocket.maxX + 1 || worldZ < pocket.minZ - 1 || worldZ > pocket.maxZ || y >= SURFACE_HEIGHT) continue;
+    // The deep chamber's existing exposed silver wall is the pocket entrance.
+    if (pocket.id === "deep-silver" && worldZ === pocket.minZ - 1) continue;
+    if (worldX >= pocket.minX && worldX <= pocket.maxX && worldZ >= pocket.minZ && worldZ <= pocket.maxZ
+      && y > pocket.floorY && y <= pocket.floorY + 2) return pocket.block;
+    // Solid floor and perimeter keep mining pockets supported across world seeds.
+    if (worldZ >= pocket.minZ && worldZ <= pocket.maxZ || worldZ === pocket.minZ - 1) return Block.Stone;
+  }
   // Authored stone enclosure prevents random generation from puncturing floors or the sealed chamber.
   if (worldX >= 31 && worldX <= 59 && worldZ >= 4 && worldZ <= 13 && y < SURFACE_HEIGHT) {
     if (worldX === 31) return y === SURFACE_HEIGHT ? Block.Grass : Block.Stone;

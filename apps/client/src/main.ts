@@ -858,10 +858,22 @@ const lanternGlow = new pc.StandardMaterial();
 lanternGlow.diffuse = new pc.Color(1, 0.7, 0.24);
 lanternGlow.emissive = new pc.Color(1, 0.5, 0.12);
 lanternGlow.update();
+// Entrance supports flank the stairs, never obstructing the three-block-wide route.
+const mineGate = new pc.Entity("east-ore-mine-gateway");
+const mineTimber = coloredMaterial(new pc.Color(.29, .19, .10));
+for (const z of [6.4, 10.6]) {
+  addBox(mineGate, "mine-gate-post", mineTimber, [.38, 2.8, .38], [31.5, 9.4, z]);
+  addBox(mineGate, "mine-gate-foot", lanternMetal, [.52, .25, .52], [31.5, 8.125, z]);
+}
+addBox(mineGate, "mine-gate-beam", mineTimber, [.5, .38, 4.7], [31.5, 10.75, 8.5]);
+addBox(mineGate, "mine-gate-sign", lanternMetal, [.18, .65, 1.8], [31.18, 10.18, 8.5]);
+for (const z of [8.05, 8.5, 8.95]) addBox(mineGate, "ore-sign-inlay", lanternGlow, [.04, .24, .24], [31.06, 10.18, z]);
+app.root.addChild(mineGate);
 for (const point of [
   { x: 32.5, y: 7, z: 7.25 }, { x: 36.5, y: 3, z: 7.25 },
   { x: 41.5, y: 3, z: 7.25 }, { x: 44.5, y: 1, z: 7.25 },
   { x: 50.5, y: 1, z: 7.25 }, { x: 56.5, y: 1, z: 7.25 },
+  { x: 37.5, y: 3, z: 5.3 }, { x: 45.5, y: 1, z: 12.3 },
 ]) {
   const root = new pc.Entity("return-route-lantern");
   root.setPosition(point.x, point.y, point.z);
