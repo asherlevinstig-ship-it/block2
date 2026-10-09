@@ -1,6 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import { CHAMPION_CHARGE } from "@blockcraft/protocol";
-import { FRONTIER_CHAMPION_ID, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
+import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
@@ -179,6 +179,8 @@ interface PendingPower {
 }
 
 interface PendingMobProjectile {
+  hazardRadius?: number;
+  hazardDurationMs?: number;
   projectileId: string;
   mobId: string;
   archetype: string;
@@ -852,13 +854,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.mobHomes.set(mobId, home);
     this.mobNavigation.set(mobId, createMobNavigationState());
     const mob = this.createMob(archetypeId, home);
-    if (mobId === FRONTIER_CHAMPION_ID) {
+    if (mobId === FRONTIER_CHAMPION_ID || mobId === SILVER_CHAMPION_ID) {
       mob.isChampion = true;
+      mob.attackPattern = championPattern(mob);
       const stats = scaledMobStats(combatMobDefinition(mob), dangerBandAt(home));
       mob.maxHealth = mob.health = stats.maxHealth; mob.rewardMultiplier *= 1.5;
     }
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
-    if (mob.isChampion) mob.name = "Frontier Stone Champion";
+    if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     this.state.mobs.set(mobId, mob);
   }
 
@@ -871,7 +874,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
   private championAllowed(id: string, pose: { x: number; z: number }): boolean {
     const home = this.mobHomes.get(id);
-    return id !== FRONTIER_CHAMPION_ID || !home || Math.hypot(pose.x - home.x, pose.z - home.z) <= 12;
+    return (id !== FRONTIER_CHAMPION_ID && id !== SILVER_CHAMPION_ID) || !home || Math.hypot(pose.x - home.x, pose.z - home.z) <= 12;
   }
 
   private patrolRoamingMember(id: string, mob: MobState, now: number, dt: number, speed: number): void {
@@ -1073,7 +1076,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number): void {
-    const drops = mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
+    const drops = mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
+      : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
       : lootForArchetype(mob.archetype as MobArchetypeId);
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
@@ -1247,16 +1251,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (target && collision?.targetId) {
         this.damagePlayer(projectile.mobId, collision.targetId, projectile.damage, now);
       }
-      if (definition.hazardDurationMs <= 0 || definition.hazardRadius <= 0) continue;
+      const hazardDurationMs = projectile.hazardDurationMs ?? definition.hazardDurationMs;
+      const hazardRadius = projectile.hazardRadius ?? definition.hazardRadius;
+      if (hazardDurationMs <= 0 || hazardRadius <= 0) continue;
       const puddle = target ? { x: impact.x, y: target.y, z: impact.z }
         : { x: projectile.end.x, y: projectile.end.y - 0.08, z: projectile.end.z };
       const hazardId = `acid:${projectileId}`;
-      const expiresAt = now + definition.hazardDurationMs;
+      const expiresAt = now + hazardDurationMs;
       this.mobHazards.set(hazardId, {
         hazardId,
         mobId: projectile.mobId,
         ...puddle,
-        radius: definition.hazardRadius,
+        radius: hazardRadius,
         damage: projectile.damage,
         expiresAt,
         nextDamageAt: now + 700,
@@ -1266,7 +1272,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         hazardId,
         mobId: projectile.mobId,
         ...puddle,
-        radius: definition.hazardRadius,
+        radius: hazardRadius,
         expiresAt,
       } satisfies MobHazardPlaced);
     }
@@ -1393,7 +1399,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       advanceRoamingRoute(pack, route, now, members);
     }
     for (const [mobId, mob] of this.state.mobs) {
-      if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = mob.actionSequence % 2 === 0 ? "slam" : "charge";
+      if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
@@ -1416,7 +1422,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.attackDamage = stats.damage;
         mob.speedMultiplier = stats.speedMultiplier;
         mob.rewardMultiplier = stats.rewardMultiplier;
-        if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = "slam"; }
+        if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
         mob.alive = true;
         mob.respawnAt = 0;
         mob.combatState = "idle";
@@ -1477,14 +1483,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           continue;
         }
         if (definition.attackKind === "projectile") {
+          const shots = mob.isChampion ? spitterChampionShots(mob, aim, mob.attackPattern) : [aim];
+          for (const shotAim of shots) {
           const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
           const start = { x: mob.x, y: mob.y + 1.05, z: mob.z };
-          const end = { x: aim.x, y: aim.y + 0.08, z: aim.z };
+          const end = { x: shotAim.x, y: shotAim.y + 0.08, z: shotAim.z };
           const projectile: PendingMobProjectile = {
             projectileId,
             mobId,
             archetype: mob.archetype,
             damage: mob.attackDamage,
+            hazardRadius: definition.hazardRadius, hazardDurationMs: definition.hazardDurationMs,
             start, end, position: start, startedAt: now,
             impactAt: now + definition.projectileTravelMs,
           };
@@ -1495,11 +1504,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             x: mob.x,
             y: mob.y,
             z: mob.z,
-            targetX: aim.x,
-            targetY: aim.y,
-            targetZ: aim.z,
+            targetX: shotAim.x,
+            targetY: shotAim.y,
+            targetZ: shotAim.z,
             travelMs: definition.projectileTravelMs,
           } satisfies MobProjectileReleased);
+          }
           mob.targetId = "";
           continue;
         }
@@ -2214,6 +2224,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private updateMobStrikeOrigin(mobId: string, mob: MobState): void {
+    if (mob.isChampion && mob.archetype === "cave_spitter") {
+      if (mob.aimCommitted) return;
+      const aim = this.mobCommittedAim.get(mobId);
+      mob.attackStrikeX = mob.attackPattern === "pool" ? aim?.x ?? mob.x : mob.x;
+      mob.attackStrikeY = mob.attackPattern === "pool" ? aim?.y ?? mob.y : mob.y;
+      mob.attackStrikeZ = mob.attackPattern === "pool" ? aim?.z ?? mob.z : mob.z;
+      return;
+    }
     if (mob.isChampion && mob.attackPattern === "charge") {
       if (mob.aimCommitted) return;
       mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;

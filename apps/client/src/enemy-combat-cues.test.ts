@@ -4,6 +4,14 @@ import { enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy
 const mob = { alive: true, combatState: "windup", aimCommitted: false, archetype: "stone_brute",
   attackStartedAt: 1000, attackReleaseAt: 2000, attackContactAt: 2280, attackContactEndAt: 2380, attackRecoveryEndAt: 3000 };
 describe("readable enemy combat cues", () => {
+  it("labels silver champion fan and pool telegraphs and hides cancelled attacks", () => {
+    for (const pattern of ["fan", "pool"]) {
+      const silver = { ...mob, archetype: "cave_spitter", attackPattern: pattern };
+      expect(enemyCombatCue(silver, 1400).label).toBe(`${pattern === "fan" ? "FAN" : "ACID POOL"} · LOCKED`);
+      expect(enemyCombatCue({ ...silver, combatState: "stagger" }, 1400).visible).toBe(false);
+      expect(enemyCombatCue(silver, 2690).label).toBe("RECOVER · COUNTER");
+    }
+  });
   it("distinguishes a champion charge through aim, commitment and recovery", () => {
     const charge = { ...mob, attackPattern: "charge" };
     expect(enemyCombatCue(charge, 1200).label).toBe("CHARGE · AIMING");

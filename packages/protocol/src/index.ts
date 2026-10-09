@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-frontier-champion-v43";
+export const WORLD_ROOM = "world-silver-champion-v44";
 export const EQUIPMENT_LOOT_RANGE = 1.8;
 export const LootCollectRequestSchema = z.object({ dropId: z.string().min(1).max(160), equip: z.boolean() });
 export type LootCollectResult = { ok: boolean; dropId: string; message: string };

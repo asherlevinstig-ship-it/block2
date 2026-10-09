@@ -2189,7 +2189,10 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
 }
 
 function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance): void {
-  const outline = pattern === "charge" ? championChargeOutline(yaw, chargeLength) : archetype === "stone_brute"
+  const angle = yaw * Math.PI / 180;
+  const outline = pattern === "pool" ? Array.from({ length: 48 }, (_, i) => ({ x: Math.cos(i * Math.PI / 24) * 1.6, z: Math.sin(i * Math.PI / 24) * 1.6 }))
+    : pattern === "fan" ? [{ x: 0, z: 0 }, { x: Math.sin(angle + 22 * Math.PI / 180) * 7, z: Math.cos(angle + 22 * Math.PI / 180) * 7 }, { x: Math.sin(angle - 22 * Math.PI / 180) * 7, z: Math.cos(angle - 22 * Math.PI / 180) * 7 }]
+    : pattern === "charge" ? championChargeOutline(yaw, chargeLength) : archetype === "stone_brute"
     ? bruteSlamOutline()
     : mobStrikeGroundOutline(archetype, yaw);
   mesh.setPositions(outline.flatMap(point => [point.x, 0, point.z]));
@@ -2314,13 +2317,14 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial);
   if (mob.isChampion) {
     const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
-    addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, 2.02, 0]);
-    for (const x of [-.28, 0, .28]) addBox(bodyRoot, "champion-crest-point", crestMaterial, [.15, .23, .18], [x, 2.18, 0]);
+    const crestY = isSpitter ? 1.18 : 2.02;
+    addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, crestY, 0]);
+    for (const x of [-.28, 0, .28]) addBox(bodyRoot, "champion-crest-point", crestMaterial, [.15, .23, .18], [x, crestY + .16, 0]);
   }
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
   const healthWidth = isBrute ? 1.46 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = mob.isChampion ? 3.08 : isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
+  const healthBarY = mob.isChampion ? isSpitter ? 1.9 : 3.08 : isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
   addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);
@@ -2330,7 +2334,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     pip.setLocalEulerAngles(0, 45, 45);
   }
   const warning = new pc.Entity("lunge-warning");
-  const warningMesh = !isSpitter ? new pc.Mesh(app.graphicsDevice) : null;
+  const warningMesh = !isSpitter || mob.isChampion ? new pc.Mesh(app.graphicsDevice) : null;
   if (warningMesh) {
     updateStrikeWarningMesh(warningMesh, mob.archetype, mob.yaw, mob.attackPattern);
     warning.addComponent("render", { meshInstances: [new pc.MeshInstance(warningMesh, warningMaterial)], castShadows: false, receiveShadows: false });
@@ -2339,7 +2343,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const warningScale = 1;
   warning.setLocalScale(1, 1, 1);
   warning.enabled = false;
-  if (isSpitter) {
+  if (isSpitter && !mob.isChampion) {
     addBox(warning, "shot-direction", warningMaterial, [0.14, 0.02, 6.6], [0, 0, 3.6]);
     const arrowLeft = addBox(warning, "shot-direction-left", warningMaterial, [0.12, 0.02, 0.6], [-0.18, 0, 6.65]);
     const arrowRight = addBox(warning, "shot-direction-right", warningMaterial, [0.12, 0.02, 0.6], [0.18, 0, 6.65]);
