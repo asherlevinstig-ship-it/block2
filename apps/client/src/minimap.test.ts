@@ -1,7 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, mapPoint, mapFacing, parseDiscoveries } from "./minimap.js";
+import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
+  it("never exposes or selects undiscovered deposits", () => {
+    const discovered = new Set<string>();
+    expect(knownWaypoints(discovered).map(target => target.id)).toEqual(["home", "smith"]);
+    const deposit = MAP_DEPOSITS[0]!;
+    const player = { x: deposit.x, z: deposit.z };
+    expect(waypointAtMapPoint(player, MAP_SIZE / 2, MAP_SIZE / 2, discovered)).toBeNull();
+    discovered.add(depositKey(deposit));
+    expect(waypointAtMapPoint(player, MAP_SIZE / 2, MAP_SIZE / 2, discovered)?.id).toBe(depositKey(deposit));
+    expect(knownWaypoints(discovered)).toHaveLength(3);
+  });
+  it("selects known markers on the edge and ignores empty map clicks", () => {
+    const player = { x: 200, z: 200 };
+    const p = mapPoint(player, HOME_WAYPOINT);
+    expect(waypointAtMapPoint(player, p.x, p.y, new Set())?.id).toBe("home");
+    expect(waypointAtMapPoint(player, 200, 200, new Set())).toBeNull();
+  });
+  it("uses a camera-relative guide without changing the north-up map", () => {
+    const player = { x: 0, y: 8, z: 0 };
+    const target = { ...HOME_WAYPOINT, x: 0, z: -10 };
+    const north = waypointDirection(player, target, Math.PI / 2);
+    expect(north.angle).toBeCloseTo(0); expect(north.distance).toBe(10);
+    expect(north.arrived).toBe(false);
+    expect(waypointDirection(player, target, 0).angle).toBeCloseTo(90);
+  });
+  it("arrives only near the waypoint on its floor, not directly underneath it", () => {
+    expect(waypointDirection({ ...HOME_WAYPOINT, x: HOME_WAYPOINT.x + 2 }, HOME_WAYPOINT, 0).arrived).toBe(true);
+    expect(waypointDirection({ ...HOME_WAYPOINT, y: 3 }, HOME_WAYPOINT, 0).arrived).toBe(false);
+    expect(waypointDirection({ ...HOME_WAYPOINT, x: HOME_WAYPOINT.x + 3 }, HOME_WAYPOINT, 0).arrived).toBe(false);
+  });
   it("centres the player and preserves world directions regardless of camera rotation", () => {
     const player = { x: 8.5, z: 8.5 };
     expect(mapPoint(player, player)).toEqual({ x: MAP_SIZE / 2, y: MAP_SIZE / 2, offscreen: false });

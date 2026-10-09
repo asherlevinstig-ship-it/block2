@@ -4825,7 +4825,7 @@ app.on("update", (dt: number) => {
   if (activeStopTrace && now >= activeStopTrace.captureUntil) finishStopTrace();
 
   updatePerformanceMetrics(now);
-  if (worldReady) minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden));
+  if (worldReady) minimap.update(localPlayer.getPosition(), localFacingYaw, now, minimapPanel.open && Boolean(performancePanel.hidden) && Boolean(defeatScreen.hidden), cameraOrbit.yaw, Boolean(defeatScreen.hidden));
   if (room && worldReady && now - lastPingSentAt >= 2000) {
     lastPingSentAt = now;
     pingSequence += 1;
@@ -5246,6 +5246,7 @@ async function connect(): Promise<void> {
     }
   });
   room.onLeave(() => {
+    document.querySelector<HTMLElement>("#waypoint-guide")!.hidden = true;
     awaitingReturnState = false; townReturnPosition = null;
     if (!defeatScreen.hidden) {
       returnToTownButton.disabled = true;
