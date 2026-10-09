@@ -283,6 +283,12 @@ export class SceneDressing {
       solid.box(39.5, 10.0, 14.28, 2.3, 0.72, 0.16, OAK);
       glow.box(39.5, 10.0, 14.18, 1.92, 0.44, 0.035, GOLD);
       solid.box(39.5, 10.0, 14.13, 1.5, 0.09, 0.025, DARK_OAK);
+      // Trail pennants and an iron-vein marker: batched, no extra draw calls.
+      for (const [x, z] of [[31.5, 11.5], [40.5, 12.5], [47.5, 18.5]] as const) {
+        solid.box(x, 8.7, z, 0.12, 1.4, 0.12, DARK_OAK);
+        solid.box(x + 0.28, 9.15, z, 0.55, 0.4, 0.06, x > 46 ? IRON : CLOTH);
+        glow.box(x + 0.28, 9.16, z - 0.04, 0.3, 0.06, 0.025, GOLD);
+      }
     }
 
     // Keep the existing hall art in local coordinates while moving the entire tavern south.

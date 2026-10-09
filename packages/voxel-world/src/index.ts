@@ -24,8 +24,16 @@ export const TOWN_BLACKSMITH_STALL_POSITION = { x: 22.5, y: 8, z: 2.5 } as const
 export const TOWN_BLACKSMITH_STALL_COLLIDER = { x: 22.5, z: 2.5, width: 3.1, depth: 0.7, minY: 8, maxY: 9.15 } as const;
 export const TOWN_BEACON_POSITION = { x: -2, z: 1 } as const;
 export const MILESTONE_CAVE_X_OFFSET = 14;
-export const GREENWOOD_REGION = { minX: 31, maxX: 47, minZ: -10, maxZ: 27 } as const;
-export const GREENWOOD_CAMP = { minX: 37, maxX: 45, minZ: 15, maxZ: 22 } as const;
+export const GREENWOOD_REGION = { minX: 31, maxX: 51, minZ: -10, maxZ: 27 } as const;
+export const GREENWOOD_CAMP = { minX: 36, maxX: 46, minZ: 14, maxZ: 24 } as const;
+export const GREENWOOD_IRON_SEAM = { minX: 48, maxX: 50, minZ: 19, maxZ: 21 } as const;
+export const GREENWOOD_CRAWLER_HOMES = [
+  { x: 39.5, y: 8, z: 16.5 }, { x: 43.5, y: 8, z: 21.5 }, { x: 45.5, y: 8, z: 16.5 },
+] as const;
+export function isInGreenwoodCamp(x: number, z: number): boolean {
+  return x >= GREENWOOD_CAMP.minX && x <= GREENWOOD_CAMP.maxX + 1
+    && z >= GREENWOOD_CAMP.minZ && z <= GREENWOOD_CAMP.maxZ + 1;
+}
 
 type FurnitureCollider = { x: number; z: number; width: number; depth: number; minY: number; maxY: number };
 export const TOWN_TAVERN_FURNITURE_COLLIDERS: readonly FurnitureCollider[] = [
@@ -112,24 +120,33 @@ export function isInGreenwoodRegion(x: number, z: number): boolean {
 
 function isGreenwoodRoad(x: number, z: number): boolean {
   return (x >= GREENWOOD_REGION.minX && x <= GREENWOOD_REGION.maxX && (z === 8 || z === 9))
+    || (x === 31 && z >= 8 && z <= 12)
+    || (z === 12 && x >= 31 && x <= 40)
     || ((x === 39 || x === 40) && z >= 9 && z <= GREENWOOD_CAMP.minZ);
 }
 
 function isGreenwoodCampClearing(x: number, z: number): boolean {
-  return x >= GREENWOOD_CAMP.minX - 1 && x <= GREENWOOD_CAMP.maxX + 1
-    && z >= GREENWOOD_CAMP.minZ - 1 && z <= GREENWOOD_CAMP.maxZ + 1;
+  return x >= GREENWOOD_CAMP.minX - 3 && x <= GREENWOOD_CAMP.maxX + 5
+    && z >= GREENWOOD_CAMP.minZ - 3 && z <= GREENWOOD_CAMP.maxZ + 3;
 }
 
 function isGreenwoodTreeCenter(seed: number, x: number, z: number): boolean {
   if (x < GREENWOOD_REGION.minX + 2 || x > GREENWOOD_REGION.maxX - 2
     || z < GREENWOOD_REGION.minZ + 2 || z > GREENWOOD_REGION.maxZ - 2
-    || isGreenwoodRoad(x, z) || isGreenwoodCampClearing(x, z)) return false;
+    || isGreenwoodRoad(x, z) || isGreenwoodCampClearing(x, z)
+    || ((z >= 6 && z <= 14) || (x >= 37 && x <= 42 && z >= 9 && z <= GREENWOOD_CAMP.minZ))) return false;
   return hash32(seed ^ Math.imul(x, 0x45d9f3b) ^ Math.imul(z, 0x119de1f3)) % 13 === 0;
 }
 
 /** Deterministic authored layer for the first Phase 1 wilderness region. */
 export function greenwoodRegionBlock(seedText: string, worldX: number, y: number, worldZ: number): BlockId | null {
   if (!isInGreenwoodRegion(worldX, worldZ)) return null;
+  const seam = worldX >= GREENWOOD_IRON_SEAM.minX && worldX <= GREENWOOD_IRON_SEAM.maxX
+    && worldZ >= GREENWOOD_IRON_SEAM.minZ && worldZ <= GREENWOOD_IRON_SEAM.maxZ;
+  if (seam && (y === SURFACE_HEIGHT || y === SURFACE_HEIGHT - 1)) return Block.IronOre;
+  // A firm foundation under the clearing prevents generated cave pockets from
+  // dropping a miner through the camp after removing its first surface block.
+  if (isGreenwoodCampClearing(worldX, worldZ) && y >= SURFACE_HEIGHT - 2 && y < SURFACE_HEIGHT) return Block.Stone;
   if (y === SURFACE_HEIGHT) return isGreenwoodRoad(worldX, worldZ) || isGreenwoodCampClearing(worldX, worldZ)
     ? Block.Dirt
     : Block.Grass;

@@ -71,6 +71,7 @@ import {
   TOWN_BUILDINGS,
   chunkIndex,
   isInGreenwoodRegion,
+  isInGreenwoodCamp,
   isProtectedVoxel,
   isPlayerSupported,
   resolvePlayerMotion,
@@ -1408,10 +1409,11 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const tier = Math.max(0, Math.min(3, Math.floor(tierValue)));
   localDangerTier = tier;
   const greenwood = tier > 0 && isInGreenwoodRegion(position.x, position.z);
-  const label = greenwood
+  const camp = tier > 0 && isInGreenwoodCamp(position.x, position.z);
+  const label = camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : DANGER_ZONE_LABELS[tier]!;
-  const nextKey = `${tier}:${greenwood}`;
+  const nextKey = `${tier}:${greenwood}:${camp}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);

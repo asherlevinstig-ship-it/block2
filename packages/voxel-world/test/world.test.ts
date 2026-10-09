@@ -5,6 +5,8 @@ import {
   CHUNK_SIZE,
   GRAVITY,
   GREENWOOD_CAMP,
+  GREENWOOD_CRAWLER_HOMES,
+  GREENWOOD_IRON_SEAM,
   MILESTONE_CAVE_X_OFFSET,
   SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
@@ -206,6 +208,40 @@ describe("deterministic voxel world", () => {
     expect(blocks.filter(block => block === Block.Leaves).length).toBeGreaterThan(20);
     const camp = generateChunk("test-world", 2, 0);
     expect(getBlock(camp, GREENWOOD_CAMP.minX - 32, SURFACE_HEIGHT, GREENWOOD_CAMP.minZ)).toBe(Block.Dirt);
+  });
+  it.each(["test-world", "another-seed"])("keeps crawler camp sightlines, approach, and mining foundation clear for %s", seed => {
+    const cache = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const a = worldToChunk(x, z); const key = `${a.chunkX},${a.chunkZ}`;
+      if (!cache.has(key)) cache.set(key, generateChunk(seed, a.chunkX, a.chunkZ));
+      return getBlock(cache.get(key)!, a.localX, y, a.localZ);
+    };
+    for (let x = GREENWOOD_CAMP.minX; x <= GREENWOOD_CAMP.maxX; x++) {
+      for (let z = GREENWOOD_CAMP.minZ; z <= GREENWOOD_CAMP.maxZ; z++) {
+        expect(read(x, 7, z)).toBe(Block.Dirt);
+        expect(read(x, 6, z)).toBe(Block.Stone);
+        for (let y = 8; y <= 15; y++) expect(read(x, y, z)).toBe(Block.Air);
+      }
+    }
+    for (let x = 31; x <= 40; x++) {
+      expect(read(x, 7, 12)).toBe(Block.Dirt);
+      expect(playerCollides(read, x + 0.5, 8, 12.5)).toBe(false);
+      expect(isPlayerSupported(read, x + 0.5, 8, 12.5)).toBe(true);
+    }
+    for (const home of GREENWOOD_CRAWLER_HOMES) {
+      expect(Math.hypot(home.x - 8.5, home.z - 8.5)).toBeGreaterThan(30);
+      expect(playerCollides(read, home.x, home.y, home.z)).toBe(false);
+      expect(isPlayerSupported(read, home.x, home.y, home.z)).toBe(true);
+    }
+    let ore = 0;
+    for (let x = GREENWOOD_IRON_SEAM.minX; x <= GREENWOOD_IRON_SEAM.maxX; x++) {
+      for (let z = GREENWOOD_IRON_SEAM.minZ; z <= GREENWOOD_IRON_SEAM.maxZ; z++) {
+        expect(isProtectedVoxel(x, 7, z)).toBe(false);
+        for (const y of [6, 7]) { expect(read(x, y, z)).toBe(Block.IronOre); ore++; }
+        expect(read(x, 5, z)).toBe(Block.Stone);
+      }
+    }
+    expect(ore).toBe(18);
   });
 
   it("raycasts to the first solid voxel and reports the preceding cell", () => {

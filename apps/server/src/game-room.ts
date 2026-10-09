@@ -104,6 +104,7 @@ import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
+import { GREENWOOD_CRAWLER_HOMES } from "@blockcraft/voxel-world";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -245,12 +246,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       console.warn("Persistent terrain could not be loaded; using the generated world for this room.", error);
     }
     this.setState(new WorldState());
-    this.registerMob("moss-crawler", "moss_crawler", MOB_ARCHETYPES.moss_crawler.spawn);
-    this.registerMob("greenwood-briar", "briar_crawler", MOB_ARCHETYPES.briar_crawler.spawn);
-    this.registerMob("greenwood-briar-north", "briar_crawler", { x: 43.5, y: 8, z: 23.5 });
+    this.registerMob("moss-crawler", "moss_crawler", { x: 40.5, y: 8, z: -6.5 });
+    this.registerMob("greenwood-briar", "briar_crawler", GREENWOOD_CRAWLER_HOMES[1]);
+    this.registerMob("greenwood-briar-north", "briar_crawler", GREENWOOD_CRAWLER_HOMES[2]);
     this.registerMob("stone-brute", "stone_brute", MOB_ARCHETYPES.stone_brute.spawn);
     this.registerMob("cave-spitter", "cave_spitter", MOB_ARCHETYPES.cave_spitter.spawn);
-    this.registerMob("wild-crawler", "moss_crawler", { x: 39.5, y: 8, z: 18.5 });
+    this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 40.5, y: 8, z: 35.5 });
     this.registerMob("frontier-brute", "stone_brute", { x: 43.5, y: 8, z: 41.5 });
     this.registerMob("frontier-spitter", "cave_spitter", { x: 43.5, y: 8, z: -4.5 });
