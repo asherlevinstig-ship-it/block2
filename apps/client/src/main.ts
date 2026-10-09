@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { createMinimap } from "./minimap.js";
+import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
 import { miningAvailability, miningReach, miningProgress, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
@@ -346,6 +347,79 @@ app.root.addChild(caveLight);
 
 const worldRoot = new pc.Entity("voxel-world");
 app.root.addChild(worldRoot);
+const caveFogRoot = new pc.Entity("undiscovered-cave");
+app.root.addChild(caveFogRoot);
+const caveFogMaterial = new pc.StandardMaterial();
+caveFogMaterial.diffuse = new pc.Color(0.018, 0.033, 0.038);
+caveFogMaterial.useLighting = false;
+caveFogMaterial.useFog = false;
+caveFogMaterial.cull = pc.CULLFACE_NONE;
+caveFogMaterial.update();
+let caveFogMesh: pc.Mesh | null = null;
+const caveDiscoveries = new Map<number, Set<string>>();
+let caveDiscoverySampleKey = "";
+let caveFogViewKey = "";
+let caveDiscoveryRevision = 0;
+let lastCaveDiscoveryAt = -Infinity;
+let buriedChamberDiscovered = false;
+const caveLanterns: { root: pc.Entity; x: number; y: number; z: number }[] = [];
+
+function undergroundKnown(x: number, y: number, z: number): boolean {
+  if (!playerCutaway.active || localPlayer.getPosition().y >= SURFACE_HEIGHT) return true;
+  const band = caveDepthBand(localPlayer.getPosition().y);
+  return caveDepthBand(y) === band && Boolean(caveDiscoveries.get(band)?.has(caveCellKey(x, z)));
+}
+
+function updateCaveDiscovery(position: pc.Vec3, now: number): void {
+  const active = playerCutaway.active && position.y < SURFACE_HEIGHT;
+  caveFogRoot.enabled = active;
+  if (!active) {
+    caveDiscoverySampleKey = "";
+    for (const lantern of caveLanterns) lantern.root.enabled = false;
+    return;
+  }
+  const band = caveDepthBand(position.y);
+  let known = caveDiscoveries.get(band);
+  if (!known) { known = new Set(); caveDiscoveries.set(band, known); }
+  const sampleKey = `${caveCellKey(position.x, position.z)}:${band}:${caveDiscoveryRevision}`;
+  let changed = false;
+  if (sampleKey !== caveDiscoverySampleKey && now - lastCaveDiscoveryAt >= 200) {
+    lastCaveDiscoveryAt = now;
+    caveDiscoverySampleKey = sampleKey;
+    changed = discoverCave(position, known, readCollisionWorldBlock);
+    if (!buriedChamberDiscovered && band === 0 && known.has("54,8") && readWorldBlock(54, 1, 8) === Block.Air) {
+      buriedChamberDiscovered = true;
+      showCombatFeedback("BURIED CHAMBER DISCOVERED", "dodge");
+      logMovementEvent("DISCOVERY buried-chamber");
+    }
+  }
+  for (const lantern of caveLanterns) lantern.root.enabled = undergroundKnown(lantern.x, lantern.y, lantern.z) && Math.hypot(position.x - lantern.x, position.z - lantern.z) < 12;
+  for (let i = 0; i < MILESTONE_EXIT_STEPS.length; i++) {
+    const step = MILESTONE_EXIT_STEPS[i]!;
+    exitTrail.children[i]!.enabled = undergroundKnown(step.x, step.topY, step.z);
+  }
+  const center = worldToChunk(position.x, position.z);
+  const viewKey = `${center.chunkX},${center.chunkZ}:${band}:${playerCutaway.sliceY}`;
+  if (!changed && viewKey === caveFogViewKey && caveFogMesh) return;
+  caveFogViewKey = viewKey;
+  if (caveFogMesh) caveFogMesh.destroy();
+  for (const child of [...caveFogRoot.children]) child.destroy();
+  const minX = (center.chunkX - ACTIVE_CHUNK_RENDER_RADIUS) * CHUNK_SIZE;
+  const minZ = (center.chunkZ - ACTIVE_CHUNK_RENDER_RADIUS) * CHUNK_SIZE;
+  const size = (ACTIVE_CHUNK_RENDER_RADIUS * 2 + 1) * CHUNK_SIZE;
+  const positions: number[] = [], indices: number[] = [];
+  const y = playerCutaway.sliceY + 0.025;
+  for (const run of caveFogRuns(known, minX, minX + size, minZ, minZ + size)) {
+    const index = positions.length / 3;
+    positions.push(run.x, y, run.z, run.endX, y, run.z, run.endX, y, run.z + 1, run.x, y, run.z + 1);
+    indices.push(index, index + 1, index + 2, index, index + 2, index + 3);
+  }
+  const geometry = new pc.Geometry(); geometry.positions = positions; geometry.indices = indices;
+  caveFogMesh = pc.Mesh.fromGeometry(app.graphicsDevice, geometry);
+  const entity = new pc.Entity("cave-fog-mask");
+  entity.addComponent("render", { meshInstances: [new pc.MeshInstance(caveFogMesh, caveFogMaterial)], castShadows: false, receiveShadows: false });
+  caveFogRoot.addChild(entity);
+}
 const sceneDressing = new SceneDressing(app);
 
 const exitTrail = new pc.Entity("exit-trail");
@@ -741,6 +815,28 @@ function addBox(
   box.setLocalPosition(...position);
   parent.addChild(box);
   return box;
+}
+
+const lanternMetal = coloredMaterial(new pc.Color(0.2, 0.16, 0.1));
+const lanternGlow = new pc.StandardMaterial();
+lanternGlow.diffuse = new pc.Color(1, 0.7, 0.24);
+lanternGlow.emissive = new pc.Color(1, 0.5, 0.12);
+lanternGlow.update();
+for (const point of [
+  { x: 32.5, y: 7, z: 7.25 }, { x: 36.5, y: 3, z: 7.25 },
+  { x: 41.5, y: 3, z: 7.25 }, { x: 44.5, y: 1, z: 7.25 },
+  { x: 50.5, y: 1, z: 7.25 }, { x: 56.5, y: 1, z: 7.25 },
+]) {
+  const root = new pc.Entity("return-route-lantern");
+  root.setPosition(point.x, point.y, point.z);
+  addBox(root, "lantern-base", lanternMetal, [0.24, 0.12, 0.24], [0, 0.1, 0]);
+  addBox(root, "lantern-glass", lanternGlow, [0.16, 0.28, 0.16], [0, 0.3, 0]);
+  addBox(root, "lantern-cap", lanternMetal, [0.24, 0.08, 0.24], [0, 0.48, 0]);
+  const glow = new pc.Entity("lantern-light");
+  glow.addComponent("light", { type: "omni", color: new pc.Color(1, 0.73, 0.35), intensity: 1.4, range: 5, castShadows: false });
+  glow.setLocalPosition(0, 0.4, 0); root.addChild(glow);
+  root.enabled = false; app.root.addChild(root);
+  caveLanterns.push({ root, ...point });
 }
 
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false): VoxelCharacterRig {
@@ -2360,7 +2456,7 @@ function bindMobs(joinedRoom: Room): void {
 function nearestLivingMob(position: pc.Vec3, maximumRange: number): { id: string; visual: MobVisual; distance: number } | null {
   let nearest: { id: string; visual: MobVisual; distance: number } | null = null;
   for (const [id, visual] of mobVisuals) {
-    if (!visual.state.alive) continue;
+    if (!visual.state.alive || !undergroundKnown(visual.state.x, visual.state.y, visual.state.z)) continue;
     const distance = Math.hypot(visual.state.x - position.x, visual.state.y - position.y, visual.state.z - position.z);
     if (distance > maximumRange || (nearest && distance >= nearest.distance)) continue;
     nearest = { id, visual, distance };
@@ -2912,7 +3008,8 @@ function updateTarget(): void {
   const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
   const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
   const direction = end.clone().sub(start);
-  const hit = voxelRaycast(start, direction, camera.camera.farClip, readVisibleWorldBlock);
+  const aimedHit = voxelRaycast(start, direction, camera.camera.farClip, readVisibleWorldBlock);
+  const hit = aimedHit && undergroundKnown(aimedHit.x, localPlayer.getPosition().y, aimedHit.z) ? aimedHit : null;
   const player = localPlayer.getPosition();
   const caveSignScreen = camera.camera.worldToScreen(new pc.Vec3(32.5, 8.4, 8.5));
   caveEntranceSign.hidden = !worldReady || player.y < SURFACE_HEIGHT || Math.hypot(player.x - 32.5, player.z - 8.5) > 20 || caveSignScreen.z < 0;
@@ -2995,6 +3092,9 @@ let worldPayloadBytes = 0;
 let networkRttMs: number | null = null;
 
 function renderBootstrap(payload: WorldBootstrap): void {
+  caveDiscoverySampleKey = "";
+  caveFogViewKey = "";
+  caveDiscoveryRevision++;
   miningSwing = null;
   pendingMine = null;
   miningHud.hidden = true;
@@ -4486,6 +4586,7 @@ app.on("update", (dt: number) => {
   for (const remote of remotePlayers.values()) {
     const pose = sampleRemotePose(remote.snapshots, renderAt);
     if (pose) {
+      remote.entity.enabled = undergroundKnown(pose.x, pose.y, pose.z);
       const previousPosition = remote.entity.getPosition();
       const remoteSpeed = Math.hypot(pose.x - previousPosition.x, pose.z - previousPosition.z) / Math.max(frameTime, 0.001);
       const remoteVerticalVelocity = (pose.y - previousPosition.y) / Math.max(frameTime, 0.001);
@@ -4507,7 +4608,7 @@ app.on("update", (dt: number) => {
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
   for (const loot of lootVisuals.values()) {
-    const visible = !isCutawayHidden(Math.floor(loot.state.x), Math.floor(loot.state.y), Math.floor(loot.state.z));
+    const visible = undergroundKnown(loot.state.x, loot.state.y, loot.state.z) && !isCutawayHidden(Math.floor(loot.state.x), Math.floor(loot.state.y), Math.floor(loot.state.z));
     loot.root.enabled = visible;
     if (!visible) continue;
     const bob = Math.sin(animationTime * 3.2 + loot.phase) * 0.08;
@@ -4528,7 +4629,7 @@ app.on("update", (dt: number) => {
       }
     }
     const defeat = mob.state.alive ? 0 : Math.min(1, (animationNow - mob.defeatAt) / 580);
-    const visible = (mob.state.alive || defeat < 1) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
+    const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || defeat < 1) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
@@ -4816,6 +4917,7 @@ app.on("update", (dt: number) => {
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
   updateUndergroundPresentation(player, frameTime);
   updateIndoorRoof(player);
+  updateCaveDiscovery(player, performance.now());
   updateTarget();
 
   const now = performance.now();
@@ -4965,6 +5067,7 @@ app.on("update", (dt: number) => {
 });
 
 function applyBlockChange(message: BlockChanged): void {
+  caveDiscoveryRevision++;
   const address = worldToChunk(message.x, message.z);
   const chunk = chunks.get(chunkKey(address.chunkX, address.chunkZ));
   if (!chunk || message.revision <= chunk.revision) return;
