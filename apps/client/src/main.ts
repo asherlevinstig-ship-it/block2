@@ -22,6 +22,8 @@ import {
   mobAimCommitMs,
   mobStrikeGroundOutline,
   BRUTE_SLAM,
+  CHAMPION_CHARGE,
+  championChargeOutline,
   bruteSlamOutline,
   BLACKSMITH_UPGRADES,
   IRON_ORE_GOLD_PRICE,
@@ -1155,6 +1157,8 @@ interface RemotePlayerVisual {
 }
 
 interface NetworkMob {
+  isChampion: boolean;
+  attackPattern: string;
   x: number;
   y: number;
   z: number;
@@ -1217,6 +1221,8 @@ interface MobVisual {
   warningScale: number;
   warningMesh: pc.Mesh | null;
   warningYaw: number;
+  warningPattern: string;
+  warningChargeLength: number;
   combatCue: HTMLDivElement;
   combatCueLabel: HTMLSpanElement;
   combatCueFill: HTMLSpanElement;
@@ -2182,8 +2188,8 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
   cameraShakeUntil = performance.now() + 420;
 }
 
-function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number): void {
-  const outline = archetype === "stone_brute"
+function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance): void {
+  const outline = pattern === "charge" ? championChargeOutline(yaw, chargeLength) : archetype === "stone_brute"
     ? bruteSlamOutline()
     : mobStrikeGroundOutline(archetype, yaw);
   mesh.setPositions(outline.flatMap(point => [point.x, 0, point.z]));
@@ -2306,10 +2312,15 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.depthWrite = false;
   markMaterial.update();
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial);
+  if (mob.isChampion) {
+    const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
+    addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, 2.02, 0]);
+    for (const x of [-.28, 0, .28]) addBox(bodyRoot, "champion-crest-point", crestMaterial, [.15, .23, .18], [x, 2.18, 0]);
+  }
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
   const healthWidth = isBrute ? 1.46 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
+  const healthBarY = mob.isChampion ? 3.08 : isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
   addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);
@@ -2321,7 +2332,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const warning = new pc.Entity("lunge-warning");
   const warningMesh = !isSpitter ? new pc.Mesh(app.graphicsDevice) : null;
   if (warningMesh) {
-    updateStrikeWarningMesh(warningMesh, mob.archetype, mob.yaw);
+    updateStrikeWarningMesh(warningMesh, mob.archetype, mob.yaw, mob.attackPattern);
     warning.addComponent("render", { meshInstances: [new pc.MeshInstance(warningMesh, warningMaterial)], castShadows: false, receiveShadows: false });
   }
   warning.setLocalPosition(0, 0.035, 0);
@@ -2387,6 +2398,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warningScale,
     warningMesh,
     warningYaw: mob.yaw,
+    warningPattern: mob.attackPattern,
+    warningChargeLength: CHAMPION_CHARGE.distance,
     combatCue, combatCueLabel, combatCueFill, recovery,
     healthFill,
     healthWidth,
@@ -2584,7 +2597,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["isChampion", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -4936,7 +4949,7 @@ app.on("update", (dt: number) => {
     const attackPhase = attackElapsed < attackPeak ? attackElapsed / attackPeak * 0.5
       : 0.5 + (attackElapsed - attackPeak) / (attackDuration - attackPeak) * 0.5;
     const attackStrength = mob.state.attackStartedAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
-    if (mob.isBrute && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
+    if (mob.isBrute && mob.state.attackPattern !== "charge" && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
       mob.lastImpactStartedAt = mob.state.attackStartedAt;
       createBruteSlamImpact(mob);
     }
@@ -4990,12 +5003,14 @@ app.on("update", (dt: number) => {
     mob.warning.enabled = presentation.warning && cueVisible;
     if (mob.warning.enabled) {
       if (mob.warningMesh) {
-        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25) {
-          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw);
+        const chargeLength = mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
+        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || Math.abs(chargeLength - mob.warningChargeLength) > .05) {
+          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, chargeLength);
           mob.warningYaw = mob.state.yaw;
+          mob.warningPattern = mob.state.attackPattern; mob.warningChargeLength = chargeLength;
         }
         mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
-        const growth = mob.isBrute && !presentation.aimLocked
+        const growth = mob.isBrute && mob.state.attackPattern !== "charge" && !presentation.aimLocked
           ? .65 + .35 * Math.max(0, Math.min(1, (animationNow + serverClock.offset - mob.state.attackStartedAt)
             / Math.max(1, mob.state.attackReleaseAt - mobAimCommitMs("stone_brute") - mob.state.attackStartedAt))) : 1;
         mob.warning.setLocalScale(growth, 1, growth);
@@ -5015,7 +5030,8 @@ app.on("update", (dt: number) => {
       ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
-    mob.bodyRoot.setLocalScale(1 + defeat * 0.13, 1 - defeat * (mob.isBrute ? 0.42 : 0.58), 1 + defeat * 0.1);
+    const bodySize = mob.state.isChampion ? 1.25 : 1;
+    mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
     mob.bodyRoot.setLocalPosition(
       0,
       gaitBob - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06,

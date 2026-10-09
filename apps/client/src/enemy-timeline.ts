@@ -17,6 +17,7 @@ export function sampleServerClock(clock: ServerClock, sentAt: number, receivedAt
 export interface EnemyTimeline {
   alive: boolean; combatState: string; aimCommitted: boolean;
   archetype?: string;
+  attackPattern?: string;
   attackStartedAt: number; attackReleaseAt: number; attackContactAt: number;
   attackContactEndAt: number; attackRecoveryEndAt: number;
 }

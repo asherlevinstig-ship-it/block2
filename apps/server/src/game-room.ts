@@ -1,4 +1,6 @@
 import { Client, Room } from "@colyseus/core";
+import { CHAMPION_CHARGE } from "@blockcraft/protocol";
+import { FRONTIER_CHAMPION_ID, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
@@ -222,6 +224,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly pendingMining = new Map<string, { client: Client; request: MineBlockRequest; block: number; completesAt: number; origin: { x: number; y: number; z: number } }>();
   private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
   private readonly crawlerRushes = new Map<string, { yaw: number; distance: number; startedAt: number; progress: number }>();
+  private readonly championCharges = new Map<string, { yaw: number; startedAt: number; progress: number; hit: Set<string> }>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
@@ -849,7 +852,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.mobHomes.set(mobId, home);
     this.mobNavigation.set(mobId, createMobNavigationState());
     const mob = this.createMob(archetypeId, home);
+    if (mobId === FRONTIER_CHAMPION_ID) {
+      mob.isChampion = true;
+      const stats = scaledMobStats(combatMobDefinition(mob), dangerBandAt(home));
+      mob.maxHealth = mob.health = stats.maxHealth; mob.rewardMultiplier *= 1.5;
+    }
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
+    if (mob.isChampion) mob.name = "Frontier Stone Champion";
     this.state.mobs.set(mobId, mob);
   }
 
@@ -859,6 +868,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
     const membership = roamingMembership(id);
     return !membership || roamingPackAllows(membership.pack, pose);
+  }
+  private championAllowed(id: string, pose: { x: number; z: number }): boolean {
+    const home = this.mobHomes.get(id);
+    return id !== FRONTIER_CHAMPION_ID || !home || Math.hypot(pose.x - home.x, pose.z - home.z) <= 12;
   }
 
   private patrolRoamingMember(id: string, mob: MobState, now: number, dt: number, speed: number): void {
@@ -877,7 +890,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const navigation = this.mobNavigation.get(mobId) ?? createMobNavigationState();
     this.mobNavigation.set(mobId, navigation);
     const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock,
-      pose => allowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+      pose => allowed(pose) && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
     if (Math.hypot(dx, dz) > 0.0001) mob.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
@@ -921,7 +934,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private displaceMob(mobId: string, mob: MobState, delta: { x: number; z: number }): void {
     const next = moveMobSafely(mob, delta, this.readWorldBlock,
-      pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+      pose => this.mobPositionAllowed(pose) && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     mob.x = next.x;
     mob.y = next.y;
     mob.z = next.z;
@@ -960,6 +973,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.mobStaggerImmuneUntil.set(mobId, mob.stateUntil + STAGGER_IMMUNITY_MS);
     this.pendingMobMelee.delete(mobId);
     this.crawlerRushes.delete(mobId);
+    this.championCharges.delete(mobId);
     return true;
   }
 
@@ -976,10 +990,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
-    const definition = mobArchetype(mob.archetype);
+    const definition = combatMobDefinition(mob);
     this.spawnLootDrops(mobId, mob, now);
     mob.alive = false;
     this.crawlerRushes.delete(mobId);
+    this.championCharges.delete(mobId);
     this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
     mob.respawnAt = now + definition.respawnMs;
@@ -1058,7 +1073,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number): void {
-    const drops = lootForArchetype(mob.archetype as MobArchetypeId);
+    const drops = mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
+      : lootForArchetype(mob.archetype as MobArchetypeId);
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
       const drop = new LootDropState();
@@ -1361,6 +1377,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.resolvePendingPowers(now);
     this.resolvePendingAttacks(now);
     this.advanceCrawlerRushes(now);
+    this.advanceChampionCharges(now);
     this.resolveMobMelee(now);
     this.resolveWeaponProjectiles(now);
     this.resolveBrambleSnares(now);
@@ -1376,7 +1393,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       advanceRoamingRoute(pack, route, now, members);
     }
     for (const [mobId, mob] of this.state.mobs) {
-      const definition = mobArchetype(mob.archetype);
+      if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = mob.actionSequence % 2 === 0 ? "slam" : "charge";
+      const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
         const stats = scaledMobStats(definition, dangerBandAt(home));
@@ -1398,6 +1416,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.attackDamage = stats.damage;
         mob.speedMultiplier = stats.speedMultiplier;
         mob.rewardMultiplier = stats.rewardMultiplier;
+        if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = "slam"; }
         mob.alive = true;
         mob.respawnAt = 0;
         mob.combatState = "idle";
@@ -1420,10 +1439,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.combatState = "idle";
         mob.stateUntil = 0;
         this.clearMobAttackTimeline(mob);
+        if (mob.isChampion) continue;
       }
       if (mob.combatState === "windup") {
         const targetPlayer = this.state.players.get(mob.targetId);
-        if ((CAVE_ENCOUNTERS[mobId] || roamingMembership(mobId)) && (!targetPlayer || targetPlayer.health <= 0 || !caveEncounterAllows(mobId, targetPlayer) || !this.roamingAllowed(mobId, targetPlayer))) {
+        if ((CAVE_ENCOUNTERS[mobId] || roamingMembership(mobId) || mob.isChampion) && (!targetPlayer || targetPlayer.health <= 0 || !caveEncounterAllows(mobId, targetPlayer) || !this.roamingAllowed(mobId, targetPlayer) || !this.championAllowed(mobId, targetPlayer))) {
           mob.targetId = "";
           mob.aimCommitted = false;
           mob.combatState = "recover";
@@ -1494,8 +1514,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             x: Math.sin(aim.yaw * Math.PI / 180) * lungeDistance, z: Math.cos(aim.yaw * Math.PI / 180) * lungeDistance,
           });
         }
-        this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw,
-          impactAt: mob.attackContactAt });
+        if (mob.isChampion && mob.attackPattern === "charge") {
+          this.championCharges.set(mobId, { yaw: aim.yaw, startedAt: now, progress: 0, hit: new Set() });
+        } else {
+          this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw, impactAt: mob.attackContactAt });
+        }
         if (mob.archetype !== "stone_brute") {
           mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
         }
@@ -1510,6 +1533,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       })).filter(player => !isInsideTownSafeZone(player) && radiusFromSafeCenter(player) >= MOB_TOWN_MINIMUM_RADIUS
         && caveEncounterAllows(mobId, player)
         && this.roamingAllowed(mobId, player)
+        && this.championAllowed(mobId, player)
         && (mobId === "stone-brute" || !isInStoneBruteArena(player.x, player.z)));
       const target = this.roamingReturning.has(mobId) ? null : selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
@@ -2190,6 +2214,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private updateMobStrikeOrigin(mobId: string, mob: MobState): void {
+    if (mob.isChampion && mob.attackPattern === "charge") {
+      if (mob.aimCommitted) return;
+      mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
+      return;
+    }
     if (crawlerRushDistance(mob.archetype) > 0) {
       if (mob.aimCommitted) return;
       mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
@@ -2213,12 +2242,39 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private setMobAttackTimeline(mob: MobState, startedAt: number, releaseAt: number): void {
-    const definition = mobArchetype(mob.archetype);
+    const definition = combatMobDefinition(mob);
     mob.attackStartedAt = startedAt;
     mob.attackReleaseAt = releaseAt;
+    if (mob.isChampion && mob.attackPattern === "charge") {
+      mob.attackContactAt = releaseAt;
+      mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;
+      mob.attackRecoveryEndAt = mob.attackContactEndAt + CHAMPION_CHARGE.recoveryMs;
+      return;
+    }
     mob.attackContactAt = releaseAt + (definition.attackKind === "melee" ? mobMeleeImpactMs(mob.archetype) : 0);
     mob.attackContactEndAt = mob.attackContactAt + (definition.attackKind === "melee" ? mobMeleeStrike(mob.archetype).afterImpactMs : 0);
     mob.attackRecoveryEndAt = mob.attackContactEndAt + definition.recoverMs;
+  }
+
+  private advanceChampionCharges(now: number): void {
+    for (const [id, charge] of this.championCharges) {
+      const mob = this.state.mobs.get(id);
+      if (!mob?.alive || mob.combatState !== "strike") { this.championCharges.delete(id); continue; }
+      const progress = Math.max(charge.progress, Math.min(1, Math.max(0, (now - charge.startedAt) / CHAMPION_CHARGE.durationMs)));
+      const travel = CHAMPION_CHARGE.distance * (progress - charge.progress);
+      const start = { x: mob.x, y: mob.y, z: mob.z };
+      const next = moveChampionCharge(start, charge.yaw, travel, this.readWorldBlock,
+        pose => this.mobPositionAllowed(pose) && this.championAllowed(id, pose) && !isInStoneBruteArena(pose.x, pose.z));
+      mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = charge.yaw;
+      for (const [playerId, player] of this.state.players) {
+        if (charge.hit.has(playerId) || player.health <= 0 || Math.abs(player.y - mob.y) > 1.1
+          || !hasCombatLineOfSight(start, player, this.readWorldBlock)) continue;
+        if (championChargeHits(start, next, player)) { charge.hit.add(playerId); this.damagePlayer(id, playerId, mob.attackDamage, now); }
+        if (mob.combatState !== "strike") break;
+      }
+      charge.progress = progress;
+      if (progress >= 1 || Math.hypot(next.x - start.x, next.z - start.z) < travel * .8) this.championCharges.delete(id);
+    }
   }
 
   private advanceCrawlerRushes(now: number): void {

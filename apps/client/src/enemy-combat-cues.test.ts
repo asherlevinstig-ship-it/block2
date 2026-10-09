@@ -4,6 +4,13 @@ import { enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy
 const mob = { alive: true, combatState: "windup", aimCommitted: false, archetype: "stone_brute",
   attackStartedAt: 1000, attackReleaseAt: 2000, attackContactAt: 2280, attackContactEndAt: 2380, attackRecoveryEndAt: 3000 };
 describe("readable enemy combat cues", () => {
+  it("distinguishes a champion charge through aim, commitment and recovery", () => {
+    const charge = { ...mob, attackPattern: "charge" };
+    expect(enemyCombatCue(charge, 1200).label).toBe("CHARGE · AIMING");
+    expect(enemyCombatCue(charge, 1400).label).toBe("CHARGE · LOCKED");
+    expect(enemyCombatCue(charge, 2300).label).toBe("CHARGE · STRIKE");
+    expect(enemyCombatCue(charge, 2690).label).toBe("RECOVER · COUNTER");
+  });
   it("distinguishes bite, shot and slam without changing the attack timeline", () => {
     for (const [archetype, kind] of [["moss_crawler", "bite"], ["cave_spitter", "shot"], ["stone_brute", "slam"]] as const) {
       expect(enemyCombatCue({ ...mob, archetype }, 1200)).toMatchObject({ kind, label: `${kind === "bite" ? "RUSH" : kind.toUpperCase()} · AIMING`, progress: .2 });

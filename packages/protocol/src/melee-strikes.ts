@@ -1,6 +1,12 @@
 import type { MainHandId } from "./index.js";
 
 export interface StrikePoint { x: number; y: number; z: number }
+export const CHAMPION_CHARGE = { distance: 3.6, durationMs: 600, windupMs: 1300, recoveryMs: 1800, halfWidth: .95 } as const;
+export function championChargeOutline(yaw: number, distance: number = CHAMPION_CHARGE.distance) {
+  const angle = yaw * Math.PI / 180; const width = CHAMPION_CHARGE.halfWidth;
+  return [[-width, -width], [width, -width], [width, distance + width], [-width, distance + width]]
+    .map(([x, z]) => ({ x: x! * Math.cos(angle) + z! * Math.sin(angle), z: z! * Math.cos(angle) - x! * Math.sin(angle) }));
+}
 export const CRAWLER_RUSH_MS = 120;
 export const crawlerRushDistance = (archetype: string): number => archetype === "moss_crawler" ? .9 : archetype === "briar_crawler" ? 1.1 : 0;
 export const BRUTE_SLAM = { radius: 2.2, forward: 1.4, verticalRange: 1.1, recoveryMs: 1400 } as const;
