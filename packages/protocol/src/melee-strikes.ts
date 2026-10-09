@@ -1,6 +1,17 @@
 import type { MainHandId } from "./index.js";
 
 export interface StrikePoint { x: number; y: number; z: number }
+export const BRUTE_SLAM = { radius: 2.2, forward: 1.4, verticalRange: 1.1, recoveryMs: 1400 } as const;
+export function bruteSlamCenter(origin: StrikePoint, yaw: number): StrikePoint {
+  const radians = yaw * Math.PI / 180;
+  return { x: origin.x + Math.sin(radians) * BRUTE_SLAM.forward, y: origin.y,
+    z: origin.z + Math.cos(radians) * BRUTE_SLAM.forward };
+}
+/** Counter-clockwise in XZ; the warning mesh reverses triangles for upward faces. */
+export function bruteSlamOutline(): { x: number; z: number }[] {
+  return Array.from({ length: 48 }, (_, i) => ({ x: Math.cos(i * Math.PI / 24) * BRUTE_SLAM.radius,
+    z: Math.sin(i * Math.PI / 24) * BRUTE_SLAM.radius }));
+}
 export interface MeleeStrikeProfile {
   reach: number;
   radius: number;

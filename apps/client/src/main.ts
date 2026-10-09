@@ -17,7 +17,10 @@ import {
   playerMeleeStrike,
   sampleMeleeStrike,
   mobMeleeImpactMs,
+  mobAimCommitMs,
   mobStrikeGroundOutline,
+  BRUTE_SLAM,
+  bruteSlamOutline,
   BLACKSMITH_UPGRADES,
   IRON_ORE_GOLD_PRICE,
   SILVER_ORE_GOLD_PRICE,
@@ -2112,7 +2115,9 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
 }
 
 function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number): void {
-  const outline = mobStrikeGroundOutline(archetype, yaw);
+  const outline = archetype === "stone_brute"
+    ? bruteSlamOutline()
+    : mobStrikeGroundOutline(archetype, yaw);
   mesh.setPositions(outline.flatMap(point => [point.x, 0, point.z]));
   mesh.setNormals(outline.flatMap(() => [0, 1, 0]));
   const indices: number[] = [];
@@ -2141,7 +2146,7 @@ function createBruteSlamImpact(mob: MobVisual): void {
   const material = powerMaterial(new pc.Color(0.92, 0.34, 0.07), 0.9);
   for (let index = 0; index < 28; index += 1) {
     const angle = index / 28 * Math.PI * 2;
-    const radius = index % 2 === 0 ? 1.15 : 1.55;
+    const radius = index % 2 === 0 ? BRUTE_SLAM.radius * .7 : BRUTE_SLAM.radius;
     const segment = addBox(
       root,
       "brute-slam-ring",
@@ -2151,7 +2156,7 @@ function createBruteSlamImpact(mob: MobVisual): void {
     );
     segment.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 === 0 ? 8 : -8);
   }
-  root.setPosition(mob.state.x, mob.state.y + 0.03, mob.state.z);
+  root.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.03, mob.state.attackStrikeZ);
   app.root.addChild(root);
   markPayoffVisuals.push({ root, material, startedAt: performance.now() });
   const playerPosition = localPlayer.getPosition();
@@ -4896,8 +4901,11 @@ app.on("update", (dt: number) => {
           mob.warningYaw = mob.state.yaw;
         }
         mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
+        const growth = mob.isBrute && !presentation.aimLocked
+          ? .65 + .35 * Math.max(0, Math.min(1, (animationNow + serverClock.offset - mob.state.attackStartedAt)
+            / Math.max(1, mob.state.attackReleaseAt - mobAimCommitMs("stone_brute") - mob.state.attackStartedAt))) : 1;
+        mob.warning.setLocalScale(growth, 1, growth);
         mob.warning.setEulerAngles(0, 0, 0);
-        mob.warning.setLocalScale(1, 1, 1);
       } else {
         const length = enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + .8, z: mob.state.z }, mob.state.yaw, readCollisionWorldBlock);
         mob.warning.setLocalScale(1, 1, length / 6.9);

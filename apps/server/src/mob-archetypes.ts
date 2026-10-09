@@ -1,3 +1,4 @@
+import { BRUTE_SLAM } from "@blockcraft/protocol";
 export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter";
 
 export interface MobArchetypeDefinition {
@@ -86,10 +87,10 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     minimumAttackRange: 0,
     aggroRange: 10,
     windupMs: 1150,
-    recoverMs: 850,
+    recoverMs: BRUTE_SLAM.recoveryMs,
     cooldownMs: 2400,
     damage: 2,
-    lungeDistance: 0.45,
+    lungeDistance: 0,
     hitRange: 2.75,
     projectileTravelMs: 0,
     hazardDurationMs: 0,

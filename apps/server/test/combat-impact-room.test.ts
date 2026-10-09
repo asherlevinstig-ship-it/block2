@@ -84,7 +84,7 @@ describe("authoritative combat impacts", () => {
       internal.mobCommittedAim.set("mob", { x: player.x, y: player.y, z: player.z, yaw: 90 });
       let sequence = 0;
       // Aim lock: 10500. Cue delivery + human reaction + return trip: 400 ms.
-      // Initial 3.05 minus the 0.45 lunge leaves 2.6 at contact: outer reach.
+      // The locked slam is centred 1.4 blocks ahead with a 2.2-block radius.
       for (let now = 10_000; now < 12_000; now += 33) {
         vi.setSystemTime(now);
         if (now >= 10_900 && now < 11_650 && sequence % 2 === 0) {
@@ -102,7 +102,7 @@ describe("authoritative combat impacts", () => {
     expect(mob.attackStrikeX).toBeGreaterThan(mob.x);
     vi.setSystemTime(10_550); internal.simulatePlayers(0.033); expect(mob.aimCommitted).toBe(true);
     vi.setSystemTime(11_150); internal.simulatePlayers(0.033);
-    expect(mob.attackStrikeX).toBeCloseTo(mob.x);
+    expect(mob.attackStrikeX).toBeCloseTo(mob.x + 1.4);
     vi.setSystemTime(11_500); internal.simulatePlayers(0.033);
     expect(player.health).toBeLessThan(5);
   });
@@ -114,15 +114,15 @@ describe("authoritative combat impacts", () => {
     expect(mob.attackReleaseAt).toBe(11_150);
     expect(mob.attackContactAt).toBe(11_430);
     expect(mob.attackContactEndAt).toBe(11_530);
-    expect(mob.attackRecoveryEndAt).toBe(12_380);
+    expect(mob.attackRecoveryEndAt).toBe(12_930);
     vi.setSystemTime(10_950); internal.simulatePlayers(0.033); expect(mob.aimCommitted).toBe(true);
     const lockedYaw = mob.yaw;
     vi.setSystemTime(11_150); internal.simulatePlayers(0.033);
     expect(mob.combatState).toBe("strike"); expect(mob.aimCommitted).toBe(true); expect(mob.yaw).toBe(lockedYaw);
     vi.setSystemTime(11_500); internal.simulatePlayers(0.033); expect(mob.combatState).toBe("strike");
     vi.setSystemTime(11_550); internal.simulatePlayers(0.033);
-    expect(mob.combatState).toBe("recover"); expect(mob.aimCommitted).toBe(false); expect(mob.stateUntil).toBe(12_380);
-    vi.setSystemTime(12_400); internal.simulatePlayers(0.033);
+    expect(mob.combatState).toBe("recover"); expect(mob.aimCommitted).toBe(false); expect(mob.stateUntil).toBe(12_930);
+    vi.setSystemTime(12_950); internal.simulatePlayers(0.033);
     expect(mob.combatState).toBe("idle"); expect(mob.attackStartedAt).toBe(0);
   });
   it("clears a cancelled timeline so it cannot produce a phantom strike", () => {

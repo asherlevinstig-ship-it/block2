@@ -1,5 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
+import { BRUTE_SLAM, bruteSlamCenter } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
@@ -1380,7 +1381,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.stateUntil = definition.attackKind === "melee" ? mob.attackContactEndAt : mob.attackRecoveryEndAt;
         mob.actionSequence += 1;
         this.lastMobAttackAt.set(mobId, now);
-        if (!targetPlayer) {
+        if (!targetPlayer && mob.archetype !== "stone_brute") {
           mob.combatState = "recover";
           mob.stateUntil = now + definition.recoverMs;
           mob.aimCommitted = false;
@@ -1425,7 +1426,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         }
         this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw,
           impactAt: mob.attackContactAt });
-        mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
+        if (mob.archetype !== "stone_brute") {
+          mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
+        }
         continue;
       }
       const players = [...this.state.players.entries()].map(([id, player]) => ({
@@ -2108,6 +2111,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private updateMobStrikeOrigin(mobId: string, mob: MobState): void {
+    if (mob.archetype === "stone_brute") {
+      // Once committed, neither player movement nor late snapshots move the impact circle.
+      if (mob.aimCommitted) return;
+      const center = bruteSlamCenter(mob, mob.yaw);
+      mob.attackStrikeX = center.x; mob.attackStrikeY = center.y; mob.attackStrikeZ = center.z;
+      return;
+    }
     const aim = this.mobCommittedAim.get(mobId);
     const definition = mobArchetype(mob.archetype);
     const distance = aim ? Math.hypot(aim.x - mob.x, aim.z - mob.z) : 0;
@@ -2131,7 +2141,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const [mobId, pending] of this.pendingMobMelee) {
       const mob = this.state.mobs.get(mobId);
       const player = this.state.players.get(pending.targetId);
-      if (!mob?.alive || mob.combatState !== "strike" || !player) { this.pendingMobMelee.delete(mobId); continue; }
+      if (!mob?.alive || mob.combatState !== "strike") { this.pendingMobMelee.delete(mobId); continue; }
+      if (mob.archetype === "stone_brute") {
+        if (now < pending.impactAt) continue;
+        this.pendingMobMelee.delete(mobId); // One impact, not damage on every contact frame.
+        const center = { x: mob.attackStrikeX, y: mob.attackStrikeY, z: mob.attackStrikeZ };
+        for (const [id, target] of this.state.players) {
+          if (target.health <= 0 || !caveEncounterAllows(mobId, target)
+            || Math.abs(target.y - center.y) > BRUTE_SLAM.verticalRange
+            || Math.hypot(target.x - center.x, target.z - center.z) > BRUTE_SLAM.radius
+            || !hasCombatLineOfSight(mob, target, this.readWorldBlock)
+            || !hasCombatLineOfSight(center, target, this.readWorldBlock)) continue;
+          this.damagePlayer(mobId, id, mob.attackDamage, now);
+        }
+        continue;
+      }
+      if (!player) { this.pendingMobMelee.delete(mobId); continue; }
       const strike = mobMeleeStrike(mob.archetype);
       const start = pending.impactAt - strike.beforeImpactMs;
       const end = pending.impactAt + strike.afterImpactMs;
