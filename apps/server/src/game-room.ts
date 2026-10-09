@@ -2,7 +2,7 @@ import { Client, Room } from "@colyseus/core";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
-import { miningDurationMs } from "@blockcraft/voxel-world";
+import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
 import type { MineBlockRequest } from "@blockcraft/protocol";
 import {
   AttackRequestSchema,
@@ -210,7 +210,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly verticalVelocities = new Map<string, number>();
   private readonly attackChains = new Map<string, AttackChainState>();
   private readonly pendingAttacks = new Map<string, PendingAttack>();
-  private readonly pendingMining = new Map<string, { client: Client; request: MineBlockRequest; block: number; completesAt: number }>();
+  private readonly pendingMining = new Map<string, { client: Client; request: MineBlockRequest; block: number; completesAt: number; origin: { x: number; y: number; z: number } }>();
   private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
@@ -1217,6 +1217,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     player.yaw = parsed.data.yaw;
     this.movementInputs.set(client.sessionId, { request: parsed.data, receivedAt: now });
+    if (Math.hypot(parsed.data.strafe, parsed.data.forward) > 0.01) {
+      const mining = this.pendingMining.get(client.sessionId);
+      if (mining) {
+        this.pendingMining.delete(client.sessionId);
+        this.reject(client, { requestId: mining.request.requestId, action: "mine", reason: "moving" });
+      }
+    }
   }
 
   private readWorldBlock = (x: number, y: number, z: number) => {
@@ -1908,7 +1915,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const block = getBlock(stored.chunk, address.localX, request.y, address.localZ);
     const reason = miningRejectionReason(player, request, block, stored.revision);
     if (reason) return this.reject(client, { requestId: request.requestId, action: "mine", reason });
-    this.pendingMining.set(client.sessionId, { client, request, block, completesAt: Date.now() + miningDurationMs(block) });
+    const movement = this.movementInputs.get(client.sessionId)?.request;
+    if (movement && Math.hypot(movement.strafe, movement.forward) > 0.01) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "moving" });
+    if (!miningLineClear(player, request, this.readWorldBlock)) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "collision" });
+    const mineral = minedMineral(block);
+    if (mineral && (player.inventory.get(mineral)?.quantity ?? 0) >= ironCapacity(player.blacksmithUpgrades)) {
+      client.send("resource:gathered", { itemId: mineral, quantity: 0, total: player.inventory.get(mineral)!.quantity } satisfies ResourceGathered);
+      return;
+    }
+    this.pendingMining.set(client.sessionId, { client, request, block, completesAt: Date.now() + miningDurationMs(block), origin: { x: player.x, y: player.y, z: player.z } });
   }
 
   private resolveMining(now: number): void {
@@ -1916,9 +1931,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const player = this.state.players.get(id);
       const { request } = pending;
       const block = this.readWorldBlock(request.x, request.y, request.z);
-      if (!player || player.health <= 0 || this.pendingPowers.has(id) || miningRejectionReason(player, request, block, request.expectedRevision) || block !== pending.block) {
+      const reason = !player || player.health <= 0 || block !== pending.block ? "missing"
+        : this.pendingPowers.has(id) ? "rate"
+        : miningRejectionReason(player, request, block, request.expectedRevision)
+          ?? (Math.hypot(player.x - pending.origin.x, player.z - pending.origin.z) > 0.12 || Math.abs(player.y - pending.origin.y) > 0.2 ? "moving" : null)
+          ?? (!miningLineClear(player, request, this.readWorldBlock) ? "collision" : null);
+      if (reason) {
         this.pendingMining.delete(id);
-        this.reject(pending.client, { requestId: request.requestId, action: "mine", reason: "missing" });
+        this.reject(pending.client, { requestId: request.requestId, action: "mine", reason });
         continue;
       }
       if (now < pending.completesAt) continue;
@@ -1947,6 +1967,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const current = getBlock(stored.chunk, address.localX, request.y, address.localZ);
     const rejection = miningRejectionReason(player, request, current, stored.revision);
     if (rejection) return this.reject(client, { requestId: request.requestId, action: "mine", reason: rejection });
+    if (!miningLineClear(player, request, this.readWorldBlock)) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "collision" });
     const mineral = minedMineral(current);
     if (mineral) {
       const carried = player.inventory.get(mineral)?.quantity ?? 0;

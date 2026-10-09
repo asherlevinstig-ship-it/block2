@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
 import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } from "./cave-navigation.js";
-import { miningAvailability, miningReach, miningProgress, miningDurationMs, type MiningCell } from "./mining-feedback.js";
+import { miningAvailability, miningReach, miningProgress, miningDurationMs, miningLineClear, miningMessage, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
@@ -2675,7 +2675,7 @@ const miningFill = document.querySelector<HTMLElement>("#mining-progress-fill")!
 const miningCaption = document.querySelector<HTMLElement>("#mining-progress-label")!;
 const resourceToasts = document.querySelector<HTMLElement>("#resource-toasts")!;
 const caveEntranceSign = document.querySelector<HTMLElement>("#cave-entrance")!;
-let miningSwing: { cell: MiningCell; startedAt: number; requestId: string; stage: number } | null = null;
+let miningSwing: { cell: MiningCell; startedAt: number; requestId: string; stage: number; origin: pc.Vec3 } | null = null;
 let pendingMine: { requestId: string; startedAt: number } | null = null;
 const miningChips: { entity: pc.Entity; origin: pc.Vec3; velocity: pc.Vec3; startedAt: number }[] = [];
 const chipStoneMaterial = coloredMaterial(new pc.Color(0.45, 0.53, 0.56));
@@ -2720,11 +2720,20 @@ function updateMiningCracks(cell: MiningCell, stage: number): void {
   if (!miningCracks.render) miningCracks.addComponent("render", { meshInstances: [new pc.MeshInstance(crackMesh, crackMaterial)], castShadows: false, receiveShadows: false });
 }
 
-function cancelMining(): void {
+function cancelMining(reason?: string): void {
+  const active = Boolean(pendingMine || miningSwing);
   if (pendingMine) room?.send("mine:cancel", { requestId: pendingMine.requestId });
   miningSwing = null;
   pendingMine = null;
   miningCracks.enabled = false;
+  if (active && reason) {
+    status.textContent = miningMessage(reason);
+    logMovementEvent(`MINE CANCEL ${reason}`);
+  }
+}
+
+function miningMovementRequested(): boolean {
+  return ["KeyW", "KeyA", "KeyS", "KeyD"].some(code => keys.has(code)) || Math.hypot(touchStrafe, touchForward) > 0.05;
 }
 
 function miningBurst(cell: MiningCell, count: number): void {
@@ -2757,10 +2766,20 @@ function updateMining(now: number): void {
     chip.entity.setPosition(chip.origin.x + chip.velocity.x * t, chip.origin.y + chip.velocity.y * t - 5 * t * t, chip.origin.z + chip.velocity.z * t);
     chip.entity.setLocalScale(0.08 * (1 - t), 0.08 * (1 - t), 0.08 * (1 - t));
   }
-  if (pendingMine && now - pendingMine.startedAt > 5000) cancelMining();
+  if (pendingMine && now - pendingMine.startedAt > 5000) cancelMining("timeout");
   if (miningSwing) {
     const { cell, startedAt } = miningSwing;
-    if (!worldReady || !room || interactionMode !== "build" || !defeatScreen.hidden || !inventoryPanel.hidden || !quizPanel.hidden || !blacksmithPanel.hidden || miningAvailability(localPlayer.getPosition(), cell) !== "ready" || readWorldBlock(cell.x, cell.y, cell.z) !== cell.block) {
+    const player = localPlayer.getPosition();
+    const availability = miningAvailability(player, cell);
+    if (miningMovementRequested() || Math.hypot(player.x - miningSwing.origin.x, player.z - miningSwing.origin.z) > 0.12 || Math.abs(player.y - miningSwing.origin.y) > 0.2) {
+      cancelMining("moving");
+    } else if (availability !== "ready") {
+      cancelMining(availability);
+    } else if (readWorldBlock(cell.x, cell.y, cell.z) !== cell.block) {
+      cancelMining("missing");
+    } else if (!miningLineClear(player, cell, readCollisionWorldBlock)) {
+      cancelMining("collision");
+    } else if (!worldReady || !room || interactionMode !== "build" || !defeatScreen.hidden || !inventoryPanel.hidden || !quizPanel.hidden || !blacksmithPanel.hidden) {
       cancelMining();
     } else {
       const progress = miningProgress(startedAt, now, miningDurationMs(cell.block));
@@ -3772,8 +3791,14 @@ function requestMine(): void {
     return;
   }
   const player = localPlayer.getPosition();
-  if (miningAvailability(player, currentTarget) !== "ready") {
-    status.textContent = "That block is protected or unbreakable.";
+  if (miningMovementRequested()) { status.textContent = miningMessage("moving"); return; }
+  const availability = miningAvailability(player, currentTarget);
+  if (availability !== "ready") {
+    status.textContent = miningMessage(availability);
+    return;
+  }
+  if (!miningLineClear(player, currentTarget, readCollisionWorldBlock)) {
+    status.textContent = miningMessage("collision");
     return;
   }
   const mineralId = currentTarget.block === Block.IronOre ? "iron_ore" : currentTarget.block === Block.SilverOre ? "silver_ore" : null;
@@ -3798,7 +3823,7 @@ function requestMine(): void {
   if (!chunk) return;
   const startedAt = performance.now();
   const requestId = `mine-${room.sessionId}-${++mineSequence}`;
-  miningSwing = { cell: { ...currentTarget }, startedAt, requestId, stage: 0 };
+  miningSwing = { cell: Object.freeze({ ...currentTarget }), startedAt, requestId, stage: 0, origin: player.clone() };
   pendingMine = { requestId, startedAt };
   room.send("mine", { requestId, expectedRevision: chunk.revision, x: currentTarget.x, y: currentTarget.y, z: currentTarget.z });
   status.textContent = `Mining ${currentTarget.x}, ${currentTarget.y}, ${currentTarget.z}...`;
@@ -4207,8 +4232,9 @@ function requestPrimaryAction(): void {
 
 function setInteractionMode(mode: InteractionMode): void {
   if (interactionMode === mode && targetStateKey.startsWith(`${mode}:`)) return;
+  const cancelledMining = mode !== "build" && Boolean(miningSwing || pendingMine);
   interactionMode = mode;
-  if (mode !== "build") cancelMining();
+  if (mode !== "build") cancelMining("mode");
   for (const button of modeButtons) button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
   mineButton.textContent = mode === "build" ? "Mine" : "Attack";
   mineButton.dataset.mode = mode;
@@ -4221,7 +4247,7 @@ function setInteractionMode(mode: InteractionMode): void {
   logMovementEvent(`MODE ${mode.toUpperCase()}`);
   status.textContent = mode === "build"
     ? "Build mode · clicks mine nearby targeted blocks."
-    : `Combat mode · clicks use the ${MAIN_HAND_DEFINITIONS[localMainHandId].name} Attack without changing blocks.`;
+    : cancelledMining ? miningMessage("mode") : `Combat mode · clicks use the ${MAIN_HAND_DEFINITIONS[localMainHandId].name} Attack without changing blocks.`;
 }
 
 for (const button of modeButtons) {
@@ -5477,7 +5503,7 @@ async function connect(): Promise<void> {
   });
   room.onMessage("action:rejected", (message: ActionRejected) => {
     if (message.action === "mine" && message.requestId === pendingMine?.requestId) cancelMining();
-    status.textContent = `Server rejected ${message.action}: ${message.reason}`;
+    status.textContent = message.action === "mine" ? miningMessage(message.reason) : `Server rejected ${message.action}: ${message.reason}`;
     logMovementEvent(`REJECT ${message.action} reason=${message.reason}`);
     if (message.action === "move" || message.action === "dodge") recordSnapDiagnostic(
       `ACTION_REJECT action=${message.action} reason=${message.reason}`,

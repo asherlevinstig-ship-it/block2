@@ -1,7 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { miningAvailability, miningProgress, miningReach, miningDurationMs, MINING_WINDUP_MS } from "./mining-feedback.js";
+import { miningAvailability, miningProgress, miningReach, miningDurationMs, miningLineClear, miningMessage, MINING_WINDUP_MS } from "./mining-feedback.js";
 describe("mining presentation", () => {
+  it("uses real terrain for line of sight, including hidden or unloaded walls", () => {
+    const player = { x: 35.5, y: 7, z: -4.5 };
+    const target = { x: 38, y: 7, z: -5, block: Block.IronOre };
+    const read = (x: number) => x === 38 ? Block.IronOre : Block.Air;
+    expect(miningLineClear(player, target, read)).toBe(true);
+    expect(miningLineClear(player, target, x => x === 36 ? Block.Stone : read(x))).toBe(false);
+    expect(miningLineClear(player, target, x => x === 36 ? Block.Bedrock : read(x))).toBe(false);
+  });
+  it("explains cancellation without exposing internal rejection codes", () => {
+    expect(miningMessage("range")).toContain("Out of reach");
+    expect(miningMessage("collision")).toContain("Blocked");
+    expect(miningMessage("moving")).toContain("stand still");
+    expect(miningMessage("stale")).toContain("block changed");
+  });
+  it("allows exposed ore tops without cutting through adjacent ground", () => {
+    const target = { x: 38, y: 7, z: -5, block: Block.IronOre };
+    const read = (x: number, y: number) => y <= 7 ? x === 38 ? Block.IronOre : Block.Stone : Block.Air;
+    expect(miningLineClear({ x: 35.5, y: 7.94, z: -4.5 }, target, read)).toBe(true);
+  });
   it("keeps mineral timing consistent and silver harder than iron", () => {
     expect(miningDurationMs(Block.SilverOre)).toBe(1200);
     expect(miningDurationMs(Block.IronOre)).toBe(850);

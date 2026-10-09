@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-mining-v32";
+export const WORLD_ROOM = "world-mining-safety-v33";
 export const MINERAL_REGROWTH_MS = 120_000;
 export interface MineralDepositStatus { id: string; available: number; total: number; readyAt: number | null }
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
@@ -711,7 +711,7 @@ export interface BrambleSnareTriggered {
 export interface ActionRejected {
   requestId?: string;
   action: "move" | "mine" | "attack" | "dodge" | "defense" | "power" | "special" | "loadout";
-  reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate" | "stamina" | "cooldown" | "compatibility";
+  reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate" | "stamina" | "cooldown" | "compatibility" | "moving";
 }
 
 export * from "./melee-strikes.js";

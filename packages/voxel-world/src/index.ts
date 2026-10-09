@@ -91,6 +91,28 @@ export function miningDurationMs(block: number): number {
   return 300;
 }
 
+export function miningLineClear(player: { x: number; y: number; z: number }, target: { x: number; y: number; z: number }, read: WorldBlockReader): boolean {
+  const origin = { x: player.x, y: player.y + 0.8, z: player.z };
+  // Test the nearest block surface, not its buried centre: exposed ore tops
+  // must remain mineable without the ray cutting through adjacent ground.
+  const nearest = (value: number, cell: number) => Math.max(cell + 0.01, Math.min(cell + 0.99, value));
+  const points = [{ x: nearest(origin.x, target.x), y: nearest(origin.y, target.y), z: nearest(origin.z, target.z) }];
+  for (const axis of ["x", "y", "z"] as const) {
+    if (origin[axis] >= target[axis] && origin[axis] <= target[axis] + 1) continue;
+    const face = { x: target.x + 0.5, y: target.y + 0.5, z: target.z + 0.5 };
+    face[axis] = origin[axis] < target[axis] ? target[axis] + 0.001 : target[axis] + 0.999;
+    points.push(face);
+  }
+  for (const point of points) {
+    const delta = { x: point.x - origin.x, y: point.y - origin.y, z: point.z - origin.z };
+    const distance = Math.hypot(delta.x, delta.y, delta.z);
+    if (distance < 0.001) continue;
+    const hit = voxelRaycast(origin, delta, distance + 0.01, read);
+    if (hit && hit.x === target.x && hit.y === target.y && hit.z === target.z) return true;
+  }
+  return false;
+}
+
 export const MINERAL_DEPOSITS = [
   { x: 35, z: -5, block: Block.IronOre },
   { x: 68, z: 27, block: Block.SilverOre },
