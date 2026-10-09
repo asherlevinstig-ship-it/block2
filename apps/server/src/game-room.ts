@@ -104,7 +104,7 @@ import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
-import { GREENWOOD_CRAWLER_HOMES } from "@blockcraft/voxel-world";
+import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -249,11 +249,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("moss-crawler", "moss_crawler", { x: 40.5, y: 8, z: -6.5 });
     this.registerMob("greenwood-briar", "briar_crawler", GREENWOOD_CRAWLER_HOMES[1]);
     this.registerMob("greenwood-briar-north", "briar_crawler", GREENWOOD_CRAWLER_HOMES[2]);
-    this.registerMob("stone-brute", "stone_brute", MOB_ARCHETYPES.stone_brute.spawn);
+    this.registerMob("stone-brute", "stone_brute", STONE_BRUTE_ARENA_HOME);
     this.registerMob("cave-spitter", "cave_spitter", MOB_ARCHETYPES.cave_spitter.spawn);
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
-    this.registerMob("frontier-crawler", "moss_crawler", { x: 40.5, y: 8, z: 35.5 });
-    this.registerMob("frontier-brute", "stone_brute", { x: 43.5, y: 8, z: 41.5 });
+    this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
+    this.registerMob("frontier-brute", "stone_brute", { x: 63.5, y: 8, z: 48.5 });
     this.registerMob("frontier-spitter", "cave_spitter", { x: 43.5, y: 8, z: -4.5 });
     this.onMessage("world:ready", client => client.send("world:bootstrap", this.bootstrapPayload()));
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
@@ -731,7 +731,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     goal: { x: number; y: number; z: number }, now: number, allowed = this.mobPositionAllowed): void {
     const navigation = this.mobNavigation.get(mobId) ?? createMobNavigationState();
     this.mobNavigation.set(mobId, navigation);
-    const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock, allowed);
+    const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock,
+      pose => allowed(pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
     if (Math.hypot(dx, dz) > 0.0001) mob.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
@@ -774,7 +775,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private displaceMob(mobId: string, mob: MobState, delta: { x: number; z: number }): void {
-    const next = moveMobSafely(mob, delta, this.readWorldBlock, this.mobPositionAllowed);
+    const next = moveMobSafely(mob, delta, this.readWorldBlock,
+      pose => this.mobPositionAllowed(pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     mob.x = next.x;
     mob.y = next.y;
     mob.z = next.z;
@@ -1284,7 +1286,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         y: player.y,
         z: player.z,
         health: player.health,
-      })).filter(player => !isInsideTownSafeZone(player) && radiusFromSafeCenter(player) >= MOB_TOWN_MINIMUM_RADIUS);
+      })).filter(player => !isInsideTownSafeZone(player) && radiusFromSafeCenter(player) >= MOB_TOWN_MINIMUM_RADIUS
+        && (mobId === "stone-brute" || !isInStoneBruteArena(player.x, player.z)));
       const target = selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
         this.patrolMob(mobId, mob, home, now, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier * 0.65));

@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 
@@ -288,6 +289,25 @@ export class SceneDressing {
         solid.box(x, 8.7, z, 0.12, 1.4, 0.12, DARK_OAK);
         solid.box(x + 0.28, 9.15, z, 0.55, 0.4, 0.06, x > 46 ? IRON : CLOTH);
         glow.box(x + 0.28, 9.16, z - 0.04, 0.3, 0.06, 0.025, GOLD);
+      }
+    }
+
+    if (read(STONE_BRUTE_ARENA_HOME.x | 0, SURFACE_HEIGHT, STONE_BRUTE_ARENA_HOME.z | 0) === Block.Stone) {
+      // Open arena: flat perimeter markings, no walls or roofs over the fight.
+      const a = STONE_BRUTE_ARENA;
+      for (let x = a.minX + 1; x < a.maxX; x += 2) {
+        solid.box(x + 0.5, 8.025, a.minZ + 0.5, 0.7, 0.035, 0.35, SLATE);
+        solid.box(x + 0.5, 8.025, a.maxZ + 0.5, 0.7, 0.035, 0.35, SLATE);
+      }
+      for (let z = a.minZ + 1; z < a.maxZ; z += 2) {
+        solid.box(a.minX + 0.5, 8.025, z + 0.5, 0.35, 0.035, 0.7, SLATE);
+        solid.box(a.maxX + 0.5, 8.025, z + 0.5, 0.35, 0.035, 0.7, SLATE);
+      }
+      for (const z of [27.5, 31.5, 33.5]) {
+        solid.box(43.3, 8.7, z, 0.12, 1.4, 0.12, DARK_OAK);
+        solid.box(43.6, 9.15, z, 0.6, 0.45, 0.08, SLATE);
+        glow.box(43.6, 9.2, z - 0.05, 0.28, 0.12, 0.03, GOLD);
+        glow.box(43.6, 9.05, z - 0.05, 0.05, 0.25, 0.03, GOLD);
       }
     }
 

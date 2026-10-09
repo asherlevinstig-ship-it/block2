@@ -7,6 +7,9 @@ import {
   GREENWOOD_CAMP,
   GREENWOOD_CRAWLER_HOMES,
   GREENWOOD_IRON_SEAM,
+  STONE_BRUTE_ARENA,
+  STONE_BRUTE_ARENA_HOME,
+  isInStoneBruteArena,
   MILESTONE_CAVE_X_OFFSET,
   SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
@@ -29,6 +32,27 @@ import {
 } from "../src/index.js";
 
 describe("deterministic voxel world", () => {
+  it("provides a flat open brute arena and a supported trail beyond the crawler camp", () => {
+    const cache = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const a = worldToChunk(x, z); const key = `${a.chunkX},${a.chunkZ}`;
+      if (!cache.has(key)) cache.set(key, generateChunk("test-world", a.chunkX, a.chunkZ));
+      return getBlock(cache.get(key)!, a.localX, y, a.localZ);
+    };
+    for (let z = 25; z <= STONE_BRUTE_ARENA.maxZ; z++) {
+      expect(isPlayerSupported(read, 41.5, 8, z + 0.5)).toBe(true);
+      expect(playerCollides(read, 41.5, 8, z + 0.5)).toBe(false);
+    }
+    for (let x = STONE_BRUTE_ARENA.minX; x <= STONE_BRUTE_ARENA.maxX; x++) {
+      for (let z = STONE_BRUTE_ARENA.minZ; z <= STONE_BRUTE_ARENA.maxZ; z++) {
+        expect(read(x, 6, z)).toBe(Block.Stone);
+        expect(isPlayerSupported(read, x + 0.5, 8, z + 0.5)).toBe(true);
+        for (let y = 8; y <= 17; y++) expect(read(x, y, z)).toBe(Block.Air);
+      }
+    }
+    expect(isInStoneBruteArena(STONE_BRUTE_ARENA_HOME.x, STONE_BRUTE_ARENA_HOME.z)).toBe(true);
+    expect(STONE_BRUTE_ARENA.minZ).toBeGreaterThan(GREENWOOD_CAMP.maxZ + 8);
+  });
   it("generates identical chunks from the same seed", () => {
     const first = generateChunk("test-world", 0, 0);
     const second = generateChunk("test-world", 0, 0);

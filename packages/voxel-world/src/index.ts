@@ -30,6 +30,24 @@ export const GREENWOOD_IRON_SEAM = { minX: 48, maxX: 50, minZ: 19, maxZ: 21 } as
 export const GREENWOOD_CRAWLER_HOMES = [
   { x: 39.5, y: 8, z: 16.5 }, { x: 43.5, y: 8, z: 21.5 }, { x: 45.5, y: 8, z: 16.5 },
 ] as const;
+export const STONE_BRUTE_ARENA = { minX: 35, maxX: 49, minZ: 34, maxZ: 48 } as const;
+export const STONE_BRUTE_ARENA_HOME = { x: 42.5, y: 8, z: 41.5 } as const;
+export function isInStoneBruteArena(x: number, z: number): boolean {
+  return x >= STONE_BRUTE_ARENA.minX && x <= STONE_BRUTE_ARENA.maxX + 1
+    && z >= STONE_BRUTE_ARENA.minZ && z <= STONE_BRUTE_ARENA.maxZ + 1;
+}
+
+export function stoneBruteArenaBlock(x: number, y: number, z: number): BlockId | null {
+  const arena = isInStoneBruteArena(x, z);
+  const approach = x >= 41 && x <= 42 && z >= 25 && z < STONE_BRUTE_ARENA.minZ;
+  if (!arena && !approach) return null;
+  if (y > SURFACE_HEIGHT) return Block.Air;
+  if (y === SURFACE_HEIGHT) {
+    const edge = arena && (x === 35 || x === 49 || z === 34 || z === 48);
+    return approach || edge ? Block.Dirt : Block.Stone;
+  }
+  return y >= SURFACE_HEIGHT - 2 ? Block.Stone : null;
+}
 export function isInGreenwoodCamp(x: number, z: number): boolean {
   return x >= GREENWOOD_CAMP.minX && x <= GREENWOOD_CAMP.maxX + 1
     && z >= GREENWOOD_CAMP.minZ && z <= GREENWOOD_CAMP.maxZ + 1;
@@ -307,6 +325,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (caveBlock !== null) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
         const greenwoodBlock = greenwoodRegionBlock(seedText, worldX, y, worldZ);
         if (greenwoodBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = greenwoodBlock;
+        const arenaBlock = stoneBruteArenaBlock(worldX, y, worldZ);
+        if (arenaBlock !== null) blocks[chunkIndex(localX, y, localZ)] = arenaBlock;
         const townBlock = townOfBeginningsBlock(worldX, y, worldZ);
         if (townBlock !== null) blocks[chunkIndex(localX, y, localZ)] = townBlock;
       }
