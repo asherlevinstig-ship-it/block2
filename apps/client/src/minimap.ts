@@ -86,11 +86,16 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     destinations.value = waypoint?.id ?? "";
   };
   refreshDestinations();
-  homeButton.addEventListener("click", () => setWaypoint(HOME_WAYPOINT));
+  homeButton.addEventListener("click", () => { setWaypoint(HOME_WAYPOINT); homeButton.blur(); });
   for (const control of [homeButton, destinations, document.querySelector<HTMLButtonElement>("#waypoint-clear")!]) {
-    control.addEventListener("keydown", event => event.stopPropagation());
+    control.addEventListener("keydown", event => {
+      if (control === destinations || (event instanceof KeyboardEvent && (event.code === "Space" || event.code === "Enter"))) event.stopPropagation();
+    });
   }
-  destinations.addEventListener("change", () => setWaypoint(knownWaypoints(discovered).find(target => target.id === destinations.value) ?? null));
+  destinations.addEventListener("change", () => {
+    setWaypoint(knownWaypoints(discovered).find(target => target.id === destinations.value) ?? null);
+    destinations.blur();
+  });
   document.querySelector<HTMLButtonElement>("#waypoint-clear")!.addEventListener("click", () => setWaypoint(null));
   canvas.addEventListener("click", event => {
     if (!lastPlayer) return;
