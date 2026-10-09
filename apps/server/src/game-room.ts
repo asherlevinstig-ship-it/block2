@@ -2,6 +2,7 @@ import { Client, Room } from "@colyseus/core";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
+import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
 import type { MineBlockRequest } from "@blockcraft/protocol";
 import {
@@ -801,21 +802,23 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private registerMob(mobId: string, archetypeId: MobArchetypeId, spawn: { x: number; y: number; z: number }): void {
     const outside = keepMobOutsideTown(spawn);
-    const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, this.mobPositionAllowed);
+    const home = walkableMobSpawn({ ...spawn, ...outside }, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose));
     this.mobHomes.set(mobId, home);
     this.mobNavigation.set(mobId, createMobNavigationState());
-    this.state.mobs.set(mobId, this.createMob(archetypeId, home));
+    const mob = this.createMob(archetypeId, home);
+    mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? mob.name;
+    this.state.mobs.set(mobId, mob);
   }
 
   private readonly mobPositionAllowed = (position: { x: number; z: number }): boolean =>
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private moveNavigatingMob(mobId: string, mob: MobState, desired: { x: number; z: number },
-    goal: { x: number; y: number; z: number }, now: number, allowed = this.mobPositionAllowed): void {
+    goal: { x: number; y: number; z: number }, now: number, allowed: (pose: { x: number; y: number; z: number }) => boolean = this.mobPositionAllowed): void {
     const navigation = this.mobNavigation.get(mobId) ?? createMobNavigationState();
     this.mobNavigation.set(mobId, navigation);
     const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock,
-      pose => allowed(pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+      pose => allowed(pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
     if (Math.hypot(dx, dz) > 0.0001) mob.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
@@ -839,7 +842,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       patrol.pauseUntil = now + 800;
       return;
     }
-    const allowed = (pose: { x: number; z: number }) => this.mobPositionAllowed(pose)
+    const allowed = (pose: { x: number; y: number; z: number }) => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose)
       && Math.hypot(pose.x - home.x, pose.z - home.z) <= MOB_PATROL_RADIUS + 0.5;
     if (patrol.goal && (Math.hypot(mob.x - patrol.goal.x, mob.z - patrol.goal.z) < 0.2
       || now >= patrol.expiresAt)) {
@@ -859,7 +862,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private displaceMob(mobId: string, mob: MobState, delta: { x: number; z: number }): void {
     const next = moveMobSafely(mob, delta, this.readWorldBlock,
-      pose => this.mobPositionAllowed(pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+      pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     mob.x = next.x;
     mob.y = next.y;
     mob.z = next.z;
@@ -1039,7 +1042,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true): boolean {
     const player = this.state.players.get(playerId);
-    if (!player || player.health <= 0 || now < player.invulnerableUntil || isInsideTownSafeZone(player)) return false;
+    if (!player || player.health <= 0 || now < player.invulnerableUntil || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
     const mob = this.state.mobs.get(mobId);
     const defense = blockable && mob
       ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
@@ -1125,7 +1128,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const progress = Math.max(0, Math.min(1, (now - projectile.startedAt) / (projectile.impactAt - projectile.startedAt)));
       const next = flightPoint(projectile.start, projectile.end, progress);
       const targets = [...this.state.players.entries()]
-        .filter(([, player]) => player.health > 0 && !isInsideTownSafeZone(player))
+        .filter(([, player]) => player.health > 0 && !isInsideTownSafeZone(player) && caveEncounterAllows(projectile.mobId, player))
         .map(([id, player]) => ({ id, x: player.x, y: player.y, z: player.z }));
       const collision = projectileImpact(projectile.position, next, targets, this.readWorldBlock);
       projectile.position = next;
@@ -1278,7 +1281,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
         const stats = scaledMobStats(definition, dangerBandAt(home));
-        const spawn = walkableMobSpawn(home, this.readWorldBlock, this.mobPositionAllowed);
+        const spawn = walkableMobSpawn(home, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose));
         mob.x = spawn.x;
         mob.y = spawn.y;
         mob.z = spawn.z;
@@ -1319,6 +1322,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       if (mob.combatState === "windup") {
         const targetPlayer = this.state.players.get(mob.targetId);
+        if (CAVE_ENCOUNTERS[mobId] && (!targetPlayer || targetPlayer.health <= 0 || !caveEncounterAllows(mobId, targetPlayer))) {
+          mob.targetId = "";
+          mob.aimCommitted = false;
+          mob.combatState = "recover";
+          mob.stateUntil = now + definition.recoverMs;
+          this.mobCommittedAim.delete(mobId);
+          this.pendingMobMelee.delete(mobId);
+          this.clearMobAttackTimeline(mob);
+          continue;
+        }
         if (targetPlayer && now < mob.stateUntil - mobAimCommitMs(mob.archetype)) {
           mob.yaw = Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI;
           this.mobCommittedAim.set(mobId, { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: mob.yaw });
@@ -1390,6 +1403,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         z: player.z,
         health: player.health,
       })).filter(player => !isInsideTownSafeZone(player) && radiusFromSafeCenter(player) >= MOB_TOWN_MINIMUM_RADIUS
+        && caveEncounterAllows(mobId, player)
         && (mobId === "stone-brute" || !isInStoneBruteArena(player.x, player.z)));
       const target = selectAggroTarget(mob, players, definition.aggroRange);
       if (!target) {
@@ -2064,7 +2078,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const lunge = definition.attackKind === "melee" ? Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6)) : 0;
     const yaw = aim?.yaw ?? mob.yaw;
     const origin = moveMobSafely(mob, { x: Math.sin(yaw * Math.PI / 180) * lunge,
-      z: Math.cos(yaw * Math.PI / 180) * lunge }, this.readWorldBlock, this.mobPositionAllowed);
+      z: Math.cos(yaw * Math.PI / 180) * lunge }, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && caveEncounterAllows(mobId, pose));
     mob.attackStrikeX = origin.x; mob.attackStrikeY = origin.y; mob.attackStrikeZ = origin.z;
   }
 
