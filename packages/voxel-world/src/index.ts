@@ -140,6 +140,32 @@ export const MINERAL_DEPOSITS = [
   { x: -48, z: 8, block: Block.SilverOre, radius: 2 },
 ] as const;
 export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, block: Block.IronOre, radius: 1 }] as const;
+export const WILDERNESS_CAMPS = MINERAL_DEPOSITS.map(deposit => ({ ...deposit,
+  kind: deposit.block === Block.IronOre ? "nest" as const : deposit.radius === 1 ? "spitter" as const : "ruin" as const,
+}));
+/** Broken cover, never a closed enclosure. The central ore and cardinal approaches stay open. */
+export function wildernessCampBlock(x: number, y: number, z: number): BlockId | null {
+  if (y < SURFACE_HEIGHT || isInStoneBruteArena(x, z)
+    || Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) < TOWN_SAFE_RADIUS) return null;
+  let camp: typeof WILDERNESS_CAMPS[number] | undefined;
+  let nearest = Infinity;
+  for (const site of WILDERNESS_CAMPS) {
+    const dx = x - site.x; const dz = z - site.z;
+    const distance = dx * dx + dz * dz;
+    if (Math.abs(dx) <= site.radius + 3 && Math.abs(dz) <= site.radius + 3 && distance < nearest) {
+      camp = site; nearest = distance;
+    }
+  }
+  if (!camp) return null;
+  const dx = x - camp.x; const dz = z - camp.z;
+  if (Math.abs(dx) <= camp.radius + 1 && Math.abs(dz) <= camp.radius + 1) return null;
+  if (y === SURFACE_HEIGHT) return camp.kind === "nest" ? Block.Dirt : camp.kind === "ruin" ? Block.Stone : Block.Dirt;
+  const pillar = camp.kind === "spitter" && Math.abs(dx) === 3 && Math.abs(dz) === 2;
+  const brokenWall = camp.kind === "ruin" && Math.abs(dx) === 4 && (Math.abs(dz) === 4 || Math.abs(dz) === 3);
+  if ((pillar || brokenWall) && y <= SURFACE_HEIGHT + (Math.abs(dz) === 4 ? 3 : 2)) return Block.Stone;
+  // Clear canopy above the encounter so cover and deposits can be read from the camera.
+  return Block.Air;
+}
 export function authoredMineralAt(x: number, y: number, z: number): BlockId | null {
   if (y !== SURFACE_HEIGHT && y !== SURFACE_HEIGHT - 1) return null;
   return RENEWABLE_MINERAL_DEPOSITS.find(deposit => Math.abs(x - deposit.x) <= deposit.radius && Math.abs(z - deposit.z) <= deposit.radius)?.block ?? null;
@@ -427,6 +453,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (greenwoodBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = greenwoodBlock;
         const arenaBlock = stoneBruteArenaBlock(worldX, y, worldZ);
         if (arenaBlock !== null) blocks[chunkIndex(localX, y, localZ)] = arenaBlock;
+        const campBlock = wildernessCampBlock(worldX, y, worldZ);
+        if (campBlock !== null) blocks[chunkIndex(localX, y, localZ)] = campBlock;
         const mineralBlock = mineralOutcropBlock(worldX, y, worldZ);
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;
         // The authored cave owns its subsurface geometry, regardless of surface biome overlays.

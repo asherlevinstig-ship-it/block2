@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { MINERAL_DEPOSITS } from "@blockcraft/voxel-world";
+import { MINERAL_DEPOSITS, WILDERNESS_CAMPS } from "@blockcraft/voxel-world";
 import { STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
@@ -322,6 +322,29 @@ export class SceneDressing {
       solid.box(x + .3, 9.15, z, .65, .45, .07, color);
       glow.box(x + .3, 9.15, z - .045, .25, .1, .025, deposit.block === Block.IronOre ? IRON : [0.7, 0.86, 0.94]);
       if (deposit.radius > 1) glow.box(x + .3, 9.32, z - .045, .25, .05, .025, GOLD);
+    }
+
+    for (const camp of WILDERNESS_CAMPS) {
+      // Only bake decorations whose ground is actually present in the streamed world.
+      for (const [dx, dz] of camp.kind === "nest" ? [[-3, -3], [3, 3]] : camp.kind === "spitter" ? [[-2, -3], [2, 3]] : [[-3, -4], [3, 4]]) {
+        const x = camp.x + dx!; const z = camp.z + dz!;
+        if (read(x, SURFACE_HEIGHT, z) === Block.Air) continue;
+        if (camp.kind === "nest") {
+          // Low twig bowls and pale shed fangs: readable but not invisible colliders.
+          for (let i = 0; i < 8; i++) {
+            const angle = i * Math.PI / 4;
+            solid.box(x + .5 + Math.sin(angle) * .55, 8.1, z + .5 + Math.cos(angle) * .55, .24, .18, .24, DARK_OAK);
+          }
+          solid.box(x + .35, 8.12, z + .35, .17, .2, .17, [0.8, .76, .53]);
+          solid.box(x + .65, 8.12, z + .6, .15, .18, .15, [0.8, .76, .53]);
+        } else if (camp.kind === "spitter") {
+          solid.box(x + .5, 8.025, z + .5, .9, .04, .75, [.22, .3, .13]);
+          glow.box(x + .5, 8.06, z + .5, .28, .06, .22, [.43, .65, .08]);
+        } else {
+          solid.box(x + .5, 8.055, z + .5, .75, .11, .65, SLATE);
+          glow.box(x + .5, 8.12, z + .5, .35, .035, .08, [.65, .27, .1]);
+        }
+      }
     }
 
     // Keep the existing hall art in local coordinates while moving the entire tavern south.
