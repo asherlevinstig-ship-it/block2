@@ -2556,6 +2556,7 @@ const miningHud = document.querySelector<HTMLElement>("#mining-progress")!;
 const miningFill = document.querySelector<HTMLElement>("#mining-progress-fill")!;
 const miningCaption = document.querySelector<HTMLElement>("#mining-progress-label")!;
 const resourceToasts = document.querySelector<HTMLElement>("#resource-toasts")!;
+const caveEntranceSign = document.querySelector<HTMLElement>("#cave-entrance")!;
 let miningSwing: { cell: MiningCell; startedAt: number } | null = null;
 let pendingMine: { requestId: string; startedAt: number } | null = null;
 const miningChips: { entity: pc.Entity; origin: pc.Vec3; velocity: pc.Vec3; startedAt: number }[] = [];
@@ -2913,6 +2914,13 @@ function updateTarget(): void {
   const direction = end.clone().sub(start);
   const hit = voxelRaycast(start, direction, camera.camera.farClip, readVisibleWorldBlock);
   const player = localPlayer.getPosition();
+  const caveSignScreen = camera.camera.worldToScreen(new pc.Vec3(32.5, 8.4, 8.5));
+  caveEntranceSign.hidden = !worldReady || player.y < SURFACE_HEIGHT || Math.hypot(player.x - 32.5, player.z - 8.5) > 20 || caveSignScreen.z < 0;
+  if (!caveEntranceSign.hidden) {
+    const bounds = canvas.getBoundingClientRect();
+    caveEntranceSign.style.left = `${bounds.left + caveSignScreen.x * bounds.width / canvas.width}px`;
+    caveEntranceSign.style.top = `${bounds.top + caveSignScreen.y * bounds.height / canvas.height}px`;
+  }
   const blacksmithNearby = worldReady && room !== null && canTradeAtBlacksmithStall(player, sceneDressing.blacksmithVisible);
   blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden;
   if (!blacksmithPrompt.hidden) {

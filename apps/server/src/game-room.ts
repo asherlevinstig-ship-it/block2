@@ -1,6 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import {
   AttackRequestSchema,
@@ -265,6 +265,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("greenwood-briar-north", "briar_crawler", GREENWOOD_CRAWLER_HOMES[2]);
     this.registerMob("stone-brute", "stone_brute", STONE_BRUTE_ARENA_HOME);
     this.registerMob("cave-spitter", "cave_spitter", MOB_ARCHETYPES.cave_spitter.spawn);
+    this.registerMob("shallow-cave-crawler", "moss_crawler", CAVE_SHALLOW_HOME);
+    this.registerMob("deep-cave-spitter", "cave_spitter", CAVE_DEEP_HOME);
+    this.registerMob("buried-chamber-brute", "stone_brute", CAVE_HIDDEN_HOME);
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
     this.registerMob("frontier-brute", "stone_brute", { x: 63.5, y: 8, z: 48.5 });

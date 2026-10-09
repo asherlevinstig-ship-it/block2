@@ -3,6 +3,11 @@ import { MOB_ARCHETYPES } from "../src/mob-archetypes.js";
 import { DANGER_BANDS, MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "../src/radial-difficulty.js";
 
 describe("radial danger progression", () => {
+  it("raises underground danger by depth without changing town protection", () => {
+    expect(dangerBandAt({ x: 39.5, y: 3, z: 6.5 }).tier).toBe(2);
+    expect(dangerBandAt({ x: 48.5, y: 1, z: 10.5 }).tier).toBe(3);
+    expect(dangerBandAt({ x: 8.5, y: 1, z: 8.5 }).tier).toBe(0);
+  });
   it("increases the danger band as players travel from the safe centre", () => {
     expect(dangerBandAt({ x: 8.5, z: 8.5 }).tier).toBe(0);
     expect(dangerBandAt({ x: 14.5, z: 8.5 }).tier).toBe(0);

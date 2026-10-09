@@ -42,11 +42,13 @@ export function keepMobOutsideTown(position: { x: number; z: number }): { x: num
   return { x: WORLD_SAFE_CENTER.x + (radius ? dx : 1) * scale, z: WORLD_SAFE_CENTER.z + dz * scale };
 }
 
-export function dangerBandAt(position: { x: number; z: number }): DangerBand {
+export function dangerBandAt(position: { x: number; z: number; y?: number }): DangerBand {
   const radius = radiusFromSafeCenter(position);
+  // Town protection is unchanged; outside it, the deeper cave adds danger beyond distance alone.
+  const depthTier = radius >= TOWN_SAFE_RADIUS && position.y !== undefined ? position.y <= 2 ? 3 : position.y <= 5 ? 2 : 0 : 0;
   for (let index = DANGER_BANDS.length - 1; index >= 0; index -= 1) {
     const band = DANGER_BANDS[index];
-    if (band && radius >= band.minimumRadius) return band;
+    if (band && (radius >= band.minimumRadius || band.tier <= depthTier)) return band;
   }
   return DANGER_BANDS[0]!;
 }

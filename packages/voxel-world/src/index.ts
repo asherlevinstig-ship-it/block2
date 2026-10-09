@@ -26,6 +26,12 @@ export const TOWN_BLACKSMITH_STALL_POSITION = { x: 22.5, y: 8, z: 2.5 } as const
 export const TOWN_BLACKSMITH_STALL_COLLIDER = { x: 22.5, z: 2.5, width: 3.1, depth: 0.7, minY: 8, maxY: 9.15 } as const;
 export const TOWN_BEACON_POSITION = { x: -2, z: 1 } as const;
 export const MILESTONE_CAVE_X_OFFSET = 14;
+export const CAVE_SHALLOW_HOME = { x: 39.5, y: 3, z: 6.5 } as const;
+export const CAVE_DEEP_HOME = { x: 48.5, y: 1, z: 10.5 } as const;
+export const CAVE_HIDDEN_HOME = { x: 56.5, y: 1, z: 9.5 } as const;
+export function isCaveReturnRoute(x: number, z: number): boolean {
+  return z >= 7 && z <= 9 && ((x >= 32 && x <= 35) || (x >= 42 && x <= 43));
+}
 export const GREENWOOD_REGION = { minX: 31, maxX: 51, minZ: -10, maxZ: 27 } as const;
 export const GREENWOOD_CAMP = { minX: 36, maxX: 46, minZ: 14, maxZ: 24 } as const;
 export const GREENWOOD_IRON_SEAM = { minX: 48, maxX: 50, minZ: 19, maxZ: 21 } as const;
@@ -210,6 +216,25 @@ export function greenwoodRegionBlock(seedText: string, worldX: number, y: number
 }
 
 function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId | null {
+  // Authored stone enclosure prevents random generation from puncturing floors or the sealed chamber.
+  if (worldX >= 31 && worldX <= 59 && worldZ >= 4 && worldZ <= 13 && y < SURFACE_HEIGHT) {
+    if (worldX === 31) return y === SURFACE_HEIGHT ? Block.Grass : Block.Stone;
+    if (worldX >= 42) {
+      if (worldX <= 43 && worldZ >= 7 && worldZ <= 9) {
+        const floor = worldX === 42 ? 1 : 0;
+        return y > floor && y <= 5 ? Block.Air : Block.Stone;
+      }
+      const deep = worldX >= 44 && worldX <= 51 && worldZ >= 5 && worldZ <= 12;
+      const hidden = worldX >= 53 && worldX <= 58 && worldZ >= 7 && worldZ <= 11;
+      if ((deep || hidden) && y >= 1 && y <= 3) return Block.Air;
+      // A two-block-high silver seam is the mineable doorway; no second open entrance.
+      if (worldX === 52 && worldZ >= 8 && worldZ <= 9 && y >= 1 && y <= 3) return Block.SilverOre;
+      if (worldX >= 46 && worldX <= 49 && worldZ === 13 && y >= 1 && y <= 2) return Block.SilverOre;
+      if (worldX === 58 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 2) return Block.SilverOre;
+      return y === SURFACE_HEIGHT ? Block.Grass : Block.Stone;
+    }
+    if (worldX >= 37 && worldX <= 40 && worldZ === 12 && y >= 3 && y <= 4) return Block.IronOre;
+  }
   const caveX = worldX - MILESTONE_CAVE_X_OFFSET;
   const inChamberFootprint = caveX >= 22 && caveX <= 27 && worldZ >= 5 && worldZ <= 11;
   if (inChamberFootprint && y === 2) return Block.Stone;
@@ -221,14 +246,14 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
 
   if (worldZ < 7 || worldZ > 9) {
     const inChamber = inChamberFootprint && y >= 3 && y <= 5;
-    return inChamber ? Block.Air : null;
+    return inChamber ? Block.Air : worldX >= 31 && worldX <= 41 && worldZ >= 4 && worldZ <= 13 && y < SURFACE_HEIGHT ? Block.Stone : null;
   }
   if (caveX === 18 && y === SURFACE_HEIGHT) return Block.Air;
   if (caveX === 19 && y >= 6 && y <= SURFACE_HEIGHT) return Block.Air;
   if (caveX === 20 && y >= 5 && y <= SURFACE_HEIGHT) return Block.Air;
   if (caveX === 21 && y >= 4 && y <= 6) return Block.Air;
   if (caveX >= 22 && caveX <= 27 && y >= 3 && y <= 5) return Block.Air;
-  return null;
+  return worldX >= 32 && worldX <= 41 && y < SURFACE_HEIGHT ? Block.Stone : null;
 }
 
 export function isTownTavernFootprint(worldX: number, worldZ: number): boolean {
@@ -322,7 +347,7 @@ export function worldToChunk(x: number, z: number): ChunkAddress {
 
 export function isProtectedVoxel(x: number, z: number): boolean {
   return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS
-    || townWallBlock(x, 8, z) !== null;
+    || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z);
 }
 
 export function generateChunk(seedText: string, chunkX: number, chunkZ: number): GeneratedChunk {
@@ -352,6 +377,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (arenaBlock !== null) blocks[chunkIndex(localX, y, localZ)] = arenaBlock;
         const mineralBlock = mineralOutcropBlock(worldX, y, worldZ);
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;
+        // The authored cave owns its subsurface geometry, regardless of surface biome overlays.
+        if (caveBlock !== null && y < SURFACE_HEIGHT) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
         const townBlock = townOfBeginningsBlock(worldX, y, worldZ);
         if (townBlock !== null) blocks[chunkIndex(localX, y, localZ)] = townBlock;
       }

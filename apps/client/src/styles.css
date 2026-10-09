@@ -1120,6 +1120,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   #minimap > small { display: none; }
 }
 #mining-progress { position: fixed; z-index: 22; left: 50%; bottom: 100px; transform: translateX(-50%); width: 210px; padding: 10px 14px; border: 1px solid #e6c97688; border-radius: 10px; background: #14251ef2; color: #ffe1a0; text-align: center; pointer-events: none; font: 700 12px system-ui; }
+#cave-entrance { position: fixed; z-index: 19; transform: translate(-50%, -110%); background: #14251eef; border: 1px solid #f1ce77; border-radius: 8px; padding: 8px 12px; color: #ffe1a0; font: 800 12px system-ui; text-align: center; pointer-events: none; }
+#cave-entrance[hidden] { display: none; }
+#cave-entrance small { display: block; margin-top: 3px; color: #e1e8cf; font-size: 10px; font-weight: 400; }
 #mining-progress[hidden] { display: none; }
 #mining-progress > div { height: 6px; margin-top: 8px; border-radius: 4px; background: #0a1512; overflow: hidden; }
 #mining-progress-fill { display: block; height: 100%; background: linear-gradient(90deg, #c28436, #ffdf86); }
