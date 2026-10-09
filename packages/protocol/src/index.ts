@@ -3,7 +3,9 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-pickaxe-shop-v35";
+export const WORLD_ROOM = "world-healing-potions-v36";
+export const HEALING_POTION = { price: 5, heal: 2, capacity: 3, cooldownMs: 5000 } as const;
+export type PotionUpdate = { phase: "bought" | "healed" | "error"; message: string; quantity: number; gold: number; health: number; maxHealth: number; cooldownUntil: number; healed: number };
 export const MINERAL_REGROWTH_MS = 120_000;
 export interface MineralDepositStatus { id: string; available: number; total: number; readyAt: number | null }
 export const WORLD_BOOTSTRAP_CHUNK_RADIUS = 2;
@@ -50,6 +52,7 @@ export type TavernQuizUpdate = {
 };
 
 export const ITEM_DEFINITIONS = {
+  healing_potion: { id: "healing_potion", name: "Healing Potion", description: "Restore 2 HP · H to drink · carry up to 3" },
   iron_ore: { id: "iron_ore", name: "Iron Ore", description: "Mined iron ore that can be sold to the town blacksmith" },
   silver_ore: { id: "silver_ore", name: "Silver Ore", description: "Wilderness mineral · sell to the blacksmith for 8 gold each" },
   timber: { id: "timber", name: "Greenwood Timber", description: "Fresh timber harvested from Greenwood oak trees" },

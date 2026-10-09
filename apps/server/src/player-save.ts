@@ -1,5 +1,6 @@
 import {
   ITEM_DEFINITIONS,
+  HEALING_POTION,
   MAIN_HAND_DEFINITIONS,
   POWER_DEFINITIONS,
   SEISMIC_CLEAVE_UPGRADES,
@@ -29,6 +30,7 @@ export interface PlayerSaveData {
   stamina: number;
   maxStamina: number;
   coins: number;
+  potionCooldownUntil?: number;
   blacksmithUpgrades: number;
   inventory: Partial<Record<ItemId, number>>;
   mainHandId: MainHandId;
@@ -67,6 +69,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     stamina: player.stamina,
     maxStamina: player.maxStamina,
     coins: player.coins,
+    potionCooldownUntil: player.potionCooldownUntil,
     blacksmithUpgrades: player.blacksmithUpgrades,
     inventory,
     mainHandId: player.mainHandId as MainHandId,
@@ -92,7 +95,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     for (const itemId of Object.keys(ITEM_DEFINITIONS) as ItemId[]) {
       const quantity = value.inventory[itemId];
       if (typeof quantity === "number" && Number.isInteger(quantity) && quantity > 0) {
-        inventory[itemId] = Math.min(65_535, quantity);
+        inventory[itemId] = Math.min(itemId === "healing_potion" ? HEALING_POTION.capacity : 65_535, quantity);
       }
     }
   }
@@ -113,6 +116,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     stamina: finiteNumber(value.stamina, maxStamina, 0, maxStamina),
     maxStamina,
     coins: Math.floor(finiteNumber(value.coins, TAVERN_QUIZ_STARTING_COINS, 0, 1_000_000)),
+    potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 7)),
     inventory,
     mainHandId,
@@ -129,6 +133,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.health = save.health;
   player.maxStamina = save.maxStamina;
   player.coins = save.coins;
+  player.potionCooldownUntil = save.potionCooldownUntil ?? 0;
   player.blacksmithUpgrades = save.blacksmithUpgrades;
   player.stamina = save.stamina;
   for (const [itemId, quantity] of Object.entries(save.inventory) as [ItemId, number][]) {

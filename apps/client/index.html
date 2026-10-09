@@ -94,10 +94,12 @@
     <div id="quiz-table-prompt" hidden>DOUBLE OR QUIT <small>Press E to play</small></div>
     <div id="blacksmith-prompt" hidden>BLACKSMITH <small>Press E to trade or forge</small></div>
     <div id="combat-feedback" aria-live="polite"></div>
+    <button id="potion-use" type="button" aria-label="Drink healing potion">POTION 0 / 3 · H</button>
     <section id="tavern-dialogue" role="dialog" aria-label="Mara the Tavernkeeper" hidden>
       <p class="eyebrow">HEARTH & HAMMER</p>
       <h2>Mara <small>Tavernkeeper</small></h2>
       <p id="tavern-dialogue-line"></p>
+      <div class="potion-shop"><strong>Healing Potion · 5 gold</strong><small>Restores 2 HP · carry 3 · H to drink</small><p id="potion-shop-status" aria-live="polite"></p><button id="potion-buy" type="button">BUY · 5 GOLD</button></div>
       <div class="tavern-dialogue-actions">
         <button id="tavern-dialogue-next" type="button">Continue</button>
         <button id="tavern-dialogue-close" type="button">Close</button>
@@ -207,6 +209,10 @@
           <article data-item="stone_core"><i></i><div><strong>Stone Core</strong><small>Dense brute crafting material</small></div><em data-item-count="stone_core">0</em></article>
           <article data-item="acid_gland"><i></i><div><strong>Acid Gland</strong><small>Volatile spitter material</small></div><em data-item-count="acid_gland">0</em></article>
         </div>
+      </section>
+      <section class="inventory-section" aria-labelledby="inventory-consumables-title">
+        <h3 id="inventory-consumables-title">Supplies</h3>
+        <article class="potion-inventory" data-item="healing_potion"><strong>Healing Potion</strong><small>Restores 2 HP · H to drink · carry 3</small><em data-item-count="healing_potion">0</em></article>
       </section>
       <section class="inventory-section" aria-labelledby="inventory-tools-title">
         <h3 id="inventory-tools-title"><span>Tools</span><small>Mining equipment auto-equips when acquired</small></h3>

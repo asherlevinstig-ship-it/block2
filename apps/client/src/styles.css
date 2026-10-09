@@ -4,6 +4,15 @@
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
+#potion-use { position: fixed; right: 24px; bottom: 24px; z-index: 12; padding: 12px 16px; border: 1px solid #f38e9e; border-radius: 9px; background: #331922; color: #ffe3e9; font-weight: 800; min-height: 44px; }
+#potion-use:disabled { opacity: .55; }
+.potion-shop { padding: 14px; margin: 14px 0; border: 1px solid #a76870; border-radius: 8px; background: #21191b; }
+.potion-shop strong, .potion-shop small, .potion-inventory small { display: block; }
+.potion-shop small { margin-top: 6px; color: #c9b6aa; }
+.potion-shop button { min-height: 44px; padding: 8px 16px; }
+.potion-inventory { padding: 12px; margin-bottom: 12px; border: 1px solid #85515d; border-radius: 8px; }
+@media (max-width: 820px) { #potion-use { right: 14px; bottom: 210px; padding: 10px; font-size: 11px; } }
+
 * { box-sizing: border-box; }
 
 html, body, #game {

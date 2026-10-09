@@ -25,6 +25,8 @@ import {
   TRAIT_DEFINITIONS,
   HUNTERS_MARK,
   ITEM_DEFINITIONS,
+  HEALING_POTION,
+  type PotionUpdate,
   POWER_DEFINITIONS,
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
@@ -165,6 +167,9 @@ const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const targetLabel = document.querySelector<HTMLElement>("#target")!;
 const tavernDialogue = document.querySelector<HTMLElement>("#tavern-dialogue")!;
+const potionBuy = document.querySelector<HTMLButtonElement>("#potion-buy")!;
+const potionUse = document.querySelector<HTMLButtonElement>("#potion-use")!;
+const potionShopStatus = document.querySelector<HTMLElement>("#potion-shop-status")!;
 const quizTablePrompt = document.querySelector<HTMLElement>("#quiz-table-prompt")!;
 const blacksmithPrompt = document.querySelector<HTMLElement>("#blacksmith-prompt")!;
 const blacksmithPanel = document.querySelector<HTMLElement>("#blacksmith-panel")!;
@@ -1095,6 +1100,7 @@ localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
 interface NetworkPlayer {
+  potionCooldownUntil: number;
   x: number;
   y: number;
   z: number;
@@ -1409,7 +1415,7 @@ function updateControlsHelp(): void {
   const special = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
   const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
-  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
+  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
@@ -1497,6 +1503,8 @@ function requestTraitEquip(traitId: TraitId): void {
 }
 
 function updatePlayerHealth(health: number, maximumHealth: number): void {
+  potionHealth = health;
+  potionMaxHealth = maximumHealth;
   const fraction = Math.max(0, Math.min(1, health / Math.max(1, maximumHealth)));
   playerHealthFill.style.width = `${fraction * 100}%`;
   playerHealthValue.textContent = `${health} / ${maximumHealth}`;
@@ -2330,6 +2338,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 }
 
 const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
+  healing_potion: coloredMaterial(new pc.Color(.85, .15, .3)),
   iron_ore: coloredMaterial(new pc.Color(0.57, 0.65, 0.68)),
   silver_ore: coloredMaterial(new pc.Color(0.7, 0.88, 0.98)),
   timber: coloredMaterial(new pc.Color(0.48, 0.3, 0.14)),
@@ -2663,6 +2672,9 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("maxHealth", () => {
       if (isLocal) updatePlayerHealth(player.health, player.maxHealth);
     }, true);
+    playerCallbacks.listen("potionCooldownUntil", () => {
+      if (isLocal) potionCooldownUntil = player.potionCooldownUntil;
+    }, true);
     playerCallbacks.listen("stamina", () => {
       if (isLocal) updatePlayerStamina(player.stamina, player.maxStamina);
     }, true);
@@ -2833,6 +2845,37 @@ function updateMining(now: number): void {
   if (!miningSwing) miningCracks.enabled = false;
 }
 let tavernDialogueIndex = -1;
+let potionCooldownUntil = 0;
+let potionPendingUntil = 0;
+let potionHealth = 5;
+let potionMaxHealth = 5;
+let potionUiKey = "";
+
+function refreshPotionUi(): void {
+  const quantity = inventoryCounts.get("healing_potion") ?? 0;
+  const remaining = Math.max(0, potionCooldownUntil - (performance.now() + serverClock.offset));
+  const pending = performance.now() < potionPendingUntil;
+  const nearby = canTalkToTavernKeeper(localPlayer.getPosition(), sceneDressing.keeperVisible);
+  const key = `${quantity}:${Math.ceil(remaining / 1000)}:${pending}:${nearby}:${Boolean(room)}:${tavernCoinBalance}:${potionHealth}:${potionMaxHealth}`;
+  if (key === potionUiKey) return;
+  potionUiKey = key;
+  potionBuy.disabled = !room || pending || !nearby || quantity >= HEALING_POTION.capacity || tavernCoinBalance < HEALING_POTION.price;
+  potionBuy.textContent = quantity >= HEALING_POTION.capacity ? "POUCH FULL" : "BUY · 5 GOLD";
+  potionUse.disabled = !room || pending || quantity === 0 || potionHealth <= 0 || potionHealth >= potionMaxHealth || remaining > 0;
+  potionUse.textContent = `POTION ${quantity} / 3 · ${remaining > 0 ? `${Math.ceil(remaining / 1000)}s` : "H"}`;
+  potionUse.title = `Restore 2 HP · ${quantity} potions · 5 second cooldown`;
+  if (!pending) potionShopStatus.textContent = `${quantity} / 3 potions · ${tavernCoinBalance} gold`;
+}
+function requestPotion(buying = false): void {
+  if (!room || performance.now() < potionPendingUntil) return;
+  if (buying && !canTalkToTavernKeeper(localPlayer.getPosition(), sceneDressing.keeperVisible)) return;
+  potionPendingUntil = performance.now() + 3000;
+  potionShopStatus.textContent = buying ? "Buying potion…" : "Drinking potion…";
+  room.send(buying ? "potion:buy" : "potion:use");
+  refreshPotionUi();
+}
+potionBuy.addEventListener("click", () => requestPotion(true));
+potionUse.addEventListener("click", () => requestPotion());
 
 function closeTavernDialogue(): void {
   tavernDialogue.hidden = true;
@@ -4354,6 +4397,7 @@ window.addEventListener("keydown", event => {
     return;
   }
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
+  if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
   if (event.code === "KeyE") requestPrimaryAction();
   if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyR") beginPowerAim();
@@ -4569,6 +4613,7 @@ function reconcileLocalPlayer(
 }
 
 app.on("update", (dt: number) => {
+  refreshPotionUi();
   frameSamples.push(dt * 1000);
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
@@ -5492,6 +5537,16 @@ async function connect(): Promise<void> {
       ? "You were defeated. Return to the Town of Beginnings when ready."
       : `${attackerName} hit you for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HURT hp=${message.health} defeated=${message.defeated}`);
+  });
+  room.onMessage("potion:update", (message: PotionUpdate) => {
+    potionPendingUntil = 0;
+    potionCooldownUntil = message.cooldownUntil;
+    updateInventoryItem("healing_potion", message.quantity);
+    updateTavernCoins(message.gold);
+    updatePlayerHealth(message.health, message.maxHealth);
+    status.textContent = message.message;
+    showCombatFeedback(message.phase === "healed" ? `+${message.healed} HP` : message.phase === "bought" ? "+1 POTION" : message.message, message.phase === "error" ? "hurt" : "dodge");
+    refreshPotionUi();
   });
   room.onMessage("combat:defense", (message: DefenseResolved) => {
     if (message.playerId !== room?.sessionId) return;

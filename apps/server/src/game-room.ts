@@ -1,4 +1,6 @@
 import { Client, Room } from "@colyseus/core";
+import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
+import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
@@ -317,6 +319,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
+    this.onMessage("potion:buy", client => this.handlePotion(client, true));
+    this.onMessage("potion:use", client => this.handlePotion(client, false));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 33);
   }
 
@@ -589,6 +593,33 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     void this.persistPlayer(client.sessionId, player);
     this.sendBlacksmithState(client, `${BLACKSMITH_UPGRADES[upgradeId].name} ${upgradeId === "reinforced_pickaxe" ? "bought" : "forged"} and equipped. ${BLACKSMITH_UPGRADES[upgradeId].description}.`, "purchased", 0, 0, upgradeId);
+  }
+
+  private handlePotion(client: Client, buying: boolean): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const now = Date.now();
+    let item = player.inventory.get("healing_potion");
+    const quantity = item?.quantity ?? 0;
+    const error = buying ? potionBuyError(player.health, player.coins, quantity, canBuyPotionAtKeeper(player))
+      : potionUseError(player.health, player.maxHealth, quantity, player.potionCooldownUntil, now);
+    let healed = 0;
+    if (!error) {
+      if (!item) { item = new InventoryItemState(); player.inventory.set("healing_potion", item); }
+      if (buying) { player.coins -= HEALING_POTION.price; item.quantity++; }
+      else {
+        healed = Math.min(HEALING_POTION.heal, player.maxHealth - player.health);
+        player.health += healed;
+        item.quantity--;
+        player.potionCooldownUntil = now + HEALING_POTION.cooldownMs;
+      }
+      void this.persistPlayer(client.sessionId, player);
+    }
+    const update: PotionUpdate = { phase: error ? "error" : buying ? "bought" : "healed",
+      message: error ?? (buying ? "Healing potion bought for 5 gold. Press H to drink when hurt." : `Restored ${healed} HP.`),
+      quantity: item?.quantity ?? 0, gold: player.coins, health: player.health, maxHealth: player.maxHealth,
+      cooldownUntil: player.potionCooldownUntil, healed };
+    client.send("potion:update", update);
   }
 
   private persistPlayer(sessionId: string, player: PlayerState, force = false): Promise<void> {
