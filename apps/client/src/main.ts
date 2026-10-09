@@ -1,4 +1,6 @@
 import * as pc from "playcanvas";
+import { equipmentForItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
+import { weaponComparison } from "./loot-comparison.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
@@ -1250,6 +1252,72 @@ const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const mobVisuals = new Map<string, MobVisual>();
 const lootVisuals = new Map<string, LootVisual>();
+const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
+const lootClose = document.querySelector<HTMLButtonElement>("#loot-close")!;
+const lootEquip = document.querySelector<HTMLButtonElement>("#loot-equip")!;
+const lootKeep = document.querySelector<HTMLButtonElement>("#loot-keep")!;
+const lootMessage = document.querySelector<HTMLElement>("#loot-message")!;
+let inspectedDropId: string | null = null;
+let lootPending = false;
+function closeLoot() {
+  lootPanel.hidden = true; inspectedDropId = null; lootPending = false;
+}
+function nearestEquipmentDrop(): string | null {
+  const player = localPlayer.getPosition();
+  let nearest: string | null = null; let distance = EQUIPMENT_LOOT_RANGE;
+  for (const [id, visual] of lootVisuals) {
+    const drop = visual.state;
+    const d = Math.hypot(drop.x - player.x, drop.y - player.y, drop.z - player.z);
+    if (!equipmentForItem(drop.itemId) || !visual.root.enabled || d > distance
+      || !enemyCueLineClear({ x: player.x, y: player.y + .72, z: player.z },
+        { x: drop.x, y: drop.y + .72, z: drop.z }, readCollisionWorldBlock)) continue;
+    nearest = id; distance = d;
+  }
+  return nearest;
+}
+function fillLootComparison(element: HTMLElement, id: MainHandId) {
+  const comparison = weaponComparison(id, localIronSwordOwned);
+  element.replaceChildren();
+  const title = document.createElement("strong"); title.textContent = comparison.name; element.append(title);
+  for (const [label, value] of [["Damage", comparison.damage], ["Reach", comparison.range], ["First attack", comparison.speed]] as const) {
+    const row = document.createElement("div"); row.className = "loot-stat";
+    const key = document.createElement("span"); key.textContent = label;
+    const stat = document.createElement("span"); stat.textContent = value;
+    row.append(key, stat); element.append(row);
+  }
+  const note = document.createElement("p"); note.textContent = `${comparison.style} · ${comparison.benefit}`; element.append(note);
+}
+function openLoot(id: string) {
+  const drop = lootVisuals.get(id)?.state;
+  const hand = drop && equipmentForItem(drop.itemId);
+  if (!drop || !hand || !room || !worldReady) return;
+  setInventoryOpen(false); quizPanel.hidden = true; blacksmithPanel.hidden = true; closeTavernDialogue();
+  if (localDefending) requestDefense(false);
+  resetMovementControls();
+  inspectedDropId = id; lootPending = false; lootPanel.hidden = false;
+  document.querySelector<HTMLElement>("#loot-title")!.textContent = MAIN_HAND_DEFINITIONS[hand].name;
+  document.querySelector<HTMLElement>("#loot-description")!.textContent = `${drop.quantity} item · ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].description : "Enemy equipment"}`;
+  fillLootComparison(document.querySelector<HTMLElement>("#loot-new")!, hand);
+  fillLootComparison(document.querySelector<HTMLElement>("#loot-current")!, localMainHandId);
+  lootMessage.textContent = "Choose how to use this item. The world keeps moving.";
+  lootEquip.disabled = lootKeep.disabled = false;
+  lootClose.focus();
+}
+function collectInspectedLoot(equip: boolean) {
+  if (!room || !inspectedDropId || lootPending) return;
+  lootPending = true; lootEquip.disabled = lootKeep.disabled = true;
+  lootMessage.textContent = "Collecting…";
+  const id = inspectedDropId;
+  room.send("loot:collect", { dropId: id, equip });
+  window.setTimeout(() => {
+    if (inspectedDropId !== id || !lootPending) return;
+    lootPending = false; lootEquip.disabled = lootKeep.disabled = false;
+    lootMessage.textContent = "No confirmation yet. You can try again.";
+  }, 3000);
+}
+lootClose.addEventListener("click", closeLoot);
+lootEquip.addEventListener("click", () => collectInspectedLoot(true));
+lootKeep.addEventListener("click", () => collectInspectedLoot(false));
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 const combatAudio = new CombatAudio();
 const unlockCombatAudio = (): void => combatAudio.unlock();
@@ -2367,7 +2435,11 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
   const material = lootMaterials[itemId];
-  if (itemId === "fang_dagger") {
+  if (equipmentForItem(itemId)) {
+    addBox(root, "loot-bag", weaponWoodMaterial, [.55, .42, .44], [0, 0, 0]);
+    addBox(root, "bag-tie", material, [.25, .12, .25], [0, .27, 0]);
+    addBox(root, "equipment-emblem", material, [.28, .2, .06], [0, .02, -.25]);
+  } else if (itemId === "fang_dagger") {
     addBox(root, "dropped-dagger-grip", weaponWoodMaterial, [0.1, 0.26, 0.1], [0, 0.17, 0]);
     addBox(root, "dropped-dagger-fang", material, [0.18, 0.48, 0.12], [0, -0.18, 0]).setLocalEulerAngles(0, 0, 8);
   } else if (itemId === "stone_core_hammer") {
@@ -2406,6 +2478,10 @@ function bindLootDrops(joinedRoom: Room): void {
   drops.onRemove((_drop: NetworkLootDrop, dropId: string) => {
     lootVisuals.get(dropId)?.root.destroy();
     lootVisuals.delete(dropId);
+    if (inspectedDropId === dropId && !lootPending) {
+      lootMessage.textContent = "That bag was collected or expired.";
+      lootEquip.disabled = lootKeep.disabled = true;
+    }
   });
 }
 
@@ -2904,6 +2980,7 @@ tavernDialogueNext.addEventListener("click", advanceTavernDialogue);
 tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function setInventoryOpen(open: boolean): void {
+  if (open) closeLoot();
   inventoryPanel.hidden = !open;
   inventoryToggle.setAttribute("aria-expanded", String(open));
   if (open) {
@@ -3215,7 +3292,8 @@ function updateTarget(): void {
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}`;
+  const nearbyLoot = nearestEquipmentDrop();
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${nearbyLoot}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -3223,8 +3301,9 @@ function updateTarget(): void {
   targetMaterial.emissive = tint.clone().mulScalar(0.3);
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
-  mineButton.textContent = blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
-  if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
+  mineButton.textContent = nearbyLoot ? "Loot" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
+  if (nearbyLoot) targetLabel.textContent = "Equipment bag · press E or Loot to inspect and compare";
+  else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
   else if (interactionMode === "combat" && combatMob) {
@@ -3363,6 +3442,7 @@ function clearDefeatCombat(): void {
   }
 }
 function showDefeat(attackerName: string): void {
+  closeLoot();
   clearDefeatCombat();
   quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
   defeatDetail.textContent = `${attackerName} defeated you. Take a breath and return to safety.`;
@@ -4295,7 +4375,10 @@ function commitSpecialAim(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (!lootPanel.hidden) return;
   if (!defeatScreen.hidden) return;
+  const nearbyLoot = nearestEquipmentDrop();
+  if (nearbyLoot) { openLoot(nearbyLoot); return; }
   if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
     openBlacksmith();
     return;
@@ -4379,6 +4462,17 @@ for (const button of traitPickerButtons) {
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
   if (!defeatScreen.hidden) return;
+  if (!lootPanel.hidden) {
+    if (event.code === "Escape") closeLoot();
+    if (event.code === "Tab") {
+      const buttons = [lootClose, lootEquip, lootKeep].filter(button => !button.disabled);
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
+      event.preventDefault();
+    }
+    if (event.code !== "Tab") event.preventDefault();
+    return;
+  }
   if (!inventoryPanel.hidden) {
     if (event.code === "Escape" || event.code === "KeyI") setInventoryOpen(false);
     event.preventDefault();
@@ -4625,8 +4719,8 @@ app.on("update", (dt: number) => {
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const strafe = defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
-  const forward = defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
+  const strafe = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
+  const forward = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
@@ -5582,6 +5676,12 @@ async function connect(): Promise<void> {
     status.textContent = `${defeatedName} reward${rewards ? ` · ${rewards}` : " claimed"}.`;
     logMovementEvent(`REWARD ${message.mobId} hp=${message.healthRestored} stamina=${message.staminaRestored}`);
   });
+  room.onMessage("loot:result", (message: LootCollectResult) => {
+    if (message.dropId !== inspectedDropId) return;
+    lootPending = false; lootEquip.disabled = lootKeep.disabled = !lootVisuals.has(message.dropId);
+    lootMessage.textContent = message.message;
+    if (message.ok) { closeLoot(); status.textContent = message.message; }
+  });
   room.onMessage("loot:picked-up", (message: LootPickedUp) => {
     if (message.playerId !== room?.sessionId || !isItemId(message.itemId)) return;
     updateInventoryItem(message.itemId, message.total);
@@ -5700,6 +5800,7 @@ async function connect(): Promise<void> {
     mobVisuals.clear();
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();
+    closeLoot();
     for (const itemId of inventoryCounts.keys()) updateInventoryItem(itemId, 0);
     for (const telegraph of powerTelegraphs.values()) telegraph.root.destroy();
     powerTelegraphs.clear();

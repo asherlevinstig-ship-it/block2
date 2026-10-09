@@ -3,7 +3,10 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-crawler-rush-v39";
+export const WORLD_ROOM = "world-loot-bags-v40";
+export const EQUIPMENT_LOOT_RANGE = 1.8;
+export const LootCollectRequestSchema = z.object({ dropId: z.string().min(1).max(160), equip: z.boolean() });
+export type LootCollectResult = { ok: boolean; dropId: string; message: string };
 export const HEALING_POTION = { price: 5, heal: 2, capacity: 3, cooldownMs: 5000 } as const;
 export type PotionUpdate = { phase: "bought" | "healed" | "error"; message: string; quantity: number; gold: number; health: number; maxHealth: number; cooldownUntil: number; healed: number };
 export const MINERAL_REGROWTH_MS = 120_000;
@@ -123,6 +126,10 @@ export const MAIN_HAND_DEFINITIONS = {
 } as const satisfies Record<string, MainHandDefinition>;
 
 export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
+export function equipmentForItem(itemId: string): MainHandId | null {
+  return (Object.keys(MAIN_HAND_DEFINITIONS) as MainHandId[])
+    .find(id => "requiredItemId" in MAIN_HAND_DEFINITIONS[id] && (MAIN_HAND_DEFINITIONS[id] as MainHandDefinition).requiredItemId === itemId) ?? null;
+}
 
 export interface WeaponAttackStep {
   step: 1 | 2 | 3;

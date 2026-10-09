@@ -81,6 +81,10 @@ describe("ore to forged sword to item loot", () => {
     internal.resolvePendingAttacks(10_225);
     expect(mob.alive).toBe(false); expect(room.state.lootDrops.size).toBe(3);
     Object.assign(player, { x: mob.x, y: mob.y, z: mob.z }); internal.resolveLootPickups(10_300);
+    expect(player.inventory.has("fang_dagger")).toBe(false);
+    expect(room.state.lootDrops.size).toBe(1);
+    const bagId = [...room.state.lootDrops.keys()][0];
+    internal.handleLootCollect(client, { dropId: bagId, equip: false });
     expect(player.inventory.get("fang_dagger")?.quantity).toBe(1);
     expect(player.inventory.get("crawler_fang")?.quantity).toBe(1);
     expect(room.state.lootDrops.size).toBe(0);

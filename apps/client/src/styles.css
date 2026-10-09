@@ -3,6 +3,24 @@
   background: #101814;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
+.loot-panel { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 18px; background: #09120ddd; }
+.loot-panel[hidden] { display: none; }
+.loot-card { width: min(560px, 100%); max-height: 85vh; overflow: auto; padding: 24px; border: 2px solid #cda750; border-radius: 16px; background: linear-gradient(145deg, #23342a, #101b16); box-shadow: 0 20px 70px #0009; }
+.loot-heading { display: flex; align-items: center; justify-content: space-between; color: #f3ce76; font-weight: 800; font-size: 12px; letter-spacing: .08em; }
+.loot-heading button { min-width: 44px; min-height: 44px; }
+.loot-card h2 { margin: 10px 0; color: #fff3cf; }
+.loot-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+.loot-compare section { padding: 16px; border: 1px solid #64775b; border-radius: 10px; background: #0b171a88; }
+.loot-compare h3 { font-size: 11px; color: #eaca76; letter-spacing: .1em; }
+.loot-compare strong { display: block; min-height: 40px; }
+.loot-stat { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid #ffffff12; font-size: 13px; }
+.loot-compare p { font-size: 13px; color: #b9d4b3; }
+.loot-actions { display: flex; gap: 10px; margin: 16px 0; }
+.loot-actions button { flex: 1; min-height: 48px; border: 1px solid #bb984d; border-radius: 8px; background: #754d18; color: #fff3cc; font-weight: 800; cursor: pointer; }
+.loot-actions button:last-child { background: #25362c; }
+.loot-actions button:disabled { opacity: .5; cursor: wait; }
+.loot-card small { color: #aab6a8; }
+@media (max-width: 520px) { .loot-card { padding: 16px; } .loot-compare { gap: 8px; } .loot-compare section { padding: 10px; } .loot-stat { flex-direction: column; gap: 2px; } }
 
 #potion-use { position: fixed; right: 24px; bottom: 84px; z-index: 12; padding: 12px 16px; border: 1px solid #f38e9e; border-radius: 9px; background: #331922; color: #ffe3e9; font-weight: 800; min-height: 44px; }
 #potion-use:disabled { opacity: .55; }

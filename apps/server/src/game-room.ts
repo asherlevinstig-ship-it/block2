@@ -1,4 +1,5 @@
 import { Client, Room } from "@colyseus/core";
+import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { BRUTE_SLAM, bruteSlamCenter, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
@@ -313,6 +314,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     aliveMessage("special", (client, payload) => this.handleSpecial(client, payload));
     aliveMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
     aliveMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
+    this.onMessage("loot:collect", (client, payload) => this.handleLootCollect(client, payload));
     aliveMessage("trait:equip", (client, payload) => this.handleTraitEquip(client, payload));
     this.onMessage("quiz:sync", client => this.sendQuizState(client));
     aliveMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
@@ -1052,8 +1054,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         this.state.lootDrops.delete(dropId);
         continue;
       }
+      if (equipmentForItem(drop.itemId)) continue;
       for (const [playerId, player] of this.state.players) {
-        if (player.health <= 0 || !isLootInPickupRange(player, drop)) continue;
+        if (player.health <= 0 || !isLootInPickupRange(player, drop) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) continue;
         const itemId = drop.itemId as ItemId;
         let inventoryItem = player.inventory.get(itemId);
         const total = inventoryTotal(inventoryItem?.quantity, drop.quantity);
@@ -1073,6 +1076,33 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         break;
       }
     }
+  }
+
+  private handleLootCollect(client: Client, payload: unknown): void {
+    const parsed = LootCollectRequestSchema.safeParse(payload);
+    const reply = (ok: boolean, message: string) => client.send("loot:result", { ok, dropId: parsed.success ? parsed.data.dropId : "", message } satisfies LootCollectResult);
+    if (!parsed.success) return reply(false, "Invalid loot request.");
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.health <= 0) return reply(false, "You must be alive to collect loot.");
+    const drop = this.state.lootDrops.get(parsed.data.dropId);
+    if (!drop || Date.now() >= drop.expiresAt) return reply(false, "That bag is no longer available.");
+    const mainHandId = equipmentForItem(drop.itemId);
+    if (!mainHandId) return reply(false, "Materials are collected automatically.");
+    if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside the bag with a clear path to it.");
+    if (parsed.data.equip && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
+    const itemId = drop.itemId as ItemId;
+    let item = player.inventory.get(itemId);
+    const before = item?.quantity ?? 0;
+    if (before + drop.quantity > 65535) return reply(false, "Your pack cannot hold another of that item.");
+    if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
+    item.quantity = inventoryTotal(before, drop.quantity);
+    // Synchronous removal makes competing and replayed requests collect at most once.
+    this.state.lootDrops.delete(parsed.data.dropId);
+    if (parsed.data.equip) this.handleMainHandEquip(client, { requestId: `loot-equip-${Date.now()}`, mainHandId });
+    void this.persistPlayer(client.sessionId, player);
+    this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
+      quantity: drop.quantity, total: item.quantity } satisfies LootPickedUp);
+    reply(true, `${MAIN_HAND_DEFINITIONS[mainHandId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true): boolean {
