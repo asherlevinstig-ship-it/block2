@@ -7,7 +7,7 @@ describe("readable enemy combat cues", () => {
   it("labels silver champion fan and pool telegraphs and hides cancelled attacks", () => {
     for (const pattern of ["fan", "pool"]) {
       const silver = { ...mob, archetype: "cave_spitter", attackPattern: pattern };
-      expect(enemyCombatCue(silver, 1400).label).toBe(`${pattern === "fan" ? "FAN" : "ACID POOL"} · LOCKED`);
+      expect(enemyCombatCue(silver, 1800).label).toBe(`${pattern === "fan" ? "FAN" : "ACID POOL"} · LOCKED`);
       expect(enemyCombatCue({ ...silver, combatState: "stagger" }, 1400).visible).toBe(false);
       expect(enemyCombatCue(silver, 2690).label).toBe("RECOVER · COUNTER");
     }
