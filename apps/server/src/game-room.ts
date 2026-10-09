@@ -1,4 +1,5 @@
 import { Client, Room } from "@colyseus/core";
+import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
@@ -266,18 +267,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.setState(new WorldState());
     if (this.pendingWorldDeltaWrites.size) void this.flushWorldDeltaWrites();
-    this.registerMob("moss-crawler", "moss_crawler", { x: 40.5, y: 8, z: -6.5 });
+    for (const spawn of WILDERNESS_ENCOUNTERS) this.registerMob(spawn.id, spawn.archetype, spawn);
     this.registerMob("greenwood-briar", "briar_crawler", GREENWOOD_CRAWLER_HOMES[1]);
     this.registerMob("greenwood-briar-north", "briar_crawler", GREENWOOD_CRAWLER_HOMES[2]);
     this.registerMob("stone-brute", "stone_brute", STONE_BRUTE_ARENA_HOME);
-    this.registerMob("cave-spitter", "cave_spitter", MOB_ARCHETYPES.cave_spitter.spawn);
     this.registerMob("shallow-cave-crawler", "moss_crawler", CAVE_SHALLOW_HOME);
     this.registerMob("deep-cave-spitter", "cave_spitter", CAVE_DEEP_HOME);
     this.registerMob("buried-chamber-brute", "stone_brute", CAVE_HIDDEN_HOME);
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
-    this.registerMob("frontier-brute", "stone_brute", { x: 63.5, y: 8, z: 48.5 });
-    this.registerMob("frontier-spitter", "cave_spitter", { x: 43.5, y: 8, z: -4.5 });
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload());
       client.send("mineral:status", this.mineralStatus());
@@ -683,8 +681,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     return RENEWABLE_MINERAL_DEPOSITS.map(deposit => {
       let available = 0;
       let readyAt: number | null = null;
-      for (let x = deposit.x - 1; x <= deposit.x + 1; x++) {
-        for (let z = deposit.z - 1; z <= deposit.z + 1; z++) {
+      for (let x = deposit.x - deposit.radius; x <= deposit.x + deposit.radius; x++) {
+        for (let z = deposit.z - deposit.radius; z <= deposit.z + deposit.radius; z++) {
           for (const y of [SURFACE_HEIGHT - 1, SURFACE_HEIGHT]) {
             if (this.readWorldBlock(x, y, z) === deposit.block) available++;
             const pending = this.mineralRegrowth.get(worldDeltaField(x, y, z));
@@ -692,7 +690,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           }
         }
       }
-      return { id: `${deposit.x},${deposit.z}`, available, total: 18, readyAt };
+      return { id: `${deposit.x},${deposit.z}`, available, total: (deposit.radius * 2 + 1) ** 2 * 2, readyAt };
     });
   }
 

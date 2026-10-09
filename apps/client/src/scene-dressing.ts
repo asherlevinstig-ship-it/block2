@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { MINERAL_DEPOSITS } from "@blockcraft/voxel-world";
 import { STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
@@ -309,6 +310,18 @@ export class SceneDressing {
         glow.box(43.6, 9.2, z - 0.05, 0.28, 0.12, 0.03, GOLD);
         glow.box(43.6, 9.05, z - 0.05, 0.05, 0.25, 0.03, GOLD);
       }
+    }
+
+    // Ore-site pennants are batched with existing dressing, not new draw calls.
+    for (const deposit of MINERAL_DEPOSITS) {
+      if (read(deposit.x, SURFACE_HEIGHT, deposit.z) === Block.Air) continue;
+      const x = deposit.x + deposit.radius + 1.5;
+      const z = deposit.z + deposit.radius + 1.5;
+      const color: Color = deposit.block === Block.IronOre ? COPPER : deposit.radius > 1 ? [0.48, 0.16, 0.1] : [0.16, 0.38, 0.48];
+      solid.box(x, 8.7, z, .12, 1.4, .12, DARK_OAK);
+      solid.box(x + .3, 9.15, z, .65, .45, .07, color);
+      glow.box(x + .3, 9.15, z - .045, .25, .1, .025, deposit.block === Block.IronOre ? IRON : [0.7, 0.86, 0.94]);
+      if (deposit.radius > 1) glow.box(x + .3, 9.32, z - .045, .25, .05, .025, GOLD);
     }
 
     // Keep the existing hall art in local coordinates while moving the entire tavern south.

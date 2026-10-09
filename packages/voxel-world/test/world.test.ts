@@ -43,7 +43,7 @@ describe("deterministic voxel world", () => {
       expect(getBlock(chunk, address.localX, SURFACE_HEIGHT + 1, address.localZ)).toBe(Block.Air);
       expect(isProtectedVoxel(deposit.x, deposit.z)).toBe(false);
       const radius = Math.hypot(deposit.x - 8.5, deposit.z - 8.5);
-      expect(radius).toBeGreaterThan(deposit.block === Block.SilverOre ? 55 : 25);
+      expect(radius).toBeGreaterThan(deposit.block === Block.SilverOre ? 34 : 25);
     }
   });
   it("provides a flat open brute arena and a supported trail beyond the crawler camp", () => {

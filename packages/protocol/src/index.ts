@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-healing-potions-v36";
+export const WORLD_ROOM = "world-wilderness-territories-v37";
 export const HEALING_POTION = { price: 5, heal: 2, capacity: 3, cooldownMs: 5000 } as const;
 export type PotionUpdate = { phase: "bought" | "healed" | "error"; message: string; quantity: number; gold: number; health: number; maxHealth: number; cooldownUntil: number; healed: number };
 export const MINERAL_REGROWTH_MS = 120_000;

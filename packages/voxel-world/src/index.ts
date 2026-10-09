@@ -82,6 +82,23 @@ export const Block = {
 
 export type BlockId = (typeof Block)[keyof typeof Block];
 
+export const WILDERNESS_TERRITORIES = [
+  { tier: 1, name: "IRON OUTSKIRTS", detail: "Scattered crawlers · exposed iron · prepare for the wilds" },
+  { tier: 2, name: "SILVER WILDS", detail: "Spitter pairs guard silver · use cover and dodge their shots" },
+  { tier: 3, name: "STONE FRONTIER", detail: "Brutes guard rich silver seams · defeat them for Stone Core Hammers" },
+] as const;
+export function wildernessTerritoryAt(x: number, z: number) {
+  const radius = Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z);
+  return radius < TOWN_SAFE_RADIUS ? null : WILDERNESS_TERRITORIES[radius >= FRONTIER_MINIMUM_RADIUS ? 2 : radius >= WILDS_MINIMUM_RADIUS ? 1 : 0]!;
+}
+/** Flat ground palettes distinguish rings without adding collision geometry. */
+export function wildernessSurfaceBlock(x: number, z: number): BlockId {
+  const territory = wildernessTerritoryAt(x, z);
+  const patch = Math.abs(Math.floor(x / 3) + Math.floor(z / 3)) % 4;
+  return territory?.tier === 3 ? (patch < 2 ? Block.Stone : Block.Dirt)
+    : territory?.tier === 2 && patch === 0 ? Block.Dirt : Block.Grass;
+}
+
 // Shared by authoritative mining and the local progress presentation.
 export function miningDurationMs(block: number): number {
   if (block === Block.SilverOre) return 1200;
@@ -114,22 +131,26 @@ export function miningLineClear(player: { x: number; y: number; z: number }, tar
 }
 
 export const MINERAL_DEPOSITS = [
-  { x: 35, z: -5, block: Block.IronOre },
-  { x: 68, z: 27, block: Block.SilverOre },
-  { x: -48, z: 8, block: Block.SilverOre },
+  { x: 35, z: -5, block: Block.IronOre, radius: 1 },
+  { x: -23, z: 8, block: Block.IronOre, radius: 1 },
+  { x: 8, z: -23, block: Block.IronOre, radius: 1 },
+  { x: 48, z: 28, block: Block.SilverOre, radius: 1 },
+  { x: -30, z: 8, block: Block.SilverOre, radius: 1 },
+  { x: 68, z: 27, block: Block.SilverOre, radius: 2 },
+  { x: -48, z: 8, block: Block.SilverOre, radius: 2 },
 ] as const;
-export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, block: Block.IronOre }] as const;
+export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, block: Block.IronOre, radius: 1 }] as const;
 export function authoredMineralAt(x: number, y: number, z: number): BlockId | null {
   if (y !== SURFACE_HEIGHT && y !== SURFACE_HEIGHT - 1) return null;
-  return RENEWABLE_MINERAL_DEPOSITS.find(deposit => Math.abs(x - deposit.x) <= 1 && Math.abs(z - deposit.z) <= 1)?.block ?? null;
+  return RENEWABLE_MINERAL_DEPOSITS.find(deposit => Math.abs(x - deposit.x) <= deposit.radius && Math.abs(z - deposit.z) <= deposit.radius)?.block ?? null;
 }
 
 /** Flat, exposed outcrops: visible ore, firm footing, no canopy or hidden drop. */
 export function mineralOutcropBlock(x: number, y: number, z: number): BlockId | null {
-  const deposit = MINERAL_DEPOSITS.find(point => Math.abs(x - point.x) <= 2 && Math.abs(z - point.z) <= 2);
+  const deposit = MINERAL_DEPOSITS.find(point => Math.abs(x - point.x) <= point.radius + 1 && Math.abs(z - point.z) <= point.radius + 1);
   if (!deposit || y < SURFACE_HEIGHT - 2) return null;
   if (y > SURFACE_HEIGHT) return Block.Air;
-  const core = Math.abs(x - deposit.x) <= 1 && Math.abs(z - deposit.z) <= 1;
+  const core = Math.abs(x - deposit.x) <= deposit.radius && Math.abs(z - deposit.z) <= deposit.radius;
   return core && y >= SURFACE_HEIGHT - 1 ? deposit.block : Block.Stone;
 }
 
@@ -392,7 +413,7 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
       const height = SURFACE_HEIGHT;
 
       for (let y = 0; y <= height; y += 1) {
-        let block: BlockId = y === 0 ? Block.Bedrock : y === height ? Block.Grass : y >= height - 2 ? Block.Dirt : Block.Stone;
+        let block: BlockId = y === 0 ? Block.Bedrock : y === height ? wildernessSurfaceBlock(worldX, worldZ) : y >= height - 2 ? Block.Dirt : Block.Stone;
         const cave = y > 1 && y < height - 1 && noise(seed, worldX, y, worldZ) > 0.86;
         if (cave) block = Block.Air;
         else if (block === Block.Stone && noise(seed ^ 0x9e3779b9, worldX, y, worldZ) > 0.94) block = Block.IronOre;
