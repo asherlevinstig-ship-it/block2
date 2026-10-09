@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { miningAvailability, miningProgress, miningReach, MINING_WINDUP_MS } from "./mining-feedback.js";
+import { miningAvailability, miningProgress, miningReach, miningDurationMs, MINING_WINDUP_MS } from "./mining-feedback.js";
 describe("mining presentation", () => {
+  it("keeps mineral timing consistent and silver harder than iron", () => {
+    expect(miningDurationMs(Block.SilverOre)).toBe(1200);
+    expect(miningDurationMs(Block.IronOre)).toBe(850);
+    expect(miningDurationMs(Block.Stone)).toBe(600);
+    expect(miningDurationMs(Block.Dirt)).toBe(300);
+    expect(miningProgress(1000, 1600, miningDurationMs(Block.SilverOre))).toBe(0.5);
+    expect(miningProgress(1000, 2200, miningDurationMs(Block.SilverOre))).toBe(1);
+  });
   const cell = { x: 35, y: 7, z: -5, block: Block.IronOre };
   it("uses three-dimensional reach, including vertical separation", () => {
     expect(miningReach({ x: 35.5, y: 7.5, z: -4.5 }, cell)).toBe(0);

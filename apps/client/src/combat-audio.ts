@@ -1,7 +1,8 @@
 export type EnemyCue = "warning" | "hurt" | "stagger" | "defeat";
 export type PowerCue = "seismicWindup" | "seismicImpact";
 export type WeaponCue = "hammerImpact";
-type CombatCue = EnemyCue | PowerCue | WeaponCue;
+export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
+type CombatCue = EnemyCue | PowerCue | WeaponCue | MiningCue;
 
 interface ToneLayer {
   wave: OscillatorType;
@@ -77,10 +78,18 @@ export const WEAPON_CUE_DEFINITIONS: Record<WeaponCue, EnemyCueDefinition> = {
   },
 };
 
+export const MINING_CUE_DEFINITIONS: Record<MiningCue, EnemyCueDefinition> = {
+  miningStone: { minimumIntervalMs: 90, tones: [{ wave: "triangle", startHz: 170, endHz: 55, gain: 0.08, delayMs: 0, durationMs: 100 }] },
+  miningIron: { minimumIntervalMs: 90, tones: [{ wave: "triangle", startHz: 660, endHz: 240, gain: 0.065, delayMs: 0, durationMs: 145 }, { wave: "sine", startHz: 112, endHz: 45, gain: 0.08, delayMs: 0, durationMs: 95 }] },
+  miningSilver: { minimumIntervalMs: 90, tones: [{ wave: "sine", startHz: 1050, endHz: 540, gain: 0.06, delayMs: 0, durationMs: 200 }, { wave: "triangle", startHz: 220, endHz: 90, gain: 0.06, delayMs: 0, durationMs: 90 }] },
+  miningBreak: { minimumIntervalMs: 90, tones: [{ wave: "sawtooth", startHz: 120, endHz: 40, gain: 0.06, delayMs: 0, durationMs: 150 }] },
+};
+
 const COMBAT_CUE_DEFINITIONS: Record<CombatCue, EnemyCueDefinition> = {
   ...ENEMY_CUE_DEFINITIONS,
   ...POWER_CUE_DEFINITIONS,
   ...WEAPON_CUE_DEFINITIONS,
+  ...MINING_CUE_DEFINITIONS,
 };
 
 export interface EnemyCueSnapshot {

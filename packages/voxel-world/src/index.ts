@@ -82,6 +82,15 @@ export const Block = {
 
 export type BlockId = (typeof Block)[keyof typeof Block];
 
+// Shared by authoritative mining and the local progress presentation.
+export function miningDurationMs(block: number): number {
+  if (block === Block.SilverOre) return 1200;
+  if (block === Block.IronOre) return 850;
+  if (block === Block.Stone) return 600;
+  if (block === Block.OakLog) return 500;
+  return 300;
+}
+
 export const MINERAL_DEPOSITS = [
   { x: 35, z: -5, block: Block.IronOre },
   { x: 68, z: 27, block: Block.SilverOre },

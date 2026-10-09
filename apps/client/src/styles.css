@@ -1128,5 +1128,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #mining-progress-fill { display: block; height: 100%; background: linear-gradient(90deg, #c28436, #ffdf86); }
 #resource-toasts { position: fixed; z-index: 23; top: 115px; left: 50%; transform: translateX(-50%); pointer-events: none; display: grid; gap: 6px; }
 .resource-toast { padding: 9px 18px; border: 1px solid #cbdcaa88; border-radius: 20px; color: #f6edbc; background: #163026ed; font: 800 15px system-ui; text-align: center; animation: resource-pickup 2.2s both; }
+.resource-toast[data-item="iron_ore"] { color: #ffd19e; border-color: #d89851; background: #352416ed; box-shadow: 0 0 18px #ce8b3a33; }
+.resource-toast[data-item="silver_ore"] { color: #d3f1ff; border-color: #9acfe6; background: #172d3ced; box-shadow: 0 0 18px #83c5e333; }
 @keyframes resource-pickup { 0% { opacity: 0; transform: translateY(12px) scale(.9); } 12%, 75% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-12px); } }
 @media (prefers-reduced-motion: reduce) { .resource-toast { animation: none; } }

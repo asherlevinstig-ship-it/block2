@@ -1,4 +1,5 @@
 import { Block, isProtectedVoxel } from "@blockcraft/voxel-world";
+export { miningDurationMs } from "@blockcraft/voxel-world";
 export const MINING_REACH = 4.5;
 export const MINING_WINDUP_MS = 300;
 export type MiningCell = { x: number; y: number; z: number; block: number };
@@ -11,6 +12,6 @@ export function miningAvailability(player: { x: number; y: number; z: number }, 
   if (cell.block === Block.Air || cell.block === Block.Bedrock) return "unbreakable";
   return "ready";
 }
-export function miningProgress(start: number, now: number): number {
-  return Math.max(0, Math.min(1, (now - start) / MINING_WINDUP_MS));
+export function miningProgress(start: number, now: number, durationMs = MINING_WINDUP_MS): number {
+  return Math.max(0, Math.min(1, (now - start) / Math.max(1, durationMs)));
 }

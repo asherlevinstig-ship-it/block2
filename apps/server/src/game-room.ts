@@ -2,6 +2,8 @@ import { Client, Room } from "@colyseus/core";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
+import { miningDurationMs } from "@blockcraft/voxel-world";
+import type { MineBlockRequest } from "@blockcraft/protocol";
 import {
   AttackRequestSchema,
   playerMeleeStrike,
@@ -208,6 +210,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly verticalVelocities = new Map<string, number>();
   private readonly attackChains = new Map<string, AttackChainState>();
   private readonly pendingAttacks = new Map<string, PendingAttack>();
+  private readonly pendingMining = new Map<string, { client: Client; request: MineBlockRequest; block: number; completesAt: number }>();
   private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
   private readonly pendingPowers = new Map<string, PendingPower>();
   private readonly specialMarks = new Map<string, ActiveSpecialMark>();
@@ -290,7 +293,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     };
     this.onMessage("player:return", client => this.returnPlayerToTown(client));
     aliveMessage("move", (client, payload) => this.handleMove(client, payload));
-    aliveMessage("mine", (client, payload) => this.handleMine(client, payload));
+    aliveMessage("mine", (client, payload) => this.beginMine(client, payload));
+    this.onMessage("mine:cancel", (client, payload: unknown) => {
+      const pending = this.pendingMining.get(client.sessionId);
+      if (pending && typeof payload === "object" && payload !== null && "requestId" in payload && payload.requestId === pending.request.requestId) this.pendingMining.delete(client.sessionId);
+    });
     aliveMessage("attack", (client, payload) => this.handleAttack(client, payload));
     aliveMessage("dodge", (client, payload) => this.handleDodge(client, payload));
     aliveMessage("defense", (client, payload) => this.handleDefense(client, payload));
@@ -384,6 +391,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.pendingMining.delete(client.sessionId);
     const player = this.state.players.get(client.sessionId);
     const quizRound = this.quizRounds.get(client.sessionId);
     // A confirmed answer has already earned a pot. Treat disconnecting at the
@@ -1245,6 +1253,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private simulatePlayers(deltaTime: number): void {
     const now = Date.now();
+    this.resolveMining(now);
     this.regrowMinerals(now);
     if (this.pendingWorldDeltaWrites.size > 0 && now - this.lastWorldDeltaRetryAt >= 5_000) {
       this.lastWorldDeltaRetryAt = now;
@@ -1882,6 +1891,40 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       };
       this.broadcast("power:resolved", resolved);
       for (const consumed of consumedMarks) this.broadcast("special:consumed", consumed);
+    }
+  }
+
+  private beginMine(client: Client, payload: unknown): void {
+    const parsed = MineBlockRequestSchema.safeParse(payload);
+    if (!parsed.success) return this.reject(client, { action: "mine", reason: "payload" });
+    const request = parsed.data;
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.health <= 0) return;
+    if (this.pendingMining.has(client.sessionId) || this.pendingPowers.has(client.sessionId)) {
+      return this.reject(client, { requestId: request.requestId, action: "mine", reason: "rate" });
+    }
+    const address = worldToChunk(request.x, request.z);
+    const stored = this.getChunk(address.chunkX, address.chunkZ);
+    const block = getBlock(stored.chunk, address.localX, request.y, address.localZ);
+    const reason = miningRejectionReason(player, request, block, stored.revision);
+    if (reason) return this.reject(client, { requestId: request.requestId, action: "mine", reason });
+    this.pendingMining.set(client.sessionId, { client, request, block, completesAt: Date.now() + miningDurationMs(block) });
+  }
+
+  private resolveMining(now: number): void {
+    for (const [id, pending] of this.pendingMining) {
+      const player = this.state.players.get(id);
+      const { request } = pending;
+      const block = this.readWorldBlock(request.x, request.y, request.z);
+      if (!player || player.health <= 0 || this.pendingPowers.has(id) || miningRejectionReason(player, request, block, request.expectedRevision) || block !== pending.block) {
+        this.pendingMining.delete(id);
+        this.reject(pending.client, { requestId: request.requestId, action: "mine", reason: "missing" });
+        continue;
+      }
+      if (now < pending.completesAt) continue;
+      this.pendingMining.delete(id);
+      // Revalidate revision, reach, protection and inventory on actual impact.
+      this.handleMine(pending.client, request);
     }
   }
 
