@@ -75,12 +75,27 @@ describe("voxel character animation", () => {
 
   it("gives dropped weapons their matching combat silhouettes", () => {
     const dagger = primaryActionPose(90, 1, "fang_dagger");
-    const hammer = primaryActionPose(430, 1, "stone_core_hammer");
+    const hammer = primaryActionPose(340, 1, "stone_core_hammer");
     const acidFocus = primaryActionPose(235, 1, "acid_gland_focus");
     expect(dagger.rightArmPitch).toBeLessThan(-100);
     expect(hammer.leftArmPitch).toBeLessThan(-130);
     expect(hammer.rightArmPitch).toBeLessThan(-140);
     expect(acidFocus.rightArmPitch).toBeLessThan(-120);
+  });
+
+  it("brings the hammer down at impact then smoothly returns to rest", () => {
+    const impact = primaryActionPose(430, 1, "stone_core_hammer");
+    expect(impact.leftArmPitch).toBe(24);
+    expect(impact.rightArmPitch).toBe(28);
+    expect(impact.leftArmRoll).toBe(0);
+    expect(impact.rightArmRoll).toBeCloseTo(0);
+    for (const boundary of [340, 430, 520, 820]) {
+      const before = primaryActionPose(boundary - 0.01, 1, "stone_core_hammer");
+      const after = primaryActionPose(boundary, 1, "stone_core_hammer");
+      expect(Math.abs(before.rightArmPitch - after.rightArmPitch)).toBeLessThan(0.001);
+      expect(Math.abs(before.torsoYaw - after.torsoYaw)).toBeLessThan(0.001);
+    }
+    expect(primaryActionPose(820, 1, "stone_core_hammer")).toEqual(primaryActionPose(null));
   });
 
   it("raises the weapon before snapping into a committed Seismic Cleave slam", () => {

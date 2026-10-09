@@ -73,6 +73,22 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   }
 
   const impact = combatTiming?.impactMs ?? 95;
+  if (mainHandId === "stone_core_hammer") {
+    const liftEnd = impact - 90;
+    const settleStart = impact + 90;
+    const smooth = (t: number) => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
+    const lift = smooth(elapsedMilliseconds / liftEnd);
+    const slam = smooth((elapsedMilliseconds - liftEnd) / (impact - liftEnd));
+    const recovery = 1 - smooth((elapsedMilliseconds - settleStart) / (duration - settleStart));
+    return {
+      active: true,
+      torsoYaw: (-8 * lift + 18 * slam) * recovery,
+      leftArmPitch: (-142 * lift + 166 * slam) * recovery,
+      leftArmRoll: 14 * lift * (1 - slam) * recovery,
+      rightArmPitch: (-154 * lift + 182 * slam) * recovery,
+      rightArmRoll: -14 * lift * (1 - slam) * recovery,
+    };
+  }
   const progress = elapsedMilliseconds <= impact
     ? elapsedMilliseconds / impact
     : 1 - (elapsedMilliseconds - impact) / (duration - impact);
@@ -96,14 +112,6 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
     leftArmRoll: 28 * strength,
     rightArmPitch: -138 * strength,
     rightArmRoll: -12 * strength,
-  };
-  if (mainHandId === "stone_core_hammer") return {
-    active: true,
-    torsoYaw: -6 * strength + 12 * followThrough,
-    leftArmPitch: -142 * strength,
-    leftArmRoll: 14 * strength,
-    rightArmPitch: -154 * strength,
-    rightArmRoll: -14 * strength,
   };
   if (comboStep === 2) return {
     active: true,

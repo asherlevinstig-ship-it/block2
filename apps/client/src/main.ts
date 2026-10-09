@@ -1491,6 +1491,7 @@ interface MarkPayoffVisual {
   root: pc.Entity;
   material: pc.StandardMaterial;
   startedAt: number;
+  durationMs?: number;
 }
 
 interface BrambleSnareVisual {
@@ -1978,6 +1979,22 @@ function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number):
   const indices: number[] = [];
   for (let i = 1; i < outline.length - 1; i++) indices.push(0, i + 1, i);
   mesh.setIndices(indices); mesh.update(pc.PRIMITIVE_TRIANGLES);
+}
+
+function createHammerHitImpact(mob: MobVisual): void {
+  const root = new pc.Entity("hammer-hit-chips");
+  const material = powerMaterial(new pc.Color(0.72, 0.82, 0.86), 0.88);
+  for (let i = 0; i < 6; i++) {
+    const angle = i * Math.PI / 3;
+    const chip = addBox(root, "stone-chip", material, [0.13, 0.12, 0.18],
+      [Math.sin(angle) * 0.38, 0.2 + i % 3 * 0.12, Math.cos(angle) * 0.38]);
+    chip.setLocalEulerAngles(i * 19, i * 41, 25);
+  }
+  const position = mob.entity.getPosition();
+  root.setPosition(position.x, position.y + 0.35, position.z);
+  app.root.addChild(root);
+  markPayoffVisuals.push({ root, material, startedAt: performance.now(), durationMs: 380 });
+  combatAudio.play("hammerImpact", enemyCuePan(position.x, localPlayer.getPosition().x));
 }
 
 function createBruteSlamImpact(mob: MobVisual): void {
@@ -4515,12 +4532,14 @@ app.on("update", (dt: number) => {
   for (let index = markPayoffVisuals.length - 1; index >= 0; index -= 1) {
     const payoff = markPayoffVisuals[index]!;
     const elapsed = animationNow - payoff.startedAt;
-    if (elapsed >= 760) {
+    const duration = payoff.durationMs ?? 760;
+    if (elapsed >= duration) {
       payoff.root.destroy();
+      payoff.material.destroy();
       markPayoffVisuals.splice(index, 1);
       continue;
     }
-    const progress = elapsed / 760;
+    const progress = elapsed / duration;
     const strength = 1 - progress;
     payoff.root.setLocalScale(0.55 + progress * 1.25, 0.8 + Math.sin(progress * Math.PI) * 1.25, 0.55 + progress * 1.25);
     payoff.root.rotate(0, frameTime * 210, 0);
@@ -4967,6 +4986,8 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:hit", (message: CombatHit) => {
     const mob = mobVisuals.get(message.mobId);
+    if (message.mainHandId === "stone_core_hammer" && message.damage > 0 && mob
+      && localPlayer.getPosition().distance(mob.entity.getPosition()) <= 9) createHammerHitImpact(mob);
     if (message.defeated) mob?.marks.clear();
     const name = mob?.state.name ?? "Mob";
     const respawnSeconds = mob?.state.archetype === "stone_brute" ? 8.5 : 5;
@@ -4977,7 +4998,7 @@ async function connect(): Promise<void> {
     if (message.attackerId === room?.sessionId) {
       updateMomentum(message.momentumStacks);
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
-      localHitPauseUntil = performance.now() + (comboStep === 3 ? 75 : 48);
+      localHitPauseUntil = performance.now() + (message.mainHandId === "stone_core_hammer" ? 80 : comboStep === 3 ? 75 : 48);
       const hitLabel = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo && comboStep === 3
         ? `FINISHER  −${message.damage}`
         : `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName.toUpperCase()}  −${message.damage}`;
@@ -5158,7 +5179,10 @@ async function connect(): Promise<void> {
     powerImpactVisuals.length = 0;
     for (const debris of powerDebrisVisuals) debris.entity.destroy();
     powerDebrisVisuals.length = 0;
-    for (const payoff of markPayoffVisuals) payoff.root.destroy();
+    for (const payoff of markPayoffVisuals) {
+      payoff.root.destroy();
+      payoff.material.destroy();
+    }
     markPayoffVisuals.length = 0;
     for (const snare of brambleSnareVisuals.values()) snare.root.destroy();
     brambleSnareVisuals.clear();

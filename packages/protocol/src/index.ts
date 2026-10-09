@@ -54,7 +54,7 @@ export const ITEM_DEFINITIONS = {
   stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core from a Stone Brute" },
   acid_gland: { id: "acid_gland", name: "Acid Gland", description: "A volatile gland taken from a Cave Spitter" },
   fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", description: "A fast three-hit melee weapon" },
-  stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", description: "A slow crushing weapon with heavy knockback" },
+  stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", description: "Slow overhead smash · heavy knockback · can stagger enemy windups" },
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", description: "A ranged focus that fires corrosive bolts" },
 } as const;
 

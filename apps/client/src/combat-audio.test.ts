@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENEMY_CUE_DEFINITIONS, POWER_CUE_DEFINITIONS, enemyCuePan, enemyCuesForTransition, type EnemyCueSnapshot } from "./combat-audio.js";
+import { ENEMY_CUE_DEFINITIONS, POWER_CUE_DEFINITIONS, WEAPON_CUE_DEFINITIONS, enemyCuePan, enemyCuesForTransition, type EnemyCueSnapshot } from "./combat-audio.js";
 
 const idle: EnemyCueSnapshot = {
   alive: true,
@@ -10,6 +10,13 @@ const idle: EnemyCueSnapshot = {
 };
 
 describe("enemy combat audio", () => {
+  it("gives confirmed hammer impacts a short low-frequency thump", () => {
+    const cue = WEAPON_CUE_DEFINITIONS.hammerImpact;
+    expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(180);
+    expect(cue.tones[0]!.startHz).toBeLessThan(100);
+    expect(cue.tones[0]!.endHz).toBeLessThan(cue.tones[0]!.startHz);
+    expect(cue.tones.every(tone => tone.gain <= 0.12 && tone.durationMs <= 220)).toBe(true);
+  });
   it("provides a distinct synthesized definition for every enemy cue", () => {
     expect(Object.keys(ENEMY_CUE_DEFINITIONS).sort()).toEqual(["defeat", "hurt", "stagger", "warning"]);
     expect(new Set(Object.values(ENEMY_CUE_DEFINITIONS).map(cue => cue.tones[0]?.startHz)).size).toBe(4);

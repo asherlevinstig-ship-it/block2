@@ -1,6 +1,7 @@
 export type EnemyCue = "warning" | "hurt" | "stagger" | "defeat";
 export type PowerCue = "seismicWindup" | "seismicImpact";
-type CombatCue = EnemyCue | PowerCue;
+export type WeaponCue = "hammerImpact";
+type CombatCue = EnemyCue | PowerCue | WeaponCue;
 
 interface ToneLayer {
   wave: OscillatorType;
@@ -65,9 +66,21 @@ export const POWER_CUE_DEFINITIONS: Record<PowerCue, EnemyCueDefinition> = {
   },
 };
 
+export const WEAPON_CUE_DEFINITIONS: Record<WeaponCue, EnemyCueDefinition> = {
+  hammerImpact: {
+    minimumIntervalMs: 180,
+    tones: [
+      { wave: "sine", startHz: 96, endHz: 38, gain: 0.12, delayMs: 0, durationMs: 220 },
+      { wave: "triangle", startHz: 360, endHz: 110, gain: 0.045, delayMs: 0, durationMs: 100 },
+      { wave: "square", startHz: 140, endHz: 55, gain: 0.035, delayMs: 18, durationMs: 150 },
+    ],
+  },
+};
+
 const COMBAT_CUE_DEFINITIONS: Record<CombatCue, EnemyCueDefinition> = {
   ...ENEMY_CUE_DEFINITIONS,
   ...POWER_CUE_DEFINITIONS,
+  ...WEAPON_CUE_DEFINITIONS,
 };
 
 export interface EnemyCueSnapshot {
