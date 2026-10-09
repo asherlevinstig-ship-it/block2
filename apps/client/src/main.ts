@@ -2492,7 +2492,11 @@ function bindPlayers(joinedRoom: Room): void {
       refreshPowerCompatibility();
     }, true);
     playerCallbacks.listen("health", () => {
-      if (isLocal) updatePlayerHealth(player.health, player.maxHealth);
+      if (isLocal) {
+        updatePlayerHealth(player.health, player.maxHealth);
+        if (player.health > 0) awaitingReturnState = false;
+        if (player.health <= 0 && defeatScreen.hidden && !awaitingReturnState) showDefeat("An enemy");
+      }
     }, true);
     playerCallbacks.listen("maxHealth", () => {
       if (isLocal) updatePlayerHealth(player.health, player.maxHealth);
@@ -2903,7 +2907,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   chunks.clear();
   payload.chunks.forEach(installChunk);
   const ownPlayer = room ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId) : undefined;
-  const initialPose = ownPlayer ?? payload.spawn;
+  const initialPose = townReturnPosition ?? ownPlayer ?? payload.spawn;
+  townReturnPosition = null;
   const initialPosition = new pc.Vec3(initialPose.x, initialPose.y, initialPose.z);
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
@@ -2956,7 +2961,53 @@ function renderBootstrap(payload: WorldBootstrap): void {
 }
 
 const keys = new Set<string>();
+let awaitingReturnState = false;
+let townReturnPosition: { x: number; y: number; z: number } | null = null;
+const defeatScreen = document.querySelector<HTMLElement>("#defeat-screen")!;
+const returnToTownButton = document.querySelector<HTMLButtonElement>("#return-to-town")!;
+const defeatDetail = document.querySelector<HTMLElement>("#defeat-detail")!;
+function clearDefeatCombat(): void {
+  keys.clear(); touchStrafe = 0; touchForward = 0;
+  smoothedMovement = { x: 0, z: 0 };
+  cancelPowerAim(); cancelSpecialAim(); cancelLocalPowerPresentation();
+  setDefensePresentation(false);
+  localActionStartedAt = null;
+  localDodgeStartedAt = null;
+  localHitPauseUntil = 0;
+  localComboStep = 0; localComboExpiresAt = 0;
+  pendingPredictionFrames.length = 0;
+  pendingStopInputSequence = null;
+  cameraShakeUntil = 0; cameraShakeStrength = 0;
+  localVerticalVelocity = 0;
+  localVisualVerticalOffset = 0;
+  localNetworkVisualOffset = { x: 0, z: 0 };
+  localRecoveryVisualOffset = { x: 0, z: 0 };
+  localPowerVisualOffset.set(0, 0, 0);
+  if (room) {
+    for (const mob of mobVisuals.values()) mob.marks.delete(room.sessionId);
+    powerTelegraphs.get(room.sessionId)?.root.destroy();
+    powerTelegraphs.delete(room.sessionId);
+    brambleSnareVisuals.get(room.sessionId)?.root.destroy();
+    brambleSnareVisuals.delete(room.sessionId);
+  }
+}
+function showDefeat(attackerName: string): void {
+  clearDefeatCombat();
+  quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
+  defeatDetail.textContent = `${attackerName} defeated you. Take a breath and return to safety.`;
+  defeatScreen.hidden = false;
+  returnToTownButton.disabled = !room;
+  returnToTownButton.textContent = "Return to Town";
+  returnToTownButton.focus();
+}
+returnToTownButton.addEventListener("click", () => {
+  if (!room) return;
+  returnToTownButton.disabled = true;
+  returnToTownButton.textContent = "Returning…";
+  room.send("player:return");
+});
 window.addEventListener("keydown", event => {
+  if (!defeatScreen.hidden) return;
   if (event.code.startsWith("Arrow")) event.preventDefault();
   keys.add(event.code);
 });
@@ -3182,6 +3233,7 @@ function setDefensePresentation(active: boolean): void {
 }
 
 function requestDefense(active: boolean): void {
+  if (!defeatScreen.hidden) return;
   if (!room || !worldReady || active === localDefending) return;
   if (active && (powerAimActive || specialAimActive || localPowerStartedAt !== null || localActionStartedAt !== null)) {
     status.textContent = "Finish or cancel the current action before guarding.";
@@ -3434,6 +3486,7 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
 }
 
 function requestMine(): void {
+  if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
   if (powerAimActive || localPowerStartedAt !== null) {
     status.textContent = `Committed to ${POWER_DEFINITIONS[localActivePower ?? localEquippedPower].name} · dodge to cancel.`;
@@ -3475,6 +3528,7 @@ function requestMine(): void {
 }
 
 function requestAttack(): void {
+  if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
   const now = performance.now();
   if (powerAimActive || (localPowerStartedAt !== null && now - localPowerStartedAt < powerDuration(localActivePower))) {
@@ -3514,6 +3568,7 @@ function requestAttack(): void {
 }
 
 function requestDodge(): void {
+  if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
   if (localDefending) requestDefense(false);
   if (powerAimActive) cancelPowerAim();
@@ -3537,7 +3592,7 @@ function requestDodge(): void {
     { x: direction.x * 1.8, y: 0, z: direction.z * 1.8 },
     readCollisionWorldBlock,
   );
-  localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
+  if (defeatScreen.hidden) localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   updateActiveChunkMeshes(predicted);
   localDodgeStartedAt = performance.now();
   dodgeSequence += 1;
@@ -3600,6 +3655,7 @@ function updatePowerAimFromPointer(): void {
 }
 
 function beginPowerAim(pointerId: number | null = null): void {
+  if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
   if (localDefending) requestDefense(false);
   if (!powerServerReady) {
@@ -3703,6 +3759,7 @@ function castPower(yaw: number, target?: { x: number; y: number; z: number }): v
 }
 
 function commitPowerAim(): void {
+  if (!defeatScreen.hidden) return;
   if (!powerAimActive || !room) return;
   const yaw = powerAimYaw;
   const definition = POWER_DEFINITIONS[localEquippedPower];
@@ -3723,6 +3780,7 @@ function commitPowerAim(): void {
 }
 
 function requestHuntersMark(): void {
+  if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
   const remaining = localSpecialCooldownUntil - Date.now();
   if (remaining > 0) {
@@ -3776,6 +3834,7 @@ function updateSpecialAimFromPointer(): void {
 }
 
 function beginSpecialAim(pointerId: number | null = null): void {
+  if (!defeatScreen.hidden) return;
   if (!room || !worldReady || specialAimActive) return;
   if (localDefending) requestDefense(false);
   const definition = SPECIAL_DEFINITIONS[localEquippedSpecial];
@@ -3828,6 +3887,7 @@ function cancelSpecialAim(): void {
 }
 
 function commitSpecialAim(): void {
+  if (!defeatScreen.hidden) return;
   if (!specialAimActive || !room) return;
   if (!specialAimTargetValid) {
     status.textContent = "Bramble Snare needs solid ground within range.";
@@ -3850,6 +3910,7 @@ function commitSpecialAim(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (!defeatScreen.hidden) return;
   if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
     openBlacksmith();
     return;
@@ -3930,6 +3991,7 @@ for (const button of traitPickerButtons) {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (!defeatScreen.hidden) return;
   if (!inventoryPanel.hidden) {
     if (event.code === "Escape" || event.code === "KeyI") setInventoryOpen(false);
     event.preventDefault();
@@ -4173,8 +4235,8 @@ app.on("update", (dt: number) => {
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const strafe = quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
-  const forward = quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
+  const strafe = defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
+  const forward = defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
@@ -5028,14 +5090,29 @@ async function connect(): Promise<void> {
     status.textContent = `Heavy interrupt · enemy staggered for ${(message.durationMs / 1000).toFixed(1)}s.`;
     logMovementEvent(`STAGGER ${message.mobId} ${message.durationMs}ms`);
   });
+  room.onMessage("player:returned", (spawn: { x: number; y: number; z: number }) => {
+    awaitingReturnState = true;
+    townReturnPosition = spawn;
+    clearDefeatCombat();
+    localPlayer.setPosition(spawn.x, spawn.y, spawn.z);
+    authoritativeLocalPosition.set(spawn.x, spawn.y, spawn.z);
+    cameraFocus.set(spawn.x, spawn.y, spawn.z);
+    localPowerCooldownUntil = 0; localSpecialCooldownUntil = 0;
+    cutawaySliceY = null;
+    defeatScreen.hidden = true;
+    worldReady = false;
+    room?.send("world:ready");
+    status.textContent = "Back in the Town of Beginnings · health and stamina restored. Nothing lost.";
+  });
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
     if (message.playerId !== room?.sessionId) return;
     if (message.momentumStacks !== undefined) updateMomentum(message.momentumStacks);
+    if (message.defeated) showDefeat(mobVisuals.get(message.mobId)?.state.name ?? "An enemy");
     if (message.guarded) return;
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
-    showCombatFeedback(message.defeated ? "DEFEATED · RESPAWNING" : `HURT  −${message.damage}`, "hurt");
+    showCombatFeedback(message.defeated ? "DEFEATED" : `HURT  −${message.damage}`, "hurt");
     status.textContent = message.defeated
-      ? "You were defeated and returned to the surface camp."
+      ? "You were defeated. Return to the Town of Beginnings when ready."
       : `${attackerName} hit you for ${message.damage} · ${message.health} HP remaining.`;
     logMovementEvent(`HURT hp=${message.health} defeated=${message.defeated}`);
   });
@@ -5144,6 +5221,11 @@ async function connect(): Promise<void> {
     }
   });
   room.onLeave(() => {
+    awaitingReturnState = false; townReturnPosition = null;
+    if (!defeatScreen.hidden) {
+      returnToTownButton.disabled = true;
+      defeatDetail.textContent = "Disconnected. Reload to reconnect to the Town of Beginnings.";
+    }
     quizPanel.hidden = true;
     blacksmithPanel.hidden = true;
     inventoryPanel.hidden = true;

@@ -263,26 +263,32 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         client.send("pong", { id: payload.id, serverTime: Date.now() });
       }
     });
-    this.onMessage("move", (client, payload) => this.handleMove(client, payload));
-    this.onMessage("mine", (client, payload) => this.handleMine(client, payload));
-    this.onMessage("attack", (client, payload) => this.handleAttack(client, payload));
-    this.onMessage("dodge", (client, payload) => this.handleDodge(client, payload));
-    this.onMessage("defense", (client, payload) => this.handleDefense(client, payload));
-    this.onMessage("power", (client, payload) => this.handlePower(client, payload));
-    this.onMessage("power:cancel", (client, payload) => this.handlePowerCancel(client, payload));
-    this.onMessage("power:equip", (client, payload) => this.handlePowerEquip(client, payload));
-    this.onMessage("power:seismic-mastery", (client, payload) => this.handleSeismicMasteryEquip(client, payload));
-    this.onMessage("special", (client, payload) => this.handleSpecial(client, payload));
-    this.onMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
-    this.onMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
-    this.onMessage("trait:equip", (client, payload) => this.handleTraitEquip(client, payload));
+    const aliveMessage = (type: string, handler: (client: Client, payload: any) => void) => {
+      this.onMessage(type, (client, payload) => {
+        if ((this.state.players.get(client.sessionId)?.health ?? 0) > 0) handler(client, payload);
+      });
+    };
+    this.onMessage("player:return", client => this.returnPlayerToTown(client));
+    aliveMessage("move", (client, payload) => this.handleMove(client, payload));
+    aliveMessage("mine", (client, payload) => this.handleMine(client, payload));
+    aliveMessage("attack", (client, payload) => this.handleAttack(client, payload));
+    aliveMessage("dodge", (client, payload) => this.handleDodge(client, payload));
+    aliveMessage("defense", (client, payload) => this.handleDefense(client, payload));
+    aliveMessage("power", (client, payload) => this.handlePower(client, payload));
+    aliveMessage("power:cancel", (client, payload) => this.handlePowerCancel(client, payload));
+    aliveMessage("power:equip", (client, payload) => this.handlePowerEquip(client, payload));
+    aliveMessage("power:seismic-mastery", (client, payload) => this.handleSeismicMasteryEquip(client, payload));
+    aliveMessage("special", (client, payload) => this.handleSpecial(client, payload));
+    aliveMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
+    aliveMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
+    aliveMessage("trait:equip", (client, payload) => this.handleTraitEquip(client, payload));
     this.onMessage("quiz:sync", client => this.sendQuizState(client));
-    this.onMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
-    this.onMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
-    this.onMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
+    aliveMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
+    aliveMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
+    aliveMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
     this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
-    this.onMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
-    this.onMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
+    aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
+    aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 33);
   }
 
@@ -844,7 +850,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.clearMarksForMob(mobId);
     this.progressWorldObjectives(mobId, mob, attackerId);
     const player = this.state.players.get(attackerId);
-    if (!player) return;
+    if (!player || player.health <= 0) return;
     const reward = defeatReward(player.health, player.maxHealth, player.stamina, player.maxStamina, definition, mob.rewardMultiplier);
     player.health = reward.health;
     player.stamina = reward.stamina;
@@ -932,7 +938,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         continue;
       }
       for (const [playerId, player] of this.state.players) {
-        if (!isLootInPickupRange(player, drop)) continue;
+        if (player.health <= 0 || !isLootInPickupRange(player, drop)) continue;
         const itemId = drop.itemId as ItemId;
         let inventoryItem = player.inventory.get(itemId);
         const total = inventoryTotal(inventoryItem?.quantity, drop.quantity);
@@ -956,7 +962,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true): boolean {
     const player = this.state.players.get(playerId);
-    if (!player || now < player.invulnerableUntil || isInsideTownSafeZone(player)) return false;
+    if (!player || player.health <= 0 || now < player.invulnerableUntil || isInsideTownSafeZone(player)) return false;
     const mob = this.state.mobs.get(mobId);
     const defense = blockable && mob
       ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
@@ -996,14 +1002,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       } satisfies DefenseResolved);
     }
     if (!defeated) return true;
-    const spawn = this.spawnPoint();
-    player.x = spawn.x;
-    player.y = spawn.y;
-    player.z = spawn.z;
-    player.health = player.maxHealth;
-    player.stamina = player.maxStamina;
+    player.defending = false;
     player.momentumStacks = 0;
-    player.invulnerableUntil = now + 1500;
     this.pendingAttacks.delete(playerId);
     this.cancelWeaponProjectiles(playerId);
     this.pendingPowers.delete(playerId);
@@ -1024,6 +1024,23 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.targetId = "";
     }
     return true;
+  }
+
+  private returnPlayerToTown(client: Client): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.health > 0) return;
+    const now = Date.now();
+    const spawn = this.spawnPoint();
+    player.x = spawn.x; player.y = spawn.y; player.z = spawn.z;
+    player.health = player.maxHealth;
+    player.stamina = player.maxStamina;
+    player.defending = false;
+    player.powerCooldownUntil = 0;
+    player.specialCooldownUntil = 0;
+    player.invulnerableUntil = now + 1500;
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
+    this.verticalVelocities.set(client.sessionId, 0);
+    client.send("player:returned", spawn);
   }
 
   private resolveMobProjectiles(now: number): void {
@@ -1323,6 +1340,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.updateMobStrikeOrigin(mobId, mob);
     }
     for (const [sessionId, player] of this.state.players) {
+      if (player.health <= 0) continue;
       player.dangerTier = dangerBandAt(player).tier;
       if (player.defending) {
         player.stamina = Math.max(0, player.stamina - guardStaminaCost(GUARD_STAMINA_DRAIN_PER_SECOND, player.equippedTrait as TraitId) * deltaTime);
