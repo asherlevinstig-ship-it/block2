@@ -15,6 +15,7 @@ import {
   type TraitId,
 } from "@blockcraft/protocol";
 import { canEquipMainHand } from "./equipment-rules.js";
+import { ArmourEquipSchema, type ArmourId } from "@blockcraft/protocol";
 import { compatiblePowerOrFallback } from "./power-rules.js";
 import { InventoryItemState, type PlayerState } from "./schema.js";
 
@@ -34,6 +35,7 @@ export interface PlayerSaveData {
   blacksmithUpgrades: number;
   inventory: Partial<Record<ItemId, number>>;
   mainHandId: MainHandId;
+  armourId?: ArmourId;
   equippedPower: PowerId;
   seismicMastery: SeismicMasteryId;
   equippedSpecial: SpecialId;
@@ -73,6 +75,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     blacksmithUpgrades: player.blacksmithUpgrades,
     inventory,
     mainHandId: player.mainHandId as MainHandId,
+    armourId: ArmourEquipSchema.safeParse({ armourId: player.armourId }).data?.armourId ?? "none",
     equippedPower: player.equippedPower as PowerId,
     seismicMastery: player.seismicMastery as SeismicMasteryId,
     equippedSpecial: player.equippedSpecial as SpecialId,
@@ -120,6 +123,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 7)),
     inventory,
     mainHandId,
+    armourId: ArmourEquipSchema.safeParse({ armourId: value.armourId }).data?.armourId ?? "none",
     equippedPower,
     seismicMastery: isKeyOf(value.seismicMastery, SEISMIC_CLEAVE_UPGRADES.masteries) ? value.seismicMastery : "advancing_fault",
     equippedSpecial: isKeyOf(value.equippedSpecial, SPECIAL_DEFINITIONS) ? value.equippedSpecial : "hunters_mark",
@@ -147,6 +151,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   const mainHand = MAIN_HAND_DEFINITIONS[mainHandId];
   player.mainHandId = mainHandId;
   player.mainHandTag = mainHand.tag;
+  player.armourId = save.armourId && (save.armourId === "none" || (player.inventory.get(save.armourId)?.quantity ?? 0) > 0) ? save.armourId : "none";
   player.equippedPower = compatiblePowerOrFallback(save.equippedPower, mainHand.tag);
   player.seismicMastery = save.seismicMastery;
   player.equippedSpecial = save.equippedSpecial;

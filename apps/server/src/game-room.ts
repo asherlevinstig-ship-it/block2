@@ -5,7 +5,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_WEAPONS, BlacksmithBuySchema, ITEM_DEFINITIONS } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BlacksmithBuySchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
@@ -378,6 +378,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     aliveMessage("special", (client, payload) => this.handleSpecial(client, payload));
     aliveMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
     aliveMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
+    aliveMessage("armour:equip", (client, payload) => this.handleArmourEquip(client, payload));
     this.onMessage("loot:collect", (client, payload) => this.handleLootCollect(client, payload));
     aliveMessage("trait:equip", (client, payload) => this.handleTraitEquip(client, payload));
     this.onMessage("quiz:sync", client => this.sendQuizState(client));
@@ -631,7 +632,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       ironCapacity: ironCapacity(player.blacksmithUpgrades),
       gold: player.coins,
       ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
-      weapons: Object.fromEntries(Object.keys(BLACKSMITH_WEAPONS).map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
+      weapons: Object.fromEntries(Object.keys(BLACKSMITH_STOCK).map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       sold,
       goldGranted,
       purchasedUpgradeId,
@@ -639,12 +640,24 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     } satisfies BlacksmithUpdate);
   }
 
+  private handleArmourEquip(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = ArmourEquipSchema.safeParse(payload);
+    if (!player || player.health <= 0 || !parsed.success) return;
+    const id = parsed.data.armourId;
+    if (id !== "none" && (player.inventory.get(id)?.quantity ?? 0) <= 0) {
+      client.send("chat:notice", { message: "You need that armour in your pack before equipping it." }); return;
+    }
+    player.armourId = id;
+    void this.persistPlayer(client.sessionId, player);
+  }
+
   private handleBlacksmithBuy(client: Client, payload: unknown): void {
     const player = this.state.players.get(client.sessionId);
     const parsed = BlacksmithBuySchema.safeParse(payload);
     if (!player) return;
-    if (!parsed.success) return this.sendBlacksmithState(client, "Choose a weapon from the shop.", "error");
-    if (player.health <= 0 || !canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to buy weapons.", "error");
+    if (!parsed.success) return this.sendBlacksmithState(client, "Choose equipment from the shop.", "error");
+    if (player.health <= 0 || !canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to buy equipment.", "error");
     const id = parsed.data.itemId;
     const result = weaponPurchase(player.coins, player.inventory.get(id)?.quantity ?? 0, id);
     if (!result.ok) return this.sendBlacksmithState(client, result.message, "error");
@@ -1263,6 +1276,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.staggerMob(mobId, mob, now, PARRY_STAGGER_MS, true);
     }
     if (player.stamina <= 0) player.defending = false;
+    defense.damage = armouredDamage(defense.damage, player.armourId);
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
     player.health = Math.max(0, player.health - defense.damage);
     const defeated = player.health === 0;
@@ -1701,7 +1715,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
-      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId);
+      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId) * armourStats(player.armourId).speed;
       const grounded = isPlayerSupported(this.readWorldBlock, player.x, player.y, player.z);
       let verticalVelocity = this.verticalVelocities.get(sessionId) ?? 0;
       if (grounded && verticalVelocity < 0) verticalVelocity = 0;

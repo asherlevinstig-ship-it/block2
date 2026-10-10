@@ -29,8 +29,11 @@ import {
   championChargeOutline,
   bruteSlamOutline,
   BLACKSMITH_UPGRADES,
-  BLACKSMITH_WEAPONS,
-  type BlacksmithWeaponId,
+  BLACKSMITH_STOCK,
+  type BlacksmithStockId,
+  ARMOUR_DEFINITIONS,
+  armourStats,
+  type ArmourId,
   IRON_ORE_GOLD_PRICE,
   SILVER_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
@@ -838,6 +841,7 @@ interface VoxelCharacterRig {
   scarf: pc.Entity;
   silhouette: pc.Entity | null;
   mainHands: Record<MainHandId, pc.Entity>;
+  armour: Record<"leather_armour" | "iron_armour", pc.Entity>;
   locomotionPhase: number;
   locomotionWeight: number;
 }
@@ -1050,7 +1054,22 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     silhouette.enabled = false;
     root.addChild(silhouette);
   }
-  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, silhouette, mainHands, locomotionPhase: 0, locomotionWeight: 0 };
+  const armour = { leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour") };
+  for (const [id, layer] of Object.entries(armour)) {
+    const material = id === "iron_armour" ? bladeMaterial : bootMaterial;
+    torso.addChild(layer);
+    addBox(layer, "chest-protection", material, [.53, .43, .07], [0, -.025, .205]);
+    addBox(layer, "armour-back", material, [.53, .43, .06], [0, -.025, -.185]);
+    addBox(layer, "left-shoulder", material, [.2, .12, .39], [-.28, .24, 0]);
+    addBox(layer, "right-shoulder", material, [.2, .12, .39], [.28, .24, 0]);
+    if (id === "iron_armour") addBox(layer, "iron-ridge", brassMaterial, [.09, .43, .025], [0, -.025, .253]);
+    layer.enabled = false;
+  }
+  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, silhouette, mainHands, armour, locomotionPhase: 0, locomotionWeight: 0 };
+}
+
+function setRigArmour(rig: VoxelCharacterRig, id: string): void {
+  for (const [key, entity] of Object.entries(rig.armour)) entity.enabled = key === id;
 }
 
 function setRigMainHand(rig: VoxelCharacterRig, mainHandId: MainHandId): void {
@@ -1153,6 +1172,7 @@ interface NetworkPlayer {
   dodgeSequence: number;
   invulnerableUntil: number;
   mainHandId: string;
+  armourId: string;
   mainHandTag: string;
   equippedPower: string;
   seismicMastery: string;
@@ -1384,6 +1404,7 @@ let localPowerStepApplied = false;
 let localPowerCooldownUntil = 0;
 let localSpecialCooldownUntil = 0;
 let localMainHandId: MainHandId = "longsword";
+let localArmourId: ArmourId = "none";
 let localIronSwordOwned = false;
 let localEquippedPower: PowerId = "shockwave";
 let localSeismicMastery: SeismicMasteryId = "advancing_fault";
@@ -1483,7 +1504,15 @@ function refreshPowerCompatibility(): void {
 
 function refreshInventoryEquipped(): void {
   const tool = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0 ? "Reinforced Pickaxe" : "Starter Pickaxe";
-  inventoryEquipped.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name} · ${tool}`;
+  inventoryEquipped.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name} · ${tool} · ${armourStats(localArmourId).name}`;
+  const slot = document.querySelector<HTMLElement>("#inventory-armour-slot");
+  if (slot) slot.textContent = `ARMOUR SLOT: ${armourStats(localArmourId).name}`;
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-equip-armour]")) {
+    const id = button.dataset.equipArmour!;
+    button.disabled = id === localArmourId || (id !== "none" && (inventoryCounts.get(id as ItemId) ?? 0) <= 0);
+    button.textContent = id === localArmourId ? "EQUIPPED" : id === "none" ? "REMOVE ARMOUR" : "EQUIP";
+    button.setAttribute("aria-pressed", String(id === localArmourId));
+  }
 }
 
 function updatePowerLoadout(powerId: PowerId): void {
@@ -1637,7 +1666,7 @@ function updateMomentum(stacksValue: number): void {
 }
 
 function localMovementSpeed(): number {
-  const baseSpeed = localDefending ? 2.1 : 4.2;
+  const baseSpeed = (localDefending ? 2.1 : 4.2) * armourStats(localArmourId).speed;
   return localTraitId === "momentum"
     ? baseSpeed * (1 + localMomentumStacks * MOMENTUM_TRAIT.movementSpeedBonusPerStack)
     : baseSpeed;
@@ -2287,6 +2316,7 @@ function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePla
   const entity = new pc.Entity(`remote-player:${sessionId}`);
   const rig = createVoxelCharacter(entity, remoteMaterial);
   if (isMainHandId(player.mainHandId)) setRigMainHand(rig, player.mainHandId);
+  setRigArmour(rig, player.armourId);
   entity.setPosition(player.x, player.y, player.z);
   app.root.addChild(entity);
   return {
@@ -2463,6 +2493,8 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 }
 
 const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
+  leather_armour: coloredMaterial(new pc.Color(.44, .26, .12)),
+  iron_armour: coloredMaterial(new pc.Color(.76, .8, .85)),
   forged_sword: coloredMaterial(new pc.Color(.76, .8, .85)),
   forged_bow: coloredMaterial(new pc.Color(.65, .45, .25)),
   forged_focus: coloredMaterial(new pc.Color(.3, .65, .95)),
@@ -2793,6 +2825,12 @@ function bindPlayers(joinedRoom: Room): void {
         setRigMainHand(remote.rig, player.mainHandId);
       }
     }, true);
+    playerCallbacks.listen("armourId", () => {
+      if (isLocal) {
+        localArmourId = Object.hasOwn(ARMOUR_DEFINITIONS, player.armourId) ? player.armourId as ArmourId : "none";
+        setRigArmour(localPlayerRig, localArmourId); refreshInventoryEquipped();
+      } else if (remote) setRigArmour(remote.rig, player.armourId);
+    }, true);
     playerCallbacks.listen("blacksmithUpgrades", () => {
       if (!isLocal) return;
       localIronSwordOwned = (player.blacksmithUpgrades & 2) !== 0;
@@ -3075,24 +3113,26 @@ blacksmithClose.before(weaponShop);
 function renderWeaponShop(): void {
   weaponShop.replaceChildren();
   const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
-  heading.textContent = "FORGED WEAPONS · ADDED TO YOUR PACK"; weaponShop.append(heading);
+  heading.textContent = "WEAPONS & ARMOUR · ADDED TO YOUR PACK"; weaponShop.append(heading);
   const current = weaponComparison(localMainHandId, localIronSwordOwned);
-  for (const id of Object.keys(BLACKSMITH_WEAPONS) as BlacksmithWeaponId[]) {
-    const stats = weaponComparison(id);
+  for (const id of Object.keys(BLACKSMITH_STOCK) as BlacksmithStockId[]) {
+    const armour = id === "leather_armour" || id === "iron_armour" ? armourStats(id) : null;
+    const stats = armour ? null : weaponComparison(id as MainHandId);
     const card = document.createElement("article");
-    const title = document.createElement("strong"); title.textContent = stats.name;
+    const title = document.createElement("strong"); title.textContent = ITEM_DEFINITIONS[id].name;
     const description = document.createElement("p");
-    description.textContent = `Damage ${stats.damage} · attack ${stats.speed} · reach ${stats.range}`;
+    description.textContent = armour ? `Damage reduction ${armour.reduction} · movement ${Math.round(armour.speed * 100)}% · minimum hit 1` : `Damage ${stats!.damage} · attack ${stats!.speed} · reach ${stats!.range}`;
     const comparison = document.createElement("small");
-    comparison.textContent = `Equipped: ${current.name} — damage ${current.damage}, attack ${current.speed}, reach ${current.range}. Lower ms = faster.`;
+    const worn = armourStats(localArmourId);
+    comparison.textContent = armour ? `Worn: ${worn.name} — reduction ${worn.reduction}, movement ${Math.round(worn.speed * 100)}%. Buy, then equip from your pack.` : `Equipped: ${current.name} — damage ${current.damage}, attack ${current.speed}, reach ${current.range}. Lower ms = faster.`;
     const button = document.createElement("button");
     const owned = inventoryCounts.get(id) ?? 0;
-    button.textContent = `BUY · ${BLACKSMITH_WEAPONS[id].price} GOLD${owned ? ` · ${owned} OWNED` : ""}`;
-    button.disabled = !room || blacksmithPending || tavernCoinBalance < BLACKSMITH_WEAPONS[id].price || owned >= 65535;
+    button.textContent = `BUY · ${BLACKSMITH_STOCK[id].price} GOLD${owned ? ` · ${owned} OWNED` : ""}`;
+    button.disabled = !room || blacksmithPending || tavernCoinBalance < BLACKSMITH_STOCK[id].price || owned >= 65535;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending) return;
       blacksmithPending = true; renderWeaponShop();
-      blacksmithMessage.textContent = `Buying ${stats.name}...`;
+      blacksmithMessage.textContent = `Buying ${ITEM_DEFINITIONS[id].name}...`;
       room.send("blacksmith:buy", { itemId: id });
     });
     card.append(title, description, comparison, button); weaponShop.append(card);
@@ -3112,7 +3152,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   document.querySelector<HTMLElement>("#blacksmith-sale-value")!.textContent = `${update.ironOre * IRON_ORE_GOLD_PRICE + silver * SILVER_ORE_GOLD_PRICE} gold`;
   blacksmithOre.textContent = `${update.ironOre.toLocaleString()} / ${update.ironCapacity.toLocaleString()}`;
   updateTavernCoins(update.gold);
-  for (const id of Object.keys(BLACKSMITH_WEAPONS) as BlacksmithWeaponId[]) updateInventoryItem(id, update.weapons?.[id] ?? 0);
+  for (const id of Object.keys(BLACKSMITH_STOCK) as BlacksmithStockId[]) updateInventoryItem(id, update.weapons?.[id] ?? 0);
   renderWeaponShop();
   blacksmithSell.disabled = update.ironOre + silver <= 0 || blacksmithPending || update.gold >= 1_000_000;
   const owned = new Set(update.ownedUpgrades);
@@ -3144,7 +3184,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     status.textContent = update.message;
   }
   if (update.phase === "purchased" && !update.purchasedUpgradeId) {
-    showCombatFeedback("WEAPON ADDED TO PACK", "dodge");
+    showCombatFeedback("EQUIPMENT ADDED TO PACK", "dodge");
     status.textContent = update.message;
   }
 }
@@ -4535,6 +4575,12 @@ for (const button of mainHandPickerButtons) {
   button.addEventListener("click", () => {
     const mainHandId = button.dataset.mainHand;
     if (mainHandId && isMainHandId(mainHandId)) requestMainHandEquip(mainHandId);
+  });
+}
+for (const button of document.querySelectorAll<HTMLButtonElement>("[data-equip-armour]")) {
+  button.addEventListener("click", () => {
+    if (!room || !worldReady) return;
+    room.send("armour:equip", { armourId: button.dataset.equipArmour });
   });
 }
 for (const button of inventoryEquipButtons) {

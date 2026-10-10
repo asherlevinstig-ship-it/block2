@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-weapon-shop-v49";
+export const WORLD_ROOM = "world-armour-v50";
 export const PartyRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
   z.object({ action: z.literal("respond"), inviteId: z.string().min(1).max(160), accept: z.boolean() }),
@@ -42,7 +42,18 @@ export type BlacksmithUpgradeId = keyof typeof BLACKSMITH_UPGRADES;
 export const BlacksmithForgeSchema = z.object({ upgradeId: z.enum(["reinforced_pickaxe", "iron_sword", "miners_pack"]) });
 export const BLACKSMITH_WEAPONS = { forged_sword: { price: 45 }, forged_bow: { price: 50 }, forged_focus: { price: 55 } } as const;
 export type BlacksmithWeaponId = keyof typeof BLACKSMITH_WEAPONS;
-export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus"]) });
+export const ARMOUR_DEFINITIONS = {
+  none: { name: "No armour", reduction: 0, speed: 1 },
+  leather_armour: { name: "Leather Armour", reduction: 1, speed: 1 },
+  iron_armour: { name: "Iron Armour", reduction: 2, speed: .92 },
+} as const;
+export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour"]) });
+export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
+export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
+export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
+export function armourStats(id: string) { return ARMOUR_DEFINITIONS[Object.hasOwn(ARMOUR_DEFINITIONS, id) ? id as ArmourId : "none"]; }
+export function armouredDamage(damage: number, id: string): number { return damage <= 0 ? 0 : Math.max(1, damage - armourStats(id).reduction); }
 export type BlacksmithUpdate = {
   phase: "idle" | "traded" | "purchased" | "error";
   ironOre: number;
@@ -51,7 +62,7 @@ export type BlacksmithUpdate = {
   gold: number;
   ownedUpgrades: BlacksmithUpgradeId[];
   purchasedUpgradeId?: BlacksmithUpgradeId;
-  weapons?: Partial<Record<BlacksmithWeaponId, number>>;
+  weapons?: Partial<Record<BlacksmithStockId, number>>;
   sold?: number;
   goldGranted?: number;
   message: string;
@@ -70,6 +81,8 @@ export type TavernQuizUpdate = {
 };
 
 export const ITEM_DEFINITIONS = {
+  leather_armour: { id: "leather_armour", name: "Leather Armour", description: "Reduce damage by 1 (minimum hit 1) · full movement speed" },
+  iron_armour: { id: "iron_armour", name: "Iron Armour", description: "Reduce damage by 2 (minimum hit 1) · 8% slower movement" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
   forged_focus: { id: "forged_focus", name: "Forged Focus", description: "Smith-made focus · 2 bolt damage · equip from your pack" },

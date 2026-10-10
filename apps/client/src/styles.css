@@ -642,6 +642,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #blacksmith-weapons p { font-size: .76rem; color: #d8e5df; line-height: 1.5; }
 #blacksmith-weapons small { display: block; color: #b6ad9d; line-height: 1.5; }
 #blacksmith-weapons button { width: 100%; }
+.inventory-grid article[data-item="leather_armour"] i { background: linear-gradient(135deg, #aa7643, #55301a); }
+.inventory-grid article[data-item="iron_armour"] i { background: linear-gradient(135deg, #dce4ec, #6e8095); }
 .inventory-grid article[data-item="forged_sword"] i { background: linear-gradient(135deg, #cbd4df 0 55%, #704923 56%); }
 .inventory-grid article[data-item="forged_bow"] i { background: linear-gradient(135deg, #7d512c, #cbd4df); }
 .inventory-grid article[data-item="forged_focus"] i { background: linear-gradient(135deg, #54afff 0 55%, #704923 56%); }

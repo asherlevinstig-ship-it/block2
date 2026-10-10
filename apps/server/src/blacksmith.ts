@@ -1,12 +1,12 @@
 import { BLACKSMITH_UPGRADES, IRON_ORE_GOLD_PRICE, SILVER_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId } from "@blockcraft/protocol";
 import { Block, TOWN_BLACKSMITH_STALL_POSITION, type BlockId } from "@blockcraft/voxel-world";
-import { BLACKSMITH_WEAPONS, type BlacksmithWeaponId } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, type BlacksmithStockId } from "@blockcraft/protocol";
 
-export function weaponPurchase(gold: number, quantity: number, itemId: BlacksmithWeaponId) {
-  const price = BLACKSMITH_WEAPONS[itemId].price;
-  if (quantity >= 65535) return { ok: false as const, gold, quantity, message: "No room for another copy of this weapon." };
-  if (gold < price) return { ok: false as const, gold, quantity, message: `You need ${price} gold for this weapon.` };
-  return { ok: true as const, gold: gold - price, quantity: quantity + 1, message: "Weapon bought. Open your pack with I to equip it." };
+export function weaponPurchase(gold: number, quantity: number, itemId: BlacksmithStockId) {
+  const price = BLACKSMITH_STOCK[itemId].price;
+  if (quantity >= 65535) return { ok: false as const, gold, quantity, message: "No room for another copy of this equipment." };
+  if (gold < price) return { ok: false as const, gold, quantity, message: `You need ${price} gold for this equipment.` };
+  return { ok: true as const, gold: gold - price, quantity: quantity + 1, message: "Equipment bought. Open your pack with I to equip it." };
 }
 
 export const MAX_GOLD = 1_000_000;

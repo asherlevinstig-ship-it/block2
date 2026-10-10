@@ -1,6 +1,6 @@
 import { ITEM_DEFINITIONS, MAIN_HAND_DEFINITIONS, HEALING_POTION, type ItemId, type MainHandId, type TradeOffer, type TradeRequest, type TradeUpdate } from "@blockcraft/protocol";
 import { ironCapacity, MAX_GOLD } from "./blacksmith.js";
-type Player = { x: number; y: number; z: number; health: number; name: string; coins: number; mainHandId: string; blacksmithUpgrades: number;
+type Player = { x: number; y: number; z: number; health: number; name: string; coins: number; mainHandId: string; armourId?: string; blacksmithUpgrades: number;
   inventory: { get(id: string): { quantity: number } | undefined } };
 type Players = { get(id: string): Player | undefined };
 type Session = { id: string; members: [string, string]; accepted: boolean; offers: [TradeOffer, TradeOffer]; confirmed: [boolean, boolean]; revision: number; expiresAt: number };
@@ -16,6 +16,7 @@ export function tradeBalance(player: Player, outgoing: TradeOffer, incoming: Tra
     const owned = player.inventory.get(item.itemId)?.quantity ?? 0;
     if (item.itemId === "reinforced_pickaxe") return "Account-bound upgrades cannot be traded.";
     if (owned < item.quantity) return "An offered item is no longer available.";
+    if (item.itemId === player.armourId && owned - item.quantity < 1) return "Unequip your armour before trading its last copy.";
     if (item.itemId === required && owned - item.quantity < 1) return "Keep one copy of your equipped weapon. Equip another weapon first.";
   }
   const coins = player.coins - outgoing.gold + incoming.gold;

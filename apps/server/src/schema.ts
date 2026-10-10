@@ -29,6 +29,7 @@ export const PlayerState = schema({
   invulnerableUntil: t.float64().default(0),
   mainHandId: t.string().default("longsword"),
   mainHandTag: t.string().default("melee"),
+  armourId: t.string().default("none"),
   equippedPower: t.string().default(""),
   seismicMastery: t.string().default("advancing_fault"),
   powerCooldownUntil: t.float64().default(0),
