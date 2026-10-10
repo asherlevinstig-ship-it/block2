@@ -19,6 +19,18 @@ function fixture(read = flat, archetype = "moss_crawler") {
   return { mob, player, internal, arm };
 }
 describe("committed crawler rush", () => {
+  it("circles briefly on approach then begins the normal warned strike", () => {
+    const { mob, player, internal } = fixture(); mob.combatState = "idle"; player.x = 103;
+    internal.simulatePlayers(.033);
+    expect(mob.combatState).toBe("idle");
+    expect(mob.z).not.toBe(100.5);
+    for (let now = 10033; now < 12000 && mob.combatState === "idle"; now += 33) {
+      vi.setSystemTime(now); internal.simulatePlayers(.033);
+    }
+    expect(mob.combatState).toBe("windup");
+    expect(mob.attackReleaseAt).toBeGreaterThan(Date.now());
+    expect(internal.crawlerRushes.size).toBe(0);
+  });
   it.each(["moss_crawler", "briar_crawler"])("moves %s progressively along a fixed direction", archetype => {
     const { mob, player, internal, arm } = fixture(flat, archetype); arm();
     internal.advanceCrawlerRushes(10000); expect(mob.x).toBe(100.5);

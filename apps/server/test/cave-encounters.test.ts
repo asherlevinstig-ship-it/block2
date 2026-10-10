@@ -75,6 +75,8 @@ describe("chamber-specific encounters", () => {
     }
   });
   it("drops the guardian's guaranteed core and hammer once on defeat", () => {
+    // Keep optional equipment rolls out of this guaranteed-reward assertion.
+    vi.spyOn(Math, "random").mockReturnValue(.99);
     const { room, internal } = fixture();
     const mob = room.state.mobs.get("buried-chamber-brute")!;
     internal.defeatMob("buried-chamber-brute", mob, "visitor", 10_000);
