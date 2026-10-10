@@ -12,6 +12,7 @@ import { spacedMobDesired } from "./mob-spacing.js";
 import { turnBruteAim } from "./brute-aim.js";
 import { meleeSlotsFull, meleeWaitingGoal } from "./melee-coordination.js";
 import { checkMobProgress, type MobProgress } from "./mob-progress.js";
+import { mobAssistants, MOB_ASSIST_COOLDOWN_MS } from "./mob-assist.js";
 import { circleCrawler, createCrawlerPositioning, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
@@ -257,6 +258,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly mobProgress = new Map<string, MobProgress>();
   private readonly mobUnreachableUntil = new Map<string, number>();
   private readonly mobReturning = new Set<string>();
+  private readonly mobAssistAt = new Map<string, number>();
   private readonly crawlerPositioning = new Map<string, CrawlerPositioning>();
   private readonly mobPatrols = new Map<string, MobPatrolState>();
   private readonly roamingRoutes = new Map<string, RoamingRouteState>();
@@ -2671,6 +2673,31 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (mob) { mob.alertUntil = now + 900; mob.awarenessState = "engaged"; }
     this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     this.roamingReturning.delete(mobId);
+    if (!mob || now - (this.mobAssistAt.get(mobId) ?? -Infinity) < MOB_ASSIST_COOLDOWN_MS) return;
+    this.mobAssistAt.set(mobId, now);
+    const victimPack = roamingMembership(mobId);
+    const helpers = mobAssistants(mobId, mob, [...this.state.mobs.entries()].map(([id, peer]) => ({
+      id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, health: peer.health,
+      available: peer.combatState === "idle" && !peer.isChampion && !this.mobAwareness.get(id)?.targetId
+        && !this.mobReturning.has(id) && !this.roamingReturning.has(id) && now >= (this.mobUnreachableUntil.get(id) ?? 0),
+    })), peer => {
+      const pack = roamingMembership(peer.id);
+      return (!pack || pack.pack.id === victimPack?.pack.id)
+        && Math.abs(peer.y - player.y) <= 1.75 && Math.hypot(peer.x - player.x, peer.z - player.z) <= 12
+        && caveEncounterAllows(peer.id, player) && caveEncounterAllows(peer.id, mob) && caveEncounterAllows(mobId, peer)
+        && this.championAllowed(peer.id, player)
+        && (peer.id === "stone-brute" || !isInStoneBruteArena(player.x, player.z))
+        && (peer.id !== "stone-brute" || isInStoneBruteArena(mob.x, mob.z))
+        && hasCombatLineOfSight(peer, mob, this.readWorldBlock) && hasCombatLineOfSight(peer, player, this.readWorldBlock);
+    });
+    for (const helper of helpers) {
+      const state = this.mobAwareness.get(helper.id) ?? createMobAwareness();
+      provokeMob(state, { id: sessionId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
+      this.mobAwareness.set(helper.id, state);
+      const ally = this.state.mobs.get(helper.id)!;
+      ally.alertUntil = now + 900; ally.awarenessState = "engaged";
+      // Do not call alertHitMob here: assists must not propagate to another group.
+    }
   }
 
   private applyWeaponHit(sessionId: string, pending: PendingAttack, mobId: string, now: number,
