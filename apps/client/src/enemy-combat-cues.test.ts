@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { bruteRecoveryPose, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
+import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 const mob = { alive: true, combatState: "windup", aimCommitted: false, archetype: "stone_brute",
   attackStartedAt: 1000, attackReleaseAt: 2000, attackContactAt: 2280, attackContactEndAt: 2380, attackRecoveryEndAt: 3000 };
 describe("readable enemy combat cues", () => {
+  it("shows a brief spotted cue without replaying expired alerts", () => {
+    const state = { alive: true, combatState: "idle", awarenessState: "engaged", alertUntil: 1900 };
+    expect(enemyAwarenessCue(state, 1000)).toMatchObject({ visible: true, label: "! SPOTTED", kind: "alert" });
+    expect(enemyAwarenessCue(state, 1900).visible).toBe(false);
+  });
+  it("distinguishes searching and returning without a combat countdown", () => {
+    const state = { alive: true, combatState: "idle" };
+    expect(enemyAwarenessCue({ ...state, awarenessState: "search" }, 1000)).toMatchObject({ visible: true, label: "? SEARCHING", kind: "search", recovery: false });
+    expect(enemyAwarenessCue({ ...state, awarenessState: "return" }, 1000)).toMatchObject({ visible: true, label: "↩ RETURNING", kind: "return" });
+  });
+  it("hides awareness cues during attacks, stagger, recovery, and death", () => {
+    for (const combatState of ["windup", "strike", "stagger", "recover"]) {
+      expect(enemyAwarenessCue({ alive: true, combatState, awarenessState: "search" }, 1000).visible).toBe(false);
+    }
+    expect(enemyAwarenessCue({ alive: false, combatState: "idle", awarenessState: "return" }, 1000).visible).toBe(false);
+  });
+  it("does not show cues for patrols or missing awareness data", () => {
+    expect(enemyAwarenessCue({ alive: true, combatState: "idle", awarenessState: "patrol" }, 1000).visible).toBe(false);
+    expect(enemyAwarenessCue({ alive: true, combatState: "idle" }, 1000).visible).toBe(false);
+  });
   it("shows an exhausted brute pose only inside its real recovery window", () => {
     expect(bruteRecoveryPose(mob, 1200)).toBe(0);
     expect(bruteRecoveryPose(mob, 2380)).toBeCloseTo(0);

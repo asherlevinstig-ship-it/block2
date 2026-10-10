@@ -34,3 +34,11 @@ export function bruteRecoveryPose(mob: EnemyTimeline, now: number): number {
     / Math.max(1, mob.attackRecoveryEndAt - mob.attackContactEndAt)));
   return Math.sin(Math.PI * progress);
 }
+
+export function enemyAwarenessCue(mob: { alive: boolean; combatState: string; awarenessState?: string; alertUntil?: number }, now: number) {
+  const kind = mob.awarenessState === "search" ? "search" : mob.awarenessState === "return" ? "return" : "alert";
+  const visible = mob.alive && mob.combatState === "idle" && (kind !== "alert"
+    || (mob.awarenessState === "engaged" && now < (mob.alertUntil ?? 0)));
+  return { kind, visible, recovery: false, progress: 1,
+    label: kind === "search" ? "? SEARCHING" : kind === "return" ? "↩ RETURNING" : "! SPOTTED" };
+}

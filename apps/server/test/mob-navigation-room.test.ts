@@ -15,6 +15,21 @@ function fixture(read: WorldBlockReader) {
 }
 
 describe("mob navigation in the authoritative room", () => {
+  it("publishes spotted and searching state without refreshing the alert every tick", () => {
+    let covered = false;
+    const { room, mob, tick } = fixture((x, y) => y <= 0 || (covered && x === 102 && y <= 3) ? Block.Stone : Block.Air);
+    const player = new PlayerState(); Object.assign(player, { x: 106.5, y: 1, z: 100.5 });
+    room.state.players.set("player", player); tick();
+    expect(mob.awarenessState).toBe("engaged"); expect(mob.alertUntil).toBeGreaterThan(Date.now());
+    const alert = mob.alertUntil; tick(); expect(mob.alertUntil).toBe(alert);
+    covered = true; tick(); expect(mob.awarenessState).toBe("search");
+  });
+  it("publishes returning state only while actually returning toward home", () => {
+    const { room, mob, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
+    (room as any).mobHomes.set("test", { x: 100.5, y: 1, z: 100.5 });
+    mob.x = 106.5; tick(); expect(mob.awarenessState).toBe("return"); expect(mob.x).toBeLessThan(106.5);
+    mob.x = 100.5; tick(); expect(mob.awarenessState).toBe("patrol");
+  });
   it("allows only two same-tick windups when a whole group reaches one player", () => {
     const { room, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
     room.state.mobs.clear();

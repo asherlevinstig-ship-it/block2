@@ -66,6 +66,8 @@ export const MobState = schema({
   yaw: t.float32().default(0),
   combatState: t.string().default("idle"),
   aimCommitted: t.boolean().default(false),
+  awarenessState: t.string().default("patrol"),
+  alertUntil: t.float64().default(0),
   attackStartedAt: t.float64().default(0),
   attackStrikeX: t.float32().default(0),
   attackStrikeY: t.float32().default(0),

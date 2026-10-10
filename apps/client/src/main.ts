@@ -12,7 +12,7 @@ import { miningAvailability, miningReach, miningProgress, miningDurationMs, mini
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
-import { bruteRecoveryPose, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
+import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
@@ -1204,6 +1204,8 @@ interface RemotePlayerVisual {
 }
 
 interface NetworkMob {
+  awarenessState: string;
+  alertUntil: number;
   isChampion: boolean;
   attackPattern: string;
   x: number;
@@ -2690,7 +2692,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["isChampion", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["awarenessState", "alertUntil", "isChampion", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -5131,7 +5133,8 @@ app.on("update", (dt: number) => {
         pip.setLocalScale(0.14 * pipPulse, 0.14 * pipPulse, 0.14 * pipPulse);
       }
     }
-    const cue = enemyCombatCue(mob.state, animationNow + serverClock.offset);
+    const combatCue = enemyCombatCue(mob.state, animationNow + serverClock.offset);
+    const cue = combatCue.visible ? combatCue : enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
     const playerEye = localPlayer.getPosition();
     const cueVisible = cue.visible && Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z) <= 14
       && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },

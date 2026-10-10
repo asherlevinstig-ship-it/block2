@@ -1234,5 +1234,11 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .enemy-combat-cue[data-kind="shot"] { color: #beff65; }
 .enemy-combat-cue[data-kind="slam"] { color: #ff9167; }
 .enemy-combat-cue[data-kind="recovery"] { color: #73efff; }
+.enemy-combat-cue[data-kind="alert"] { color: #ffe48a; }
+.enemy-combat-cue[data-kind="search"] { color: #d6bcff; }
+.enemy-combat-cue[data-kind="return"] { color: #a8bcc4; opacity: .8; }
+.enemy-combat-cue[data-kind="alert"] .enemy-combat-cue-track,
+.enemy-combat-cue[data-kind="search"] .enemy-combat-cue-track,
+.enemy-combat-cue[data-kind="return"] .enemy-combat-cue-track { display: none; }
 .enemy-combat-cue-track { display: block; height: 3px; margin-top: 4px; background: #ffffff20; }
 .enemy-combat-cue-track > span { display: block; height: 100%; background: currentColor; transform-origin: left; }

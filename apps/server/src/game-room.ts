@@ -1125,6 +1125,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = combatMobDefinition(mob);
     this.spawnLootDrops(mobId, mob, now);
     mob.alive = false;
+    mob.awarenessState = "patrol"; mob.alertUntil = 0;
     this.mobAwareness.delete(mobId);
     this.crawlerPositioning.delete(mobId);
     this.crawlerRushes.delete(mobId);
@@ -1539,6 +1540,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
+        mob.awarenessState = "patrol"; mob.alertUntil = 0;
         this.mobAwareness.delete(mobId);
         const stats = scaledMobStats(definition, dangerBandAt(home));
         const spawn = walkableMobSpawn(home, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose));
@@ -1690,6 +1692,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         && (mobId === "stone-brute" || !isInStoneBruteArena(player.x, player.z)));
       const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
       this.mobAwareness.set(mobId, awareness);
+      const previousTarget = awareness.targetId;
       const target = this.roamingReturning.has(mobId) ? null : awareMobTarget(mob, players, awareness, now, definition.aggroRange,
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       if (!target) {
@@ -1700,11 +1703,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             this.roamingReturning.add(mobId); this.mobNavigation.set(mobId, createMobNavigationState());
           }
           this.patrolRoamingMember(mobId, mob, now, deltaTime, Math.min(1.1, definition.speed * mob.speedMultiplier * .75));
+          mob.awarenessState = this.roamingReturning.has(mobId) ? "return" : "patrol";
           continue;
         }
         this.patrolMob(mobId, mob, home, now, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier * 0.65));
+        mob.awarenessState = Math.hypot(mob.x - home.x, mob.z - home.z) > MOB_PATROL_RADIUS + .5 ? "return" : "patrol";
         continue;
       }
+      if (target.visible && previousTarget !== target.id) mob.alertUntil = now + 900;
+      mob.awarenessState = target.visible ? "engaged" : "search";
       if (roamingMembership(mobId)) this.roamingEngaged.add(mobId);
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
@@ -2627,6 +2634,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
     provokeMob(awareness, { id: sessionId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
     this.mobAwareness.set(mobId, awareness);
+    const mob = this.state.mobs.get(mobId);
+    if (mob) { mob.alertUntil = now + 900; mob.awarenessState = "engaged"; }
     this.roamingReturning.delete(mobId);
   }
 
