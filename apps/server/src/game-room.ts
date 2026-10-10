@@ -135,6 +135,7 @@ import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
+import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern } from "@blockcraft/protocol";
 import { CombatContributions } from "./combat-contributions.js";
 import { SilverGuardVolley } from "./silver-guard-volley.js";
 import { ForestPortalCycle } from "./forest-portal-cycle.js";
@@ -256,6 +257,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly lastMobAttackAt = new Map<string, number>();
   private readonly lastDodgeAt = new Map<string, number>();
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
+  private readonly delayedMatriarchVolleys = new Map<string, { origin: { x: number; y: number; z: number }; shots: { x: number; y: number; z: number }[]; releaseAt: number; damage: number; travelMs: number }>();
   private readonly pendingWeaponProjectiles = new Map<string, PendingWeaponProjectile>();
   private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
@@ -1160,6 +1162,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private staggerMob(mobId: string, mob: MobState, now: number, duration: number, force = false): boolean {
     if (!mob.alive || mob.health <= 0 || duration <= 0 || (!force && now < (this.mobStaggerImmuneUntil.get(mobId) ?? 0))) return false;
+    this.delayedMatriarchVolleys.delete(mobId);
     mob.combatState = "stagger";
     mob.stateUntil = now + duration;
     mob.targetId = "";
@@ -1193,6 +1196,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = combatMobDefinition(mob);
     for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
     mob.alive = false;
+    this.delayedMatriarchVolleys.delete(mobId);
     this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     mob.awarenessState = "patrol"; mob.alertUntil = 0;
     this.mobAwareness.delete(mobId);
@@ -1519,7 +1523,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     void this.persistPlayer(client.sessionId, player);
   }
 
+  private releaseMobVolley(mobId: string, mob: MobState, origin: { x: number; y: number; z: number }, shots: { x: number; y: number; z: number }[], now: number, travelMs: number, damage: number, hazardRadius: number, hazardDurationMs: number): void {
+    for (const aim of shots) {
+      const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
+      const start = { x: origin.x, y: origin.y + 1.05, z: origin.z };
+      const end = { x: aim.x, y: aim.y + .08, z: aim.z };
+      this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
+        start, end, position: start, startedAt: now, impactAt: now + travelMs });
+      this.broadcast("combat:mob-projectile", { projectileId, mobId, ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
+    }
+  }
+
   private resolveMobProjectiles(now: number): void {
+    for (const [mobId, volley] of this.delayedMatriarchVolleys) {
+      const mob = this.state.mobs.get(mobId);
+      if (!mob?.alive || mob.combatState === "stagger") { this.delayedMatriarchVolleys.delete(mobId); continue; }
+      if (now < volley.releaseAt) continue;
+      this.delayedMatriarchVolleys.delete(mobId);
+      this.releaseMobVolley(mobId, mob, volley.origin, volley.shots, now, volley.travelMs, volley.damage, 0, 0);
+    }
     for (const [projectileId, projectile] of this.pendingMobProjectiles) {
       const progress = Math.max(0, Math.min(1, (now - projectile.startedAt) / (projectile.impactAt - projectile.startedAt)));
       const next = flightPoint(projectile.start, projectile.end, progress);
@@ -1713,7 +1735,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const [mobId, mob] of this.state.mobs) {
       if (mobId === WILDERNESS_EVENT_ID && !mob.alive) continue;
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
-      if (mobId === WILDERNESS_EVENT_ID && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);
+      if (mobId === WILDERNESS_EVENT_ID) {
+        if (!mob.enraged && matriarchEnraged(mob.health, mob.maxHealth)) mob.enraged = true;
+        if (mob.combatState === "idle") mob.attackPattern = matriarchPattern(mob.actionSequence, mob.enraged);
+      }
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);
@@ -1811,33 +1836,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         }
         if (definition.attackKind === "projectile") {
           const shots = mob.isChampion && mobId !== WILDERNESS_EVENT_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
-          for (const shotAim of shots) {
-          const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
-          const start = { x: mob.x, y: mob.y + 1.05, z: mob.z };
-          const end = { x: shotAim.x, y: shotAim.y + 0.08, z: shotAim.z };
-          const projectile: PendingMobProjectile = {
-            projectileId,
-            mobId,
-            archetype: mob.archetype,
-            damage: mob.attackDamage,
-            hazardRadius: definition.hazardRadius, hazardDurationMs: definition.hazardDurationMs,
-            start, end, position: start, startedAt: now,
-            impactAt: now + definition.projectileTravelMs,
-          };
-          this.pendingMobProjectiles.set(projectileId, projectile);
-          this.broadcast("combat:mob-projectile", {
-            projectileId,
-            mobId,
-            x: mob.x,
-            y: mob.y,
-            z: mob.z,
-            targetX: shotAim.x,
-            targetY: shotAim.y,
-            targetZ: shotAim.z,
-            travelMs: definition.projectileTravelMs,
-            releasedAt: now,
-          } satisfies MobProjectileReleased);
-          }
+          const origin = { x: mob.x, y: mob.y, z: mob.z };
+          this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage, definition.hazardRadius, definition.hazardDurationMs);
+          if (mobId === WILDERNESS_EVENT_ID && mob.attackPattern === "double-fan")
+            this.delayedMatriarchVolleys.set(mobId, { origin, shots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
           mob.targetId = "";
           continue;
         }
@@ -2643,6 +2645,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = combatMobDefinition(mob);
     mob.attackStartedAt = startedAt;
     mob.attackReleaseAt = releaseAt;
+    if (mobId === WILDERNESS_EVENT_ID && mob.attackPattern === "double-fan") {
+      mob.attackContactAt = releaseAt;
+      mob.attackContactEndAt = releaseAt + MATRIARCH_PHASE.volleyGapMs;
+      mob.attackRecoveryEndAt = mob.attackContactEndAt + MATRIARCH_PHASE.recoveryMs;
+      return;
+    }
     if (mob.isChampion && mob.attackPattern === "charge") {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;

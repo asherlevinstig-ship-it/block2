@@ -1,10 +1,10 @@
 import { z } from "zod";
-export { SPITTER_PATTERN, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
+export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
 
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-wilderness-event-v69";
+export const WORLD_ROOM = "world-matriarch-phase-v70";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {

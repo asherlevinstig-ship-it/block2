@@ -11,6 +11,15 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue(smash, 2300).label).toBe("SMASH · STRIKE");
     expect(enemyCombatCue(smash, 2690).label).toBe("RECOVER · COUNTER");
   });
+  it("labels the enraged double volley, then only shows the counter window after both releases", () => {
+    const boss = { ...mob, archetype: "cave_spitter", attackPattern: "double-fan", enraged: true,
+      attackReleaseAt: 2000, attackContactAt: 2000, attackContactEndAt: 2500, attackRecoveryEndAt: 5100 };
+    expect(enemyCombatCue(boss, 1800).label).toContain("ENRAGED · DOUBLE FAN");
+    expect(enemyCombatCue({ ...boss, combatState: "recover" }, 2300).recovery).toBe(false);
+    expect(enemyCombatCue({ ...boss, combatState: "recover" }, 2501).label).toBe("RECOVER · COUNTER");
+    expect(enemyCombatCue({ ...boss, combatState: "idle" }, 5200).label).toBe("ENRAGED");
+    expect(enemyCombatCue({ ...boss, alive: false }, 5200).visible).toBe(false);
+  });
   it("shows a brief spotted cue without replaying expired alerts", () => {
     const state = { alive: true, combatState: "idle", awarenessState: "engaged", alertUntil: 1900 };
     expect(enemyAwarenessCue(state, 1000)).toMatchObject({ visible: true, label: "! SPOTTED", kind: "alert" });

@@ -63,6 +63,7 @@ export type LootDropState = SchemaType<typeof LootDropState>;
 
 export const MobState = schema({
   isChampion: t.boolean().default(false),
+  enraged: t.boolean().default(false),
   attackPattern: t.string().default("slam"),
   x: t.float32().default(24.5),
   y: t.float32().default(8),

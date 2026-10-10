@@ -1242,6 +1242,7 @@ interface NetworkMob {
   awarenessState: string;
   alertUntil: number;
   isChampion: boolean;
+  enraged?: boolean;
   attackPattern: string;
   x: number;
   y: number;

@@ -5,7 +5,39 @@ import { PlayerState, WorldState } from "./schema.js";
 import { Block } from "@blockcraft/voxel-world";
 import { vi } from "vitest";
 import { nearbyObjective } from "./world-objectives.js";
+import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, spitterShotEndpoints } from "@blockcraft/protocol";
 describe("shared wilderness event", () => {
+  it("enrages strictly below half health and alternates aimed shots with double fans", () => {
+    expect(matriarchEnraged(12, 24)).toBe(false);
+    expect(matriarchEnraged(11, 24)).toBe(true);
+    expect(matriarchPattern(0, true)).toBe("aimed");
+    expect(matriarchPattern(1, true)).toBe("double-fan");
+    expect(matriarchPattern(1, false)).toBe("fan");
+    expect(spitterShotEndpoints({ x: 0, y: 8, z: 0 }, 0, "double-fan")).toHaveLength(4);
+  });
+  it("releases the second volley only when due, from the committed origin, and gives longer recovery", () => {
+    const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
+    Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.registerMob("greenwood-venom-matriarch", "cave_spitter", { x: 43, y: 8, z: 18 });
+    const mob = room.state.mobs.get("greenwood-venom-matriarch")!;
+    Object.assign(mob, { isChampion: true, enraged: true, attackPattern: "double-fan", combatState: "recover" });
+    internal.setMobAttackTimeline(mob, 1000, 2400, "greenwood-venom-matriarch");
+    expect(mob.attackContactEndAt).toBe(2900);
+    expect(mob.attackRecoveryEndAt).toBe(5500);
+    const origin = { x: 43, y: 8, z: 18 }, shots = spitterShotEndpoints(origin, 0, "double-fan");
+    internal.delayedMatriarchVolleys.set("greenwood-venom-matriarch", { origin, shots, releaseAt: 2900, damage: 1, travelMs: 1250 });
+    internal.resolveMobProjectiles(2899); expect(room.broadcast).not.toHaveBeenCalled();
+    mob.x = 45;
+    internal.resolveMobProjectiles(2900); expect(room.broadcast).toHaveBeenCalledTimes(4);
+    expect((room.broadcast as any).mock.calls[0][1].x).toBe(43);
+    expect((room.broadcast as any).mock.calls[0][1].releasedAt).toBe(2900);
+    internal.resolveMobProjectiles(2901); expect(room.broadcast).toHaveBeenCalledTimes(4);
+    internal.delayedMatriarchVolleys.set("greenwood-venom-matriarch", { origin, shots, releaseAt: 3000, damage: 1, travelMs: 1250 });
+    mob.alive = false; internal.resolveMobProjectiles(3000);
+    expect(internal.delayedMatriarchVolleys.size).toBe(0);
+    expect(MATRIARCH_PHASE.recoveryMs).toBeGreaterThan(1900);
+  });
   const clear = (cycle: WildernessEventCycle, now: number, active = false) => {
     cycle.record("wild-crawler", now, active);
     cycle.record("greenwood-briar", now, active);

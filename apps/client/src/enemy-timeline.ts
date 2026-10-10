@@ -18,6 +18,7 @@ export interface EnemyTimeline {
   alive: boolean; combatState: string; aimCommitted: boolean;
   archetype?: string;
   attackPattern?: string;
+  enraged?: boolean;
   attackStartedAt: number; attackReleaseAt: number; attackContactAt: number;
   attackContactEndAt: number; attackRecoveryEndAt: number;
 }

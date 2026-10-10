@@ -1,5 +1,8 @@
 export const SPITTER_PATTERN = { range: 10, travelMs: 1250, fanOffsets: [-30, -12, 12, 30], laneHalfWidth: .42 } as const;
-export const spitterShotOffsets = (pattern: string): readonly number[] => pattern === "fan" ? SPITTER_PATTERN.fanOffsets : [0];
+export const spitterShotOffsets = (pattern: string): readonly number[] => pattern === "fan" || pattern === "double-fan" ? SPITTER_PATTERN.fanOffsets : [0];
+export const MATRIARCH_PHASE = { volleyGapMs: 500, recoveryMs: 2600 } as const;
+export const matriarchEnraged = (health: number, maxHealth: number) => health > 0 && health * 2 < maxHealth;
+export const matriarchPattern = (sequence: number, enraged: boolean) => enraged && sequence % 2 === 1 ? "double-fan" : spitterPattern(sequence);
 export const spitterPattern = (sequence: number): "aimed" | "fan" => sequence % 2 === 0 ? "aimed" : "fan";
 export function spitterShotEndpoints(start: { x: number; y: number; z: number }, yaw: number, pattern: string) {
   return spitterShotOffsets(pattern).map(offset => {
