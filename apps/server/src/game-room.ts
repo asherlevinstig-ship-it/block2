@@ -1831,7 +1831,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           this.clearMobAttackTimeline(mob);
           continue;
         }
-        if (targetPlayer && now < mob.stateUntil - mobAimCommitMs(mob.archetype)) {
+        if (targetPlayer && now < mob.stateUntil - mobAimCommitMs(mob.archetype)
+          && hasCombatLineOfSight(mob, targetPlayer, this.readWorldBlock)) {
           const desiredYaw = Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI;
           mob.yaw = mob.archetype === "stone_brute" ? turnBruteAim(mob.yaw, desiredYaw, deltaTime) : desiredYaw;
           this.mobCommittedAim.set(mobId, { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: mob.yaw });
@@ -1912,6 +1913,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (!target) {
         this.crawlerPositioning.delete(mobId);
         this.spitterPositioning.delete(mobId);
+        if (previousTarget && !roamingMembership(mobId)) {
+          this.mobReturning.add(mobId);
+          this.mobPatrols.delete(mobId);
+          this.mobNavigation.set(mobId, createMobNavigationState());
+        }
         if (this.mobReturning.has(mobId) && !roamingMembership(mobId)) {
           if (Math.hypot(mob.x - home.x, mob.z - home.z) <= .65) this.mobReturning.delete(mobId);
           else {
@@ -2922,14 +2928,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
-  private alertHitMob(mobId: string, sessionId: string, now: number): void {
+  private alertHitMob(mobId: string, sessionId: string, now: number, source?: { x: number; y?: number; z: number }): void {
     const player = this.state.players.get(sessionId);
     if (!player || player.health <= 0 || isInsideTownSafeZone(player)) return;
     const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
-    provokeMob(awareness, { id: sessionId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
-    this.mobAwareness.set(mobId, awareness);
     const mob = this.state.mobs.get(mobId);
-    if (mob) { mob.alertUntil = now + 900; mob.awarenessState = "engaged"; }
+    const visible = !!mob && hasCombatLineOfSight(mob, player, this.readWorldBlock);
+    // A delayed hit reveals its launch location, not an unseen attacker's live location.
+    const evidence = visible ? player : source ? { ...source, y: source.y ?? mob?.y ?? player.y }
+      : awareness.lastSeen ?? mob ?? player;
+    provokeMob(awareness, { id: sessionId, x: evidence.x, y: evidence.y, z: evidence.z, health: player.health }, now);
+    this.mobAwareness.set(mobId, awareness);
+    if (mob) { mob.alertUntil = now + 900; mob.awarenessState = visible ? "engaged" : "search"; }
     this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     this.roamingReturning.delete(mobId);
     if (!mob || now - (this.mobAssistAt.get(mobId) ?? -Infinity) < MOB_ASSIST_COOLDOWN_MS) return;
@@ -2973,7 +2983,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       ) + traitBonusDamage;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage);
-      this.alertHitMob(mobId, sessionId, now);
+      this.alertHitMob(mobId, sessionId, now, source);
       mob.hitSequence += 1;
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
       const staggerDuration = basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState);
