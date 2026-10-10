@@ -1,5 +1,6 @@
 import type { ItemId } from "@blockcraft/protocol";
 import type { MobArchetypeId } from "./mob-archetypes.js";
+import { isSilverGuard } from "./wilderness-encounters.js";
 
 export const LOOT_DESPAWN_MS = 30_000;
 export const LOOT_PICKUP_RADIUS = 1.35;
@@ -30,7 +31,10 @@ const LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: ItemId; quant
   ],
 };
 
-export function lootForArchetype(archetypeId: MobArchetypeId): readonly { itemId: ItemId; quantity: number }[] {
+export function lootForArchetype(archetypeId: MobArchetypeId, mobId = ""): readonly { itemId: ItemId; quantity: number }[] {
+  if (archetypeId === "cave_spitter" && isSilverGuard(mobId)) return [
+    { itemId: "acid_gland", quantity: 2 }, { itemId: "acid_gland_focus", quantity: 1 }, { itemId: "healing_potion", quantity: 1 },
+  ];
   return LOOT_BY_ARCHETYPE[archetypeId];
 }
 

@@ -12,7 +12,7 @@ const GROUPS = [
   { id: "frontier-mixed", title: "Frontier Warband", detail: "Draw out the crawler, dodge the brute's rocks, then pressure the support spitter. Counter during recovery.", ids: [...MIXED_FRONTIER_IDS] },
   { id: "greenwood-event", title: "Venom Matriarch · Shared Event", detail: "Dodge aimed shots and fan gaps. Fight together: eligible contributors each receive personal equipment.", ids: [WILDERNESS_EVENT_ID] },
   { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Clear the nearby crawlers and collect their item drops.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"] },
-  { id: "silver-guards", title: "Silver Guard Clearing", detail: "Defeat both spitters to open the Forest Dungeon portal. Use the stone cover.", ids: ["cave-spitter", "frontier-spitter"] },
+  { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"] },
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"] },
   { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Sidestep the smash and leave the slam circle. Collect the hammer and rich silver.", ids: ["frontier-brute"] },
   ...[1, 2, 3].map(stage => ({ id: `forest-stage-${stage}`, title: stage === 3 ? "Ancient Root Guardian" : `Forest Dungeon · Room ${stage}`,

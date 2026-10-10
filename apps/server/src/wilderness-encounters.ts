@@ -1,6 +1,10 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import { SILVER_GUARD_HOMES } from "@blockcraft/voxel-world";
 export const SILVER_GUARD_IDS = ["cave-spitter", "frontier-spitter"] as const;
+export const isSilverGuard = (id: string) => SILVER_GUARD_IDS.some(guard => guard === id);
+/** Guard the deposit and its approaches, not a player all the way back to town. */
+export const silverGuardAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
+  && pose.x >= 40 && pose.x <= 58 && pose.z >= 22 && pose.z <= 36;
 export const MIXED_FRONTIER_IDS = ["frontier-crawler", "frontier-support-spitter", "frontier-brute-east"] as const;
 export const MIXED_FRONTIER_CENTER = { x: 68.5, y: 8, z: 34.5 };
 export const MIXED_FRONTIER_SPITTER = { x: 68.5, y: 8, z: 36.5 };

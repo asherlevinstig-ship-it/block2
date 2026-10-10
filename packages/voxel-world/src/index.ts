@@ -192,7 +192,7 @@ export const WILDERNESS_CAMPS = MINERAL_DEPOSITS.map(deposit => ({ ...deposit,
 }));
 export const SILVER_GUARD_CLEARING = { minX: 44, maxX: 55, minZ: 25, maxZ: 33 } as const;
 export const SILVER_GUARD_HOMES = [{ x: 46.5, y: 8, z: 31.5 }, { x: 50.5, y: 8, z: 25.5 }] as const;
-export const SILVER_GUARD_COVER = [{ x: 44, z: 25 }, { x: 52, z: 25 }, { x: 54, z: 30 }] as const;
+export const SILVER_GUARD_COVER = [{ x: 44, z: 25 }, { x: 52, z: 25 }, { x: 54, z: 30 }, { x: 44, z: 30 }] as const;
 export function isInSilverGuardClearing(x: number, z: number): boolean {
   const area = SILVER_GUARD_CLEARING;
   return x >= area.minX && x <= area.maxX + 1 && z >= area.minZ && z <= area.maxZ + 1;

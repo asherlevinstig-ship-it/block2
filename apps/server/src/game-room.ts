@@ -1,6 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -1046,6 +1046,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    if (isSilverGuard(id)) return silverGuardAllows(pose);
     if (isMixedFrontierMob(id)) return mixedFrontierAllows(pose);
     const forest = FOREST_DUNGEON_MOBS.find(mob => mob.id === id);
     if (forest) return pose.y >= 7 && pose.y <= 9 && pose.z > 156 && pose.z < 174
@@ -1293,7 +1294,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const baseDrops = mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
       : mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
       : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
-      : lootForArchetype(mob.archetype as MobArchetypeId);
+      : lootForArchetype(mob.archetype as MobArchetypeId, mobId);
     const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
@@ -1749,7 +1750,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
-      else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);
+      else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
       if (mob.archetype === "stone_brute" && mob.combatState === "idle") {
         const eligible = [...this.state.players.values()].filter(player => player.health > 0 && !isInsideTownSafeZone(player)
           && Math.abs(player.y - mob.y) <= 1.75 && caveEncounterAllows(mobId, player) && this.roamingAllowed(mobId, player) && this.championAllowed(mobId, player));

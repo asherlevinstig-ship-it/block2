@@ -11,6 +11,16 @@ function reader(seed: string): WorldBlockReader {
   };
 }
 describe("readable deposit camps", () => {
+  it("gives the silver clearing four real cover rocks while keeping the ore and entry lane open", () => {
+    const read = reader("silver-cover");
+    expect(SILVER_GUARD_COVER).toHaveLength(4);
+    for (const rock of SILVER_GUARD_COVER) {
+      expect(read(rock.x, 8, rock.z)).toBe(Block.Stone);
+      expect(voxelRaycast({ x: rock.x - 1, y: 8.8, z: rock.z + .5 }, { x: 1, y: 0, z: 0 }, 3, read)?.x).toBe(rock.x);
+    }
+    expect(read(48, 7, 28)).toBe(Block.SilverOre);
+    for (let x = 40; x <= 48; x++) expect(playerCollides(read, x + .5, 8, 28.5)).toBe(false);
+  });
   it("assigns nests, spitter cover and ruins to the right mineral sites", () => {
     expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "nest")).toHaveLength(3);
     expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "spitter")).toHaveLength(2);
