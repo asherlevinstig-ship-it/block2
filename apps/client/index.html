@@ -198,6 +198,21 @@
         <div><span>CARRIED</span><strong id="inventory-total">EMPTY</strong></div>
         <div><span>EQUIPPED</span><strong id="inventory-equipped">Longsword</strong></div>
       </div>
+      <section class="inventory-loadout" aria-label="Character and equipment preview">
+        <div class="inventory-portrait">
+          <canvas id="inventory-portrait" width="240" height="280" role="img" aria-label="Your voxel character wearing the preview equipment"></canvas>
+          <p id="inventory-preview-label">Currently equipped</p>
+          <button id="inventory-preview-reset" type="button">SHOW WORN GEAR</button>
+        </div>
+        <div class="inventory-preview-stats">
+          <p class="eyebrow">LOADOUT PREVIEW · DOES NOT EQUIP</p>
+          <div class="inventory-comparison">
+            <section><h3>Worn</h3><div id="inventory-worn-stats"></div></section>
+            <section><h3>Selected</h3><div id="inventory-selected-stats" aria-live="polite"></div></section>
+          </div>
+          <p class="inventory-preview-help">Preview any item below. Use EQUIP to wear owned gear; remove armour to return to your coat.</p>
+        </div>
+      </section>
       <section class="inventory-section" aria-labelledby="inventory-materials-title">
         <h3 id="inventory-materials-title"><span>Materials</span><small>Mine, collect and trade</small></h3>
         <div class="inventory-grid materials">

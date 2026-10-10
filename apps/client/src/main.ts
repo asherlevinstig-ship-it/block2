@@ -4,6 +4,7 @@ import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
+import { createInventoryPortrait } from "./inventory-preview.js";
 import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
@@ -1552,6 +1553,35 @@ function refreshInventoryEquipped(): void {
     button.textContent = id === localArmourId ? "EQUIPPED" : id === "none" ? "REMOVE ARMOUR" : "EQUIP";
     button.setAttribute("aria-pressed", String(id === localArmourId));
   }
+  if (!inventoryPanel.hidden) refreshInventoryPreview();
+}
+
+let inventoryPortrait: ReturnType<typeof createInventoryPortrait> | undefined;
+let inventoryPortraitRig: VoxelCharacterRig | undefined;
+let previewHand: MainHandId | undefined;
+let previewArmour: ArmourId | undefined;
+let previewSlot: "weapon" | "armour" = "weapon";
+
+function refreshInventoryPreview(): void {
+  if (inventoryPanel.hidden) return;
+  if (!inventoryPortraitRig) {
+    const root = new pc.Entity("inventory-preview-character");
+    inventoryPortraitRig = createVoxelCharacter(root, coloredMaterial(new pc.Color(.12, .45, .46)));
+    inventoryPortrait = createInventoryPortrait(app, document.querySelector<HTMLCanvasElement>("#inventory-portrait")!, root);
+  }
+  const hand = previewHand ?? localMainHandId;
+  const armour = previewArmour ?? localArmourId;
+  setRigMainHand(inventoryPortraitRig, hand); setRigArmour(inventoryPortraitRig, armour);
+  const worn = document.querySelector<HTMLElement>("#inventory-worn-stats")!;
+  const selected = document.querySelector<HTMLElement>("#inventory-selected-stats")!;
+  if (previewSlot === "armour") {
+    fillArmourComparison(worn, localArmourId); fillArmourComparison(selected, armour);
+  } else {
+    fillLootComparison(worn, localMainHandId); fillLootComparison(selected, hand);
+  }
+  const changed = hand !== localMainHandId || armour !== localArmourId;
+  document.querySelector<HTMLElement>("#inventory-preview-label")!.textContent = changed ? "Preview only · not equipped" : "Currently equipped";
+  inventoryPortrait!.refresh();
 }
 
 function updatePowerLoadout(powerId: PowerId): void {
@@ -3132,17 +3162,41 @@ function setInventoryOpen(open: boolean): void {
   inventoryToggle.setAttribute("aria-expanded", String(open));
   if (open) {
     closeTavernDialogue();
+    previewHand = undefined; previewArmour = undefined; previewSlot = "weapon";
+    refreshInventoryPreview();
     performancePanel.hidden = true;
     performanceToggle.setAttribute("aria-expanded", "false");
     resetMovementControls();
     inventoryClose.focus();
   } else {
+    inventoryPortrait?.hide();
     inventoryToggle.focus();
   }
 }
 
 inventoryToggle.addEventListener("click", () => setInventoryOpen(inventoryPanel.hasAttribute("hidden")));
 inventoryClose.addEventListener("click", () => setInventoryOpen(false));
+document.querySelector("#inventory-preview-reset")!.addEventListener("click", () => {
+  previewHand = undefined; previewArmour = undefined; refreshInventoryPreview();
+});
+for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipment")) {
+  const button = document.createElement("button"); button.type = "button"; button.className = "inventory-preview-button";
+  button.textContent = "PREVIEW";
+  button.setAttribute("aria-label", `Preview ${card.querySelector("strong")!.textContent}`);
+  button.addEventListener("click", () => {
+    const hand = card.querySelector<HTMLElement>("[data-equip-main-hand]")?.dataset.equipMainHand;
+    const armour = card.querySelector<HTMLElement>("[data-equip-armour]")?.dataset.equipArmour;
+    if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; }
+    else if (armour === "leather_armour" || armour === "iron_armour") { previewArmour = armour; previewSlot = "armour"; }
+    refreshInventoryPreview();
+  });
+  card.append(button);
+}
+window.addEventListener("pagehide", event => {
+  if (event.persisted) { inventoryPortrait?.hide(); return; }
+  inventoryPortrait?.destroy(); inventoryPortrait = undefined; inventoryPortraitRig = undefined;
+});
+window.addEventListener("pageshow", () => { if (!inventoryPanel.hidden) refreshInventoryPreview(); });
 
 let tavernCoinBalance = TAVERN_QUIZ_STARTING_COINS;
 let quizPending = false;
