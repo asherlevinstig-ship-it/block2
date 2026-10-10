@@ -6,6 +6,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createInventoryPortrait } from "./inventory-preview.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
+import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
@@ -1565,7 +1566,7 @@ let inventoryComparisonKey = "";
 let inventoryBackgroundFrameAt = 0;
 
 function refreshInventoryPreview(): void {
-  if (inventoryPanel.hidden) return;
+  if (inventoryPanel.hidden || !document.querySelector<HTMLDetailsElement>("#inventory-preview-drawer")!.open) return;
   if (!inventoryPortrait) {
     inventoryPortrait = createInventoryPortrait(document.querySelector<HTMLCanvasElement>("#inventory-portrait")!);
   }
@@ -3165,7 +3166,10 @@ function setInventoryOpen(open: boolean): void {
   inventoryToggle.setAttribute("aria-expanded", String(open));
   if (open) {
     closeTavernDialogue();
-    previewHand = undefined; previewArmour = undefined; previewSlot = "weapon";
+    inventoryPreviewDrawer.open = false;
+    inventoryPanel.scrollTop = 0;
+    previewHand = undefined; previewArmour = undefined;
+    previewSlot = inventoryTabs.find(tab => tab.getAttribute("aria-selected") === "true")?.dataset.inventoryTab === "armour" ? "armour" : "weapon";
     refreshInventoryPreview();
     performancePanel.hidden = true;
     performanceToggle.setAttribute("aria-expanded", "false");
@@ -3180,6 +3184,31 @@ function setInventoryOpen(open: boolean): void {
 
 inventoryToggle.addEventListener("click", () => setInventoryOpen(inventoryPanel.hasAttribute("hidden")));
 inventoryClose.addEventListener("click", () => setInventoryOpen(false));
+const inventoryPreviewDrawer = document.querySelector<HTMLDetailsElement>("#inventory-preview-drawer")!;
+const inventoryTabs = [...inventoryPanel.querySelectorAll<HTMLButtonElement>("[data-inventory-tab]")];
+function selectInventoryCategory(category: InventoryTab, focus = false): void {
+  for (const tab of inventoryTabs) {
+    const selected = tab.dataset.inventoryTab === category;
+    tab.setAttribute("aria-selected", String(selected)); tab.tabIndex = selected ? 0 : -1;
+    if (selected && focus) tab.focus();
+  }
+  for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
+    section.hidden = section.dataset.inventoryCategory !== category;
+  }
+  inventoryPreviewDrawer.open = false;
+  previewHand = undefined; previewArmour = undefined;
+  previewSlot = category === "armour" ? "armour" : "weapon";
+  inventoryPanel.scrollTop = 0;
+}
+for (const tab of inventoryTabs) {
+  tab.addEventListener("click", () => selectInventoryCategory(tab.dataset.inventoryTab as InventoryTab));
+  tab.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault(); event.stopPropagation();
+    selectInventoryCategory(nextInventoryTab(tab.dataset.inventoryTab as InventoryTab, event.key), true);
+  });
+}
+inventoryPreviewDrawer.addEventListener("toggle", () => { if (inventoryPreviewDrawer.open) refreshInventoryPreview(); });
 document.querySelector("#inventory-preview-reset")!.addEventListener("click", () => {
   previewHand = undefined; previewArmour = undefined; refreshInventoryPreview();
 });
@@ -3192,9 +3221,13 @@ for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipme
     const armour = card.querySelector<HTMLElement>("[data-equip-armour]")?.dataset.equipArmour;
     if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; }
     else if (armour === "leather_armour" || armour === "iron_armour") { previewArmour = armour; previewSlot = "armour"; }
+    inventoryPreviewDrawer.open = true;
     refreshInventoryPreview();
+    inventoryPreviewDrawer.scrollIntoView({ block: "nearest" });
   });
-  card.append(button);
+  const actions = document.createElement("div"); actions.className = "inventory-item-actions";
+  const equip = card.querySelector<HTMLButtonElement>("[data-equip-main-hand], [data-equip-armour]")!;
+  actions.append(equip, button); card.append(actions);
 }
 window.addEventListener("pagehide", event => {
   if (event.persisted) { inventoryPortrait?.hide(); return; }

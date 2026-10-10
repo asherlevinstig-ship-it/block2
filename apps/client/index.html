@@ -198,6 +198,15 @@
         <div><span>CARRIED</span><strong id="inventory-total">EMPTY</strong></div>
         <div><span>EQUIPPED</span><strong id="inventory-equipped">Longsword</strong></div>
       </div>
+      <nav class="inventory-tabs" role="tablist" aria-label="Inventory categories">
+        <button id="inventory-tab-weapons" type="button" role="tab" aria-controls="inventory-category-weapons" aria-selected="true" data-inventory-tab="weapons">Weapons</button>
+        <button id="inventory-tab-armour" type="button" role="tab" aria-controls="inventory-category-armour" aria-selected="false" tabindex="-1" data-inventory-tab="armour">Armour</button>
+        <button id="inventory-tab-tools" type="button" role="tab" aria-controls="inventory-category-tools" aria-selected="false" tabindex="-1" data-inventory-tab="tools">Tools</button>
+        <button id="inventory-tab-materials" type="button" role="tab" aria-controls="inventory-category-materials" aria-selected="false" tabindex="-1" data-inventory-tab="materials">Materials</button>
+        <button id="inventory-tab-supplies" type="button" role="tab" aria-controls="inventory-category-supplies" aria-selected="false" tabindex="-1" data-inventory-tab="supplies">Supplies</button>
+      </nav>
+      <details id="inventory-preview-drawer">
+      <summary>Your character &amp; worn gear <span>Show / hide preview</span></summary>
       <section class="inventory-loadout" aria-label="Character and equipment preview">
         <div class="inventory-portrait">
           <canvas id="inventory-portrait" width="240" height="280" role="img" aria-label="Simplified 2D voxel preview of your selected weapon and armour"></canvas>
@@ -213,7 +222,8 @@
           <p class="inventory-preview-help">Preview any item below. Use EQUIP to wear owned gear; remove armour to return to your coat.</p>
         </div>
       </section>
-      <section class="inventory-section" aria-labelledby="inventory-materials-title">
+      </details>
+      <section id="inventory-category-materials" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-materials" data-inventory-category="materials" tabindex="0" hidden>
         <h3 id="inventory-materials-title"><span>Materials</span><small>Mine, collect and trade</small></h3>
         <div class="inventory-grid materials">
           <article data-item="iron_ore"><i></i><div><strong>Iron Ore</strong><small>Mineral · sell at the blacksmith</small></div><em data-item-count="iron_ore">0</em></article>
@@ -225,17 +235,17 @@
           <article data-item="acid_gland"><i></i><div><strong>Acid Gland</strong><small>Volatile spitter material</small></div><em data-item-count="acid_gland">0</em></article>
         </div>
       </section>
-      <section class="inventory-section" aria-labelledby="inventory-consumables-title">
+      <section id="inventory-category-supplies" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-supplies" data-inventory-category="supplies" tabindex="0" hidden>
         <h3 id="inventory-consumables-title">Supplies</h3>
         <article class="potion-inventory" data-item="healing_potion"><strong>Healing Potion</strong><small>Restores 2 HP · H to drink · carry 3</small><em data-item-count="healing_potion">0</em></article>
       </section>
-      <section class="inventory-section" aria-labelledby="inventory-tools-title">
+      <section id="inventory-category-tools" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-tools" data-inventory-category="tools" tabindex="0" hidden>
         <h3 id="inventory-tools-title"><span>Tools</span><small>Mining equipment auto-equips when acquired</small></h3>
         <div class="inventory-grid tools-grid">
           <article data-item="reinforced_pickaxe"><i></i><div><strong>Reinforced Pickaxe</strong><small>Equipped tool · mine 2 minerals per ore block</small></div><em data-item-count="reinforced_pickaxe">0</em></article>
         </div>
       </section>
-      <section class="inventory-section" aria-labelledby="inventory-armour-slot">
+      <section id="inventory-category-armour" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-armour" data-inventory-category="armour" tabindex="0" hidden>
         <h3 id="inventory-armour-slot">ARMOUR SLOT: No armour</h3>
         <button type="button" data-equip-armour="none">REMOVE ARMOUR</button>
         <div class="inventory-grid equipment-grid">
@@ -243,8 +253,8 @@
           <article class="equipment" data-item="iron_armour"><i></i><div><strong>Iron Armour</strong><small>−2 damage · minimum hit 1 · 8% slower</small></div><em data-item-count="iron_armour">0</em><button type="button" data-equip-armour="iron_armour" disabled>EQUIP</button></article>
         </div>
       </section>
-      <section class="inventory-section equipment-section" aria-labelledby="inventory-equipment-title">
-        <h3 id="inventory-equipment-title"><span>Equipment</span><small>Select your main hand</small></h3>
+      <section id="inventory-category-weapons" class="inventory-section equipment-section" role="tabpanel" aria-labelledby="inventory-tab-weapons" data-inventory-category="weapons" tabindex="0">
+        <h3 id="inventory-equipment-title"><span>Weapons</span><small>Preview or equip your main hand</small></h3>
         <div class="inventory-grid equipment-grid">
           <article class="equipment" data-item="forged_sword"><i></i><div><strong>Forged Sword</strong><small>2 / 2 / 3 damage · 380 ms opening swing</small></div><em data-item-count="forged_sword">0</em><button type="button" data-equip-main-hand="forged_sword" disabled>EQUIP</button></article>
           <article class="equipment" data-item="forged_bow"><i></i><div><strong>Forged Bow</strong><small>2 damage · 640 ms shot</small></div><em data-item-count="forged_bow">0</em><button type="button" data-equip-main-hand="forged_bow" disabled>EQUIP</button></article>
