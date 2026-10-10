@@ -15,7 +15,7 @@ export function enemyShotGuideLength(from: Point, yaw: number, read: WorldBlockR
 }
 export function enemyCombatCue(mob: EnemyTimeline, now: number) {
   const presentation = enemyAttackPresentation(mob, now);
-  const kind = mob.archetype === "stone_brute" ? mob.attackPattern === "charge" ? "charge" : "slam" : mob.archetype === "cave_spitter" ? mob.attackPattern === "fan" ? "fan" : mob.attackPattern === "pool" ? "acid pool" : "shot" : "bite";
+  const kind = mob.archetype === "stone_brute" ? mob.attackPattern === "charge" ? "charge" : mob.attackPattern === "smash" ? "smash" : "slam" : mob.archetype === "cave_spitter" ? mob.attackPattern === "fan" ? "fan" : mob.attackPattern === "pool" ? "acid pool" : "shot" : "bite";
   const recovery = mob.alive && presentation.phase === "recover" && mob.attackStartedAt > 0 && now < mob.attackRecoveryEndAt;
   const fraction = (start: number, end: number) => Math.max(0, Math.min(1, (now - start) / Math.max(1, end - start)));
   return {

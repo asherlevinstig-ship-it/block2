@@ -19,7 +19,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
-import { BRUTE_SLAM, bruteSlamCenter, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
+import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
@@ -1017,6 +1017,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
+    if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
     this.state.mobs.set(mobId, mob);
   }
 
@@ -1598,6 +1599,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     for (const [mobId, mob] of this.state.mobs) {
       if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
+      else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
@@ -1678,7 +1680,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const aim = this.mobCommittedAim.get(mobId) ?? { x: mob.x + Math.sin(mob.yaw * Math.PI / 180) * definition.stopDistance,
           y: mob.y, z: mob.z + Math.cos(mob.yaw * Math.PI / 180) * definition.stopDistance, yaw: mob.yaw };
         this.mobCommittedAim.delete(mobId);
-        this.setMobAttackTimeline(mob, mob.attackStartedAt, now);
+        this.setMobAttackTimeline(mob, mob.attackStartedAt, now, mobId);
         mob.aimCommitted = definition.attackKind === "melee";
         mob.combatState = definition.attackKind === "melee" ? "strike" : "recover";
         mob.stateUntil = definition.attackKind === "melee" ? mob.attackContactEndAt : mob.attackRecoveryEndAt;
@@ -1837,13 +1839,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
+      if (mobId === "frontier-brute") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       mob.combatState = "windup";
       this.silverGuardVolley.started(mobId, now);
       this.crawlerPositioning.delete(mobId);
       if (definition.attackKind !== "projectile") this.spitterPositioning.delete(mobId);
       this.mobNavigation.set(mobId, createMobNavigationState());
-      mob.stateUntil = now + definition.windupMs;
-      this.setMobAttackTimeline(mob, now, mob.stateUntil);
+      mob.stateUntil = now + (mobId === "frontier-brute" ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs);
+      this.setMobAttackTimeline(mob, now, mob.stateUntil, mobId);
       mob.targetId = target.id;
       mob.aimCommitted = false;
       mob.yaw = Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI;
@@ -2506,7 +2509,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (mob.archetype === "stone_brute") {
       // Once committed, neither player movement nor late snapshots move the impact circle.
       if (mob.aimCommitted) return;
-      const center = bruteSlamCenter(mob, mob.yaw);
+      const center = mob.attackPattern === "smash" ? mob : bruteSlamCenter(mob, mob.yaw);
       mob.attackStrikeX = center.x; mob.attackStrikeY = center.y; mob.attackStrikeZ = center.z;
       return;
     }
@@ -2520,7 +2523,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.attackStrikeX = origin.x; mob.attackStrikeY = origin.y; mob.attackStrikeZ = origin.z;
   }
 
-  private setMobAttackTimeline(mob: MobState, startedAt: number, releaseAt: number): void {
+  private setMobAttackTimeline(mob: MobState, startedAt: number, releaseAt: number, mobId = ""): void {
     const definition = combatMobDefinition(mob);
     mob.attackStartedAt = startedAt;
     mob.attackReleaseAt = releaseAt;
@@ -2528,6 +2531,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + CHAMPION_CHARGE.recoveryMs;
+      return;
+    }
+    if (mobId === "frontier-brute") {
+      const timing = FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"];
+      mob.attackContactAt = releaseAt + timing.impactMs;
+      mob.attackContactEndAt = mob.attackContactAt + 100;
+      mob.attackRecoveryEndAt = mob.attackContactEndAt + timing.recoveryMs;
       return;
     }
     mob.attackContactAt = releaseAt + (definition.attackKind === "melee" ? mobMeleeImpactMs(mob.archetype) : 0);
@@ -2584,8 +2594,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const center = { x: mob.attackStrikeX, y: mob.attackStrikeY, z: mob.attackStrikeZ };
         for (const [id, target] of this.state.players) {
           if (target.health <= 0 || !caveEncounterAllows(mobId, target)
-            || Math.abs(target.y - center.y) > BRUTE_SLAM.verticalRange
-            || Math.hypot(target.x - center.x, target.z - center.z) > BRUTE_SLAM.radius
+            || (mob.attackPattern === "smash" ? !bruteSmashHits(center, pending.yaw, target)
+              : Math.abs(target.y - center.y) > BRUTE_SLAM.verticalRange || Math.hypot(target.x - center.x, target.z - center.z) > BRUTE_SLAM.radius)
             || !hasCombatLineOfSight(mob, target, this.readWorldBlock)
             || !hasCombatLineOfSight(center, target, this.readWorldBlock)) continue;
           this.damagePlayer(mobId, id, mob.attackDamage, now);

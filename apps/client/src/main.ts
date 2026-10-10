@@ -11,7 +11,7 @@ import { inventoryItemVisible } from "./inventory-ownership.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
-import { isInSilverGuardClearing } from "@blockcraft/voxel-world";
+import { isInSilverGuardClearing, isInFrontierBruteArena } from "@blockcraft/voxel-world";
 import { SPITTER_PATTERN, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { equipmentPickupCard } from "./equipment-pickup.js";
@@ -38,6 +38,7 @@ import {
   CHAMPION_CHARGE,
   championChargeOutline,
   bruteSlamOutline,
+  bruteSmashOutline,
   BLACKSMITH_UPGRADES,
   BLACKSMITH_STOCK,
   type BlacksmithStockId,
@@ -1772,11 +1773,12 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const arena = tier > 0 && isInStoneBruteArena(position.x, position.z);
   const territory = position.y >= SURFACE_HEIGHT && tier > 0 ? wildernessTerritoryAt(position.x, position.z) : null;
   const silverGuard = position.y >= SURFACE_HEIGHT && isInSilverGuardClearing(position.x, position.z);
-  const label = silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
+  const frontierArena = position.y >= SURFACE_HEIGHT && isInFrontierBruteArena(position.x, position.z);
+  const label = frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${territory?.tier ?? 0}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${territory?.tier ?? 0}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -2346,7 +2348,7 @@ function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, 
   const outline = pattern === "pool" ? Array.from({ length: 48 }, (_, i) => ({ x: Math.cos(i * Math.PI / 24) * 1.6, z: Math.sin(i * Math.PI / 24) * 1.6 }))
     : pattern === "fan" ? [{ x: 0, z: 0 }, { x: Math.sin(angle + 22 * Math.PI / 180) * 7, z: Math.cos(angle + 22 * Math.PI / 180) * 7 }, { x: Math.sin(angle - 22 * Math.PI / 180) * 7, z: Math.cos(angle - 22 * Math.PI / 180) * 7 }]
     : pattern === "charge" ? championChargeOutline(yaw, chargeLength) : archetype === "stone_brute"
-    ? bruteSlamOutline()
+    ? pattern === "smash" ? bruteSmashOutline(yaw) : bruteSlamOutline()
     : mobStrikeGroundOutline(archetype, yaw);
   mesh.setPositions(outline.flatMap(point => [point.x, 0, point.z]));
   mesh.setNormals(outline.flatMap(() => [0, 1, 0]));
@@ -2374,15 +2376,21 @@ function createHammerHitImpact(mob: MobVisual): void {
 function createBruteSlamImpact(mob: MobVisual): void {
   const root = new pc.Entity("stone-brute-slam");
   const material = powerMaterial(new pc.Color(0.92, 0.34, 0.07), 0.9);
+  const smashEdge = bruteSmashOutline(mob.state.yaw);
   for (let index = 0; index < 28; index += 1) {
     const angle = index / 28 * Math.PI * 2;
     const radius = index % 2 === 0 ? BRUTE_SLAM.radius * .7 : BRUTE_SLAM.radius;
+    const edge = Math.floor(index / 7), t = (index % 7) / 7;
+    const from = smashEdge[edge]!, to = smashEdge[(edge + 1) % 4]!;
+    const position = mob.state.attackPattern === "smash"
+      ? [from.x + (to.x - from.x) * t, .1, from.z + (to.z - from.z) * t]
+      : [Math.sin(angle) * radius, .1, Math.cos(angle) * radius];
     const segment = addBox(
       root,
       "brute-slam-ring",
       material,
       [0.36 + index % 3 * 0.08, 0.1, 0.18],
-      [Math.sin(angle) * radius, 0.1, Math.cos(angle) * radius],
+      position as [number, number, number],
     );
     segment.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 === 0 ? 8 : -8);
   }

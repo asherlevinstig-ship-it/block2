@@ -50,6 +50,23 @@ export const GREENWOOD_CRAWLER_HOMES = [
 ] as const;
 export const STONE_BRUTE_ARENA = { minX: 35, maxX: 49, minZ: 34, maxZ: 48 } as const;
 export const STONE_BRUTE_ARENA_HOME = { x: 42.5, y: 8, z: 41.5 } as const;
+export const FRONTIER_BRUTE_ARENA = { minX: 60, maxX: 75, minZ: 19, maxZ: 34 } as const;
+export function isInFrontierBruteArena(x: number, z: number): boolean {
+  const a = FRONTIER_BRUTE_ARENA;
+  return x >= a.minX && x <= a.maxX + 1 && z >= a.minZ && z <= a.maxZ + 1;
+}
+export function frontierBruteArenaBlock(x: number, y: number, z: number): BlockId | null {
+  const arena = isInFrontierBruteArena(x, z);
+  const approach = x >= 56 && x < 60 && z >= 27 && z <= 29;
+  if ((!arena && !approach) || y < SURFACE_HEIGHT) return null;
+  if (y === SURFACE_HEIGHT) {
+    const edge = arena && (x === 60 || x === 75 || z === 19 || z === 34);
+    return edge || approach ? Block.Dirt : Block.Stone;
+  }
+  // Ruined corner pillars keep the centre and retreat lane open.
+  const pillar = (x === 64 || x === 72) && (z === 23 || z === 31);
+  return pillar && y <= SURFACE_HEIGHT + 2 ? Block.Stone : Block.Air;
+}
 export function isInStoneBruteArena(x: number, z: number): boolean {
   return x >= STONE_BRUTE_ARENA.minX && x <= STONE_BRUTE_ARENA.maxX + 1
     && z >= STONE_BRUTE_ARENA.minZ && z <= STONE_BRUTE_ARENA.maxZ + 1;
@@ -495,6 +512,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         const campBlock = wildernessCampBlock(worldX, y, worldZ);
         if (campBlock !== null) blocks[chunkIndex(localX, y, localZ)] = campBlock;
         const mineralBlock = mineralOutcropBlock(worldX, y, worldZ);
+        const frontierBlock = frontierBruteArenaBlock(worldX, y, worldZ);
+        if (frontierBlock !== null) blocks[chunkIndex(localX, y, localZ)] = frontierBlock;
         const silverGuardBlock = silverGuardEncounterBlock(worldX, y, worldZ);
         if (silverGuardBlock !== null) blocks[chunkIndex(localX, y, localZ)] = silverGuardBlock;
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;

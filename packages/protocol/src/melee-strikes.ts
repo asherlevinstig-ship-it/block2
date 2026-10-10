@@ -10,6 +10,24 @@ export function championChargeOutline(yaw: number, distance: number = CHAMPION_C
 export const CRAWLER_RUSH_MS = 120;
 export const crawlerRushDistance = (archetype: string): number => archetype === "moss_crawler" ? .9 : archetype === "briar_crawler" ? 1.1 : 0;
 export const BRUTE_SLAM = { radius: 2.2, forward: 1.4, verticalRange: 1.1, recoveryMs: 1400 } as const;
+export const FRONTIER_BRUTE = {
+  halfWidth: .85, reach: 3.6, verticalRange: 1.1,
+  smash: { windupMs: 1100, impactMs: 220, recoveryMs: 1600 },
+  slam: { windupMs: 1500, impactMs: 450, recoveryMs: 1800 },
+} as const;
+export function frontierBrutePattern(sequence: number): "smash" | "slam" { return sequence % 2 === 0 ? "smash" : "slam"; }
+export function bruteSmashOutline(yaw: number): { x: number; z: number }[] {
+  const a = yaw * Math.PI / 180;
+  return [[-FRONTIER_BRUTE.halfWidth, 0], [FRONTIER_BRUTE.halfWidth, 0],
+    [FRONTIER_BRUTE.halfWidth, FRONTIER_BRUTE.reach], [-FRONTIER_BRUTE.halfWidth, FRONTIER_BRUTE.reach]]
+    .map(([x, z]) => ({ x: x! * Math.cos(a) + z! * Math.sin(a), z: z! * Math.cos(a) - x! * Math.sin(a) }));
+}
+export function bruteSmashHits(origin: StrikePoint, yaw: number, target: StrikePoint): boolean {
+  const a = yaw * Math.PI / 180, dx = target.x - origin.x, dz = target.z - origin.z;
+  const forward = dx * Math.sin(a) + dz * Math.cos(a), side = dx * Math.cos(a) - dz * Math.sin(a);
+  return Math.abs(target.y - origin.y) <= FRONTIER_BRUTE.verticalRange
+    && forward >= 0 && forward <= FRONTIER_BRUTE.reach && Math.abs(side) <= FRONTIER_BRUTE.halfWidth;
+}
 export function bruteSlamCenter(origin: StrikePoint, yaw: number): StrikePoint {
   const radians = yaw * Math.PI / 180;
   return { x: origin.x + Math.sin(radians) * BRUTE_SLAM.forward, y: origin.y,

@@ -4,6 +4,13 @@ import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear
 const mob = { alive: true, combatState: "windup", aimCommitted: false, archetype: "stone_brute",
   attackStartedAt: 1000, attackReleaseAt: 2000, attackContactAt: 2280, attackContactEndAt: 2380, attackRecoveryEndAt: 3000 };
 describe("readable enemy combat cues", () => {
+  it("distinguishes the directional smash and preserves its latency-safe counter cue", () => {
+    const smash = { ...mob, attackPattern: "smash" };
+    expect(enemyCombatCue(smash, 1200).label).toBe("SMASH · AIMING");
+    expect(enemyCombatCue(smash, 1800).label).toBe("SMASH · LOCKED");
+    expect(enemyCombatCue(smash, 2300).label).toBe("SMASH · STRIKE");
+    expect(enemyCombatCue(smash, 2690).label).toBe("RECOVER · COUNTER");
+  });
   it("shows a brief spotted cue without replaying expired alerts", () => {
     const state = { alive: true, combatState: "idle", awarenessState: "engaged", alertUntil: 1900 };
     expect(enemyAwarenessCue(state, 1000)).toMatchObject({ visible: true, label: "! SPOTTED", kind: "alert" });
