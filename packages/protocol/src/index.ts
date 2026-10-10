@@ -4,7 +4,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-matriarch-phase-v70";
+export const WORLD_ROOM = "world-venom-focus-v71";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -109,6 +109,7 @@ export const ITEM_DEFINITIONS = {
   fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", description: "A fast three-hit melee weapon" },
   stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", description: "Slow overhead smash · heavy knockback · can stagger enemy windups" },
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", description: "A ranged focus that fires corrosive bolts" },
+  venom_focus: { id: "venom_focus", name: "Venom Focus", description: "Matriarch focus: corrosive bolts and a three-shot Venom Fan special" },
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
@@ -181,6 +182,7 @@ export const MAIN_HAND_DEFINITIONS = {
   fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", tag: "melee", attackName: "Fang Flurry", requiredItemId: "fang_dagger" },
   stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", tag: "melee", attackName: "Core Smash", requiredItemId: "stone_core_hammer" },
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", tag: "focus", attackName: "Corrosive Bolt", requiredItemId: "acid_gland_focus" },
+  venom_focus: { id: "venom_focus", name: "Venom Focus", tag: "focus", attackName: "Venom Bolt", requiredItemId: "venom_focus" },
 } as const satisfies Record<string, MainHandDefinition>;
 
 export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
@@ -265,6 +267,8 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     projectileTravelMs: 220,
     attacks: [{ step: 1, durationMs: 560, impactMs: 235, damage: 2, knockback: 0.22 }],
   },
+  venom_focus: { combo: false, comboWindowMs: 0, range: 7.5, minimumFacingDot: .58, projectileTravelMs: 220,
+    attacks: [{ step: 1, durationMs: 560, impactMs: 235, damage: 2, knockback: .22 }] },
 } as const satisfies Record<MainHandId, WeaponAttackDefinition>;
 
 export interface PowerDefinition {
@@ -418,6 +422,7 @@ export const BRAMBLE_SNARE = {
 } as const;
 
 export const SPECIAL_DEFINITIONS = {
+  venom_fan: { id: "venom_fan", name: "Venom Fan", core: "volley", castType: "tap", cooldownMs: 8000, range: 6, travelMs: 450, offsets: [-18, 0, 18] },
   hunters_mark: HUNTERS_MARK,
   bramble_snare: BRAMBLE_SNARE,
 } as const;
@@ -497,7 +502,7 @@ export const SeismicMasteryEquipRequestSchema = z.object({
 
 export const SpecialRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  specialId: z.enum(["hunters_mark", "bramble_snare"]),
+  specialId: z.enum(["hunters_mark", "bramble_snare", "venom_fan"]),
   yaw: z.number().finite(),
   target: z.object({
     x: z.number().finite(),
@@ -513,7 +518,7 @@ export const SpecialEquipRequestSchema = z.object({
 
 export const MainHandEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "acid_gland_focus", "forged_sword", "forged_bow", "forged_focus"]),
+  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "acid_gland_focus", "venom_focus", "forged_sword", "forged_bow", "forged_focus"]),
 });
 
 export const TraitEquipRequestSchema = z.object({

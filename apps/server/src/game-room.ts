@@ -44,6 +44,7 @@ import {
   DodgeRequestSchema,
   DefenseRequestSchema,
   HUNTERS_MARK,
+  SPECIAL_DEFINITIONS,
   MAIN_HAND_DEFINITIONS,
   MainHandEquipRequestSchema,
   MineBlockRequestSchema,
@@ -1283,7 +1284,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
-    const baseDrops = mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
+    const baseDrops = mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
+      : mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
       : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
       : lootForArchetype(mob.archetype as MobArchetypeId);
     const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
@@ -2153,6 +2155,24 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "rate" });
     }
     player.yaw = parsed.data.yaw;
+    if (parsed.data.specialId === "venom_fan") {
+      if (player.mainHandId !== "venom_focus" || (player.inventory.get("venom_focus")?.quantity ?? 0) <= 0 || parsed.data.target)
+        return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "compatibility" });
+      const fan = SPECIAL_DEFINITIONS.venom_fan;
+      player.specialCooldownUntil = now + fan.cooldownMs;
+      player.attackStep = 1; player.actionSequence++;
+      for (const offset of fan.offsets) {
+        const yaw = (parsed.data.yaw + offset) * Math.PI / 180;
+        const endpoint = { x: player.x + Math.sin(yaw) * fan.range, y: player.y, z: player.z + Math.cos(yaw) * fan.range };
+        const start = { x: player.x, y: player.y + 1.05, z: player.z }, end = bodyPoint(endpoint);
+        const projectileId = `venom:${client.sessionId}:${++this.weaponProjectileSequence}`;
+        this.pendingWeaponProjectiles.set(projectileId, { requestId: parsed.data.requestId, mainHandId: "venom_focus", step: 1, yaw: parsed.data.yaw + offset,
+          impactAt: now + fan.travelMs, projectileId, attackerId: client.sessionId, start, end, position: start, startedAt: now });
+        this.broadcast("combat:projectile", { projectileId, attackerId: client.sessionId, mainHandId: "venom_focus", x: player.x, y: player.y, z: player.z,
+          targetX: endpoint.x, targetY: endpoint.y, targetZ: endpoint.z, travelMs: fan.travelMs } satisfies WeaponAttackReleased);
+      }
+      return;
+    }
     if (parsed.data.specialId === "bramble_snare") {
       const target = parsed.data.target;
       if (!target) return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "payload" });
@@ -2200,6 +2220,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success) return this.reject(client, { action: "special", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (player.mainHandId === "venom_focus") return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "compatibility" });
     if (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "rate" });
     }
@@ -2254,6 +2275,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     player.mainHandId = mainHand.id;
     player.mainHandTag = mainHand.tag;
+    if (mainHand.id === "venom_focus") player.equippedSpecial = "venom_fan";
+    else if (player.equippedSpecial === "venom_fan") player.equippedSpecial = "hunters_mark";
     this.attackChains.delete(client.sessionId);
     player.equippedPower = compatiblePowerOrFallback(player.equippedPower, mainHand.tag);
   }

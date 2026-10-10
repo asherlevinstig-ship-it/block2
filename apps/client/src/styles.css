@@ -902,6 +902,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article[data-item="fang_dagger"] i { background: linear-gradient(135deg, #e9dfb7 0 55%, #604120 56%); }
 .inventory-grid article[data-item="stone_core_hammer"] i { background: linear-gradient(135deg, #8ba0aa 0 58%, #70421e 59%); }
 .inventory-grid article[data-item="acid_gland_focus"] i { background: radial-gradient(circle, #c6ff55 0 35%, #49891b 38% 65%, #5c3d20 68%); }
+.inventory-grid article[data-item="venom_focus"] i { background: radial-gradient(circle, #b7ffe0 0 20%, #36d7a2 24% 50%, #194f42 54% 70%, #816341 74%); }
 .inventory-grid article.empty { opacity: .48; }
 .equipment-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .inventory-grid article.equipment { grid-template-columns: 38px 1fr auto; grid-template-rows: auto auto; border-color: rgb(116 183 220 / 20%); }

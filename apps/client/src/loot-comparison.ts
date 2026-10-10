@@ -16,6 +16,6 @@ export function weaponComparison(id: MainHandId, ironSwordOwned = false) {
     style: MAIN_HAND_DEFINITIONS[id].attackName,
     benefit: id === "fang_dagger" ? "Faster attacks, shorter reach"
       : id === "stone_core_hammer" ? "Heavy knockback · can stagger windups"
-        : id === "acid_gland_focus" ? "Ranged corrosive bolts" : "Your current weapon",
+        : id === "venom_focus" ? "F: three-shot Venom Fan · 8s cooldown" : id === "acid_gland_focus" ? "Ranged corrosive bolts" : "Your current weapon",
   };
 }

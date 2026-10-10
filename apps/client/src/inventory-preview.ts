@@ -36,7 +36,7 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
         box("#a27742", 191, 107, 8, 99); box("#a27742", 179, 99, 16, 8); box("#a27742", 179, 206, 16, 8); box("#d5d6bc", 179, 108, 2, 98);
       } else if (hand.includes("focus")) {
         box("#795735", 180, 125, 7, 82);
-        box(hand === "acid_gland_focus" ? "#b1db54" : "#79c4e5", 172, 105, 23, 24); box("#ddf4f0", 179, 109, 7, 10);
+        box(hand === "venom_focus" ? "#36d7a2" : hand === "acid_gland_focus" ? "#b1db54" : "#79c4e5", 172, 105, 23, 24); box("#ddf4f0", 179, 109, 7, 10);
       } else if (hand === "stone_core_hammer") {
         box("#8b623b", 183, 118, 8, 91); box("#819baa", 167, 97, 39, 27); box("#c6d5dc", 169, 97, 35, 7);
       } else {

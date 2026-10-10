@@ -105,7 +105,7 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
     rightArmPitch: -82 * strength,
     rightArmRoll: -68 * strength,
   };
-  if (mainHandId === "magic_focus" || mainHandId === "forged_focus" || mainHandId === "acid_gland_focus") return {
+  if (mainHandId === "magic_focus" || mainHandId === "forged_focus" || mainHandId === "acid_gland_focus" || mainHandId === "venom_focus") return {
     active: true,
     torsoYaw: -8 * strength,
     leftArmPitch: -42 * strength,

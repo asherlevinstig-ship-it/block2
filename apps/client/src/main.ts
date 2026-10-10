@@ -322,7 +322,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 6 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 7 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -1030,7 +1030,13 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(forgedSword, "forged-sword-collar", bladeMaterial, [.18, .09, .13], [0, -.16, 0]);
   addBox(forgedFocus, "forged-focus-frame", bladeMaterial, [.34, .07, .34], [0, -.34, 0]);
   forgedSword.enabled = forgedBow.enabled = forgedFocus.enabled = false;
+  const venomFocus = acidGlandFocus.clone();
+  venomFocus.name = "venom-focus";
+  acidGlandFocus.parent!.addChild(venomFocus);
+  addBox(venomFocus, "matriarch-jade-prongs", coloredMaterial(new pc.Color(.15, .9, .65)), [.45, .1, .18], [0, -.3, 0]);
+  venomFocus.enabled = false;
   const mainHands = {
+    venom_focus: venomFocus,
     forged_sword: forgedSword,
     forged_bow: forgedBow,
     forged_focus: forgedFocus,
@@ -1651,9 +1657,10 @@ function updateSpecialLoadout(specialId: SpecialId): void {
   const definition = SPECIAL_DEFINITIONS[specialId];
   specialName.textContent = definition.name;
   specialSlot.setAttribute("aria-label", `Use ${definition.name}`);
-  specialButton.textContent = specialId === "hunters_mark" ? "Mark" : "Snare";
+  specialButton.textContent = specialId === "venom_fan" ? "Fan" : specialId === "hunters_mark" ? "Mark" : "Snare";
   for (const button of specialPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.special === specialId));
+    button.disabled = specialId === "venom_fan";
   }
   updateControlsHelp();
 }
@@ -1908,7 +1915,7 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
 }
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
-  const acid = message.mainHandId === "acid_gland_focus";
+  const acid = message.mainHandId === "acid_gland_focus" || message.mainHandId === "venom_focus";
   const arrow = message.mainHandId === "bow" || message.mainHandId === "forged_bow";
   const entity = new pc.Entity(arrow ? "arrow-projectile" : acid ? "corrosive-projectile" : "arcane-projectile");
   entity.addComponent("render", { type: arrow ? "box" : "sphere" });
@@ -2610,6 +2617,7 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   fang_dagger: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
   stone_core_hammer: coloredMaterial(new pc.Color(0.42, 0.52, 0.58)),
   acid_gland_focus: coloredMaterial(new pc.Color(0.62, 0.96, 0.12)),
+  venom_focus: coloredMaterial(new pc.Color(.15, .95, .65)),
 };
 
 function isItemId(value: string): value is ItemId {
@@ -4813,6 +4821,16 @@ function beginSpecialAim(pointerId: number | null = null): void {
     showCombatFeedback("SPECIAL BLOCKED", "hurt");
     return;
   }
+  if (localEquippedSpecial === "venom_fan") {
+    const pose = localPlayer.getPosition();
+    const target = nearestLivingMob(pose, SPECIAL_DEFINITIONS.venom_fan.range);
+    const yaw = target ? movementYaw(target.visual.state.x - pose.x, target.visual.state.z - pose.z, localFacingYaw) : localFacingYaw;
+    room.send("special", { requestId: `venom-${Date.now()}`, specialId: "venom_fan", yaw });
+    localSpecialCooldownUntil = Date.now() + definition.cooldownMs;
+    localFacingYaw = yaw;
+    showCombatFeedback("VENOM FAN", "dodge");
+    return;
+  }
   if (localEquippedSpecial === "hunters_mark") {
     requestHuntersMark();
     return;
@@ -5723,7 +5741,7 @@ app.on("update", (dt: number) => {
     ? "Release"
     : specialRemaining > 0
       ? `${Math.ceil(specialRemaining / 1000)}s`
-      : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
+      : localEquippedSpecial === "venom_fan" ? "Fan" : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
   cameraTarget.set(
     player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x,
     player.y + localVisualVerticalOffset,
