@@ -1,6 +1,6 @@
 export type EnemyCue = "warning" | "hurt" | "stagger" | "defeat";
 export type PowerCue = "seismicWindup" | "seismicImpact";
-export type WeaponCue = "hammerImpact" | "rangedHit";
+export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit";
 export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
 type CombatCue = EnemyCue | PowerCue | WeaponCue | MiningCue;
 
@@ -68,6 +68,8 @@ export const POWER_CUE_DEFINITIONS: Record<PowerCue, EnemyCueDefinition> = {
 };
 
 export const WEAPON_CUE_DEFINITIONS: Record<WeaponCue, EnemyCueDefinition> = {
+  acidHit: { minimumIntervalMs: 90, tones: [{ wave: "triangle", startHz: 165, endHz: 65, gain: .035, delayMs: 0, durationMs: 110 }] },
+  venomHit: { minimumIntervalMs: 90, tones: [{ wave: "sine", startHz: 720, endHz: 380, gain: .03, delayMs: 0, durationMs: 85 }] },
   rangedHit: { minimumIntervalMs: 90, tones: [{ wave: "sine", startHz: 520, endHz: 300, gain: .035, delayMs: 0, durationMs: 75 }] },
   hammerImpact: {
     minimumIntervalMs: 180,

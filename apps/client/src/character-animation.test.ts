@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { WEAPON_ATTACK_DEFINITIONS } from "@blockcraft/protocol";
 import {
   PRIMARY_ACTION_DURATION_MS,
   actionArmSwingWeight,
@@ -65,7 +66,7 @@ describe("voxel character animation", () => {
   });
 
   it("uses distinct Bow and Magic Focus release poses", () => {
-    const bow = primaryActionPose(330, 1, "bow");
+    const bow = primaryActionPose(WEAPON_ATTACK_DEFINITIONS.bow.attacks[0].impactMs, 1, "bow");
     const focus = primaryActionPose(190, 1, "magic_focus");
     expect(bow.leftArmPitch).toBeLessThan(-100);
     expect(bow.rightArmRoll).toBeLessThan(-60);

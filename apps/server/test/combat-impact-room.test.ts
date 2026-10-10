@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, type WorldBlockReader } from "@blockcraft/voxel-world";
 import type { MainHandId, PowerId } from "@blockcraft/protocol";
+import { WEAPON_ATTACK_DEFINITIONS } from "@blockcraft/protocol";
 import { MOB_ARCHETYPES } from "../src/mob-archetypes.js";
 import { WorldRoom } from "../src/game-room.js";
 import { MobState, PlayerState, WorldState } from "../src/schema.js";
@@ -43,6 +44,19 @@ function fixture(read = flat) {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("authoritative combat impacts", () => {
+  it.each(["bow", "forged_bow", "acid_gland_focus", "venom_focus"] as const)("%s uses shared flight timing and only damages on impact", weapon => {
+    const { mob, internal, events, release } = fixture();
+    const definition = WEAPON_ATTACK_DEFINITIONS[weapon];
+    release(weapon);
+    expect(events.find(event => event.type === "combat:projectile")?.payload.travelMs).toBe(definition.projectileTravelMs);
+    expect(mob.health).toBe(30);
+    internal.resolveWeaponProjectiles(10_000 + Math.floor(definition.projectileTravelMs * .25));
+    expect(mob.health).toBe(30);
+    internal.resolveWeaponProjectiles(10_000 + definition.projectileTravelMs);
+    expect(mob.health).toBe(30 - definition.attacks[0].damage);
+    internal.resolveWeaponProjectiles(10_000 + definition.projectileTravelMs + 100);
+    expect(mob.health).toBe(30 - definition.attacks[0].damage);
+  });
   it.each(["moss_crawler", "briar_crawler"] as const)("%s bites once, freezes its aim, and leaves a harmless recovery window", archetype => {
     const { player, mob, internal, events } = fixture();
     mob.archetype = archetype; mob.x = player.x - 1.3;

@@ -4,7 +4,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-ranged-free-aim-v72";
+export const WORLD_ROOM = "world-ranged-identity-v73";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -211,8 +211,8 @@ export interface WeaponAttackDefinition {
 export const WEAPON_ATTACK_DEFINITIONS = {
   forged_sword: { combo: true, comboWindowMs: COMBO_CHAIN_WINDOW_MS, range: 2.1, minimumFacingDot: .35, projectileTravelMs: 0,
     attacks: COMBAT_ATTACKS.map(step => ({ ...step, damage: step.damage + 1 })) },
-  forged_bow: { combo: false, comboWindowMs: 0, range: 9, minimumFacingDot: .92, projectileTravelMs: 190,
-    attacks: [{ step: 1, durationMs: 640, impactMs: 330, damage: 2, knockback: .18 }] },
+  forged_bow: { combo: false, comboWindowMs: 0, range: 9, minimumFacingDot: .92, projectileTravelMs: 160,
+    attacks: [{ step: 1, durationMs: 540, impactMs: 220, damage: 2, knockback: .18 }] },
   forged_focus: { combo: false, comboWindowMs: 0, range: 7, minimumFacingDot: .58, projectileTravelMs: 230,
     attacks: [{ step: 1, durationMs: 470, impactMs: 190, damage: 2, knockback: .28 }] },
   longsword: {
@@ -228,8 +228,8 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     comboWindowMs: 0,
     range: 9,
     minimumFacingDot: 0.92,
-    projectileTravelMs: 190,
-    attacks: [{ step: 1, durationMs: 640, impactMs: 330, damage: 1, knockback: 0.18 }],
+    projectileTravelMs: 160,
+    attacks: [{ step: 1, durationMs: 540, impactMs: 220, damage: 1, knockback: 0.18 }],
   },
   magic_focus: {
     combo: false,
@@ -264,10 +264,10 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     comboWindowMs: 0,
     range: 7.5,
     minimumFacingDot: 0.58,
-    projectileTravelMs: 220,
-    attacks: [{ step: 1, durationMs: 560, impactMs: 235, damage: 2, knockback: 0.22 }],
+    projectileTravelMs: 360,
+    attacks: [{ step: 1, durationMs: 620, impactMs: 280, damage: 2, knockback: 0.22 }],
   },
-  venom_focus: { combo: false, comboWindowMs: 0, range: 7.5, minimumFacingDot: .58, projectileTravelMs: 220,
+  venom_focus: { combo: false, comboWindowMs: 0, range: 7.5, minimumFacingDot: .58, projectileTravelMs: 300,
     attacks: [{ step: 1, durationMs: 560, impactMs: 235, damage: 2, knockback: .22 }] },
 } as const satisfies Record<MainHandId, WeaponAttackDefinition>;
 

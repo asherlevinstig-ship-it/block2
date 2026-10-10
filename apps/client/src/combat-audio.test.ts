@@ -10,6 +10,14 @@ const idle: EnemyCueSnapshot = {
 };
 
 describe("enemy combat audio", () => {
+  it("gives acid and venom distinct quiet confirmed-impact sounds", () => {
+    expect(WEAPON_CUE_DEFINITIONS.acidHit.tones[0]!.startHz).toBeLessThan(200);
+    expect(WEAPON_CUE_DEFINITIONS.venomHit.tones[0]!.startHz).toBeGreaterThan(600);
+    for (const cue of [WEAPON_CUE_DEFINITIONS.acidHit, WEAPON_CUE_DEFINITIONS.venomHit]) {
+      expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(90);
+      expect(cue.tones.every(tone => tone.gain <= .035 && tone.durationMs <= 110)).toBe(true);
+    }
+  });
   it("keeps ranged hit confirmation short, quiet and rate limited", () => {
     const cue = WEAPON_CUE_DEFINITIONS.rangedHit;
     expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(90);

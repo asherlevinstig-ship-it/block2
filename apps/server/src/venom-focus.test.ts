@@ -34,7 +34,8 @@ describe("Venom Focus", () => {
   it("is owned equipment with familiar basic damage and an automatically bound special", () => {
     const { internal, player, client } = setup();
     expect(equipmentForItem("venom_focus")).toBe("venom_focus");
-    expect(WEAPON_ATTACK_DEFINITIONS.venom_focus.attacks).toEqual(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks);
+    expect(WEAPON_ATTACK_DEFINITIONS.venom_focus.attacks[0].damage).toBe(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0].damage);
+    expect(WEAPON_ATTACK_DEFINITIONS.venom_focus.attacks[0].durationMs).toBeLessThan(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0].durationMs);
     expect(player.equippedSpecial).toBe("venom_fan");
     internal.handleSpecialEquip(client, { requestId: "special", specialId: "bramble_snare" });
     expect(player.equippedSpecial).toBe("venom_fan");

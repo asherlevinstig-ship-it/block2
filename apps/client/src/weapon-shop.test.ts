@@ -6,7 +6,7 @@ import { weaponComparison } from "./loot-comparison.js";
 describe("forged shop weapons", () => {
   it("shows damage, speed and range for all three inventory weapons", () => {
     expect(weaponComparison("forged_sword").damage).toBe("2 / 2 / 3");
-    expect(weaponComparison("forged_bow")).toMatchObject({ damage: "2", speed: "640 ms", range: "9.00 blocks" });
+    expect(weaponComparison("forged_bow")).toMatchObject({ damage: "2", speed: "540 ms", range: "9.00 blocks" });
     expect(weaponComparison("forged_focus")).toMatchObject({ damage: "2", speed: "470 ms", range: "7.00 blocks" });
     for (const id of ["forged_sword", "forged_bow", "forged_focus"]) expect(equipmentForItem(id)).toBe(id);
   });

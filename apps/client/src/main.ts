@@ -10,6 +10,7 @@ import { createTradeUI } from "./trade-ui.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createInventoryPortrait } from "./inventory-preview.js";
+import { rangedStyle } from "./ranged-style.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
@@ -1832,10 +1833,11 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" = "hit
 let rangedReticleHitUntil = 0;
 let rangedPopupSequence = 0;
 const rangedPopups: { element: HTMLElement; position: pc.Vec3; startedAt: number; duration: number; damage: boolean; offset: number }[] = [];
-function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "enemy" | "terrain", defeated = false): void {
+function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "enemy" | "terrain", defeated = false, color?: readonly number[]): void {
   const element = document.createElement("span");
   element.className = `ranged-popup ranged-popup-${kind}${defeated ? " defeated" : ""}`;
   element.textContent = text; element.setAttribute("aria-hidden", "true");
+  if (color) element.style.color = `rgb(${color.map(channel => Math.round(channel * 255)).join(",")})`;
   document.body.append(element);
   rangedPopups.push({ element, position: position.clone(), startedAt: performance.now(), duration: kind === "damage" ? 800 : 240,
     damage: kind === "damage", offset: kind === "damage" ? (++rangedPopupSequence % 3 - 1) * 14 : 0 });
@@ -1933,6 +1935,8 @@ const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
+// Retain impact style after the short-lived mesh ends, until server confirmation arrives.
+const projectileWeapons = new Map<string, MainHandId>();
 const mobHazardVisuals = new Map<string, MobHazardVisual>();
 let powerAimVisual: PowerAimVisual | null = null;
 let specialAimVisual: PowerAimVisual | null = null;
@@ -1949,21 +1953,18 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
 }
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
-  const acid = message.mainHandId === "acid_gland_focus" || message.mainHandId === "venom_focus";
-  const arrow = message.mainHandId === "bow" || message.mainHandId === "forged_bow";
-  const entity = new pc.Entity(arrow ? "arrow-projectile" : acid ? "corrosive-projectile" : "arcane-projectile");
-  entity.addComponent("render", { type: arrow ? "box" : "sphere" });
-  const material = powerMaterial(
-    arrow ? new pc.Color(0.93, 0.76, 0.34) : acid ? new pc.Color(0.58, 1, 0.08) : new pc.Color(0.28, 0.68, 1),
-    0.96,
-  );
+  projectileWeapons.set(message.projectileId, message.mainHandId);
+  while (projectileWeapons.size > 128) projectileWeapons.delete(projectileWeapons.keys().next().value!);
+  const style = rangedStyle(message.mainHandId);
+  const entity = new pc.Entity(`${message.mainHandId}-projectile`);
+  entity.addComponent("render", { type: style.shape });
+  const material = powerMaterial(new pc.Color(style.color[0]!, style.color[1]!, style.color[2]!), 0.96);
   if (entity.render) entity.render.material = material;
-  if (arrow) entity.setLocalScale(0.07, 0.07, 0.58);
-  else entity.setLocalScale(0.24, 0.24, 0.24);
+  entity.setLocalScale(style.scale[0]!, style.scale[1]!, style.scale[2]!);
   const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
   const end = new pc.Vec3(message.targetX, message.targetY + 0.72, message.targetZ);
   entity.setPosition(start);
-  if (arrow) entity.lookAt(end);
+  if (style.shape === "box") entity.lookAt(end);
   app.root.addChild(entity);
   weaponProjectileVisuals.push({
     projectileId: message.projectileId,
@@ -6108,9 +6109,12 @@ async function connect(): Promise<void> {
   room.onMessage("combat:projectile-resolved", (message: ProjectileResolved) => {
     const cue = projectileImpactCue(message.projectileId, message.reason);
     const point = new pc.Vec3(message.x, message.y, message.z);
-    if (cue && localPlayer.getPosition().distance(point) <= 18)
-      createRangedPopup(point, cue === "enemy" ? "✦" : "•", cue);
     const index = weaponProjectileVisuals.findIndex(projectile => projectile.projectileId === message.projectileId);
+    const weapon = projectileWeapons.get(message.projectileId);
+    const style = rangedStyle(weapon ?? "magic_focus");
+    projectileWeapons.delete(message.projectileId);
+    if (cue && localPlayer.getPosition().distance(point) <= 18)
+      createRangedPopup(point, cue === "enemy" ? style.glyph : "•", cue, false, cue === "enemy" ? style.color : undefined);
     if (index >= 0) {
       weaponProjectileVisuals[index]!.entity.destroy();
       weaponProjectileVisuals[index]!.material.destroy();
@@ -6244,7 +6248,7 @@ async function connect(): Promise<void> {
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
     if (rangedHit) {
       rangedReticleHitUntil = performance.now() + 110;
-      combatAudio.play("rangedHit");
+      combatAudio.play(rangedStyle(message.mainHandId).hitSound);
       if (mob) {
         const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
         createRangedPopup(position, `−${message.damage}`, "damage", message.defeated);
@@ -6512,6 +6516,7 @@ async function connect(): Promise<void> {
     brambleSnareVisuals.clear();
     for (const projectile of weaponProjectileVisuals) { projectile.entity.destroy(); projectile.material.destroy(); }
     weaponProjectileVisuals.length = 0;
+    projectileWeapons.clear();
     for (const hazard of mobHazardVisuals.values()) hazard.root.destroy();
     mobHazardVisuals.clear();
     updatePlayerCount();
