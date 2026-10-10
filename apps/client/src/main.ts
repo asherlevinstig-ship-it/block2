@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { advanceBossHud, initialBossHud } from "./boss-hud.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
@@ -4068,6 +4069,34 @@ function updateObjectiveGuidance(): void {
   objectiveMarker.dataset.onscreen = String(onScreen);
 }
 
+const bossHud = document.querySelector<HTMLElement>("#boss-hud")!;
+const bossName = document.querySelector<HTMLElement>("#boss-name")!;
+const bossPhase = document.querySelector<HTMLElement>("#boss-phase")!;
+const bossHealth = document.querySelector<HTMLElement>("#boss-health")!;
+const bossHealthFill = document.querySelector<HTMLElement>("#boss-health-fill")!;
+const bossHealthText = document.querySelector<HTMLElement>("#boss-health-text")!;
+const bossNotice = document.querySelector<HTMLElement>("#boss-notice")!;
+let bossHudState = initialBossHud();
+let bossHudFingerprint = "";
+function updateBossHud(now: number): void {
+  const boss = mobVisuals.get("greenwood-venom-matriarch")?.state;
+  const position = localPlayer.getPosition();
+  bossHudState = advanceBossHud(bossHudState, boss, { x: position.x, y: position.y, z: position.z, health: potionHealth }, now);
+  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, bossHudState.enraged, bossHudState.message]);
+  if (fingerprint === bossHudFingerprint) return;
+  bossHudFingerprint = fingerprint;
+  bossHud.hidden = !bossHudState.visible;
+  if (!boss || !bossHudState.visible) return;
+  bossName.textContent = boss.name;
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : bossHudState.enraged ? "PHASE 2 · ENRAGED" : "PHASE 1";
+  bossHud.dataset.enraged = String(bossHudState.enraged);
+  bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
+  bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
+  bossHealth.setAttribute("aria-valuemax", String(boss.maxHealth));
+  bossHealth.setAttribute("aria-valuenow", String(Math.max(0, boss.health)));
+  bossNotice.textContent = bossHudState.message;
+}
+
 interface StopTraceFrame {
   at: number;
   dtMs: number;
@@ -5706,6 +5735,7 @@ app.on("update", (dt: number) => {
   camera.setPosition(desiredCamera);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   updateObjectiveGuidance();
+  updateBossHud(animationNow);
   const bodyY = localPlayerRig.root.getLocalPosition().y;
   const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
@@ -6333,6 +6363,7 @@ async function connect(): Promise<void> {
     remotePlayers.clear();
     for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
+    bossHudState = initialBossHud(); bossHudFingerprint = ""; bossHud.hidden = true;
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();
     for (const visual of recoveryVisuals.values()) visual.destroy();
