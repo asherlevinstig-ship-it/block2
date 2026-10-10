@@ -1213,6 +1213,11 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .resource-toast { padding: 9px 18px; border: 1px solid #cbdcaa88; border-radius: 20px; color: #f6edbc; background: #163026ed; font: 800 15px system-ui; text-align: center; animation: resource-pickup 2.2s both; }
 .resource-toast[data-item="iron_ore"] { color: #ffd19e; border-color: #d89851; background: #352416ed; box-shadow: 0 0 18px #ce8b3a33; }
 .resource-toast[data-item="silver_ore"] { color: #d3f1ff; border-color: #9acfe6; background: #172d3ced; box-shadow: 0 0 18px #83c5e333; }
+.equipment-pickup { width: min(340px, calc(100vw - 52px)); border-radius: 12px; border: 2px solid #c6d3b4; background: linear-gradient(135deg, #243b35, #101c23); padding: 14px 20px; animation-duration: 4.5s; box-shadow: 0 8px 24px #0006; }
+.equipment-pickup small { display: block; font-size: 10px; letter-spacing: .08em; color: #b9d4c8; }
+.equipment-pickup strong { display: block; margin: 6px 0; font-size: 19px; color: #fff4d6; }
+.equipment-pickup > span { display: block; font-size: 12px; font-weight: 500; color: #c6d6dd; }
+.equipment-pickup[data-category="armour"] { border-color: #b6cbd8; }
 @keyframes resource-pickup { 0% { opacity: 0; transform: translateY(12px) scale(.9); } 12%, 75% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-12px); } }
 @media (prefers-reduced-motion: reduce) { .resource-toast { animation: none; } }
 /* Small, steady enemy cues: no flashing or camera movement. */

@@ -4,6 +4,7 @@ import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
+import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
@@ -957,6 +958,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(longsword, "sword-guard", brassMaterial, [0.33, 0.07, 0.115], [0, -0.105, 0]);
   addBox(longsword, "sword-blade", bladeMaterial, [0.115, 0.44, 0.065], [0, -0.335, 0]);
   addBox(longsword, "sword-tip", bladeMaterial, [0.065, 0.075, 0.055], [0, -0.59, 0]);
+  addBox(longsword, "blade-spine", eyeWhiteMaterial, [.028, .4, .018], [0, -.335, .043]);
   rightElbow.addChild(longsword);
 
   const bow = new pc.Entity("main-hand-bow");
@@ -968,6 +970,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   bowBottom.setLocalEulerAngles(0, 0, 24);
   addBox(bow, "bow-string", eyeWhiteMaterial, [0.014, 1.02, 0.014], [0.16, 0, 0]);
   addBox(bow, "bow-grip-wrap", brassMaterial, [0.095, 0.13, 0.095], [0, 0, 0]);
+  for (const y of [-.48, .48]) addBox(bow, "bow-limb-cap", brassMaterial, [.13, .09, .12], [.13, y, 0]);
   rightElbow.addChild(bow);
 
   const magicFocus = new pc.Entity("main-hand-magic-focus");
@@ -975,6 +978,8 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(magicFocus, "focus-handle", weaponWoodMaterial, [0.09, 0.45, 0.09], [0, 0, 0]);
   addBox(magicFocus, "focus-crystal", focusMaterial, [0.25, 0.25, 0.25], [0, -0.34, 0]);
   addBox(magicFocus, "focus-collar", brassMaterial, [0.3, 0.06, 0.3], [0, -0.19, 0]);
+  const focusPoint = addBox(magicFocus, "focus-point", focusMaterial, [.16, .2, .16], [0, -.5, 0]);
+  focusPoint.setLocalEulerAngles(0, 45, 0);
   rightElbow.addChild(magicFocus);
 
   const fangDagger = new pc.Entity("main-hand-fang-dagger");
@@ -983,6 +988,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(fangDagger, "dagger-guard", fangWeaponMaterial, [0.25, 0.07, 0.11], [0, -0.12, 0]);
   const fangBlade = addBox(fangDagger, "dagger-fang", fangWeaponMaterial, [0.16, 0.46, 0.11], [0, -0.38, 0]);
   fangBlade.setLocalEulerAngles(0, 0, 8);
+  addBox(fangDagger, "fang-edge", eyeWhiteMaterial, [.06, .3, .025], [.07, -.38, .065]);
   rightElbow.addChild(fangDagger);
 
   const stoneCoreHammer = new pc.Entity("main-hand-stone-core-hammer");
@@ -990,6 +996,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(stoneCoreHammer, "hammer-handle", weaponWoodMaterial, [0.11, 0.52, 0.11], [0, -0.12, 0]);
   addBox(stoneCoreHammer, "hammer-head", coreWeaponMaterial, [0.62, 0.3, 0.36], [0, -0.42, 0]);
   addBox(stoneCoreHammer, "hammer-core", coreGlowMaterial, [0.17, 0.22, 0.38], [0, -0.42, 0]);
+  for (const x of [-.23, .23]) addBox(stoneCoreHammer, "hammer-binding", brassMaterial, [.055, .34, .4], [x, -.42, 0]);
   rightElbow.addChild(stoneCoreHammer);
 
   const acidGlandFocus = new pc.Entity("main-hand-acid-gland-focus");
@@ -997,6 +1004,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(acidGlandFocus, "acid-focus-handle", weaponWoodMaterial, [0.1, 0.48, 0.1], [0, 0, 0]);
   addBox(acidGlandFocus, "acid-focus-cage", coreWeaponMaterial, [0.34, 0.1, 0.34], [0, -0.34, 0]);
   addBox(acidGlandFocus, "acid-focus-gland", acidWeaponMaterial, [0.25, 0.3, 0.25], [0, -0.42, 0]);
+  for (const x of [-.17, .17]) addBox(acidGlandFocus, "acid-cage-prong", coreWeaponMaterial, [.06, .33, .08], [x, -.44, 0]);
   rightElbow.addChild(acidGlandFocus);
 
   const forgedSword = longsword.clone(); rightElbow.addChild(forgedSword);
@@ -1055,13 +1063,25 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   }
   const armour = { leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour") };
   for (const [id, layer] of Object.entries(armour)) {
-    const material = id === "iron_armour" ? bladeMaterial : bootMaterial;
+    const iron = id === "iron_armour";
+    const material = iron ? bladeMaterial : weaponWoodMaterial;
     torso.addChild(layer);
     addBox(layer, "chest-protection", material, [.53, .43, .07], [0, -.025, .205]);
     addBox(layer, "armour-back", material, [.53, .43, .06], [0, -.025, -.185]);
-    addBox(layer, "left-shoulder", material, [.2, .12, .39], [-.28, .24, 0]);
-    addBox(layer, "right-shoulder", material, [.2, .12, .39], [.28, .24, 0]);
-    if (id === "iron_armour") addBox(layer, "iron-ridge", brassMaterial, [.09, .43, .025], [0, -.025, .253]);
+    for (const x of [-.28, .28]) {
+      addBox(layer, "shoulder-rim", bootMaterial, [iron ? .28 : .21, .08, iron ? .44 : .36], [x, .235, 0]);
+      addBox(layer, "shoulder-protection", material, [iron ? .25 : .19, iron ? .17 : .1, iron ? .42 : .34], [x, .28, 0]);
+      addBox(layer, "shoulder-rivet", brassMaterial, [.055, .045, .025], [x, .29, iron ? .224 : .184]);
+    }
+    if (iron) {
+      addBox(layer, "iron-ridge", brassMaterial, [.09, .43, .025], [0, -.025, .253]);
+      addBox(layer, "iron-collar", bladeMaterial, [.4, .095, .4], [0, .225, 0]);
+      for (const y of [-.15, -.05]) addBox(layer, "iron-lower-plate", bladeMaterial, [.56, .07, .04], [0, y, .26]);
+    } else {
+      const strap = addBox(layer, "leather-cross-strap", bootMaterial, [.06, .47, .035], [0, -.015, .26]);
+      strap.setLocalEulerAngles(0, 0, -28);
+      addBox(layer, "leather-clasp", brassMaterial, [.1, .09, .025], [.065, .09, .288]);
+    }
     layer.enabled = false;
   }
   return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, silhouette, mainHands, armour, locomotionPhase: 0, locomotionWeight: 0 };
@@ -2998,6 +3018,19 @@ function showResourcePickup(name: string, quantity: number, itemId?: string): vo
   resourceToasts.prepend(toast);
   while (resourceToasts.children.length > 3) resourceToasts.lastElementChild!.remove();
   setTimeout(() => toast.remove(), 2200);
+}
+
+function showEquipmentPickup(itemId: ItemId, quantity: number): void {
+  const card = equipmentPickupCard(itemId, quantity);
+  if (!card) return;
+  const toast = document.createElement("div"); toast.className = "resource-toast equipment-pickup";
+  toast.dataset.category = card.category.toLowerCase();
+  const title = document.createElement("small"); title.textContent = `${card.title} · ${card.category}`;
+  const name = document.createElement("strong"); name.textContent = `${card.name}${card.quantity}`;
+  const hint = document.createElement("span"); hint.textContent = card.hint;
+  toast.append(title, name, hint); resourceToasts.prepend(toast);
+  while (resourceToasts.children.length > 3) resourceToasts.lastElementChild!.remove();
+  setTimeout(() => toast.remove(), 4500);
 }
 
 function updateMining(now: number): void {
@@ -5873,6 +5906,7 @@ async function connect(): Promise<void> {
     if (message.playerId !== room?.sessionId || !isItemId(message.itemId)) return;
     updateInventoryItem(message.itemId, message.total);
     const item = ITEM_DEFINITIONS[message.itemId];
+    if (isEquipmentItem(message.itemId)) showEquipmentPickup(message.itemId, message.quantity);
     showCombatFeedback(`+${message.quantity} ${item.name.toUpperCase()}`, "dodge");
     status.textContent = `Picked up ${item.name} · ${message.total} total.`;
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
