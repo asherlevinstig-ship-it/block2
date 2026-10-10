@@ -10,6 +10,11 @@ const idle: EnemyCueSnapshot = {
 };
 
 describe("enemy combat audio", () => {
+  it("keeps ranged hit confirmation short, quiet and rate limited", () => {
+    const cue = WEAPON_CUE_DEFINITIONS.rangedHit;
+    expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(90);
+    expect(cue.tones.every(tone => tone.gain <= .035 && tone.durationMs <= 75)).toBe(true);
+  });
   it("gives confirmed hammer impacts a short low-frequency thump", () => {
     const cue = WEAPON_CUE_DEFINITIONS.hammerImpact;
     expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(180);

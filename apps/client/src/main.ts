@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { advanceBossHud, initialBossHud } from "./boss-hud.js";
@@ -1826,6 +1827,36 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" = "hit
   void combatFeedback.offsetWidth;
   if (style !== "hit") combatFeedback.classList.add(style);
   combatFeedback.classList.add("show");
+}
+
+let rangedReticleHitUntil = 0;
+let rangedPopupSequence = 0;
+const rangedPopups: { element: HTMLElement; position: pc.Vec3; startedAt: number; duration: number; damage: boolean; offset: number }[] = [];
+function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "enemy" | "terrain", defeated = false): void {
+  const element = document.createElement("span");
+  element.className = `ranged-popup ranged-popup-${kind}${defeated ? " defeated" : ""}`;
+  element.textContent = text; element.setAttribute("aria-hidden", "true");
+  document.body.append(element);
+  rangedPopups.push({ element, position: position.clone(), startedAt: performance.now(), duration: kind === "damage" ? 800 : 240,
+    damage: kind === "damage", offset: kind === "damage" ? (++rangedPopupSequence % 3 - 1) * 14 : 0 });
+  while (rangedPopups.length > 32) rangedPopups.shift()!.element.remove();
+}
+function updateRangedFeedback(now: number): void {
+  const hit = now < rangedReticleHitUntil;
+  if (combatReticle.dataset.hit !== String(hit)) combatReticle.dataset.hit = String(hit);
+  if (!rangedPopups.length) return;
+  const rect = canvas.getBoundingClientRect();
+  for (let index = rangedPopups.length - 1; index >= 0; index--) {
+    const popup = rangedPopups[index]!, fraction = (now - popup.startedAt) / popup.duration;
+    if (fraction >= 1 || !worldReady) { popup.element.remove(); rangedPopups.splice(index, 1); continue; }
+    const screen = camera.camera?.worldToScreen(popup.position);
+    popup.element.hidden = !screen || screen.z <= 0 || screen.x < 0 || screen.y < 0 || screen.x > rect.width || screen.y > rect.height;
+    if (popup.element.hidden || !screen) continue;
+    popup.element.style.left = `${rect.left + screen.x + popup.offset}px`;
+    popup.element.style.top = `${rect.top + screen.y - (popup.damage ? fraction * 38 : 0)}px`;
+    popup.element.style.opacity = String(Math.min(1, (1 - fraction) * 2));
+    popup.element.style.transform = `translate(-50%, -50%) scale(${popup.damage ? 1 + Math.max(0, .15 - fraction) : .65 + fraction * .7})`;
+  }
 }
 
 interface PowerTelegraphVisual {
@@ -5802,6 +5833,7 @@ app.on("update", (dt: number) => {
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   updateObjectiveGuidance();
   updateRangedReticle();
+  updateRangedFeedback(animationNow);
   if (rangedFirePointer !== null) {
     const readyAt = localActionStartedAt === null ? 0 : localActionStartedAt + actionDuration(localActionStep);
     const fire = heldFireStep(true, rangedFireAllowed(), performance.now(), readyAt);
@@ -6074,6 +6106,10 @@ async function connect(): Promise<void> {
     logMovementEvent(`${message.mainHandId === "bow" ? "ARROW" : "ARCANE"} RELEASED`);
   });
   room.onMessage("combat:projectile-resolved", (message: ProjectileResolved) => {
+    const cue = projectileImpactCue(message.projectileId, message.reason);
+    const point = new pc.Vec3(message.x, message.y, message.z);
+    if (cue && localPlayer.getPosition().distance(point) <= 18)
+      createRangedPopup(point, cue === "enemy" ? "✦" : "•", cue);
     const index = weaponProjectileVisuals.findIndex(projectile => projectile.projectileId === message.projectileId);
     if (index >= 0) {
       weaponProjectileVisuals[index]!.entity.destroy();
@@ -6205,6 +6241,15 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:hit", (message: CombatHit) => {
     const mob = mobVisuals.get(message.mobId);
+    const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
+    if (rangedHit) {
+      rangedReticleHitUntil = performance.now() + 110;
+      combatAudio.play("rangedHit");
+      if (mob) {
+        const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
+        createRangedPopup(position, `−${message.damage}`, "damage", message.defeated);
+      }
+    }
     if (message.mainHandId === "stone_core_hammer" && message.damage > 0 && mob
       && localPlayer.getPosition().distance(mob.entity.getPosition()) <= 9) createHammerHitImpact(mob);
     if (message.defeated) mob?.marks.clear();
@@ -6217,7 +6262,7 @@ async function connect(): Promise<void> {
     if (message.attackerId === room?.sessionId) {
       updateMomentum(message.momentumStacks);
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
-      localHitPauseUntil = performance.now() + (message.mainHandId === "stone_core_hammer" ? 80 : comboStep === 3 ? 75 : 48);
+      if (!rangedHit) localHitPauseUntil = performance.now() + (message.mainHandId === "stone_core_hammer" ? 80 : comboStep === 3 ? 75 : 48);
       const hitLabel = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo && comboStep === 3
         ? `FINISHER  −${message.damage}`
         : `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName.toUpperCase()}  −${message.damage}`;
@@ -6234,6 +6279,11 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {
     if (message.attackerId !== room?.sessionId) return;
+    if (WEAPON_ATTACK_DEFINITIONS[message.mainHandId].projectileTravelMs > 0) {
+      // Empty fan lanes are normal: do not overwrite a confirmed hit with MISS.
+      logMovementEvent(`MISS ${message.mainHandId} step=${message.comboStep}`);
+      return;
+    }
     showCombatFeedback("MISS", "hurt");
     const attackName = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo
       ? `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName} ${message.comboStep}`
@@ -6436,6 +6486,7 @@ async function connect(): Promise<void> {
     remotePlayers.clear();
     for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
+    for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
     bossHudState = initialBossHud(); bossHudFingerprint = ""; bossHud.hidden = true;
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();

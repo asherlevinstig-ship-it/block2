@@ -430,6 +430,13 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
   transform: translate(-50%, -50%);
 }
 #combat-reticle[hidden] { display: none; }
+#combat-reticle[data-hit="true"] { border-color: #fff6c4; box-shadow: 0 0 0 4px #ffd86b55, 0 0 12px #ffd86b88; }
+#combat-reticle[data-hit="true"] span, #combat-reticle[data-hit="true"] span::before { background: #fff6c4; }
+.ranged-popup { position: fixed; z-index: 18; pointer-events: none; font: 900 24px/1 system-ui, sans-serif; text-shadow: 0 2px 2px #000, 1px 0 #000, -1px 0 #000; }
+.ranged-popup-damage { color: #fff3c5; }
+.ranged-popup-damage.defeated { color: #ffb56d; }
+.ranged-popup-enemy { color: #ffe9a3; font-size: 28px; }
+.ranged-popup-terrain { color: #b8c2c3; font-size: 36px; }
 canvas.ranged-aim { cursor: none; }
 #quiz-table-prompt, #blacksmith-prompt {
   position: fixed;
