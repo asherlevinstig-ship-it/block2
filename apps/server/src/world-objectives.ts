@@ -1,4 +1,5 @@
 import { isEquipmentItem, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
+import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
 import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; combatState: string; targetId: string };
@@ -7,6 +8,7 @@ type Loot = Pose & { ownerId: string; itemId: string; expiresAt: number };
 export interface WorldObjectiveProgress { id: string | null; fingerprint: string }
 export const createObjectiveProgress = (): WorldObjectiveProgress => ({ id: null, fingerprint: "" });
 const GROUPS = [
+  { id: "greenwood-event", title: "Venom Matriarch · Shared Event", detail: "Dodge aimed shots and fan gaps. Fight together: eligible contributors each receive personal equipment.", ids: [WILDERNESS_EVENT_ID] },
   { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Clear the nearby crawlers and collect their item drops.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"] },
   { id: "silver-guards", title: "Silver Guard Clearing", detail: "Defeat both spitters to open the Forest Dungeon portal. Use the stone cover.", ids: ["cave-spitter", "frontier-spitter"] },
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"] },
@@ -15,7 +17,7 @@ const GROUPS = [
     detail: stage === 3 ? "Defeat the guardian, collect your equipment bag, then use the return portal." : "Clear this room to open the next gate. The entrance return portal stays available.",
     ids: FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage).map(mob => mob.id) })),
 ];
-export function nearbyObjective(playerId: string, player: Player, mobEntries: Iterable<readonly [string, Mob]>, portalEntries: Iterable<readonly [string, ForestPortal]>, lootEntries: Iterable<readonly [string, Loot]>, now: number, previousId: string | null): WorldObjectiveUpdate {
+export function nearbyObjective(playerId: string, player: Player, mobEntries: Iterable<readonly [string, Mob]>, portalEntries: Iterable<readonly [string, ForestPortal]>, lootEntries: Iterable<readonly [string, Loot]>, now: number, previousId: string | null, eventWarningUntil = 0): WorldObjectiveUpdate {
   const distance = (point: Pose) => Math.hypot(point.x - player.x, point.z - player.z);
   const sameFloor = (point: Pose) => Math.abs(point.y - player.y) <= 2.5;
   const make = (id: string, title: string, detail: string, point: Pose, kind: WorldObjectiveUpdate["kind"], tier = 0): WorldObjectiveUpdate => ({
@@ -38,6 +40,10 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   }).sort((a, b) => a.distance - b.distance);
   const activeFight = candidates.find(candidate => candidate.engaged && candidate.update.objectiveId === previousId) ?? candidates.find(candidate => candidate.engaged);
   if (activeFight) return activeFight.update;
+  if (eventWarningUntil > now && sameFloor(WILDERNESS_EVENT_POSITION) && distance(WILDERNESS_EVENT_POSITION) <= 26)
+    return make("greenwood-event-warning", `Venom Matriarch · ${Math.ceil((eventWarningUntil - now) / 1000)}s`, "Shared event incoming at the cleared camp. Gather nearby and prepare to dodge.", WILDERNESS_EVENT_POSITION, "encounter", 1);
+  const event = candidates.find(candidate => candidate.update.objectiveId === "greenwood-event");
+  if (event) return event.update;
   const loot = [...lootEntries].filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6 && isEquipmentItem(drop.itemId as ItemId)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
   if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your equipment bag and press E to inspect or equip the item.", loot[1], "loot");
   const portal = [...portalEntries].filter(([, point]) => (point.expiresAt === 0 || now < point.expiresAt) && sameFloor(point) && distance(point) <= 18

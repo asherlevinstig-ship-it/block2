@@ -4024,7 +4024,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   objectiveTier.textContent = update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : `NEARBY · TIER ${update.tier}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
-  objectiveProgress.hidden = update.kind !== "encounter";
+  objectiveProgress.hidden = update.kind !== "encounter" || update.targetMobIds.length === 0;
   objectiveProgress.textContent = `${update.targetMobIds.length - update.completedMobIds.length} remaining`;
   objectiveDistance.hidden = update.showMarker === false;
   objectiveMarkerLabel.textContent = update.title.toUpperCase();

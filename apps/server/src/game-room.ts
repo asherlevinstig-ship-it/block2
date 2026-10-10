@@ -15,6 +15,7 @@ import { checkMobProgress, type MobProgress } from "./mob-progress.js";
 import { mobAssistants, MOB_ASSIST_COOLDOWN_MS } from "./mob-assist.js";
 import { circleCrawler, createCrawlerPositioning, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
+import { WildernessEventCycle, WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
@@ -279,6 +280,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly parties = new Parties();
   private readonly combatContributions = new CombatContributions();
   private readonly silverGuardVolley = new SilverGuardVolley();
+  private readonly wildernessEvent = new WildernessEventCycle();
   private readonly forestPortalCycle = new ForestPortalCycle();
   private forestDungeonActive = false;
   private readonly forestReturns = new Map<string, { x: number; y: number; z: number }>();
@@ -1049,7 +1051,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
   private championAllowed(id: string, pose: { x: number; z: number }): boolean {
     const home = this.mobHomes.get(id);
-    return (id !== FRONTIER_CHAMPION_ID && id !== SILVER_CHAMPION_ID) || !home || Math.hypot(pose.x - home.x, pose.z - home.z) <= 12;
+    return (id !== FRONTIER_CHAMPION_ID && id !== SILVER_CHAMPION_ID && id !== WILDERNESS_EVENT_ID) || !home || Math.hypot(pose.x - home.x, pose.z - home.z) <= 12;
   }
 
   private patrolRoamingMember(id: string, mob: MobState, now: number, dt: number, speed: number): void {
@@ -1200,6 +1202,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
     mob.respawnAt = now + definition.respawnMs;
+    if (this.wildernessEvent.record(mobId, now, this.state.mobs.get(WILDERNESS_EVENT_ID)?.alive === true)) {
+      for (const client of this.clients) {
+        const player = this.state.players.get(client.sessionId);
+        if (player && Math.abs(player.y - 8) <= 2.5 && Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) <= 32)
+          client.send("chat:notice", "Wilderness event · Venom Matriarch arrives at the Greenwood camp in 8 seconds. Gather and prepare!");
+      }
+    }
     if (this.forestPortalCycle.record(mobId, now) && !this.state.portals.has("forest-entry") && !this.forestDungeonActive) {
       // Repair an old excavation beneath the arrival pad before making it usable.
       for (let x = 45; x <= 46; x++) for (let z = 28; z <= 29; z++) {
@@ -1245,7 +1254,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!player) return;
     const progress = this.objectiveProgress.get(client.sessionId) ?? createObjectiveProgress();
     this.objectiveProgress.set(client.sessionId, progress);
-    const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id);
+    const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id, this.wildernessEvent.warningUntil);
     const fingerprint = JSON.stringify({ ...update, targetX: Math.round(update.targetX), targetY: Math.round(update.targetY), targetZ: Math.round(update.targetZ) });
     if (!force && fingerprint === progress.fingerprint) return;
     progress.id = update.objectiveId; progress.fingerprint = fingerprint;
@@ -1255,6 +1264,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private refreshNearbyObjectives(): void {
     // Guidance is local context, not a quest chain with extra completion bonuses.
     for (const client of this.clients) this.sendObjectiveState(client);
+  }
+
+  private advanceWildernessEvent(now: number): void {
+    if (!this.wildernessEvent.release(now)) return;
+    this.registerMob(WILDERNESS_EVENT_ID, "cave_spitter", WILDERNESS_EVENT_POSITION);
+    const mob = this.state.mobs.get(WILDERNESS_EVENT_ID)!;
+    mob.name = "Greenwood Venom Matriarch";
+    mob.isChampion = true;
+    mob.health = mob.maxHealth = 24;
+    mob.attackPattern = "aimed";
+    mob.rewardMultiplier *= 1.5;
+    this.refreshNearbyObjectives();
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
@@ -1679,6 +1700,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.resolveBrambleSnares(now);
     this.resolveMobProjectiles(now);
     this.resolveMobHazards(now);
+    this.advanceWildernessEvent(now);
     for (const pack of ROAMING_PACKS) {
       const route = this.roamingRoutes.get(pack.id) ?? createRoamingRouteState(now);
       this.roamingRoutes.set(pack.id, route);
@@ -1689,8 +1711,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       advanceRoamingRoute(pack, route, now, members);
     }
     for (const [mobId, mob] of this.state.mobs) {
+      if (mobId === WILDERNESS_EVENT_ID && !mob.alive) continue;
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
-      if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
+      if (mobId === WILDERNESS_EVENT_ID && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);
+      else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);
       const definition = combatMobDefinition(mob);
@@ -1786,7 +1810,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           continue;
         }
         if (definition.attackKind === "projectile") {
-          const shots = mob.isChampion ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
+          const shots = mob.isChampion && mobId !== WILDERNESS_EVENT_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           for (const shotAim of shots) {
           const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
           const start = { x: mob.x, y: mob.y + 1.05, z: mob.z };
