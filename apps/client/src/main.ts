@@ -37,7 +37,8 @@ import { createServerClock, sampleServerClock, enemyAttackPresentation } from ".
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
-import { animateMobArt, createMobArt, setMobArtEnraged, type MobArtRig } from "./mob-art";
+import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
+import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
@@ -1302,6 +1303,8 @@ interface NetworkLootDrop {
 
 interface LootVisual {
   root: pc.Entity;
+  marker: pc.Entity;
+  revealAt: number;
   state: NetworkLootDrop;
   phase: number;
 }
@@ -2674,6 +2677,7 @@ function isItemId(value: string): value is ItemId {
   return value in ITEM_DEFINITIONS;
 }
 
+const lootMarkerMaterial = powerMaterial(new pc.Color(.8, .88, .62), .24);
 function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
@@ -2709,8 +2713,15 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
     addBox(root, "fibre-b", material, [0.12, 0.42, 0.12], [0.09, 0.02, 0]).setLocalEulerAngles(-22, 0, -18);
   }
   root.setPosition(drop.x, drop.y + 0.36, drop.z);
+  const marker = new pc.Entity("personal-loot-marker");
+  marker.addComponent("render", { type: "cylinder", material: lootMarkerMaterial, castShadows: false, receiveShadows: false });
+  marker.setLocalScale(.85, .012, .85); marker.enabled = false;
+  root.addChild(marker);
+  const sourceId = lootSourceMob(dropId), source = sourceId ? mobVisuals.get(sourceId) : undefined;
+  const now = performance.now();
+  const revealAt = source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.state.archetype) : now + 180;
   app.root.addChild(root);
-  return { root, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17 };
+  return { root, marker, revealAt, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17 };
 }
 
 function bindLootDrops(joinedRoom: Room): void {
@@ -5513,6 +5524,12 @@ app.on("update", (dt: number) => {
     const bob = Math.sin(animationTime * 3.2 + loot.phase) * 0.08;
     loot.root.setPosition(loot.state.x, loot.state.y + 0.36 + bob, loot.state.z);
     loot.root.setEulerAngles(0, (animationTime * 58 + loot.phase * 23) % 360, 0);
+    loot.marker.enabled = animationNow >= loot.revealAt;
+    if (loot.marker.enabled) {
+      const scale = lootMarkerScale(animationNow, loot.revealAt);
+      loot.marker.setLocalScale(.85 * scale, .012, .85 * scale);
+      loot.marker.setLocalPosition(0, -.54 - bob, 0);
+    }
   }
   for (const mob of mobVisuals.values()) {
     if (mob.frameAlive !== mob.state.alive) {
@@ -5527,8 +5544,9 @@ app.on("update", (dt: number) => {
         mob.renderYaw = mob.state.yaw;
       }
     }
-    const defeat = mob.state.alive ? 0 : Math.min(1, (animationNow - mob.defeatAt) / 580);
-    const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || defeat < 1) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
+    const deathPose = mobDefeatPose(mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
+    const defeat = mob.state.alive ? 0 : deathPose.collapse;
+    const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
     mob.combatCue.hidden = true;
     if (!visible) continue;
@@ -5635,6 +5653,7 @@ app.on("update", (dt: number) => {
     }
     animateMobArt(mob.art, frameTime, animationTime, moveSpeed, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
     setMobArtEnraged(mob.art, mob.state.enraged === true);
+    setMobArtDefeated(mob.art, !mob.state.alive && deathPose.progress >= .3);
     const crawlerRecovery = !mob.isBrute && !mob.isSpitter && presentation.phase === "recover"
       ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
@@ -5658,6 +5677,12 @@ app.on("update", (dt: number) => {
       mob.bodyRoot.setLocalPosition(0, gaitBob + pose.drop - hitStrength * .035, pose.recoilZ - windupStrength * .18);
       mob.bodyRoot.setLocalEulerAngles(windupStrength * 12 - attackStrength * 20, 0, pose.roll);
       mob.bodyMaterial.diffuse.set(mob.state.enraged ? .5 : .15, mob.state.enraged ? .16 : .34, mob.state.enraged ? .12 : .31);
+    }
+    if (!mob.state.alive) {
+      const size = mob.art.matriarch ? [1.55, 1.45, 1.7] : [bodySize, bodySize, bodySize];
+      mob.bodyRoot.setLocalScale(size[0]! * deathPose.width, size[1]! * deathPose.height, size[2]! * deathPose.length);
+      mob.bodyRoot.setLocalPosition(0, deathPose.y, 0);
+      mob.bodyRoot.setLocalEulerAngles(deathPose.pitch, 0, deathPose.roll);
     }
     mob.bodyMaterial.emissive.set(
       0.001 + 0.55 * hitStrength + 0.34 * windupStrength,

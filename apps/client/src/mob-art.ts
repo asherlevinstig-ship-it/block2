@@ -23,6 +23,8 @@ export interface MobArtRig {
   matriarch: boolean;
   phaseSurfaces: pc.Entity[];
   enraged: boolean;
+  defeated: boolean;
+  glowSurfaces: { part: pc.Entity; liveMaterial: pc.StandardMaterial }[];
 }
 
 function material(name: string, color: Triple, glow?: Triple): pc.StandardMaterial {
@@ -53,6 +55,8 @@ const mouth = material("creature-mouth", [0.085, 0.06, 0.1]);
 const matriarchVenom = material("matriarch-jade-venom", [.2, .95, .65], [.08, .5, .25]);
 const matriarchEnragedVenom = material("matriarch-enraged-venom", [1, .35, .12], [.65, .12, .025]);
 const matriarchArmour = material("matriarch-dark-jade-armour", [.12, .28, .26]);
+const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom]
+  .map(live => [live, material(`defeated-${live.name}`, [live.diffuse.r * .5, live.diffuse.g * .5, live.diffuse.b * .5])]));
 
 function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
   const result = new pc.Entity(name);
@@ -75,7 +79,7 @@ export function createMobArt(parent: pc.Entity, archetype: string, body: pc.Stan
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter" : "moss_crawler";
   const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
-  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, matriarch, phaseSurfaces: [], enraged: false };
+  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, matriarch, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
   if (kind === "moss_crawler") {
     box(parent, "bark-abdomen", shellDark, [0.82, 0.34, 1.04], [0, 0.4, -0.1]);
@@ -164,13 +168,29 @@ export function createMobArt(parent: pc.Entity, archetype: string, body: pc.Stan
       rig.phaseSurfaces.push(box(head, `matriarch-venom-eye-${side}`, matriarchVenom, [.12, .09, .08], [side * .16, .18, .4]));
     }
   }
+  for (const render of parent.findComponents("render") as pc.RenderComponent[]) {
+    const surface = render.material as pc.StandardMaterial;
+    if (dimGlowMaterials.has(surface)) rig.glowSurfaces.push({ part: render.entity as pc.Entity, liveMaterial: surface });
+  }
   return rig;
 }
 
 export function setMobArtEnraged(rig: MobArtRig, enraged: boolean): void {
   if (!rig.matriarch || rig.enraged === enraged) return;
   rig.enraged = enraged;
-  for (const part of rig.phaseSurfaces) if (part.render) part.render.material = enraged ? matriarchEnragedVenom : matriarchVenom;
+  for (const part of rig.phaseSurfaces) if (part.render) {
+    const live = enraged ? matriarchEnragedVenom : matriarchVenom;
+    const glow = rig.glowSurfaces.find(surface => surface.part === part);
+    if (glow) glow.liveMaterial = live;
+    part.render.material = rig.defeated ? dimGlowMaterials.get(live)! : live;
+  }
+}
+
+export function setMobArtDefeated(rig: MobArtRig, defeated: boolean): void {
+  if (rig.defeated === defeated) return;
+  rig.defeated = defeated;
+  for (const glow of rig.glowSurfaces) if (glow.part.render)
+    glow.part.render.material = defeated ? dimGlowMaterials.get(glow.liveMaterial)! : glow.liveMaterial;
 }
 
 /** No per-frame geometry/material creation; only transform the prebuilt joints. */
@@ -180,6 +200,7 @@ export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: n
   const activity = (1 - Math.min(1, windup + stagger)) * (1 - defeat);
   const desiredWalk = Math.min(1, speed / (brute ? 0.85 : 1.4)) * activity;
   rig.walk += (desiredWalk - rig.walk) * Math.min(1, dt * 14);
+  if (defeat > 0) rig.walk = 0;
   rig.phase += dt * Math.min(speed, 6) * (brute ? 3.5 : spitter ? 6.5 : 8);
   for (const leg of rig.limbs) {
     const stride = Math.sin(rig.phase + leg.offset);
