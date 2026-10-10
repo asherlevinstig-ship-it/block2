@@ -4,6 +4,12 @@ import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear
 const mob = { alive: true, combatState: "windup", aimCommitted: false, archetype: "stone_brute",
   attackStartedAt: 1000, attackReleaseAt: 2000, attackContactAt: 2280, attackContactEndAt: 2380, attackRecoveryEndAt: 3000 };
 describe("readable enemy combat cues", () => {
+  it("labels rock aim, commitment and the full recovery window", () => {
+    const rocks = { ...mob, attackPattern: "rocks", attackContactAt: 2000, attackContactEndAt: 2000, attackRecoveryEndAt: 4400 };
+    expect(enemyCombatCue(rocks, 1200).label).toBe("ROCK VOLLEY · AIMING");
+    expect(enemyCombatCue(rocks, 1800).label).toBe("ROCK VOLLEY · LOCKED");
+    expect(enemyCombatCue({ ...rocks, combatState: "recover" }, 4300).label).toBe("RECOVER · COUNTER");
+  });
   it("distinguishes the directional smash and preserves its latency-safe counter cue", () => {
     const smash = { ...mob, attackPattern: "smash" };
     expect(enemyCombatCue(smash, 1200).label).toBe("SMASH · AIMING");

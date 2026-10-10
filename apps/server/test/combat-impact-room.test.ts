@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, type WorldBlockReader } from "@blockcraft/voxel-world";
 import type { MainHandId, PowerId } from "@blockcraft/protocol";
-import { WEAPON_ATTACK_DEFINITIONS } from "@blockcraft/protocol";
+import { BRUTE_VOLLEY, WEAPON_ATTACK_DEFINITIONS } from "@blockcraft/protocol";
 import { MOB_ARCHETYPES } from "../src/mob-archetypes.js";
 import { WorldRoom } from "../src/game-room.js";
 import { MobState, PlayerState, WorldState } from "../src/schema.js";
@@ -44,6 +44,64 @@ function fixture(read = flat) {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("authoritative combat impacts", () => {
+  it("releases three rocks once with locked aim, then holds still through long recovery", () => {
+    const { player, mob, internal, events } = fixture();
+    mob.archetype = "stone_brute"; mob.x = player.x + 6;
+    internal.simulatePlayers(.033);
+    expect(mob.attackPattern).toBe("rocks"); expect(mob.combatState).toBe("windup");
+    const releaseAt = mob.attackReleaseAt;
+    expect(releaseAt - mob.attackStartedAt).toBe(BRUTE_VOLLEY.windupMs);
+    vi.setSystemTime(releaseAt - 650); internal.simulatePlayers(.033);
+    const yaw = mob.yaw; player.z += 2;
+    vi.setSystemTime(releaseAt); internal.simulatePlayers(.033);
+    const shots = events.filter(event => event.type === "combat:mob-projectile");
+    expect(shots).toHaveLength(3);
+    expect(shots.every(event => event.payload.kind === "rock" && event.payload.travelMs === BRUTE_VOLLEY.travelMs)).toBe(true);
+    expect(mob.yaw).toBe(yaw); expect(player.health).toBe(5);
+    expect(mob.attackRecoveryEndAt - releaseAt).toBe(BRUTE_VOLLEY.recoveryMs);
+    const x = mob.x;
+    vi.setSystemTime(releaseAt + BRUTE_VOLLEY.recoveryMs - 1); internal.simulatePlayers(.033);
+    expect(mob.combatState).toBe("recover"); expect(mob.x).toBe(x);
+    expect(events.filter(event => event.type === "combat:mob-projectile")).toHaveLength(3);
+    expect(internal.mobHazards.size).toBe(0);
+  });
+  it("a wall added during rock flight blocks damage and never creates acid", () => {
+    let blocked = false;
+    const { player, mob, internal, events } = fixture((x, y, z) => blocked && x === 103 && y >= 1 ? Block.Stone : flat(x, y, z));
+    mob.archetype = "stone_brute"; mob.x = player.x + 6;
+    internal.simulatePlayers(.033);
+    vi.setSystemTime(mob.attackReleaseAt); internal.simulatePlayers(.033);
+    expect(player.health).toBe(5);
+    blocked = true;
+    internal.resolveMobProjectiles(Date.now() + BRUTE_VOLLEY.travelMs);
+    expect(player.health).toBe(5); expect(internal.mobHazards.size).toBe(0);
+    expect(events.filter(event => event.type === "combat:projectile-resolved" && event.payload.reason === "terrain")).toHaveLength(3);
+  });
+  it("rock damage happens only on body impact and a deliberate stagger cancels windup", () => {
+    const { player, mob, internal } = fixture(); mob.archetype = "stone_brute"; mob.x = player.x + 6;
+    internal.simulatePlayers(.033);
+    vi.setSystemTime(mob.attackReleaseAt); internal.simulatePlayers(.033);
+    expect(player.health).toBe(5);
+    internal.resolveMobProjectiles(Date.now() + 200); expect(player.health).toBe(5);
+    internal.resolveMobProjectiles(Date.now() + BRUTE_VOLLEY.travelMs); expect(player.health).toBe(5 - mob.attackDamage);
+    internal.resolveMobProjectiles(Date.now() + BRUTE_VOLLEY.travelMs + 100); expect(player.health).toBe(5 - mob.attackDamage);
+    mob.combatState = "windup"; mob.stateUntil = Date.now() + 1500;
+    expect(internal.staggerMob("mob", mob, Date.now(), 600, true)).toBe(true);
+    expect(mob.combatState).toBe("stagger");
+  });
+  it.each([150, 300, 600])("allows walking out of the committed rock volley with %s ms RTT", rtt => {
+    const { player, mob, internal } = fixture(); mob.archetype = "stone_brute"; mob.x = player.x + 6;
+    internal.simulatePlayers(.033); const releaseAt = mob.attackReleaseAt;
+    const moveAt = releaseAt - 650 + rtt + 100;
+    let sequence = 0;
+    for (let now = 10_033; now <= releaseAt + BRUTE_VOLLEY.travelMs; now += 33) {
+      vi.setSystemTime(now);
+      if (now >= moveAt && sequence % 2 === 0) internal.handleMove({ sessionId: "player" },
+        { sequence: sequence + 1, strafe: 0, forward: 1, yaw: 90 });
+      sequence++; internal.simulatePlayers(.033);
+    }
+    expect(player.health).toBe(5);
+  });
   it.each(["bow", "acid_gland_focus", "venom_focus"].flatMap(weapon => [150, 300, 600].flatMap(rtt => [true, false].map(evades => [weapon as MainHandId, rtt, evades] as const))))(
     "%s checks the moving target, not its launch position, with %s ms RTT (evades=%s)", (weapon, rtt, evades) => {
       const { mob, internal, release } = fixture();

@@ -1,4 +1,5 @@
 import { Client, Room } from "@colyseus/core";
+import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
 import { PartyRequestSchema } from "@blockcraft/protocol";
@@ -1532,7 +1533,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const end = { x: aim.x, y: aim.y + .08, z: aim.z };
       this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
         start, end, position: start, startedAt: now, impactAt: now + travelMs });
-      this.broadcast("combat:mob-projectile", { projectileId, mobId, ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
+      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
     }
   }
 
@@ -1744,6 +1745,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);
+      if (mob.archetype === "stone_brute" && mob.combatState === "idle") {
+        const eligible = [...this.state.players.values()].filter(player => player.health > 0 && !isInsideTownSafeZone(player)
+          && Math.abs(player.y - mob.y) <= 1.75 && caveEncounterAllows(mobId, player) && this.roamingAllowed(mobId, player) && this.championAllowed(mobId, player));
+        const distance = Math.min(...eligible.map(player => Math.hypot(player.x - mob.x, player.z - mob.z)));
+        mob.attackPattern = bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
+          : mob.isChampion ? championPattern(mob) : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence) : "slam";
+      }
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
@@ -1837,7 +1845,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           continue;
         }
         if (definition.attackKind === "projectile") {
-          const shots = mob.isChampion && mobId !== WILDERNESS_EVENT_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
+          const shots = mob.attackPattern === "rocks" ? bruteRockEndpoints(mob, aim.yaw)
+            : mob.isChampion && mobId !== WILDERNESS_EVENT_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage, definition.hazardRadius, definition.hazardDurationMs);
           if (mobId === WILDERNESS_EVENT_ID && mob.attackPattern === "double-fan")
@@ -1913,7 +1922,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
-      const rangedPursuit = definition.attackKind === "projectile" && target.visible
+      const rangedPursuit = mob.archetype === "cave_spitter" && definition.attackKind === "projectile" && target.visible
         ? positionSpitter(mob, target, home, positioning, now, deltaTime, definition.speed * mob.speedMultiplier,
           this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z))
         : null;
@@ -1959,13 +1968,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
-      if (mobId === "frontier-brute") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
+      if (mobId === "frontier-brute" && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       mob.combatState = "windup";
       this.silverGuardVolley.started(mobId, now);
       this.crawlerPositioning.delete(mobId);
       if (definition.attackKind !== "projectile") this.spitterPositioning.delete(mobId);
       this.mobNavigation.set(mobId, createMobNavigationState());
-      mob.stateUntil = now + (mobId === "frontier-brute" ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs);
+      mob.stateUntil = now + (mobId === "frontier-brute" && mob.attackPattern !== "rocks" ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs);
       this.setMobAttackTimeline(mob, now, mob.stateUntil, mobId);
       mob.targetId = target.id;
       mob.aimCommitted = false;
@@ -2629,6 +2638,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private updateMobStrikeOrigin(mobId: string, mob: MobState): void {
+    if (mob.attackPattern === "rocks") {
+      if (!mob.aimCommitted) { mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z; }
+      return;
+    }
     if (mob.isChampion && mob.archetype === "cave_spitter") {
       if (mob.aimCommitted) return;
       const aim = this.mobCommittedAim.get(mobId);
@@ -2668,6 +2681,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = combatMobDefinition(mob);
     mob.attackStartedAt = startedAt;
     mob.attackReleaseAt = releaseAt;
+    if (mob.attackPattern === "rocks") {
+      mob.attackContactAt = releaseAt;
+      mob.attackContactEndAt = releaseAt;
+      mob.attackRecoveryEndAt = releaseAt + BRUTE_VOLLEY.recoveryMs;
+      return;
+    }
     if (mobId === WILDERNESS_EVENT_ID && mob.attackPattern === "double-fan") {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + MATRIARCH_PHASE.volleyGapMs;

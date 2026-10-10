@@ -11,6 +11,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createInventoryPortrait } from "./inventory-preview.js";
 import { rangedStyle } from "./ranged-style.js";
+import { BRUTE_VOLLEY, bruteRockLanes } from "@blockcraft/protocol";
 import { projectilePresentation } from "./projectile-clock.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
@@ -1983,11 +1984,13 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
 function createMobProjectile(message: MobProjectileReleased): void {
   const flight = projectilePresentation(message.releasedAt, serverClock.offset, performance.now(), message.travelMs);
   if (flight.expired) return;
-  const entity = new pc.Entity("acid-projectile");
-  entity.addComponent("render", { type: "sphere" });
-  const material = powerMaterial(new pc.Color(0.54, 1, 0.08), 0.94);
+  const rock = message.kind === "rock";
+  const entity = new pc.Entity(rock ? "rock-projectile" : "acid-projectile");
+  entity.addComponent("render", { type: rock ? "box" : "sphere" });
+  const material = powerMaterial(rock ? new pc.Color(.72, .57, .38) : new pc.Color(0.54, 1, 0.08), 0.94);
   if (entity.render) entity.render.material = material;
   entity.setLocalScale(0.3, 0.3, 0.3);
+  if (rock) entity.setEulerAngles(28, 35, 18);
   const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
   const end = new pc.Vec3(message.targetX, message.targetY + 0.08, message.targetZ);
   entity.setPosition(start);
@@ -2390,9 +2393,10 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
 }
 
 function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance, shotOrigin = { x: 0, y: 0, z: 0 }): void {
-  if (archetype === "cave_spitter" && pattern !== "pool") {
-    const lengths = spitterShotOffsets(pattern).map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range));
-    const lanes = spitterWarningLanes(yaw, pattern, lengths);
+  if (pattern === "rocks" || archetype === "cave_spitter" && pattern !== "pool") {
+    const offsets = pattern === "rocks" ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
+    const lengths = offsets.map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, pattern === "rocks" ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range));
+    const lanes = pattern === "rocks" ? bruteRockLanes(yaw, lengths) : spitterWarningLanes(yaw, pattern, lengths);
     mesh.setPositions(lanes.flatMap(lane => lane.flatMap(point => [point.x, 0, point.z])));
     mesh.setNormals(lanes.flatMap(lane => lane.flatMap(() => [0, 1, 0])));
     mesh.setIndices(lanes.flatMap((_lane, index) => { const i = index * 4; return [i, i + 1, i + 2, i, i + 2, i + 3]; }));
@@ -5542,12 +5546,12 @@ app.on("update", (dt: number) => {
     mob.entity.setEulerAngles(0, mob.renderYaw, 0);
     const attackElapsed = presentation.elapsed;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
-    const attackPeak = mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
+    const attackPeak = mob.state.attackPattern === "rocks" ? 180 : mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
     const attackPhase = attackElapsed < attackPeak ? attackElapsed / attackPeak * 0.5
       : 0.5 + (attackElapsed - attackPeak) / (attackDuration - attackPeak) * 0.5;
     const attackStrength = mob.art.matriarch ? mob.state.alive && mob.state.attackStartedAt > 0 && ["windup", "recover"].includes(mob.state.combatState) ? matriarchRecoil(attackElapsed, mob.state.attackPattern === "double-fan") : 0
       : mob.state.attackStartedAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
-    if (mob.isBrute && mob.state.attackPattern !== "charge" && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
+    if (mob.isBrute && mob.state.attackPattern !== "charge" && mob.state.attackPattern !== "rocks" && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
       mob.lastImpactStartedAt = mob.state.attackStartedAt;
       createBruteSlamImpact(mob);
     }
@@ -5603,10 +5607,11 @@ app.on("update", (dt: number) => {
     if (mob.warning.enabled) {
       if (mob.warningMesh) {
         const chargeLength = mob.isSpitter && mob.state.attackPattern !== "pool" ? spitterShotOffsets(mob.state.attackPattern).reduce((sum, offset, i) => sum + (i + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range), 0) : mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
-        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || Math.abs(chargeLength - mob.warningChargeLength) > .05) {
-          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, chargeLength, mob.state);
+        const warningLength = mob.state.attackPattern === "rocks" ? BRUTE_VOLLEY.offsets.reduce<number>((sum, offset, index) => sum + (index + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, BRUTE_VOLLEY.range), 0) : chargeLength;
+        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || Math.abs(warningLength - mob.warningChargeLength) > .05) {
+          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, warningLength, mob.state);
           mob.warningYaw = mob.state.yaw;
-          mob.warningPattern = mob.state.attackPattern; mob.warningChargeLength = chargeLength;
+          mob.warningPattern = mob.state.attackPattern; mob.warningChargeLength = warningLength;
         }
         mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
         // The marked danger area must always match the eventual damage radius.

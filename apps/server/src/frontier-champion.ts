@@ -1,4 +1,4 @@
-import { CHAMPION_CHARGE, SPITTER_PATTERN, spitterShotEndpoints } from "@blockcraft/protocol";
+import { BRUTE_VOLLEY, CHAMPION_CHARGE, SPITTER_PATTERN, spitterShotEndpoints } from "@blockcraft/protocol";
 import { isPlayerSupported, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { mobArchetype } from "./mob-archetypes.js";
 import { moveMobSafely } from "./mob-navigation.js";
@@ -20,6 +20,10 @@ export function championChargeHits(start: Position, end: Position, target: Posit
 }
 export function combatMobDefinition(mob: { archetype: string; isChampion?: boolean; attackPattern?: string }) {
   const base = mobArchetype(mob.archetype);
+  if (mob.archetype === "stone_brute" && mob.attackPattern === "rocks") return { ...base, attackKind: "projectile" as const,
+    stopDistance: BRUTE_VOLLEY.attackRange, minimumAttackRange: BRUTE_VOLLEY.minimumRange,
+    windupMs: BRUTE_VOLLEY.windupMs, recoverMs: BRUTE_VOLLEY.recoveryMs, cooldownMs: BRUTE_VOLLEY.cooldownMs,
+    projectileTravelMs: BRUTE_VOLLEY.travelMs, hazardDurationMs: 0, hazardRadius: 0 };
   if (mob.isChampion && mob.archetype === "cave_spitter") return { ...base, name: "Silver Venom Champion", maxHealth: 18,
     windupMs: 1400, recoverMs: 1900, cooldownMs: 3000, projectileTravelMs: mob.attackPattern === "pool" ? 1100 : SPITTER_PATTERN.travelMs,
     hazardDurationMs: mob.attackPattern === "pool" ? 4000 : 0, hazardRadius: mob.attackPattern === "pool" ? 1.6 : 0, respawnMs: 20000 };

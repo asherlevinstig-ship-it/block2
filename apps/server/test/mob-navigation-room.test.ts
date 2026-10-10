@@ -119,7 +119,8 @@ describe("mob navigation in the authoritative room", () => {
     const read: WorldBlockReader = (_x, y) => y <= 0 ? Block.Stone : Block.Air;
     const { room, mob, tick } = fixture(read);
     room.state.mobs.delete("test"); room.state.mobs.set("stone-brute", mob);
-    Object.assign(mob, { ...STONE_BRUTE_ARENA_HOME, y: 1, archetype: "stone_brute" });
+    // Exercise the melee pursuit turn, rather than its new stationary ranged volley.
+    Object.assign(mob, { ...STONE_BRUTE_ARENA_HOME, y: 1, archetype: "stone_brute", actionSequence: 1 });
     const player = new PlayerState(); player.x = mob.x + 5; player.y = 1; player.z = mob.z;
     room.state.players.set("player", player); const before = mob.x; tick();
     expect(mob.x).toBeGreaterThan(before);
