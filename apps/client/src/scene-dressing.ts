@@ -3,6 +3,7 @@ import { MINERAL_DEPOSITS, WILDERNESS_CAMPS } from "@blockcraft/voxel-world";
 import { STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
+import { TOWN_STORAGE_CHEST_POSITION } from "@blockcraft/voxel-world";
 
 type Color = readonly [number, number, number];
 const WOOD: Color = [0.24, 0.17, 0.12];
@@ -472,8 +473,19 @@ export class SceneDressing {
 
     solid.offsetZ = 0;
     glow.offsetZ = 0;
-    // A compact, readable smithy: heavy timber, a striped awning, working forge,
-    // and metal goods. Everything stays in the two shared decorative batches.
+    // Personal chest uses the existing decorative batches, without extra lights.
+    const chest = TOWN_STORAGE_CHEST_POSITION;
+    if (read(Math.floor(chest.x), SURFACE_HEIGHT, Math.floor(chest.z)) !== Block.Air) {
+      solid.box(chest.x, 8.4, chest.z, 1.3, .8, .9, OAK);
+      solid.box(chest.x, 8.87, chest.z, 1.34, .15, .94, DARK_OAK);
+      for (const dx of [-.43, .43]) {
+        solid.box(chest.x + dx, 8.45, chest.z + .465, .075, .9, .03, IRON);
+        solid.box(chest.x + dx, 8.96, chest.z, .075, .03, .94, IRON);
+      }
+      solid.box(chest.x, 8.71, chest.z + .475, .19, .23, .04, GOLD);
+      solid.box(chest.x, 8.71, chest.z + .50, .055, .1, .02, SOOT);
+    }
+    // A compact smithy: heavy timber, a striped awning, forge and metal goods.
     if (read(Math.floor(TOWN_BLACKSMITH_STALL_POSITION.x), SURFACE_HEIGHT, Math.floor(TOWN_BLACKSMITH_STALL_POSITION.z)) !== Block.Air) {
       this.blacksmithBuilt = true;
       const { x, z } = TOWN_BLACKSMITH_STALL_POSITION;

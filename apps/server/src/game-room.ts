@@ -132,6 +132,7 @@ import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInR
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS } from "./loot-rules.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
+import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
@@ -399,6 +400,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     aliveMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
     aliveMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
     this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
+    this.onMessage("storage:sync", client => this.sendStorageState(client));
+    this.onMessage("storage:transfer", (client, payload: unknown) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      const message = transferStoredItem(player, payload);
+      void this.persistPlayer(client.sessionId, player);
+      this.sendStorageState(client, message);
+    });
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
@@ -633,6 +642,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     round.askedIds.push(question.id);
     round.phase = "question";
     this.sendQuizState(client, "Double or nothing. Here's your next question.");
+  }
+
+  private sendStorageState(client: Client, message?: string): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const items = (map: PlayerState["inventory"]) => Object.fromEntries([...map.entries()].filter(([, item]) => item.quantity > 0).map(([id, item]) => [id, item.quantity]));
+    client.send("storage:update", { carried: items(player.inventory), stored: items(player.storage),
+      message: message ?? (canUseStorage(player) ? "Your personal chest. Choose an item to deposit or withdraw." : "Stand beside the chest to transfer items.") });
   }
 
   private sendBlacksmithState(client: Client, message: string | undefined = undefined, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId): void {

@@ -26,6 +26,7 @@ export const PlayerState = schema({
   momentumStacks: t.int8().default(0),
   equippedTrait: t.string().default("momentum"),
   inventory: t.map(InventoryItemState),
+  storage: t.map(InventoryItemState),
   invulnerableUntil: t.float64().default(0),
   mainHandId: t.string().default("longsword"),
   mainHandTag: t.string().default("melee"),

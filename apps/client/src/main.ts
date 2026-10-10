@@ -9,6 +9,8 @@ import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
+import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
+import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
@@ -3184,6 +3186,9 @@ tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 function setInventoryOpen(open: boolean): void {
   if (open) closeLoot();
   inventoryPanel.hidden = !open;
+  delete inventoryPanel.dataset.storage;
+  document.querySelector("#inventory-title")!.textContent = "Inventory";
+  document.querySelector<HTMLElement>("#personal-storage")!.hidden = true;
   inventoryToggle.setAttribute("aria-expanded", String(open));
   if (open) {
     closeTavernDialogue();
@@ -3206,6 +3211,18 @@ function setInventoryOpen(open: boolean): void {
 
 inventoryToggle.addEventListener("click", () => setInventoryOpen(inventoryPanel.hasAttribute("hidden")));
 inventoryClose.addEventListener("click", () => setInventoryOpen(false));
+const storageUI = createStorageUI(document.querySelector<HTMLElement>("#storage-content")!, (type, payload) => room?.send(type, payload));
+const storagePrompt = document.createElement("button"); storagePrompt.id = "storage-prompt"; storagePrompt.type = "button";
+storagePrompt.textContent = "PERSONAL CHEST · E"; storagePrompt.hidden = true; document.body.append(storagePrompt);
+function openPersonalStorage(): void {
+  if (!room || !worldReady || !isAtTownStorage(localPlayer.getPosition())) return;
+  blacksmithPanel.hidden = true; quizPanel.hidden = true;
+  setInventoryOpen(true); inventoryPanel.dataset.storage = "true";
+  document.querySelector("#inventory-title")!.textContent = "Personal Chest";
+  document.querySelector<HTMLElement>("#personal-storage")!.hidden = false;
+  storageUI.open();
+}
+storagePrompt.addEventListener("click", openPersonalStorage);
 const inventoryPreviewDrawer = document.querySelector<HTMLDetailsElement>("#inventory-preview-drawer")!;
 const inventoryTabs = [...inventoryPanel.querySelectorAll<HTMLButtonElement>("[data-inventory-tab]")];
 function selectInventoryCategory(category: InventoryTab, focus = false): void {
@@ -3591,7 +3608,16 @@ function updateTarget(): void {
     caveEntranceSign.style.top = `${bounds.top + caveSignScreen.y * bounds.height / canvas.height}px`;
   }
   const blacksmithNearby = worldReady && room !== null && canTradeAtBlacksmithStall(player, sceneDressing.blacksmithVisible);
-  blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden;
+  const chestNearby = worldReady && room !== null && sceneDressing.blacksmithVisible && isAtTownStorage(player);
+  storagePrompt.hidden = !chestNearby || !inventoryPanel.hidden || !blacksmithPanel.hidden || !quizPanel.hidden;
+  if (!storagePrompt.hidden) {
+    const chest = TOWN_STORAGE_CHEST_POSITION;
+    const screen = camera.camera.worldToScreen(new pc.Vec3(chest.x, chest.y + 1.6, chest.z));
+    const rect = canvas.getBoundingClientRect();
+    storagePrompt.style.left = `${rect.left + screen.x * rect.width / canvas.width}px`;
+    storagePrompt.style.top = `${rect.top + screen.y * rect.height / canvas.height}px`;
+  }
+  blacksmithPrompt.hidden = !blacksmithNearby || !blacksmithPanel.hidden || chestNearby;
   if (!blacksmithPrompt.hidden) {
     const screen = camera.camera.worldToScreen(new pc.Vec3(BLACKSMITH_STALL.x, 10.35, BLACKSMITH_STALL.z));
     const rect = canvas.getBoundingClientRect();
@@ -4704,8 +4730,10 @@ function commitSpecialAim(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (!inventoryPanel.hidden) return;
   if (!lootPanel.hidden) return;
   if (!defeatScreen.hidden) return;
+  if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
   const nearbyLoot = nearestEquipmentDrop();
   if (nearbyLoot) { openLoot(nearbyLoot); return; }
   if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
@@ -5803,6 +5831,10 @@ async function connect(): Promise<void> {
   room.onMessage("blacksmith:update", (update: BlacksmithUpdate) => {
     renderBlacksmith(update);
     if (update.phase === "traded") status.textContent = update.message;
+  });
+  room.onMessage("storage:update", (message: StorageUpdate) => {
+    storageUI.receive(message);
+    for (const id of Object.keys(ITEM_DEFINITIONS) as ItemId[]) updateInventoryItem(id, message.carried[id] ?? 0);
   });
   room.onMessage("block:changed", applyBlockChange);
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {

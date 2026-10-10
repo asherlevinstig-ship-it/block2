@@ -23,6 +23,11 @@ export const TOWN_TAVERN_TABLE_CENTERS = [[4.5, 19.5], [12.5, 19.5], [12.5, 22.5
 export const TOWN_TAVERN_QUIZ_TABLE_POSITION = { x: 12.5, y: 8, z: 22.5 } as const;
 export const TOWN_TAVERN_KEEPER_POSITION = { x: 5.1, y: 8, z: 24.35 } as const;
 export const TOWN_BLACKSMITH_STALL_POSITION = { x: 22.5, y: 8, z: 2.5 } as const;
+export const TOWN_STORAGE_CHEST_POSITION = { x: 26.5, y: 8, z: 4.5 } as const;
+export function isAtTownStorage(player: { x: number; y: number; z: number }): boolean {
+  const chest = TOWN_STORAGE_CHEST_POSITION;
+  return Math.abs(player.y - chest.y) <= 1.5 && Math.hypot(player.x - chest.x, player.z - chest.z) <= 2;
+}
 export const TOWN_BLACKSMITH_STALL_COLLIDER = { x: 22.5, z: 2.5, width: 3.1, depth: 0.7, minY: 8, maxY: 9.15 } as const;
 export const TOWN_BEACON_POSITION = { x: -2, z: 1 } as const;
 export const MILESTONE_CAVE_X_OFFSET = 14;
@@ -500,6 +505,13 @@ export function highestSolidY(chunk: GeneratedChunk, localX: number, localZ: num
 }
 
 export function playerCollides(readBlock: WorldBlockReader, x: number, y: number, z: number): boolean {
+  const chest = TOWN_STORAGE_CHEST_POSITION;
+  if (y + PLAYER_HEIGHT > chest.y && y < chest.y + .95
+    && readBlock(Math.floor(chest.x), SURFACE_HEIGHT, Math.floor(chest.z)) !== Block.Air) {
+    const dx = Math.max(0, Math.abs(x - chest.x) - .65);
+    const dz = Math.max(0, Math.abs(z - chest.z) - .45);
+    if (Math.hypot(dx, dz) < PLAYER_RADIUS) return true;
+  }
   if (y + PLAYER_HEIGHT - 0.06 > TOWN_BLACKSMITH_STALL_COLLIDER.minY
     && y + 0.06 < TOWN_BLACKSMITH_STALL_COLLIDER.maxY
     && readBlock(Math.floor(TOWN_BLACKSMITH_STALL_POSITION.x), SURFACE_HEIGHT, Math.floor(TOWN_BLACKSMITH_STALL_POSITION.z)) !== Block.Air) {

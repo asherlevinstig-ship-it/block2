@@ -34,6 +34,7 @@ export interface PlayerSaveData {
   potionCooldownUntil?: number;
   blacksmithUpgrades: number;
   inventory: Partial<Record<ItemId, number>>;
+  storage?: Partial<Record<ItemId, number>>;
   mainHandId: MainHandId;
   armourId?: ArmourId;
   equippedPower: PowerId;
@@ -58,9 +59,12 @@ function isKeyOf<T extends object>(value: unknown, record: T): value is Extract<
 
 export function snapshotPlayerSave(player: PlayerState, now = Date.now()): PlayerSaveData {
   const inventory: Partial<Record<ItemId, number>> = {};
+  const storage: Partial<Record<ItemId, number>> = {};
   for (const itemId of Object.keys(ITEM_DEFINITIONS) as ItemId[]) {
     const quantity = player.inventory.get(itemId)?.quantity ?? 0;
     if (quantity > 0) inventory[itemId] = Math.min(65_535, Math.floor(quantity));
+    const stored = player.storage.get(itemId)?.quantity ?? 0;
+    if (stored > 0) storage[itemId] = Math.min(65_535, Math.floor(stored));
   }
   return {
     version: PLAYER_SAVE_VERSION,
@@ -74,6 +78,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     potionCooldownUntil: player.potionCooldownUntil,
     blacksmithUpgrades: player.blacksmithUpgrades,
     inventory,
+    storage,
     mainHandId: player.mainHandId as MainHandId,
     armourId: ArmourEquipSchema.safeParse({ armourId: player.armourId }).data?.armourId ?? "none",
     equippedPower: player.equippedPower as PowerId,
@@ -103,6 +108,13 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     }
   }
   const maxHealth = Math.floor(finiteNumber(value.maxHealth, 5, 1, 127));
+  const storage: Partial<Record<ItemId, number>> = {};
+  if (isRecord(value.storage)) {
+    for (const itemId of Object.keys(ITEM_DEFINITIONS) as ItemId[]) {
+      const quantity = value.storage[itemId];
+      if (typeof quantity === "number" && Number.isInteger(quantity) && quantity > 0) storage[itemId] = Math.min(65_535, quantity);
+    }
+  }
   const maxStamina = finiteNumber(value.maxStamina, 100, 1, 10_000);
   const mainHandId = isKeyOf(value.mainHandId, MAIN_HAND_DEFINITIONS) ? value.mainHandId : "longsword";
   const mainHand = MAIN_HAND_DEFINITIONS[mainHandId];
@@ -122,6 +134,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 7)),
     inventory,
+    storage,
     mainHandId,
     armourId: ArmourEquipSchema.safeParse({ armourId: value.armourId }).data?.armourId ?? "none",
     equippedPower,
@@ -148,6 +161,9 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   const mainHandId = canEquipMainHand(save.mainHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)
     ? save.mainHandId
     : "longsword";
+  for (const [itemId, quantity] of Object.entries(save.storage ?? {}) as [ItemId, number][]) {
+    const item = new InventoryItemState(); item.quantity = quantity; player.storage.set(itemId, item);
+  }
   const mainHand = MAIN_HAND_DEFINITIONS[mainHandId];
   player.mainHandId = mainHandId;
   player.mainHandTag = mainHand.tag;

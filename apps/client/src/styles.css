@@ -811,6 +811,19 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   transform: translate(-50%, -50%);
 }
 #inventory-panel[hidden] { display: none; }
+#inventory-panel[data-storage="true"] > .inventory-summary, #inventory-panel[data-storage="true"] > .inventory-tabs,
+#inventory-panel[data-storage="true"] > .inventory-section, #inventory-panel[data-storage="true"] > #inventory-preview-drawer { display: none; }
+#personal-storage[hidden], #storage-prompt[hidden] { display: none; }
+.storage-help, .storage-message { color: #a9b99f; font-size: .75rem; line-height: 1.5; }
+.storage-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.storage-columns h3 { color: #e5c77f; font-size: .9rem; }
+.storage-columns article { padding: 10px; margin: 8px 0; border: 1px solid #73835b66; border-radius: 8px; background: #ffffff07; }
+.storage-columns article strong { font-size: .75rem; }
+.storage-item-actions { display: flex; gap: 6px; margin-top: 8px; }
+.storage-item-actions button { flex: 1; padding: 8px 4px; border: 1px solid #9d8553; border-radius: 6px; background: #42351e; color: #ffe2a0; font-size: .65rem; }
+.storage-item-actions button:disabled { opacity: .4; }
+#storage-prompt { position: fixed; z-index: 15; transform: translate(-50%, -100%); padding: 10px 14px; border: 1px solid #e4c673; border-radius: 8px; background: #16291ce8; color: #ffe3a4; font-size: .7rem; font-weight: 800; }
+@media (max-width: 480px) { .storage-columns { grid-template-columns: 1fr; } }
 .inventory-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid #9bbc8050; }
 .inventory-header p { margin: 0; color: #aede8e; }
 .inventory-header h2 { margin: 2px 0 0; color: #f2e4c5; font: 700 2rem Georgia, serif; }
