@@ -16,7 +16,7 @@ import { turnBruteAim } from "./brute-aim.js";
 import { meleeSlotsFull, meleeWaitingGoal } from "./melee-coordination.js";
 import { checkMobProgress, type MobProgress } from "./mob-progress.js";
 import { mobAssistants, MOB_ASSIST_COOLDOWN_MS } from "./mob-assist.js";
-import { circleCrawler, createCrawlerPositioning, type CrawlerPositioning } from "./crawler-positioning.js";
+import { circleCrawler, createCrawlerPositioning, retreatCrawler, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { WildernessEventCycle, WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
@@ -1802,6 +1802,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.targetId = "";
       }
       if (mob.combatState === "stagger" || mob.combatState === "recover") {
+        if (mob.combatState === "recover" && crawlerRushDistance(mob.archetype) > 0 && mob.attackContactEndAt > 0) {
+          const next = retreatCrawler(mob, mob.yaw, now, deltaTime, mob.attackContactEndAt, mob.attackRecoveryEndAt,
+            this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.championAllowed(mobId, pose)
+              && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z));
+          mob.x = next.x; mob.z = next.z;
+        }
         if (now < mob.stateUntil) continue;
         if (mob.combatState === "recover" && definition.attackKind === "projectile") {
           const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();

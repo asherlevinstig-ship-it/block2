@@ -1,4 +1,18 @@
 import type { Position } from "./action-rules.js";
+import { isPlayerSupported, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { moveMobSafely } from "./mob-navigation.js";
+/** Step back along the committed attack axis, then rest. Never turn to track a circling player. */
+export function retreatCrawler(mob: Position, yaw: number, now: number, dt: number,
+  contactEndAt: number, recoveryEndAt: number, read: WorldBlockReader, allowed: (pose: Position) => boolean): Position {
+  const end = Math.min(recoveryEndAt, contactEndAt + 420);
+  const seconds = Math.max(0, Math.min(now, end) - Math.max(contactEndAt, now - Math.max(0, Math.min(dt, .1)) * 1000)) / 1000;
+  const distance = seconds * .85;
+  if (!distance) return mob;
+  const delta = { x: -Math.sin(yaw * Math.PI / 180) * distance, z: -Math.cos(yaw * Math.PI / 180) * distance };
+  const next = moveMobSafely(mob, delta, read, allowed);
+  return Math.abs(next.y - mob.y) <= .05 && isPlayerSupported(read, next.x, next.y, next.z)
+    && Math.hypot(next.x - mob.x - delta.x, next.z - mob.z - delta.z) < .01 ? next : mob;
+}
 export const CRAWLER_CIRCLE_MS = 600;
 export interface CrawlerPositioning { targetId: string; startedAt: number | null; direction: number }
 export function createCrawlerPositioning(id: string, targetId: string): CrawlerPositioning {
