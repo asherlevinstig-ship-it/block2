@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { advanceBossHud, initialBossHud } from "./boss-hud.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
@@ -1650,7 +1651,8 @@ function updateControlsHelp(): void {
   const special = SPECIAL_DEFINITIONS[localEquippedSpecial];
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
   const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
-  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts`;
+  const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Mouse aim · Hold left-click fire" : "";
+  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts${fireHint}`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
@@ -3024,6 +3026,15 @@ app.root.addChild(targetMarker);
 
 const pointer = { x: canvas.width / 2, y: canvas.height / 2 };
 const rangedPointer = { active: false, x: 0, y: 0 };
+let rangedFirePointer: number | null = null;
+function rangedFireAllowed(): boolean {
+  const combatMenuPanels = [inventoryPanel, lootPanel, defeatScreen, quizPanel, blacksmithPanel, tavernDialogue];
+  return Boolean(room && worldReady && interactionMode === "combat" && rangedPointer.active && !document.hidden
+    && WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0
+    && combatMenuPanels.every(panel => panel.hidden === true) && !tradeUI.isOpen()
+    && !(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
+    && !powerAimActive && !specialAimActive && localPowerStartedAt === null && !localDefending);
+}
 function mouseRangedYaw(fallback: number): number {
   if (!rangedPointer.active || !camera.camera) return fallback;
   const rect = canvas.getBoundingClientRect();
@@ -3673,7 +3684,7 @@ function updatePointerPosition(event: PointerEvent): void {
 }
 
 canvas.addEventListener("pointermove", updatePointerPosition);
-canvas.addEventListener("pointerleave", () => { rangedPointer.active = false; updateRangedReticle(); });
+canvas.addEventListener("pointerleave", () => { rangedFirePointer = null; rangedPointer.active = false; updateRangedReticle(); });
 
 function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | null {
   for (const [casterId, mark] of mob.marks) {
@@ -4312,6 +4323,7 @@ movementDebugCopy.addEventListener("click", async () => {
 });
 
 function resetMovementControls(): void {
+  rangedFirePointer = null;
   keys.clear();
   if (joystickPointerId !== null) releaseJoystick(joystickPointerId);
   touchStrafe = 0;
@@ -4937,6 +4949,7 @@ function requestPrimaryAction(): void {
 }
 
 function setInteractionMode(mode: InteractionMode): void {
+  rangedFirePointer = null;
   if (interactionMode === mode && targetStateKey.startsWith(`${mode}:`)) return;
   const cancelledMining = mode !== "build" && Boolean(miningSwing || pendingMine);
   interactionMode = mode;
@@ -5064,6 +5077,7 @@ window.addEventListener("keyup", event => {
 });
 canvas.addEventListener("pointerdown", event => {
   if (event.button === 2) {
+    rangedFirePointer = null;
     event.preventDefault();
     requestDefense(true);
     return;
@@ -5072,7 +5086,10 @@ canvas.addEventListener("pointerdown", event => {
   updatePointerPosition(event);
   updateTarget();
   requestPrimaryAction();
+  if (event.pointerType === "mouse" && rangedFireAllowed()) rangedFirePointer = event.pointerId;
 });
+window.addEventListener("pointerup", event => { if (event.pointerId === rangedFirePointer) rangedFirePointer = null; });
+window.addEventListener("pointercancel", event => { if (event.pointerId === rangedFirePointer) rangedFirePointer = null; });
 canvas.addEventListener("pointerup", event => {
   if (event.button === 2) requestDefense(false);
 });
@@ -5785,6 +5802,12 @@ app.on("update", (dt: number) => {
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   updateObjectiveGuidance();
   updateRangedReticle();
+  if (rangedFirePointer !== null) {
+    const readyAt = localActionStartedAt === null ? 0 : localActionStartedAt + actionDuration(localActionStep);
+    const fire = heldFireStep(true, rangedFireAllowed(), performance.now(), readyAt);
+    if (!fire.held) rangedFirePointer = null;
+    else if (fire.fire) requestAttack();
+  }
   updateBossHud(animationNow);
   const bodyY = localPlayerRig.root.getLocalPosition().y;
   const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z);
