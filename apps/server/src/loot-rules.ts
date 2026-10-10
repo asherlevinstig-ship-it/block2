@@ -3,6 +3,12 @@ import type { MobArchetypeId } from "./mob-archetypes.js";
 
 export const LOOT_DESPAWN_MS = 30_000;
 export const LOOT_PICKUP_RADIUS = 1.35;
+export function armourDropForMob(archetype: string, tier: number, roll: number): { itemId: ItemId; quantity: number }[] {
+  if (!Number.isFinite(roll) || roll < 0 || roll >= 1) return [];
+  if ((archetype === "moss_crawler" || archetype === "briar_crawler") && roll < .2) return [{ itemId: "leather_armour", quantity: 1 }];
+  if (archetype === "stone_brute" && tier >= 3 && roll < .25) return [{ itemId: "iron_armour", quantity: 1 }];
+  return [];
+}
 
 const LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: ItemId; quantity: number }[]> = {
   moss_crawler: [

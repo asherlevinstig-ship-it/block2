@@ -2,8 +2,8 @@ import * as pc from "playcanvas";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
-import { equipmentForItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
-import { weaponComparison } from "./loot-comparison.js";
+import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
+import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
@@ -1326,7 +1326,7 @@ function nearestEquipmentDrop(): string | null {
   for (const [id, visual] of lootVisuals) {
     const drop = visual.state;
     const d = Math.hypot(drop.x - player.x, drop.y - player.y, drop.z - player.z);
-    if (!equipmentForItem(drop.itemId) || !visual.root.enabled || d > distance
+    if (!isEquipmentItem(drop.itemId) || !visual.root.enabled || d > distance
       || !enemyCueLineClear({ x: player.x, y: player.y + .72, z: player.z },
         { x: drop.x, y: drop.y + .72, z: drop.z }, readCollisionWorldBlock)) continue;
     nearest = id; distance = d;
@@ -1345,18 +1345,36 @@ function fillLootComparison(element: HTMLElement, id: MainHandId) {
   }
   const note = document.createElement("p"); note.textContent = `${comparison.style} · ${comparison.benefit}`; element.append(note);
 }
+function fillArmourComparison(element: HTMLElement, id: ArmourId) {
+  const comparison = armourComparison(id);
+  element.replaceChildren();
+  const title = document.createElement("strong"); title.textContent = comparison.name; element.append(title);
+  for (const [label, value] of [["Reduction", comparison.reduction], ["Movement", comparison.speed], ["Minimum hit", comparison.minimum]]) {
+    const row = document.createElement("div"); row.className = "loot-stat";
+    const key = document.createElement("span"); key.textContent = label!;
+    const stat = document.createElement("span"); stat.textContent = value!;
+    row.append(key, stat); element.append(row);
+  }
+  const note = document.createElement("p"); note.textContent = comparison.note; element.append(note);
+}
 function openLoot(id: string) {
   const drop = lootVisuals.get(id)?.state;
   const hand = drop && equipmentForItem(drop.itemId);
-  if (!drop || !hand || !room || !worldReady) return;
+  const armour = drop && armourForItem(drop.itemId);
+  if (!drop || (!hand && !armour) || !room || !worldReady) return;
   setInventoryOpen(false); quizPanel.hidden = true; blacksmithPanel.hidden = true; closeTavernDialogue();
   if (localDefending) requestDefense(false);
   resetMovementControls();
   inspectedDropId = id; lootPending = false; lootPanel.hidden = false;
-  document.querySelector<HTMLElement>("#loot-title")!.textContent = MAIN_HAND_DEFINITIONS[hand].name;
+  document.querySelector<HTMLElement>("#loot-title")!.textContent = ITEM_DEFINITIONS[drop.itemId as ItemId].name;
   document.querySelector<HTMLElement>("#loot-description")!.textContent = `${drop.quantity} item · ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].description : "Enemy equipment"}`;
-  fillLootComparison(document.querySelector<HTMLElement>("#loot-new")!, hand);
-  fillLootComparison(document.querySelector<HTMLElement>("#loot-current")!, localMainHandId);
+  if (armour) {
+    fillArmourComparison(document.querySelector<HTMLElement>("#loot-new")!, armour);
+    fillArmourComparison(document.querySelector<HTMLElement>("#loot-current")!, localArmourId);
+  } else if (hand) {
+    fillLootComparison(document.querySelector<HTMLElement>("#loot-new")!, hand);
+    fillLootComparison(document.querySelector<HTMLElement>("#loot-current")!, localMainHandId);
+  }
   lootMessage.textContent = "Choose how to use this item. The world keeps moving.";
   lootEquip.disabled = lootKeep.disabled = false;
   lootClose.focus();
@@ -2520,10 +2538,14 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
   const material = lootMaterials[itemId];
-  if (equipmentForItem(itemId)) {
+  if (isEquipmentItem(itemId)) {
     addBox(root, "loot-bag", weaponWoodMaterial, [.55, .42, .44], [0, 0, 0]);
     addBox(root, "bag-tie", material, [.25, .12, .25], [0, .27, 0]);
     addBox(root, "equipment-emblem", material, [.28, .2, .06], [0, .02, -.25]);
+    if (armourForItem(itemId)) {
+      addBox(root, "armour-left-shoulder", material, [.12, .1, .06], [-.16, .12, -.25]);
+      addBox(root, "armour-right-shoulder", material, [.12, .1, .06], [.16, .12, -.25]);
+    }
   } else if (itemId === "fang_dagger") {
     addBox(root, "dropped-dagger-grip", weaponWoodMaterial, [0.1, 0.26, 0.1], [0, 0.17, 0]);
     addBox(root, "dropped-dagger-fang", material, [0.18, 0.48, 0.12], [0, -0.18, 0]).setLocalEulerAngles(0, 0, 8);

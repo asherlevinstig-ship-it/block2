@@ -58,6 +58,7 @@ describe("ore to forged sword to item loot", () => {
     internal.handleBlacksmithSell(client); expect(player.coins).toBe(122);
   });
   it("sells gathered ore, forges once, defeats a mob with upgraded sword damage, and collects its items", () => {
+    vi.spyOn(Math, "random").mockReturnValue(.99); // This case covers the guaranteed drops, not bonus armour.
     vi.useFakeTimers(); vi.setSystemTime(10_000);
     const room = new WorldRoom(); room.setState(new WorldState());
     Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 0 ? Block.Stone : Block.Air });

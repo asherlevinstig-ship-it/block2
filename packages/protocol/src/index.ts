@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-armour-v50";
+export const WORLD_ROOM = "world-armour-loot-v51";
 export const PartyRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
   z.object({ action: z.literal("respond"), inviteId: z.string().min(1).max(160), accept: z.boolean() }),
@@ -48,6 +48,10 @@ export const ARMOUR_DEFINITIONS = {
   iron_armour: { name: "Iron Armour", reduction: 2, speed: .92 },
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
+export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
+  return id === "leather_armour" || id === "iron_armour" ? id : null;
+}
+export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null; }
 export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;

@@ -20,6 +20,7 @@ function fixture(read = flat) {
 }
 describe("frontier champion", () => {
   it("promotes the western rich deposit guard without adding extra mobs", () => {
+    vi.spyOn(Math, "random").mockReturnValue(.99); // Preserve the base-loot assertion independently of armour rolls.
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     internal.registerMob(FRONTIER_CHAMPION_ID, "stone_brute", { x: -48.5, y: 8, z: 12.5 });
     const mob = room.state.mobs.get(FRONTIER_CHAMPION_ID)!;

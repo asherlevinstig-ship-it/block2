@@ -8,7 +8,7 @@ import { Trading } from "./trading.js";
 import { BLACKSMITH_STOCK, BlacksmithBuySchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
-import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
+import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
@@ -122,7 +122,7 @@ import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOut
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
-import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS } from "./loot-rules.js";
+import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS } from "./loot-rules.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
@@ -1186,9 +1186,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number): void {
-    const drops = mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
+    const baseDrops = mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
       : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
       : lootForArchetype(mob.archetype as MobArchetypeId);
+    const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
       const drop = new LootDropState();
@@ -1208,7 +1209,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         this.state.lootDrops.delete(dropId);
         continue;
       }
-      if (equipmentForItem(drop.itemId)) continue;
+      if (isEquipmentItem(drop.itemId)) continue;
       for (const [playerId, player] of this.state.players) {
         if (player.health <= 0 || !isLootInPickupRange(player, drop) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) continue;
         const itemId = drop.itemId as ItemId;
@@ -1241,7 +1242,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const drop = this.state.lootDrops.get(parsed.data.dropId);
     if (!drop || Date.now() >= drop.expiresAt) return reply(false, "That bag is no longer available.");
     const mainHandId = equipmentForItem(drop.itemId);
-    if (!mainHandId) return reply(false, "Materials are collected automatically.");
+    const armourId = armourForItem(drop.itemId);
+    if (!mainHandId && !armourId) return reply(false, "Materials are collected automatically.");
     if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside the bag with a clear path to it.");
     if (parsed.data.equip && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
     const itemId = drop.itemId as ItemId;
@@ -1252,11 +1254,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     item.quantity = inventoryTotal(before, drop.quantity);
     // Synchronous removal makes competing and replayed requests collect at most once.
     this.state.lootDrops.delete(parsed.data.dropId);
-    if (parsed.data.equip) this.handleMainHandEquip(client, { requestId: `loot-equip-${Date.now()}`, mainHandId });
+    if (parsed.data.equip && mainHandId) this.handleMainHandEquip(client, { requestId: `loot-equip-${Date.now()}`, mainHandId });
+    if (parsed.data.equip && armourId) this.handleArmourEquip(client, { armourId });
     void this.persistPlayer(client.sessionId, player);
     this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
       quantity: drop.quantity, total: item.quantity } satisfies LootPickedUp);
-    reply(true, `${MAIN_HAND_DEFINITIONS[mainHandId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
+    reply(true, `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true): boolean {

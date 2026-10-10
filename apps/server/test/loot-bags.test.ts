@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { WorldRoom } from "../src/game-room.js";
-import { InventoryItemState, LootDropState, PlayerState, WorldState } from "../src/schema.js";
+import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "../src/schema.js";
+import { armourDropForMob } from "../src/loot-rules.js";
 const flat: WorldBlockReader = (_x, y) => y <= 0 ? Block.Stone : Block.Air;
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 function fixture(read = flat) {
@@ -19,6 +20,55 @@ function fixture(read = flat) {
   return { room, internal, player, drop, client, collect, persist };
 }
 describe("authoritative equipment loot bags", () => {
+  it("rolls armour only for crawlers and frontier brutes at exact chance boundaries", () => {
+    for (const archetype of ["moss_crawler", "briar_crawler"]) {
+      expect(armourDropForMob(archetype, 1, .199)).toEqual([{ itemId: "leather_armour", quantity: 1 }]);
+      expect(armourDropForMob(archetype, 3, .2)).toEqual([]);
+    }
+    expect(armourDropForMob("stone_brute", 3, .249)).toEqual([{ itemId: "iron_armour", quantity: 1 }]);
+    expect(armourDropForMob("stone_brute", 3, .25)).toEqual([]);
+    expect(armourDropForMob("stone_brute", 2, 0)).toEqual([]);
+    expect(armourDropForMob("cave_spitter", 3, 0)).toEqual([]);
+    for (const roll of [-1, 1, NaN]) expect(armourDropForMob("moss_crawler", 1, roll)).toEqual([]);
+  });
+  it("adds rolled armour without replacing guaranteed drops", () => {
+    const { internal, room } = fixture(); room.state.lootDrops.clear();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const mob = new MobState(); mob.archetype = "stone_brute"; mob.difficultyTier = 3;
+    internal.spawnLootDrops("frontier", mob, 10000);
+    expect([...room.state.lootDrops.values()].map(drop => drop.itemId)).toEqual(["stone_core", "stone_core_hammer", "iron_armour"]);
+  });
+  it.each(["leather_armour", "iron_armour"])("keeps %s as an inspectable bag and stores it without equipping", id => {
+    const { internal, room, drop, player, collect, persist } = fixture(); drop.itemId = id;
+    internal.resolveLootPickups(10000); expect(room.state.lootDrops.has("bag")).toBe(true);
+    expect(player.inventory.has(id)).toBe(false); collect(false);
+    expect(player.inventory.get(id)?.quantity).toBe(1); expect(player.armourId).toBe("none");
+    expect(player.mainHandId).toBe("longsword"); expect(persist).toHaveBeenCalled();
+  });
+  it.each(["leather_armour", "iron_armour"])("equips %s once without changing the weapon or duplicating on replay", id => {
+    const { player, drop, collect, room, internal } = fixture(); drop.itemId = id;
+    const other = new PlayerState(); Object.assign(other, { x: player.x, y: player.y, z: player.z }); room.state.players.set("other", other);
+    collect(true); collect(true);
+    internal.handleLootCollect({ sessionId: "other", send: vi.fn() }, { dropId: "bag", equip: true });
+    expect(player.armourId).toBe(id); expect(player.inventory.get(id)?.quantity).toBe(1);
+    expect(player.mainHandId).toBe("longsword"); expect(other.inventory.has(id)).toBe(false);
+  });
+  it.each(["dead", "distant", "expired", "full", "busy"])("does not collect or equip armour for a %s request", reason => {
+    const { internal, player, drop, collect, room, client } = fixture(); drop.itemId = "iron_armour";
+    if (reason === "dead") player.health = 0;
+    if (reason === "distant") player.x += 10;
+    if (reason === "expired") drop.expiresAt = 10000;
+    if (reason === "full") { const item = new InventoryItemState(); item.quantity = 65535; player.inventory.set("iron_armour", item); }
+    if (reason === "busy") internal.pendingAttacks.set("player", {});
+    collect(true); expect(player.armourId).toBe("none"); expect(room.state.lootDrops.has("bag")).toBe(true);
+    expect(player.inventory.get("iron_armour")?.quantity ?? 0).toBe(reason === "full" ? 65535 : 0);
+    expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({ ok: false }));
+  });
+  it("does not collect armour through terrain", () => {
+    const { player, drop, collect } = fixture((x, y) => y <= 0 || x === 101 && y <= 3 ? Block.Stone : Block.Air);
+    drop.itemId = "leather_armour"; collect(true);
+    expect(player.inventory.has("leather_armour")).toBe(false); expect(player.armourId).toBe("none");
+  });
   it("leaves equipment for inspection but still automatically picks up materials", () => {
     const { internal, room, drop, player } = fixture(); internal.resolveLootPickups(10000);
     expect(room.state.lootDrops.has("bag")).toBe(true); expect(player.inventory.has("fang_dagger")).toBe(false);
