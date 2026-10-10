@@ -4,7 +4,13 @@ export { SPITTER_PATTERN, spitterPattern, spitterShotOffsets, spitterShotEndpoin
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-frontier-brute-v66";
+export const WORLD_ROOM = "world-forest-portal-v67";
+export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
+export const FOREST_PORTAL_LIFETIME_MS = 120_000;
+export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
+  return player.health > 0 && (portal.expiresAt === 0 || now < portal.expiresAt)
+    && Math.abs(player.y - portal.y) <= 1.5 && Math.hypot(player.x - portal.x, player.z - portal.z) <= 2;
+}
 export const PartyRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
   z.object({ action: z.literal("respond"), inviteId: z.string().min(1).max(160), accept: z.boolean() }),

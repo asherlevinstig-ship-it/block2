@@ -99,9 +99,13 @@ export const MobState = schema({
 }, "MobState");
 export type MobState = SchemaType<typeof MobState>;
 
+export const ForestPortalState = schema({
+  kind: t.string(), x: t.float32(), y: t.float32(), z: t.float32(), expiresAt: t.float64().default(0),
+}, "ForestPortalState");
 export const WorldState = schema({
   players: t.map(PlayerState),
   mobs: t.map(MobState),
   lootDrops: t.map(LootDropState),
+  portals: t.map(ForestPortalState),
 }, "WorldState");
 export type WorldState = SchemaType<typeof WorldState>;

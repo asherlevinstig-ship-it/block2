@@ -11,7 +11,9 @@ import { inventoryItemVisible } from "./inventory-ownership.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
-import { isInSilverGuardClearing, isInFrontierBruteArena } from "@blockcraft/voxel-world";
+import { isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon } from "@blockcraft/voxel-world";
+import { canUseForestPortal, type ForestPortal } from "@blockcraft/protocol";
+import { portalArrivalSnapshot } from "./portal-travel.js";
 import { SPITTER_PATTERN, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { equipmentPickupCard } from "./equipment-pickup.js";
@@ -1774,11 +1776,12 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const territory = position.y >= SURFACE_HEIGHT && tier > 0 ? wildernessTerritoryAt(position.x, position.z) : null;
   const silverGuard = position.y >= SURFACE_HEIGHT && isInSilverGuardClearing(position.x, position.z);
   const frontierArena = position.y >= SURFACE_HEIGHT && isInFrontierBruteArena(position.x, position.z);
-  const label = frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
+  const forestDungeon = isInForestDungeon(position.x, position.z);
+  const label = forestDungeon ? { name: "FOREST DUNGEON", detail: "Clear each room to open its gate · defeat the Root Guardian · return portal always open at the entrance" } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${territory?.tier ?? 0}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${forestDungeon}:${territory?.tier ?? 0}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -2846,6 +2849,10 @@ function bindPlayers(joinedRoom: Room): void {
       queueMicrotask(() => {
         snapshotQueued = false;
         if (room !== joinedRoom) return;
+        if (pendingPortalDestination) {
+          if (!portalArrivalSnapshot(pendingPortalDestination, player)) return;
+          pendingPortalDestination = null;
+        }
         authoritativeLocalPosition.set(player.x, player.y, player.z);
         if (player.lastProcessedInput > lastProcessedInputSequence) lastAcknowledgementAdvancedAt = performance.now();
         lastProcessedInputSequence = player.lastProcessedInput;
@@ -3650,7 +3657,54 @@ function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | n
   return strongest;
 }
 
+const forestPortalVisuals = new Map<string, { root: pc.Entity; glow: pc.Entity; label: HTMLButtonElement; state: ForestPortal; materials: pc.Material[] }>();
+let nearbyForestPortal: string | null = null;
+let pendingPortalDestination: { x: number; y: number; z: number } | null = null;
+function useNearbyForestPortal(): void {
+  if (!worldReady || !room || !nearbyForestPortal || !defeatScreen.hidden) return;
+  room.send("portal:use", { id: nearbyForestPortal });
+}
+function updateForestPortals(): void {
+  const portals = (room?.state as { portals?: Map<string, ForestPortal> } | undefined)?.portals;
+  const now = performance.now() + serverClock.offset, player = localPlayer.getPosition();
+  nearbyForestPortal = null; let nearest = Infinity;
+  for (const [id, visual] of forestPortalVisuals) if (!portals?.has(id)) {
+    visual.root.destroy(); visual.materials.forEach(material => material.destroy()); visual.label.remove(); forestPortalVisuals.delete(id);
+  }
+  portals?.forEach((portal, id) => {
+    let visual = forestPortalVisuals.get(id);
+    if (!visual) {
+      const root = new pc.Entity(`portal-${id}`);
+      const frame = coloredMaterial(new pc.Color(.2, .12, .3));
+      const light = powerMaterial(portal.kind === "entry" ? new pc.Color(.45, 1, .65) : new pc.Color(1, .75, .25), .6);
+      addBox(root, "left-arch", frame, [.35, 2.9, .4], [-1, 1.45, 0]);
+      addBox(root, "right-arch", frame, [.35, 2.9, .4], [1, 1.45, 0]);
+      addBox(root, "arch-crown", frame, [2.35, .35, .4], [0, 2.8, 0]);
+      const glow = addBox(root, "portal-light", light, [1.65, 2.35, .12], [0, 1.5, 0]);
+      for (let i = 0; i < 6; i++) addBox(root, "rune", light, [.15, .15, .46], [i % 2 ? 1 : -1, .45 + Math.floor(i / 2) * .8, 0]);
+      root.setPosition(portal.x, portal.y, portal.z); app.root.addChild(root);
+      const label = document.createElement("button"); label.className = "forest-portal-label";
+      label.addEventListener("click", event => { event.stopPropagation(); room?.send("portal:use", { id }); }); document.body.append(label);
+      visual = { root, glow, label, state: portal, materials: [frame, light] }; forestPortalVisuals.set(id, visual);
+    }
+    visual.state = portal;
+    const distance = Math.hypot(player.x - portal.x, player.z - portal.z);
+    const active = worldReady && (portal.expiresAt === 0 || now < portal.expiresAt);
+    visual.root.enabled = active && distance < 45;
+    visual.glow.setLocalScale(1, .96 + Math.sin(performance.now() / 600) * .04, 1);
+    const screen = camera.camera!.worldToScreen(new pc.Vec3(portal.x, portal.y + 3.3, portal.z));
+    const rect = canvas.getBoundingClientRect();
+    visual.label.hidden = !active || distance > 25 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
+    visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
+    const reachable = canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
+    visual.label.disabled = !reachable;
+    const text = `${portal.kind === "entry" ? "FOREST DUNGEON" : "RETURN TO WILDERNESS"}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable ? " · E TO ENTER" : ""}`;
+    if (visual.label.textContent !== text) visual.label.textContent = text;
+    if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
+  });
+}
 function updateTarget(): void {
+  updateForestPortals();
   updateRecoveryMarker();
   if (!camera.camera) return;
   const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
@@ -3705,7 +3759,7 @@ function updateTarget(): void {
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
   const nearbyLoot = nearestEquipmentDrop();
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${nearbyLoot}`;
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${nearbyLoot}:${nearbyForestPortal}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -3713,8 +3767,9 @@ function updateTarget(): void {
   targetMaterial.emissive = tint.clone().mulScalar(0.3);
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
-  mineButton.textContent = nearbyLoot ? "Loot" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
+  mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (nearbyLoot) targetLabel.textContent = "Equipment bag · press E or Loot to inspect and compare";
+  else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
@@ -4796,6 +4851,7 @@ function requestPrimaryAction(): void {
   if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
   const nearbyLoot = nearestEquipmentDrop();
   if (nearbyLoot) { openLoot(nearbyLoot); return; }
+  if (nearbyForestPortal) { useNearbyForestPortal(); return; }
   if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
     openBlacksmith();
     return;
@@ -5095,7 +5151,7 @@ function reconcileLocalPlayer(
   grounded: boolean,
   authoritativeInputReady: boolean,
 ): { distance: number; rate: number } {
-  if (!worldReady || !defeatScreen.hidden || awaitingReturnState) return { distance: 0, rate: 0 };
+  if (!worldReady || !defeatScreen.hidden || awaitingReturnState || pendingPortalDestination) return { distance: 0, rate: 0 };
   const position = localPlayer.getPosition();
   const beforeCorrection = position.clone();
   const target = authoritativeLocalPosition.clone();
@@ -5879,6 +5935,14 @@ async function connect(): Promise<void> {
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
+  room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
+    clearDefeatCombat(); closeLoot();
+    const own = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room!.sessionId);
+    pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
+    worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
+    status.textContent = spawn.entering ? "Forest Dungeon · clear two rooms, defeat the guardian, then collect your equipment bag." : "Returned to the silver clearing with your loot.";
+  });
+  room.onMessage("portal:notice", (message: string) => { status.textContent = message; showCombatFeedback("DUNGEON CLEARED", "hit"); });
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
@@ -6256,6 +6320,9 @@ async function connect(): Promise<void> {
     cancelSpecialAim();
     cancelLocalPowerPresentation();
     room = null;
+    for (const visual of forestPortalVisuals.values()) { visual.root.destroy(); visual.materials.forEach(material => material.destroy()); visual.label.remove(); }
+    forestPortalVisuals.clear(); nearbyForestPortal = null;
+    pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();
     tradeUI.update(null);

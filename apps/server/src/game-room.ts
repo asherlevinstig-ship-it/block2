@@ -137,6 +137,10 @@ import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
 import { CombatContributions } from "./combat-contributions.js";
 import { SilverGuardVolley } from "./silver-guard-volley.js";
+import { ForestPortalCycle } from "./forest-portal-cycle.js";
+import { FOREST_PORTAL_LIFETIME_MS, canUseForestPortal } from "@blockcraft/protocol";
+import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, isInForestDungeon } from "@blockcraft/voxel-world";
+import { ForestPortalState } from "./schema.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
@@ -276,6 +280,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly parties = new Parties();
   private readonly combatContributions = new CombatContributions();
   private readonly silverGuardVolley = new SilverGuardVolley();
+  private readonly forestPortalCycle = new ForestPortalCycle();
+  private forestDungeonActive = false;
+  private readonly forestReturns = new Map<string, { x: number; y: number; z: number }>();
+  private readonly forestTravelAt = new Map<string, number>();
   private readonly lastPartyRequestAt = new Map<string, number>();
   private lastPartyUpdateAt = -Infinity;
   private readonly trading = new Trading((a, b) => hasCombatLineOfSight(a, b, this.readWorldBlock));
@@ -329,7 +337,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
     this.onMessage("world:ready", client => {
-      client.send("world:bootstrap", this.bootstrapPayload());
+      client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
       client.send("mineral:status", this.mineralStatus());
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
@@ -382,6 +390,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       });
     };
     this.onMessage("player:return", client => this.returnPlayerToTown(client));
+    this.onMessage("portal:use", (client, payload: unknown) => this.useForestPortal(client, payload));
     this.onMessage("recovery:collect", (client, payload: unknown) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !payload || typeof payload !== "object" || !("bagId" in payload) || typeof payload.bagId !== "string" || payload.bagId.length > 80) return;
@@ -519,6 +528,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       // Always finish room cleanup even if external save storage is unavailable.
     }
     this.state.players.delete(client.sessionId);
+    this.forestReturns.delete(client.sessionId);
+    this.forestTravelAt.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
     this.movementRateWindows.delete(client.sessionId);
     this.verticalVelocities.delete(client.sessionId);
@@ -929,18 +940,19 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     return { chunkX, chunkZ, revision: stored.revision, blocks: [...stored.chunk.blocks] };
   }
 
-  private bootstrapPayload(): WorldBootstrap {
+  private bootstrapPayload(position = this.spawnPoint()): WorldBootstrap {
     const chunks: ChunkSnapshot[] = [];
+    const center = worldToChunk(position.x, position.z);
     for (let chunkZ = -WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkZ <= WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkZ += 1) {
       for (let chunkX = -WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkX <= WORLD_BOOTSTRAP_CHUNK_RADIUS; chunkX += 1) {
-        chunks.push(this.snapshot(chunkX, chunkZ));
+        chunks.push(this.snapshot(center.chunkX + chunkX, center.chunkZ + chunkZ));
       }
     }
     return {
       seed: this.worldSeed,
       chunkSize: CHUNK_SIZE,
       chunkHeight: CHUNK_HEIGHT,
-      spawn: this.spawnPoint(),
+      spawn: { x: position.x, y: position.y, z: position.z },
       chunks,
     };
   }
@@ -1025,6 +1037,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    const forest = FOREST_DUNGEON_MOBS.find(mob => mob.id === id);
+    if (forest) return pose.y >= 7 && pose.y <= 9 && pose.z > 156 && pose.z < 174
+      && pose.x > 156 + (forest.stage - 1) * 12 && pose.x < 156 + forest.stage * 12;
     const membership = roamingMembership(id);
     // A hit can pull a pack beyond its passive patrol corridor, but never into town.
     if (membership && Date.now() < (this.mobAwareness.get(id)?.provokedUntil ?? 0)) {
@@ -1186,6 +1201,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
     mob.respawnAt = now + definition.respawnMs;
+    if (this.forestPortalCycle.record(mobId, now) && !this.state.portals.has("forest-entry") && !this.forestDungeonActive) {
+      // Repair an old excavation beneath the arrival pad before making it usable.
+      for (let x = 45; x <= 46; x++) for (let z = 28; z <= 29; z++) {
+        const a = worldToChunk(x, z), stored = this.getChunk(a.chunkX, a.chunkZ);
+        if (getBlock(stored.chunk, a.localX, 7, a.localZ) !== Block.Air) continue;
+        setBlock(stored.chunk, a.localX, 7, a.localZ, Block.Stone); stored.revision++;
+        this.broadcast("block:changed", { requestId: "forest-pad", x, y: 7, z, block: Block.Stone, revision: stored.revision } satisfies BlockChanged);
+      }
+      const portal = new ForestPortalState(); Object.assign(portal, FOREST_PORTAL_POSITION, { kind: "entry", expiresAt: now + FOREST_PORTAL_LIFETIME_MS });
+      this.state.portals.set("forest-entry", portal);
+    }
+    if (FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) this.advanceForestDungeon();
     mob.combatState = "idle";
     mob.stateUntil = 0;
     mob.targetId = "";
@@ -1412,11 +1439,82 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     return true;
   }
 
+  private forestGate(x: number, open: boolean): void {
+    for (let z = 164; z <= 166; z++) for (let y = 8; y <= 10; y++) {
+      const a = worldToChunk(x, z), stored = this.getChunk(a.chunkX, a.chunkZ), block = open ? Block.Air : Block.OakLog;
+      if (getBlock(stored.chunk, a.localX, y, a.localZ) === block) continue;
+      setBlock(stored.chunk, a.localX, y, a.localZ, block); stored.revision++;
+      this.broadcast("block:changed", { requestId: `forest-gate-${x}-${open}`, x, y, z, block, revision: stored.revision } satisfies BlockChanged);
+    }
+  }
+
+  private spawnForestStage(stage: number): void {
+    for (const entry of FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage)) {
+      if (this.state.mobs.has(entry.id)) continue;
+      this.registerMob(entry.id, entry.archetype, entry);
+      const mob = this.state.mobs.get(entry.id)!;
+      mob.name = stage === 3 ? "Ancient Root Guardian" : stage === 2 ? "Thicket Guard" : "Forest Sentinel";
+      mob.health = mob.maxHealth = stage === 3 ? 28 : entry.archetype === "cave_spitter" ? 8 : 10;
+      mob.attackDamage = stage === 3 ? 2 : 1; mob.speedMultiplier = 1; mob.rewardMultiplier = 1;
+    }
+  }
+
+  private advanceForestDungeon(): void {
+    for (const stage of [1, 2]) {
+      const cleared = FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage).every(entry => this.state.mobs.get(entry.id)?.alive === false);
+      if (cleared) { this.forestGate(stage === 1 ? 168 : 180, true); this.spawnForestStage(stage + 1); }
+    }
+    if (this.state.mobs.get("forest-guardian")?.alive === false && !this.state.portals.has("forest-victory")) {
+      const portal = new ForestPortalState(); Object.assign(portal, { kind: "return", x: 189.5, y: 8, z: 165.5 });
+      this.state.portals.set("forest-victory", portal);
+      for (const client of this.clients) {
+        const player = this.state.players.get(client.sessionId);
+        if (player && isInForestDungeon(player.x, player.z)) client.send("portal:notice", "Guardian defeated! Collect your equipment bag, then use the return portal.");
+      }
+    }
+  }
+
+  private useForestPortal(client: Client, payload: unknown): void {
+    if (!payload || typeof payload !== "object" || !("id" in payload) || typeof payload.id !== "string") return;
+    const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(payload.id), now = Date.now();
+    if (!player || !portal || !canUseForestPortal(player, portal, now)
+      || now - (this.forestTravelAt.get(client.sessionId) ?? -Infinity) < 1000
+      || !hasCombatLineOfSight(player, portal, this.readWorldBlock)) return;
+    if (portal.kind === "return" && !this.forestReturns.has(client.sessionId)) return;
+    this.forestTravelAt.set(client.sessionId, now);
+    let destination = this.forestReturns.get(client.sessionId) ?? FOREST_PORTAL_POSITION;
+    if (portal.kind === "entry") {
+      if (!this.forestDungeonActive) {
+        this.forestDungeonActive = true;
+        this.state.portals.delete("forest-victory");
+        this.forestGate(168, false); this.forestGate(180, false);
+        this.spawnForestStage(1);
+        const exit = new ForestPortalState(); Object.assign(exit, FOREST_DUNGEON_EXIT, { kind: "return" });
+        this.state.portals.set("forest-return", exit);
+      }
+      this.forestReturns.set(client.sessionId, { ...FOREST_PORTAL_POSITION });
+      destination = FOREST_DUNGEON_ENTRY;
+    } else this.forestReturns.delete(client.sessionId);
+    this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
+    this.pendingPowers.delete(client.sessionId); this.cancelWeaponProjectiles(client.sessionId);
+    this.attackChains.delete(client.sessionId); this.brambleSnares.delete(client.sessionId); this.specialMarks.delete(client.sessionId);
+    this.trading.disconnect(client.sessionId);
+    player.defending = false; player.powerCastStartedAt = 0;
+    player.x = destination.x; player.y = destination.y; player.z = destination.z;
+    player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 1200);
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
+    this.verticalVelocities.set(client.sessionId, 0);
+    client.send("player:portal", { ...destination, entering: portal.kind === "entry" });
+    client.send("world:bootstrap", this.bootstrapPayload(destination));
+    void this.persistPlayer(client.sessionId, player);
+  }
+
   private returnPlayerToTown(client: Client): void {
     const player = this.state.players.get(client.sessionId);
     if (!player || player.health > 0) return;
     const now = Date.now();
     const spawn = this.spawnPoint();
+    this.forestReturns.delete(client.sessionId);
     player.x = spawn.x; player.y = spawn.y; player.z = spawn.z;
     player.health = player.maxHealth;
     player.stamina = player.maxStamina;
@@ -1573,6 +1671,26 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private simulatePlayers(deltaTime: number): void {
     if (Date.now() - this.lastPartyUpdateAt >= 500) this.sendPartyUpdates(Date.now());
     const now = Date.now();
+    const entrance = this.state.portals.get("forest-entry");
+    if (entrance && now >= entrance.expiresAt) this.state.portals.delete("forest-entry");
+    if (this.forestDungeonActive && ![...this.state.players.values()].some(player => isInForestDungeon(player.x, player.z))) {
+      this.forestDungeonActive = false;
+      this.state.portals.delete("forest-return"); this.state.portals.delete("forest-entry");
+      this.state.portals.delete("forest-victory");
+      this.forestReturns.clear();
+      for (const entry of FOREST_DUNGEON_MOBS) {
+        this.state.mobs.delete(entry.id); this.mobHomes.delete(entry.id); this.mobNavigation.delete(entry.id);
+        this.pendingMobMelee.delete(entry.id); this.mobAwareness.delete(entry.id); this.combatContributions.clear(entry.id);
+        this.mobPatrols.delete(entry.id); this.mobProgress.delete(entry.id); this.mobUnreachableUntil.delete(entry.id); this.mobReturning.delete(entry.id);
+        this.mobVerticalVelocities.delete(entry.id); this.lastMobAttackAt.delete(entry.id); this.mobCommittedAim.delete(entry.id);
+        this.crawlerPositioning.delete(entry.id); this.crawlerRushes.delete(entry.id); this.spitterPositioning.delete(entry.id);
+        this.mobStaggerImmuneUntil.delete(entry.id); this.mobAssistAt.delete(entry.id);
+        for (const [id, shot] of this.pendingMobProjectiles) if (shot.mobId === entry.id) {
+          this.pendingMobProjectiles.delete(id); this.resolveProjectileVisual(id, shot.position, "miss");
+        }
+        for (const [id, hazard] of this.mobHazards) if (hazard.mobId === entry.id) this.mobHazards.delete(id);
+      }
+    }
     this.resolveMining(now);
     this.regrowMinerals(now);
     if (this.pendingWorldDeltaWrites.size > 0 && now - this.lastWorldDeltaRetryAt >= 5_000) {
@@ -1598,6 +1716,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       advanceRoamingRoute(pack, route, now, members);
     }
     for (const [mobId, mob] of this.state.mobs) {
+      if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
       if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);

@@ -51,6 +51,26 @@ export const GREENWOOD_CRAWLER_HOMES = [
 export const STONE_BRUTE_ARENA = { minX: 35, maxX: 49, minZ: 34, maxZ: 48 } as const;
 export const STONE_BRUTE_ARENA_HOME = { x: 42.5, y: 8, z: 41.5 } as const;
 export const FRONTIER_BRUTE_ARENA = { minX: 60, maxX: 75, minZ: 19, maxZ: 34 } as const;
+export const FOREST_DUNGEON = { minX: 156, maxX: 192, minZ: 156, maxZ: 174 } as const;
+export const FOREST_PORTAL_POSITION = { x: 46.5, y: 8, z: 28.5 } as const;
+export const FOREST_DUNGEON_ENTRY = { x: 160.5, y: 8, z: 165.5 } as const;
+export const FOREST_DUNGEON_EXIT = { x: 158.5, y: 8, z: 165.5 } as const;
+export const FOREST_DUNGEON_MOBS = [
+  { id: "forest-room1-a", archetype: "briar_crawler", x: 164.5, y: 8, z: 161.5, stage: 1 },
+  { id: "forest-room1-b", archetype: "moss_crawler", x: 164.5, y: 8, z: 169.5, stage: 1 },
+  { id: "forest-room2-a", archetype: "cave_spitter", x: 176.5, y: 8, z: 161.5, stage: 2 },
+  { id: "forest-room2-b", archetype: "briar_crawler", x: 176.5, y: 8, z: 169.5, stage: 2 },
+  { id: "forest-guardian", archetype: "stone_brute", x: 187.5, y: 8, z: 165.5, stage: 3 },
+] as const;
+export function isInForestDungeon(x: number, z: number): boolean {
+  return x >= 156 && x <= 193 && z >= 156 && z <= 175;
+}
+export function forestDungeonBlock(x: number, y: number, z: number): BlockId | null {
+  if (x < 152 || x > 196 || z < 152 || z > 178 || y < SURFACE_HEIGHT) return null;
+  if (y === SURFACE_HEIGHT) return isInForestDungeon(x, z) ? (z >= 164 && z <= 166 ? Block.Dirt : Block.Grass) : Block.Stone;
+  const wall = isInForestDungeon(x, z) && (x === 156 || x === 192 || z === 156 || z === 174 || x === 168 || x === 180);
+  return wall && y <= 10 ? Block.OakLog : Block.Air;
+}
 export function isInFrontierBruteArena(x: number, z: number): boolean {
   const a = FRONTIER_BRUTE_ARENA;
   return x >= a.minX && x <= a.maxX + 1 && z >= a.minZ && z <= a.maxZ + 1;
@@ -481,7 +501,8 @@ export function worldToChunk(x: number, z: number): ChunkAddress {
 
 export function isProtectedVoxel(x: number, z: number): boolean {
   return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS
-    || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z);
+    || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z) || isInForestDungeon(x, z)
+    || (x >= 45 && x <= 46 && z >= 28 && z <= 29);
 }
 
 export function generateChunk(seedText: string, chunkX: number, chunkZ: number): GeneratedChunk {
@@ -517,6 +538,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         const silverGuardBlock = silverGuardEncounterBlock(worldX, y, worldZ);
         if (silverGuardBlock !== null) blocks[chunkIndex(localX, y, localZ)] = silverGuardBlock;
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;
+        const dungeonBlock = forestDungeonBlock(worldX, y, worldZ);
+        if (dungeonBlock !== null) blocks[chunkIndex(localX, y, localZ)] = dungeonBlock;
         // The authored cave owns its subsurface geometry, regardless of surface biome overlays.
         if (caveBlock !== null && y < SURFACE_HEIGHT) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
         const townBlock = townOfBeginningsBlock(worldX, y, worldZ);

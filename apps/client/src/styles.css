@@ -1,3 +1,6 @@
+.forest-portal-label { position: fixed; z-index: 25; transform: translate(-50%, -100%); padding: 8px 12px; border: 1px solid #81eeb0; border-radius: 8px; background: #101b23ed; color: #d7ffe6; font: 700 11px/1.4 ui-sans-serif, system-ui; letter-spacing: .06em; cursor: pointer; box-shadow: 0 3px 12px #0006; }
+.forest-portal-label:disabled { cursor: default; opacity: .85; }
+.forest-portal-label[hidden] { display: none; }
 :root {
   color: #eef7e8;
   background: #101814;
