@@ -30,7 +30,8 @@ import { createServerClock, sampleServerClock, enemyAttackPresentation } from ".
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
-import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
+import { animateMobArt, createMobArt, setMobArtEnraged, type MobArtRig } from "./mob-art";
+import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import {
   BRAMBLE_SNARE,
@@ -2482,8 +2483,9 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.blendType = pc.BLEND_NORMAL;
   markMaterial.depthWrite = false;
   markMaterial.update();
-  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial);
-  if (mob.isChampion) {
+  const matriarch = mobId === "greenwood-venom-matriarch";
+  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch);
+  if (mob.isChampion && !matriarch) {
     const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
     const crestY = isSpitter ? 1.18 : 2.02;
     addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, crestY, 0]);
@@ -2492,7 +2494,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
   const healthWidth = isBrute ? 1.46 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = mob.isChampion ? isSpitter ? 1.9 : 3.08 : isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
+  const healthBarY = matriarch ? 2.5 : mob.isChampion ? isSpitter ? 1.9 : 3.08 : isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
   addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);
@@ -5451,7 +5453,8 @@ app.on("update", (dt: number) => {
     const attackPeak = mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
     const attackPhase = attackElapsed < attackPeak ? attackElapsed / attackPeak * 0.5
       : 0.5 + (attackElapsed - attackPeak) / (attackDuration - attackPeak) * 0.5;
-    const attackStrength = mob.state.attackStartedAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
+    const attackStrength = mob.art.matriarch ? mob.state.alive && mob.state.attackStartedAt > 0 && ["windup", "recover"].includes(mob.state.combatState) ? matriarchRecoil(attackElapsed, mob.state.attackPattern === "double-fan") : 0
+      : mob.state.attackStartedAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
     if (mob.isBrute && mob.state.attackPattern !== "charge" && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
       mob.lastImpactStartedAt = mob.state.attackStartedAt;
       createBruteSlamImpact(mob);
@@ -5528,6 +5531,7 @@ app.on("update", (dt: number) => {
       mob.warningMaterial.update();
     }
     animateMobArt(mob.art, frameTime, animationTime, moveSpeed, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
+    setMobArtEnraged(mob.art, mob.state.enraged === true);
     const crawlerRecovery = !mob.isBrute && !mob.isSpitter && presentation.phase === "recover"
       ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
@@ -5545,6 +5549,13 @@ app.on("update", (dt: number) => {
       0,
       Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3) + defeat * (mob.isBrute ? 7 : 12),
     );
+    if (mob.art.matriarch) {
+      const pose = matriarchBodyPose(defeat, attackStrength);
+      mob.bodyRoot.setLocalScale(pose.width, pose.height, pose.length);
+      mob.bodyRoot.setLocalPosition(0, gaitBob + pose.drop - hitStrength * .035, pose.recoilZ - windupStrength * .18);
+      mob.bodyRoot.setLocalEulerAngles(windupStrength * 12 - attackStrength * 20, 0, pose.roll);
+      mob.bodyMaterial.diffuse.set(mob.state.enraged ? .5 : .15, mob.state.enraged ? .16 : .34, mob.state.enraged ? .12 : .31);
+    }
     mob.bodyMaterial.emissive.set(
       0.001 + 0.55 * hitStrength + 0.34 * windupStrength,
       0.001 + 0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,

@@ -20,6 +20,9 @@ export interface MobArtRig {
   sacs: pc.Entity[];
   phase: number;
   walk: number;
+  matriarch: boolean;
+  phaseSurfaces: pc.Entity[];
+  enraged: boolean;
 }
 
 function material(name: string, color: Triple, glow?: Triple): pc.StandardMaterial {
@@ -47,6 +50,9 @@ const spitterDark = material("spitter-carapace", [0.2, 0.18, 0.29]);
 const spitterLight = material("spitter-shell-edge", [0.47, 0.39, 0.58]);
 const acid = material("spitter-acid-sacs", [0.63, 0.85, 0.24], [0.19, 0.3, 0.025]);
 const mouth = material("creature-mouth", [0.085, 0.06, 0.1]);
+const matriarchVenom = material("matriarch-jade-venom", [.2, .95, .65], [.08, .5, .25]);
+const matriarchEnragedVenom = material("matriarch-enraged-venom", [1, .35, .12], [.65, .12, .025]);
+const matriarchArmour = material("matriarch-dark-jade-armour", [.12, .28, .26]);
 
 function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
   const result = new pc.Entity(name);
@@ -65,11 +71,11 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
   return result;
 }
 
-export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial): MobArtRig {
+export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false): MobArtRig {
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter" : "moss_crawler";
   const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
-  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0 };
+  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, matriarch, phaseSurfaces: [], enraged: false };
 
   if (kind === "moss_crawler") {
     box(parent, "bark-abdomen", shellDark, [0.82, 0.34, 1.04], [0, 0.4, -0.1]);
@@ -146,7 +152,25 @@ export function createMobArt(parent: pc.Entity, archetype: string, body: pc.Stan
       }
     }
   }
+  if (matriarch && kind === "cave_spitter") {
+    const dorsal = pivot(parent, "matriarch-dorsal-sac", [0, 1.05, -.36]);
+    rig.phaseSurfaces.push(box(dorsal, "large-venom-reservoir", matriarchVenom, [.65, .62, .82], [0, 0, 0]));
+    rig.sacs.push(dorsal);
+    box(dorsal, "sac-armour-ridge", matriarchArmour, [.16, .15, .87], [0, .33, 0]);
+    for (const side of [-1, 1]) {
+      box(parent, `matriarch-flared-shell-${side}`, matriarchArmour, [.27, .52, 1.05], [side * .53, .62, -.18], [0, 0, side * -20]);
+      for (let i = 0; i < 3; i++) box(parent, `matriarch-spine-${side}-${i}`, ivory, [.12, .38 - i * .05, .15], [side * .55, .98, .12 - i * .3], [-18, 0, side * -28]);
+      box(head, `matriarch-horn-${side}`, ivory, [.13, .4, .16], [side * .33, .37, .2], [-24, 0, side * -22]);
+      rig.phaseSurfaces.push(box(head, `matriarch-venom-eye-${side}`, matriarchVenom, [.12, .09, .08], [side * .16, .18, .4]));
+    }
+  }
   return rig;
+}
+
+export function setMobArtEnraged(rig: MobArtRig, enraged: boolean): void {
+  if (!rig.matriarch || rig.enraged === enraged) return;
+  rig.enraged = enraged;
+  for (const part of rig.phaseSurfaces) if (part.render) part.render.material = enraged ? matriarchEnragedVenom : matriarchVenom;
 }
 
 /** No per-frame geometry/material creation; only transform the prebuilt joints. */
