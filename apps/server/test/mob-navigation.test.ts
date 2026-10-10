@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Block, playerCollides, type WorldBlockReader } from "@blockcraft/voxel-world";
-import { advanceMobGravity, createMobNavigationState, findMobPath, moveMobSafely, navigateMob, walkableMobSpawn } from "../src/mob-navigation.js";
+import { advanceMobGravity, createMobNavigationState, findMobPath, moveMobSafely, navigateMob, safeMobCorridor, walkableMobSpawn } from "../src/mob-navigation.js";
 import { pursueTarget } from "../src/combat-rules.js";
 import { MobState } from "../src/schema.js";
 
@@ -9,6 +9,23 @@ const wall: WorldBlockReader = (x, y, z) => x === 102 && z >= 99 && z <= 101 && 
 const start = { x: 100.5, y: 1, z: 100.5 };
 
 describe("terrain-aware mob navigation", () => {
+  it("turns gradually in open pursuit rather than instantly changing direction", () => {
+    const state = createMobNavigationState();
+    const first = navigateMob(start, { x: start.x + .1, z: start.z }, { x: 110, y: 1, z: 100.5 }, state, 0, flat);
+    const next = navigateMob(first, { x: first.x, z: first.z + .1 }, { x: first.x, y: 1, z: 110 }, state, 33, flat);
+    expect(next.x).toBeGreaterThan(first.x);
+    expect(next.z).toBeGreaterThan(first.z);
+    expect(Math.abs(state.heading! - Math.PI / 2)).toBeCloseTo(.4);
+    expect(Math.hypot(next.x - first.x, next.z - first.z)).toBeCloseTo(.1);
+  });
+  it("rejects shortcuts across walls, deep holes, and territory boundaries", () => {
+    const goal = { x: 103.5, y: 1, z: 100.5 };
+    const hole: WorldBlockReader = (x, y, z) => x === 101 ? y <= -5 ? Block.Stone : Block.Air : flat(x, y, z);
+    expect(safeMobCorridor(start, goal, flat)).toBe(true);
+    expect(safeMobCorridor(start, goal, wall)).toBe(false);
+    expect(safeMobCorridor(start, goal, hole)).toBe(false);
+    expect(safeMobCorridor(start, goal, flat, pose => pose.x < 102)).toBe(false);
+  });
   it("keeps a usable detour moving when the target crosses a cell before replanning is allowed", () => {
     const nearWall = { x: 101.7, y: 1, z: 100.5 };
     const state = createMobNavigationState();

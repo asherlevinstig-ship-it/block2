@@ -36,11 +36,14 @@ describe("mob navigation in the authoritative room", () => {
     expect(mob.x).toBeGreaterThan(before);
   });
   it("uses obstacle routing when chasing a player in the room simulation", () => {
-    const read: WorldBlockReader = (x, y, z) => y <= 0 || (x === 102 && z >= 99 && z <= 101 && y <= 3) ? Block.Stone : Block.Air;
+    let obstructed = false;
+    const read: WorldBlockReader = (x, y, z) => y <= 0 || (obstructed && x === 102 && z >= 99 && z <= 101 && y <= 3) ? Block.Stone : Block.Air;
     const { room, mob, tick } = fixture(read);
     const player = new PlayerState();
     player.x = 106.5; player.y = 1; player.z = 100.5;
     room.state.players.set("player", player);
+    tick(); // Acquire while visible, then follow last-seen information around new cover.
+    obstructed = true;
     for (let i = 0; i < 120; i += 1) {
       tick();
       expect(playerCollides(read, mob.x, mob.y, mob.z)).toBe(false);

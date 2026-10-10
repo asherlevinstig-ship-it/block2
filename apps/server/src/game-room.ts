@@ -7,6 +7,7 @@ import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
 import { BLACKSMITH_STOCK, BlacksmithBuySchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
+import { awareMobTarget, createMobAwareness, type MobAwareness } from "./mob-awareness.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
@@ -115,7 +116,7 @@ import {
 } from "@blockcraft/voxel-world";
 import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
 import { miningRejectionReason, movementRejectionReason, nextComboStep, selectAttackTarget } from "./action-rules.js";
-import { dodgeDirection, isInsideImpact, pursueTarget, selectAggroTarget } from "./combat-rules.js";
+import { dodgeDirection, isInsideImpact, pursueTarget } from "./combat-rules.js";
 import { GUARD_MINIMUM_STAMINA, GUARD_STAMINA_DRAIN_PER_SECOND, PARRY_STAGGER_MS, isAttackInGuardArc, resolveDefense } from "./defense-rules.js";
 import { MOB_ARCHETYPES, damageAfterArmor, defeatReward, mobArchetype, type MobArchetypeId } from "./mob-archetypes.js";
 import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOutsideTown, radiusFromSafeCenter, scaledMobStats } from "./radial-difficulty.js";
@@ -247,6 +248,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
   private readonly mobVerticalVelocities = new Map<string, number>();
   private readonly mobNavigation = new Map<string, MobNavigationState>();
+  private readonly mobAwareness = new Map<string, MobAwareness>();
   private readonly mobPatrols = new Map<string, MobPatrolState>();
   private readonly roamingRoutes = new Map<string, RoamingRouteState>();
   private readonly roamingEngaged = new Set<string>();
@@ -1106,6 +1108,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = combatMobDefinition(mob);
     this.spawnLootDrops(mobId, mob, now);
     mob.alive = false;
+    this.mobAwareness.delete(mobId);
     this.crawlerRushes.delete(mobId);
     this.championCharges.delete(mobId);
     this.clearMobAttackTimeline(mob);
@@ -1518,6 +1521,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
+        this.mobAwareness.delete(mobId);
         const stats = scaledMobStats(definition, dangerBandAt(home));
         const spawn = walkableMobSpawn(home, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose));
         mob.x = spawn.x;
@@ -1660,7 +1664,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         && this.roamingAllowed(mobId, player)
         && this.championAllowed(mobId, player)
         && (mobId === "stone-brute" || !isInStoneBruteArena(player.x, player.z)));
-      const target = this.roamingReturning.has(mobId) ? null : selectAggroTarget(mob, players, definition.aggroRange);
+      const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
+      this.mobAwareness.set(mobId, awareness);
+      const target = this.roamingReturning.has(mobId) ? null : awareMobTarget(mob, players, awareness, now, definition.aggroRange,
+        player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       if (!target) {
         this.spitterPositioning.delete(mobId);
         if (roamingMembership(mobId)) {
@@ -1677,22 +1684,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
-      const rangedPursuit = definition.attackKind === "projectile"
+      const rangedPursuit = definition.attackKind === "projectile" && target.visible
         ? positionSpitter(mob, target, home, positioning, now, deltaTime, definition.speed * mob.speedMultiplier,
           this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z))
         : null;
-      const pursuit = rangedPursuit ?? pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
+      const pursuit = rangedPursuit ?? pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, target.visible ? definition.stopDistance : .3);
       const goal = rangedPursuit?.goal ?? target;
       this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
         && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6));
       // A ranged mob may walk backwards, but still aims its attacks at the player.
-      if (definition.attackKind === "projectile" || pursuit.inAttackRange) mob.yaw = pursuit.yaw;
+      if (target.visible && (definition.attackKind === "projectile" || pursuit.inAttackRange)) mob.yaw = pursuit.yaw;
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
       const actualDistance = Math.hypot(target.x - mob.x, target.z - mob.z);
       const inAttackRange = definition.attackKind === "projectile"
         ? actualDistance >= definition.minimumAttackRange - 0.05 && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
-      if (!inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
+      if (!target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       mob.combatState = "windup";

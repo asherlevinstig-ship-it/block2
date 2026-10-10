@@ -8,6 +8,7 @@ export interface MobNavigationState {
   waypoints: Position[];
   goalKey: string;
   nextPlanAt: number;
+  heading?: number;
 }
 export const createMobNavigationState = (): MobNavigationState => ({ waypoints: [], goalKey: "", nextPlanAt: 0 });
 type AllowedPosition = (position: Position) => boolean;
@@ -19,6 +20,22 @@ const hasSafeLanding = (pose: Position, read: WorldBlockReader): boolean => {
   const settled = resolvePlayerMotion(pose, { x: 0, y: -1, z: 0 }, read);
   return settled.grounded;
 };
+
+/** Shortcuts must check the entire corridor, not just the landing beyond a hole. */
+export function safeMobCorridor(start: Position, goal: Position, read: WorldBlockReader, allowed = anywhere): boolean {
+  const distance = horizontalDistance(start, goal);
+  const steps = Math.max(1, Math.ceil(distance / .2));
+  let pose = copyPose(start);
+  for (let i = 1; i <= steps; i++) {
+    const x = start.x + (goal.x - start.x) * i / steps;
+    const z = start.z + (goal.z - start.z) * i / steps;
+    const next = moveMobSafely(pose, { x: x - pose.x, z: z - pose.z }, read, allowed);
+    if (Math.hypot(next.x - x, next.z - z) > .03 || !allowed(next) || !hasSafeLanding(next, read)) return false;
+    const settled = resolvePlayerMotion(next, { x: 0, y: -1, z: 0 }, read);
+    pose = settled.grounded ? copyPose(settled) : next;
+  }
+  return Math.abs(pose.y - goal.y) <= 1.05;
+}
 
 /** Sweep every displacement, including lunges, to avoid tunnelling through voxels. */
 export function moveMobSafely(start: Position, delta: { x: number; z: number }, read: WorldBlockReader, allowed = anywhere): Position {
@@ -38,6 +55,22 @@ export function advanceMobGravity(start: Position, velocity: number, dt: number,
   const nextVelocity = grounded && velocity <= 0 ? 0 : Math.max(-TERMINAL_VELOCITY, velocity - GRAVITY * boundedDt);
   const next = resolvePlayerMotion(copyPose(start), { x: 0, y: nextVelocity * boundedDt, z: 0 }, read);
   return { x: next.x, y: next.y, z: next.z, velocity: next.grounded || next.hitVertical ? 0 : nextVelocity };
+}
+
+function steerMob(start: Position, destination: Position, state: MobNavigationState,
+  read: WorldBlockReader, allowed: AllowedPosition, smooth = true): Position {
+  const distance = horizontalDistance(start, destination);
+  const desiredHeading = Math.atan2(destination.x - start.x, destination.z - start.z);
+  const oldHeading = state.heading ?? desiredHeading;
+  const angle = ((desiredHeading - oldHeading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  const heading = oldHeading + Math.min(Math.abs(angle), Math.max(.025, distance * 4)) * Math.sign(angle);
+  const curved = { x: start.x + Math.sin(heading) * distance, y: start.y,
+    z: start.z + Math.cos(heading) * distance };
+  // Terrain wins over smoothing: never arc into a wall, shaft, or protected area.
+  const endpoint = smooth && safeMobCorridor(start, curved, read, allowed) ? curved : destination;
+  const next = moveMobSafely(start, { x: endpoint.x - start.x, z: endpoint.z - start.z }, read, allowed);
+  if (horizontalDistance(start, next) > .00001) state.heading = Math.atan2(next.x - start.x, next.z - start.z);
+  return next;
 }
 
 /** Local A*: at most 128 expansions within eight blocks. No world-wide scans. */
@@ -84,22 +117,31 @@ export function navigateMob(start: Position, desired: { x: number; z: number }, 
   const goalKey = `${Math.floor(goal.x)},${Math.floor(goal.y)},${Math.floor(goal.z)}`;
   // A moving target must not discard a usable detour and then wait for the
   // planner cooldown. Keep walking it until a replacement can be computed.
-  if (goalKey !== state.goalKey && now >= state.nextPlanAt) {
-    state.waypoints = []; state.goalKey = goalKey;
-  }
+  state.goalKey = goalKey;
   while (state.waypoints[0] && horizontalDistance(start, state.waypoints[0]) < 0.12) state.waypoints.shift();
   if (!state.waypoints.length) {
     const direct = moveMobSafely(start, { x: desired.x - start.x, z: desired.z - start.z }, read, allowed);
-    if (horizontalDistance(start, direct) >= travel * 0.8 && hasSafeLanding(direct, read)) return direct;
+    if (horizontalDistance(start, direct) >= travel * 0.8 && hasSafeLanding(direct, read)) {
+      // Finish an arrival precisely instead of orbiting within the turn radius.
+      return steerMob(start, direct, state, read, allowed, horizontalDistance(start, goal) > .6);
+    }
     if (now < state.nextPlanAt) return copyPose(start);
     state.nextPlanAt = now + 250;
     state.waypoints = findMobPath(start, goal, read, allowed);
+  }
+  // Look ahead over nearby corners only. Existing collision/landing checks remain authoritative.
+  for (let i = Math.min(3, state.waypoints.length - 1); i > 0; i--) {
+    const candidate = state.waypoints[i]!;
+    if (horizontalDistance(start, candidate) <= 2 && safeMobCorridor(start, candidate, read, allowed)) {
+      state.waypoints.splice(0, i); break;
+    }
   }
   const waypoint = state.waypoints[0];
   if (!waypoint) return copyPose(start);
   const distance = horizontalDistance(start, waypoint);
   const scale = Math.min(travel, distance) / Math.max(distance, 0.00001);
-  const next = moveMobSafely(start, { x: (waypoint.x - start.x) * scale, z: (waypoint.z - start.z) * scale }, read, allowed);
+  const next = steerMob(start, { x: start.x + (waypoint.x - start.x) * scale, y: start.y,
+    z: start.z + (waypoint.z - start.z) * scale }, state, read, allowed, distance > .35);
   if (horizontalDistance(start, next) < travel * 0.25 || !hasSafeLanding(next, read)) {
     state.waypoints = [];
     return copyPose(start);
