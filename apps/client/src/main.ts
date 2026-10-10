@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
@@ -4016,9 +4017,10 @@ let lastMovementDebugUpdateAt = 0;
 const movementEventLog: string[] = [];
 
 function renderWorldObjective(update: WorldObjectiveUpdate): void {
+  const changedObjective = currentWorldObjective?.objectiveId !== update.objectiveId;
   currentWorldObjective = update;
   worldObjective.hidden = false;
-  objectiveMarker.hidden = update.showMarker === false;
+  if (changedObjective || update.showMarker === false) objectiveMarker.hidden = update.showMarker === false;
   objectiveTier.textContent = update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : `NEARBY · TIER ${update.tier}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
@@ -4026,6 +4028,8 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   objectiveProgress.textContent = `${update.targetMobIds.length - update.completedMobIds.length} remaining`;
   objectiveDistance.hidden = update.showMarker === false;
   objectiveMarkerLabel.textContent = update.title.toUpperCase();
+  objectiveMarker.dataset.kind = update.kind ?? "encounter";
+  objectiveMarker.querySelector("i")!.textContent = objectiveIcon(update.kind);
 }
 
 function showObjectiveComplete(message: WorldObjectiveCompleted): void {
@@ -4055,16 +4059,8 @@ function updateObjectiveGuidance(): void {
   objectiveDistance.textContent = distanceLabel;
   objectiveMarkerDistance.textContent = distanceLabel;
   const screen = camera.camera.worldToScreen(targetPosition);
-  const centerX = window.innerWidth / 2;
-  const centerY = window.innerHeight / 2;
-  const safeLeft = window.innerWidth > 820 ? Math.min(410, window.innerWidth * .32) : 44;
-  const safeRight = window.innerWidth - 52;
-  const safeTop = 130;
-  const safeBottom = window.innerHeight - 70;
-  const onScreen = screen.z > 0 && screen.x >= safeLeft && screen.x <= safeRight && screen.y >= safeTop && screen.y <= safeBottom;
-  const x = Math.max(safeLeft, Math.min(safeRight, screen.x));
-  const y = Math.max(safeTop, Math.min(safeBottom, screen.y));
-  const angle = Math.atan2(screen.y - centerY, screen.x - centerX) * 180 / Math.PI + 90;
+  const { hidden, onScreen, x, y, angle } = objectiveGuidance(screen, window.innerWidth, window.innerHeight, distance, objectiveMarker.hidden === true);
+  objectiveMarker.hidden = hidden;
   objectiveMarker.style.left = `${x}px`;
   objectiveMarker.style.top = `${y}px`;
   objectiveMarker.style.setProperty("--marker-rotation", onScreen ? "0deg" : `${angle}deg`);
