@@ -4018,11 +4018,13 @@ const movementEventLog: string[] = [];
 function renderWorldObjective(update: WorldObjectiveUpdate): void {
   currentWorldObjective = update;
   worldObjective.hidden = false;
-  objectiveMarker.hidden = false;
-  objectiveTier.textContent = `TIER ${update.tier}`;
+  objectiveMarker.hidden = update.showMarker === false;
+  objectiveTier.textContent = update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : `NEARBY · TIER ${update.tier}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
-  objectiveProgress.textContent = `${update.completedMobIds.length} / ${update.targetMobIds.length}`;
+  objectiveProgress.hidden = update.kind !== "encounter";
+  objectiveProgress.textContent = `${update.targetMobIds.length - update.completedMobIds.length} remaining`;
+  objectiveDistance.hidden = update.showMarker === false;
   objectiveMarkerLabel.textContent = update.title.toUpperCase();
 }
 
@@ -4042,6 +4044,7 @@ function showObjectiveComplete(message: WorldObjectiveCompleted): void {
 function updateObjectiveGuidance(): void {
   const objective = currentWorldObjective;
   if (!objective || !camera.camera) return;
+  if (objective.showMarker === false) { objectiveMarker.hidden = true; return; }
   const trackedMob = mobVisuals.get(objective.targetMobId);
   const targetPosition = trackedMob?.state.alive
     ? trackedMob.entity.getPosition()

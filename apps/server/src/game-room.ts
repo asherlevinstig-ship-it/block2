@@ -91,7 +91,6 @@ import {
   type SpecialProgressed,
   type TraitId,
   type WorldBootstrap,
-  type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
   type WeaponAttackReleased,
   type ItemId,
@@ -159,7 +158,7 @@ import {
   type MovementRateWindow,
   type StoredMovementInput,
 } from "./movement-input.js";
-import { activeObjective, createObjectiveProgress, creditObjectiveDefeat, nextObjectiveTarget, type WorldObjectiveProgress } from "./world-objectives.js";
+import { nearbyObjective, createObjectiveProgress, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
@@ -378,7 +377,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       void this.persistPlayer(client.sessionId, player, true).catch(() => {});
       client.send("chat:notice", `Your name is now ${player.name}.`);
     });
-    this.onMessage("objective:sync", client => this.sendObjectiveState(client));
+    this.onMessage("objective:sync", client => this.sendObjectiveState(client, true));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
         client.send("pong", { id: payload.id, serverTime: Date.now() });
@@ -1219,7 +1218,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.aimCommitted = false;
     this.mobCommittedAim.delete(mobId);
     this.clearMarksForMob(mobId);
-    this.progressWorldObjectives(mobId, recipients);
+    this.refreshNearbyObjectives();
     for (const playerId of recipients) {
       const player = this.state.players.get(playerId)!;
       const reward = defeatReward(player.health, player.maxHealth, player.stamina, player.maxStamina, definition, mob.rewardMultiplier);
@@ -1241,50 +1240,21 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
-  private sendObjectiveState(client: Client): void {
-    const progress = this.objectiveProgress.get(client.sessionId);
-    if (!progress) return;
-    const objective = activeObjective(progress);
-    const targetMobId = nextObjectiveTarget(progress);
-    const target = this.state.mobs.get(targetMobId);
-    const home = this.mobHomes.get(targetMobId);
-    client.send("objective:update", {
-      objectiveId: objective.id,
-      title: objective.title,
-      detail: objective.detail,
-      tier: objective.tier,
-      targetMobId,
-      targetMobIds: [...objective.targetMobIds],
-      completedMobIds: [...progress.completedMobIds],
-      targetX: target?.x ?? home?.x ?? 8.5,
-      targetY: target?.y ?? home?.y ?? 8,
-      targetZ: target?.z ?? home?.z ?? 8.5,
-    } satisfies WorldObjectiveUpdate);
+  private sendObjectiveState(client: Client, force = false): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const progress = this.objectiveProgress.get(client.sessionId) ?? createObjectiveProgress();
+    this.objectiveProgress.set(client.sessionId, progress);
+    const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id);
+    const fingerprint = JSON.stringify({ ...update, targetX: Math.round(update.targetX), targetY: Math.round(update.targetY), targetZ: Math.round(update.targetZ) });
+    if (!force && fingerprint === progress.fingerprint) return;
+    progress.id = update.objectiveId; progress.fingerprint = fingerprint;
+    client.send("objective:update", update satisfies WorldObjectiveUpdate);
   }
 
-  private progressWorldObjectives(mobId: string, recipients: readonly string[]): void {
-    for (const [playerId, player] of this.state.players) {
-      if (!recipients.includes(playerId)) continue;
-      const progress = this.objectiveProgress.get(playerId);
-      if (!progress) continue;
-      const completedBefore = progress.completedMobIds.size;
-      const result = creditObjectiveDefeat(progress, mobId);
-      const client = this.clients.find(candidate => candidate.sessionId === playerId);
-      if (!result.completed) {
-        if (progress.completedMobIds.size !== completedBefore && client) this.sendObjectiveState(client);
-        continue;
-      }
-      const coinsBefore = player.coins;
-      player.coins = Math.min(1_000_000, player.coins + result.completed.coins);
-      client?.send("objective:completed", {
-        objectiveId: result.completed.id,
-        title: result.completed.title,
-        rewardLabel: result.completed.rewardLabel,
-        coinsGranted: player.coins - coinsBefore,
-      } satisfies WorldObjectiveCompleted);
-      if (client) this.sendObjectiveState(client);
-      void this.persistPlayer(playerId, player);
-    }
+  private refreshNearbyObjectives(): void {
+    // Guidance is local context, not a quest chain with extra completion bonuses.
+    for (const client of this.clients) this.sendObjectiveState(client);
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
@@ -1669,7 +1639,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private simulatePlayers(deltaTime: number): void {
-    if (Date.now() - this.lastPartyUpdateAt >= 500) this.sendPartyUpdates(Date.now());
+    if (Date.now() - this.lastPartyUpdateAt >= 500) {
+      this.sendPartyUpdates(Date.now());
+      for (const client of this.clients) this.sendObjectiveState(client);
+    }
     const now = Date.now();
     const entrance = this.state.portals.get("forest-entry");
     if (entrance && now >= entrance.expiresAt) this.state.portals.delete("forest-entry");
