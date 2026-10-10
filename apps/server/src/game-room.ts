@@ -5,6 +5,8 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
+import { BLACKSMITH_WEAPONS, BlacksmithBuySchema, ITEM_DEFINITIONS } from "@blockcraft/protocol";
+import { weaponPurchase } from "./blacksmith.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
@@ -385,6 +387,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
+    aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
     this.onMessage("potion:buy", client => this.handlePotion(client, true));
     this.onMessage("potion:use", client => this.handlePotion(client, false));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 33);
@@ -628,11 +631,29 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       ironCapacity: ironCapacity(player.blacksmithUpgrades),
       gold: player.coins,
       ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
+      weapons: Object.fromEntries(Object.keys(BLACKSMITH_WEAPONS).map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       sold,
       goldGranted,
       purchasedUpgradeId,
       message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
     } satisfies BlacksmithUpdate);
+  }
+
+  private handleBlacksmithBuy(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = BlacksmithBuySchema.safeParse(payload);
+    if (!player) return;
+    if (!parsed.success) return this.sendBlacksmithState(client, "Choose a weapon from the shop.", "error");
+    if (player.health <= 0 || !canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to buy weapons.", "error");
+    const id = parsed.data.itemId;
+    const result = weaponPurchase(player.coins, player.inventory.get(id)?.quantity ?? 0, id);
+    if (!result.ok) return this.sendBlacksmithState(client, result.message, "error");
+    let item = player.inventory.get(id);
+    if (!item) { item = new InventoryItemState(); player.inventory.set(id, item); }
+    player.coins = result.gold;
+    item.quantity = result.quantity;
+    void this.persistPlayer(client.sessionId, player);
+    this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[id].name} added to your pack. Press I to equip it.`, "purchased");
   }
 
   private handleBlacksmithSell(client: Client): void {

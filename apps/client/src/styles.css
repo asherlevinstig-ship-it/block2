@@ -637,6 +637,14 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #blacksmith-upgrades article.owned { border-color: #76a85c80; background: linear-gradient(90deg, #3b6b2c2e, #00000018); }
 #blacksmith-upgrades article.owned button { border-color: #5d8750; background: #294423; color: #bfe2a5; }
 #blacksmith-close { display: block; margin-left: auto; border-color: #736b5e !important; background: #352e28 !important; font-size: .75rem !important; }
+#blacksmith-weapons article { padding: 12px; margin: 8px 0; border: 1px solid #a67a4e80; border-radius: 9px; background: #ffffff08; }
+#blacksmith-weapons strong { color: #ffe2aa; }
+#blacksmith-weapons p { font-size: .76rem; color: #d8e5df; line-height: 1.5; }
+#blacksmith-weapons small { display: block; color: #b6ad9d; line-height: 1.5; }
+#blacksmith-weapons button { width: 100%; }
+.inventory-grid article[data-item="forged_sword"] i { background: linear-gradient(135deg, #cbd4df 0 55%, #704923 56%); }
+.inventory-grid article[data-item="forged_bow"] i { background: linear-gradient(135deg, #7d512c, #cbd4df); }
+.inventory-grid article[data-item="forged_focus"] i { background: linear-gradient(135deg, #54afff 0 55%, #704923 56%); }
 #blacksmith-panel[data-phase="traded"] #blacksmith-message { color: #bff4ac; }
 #blacksmith-panel[data-phase="purchased"] #blacksmith-message { color: #ffe08b; }
 #blacksmith-panel[data-phase="error"] #blacksmith-message { color: #ffaf92; }

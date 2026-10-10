@@ -97,7 +97,7 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   const followThrough = elapsedMilliseconds > impact
     ? Math.sin((elapsedMilliseconds - impact) / (duration - impact) * Math.PI) * 0.5
     : 0;
-  if (mainHandId === "bow") return {
+  if (mainHandId === "bow" || mainHandId === "forged_bow") return {
     active: true,
     torsoYaw: -4 * strength,
     leftArmPitch: -102 * strength,
@@ -105,7 +105,7 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
     rightArmPitch: -82 * strength,
     rightArmRoll: -68 * strength,
   };
-  if (mainHandId === "magic_focus" || mainHandId === "acid_gland_focus") return {
+  if (mainHandId === "magic_focus" || mainHandId === "forged_focus" || mainHandId === "acid_gland_focus") return {
     active: true,
     torsoYaw: -8 * strength,
     leftArmPitch: -42 * strength,

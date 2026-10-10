@@ -33,7 +33,7 @@ export interface MeleeStrikeProfile {
 }
 
 export function playerMeleeStrike(mainHandId: MainHandId, step: number): MeleeStrikeProfile | null {
-  if (mainHandId !== "longsword" && mainHandId !== "fang_dagger" && mainHandId !== "stone_core_hammer") return null;
+  if (mainHandId !== "longsword" && mainHandId !== "forged_sword" && mainHandId !== "fang_dagger" && mainHandId !== "stone_core_hammer") return null;
   const dagger = mainHandId === "fang_dagger";
   const overhead = step === 3 || mainHandId === "stone_core_hammer";
   const reverse = step === 2;

@@ -29,6 +29,8 @@ import {
   championChargeOutline,
   bruteSlamOutline,
   BLACKSMITH_UPGRADES,
+  BLACKSMITH_WEAPONS,
+  type BlacksmithWeaponId,
   IRON_ORE_GOLD_PRICE,
   SILVER_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
@@ -301,7 +303,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 3 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 6 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -994,7 +996,17 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(acidGlandFocus, "acid-focus-gland", acidWeaponMaterial, [0.25, 0.3, 0.25], [0, -0.42, 0]);
   rightElbow.addChild(acidGlandFocus);
 
+  const forgedSword = longsword.clone(); rightElbow.addChild(forgedSword);
+  const forgedBow = bow.clone(); rightElbow.addChild(forgedBow);
+  const forgedFocus = magicFocus.clone(); rightElbow.addChild(forgedFocus);
+  addBox(forgedBow, "forged-bow-bracing", bladeMaterial, [.1, .4, .1], [.075, .32, 0]);
+  addBox(forgedSword, "forged-sword-collar", bladeMaterial, [.18, .09, .13], [0, -.16, 0]);
+  addBox(forgedFocus, "forged-focus-frame", bladeMaterial, [.34, .07, .34], [0, -.34, 0]);
+  forgedSword.enabled = forgedBow.enabled = forgedFocus.enabled = false;
   const mainHands = {
+    forged_sword: forgedSword,
+    forged_bow: forgedBow,
+    forged_focus: forgedFocus,
     longsword,
     bow,
     magic_focus: magicFocus,
@@ -1090,9 +1102,10 @@ function animateVoxelCharacter(
   rig.leftKnee.setLocalEulerAngles(pose.leftKneePitch, 0, 0);
   rig.rightKnee.setLocalEulerAngles(pose.rightKneePitch, 0, 0);
   rig.scarf.setLocalEulerAngles(pose.scarfPitch, 0, pose.torsoRoll * -1.5);
-  for (const id of ["longsword", "fang_dagger", "stone_core_hammer"] as const) {
+  for (const id of ["longsword", "forged_sword", "fang_dagger", "stone_core_hammer"] as const) {
     const weapon = rig.mainHands[id];
-    weapon.setLocalPosition(0, id === "longsword" ? -0.29 : -0.28, id === "longsword" ? 0.085 : 0.1);
+    const sword = id === "longsword" || id === "forged_sword";
+    weapon.setLocalPosition(0, sword ? -0.29 : -0.28, sword ? 0.085 : 0.1);
     weapon.setLocalEulerAngles(0, 0, 0);
     weapon.setLocalScale(1, 1, 1);
   }
@@ -1775,19 +1788,20 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
   const acid = message.mainHandId === "acid_gland_focus";
-  const entity = new pc.Entity(message.mainHandId === "bow" ? "arrow-projectile" : acid ? "corrosive-projectile" : "arcane-projectile");
-  entity.addComponent("render", { type: message.mainHandId === "bow" ? "box" : "sphere" });
+  const arrow = message.mainHandId === "bow" || message.mainHandId === "forged_bow";
+  const entity = new pc.Entity(arrow ? "arrow-projectile" : acid ? "corrosive-projectile" : "arcane-projectile");
+  entity.addComponent("render", { type: arrow ? "box" : "sphere" });
   const material = powerMaterial(
-    message.mainHandId === "bow" ? new pc.Color(0.93, 0.76, 0.34) : acid ? new pc.Color(0.58, 1, 0.08) : new pc.Color(0.28, 0.68, 1),
+    arrow ? new pc.Color(0.93, 0.76, 0.34) : acid ? new pc.Color(0.58, 1, 0.08) : new pc.Color(0.28, 0.68, 1),
     0.96,
   );
   if (entity.render) entity.render.material = material;
-  if (message.mainHandId === "bow") entity.setLocalScale(0.07, 0.07, 0.58);
+  if (arrow) entity.setLocalScale(0.07, 0.07, 0.58);
   else entity.setLocalScale(0.24, 0.24, 0.24);
   const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
   const end = new pc.Vec3(message.targetX, message.targetY + 0.72, message.targetZ);
   entity.setPosition(start);
-  if (message.mainHandId === "bow") entity.lookAt(end);
+  if (arrow) entity.lookAt(end);
   app.root.addChild(entity);
   weaponProjectileVisuals.push({
     projectileId: message.projectileId,
@@ -2449,6 +2463,9 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 }
 
 const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
+  forged_sword: coloredMaterial(new pc.Color(.76, .8, .85)),
+  forged_bow: coloredMaterial(new pc.Color(.65, .45, .25)),
+  forged_focus: coloredMaterial(new pc.Color(.3, .65, .95)),
   healing_potion: coloredMaterial(new pc.Color(.85, .15, .3)),
   iron_ore: coloredMaterial(new pc.Color(0.57, 0.65, 0.68)),
   silver_ore: coloredMaterial(new pc.Color(0.7, 0.88, 0.98)),
@@ -3052,6 +3069,35 @@ function updateTavernCoins(coins: number): void {
 
 let blacksmithPending = false;
 let blacksmithIronCapacity = 12;
+const weaponShop = document.createElement("div");
+weaponShop.id = "blacksmith-weapons";
+blacksmithClose.before(weaponShop);
+function renderWeaponShop(): void {
+  weaponShop.replaceChildren();
+  const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
+  heading.textContent = "FORGED WEAPONS · ADDED TO YOUR PACK"; weaponShop.append(heading);
+  const current = weaponComparison(localMainHandId, localIronSwordOwned);
+  for (const id of Object.keys(BLACKSMITH_WEAPONS) as BlacksmithWeaponId[]) {
+    const stats = weaponComparison(id);
+    const card = document.createElement("article");
+    const title = document.createElement("strong"); title.textContent = stats.name;
+    const description = document.createElement("p");
+    description.textContent = `Damage ${stats.damage} · attack ${stats.speed} · reach ${stats.range}`;
+    const comparison = document.createElement("small");
+    comparison.textContent = `Equipped: ${current.name} — damage ${current.damage}, attack ${current.speed}, reach ${current.range}. Lower ms = faster.`;
+    const button = document.createElement("button");
+    const owned = inventoryCounts.get(id) ?? 0;
+    button.textContent = `BUY · ${BLACKSMITH_WEAPONS[id].price} GOLD${owned ? ` · ${owned} OWNED` : ""}`;
+    button.disabled = !room || blacksmithPending || tavernCoinBalance < BLACKSMITH_WEAPONS[id].price || owned >= 65535;
+    button.addEventListener("click", () => {
+      if (!room || blacksmithPending) return;
+      blacksmithPending = true; renderWeaponShop();
+      blacksmithMessage.textContent = `Buying ${stats.name}...`;
+      room.send("blacksmith:buy", { itemId: id });
+    });
+    card.append(title, description, comparison, button); weaponShop.append(card);
+  }
+}
 blacksmithPrice.textContent = `Iron ${IRON_ORE_GOLD_PRICE} · Silver ${SILVER_ORE_GOLD_PRICE} gold`;
 
 function renderBlacksmith(update: BlacksmithUpdate): void {
@@ -3066,6 +3112,8 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   document.querySelector<HTMLElement>("#blacksmith-sale-value")!.textContent = `${update.ironOre * IRON_ORE_GOLD_PRICE + silver * SILVER_ORE_GOLD_PRICE} gold`;
   blacksmithOre.textContent = `${update.ironOre.toLocaleString()} / ${update.ironCapacity.toLocaleString()}`;
   updateTavernCoins(update.gold);
+  for (const id of Object.keys(BLACKSMITH_WEAPONS) as BlacksmithWeaponId[]) updateInventoryItem(id, update.weapons?.[id] ?? 0);
+  renderWeaponShop();
   blacksmithSell.disabled = update.ironOre + silver <= 0 || blacksmithPending || update.gold >= 1_000_000;
   const owned = new Set(update.ownedUpgrades);
   for (const card of blacksmithUpgradeCards) {
@@ -3095,12 +3143,17 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     showCombatFeedback(update.purchasedUpgradeId === "reinforced_pickaxe" ? "PICKAXE BOUGHT · EQUIPPED" : "EQUIPMENT FORGED", "dodge");
     status.textContent = update.message;
   }
+  if (update.phase === "purchased" && !update.purchasedUpgradeId) {
+    showCombatFeedback("WEAPON ADDED TO PACK", "dodge");
+    status.textContent = update.message;
+  }
 }
 
 function openBlacksmith(): void {
   closeTavernDialogue();
   setInventoryOpen(false);
   blacksmithPanel.hidden = false;
+  renderWeaponShop();
   blacksmithMessage.textContent = "Checking your minerals...";
   if (room) room.send("blacksmith:sync");
 }

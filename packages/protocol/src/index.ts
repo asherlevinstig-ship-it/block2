@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-trading-v48";
+export const WORLD_ROOM = "world-weapon-shop-v49";
 export const PartyRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
   z.object({ action: z.literal("respond"), inviteId: z.string().min(1).max(160), accept: z.boolean() }),
@@ -40,6 +40,9 @@ export const BLACKSMITH_UPGRADES = {
 } as const;
 export type BlacksmithUpgradeId = keyof typeof BLACKSMITH_UPGRADES;
 export const BlacksmithForgeSchema = z.object({ upgradeId: z.enum(["reinforced_pickaxe", "iron_sword", "miners_pack"]) });
+export const BLACKSMITH_WEAPONS = { forged_sword: { price: 45 }, forged_bow: { price: 50 }, forged_focus: { price: 55 } } as const;
+export type BlacksmithWeaponId = keyof typeof BLACKSMITH_WEAPONS;
+export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus"]) });
 export type BlacksmithUpdate = {
   phase: "idle" | "traded" | "purchased" | "error";
   ironOre: number;
@@ -48,6 +51,7 @@ export type BlacksmithUpdate = {
   gold: number;
   ownedUpgrades: BlacksmithUpgradeId[];
   purchasedUpgradeId?: BlacksmithUpgradeId;
+  weapons?: Partial<Record<BlacksmithWeaponId, number>>;
   sold?: number;
   goldGranted?: number;
   message: string;
@@ -66,6 +70,9 @@ export type TavernQuizUpdate = {
 };
 
 export const ITEM_DEFINITIONS = {
+  forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
+  forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
+  forged_focus: { id: "forged_focus", name: "Forged Focus", description: "Smith-made focus · 2 bolt damage · equip from your pack" },
   healing_potion: { id: "healing_potion", name: "Healing Potion", description: "Restore 2 HP · H to drink · carry up to 3" },
   iron_ore: { id: "iron_ore", name: "Iron Ore", description: "Mined iron ore that can be sold to the town blacksmith" },
   silver_ore: { id: "silver_ore", name: "Silver Ore", description: "Wilderness mineral · sell to the blacksmith for 8 gold each" },
@@ -141,6 +148,9 @@ export interface MainHandDefinition {
 }
 
 export const MAIN_HAND_DEFINITIONS = {
+  forged_sword: { id: "forged_sword", name: "Forged Sword", tag: "melee", attackName: "Sword Combo", requiredItemId: "forged_sword" },
+  forged_bow: { id: "forged_bow", name: "Forged Bow", tag: "ranged", attackName: "Bow Shot", requiredItemId: "forged_bow" },
+  forged_focus: { id: "forged_focus", name: "Forged Focus", tag: "focus", attackName: "Arcane Bolt", requiredItemId: "forged_focus" },
   longsword: { id: "longsword", name: "Longsword", tag: "melee", attackName: "Sword Combo" },
   bow: { id: "bow", name: "Hunting Bow", tag: "ranged", attackName: "Bow Shot" },
   magic_focus: { id: "magic_focus", name: "Magic Focus", tag: "focus", attackName: "Arcane Bolt" },
@@ -173,6 +183,12 @@ export interface WeaponAttackDefinition {
 }
 
 export const WEAPON_ATTACK_DEFINITIONS = {
+  forged_sword: { combo: true, comboWindowMs: COMBO_CHAIN_WINDOW_MS, range: 2.1, minimumFacingDot: .35, projectileTravelMs: 0,
+    attacks: COMBAT_ATTACKS.map(step => ({ ...step, damage: step.damage + 1 })) },
+  forged_bow: { combo: false, comboWindowMs: 0, range: 9, minimumFacingDot: .92, projectileTravelMs: 190,
+    attacks: [{ step: 1, durationMs: 640, impactMs: 330, damage: 2, knockback: .18 }] },
+  forged_focus: { combo: false, comboWindowMs: 0, range: 7, minimumFacingDot: .58, projectileTravelMs: 230,
+    attacks: [{ step: 1, durationMs: 470, impactMs: 190, damage: 2, knockback: .28 }] },
   longsword: {
     combo: true,
     comboWindowMs: COMBO_CHAIN_WINDOW_MS,
@@ -473,7 +489,7 @@ export const SpecialEquipRequestSchema = z.object({
 
 export const MainHandEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "acid_gland_focus"]),
+  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "acid_gland_focus", "forged_sword", "forged_bow", "forged_focus"]),
 });
 
 export const TraitEquipRequestSchema = z.object({
