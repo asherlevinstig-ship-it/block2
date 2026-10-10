@@ -10,6 +10,7 @@ import { weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
 import { spacedMobDesired } from "./mob-spacing.js";
 import { turnBruteAim } from "./brute-aim.js";
+import { meleeSlotsFull, meleeWaitingGoal } from "./melee-coordination.js";
 import { circleCrawler, createCrawlerPositioning, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
@@ -1721,18 +1722,29 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         }
         circling = circleCrawler(mob, target, flank, now, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
       } else this.crawlerPositioning.delete(mobId);
-      const pursuit = circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, target.visible ? definition.stopDistance : .3);
-      const goal = circling?.goal ?? rangedPursuit?.goal ?? target;
+      const attackers = () => [...this.state.mobs.entries()].map(([id, peer]) => ({
+        id, alive: peer.alive, health: peer.health, archetype: peer.archetype, combatState: peer.combatState, targetId: peer.targetId,
+      }));
+      const waiting = definition.attackKind === "melee" && target.visible && meleeSlotsFull(target.id, attackers());
+      const waitingGoal = waiting ? meleeWaitingGoal(mobId, target, [...this.mobAwareness.entries()]
+        .filter(([id, awareness]) => awareness.targetId === target.id && this.state.mobs.get(id)?.alive
+          && this.state.mobs.get(id)?.archetype !== "cave_spitter").map(([id]) => id), definition.stopDistance + 1.1) : null;
+      const pursuit = waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, definition.speed * mob.speedMultiplier, .2)
+        : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, target.visible ? definition.stopDistance : .3);
+      const goal = waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
       this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
         && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6));
       // A ranged mob may walk backwards, but still aims its attacks at the player.
-      if (target.visible && (definition.attackKind === "projectile" || pursuit.inAttackRange)) mob.yaw = pursuit.yaw;
+      if (target.visible && (definition.attackKind === "projectile" || pursuit.inAttackRange)) {
+        mob.yaw = waiting ? Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI : pursuit.yaw;
+      }
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
       const actualDistance = Math.hypot(target.x - mob.x, target.z - mob.z);
       const inAttackRange = definition.attackKind === "projectile"
         ? (rangedPursuit?.cornered || actualDistance >= definition.minimumAttackRange - 0.05) && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
-      if (circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
+      if (waiting || (definition.attackKind === "melee" && meleeSlotsFull(target.id, attackers()))
+        || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       mob.combatState = "windup";

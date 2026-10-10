@@ -15,6 +15,34 @@ function fixture(read: WorldBlockReader) {
 }
 
 describe("mob navigation in the authoritative room", () => {
+  it("allows only two same-tick windups when a whole group reaches one player", () => {
+    const { room, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
+    room.state.mobs.clear();
+    const player = new PlayerState(); Object.assign(player, { x: 100.5, y: 1, z: 100.5 });
+    room.state.players.set("player", player);
+    for (const [id, dx, dz] of [["a", 1.6, 0], ["b", -1.6, 0], ["c", 0, 1.6], ["d", 0, -1.6]] as const) {
+      const mob = new MobState(); Object.assign(mob, { x: player.x + dx, y: 1, z: player.z + dz });
+      room.state.mobs.set(id, mob);
+    }
+    tick();
+    expect([...room.state.mobs.values()].filter(mob => mob.combatState === "windup")).toHaveLength(2);
+    expect([...room.state.mobs.values()].filter(mob => mob.combatState === "idle")).toHaveLength(2);
+    for (const mob of room.state.mobs.values()) expect(playerCollides((_x, y) => y <= 0 ? Block.Stone : Block.Air, mob.x, mob.y, mob.z)).toBe(false);
+  });
+  it("holds a third melee attacker back and releases its turn after interruption", () => {
+    const { room, mob, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
+    const player = new PlayerState(); Object.assign(player, { x: 101.9, y: 1, z: 100.5 });
+    room.state.players.set("player", player);
+    for (const id of ["a", "b"]) {
+      const peer = new MobState(); Object.assign(peer, { x: 102, y: 1, z: id === "a" ? 99 : 102,
+        combatState: "windup", targetId: "player", stateUntil: Date.now() + 60000 });
+      room.state.mobs.set(id, peer);
+    }
+    tick(); expect(mob.combatState).toBe("idle");
+    room.state.mobs.get("a")!.combatState = "stagger";
+    tick(); expect(mob.combatState).toBe("windup");
+    expect([...room.state.mobs.values()].filter(peer => peer.combatState === "windup")).toHaveLength(2);
+  });
   it("allows a provoked roaming pack to respond beyond its passive territory corridor", () => {
     const { room, mob } = fixture((_x, y) => y <= 7 ? Block.Stone : Block.Air);
     const id = "outskirts-west-pack:0";
