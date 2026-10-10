@@ -51,6 +51,7 @@ export const PlayerState = schema({
 export type PlayerState = SchemaType<typeof PlayerState>;
 
 export const LootDropState = schema({
+  ownerId: t.string().default(""),
   itemId: t.string(),
   quantity: t.uint8().default(1),
   x: t.float32(),

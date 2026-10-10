@@ -10,6 +10,7 @@ import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
+import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { SPITTER_PATTERN, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { equipmentPickupCard } from "./equipment-pickup.js";
@@ -1269,6 +1270,7 @@ interface NetworkMob {
 }
 
 interface NetworkLootDrop {
+  ownerId?: string;
   itemId: string;
   quantity: number;
   x: number;
@@ -2641,6 +2643,7 @@ function bindLootDrops(joinedRoom: Room): void {
   if (!state.lootDrops) return;
   const drops = callbacks(joinedRoom.state).lootDrops;
   drops.onAdd((drop: NetworkLootDrop, dropId: string) => {
+    if (!lootVisibleToPlayer(drop.ownerId, joinedRoom.sessionId)) return;
     lootVisuals.get(dropId)?.root.destroy();
     lootVisuals.set(dropId, createLootVisual(dropId, drop));
   }, true);

@@ -135,6 +135,7 @@ import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
+import { CombatContributions } from "./combat-contributions.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
@@ -272,6 +273,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly lastChatAt = new Map<string, number>();
   private readonly lastNameAt = new Map<string, number>();
   private readonly parties = new Parties();
+  private readonly combatContributions = new CombatContributions();
   private readonly lastPartyRequestAt = new Map<string, number>();
   private lastPartyUpdateAt = -Infinity;
   private readonly trading = new Trading((a, b) => hasCombatLineOfSight(a, b, this.readWorldBlock));
@@ -497,6 +499,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.combatContributions.disconnect(client.sessionId);
+    for (const [id, drop] of this.state.lootDrops) if (drop.ownerId === client.sessionId) this.state.lootDrops.delete(id);
     this.trading.disconnect(client.sessionId); this.lastTradeRequestAt.delete(client.sessionId);
     this.parties.disconnect(client.sessionId);
     this.lastPartyRequestAt.delete(client.sessionId);
@@ -1164,8 +1168,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
+    if (!mob.alive) return;
+    const recipients = this.combatContributions.eligible(mobId, mob, this.state.players, now);
+    this.combatContributions.clear(mobId);
     const definition = combatMobDefinition(mob);
-    this.spawnLootDrops(mobId, mob, now);
+    for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
     mob.alive = false;
     this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     mob.awarenessState = "patrol"; mob.alertUntil = 0;
@@ -1182,24 +1189,26 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.aimCommitted = false;
     this.mobCommittedAim.delete(mobId);
     this.clearMarksForMob(mobId);
-    this.progressWorldObjectives(mobId, mob, attackerId);
-    const player = this.state.players.get(attackerId);
-    if (!player || player.health <= 0) return;
-    const reward = defeatReward(player.health, player.maxHealth, player.stamina, player.maxStamina, definition, mob.rewardMultiplier);
-    player.health = reward.health;
-    player.stamina = reward.stamina;
-    const coinsBefore = player.coins;
-    player.coins = Math.min(1_000_000, player.coins + 2);
-    void this.persistPlayer(attackerId, player);
-    this.broadcast("combat:reward", {
-      playerId: attackerId,
-      mobId,
-      coinsGranted: player.coins - coinsBefore,
-      healthRestored: reward.healthRestored,
-      staminaRestored: reward.staminaRestored,
-      health: player.health,
-      stamina: Math.round(player.stamina),
-    } satisfies CombatReward);
+    this.progressWorldObjectives(mobId, recipients);
+    for (const playerId of recipients) {
+      const player = this.state.players.get(playerId)!;
+      const reward = defeatReward(player.health, player.maxHealth, player.stamina, player.maxStamina, definition, mob.rewardMultiplier);
+      player.health = reward.health;
+      player.stamina = reward.stamina;
+      const coinsBefore = player.coins;
+      player.coins = Math.min(1_000_000, player.coins + 2);
+      void this.persistPlayer(playerId, player);
+      this.broadcast("combat:reward", {
+        playerId,
+        mobId,
+        coinsGranted: player.coins - coinsBefore,
+        healthRestored: reward.healthRestored,
+        staminaRestored: reward.staminaRestored,
+        health: player.health,
+        stamina: Math.round(player.stamina),
+      } satisfies CombatReward);
+      this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", "Kill contribution credited · your personal loot is ready. Equipment bags expire after 30 seconds.");
+    }
   }
 
   private sendObjectiveState(client: Client): void {
@@ -1223,11 +1232,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     } satisfies WorldObjectiveUpdate);
   }
 
-  private progressWorldObjectives(mobId: string, mob: MobState, attackerId: string): void {
-    const participationRadius = 22;
+  private progressWorldObjectives(mobId: string, recipients: readonly string[]): void {
     for (const [playerId, player] of this.state.players) {
-      const distance = Math.hypot(player.x - mob.x, player.z - mob.z);
-      if (playerId !== attackerId && distance > participationRadius) continue;
+      if (!recipients.includes(playerId)) continue;
       const progress = this.objectiveProgress.get(playerId);
       if (!progress) continue;
       const completedBefore = progress.completedMobIds.size;
@@ -1250,7 +1257,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
-  private spawnLootDrops(mobId: string, mob: MobState, now: number): void {
+  private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
     const baseDrops = mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
       : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
       : lootForArchetype(mob.archetype as MobArchetypeId);
@@ -1258,6 +1265,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
       const drop = new LootDropState();
+      drop.ownerId = ownerId;
       drop.itemId = entry.itemId;
       drop.quantity = entry.quantity;
       drop.x = mob.x + Math.cos(angle) * 0.42;
@@ -1276,15 +1284,19 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       if (isEquipmentItem(drop.itemId)) continue;
       for (const [playerId, player] of this.state.players) {
+        if (drop.ownerId && drop.ownerId !== playerId) continue;
         if (player.health <= 0 || !isLootInPickupRange(player, drop) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) continue;
         const itemId = drop.itemId as ItemId;
         let inventoryItem = player.inventory.get(itemId);
+        const capacity = itemId === "healing_potion" ? HEALING_POTION.capacity : itemId === "iron_ore" || itemId === "silver_ore" ? ironCapacity(player.blacksmithUpgrades) : 65535;
+        if ((inventoryItem?.quantity ?? 0) + drop.quantity > capacity) continue;
         const total = inventoryTotal(inventoryItem?.quantity, drop.quantity);
         if (!inventoryItem) {
           inventoryItem = new InventoryItemState();
           player.inventory.set(itemId, inventoryItem);
         }
         inventoryItem.quantity = total;
+        void this.persistPlayer(playerId, player);
         this.state.lootDrops.delete(dropId);
         this.broadcast("loot:picked-up", {
           playerId,
@@ -1306,6 +1318,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!player || player.health <= 0) return reply(false, "You must be alive to collect loot.");
     const drop = this.state.lootDrops.get(parsed.data.dropId);
     if (!drop || Date.now() >= drop.expiresAt) return reply(false, "That bag is no longer available.");
+    if (drop.ownerId && drop.ownerId !== client.sessionId) return reply(false, "That is another player's personal loot.");
     const mainHandId = equipmentForItem(drop.itemId);
     const armourId = armourForItem(drop.itemId);
     if (!mainHandId && !armourId) return reply(false, "Materials are collected automatically.");
@@ -1587,6 +1600,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
+        this.combatContributions.clear(mobId);
         this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
         mob.awarenessState = "patrol"; mob.alertUntil = 0;
         this.mobAwareness.delete(mobId);
@@ -2254,6 +2268,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           && isSeismicAftershockTarget(impactCenter, pending.yaw, mob, resolvedRange);
         if (aftershock) aftershockHitCount += 1;
         resolvedDamage = Math.max(resolvedDamage, damage);
+        this.combatContributions.record(target.id, sessionId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage);
         this.alertHitMob(target.id, sessionId, now);
         mob.hitSequence += 1;
@@ -2737,12 +2752,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const mob = this.state.mobs.get(mobId);
       const timing = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[pending.step - 1]
         ?? WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[0];
-      if (!player || !mob || !mob.alive || !timing) return;
+      if (!player || player.health <= 0 || !mob || !mob.alive || !timing) return;
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
       const damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId) + this.specialDamageBonus(sessionId, mobId, now),
         mob.armor,
       ) + traitBonusDamage;
+      this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage);
       this.alertHitMob(mobId, sessionId, now);
       mob.hitSequence += 1;

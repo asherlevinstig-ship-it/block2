@@ -79,6 +79,9 @@ describe("chamber-specific encounters", () => {
     vi.spyOn(Math, "random").mockReturnValue(.99);
     const { room, internal } = fixture();
     const mob = room.state.mobs.get("buried-chamber-brute")!;
+    const visitor = new PlayerState(); visitor.x = mob.x + 3; visitor.y = mob.y; visitor.z = mob.z;
+    room.state.players.set("visitor", visitor);
+    internal.combatContributions.record("buried-chamber-brute", "visitor", mob.maxHealth, 10_000);
     internal.defeatMob("buried-chamber-brute", mob, "visitor", 10_000);
     expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity])).toEqual([["stone_core", 1], ["stone_core_hammer", 1]]);
     internal.simulatePlayers(0.1);
