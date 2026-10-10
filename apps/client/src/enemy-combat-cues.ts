@@ -25,3 +25,12 @@ export function enemyCombatCue(mob: EnemyTimeline, now: number) {
       : presentation.phase === "strike" ? 1 : fraction(mob.attackStartedAt, mob.attackReleaseAt),
   };
 }
+
+/** Full danger footprint throughout windup, plus a continuous exhausted recovery pose. */
+export function bruteRecoveryPose(mob: EnemyTimeline, now: number): number {
+  if (!mob.alive || mob.archetype !== "stone_brute" || enemyAttackPresentation(mob, now).phase !== "recover"
+    || mob.attackStartedAt <= 0 || now >= mob.attackRecoveryEndAt) return 0;
+  const progress = Math.max(0, Math.min(1, (now - mob.attackContactEndAt)
+    / Math.max(1, mob.attackRecoveryEndAt - mob.attackContactEndAt)));
+  return Math.sin(Math.PI * progress);
+}

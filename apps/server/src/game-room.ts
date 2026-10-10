@@ -9,6 +9,7 @@ import { BLACKSMITH_STOCK, BlacksmithBuySchema, ITEM_DEFINITIONS, ArmourEquipSch
 import { weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
 import { spacedMobDesired } from "./mob-spacing.js";
+import { turnBruteAim } from "./brute-aim.js";
 import { circleCrawler, createCrawlerPositioning, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
@@ -1600,7 +1601,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           continue;
         }
         if (targetPlayer && now < mob.stateUntil - mobAimCommitMs(mob.archetype)) {
-          mob.yaw = Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI;
+          const desiredYaw = Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI;
+          mob.yaw = mob.archetype === "stone_brute" ? turnBruteAim(mob.yaw, desiredYaw, deltaTime) : desiredYaw;
           this.mobCommittedAim.set(mobId, { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: mob.yaw });
         }
         if (now >= mob.stateUntil - mobAimCommitMs(mob.archetype)) mob.aimCommitted = true;

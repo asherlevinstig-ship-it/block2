@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
+import { bruteRecoveryPose, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 const mob = { alive: true, combatState: "windup", aimCommitted: false, archetype: "stone_brute",
   attackStartedAt: 1000, attackReleaseAt: 2000, attackContactAt: 2280, attackContactEndAt: 2380, attackRecoveryEndAt: 3000 };
 describe("readable enemy combat cues", () => {
+  it("shows an exhausted brute pose only inside its real recovery window", () => {
+    expect(bruteRecoveryPose(mob, 1200)).toBe(0);
+    expect(bruteRecoveryPose(mob, 2380)).toBeCloseTo(0);
+    expect(bruteRecoveryPose(mob, 2690)).toBeCloseTo(1);
+    expect(bruteRecoveryPose(mob, 3000)).toBe(0);
+    expect(bruteRecoveryPose({ ...mob, combatState: "stagger" }, 2690)).toBe(0);
+    expect(bruteRecoveryPose({ ...mob, alive: false }, 2690)).toBe(0);
+    expect(bruteRecoveryPose({ ...mob, archetype: "moss_crawler" }, 2690)).toBe(0);
+  });
   it("labels silver champion fan and pool telegraphs and hides cancelled attacks", () => {
     for (const pattern of ["fan", "pool"]) {
       const silver = { ...mob, archetype: "cave_spitter", attackPattern: pattern };

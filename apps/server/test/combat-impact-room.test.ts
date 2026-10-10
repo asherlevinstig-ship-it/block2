@@ -81,6 +81,7 @@ describe("authoritative combat impacts", () => {
       mob.archetype = "stone_brute"; mob.x = player.x - distance;
       mob.combatState = "windup"; mob.stateUntil = 11_150; mob.targetId = "player";
       mob.attackStartedAt = 10_000;
+      mob.yaw = 90; // Match the initial aim of the manually armed windup.
       internal.mobCommittedAim.set("mob", { x: player.x, y: player.y, z: player.z, yaw: 90 });
       let sequence = 0;
       // Aim lock: 10500. Cue delivery + human reaction + return trip: 400 ms.

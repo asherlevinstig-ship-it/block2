@@ -12,7 +12,7 @@ import { miningAvailability, miningReach, miningProgress, miningDurationMs, mini
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
-import { enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
+import { bruteRecoveryPose, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { animateMobArt, createMobArt, type MobArtRig } from "./mob-art";
@@ -22,7 +22,6 @@ import {
   playerMeleeStrike,
   sampleMeleeStrike,
   mobMeleeImpactMs,
-  mobAimCommitMs,
   mobStrikeGroundOutline,
   BRUTE_SLAM,
   CHAMPION_CHARGE,
@@ -5159,10 +5158,8 @@ app.on("update", (dt: number) => {
           mob.warningPattern = mob.state.attackPattern; mob.warningChargeLength = chargeLength;
         }
         mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
-        const growth = mob.isBrute && mob.state.attackPattern !== "charge" && !presentation.aimLocked
-          ? .65 + .35 * Math.max(0, Math.min(1, (animationNow + serverClock.offset - mob.state.attackStartedAt)
-            / Math.max(1, mob.state.attackReleaseAt - mobAimCommitMs("stone_brute") - mob.state.attackStartedAt))) : 1;
-        mob.warning.setLocalScale(growth, 1, growth);
+        // The marked danger area must always match the eventual damage radius.
+        mob.warning.setLocalScale(1, 1, 1);
         mob.warning.setEulerAngles(0, 0, 0);
       } else {
         const length = enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + .8, z: mob.state.z }, mob.state.yaw, readCollisionWorldBlock);
@@ -5179,15 +5176,16 @@ app.on("update", (dt: number) => {
       ? Math.sin(Math.PI * Math.min(1, Math.max(0, (animationNow + serverClock.offset - mob.state.attackContactEndAt)
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
+    const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
     const bodySize = mob.state.isChampion ? 1.25 : 1;
     mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
     mob.bodyRoot.setLocalPosition(
       0,
-      gaitBob - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06,
+      gaitBob - hitStrength * 0.035 - attackStrength * (mob.isBrute ? 0.07 : 0) - crawlerRecovery * 0.06 - bruteRecovery * .1,
       attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16),
     );
     mob.bodyRoot.setLocalEulerAngles(
-      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5),
+      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 + bruteRecovery * 14 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5),
       0,
       Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3) + defeat * (mob.isBrute ? 7 : 12),
     );

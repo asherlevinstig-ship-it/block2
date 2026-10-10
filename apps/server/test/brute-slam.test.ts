@@ -24,6 +24,19 @@ function fixture(read = flat) {
   return { room, internal, mob, add, arm };
 }
 describe("brute ground slam", () => {
+  it("tracks slowly before commitment, stays planted, and freezes afterwards", () => {
+    const { internal, mob, add } = fixture(); const player = add("first");
+    internal.simulatePlayers(.033);
+    const yaw = mob.yaw; player.x = mob.x; player.z = mob.z + 1.4;
+    vi.setSystemTime(10033); internal.simulatePlayers(.033);
+    expect(Math.abs(mob.yaw - yaw)).toBeCloseTo(3.96);
+    expect(mob.x).toBe(100.5); expect(mob.z).toBe(100.5);
+    vi.setSystemTime(10500); internal.simulatePlayers(.033);
+    const locked = mob.yaw;
+    player.z = mob.z - 1.4;
+    vi.setSystemTime(10800); internal.simulatePlayers(.033);
+    expect(mob.yaw).toBe(locked); expect(mob.aimCommitted).toBe(true);
+  });
   it("draws the same radius as damage with upward-facing warning triangles", () => {
     const points = bruteSlamOutline();
     for (const point of points) expect(Math.hypot(point.x, point.z)).toBeCloseTo(BRUTE_SLAM.radius);
