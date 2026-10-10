@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { rangedAimYaw } from "./ranged-aim.js";
 import { advanceBossHud, initialBossHud } from "./boss-hud.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -3022,6 +3023,20 @@ targetMarker.enabled = false;
 app.root.addChild(targetMarker);
 
 const pointer = { x: canvas.width / 2, y: canvas.height / 2 };
+const rangedPointer = { active: false, x: 0, y: 0 };
+function mouseRangedYaw(fallback: number): number {
+  if (!rangedPointer.active || !camera.camera) return fallback;
+  const rect = canvas.getBoundingClientRect();
+  const x = rangedPointer.x - rect.left, y = rangedPointer.y - rect.top;
+  return rangedAimYaw(camera.camera.screenToWorld(x, y, camera.camera.nearClip), camera.camera.screenToWorld(x, y, camera.camera.farClip), localPlayer.getPosition(), fallback);
+}
+function updateRangedReticle(): void {
+  const ranged = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0;
+  const active = rangedPointer.active && ranged && interactionMode === "combat" && worldReady && defeatScreen.hidden === true && inventoryPanel.hidden === true;
+  combatReticle.hidden = !active;
+  canvas.classList.toggle("ranged-aim", active);
+  if (active) { combatReticle.style.left = `${rangedPointer.x}px`; combatReticle.style.top = `${rangedPointer.y}px`; }
+}
 let currentTarget: VoxelRaycastHit | null = null;
 let targetStateKey = "";
 let interactionMode: InteractionMode = "build";
@@ -3648,6 +3663,8 @@ for (const [button, decision] of [[quizDouble, "double"], [quizQuit, "quit"]] as
 }
 
 function updatePointerPosition(event: PointerEvent): void {
+  rangedPointer.active = event.pointerType === "mouse";
+  rangedPointer.x = event.clientX; rangedPointer.y = event.clientY;
   const rect = canvas.getBoundingClientRect();
   pointer.x = (event.clientX - rect.left) * (canvas.width / rect.width);
   pointer.y = (event.clientY - rect.top) * (canvas.height / rect.height);
@@ -3656,6 +3673,7 @@ function updatePointerPosition(event: PointerEvent): void {
 }
 
 canvas.addEventListener("pointermove", updatePointerPosition);
+canvas.addEventListener("pointerleave", () => { rangedPointer.active = false; updateRangedReticle(); });
 
 function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | null {
   for (const [casterId, mark] of mob.marks) {
@@ -4515,7 +4533,7 @@ function requestAttack(): void {
   const attackDefinition = WEAPON_ATTACK_DEFINITIONS[localMainHandId];
   const player = localPlayer.getPosition();
   const targetMob = nearestLivingMob(player, attackDefinition.range);
-  localActionFacingYaw = targetMob
+  localActionFacingYaw = attackDefinition.projectileTravelMs > 0 && rangedPointer.active ? mouseRangedYaw(localFacingYaw) : targetMob
     ? movementYaw(targetMob.visual.state.x - player.x, targetMob.visual.state.z - player.z, localFacingYaw)
     : currentTarget
       ? movementYaw(currentTarget.x + 0.5 - player.x, currentTarget.z + 0.5 - player.z, localFacingYaw)
@@ -4533,7 +4551,7 @@ function requestAttack(): void {
   const attackName = attackDefinition.combo
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
     : MAIN_HAND_DEFINITIONS[localMainHandId].attackName;
-  status.textContent = targetMob
+  status.textContent = attackDefinition.projectileTravelMs > 0 && rangedPointer.active ? `${attackName} · firing toward your reticle.` : targetMob
     ? attackDefinition.combo && comboStep === 3
       ? `Heavy finisher aimed at ${targetMob.visual.state.name}...`
       : `${attackName} aimed at ${targetMob.visual.state.name}...`
@@ -4824,7 +4842,7 @@ function beginSpecialAim(pointerId: number | null = null): void {
   if (localEquippedSpecial === "venom_fan") {
     const pose = localPlayer.getPosition();
     const target = nearestLivingMob(pose, SPECIAL_DEFINITIONS.venom_fan.range);
-    const yaw = target ? movementYaw(target.visual.state.x - pose.x, target.visual.state.z - pose.z, localFacingYaw) : localFacingYaw;
+    const yaw = rangedPointer.active ? mouseRangedYaw(localFacingYaw) : target ? movementYaw(target.visual.state.x - pose.x, target.visual.state.z - pose.z, localFacingYaw) : localFacingYaw;
     room.send("special", { requestId: `venom-${Date.now()}`, specialId: "venom_fan", yaw });
     localSpecialCooldownUntil = Date.now() + definition.cooldownMs;
     localFacingYaw = yaw;
@@ -5281,6 +5299,8 @@ app.on("update", (dt: number) => {
     ? powerAimActive ? powerAimYaw : localPowerFacingYaw!
     : actionFacingActive
     ? localActionFacingYaw!
+    : interactionMode === "combat" && rangedPointer.active && WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0
+    ? mouseRangedYaw(localFacingYaw)
     : movementYaw(desiredMovement.x, desiredMovement.z, localFacingYaw);
   localFacingYaw = approachYaw(localFacingYaw, desiredFacingYaw, frameTime);
   const current = localPlayer.getPosition();
@@ -5764,6 +5784,7 @@ app.on("update", (dt: number) => {
   camera.setPosition(desiredCamera);
   camera.lookAt(cameraFocus.x, cameraFocus.y - 2, cameraFocus.z);
   updateObjectiveGuidance();
+  updateRangedReticle();
   updateBossHud(animationNow);
   const bodyY = localPlayerRig.root.getLocalPosition().y;
   const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z);

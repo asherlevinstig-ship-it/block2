@@ -19,6 +19,18 @@ function setup(wall = false) {
   return { room, internal, player, client, mob };
 }
 describe("Venom Focus", () => {
+  it("keeps basic ranged shots on the requested yaw despite an off-axis nearby target", () => {
+    const { internal, room, mob } = setup();
+    mob.x = 43; mob.z = 20;
+    internal.pendingAttacks.set("a", { requestId: "aim", mainHandId: "venom_focus", step: 1, yaw: 90, impactAt: 10000 });
+    internal.resolvePendingAttacks(10000);
+    const message = (room.broadcast as any).mock.calls.find((call: any[]) => call[0] === "combat:projectile")[1];
+    expect(message.targetX).toBeCloseTo(47.5);
+    expect(message.targetZ).toBeCloseTo(18);
+    const before = mob.health;
+    internal.resolveWeaponProjectiles(10220);
+    expect(mob.health).toBe(before);
+  });
   it("is owned equipment with familiar basic damage and an automatically bound special", () => {
     const { internal, player, client } = setup();
     expect(equipmentForItem("venom_focus")).toBe("venom_focus");

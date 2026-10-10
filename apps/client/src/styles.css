@@ -430,6 +430,7 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
   transform: translate(-50%, -50%);
 }
 #combat-reticle[hidden] { display: none; }
+canvas.ranged-aim { cursor: none; }
 #quiz-table-prompt, #blacksmith-prompt {
   position: fixed;
   z-index: 21;

@@ -2810,7 +2810,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       );
       if (attackDefinition.projectileTravelMs > 0) {
         const radians = pending.yaw * Math.PI / 180;
-        const endpoint = target ?? {
+        const endpoint = {
           x: player.x + Math.sin(radians) * attackDefinition.range,
           y: player.y,
           z: player.z + Math.cos(radians) * attackDefinition.range,
