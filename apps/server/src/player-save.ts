@@ -18,6 +18,7 @@ import { canEquipMainHand } from "./equipment-rules.js";
 import { ArmourEquipSchema, type ArmourId } from "@blockcraft/protocol";
 import { compatiblePowerOrFallback } from "./power-rules.js";
 import { InventoryItemState, type PlayerState } from "./schema.js";
+import { parseRecoveryBags, restoreRecoveryBags, snapshotRecoveryBags, type RecoveryBagData } from "./death-recovery.js";
 
 export const PLAYER_SAVE_VERSION = 1;
 export const PLAYER_SAVE_HASH = "blockcraft:player-saves:v1";
@@ -35,6 +36,7 @@ export interface PlayerSaveData {
   blacksmithUpgrades: number;
   inventory: Partial<Record<ItemId, number>>;
   storage?: Partial<Record<ItemId, number>>;
+  recoveryBags?: RecoveryBagData[];
   mainHandId: MainHandId;
   armourId?: ArmourId;
   equippedPower: PowerId;
@@ -79,6 +81,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     blacksmithUpgrades: player.blacksmithUpgrades,
     inventory,
     storage,
+    recoveryBags: snapshotRecoveryBags(player),
     mainHandId: player.mainHandId as MainHandId,
     armourId: ArmourEquipSchema.safeParse({ armourId: player.armourId }).data?.armourId ?? "none",
     equippedPower: player.equippedPower as PowerId,
@@ -136,6 +139,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     inventory,
     storage,
     mainHandId,
+    recoveryBags: parseRecoveryBags(value.recoveryBags),
     armourId: ArmourEquipSchema.safeParse({ armourId: value.armourId }).data?.armourId ?? "none",
     equippedPower,
     seismicMastery: isKeyOf(value.seismicMastery, SEISMIC_CLEAVE_UPGRADES.masteries) ? value.seismicMastery : "advancing_fault",
@@ -153,6 +157,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.potionCooldownUntil = save.potionCooldownUntil ?? 0;
   player.blacksmithUpgrades = save.blacksmithUpgrades;
   player.stamina = save.stamina;
+  restoreRecoveryBags(player, save.recoveryBags ?? []);
   for (const [itemId, quantity] of Object.entries(save.inventory) as [ItemId, number][]) {
     const item = new InventoryItemState();
     item.quantity = quantity;

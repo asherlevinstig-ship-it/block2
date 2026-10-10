@@ -1303,3 +1303,6 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .enemy-combat-cue[data-kind="return"] .enemy-combat-cue-track { display: none; }
 .enemy-combat-cue-track { display: block; height: 3px; margin-top: 4px; background: #ffffff20; }
 .enemy-combat-cue-track > span { display: block; height: 100%; background: currentColor; transform-origin: left; }
+#recovery-marker { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 15; max-width: min(90vw, 540px); padding: 10px 16px; border: 1px solid #d9b65d; border-radius: 10px; background: #182218ee; color: #ffe6a1; font: 700 12px system-ui; box-shadow: 0 3px 12px #0006; }
+#recovery-marker:disabled { opacity: .9; cursor: default; }
+#recovery-marker[hidden] { display: none; }

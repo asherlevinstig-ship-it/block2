@@ -28,7 +28,7 @@ function fixture() {
 }
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("defeat and return to town", () => {
-  it("waits for explicit return without moving, restoring health or losing possessions", () => {
+  it("waits for explicit return and leaves spare possessions in a recovery bag", () => {
     const { player, client, internal } = fixture();
     internal.pendingAttacks.set("player", {}); internal.pendingPowers.set("player", {});
     internal.specialMarks.set("player", {}); internal.brambleSnares.set("player", {});
@@ -42,7 +42,11 @@ describe("defeat and return to town", () => {
     internal.returnPlayerToTown(client);
     expect([player.x, player.y, player.z]).toEqual([8.5, 8, 8.5]);
     expect(player.health).toBe(player.maxHealth); expect(player.stamina).toBe(player.maxStamina);
-    expect(player.coins).toBe(47); expect(player.inventory.get("iron_ore")?.quantity).toBe(7);
+    expect(player.coins).toBe(47); expect(player.inventory.get("iron_ore")?.quantity).toBe(0);
+    expect(player.recoveryBags.size).toBe(1);
+    const bag = [...player.recoveryBags.values()][0]!;
+    expect([bag.x, bag.y, bag.z]).toEqual([100, 1, 100]);
+    expect(bag.items.get("iron_ore")?.quantity).toBe(7);
     expect(player.mainHandId).toBe("stone_core_hammer");
     expect(player.invulnerableUntil).toBe(11_500);
     internal.returnPlayerToTown(client);

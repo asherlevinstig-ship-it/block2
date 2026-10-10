@@ -1214,6 +1214,7 @@ interface NetworkPlayer {
   momentumStacks: number;
   equippedTrait: string;
   inventory: unknown;
+  recoveryBags?: Map<string, { x: number; y: number; z: number; items: Map<string, { quantity: number }> }>;
 }
 
 interface RemotePlayerVisual {
@@ -3223,6 +3224,48 @@ function openPersonalStorage(): void {
   storageUI.open();
 }
 storagePrompt.addEventListener("click", openPersonalStorage);
+const recoveryMarker = document.createElement("button"); recoveryMarker.id = "recovery-marker";
+recoveryMarker.type = "button"; recoveryMarker.hidden = true; document.body.append(recoveryMarker);
+const recoveryVisuals = new Map<string, pc.Entity>();
+let nearbyRecoveryBag: string | null = null;
+let recoveryPendingUntil = 0;
+function recoverNearbyBag(): void {
+  if (!room || !nearbyRecoveryBag || performance.now() < recoveryPendingUntil) return;
+  recoveryPendingUntil = performance.now() + 1500;
+  room.send("recovery:collect", { bagId: nearbyRecoveryBag });
+}
+recoveryMarker.addEventListener("click", recoverNearbyBag);
+function updateRecoveryMarker(): void {
+  const own = room ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId) : undefined;
+  const bags = own?.recoveryBags;
+  for (const [id, entity] of recoveryVisuals) if (!bags?.has(id)) { entity.destroy(); recoveryVisuals.delete(id); }
+  let nearest: { id: string; x: number; y: number; z: number; distance: number; items: number } | null = null;
+  const player = localPlayer.getPosition();
+  if (bags) for (const [id, bag] of bags) {
+    let entity = recoveryVisuals.get(id);
+    if (!entity) {
+      entity = new pc.Entity(`recovery:${id}`);
+      addBox(entity, "personal-bag", weaponWoodMaterial, [.65, .5, .5], [0, .25, 0]);
+      addBox(entity, "gold-tie", lanternGlow, [.25, .12, .25], [0, .55, 0]);
+      const beacon = addBox(entity, "recovery-beacon", lanternGlow, [.06, 1.2, .06], [0, 1.25, 0]);
+      if (beacon.render) beacon.render.castShadows = false;
+      entity.setPosition(bag.x, bag.y, bag.z);
+      app.root.addChild(entity); recoveryVisuals.set(id, entity);
+    }
+    const distance = Math.hypot(player.x - bag.x, player.y - bag.y, player.z - bag.z);
+    entity.enabled = worldReady && distance <= 70 && undergroundKnown(bag.x, bag.y, bag.z) && !isCutawayHidden(Math.floor(bag.x), Math.floor(bag.y), Math.floor(bag.z));
+    if (!nearest || distance < nearest.distance) nearest = { id, x: bag.x, y: bag.y, z: bag.z, distance, items: [...bag.items.values()].reduce((total, item) => total + item.quantity, 0) };
+  }
+  nearbyRecoveryBag = nearest && Math.hypot(player.x - nearest.x, player.z - nearest.z) <= 2 && Math.abs(player.y - nearest.y) <= 1.5 ? nearest.id : null;
+  recoveryMarker.hidden = !nearest || !worldReady || !defeatScreen.hidden || !inventoryPanel.hidden || !quizPanel.hidden || !blacksmithPanel.hidden;
+  if (nearest) {
+    recoveryMarker.disabled = !nearbyRecoveryBag || performance.now() < recoveryPendingUntil;
+    const depth = Math.round(nearest.y - player.y);
+    const direction = `${nearest.z < player.z - 2 ? "N" : nearest.z > player.z + 2 ? "S" : ""}${nearest.x < player.x - 2 ? "W" : nearest.x > player.x + 2 ? "E" : ""}`;
+    const label = nearbyRecoveryBag ? `YOUR BAG · ${nearest.items} items · E to recover` : `YOUR BAG · ${Math.ceil(nearest.distance)}m ${direction}${Math.abs(depth) > 1 ? ` · ${Math.abs(depth)}m ${depth < 0 ? "below" : "above"}` : ""} · (${Math.round(nearest.x)}, ${Math.round(nearest.z)})`;
+    if (recoveryMarker.textContent !== label) recoveryMarker.textContent = label;
+  }
+}
 const inventoryPreviewDrawer = document.querySelector<HTMLDetailsElement>("#inventory-preview-drawer")!;
 const inventoryTabs = [...inventoryPanel.querySelectorAll<HTMLButtonElement>("[data-inventory-tab]")];
 function selectInventoryCategory(category: InventoryTab, focus = false): void {
@@ -3593,6 +3636,7 @@ function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | n
 }
 
 function updateTarget(): void {
+  updateRecoveryMarker();
   if (!camera.camera) return;
   const start = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.nearClip);
   const end = camera.camera.screenToWorld(pointer.x, pointer.y, camera.camera.farClip);
@@ -3798,7 +3842,7 @@ function showDefeat(attackerName: string): void {
   closeLoot();
   clearDefeatCombat();
   quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
-  defeatDetail.textContent = `${attackerName} defeated you. Take a breath and return to safety.`;
+  defeatDetail.textContent = `${attackerName} defeated you. Carried minerals and spare loot stay in your personal recovery bag. Equipped gear, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
   defeatScreen.hidden = false;
   returnToTownButton.disabled = !room;
   returnToTownButton.textContent = "Return to Town";
@@ -4733,6 +4777,7 @@ function requestPrimaryAction(): void {
   if (!inventoryPanel.hidden) return;
   if (!lootPanel.hidden) return;
   if (!defeatScreen.hidden) return;
+  if (nearbyRecoveryBag) { recoverNearbyBag(); return; }
   if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
   const nearbyLoot = nearestEquipmentDrop();
   if (nearbyLoot) { openLoot(nearbyLoot); return; }
@@ -5836,6 +5881,11 @@ async function connect(): Promise<void> {
     storageUI.receive(message);
     for (const id of Object.keys(ITEM_DEFINITIONS) as ItemId[]) updateInventoryItem(id, message.carried[id] ?? 0);
   });
+  room.onMessage("recovery:result", (message: string) => {
+    recoveryPendingUntil = 0;
+    status.textContent = message;
+    showCombatFeedback(message.startsWith("Recovered") ? "BAG RECOVERED" : "RECOVERY", "dodge");
+  });
   room.onMessage("block:changed", applyBlockChange);
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
     createWeaponProjectile(message);
@@ -6027,7 +6077,7 @@ async function connect(): Promise<void> {
     defeatScreen.hidden = true;
     worldReady = false;
     room?.send("world:ready");
-    status.textContent = "Back in the Town of Beginnings · health and stamina restored. Nothing lost.";
+    status.textContent = "Back in the Town of Beginnings · follow your recovery marker to reclaim dropped items.";
   });
   room.onMessage("combat:player-hit", (message: PlayerHit) => {
     if (message.playerId !== room?.sessionId) return;
@@ -6203,6 +6253,8 @@ async function connect(): Promise<void> {
     mobVisuals.clear();
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();
+    for (const visual of recoveryVisuals.values()) visual.destroy();
+    recoveryVisuals.clear(); nearbyRecoveryBag = null; recoveryMarker.hidden = true; recoveryPendingUntil = 0;
     closeLoot();
     for (const itemId of inventoryCounts.keys()) updateInventoryItem(itemId, 0);
     for (const telegraph of powerTelegraphs.values()) telegraph.root.destroy();

@@ -133,6 +133,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
+import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
@@ -376,6 +377,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       });
     };
     this.onMessage("player:return", client => this.returnPlayerToTown(client));
+    this.onMessage("recovery:collect", (client, payload: unknown) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !payload || typeof payload !== "object" || !("bagId" in payload) || typeof payload.bagId !== "string" || payload.bagId.length > 80) return;
+      const message = collectRecoveryBag(player, payload.bagId, bag => hasCombatLineOfSight(player, bag, this.readWorldBlock));
+      void this.persistPlayer(client.sessionId, player);
+      client.send("recovery:result", message);
+    });
     aliveMessage("move", (client, payload) => this.handleMove(client, payload));
     aliveMessage("mine", (client, payload) => this.beginMine(client, payload));
     this.onMessage("mine:cancel", (client, payload: unknown) => {
@@ -1361,6 +1369,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       } satisfies DefenseResolved);
     }
     if (!defeated) return true;
+    leaveRecoveryBag(player, `${now}-${++this.lootDropSequence}`);
+    void this.persistPlayer(playerId, player);
     player.defending = false;
     player.momentumStacks = 0;
     this.pendingAttacks.delete(playerId);
@@ -1400,6 +1410,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
     this.verticalVelocities.set(client.sessionId, 0);
     client.send("player:returned", spawn);
+    void this.persistPlayer(client.sessionId, player);
   }
 
   private resolveMobProjectiles(now: number): void {

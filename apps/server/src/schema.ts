@@ -5,6 +5,12 @@ export const InventoryItemState = schema({
 }, "InventoryItemState");
 export type InventoryItemState = SchemaType<typeof InventoryItemState>;
 
+export const RecoveryBagState = schema({
+  x: t.float32(), y: t.float32(), z: t.float32(),
+  items: t.map(InventoryItemState),
+}, "RecoveryBagState");
+export type RecoveryBagState = SchemaType<typeof RecoveryBagState>;
+
 export const PlayerState = schema({
   x: t.float32().default(8.5),
   y: t.float32().default(11),
@@ -27,6 +33,7 @@ export const PlayerState = schema({
   equippedTrait: t.string().default("momentum"),
   inventory: t.map(InventoryItemState),
   storage: t.map(InventoryItemState),
+  recoveryBags: t.map(RecoveryBagState),
   invulnerableUntil: t.float64().default(0),
   mainHandId: t.string().default("longsword"),
   mainHandTag: t.string().default("melee"),
