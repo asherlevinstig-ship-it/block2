@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Block, isInStoneBruteArena, STONE_BRUTE_ARENA_HOME, playerCollides, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { WorldRoom } from "../src/game-room.js";
 import { MobState, PlayerState, WorldState } from "../src/schema.js";
@@ -15,6 +15,24 @@ function fixture(read: WorldBlockReader) {
 }
 
 describe("mob navigation in the authoritative room", () => {
+  it("abandons blocked pursuit without teleporting and does not immediately reacquire", () => {
+    vi.useFakeTimers(); vi.setSystemTime(10000);
+    try {
+      const { room, mob, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
+      const internal = room as any;
+      Object.defineProperty(room, "mobPositionAllowed", { value: () => false });
+      internal.mobHomes.set("test", { x: 100.5, y: 1, z: 100.5 });
+      const player = new PlayerState(); Object.assign(player, { x: 106.5, y: 1, z: 100.5 });
+      room.state.players.set("player", player);
+      for (let now = 10000; now <= 14500; now += 100) { vi.setSystemTime(now); tick(); }
+      expect(mob.awarenessState).toBe("return"); expect(internal.mobAwareness.has("test")).toBe(false);
+      expect({ x: mob.x, y: mob.y, z: mob.z }).toEqual({ x: 100.5, y: 1, z: 100.5 });
+      expect(internal.mobUnreachableUntil.get("test")).toBe(20500);
+      vi.setSystemTime(14600); tick(); expect(mob.awarenessState).toBe("patrol");
+      internal.alertHitMob("test", "player", 14600);
+      expect(internal.mobUnreachableUntil.has("test")).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
   it("publishes spotted and searching state without refreshing the alert every tick", () => {
     let covered = false;
     const { room, mob, tick } = fixture((x, y) => y <= 0 || (covered && x === 102 && y <= 3) ? Block.Stone : Block.Air);

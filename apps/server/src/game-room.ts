@@ -11,6 +11,7 @@ import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } fro
 import { spacedMobDesired } from "./mob-spacing.js";
 import { turnBruteAim } from "./brute-aim.js";
 import { meleeSlotsFull, meleeWaitingGoal } from "./melee-coordination.js";
+import { checkMobProgress, type MobProgress } from "./mob-progress.js";
 import { circleCrawler, createCrawlerPositioning, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
@@ -253,6 +254,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly mobVerticalVelocities = new Map<string, number>();
   private readonly mobNavigation = new Map<string, MobNavigationState>();
   private readonly mobAwareness = new Map<string, MobAwareness>();
+  private readonly mobProgress = new Map<string, MobProgress>();
+  private readonly mobUnreachableUntil = new Map<string, number>();
+  private readonly mobReturning = new Set<string>();
   private readonly crawlerPositioning = new Map<string, CrawlerPositioning>();
   private readonly mobPatrols = new Map<string, MobPatrolState>();
   private readonly roamingRoutes = new Map<string, RoamingRouteState>();
@@ -1011,7 +1015,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private moveNavigatingMob(mobId: string, mob: MobState, desired: { x: number; z: number },
-    goal: { x: number; y: number; z: number }, now: number, allowed: (pose: { x: number; y: number; z: number }) => boolean = this.mobPositionAllowed): void {
+    goal: { x: number; y: number; z: number }, now: number, allowed: (pose: { x: number; y: number; z: number }) => boolean = this.mobPositionAllowed,
+    monitor = true): boolean {
     const navigation = this.mobNavigation.get(mobId) ?? createMobNavigationState();
     this.mobNavigation.set(mobId, navigation);
     const peers = [...this.state.mobs.entries()]
@@ -1025,10 +1030,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
+    const progress = checkMobProgress(this.mobProgress.get(mobId), mob, next, now,
+      monitor && Math.hypot(desired.x - mob.x, desired.z - mob.z) > .001 && isPlayerSupported(this.readWorldBlock, mob.x, mob.y, mob.z));
+    if (progress.state) this.mobProgress.set(mobId, progress.state); else this.mobProgress.delete(mobId);
+    if (progress.action !== "none") {
+      navigation.waypoints = []; navigation.nextPlanAt = now; navigation.heading = undefined;
+    }
     if (Math.hypot(dx, dz) > 0.0001) mob.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
     mob.x = next.x;
     mob.y = next.y;
     mob.z = next.z;
+    return progress.action === "abandon";
   }
 
   private patrolMob(mobId: string, mob: MobState, home: { x: number; y: number; z: number },
@@ -1061,7 +1073,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (!patrol.goal) { patrol.pauseUntil = now + 2000; return; }
     }
     const walking = pursueTarget(mob, patrol.goal, dt, speed, 0.1);
-    this.moveNavigatingMob(mobId, mob, walking, patrol.goal, now, allowed);
+    if (this.moveNavigatingMob(mobId, mob, walking, patrol.goal, now, allowed)) {
+      patrol.goal = null; patrol.pauseUntil = now + 800;
+    }
   }
 
   private displaceMob(mobId: string, mob: MobState, delta: { x: number; z: number }): void {
@@ -1125,6 +1139,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = combatMobDefinition(mob);
     this.spawnLootDrops(mobId, mob, now);
     mob.alive = false;
+    this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     mob.awarenessState = "patrol"; mob.alertUntil = 0;
     this.mobAwareness.delete(mobId);
     this.crawlerPositioning.delete(mobId);
@@ -1540,6 +1555,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
+        this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
         mob.awarenessState = "patrol"; mob.alertUntil = 0;
         this.mobAwareness.delete(mobId);
         const stats = scaledMobStats(definition, dangerBandAt(home));
@@ -1693,11 +1709,21 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
       this.mobAwareness.set(mobId, awareness);
       const previousTarget = awareness.targetId;
-      const target = this.roamingReturning.has(mobId) ? null : awareMobTarget(mob, players, awareness, now, definition.aggroRange,
+      const target = this.roamingReturning.has(mobId) || this.mobReturning.has(mobId) || now < (this.mobUnreachableUntil.get(mobId) ?? 0)
+        ? null : awareMobTarget(mob, players, awareness, now, definition.aggroRange,
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       if (!target) {
         this.crawlerPositioning.delete(mobId);
         this.spitterPositioning.delete(mobId);
+        if (this.mobReturning.has(mobId) && !roamingMembership(mobId)) {
+          if (Math.hypot(mob.x - home.x, mob.z - home.z) <= .65) this.mobReturning.delete(mobId);
+          else {
+            const failed = this.moveNavigatingMob(mobId, mob, pursueTarget(mob, home, deltaTime, definition.speed * mob.speedMultiplier, .3), home, now);
+            mob.awarenessState = "return";
+            if (failed) this.mobReturning.delete(mobId); // Give local patrol another safe goal; never teleport.
+            continue;
+          }
+        }
         if (roamingMembership(mobId)) {
           if (this.roamingEngaged.delete(mobId)) {
             this.roamingReturning.add(mobId); this.mobNavigation.set(mobId, createMobNavigationState());
@@ -1739,8 +1765,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const pursuit = waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, definition.speed * mob.speedMultiplier, .2)
         : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, target.visible ? definition.stopDistance : .3);
       const goal = waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
-      this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
-        && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6));
+      const stuck = this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
+        && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6), !waiting);
+      if (stuck) {
+        this.mobAwareness.delete(mobId); this.crawlerPositioning.delete(mobId); this.spitterPositioning.delete(mobId);
+        this.mobUnreachableUntil.set(mobId, now + 6000);
+        if (roamingMembership(mobId)) this.roamingReturning.add(mobId); else this.mobReturning.add(mobId);
+        mob.awarenessState = "return";
+        continue;
+      }
       // A ranged mob may walk backwards, but still aims its attacks at the player.
       if (target.visible && (definition.attackKind === "projectile" || pursuit.inAttackRange)) {
         mob.yaw = waiting ? Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI : pursuit.yaw;
@@ -2636,6 +2669,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.mobAwareness.set(mobId, awareness);
     const mob = this.state.mobs.get(mobId);
     if (mob) { mob.alertUntil = now + 900; mob.awarenessState = "engaged"; }
+    this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     this.roamingReturning.delete(mobId);
   }
 
