@@ -1303,6 +1303,7 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 @keyframes resource-pickup { 0% { opacity: 0; transform: translateY(12px) scale(.9); } 12%, 75% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-12px); } }
 @media (prefers-reduced-motion: reduce) { .resource-toast { animation: none; } }
 /* Small, steady enemy cues: no flashing or camera movement. */
+.ranged-popup-near-miss { width: 16px; height: 2px; border-radius: 2px; background: #d3f4ff; box-shadow: 0 0 4px #c3edff88; }
 .enemy-combat-cue {
   position: fixed;
   transform: translate(-50%, -100%);

@@ -11,6 +11,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createInventoryPortrait } from "./inventory-preview.js";
 import { rangedStyle } from "./ranged-style.js";
+import { projectileNearMiss } from "./projectile-near-miss.js";
 import { BRUTE_VOLLEY, bruteRockLanes } from "@blockcraft/protocol";
 import { projectilePresentation } from "./projectile-clock.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
@@ -1835,13 +1836,13 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" = "hit
 let rangedReticleHitUntil = 0;
 let rangedPopupSequence = 0;
 const rangedPopups: { element: HTMLElement; position: pc.Vec3; startedAt: number; duration: number; damage: boolean; offset: number }[] = [];
-function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "enemy" | "terrain", defeated = false, color?: readonly number[]): void {
+function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "enemy" | "terrain" | "near-miss", defeated = false, color?: readonly number[]): void {
   const element = document.createElement("span");
   element.className = `ranged-popup ranged-popup-${kind}${defeated ? " defeated" : ""}`;
   element.textContent = text; element.setAttribute("aria-hidden", "true");
   if (color) element.style.color = `rgb(${color.map(channel => Math.round(channel * 255)).join(",")})`;
   document.body.append(element);
-  rangedPopups.push({ element, position: position.clone(), startedAt: performance.now(), duration: kind === "damage" ? 800 : 240,
+  rangedPopups.push({ element, position: position.clone(), startedAt: performance.now(), duration: kind === "damage" ? 800 : kind === "near-miss" ? 160 : 240,
     damage: kind === "damage", offset: kind === "damage" ? (++rangedPopupSequence % 3 - 1) * 14 : 0 });
   while (rangedPopups.length > 32) rangedPopups.shift()!.element.remove();
 }
@@ -1917,6 +1918,9 @@ interface BrambleSnareVisual {
 
 interface WeaponProjectileVisual {
   projectileId: string;
+  enemy?: boolean;
+  sampled?: boolean;
+  nearMissPlayed?: boolean;
   entity: pc.Entity;
   material: pc.StandardMaterial;
   start: pc.Vec3;
@@ -1937,6 +1941,7 @@ const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
 const weaponProjectileVisuals: WeaponProjectileVisual[] = [];
+let nextNearMissAt = 0;
 // Retain impact style after the short-lived mesh ends, until server confirmation arrives.
 const projectileWeapons = new Map<string, MainHandId>();
 const mobHazardVisuals = new Map<string, MobHazardVisual>();
@@ -1997,6 +2002,7 @@ function createMobProjectile(message: MobProjectileReleased): void {
   app.root.addChild(entity);
   weaponProjectileVisuals.push({
     projectileId: message.projectileId,
+    enemy: true,
     entity,
     material,
     start,
@@ -5773,6 +5779,20 @@ app.on("update", (dt: number) => {
     const hit = direction.length() > 0.00001 ? voxelRaycast(from, direction, direction.length(), readCollisionWorldBlock) : null;
     if (hit) next.copy(from).add(direction.normalize().mulScalar(hit.distance));
     projectile.entity.setPosition(next);
+    if (projectile.enemy && projectile.sampled && !projectile.nearMissPlayed && !hit && worldReady && potionHealth > 0
+      && !document.hidden && wildernessTerritoryAt(localPlayer.getPosition().x, localPlayer.getPosition().z) !== null) {
+      const player = localPlayer.getPosition();
+      const near = projectileNearMiss(from, next, player);
+      if (near) {
+        projectile.nearMissPlayed = true;
+        if (animationNow >= nextNearMissAt && enemyCueLineClear({ x: player.x, y: player.y + .8, z: player.z }, near, readCollisionWorldBlock)) {
+          nextNearMissAt = animationNow + 350;
+          combatAudio.play("nearMiss", enemyCuePan(near.x, player.x, 2));
+          createRangedPopup(new pc.Vec3(near.x, near.y, near.z), "", "near-miss");
+        }
+      }
+    }
+    projectile.sampled = true;
     if (progress < 1 && !hit) continue;
     projectile.material.opacity = 0;
     projectile.material.update();
@@ -6526,6 +6546,7 @@ async function connect(): Promise<void> {
     brambleSnareVisuals.clear();
     for (const projectile of weaponProjectileVisuals) { projectile.entity.destroy(); projectile.material.destroy(); }
     weaponProjectileVisuals.length = 0;
+    nextNearMissAt = 0;
     projectileWeapons.clear();
     for (const hazard of mobHazardVisuals.values()) hazard.root.destroy();
     mobHazardVisuals.clear();

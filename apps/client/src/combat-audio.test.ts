@@ -10,6 +10,11 @@ const idle: EnemyCueSnapshot = {
 };
 
 describe("enemy combat audio", () => {
+  it("keeps close-miss whooshes quiet, brief and spaced apart", () => {
+    const cue = WEAPON_CUE_DEFINITIONS.nearMiss;
+    expect(cue.minimumIntervalMs).toBeGreaterThanOrEqual(350);
+    expect(cue.tones.every(tone => tone.gain <= .02 && tone.durationMs <= 100)).toBe(true);
+  });
   it("gives acid and venom distinct quiet confirmed-impact sounds", () => {
     expect(WEAPON_CUE_DEFINITIONS.acidHit.tones[0]!.startHz).toBeLessThan(200);
     expect(WEAPON_CUE_DEFINITIONS.venomHit.tones[0]!.startHz).toBeGreaterThan(600);
