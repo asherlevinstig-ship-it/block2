@@ -1,4 +1,6 @@
 import { Client, Room } from "@colyseus/core";
+import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
+import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -284,6 +286,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly parties = new Parties();
   private readonly combatContributions = new CombatContributions();
   private readonly silverGuardVolley = new SilverGuardVolley();
+  private readonly attackCoordination = new AttackCoordination();
   private readonly wildernessEvent = new WildernessEventCycle();
   private readonly forestPortalCycle = new ForestPortalCycle();
   private forestDungeonActive = false;
@@ -341,6 +344,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("buried-chamber-brute", "stone_brute", CAVE_HIDDEN_HOME);
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
+    this.registerMob("frontier-support-spitter", "cave_spitter", MIXED_FRONTIER_SPITTER);
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
       client.send("mineral:status", this.mineralStatus());
@@ -1042,6 +1046,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    if (isMixedFrontierMob(id)) return mixedFrontierAllows(pose);
     const forest = FOREST_DUNGEON_MOBS.find(mob => mob.id === id);
     if (forest) return pose.y >= 7 && pose.y <= 9 && pose.z > 156 && pose.z < 174
       && pose.x > 156 + (forest.stage - 1) * 12 && pose.x < 156 + forest.stage * 12;
@@ -1845,6 +1850,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           continue;
         }
         if (definition.attackKind === "projectile") {
+          if (mob.archetype === "cave_spitter" && !allyFireLaneClear(mobId, mob, aim,
+            [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
+            const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
+            positioning.sidestepPending = true; this.spitterPositioning.set(mobId, positioning);
+            mob.targetId = ""; continue;
+          }
           const shots = mob.attackPattern === "rocks" ? bruteRockEndpoints(mob, aim.yaw)
             : mob.isChampion && mobId !== WILDERNESS_EVENT_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           const origin = { x: mob.x, y: mob.y, z: mob.z };
@@ -1959,12 +1970,23 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.yaw = waiting ? Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI : pursuit.yaw;
       }
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
+      const windupMs = mobId === "frontier-brute" && mob.attackPattern !== "rocks"
+        ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs;
+      if (definition.attackKind === "projectile" && mob.archetype === "cave_spitter"
+        && !allyFireLaneClear(mobId, mob, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
+        positioning.sidestepPending = true;
+        continue;
+      }
       const actualDistance = Math.hypot(target.x - mob.x, target.z - mob.z);
       const inAttackRange = definition.attackKind === "projectile"
         ? (rangedPursuit?.cornered || actualDistance >= definition.minimumAttackRange - 0.05) && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
       if (waiting || (definition.attackKind === "melee" && meleeSlotsFull(target.id, attackers()))
         || !this.silverGuardVolley.canStart(mobId, now)
+        || !this.attackCoordination.canStart(mobId, target.id, mob, now, now + windupMs, (id, startedAt) => {
+          const peer = this.state.mobs.get(id);
+          return Boolean(peer?.alive && peer.attackStartedAt === startedAt && ["windup", "strike", "recover"].includes(peer.combatState));
+        })
         || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
@@ -1974,8 +1996,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.crawlerPositioning.delete(mobId);
       if (definition.attackKind !== "projectile") this.spitterPositioning.delete(mobId);
       this.mobNavigation.set(mobId, createMobNavigationState());
-      mob.stateUntil = now + (mobId === "frontier-brute" && mob.attackPattern !== "rocks" ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs);
+      mob.stateUntil = now + windupMs;
       this.setMobAttackTimeline(mob, now, mob.stateUntil, mobId);
+      this.attackCoordination.started(mobId, target.id, mob, now, mob.stateUntil);
       mob.targetId = target.id;
       mob.aimCommitted = false;
       mob.yaw = Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI;

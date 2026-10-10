@@ -1,5 +1,6 @@
 import { isEquipmentItem, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
+import { MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; combatState: string; targetId: string };
@@ -8,6 +9,7 @@ type Loot = Pose & { ownerId: string; itemId: string; expiresAt: number };
 export interface WorldObjectiveProgress { id: string | null; fingerprint: string }
 export const createObjectiveProgress = (): WorldObjectiveProgress => ({ id: null, fingerprint: "" });
 const GROUPS = [
+  { id: "frontier-mixed", title: "Frontier Warband", detail: "Draw out the crawler, dodge the brute's rocks, then pressure the support spitter. Counter during recovery.", ids: [...MIXED_FRONTIER_IDS] },
   { id: "greenwood-event", title: "Venom Matriarch · Shared Event", detail: "Dodge aimed shots and fan gaps. Fight together: eligible contributors each receive personal equipment.", ids: [WILDERNESS_EVENT_ID] },
   { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Clear the nearby crawlers and collect their item drops.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"] },
   { id: "silver-guards", title: "Silver Guard Clearing", detail: "Defeat both spitters to open the Forest Dungeon portal. Use the stone cover.", ids: ["cave-spitter", "frontier-spitter"] },

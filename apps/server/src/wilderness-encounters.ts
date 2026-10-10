@@ -1,6 +1,12 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import { SILVER_GUARD_HOMES } from "@blockcraft/voxel-world";
 export const SILVER_GUARD_IDS = ["cave-spitter", "frontier-spitter"] as const;
+export const MIXED_FRONTIER_IDS = ["frontier-crawler", "frontier-support-spitter", "frontier-brute-east"] as const;
+export const MIXED_FRONTIER_CENTER = { x: 68.5, y: 8, z: 34.5 };
+export const MIXED_FRONTIER_SPITTER = { x: 68.5, y: 8, z: 36.5 };
+export const isMixedFrontierMob = (id: string) => MIXED_FRONTIER_IDS.some(member => member === id);
+export const mixedFrontierAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - MIXED_FRONTIER_CENTER.y) <= 1.5
+  && Math.hypot(pose.x - MIXED_FRONTIER_CENTER.x, pose.z - MIXED_FRONTIER_CENTER.z) <= 14;
 /** Existing encounter IDs remain stable for objective tracking and saved worlds. */
 export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchetypeId; x: number; y: number; z: number }[] = [
   { id: "moss-crawler", archetype: "moss_crawler", x: 35.5, y: 8, z: -8.5 },

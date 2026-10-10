@@ -8,6 +8,14 @@ const mob = (x: number, z: number, more = {}) => ({ x, y: 8, z, alive: true, nam
 const select = (pose = player(48, 28), mobs = new Map([["cave-spitter", mob(46.5, 31.5)], ["frontier-spitter", mob(50.5, 25.5)]]), previous: string | null = null) => nearbyObjective("tester", pose, mobs, [], [], 10000, previous);
 
 describe("world objective director", () => {
+  it("groups the mixed frontier enemies into one nearby encounter", () => {
+    const mobs = new Map([["frontier-crawler", mob(63.5, 35.5)], ["frontier-support-spitter", mob(68.5, 36.5)],
+      ["frontier-brute-east", mob(70.5, 32.5)]]);
+    const objective = select(player(67, 35), mobs);
+    expect(objective.objectiveId).toBe("frontier-mixed");
+    expect(objective.targetMobIds).toHaveLength(3);
+    expect(objective.title).toBe("Frontier Warband");
+  });
   it("selects the nearby silver encounter without a prerequisite quest", () => {
     expect(select().objectiveId).toBe("silver-guards");
     expect(select().targetMobIds).toEqual(["cave-spitter", "frontier-spitter"]);

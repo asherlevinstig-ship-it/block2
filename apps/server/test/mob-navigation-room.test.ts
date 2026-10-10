@@ -48,7 +48,7 @@ describe("mob navigation in the authoritative room", () => {
     mob.x = 106.5; tick(); expect(mob.awarenessState).toBe("return"); expect(mob.x).toBeLessThan(106.5);
     mob.x = 100.5; tick(); expect(mob.awarenessState).toBe("patrol");
   });
-  it("allows only two same-tick windups when a whole group reaches one player", () => {
+  it("starts one windup at a time when a whole group reaches one player", () => {
     const { room, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
     room.state.mobs.clear();
     const player = new PlayerState(); Object.assign(player, { x: 100.5, y: 1, z: 100.5 });
@@ -58,8 +58,8 @@ describe("mob navigation in the authoritative room", () => {
       room.state.mobs.set(id, mob);
     }
     tick();
-    expect([...room.state.mobs.values()].filter(mob => mob.combatState === "windup")).toHaveLength(2);
-    expect([...room.state.mobs.values()].filter(mob => mob.combatState === "idle")).toHaveLength(2);
+    expect([...room.state.mobs.values()].filter(mob => mob.combatState === "windup")).toHaveLength(1);
+    expect([...room.state.mobs.values()].filter(mob => mob.combatState === "idle")).toHaveLength(3);
     for (const mob of room.state.mobs.values()) expect(playerCollides((_x, y) => y <= 0 ? Block.Stone : Block.Air, mob.x, mob.y, mob.z)).toBe(false);
   });
   it("holds a third melee attacker back and releases its turn after interruption", () => {
