@@ -153,6 +153,26 @@ export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, 
 export const WILDERNESS_CAMPS = MINERAL_DEPOSITS.map(deposit => ({ ...deposit,
   kind: deposit.block === Block.IronOre ? "nest" as const : deposit.radius === 1 ? "spitter" as const : "ruin" as const,
 }));
+export const SILVER_GUARD_CLEARING = { minX: 44, maxX: 55, minZ: 25, maxZ: 33 } as const;
+export const SILVER_GUARD_HOMES = [{ x: 46.5, y: 8, z: 31.5 }, { x: 50.5, y: 8, z: 25.5 }] as const;
+export const SILVER_GUARD_COVER = [{ x: 44, z: 25 }, { x: 52, z: 25 }, { x: 54, z: 30 }] as const;
+export function isInSilverGuardClearing(x: number, z: number): boolean {
+  const area = SILVER_GUARD_CLEARING;
+  return x >= area.minX && x <= area.maxX + 1 && z >= area.minZ && z <= area.maxZ + 1;
+}
+export function isSilverRetreatTrail(x: number, z: number): boolean {
+  return x >= 8 && x <= 10 && z >= 30 && z <= 32
+    || x >= 9 && x <= 40 && z >= 31 && z <= 33
+    || x >= 39 && x <= 41 && z >= 28 && z <= 32
+    || x >= 40 && x <= 48 && z >= 27 && z <= 29;
+}
+/** Low stone cover blocks real shots; ore is layered afterwards and remains exposed. */
+export function silverGuardEncounterBlock(x: number, y: number, z: number): BlockId | null {
+  if (y < SURFACE_HEIGHT || (!isInSilverGuardClearing(x, z) && !isSilverRetreatTrail(x, z))) return null;
+  if (y === SURFACE_HEIGHT) return isSilverRetreatTrail(x, z) ? Block.Dirt : Block.Grass;
+  const cover = SILVER_GUARD_COVER.some(rock => x >= rock.x && x <= rock.x + 1 && z >= rock.z && z <= rock.z + 1);
+  return cover && y <= SURFACE_HEIGHT + 2 ? Block.Stone : Block.Air;
+}
 /** Broken cover, never a closed enclosure. The central ore and cardinal approaches stay open. */
 export function wildernessCampBlock(x: number, y: number, z: number): BlockId | null {
   if (y < SURFACE_HEIGHT || isInStoneBruteArena(x, z)
@@ -475,6 +495,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         const campBlock = wildernessCampBlock(worldX, y, worldZ);
         if (campBlock !== null) blocks[chunkIndex(localX, y, localZ)] = campBlock;
         const mineralBlock = mineralOutcropBlock(worldX, y, worldZ);
+        const silverGuardBlock = silverGuardEncounterBlock(worldX, y, worldZ);
+        if (silverGuardBlock !== null) blocks[chunkIndex(localX, y, localZ)] = silverGuardBlock;
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;
         // The authored cave owns its subsurface geometry, regardless of surface biome overlays.
         if (caveBlock !== null && y < SURFACE_HEIGHT) blocks[chunkIndex(localX, y, localZ)] = caveBlock;

@@ -136,6 +136,7 @@ import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
 import { CombatContributions } from "./combat-contributions.js";
+import { SilverGuardVolley } from "./silver-guard-volley.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
@@ -274,6 +275,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly lastNameAt = new Map<string, number>();
   private readonly parties = new Parties();
   private readonly combatContributions = new CombatContributions();
+  private readonly silverGuardVolley = new SilverGuardVolley();
   private readonly lastPartyRequestAt = new Map<string, number>();
   private lastPartyUpdateAt = -Infinity;
   private readonly trading = new Trading((a, b) => hasCombatLineOfSight(a, b, this.readWorldBlock));
@@ -1831,10 +1833,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         ? (rangedPursuit?.cornered || actualDistance >= definition.minimumAttackRange - 0.05) && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
       if (waiting || (definition.attackKind === "melee" && meleeSlotsFull(target.id, attackers()))
+        || !this.silverGuardVolley.canStart(mobId, now)
         || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       mob.combatState = "windup";
+      this.silverGuardVolley.started(mobId, now);
       this.crawlerPositioning.delete(mobId);
       if (definition.attackKind !== "projectile") this.spitterPositioning.delete(mobId);
       this.mobNavigation.set(mobId, createMobNavigationState());

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Block, WILDERNESS_CAMPS, SURFACE_HEIGHT, generateChunk, getBlock, worldToChunk, playerCollides,
+import { Block, WILDERNESS_CAMPS, SILVER_GUARD_COVER, SURFACE_HEIGHT, generateChunk, getBlock, worldToChunk, playerCollides,
   isPlayerSupported, voxelRaycast, wildernessCampBlock, type WorldBlockReader, type GeneratedChunk } from "../src/index.js";
 function reader(seed: string): WorldBlockReader {
   const chunks = new Map<string, GeneratedChunk>();
@@ -36,7 +36,10 @@ describe("readable deposit camps", () => {
     for (const camp of WILDERNESS_CAMPS.filter(c => c.kind !== "nest")) {
       const dx = camp.kind === "spitter" ? 3 : 4;
       const dz = camp.kind === "spitter" ? 2 : 4;
-      const x = camp.x + dx; const z = camp.z + dz;
+      const cover = camp.x === 48 && camp.z === 28
+        ? SILVER_GUARD_COVER[2]
+        : { x: camp.x + dx, z: camp.z + dz };
+      const { x, z } = cover;
       expect(read(x, 8, z)).toBe(Block.Stone); expect(read(x, 9, z)).toBe(Block.Stone);
       expect(playerCollides(read, x + .5, 8, z + .5)).toBe(true);
       const hit = voxelRaycast({ x: x - 1, y: 8.8, z: z + .5 }, { x: 1, y: 0, z: 0 }, 3, read);
