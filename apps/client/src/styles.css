@@ -42,7 +42,8 @@ html, body, #game {
 
 #game { display: block; touch-action: none; }
 
-button { font: inherit; }
+button { font: inherit; cursor: pointer; }
+button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 
 #development-banner {
   position: fixed;
