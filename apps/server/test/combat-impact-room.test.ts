@@ -44,11 +44,29 @@ function fixture(read = flat) {
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe("authoritative combat impacts", () => {
+  it.each(["bow", "acid_gland_focus", "venom_focus"].flatMap(weapon => [150, 300, 600].flatMap(rtt => [true, false].map(evades => [weapon as MainHandId, rtt, evades] as const))))(
+    "%s checks the moving target, not its launch position, with %s ms RTT (evades=%s)", (weapon, rtt, evades) => {
+      const { mob, internal, release } = fixture();
+      // Request reaches the server after one-way latency; targets continue moving throughout flight.
+      const startedAt = 10_000 + rtt / 2;
+      vi.setSystemTime(startedAt);
+      mob.z = evades ? 100.5 : 103.5;
+      release(weapon);
+      const definition = WEAPON_ATTACK_DEFINITIONS[weapon];
+      internal.resolveWeaponProjectiles(startedAt + definition.projectileTravelMs * .25);
+      expect(mob.health).toBe(30);
+      mob.z = evades ? 103.5 : 100.5;
+      for (let elapsed = definition.projectileTravelMs * .25 + 16; elapsed < definition.projectileTravelMs; elapsed += 16)
+        internal.resolveWeaponProjectiles(startedAt + elapsed);
+      internal.resolveWeaponProjectiles(startedAt + definition.projectileTravelMs);
+      expect(mob.health).toBe(evades ? 30 : 30 - definition.attacks[0]!.damage);
+    });
   it.each(["bow", "forged_bow", "acid_gland_focus", "venom_focus"] as const)("%s uses shared flight timing and only damages on impact", weapon => {
     const { mob, internal, events, release } = fixture();
     const definition = WEAPON_ATTACK_DEFINITIONS[weapon];
     release(weapon);
     expect(events.find(event => event.type === "combat:projectile")?.payload.travelMs).toBe(definition.projectileTravelMs);
+    expect(events.find(event => event.type === "combat:projectile")?.payload.releasedAt).toBe(10_000);
     expect(mob.health).toBe(30);
     internal.resolveWeaponProjectiles(10_000 + Math.floor(definition.projectileTravelMs * .25));
     expect(mob.health).toBe(30);
@@ -187,7 +205,7 @@ describe("authoritative combat impacts", () => {
     internal.resolveWeaponProjectiles(10_180); expect(mob.health).toBe(29);
     internal.resolveWeaponProjectiles(10_300); expect(mob.health).toBe(29);
   });
-  it.each(["bow", "magic_focus", "acid_gland_focus"] as const)("blocks %s projectile damage with terrain", weapon => {
+  it.each(["bow", "magic_focus", "acid_gland_focus", "venom_focus"] as const)("blocks %s projectile damage with terrain", weapon => {
     const { mob, internal, events, release } = fixture((x, y, z) => x === 102 && y >= 1 && y <= 3 ? Block.Stone : flat(x, y, z));
     release(weapon); internal.resolveWeaponProjectiles(10_400);
     expect(mob.health).toBe(30);
@@ -285,11 +303,11 @@ describe("authoritative combat impacts", () => {
     expect(internal.mobHazards.size).toBe(0);
     internal.resolveMobProjectiles(12_000); expect(player.health).toBe(4);
   });
-  it.each([4.7, 7].flatMap(distance => [-1, 1].map(side => [distance, side] as const)))(
-    "allows walking escape from a spitter at %s blocks in direction %s with 300 ms RTT", (distance, side) => {
+  it.each([4.7, 7].flatMap(distance => [-1, 1].flatMap(side => [150, 300, 600].map(rtt => [distance, side, rtt] as const))))(
+    "allows walking escape from a spitter at %s blocks in direction %s with %s ms RTT", (distance, side, rtt) => {
       const { player, mob, internal, events } = fixture(); mob.archetype = "cave_spitter";
       mob.x = player.x + distance; internal.simulatePlayers(0.033);
-      const release = mob.attackReleaseAt; const moveAt = release - 450 + 150 + 100 + 150;
+      const release = mob.attackReleaseAt; const moveAt = release - 450 + rtt / 2 + 100 + rtt / 2;
       let sequence = 0;
       for (let now = 10_033; now < release + 1100; now += 33) {
         vi.setSystemTime(now);

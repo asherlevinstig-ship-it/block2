@@ -2169,7 +2169,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         this.pendingWeaponProjectiles.set(projectileId, { requestId: parsed.data.requestId, mainHandId: "venom_focus", step: 1, yaw: parsed.data.yaw + offset,
           impactAt: now + fan.travelMs, projectileId, attackerId: client.sessionId, start, end, position: start, startedAt: now });
         this.broadcast("combat:projectile", { projectileId, attackerId: client.sessionId, mainHandId: "venom_focus", x: player.x, y: player.y, z: player.z,
-          targetX: endpoint.x, targetY: endpoint.y, targetZ: endpoint.z, travelMs: fan.travelMs } satisfies WeaponAttackReleased);
+          targetX: endpoint.x, targetY: endpoint.y, targetZ: endpoint.z, travelMs: fan.travelMs, releasedAt: now } satisfies WeaponAttackReleased);
       }
       return;
     }
@@ -2833,6 +2833,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           targetY: endpoint.y,
           targetZ: endpoint.z,
           travelMs: attackDefinition.projectileTravelMs,
+          releasedAt: now,
         } satisfies WeaponAttackReleased);
         continue;
       }

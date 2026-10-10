@@ -11,6 +11,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createInventoryPortrait } from "./inventory-preview.js";
 import { rangedStyle } from "./ranged-style.js";
+import { projectilePresentation } from "./projectile-clock.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
@@ -1955,6 +1956,8 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
 function createWeaponProjectile(message: WeaponAttackReleased): void {
   projectileWeapons.set(message.projectileId, message.mainHandId);
   while (projectileWeapons.size > 128) projectileWeapons.delete(projectileWeapons.keys().next().value!);
+  const flight = projectilePresentation(message.releasedAt, serverClock.offset, performance.now(), message.travelMs);
+  if (flight.expired) return;
   const style = rangedStyle(message.mainHandId);
   const entity = new pc.Entity(`${message.mainHandId}-projectile`);
   entity.addComponent("render", { type: style.shape });
@@ -1972,12 +1975,14 @@ function createWeaponProjectile(message: WeaponAttackReleased): void {
     material,
     start,
     end,
-    startedAt: performance.now(),
-    durationMs: Math.max(80, message.travelMs),
+    startedAt: flight.startedAt,
+    durationMs: flight.durationMs,
   });
 }
 
 function createMobProjectile(message: MobProjectileReleased): void {
+  const flight = projectilePresentation(message.releasedAt, serverClock.offset, performance.now(), message.travelMs);
+  if (flight.expired) return;
   const entity = new pc.Entity("acid-projectile");
   entity.addComponent("render", { type: "sphere" });
   const material = powerMaterial(new pc.Color(0.54, 1, 0.08), 0.94);
@@ -1993,8 +1998,8 @@ function createMobProjectile(message: MobProjectileReleased): void {
     material,
     start,
     end,
-    startedAt: message.releasedAt === undefined ? performance.now() : message.releasedAt - serverClock.offset,
-    durationMs: Math.max(160, message.travelMs),
+    startedAt: flight.startedAt,
+    durationMs: flight.durationMs,
   });
 }
 
