@@ -10,6 +10,15 @@ const target = { x: 102.5, y: 1, z: 100.5 };
 const anywhere = () => true;
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 describe("controlled spitter positioning", () => {
+  it("chooses only the sidestep that opens an allied firing lane, and safely skips both if blocked", () => {
+    const state = createSpitterPositioning(); state.sidestepPending = true;
+    const distant = { ...target, x: home.x + 6 };
+    const next = positionSpitter(home, distant, home, state, 10000, .1, 1.05, flat, anywhere, pose => pose.z > home.z);
+    expect(next.repositioning).toBe(true); expect(state.goal!.z).toBeGreaterThan(home.z);
+    const blocked = createSpitterPositioning(); blocked.sidestepPending = true;
+    expect(positionSpitter(home, distant, home, blocked, 10000, .1, 1.05, flat, anywhere, () => false).repositioning).toBe(false);
+    expect(blocked.sidestepPending).toBe(false);
+  });
   it("takes one stable speed-limited sidestep after a shot and alternates sides", () => {
     const state = createSpitterPositioning(); state.sidestepPending = true;
     const distant = { ...target, x: home.x + 6 };

@@ -17,7 +17,8 @@ export const createSpitterPositioning = (): SpitterPositioning => ({ goal: null,
 
 /** Commit to a short escape, not a new direction every time the player circles. */
 export function positionSpitter(mob: Position, target: Position, home: Position, state: SpitterPositioning,
-  now: number, dt: number, speed: number, read: WorldBlockReader, allowed: (pose: Position) => boolean) {
+  now: number, dt: number, speed: number, read: WorldBlockReader, allowed: (pose: Position) => boolean,
+  clearShot: (pose: Position) => boolean = () => true) {
   const distance = Math.hypot(target.x - mob.x, target.z - mob.z);
   const yaw = distance < .001 ? 0 : Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI;
   if (state.goal && (now >= state.retreatUntil || (!state.sidestepping && distance >= 5.2) || Math.hypot(state.goal.x - mob.x, state.goal.z - mob.z) < .15)) {
@@ -52,7 +53,7 @@ export function positionSpitter(mob: Position, target: Position, home: Position,
       const goal = { x: mob.x + Math.cos(direction) * .8 * sign, y: mob.y,
         z: mob.z - Math.sin(direction) * .8 * sign };
       if (safeMobCorridor(mob, goal, read, pose => allowed(pose) && Math.hypot(pose.x - home.x, pose.z - home.z) <= 6)
-        && hasCombatLineOfSight(goal, target, read)) {
+        && hasCombatLineOfSight(goal, target, read) && clearShot(goal)) {
         state.goal = goal; state.sidestepping = true; state.retreatUntil = now + 900;
         state.side = -sign; break;
       }

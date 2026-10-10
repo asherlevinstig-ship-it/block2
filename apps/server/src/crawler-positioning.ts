@@ -15,9 +15,10 @@ export function retreatCrawler(mob: Position, yaw: number, now: number, dt: numb
 }
 export const CRAWLER_CIRCLE_MS = 600;
 export interface CrawlerPositioning { targetId: string; startedAt: number | null; direction: number }
-export function createCrawlerPositioning(id: string, targetId: string): CrawlerPositioning {
+export function createCrawlerPositioning(id: string, targetId: string, peers: readonly string[] = []): CrawlerPositioning {
   const seed = [...id].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) | 0, 0);
-  return { targetId, startedAt: null, direction: seed % 2 === 0 ? 1 : -1 };
+  const group = [...new Set([...peers, id])].sort();
+  return { targetId, startedAt: null, direction: (group.length > 1 ? group.indexOf(id) : seed) % 2 === 0 ? 1 : -1 };
 }
 /** One short flank per attack cycle. Expiry is time-based even if terrain blocks it. */
 export function circleCrawler(mob: Position, target: Position, state: CrawlerPositioning,

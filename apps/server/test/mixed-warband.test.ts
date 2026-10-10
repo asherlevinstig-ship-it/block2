@@ -35,6 +35,12 @@ describe("mixed frontier warband", () => {
     const last = new Map<string, number>(), starts: { id: string; at: number; release: number }[] = [];
     for (let now = 10_000; now < 28_000; now += 33) {
       vi.setSystemTime(now); internal.simulatePlayers(.033);
+      const peers = [...room.state.mobs.values()];
+      for (let a = 0; a < peers.length; a++) for (let b = a + 1; b < peers.length; b++) {
+        const left = peers[a]!, right = peers[b]!;
+        const minimum = left.archetype === "stone_brute" || right.archetype === "stone_brute" ? 1.15 : .75;
+        expect(Math.hypot(left.x - right.x, left.z - right.z)).toBeGreaterThanOrEqual(minimum - .01);
+      }
       for (const [id, mob] of room.state.mobs) {
         if (mob.combatState !== "windup" || last.get(id) === mob.attackStartedAt) continue;
         starts.push({ id, at: mob.attackStartedAt, release: mob.attackReleaseAt }); last.set(id, mob.attackStartedAt);

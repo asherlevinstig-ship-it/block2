@@ -11,7 +11,7 @@ import { Trading } from "./trading.js";
 import { BLACKSMITH_STOCK, BlacksmithBuySchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
-import { spacedMobDesired } from "./mob-spacing.js";
+import { spacedMobDesired, mobPersonalSpace } from "./mob-spacing.js";
 import { turnBruteAim } from "./brute-aim.js";
 import { meleeSlotsFull, meleeWaitingGoal } from "./melee-coordination.js";
 import { checkMobProgress, type MobProgress } from "./mob-progress.js";
@@ -1082,11 +1082,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const peers = [...this.state.mobs.entries()]
       .filter(([id, peer]) => id !== mobId && peer.alive && Math.abs(peer.y - mob.y) < 1
         && Math.hypot(peer.x - mob.x, peer.z - mob.z) < 2)
-      .map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z }));
-    const spaced = spacedMobDesired(mobId, mob, desired, peers);
+      .map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, archetype: peer.archetype }));
+    const spaced = spacedMobDesired(mobId, mob, desired, peers, mob.archetype);
     const next = navigateMob(mob, spaced, goal, navigation, now, this.readWorldBlock,
       pose => allowed(pose) && peers.every(peer => Math.hypot(pose.x - peer.x, pose.z - peer.z)
-        >= Math.min(.75, Math.hypot(mob.x - peer.x, mob.z - peer.z)) - .001)
+        >= Math.min(mobPersonalSpace(mob.archetype, peer.archetype), Math.hypot(mob.x - peer.x, mob.z - peer.z)) - .001)
         && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
@@ -1941,13 +1941,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
       const rangedPursuit = mob.archetype === "cave_spitter" && definition.attackKind === "projectile" && target.visible
         ? positionSpitter(mob, target, home, positioning, now, deltaTime, definition.speed * mob.speedMultiplier,
-          this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z))
+          this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z),
+          pose => allyFireLaneClear(mobId, pose, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype }))))
         : null;
       let circling = null;
       if (crawlerRushDistance(mob.archetype) > 0 && target.visible) {
         let flank = this.crawlerPositioning.get(mobId);
         if (!flank || flank.targetId !== target.id) {
-          flank = createCrawlerPositioning(mobId, target.id);
+          flank = createCrawlerPositioning(mobId, target.id, [...this.state.mobs]
+            .filter(([, peer]) => peer.alive && crawlerRushDistance(peer.archetype) > 0 && Math.abs(peer.y - target.y) <= 1.75
+              && Math.hypot(peer.x - target.x, peer.z - target.z) <= 8).map(([id]) => id));
           this.crawlerPositioning.set(mobId, flank);
         }
         circling = circleCrawler(mob, target, flank, now, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);

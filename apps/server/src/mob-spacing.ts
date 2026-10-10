@@ -1,8 +1,9 @@
 import type { Position } from "./action-rules.js";
+export const mobPersonalSpace = (a?: string, b?: string) => a === "stone_brute" || b === "stone_brute" ? 1.15 : .75;
 
 /** Soft steering only; the navigation sweep still decides what terrain permits. */
 export function spacedMobDesired(id: string, start: Position, desired: { x: number; z: number },
-  peers: readonly (Position & { id: string })[]): { x: number; z: number } {
+  peers: readonly (Position & { id: string; archetype?: string })[], archetype?: string): { x: number; z: number } {
   const travel = Math.hypot(desired.x - start.x, desired.z - start.z);
   if (travel < .00001) return desired;
   let rx = 0; let rz = 0;
@@ -10,8 +11,12 @@ export function spacedMobDesired(id: string, start: Position, desired: { x: numb
     if (peer.id === id || Math.abs(peer.y - start.y) > 1) continue;
     const dx = start.x - peer.x; const dz = start.z - peer.z;
     const distance = Math.hypot(dx, dz);
-    if (distance >= 1.4) continue;
-    const strength = (1.4 - distance) / 1.4;
+    const radius = mobPersonalSpace(archetype, peer.archetype) + .65;
+    if (distance >= radius) continue;
+    // Smaller allies yield sooner; the brute keeps a steady centre lane, without pushing anyone.
+    const priority = archetype === "stone_brute" && peer.archetype !== "stone_brute" ? .6
+      : peer.archetype === "stone_brute" && archetype !== "stone_brute" ? 1.3 : 1;
+    const strength = (radius - distance) / radius * priority;
     if (distance < .001) rx += id < peer.id ? -strength : strength;
     else { rx += dx / distance * strength; rz += dz / distance * strength; }
   }

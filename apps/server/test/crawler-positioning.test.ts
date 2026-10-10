@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { circleCrawler, createCrawlerPositioning } from "../src/crawler-positioning.js";
 const target = { x: 0, y: 1, z: 0 };
 describe("crawler circling", () => {
+  it("alternates nearby allies' flanks even when their ID hashes would pick the same side", () => {
+    const peers = ["a", "c"];
+    const a = createCrawlerPositioning("a", "p", peers);
+    const c = createCrawlerPositioning("c", "p", [...peers].reverse());
+    expect(a.direction).toBe(-c.direction);
+    expect(createCrawlerPositioning("a", "p", peers).direction).toBe(a.direction);
+  });
   it("approaches normally until close enough, then circles for only 600ms", () => {
     const state = createCrawlerPositioning("a", "player");
     expect(circleCrawler({ x: 6, y: 1, z: 0 }, target, state, 0, .033, 1.35, 2.1)).toBeNull();
