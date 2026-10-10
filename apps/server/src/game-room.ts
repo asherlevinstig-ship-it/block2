@@ -1577,6 +1577,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       if (mob.combatState === "stagger" || mob.combatState === "recover") {
         if (now < mob.stateUntil) continue;
+        if (mob.combatState === "recover" && definition.attackKind === "projectile") {
+          const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
+          positioning.sidestepPending = true;
+          this.spitterPositioning.set(mobId, positioning);
+        }
         mob.combatState = "idle";
         mob.stateUntil = 0;
         this.clearMobAttackTimeline(mob);
@@ -1723,14 +1728,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
       const actualDistance = Math.hypot(target.x - mob.x, target.z - mob.z);
       const inAttackRange = definition.attackKind === "projectile"
-        ? actualDistance >= definition.minimumAttackRange - 0.05 && actualDistance <= definition.stopDistance + 0.05
+        ? (rangedPursuit?.cornered || actualDistance >= definition.minimumAttackRange - 0.05) && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
-      if (circling || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
+      if (circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       mob.combatState = "windup";
       this.crawlerPositioning.delete(mobId);
-      this.spitterPositioning.delete(mobId);
+      if (definition.attackKind !== "projectile") this.spitterPositioning.delete(mobId);
       this.mobNavigation.set(mobId, createMobNavigationState());
       mob.stateUntil = now + definition.windupMs;
       this.setMobAttackTimeline(mob, now, mob.stateUntil);
