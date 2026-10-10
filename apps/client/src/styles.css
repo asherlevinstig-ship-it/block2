@@ -813,6 +813,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-summary span { color: #829288; font-size: .61rem; font-weight: 900; letter-spacing: .11em; }
 .inventory-summary strong { margin-top: 3px; color: #e6d19b; font-size: .9rem; }
 .inventory-section[hidden] { display: none; }
+.inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }
+.inventory-empty { margin: 12px 0; padding: 22px 16px; border: 1px dashed #70876866; border-radius: 9px; color: #92a68e; font-size: .8rem; text-align: center; }
 .inventory-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
 .inventory-tabs button { min-height: 38px; padding: 8px 4px; border: 1px solid #6b88614d; border-radius: 7px; background: #13261b; color: #a3b69f; font-size: .72rem; font-weight: 800; }
 .inventory-tabs button[aria-selected="true"] { background: #4a3a1c; color: #ffe0a0; border-color: #c6a054; }

@@ -7,6 +7,7 @@ import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createInventoryPortrait } from "./inventory-preview.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
+import { inventoryItemVisible } from "./inventory-ownership.js";
 import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
@@ -2647,8 +2648,25 @@ function bindLootDrops(joinedRoom: Room): void {
   });
 }
 
+function refreshOwnedInventory(): void {
+  for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article[data-item]")) {
+    card.hidden = !inventoryItemVisible(inventoryCounts.get(card.dataset.item as ItemId));
+  }
+  for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
+    let empty = section.querySelector<HTMLElement>(".inventory-empty");
+    if (!empty) {
+      empty = document.createElement("p"); empty.className = "inventory-empty";
+      const category = section.dataset.inventoryCategory!;
+      empty.textContent = `No ${category} in your pack yet.${category === "weapons" ? " Starter gear is shown in your character preview." : ""}`;
+      section.append(empty);
+    }
+    empty.hidden = [...section.querySelectorAll<HTMLElement>("article[data-item]")].some(card => !card.hidden);
+  }
+}
+
 function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryCounts.set(itemId, total);
+  refreshOwnedInventory();
   if (itemId === "iron_ore" || itemId === "silver_ore") {
     const iron = inventoryCounts.get("iron_ore") ?? 0;
     const silver = inventoryCounts.get("silver_ore") ?? 0;
@@ -2670,8 +2688,10 @@ function updateInventoryItem(itemId: ItemId, total: number): void {
   if (card) {
     card.classList.toggle("empty", total <= 0);
     card.classList.remove("loot-added");
-    requestAnimationFrame(() => card.classList.add("loot-added"));
-    window.setTimeout(() => card.classList.remove("loot-added"), 650);
+    if (total > 0) {
+      requestAnimationFrame(() => card.classList.add("loot-added"));
+      window.setTimeout(() => card.classList.remove("loot-added"), 650);
+    }
   }
 }
 
@@ -3166,7 +3186,8 @@ function setInventoryOpen(open: boolean): void {
   inventoryToggle.setAttribute("aria-expanded", String(open));
   if (open) {
     closeTavernDialogue();
-    inventoryPreviewDrawer.open = false;
+    inventoryPreviewDrawer.open = true;
+    refreshOwnedInventory();
     inventoryPanel.scrollTop = 0;
     previewHand = undefined; previewArmour = undefined;
     previewSlot = inventoryTabs.find(tab => tab.getAttribute("aria-selected") === "true")?.dataset.inventoryTab === "armour" ? "armour" : "weapon";
@@ -3195,9 +3216,9 @@ function selectInventoryCategory(category: InventoryTab, focus = false): void {
   for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
     section.hidden = section.dataset.inventoryCategory !== category;
   }
-  inventoryPreviewDrawer.open = false;
   previewHand = undefined; previewArmour = undefined;
   previewSlot = category === "armour" ? "armour" : "weapon";
+  refreshInventoryPreview();
   inventoryPanel.scrollTop = 0;
 }
 for (const tab of inventoryTabs) {
@@ -3209,6 +3230,7 @@ for (const tab of inventoryTabs) {
   });
 }
 inventoryPreviewDrawer.addEventListener("toggle", () => { if (inventoryPreviewDrawer.open) refreshInventoryPreview(); });
+refreshOwnedInventory();
 document.querySelector("#inventory-preview-reset")!.addEventListener("click", () => {
   previewHand = undefined; previewArmour = undefined; refreshInventoryPreview();
 });
