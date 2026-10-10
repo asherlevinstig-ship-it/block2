@@ -15,6 +15,34 @@ function fixture(read: WorldBlockReader) {
 }
 
 describe("mob navigation in the authoritative room", () => {
+  it("allows a provoked roaming pack to respond beyond its passive territory corridor", () => {
+    const { room, mob } = fixture((_x, y) => y <= 7 ? Block.Stone : Block.Air);
+    const id = "outskirts-west-pack:0";
+    room.state.mobs.delete("test"); room.state.mobs.set(id, mob);
+    Object.assign(mob, { x: -22.5, y: 8, z: -2.5 });
+    const player = new PlayerState(); Object.assign(player, { x: -30.5, y: 8, z: -2.5 });
+    room.state.players.set("player", player);
+    expect((room as any).roamingAllowed(id, player)).toBe(false);
+    (room as any).alertHitMob(id, "player", Date.now());
+    expect((room as any).roamingAllowed(id, player)).toBe(true);
+    expect((room as any).roamingAllowed(id, { x: 8.5, y: 8, z: 8.5 })).toBe(false);
+  });
+  it("a ranged hit alerts the victim and starts pursuit outside passive aggro range", () => {
+    const { room, mob, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
+    const player = new PlayerState(); Object.assign(player, { x: 110.5, y: 1, z: 100.5 });
+    room.state.players.set("player", player);
+    (room as any).broadcast = () => {};
+    (room as any).applyWeaponHit("player", { mainHandId: "bow", step: 1 }, "test", Date.now());
+    const before = mob.x; tick();
+    expect(mob.x).toBeGreaterThan(before);
+  });
+  it("detects players outside the safe zone even inside the mob spawn buffer", () => {
+    const { room, mob, tick } = fixture((_x, y) => y <= 0 ? Block.Stone : Block.Air);
+    Object.assign(mob, { x: 40, z: 8.5 });
+    const player = new PlayerState(); Object.assign(player, { x: 35.5, y: 1, z: 8.5 });
+    room.state.players.set("player", player); tick();
+    expect(mob.x).toBeLessThan(40);
+  });
   it("keeps other mobs from chasing or being pushed into the reserved brute arena", () => {
     const read: WorldBlockReader = (_x, y) => y <= 0 ? Block.Stone : Block.Air;
     const { room, mob, tick } = fixture(read);

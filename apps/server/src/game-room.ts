@@ -7,7 +7,8 @@ import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
 import { BLACKSMITH_STOCK, BlacksmithBuySchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
-import { awareMobTarget, createMobAwareness, type MobAwareness } from "./mob-awareness.js";
+import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
+import { spacedMobDesired } from "./mob-spacing.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
@@ -982,6 +983,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
     const membership = roamingMembership(id);
+    // A hit can pull a pack beyond its passive patrol corridor, but never into town.
+    if (membership && Date.now() < (this.mobAwareness.get(id)?.provokedUntil ?? 0)) {
+      return !isInsideTownSafeZone(pose) && pose.y >= 6.8 && pose.y <= 9.2
+        && membership.pack.route.some(point => Math.hypot(point.x - pose.x, point.z - pose.z) <= 12);
+    }
     return !membership || roamingPackAllows(membership.pack, pose);
   }
   private championAllowed(id: string, pose: { x: number; z: number }): boolean {
@@ -1004,8 +1010,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     goal: { x: number; y: number; z: number }, now: number, allowed: (pose: { x: number; y: number; z: number }) => boolean = this.mobPositionAllowed): void {
     const navigation = this.mobNavigation.get(mobId) ?? createMobNavigationState();
     this.mobNavigation.set(mobId, navigation);
-    const next = navigateMob(mob, desired, goal, navigation, now, this.readWorldBlock,
-      pose => allowed(pose) && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
+    const peers = [...this.state.mobs.entries()]
+      .filter(([id, peer]) => id !== mobId && peer.alive && Math.abs(peer.y - mob.y) < 1
+        && Math.hypot(peer.x - mob.x, peer.z - mob.z) < 2)
+      .map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z }));
+    const spaced = spacedMobDesired(mobId, mob, desired, peers);
+    const next = navigateMob(mob, spaced, goal, navigation, now, this.readWorldBlock,
+      pose => allowed(pose) && peers.every(peer => Math.hypot(pose.x - peer.x, pose.z - peer.z)
+        >= Math.min(.75, Math.hypot(mob.x - peer.x, mob.z - peer.z)) - .001)
+        && this.championAllowed(mobId, pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && (mobId === "stone-brute" || !isInStoneBruteArena(pose.x, pose.z)));
     const dx = next.x - mob.x;
     const dz = next.z - mob.z;
     if (Math.hypot(dx, dz) > 0.0001) mob.yaw = Math.atan2(dx, dz) * 180 / Math.PI;
@@ -1659,7 +1672,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         y: player.y,
         z: player.z,
         health: player.health,
-      })).filter(player => !isInsideTownSafeZone(player) && radiusFromSafeCenter(player) >= MOB_TOWN_MINIMUM_RADIUS
+      })).filter(player => !isInsideTownSafeZone(player)
         && caveEncounterAllows(mobId, player)
         && this.roamingAllowed(mobId, player)
         && this.championAllowed(mobId, player)
@@ -2136,6 +2149,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if (aftershock) aftershockHitCount += 1;
         resolvedDamage = Math.max(resolvedDamage, damage);
         mob.health = Math.max(0, mob.health - damage);
+        this.alertHitMob(target.id, sessionId, now);
         mob.hitSequence += 1;
         const radialX = mob.x - impactCenter.x;
         const radialZ = mob.z - impactCenter.z;
@@ -2574,6 +2588,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
+  private alertHitMob(mobId: string, sessionId: string, now: number): void {
+    const player = this.state.players.get(sessionId);
+    if (!player || player.health <= 0 || isInsideTownSafeZone(player)) return;
+    const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
+    provokeMob(awareness, { id: sessionId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
+    this.mobAwareness.set(mobId, awareness);
+    this.roamingReturning.delete(mobId);
+  }
+
   private applyWeaponHit(sessionId: string, pending: PendingAttack, mobId: string, now: number,
     source?: { x: number; z: number }): void {
       const player = this.state.players.get(sessionId);
@@ -2587,6 +2610,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.armor,
       ) + traitBonusDamage;
       mob.health = Math.max(0, mob.health - damage);
+      this.alertHitMob(mobId, sessionId, now);
       mob.hitSequence += 1;
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
       const staggerDuration = basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState);

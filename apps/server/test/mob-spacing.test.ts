@@ -1,0 +1,18 @@
+import { describe, expect, it } from "vitest";
+import { spacedMobDesired } from "../src/mob-spacing.js";
+const start = { x: 0, y: 1, z: 0 };
+describe("mob personal space", () => {
+  it("leaves isolated movement unchanged", () => {
+    expect(spacedMobDesired("a", start, { x: .1, z: 0 }, [])).toEqual({ x: .1, z: 0 });
+  });
+  it("steers away from a touching neighbour without increasing movement speed", () => {
+    const next = spacedMobDesired("a", start, { x: .1, z: 0 }, [{ id: "b", x: .5, y: 1, z: 0 }]);
+    expect(next.x).toBeLessThanOrEqual(0);
+    expect(Math.hypot(next.x, next.z)).toBeLessThanOrEqual(.1);
+  });
+  it("splits exact overlaps deterministically and ignores other floors", () => {
+    expect(spacedMobDesired("a", start, { x: 0, z: .1 }, [{ id: "b", ...start }]).x).toBeLessThan(0);
+    expect(spacedMobDesired("b", start, { x: 0, z: .1 }, [{ id: "a", ...start }]).x).toBeGreaterThan(0);
+    expect(spacedMobDesired("a", start, { x: .1, z: 0 }, [{ id: "b", ...start, y: 3 }])).toEqual({ x: .1, z: 0 });
+  });
+});

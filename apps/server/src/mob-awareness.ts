@@ -1,20 +1,28 @@
 import type { Combatant } from "./combat-rules.js";
 import type { Position } from "./action-rules.js";
 export const MOB_MEMORY_MS = 3000;
-export interface MobAwareness { targetId: string; lastSeen: Position | null; seenAt: number }
+export interface MobAwareness { targetId: string; lastSeen: Position | null; seenAt: number; provokedUntil?: number }
 export const createMobAwareness = (): MobAwareness => ({ targetId: "", lastSeen: null, seenAt: 0 });
+/** A real hit alerts the victim, even beyond its passive detection radius. */
+export function provokeMob(state: MobAwareness, attacker: Combatant, now: number): void {
+  state.targetId = attacker.id;
+  state.lastSeen = { x: attacker.x, y: attacker.y, z: attacker.z };
+  state.seenAt = now;
+  state.provokedUntil = now + 6000;
+}
 export function awareMobTarget(mob: Position, players: readonly Combatant[], state: MobAwareness,
   now: number, range: number, visible: (target: Combatant) => boolean): (Combatant & { visible: boolean }) | null {
   const eligible = (p: Combatant, limit: number) => p.health > 0 && Math.abs(p.y - mob.y) <= 1.75 && Math.hypot(p.x - mob.x, p.z - mob.z) <= limit;
   const current = players.find(p => p.id === state.targetId);
-  if (current && eligible(current, range + 2)) {
+  const provoked = now < (state.provokedUntil ?? 0);
+  if (current && eligible(current, provoked ? Math.max(12, range + 2) : range + 2)) {
     if (visible(current)) {
       state.lastSeen = { x: current.x, y: current.y, z: current.z }; state.seenAt = now;
       return { ...current, visible: true };
     }
     if (state.lastSeen && now - state.seenAt < MOB_MEMORY_MS) return { ...state.lastSeen, id: current.id, health: current.health, visible: false };
   }
-  state.targetId = ""; state.lastSeen = null;
+  state.targetId = ""; state.lastSeen = null; state.provokedUntil = 0;
   let nearest: Combatant | null = null; let distance = Infinity;
   for (const p of players) {
     const d = Math.hypot(p.x - mob.x, p.z - mob.z);

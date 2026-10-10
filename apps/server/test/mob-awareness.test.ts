@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { awareMobTarget, createMobAwareness, MOB_MEMORY_MS } from "../src/mob-awareness.js";
+import { awareMobTarget, createMobAwareness, MOB_MEMORY_MS, provokeMob } from "../src/mob-awareness.js";
 const mob = { x: 100, y: 1, z: 100 };
 const a = { ...mob, x: 105, id: "a", health: 5 };
 const b = { ...mob, x: 106, id: "b", health: 5 };
 describe("mob awareness", () => {
+  it("responds to a ranged attacker outside passive detection range", () => {
+    const state = createMobAwareness(); const attacker = { ...a, x: 110 };
+    provokeMob(state, attacker, 100);
+    expect(awareMobTarget(mob, [attacker], state, 133, 7, () => true)?.id).toBe("a");
+    expect(awareMobTarget(mob, [attacker], state, 6200, 7, () => true)).toBeNull();
+  });
+  it("remembers a hit source but cannot attack a hidden attacker", () => {
+    const state = createMobAwareness(); provokeMob(state, a, 100);
+    expect(awareMobTarget(mob, [{ ...a, z: 103 }], state, 133, 7, () => false)).toMatchObject({ z: 100, visible: false });
+  });
   it("does not acquire players through cover", () => {
     expect(awareMobTarget(mob, [a], createMobAwareness(), 0, 7, () => false)).toBeNull();
   });
