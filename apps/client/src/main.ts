@@ -1558,7 +1558,6 @@ function refreshInventoryEquipped(): void {
 }
 
 let inventoryPortrait: ReturnType<typeof createInventoryPortrait> | undefined;
-let inventoryPortraitRig: VoxelCharacterRig | undefined;
 let previewHand: MainHandId | undefined;
 let previewArmour: ArmourId | undefined;
 let previewSlot: "weapon" | "armour" = "weapon";
@@ -1567,19 +1566,16 @@ let inventoryBackgroundFrameAt = 0;
 
 function refreshInventoryPreview(): void {
   if (inventoryPanel.hidden) return;
-  if (!inventoryPortraitRig) {
-    const root = new pc.Entity("inventory-preview-character");
-    inventoryPortraitRig = createVoxelCharacter(root, coloredMaterial(new pc.Color(.12, .45, .46)));
-    inventoryPortrait = createInventoryPortrait(app, document.querySelector<HTMLCanvasElement>("#inventory-portrait")!, root);
+  if (!inventoryPortrait) {
+    inventoryPortrait = createInventoryPortrait(document.querySelector<HTMLCanvasElement>("#inventory-portrait")!);
   }
   const hand = previewHand ?? localMainHandId;
   const armour = previewArmour ?? localArmourId;
   const appearanceKey = `${hand}:${armour}`;
   const comparisonKey = `${appearanceKey}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${previewSlot}`;
-  inventoryPortrait!.refresh(appearanceKey);
+  inventoryPortrait.refresh(hand, armour);
   if (comparisonKey === inventoryComparisonKey) return;
   inventoryComparisonKey = comparisonKey;
-  setRigMainHand(inventoryPortraitRig, hand); setRigArmour(inventoryPortraitRig, armour);
   const worn = document.querySelector<HTMLElement>("#inventory-worn-stats")!;
   const selected = document.querySelector<HTMLElement>("#inventory-selected-stats")!;
   if (previewSlot === "armour") {
@@ -3202,7 +3198,7 @@ for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipme
 }
 window.addEventListener("pagehide", event => {
   if (event.persisted) { inventoryPortrait?.hide(); return; }
-  inventoryPortrait?.destroy(); inventoryPortrait = undefined; inventoryPortraitRig = undefined;
+  inventoryPortrait?.destroy(); inventoryPortrait = undefined;
 });
 window.addEventListener("pageshow", () => { if (!inventoryPanel.hidden) refreshInventoryPreview(); });
 

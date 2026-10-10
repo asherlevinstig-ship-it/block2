@@ -1,77 +1,53 @@
-import * as pc from "playcanvas";
-import { flipPortraitRows } from "./portrait-pixels.js";
+import type { ArmourId, MainHandId } from "@blockcraft/protocol";
 
-/** A private render layer: never moves or renders the real player. */
-export function createInventoryPortrait(app: pc.Application, canvas: HTMLCanvasElement, character: pc.Entity) {
-  const layer = new pc.Layer({ name: "Inventory portrait" });
-  app.scene.layers.push(layer);
-  for (const component of character.findComponents("render") as pc.RenderComponent[]) {
-    component.layers = [layer.id];
-    component.castShadows = false;
-  }
-  const texture = new pc.Texture(app.graphicsDevice, {
-    width: canvas.width, height: canvas.height, format: pc.PIXELFORMAT_R8_G8_B8_A8,
-    mipmaps: false, minFilter: pc.FILTER_LINEAR, magFilter: pc.FILTER_LINEAR,
-  });
-  const target = new pc.RenderTarget({ colorBuffer: texture, depth: true });
-  const camera = new pc.Entity("inventory-portrait-camera");
-  camera.addComponent("camera", {
-    layers: [layer.id], renderTarget: target, priority: 10,
-    projection: pc.PROJECTION_ORTHOGRAPHIC, orthoHeight: 1.2,
-    clearColor: new pc.Color(.055, .09, .075), farClip: 10,
-    toneMapping: pc.TONEMAP_ACES, gammaCorrection: pc.GAMMA_SRGB,
-  });
-  camera.setPosition(2.6, 1.7, 4);
-  camera.lookAt(0, .85, 0);
-  const light = new pc.Entity("inventory-portrait-light");
-  light.addComponent("light", { type: "directional", layers: [layer.id],
-    color: new pc.Color(1, .93, .82), intensity: 1.5, castShadows: false });
-  light.setEulerAngles(40, -35, 0);
-  app.root.addChild(character); app.root.addChild(camera); app.root.addChild(light);
-  camera.enabled = false; character.enabled = false; light.enabled = false;
-  const pixels = new Uint8Array(canvas.width * canvas.height * 4);
-  const context = canvas.getContext("2d")!;
-  const frame = context.createImageData(canvas.width, canvas.height);
-  let pending = false;
-  let reading = false;
-  let revision = 0;
-  let cachedKey: string | undefined;
-  let requestedKey: string | undefined;
-  const capture = async () => {
-    if (!pending || reading) return;
-    pending = false; reading = true;
-    const capturedRevision = revision;
-    const capturedKey = requestedKey;
-    camera.enabled = false; character.enabled = false; light.enabled = false;
-    try {
-      await texture.read(0, 0, canvas.width, canvas.height, { renderTarget: target, data: pixels, frequent: true });
-      if (capturedRevision !== revision) return;
-      flipPortraitRows(pixels, frame.data, canvas.width, canvas.height);
-      context.putImageData(frame, 0, 0);
-      cachedKey = capturedKey;
-    } catch (error) {
-      console.warn("Inventory portrait unavailable", error);
-    } finally { reading = false; }
+/** Static paper doll: no engine entities, render targets, readbacks or animation loop. */
+export function createInventoryPortrait(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext("2d", { alpha: false });
+  let cachedKey = "";
+  let destroyed = false;
+  const box = (colour: string, x: number, y: number, w: number, h: number) => {
+    context!.fillStyle = colour; context!.fillRect(x, y, w, h);
   };
-  app.on("postrender", capture);
   return {
-    refresh(key?: string) {
-      if (key !== undefined && key === cachedKey) {
-        // Returning to the cached look must cancel a newer pending capture.
-        revision++; requestedKey = undefined; pending = false;
-        character.enabled = false; camera.enabled = false; light.enabled = false;
-        return;
+    refresh(hand: MainHandId, armour: ArmourId) {
+      const key = hand + ":" + armour;
+      if (!context || destroyed || key === cachedKey) return;
+      cachedKey = key;
+      context.save(); context.scale(canvas.width / 240, canvas.height / 280);
+      box("#0e1713", 0, 0, 240, 280); box("#213329", 52, 248, 136, 8);
+      box("#182c2c", 92, 182, 24, 57); box("#223a3a", 124, 182, 24, 57);
+      box("#34291f", 88, 227, 29, 18); box("#34291f", 123, 227, 29, 18);
+      const coat = armour === "iron_armour" ? "#a7bac5" : armour === "leather_armour" ? "#95633c" : "#267d7c";
+      box(coat, 86, 103, 68, 82);
+      box(armour === "iron_armour" ? "#738b9c" : "#225453", 86, 103, 12, 82);
+      box(coat, 62, 106, 22, 61); box(coat, 156, 106, 22, 61);
+      box("#d8a775", 64, 167, 18, 18); box("#d8a775", 158, 167, 18, 18);
+      box("#442d22", 86, 165, 68, 12); box("#dbb466", 114, 165, 13, 12);
+      box("#e9bd8b", 96, 53, 48, 48); box("#c59161", 132, 53, 12, 48);
+      box("#563729", 92, 45, 56, 16); box("#563729", 92, 58, 10, 13);
+      box("#282520", 107, 76, 5, 5); box("#282520", 127, 76, 5, 5);
+      box("#e4b84f", 92, 98, 56, 11); box("#bf9037", 96, 109, 12, 31);
+      if (armour === "iron_armour") {
+        box("#dbe5ea", 57, 101, 30, 16); box("#dbe5ea", 153, 101, 30, 16); box("#dbe5ea", 117, 113, 7, 47);
+      } else if (armour === "leather_armour") {
+        for (let i = 0; i < 5; i++) box("#4d3627", 100 + i * 7, 113 + i * 8, 10, 12);
       }
-      if (key !== undefined && key === requestedKey && (pending || reading)) return;
-      requestedKey = key; revision++; pending = true;
-      character.enabled = true; camera.enabled = true; light.enabled = true;
-      app.renderNextFrame = true;
+      if (hand.includes("bow")) {
+        box("#a27742", 191, 107, 8, 99); box("#a27742", 179, 99, 16, 8); box("#a27742", 179, 206, 16, 8); box("#d5d6bc", 179, 108, 2, 98);
+      } else if (hand.includes("focus")) {
+        box("#795735", 180, 125, 7, 82);
+        box(hand === "acid_gland_focus" ? "#b1db54" : "#79c4e5", 172, 105, 23, 24); box("#ddf4f0", 179, 109, 7, 10);
+      } else if (hand === "stone_core_hammer") {
+        box("#8b623b", 183, 118, 8, 91); box("#819baa", 167, 97, 39, 27); box("#c6d5dc", 169, 97, 35, 7);
+      } else {
+        const dagger = hand === "fang_dagger";
+        box("#6f4b2d", 182, 173, 8, 29); box("#cba65c", 174, 169, 24, 7);
+        box(dagger ? "#e7ddbb" : "#b5cbd4", 181, dagger ? 132 : 91, 10, dagger ? 37 : 78);
+        box("#eef2e7", 181, dagger ? 132 : 91, 3, dagger ? 37 : 78);
+      }
+      context.restore();
     },
-    hide() { revision++; requestedKey = undefined; pending = false; character.enabled = false; camera.enabled = false; light.enabled = false; },
-    destroy() {
-      revision++;
-      app.off("postrender", capture); character.destroy(); camera.destroy(); light.destroy();
-      app.scene.layers.remove(layer); target.destroy(); texture.destroy();
-    },
+    hide() { /* A cached drawing has no ongoing work to stop. */ },
+    destroy() { destroyed = true; },
   };
 }
