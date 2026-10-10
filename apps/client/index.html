@@ -140,20 +140,32 @@
     </section>
     <section id="blacksmith-panel" role="dialog" aria-label="Blacksmith trading and forging" hidden>
       <p class="eyebrow">TOWN OF BEGINNINGS · BLACKSMITH</p>
-      <h2>Trade, Forge &amp; Buy</h2>
-      <p id="blacksmith-message" aria-live="polite">Sell minerals for gold, then buy a reinforced pickaxe for 12 gold. It auto-equips and doubles ore yield.</p>
+      <h2>Blacksmith</h2>
+      <p class="blacksmith-loop">Mine minerals → sell for gold → buy gear → equip in your pack</p>
+      <div class="blacksmith-trade-row gold"><span>YOUR GOLD</span><strong id="blacksmith-gold">20</strong></div>
+      <nav id="blacksmith-shop-tabs" aria-label="Blacksmith shop categories">
+        <button type="button" data-smith-tab="sell" aria-pressed="true">Sell minerals</button>
+        <button type="button" data-smith-tab="weapons" aria-pressed="false">Weapons</button>
+        <button type="button" data-smith-tab="armour" aria-pressed="false">Armour</button>
+        <button type="button" data-smith-tab="upgrades" aria-pressed="false">Upgrades</button>
+      </nav>
+      <p id="blacksmith-message" aria-live="polite">Sell your iron and silver here, then choose Weapons or Armour to spend your gold.</p>
+      <div id="blacksmith-mineral-shop">
       <div class="blacksmith-trade-row"><span>IRON ORE IN PACK</span><strong id="blacksmith-ore">0</strong></div>
       <div class="blacksmith-trade-row"><span>SILVER ORE IN PACK</span><strong id="blacksmith-silver">0</strong></div>
       <div class="blacksmith-trade-row"><span>PRICE PER MINERAL</span><strong id="blacksmith-price">Iron 3 · Silver 8 gold</strong></div>
       <div class="blacksmith-trade-row"><span>MINERALS VALUE</span><strong id="blacksmith-sale-value">0 gold</strong></div>
-      <div class="blacksmith-trade-row gold"><span>YOUR GOLD</span><strong id="blacksmith-gold">20</strong></div>
       <button id="blacksmith-sell" type="button">Sell all minerals</button>
-      <h3 class="blacksmith-shop-heading">EQUIPMENT SHOP <small>Gold comes directly from your purse · upgrades auto-equip</small></h3>
+      </div>
+      <div id="blacksmith-upgrade-shop" hidden>
+      <h3 class="blacksmith-shop-heading">PERMANENT UPGRADES <small>Gold comes directly from your purse · upgrades auto-equip</small></h3>
       <div id="blacksmith-upgrades">
         <article data-blacksmith-upgrade="reinforced_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Reinforced Pickaxe</strong><small>Auto-equips · mine 2 minerals per ore block · no ore required</small><span class="forge-costs"><b data-cost="gold">0 / 12 GOLD</b></span></div><button type="button">BUY · 12 GOLD</button></article>
         <article data-blacksmith-upgrade="iron_sword"><span class="upgrade-icon">⚔</span><div><strong>Iron Sword</strong><small>Equips your longsword · +1 sword damage</small><span class="forge-costs"><b data-cost="gold">0 / 45 GOLD</b></span></div><button type="button">FORGE</button></article>
         <article data-blacksmith-upgrade="miners_pack"><span class="upgrade-icon">▣</span><div><strong>Miner's Pack</strong><small>Carry 30 of each mineral instead of 12</small><span class="forge-costs"><b data-cost="gold">0 / 25 GOLD</b></span></div><button type="button">FORGE</button></article>
       </div>
+      </div>
+      <button id="blacksmith-open-pack" type="button">Open pack to equip gear</button>
       <button id="blacksmith-close" type="button">Leave stall</button>
     </section>
     <button id="inventory-toggle" type="button" aria-controls="inventory-panel" aria-expanded="false"><span>▣</span> PACK <strong id="inventory-badge">0</strong><kbd>I</kbd></button>

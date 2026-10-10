@@ -8,6 +8,7 @@ import { createInventoryPortrait } from "./inventory-preview.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
+import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
@@ -3276,15 +3277,25 @@ function updateTavernCoins(coins: number): void {
 
 let blacksmithPending = false;
 let blacksmithIronCapacity = 12;
+let blacksmithShopTab: BlacksmithShopTab = "sell";
+let lastShopPurchaseCategory: InventoryTab = "weapons";
 const weaponShop = document.createElement("div");
 weaponShop.id = "blacksmith-weapons";
 blacksmithClose.before(weaponShop);
 function renderWeaponShop(): void {
   weaponShop.replaceChildren();
+  const shopping = blacksmithShopTab === "weapons" || blacksmithShopTab === "armour";
+  weaponShop.hidden = !shopping;
+  document.querySelector<HTMLElement>("#blacksmith-mineral-shop")!.hidden = blacksmithShopTab !== "sell";
+  document.querySelector<HTMLElement>("#blacksmith-upgrade-shop")!.hidden = blacksmithShopTab !== "upgrades";
+  for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {
+    tab.setAttribute("aria-pressed", String(tab.dataset.smithTab === blacksmithShopTab));
+  }
+  if (!shopping) return;
   const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
-  heading.textContent = "WEAPONS & ARMOUR · ADDED TO YOUR PACK"; weaponShop.append(heading);
+  heading.textContent = `${blacksmithShopTab.toUpperCase()} · BUY WITH GOLD · EQUIP FROM YOUR PACK`; weaponShop.append(heading);
   const current = weaponComparison(localMainHandId, localIronSwordOwned);
-  for (const id of Object.keys(BLACKSMITH_STOCK) as BlacksmithStockId[]) {
+  for (const id of blacksmithShopStock(blacksmithShopTab)) {
     const armour = id === "leather_armour" || id === "iron_armour" ? armourStats(id) : null;
     const stats = armour ? null : weaponComparison(id as MainHandId);
     const card = document.createElement("article");
@@ -3296,23 +3307,39 @@ function renderWeaponShop(): void {
     comparison.textContent = armour ? `Worn: ${worn.name} — reduction ${worn.reduction}, movement ${Math.round(worn.speed * 100)}%. Buy, then equip from your pack.` : `Equipped: ${current.name} — damage ${current.damage}, attack ${current.speed}, reach ${current.range}. Lower ms = faster.`;
     const button = document.createElement("button");
     const owned = inventoryCounts.get(id) ?? 0;
-    button.textContent = `BUY · ${BLACKSMITH_STOCK[id].price} GOLD${owned ? ` · ${owned} OWNED` : ""}`;
+    const price = document.createElement("span"); price.className = "blacksmith-item-price";
+    price.textContent = `${BLACKSMITH_STOCK[id].price} GOLD${owned ? ` · ${owned} owned` : ""}`;
+    const shortfall = shopGoldShortfall(id, tavernCoinBalance);
+    button.textContent = blacksmithPending ? "PLEASE WAIT…" : shortfall ? `NEED ${shortfall} MORE GOLD` : "BUY · ADD TO PACK";
     button.disabled = !room || blacksmithPending || tavernCoinBalance < BLACKSMITH_STOCK[id].price || owned >= 65535;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending) return;
+      lastShopPurchaseCategory = armour ? "armour" : "weapons";
       blacksmithPending = true; renderWeaponShop();
       blacksmithMessage.textContent = `Buying ${ITEM_DEFINITIONS[id].name}...`;
       room.send("blacksmith:buy", { itemId: id });
     });
-    card.append(title, description, comparison, button); weaponShop.append(card);
+    card.append(title, price, description, comparison, button); weaponShop.append(card);
   }
 }
+for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {
+  tab.addEventListener("click", () => {
+    blacksmithShopTab = tab.dataset.smithTab as BlacksmithShopTab;
+    renderWeaponShop(); blacksmithPanel.scrollTop = 0;
+  });
+}
+document.querySelector("#blacksmith-open-pack")!.addEventListener("click", () => {
+  blacksmithPanel.hidden = true;
+  selectInventoryCategory(lastShopPurchaseCategory); setInventoryOpen(true);
+});
 blacksmithPrice.textContent = `Iron ${IRON_ORE_GOLD_PRICE} · Silver ${SILVER_ORE_GOLD_PRICE} gold`;
 
 function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithPending = false;
   blacksmithPanel.dataset.phase = update.phase;
-  blacksmithMessage.textContent = update.message;
+  blacksmithMessage.textContent = update.phase === "idle"
+    ? "Sell iron for 3 gold and silver for 8. Choose Weapons or Armour, buy gear, then open your pack to equip it."
+    : update.phase === "traded" ? `${update.message} Choose Weapons or Armour to spend your gold.` : update.message;
   blacksmithIronCapacity = update.ironCapacity;
   updateInventoryItem("iron_ore", update.ironOre);
   const silver = update.silverOre ?? 0;
@@ -3362,6 +3389,8 @@ function openBlacksmith(): void {
   closeTavernDialogue();
   setInventoryOpen(false);
   blacksmithPanel.hidden = false;
+  blacksmithShopTab = "sell";
+  blacksmithPanel.scrollTop = 0;
   renderWeaponShop();
   blacksmithMessage.textContent = "Checking your minerals...";
   if (room) room.send("blacksmith:sync");

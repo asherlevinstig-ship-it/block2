@@ -602,7 +602,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   z-index: 24;
   top: 50%;
   left: 50%;
-  width: min(420px, calc(100vw - 28px));
+  width: min(700px, calc(100vw - 28px));
   max-height: calc(100dvh - 24px);
   overflow-y: auto;
   padding: 20px;
@@ -614,6 +614,15 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   transform: translate(-50%, -50%);
 }
 #blacksmith-panel[hidden] { display: none; }
+#blacksmith-mineral-shop[hidden], #blacksmith-upgrade-shop[hidden], #blacksmith-weapons[hidden] { display: none; }
+.blacksmith-loop { color: #d6b87f; font-size: .74rem; line-height: 1.5; margin: 0 0 12px; }
+#blacksmith-shop-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
+#blacksmith-shop-tabs button { margin: 0; padding: 8px 4px; font-size: .7rem; background: #251e16; border-color: #836744; color: #b9a88d; }
+#blacksmith-shop-tabs button[aria-pressed="true"] { color: #fff0cb; background: #765021; border-color: #dfb76c; }
+#blacksmith-weapons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+#blacksmith-weapons > h3 { grid-column: 1 / -1; }
+.blacksmith-item-price { display: block; margin-top: 6px; color: #edc970; font-size: .75rem; font-weight: 800; }
+@media (max-width: 480px) { #blacksmith-weapons { grid-template-columns: 1fr; } #blacksmith-shop-tabs button { font-size: .61rem; } }
 #blacksmith-panel .eyebrow { margin: 0; color: #ecb982; font-size: .63rem; letter-spacing: .13em; }
 #blacksmith-panel h2 { margin: 4px 0 15px; color: #ffe2aa; font-family: Georgia, serif; font-size: 1.8rem; }
 #blacksmith-message { min-height: 2.5em; margin: 0 0 13px; color: #d9d2c2; font-size: .85rem; line-height: 1.4; }
