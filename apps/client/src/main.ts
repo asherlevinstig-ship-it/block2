@@ -5,6 +5,7 @@ import { createTradeUI } from "./trade-ui.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createInventoryPortrait } from "./inventory-preview.js";
+import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
@@ -1561,6 +1562,8 @@ let inventoryPortraitRig: VoxelCharacterRig | undefined;
 let previewHand: MainHandId | undefined;
 let previewArmour: ArmourId | undefined;
 let previewSlot: "weapon" | "armour" = "weapon";
+let inventoryComparisonKey = "";
+let inventoryBackgroundFrameAt = 0;
 
 function refreshInventoryPreview(): void {
   if (inventoryPanel.hidden) return;
@@ -1571,6 +1574,11 @@ function refreshInventoryPreview(): void {
   }
   const hand = previewHand ?? localMainHandId;
   const armour = previewArmour ?? localArmourId;
+  const appearanceKey = `${hand}:${armour}`;
+  const comparisonKey = `${appearanceKey}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${previewSlot}`;
+  inventoryPortrait!.refresh(appearanceKey);
+  if (comparisonKey === inventoryComparisonKey) return;
+  inventoryComparisonKey = comparisonKey;
   setRigMainHand(inventoryPortraitRig, hand); setRigArmour(inventoryPortraitRig, armour);
   const worn = document.querySelector<HTMLElement>("#inventory-worn-stats")!;
   const selected = document.querySelector<HTMLElement>("#inventory-selected-stats")!;
@@ -1581,7 +1589,6 @@ function refreshInventoryPreview(): void {
   }
   const changed = hand !== localMainHandId || armour !== localArmourId;
   document.querySelector<HTMLElement>("#inventory-preview-label")!.textContent = changed ? "Preview only · not equipped" : "Currently equipped";
-  inventoryPortrait!.refresh();
 }
 
 function updatePowerLoadout(powerId: PowerId): void {
@@ -3170,6 +3177,7 @@ function setInventoryOpen(open: boolean): void {
     inventoryClose.focus();
   } else {
     inventoryPortrait?.hide();
+    app.autoRender = true;
     inventoryToggle.focus();
   }
 }
@@ -4964,6 +4972,11 @@ function reconcileLocalPlayer(
 }
 
 app.on("update", (dt: number) => {
+  app.autoRender = Boolean(inventoryPanel.hidden);
+  if (!app.autoRender && inventoryRenderDue(performance.now(), inventoryBackgroundFrameAt)) {
+    inventoryBackgroundFrameAt = performance.now();
+    app.renderNextFrame = true;
+  }
   refreshPotionUi();
   frameSamples.push(dt * 1000);
   if (frameSamples.length > 240) frameSamples.shift();

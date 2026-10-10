@@ -45,6 +45,30 @@ describe("inventory portrait lifecycle", () => {
     expect(view.context.putImageData).not.toHaveBeenCalled();
     expect(view.character.enabled).toBe(false);
   });
+  it("reuses unchanged gear across inventory reopen and only captures a new appearance", async () => {
+    const view = setup();
+    view.portrait.refresh("sword:none"); await view.capture();
+    view.portrait.hide(); view.portrait.refresh("sword:none"); await view.capture();
+    expect(view.texture.read).toHaveBeenCalledOnce();
+    expect(view.character.enabled).toBe(false);
+    view.portrait.refresh("sword:iron"); await view.capture();
+    expect(view.texture.read).toHaveBeenCalledTimes(2);
+    expect(view.app).toHaveProperty("renderNextFrame", true);
+  });
+  it("coalesces identical requests while capture is pending", async () => {
+    const view = setup();
+    view.portrait.refresh("bow:leather"); view.portrait.refresh("bow:leather");
+    await view.capture();
+    expect(view.texture.read).toHaveBeenCalledOnce();
+    expect(view.context.putImageData).toHaveBeenCalledOnce();
+  });
+  it("cancels a pending new look when returning to the cached appearance", async () => {
+    const view = setup();
+    view.portrait.refresh("sword:none"); await view.capture();
+    view.portrait.refresh("bow:iron"); view.portrait.refresh("sword:none"); await view.capture();
+    expect(view.texture.read).toHaveBeenCalledOnce();
+    expect(view.character.enabled).toBe(false);
+  });
   it("releases render resources and listeners", () => {
     const view = setup(); view.portrait.destroy();
     expect(view.texture.destroy).toHaveBeenCalledOnce();

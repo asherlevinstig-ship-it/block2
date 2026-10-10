@@ -511,7 +511,8 @@ button { font: inherit; }
 }
 #tavern-quiz[hidden], #tavern-quiz-question[hidden], #tavern-quiz-decision[hidden], #tavern-quiz-stakes[hidden] { display: none; }
 body:has(#tavern-quiz:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 23; background: rgb(4 10 8 / 67%); backdrop-filter: blur(2px); pointer-events: none; }
-body:has(#blacksmith-panel:not([hidden]))::before, body:has(#inventory-panel:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 23; background: rgb(4 10 8 / 67%); backdrop-filter: blur(3px); pointer-events: none; }
+body:has(#blacksmith-panel:not([hidden]))::before, body:has(#inventory-panel:not([hidden]))::before { content: ""; position: fixed; inset: 0; z-index: 23; background: rgb(4 10 8 / 67%); pointer-events: none; }
+body:has(#blacksmith-panel:not([hidden])):not(:has(#inventory-panel:not([hidden])))::before { backdrop-filter: blur(3px); }
 body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel:not([hidden])) #touch-controls, body:has(#inventory-panel:not([hidden])) #touch-controls { opacity: 0; pointer-events: none; }
 #tavern-quiz .eyebrow { margin: 0 0 3px; color: #b9d8c0; font-size: .59rem; letter-spacing: .14em; }
 .tavern-quiz-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 3px 4px 16px; }
@@ -789,6 +790,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   width: min(760px, calc(100vw - 32px));
   max-height: min(720px, calc(100dvh - 32px));
   overflow-y: auto;
+  overscroll-behavior: contain;
+  contain: layout paint;
   padding: 22px;
   border: 2px solid #688c54;
   border-radius: 18px;

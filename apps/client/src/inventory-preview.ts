@@ -31,28 +31,43 @@ export function createInventoryPortrait(app: pc.Application, canvas: HTMLCanvasE
   camera.enabled = false; character.enabled = false; light.enabled = false;
   const pixels = new Uint8Array(canvas.width * canvas.height * 4);
   const context = canvas.getContext("2d")!;
+  const frame = context.createImageData(canvas.width, canvas.height);
   let pending = false;
   let reading = false;
   let revision = 0;
+  let cachedKey: string | undefined;
+  let requestedKey: string | undefined;
   const capture = async () => {
     if (!pending || reading) return;
     pending = false; reading = true;
     const capturedRevision = revision;
+    const capturedKey = requestedKey;
     camera.enabled = false; character.enabled = false; light.enabled = false;
     try {
-      await texture.read(0, 0, canvas.width, canvas.height, { renderTarget: target, data: pixels });
+      await texture.read(0, 0, canvas.width, canvas.height, { renderTarget: target, data: pixels, frequent: true });
       if (capturedRevision !== revision) return;
-      const frame = context.createImageData(canvas.width, canvas.height);
       flipPortraitRows(pixels, frame.data, canvas.width, canvas.height);
       context.putImageData(frame, 0, 0);
+      cachedKey = capturedKey;
     } catch (error) {
       console.warn("Inventory portrait unavailable", error);
     } finally { reading = false; }
   };
   app.on("postrender", capture);
   return {
-    refresh() { revision++; pending = true; character.enabled = true; camera.enabled = true; light.enabled = true; },
-    hide() { revision++; pending = false; character.enabled = false; camera.enabled = false; light.enabled = false; },
+    refresh(key?: string) {
+      if (key !== undefined && key === cachedKey) {
+        // Returning to the cached look must cancel a newer pending capture.
+        revision++; requestedKey = undefined; pending = false;
+        character.enabled = false; camera.enabled = false; light.enabled = false;
+        return;
+      }
+      if (key !== undefined && key === requestedKey && (pending || reading)) return;
+      requestedKey = key; revision++; pending = true;
+      character.enabled = true; camera.enabled = true; light.enabled = true;
+      app.renderNextFrame = true;
+    },
+    hide() { revision++; requestedKey = undefined; pending = false; character.enabled = false; camera.enabled = false; light.enabled = false; },
     destroy() {
       revision++;
       app.off("postrender", capture); character.destroy(); camera.destroy(); light.destroy();
