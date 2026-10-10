@@ -27,12 +27,12 @@ describe("Silver Venom Champion", () => {
     internal.spawnLootDrops(SILVER_CHAMPION_ID, mob, 10000);
     expect([...room.state.lootDrops.values()].some(drop => drop.itemId === "acid_gland_focus" && drop.quantity === 1)).toBe(true);
   });
-  it("releases three committed shots, damages only on impact and leaves no fan pools", () => {
+  it("releases four committed shots with a safe central gap and no fan pools", () => {
     const { internal, mob, player, release } = fixture(); release();
-    expect(internal.pendingMobProjectiles.size).toBe(3); expect(player.health).toBe(5);
+    expect(internal.pendingMobProjectiles.size).toBe(4); expect(player.health).toBe(5);
     expect(mob.attackRecoveryEndAt - mob.attackContactEndAt).toBe(1900);
-    internal.resolveMobProjectiles(mob.attackReleaseAt + 1100);
-    expect(player.health).toBe(4); expect(internal.mobHazards.size).toBe(0);
+    internal.resolveMobProjectiles(mob.attackReleaseAt + 1250);
+    expect(player.health).toBe(5); expect(internal.mobHazards.size).toBe(0);
   });
   it("alternates to a pool with delayed damage and finite expiry", () => {
     const { internal, mob, player, release } = fixture("pool"); release();
@@ -55,7 +55,8 @@ describe("Silver Venom Champion", () => {
   });
   it("spreads fan endpoints symmetrically around committed aim", () => {
     const shots = spitterChampionShots({ x: 0, y: 1, z: 0 }, { x: 0, y: 1, z: 6 }, "fan");
-    expect(shots).toHaveLength(3); expect(shots[0]!.x).toBeCloseTo(-shots[2]!.x);
-    expect(shots[1]).toEqual({ x: 0, y: 1, z: 6 });
+    expect(shots).toHaveLength(4); expect(shots[0]!.x).toBeCloseTo(-shots[3]!.x);
+    expect(shots[1]!.x).toBeCloseTo(-shots[2]!.x);
+    expect(shots.every(shot => Math.abs(shot.x) > 2)).toBe(true);
   });
 });

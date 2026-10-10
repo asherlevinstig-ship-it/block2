@@ -10,6 +10,7 @@ import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
+import { SPITTER_PATTERN, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
@@ -1937,7 +1938,7 @@ function createMobProjectile(message: MobProjectileReleased): void {
     material,
     start,
     end,
-    startedAt: performance.now(),
+    startedAt: message.releasedAt === undefined ? performance.now() : message.releasedAt - serverClock.offset,
     durationMs: Math.max(160, message.travelMs),
   });
 }
@@ -2328,7 +2329,15 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
   cameraShakeUntil = performance.now() + 420;
 }
 
-function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance): void {
+function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance, shotOrigin = { x: 0, y: 0, z: 0 }): void {
+  if (archetype === "cave_spitter" && pattern !== "pool") {
+    const lengths = spitterShotOffsets(pattern).map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range));
+    const lanes = spitterWarningLanes(yaw, pattern, lengths);
+    mesh.setPositions(lanes.flatMap(lane => lane.flatMap(point => [point.x, 0, point.z])));
+    mesh.setNormals(lanes.flatMap(lane => lane.flatMap(() => [0, 1, 0])));
+    mesh.setIndices(lanes.flatMap((_lane, index) => { const i = index * 4; return [i, i + 1, i + 2, i, i + 2, i + 3]; }));
+    mesh.update(pc.PRIMITIVE_TRIANGLES); return;
+  }
   const angle = yaw * Math.PI / 180;
   const outline = pattern === "pool" ? Array.from({ length: 48 }, (_, i) => ({ x: Math.cos(i * Math.PI / 24) * 1.6, z: Math.sin(i * Math.PI / 24) * 1.6 }))
     : pattern === "fan" ? [{ x: 0, z: 0 }, { x: Math.sin(angle + 22 * Math.PI / 180) * 7, z: Math.cos(angle + 22 * Math.PI / 180) * 7 }, { x: Math.sin(angle - 22 * Math.PI / 180) * 7, z: Math.cos(angle - 22 * Math.PI / 180) * 7 }]
@@ -2475,22 +2484,15 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     pip.setLocalEulerAngles(0, 45, 45);
   }
   const warning = new pc.Entity("lunge-warning");
-  const warningMesh = !isSpitter || mob.isChampion ? new pc.Mesh(app.graphicsDevice) : null;
+  const warningMesh = new pc.Mesh(app.graphicsDevice);
   if (warningMesh) {
-    updateStrikeWarningMesh(warningMesh, mob.archetype, mob.yaw, mob.attackPattern);
+    updateStrikeWarningMesh(warningMesh, mob.archetype, mob.yaw, mob.attackPattern, CHAMPION_CHARGE.distance, mob);
     warning.addComponent("render", { meshInstances: [new pc.MeshInstance(warningMesh, warningMaterial)], castShadows: false, receiveShadows: false });
   }
   warning.setLocalPosition(0, 0.035, 0);
   const warningScale = 1;
   warning.setLocalScale(1, 1, 1);
   warning.enabled = false;
-  if (isSpitter && !mob.isChampion) {
-    addBox(warning, "shot-direction", warningMaterial, [0.14, 0.02, 6.6], [0, 0, 3.6]);
-    const arrowLeft = addBox(warning, "shot-direction-left", warningMaterial, [0.12, 0.02, 0.6], [-0.18, 0, 6.65]);
-    const arrowRight = addBox(warning, "shot-direction-right", warningMaterial, [0.12, 0.02, 0.6], [0.18, 0, 6.65]);
-    arrowLeft.setLocalEulerAngles(0, -40, 0);
-    arrowRight.setLocalEulerAngles(0, 40, 0);
-  }
   entity.addChild(warning);
   const combatCue = document.createElement("div");
   combatCue.className = "enemy-combat-cue";
@@ -5407,9 +5409,9 @@ app.on("update", (dt: number) => {
     mob.warning.enabled = presentation.warning && cueVisible;
     if (mob.warning.enabled) {
       if (mob.warningMesh) {
-        const chargeLength = mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
+        const chargeLength = mob.isSpitter && mob.state.attackPattern !== "pool" ? spitterShotOffsets(mob.state.attackPattern).reduce((sum, offset, i) => sum + (i + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range), 0) : mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
         if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || Math.abs(chargeLength - mob.warningChargeLength) > .05) {
-          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, chargeLength);
+          updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, chargeLength, mob.state);
           mob.warningYaw = mob.state.yaw;
           mob.warningPattern = mob.state.attackPattern; mob.warningChargeLength = chargeLength;
         }
@@ -5422,7 +5424,7 @@ app.on("update", (dt: number) => {
         mob.warning.setLocalScale(1, 1, length / 6.9);
         mob.warning.setEulerAngles(0, mob.state.yaw, 0);
       }
-      mob.warningMaterial.diffuse.set(mob.isSpitter ? .65 : 1, mob.isSpitter ? 1 : mob.isBrute ? .25 : .72, mob.isSpitter ? .16 : mob.isBrute ? .08 : .18);
+      mob.warningMaterial.diffuse.set(mob.isSpitter ? mob.state.attackPattern === "fan" ? .2 : .85 : 1, mob.isSpitter ? 1 : mob.isBrute ? .25 : .72, mob.isSpitter ? mob.state.attackPattern === "fan" ? .75 : .16 : mob.isBrute ? .08 : .18);
       mob.warningMaterial.emissive.copy(mob.warningMaterial.diffuse);
       mob.warningMaterial.opacity = presentation.aimLocked ? .65 : .38;
       mob.warningMaterial.update();
@@ -5558,7 +5560,7 @@ app.on("update", (dt: number) => {
   }
   for (let index = weaponProjectileVisuals.length - 1; index >= 0; index -= 1) {
     const projectile = weaponProjectileVisuals[index]!;
-    const progress = Math.min(1, (animationNow - projectile.startedAt) / projectile.durationMs);
+    const progress = Math.max(0, Math.min(1, (animationNow - projectile.startedAt) / projectile.durationMs));
     const next = new pc.Vec3().lerp(projectile.start, projectile.end, progress);
     const from = projectile.entity.getPosition().clone();
     const direction = next.clone().sub(from);

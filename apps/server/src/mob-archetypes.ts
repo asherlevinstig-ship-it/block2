@@ -1,4 +1,4 @@
-import { BRUTE_SLAM, crawlerRushDistance } from "@blockcraft/protocol";
+import { BRUTE_SLAM, SPITTER_PATTERN, crawlerRushDistance } from "@blockcraft/protocol";
 export type MobArchetypeId = "moss_crawler" | "briar_crawler" | "stone_brute" | "cave_spitter";
 
 export interface MobArchetypeDefinition {
@@ -116,7 +116,7 @@ export const MOB_ARCHETYPES: Record<MobArchetypeId, MobArchetypeDefinition> = {
     damage: 1,
     lungeDistance: 0,
     hitRange: 0.9,
-    projectileTravelMs: 850,
+    projectileTravelMs: SPITTER_PATTERN.travelMs,
     hazardDurationMs: 0,
     hazardRadius: 0,
     respawnMs: 6500,

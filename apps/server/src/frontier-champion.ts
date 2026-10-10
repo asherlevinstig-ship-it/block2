@@ -1,4 +1,4 @@
-import { CHAMPION_CHARGE } from "@blockcraft/protocol";
+import { CHAMPION_CHARGE, SPITTER_PATTERN, spitterShotEndpoints } from "@blockcraft/protocol";
 import { isPlayerSupported, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { mobArchetype } from "./mob-archetypes.js";
 import { moveMobSafely } from "./mob-navigation.js";
@@ -8,12 +8,8 @@ export const SILVER_CHAMPION_ID = "wild-spitter-west";
 export const championPattern = (mob: { archetype: string; actionSequence: number }) => mob.archetype === "cave_spitter"
   ? mob.actionSequence % 2 === 0 ? "fan" : "pool" : mob.actionSequence % 2 === 0 ? "slam" : "charge";
 export function spitterChampionShots(start: Position, aim: Position, pattern: string): Position[] {
-  const dx = aim.x - start.x, dz = aim.z - start.z;
-  return (pattern === "fan" ? [-22, 0, 22] : [0]).map(degrees => {
-    const a = degrees * Math.PI / 180;
-    return { x: start.x + dx * Math.cos(a) + dz * Math.sin(a), y: aim.y,
-      z: start.z + dz * Math.cos(a) - dx * Math.sin(a) };
-  });
+  if (pattern === "fan") return spitterShotEndpoints(start, Math.atan2(aim.x - start.x, aim.z - start.z) * 180 / Math.PI, pattern);
+  return [aim];
 }
 export function championChargeHits(start: Position, end: Position, target: Position): boolean {
   const dx = end.x - start.x; const dz = end.z - start.z;
@@ -25,7 +21,7 @@ export function championChargeHits(start: Position, end: Position, target: Posit
 export function combatMobDefinition(mob: { archetype: string; isChampion?: boolean; attackPattern?: string }) {
   const base = mobArchetype(mob.archetype);
   if (mob.isChampion && mob.archetype === "cave_spitter") return { ...base, name: "Silver Venom Champion", maxHealth: 18,
-    windupMs: 1400, recoverMs: 1900, cooldownMs: 3000, projectileTravelMs: 1100,
+    windupMs: 1400, recoverMs: 1900, cooldownMs: 3000, projectileTravelMs: mob.attackPattern === "pool" ? 1100 : SPITTER_PATTERN.travelMs,
     hazardDurationMs: mob.attackPattern === "pool" ? 4000 : 0, hazardRadius: mob.attackPattern === "pool" ? 1.6 : 0, respawnMs: 20000 };
   return !mob.isChampion ? base : { ...base, name: "Frontier Stone Champion", maxHealth: 28,
     stopDistance: mob.attackPattern === "charge" ? 4.2 : base.stopDistance,

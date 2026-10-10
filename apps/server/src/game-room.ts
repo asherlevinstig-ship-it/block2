@@ -134,6 +134,7 @@ import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
+import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
@@ -1582,6 +1583,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     for (const [mobId, mob] of this.state.mobs) {
       if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
+      else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence);
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
@@ -1674,7 +1676,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           continue;
         }
         if (definition.attackKind === "projectile") {
-          const shots = mob.isChampion ? spitterChampionShots(mob, aim, mob.attackPattern) : [aim];
+          const shots = mob.isChampion ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           for (const shotAim of shots) {
           const projectileId = `${mobId}:${++this.mobProjectileSequence}`;
           const start = { x: mob.x, y: mob.y + 1.05, z: mob.z };
@@ -1699,6 +1701,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             targetY: shotAim.y,
             targetZ: shotAim.z,
             travelMs: definition.projectileTravelMs,
+            releasedAt: now,
           } satisfies MobProjectileReleased);
           }
           mob.targetId = "";

@@ -1,9 +1,10 @@
 import { z } from "zod";
+export { SPITTER_PATTERN, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
 
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-recovery-v62";
+export const WORLD_ROOM = "world-spitter-patterns-v63";
 export const PartyRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
   z.object({ action: z.literal("respond"), inviteId: z.string().min(1).max(160), accept: z.boolean() }),
@@ -618,6 +619,7 @@ export interface ProjectileResolved {
 }
 
 export interface MobProjectileReleased {
+  releasedAt?: number;
   projectileId: string;
   mobId: string;
   x: number;

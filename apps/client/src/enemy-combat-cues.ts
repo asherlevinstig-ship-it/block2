@@ -8,10 +8,10 @@ export function enemyCueLineClear(from: Point, to: Point, read: WorldBlockReader
   const distance = Math.hypot(direction.x, direction.y, direction.z);
   return distance < 0.001 || !voxelRaycast(from, direction, distance, read);
 }
-export function enemyShotGuideLength(from: Point, yaw: number, read: WorldBlockReader): number {
+export function enemyShotGuideLength(from: Point, yaw: number, read: WorldBlockReader, maximum = 6.9): number {
   const radians = yaw * Math.PI / 180;
-  const hit = voxelRaycast(from, { x: Math.sin(radians), y: 0, z: Math.cos(radians) }, 6.9, read);
-  return Math.max(0, Math.min(6.9, (hit?.distance ?? 6.9) - (hit ? 0.06 : 0)));
+  const hit = voxelRaycast(from, { x: Math.sin(radians), y: 0, z: Math.cos(radians) }, maximum, read);
+  return Math.max(0, Math.min(maximum, (hit?.distance ?? maximum) - (hit ? 0.06 : 0)));
 }
 export function enemyCombatCue(mob: EnemyTimeline, now: number) {
   const presentation = enemyAttackPresentation(mob, now);
