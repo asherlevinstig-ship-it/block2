@@ -1,10 +1,13 @@
 import type { PartyRequest, PartyUpdate } from "@blockcraft/protocol";
-export function createPartyUI(send: (request: PartyRequest) => boolean, stopMovement: () => void) {
+export function createPartyUI(send: (request: PartyRequest) => boolean, stopMovement: () => void, trade: (targetId: string) => void = () => {}, localId: () => string = () => "") {
   const root = document.createElement("section"); root.id = "party-panel"; root.setAttribute("aria-label", "Party controls");
   root.innerHTML = '<details><summary>PARTY <span class="party-count">Solo</span></summary><p class="party-help">Up to 4 players · loot unchanged · groups last for this session</p><ul class="party-members" aria-label="Party members"></ul><div class="party-invitation" hidden><p></p><button type="button" class="party-accept">Accept</button><button type="button" class="party-decline">Decline</button></div><div class="party-picker"><select aria-label="Nearby player to invite"><option value="">No nearby players</option></select><button type="button" class="party-invite">Invite</button></div><button type="button" class="party-leave" hidden>Leave party</button><p class="party-status" role="status">Invite a nearby player on your level.</p></details>';
   document.body.append(root);
   const details = root.querySelector("details")!, count = root.querySelector(".party-count")!, members = root.querySelector("ul")!;
   const select = root.querySelector("select")!, inviteButton = root.querySelector<HTMLButtonElement>(".party-invite")!;
+  const tradeButton = document.createElement("button"); tradeButton.type = "button"; tradeButton.textContent = "Trade"; tradeButton.disabled = true;
+  root.querySelector(".party-picker")!.append(tradeButton);
+  tradeButton.addEventListener("click", () => { if (select.value) trade(select.value); tradeButton.blur(); });
   const invitation = root.querySelector<HTMLElement>(".party-invitation")!, invitationText = invitation.querySelector("p")!;
   const accept = root.querySelector<HTMLButtonElement>(".party-accept")!, decline = root.querySelector<HTMLButtonElement>(".party-decline")!;
   const leave = root.querySelector<HTMLButtonElement>(".party-leave")!, status = root.querySelector(".party-status")!;
@@ -28,7 +31,9 @@ export function createPartyUI(send: (request: PartyRequest) => boolean, stopMove
       name.textContent = `${member.leader ? "★ " : ""}${member.name}`;
       info.textContent = `${member.health <= 0 ? "Defeated" : `${member.health}/${member.maxHealth} HP`} · ${member.distance === 0 ? "Here" : `${member.distance}m`}`;
       meter.min = 0; meter.max = Math.max(1, member.maxHealth); meter.value = member.health; meter.setAttribute("aria-label", `${member.name} health`);
-      row.append(name, info, meter); return row;
+      row.append(name, info, meter);
+      if (member.id !== localId() && member.distance <= 4) { const button = document.createElement("button"); button.type = "button"; button.textContent = "Trade"; button.addEventListener("click", () => trade(member.id)); row.append(button); }
+      return row;
     }));
     invitation.hidden = !value.invite;
     invitationText.textContent = value.invite ? `${value.invite.name} invites you to a party. Accept within 30 seconds.` : "";
@@ -39,8 +44,9 @@ export function createPartyUI(send: (request: PartyRequest) => boolean, stopMove
       if (value.nearby.some(player => player.id === selected)) select.value = selected;
     }
     select.disabled = value.members.length >= 4; inviteButton.disabled = !select.value || select.disabled;
+    select.disabled = false; tradeButton.disabled = !select.value;
     leave.hidden = !value.partyId;
   }
-  select.addEventListener("change", () => { inviteButton.disabled = !select.value || select.disabled; });
+  select.addEventListener("change", () => { inviteButton.disabled = !select.value || current.members.length >= 4; tradeButton.disabled = !select.value; });
   return { update, notice(text: string) { status.textContent = text; }, reset() { update({ partyId: null, members: [], nearby: [], invite: null }); status.textContent = "Disconnected. Parties are session-only."; } };
 }

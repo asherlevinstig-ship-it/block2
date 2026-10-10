@@ -1,6 +1,7 @@
 import * as pc from "playcanvas";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
+import { createTradeUI } from "./trade-ui.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison } from "./loot-comparison.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
@@ -1271,7 +1272,8 @@ interface MarkVisualState {
 const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const social = createSocialUI((type, payload) => { if (!room || !worldReady) return false; room.send(type, payload); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
-const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
+const tradeUI = createTradeUI(request => { if (!room || !worldReady) return false; room.send("trade:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
+const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); }, id => tradeUI.invite(id), () => room?.sessionId ?? "");
 let lastNameplateSampleAt = -Infinity;
 const mobVisuals = new Map<string, MobVisual>();
 const lootVisuals = new Map<string, LootVisual>();
@@ -3493,6 +3495,7 @@ returnToTownButton.addEventListener("click", () => {
 });
 window.addEventListener("keydown", event => {
   if (!defeatScreen.hidden) return;
+  if (tradeUI.isOpen()) return;
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.code.startsWith("Arrow")) event.preventDefault();
   keys.add(event.code);
@@ -4496,6 +4499,7 @@ for (const button of traitPickerButtons) {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (tradeUI.isOpen()) { if (event.code === "Escape") tradeUI.cancel(); return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.code === "Enter" && lootPanel.hidden && inventoryPanel.hidden && quizPanel.hidden && blacksmithPanel.hidden) { event.preventDefault(); social.open(); return; }
   if (!defeatScreen.hidden) return;
@@ -5487,8 +5491,9 @@ async function connect(): Promise<void> {
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));
-  room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); });
+  room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
   room.onMessage("party:update", update => partyUI.update(update));
+  room.onMessage("trade:update", update => tradeUI.update(update));
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
@@ -5853,6 +5858,7 @@ async function connect(): Promise<void> {
     room = null;
     social.clearNames();
     partyUI.reset();
+    tradeUI.update(null);
     pendingPings.clear();
     serverClock = createServerClock(performance.now(), Date.now());
     status.textContent = "Disconnected from the world.";

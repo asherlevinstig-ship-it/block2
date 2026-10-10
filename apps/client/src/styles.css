@@ -1145,6 +1145,18 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 #party-panel summary { cursor: pointer; font-weight: 800; letter-spacing: .05em; }
 .party-count { float: right; color: #c4e6a8; }
+#trade-modal { position: fixed; inset: 0; z-index: 90; background: #020c12bb; display: grid; place-items: center; padding: 15px; color: #f0ead6; font: 13px system-ui; }
+#trade-modal[hidden] { display: none; }
+.trade-card { width: min(560px, 100%); max-height: 85dvh; overflow-y: auto; background: #11241e; border: 1px solid #d2bd7988; border-radius: 14px; padding: 20px; box-shadow: 0 15px 70px #0009; }
+.trade-card h2 { margin: 0; color: #ffe5a6; } .trade-review { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.trade-review section { padding: 10px; border: 1px solid #ffffff22; border-radius: 7px; background: #091711; }
+.trade-review p { white-space: pre-line; line-height: 1.7; } .trade-card h3 { margin-top: 0; }
+.trade-items { display: grid; gap: 6px; margin: 10px 0; }
+.trade-editor label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.trade-editor input { width: 76px; padding: 8px; background: #071b13; color: #fff4d7; border: 1px solid #ffffff44; border-radius: 5px; }
+.trade-card button { padding: 10px 14px; background: #476039; color: #fff0cb; border: 1px solid #ffffff33; border-radius: 6px; cursor: pointer; }
+.trade-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0; } .trade-card button:disabled { opacity: .45; cursor: default; }
+.trade-card [hidden] { display: none; } .trade-status { color: #ffdc92; } .trade-card small { color: #a9baae; line-height: 1.6; }
 .party-help, .party-status { font-size: 10px; color: #b1c2ad; line-height: 1.4; }
 .party-members { padding: 0; margin: 8px 0; list-style: none; }
 .party-members li { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin: 8px 0; }

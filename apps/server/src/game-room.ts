@@ -3,6 +3,8 @@ import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, type NearbyChatMessa
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
 import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
+import { TradeRequestSchema } from "@blockcraft/protocol";
+import { Trading } from "./trading.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { equipmentForItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
@@ -254,6 +256,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly parties = new Parties();
   private readonly lastPartyRequestAt = new Map<string, number>();
   private lastPartyUpdateAt = -Infinity;
+  private readonly trading = new Trading((a, b) => hasCombatLineOfSight(a, b, this.readWorldBlock));
+  private readonly lastTradeRequestAt = new Map<string, number>();
   private readonly profileSaveFingerprints = new Map<string, string>();
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
   private readonly quizRounds = new Map<string, QuizRound>();
@@ -308,6 +312,26 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
     this.onMessage("chat:send", (client, payload: unknown) => this.handleNearbyChat(client, payload));
+    this.onMessage("trade:request", (client, payload: unknown) => {
+      const parsed = TradeRequestSchema.safeParse(payload); if (!parsed.success || !this.state.players.has(client.sessionId)) return;
+      const now = Date.now(); if (now - (this.lastTradeRequestAt.get(client.sessionId) ?? -Infinity) < 200) return;
+      this.lastTradeRequestAt.set(client.sessionId, now);
+      if (parsed.data.action === "invite" && this.profileTokens.get(client.sessionId) && this.profileTokens.get(client.sessionId) === this.profileTokens.get(parsed.data.targetId)) { client.send("chat:notice", "Cannot trade between sessions of the same character."); return; }
+      const result = this.trading.handle(client.sessionId, parsed.data, this.state.players, now, (ids, balances) => {
+        for (let i = 0; i < 2; i++) {
+          const player = this.state.players.get(ids[i]!)!, balance = balances[i]!;
+          player.coins = balance.coins;
+          for (const item of balance.items) { let state = player.inventory.get(item.itemId); if (!state) { state = new InventoryItemState(); player.inventory.set(item.itemId, state); } state.quantity = item.quantity; }
+        }
+        for (const id of ids) {
+          void this.persistPlayer(id, this.state.players.get(id)!, true).catch(() => {
+            this.clients.find(other => other.sessionId === id)?.send("chat:notice", "Trade finished, but saving is delayed. Please stay connected.");
+          });
+          this.clients.find(other => other.sessionId === id)?.send("chat:notice", "Trade completed. Items and gold exchanged.");
+        }
+      });
+      client.send("chat:notice", result); this.sendPartyUpdates(now);
+    });
     this.onMessage("party:request", (client, payload: unknown) => {
       const parsed = PartyRequestSchema.safeParse(payload); if (!parsed.success) return;
       const now = Date.now();
@@ -438,6 +462,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.trading.disconnect(client.sessionId); this.lastTradeRequestAt.delete(client.sessionId);
     this.parties.disconnect(client.sessionId);
     this.lastPartyRequestAt.delete(client.sessionId);
     this.lastChatAt.delete(client.sessionId); this.lastNameAt.delete(client.sessionId);
@@ -489,7 +514,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private sendPartyUpdates(now: number): void {
     this.lastPartyUpdateAt = now;
-    for (const client of this.clients) if (this.state.players.has(client.sessionId)) client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, now));
+    this.trading.refresh(this.state.players, now);
+    for (const client of this.clients) if (this.state.players.has(client.sessionId)) {
+      client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, now));
+      client.send("trade:update", this.trading.snapshot(client.sessionId, this.state.players));
+    }
   }
 
   private sendQuizState(client: Client, message?: string): void {

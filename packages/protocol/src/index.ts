@@ -3,7 +3,7 @@ import { z } from "zod";
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-parties-v47";
+export const WORLD_ROOM = "world-trading-v48";
 export const PartyRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
   z.object({ action: z.literal("respond"), inviteId: z.string().min(1).max(160), accept: z.boolean() }),
@@ -81,6 +81,19 @@ export const ITEM_DEFINITIONS = {
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
+export const TradeRequestSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
+  z.object({ action: z.literal("accept"), tradeId: z.string().max(160) }),
+  z.object({ action: z.literal("cancel"), tradeId: z.string().max(160) }),
+  z.object({ action: z.literal("offer"), tradeId: z.string().max(160), revision: z.number().int().nonnegative(), gold: z.number().int().min(0).max(1000000),
+    items: z.array(z.object({ itemId: z.enum(Object.keys(ITEM_DEFINITIONS) as [ItemId, ...ItemId[]]), quantity: z.number().int().min(1).max(65535) })).max(8) }),
+  z.object({ action: z.literal("confirm"), tradeId: z.string().max(160), revision: z.number().int().nonnegative() }),
+]);
+export type TradeRequest = z.infer<typeof TradeRequestSchema>;
+export type TradeOffer = { gold: number; items: { itemId: ItemId; quantity: number }[] };
+export type TradeUpdate = { id: string; phase: "invite" | "offer"; incoming: boolean; partner: string; revision: number;
+  mine: TradeOffer; theirs: TradeOffer; mineConfirmed: boolean; theirsConfirmed: boolean; expiresAt: number;
+  inventory: { itemId: ItemId; quantity: number }[]; gold: number } | null;
 
 export const TRAIT_DEFINITIONS = {
   momentum: {
