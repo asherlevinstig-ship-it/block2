@@ -8,6 +8,7 @@ import {
   GREENWOOD_CAMP,
   GREENWOOD_CRAWLER_HOMES,
   GREENWOOD_IRON_SEAM,
+  GREENWOOD_NEST_MARKERS,
   STONE_BRUTE_ARENA,
   STONE_BRUTE_ARENA_HOME,
   isInStoneBruteArena,
@@ -258,7 +259,11 @@ describe("deterministic voxel world", () => {
       for (let z = GREENWOOD_CAMP.minZ; z <= GREENWOOD_CAMP.maxZ; z++) {
         expect(read(x, 7, z)).toBe(Block.Dirt);
         expect(read(x, 6, z)).toBe(Block.Stone);
-        for (let y = 8; y <= 15; y++) expect(read(x, y, z)).toBe(Block.Air);
+        const nestBlock = GREENWOOD_NEST_MARKERS.some(nest => x === nest.x && z === nest.z
+          || x === nest.x + 1 && z === nest.z || x === nest.x && z === nest.z + 1);
+        for (let y = 8; y <= 15; y++) expect(read(x, y, z)).toBe(nestBlock && y === 8
+          ? GREENWOOD_NEST_MARKERS.some(nest => x === nest.x && z === nest.z + 1) ? Block.Leaves : Block.OakLog
+          : Block.Air);
       }
     }
     for (let x = 31; x <= 40; x++) {
@@ -270,6 +275,15 @@ describe("deterministic voxel world", () => {
       expect(Math.hypot(home.x - 8.5, home.z - 8.5)).toBeGreaterThan(30);
       expect(playerCollides(read, home.x, home.y, home.z)).toBe(false);
       expect(isPlayerSupported(read, home.x, home.y, home.z)).toBe(true);
+    }
+    for (const nest of GREENWOOD_NEST_MARKERS) {
+      expect(read(nest.x, 8, nest.z)).toBe(Block.OakLog);
+      expect(read(nest.x + 1, 8, nest.z)).toBe(Block.OakLog);
+      expect(read(nest.x, 8, nest.z + 1)).toBe(Block.Leaves);
+      expect(read(nest.x, 9, nest.z)).toBe(Block.Air);
+    }
+    for (let z = 12; z <= GREENWOOD_CAMP.minZ; z++) {
+      expect(playerCollides(read, 39.5, 8, z + .5)).toBe(false);
     }
     let ore = 0;
     for (let x = GREENWOOD_IRON_SEAM.minX; x <= GREENWOOD_IRON_SEAM.maxX; x++) {

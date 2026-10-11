@@ -1,6 +1,6 @@
 import { Client, Room } from "@colyseus/core";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -1046,6 +1046,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    if (isGreenwoodCampMob(id)) return greenwoodCampAllows(pose);
     if (isSilverGuard(id)) return silverGuardAllows(pose);
     if (id === "frontier-brute") return frontierBruteAllows(pose);
     if (isMixedFrontierMob(id)) return mixedFrontierAllows(pose);

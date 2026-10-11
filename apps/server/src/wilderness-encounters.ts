@@ -1,6 +1,10 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import { SILVER_GUARD_HOMES } from "@blockcraft/voxel-world";
 export const SILVER_GUARD_IDS = ["cave-spitter", "frontier-spitter"] as const;
+export const GREENWOOD_CAMP_IDS = ["wild-crawler", "greenwood-briar", "greenwood-briar-north"] as const;
+export const isGreenwoodCampMob = (id: string) => GREENWOOD_CAMP_IDS.some(member => member === id);
+export const greenwoodCampAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
+  && pose.x >= 33 && pose.x <= 52 && pose.z >= 11 && pose.z <= 28;
 export const isSilverGuard = (id: string) => SILVER_GUARD_IDS.some(guard => guard === id);
 /** Guard the deposit and its approaches, not a player all the way back to town. */
 export const silverGuardAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5

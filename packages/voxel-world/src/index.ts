@@ -48,6 +48,7 @@ export const GREENWOOD_IRON_SEAM = { minX: 48, maxX: 50, minZ: 19, maxZ: 21 } as
 export const GREENWOOD_CRAWLER_HOMES = [
   { x: 39.5, y: 8, z: 16.5 }, { x: 43.5, y: 8, z: 21.5 }, { x: 45.5, y: 8, z: 16.5 },
 ] as const;
+export const GREENWOOD_NEST_MARKERS = [{ x: 37, z: 17 }, { x: 46, z: 22 }, { x: 45, z: 14 }] as const;
 export const STONE_BRUTE_ARENA = { minX: 35, maxX: 49, minZ: 34, maxZ: 48 } as const;
 export const STONE_BRUTE_ARENA_HOME = { x: 42.5, y: 8, z: 41.5 } as const;
 export const FRONTIER_BRUTE_ARENA = { minX: 60, maxX: 75, minZ: 19, maxZ: 34 } as const;
@@ -348,6 +349,12 @@ export function greenwoodRegionBlock(seedText: string, worldX: number, y: number
     ? Block.Dirt
     : Block.Grass;
   if (y <= SURFACE_HEIGHT) return null;
+
+  // Low root piles identify each crawler nest without closing the road, ore seam, or combat sightlines.
+  if (y === SURFACE_HEIGHT + 1) for (const nest of GREENWOOD_NEST_MARKERS) {
+    if (worldX === nest.x && worldZ === nest.z || worldX === nest.x + 1 && worldZ === nest.z) return Block.OakLog;
+    if (worldX === nest.x && worldZ === nest.z + 1) return Block.Leaves;
+  }
 
   const seed = hashSeed(seedText) ^ 0x6a09e667;
   for (let dz = -2; dz <= 2; dz += 1) {
