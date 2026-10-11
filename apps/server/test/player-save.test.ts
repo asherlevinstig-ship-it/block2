@@ -15,6 +15,7 @@ describe("player saves", () => {
     player.stamina = 47;
     player.coins = 73;
     player.blacksmithUpgrades = 5;
+    player.silverDepthsBestTimeMs = 184_000;
     player.miningExpeditionStage = 6;
     Object.assign(player, { level: 6, experience: 31, unspentStatPoints: 1, powerPoints: 2, vitalityPoints: 1, agilityPoints: 1, miningPoints: 0 });
     player.mainHandId = "fang_dagger";
@@ -35,6 +36,7 @@ describe("player saves", () => {
     expect(restored.stamina).toBe(47);
     expect(restored.coins).toBe(73);
     expect(restored.blacksmithUpgrades).toBe(5);
+    expect(restored.silverDepthsBestTimeMs).toBe(184_000);
     expect(restored.miningExpeditionStage).toBe(6);
     expect([restored.level, restored.experience, restored.unspentStatPoints]).toEqual([6, 31, 1]);
     expect([restored.powerPoints, restored.vitalityPoints, restored.agilityPoints, restored.miningPoints]).toEqual([2, 1, 1, 0]);

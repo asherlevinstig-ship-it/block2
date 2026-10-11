@@ -276,12 +276,31 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
   const panel = document.createElement("section");
   panel.id = "dungeon-completion";
   panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-label", "Forest Dungeon complete");
-  panel.innerHTML = '<small>FOREST DUNGEON</small><h2>ROOT GUARDIAN DEFEATED</h2><p class="dungeon-run-time"></p><strong class="dungeon-run-reward"></strong><p>Collect your personal equipment bag, then take the return portal.</p><button type="button">CONTINUE</button>';
+  const silverDepths = update.dungeon === "silver-depths";
+  panel.dataset.dungeon = silverDepths ? "silver-depths" : "forest";
+  panel.setAttribute("aria-label", silverDepths ? "Silver Depths expedition results" : "Forest Dungeon complete");
+  panel.innerHTML = silverDepths
+    ? '<small>SILVER DEPTHS · EXPEDITION COMPLETE</small><h2>CRYSTAL MATRIARCH DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>MOONSTONE</small><b data-stat="moonstone">0</b></span><span><small>RELIC</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time"></p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">RETURN TO TOWN</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
+    : '<small>FOREST DUNGEON</small><h2>ROOT GUARDIAN DEFEATED</h2><p class="dungeon-run-time"></p><strong class="dungeon-run-reward"></strong><p>Collect your personal equipment bag, then take the return portal.</p><button class="dungeon-return" type="button">CONTINUE</button>';
   const seconds = Math.max(1, Math.round((update.durationMs ?? 0) / 1000));
   panel.querySelector(".dungeon-run-time")!.textContent = `${update.partySize > 1 ? `${update.partySize}-player party` : "Solo clear"} · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   panel.querySelector(".dungeon-run-reward")!.textContent = update.reward ?? "Personal reward unlocked";
-  panel.querySelector("button")!.addEventListener("click", () => panel.remove());
+  if (silverDepths) {
+    const stats = update.stats;
+    panel.dataset.rank = (update.rank ?? "BRONZE").toLowerCase();
+    panel.querySelector(".dungeon-rank")!.textContent = `${update.rank ?? "BRONZE"} RANK`;
+    panel.querySelector<HTMLElement>('[data-stat="enemies"]')!.textContent = String(stats?.enemiesDefeated ?? 0);
+    panel.querySelector<HTMLElement>('[data-stat="damage"]')!.textContent = String(stats?.damageTaken ?? 0);
+    panel.querySelector<HTMLElement>('[data-stat="moonstone"]')!.textContent = String(stats?.moonstoneCollected ?? 0);
+    panel.querySelector<HTMLElement>('[data-stat="relic"]')!.textContent = stats?.signatureItemObtained ? "OBTAINED" : "SECURED";
+    const best = Math.max(1, Math.round((update.bestTimeMs ?? update.durationMs ?? 0) / 1000));
+    panel.querySelector(".dungeon-best-time")!.textContent = `${update.newBest ? "NEW PERSONAL BEST" : "PERSONAL BEST"} · ${Math.floor(best / 60)}:${String(best % 60).padStart(2, "0")}`;
+    panel.querySelector<HTMLButtonElement>(".dungeon-replay")!.addEventListener("click", event => {
+      const button = event.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = "OPENING PORTAL…";
+      setTimeout(() => { panel.remove(); room?.send("portal:use", { id: "depths-entry" }); }, 1050);
+    });
+  }
+  panel.querySelector<HTMLButtonElement>(".dungeon-return")!.addEventListener("click", () => panel.remove());
   document.body.append(panel);
 }
 
@@ -6699,7 +6718,9 @@ async function connect(): Promise<void> {
     const own = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room!.sessionId);
     pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
     worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
-    status.textContent = spawn.entering ? "Forest Dungeon lobby · assemble, ready up, then begin the expedition." : "Returned from the Forest Dungeon with your loot.";
+    status.textContent = spawn.entering
+      ? spawn.y < 5 ? "Silver Depths entered · the expedition clock is running." : "Forest Dungeon lobby · assemble, ready up, then begin the expedition."
+      : "Returned to the Town of Beginnings with your loot.";
   });
   room.onMessage("portal:notice", (message: string) => {
     status.textContent = message;
@@ -6710,7 +6731,9 @@ async function connect(): Promise<void> {
     showCombatFeedback(notice.title, notice.kind === "victory" ? "dodge" : "hit");
   });
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
-    if (update.phase === "started") status.textContent = `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
+    if (update.phase === "started") status.textContent = update.dungeon === "silver-depths"
+      ? "Silver Depths expedition started · defeat the guards, mine Moonstone, and overcome the Matriarch."
+      : `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
     showDungeonRunResult(update);
   });
   room.onMessage("dungeon:reward", (reward: DungeonRewardClaimed) => {

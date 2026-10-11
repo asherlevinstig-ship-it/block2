@@ -181,6 +181,7 @@ import {
 import { nearbyObjective, createObjectiveProgress, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMiningExpedition, isBuriedVaultSeal, isInsideEastMine, type MiningExpeditionEvent } from "./mining-expedition.js";
 import { advanceSilverDepths, canEnterSilverDepths, canExitSilverDepths, isInsideSilverDepths, SILVER_DEPTHS_GUARDS, CRYSTAL_MATRIARCH_ID, type SilverDepthsEvent } from "./silver-depths-expedition.js";
+import { silverDepthsRank } from "./silver-depths-results.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
@@ -207,6 +208,16 @@ interface PendingAttack {
   step: 1 | 2 | 3;
   impactAt: number;
   lastSweepAt?: number;
+}
+
+interface SilverDepthsRunStats {
+  runId: string;
+  startedAt: number;
+  completedAt: number;
+  enemiesDefeated: number;
+  damageTaken: number;
+  moonstoneCollected: number;
+  edgeAtStart: number;
 }
 
 interface ActiveBrambleSnare {
@@ -282,6 +293,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
   private readonly delayedMatriarchVolleys = new Map<string, { origin: { x: number; y: number; z: number }; shots: { x: number; y: number; z: number }[]; releaseAt: number; damage: number; travelMs: number }>();
   private readonly matriarchCoverHits = new Map<string, number>();
+  private readonly silverDepthsRuns = new Map<string, SilverDepthsRunStats>();
+  private silverDepthsRunSequence = 0;
   private readonly pendingWeaponProjectiles = new Map<string, PendingWeaponProjectile>();
   private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
@@ -581,6 +594,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       // Always finish room cleanup even if external save storage is unavailable.
     }
     this.state.players.delete(client.sessionId);
+    this.silverDepthsRuns.delete(client.sessionId);
     this.forestReturns.delete(client.sessionId);
     this.forestTravelAt.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
@@ -1356,6 +1370,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!mob.alive) return;
     const recipients = this.combatContributions.eligible(mobId, mob, this.state.players, now);
     this.combatContributions.clear(mobId);
+    if ((SILVER_DEPTHS_GUARDS as readonly string[]).includes(mobId) || mobId === CRYSTAL_MATRIARCH_ID) {
+      for (const playerId of recipients) {
+        const run = this.silverDepthsRuns.get(playerId);
+        if (!run || run.completedAt > 0) continue;
+        run.enemiesDefeated++;
+        if (mobId === CRYSTAL_MATRIARCH_ID) run.completedAt = now;
+      }
+    }
     const definition = combatMobDefinition(mob);
     for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
     if (mobId === "buried-chamber-brute") for (const playerId of recipients) this.advanceFirstExpedition(playerId, "defeated_warden");
@@ -1623,6 +1645,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     defense.damage = armouredDamage(defense.damage, player.armourId, kind);
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
     player.health = Math.max(0, player.health - defense.damage);
+    const depthsRun = this.silverDepthsRuns.get(playerId);
+    if (depthsRun && depthsRun.completedAt === 0) depthsRun.damageTaken += defense.damage;
     const defeated = player.health === 0;
     this.broadcast("combat:player-hit", {
       mobId,
@@ -1646,6 +1670,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       } satisfies DefenseResolved);
     }
     if (!defeated) return true;
+    this.silverDepthsRuns.delete(playerId);
     leaveRecoveryBag(player, `${now}-${++this.lootDropSequence}`);
     void this.persistPlayer(playerId, player);
     player.defending = false;
@@ -1718,6 +1743,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       setBlock(stored.chunk, address.localX, y, address.localZ, Block.Stone); stored.revision++;
       this.broadcast("block:changed", { requestId: `matriarch-cover-${cover.x}:${cover.z}-restore`, x: cover.x, y, z: cover.z,
         block: Block.Stone, revision: stored.revision } satisfies BlockChanged);
+    }
+  }
+
+  private restoreSilverDepthsMoonstone(): void {
+    const cells = [
+      ...[8, 9, 10].flatMap(z => [1, 2, 3].map(y => ({ x: 68, y, z }))),
+      ...[6, 12].flatMap(z => [1, 2].map(y => ({ x: 75, y, z }))),
+    ];
+    for (const cell of cells) {
+      const address = worldToChunk(cell.x, cell.z), stored = this.getChunk(address.chunkX, address.chunkZ);
+      if (getBlock(stored.chunk, address.localX, cell.y, address.localZ) === Block.MoonstoneOre) continue;
+      setBlock(stored.chunk, address.localX, cell.y, address.localZ, Block.MoonstoneOre); stored.revision++;
+      this.broadcast("block:changed", { requestId: `depths-moonstone-${cell.x}:${cell.y}:${cell.z}-restore`, ...cell,
+        block: Block.MoonstoneOre, revision: stored.revision } satisfies BlockChanged);
     }
   }
 
@@ -1917,8 +1956,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       client.send("portal:notice", "Defeat the Crystal Matriarch and claim your personal Matriarch's Edge before extracting.");
       return;
     }
+    const activeRun = this.silverDepthsRuns.get(client.sessionId);
+    if (!entering && activeRun && activeRun.completedAt === 0) {
+      client.send("portal:notice", "This expedition is still active · defeat the Crystal Matriarch before extracting.");
+      return;
+    }
     this.forestTravelAt.set(client.sessionId, now);
     const destination = entering ? SILVER_DEPTHS_ENTRY_POSITION : TOWN_SILVER_DEPTHS_PORTAL_POSITION;
+    if (entering) this.beginSilverDepthsRun(client, player, now);
     if (entering && player.silverDepthsStage === 1) this.advanceSilverDepthsExpedition(client, "entered_depths");
     if (!entering && player.silverDepthsStage === 6) this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith");
     this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
@@ -1935,8 +1980,41 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     client.send("portal:notice", entering
       ? "Silver Depths entered · clear the gallery and confront the Crystal Matriarch."
       : "Expedition complete · returned safely to the Town of Beginnings.");
+    if (!entering && activeRun?.completedAt) this.completeSilverDepthsRun(client, player, activeRun);
     this.sendObjectiveState(client, true);
     void this.persistPlayer(client.sessionId, player, !entering);
+  }
+
+  private beginSilverDepthsRun(client: Client, player: PlayerState, now: number): void {
+    const occupied = [...this.state.players.entries()].some(([id, other]) =>
+      id !== client.sessionId && other.health > 0 && isInsideSilverDepths(other));
+    if (!occupied) {
+      this.state.portals.delete("depths-return");
+      for (const mobId of [...SILVER_DEPTHS_GUARDS, CRYSTAL_MATRIARCH_ID]) {
+        const mob = this.state.mobs.get(mobId); if (!mob) continue;
+        mob.alive = false; mob.respawnAt = now; this.delayedMatriarchVolleys.delete(mobId); this.clearMobAttackTimeline(mob);
+      }
+      this.restoreMatriarchCover();
+      this.restoreSilverDepthsMoonstone();
+    }
+    const run: SilverDepthsRunStats = { runId: `depths-run-${++this.silverDepthsRunSequence}`, startedAt: now, completedAt: 0,
+      enemiesDefeated: 0, damageTaken: 0, moonstoneCollected: 0, edgeAtStart: player.inventory.get("matriarch_edge")?.quantity ?? 0 };
+    this.silverDepthsRuns.set(client.sessionId, run);
+    client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: 1 } satisfies DungeonRunUpdate);
+  }
+
+  private completeSilverDepthsRun(client: Client, player: PlayerState, run: SilverDepthsRunStats): void {
+    const durationMs = Math.max(1, run.completedAt - run.startedAt);
+    const priorBest = player.silverDepthsBestTimeMs;
+    const newBest = priorBest === 0 || durationMs < priorBest;
+    if (newBest) player.silverDepthsBestTimeMs = durationMs;
+    const signatureItemObtained = (player.inventory.get("matriarch_edge")?.quantity ?? 0) > run.edgeAtStart;
+    client.send("dungeon:run", { runId: run.runId, phase: "completed", dungeon: "silver-depths", partySize: 1,
+      durationMs, rank: silverDepthsRank(durationMs, run.damageTaken), bestTimeMs: player.silverDepthsBestTimeMs, newBest,
+      reward: signatureItemObtained ? "Matriarch's Edge obtained" : "Matriarch's Edge secured",
+      stats: { enemiesDefeated: run.enemiesDefeated, damageTaken: run.damageTaken,
+        moonstoneCollected: run.moonstoneCollected, signatureItemObtained } } satisfies DungeonRunUpdate);
+    this.silverDepthsRuns.delete(client.sessionId);
   }
 
   private useForestPortal(client: Client, payload: unknown): void {
@@ -2004,6 +2082,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!player || player.health > 0) return;
     const now = Date.now();
     const spawn = this.spawnPoint();
+    this.silverDepthsRuns.delete(client.sessionId);
     this.forestReturns.delete(client.sessionId);
     player.x = spawn.x; player.y = spawn.y; player.z = spawn.z;
     player.health = player.maxHealth;
@@ -2294,6 +2373,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.speedMultiplier = stats.speedMultiplier;
         mob.rewardMultiplier = stats.rewardMultiplier;
         if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
+        if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = matriarchPattern(0, false); }
         if (mobId === CRYSTAL_MATRIARCH_ID) this.restoreMatriarchCover();
         mob.alive = true;
         mob.respawnAt = 0;
@@ -3058,7 +3138,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const address = worldToChunk(request.x, request.z);
     const stored = this.getChunk(address.chunkX, address.chunkZ);
     const block = getBlock(stored.chunk, address.localX, request.y, address.localZ);
-    if (block === Block.MoonstoneOre && player.silverDepthsStage !== 2) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
+    if (block === Block.MoonstoneOre && player.silverDepthsStage < 2) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
     const reason = miningRejectionReason(player, request, block, stored.revision);
     if (reason) return this.reject(client, { requestId: request.requestId, action: "mine", reason });
     const movement = this.movementInputs.get(client.sessionId)?.request;
@@ -3144,6 +3224,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const before = item.quantity;
       item.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), inventoryTotal(before,
         minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player)));
+      if (mineral === "moonstone") {
+        const run = this.silverDepthsRuns.get(client.sessionId);
+        if (run && run.completedAt === 0) run.moonstoneCollected += item.quantity - before;
+      }
       this.grantProgression(client.sessionId, mineral === "moonstone" ? 15 : 4, mineral === "moonstone" ? "Moonstone mined" : "Mineral mined");
       void this.persistPlayer(client.sessionId, player);
       client.send("resource:gathered", { itemId: mineral, quantity: item.quantity - before, total: item.quantity } satisfies ResourceGathered);

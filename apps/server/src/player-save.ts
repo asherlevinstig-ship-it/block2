@@ -42,6 +42,7 @@ export interface PlayerSaveData {
   potionCooldownUntil?: number;
   blacksmithUpgrades: number;
   forestBestTimeMs?: number;
+  silverDepthsBestTimeMs?: number;
   miningExpeditionStage?: number;
   silverDepthsStage?: number;
   inventory: Partial<Record<ItemId, number>>;
@@ -98,6 +99,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     potionCooldownUntil: player.potionCooldownUntil,
     blacksmithUpgrades: player.blacksmithUpgrades,
     forestBestTimeMs: player.forestBestTimeMs,
+    silverDepthsBestTimeMs: player.silverDepthsBestTimeMs,
     miningExpeditionStage: player.miningExpeditionStage,
     silverDepthsStage: player.silverDepthsStage,
     inventory,
@@ -169,6 +171,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 15)),
     forestBestTimeMs: Math.floor(finiteNumber(value.forestBestTimeMs, 0, 0, 86_400_000)),
+    silverDepthsBestTimeMs: Math.floor(finiteNumber(value.silverDepthsBestTimeMs, 0, 0, 86_400_000)),
     miningExpeditionStage: Math.floor(finiteNumber(value.miningExpeditionStage,
       (inventory.miners_lantern ?? 0) + (storage.miners_lantern ?? 0) > 0 ? 7 : 0, 0, 8)),
     silverDepthsStage: Math.floor(finiteNumber(value.silverDepthsStage, 0, 0, 7)),
@@ -201,6 +204,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.potionCooldownUntil = save.potionCooldownUntil ?? 0;
   player.blacksmithUpgrades = save.blacksmithUpgrades;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
+  player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;
   player.miningExpeditionStage = save.miningExpeditionStage ?? 0;
   player.silverDepthsStage = save.silverDepthsStage ?? 0;
   player.stamina = save.stamina;

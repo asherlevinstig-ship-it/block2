@@ -61,4 +61,19 @@ describe("Silver Depths room travel", () => {
     expect(player).toMatchObject(TOWN_SILVER_DEPTHS_PORTAL_POSITION);
     expect(player.inventory.get("moonstone")?.quantity).toBe(0);
   });
+
+  it("reports authoritative run stats, rank, and a persisted personal best", () => {
+    const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
+    internal.beginSilverDepthsRun(client, player, 10_000);
+    const run = internal.silverDepthsRuns.get("miner");
+    Object.assign(run, { completedAt: 160_000, enemiesDefeated: 3, damageTaken: 2, moonstoneCollected: 2 });
+    const edge = new InventoryItemState(); edge.quantity = 1; player.inventory.set("matriarch_edge", edge);
+    internal.completeSilverDepthsRun(client, player, run);
+    expect(client.send).toHaveBeenLastCalledWith("dungeon:run", expect.objectContaining({
+      dungeon: "silver-depths", phase: "completed", durationMs: 150_000, rank: "GOLD", bestTimeMs: 150_000, newBest: true,
+      stats: { enemiesDefeated: 3, damageTaken: 2, moonstoneCollected: 2, signatureItemObtained: true },
+    }));
+    expect(player.silverDepthsBestTimeMs).toBe(150_000);
+    expect(internal.silverDepthsRuns.has("miner")).toBe(false);
+  });
 });
