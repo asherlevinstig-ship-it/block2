@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PlayerState } from "./schema.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSpeedMultiplier } from "./character-progression.js";
+import { enemyLevelForTier, enemyThreat, experienceLevelMultiplier, worldLevelRange } from "@blockcraft/protocol";
 
 describe("character progression", () => {
   it("levels through multiple thresholds and grants one choice per level", () => {
@@ -22,5 +23,18 @@ describe("character progression", () => {
 
   it("awards more experience for dangerous enemies", () => {
     expect(mobExperience("stone_brute", 1.8, true)).toBeGreaterThan(mobExperience("moss_crawler", 1, false));
+  });
+
+  it("rewards danger and sharply reduces trivial-enemy farming", () => {
+    expect(mobExperience("moss_crawler", 1, false, 1, 6)).toBeGreaterThan(mobExperience("moss_crawler", 1, false, 1, 1));
+    expect(mobExperience("moss_crawler", 1, false, 10, 1)).toBeLessThan(mobExperience("moss_crawler", 1, false, 1, 1));
+    expect(experienceLevelMultiplier(10, 1)).toBe(.1);
+  });
+
+  it("maps shared-world tiers to stable levels and visible threats", () => {
+    expect(worldLevelRange(2).label).toBe("LV 4–8");
+    expect(enemyLevelForTier(3, true, true)).toBe(13);
+    expect(enemyThreat(4, 9)).toBe("deadly");
+    expect(enemyThreat(10, 5)).toBe("trivial");
   });
 });

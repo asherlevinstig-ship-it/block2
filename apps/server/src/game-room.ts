@@ -184,6 +184,7 @@ import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
 import { FOREST_CACHE_DUPLICATE_GOLD, forestCacheFeaturedReward, forestCacheRewardLabel } from "./forest-dungeon-rewards.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSnapshot, progressionSpeedMultiplier } from "./character-progression.js";
+import { enemyLevelForTier } from "@blockcraft/protocol";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -1172,6 +1173,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
+    mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion, mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian");
     this.state.mobs.set(mobId, mob);
   }
 
@@ -1297,6 +1299,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.maxHealth = stats.maxHealth;
     mob.armor = stats.armor;
     mob.difficultyTier = band.tier;
+    mob.level = enemyLevelForTier(band.tier);
     mob.attackDamage = stats.damage;
     mob.speedMultiplier = stats.speedMultiplier;
     mob.rewardMultiplier = stats.rewardMultiplier;
@@ -1390,7 +1393,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.stamina = reward.stamina;
       const coinsBefore = player.coins;
       player.coins = Math.min(1_000_000, player.coins + 2);
-      this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion), mob.name);
+      this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion, player.level, mob.level), mob.name);
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -1433,6 +1436,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.health = mob.maxHealth = 24;
     mob.attackPattern = "aimed";
     mob.rewardMultiplier *= 1.5;
+    mob.level = enemyLevelForTier(mob.difficultyTier, true, true);
     this.refreshNearbyObjectives();
   }
 
@@ -1689,6 +1693,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.speedMultiplier = 1 + Math.max(0, scalePlayers - 1) * 0.04; mob.rewardMultiplier = 1;
       if (stage === 2 && entry.id.endsWith("-b")) mob.actionSequence = 1;
       if (stage === 3) { mob.isChampion = true; mob.enraged = false; mob.attackPattern = "slam"; mob.rewardMultiplier = 1.5; }
+      mob.level = stage === 3 ? 10 : stage === 2 ? 8 : 6;
     }
   }
 

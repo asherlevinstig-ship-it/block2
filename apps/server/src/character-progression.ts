@@ -5,6 +5,7 @@ import {
   characterPowerBonus,
   characterSpeedMultiplier,
   experienceToNextLevel,
+  experienceLevelMultiplier,
   type CharacterStatId,
   type ProgressionUpdate,
 } from "@blockcraft/protocol";
@@ -43,7 +44,7 @@ export const progressionAttackBonus = (player: PlayerState) => characterPowerBon
 export const progressionSpeedMultiplier = (player: PlayerState) => characterSpeedMultiplier(player.agilityPoints);
 export const progressionMiningBonus = (player: PlayerState) => characterMiningBonus(player.miningPoints);
 
-export function mobExperience(archetype: string, rewardMultiplier: number, champion: boolean): number {
+export function mobExperience(archetype: string, rewardMultiplier: number, champion: boolean, playerLevel = 1, enemyLevel = 1): number {
   const base = archetype === "stone_brute" ? 18 : archetype === "cave_spitter" ? 12 : archetype === "briar_crawler" ? 9 : 7;
-  return Math.max(1, Math.round(base * Math.max(1, rewardMultiplier) * (champion ? 1.25 : 1)));
+  return Math.max(1, Math.round(base * Math.max(1, rewardMultiplier) * (champion ? 1.25 : 1) * experienceLevelMultiplier(playerLevel, enemyLevel)));
 }

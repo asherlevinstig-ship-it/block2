@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-character-progression-v96";
+export const WORLD_ROOM = "world-enemy-levels-v97";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -53,6 +53,28 @@ export function experienceToNextLevel(level: number): number {
 export function characterPowerBonus(points: number): number { return Math.floor(Math.max(0, points) / 2); }
 export function characterSpeedMultiplier(points: number): number { return 1 + Math.max(0, points) * .02; }
 export function characterMiningBonus(points: number): number { return Math.floor(Math.max(0, points) / 2); }
+export const WORLD_LEVEL_RANGES = [
+  { min: 1, max: 20, label: "SAFE" },
+  { min: 1, max: 4, label: "LV 1–4" },
+  { min: 4, max: 8, label: "LV 4–8" },
+  { min: 8, max: 12, label: "LV 8–12" },
+] as const;
+export type EnemyThreat = "trivial" | "even" | "dangerous" | "deadly";
+export function worldLevelRange(tier: number): typeof WORLD_LEVEL_RANGES[number] {
+  return WORLD_LEVEL_RANGES[Math.max(0, Math.min(3, Math.floor(tier)))]!;
+}
+export function enemyLevelForTier(tier: number, champion = false, boss = false): number {
+  const base = [1, 2, 5, 9][Math.max(0, Math.min(3, Math.floor(tier)))]!;
+  return Math.min(MAX_CHARACTER_LEVEL, base + (champion ? 2 : 0) + (boss ? 2 : 0));
+}
+export function enemyThreat(playerLevel: number, enemyLevel: number): EnemyThreat {
+  const gap = Math.floor(enemyLevel) - Math.floor(playerLevel);
+  return gap >= 5 ? "deadly" : gap >= 2 ? "dangerous" : gap <= -4 ? "trivial" : "even";
+}
+export function experienceLevelMultiplier(playerLevel: number, enemyLevel: number): number {
+  const gap = Math.floor(enemyLevel) - Math.floor(playerLevel);
+  return gap >= 5 ? 1.75 : gap >= 2 ? 1.4 : gap <= -6 ? .1 : gap <= -4 ? .25 : gap <= -2 ? .5 : 1;
+}
 export type ProgressionUpdate = {
   reason: "sync" | "experience" | "level_up" | "choice";
   source?: string;
@@ -664,6 +686,7 @@ export type WorldObjectiveUpdate = {
   title: string;
   detail: string;
   tier: number;
+  recommendedLevel?: string;
   targetMobId: string;
   targetMobIds: string[];
   completedMobIds: string[];

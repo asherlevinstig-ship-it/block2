@@ -104,6 +104,7 @@ export const MobState = schema({
   archetype: t.string().default("moss_crawler"),
   armor: t.int8().default(0),
   difficultyTier: t.int8().default(1),
+  level: t.int8().default(1),
   attackDamage: t.int8().default(1),
   speedMultiplier: t.float32().default(1),
   rewardMultiplier: t.float32().default(1),

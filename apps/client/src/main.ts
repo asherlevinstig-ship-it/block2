@@ -109,7 +109,9 @@ import {
   characterMiningBonus,
   characterPowerBonus,
   characterSpeedMultiplier,
+  enemyThreat,
   experienceToNextLevel,
+  worldLevelRange,
   MAX_CHARACTER_STAT_POINTS,
   type CharacterStatId,
   type ProgressionUpdate,
@@ -1473,6 +1475,7 @@ interface NetworkMob {
   archetype: string;
   armor: number;
   difficultyTier: number;
+  level: number;
   attackDamage: number;
   speedMultiplier: number;
   rewardMultiplier: number;
@@ -1517,6 +1520,7 @@ interface MobVisual {
   combatCue: HTMLDivElement;
   combatCueLabel: HTMLSpanElement;
   combatCueFill: HTMLSpanElement;
+  levelTag: HTMLDivElement;
   recovery: pc.Entity;
   healthFill: pc.Entity;
   healthWidth: number;
@@ -2044,13 +2048,17 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}:${silverDepths}:${position.x >= 69}`;
+  const recommendedLevel = tier === 0 ? "SAFE"
+    : silverDepths ? position.x >= 69 ? "LV 10–12" : "LV 7–10"
+      : forestDungeon ? dungeonAtmosphere.room === 3 ? "LV 10–12" : dungeonAtmosphere.room === 2 ? "LV 8–10" : "LV 6–8"
+        : frontierArena ? "LV 9–12" : silverGuard ? "LV 5–8" : arena ? "LV 4–6" : worldLevelRange(territory?.tier ?? tier).label;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}:${silverDepths}:${position.x >= 69}:${recommendedLevel}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
   dangerZoneName.textContent = label.name;
-  dangerZoneTier.textContent = tier === 0 ? "SAFE" : `TIER ${tier}`;
-  dangerZoneDetail.textContent = label.detail;
+  dangerZoneTier.textContent = recommendedLevel;
+  dangerZoneDetail.textContent = `${label.detail} · Recommended ${recommendedLevel}`;
 }
 
 function actionDuration(step: number): number {
@@ -2856,6 +2864,10 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   combatCueTrack.append(combatCueFill);
   combatCue.append(combatCueLabel, combatCueTrack);
   document.body.append(combatCue);
+  const levelTag = document.createElement("div");
+  levelTag.className = "enemy-level-tag";
+  levelTag.hidden = true;
+  document.body.append(levelTag);
   const recovery = new pc.Entity("enemy-recovery-opening");
   const recoveryMaterial = coloredMaterial(new pc.Color(0.15, 0.9, 1));
   recoveryMaterial.useLighting = false;
@@ -2899,7 +2911,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warningYaw: mob.yaw,
     warningPattern: mob.attackPattern,
     warningChargeLength: CHAMPION_CHARGE.distance,
-    combatCue, combatCueLabel, combatCueFill, recovery,
+    combatCue, combatCueLabel, combatCueFill, levelTag, recovery,
     healthFill,
     healthWidth,
     healthBarY,
@@ -3158,7 +3170,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["awarenessState", "alertUntil", "isChampion", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["awarenessState", "alertUntil", "isChampion", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -3169,6 +3181,7 @@ function bindMobs(joinedRoom: Room): void {
   mobs.onRemove((_mob: NetworkMob, mobId: string) => {
     mobVisuals.get(mobId)?.warningMesh?.destroy();
     mobVisuals.get(mobId)?.combatCue.remove();
+    mobVisuals.get(mobId)?.levelTag.remove();
     mobVisuals.get(mobId)?.entity.destroy();
     mobVisuals.delete(mobId);
   });
@@ -4472,7 +4485,8 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   currentWorldObjective = update;
   worldObjective.hidden = false;
   if (changedObjective || update.showMarker === false) objectiveMarker.hidden = update.showMarker === false;
-  objectiveTier.textContent = update.progressLabel ? "EXPEDITION" : update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : `NEARBY · TIER ${update.tier}`;
+  const recommendation = update.recommendedLevel ?? worldLevelRange(update.tier).label;
+  objectiveTier.textContent = `${update.progressLabel ? "EXPEDITION" : update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : "NEARBY"} · ${recommendation}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
   objectiveProgress.hidden = !update.progressLabel && (update.kind !== "encounter" || update.targetMobIds.length === 0);
@@ -5972,6 +5986,7 @@ app.on("update", (dt: number) => {
     const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
     mob.combatCue.hidden = true;
+    mob.levelTag.hidden = true;
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
     const currentMobPosition = mob.entity.getPosition();
@@ -6035,6 +6050,21 @@ app.on("update", (dt: number) => {
     const combatCue = enemyCombatCue(mob.state, animationNow + serverClock.offset);
     const cue = combatCue.visible ? combatCue : enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
     const playerEye = localPlayer.getPosition();
+    const mobDistance = Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z);
+    if (mob.state.alive && mobDistance <= 28 && camera.camera) {
+      const screen = camera.camera.worldToScreen(new pc.Vec3(sampled.x, sampled.y + mob.healthBarY + .27, sampled.z));
+      const rect = canvas.getBoundingClientRect();
+      const onScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;
+      mob.levelTag.hidden = !onScreen;
+      if (onScreen) {
+        const threat = enemyThreat(localCharacterProgression.level, mob.state.level);
+        const skulls = threat === "deadly" ? "☠☠ " : threat === "dangerous" ? "☠ " : "";
+        mob.levelTag.dataset.threat = threat;
+        mob.levelTag.textContent = `${skulls}LV ${mob.state.level} · ${mob.state.name}`;
+        mob.levelTag.style.left = `${rect.left + screen.x}px`;
+        mob.levelTag.style.top = `${rect.top + screen.y}px`;
+      }
+    }
     const cueVisible = cue.visible && Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z) <= 14
       && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
         { x: sampled.x, y: sampled.y + .8, z: sampled.z }, readCollisionWorldBlock);
@@ -7020,7 +7050,7 @@ async function connect(): Promise<void> {
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
     remotePlayers.clear();
-    for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
+    for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.levelTag.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
     for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
     bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true;

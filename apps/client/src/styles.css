@@ -1365,6 +1365,25 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .enemy-combat-cue[data-kind="return"] .enemy-combat-cue-track { display: none; }
 .enemy-combat-cue-track { display: block; height: 3px; margin-top: 4px; background: #ffffff20; }
 .enemy-combat-cue-track > span { display: block; height: 100%; background: currentColor; transform-origin: left; }
+.enemy-level-tag {
+  position: fixed;
+  z-index: 3;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  padding: 3px 7px;
+  border: 1px solid #879c80aa;
+  border-radius: 4px;
+  background: #07110ddb;
+  color: #e7f0df;
+  font: 900 9px/1.2 system-ui, sans-serif;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px #000;
+}
+.enemy-level-tag[hidden] { display: none; }
+.enemy-level-tag[data-threat="trivial"] { color: #91a78f; border-color: #60715e88; }
+.enemy-level-tag[data-threat="dangerous"] { color: #ffd268; border-color: #e3a637bb; box-shadow: 0 0 8px #e3a63733; }
+.enemy-level-tag[data-threat="deadly"] { color: #ff7968; border-color: #ff4d3dcc; box-shadow: 0 0 10px #ff382b55; }
 #recovery-marker { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 15; max-width: min(90vw, 540px); padding: 10px 16px; border: 1px solid #d9b65d; border-radius: 10px; background: #182218ee; color: #ffe6a1; font: 700 12px system-ui; box-shadow: 0 3px 12px #0006; }
 #recovery-marker:disabled { opacity: .9; cursor: default; }
 #recovery-marker[hidden] { display: none; }
