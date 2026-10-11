@@ -938,6 +938,7 @@ interface VoxelCharacterRig {
   leftKnee: pc.Entity;
   rightKnee: pc.Entity;
   scarf: pc.Entity;
+  minersLantern: pc.Entity;
   silhouette: pc.Entity | null;
   mainHands: Record<MainHandId, pc.Entity>;
   armour: Record<"leather_armour" | "iron_armour" | "rootguard_armour", pc.Entity>;
@@ -1027,6 +1028,13 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(head, "right-eye", eyeWhiteMaterial, [0.077, 0.055, 0.022], [0.09, 0.025, 0.195]);
   addBox(head, "left-pupil", faceMaterial, [0.035, 0.05, 0.025], [-0.076, 0.025, 0.209]);
   addBox(head, "right-pupil", faceMaterial, [0.035, 0.05, 0.025], [0.104, 0.025, 0.209]);
+  const minersLantern = new pc.Entity("miners-lantern-headgear");
+  head.addChild(minersLantern);
+  addBox(minersLantern, "lantern-headband", lanternMetal, [.46, .08, .43], [0, .17, 0]);
+  addBox(minersLantern, "lantern-mount", lanternMetal, [.23, .2, .09], [0, .22, .225]);
+  addBox(minersLantern, "lantern-lens", lanternGlow, [.14, .12, .055], [0, .22, .285]);
+  addBox(minersLantern, "lantern-cap", brassMaterial, [.27, .06, .11], [0, .32, .225]);
+  minersLantern.enabled = false;
 
   const leftArm = new pc.Entity("left-arm-pivot");
   leftArm.setLocalPosition(-0.34, 0.22, 0);
@@ -1214,7 +1222,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     }
     layer.enabled = false;
   }
-  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, silhouette, mainHands, armour, locomotionPhase: 0, locomotionWeight: 0 };
+  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, locomotionPhase: 0, locomotionWeight: 0 };
 }
 
 function setRigArmour(rig: VoxelCharacterRig, id: string): void {
@@ -2934,6 +2942,7 @@ function refreshOwnedInventory(): void {
 
 function updateInventoryItem(itemId: ItemId, total: number): void {
   inventoryCounts.set(itemId, total);
+  if (itemId === "miners_lantern") localPlayerRig.minersLantern.enabled = total > 0;
   refreshOwnedInventory();
   if (itemId === "iron_ore" || itemId === "silver_ore") {
     const iron = inventoryCounts.get("iron_ore") ?? 0;
