@@ -4276,7 +4276,19 @@ function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | n
   return strongest;
 }
 
-const forestPortalVisuals = new Map<string, { root: pc.Entity; glow: pc.Entity; label: HTMLButtonElement; state: ForestPortal; materials: pc.Material[] }>();
+interface ForestPortalVisual {
+  root: pc.Entity;
+  glow: pc.Entity;
+  label: HTMLButtonElement;
+  state: ForestPortal;
+  materials: pc.Material[];
+  ember: boolean;
+  runes: pc.Entity[];
+  motes: pc.Entity[];
+  orbit: pc.Entity | null;
+  portalLight: pc.Entity | null;
+}
+const forestPortalVisuals = new Map<string, ForestPortalVisual>();
 interface DungeonBurstVisual { root: pc.Entity; material: pc.StandardMaterial; startedAt: number; kind: "gate" | "victory" | "crystal" }
 const dungeonBurstVisuals: DungeonBurstVisual[] = [];
 function createDungeonBurst(x: number, z: number, kind: "gate" | "victory" | "crystal", y = 8.08): void {
@@ -4309,29 +4321,81 @@ function updateForestPortals(): void {
     let visual = forestPortalVisuals.get(id);
     if (!visual) {
       const root = new pc.Entity(`portal-${id}`);
-      const frame = coloredMaterial(new pc.Color(.2, .12, .3));
       const victory = id === "forest-victory";
       const depths = id.startsWith("depths-");
       const ember = id.startsWith("ember-");
+      const frame = coloredMaterial(ember ? new pc.Color(.085, .07, .065) : new pc.Color(.2, .12, .3));
+      const trim = ember ? coloredMaterial(new pc.Color(.34, .14, .07)) : frame;
       const light = powerMaterial(ember ? new pc.Color(1, .19, .025) : depths ? new pc.Color(.64, .28, 1)
         : portal.kind === "entry" ? new pc.Color(.45, 1, .65) : victory ? new pc.Color(1, .88, .42) : new pc.Color(1, .75, .25), victory || depths || ember ? .82 : .6);
       addBox(root, "left-arch", frame, [.35, 2.9, .4], [-1, 1.45, 0]);
       addBox(root, "right-arch", frame, [.35, 2.9, .4], [1, 1.45, 0]);
       addBox(root, "arch-crown", frame, [2.35, .35, .4], [0, 2.8, 0]);
       const glow = addBox(root, "portal-light", light, [1.65, 2.35, .12], [0, 1.5, 0]);
-      for (let i = 0; i < 6; i++) addBox(root, "rune", light, [.15, .15, .46], [i % 2 ? 1 : -1, .45 + Math.floor(i / 2) * .8, 0]);
+      const runes: pc.Entity[] = [];
+      for (let i = 0; i < 6; i++) runes.push(addBox(root, "rune", light, [.15, .15, .46], [i % 2 ? 1 : -1, .45 + Math.floor(i / 2) * .8, 0]));
+      const motes: pc.Entity[] = [];
+      let orbit: pc.Entity | null = null;
+      let portalLight: pc.Entity | null = null;
+      if (ember) {
+        addBox(root, "forge-threshold", frame, [3.4, .24, 1.75], [0, .12, 0]);
+        addBox(root, "forge-threshold-inlay", trim, [2.72, .12, 1.28], [0, .27, 0]);
+        addBox(root, "left-buttress", frame, [.72, 1.15, .9], [-1.35, .58, 0]);
+        addBox(root, "right-buttress", frame, [.72, 1.15, .9], [1.35, .58, 0]);
+        for (const side of [-1, 1]) {
+          const horn = addBox(root, "forge-crown-horn", trim, [.36, 1.28, .5], [side * 1.03, 3.25, 0]);
+          horn.setLocalEulerAngles(0, 0, side * -34);
+          addBox(root, "forge-rune-rail", light, [.1, 2.25, .5], [side * .78, 1.5, .02]);
+        }
+        for (let i = 0; i < 7; i++) {
+          const x = -.66 + i * .22;
+          addBox(root, "molten-veil", light, [.09, 2.18 - Math.abs(i - 3) * .07, .08], [x, 1.48, .01]);
+        }
+        orbit = new pc.Entity("ember-rune-orbit"); root.addChild(orbit);
+        for (let i = 0; i < 12; i++) {
+          const angle = i / 12 * Math.PI * 2;
+          const rune = addBox(orbit, "orbiting-forge-rune", light, [.12, .12, .18], [Math.cos(angle) * .72, 1.5 + Math.sin(angle) * 1.04, .16]);
+          rune.setLocalEulerAngles(0, 0, -angle * 180 / Math.PI);
+        }
+        for (let i = 0; i < 14; i++) {
+          const mote = addBox(root, "ember-mote", light, [.045, .045, .045], [0, 0, 0]);
+          if (mote.render) mote.render.castShadows = false;
+          motes.push(mote);
+        }
+        portalLight = new pc.Entity("ember-portal-light");
+        portalLight.addComponent("light", { type: "omni", color: new pc.Color(1, .18, .025), intensity: 2.2, range: 10, castShadows: false });
+        portalLight.setLocalPosition(0, 1.55, .5); root.addChild(portalLight);
+      }
       root.setPosition(portal.x, portal.y, portal.z); app.root.addChild(root);
       const label = document.createElement("button"); label.className = "forest-portal-label";
+      label.classList.toggle("ember-portal-label", ember);
       label.addEventListener("click", event => { event.stopPropagation(); room?.send("portal:use", { id }); }); document.body.append(label);
-      visual = { root, glow, label, state: portal, materials: [frame, light] }; forestPortalVisuals.set(id, visual);
+      visual = { root, glow, label, state: portal, materials: trim === frame ? [frame, light] : [frame, trim, light], ember, runes, motes, orbit, portalLight }; forestPortalVisuals.set(id, visual);
     }
     visual.state = portal;
     const distance = Math.hypot(player.x - portal.x, player.z - portal.z);
     const active = worldReady && (portal.expiresAt === 0 || now < portal.expiresAt);
     visual.root.enabled = active && distance < 45;
     const victory = id === "forest-victory";
-    const pulse = victory ? Math.sin(performance.now() / 220) * .1 : Math.sin(performance.now() / 600) * .04;
-    visual.glow.setLocalScale(victory ? 1.08 : 1, .96 + pulse, victory ? 1.08 : 1);
+    const animationNow = performance.now();
+    const pulse = victory ? Math.sin(animationNow / 220) * .1 : Math.sin(animationNow / 600) * .04;
+    const attunements = [16, 32, 64, 128, 256].filter(bit => (localDepthsRewardFlags & bit) !== 0).length;
+    const emberUnlocked = !visual.ember || id === "ember-return" || attunements >= 2;
+    visual.glow.setLocalScale(victory ? 1.08 : visual.ember ? .94 + Math.sin(animationNow / 260) * .045 : 1,
+      visual.ember ? .98 + Math.sin(animationNow / 390) * .035 : .96 + pulse, victory ? 1.08 : 1);
+    if (visual.ember) {
+      visual.orbit?.setLocalEulerAngles(0, 0, animationNow * .018);
+      visual.portalLight?.light && (visual.portalLight.light.intensity = emberUnlocked ? 2.25 + Math.sin(animationNow / 240) * .35 : .65);
+      visual.runes.forEach((rune, index) => rune.setLocalScale(1 + Math.sin(animationNow / 210 + index) * .22, 1 + Math.sin(animationNow / 210 + index) * .22, 1));
+      visual.motes.forEach((mote, index) => {
+        const phase = animationNow / (920 + index * 23) + index * 1.77;
+        const rise = (animationNow / (1450 + index * 29) + index / visual.motes.length) % 1;
+        mote.setLocalPosition(Math.sin(phase) * (.45 + index % 4 * .18), .3 + rise * 2.7, .24 + Math.cos(phase * 1.4) * .18);
+        const moteScale = emberUnlocked ? .72 + (1 - rise) * .75 : .35;
+        mote.setLocalScale(moteScale, moteScale, moteScale);
+      });
+      visual.label.classList.toggle("locked", !emberUnlocked);
+    }
     const screen = camera.camera!.worldToScreen(new pc.Vec3(portal.x, portal.y + 3.3, portal.z));
     const rect = canvas.getBoundingClientRect();
     visual.label.hidden = !active || distance > 25 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
@@ -4341,7 +4405,8 @@ function updateForestPortals(): void {
     const portalName = id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
       : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
       : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
-    const text = `${portalName}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
+    const emberState = visual.ember && id === "ember-entry" ? emberUnlocked ? "\nFORGE ATTUNED · E TO ENTER" : `\nLOCKED · ${attunements}/2 SILVER ATTUNEMENTS` : "";
+    const text = `${portalName}${emberState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !emberState ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
   });

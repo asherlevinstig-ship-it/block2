@@ -1,6 +1,10 @@
 .forest-portal-label { position: fixed; z-index: 25; transform: translate(-50%, -100%); padding: 8px 12px; border: 1px solid #81eeb0; border-radius: 8px; background: #101b23ed; color: #d7ffe6; font: 700 11px/1.4 ui-sans-serif, system-ui; letter-spacing: .06em; cursor: pointer; box-shadow: 0 3px 12px #0006; }
 .forest-portal-label:disabled { cursor: default; opacity: .85; }
 .forest-portal-label[hidden] { display: none; }
+.forest-portal-label.ember-portal-label { min-width: 210px; white-space: pre-line; color: #ffe1bf; border-color: #f06b2d; background: linear-gradient(180deg, #321209f2, #130b08f4); box-shadow: 0 0 0 1px #ff9a4133, 0 4px 18px #000b, 0 0 26px #ff4b1838; text-shadow: 0 0 10px #ff6a2b88; }
+.forest-portal-label.ember-portal-label::before { content: "◆"; display: inline-block; margin-right: 7px; color: #ff7d38; filter: drop-shadow(0 0 5px #ff4a1f); }
+.forest-portal-label.ember-portal-label.locked { color: #baaaa1; border-color: #705147; background: linear-gradient(180deg, #241713f2, #100d0cf4); box-shadow: 0 4px 18px #000b; text-shadow: none; }
+.forest-portal-label.ember-portal-label.locked::before { color: #79594d; filter: none; }
 :root {
   color: #eef7e8;
   background: #101814;
