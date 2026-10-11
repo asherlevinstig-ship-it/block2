@@ -4328,11 +4328,11 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   currentWorldObjective = update;
   worldObjective.hidden = false;
   if (changedObjective || update.showMarker === false) objectiveMarker.hidden = update.showMarker === false;
-  objectiveTier.textContent = update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : `NEARBY · TIER ${update.tier}`;
+  objectiveTier.textContent = update.progressLabel ? "EXPEDITION" : update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : `NEARBY · TIER ${update.tier}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
-  objectiveProgress.hidden = update.kind !== "encounter" || update.targetMobIds.length === 0;
-  objectiveProgress.textContent = `${update.targetMobIds.length - update.completedMobIds.length} remaining`;
+  objectiveProgress.hidden = !update.progressLabel && (update.kind !== "encounter" || update.targetMobIds.length === 0);
+  objectiveProgress.textContent = update.progressLabel ?? `${update.targetMobIds.length - update.completedMobIds.length} remaining`;
   objectiveDistance.hidden = update.showMarker === false;
   objectiveMarkerLabel.textContent = update.title.toUpperCase();
   objectiveMarker.dataset.kind = update.kind ?? "encounter";

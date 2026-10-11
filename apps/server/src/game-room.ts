@@ -103,6 +103,7 @@ import {
   type SpecialProgressed,
   type TraitId,
   type WorldBootstrap,
+  type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
   type WeaponAttackReleased,
   type ItemId,
@@ -174,6 +175,7 @@ import {
   type StoredMovementInput,
 } from "./movement-input.js";
 import { nearbyObjective, createObjectiveProgress, type WorldObjectiveProgress } from "./world-objectives.js";
+import { advanceMiningExpedition, isBuriedVaultSeal, isInsideEastMine, type MiningExpeditionEvent } from "./mining-expedition.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
@@ -448,7 +450,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     aliveMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
     aliveMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
     aliveMessage("quiz:decision", (client, payload) => this.handleQuizDecision(client, payload));
-    this.onMessage("blacksmith:sync", client => this.sendBlacksmithState(client));
+    this.onMessage("blacksmith:sync", client => this.handleBlacksmithSync(client));
     this.onMessage("storage:sync", client => this.sendStorageState(client));
     this.onMessage("storage:transfer", (client, payload: unknown) => {
       const player = this.state.players.get(client.sessionId);
@@ -721,6 +723,48 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       purchasedUpgradeId,
       message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
     } satisfies BlacksmithUpdate);
+  }
+
+  private advanceFirstExpedition(clientOrId: Client | string, event: MiningExpeditionEvent): boolean {
+    const sessionId = typeof clientOrId === "string" ? clientOrId : clientOrId.sessionId;
+    const client = typeof clientOrId === "string" ? this.clients.find(candidate => candidate.sessionId === sessionId) : clientOrId;
+    const player = this.state.players.get(sessionId);
+    if (!player) return false;
+    const next = advanceMiningExpedition(player.miningExpeditionStage, event);
+    if (next === player.miningExpeditionStage) return false;
+    player.miningExpeditionStage = next;
+    const labels = ["", "Expedition accepted · enter the East Ore Mine.", "Mine entered · locate iron in the first chamber.",
+      "Iron secured · push deeper and mine silver.", "Silver secured · breach the eastern vault seal.",
+      "Vault breached · defeat its defenders and the Stone Warden.", "Stone Warden defeated · claim your personal cache.",
+      "Miner's Lantern secured · return to the blacksmith.", "First Mining Expedition complete."];
+    client?.send("chat:notice", labels[next] ?? "First expedition updated.");
+    if (next === 8) {
+      const before = player.coins;
+      player.coins = Math.min(1_000_000, player.coins + 25);
+      player.maxHealth = Math.min(127, player.maxHealth + 1);
+      player.health = Math.min(player.maxHealth, player.health + 1);
+      client?.send("objective:completed", {
+        objectiveId: "first-mining-expedition",
+        title: "First Mining Expedition",
+        rewardLabel: `Warden's Resolve · +1 maximum health · +${player.coins - before} gold`,
+        coinsGranted: player.coins - before,
+      } satisfies WorldObjectiveCompleted);
+    }
+    void this.persistPlayer(sessionId, player, next === 8);
+    return true;
+  }
+
+  private handleBlacksmithSync(client: Client): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    let message: string | undefined;
+    if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 0 && this.advanceFirstExpedition(client, "briefed")) {
+      message = "First expedition: enter the East Ore Mine, gather iron and silver, breach the buried vault, and return with its lantern.";
+    } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 7 && this.advanceFirstExpedition(client, "returned_to_blacksmith")) {
+      message = "Expedition complete. Warden's Resolve permanently increased your maximum health, and 25 gold was added to your purse.";
+    }
+    this.sendBlacksmithState(client, message);
+    this.sendObjectiveState(client, true);
   }
 
   private handleArmourEquip(client: Client, payload: unknown): void {
@@ -1223,6 +1267,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.combatContributions.clear(mobId);
     const definition = combatMobDefinition(mob);
     for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
+    if (mobId === "buried-chamber-brute") for (const playerId of recipients) this.advanceFirstExpedition(playerId, "defeated_warden");
     mob.alive = false;
     this.delayedMatriarchVolleys.delete(mobId);
     this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
@@ -1286,6 +1331,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private sendObjectiveState(client: Client, force = false): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    if (player.miningExpeditionStage === 1 && isInsideEastMine(player)) this.advanceFirstExpedition(client, "entered_mine");
     const progress = this.objectiveProgress.get(client.sessionId) ?? createObjectiveProgress();
     this.objectiveProgress.set(client.sessionId, progress);
     const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id, this.wildernessEvent.warningUntil);
@@ -1443,6 +1489,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     void this.persistPlayer(client.sessionId, player);
     this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
       quantity: drop.quantity, total: item.quantity } satisfies LootPickedUp);
+    if (utilityId && this.advanceFirstExpedition(client, "claimed_lantern")) this.sendObjectiveState(client, true);
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
       : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
@@ -2904,6 +2951,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       item.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), inventoryTotal(before, minedIronQuantity(player.blacksmithUpgrades)));
       void this.persistPlayer(client.sessionId, player);
       client.send("resource:gathered", { itemId: mineral, quantity: item.quantity - before, total: item.quantity } satisfies ResourceGathered);
+      let expeditionAdvanced = mineral === "iron_ore" && this.advanceFirstExpedition(client, "mined_iron");
+      expeditionAdvanced = (mineral === "silver_ore" && this.advanceFirstExpedition(client, "mined_silver")) || expeditionAdvanced;
+      expeditionAdvanced = (isBuriedVaultSeal(request.x, request.y, request.z) && this.advanceFirstExpedition(client, "breached_vault")) || expeditionAdvanced;
+      if (expeditionAdvanced) this.sendObjectiveState(client, true);
     } else if (current === Block.OakLog) {
       let item = player.inventory.get("timber");
       if (!item) {

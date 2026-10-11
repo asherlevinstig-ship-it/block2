@@ -8,6 +8,15 @@ const mob = (x: number, z: number, more = {}) => ({ x, y: 8, z, alive: true, nam
 const select = (pose = player(48, 28), mobs = new Map([["cave-spitter", mob(46.5, 31.5)], ["frontier-spitter", mob(50.5, 25.5)]]), previous: string | null = null) => nearbyObjective("tester", pose, mobs, [], [], 10000, previous);
 
 describe("world objective director", () => {
+  it("guides every stage of the first mining expedition before returning to local objectives", () => {
+    const pose = { ...player(8.5, 8.5), miningExpeditionStage: 0 };
+    expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Speak to the Blacksmith");
+    pose.miningExpeditionStage = 1; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Enter the East Ore Mine");
+    pose.miningExpeditionStage = 2; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Mine Iron Ore");
+    pose.miningExpeditionStage = 3; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Mine Silver Ore");
+    pose.miningExpeditionStage = 4; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Breach the Buried Vault");
+    pose.miningExpeditionStage = 7; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Return to the Blacksmith");
+  });
   it("groups the mixed frontier enemies into one nearby encounter", () => {
     const mobs = new Map([["frontier-crawler", mob(63.5, 35.5)], ["frontier-support-spitter", mob(68.5, 36.5)],
       ["frontier-brute-east", mob(70.5, 32.5)]]);
@@ -63,7 +72,7 @@ describe("world objective director", () => {
     Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
     internal.registerMob("greenwood-briar", "briar_crawler", { x: 39.5, y: 8, z: 16.5 });
     internal.registerMob("frontier-brute", "stone_brute", { x: 65.5, y: 8, z: 23.5 });
-    const pose = new PlayerState(); Object.assign(pose, { x: 40, y: 8, z: 16 }); room.state.players.set("tester", pose);
+    const pose = new PlayerState(); Object.assign(pose, { x: 40, y: 8, z: 16, miningExpeditionStage: 8 }); room.state.players.set("tester", pose);
     const client = { sessionId: "tester", send: vi.fn() } as any;
     internal.sendObjectiveState(client); expect(client.send.mock.calls[0][1].objectiveId).toBe("greenwood");
     internal.sendObjectiveState(client); expect(client.send).toHaveBeenCalledTimes(1);
@@ -75,7 +84,7 @@ describe("world objective director", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
     vi.spyOn(room, "broadcast").mockImplementation(() => {}); vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
-    const pose = new PlayerState(); Object.assign(pose, { x: 40, y: 8, z: 16 }); room.state.players.set("tester", pose);
+    const pose = new PlayerState(); Object.assign(pose, { x: 40, y: 8, z: 16, miningExpeditionStage: 8 }); room.state.players.set("tester", pose);
     internal.registerMob("greenwood-briar", "briar_crawler", { x: 39.5, y: 8, z: 16.5 });
     const target = room.state.mobs.get("greenwood-briar")!;
     internal.combatContributions.record("greenwood-briar", "tester", target.maxHealth, 10000);

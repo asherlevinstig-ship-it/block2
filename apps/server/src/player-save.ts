@@ -35,6 +35,7 @@ export interface PlayerSaveData {
   potionCooldownUntil?: number;
   blacksmithUpgrades: number;
   forestBestTimeMs?: number;
+  miningExpeditionStage?: number;
   inventory: Partial<Record<ItemId, number>>;
   storage?: Partial<Record<ItemId, number>>;
   recoveryBags?: RecoveryBagData[];
@@ -81,6 +82,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     potionCooldownUntil: player.potionCooldownUntil,
     blacksmithUpgrades: player.blacksmithUpgrades,
     forestBestTimeMs: player.forestBestTimeMs,
+    miningExpeditionStage: player.miningExpeditionStage,
     inventory,
     storage,
     recoveryBags: snapshotRecoveryBags(player),
@@ -139,6 +141,8 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 7)),
     forestBestTimeMs: Math.floor(finiteNumber(value.forestBestTimeMs, 0, 0, 86_400_000)),
+    miningExpeditionStage: Math.floor(finiteNumber(value.miningExpeditionStage,
+      (inventory.miners_lantern ?? 0) + (storage.miners_lantern ?? 0) > 0 ? 7 : 0, 0, 8)),
     inventory,
     storage,
     mainHandId,
@@ -160,6 +164,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.potionCooldownUntil = save.potionCooldownUntil ?? 0;
   player.blacksmithUpgrades = save.blacksmithUpgrades;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
+  player.miningExpeditionStage = save.miningExpeditionStage ?? 0;
   player.stamina = save.stamina;
   restoreRecoveryBags(player, save.recoveryBags ?? []);
   for (const [itemId, quantity] of Object.entries(save.inventory) as [ItemId, number][]) {

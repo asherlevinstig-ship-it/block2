@@ -4,7 +4,7 @@ import { MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; combatState: string; targetId: string };
-type Player = Pose & { health: number; inventory: { get(id: string): { quantity: number } | undefined } };
+type Player = Pose & { health: number; miningExpeditionStage?: number; inventory: { get(id: string): { quantity: number } | undefined } };
 type Loot = Pose & { ownerId: string; itemId: string; expiresAt: number };
 export interface WorldObjectiveProgress { id: string | null; fingerprint: string }
 export const createObjectiveProgress = (): WorldObjectiveProgress => ({ id: null, fingerprint: "" });
@@ -29,12 +29,35 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     objectiveId: id, title, detail, kind, tier, showMarker: true, targetMobId: "", targetMobIds: [], completedMobIds: [], targetX: point.x, targetY: point.y, targetZ: point.z,
   });
   if (player.health <= 0) return { ...make("defeated", "Return to Town", "Use Return to Town to recover. Your dropped items remain in your recovery bag.", player, "hub"), showMarker: false };
+  const mobs = new Map(mobEntries);
+  const expeditionStage = player.miningExpeditionStage ?? 8;
+  const expedition = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => ({ ...update, progressLabel: `STEP ${step} / 8` });
+  if (expeditionStage === 0) return expedition(make("expedition-briefing", "Speak to the Blacksmith", "Visit the blacksmith stall and press E to receive your first mining expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
+  if (expeditionStage === 1) return expedition(make("expedition-enter-mine", "Enter the East Ore Mine", "Leave through the east gate and descend beneath the gold mine gateway.", { x: 34.5, y: 3, z: 8.5 }, "explore"), 2);
+  if (expeditionStage === 2) return expedition(make("expedition-iron", "Mine Iron Ore", "Find and mine an iron block in the first underground chamber.", { x: 39.5, y: 3, z: 6.5 }, "explore"), 3);
+  if (expeditionStage === 3) return expedition(make("expedition-silver", "Mine Silver Ore", "Push deeper, defeat or evade the chamber spitter, and mine a silver block.", { x: 48.5, y: 1, z: 10.5 }, "explore", 2), 4);
+  if (expeditionStage === 4) return expedition(make("expedition-breach", "Breach the Buried Vault", "Mine through the silver seal at the eastern wall of the deep chamber.", { x: 52.5, y: 1.5, z: 8.5 }, "explore", 3), 5);
+  if (expeditionStage === 5) {
+    const ids = ["buried-vault-crawler", "buried-chamber-brute"];
+    const living = ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive ? [{ id, mob }] : []; });
+    const target = living[0] ?? { id: "buried-chamber-brute", mob: mobs.get("buried-chamber-brute") ?? { x: 56.5, y: 1, z: 9.5 } };
+    const update = make("expedition-warden", "Defeat the Stone Warden", "Clear the Vault Crawler, then dodge the Warden's committed strike and counter during recovery.", target.mob, "encounter", 3);
+    update.targetMobId = target.id; update.targetMobIds = ids; update.completedMobIds = ids.filter(id => mobs.get(id)?.alive === false);
+    return expedition(update, 6);
+  }
+  if (expeditionStage === 6) {
+    const cache = [...lootEntries].find(([, drop]) => drop.ownerId === playerId && drop.itemId === "miners_lantern" && now < drop.expiresAt);
+    return expedition(cache
+      ? make(`loot-${cache[0]}`, "Claim the Miner's Lantern", "Approach your personal vault cache and press E to claim its fixed reward.", cache[1], "loot")
+      : make("expedition-recover-lantern", "Recover the Miner's Lantern", "Your personal cache is inside the vault. If it expired, defeat the Stone Warden again.", mobs.get("buried-chamber-brute") ?? { x: 56.5, y: 1, z: 9.5 }, "encounter", 3), 7);
+  }
+  if (expeditionStage === 7) return expedition(make("expedition-return", "Return to the Blacksmith", "Bring the Miner's Lantern back to town and press E at the blacksmith stall to complete the expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 8);
   if (Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) <= TOWN_SAFE_RADIUS && sameFloor({ x: 0, y: 8, z: 0 })) {
     const minerals = (player.inventory.get("iron_ore")?.quantity ?? 0) + (player.inventory.get("silver_ore")?.quantity ?? 0);
     return minerals > 0 ? make("blacksmith", "Trade Your Minerals", "Take your minerals to the blacksmith and press E to trade them for gold.", TOWN_BLACKSMITH_STALL_POSITION, "hub")
       : make("leave-town", "Explore the Wilderness", "Leave through the east gate. Nearby encounters will become your objective as you explore.", { x: 30.5, y: 8, z: 8.5 }, "hub");
   }
-  const mobs = new Map(mobEntries), dungeon = isInForestDungeon(player.x, player.z);
+  const dungeon = isInForestDungeon(player.x, player.z);
   const groups = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({ id: `mob-${id}`, title: mob.name, detail: "Defeat this nearby enemy and collect your item drops.", ids: [id] }))];
   const candidates = groups.flatMap(group => {
     const living = group.ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive && sameFloor(mob) && isInForestDungeon(mob.x, mob.z) === dungeon ? [{ id, mob }] : []; }).sort((a, b) => distance(a.mob) - distance(b.mob));

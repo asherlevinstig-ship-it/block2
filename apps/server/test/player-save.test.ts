@@ -15,6 +15,7 @@ describe("player saves", () => {
     player.stamina = 47;
     player.coins = 73;
     player.blacksmithUpgrades = 5;
+    player.miningExpeditionStage = 6;
     player.mainHandId = "fang_dagger";
     player.mainHandTag = "melee";
     player.equippedPower = "seismic_cleave";
@@ -32,6 +33,7 @@ describe("player saves", () => {
     expect(restored.stamina).toBe(47);
     expect(restored.coins).toBe(73);
     expect(restored.blacksmithUpgrades).toBe(5);
+    expect(restored.miningExpeditionStage).toBe(6);
     expect(restored.mainHandId).toBe("fang_dagger");
     expect(restored.equippedPower).toBe("seismic_cleave");
     expect(restored.seismicMastery).toBe("tectonic_stand");
@@ -63,5 +65,10 @@ describe("player saves", () => {
     const player = new PlayerState();
     applyPlayerSave(player, parsed!);
     expect(player.mainHandId).toBe("longsword");
+  });
+
+  it("resumes legacy lantern owners at the return-to-blacksmith step", () => {
+    const parsed = parsePlayerSave(JSON.stringify({ version: 1, inventory: { miners_lantern: 1 }, mainHandId: "longsword" }));
+    expect(parsed?.miningExpeditionStage).toBe(7);
   });
 });

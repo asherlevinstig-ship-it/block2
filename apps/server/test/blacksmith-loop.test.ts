@@ -5,6 +5,21 @@ import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/sc
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("ore to forged sword to item loot", () => {
+  it("starts and completes the first expedition at the blacksmith exactly once", () => {
+    const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION); room.state.players.set("miner", player);
+    const client = { sessionId: "miner", send: vi.fn() } as any;
+    internal.handleBlacksmithSync(client);
+    expect(player.miningExpeditionStage).toBe(1);
+    player.miningExpeditionStage = 7; player.coins = 20; player.health = player.maxHealth = 5;
+    internal.handleBlacksmithSync(client);
+    expect(player.miningExpeditionStage).toBe(8); expect(player.coins).toBe(45);
+    expect(player.maxHealth).toBe(6); expect(player.health).toBe(6);
+    expect(client.send).toHaveBeenCalledWith("objective:completed", expect.objectContaining({ coinsGranted: 25 }));
+    internal.handleBlacksmithSync(client);
+    expect(player.coins).toBe(45); expect(player.maxHealth).toBe(6);
+  });
   it("requires stall proximity and sufficient gold, buys once, auto-equips and doubles silver yield", () => {
     const room = new WorldRoom(); room.setState(new WorldState());
     const internal = room as any;

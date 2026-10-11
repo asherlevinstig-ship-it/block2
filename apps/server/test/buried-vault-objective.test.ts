@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { nearbyObjective } from "../src/world-objectives.js";
 
-const player = { x: 52.5, y: 1, z: 9.5, health: 5, inventory: new Map<string, { quantity: number }>() };
+const player = { x: 52.5, y: 1, z: 9.5, health: 5, miningExpeditionStage: 8, inventory: new Map<string, { quantity: number }>() };
 const mob = (x: number, z: number, alive = true) => ({ x, y: 1, z, alive, name: "Vault enemy", difficultyTier: 3, combatState: "idle", targetId: "" });
 
 describe("buried vault objective", () => {
