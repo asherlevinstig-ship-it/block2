@@ -425,8 +425,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("deep-cave-spitter", "cave_spitter", CAVE_DEEP_HOME);
     this.registerMob("buried-vault-crawler", "moss_crawler", { x: 54.5, y: 1, z: 10.5 });
     this.registerMob("buried-chamber-brute", "stone_brute", CAVE_HIDDEN_HOME);
-    SILVER_DEPTHS_SPITTER_HOMES.forEach((home, index) => this.registerMob(SILVER_DEPTHS_GUARDS[index]!, "cave_spitter", home));
-    SILVER_DEPTHS_GUARDS.forEach(id => { this.state.mobs.get(id)!.name = "Moonstone Spitter"; });
+    const legacyDepthsSpitters = ["silver-depths-spitter-a", "silver-depths-spitter-b"] as const;
+    SILVER_DEPTHS_SPITTER_HOMES.forEach((home, index) => this.registerMob(legacyDepthsSpitters[index]!, "cave_spitter", home));
+    legacyDepthsSpitters.forEach(id => { this.state.mobs.get(id)!.name = "Moonstone Spitter"; });
     this.registerMob(CRYSTAL_MATRIARCH_ID, "cave_spitter", CRYSTAL_MATRIARCH_HOME);
     const crystalMatriarch = this.state.mobs.get(CRYSTAL_MATRIARCH_ID)!;
     crystalMatriarch.name = "Crystal Matriarch"; crystalMatriarch.isChampion = true;
