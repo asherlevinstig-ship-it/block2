@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-rootbound-hammer-v85";
+export const WORLD_ROOM = "world-forest-runs-v86";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -78,6 +78,14 @@ export type BlacksmithUpdate = {
   sold?: number;
   goldGranted?: number;
   message: string;
+};
+export type DungeonRunUpdate = {
+  runId: string;
+  phase: "started" | "completed";
+  partySize: number;
+  durationMs?: number;
+  cooldownUntil?: number;
+  reward?: string;
 };
 export type ResourceGathered = { itemId: "iron_ore" | "silver_ore" | "timber"; quantity: number; total: number };
 export const TavernQuizStartSchema = z.object({ stake: z.number().int().min(1).max(TAVERN_QUIZ_MAX_STAKE) });

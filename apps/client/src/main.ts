@@ -86,6 +86,7 @@ import {
   type CombatReward,
   type CombatStagger,
   type DefenseResolved,
+  type DungeonRunUpdate,
   type ItemId,
   type LootPickedUp,
   type ResourceGathered,
@@ -198,6 +199,21 @@ function browserProfileToken() {
   } catch {
     return newGuestProfileToken();
   }
+}
+
+function showDungeonRunResult(update: DungeonRunUpdate): void {
+  if (update.phase !== "completed") return;
+  document.querySelector("#dungeon-completion")?.remove();
+  const panel = document.createElement("section");
+  panel.id = "dungeon-completion";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", "Forest Dungeon complete");
+  panel.innerHTML = '<small>FOREST DUNGEON</small><h2>ROOT GUARDIAN DEFEATED</h2><p class="dungeon-run-time"></p><strong class="dungeon-run-reward"></strong><p>Collect your personal equipment bag, then take the return portal.</p><button type="button">CONTINUE</button>';
+  const seconds = Math.max(1, Math.round((update.durationMs ?? 0) / 1000));
+  panel.querySelector(".dungeon-run-time")!.textContent = `${update.partySize > 1 ? `${update.partySize}-player party` : "Solo clear"} · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  panel.querySelector(".dungeon-run-reward")!.textContent = update.reward ?? "Personal reward unlocked";
+  panel.querySelector("button")!.addEventListener("click", () => panel.remove());
+  document.body.append(panel);
 }
 
 const profileToken = browserProfileToken();
@@ -6255,6 +6271,10 @@ async function connect(): Promise<void> {
     createDungeonBurst(notice.x, notice.z, notice.kind);
     combatAudio.play(notice.kind === "victory" ? "dungeonVictory" : "dungeonGate");
     showCombatFeedback(notice.title, notice.kind === "victory" ? "dodge" : "hit");
+  });
+  room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
+    if (update.phase === "started") status.textContent = `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
+    showDungeonRunResult(update);
   });
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));

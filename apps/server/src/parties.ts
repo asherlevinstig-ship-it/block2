@@ -11,6 +11,10 @@ export class Parties {
   private readonly lastInviteAt = new Map<string, number>();
   private sequence = 0;
   private partyId(id: string) { return this.membership.get(id) ?? null; }
+  cohort(id: string): { key: string; members: string[] } {
+    const partyId = this.partyId(id);
+    return partyId ? { key: partyId, members: [...(this.groups.get(partyId) ?? [id])] } : { key: `solo:${id}`, members: [id] };
+  }
   expire(now: number): void { for (const [id, invite] of this.invites) if (now >= invite.expiresAt) this.invites.delete(id); }
   leave(id: string): void {
     const groupId = this.partyId(id); this.membership.delete(id);

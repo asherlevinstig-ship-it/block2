@@ -90,6 +90,7 @@ import {
   type PowerFracture,
   type PowerId,
   type PowerResolved,
+  type DungeonRunUpdate,
   type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
@@ -291,6 +292,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly wildernessEvent = new WildernessEventCycle();
   private readonly forestPortalCycle = new ForestPortalCycle();
   private forestDungeonActive = false;
+  private forestDungeonRun: { id: string; key: string; allowed: Set<string>; entered: Set<string>; startedAt: number; completedAt: number } | null = null;
+  private forestDungeonRunSequence = 0;
+  private forestDungeonUnlocked = false;
+  private forestDungeonReopenAt = Infinity;
+  private readonly forestDungeonCooldownUntil = new Map<string, number>();
   private readonly forestReturns = new Map<string, { x: number; y: number; z: number }>();
   private readonly forestTravelAt = new Map<string, number>();
   private readonly lastPartyRequestAt = new Map<string, number>();
@@ -1225,6 +1231,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
     }
     if (this.forestPortalCycle.record(mobId, now) && !this.state.portals.has("forest-entry") && !this.forestDungeonActive) {
+      this.forestDungeonUnlocked = true;
       // Repair an old excavation beneath the arrival pad before making it usable.
       for (let x = 45; x <= 46; x++) for (let z = 28; z <= 29; z++) {
         const a = worldToChunk(x, z), stored = this.getChunk(a.chunkX, a.chunkZ);
@@ -1234,6 +1241,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       const portal = new ForestPortalState(); Object.assign(portal, FOREST_PORTAL_POSITION, { kind: "entry", expiresAt: now + FOREST_PORTAL_LIFETIME_MS });
       this.state.portals.set("forest-entry", portal);
+      this.forestDungeonReopenAt = portal.expiresAt;
     }
     if (FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) this.advanceForestDungeon();
     mob.combatState = "idle";
@@ -1506,6 +1514,21 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (this.state.mobs.get("forest-guardian")?.alive === false && !this.state.portals.has("forest-victory")) {
       const portal = new ForestPortalState(); Object.assign(portal, { kind: "return", x: 189.5, y: 8, z: 165.5 });
       this.state.portals.set("forest-victory", portal);
+      if (this.forestDungeonRun && this.forestDungeonRun.completedAt === 0) {
+        this.forestDungeonRun.completedAt = Date.now();
+        const cooldownUntil = Date.now() + 45_000;
+        for (const playerId of this.forestDungeonRun.entered) {
+          this.forestDungeonCooldownUntil.set(playerId, cooldownUntil);
+          this.clients.find(client => client.sessionId === playerId)?.send("dungeon:run", {
+            runId: this.forestDungeonRun.id,
+            phase: "completed",
+            partySize: this.forestDungeonRun.entered.size,
+            durationMs: Date.now() - this.forestDungeonRun.startedAt,
+            cooldownUntil,
+            reward: "Personal Rootbound Cache unlocked",
+          } satisfies DungeonRunUpdate);
+        }
+      }
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
         if (player && isInForestDungeon(player.x, player.z)) client.send("portal:notice", "Guardian defeated! Collect your equipment bag, then use the return portal.");
@@ -1523,8 +1546,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.forestTravelAt.set(client.sessionId, now);
     let destination = this.forestReturns.get(client.sessionId) ?? FOREST_PORTAL_POSITION;
     if (portal.kind === "entry") {
+      const cooldownUntil = this.forestDungeonCooldownUntil.get(client.sessionId) ?? 0;
+      if (now < cooldownUntil) {
+        client.send("portal:notice", `Forest Dungeon recovering · available in ${Math.ceil((cooldownUntil - now) / 1000)} seconds.`);
+        return;
+      }
+      if (this.forestDungeonRun && !this.forestDungeonRun.allowed.has(client.sessionId)) {
+        client.send("portal:notice", "Forest Dungeon occupied · this run belongs to another adventurer or party.");
+        return;
+      }
       if (!this.forestDungeonActive) {
         this.forestDungeonActive = true;
+        const cohort = this.parties.cohort(client.sessionId);
+        this.forestDungeonRun = { id: `forest-run-${++this.forestDungeonRunSequence}`, key: cohort.key,
+          allowed: new Set(cohort.members.filter(id => this.state.players.has(id))), entered: new Set(), startedAt: now, completedAt: 0 };
         this.state.portals.delete("forest-victory");
         this.forestGate(168, false); this.forestGate(180, false);
         for (const cover of FOREST_DUNGEON_COVER.filter(entry => entry.stage === 3)) this.setGuardianCover(cover, false);
@@ -1532,6 +1567,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const exit = new ForestPortalState(); Object.assign(exit, FOREST_DUNGEON_EXIT, { kind: "return" });
         this.state.portals.set("forest-return", exit);
       }
+      this.forestDungeonRun!.entered.add(client.sessionId);
+      client.send("dungeon:run", { runId: this.forestDungeonRun!.id, phase: "started",
+        partySize: this.forestDungeonRun!.allowed.size } satisfies DungeonRunUpdate);
       this.forestReturns.set(client.sessionId, { ...FOREST_PORTAL_POSITION });
       destination = FOREST_DUNGEON_ENTRY;
     } else this.forestReturns.delete(client.sessionId);
@@ -1726,6 +1764,32 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
+  private resetForestDungeon(now: number): void {
+    const entered = this.forestDungeonRun ? [...this.forestDungeonRun.entered] : [...this.forestReturns.keys()];
+    for (const playerId of entered) this.forestDungeonCooldownUntil.set(playerId,
+      Math.max(this.forestDungeonCooldownUntil.get(playerId) ?? 0, now + 45_000));
+    this.forestDungeonActive = false;
+    this.forestDungeonRun = null;
+    this.forestDungeonReopenAt = now + 45_000;
+    this.state.portals.delete("forest-return"); this.state.portals.delete("forest-entry");
+    this.state.portals.delete("forest-victory");
+    this.forestReturns.clear();
+    this.forestGate(168, false); this.forestGate(180, false);
+    for (const cover of FOREST_DUNGEON_COVER.filter(entry => entry.stage === 3)) this.setGuardianCover(cover, false);
+    for (const entry of FOREST_DUNGEON_MOBS) {
+      this.state.mobs.delete(entry.id); this.mobHomes.delete(entry.id); this.mobNavigation.delete(entry.id);
+      this.pendingMobMelee.delete(entry.id); this.mobAwareness.delete(entry.id); this.combatContributions.clear(entry.id);
+      this.mobPatrols.delete(entry.id); this.mobProgress.delete(entry.id); this.mobUnreachableUntil.delete(entry.id); this.mobReturning.delete(entry.id);
+      this.mobVerticalVelocities.delete(entry.id); this.lastMobAttackAt.delete(entry.id); this.mobCommittedAim.delete(entry.id);
+      this.crawlerPositioning.delete(entry.id); this.crawlerRushes.delete(entry.id); this.spitterPositioning.delete(entry.id);
+      this.mobStaggerImmuneUntil.delete(entry.id); this.mobAssistAt.delete(entry.id);
+      for (const [id, shot] of this.pendingMobProjectiles) if (shot.mobId === entry.id) {
+        this.pendingMobProjectiles.delete(id); this.resolveProjectileVisual(id, shot.position, "miss");
+      }
+      for (const [id, hazard] of this.mobHazards) if (hazard.mobId === entry.id) this.mobHazards.delete(id);
+    }
+  }
+
   private simulatePlayers(deltaTime: number): void {
     if (Date.now() - this.lastPartyUpdateAt >= 500) {
       this.sendPartyUpdates(Date.now());
@@ -1733,24 +1797,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     const now = Date.now();
     const entrance = this.state.portals.get("forest-entry");
-    if (entrance && now >= entrance.expiresAt) this.state.portals.delete("forest-entry");
+    if (entrance && entrance.expiresAt > 0 && now >= entrance.expiresAt) this.state.portals.delete("forest-entry");
+    if (this.forestDungeonUnlocked && !this.forestDungeonActive && !this.state.portals.has("forest-entry") && now >= this.forestDungeonReopenAt) {
+      const portal = new ForestPortalState(); Object.assign(portal, FOREST_PORTAL_POSITION, { kind: "entry", expiresAt: 0 });
+      this.state.portals.set("forest-entry", portal);
+    }
     if (this.forestDungeonActive && ![...this.state.players.values()].some(player => isInForestDungeon(player.x, player.z))) {
-      this.forestDungeonActive = false;
-      this.state.portals.delete("forest-return"); this.state.portals.delete("forest-entry");
-      this.state.portals.delete("forest-victory");
-      this.forestReturns.clear();
-      for (const entry of FOREST_DUNGEON_MOBS) {
-        this.state.mobs.delete(entry.id); this.mobHomes.delete(entry.id); this.mobNavigation.delete(entry.id);
-        this.pendingMobMelee.delete(entry.id); this.mobAwareness.delete(entry.id); this.combatContributions.clear(entry.id);
-        this.mobPatrols.delete(entry.id); this.mobProgress.delete(entry.id); this.mobUnreachableUntil.delete(entry.id); this.mobReturning.delete(entry.id);
-        this.mobVerticalVelocities.delete(entry.id); this.lastMobAttackAt.delete(entry.id); this.mobCommittedAim.delete(entry.id);
-        this.crawlerPositioning.delete(entry.id); this.crawlerRushes.delete(entry.id); this.spitterPositioning.delete(entry.id);
-        this.mobStaggerImmuneUntil.delete(entry.id); this.mobAssistAt.delete(entry.id);
-        for (const [id, shot] of this.pendingMobProjectiles) if (shot.mobId === entry.id) {
-          this.pendingMobProjectiles.delete(id); this.resolveProjectileVisual(id, shot.position, "miss");
-        }
-        for (const [id, hazard] of this.mobHazards) if (hazard.mobId === entry.id) this.mobHazards.delete(id);
-      }
+      this.resetForestDungeon(now);
     }
     this.resolveMining(now);
     this.regrowMinerals(now);

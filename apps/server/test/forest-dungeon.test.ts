@@ -97,6 +97,7 @@ describe("forest dungeon portal", () => {
     expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "rootbound_hammer")).toBe(true);
     expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "stone_core_hammer")).toBe(false);
     expect(room.state.portals.has("forest-victory")).toBe(true);
+    expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ phase: "completed", reward: "Personal Rootbound Cache unlocked" }));
     vi.setSystemTime(30000); internal.simulatePlayers(.033);
     expect(FOREST_DUNGEON_MOBS.every(entry => room.state.mobs.get(entry.id)?.alive === false)).toBe(true);
   });
@@ -139,10 +140,19 @@ describe("forest dungeon portal", () => {
     expect({ x: player.x, y: player.y, z: player.z }).toEqual(FOREST_PORTAL_POSITION);
     internal.simulatePlayers(.033); expect(room.state.mobs.has("forest-room1-a")).toBe(false); expect(room.state.portals.size).toBe(0);
   });
-  it("allows a second player to join the same run without resetting defeated rooms", () => {
-    const { room, internal, player, client, open, kill } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" });
-    Object.assign(player, { x: 164.5, y: 8, z: 161.5 }); kill("forest-room1-a");
+  it("admits the snapshotted party, rejects outsiders and never resets defeated rooms for a late party entrant", () => {
+    const { room, internal, player, client, open, kill } = fixture(); open();
     const friend = new PlayerState(); Object.assign(friend, FOREST_PORTAL_POSITION); room.state.players.set("friend", friend);
+    internal.parties.handle("tester", { action: "invite", targetId: "friend" }, room.state.players, 10000);
+    const inviteId = internal.parties.snapshot("friend", room.state.players, 10000).invite.id;
+    internal.parties.handle("friend", { action: "respond", inviteId, accept: true }, room.state.players, 10000);
+    internal.useForestPortal(client, { id: "forest-entry" });
+    Object.assign(player, { x: 164.5, y: 8, z: 161.5 }); kill("forest-room1-a");
+    const outsider = new PlayerState(); Object.assign(outsider, FOREST_PORTAL_POSITION); room.state.players.set("outsider", outsider);
+    const outsiderClient = { sessionId: "outsider", send: vi.fn() } as any;
+    internal.useForestPortal(outsiderClient, { id: "forest-entry" });
+    expect(outsider.x).toBe(FOREST_PORTAL_POSITION.x);
+    expect(outsiderClient.send).toHaveBeenCalledWith("portal:notice", expect.stringContaining("occupied"));
     internal.useForestPortal({ sessionId: "friend", send: vi.fn() }, { id: "forest-entry" });
     expect(friend.x).toBe(FOREST_DUNGEON_ENTRY.x); expect(room.state.mobs.get("forest-room1-a")?.alive).toBe(false);
     expect(internal.forestReturns.size).toBe(2);
@@ -162,5 +172,9 @@ describe("forest dungeon portal", () => {
     internal.returnPlayerToTown(client); internal.simulatePlayers(.033);
     expect(player.health).toBe(5); expect(player.recoveryBags.size).toBe(bags);
     expect(room.state.portals.size).toBe(0); expect(internal.forestDungeonActive).toBe(false);
+    Object.assign(player, FOREST_PORTAL_POSITION); vi.setSystemTime(57000); internal.simulatePlayers(.033);
+    expect(room.state.portals.has("forest-entry")).toBe(true);
+    internal.useForestPortal(client, { id: "forest-entry" });
+    expect(player.x).toBe(FOREST_DUNGEON_ENTRY.x);
   });
 });

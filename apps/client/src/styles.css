@@ -1339,3 +1339,9 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 #recovery-marker { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 15; max-width: min(90vw, 540px); padding: 10px 16px; border: 1px solid #d9b65d; border-radius: 10px; background: #182218ee; color: #ffe6a1; font: 700 12px system-ui; box-shadow: 0 3px 12px #0006; }
 #recovery-marker:disabled { opacity: .9; cursor: default; }
 #recovery-marker[hidden] { display: none; }
+#dungeon-completion { position: fixed; z-index: 70; inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(430px, calc(100vw - 36px)); box-sizing: border-box; padding: 28px; text-align: center; color: #edf7dc; border: 2px solid #78c85f; border-radius: 16px; background: radial-gradient(circle at 50% 0, #315329 0, #12251a 54%, #09120e 100%); box-shadow: 0 0 0 100vmax #020705a8, 0 18px 70px #000c, inset 0 0 32px #7ce36520; }
+#dungeon-completion small { color: #9ae07e; font: 900 11px system-ui; letter-spacing: .2em; }
+#dungeon-completion h2 { margin: 10px 0; color: #fff5c2; font: 900 24px/1.1 system-ui; text-shadow: 0 2px #14230d; }
+#dungeon-completion p { color: #bfd0b9; font: 13px/1.5 system-ui; }
+#dungeon-completion strong { display: block; margin: 18px 0; padding: 12px; color: #b8ff91; border: 1px solid #73c95788; border-radius: 8px; background: #29482888; font: 800 14px system-ui; }
+#dungeon-completion button { margin-top: 8px; padding: 11px 28px; cursor: pointer; color: #13200f; border: 0; border-radius: 7px; background: #b9eb87; font: 900 12px system-ui; letter-spacing: .08em; }

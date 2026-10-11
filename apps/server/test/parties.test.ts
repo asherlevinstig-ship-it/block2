@@ -16,6 +16,13 @@ describe("consent-based four-player parties", () => {
     f.players.get("a")!.health = 2;
     expect(f.snapshot("b").members).toEqual([{ id: "a", name: "Explorer a", health: 2, maxHealth: 5, distance: 1, leader: true }, { id: "b", name: "Explorer b", health: 5, maxHealth: 5, distance: 0, leader: false }]);
   });
+  it("snapshots a stable solo or party cohort for dungeon admission", () => {
+    const f = fixture();
+    expect(f.parties.cohort("a")).toEqual({ key: "solo:a", members: ["a"] });
+    f.group();
+    expect(f.parties.cohort("a").members).toEqual(["a", "b"]);
+    expect(f.parties.cohort("b").key).toBe(f.parties.cohort("a").key);
+  });
   it("declines and expires invitations without changing membership", () => {
     const f = fixture(); f.invite("a", "b"); f.respond("b", false); expect(f.snapshot("b").invite).toBeNull();
     f.invite("a", "b"); f.advance(30000); expect(f.snapshot("b").invite).toBeNull(); expect(f.respond("b")).toContain("expired");
