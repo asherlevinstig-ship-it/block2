@@ -500,7 +500,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if ((this.state.players.get(client.sessionId)?.health ?? 0) > 0) handler(client, payload);
       });
     };
-    this.onMessage("player:return", client => this.returnPlayerToTown(client));
+    this.onMessage("player:return", client => void this.returnPlayerToTown(client));
     this.onMessage("dungeon:board", (client, payload: unknown) => this.handleDungeonBoard(client, payload));
     this.onMessage("dungeon:lobby", (client, payload: unknown) => this.handleDungeonLobby(client, payload));
     this.onMessage("portal:use", (client, payload: unknown) => {
@@ -2304,11 +2304,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     void this.persistPlayer(client.sessionId, player);
   }
 
-  private returnPlayerToTown(client: Client): void {
+  private async returnPlayerToTown(client: Client): Promise<void> {
     const player = this.state.players.get(client.sessionId);
     if (!player || player.health > 0) return;
     const now = Date.now();
-    const spawn = this.spawnPoint();
+    const returningFromSilverDepths = this.roomKind === "silver-depths";
+    const spawn = returningFromSilverDepths ? TOWN_SILVER_DEPTHS_PORTAL_POSITION : this.spawnPoint();
     this.silverDepthsRuns.delete(client.sessionId);
     this.forestReturns.delete(client.sessionId);
     player.x = spawn.x; player.y = spawn.y; player.z = spawn.z;
@@ -2320,8 +2321,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.invulnerableUntil = now + 1500;
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
     this.verticalVelocities.set(client.sessionId, 0);
-    client.send("player:returned", spawn);
-    void this.persistPlayer(client.sessionId, player);
+    await this.persistPlayer(client.sessionId, player, true);
+    if (returningFromSilverDepths) {
+      client.send("portal:notice", "Expedition failed · returning to the Town of Beginnings.");
+      client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths" } satisfies RoomTransfer);
+    } else client.send("player:returned", spawn);
   }
 
   private releaseMobVolley(mobId: string, mob: MobState, origin: { x: number; y: number; z: number }, shots: { x: number; y: number; z: number }[], now: number, travelMs: number, damage: number, hazardRadius: number, hazardDurationMs: number): void {

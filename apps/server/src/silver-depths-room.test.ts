@@ -83,6 +83,20 @@ describe("Silver Depths room travel", () => {
     expect(player.inventory.get("moonstone")?.quantity).toBe(0);
   });
 
+  it("leaves the dungeon room after defeat so refreshing cannot re-enter the instance", async () => {
+    const { room, player, client } = roomWithPortal("depths-return");
+    (room as any).roomKind = "silver-depths";
+    Object.assign(player, { health: 0, x: 83.5, y: 1, z: 9.5 });
+
+    await (room as any).returnPlayerToTown(client);
+
+    expect(player.health).toBe(player.maxHealth);
+    expect(player).toMatchObject(TOWN_SILVER_DEPTHS_PORTAL_POSITION);
+    expect(client.send).toHaveBeenCalledWith("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths" });
+    expect(client.send).not.toHaveBeenCalledWith("player:returned", expect.anything());
+    expect((room as any).persistPlayer).toHaveBeenCalledWith("miner", player, true);
+  });
+
   it("reports authoritative run stats, rank, and a persisted personal best", () => {
     const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
     internal.beginSilverDepthsRun(client, player, 10_000);

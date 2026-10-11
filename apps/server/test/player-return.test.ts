@@ -5,7 +5,7 @@ import { InventoryItemState, PlayerState, WorldState } from "../src/schema.js";
 
 interface Internals {
   damagePlayer(mobId: string, playerId: string, damage: number, now: number): boolean;
-  returnPlayerToTown(client: any): void;
+  returnPlayerToTown(client: any): Promise<void>;
   simulatePlayers(dt: number): void;
   movementInputs: Map<string, unknown>;
   pendingAttacks: Map<string, unknown>;
@@ -19,6 +19,7 @@ function fixture() {
   Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 0 ? Block.Stone : Block.Air });
   Object.defineProperty(room, "spawnPoint", { value: () => ({ x: 8.5, y: 8, z: 8.5 }) });
   vi.spyOn(room, "broadcast").mockImplementation(() => {});
+  vi.spyOn(room as any, "persistPlayer").mockResolvedValue(undefined);
   const player = new PlayerState(); player.x = 100; player.y = 1; player.z = 100;
   player.coins = 47; player.stamina = 12; player.mainHandId = "stone_core_hammer";
   const ore = new InventoryItemState(); ore.quantity = 7; player.inventory.set("iron_ore", ore);
@@ -28,7 +29,7 @@ function fixture() {
 }
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("defeat and return to town", () => {
-  it("waits for explicit return and leaves spare possessions in a recovery bag", () => {
+  it("waits for explicit return and leaves spare possessions in a recovery bag", async () => {
     const { player, client, internal } = fixture();
     internal.pendingAttacks.set("player", {}); internal.pendingPowers.set("player", {});
     internal.specialMarks.set("player", {}); internal.brambleSnares.set("player", {});
@@ -39,7 +40,7 @@ describe("defeat and return to town", () => {
     expect([player.x, player.y, player.z]).toEqual([100, 1, 100]);
     expect(internal.pendingAttacks.size + internal.pendingPowers.size + internal.specialMarks.size + internal.brambleSnares.size).toBe(0);
     expect(internal.damagePlayer("missing", "player", 1, Date.now())).toBe(false);
-    internal.returnPlayerToTown(client);
+    await internal.returnPlayerToTown(client);
     expect([player.x, player.y, player.z]).toEqual([8.5, 8, 8.5]);
     expect(player.health).toBe(player.maxHealth); expect(player.stamina).toBe(player.maxStamina);
     expect(player.coins).toBe(47); expect(player.inventory.get("iron_ore")?.quantity).toBe(0);
@@ -49,12 +50,12 @@ describe("defeat and return to town", () => {
     expect(bag.items.get("iron_ore")?.quantity).toBe(7);
     expect(player.mainHandId).toBe("stone_core_hammer");
     expect(player.invulnerableUntil).toBe(11_500);
-    internal.returnPlayerToTown(client);
+    await internal.returnPlayerToTown(client);
     expect(client.send).toHaveBeenCalledTimes(1);
   });
-  it("does not allow living players to use return as a free teleport or heal", () => {
+  it("does not allow living players to use return as a free teleport or heal", async () => {
     const { player, client, internal } = fixture();
-    internal.returnPlayerToTown(client);
+    await internal.returnPlayerToTown(client);
     expect(player.x).toBe(100); expect(player.stamina).toBe(12);
     expect(client.send).not.toHaveBeenCalled();
   });
