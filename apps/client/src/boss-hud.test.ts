@@ -40,4 +40,14 @@ describe("boss HUD", () => {
     const defeated = advanceBossHud(enraged, { ...guardian, alive: false, health: 0, enraged: true }, explorer, 6000);
     expect(defeated.message).toContain("CLAIM YOUR REWARD");
   });
+  it("announces the crystal boss phases and signature reward", () => {
+    const crystal = { ...boss, x: 72.5, y: 1, z: 9.5, name: "Crystal Matriarch", maxHealth: 28, health: 28 };
+    const explorer = { ...player, x: 70, y: 1, z: 9.5 };
+    const arrived = advanceBossHud(initialBossHud(), crystal, explorer, 1000);
+    expect(arrived.message).toContain("FIND THE GAPS");
+    const enraged = advanceBossHud(arrived, { ...crystal, health: 13, enraged: true }, explorer, 5000);
+    expect(enraged.message).toContain("ROTATING CRYSTAL WAVES");
+    const defeated = advanceBossHud(enraged, { ...crystal, alive: false, health: 0, enraged: true }, explorer, 6000);
+    expect(defeated.message).toContain("MATRIARCH'S EDGE");
+  });
 });

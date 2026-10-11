@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
+import { Block, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 
@@ -19,6 +19,20 @@ function roomWithPortal(id: "depths-entry" | "depths-return") {
 }
 
 describe("Silver Depths room travel", () => {
+  it("lets Matriarch projectiles shatter cover after two hits and restores it for a new encounter", () => {
+    const { room } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    const cover = SILVER_DEPTHS_COVER[0];
+    expect(internal.readWorldBlock(cover.x, 1, cover.z)).toBe(Block.Stone);
+    const impact = { x: cover.x + .5, y: 1.5, z: cover.z + .5 };
+    internal.damageMatriarchCover(impact);
+    expect(internal.readWorldBlock(cover.x, 1, cover.z)).toBe(Block.Stone);
+    internal.damageMatriarchCover(impact);
+    expect(internal.readWorldBlock(cover.x, 1, cover.z)).toBe(Block.Air);
+    internal.restoreMatriarchCover();
+    expect(internal.readWorldBlock(cover.x, 1, cover.z)).toBe(Block.Stone);
+  });
+
   it("creates a personal fixed Matriarch's Edge drop", () => {
     const { room } = roomWithPortal("depths-entry");
     const boss = new MobState(); Object.assign(boss, { x: 72.5, y: 1, z: 9.5, archetype: "cave_spitter" });

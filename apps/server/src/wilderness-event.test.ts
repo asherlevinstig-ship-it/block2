@@ -5,7 +5,7 @@ import { PlayerState, WorldState } from "./schema.js";
 import { Block } from "@blockcraft/voxel-world";
 import { vi } from "vitest";
 import { nearbyObjective } from "./world-objectives.js";
-import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, spitterShotEndpoints } from "@blockcraft/protocol";
+import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterShotEndpoints } from "@blockcraft/protocol";
 describe("shared wilderness event", () => {
   it("enrages strictly below half health and alternates aimed shots with double fans", () => {
     expect(matriarchEnraged(12, 24)).toBe(false);
@@ -14,6 +14,13 @@ describe("shared wilderness event", () => {
     expect(matriarchPattern(1, true)).toBe("double-fan");
     expect(matriarchPattern(1, false)).toBe("fan");
     expect(spitterShotEndpoints({ x: 0, y: 8, z: 0 }, 0, "double-fan")).toHaveLength(4);
+  });
+  it("rotates the second phase-two wave while retaining explicit dodge gaps", () => {
+    expect(matriarchSecondVolleyYaw(90, 0)).toBe(112);
+    expect(matriarchSecondVolleyYaw(90, 1)).toBe(68);
+    const lanes = matriarchWarningLanes(90, 0);
+    expect(lanes).toHaveLength(8);
+    expect(lanes[0]).not.toEqual(lanes[4]);
   });
   it("releases the second volley only when due, from the committed origin, and gives longer recovery", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;

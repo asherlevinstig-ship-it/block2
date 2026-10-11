@@ -4,6 +4,11 @@ export interface BossHudState { visible: boolean; alive?: boolean; enraged: bool
 export const initialBossHud = (): BossHudState => ({ visible: false, enraged: false, message: "", messageUntil: 0 });
 export interface BossHudCopy { arrival: string; enrage: string; defeat: string }
 export function bossHudCopy(name: string): BossHudCopy {
+  if (/Crystal Matriarch/i.test(name)) return {
+    arrival: "CRYSTAL MATRIARCH AWAKENS · FIND THE GAPS",
+    enrage: "PHASE 2 · ROTATING CRYSTAL WAVES",
+    defeat: "CRYSTAL MATRIARCH DEFEATED · CLAIM MATRIARCH'S EDGE",
+  };
   if (/Root Guardian/i.test(name)) return {
     arrival: "ANCIENT ROOT GUARDIAN AWAKENS",
     enrage: "THE HEARTWOOD BREAKS · CHARGE INCOMING",

@@ -28,7 +28,7 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -152,7 +152,7 @@ import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
-import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern } from "@blockcraft/protocol";
+import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, matriarchSecondVolleyYaw } from "@blockcraft/protocol";
 import { CombatContributions } from "./combat-contributions.js";
 import { SilverGuardVolley } from "./silver-guard-volley.js";
 import { ForestPortalCycle } from "./forest-portal-cycle.js";
@@ -281,6 +281,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly lastDodgeAt = new Map<string, number>();
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
   private readonly delayedMatriarchVolleys = new Map<string, { origin: { x: number; y: number; z: number }; shots: { x: number; y: number; z: number }[]; releaseAt: number; damage: number; travelMs: number }>();
+  private readonly matriarchCoverHits = new Map<string, number>();
   private readonly pendingWeaponProjectiles = new Map<string, PendingWeaponProjectile>();
   private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
@@ -1691,6 +1692,35 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
+  private damageMatriarchCover(impact: { x: number; y: number; z: number }): void {
+    const cover = SILVER_DEPTHS_COVER.find(candidate =>
+      Math.hypot(impact.x - (candidate.x + .5), impact.z - (candidate.z + .5)) <= .9
+      && impact.y >= .5 && impact.y <= candidate.height + 1.5);
+    if (!cover) return;
+    const key = `${cover.x}:${cover.z}`;
+    const hits = (this.matriarchCoverHits.get(key) ?? 0) + 1;
+    if (hits < 2) { this.matriarchCoverHits.set(key, hits); return; }
+    this.matriarchCoverHits.delete(key);
+    for (let y = 1; y <= cover.height; y++) {
+      const address = worldToChunk(cover.x, cover.z), stored = this.getChunk(address.chunkX, address.chunkZ);
+      if (getBlock(stored.chunk, address.localX, y, address.localZ) === Block.Air) continue;
+      setBlock(stored.chunk, address.localX, y, address.localZ, Block.Air); stored.revision++;
+      this.broadcast("block:changed", { requestId: `matriarch-cover-${key}-break`, x: cover.x, y, z: cover.z,
+        block: Block.Air, revision: stored.revision } satisfies BlockChanged);
+    }
+  }
+
+  private restoreMatriarchCover(): void {
+    this.matriarchCoverHits.clear();
+    for (const cover of SILVER_DEPTHS_COVER) for (let y = 1; y <= cover.height; y++) {
+      const address = worldToChunk(cover.x, cover.z), stored = this.getChunk(address.chunkX, address.chunkZ);
+      if (getBlock(stored.chunk, address.localX, y, address.localZ) === Block.Stone) continue;
+      setBlock(stored.chunk, address.localX, y, address.localZ, Block.Stone); stored.revision++;
+      this.broadcast("block:changed", { requestId: `matriarch-cover-${cover.x}:${cover.z}-restore`, x: cover.x, y, z: cover.z,
+        block: Block.Stone, revision: stored.revision } satisfies BlockChanged);
+    }
+  }
+
   private placeGuardianRootLanes(mob: MobState, now: number): void {
     for (const [index, root] of rootLaneHazards({ x: mob.attackStrikeX, y: mob.attackStrikeY, z: mob.attackStrikeZ }).entries()) {
       const hazardId = `root:forest-guardian:${mob.actionSequence}:${index}`;
@@ -2019,7 +2049,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.pendingMobProjectiles.delete(projectileId);
       const impact = collision?.point ?? next;
       this.resolveProjectileVisual(projectileId, impact, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss");
-      if (collision?.kind === "terrain") continue;
+      if (collision?.kind === "terrain") {
+        if (projectile.mobId === CRYSTAL_MATRIARCH_ID) this.damageMatriarchCover(impact);
+        continue;
+      }
       const definition = mobArchetype(projectile.archetype);
       const target = collision?.targetId ? this.state.players.get(collision.targetId) : undefined;
       if (target && collision?.targetId) {
@@ -2261,6 +2294,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.speedMultiplier = stats.speedMultiplier;
         mob.rewardMultiplier = stats.rewardMultiplier;
         if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
+        if (mobId === CRYSTAL_MATRIARCH_ID) this.restoreMatriarchCover();
         mob.alive = true;
         mob.respawnAt = 0;
         mob.combatState = "idle";
@@ -2344,8 +2378,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             : mob.isChampion && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage, definition.hazardRadius, definition.hazardDurationMs);
-          if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) && mob.attackPattern === "double-fan")
-            this.delayedMatriarchVolleys.set(mobId, { origin, shots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
+          if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) && mob.attackPattern === "double-fan") {
+            const secondYaw = matriarchSecondVolleyYaw(aim.yaw, Math.max(0, mob.actionSequence - 1));
+            const secondShots = spitterShotEndpoints(mob, secondYaw, mob.attackPattern);
+            this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
+          }
           mob.targetId = "";
           continue;
         }
@@ -3223,7 +3260,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.attackRecoveryEndAt = releaseAt + BRUTE_VOLLEY.recoveryMs;
       return;
     }
-    if (mobId === WILDERNESS_EVENT_ID && mob.attackPattern === "double-fan") {
+    if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) && mob.attackPattern === "double-fan") {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + MATRIARCH_PHASE.volleyGapMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + MATRIARCH_PHASE.recoveryMs;

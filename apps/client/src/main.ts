@@ -24,7 +24,7 @@ import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
-import { SPITTER_PATTERN, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
+import { SPITTER_PATTERN, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { TOWN_EXPEDITION_BOARD_POSITION } from "@blockcraft/voxel-world";
 import { equipmentPickupCard } from "./equipment-pickup.js";
@@ -1532,6 +1532,7 @@ interface MobVisual {
   warningYaw: number;
   warningPattern: string;
   warningChargeLength: number;
+  warningSequence: number;
   combatCue: HTMLDivElement;
   combatCueLabel: HTMLSpanElement;
   combatCueFill: HTMLSpanElement;
@@ -2715,11 +2716,18 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
   cameraShakeUntil = performance.now() + 420;
 }
 
-function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance, shotOrigin = { x: 0, y: 0, z: 0 }): void {
+function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance,
+  shotOrigin: { x: number; y: number; z: number; name?: string; actionSequence?: number } = { x: 0, y: 0, z: 0 }): void {
   if (pattern === "rocks" || archetype === "cave_spitter" && pattern !== "pool") {
     const offsets = pattern === "rocks" ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
     const lengths = offsets.map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, pattern === "rocks" ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range));
-    const lanes = pattern === "rocks" ? bruteRockLanes(yaw, lengths) : spitterWarningLanes(yaw, pattern, lengths);
+    const crystalDoubleFan = pattern === "double-fan" && shotOrigin.name === "Crystal Matriarch";
+    const secondYaw = matriarchSecondVolleyYaw(yaw, Math.max(0, (shotOrigin.actionSequence ?? 1) - 1));
+    const secondLengths = crystalDoubleFan ? offsets.map(offset => enemyShotGuideLength(
+      { x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, secondYaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range)) : undefined;
+    const lanes = pattern === "rocks" ? bruteRockLanes(yaw, lengths)
+      : crystalDoubleFan ? matriarchWarningLanes(yaw, Math.max(0, (shotOrigin.actionSequence ?? 1) - 1), lengths, secondLengths)
+      : spitterWarningLanes(yaw, pattern, lengths);
     mesh.setPositions(lanes.flatMap(lane => lane.flatMap(point => [point.x, 0, point.z])));
     mesh.setNormals(lanes.flatMap(lane => lane.flatMap(() => [0, 1, 0])));
     mesh.setIndices(lanes.flatMap((_lane, index) => { const i = index * 4; return [i, i + 1, i + 2, i, i + 2, i + 3]; }));
@@ -2964,6 +2972,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warningYaw: mob.yaw,
     warningPattern: mob.attackPattern,
     warningChargeLength: CHAMPION_CHARGE.distance,
+    warningSequence: mob.actionSequence,
     combatCue, combatCueLabel, combatCueFill, levelTag, recovery,
     healthFill,
     healthWidth,
@@ -4156,19 +4165,19 @@ function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | n
 }
 
 const forestPortalVisuals = new Map<string, { root: pc.Entity; glow: pc.Entity; label: HTMLButtonElement; state: ForestPortal; materials: pc.Material[] }>();
-interface DungeonBurstVisual { root: pc.Entity; material: pc.StandardMaterial; startedAt: number; kind: "gate" | "victory" }
+interface DungeonBurstVisual { root: pc.Entity; material: pc.StandardMaterial; startedAt: number; kind: "gate" | "victory" | "crystal" }
 const dungeonBurstVisuals: DungeonBurstVisual[] = [];
-function createDungeonBurst(x: number, z: number, kind: "gate" | "victory"): void {
+function createDungeonBurst(x: number, z: number, kind: "gate" | "victory" | "crystal", y = 8.08): void {
   const root = new pc.Entity(`dungeon-${kind}-burst`);
-  const material = powerMaterial(kind === "victory" ? new pc.Color(1, .78, .28) : new pc.Color(.42, 1, .48), .88);
-  const segments = kind === "victory" ? 16 : 12;
+  const material = powerMaterial(kind === "victory" ? new pc.Color(1, .78, .28) : kind === "crystal" ? new pc.Color(.68, .32, 1) : new pc.Color(.42, 1, .48), .88);
+  const segments = kind === "victory" ? 16 : kind === "crystal" ? 18 : 12;
   for (let i = 0; i < segments; i++) {
     const angle = i / segments * Math.PI * 2;
     const segment = addBox(root, "dungeon-burst-ray", material, [.16, .07, kind === "victory" ? .75 : .55], [Math.sin(angle) * 1.15, .08, Math.cos(angle) * 1.15]);
     segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
     if (segment.render) segment.render.castShadows = false;
   }
-  root.setPosition(x, 8.08, z); app.root.addChild(root);
+  root.setPosition(x, y, z); app.root.addChild(root);
   dungeonBurstVisuals.push({ root, material, startedAt: performance.now(), kind });
 }
 let nearbyForestPortal: string | null = null;
@@ -4612,13 +4621,25 @@ let bossHudFingerprint = "";
 let activeBossId = "";
 function updateBossHud(now: number): void {
   const position = localPlayer.getPosition();
-  const nextBossId = isInForestDungeon(position.x, position.z) ? "forest-guardian" : "greenwood-venom-matriarch";
+  const inSilverDepths = position.y < 5 && position.x >= 59 && position.x <= 78 && position.z >= 3 && position.z <= 16;
+  const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian" : "greenwood-venom-matriarch";
   const boss = mobVisuals.get(nextBossId)?.state;
   if (activeBossId !== nextBossId) {
     activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = "";
   }
   const previous = bossHudState;
   bossHudState = advanceBossHud(bossHudState, boss, { x: position.x, y: position.y, z: position.z, health: potionHealth }, now);
+  const crystal = nextBossId === "crystal-matriarch";
+  if (crystal && bossHudState.visible && boss?.alive && previous.alive !== true) {
+    combatAudio.play("dungeonGate"); createDungeonBurst(boss.x, boss.z, "crystal", boss.y + .08);
+  }
+  if (crystal && bossHudState.visible && bossHudState.enraged && !previous.enraged) {
+    combatAudio.play("guardianPhase"); createDungeonBurst(boss!.x, boss!.z, "crystal", boss!.y + .08);
+    cameraShakeStrength = Math.max(cameraShakeStrength, .2); cameraShakeUntil = performance.now() + 360;
+  }
+  if (crystal && previous.alive === true && boss?.alive === false) {
+    combatAudio.play("dungeonVictory"); createDungeonBurst(boss.x, boss.z, "victory", boss.y + .08);
+  }
   if (nextBossId === "forest-guardian" && bossHudState.visible && bossHudState.enraged && !previous.enraged) {
     combatAudio.play("guardianPhase");
     if (boss) createDungeonBurst(boss.x, boss.z, "gate");
@@ -4630,9 +4651,9 @@ function updateBossHud(now: number): void {
   if (!boss || !bossHudState.visible) return;
   bossName.textContent = boss.name;
   const guardian = nextBossId === "forest-guardian";
-  bossEncounter.textContent = guardian ? "FOREST DUNGEON BOSS" : "SHARED WILDERNESS EVENT";
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : bossHudState.enraged ? `PHASE 2 · ${guardian ? "HEARTWOOD CHARGE" : "ENRAGED"}` : `PHASE 1 · ${guardian ? "ROOT VOLLEY" : "VENOM FAN"}`;
-  bossHud.dataset.encounter = guardian ? "dungeon" : "wilderness";
+  bossEncounter.textContent = crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : "SHARED WILDERNESS EVENT";
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : "VENOM FAN"}`;
+  bossHud.dataset.encounter = crystal ? "crystal" : guardian ? "dungeon" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
@@ -6165,10 +6186,10 @@ app.on("update", (dt: number) => {
       if (mob.warningMesh) {
         const chargeLength = mob.isSpitter && mob.state.attackPattern !== "pool" ? spitterShotOffsets(mob.state.attackPattern).reduce((sum, offset, i) => sum + (i + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range), 0) : mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
         const warningLength = mob.state.attackPattern === "rocks" ? BRUTE_VOLLEY.offsets.reduce<number>((sum, offset, index) => sum + (index + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, BRUTE_VOLLEY.range), 0) : chargeLength;
-        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || Math.abs(warningLength - mob.warningChargeLength) > .05) {
+        if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || mob.warningSequence !== mob.state.actionSequence || Math.abs(warningLength - mob.warningChargeLength) > .05) {
           updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, warningLength, mob.state);
           mob.warningYaw = mob.state.yaw;
-          mob.warningPattern = mob.state.attackPattern; mob.warningChargeLength = warningLength;
+          mob.warningPattern = mob.state.attackPattern; mob.warningChargeLength = warningLength; mob.warningSequence = mob.state.actionSequence;
         }
         mob.warning.setPosition(mob.state.attackStrikeX, mob.state.attackStrikeY + 0.04, mob.state.attackStrikeZ);
         // The marked danger area must always match the eventual damage radius.
@@ -6179,7 +6200,8 @@ app.on("update", (dt: number) => {
         mob.warning.setLocalScale(1, 1, length / 6.9);
         mob.warning.setEulerAngles(0, mob.state.yaw, 0);
       }
-      mob.warningMaterial.diffuse.set(mob.isSpitter ? mob.state.attackPattern === "fan" ? .2 : .85 : 1, mob.isSpitter ? 1 : mob.isBrute ? .25 : .72, mob.isSpitter ? mob.state.attackPattern === "fan" ? .75 : .16 : mob.isBrute ? .08 : .18);
+      const fanWarning = mob.state.attackPattern === "fan" || mob.state.attackPattern === "double-fan";
+      mob.warningMaterial.diffuse.set(mob.isSpitter ? fanWarning ? .35 : .85 : 1, mob.isSpitter ? fanWarning ? .62 : 1 : mob.isBrute ? .25 : .72, mob.isSpitter ? fanWarning ? 1 : .16 : mob.isBrute ? .08 : .18);
       mob.warningMaterial.emissive.copy(mob.warningMaterial.diffuse);
       mob.warningMaterial.opacity = presentation.aimLocked ? .65 : .38;
       mob.warningMaterial.update();

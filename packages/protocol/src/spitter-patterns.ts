@@ -4,6 +4,8 @@ export const MATRIARCH_PHASE = { volleyGapMs: 500, recoveryMs: 2600 } as const;
 export const matriarchEnraged = (health: number, maxHealth: number) => health > 0 && health * 2 < maxHealth;
 export const matriarchPattern = (sequence: number, enraged: boolean) => enraged && sequence % 2 === 1 ? "double-fan" : spitterPattern(sequence);
 export const spitterPattern = (sequence: number): "aimed" | "fan" => sequence % 2 === 0 ? "aimed" : "fan";
+/** The follow-up wave rotates clockwise/counter-clockwise on alternating casts, preserving readable escape gaps. */
+export const matriarchSecondVolleyYaw = (yaw: number, sequence: number) => yaw + (sequence % 2 === 0 ? 22 : -22);
 export function spitterShotEndpoints(start: { x: number; y: number; z: number }, yaw: number, pattern: string) {
   return spitterShotOffsets(pattern).map(offset => {
     const angle = (yaw + offset) * Math.PI / 180;
@@ -19,4 +21,10 @@ export function spitterWarningLanes(yaw: number, pattern: string, lengths?: read
     return [{ x: dz * w, z: -dx * w }, { x: -dz * w, z: dx * w },
       { x: dx * length - dz * w, z: dz * length + dx * w }, { x: dx * length + dz * w, z: dz * length - dx * w }];
   });
+}
+export function matriarchWarningLanes(yaw: number, sequence: number, firstLengths?: readonly number[], secondLengths?: readonly number[]) {
+  return [
+    ...spitterWarningLanes(yaw, "double-fan", firstLengths),
+    ...spitterWarningLanes(matriarchSecondVolleyYaw(yaw, sequence), "double-fan", secondLengths),
+  ];
 }
