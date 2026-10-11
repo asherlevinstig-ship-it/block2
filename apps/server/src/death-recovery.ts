@@ -1,4 +1,4 @@
-import { HEALING_POTION, ITEM_DEFINITIONS, MAIN_HAND_DEFINITIONS, type ItemId, type MainHandId } from "@blockcraft/protocol";
+import { HEALING_POTION, ITEM_DEFINITIONS, type ItemId } from "@blockcraft/protocol";
 import { ironCapacity } from "./blacksmith.js";
 import { InventoryItemState, RecoveryBagState, type PlayerState } from "./schema.js";
 
@@ -6,14 +6,13 @@ export type RecoveryBagData = { id: string; x: number; y: number; z: number; ite
 export function leaveRecoveryBag(player: PlayerState, id: string): number {
   if (player.health > 0 || player.recoveryBags.has(id)) return 0;
   const bag = new RecoveryBagState(); bag.x = player.x; bag.y = player.y; bag.z = player.z;
-  const hand = MAIN_HAND_DEFINITIONS[player.mainHandId as MainHandId];
   let total = 0;
   for (const itemId of Object.keys(ITEM_DEFINITIONS) as ItemId[]) {
-    // Potions are supplies rather than loot; keep them, along with permanent tools.
-    if (itemId === "reinforced_pickaxe" || itemId === "healing_potion") continue;
+    // Character progression and equipment are permanent. Only carried minerals
+    // become a recoverable world risk; storage and every other item stay safe.
+    if (itemId !== "iron_ore" && itemId !== "silver_ore" && itemId !== "moonstone") continue;
     const item = player.inventory.get(itemId); if (!item) continue;
-    const equipped = player.armourId === itemId || (hand && "requiredItemId" in hand && hand.requiredItemId === itemId);
-    const quantity = Math.max(0, item.quantity - (equipped ? 1 : 0)); if (!quantity) continue;
+    const quantity = item.quantity; if (!quantity) continue;
     const dropped = new InventoryItemState(); dropped.quantity = quantity;
     bag.items.set(itemId, dropped); item.quantity -= quantity; total += quantity;
   }
@@ -29,7 +28,8 @@ export function collectRecoveryBag(player: PlayerState, id: string, clearPath: (
   let recovered = 0, remaining = 0;
   for (const itemId of Object.keys(ITEM_DEFINITIONS) as ItemId[]) {
     const item = bag.items.get(itemId); if (!item || item.quantity <= 0) continue;
-    const capacity = itemId === "healing_potion" ? HEALING_POTION.capacity : itemId === "iron_ore" || itemId === "silver_ore" ? ironCapacity(player.blacksmithUpgrades) : 65535;
+    const capacity = itemId === "healing_potion" ? HEALING_POTION.capacity
+      : itemId === "iron_ore" || itemId === "silver_ore" || itemId === "moonstone" ? ironCapacity(player.blacksmithUpgrades) : 65535;
     let carried = player.inventory.get(itemId);
     const quantity = Math.max(0, Math.min(item.quantity, capacity - (carried?.quantity ?? 0)));
     if (quantity) {

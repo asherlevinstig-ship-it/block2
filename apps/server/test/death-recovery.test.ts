@@ -17,13 +17,13 @@ function fallen() {
   return player;
 }
 describe("death recovery", () => {
-  it("drops minerals and spare loot, preserving equipped copies, gold, storage and supplies", () => {
-    const player = fallen(); expect(leaveRecoveryBag(player, "first")).toBe(26);
+  it("drops only carried minerals, preserving all equipment, loot, gold, storage and supplies", () => {
+    const player = fallen(); expect(leaveRecoveryBag(player, "first")).toBe(18);
     const bag = player.recoveryBags.get("first")!;
-    expect(bag.items.get("fang_dagger")?.quantity).toBe(2);
-    expect(bag.items.get("leather_armour")?.quantity).toBe(1);
-    expect(player.inventory.get("fang_dagger")?.quantity).toBe(1);
-    expect(player.inventory.get("leather_armour")?.quantity).toBe(1);
+    expect(bag.items.get("fang_dagger")).toBeUndefined();
+    expect(bag.items.get("leather_armour")).toBeUndefined();
+    expect(player.inventory.get("fang_dagger")?.quantity).toBe(3);
+    expect(player.inventory.get("leather_armour")?.quantity).toBe(2);
     expect(player.inventory.get("iron_ore")?.quantity).toBe(0);
     expect(player.storage.get("iron_ore")?.quantity).toBe(20);
     expect(player.inventory.get("healing_potion")?.quantity).toBe(3);
@@ -63,7 +63,7 @@ describe("death recovery", () => {
     const restored = new PlayerState(); applyPlayerSave(restored, parsePlayerSave(serializePlayerSave(player))!);
     expect(snapshotRecoveryBags(restored)).toEqual(snapshotRecoveryBags(player));
     expect(restored.recoveryBags.size).toBe(2);
-    expect(restored.inventory.get("fang_dagger")?.quantity).toBe(1);
+    expect(restored.inventory.get("fang_dagger")?.quantity).toBe(3);
     expect(parsePlayerSave('{"version":1}')?.recoveryBags).toEqual([]);
   });
   it("sanitizes malformed saved bag data", () => {

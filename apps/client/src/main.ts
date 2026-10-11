@@ -106,6 +106,13 @@ import {
   type PowerCancelled,
   type PowerId,
   type PowerResolved,
+  characterMiningBonus,
+  characterPowerBonus,
+  characterSpeedMultiplier,
+  experienceToNextLevel,
+  MAX_CHARACTER_STAT_POINTS,
+  type CharacterStatId,
+  type ProgressionUpdate,
   type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
@@ -337,6 +344,21 @@ const playerHealthFill = document.querySelector<HTMLElement>("#player-health-fil
 const playerHealthValue = document.querySelector<HTMLElement>("#player-health-value")!;
 const playerStaminaFill = document.querySelector<HTMLElement>("#player-stamina-fill")!;
 const playerStaminaValue = document.querySelector<HTMLElement>("#player-stamina-value")!;
+const playerLevel = document.querySelector<HTMLButtonElement>("#player-level")!;
+const playerLevelValue = document.querySelector<HTMLElement>("#player-level-value")!;
+const playerXpFill = document.querySelector<HTMLElement>("#player-xp-fill")!;
+const playerXpValue = document.querySelector<HTMLElement>("#player-xp-value")!;
+const inventoryLevel = document.querySelector<HTMLElement>("#inventory-level")!;
+const characterPoints = document.querySelector<HTMLElement>("#character-points")!;
+const statPower = document.querySelector<HTMLElement>("#stat-power")!;
+const statVitality = document.querySelector<HTMLElement>("#stat-vitality")!;
+const statAgility = document.querySelector<HTMLElement>("#stat-agility")!;
+const statMining = document.querySelector<HTMLElement>("#stat-mining")!;
+const levelUpPanel = document.querySelector<HTMLElement>("#level-up-panel")!;
+const levelUpTitle = document.querySelector<HTMLElement>("#level-up-title")!;
+const levelUpMessage = document.querySelector<HTMLElement>("#level-up-message")!;
+const levelUpPoints = document.querySelector<HTMLElement>("#level-up-points")!;
+const characterStatButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-character-stat]")];
 const defenseSlot = document.querySelector<HTMLButtonElement>("#defense-slot")!;
 const traitSlot = document.querySelector<HTMLElement>("#trait-slot")!;
 const traitName = document.querySelector<HTMLElement>("#trait-name")!;
@@ -413,6 +435,9 @@ if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blac
 }
 if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
   throw new Error("World objective shell is missing required elements");
+}
+if ([playerLevel, playerLevelValue, playerXpFill, playerXpValue, inventoryLevel, characterPoints, statPower, statVitality, statAgility, statMining, levelUpPanel, levelUpTitle, levelUpMessage, levelUpPoints].some(element => !element) || characterStatButtons.length !== 4) {
+  throw new Error("Character progression shell is missing required elements");
 }
 
 function applyDefensePose(rig: VoxelCharacterRig): void {
@@ -1371,6 +1396,13 @@ interface NetworkPlayer {
   maxHealth: number;
   stamina: number;
   maxStamina: number;
+  level: number;
+  experience: number;
+  unspentStatPoints: number;
+  powerPoints: number;
+  vitalityPoints: number;
+  agilityPoints: number;
+  miningPoints: number;
   coins: number;
   blacksmithUpgrades: number;
   dodgeSequence: number;
@@ -1655,6 +1687,10 @@ let localSpecialCooldownUntil = 0;
 let localMainHandId: MainHandId = "longsword";
 let localArmourId: ArmourId = "none";
 let localIronSwordOwned = false;
+let localCharacterProgression: ProgressionUpdate = {
+  reason: "sync", level: 1, experience: 0, experienceRequired: 40, unspentStatPoints: 0,
+  powerPoints: 0, vitalityPoints: 0, agilityPoints: 0, miningPoints: 0,
+};
 let localEquippedPower: PowerId = "shockwave";
 let localSeismicMastery: SeismicMasteryId = "advancing_fault";
 let localEquippedSpecial: SpecialId = "hunters_mark";
@@ -1937,6 +1973,29 @@ function updatePlayerStamina(stamina: number, maximumStamina: number): void {
   playerStaminaValue.textContent = `${Math.round(stamina)}`;
 }
 
+function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = potionMaxHealth): void {
+  localCharacterProgression = update;
+  const required = Math.max(0, update.experienceRequired);
+  const fraction = required > 0 ? Math.max(0, Math.min(1, update.experience / required)) : 1;
+  playerLevelValue.textContent = String(update.level);
+  playerXpFill.style.width = `${fraction * 100}%`;
+  playerXpValue.textContent = required > 0 ? `${update.experience} / ${required} XP` : "MAX LEVEL";
+  inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} XP` : `${update.level} · MAX`;
+  characterPoints.textContent = update.unspentStatPoints > 0 ? `${update.unspentStatPoints} POINT${update.unspentStatPoints === 1 ? "" : "S"} AVAILABLE` : "NO POINTS AVAILABLE";
+  statPower.textContent = `${update.powerPoints} · +${characterPowerBonus(update.powerPoints)} damage`;
+  statVitality.textContent = `${update.vitalityPoints} · ${maximumHealth} max HP`;
+  statAgility.textContent = `${update.agilityPoints} · ${Math.round(characterSpeedMultiplier(update.agilityPoints) * 100)}% speed`;
+  statMining.textContent = `${update.miningPoints} · ×${1 + characterMiningBonus(update.miningPoints)} yield`;
+  levelUpTitle.textContent = `Level ${update.level}!`;
+  levelUpMessage.textContent = update.reason === "level_up" ? `You earned ${update.experienceGranted ?? 0} XP from ${update.source ?? "adventuring"}. Choose one permanent improvement.` : "Choose one permanent improvement.";
+  levelUpPoints.textContent = `${update.unspentStatPoints} point${update.unspentStatPoints === 1 ? "" : "s"} available`;
+  for (const button of characterStatButtons) {
+    const stat = button.dataset.characterStat as CharacterStatId;
+    button.disabled = update.unspentStatPoints <= 0 || update[`${stat}Points` as keyof ProgressionUpdate] as number >= MAX_CHARACTER_STAT_POINTS;
+  }
+  levelUpPanel.hidden = update.unspentStatPoints <= 0;
+}
+
 function updateMomentum(stacksValue: number): void {
   const safeStacks = Number.isFinite(stacksValue) ? stacksValue : 0;
   localMomentumStacks = Math.max(0, Math.min(MOMENTUM_TRAIT.maxStacks, Math.floor(safeStacks)));
@@ -1949,9 +2008,10 @@ function updateMomentum(stacksValue: number): void {
 
 function localMovementSpeed(): number {
   const baseSpeed = (localDefending ? 2.1 : 4.2) * armourStats(localArmourId).speed;
-  return localTraitId === "momentum"
+  const traitSpeed = localTraitId === "momentum"
     ? baseSpeed * (1 + localMomentumStacks * MOMENTUM_TRAIT.movementSpeedBonusPerStack)
     : baseSpeed;
+  return traitSpeed * characterSpeedMultiplier(localCharacterProgression.agilityPoints);
 }
 
 const DANGER_ZONE_LABELS = [
@@ -3132,6 +3192,10 @@ function bindPlayers(joinedRoom: Room): void {
     const isLocal = sessionId === joinedRoom.sessionId;
     if (isLocal) {
       updateTavernCoins(player.coins);
+      renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
+        experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
+        powerPoints: player.powerPoints, vitalityPoints: player.vitalityPoints,
+        agilityPoints: player.agilityPoints, miningPoints: player.miningPoints }, player.maxHealth);
       if (isMainHandId(player.mainHandId)) updateMainHandLoadout(player.mainHandId);
       if (isSeismicMasteryId(player.seismicMastery)) updateSeismicMastery(player.seismicMastery);
       powerServerReady = isPowerId(player.equippedPower);
@@ -3170,6 +3234,15 @@ function bindPlayers(joinedRoom: Room): void {
       });
     };
     const playerCallbacks = callbacks(player);
+    const updateLocalProgression = () => {
+      if (!isLocal) return;
+      renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
+        experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
+        powerPoints: player.powerPoints, vitalityPoints: player.vitalityPoints,
+        agilityPoints: player.agilityPoints, miningPoints: player.miningPoints }, player.maxHealth);
+    };
+    if (isLocal) for (const field of ["level", "experience", "unspentStatPoints", "powerPoints", "vitalityPoints", "agilityPoints", "miningPoints"] as const)
+      playerCallbacks.listen(field, updateLocalProgression);
     if (isLocal) {
       playerCallbacks.inventory.onAdd((item: { quantity: number }, itemId: string) => {
         if (!isItemId(itemId)) return;
@@ -3277,7 +3350,7 @@ function bindPlayers(joinedRoom: Room): void {
       }
     }, true);
     playerCallbacks.listen("maxHealth", () => {
-      if (isLocal) updatePlayerHealth(player.health, player.maxHealth);
+      if (isLocal) { updatePlayerHealth(player.health, player.maxHealth); updateLocalProgression(); }
     }, true);
     playerCallbacks.listen("potionCooldownUntil", () => {
       if (isLocal) potionCooldownUntil = player.potionCooldownUntil;
@@ -3567,6 +3640,16 @@ function setInventoryOpen(open: boolean): void {
 
 inventoryToggle.addEventListener("click", () => setInventoryOpen(inventoryPanel.hasAttribute("hidden")));
 inventoryClose.addEventListener("click", () => setInventoryOpen(false));
+playerLevel.addEventListener("click", () => {
+  if (localCharacterProgression.unspentStatPoints > 0) levelUpPanel.hidden = false;
+  else setInventoryOpen(true);
+});
+for (const button of characterStatButtons) button.addEventListener("click", () => {
+  const stat = button.dataset.characterStat as CharacterStatId;
+  if (!room || localCharacterProgression.unspentStatPoints <= 0) return;
+  characterStatButtons.forEach(choice => { choice.disabled = true; });
+  room.send("progression:choose", { stat });
+});
 const storageUI = createStorageUI(document.querySelector<HTMLElement>("#storage-content")!, (type, payload) => room?.send(type, payload));
 const storagePrompt = document.createElement("button"); storagePrompt.id = "storage-prompt"; storagePrompt.type = "button";
 storagePrompt.textContent = "PERSONAL CHEST · E"; storagePrompt.hidden = true; document.body.append(storagePrompt);
@@ -4274,7 +4357,7 @@ function showDefeat(attackerName: string): void {
   closeLoot();
   clearDefeatCombat();
   quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
-  defeatDetail.textContent = `${attackerName} defeated you. Carried minerals and spare loot stay in your personal recovery bag. Equipped gear, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
+  defeatDetail.textContent = `${attackerName} defeated you. Carried minerals stay in your personal recovery bag. Levels, equipment, other loot, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
   defeatScreen.hidden = false;
   returnToTownButton.disabled = !room;
   returnToTownButton.textContent = "Return to Town";
@@ -4287,7 +4370,7 @@ returnToTownButton.addEventListener("click", () => {
   room.send("player:return");
 });
 window.addEventListener("keydown", event => {
-  if (!defeatScreen.hidden) return;
+  if (!defeatScreen.hidden || !levelUpPanel.hidden) return;
   if (tradeUI.isOpen()) return;
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.code.startsWith("Arrow")) event.preventDefault();
@@ -5412,6 +5495,7 @@ for (const button of traitPickerButtons) {
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
+  if (!levelUpPanel.hidden) { event.preventDefault(); return; }
   if (tradeUI.isOpen()) { if (event.code === "Escape") tradeUI.cancel(); return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.code === "Enter" && lootPanel.hidden && inventoryPanel.hidden && quizPanel.hidden && blacksmithPanel.hidden) { event.preventDefault(); social.open(); return; }
@@ -5468,6 +5552,7 @@ window.addEventListener("keyup", event => {
   if (event.code === "KeyF") commitSpecialAim();
 });
 canvas.addEventListener("pointerdown", event => {
+  if (!levelUpPanel.hidden) return;
   if (event.button === 2) {
     rangedFirePointer = null;
     event.preventDefault();
@@ -5682,8 +5767,8 @@ app.on("update", (dt: number) => {
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const strafe = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
-  const forward = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
+  const strafe = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden && levelUpPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
+  const forward = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden && levelUpPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
@@ -6511,6 +6596,17 @@ async function connect(): Promise<void> {
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
+  room.onMessage("progression:update", (update: ProgressionUpdate) => {
+    renderCharacterProgression(update);
+    if (update.reason === "level_up") {
+      showCombatFeedback(`LEVEL ${update.level} · CHOOSE A STAT`, "dodge");
+      status.textContent = `Level ${update.level}! Choose a permanent character improvement.`;
+    } else if (update.reason === "experience" && update.experienceGranted) {
+      status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;
+    } else if (update.reason === "choice") {
+      showCombatFeedback(`${String(update.source ?? "STAT").toUpperCase()} IMPROVED`, "dodge");
+    }
+  });
   room.onMessage("quiz:update", (update: TavernQuizUpdate) => renderTavernQuiz(update));
   room.onMessage("blacksmith:update", (update: BlacksmithUpdate) => {
     renderBlacksmith(update);

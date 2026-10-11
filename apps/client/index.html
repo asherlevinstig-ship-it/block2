@@ -28,6 +28,9 @@
       <div id="player-stamina" aria-label="Player stamina">
         <span>ST</span><div><i id="player-stamina-fill"></i></div><strong id="player-stamina-value">100</strong>
       </div>
+      <button id="player-level" type="button" aria-label="Character level and experience">
+        <span>LV <strong id="player-level-value">1</strong></span><div><i id="player-xp-fill"></i></div><em id="player-xp-value">0 / 40 XP</em>
+      </button>
       <button id="defense-slot" type="button" aria-pressed="false"><span>DEFENSE</span><strong>Guard / Parry</strong><em>HOLD C</em></button>
       <div id="trait-slot" data-trait="momentum" aria-label="Momentum trait, zero of three stacks">
         <span>TRAIT</span><strong id="trait-name">Momentum</strong>
@@ -216,7 +219,15 @@
         <div><span>GOLD</span><strong id="tavern-coins">20</strong></div>
         <div><span>CARRIED</span><strong id="inventory-total">EMPTY</strong></div>
         <div><span>EQUIPPED</span><strong id="inventory-equipped">Longsword</strong></div>
+        <div><span>LEVEL</span><strong id="inventory-level">1 · 0 XP</strong></div>
       </div>
+      <section id="character-stats" aria-label="Character progression">
+        <header><span>CHARACTER STATS</span><strong id="character-points">NO POINTS AVAILABLE</strong></header>
+        <div><span>ATTACK</span><strong id="stat-power">0 · +0 damage</strong></div>
+        <div><span>DEFENCE</span><strong id="stat-vitality">0 · 5 max HP</strong></div>
+        <div><span>AGILITY</span><strong id="stat-agility">0 · 100% speed</strong></div>
+        <div><span>MINING</span><strong id="stat-mining">0 · ×1 yield</strong></div>
+      </section>
       <nav class="inventory-tabs" role="tablist" aria-label="Inventory categories">
         <button id="inventory-tab-weapons" type="button" role="tab" aria-controls="inventory-category-weapons" aria-selected="true" data-inventory-tab="weapons">Weapons</button>
         <button id="inventory-tab-armour" type="button" role="tab" aria-controls="inventory-category-armour" aria-selected="false" tabindex="-1" data-inventory-tab="armour">Armour</button>
@@ -319,9 +330,22 @@
         <span class="defeat-eyebrow">YOUR JOURNEY CONTINUES</span>
         <h1 id="defeat-title">You were defeated</h1>
         <p id="defeat-detail">Take a breath. The Town of Beginnings is waiting.</p>
-        <div class="defeat-kept">Weapons, minerals and gold kept<br><small>No items or coins lost</small></div>
+        <div class="defeat-kept">Levels, permanent gear and gold kept<br><small>Carried loot remains in a recovery bag where you fell</small></div>
         <button id="return-to-town" type="button">Return to Town</button>
         <p class="defeat-note">Return with full health and stamina.</p>
+      </div>
+    </section>
+    <section id="level-up-panel" role="dialog" aria-modal="true" aria-labelledby="level-up-title" hidden>
+      <div class="level-up-card">
+        <span>CHARACTER ADVANCEMENT</span><h2 id="level-up-title">Level Up!</h2>
+        <p id="level-up-message">Choose one permanent improvement.</p>
+        <div class="level-up-choices">
+          <button type="button" data-character-stat="power"><strong>POWER</strong><small>+1 damage every 2 points</small></button>
+          <button type="button" data-character-stat="vitality"><strong>VITALITY</strong><small>+1 maximum health</small></button>
+          <button type="button" data-character-stat="agility"><strong>AGILITY</strong><small>+2% movement speed</small></button>
+          <button type="button" data-character-stat="mining"><strong>MINING</strong><small>+1 mineral yield every 2 points</small></button>
+        </div>
+        <small id="level-up-points">1 point available</small>
       </div>
     </section>
     <section id="loot-panel" class="loot-panel" hidden role="dialog" aria-modal="true" aria-labelledby="loot-title">

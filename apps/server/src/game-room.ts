@@ -55,6 +55,7 @@ import {
   POWER_DEFINITIONS,
   ROOTBOUND_FINISHER,
   PlayerProfileTokenSchema,
+  ProgressionChooseSchema,
   WEAPON_ATTACK_DEFINITIONS,
   PowerCancelRequestSchema,
   PowerEquipRequestSchema,
@@ -91,6 +92,7 @@ import {
   type PowerFracture,
   type PowerId,
   type PowerResolved,
+  type ProgressionUpdate,
   type DungeonRunUpdate,
   type DungeonRewardClaimed,
   DungeonBoardRequestSchema,
@@ -181,6 +183,7 @@ import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
 import { FOREST_CACHE_DUPLICATE_GOLD, forestCacheFeaturedReward, forestCacheRewardLabel } from "./forest-dungeon-rewards.js";
+import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSnapshot, progressionSpeedMultiplier } from "./character-progression.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -453,6 +456,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     aliveMessage("armour:equip", (client, payload) => this.handleArmourEquip(client, payload));
     this.onMessage("loot:collect", (client, payload) => this.handleLootCollect(client, payload));
     aliveMessage("trait:equip", (client, payload) => this.handleTraitEquip(client, payload));
+    aliveMessage("progression:choose", (client, payload) => this.handleProgressionChoice(client, payload));
     this.onMessage("quiz:sync", client => this.sendQuizState(client));
     aliveMessage("quiz:start", (client, payload) => this.handleQuizStart(client, payload));
     aliveMessage("quiz:answer", (client, payload) => this.handleQuizAnswer(client, payload));
@@ -733,6 +737,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     } satisfies BlacksmithUpdate);
   }
 
+  private grantProgression(sessionId: string, amount: number, source: string): ProgressionUpdate | null {
+    const player = this.state.players.get(sessionId);
+    if (!player) return null;
+    const update = grantCharacterExperience(player, amount, source);
+    if (!update) return null;
+    this.clients.find(candidate => candidate.sessionId === sessionId)?.send("progression:update", update);
+    void this.persistPlayer(sessionId, player);
+    return update;
+  }
+
+  private handleProgressionChoice(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = ProgressionChooseSchema.safeParse(payload);
+    if (!player || !parsed.success) return;
+    const update = chooseCharacterStat(player, parsed.data.stat);
+    client.send("progression:update", update ?? progressionSnapshot(player));
+    if (update) void this.persistPlayer(client.sessionId, player);
+  }
+
   private advanceFirstExpedition(clientOrId: Client | string, event: MiningExpeditionEvent): boolean {
     const sessionId = typeof clientOrId === "string" ? clientOrId : clientOrId.sessionId;
     const client = typeof clientOrId === "string" ? this.clients.find(candidate => candidate.sessionId === sessionId) : clientOrId;
@@ -757,6 +780,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         rewardLabel: `Warden's Resolve · +1 maximum health · +${player.coins - before} gold`,
         coinsGranted: player.coins - before,
       } satisfies WorldObjectiveCompleted);
+      this.grantProgression(sessionId, 40, "First Mining Expedition");
     }
     void this.persistPlayer(sessionId, player, next === 8);
     return true;
@@ -790,6 +814,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.blacksmithUpgrades |= 8;
       client?.send("objective:completed", { objectiveId: "silver-depths-expedition", title: "The Silver Depths",
         rewardLabel: "Moonstone Edge · permanent +1 weapon damage", coinsGranted: 0 } satisfies WorldObjectiveCompleted);
+      this.grantProgression(sessionId, 75, "The Silver Depths");
     }
     void this.persistPlayer(sessionId, player, next === 7);
     return true;
@@ -1365,6 +1390,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.stamina = reward.stamina;
       const coinsBefore = player.coins;
       player.coins = Math.min(1_000_000, player.coins + 2);
+      this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion), mob.name);
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -2417,7 +2443,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;
-      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId) * armourStats(player.armourId).speed;
+      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId)
+        * armourStats(player.armourId).speed * progressionSpeedMultiplier(player);
       const grounded = isPlayerSupported(this.readWorldBlock, player.x, player.y, player.z);
       let verticalVelocity = this.verticalVelocities.get(sessionId) ?? 0;
       if (grounded && verticalVelocity < 0) verticalVelocity = 0;
@@ -2845,7 +2872,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         }
         const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { power: true });
         if (traitBonusDamage > 0) traitBonusHitCount += 1;
-        const damage = damageAfterArmor(definition.damage + payoff.bonusDamage, mob.armor, true) + traitBonusDamage;
+        const damage = damageAfterArmor(definition.damage + payoff.bonusDamage + progressionAttackBonus(player), mob.armor, true) + traitBonusDamage;
         const aftershock = pending.powerId === "seismic_cleave"
           && isSeismicAftershockTarget(impactCenter, pending.yaw, mob, resolvedRange);
         if (aftershock) aftershockHitCount += 1;
@@ -3003,7 +3030,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         player.inventory.set(mineral, item);
       }
       const before = item.quantity;
-      item.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), inventoryTotal(before, minedIronQuantity(player.blacksmithUpgrades)));
+      item.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), inventoryTotal(before,
+        minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player)));
+      this.grantProgression(client.sessionId, mineral === "moonstone" ? 15 : 4, mineral === "moonstone" ? "Moonstone mined" : "Mineral mined");
       void this.persistPlayer(client.sessionId, player);
       client.send("resource:gathered", { itemId: mineral, quantity: item.quantity - before, total: item.quantity } satisfies ResourceGathered);
       let expeditionAdvanced = mineral === "iron_ore" && this.advanceFirstExpedition(client, "mined_iron");
@@ -3377,7 +3406,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (!player || player.health <= 0 || !mob || !mob.alive || !timing) return;
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
       const damage = damageAfterArmor(
-        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId) + this.specialDamageBonus(sessionId, mobId, now),
+        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId) + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now),
         mob.armor,
       ) + traitBonusDamage;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);

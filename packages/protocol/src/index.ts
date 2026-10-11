@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-silver-depths-visual-v95";
+export const WORLD_ROOM = "world-character-progression-v96";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -35,6 +35,37 @@ export const WORLD_STREAM_CHUNK_RADIUS = 2;
 
 export const PlayerProfileTokenSchema = z.string().regex(/^guest_[a-f0-9]{32}$/);
 export type PlayerProfileToken = z.infer<typeof PlayerProfileTokenSchema>;
+
+export const MAX_CHARACTER_LEVEL = 20;
+export const MAX_CHARACTER_STAT_POINTS = 5;
+export const CHARACTER_STATS = {
+  power: { name: "Power", detail: "+1 weapon and Power damage every 2 points" },
+  vitality: { name: "Vitality", detail: "+1 maximum health" },
+  agility: { name: "Agility", detail: "+2% movement speed" },
+  mining: { name: "Mining", detail: "+1 mineral yield every 2 points" },
+} as const;
+export type CharacterStatId = keyof typeof CHARACTER_STATS;
+export const ProgressionChooseSchema = z.object({ stat: z.enum(["power", "vitality", "agility", "mining"]) });
+export function experienceToNextLevel(level: number): number {
+  const safe = Math.max(1, Math.min(MAX_CHARACTER_LEVEL, Math.floor(level)));
+  return safe >= MAX_CHARACTER_LEVEL ? 0 : 25 + safe * 15;
+}
+export function characterPowerBonus(points: number): number { return Math.floor(Math.max(0, points) / 2); }
+export function characterSpeedMultiplier(points: number): number { return 1 + Math.max(0, points) * .02; }
+export function characterMiningBonus(points: number): number { return Math.floor(Math.max(0, points) / 2); }
+export type ProgressionUpdate = {
+  reason: "sync" | "experience" | "level_up" | "choice";
+  source?: string;
+  experienceGranted?: number;
+  level: number;
+  experience: number;
+  experienceRequired: number;
+  unspentStatPoints: number;
+  powerPoints: number;
+  vitalityPoints: number;
+  agilityPoints: number;
+  miningPoints: number;
+};
 
 export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;

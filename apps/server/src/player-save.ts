@@ -31,6 +31,13 @@ export interface PlayerSaveData {
   maxHealth: number;
   stamina: number;
   maxStamina: number;
+  level?: number;
+  experience?: number;
+  unspentStatPoints?: number;
+  powerPoints?: number;
+  vitalityPoints?: number;
+  agilityPoints?: number;
+  miningPoints?: number;
   coins: number;
   potionCooldownUntil?: number;
   blacksmithUpgrades: number;
@@ -79,6 +86,13 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     maxHealth: player.maxHealth,
     stamina: player.stamina,
     maxStamina: player.maxStamina,
+    level: player.level,
+    experience: player.experience,
+    unspentStatPoints: player.unspentStatPoints,
+    powerPoints: player.powerPoints,
+    vitalityPoints: player.vitalityPoints,
+    agilityPoints: player.agilityPoints,
+    miningPoints: player.miningPoints,
     coins: player.coins,
     potionCooldownUntil: player.potionCooldownUntil,
     blacksmithUpgrades: player.blacksmithUpgrades,
@@ -139,6 +153,13 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     maxHealth,
     stamina: finiteNumber(value.stamina, maxStamina, 0, maxStamina),
     maxStamina,
+    level: Math.floor(finiteNumber(value.level, 1, 1, 20)),
+    experience: Math.floor(finiteNumber(value.experience, 0, 0, 1_000_000)),
+    unspentStatPoints: Math.floor(finiteNumber(value.unspentStatPoints, 0, 0, 19)),
+    powerPoints: Math.floor(finiteNumber(value.powerPoints, 0, 0, 5)),
+    vitalityPoints: Math.floor(finiteNumber(value.vitalityPoints, 0, 0, 5)),
+    agilityPoints: Math.floor(finiteNumber(value.agilityPoints, 0, 0, 5)),
+    miningPoints: Math.floor(finiteNumber(value.miningPoints, 0, 0, 5)),
     coins: Math.floor(finiteNumber(value.coins, TAVERN_QUIZ_STARTING_COINS, 0, 1_000_000)),
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 15)),
@@ -163,6 +184,13 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.maxHealth = save.maxHealth;
   player.health = save.health;
   player.maxStamina = save.maxStamina;
+  player.level = save.level ?? 1;
+  player.experience = save.experience ?? 0;
+  player.unspentStatPoints = save.unspentStatPoints ?? 0;
+  player.powerPoints = save.powerPoints ?? 0;
+  player.vitalityPoints = save.vitalityPoints ?? 0;
+  player.agilityPoints = save.agilityPoints ?? 0;
+  player.miningPoints = save.miningPoints ?? 0;
   player.coins = save.coins;
   player.potionCooldownUntil = save.potionCooldownUntil ?? 0;
   player.blacksmithUpgrades = save.blacksmithUpgrades;
