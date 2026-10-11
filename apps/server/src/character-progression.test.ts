@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PlayerState } from "./schema.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSpeedMultiplier } from "./character-progression.js";
-import { enemyLevelForTier, enemyThreat, experienceLevelMultiplier, worldLevelRange } from "@blockcraft/protocol";
+import { blacksmithRequiredLevel, enemyLevelForTier, enemyThreat, experienceLevelMultiplier, milestoneUnlocked, worldLevelRange } from "@blockcraft/protocol";
 
 describe("character progression", () => {
   it("levels through multiple thresholds and grants one choice per level", () => {
@@ -36,5 +36,14 @@ describe("character progression", () => {
     expect(enemyLevelForTier(3, true, true)).toBe(13);
     expect(enemyThreat(4, 9)).toBe("deadly");
     expect(enemyThreat(10, 5)).toBe("trivial");
+  });
+
+  it("unlocks milestone systems at their declared character levels", () => {
+    expect(milestoneUnlocked(2, "second_power")).toBe(false);
+    expect(milestoneUnlocked(3, "second_power")).toBe(true);
+    expect(milestoneUnlocked(9, "frontier_contracts")).toBe(false);
+    expect(milestoneUnlocked(10, "frontier_contracts")).toBe(true);
+    expect(blacksmithRequiredLevel("leather_armour")).toBe(1);
+    expect(blacksmithRequiredLevel("forged_sword")).toBe(5);
   });
 });

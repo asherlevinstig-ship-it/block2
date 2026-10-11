@@ -4,7 +4,7 @@ import { MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; level?: number; combatState: string; targetId: string };
-type Player = Pose & { health: number; miningExpeditionStage?: number; silverDepthsStage?: number; inventory: { get(id: string): { quantity: number } | undefined } };
+type Player = Pose & { health: number; level?: number; miningExpeditionStage?: number; silverDepthsStage?: number; inventory: { get(id: string): { quantity: number } | undefined } };
 type Loot = Pose & { ownerId: string; itemId: string; expiresAt: number };
 export interface WorldObjectiveProgress { id: string | null; fingerprint: string }
 export const createObjectiveProgress = (): WorldObjectiveProgress => ({ id: null, fingerprint: "" });
@@ -54,7 +54,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   }
   if (expeditionStage === 7) return expedition(make("expedition-return", "Return to the Blacksmith", "Bring the Miner's Lantern back to town and press E at the blacksmith stall to complete the expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 8);
   const depthsStage = player.silverDepthsStage ?? 0;
-  const depthsUnlocked = depthsStage > 0 || (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0;
+  const depthsUnlocked = depthsStage > 0 || (player.level ?? 1) >= 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0;
   const depths = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => ({ ...update, recommendedLevel: "LV 7–12", progressLabel: `SILVER DEPTHS · STEP ${step} / 7` });
   if (depthsUnlocked && depthsStage === 0) return depths(make("depths-briefing", "Speak to the Blacksmith", "Your first expedition is complete. Return to the blacksmith to unlock The Silver Depths.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
   if (depthsUnlocked && depthsStage === 1) return depths(make("depths-enter", "Follow the Lantern Route", "Pass through the eastern wall of the buried vault. Your Miner's Lantern reveals the route into the Silver Depths.", { x: 61.5, y: 1, z: 9.5 }, "explore", 3), 2);
@@ -94,6 +94,12 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     update.targetMobId = target.id; update.targetMobIds = group.ids.filter(id => mobs.has(id)); update.completedMobIds = group.ids.filter(id => mobs.get(id)?.alive === false);
     return [{ update, distance: distance(target.mob), engaged: living.some(({ mob }) => mob.targetId === playerId || mob.combatState !== "idle" && distance(mob) <= 8) }];
   }).sort((a, b) => a.distance - b.distance);
+  const lockedFrontier = candidates.find(candidate => candidate.update.objectiveId.includes("frontier"));
+  if ((player.level ?? 1) < 10 && lockedFrontier && !lockedFrontier.engaged) {
+    return { ...lockedFrontier.update, objectiveId: "frontier-locked", title: "Frontier Contracts Locked",
+      detail: "Reach character level 10 to track elite Frontier encounters. You may still explore and fight here.",
+      recommendedLevel: "UNLOCKS AT LV 10", showMarker: false };
+  }
   const activeFight = candidates.find(candidate => candidate.engaged && candidate.update.objectiveId === previousId) ?? candidates.find(candidate => candidate.engaged);
   if (activeFight) return activeFight.update;
   if (eventWarningUntil > now && sameFloor(WILDERNESS_EVENT_POSITION) && distance(WILDERNESS_EVENT_POSITION) <= 26)

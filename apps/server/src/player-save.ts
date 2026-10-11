@@ -50,6 +50,7 @@ export interface PlayerSaveData {
   mainHandId: MainHandId;
   armourId?: ArmourId;
   equippedPower: PowerId;
+  equippedPowerSecondary?: PowerId;
   seismicMastery: SeismicMasteryId;
   equippedSpecial: SpecialId;
   equippedTrait: TraitId;
@@ -105,6 +106,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     mainHandId: player.mainHandId as MainHandId,
     armourId: ArmourEquipSchema.safeParse({ armourId: player.armourId }).data?.armourId ?? "none",
     equippedPower: player.equippedPower as PowerId,
+    equippedPowerSecondary: player.equippedPowerSecondary as PowerId,
     seismicMastery: player.seismicMastery as SeismicMasteryId,
     equippedSpecial: player.equippedSpecial as SpecialId,
     equippedTrait: player.equippedTrait as TraitId,
@@ -144,6 +146,9 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
   const equippedPower = isKeyOf(value.equippedPower, POWER_DEFINITIONS)
     ? compatiblePowerOrFallback(value.equippedPower, mainHand.tag)
     : "shockwave";
+  const equippedPowerSecondary = isKeyOf(value.equippedPowerSecondary, POWER_DEFINITIONS)
+    ? compatiblePowerOrFallback(value.equippedPowerSecondary, mainHand.tag)
+    : "eruption";
 
   return {
     version: PLAYER_SAVE_VERSION,
@@ -173,6 +178,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     recoveryBags: parseRecoveryBags(value.recoveryBags),
     armourId: ArmourEquipSchema.safeParse({ armourId: value.armourId }).data?.armourId ?? "none",
     equippedPower,
+    equippedPowerSecondary,
     seismicMastery: isKeyOf(value.seismicMastery, SEISMIC_CLEAVE_UPGRADES.masteries) ? value.seismicMastery : "advancing_fault",
     equippedSpecial: isKeyOf(value.equippedSpecial, SPECIAL_DEFINITIONS) ? value.equippedSpecial : "hunters_mark",
     equippedTrait: isKeyOf(value.equippedTrait, TRAIT_DEFINITIONS) ? value.equippedTrait : "momentum",
@@ -215,6 +221,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.mainHandTag = mainHand.tag;
   player.armourId = save.armourId && (save.armourId === "none" || (player.inventory.get(save.armourId)?.quantity ?? 0) > 0) ? save.armourId : "none";
   player.equippedPower = compatiblePowerOrFallback(save.equippedPower, mainHand.tag);
+  player.equippedPowerSecondary = compatiblePowerOrFallback(save.equippedPowerSecondary ?? "eruption", mainHand.tag);
   player.seismicMastery = save.seismicMastery;
   player.equippedSpecial = save.equippedSpecial;
   player.equippedTrait = save.equippedTrait;

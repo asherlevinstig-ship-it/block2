@@ -109,6 +109,8 @@ import {
   characterMiningBonus,
   characterPowerBonus,
   characterSpeedMultiplier,
+  CHARACTER_MILESTONES,
+  blacksmithRequiredLevel,
   enemyThreat,
   experienceToNextLevel,
   worldLevelRange,
@@ -371,6 +373,8 @@ const momentumPips = [...document.querySelectorAll<HTMLElement>("#momentum-pips 
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerName = document.querySelector<HTMLElement>("#power-name")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
+const powerLoadoutButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-loadout-slots [data-power-slot]")];
+const characterMilestones = document.querySelector<HTMLElement>("#character-milestones")!;
 const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
 const mainHandName = document.querySelector<HTMLElement>("#main-hand-name")!;
 const mainHandAttack = document.querySelector<HTMLElement>("#main-hand-attack")!;
@@ -1413,6 +1417,8 @@ interface NetworkPlayer {
   armourId: string;
   mainHandTag: string;
   equippedPower: string;
+  equippedPowerSecondary: string;
+  activePower: string;
   seismicMastery: string;
   powerCooldownUntil: number;
   powerSequence: number;
@@ -1696,6 +1702,10 @@ let localCharacterProgression: ProgressionUpdate = {
   powerPoints: 0, vitalityPoints: 0, agilityPoints: 0, miningPoints: 0,
 };
 let localEquippedPower: PowerId = "shockwave";
+let localPrimaryPower: PowerId = "shockwave";
+let localSecondaryPower: PowerId = "eruption";
+let activePowerSlot: "primary" | "secondary" = "primary";
+let powerAimKey: "KeyR" | "KeyT" | null = null;
 let localSeismicMastery: SeismicMasteryId = "advancing_fault";
 let localEquippedSpecial: SpecialId = "hunters_mark";
 let localActivePower: PowerId | null = null;
@@ -1836,7 +1846,23 @@ function refreshInventoryPreview(): void {
 }
 
 function updatePowerLoadout(powerId: PowerId): void {
-  localEquippedPower = powerId;
+  localPrimaryPower = powerId;
+  if (activePowerSlot === "primary") activatePowerSlot("primary", false);
+}
+
+function updateSecondaryPowerLoadout(powerId: PowerId): void {
+  localSecondaryPower = powerId;
+  if (activePowerSlot === "secondary") activatePowerSlot("secondary", false);
+}
+
+function activatePowerSlot(slot: "primary" | "secondary", announce = true): boolean {
+  if (slot === "secondary" && localCharacterProgression.level < 3) {
+    if (announce) status.textContent = "The second Power slot unlocks at character level 3.";
+    return false;
+  }
+  activePowerSlot = slot;
+  localEquippedPower = slot === "primary" ? localPrimaryPower : localSecondaryPower;
+  const powerId = localEquippedPower;
   const definition = POWER_DEFINITIONS[powerId];
   powerName.textContent = definition.name;
   powerSlot.setAttribute("aria-label", `Use ${definition.name}`);
@@ -1845,7 +1871,16 @@ function updatePowerLoadout(powerId: PowerId): void {
   for (const button of powerPickerButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.power === powerId));
   }
+  for (const button of powerLoadoutButtons) {
+    const buttonSlot = button.dataset.powerSlot as "primary" | "secondary";
+    const locked = buttonSlot === "secondary" && localCharacterProgression.level < 3;
+    button.disabled = locked;
+    button.setAttribute("aria-pressed", String(buttonSlot === activePowerSlot));
+    const equipped = buttonSlot === "primary" ? localPrimaryPower : localSecondaryPower;
+    button.querySelector("strong")!.textContent = locked ? "LOCKED · LV 3" : POWER_DEFINITIONS[equipped].name.toUpperCase();
+  }
   refreshPowerCompatibility();
+  return true;
 }
 
 function updateSeismicMastery(masteryId: SeismicMasteryId): void {
@@ -1875,7 +1910,8 @@ function updateControlsHelp(): void {
   const powerHint = power.castType === "tap" ? `R ${power.name}` : `Hold R ${power.core === "ground" ? "place" : "aim"} ${power.name}`;
   const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
   const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Mouse aim · Hold left-click fire" : "";
-  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint} · ${specialHint} · Q mode · E/click acts${fireHint}`;
+  const secondaryHint = localCharacterProgression.level >= 3 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
+  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint}${secondaryHint} · ${specialHint} · Q mode · E/click acts${fireHint}`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
@@ -1923,8 +1959,8 @@ function requestPowerEquip(powerId: PowerId): void {
     return;
   }
   powerEquipSequence += 1;
-  room.send("power:equip", { requestId: `power-equip-${powerEquipSequence}`, powerId });
-  status.textContent = `Equipping ${POWER_DEFINITIONS[powerId].name}...`;
+  room.send("power:equip", { requestId: `power-equip-${powerEquipSequence}`, powerId, slot: activePowerSlot });
+  status.textContent = `Equipping ${POWER_DEFINITIONS[powerId].name} to the ${activePowerSlot} slot...`;
 }
 
 function requestMainHandEquip(mainHandId: MainHandId): void {
@@ -1990,6 +2026,14 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   statVitality.textContent = `${update.vitalityPoints} · ${maximumHealth} max HP`;
   statAgility.textContent = `${update.agilityPoints} · ${Math.round(characterSpeedMultiplier(update.agilityPoints) * 100)}% speed`;
   statMining.textContent = `${update.miningPoints} · ×${1 + characterMiningBonus(update.miningPoints)} yield`;
+  characterMilestones.replaceChildren(...CHARACTER_MILESTONES.map(milestone => {
+    const row = document.createElement("article");
+    const unlocked = update.level >= milestone.level;
+    row.dataset.unlocked = String(unlocked);
+    row.innerHTML = `<span>${unlocked ? "✓" : `LV ${milestone.level}`}</span><div><strong>${milestone.name}</strong><small>${milestone.detail}</small></div>`;
+    return row;
+  }));
+  activatePowerSlot(activePowerSlot, false);
   levelUpTitle.textContent = `Level ${update.level}!`;
   levelUpMessage.textContent = update.reason === "level_up" ? `You earned ${update.experienceGranted ?? 0} XP from ${update.source ?? "adventuring"}. Choose one permanent improvement.` : "Choose one permanent improvement.";
   levelUpPoints.textContent = `${update.unspentStatPoints} point${update.unspentStatPoints === 1 ? "" : "s"} available`;
@@ -3213,6 +3257,7 @@ function bindPlayers(joinedRoom: Room): void {
       if (isSeismicMasteryId(player.seismicMastery)) updateSeismicMastery(player.seismicMastery);
       powerServerReady = isPowerId(player.equippedPower);
       if (isPowerId(player.equippedPower)) updatePowerLoadout(player.equippedPower);
+      if (isPowerId(player.equippedPowerSecondary)) updateSecondaryPowerLoadout(player.equippedPowerSecondary);
       if (isSpecialId(player.equippedSpecial)) updateSpecialLoadout(player.equippedSpecial);
       if (isTraitId(player.equippedTrait)) updateTraitLoadout(player.equippedTrait);
     }
@@ -3288,13 +3333,13 @@ function bindPlayers(joinedRoom: Room): void {
       if (isLocal) {
         if (player.powerSequence <= localLastPowerSequence) return;
         localLastPowerSequence = player.powerSequence;
-        if (isPowerId(player.equippedPower)) localActivePower = player.equippedPower;
+        if (!localActivePower && isPowerId(player.activePower)) localActivePower = player.activePower;
         localPowerStartedAt ??= performance.now();
         return;
       }
       if (!remote || player.powerSequence <= remote.lastPowerSequence) return;
       remote.lastPowerSequence = player.powerSequence;
-      remote.powerId = isPowerId(player.equippedPower) ? player.equippedPower : null;
+      remote.powerId = isPowerId(player.activePower) ? player.activePower : null;
       remote.powerStartedAt = performance.now();
     }, true);
     playerCallbacks.listen("defending", () => {
@@ -3323,6 +3368,11 @@ function bindPlayers(joinedRoom: Room): void {
         updatePowerLoadout(player.equippedPower);
         status.textContent = `${POWER_DEFINITIONS[player.equippedPower].name} equipped.`;
       }
+    }, true);
+    playerCallbacks.listen("equippedPowerSecondary", () => {
+      if (!isLocal || !isPowerId(player.equippedPowerSecondary)) return;
+      updateSecondaryPowerLoadout(player.equippedPowerSecondary);
+      status.textContent = `${POWER_DEFINITIONS[player.equippedPowerSecondary].name} equipped to the secondary Power slot.`;
     }, true);
     playerCallbacks.listen("seismicMastery", () => {
       if (!isLocal || !isSeismicMasteryId(player.seismicMastery)) return;
@@ -3789,6 +3839,7 @@ function updateTavernCoins(coins: number): void {
 let blacksmithPending = false;
 let blacksmithIronCapacity = 12;
 let blacksmithShopTab: BlacksmithShopTab = "sell";
+let blacksmithCharacterLevel = 1;
 let lastShopPurchaseCategory: InventoryTab = "weapons";
 const weaponShop = document.createElement("div");
 weaponShop.id = "blacksmith-weapons";
@@ -3821,8 +3872,10 @@ function renderWeaponShop(): void {
     const price = document.createElement("span"); price.className = "blacksmith-item-price";
     price.textContent = `${BLACKSMITH_STOCK[id].price} GOLD${owned ? ` · ${owned} owned` : ""}`;
     const shortfall = shopGoldShortfall(id, tavernCoinBalance);
-    button.textContent = blacksmithPending ? "PLEASE WAIT…" : shortfall ? `NEED ${shortfall} MORE GOLD` : "BUY · ADD TO PACK";
-    button.disabled = !room || blacksmithPending || tavernCoinBalance < BLACKSMITH_STOCK[id].price || owned >= 65535;
+    const requiredLevel = blacksmithRequiredLevel(id);
+    const levelLocked = blacksmithCharacterLevel < requiredLevel;
+    button.textContent = levelLocked ? `UNLOCKS AT LEVEL ${requiredLevel}` : blacksmithPending ? "PLEASE WAIT…" : shortfall ? `NEED ${shortfall} MORE GOLD` : "BUY · ADD TO PACK";
+    button.disabled = levelLocked || !room || blacksmithPending || tavernCoinBalance < BLACKSMITH_STOCK[id].price || owned >= 65535;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending) return;
       lastShopPurchaseCategory = armour ? "armour" : "weapons";
@@ -3852,6 +3905,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     ? "Sell iron for 3 gold and silver for 8. Choose Weapons or Armour, buy gear, then open your pack to equip it."
     : update.phase === "traded" ? `${update.message} Choose Weapons or Armour to spend your gold.` : update.message;
   blacksmithIronCapacity = update.ironCapacity;
+  blacksmithCharacterLevel = update.characterLevel;
   updateInventoryItem("iron_ore", update.ironOre);
   const silver = update.silverOre ?? 0;
   updateInventoryItem("silver_ore", silver);
@@ -5199,6 +5253,7 @@ function cancelPowerAim(): void {
   if (!powerAimActive) return;
   powerAimActive = false;
   powerAimPointerId = null;
+  powerAimKey = null;
   destroyPowerAimVisual();
   powerSlot.classList.remove("aiming");
   powerButton.classList.remove("aiming");
@@ -5260,6 +5315,7 @@ function commitPowerAim(): void {
     : undefined;
   powerAimActive = false;
   powerAimPointerId = null;
+  powerAimKey = null;
   destroyPowerAimVisual();
   powerSlot.classList.remove("aiming");
   powerButton.classList.remove("aiming");
@@ -5470,6 +5526,9 @@ for (const button of powerPickerButtons) {
     if (powerId && isPowerId(powerId)) requestPowerEquip(powerId);
   });
 }
+for (const button of powerLoadoutButtons) {
+  button.addEventListener("click", () => activatePowerSlot(button.dataset.powerSlot as "primary" | "secondary"));
+}
 for (const button of seismicMasteryButtons) {
   button.addEventListener("click", () => {
     const masteryId = button.dataset.seismicMastery;
@@ -5553,7 +5612,15 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
   if (event.code === "KeyE") requestPrimaryAction();
   if (event.code === "KeyC") requestDefense(true);
-  if (event.code === "KeyR") beginPowerAim();
+  if (event.code === "KeyR") {
+    activatePowerSlot("primary", false);
+    powerAimKey = "KeyR";
+    beginPowerAim();
+  }
+  if (event.code === "KeyT" && activatePowerSlot("secondary")) {
+    powerAimKey = "KeyT";
+    beginPowerAim();
+  }
   if (event.code === "KeyF") beginSpecialAim();
   if (event.code === "Space") {
     event.preventDefault();
@@ -5562,7 +5629,7 @@ window.addEventListener("keydown", event => {
 });
 window.addEventListener("keyup", event => {
   if (event.code === "KeyC") requestDefense(false);
-  if (event.code === "KeyR") commitPowerAim();
+  if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
 });
 canvas.addEventListener("pointerdown", event => {
@@ -6629,8 +6696,9 @@ async function connect(): Promise<void> {
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
     renderCharacterProgression(update);
     if (update.reason === "level_up") {
-      showCombatFeedback(`LEVEL ${update.level} · CHOOSE A STAT`, "dodge");
-      status.textContent = `Level ${update.level}! Choose a permanent character improvement.`;
+      const milestone = CHARACTER_MILESTONES.find(entry => entry.level === update.level);
+      showCombatFeedback(milestone ? `LEVEL ${update.level} · ${milestone.name.toUpperCase()}` : `LEVEL ${update.level} · CHOOSE A STAT`, "dodge");
+      status.textContent = milestone ? `Level ${update.level}! ${milestone.name} unlocked. Choose a permanent character improvement.` : `Level ${update.level}! Choose a permanent character improvement.`;
     } else if (update.reason === "experience" && update.experienceGranted) {
       status.textContent = `+${update.experienceGranted} XP · ${update.source ?? "adventuring"}`;
     } else if (update.reason === "choice") {

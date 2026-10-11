@@ -3,7 +3,7 @@ import { Block } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { PlayerState, WorldState } from "./schema.js";
 import { nearbyObjective } from "./world-objectives.js";
-const player = (x: number, z: number, y = 8) => ({ x, y, z, health: 5, inventory: new Map<string, { quantity: number }>() });
+const player = (x: number, z: number, y = 8) => ({ x, y, z, health: 5, level: 10, inventory: new Map<string, { quantity: number }>() });
 const mob = (x: number, z: number, more = {}) => ({ x, y: 8, z, alive: true, name: "Crawler", difficultyTier: 1, combatState: "idle", targetId: "", ...more });
 const select = (pose = player(48, 28), mobs = new Map([["cave-spitter", mob(46.5, 31.5)], ["frontier-spitter", mob(50.5, 25.5)]]), previous: string | null = null) => nearbyObjective("tester", pose, mobs, [], [], 10000, previous);
 
@@ -24,6 +24,14 @@ describe("world objective director", () => {
     expect(objective.objectiveId).toBe("frontier-mixed");
     expect(objective.targetMobIds).toHaveLength(3);
     expect(objective.title).toBe("Frontier Warband");
+  });
+  it("holds Frontier contracts until level 10 without preventing exploration", () => {
+    const mobs = new Map([["frontier-crawler", mob(63.5, 35.5)], ["frontier-support-spitter", mob(68.5, 36.5)],
+      ["frontier-brute-east", mob(70.5, 32.5)]]);
+    const objective = select({ ...player(67, 35), level: 9 }, mobs);
+    expect(objective.objectiveId).toBe("frontier-locked");
+    expect(objective.showMarker).toBe(false);
+    expect(objective.detail).toContain("level 10");
   });
   it("selects the nearby silver encounter without a prerequisite quest", () => {
     expect(select().objectiveId).toBe("silver-guards");
@@ -72,7 +80,7 @@ describe("world objective director", () => {
     Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
     internal.registerMob("greenwood-briar", "briar_crawler", { x: 39.5, y: 8, z: 16.5 });
     internal.registerMob("frontier-brute", "stone_brute", { x: 65.5, y: 8, z: 23.5 });
-    const pose = new PlayerState(); Object.assign(pose, { x: 40, y: 8, z: 16, miningExpeditionStage: 8 }); room.state.players.set("tester", pose);
+    const pose = new PlayerState(); Object.assign(pose, { x: 40, y: 8, z: 16, level: 10, miningExpeditionStage: 8 }); room.state.players.set("tester", pose);
     const client = { sessionId: "tester", send: vi.fn() } as any;
     internal.sendObjectiveState(client); expect(client.send.mock.calls[0][1].objectiveId).toBe("greenwood");
     internal.sendObjectiveState(client); expect(client.send).toHaveBeenCalledTimes(1);

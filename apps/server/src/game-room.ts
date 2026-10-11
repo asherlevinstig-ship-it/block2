@@ -60,6 +60,8 @@ import {
   PowerCancelRequestSchema,
   PowerEquipRequestSchema,
   PowerRequestSchema,
+  blacksmithRequiredLevel,
+  milestoneUnlocked,
   SEISMIC_CLEAVE_UPGRADES,
   SeismicMasteryEquipRequestSchema,
   SpecialRequestSchema,
@@ -485,6 +487,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     // Assign after construction so Colyseus includes the loadout in the initial
     // patch instead of eliding it as an unchanged schema default.
     player.equippedPower = "shockwave";
+    player.equippedPowerSecondary = "eruption";
+    player.activePower = "shockwave";
     player.seismicMastery = "advancing_fault";
     player.mainHandId = "longsword";
     player.mainHandTag = "melee";
@@ -729,6 +733,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       moonstone: player.inventory.get("moonstone")?.quantity ?? 0,
       ironCapacity: ironCapacity(player.blacksmithUpgrades),
       gold: player.coins,
+      characterLevel: player.level,
       ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
       weapons: Object.fromEntries(Object.keys(BLACKSMITH_STOCK).map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       sold,
@@ -829,6 +834,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       message = "First expedition: enter the East Ore Mine, gather iron and silver, breach the buried vault, and return with its lantern.";
     } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 7 && this.advanceFirstExpedition(client, "returned_to_blacksmith")) {
       message = "Expedition complete. Warden's Resolve permanently increased your maximum health, and 25 gold was added to your purse.";
+    } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && player.level < 7) {
+      message = "The Silver Depths unlock at character level 7. Continue exploring and completing encounters.";
     } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && this.advanceSilverDepthsExpedition(client, "briefed")) {
       message = "Second expedition: use the Miner's Lantern to cross the old vault, mine Moonstone, clear the spitter gallery, and defeat the Crystal Matriarch.";
     } else if (canTradeAtBlacksmith(player) && player.silverDepthsStage === 6 && this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith")) {
@@ -857,6 +864,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success) return this.sendBlacksmithState(client, "Choose equipment from the shop.", "error");
     if (player.health <= 0 || !canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to buy equipment.", "error");
     const id = parsed.data.itemId;
+    const requiredLevel = blacksmithRequiredLevel(id);
+    if (player.level < requiredLevel) return this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[id].name} unlocks at character level ${requiredLevel}.`, "error");
     const result = weaponPurchase(player.coins, player.inventory.get(id)?.quantity ?? 0, id);
     if (!result.ok) return this.sendBlacksmithState(client, result.message, "error");
     let item = player.inventory.get(id);
@@ -2530,7 +2539,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.defending = false;
     const powerId = parsed.data.powerId as PowerId;
     const definition = POWER_DEFINITIONS[powerId];
-    if (!definition || player.equippedPower !== powerId) {
+    const equipped = player.equippedPower === powerId || milestoneUnlocked(player.level, "second_power") && player.equippedPowerSecondary === powerId;
+    if (!definition || !equipped) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
     }
     if (!isPowerCompatible(definition, player.mainHandTag)) {
@@ -2562,6 +2572,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.yaw = parsed.data.yaw;
     player.powerCooldownUntil = now + definition.cooldownMs;
     player.powerCastStartedAt = now;
+    player.activePower = powerId;
     player.powerSequence += 1;
     this.pendingPowers.set(client.sessionId, {
       requestId: parsed.data.requestId,
@@ -2711,7 +2722,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (this.pendingPowers.has(client.sessionId)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "rate" });
     }
-    player.equippedPower = parsed.data.powerId;
+    const slot = parsed.data.slot ?? "primary";
+    if (slot === "secondary" && !milestoneUnlocked(player.level, "second_power")) {
+      return this.reject(client, { requestId: parsed.data.requestId, action: "power", reason: "missing" });
+    }
+    if (slot === "secondary") player.equippedPowerSecondary = parsed.data.powerId;
+    else player.equippedPower = parsed.data.powerId;
+    void this.persistPlayer(client.sessionId, player);
   }
 
   private handleSeismicMasteryEquip(client: Client, payload: unknown): void {
@@ -2743,6 +2760,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     else if (player.equippedSpecial === "venom_fan") player.equippedSpecial = "hunters_mark";
     this.attackChains.delete(client.sessionId);
     player.equippedPower = compatiblePowerOrFallback(player.equippedPower, mainHand.tag);
+    player.equippedPowerSecondary = compatiblePowerOrFallback(player.equippedPowerSecondary, mainHand.tag);
   }
 
   private handleTraitEquip(client: Client, payload: unknown): void {

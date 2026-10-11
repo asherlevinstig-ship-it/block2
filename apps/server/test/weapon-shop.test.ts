@@ -9,7 +9,7 @@ import { applyPlayerSave, parsePlayerSave, serializePlayerSave } from "../src/pl
 
 function fixture() {
   const room = new WorldRoom(); room.setState(new WorldState());
-  const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION); player.coins = 100;
+  const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION); player.level = 5; player.coins = 100;
   room.state.players.set("buyer", player);
   const client = { sessionId: "buyer", send: vi.fn() };
   vi.spyOn(room as any, "persistPlayer").mockResolvedValue(undefined);

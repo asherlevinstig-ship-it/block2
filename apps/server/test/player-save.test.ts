@@ -20,6 +20,7 @@ describe("player saves", () => {
     player.mainHandId = "fang_dagger";
     player.mainHandTag = "melee";
     player.equippedPower = "seismic_cleave";
+    player.equippedPowerSecondary = "lunge_strike";
     player.seismicMastery = "tectonic_stand";
     player.equippedSpecial = "bramble_snare";
     player.equippedTrait = "executioner";
@@ -39,6 +40,7 @@ describe("player saves", () => {
     expect([restored.powerPoints, restored.vitalityPoints, restored.agilityPoints, restored.miningPoints]).toEqual([2, 1, 1, 0]);
     expect(restored.mainHandId).toBe("fang_dagger");
     expect(restored.equippedPower).toBe("seismic_cleave");
+    expect(restored.equippedPowerSecondary).toBe("lunge_strike");
     expect(restored.seismicMastery).toBe("tectonic_stand");
     expect(restored.equippedSpecial).toBe("bramble_snare");
     expect(restored.equippedTrait).toBe("executioner");

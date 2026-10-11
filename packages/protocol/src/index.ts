@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-enemy-levels-v97";
+export const WORLD_ROOM = "world-milestone-unlocks-v98";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -75,6 +75,19 @@ export function experienceLevelMultiplier(playerLevel: number, enemyLevel: numbe
   const gap = Math.floor(enemyLevel) - Math.floor(playerLevel);
   return gap >= 5 ? 1.75 : gap >= 2 ? 1.4 : gap <= -6 ? .1 : gap <= -4 ? .25 : gap <= -2 ? .5 : 1;
 }
+export const CHARACTER_MILESTONES = [
+  { level: 3, id: "second_power", name: "Second Power Slot", detail: "Equip a second Power and cast it with T" },
+  { level: 5, id: "advanced_smithing", name: "Advanced Smithing", detail: "Forged weapons and iron armour become available" },
+  { level: 7, id: "silver_depths", name: "The Silver Depths", detail: "Accept the second expedition from the blacksmith" },
+  { level: 10, id: "frontier_contracts", name: "Frontier Contracts", detail: "Track elite Frontier encounters and bosses" },
+] as const;
+export type CharacterMilestoneId = typeof CHARACTER_MILESTONES[number]["id"];
+export function milestoneUnlocked(level: number, id: CharacterMilestoneId): boolean {
+  return level >= CHARACTER_MILESTONES.find(milestone => milestone.id === id)!.level;
+}
+export function blacksmithRequiredLevel(id: BlacksmithStockId): number {
+  return id === "leather_armour" ? 1 : 5;
+}
 export type ProgressionUpdate = {
   reason: "sync" | "experience" | "level_up" | "choice";
   source?: string;
@@ -135,6 +148,7 @@ export type BlacksmithUpdate = {
   moonstone?: number;
   ironCapacity: number;
   gold: number;
+  characterLevel: number;
   ownedUpgrades: BlacksmithUpgradeId[];
   purchasedUpgradeId?: BlacksmithUpgradeId;
   weapons?: Partial<Record<BlacksmithStockId, number>>;
@@ -616,6 +630,7 @@ export const PowerCancelRequestSchema = z.object({
 export const PowerEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
   powerId: z.enum(["shockwave", "seismic_cleave", "eruption", "lunge_strike"]),
+  slot: z.enum(["primary", "secondary"]).optional(),
 });
 
 export const SeismicMasteryEquipRequestSchema = z.object({

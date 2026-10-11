@@ -62,6 +62,10 @@
         <button type="button" data-power="eruption" aria-pressed="false">ERUPTION</button>
         <button type="button" data-power="lunge_strike" aria-pressed="false">LUNGE</button>
       </div>
+      <div id="power-loadout-slots" role="group" aria-label="Power loadout slots">
+        <button type="button" data-power-slot="primary" aria-pressed="true"><span>R</span><strong>PRIMARY</strong></button>
+        <button type="button" data-power-slot="secondary" aria-pressed="false"><span>T</span><strong>LOCKED · LV 3</strong></button>
+      </div>
       <button id="power-slot" type="button" aria-label="Use Shockwave">
         <span>POWER</span><strong id="power-name">Shockwave</strong><em id="power-cooldown-label">READY · R</em><i id="power-cooldown-fill"></i>
       </button>
@@ -228,6 +232,7 @@
         <div><span>AGILITY</span><strong id="stat-agility">0 · 100% speed</strong></div>
         <div><span>MINING</span><strong id="stat-mining">0 · ×1 yield</strong></div>
       </section>
+      <section id="character-milestones" aria-label="Character milestone unlocks"></section>
       <nav class="inventory-tabs" role="tablist" aria-label="Inventory categories">
         <button id="inventory-tab-weapons" type="button" role="tab" aria-controls="inventory-category-weapons" aria-selected="true" data-inventory-tab="weapons">Weapons</button>
         <button id="inventory-tab-armour" type="button" role="tab" aria-controls="inventory-category-armour" aria-selected="false" tabindex="-1" data-inventory-tab="armour">Armour</button>

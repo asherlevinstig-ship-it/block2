@@ -278,6 +278,11 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
   color: #ffe0aa;
   text-align: left;
 }
+#power-loadout-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
+#power-loadout-slots button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #7c604055; border-radius: 6px; background: #171c18; color: #8f998e; font: 800 .53rem system-ui; }
+#power-loadout-slots button span { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; background: #2f2518; color: #eac477; }
+#power-loadout-slots button[aria-pressed="true"] { border-color: #e0a854aa; background: #493016; color: #ffe0a1; }
+#power-loadout-slots button:disabled { opacity: .48; cursor: not-allowed; }
 #power-picker {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -858,6 +863,14 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #character-stats > div span, #character-stats > div strong { display: block; }
 #character-stats > div span { color: #7f9684; font-size: .5rem; font-weight: 900; letter-spacing: .08em; }
 #character-stats > div strong { margin-top: 3px; color: #dce8d7; font-size: .61rem; }
+#character-milestones { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: -7px 0 14px; }
+#character-milestones article { display: grid; grid-template-columns: 34px 1fr; gap: 7px; align-items: center; padding: 8px; border: 1px solid #65725f3d; border-radius: 7px; background: #0b1510; opacity: .62; }
+#character-milestones article > span { color: #b9a56d; font: 900 .62rem system-ui; }
+#character-milestones strong, #character-milestones small { display: block; }
+#character-milestones strong { color: #c7d2c2; font-size: .65rem; }
+#character-milestones small { margin-top: 2px; color: #819084; font-size: .55rem; line-height: 1.25; }
+#character-milestones article[data-unlocked="true"] { border-color: #75aa625c; background: #12251a; opacity: 1; }
+#character-milestones article[data-unlocked="true"] > span { color: #8ddd70; }
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }
 .inventory-empty { margin: 12px 0; padding: 22px 16px; border: 1px dashed #70876866; border-radius: 9px; color: #92a68e; font-size: .8rem; text-align: center; }

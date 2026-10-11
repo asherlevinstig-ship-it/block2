@@ -22,7 +22,7 @@ function fixture() {
 describe("armour", () => {
   it("buys armour through the server shop without auto-equipping", () => {
     for (const [id, price] of [["leather_armour", 30], ["iron_armour", 70]] as const) {
-      const { room, player } = fixture(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION); player.coins = 100;
+      const { room, player } = fixture(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION); player.level = 5; player.coins = 100;
       const client = { sessionId: "player", send: vi.fn() };
       (room as any).handleBlacksmithBuy(client, { itemId: id, price: 0 });
       expect(player.coins).toBe(100 - price); expect(player.inventory.get(id)?.quantity).toBe(1); expect(player.armourId).toBe("none");

@@ -49,6 +49,8 @@ export const PlayerState = schema({
   mainHandTag: t.string().default("melee"),
   armourId: t.string().default("none"),
   equippedPower: t.string().default(""),
+  equippedPowerSecondary: t.string().default(""),
+  activePower: t.string().default(""),
   seismicMastery: t.string().default("advancing_fault"),
   powerCooldownUntil: t.float64().default(0),
   powerSequence: t.int32().default(0),

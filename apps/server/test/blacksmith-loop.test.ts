@@ -5,6 +5,24 @@ import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/sc
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("ore to forged sword to item loot", () => {
+  it("enforces level-gated Power slots, advanced stock, and the Silver Depths briefing", () => {
+    const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION, { coins: 100, miningExpeditionStage: 8 });
+    const lantern = new InventoryItemState(); lantern.quantity = 1; player.inventory.set("miners_lantern", lantern);
+    room.state.players.set("hero", player); const client = { sessionId: "hero", send: vi.fn() } as any;
+    internal.handlePowerEquip(client, { requestId: "secondary-locked", powerId: "eruption", slot: "secondary" });
+    expect(player.equippedPowerSecondary).toBe("");
+    internal.handleBlacksmithBuy(client, { itemId: "forged_sword" });
+    expect(player.inventory.has("forged_sword")).toBe(false);
+    internal.handleBlacksmithSync(client); expect(player.silverDepthsStage).toBe(0);
+    player.level = 7;
+    internal.handlePowerEquip(client, { requestId: "secondary-open", powerId: "eruption", slot: "secondary" });
+    expect(player.equippedPowerSecondary).toBe("eruption");
+    internal.handleBlacksmithBuy(client, { itemId: "forged_sword" });
+    expect(player.inventory.get("forged_sword")?.quantity).toBe(1);
+    internal.handleBlacksmithSync(client); expect(player.silverDepthsStage).toBe(1);
+  });
   it("starts and completes the first expedition at the blacksmith exactly once", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
