@@ -184,7 +184,7 @@ import {
 import { nearbyObjective, createObjectiveProgress, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMiningExpedition, isBuriedVaultSeal, isInsideEastMine, type MiningExpeditionEvent } from "./mining-expedition.js";
 import { advanceSilverDepths, canEnterSilverDepths, canExitSilverDepths, isInsideSilverDepths, SILVER_DEPTHS_GUARDS, CRYSTAL_MATRIARCH_ID, type SilverDepthsEvent } from "./silver-depths-expedition.js";
-import { silverDepthsRank } from "./silver-depths-results.js";
+import { silverDepthsMoonstoneReward, silverDepthsRank } from "./silver-depths-results.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
@@ -220,6 +220,7 @@ interface SilverDepthsRunStats {
   enemiesDefeated: number;
   damageTaken: number;
   moonstoneCollected: number;
+  moonstoneAtStart: number;
   edgeAtStart: number;
 }
 
@@ -588,6 +589,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.lastChatAt.delete(client.sessionId); this.lastNameAt.delete(client.sessionId);
     this.pendingMining.delete(client.sessionId);
     const player = this.state.players.get(client.sessionId);
+    const depthsRun = this.silverDepthsRuns.get(client.sessionId);
+    if (player && depthsRun?.completedAt === 0) this.restoreRunMoonstone(player, depthsRun);
     const quizRound = this.quizRounds.get(client.sessionId);
     // A confirmed answer has already earned a pot. Treat disconnecting at the
     // decision screen as quitting, while an unanswered question forfeits it.
@@ -1710,6 +1713,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       } satisfies DefenseResolved);
     }
     if (!defeated) return true;
+    const failedDepthsRun = this.silverDepthsRuns.get(playerId);
+    if (failedDepthsRun) this.restoreRunMoonstone(player, failedDepthsRun);
     this.silverDepthsRuns.delete(playerId);
     player.silverDepthsRunStage = 0;
     leaveRecoveryBag(player, `${now}-${++this.lootDropSequence}`);
@@ -2040,7 +2045,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.restoreSilverDepthsMoonstone();
     }
     const run: SilverDepthsRunStats = { runId: `depths-run-${++this.silverDepthsRunSequence}`, startedAt: now, completedAt: 0,
-      enemiesDefeated: 0, damageTaken: 0, moonstoneCollected: 0, edgeAtStart: player.inventory.get("matriarch_edge")?.quantity ?? 0 };
+      enemiesDefeated: 0, damageTaken: 0, moonstoneCollected: 0, moonstoneAtStart: player.inventory.get("moonstone")?.quantity ?? 0,
+      edgeAtStart: player.inventory.get("matriarch_edge")?.quantity ?? 0 };
     this.silverDepthsRuns.set(client.sessionId, run);
     player.silverDepthsRunStage = 1;
     client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: 1 } satisfies DungeonRunUpdate);
@@ -2052,12 +2058,23 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const newBest = priorBest === 0 || durationMs < priorBest;
     if (newBest) player.silverDepthsBestTimeMs = durationMs;
     const signatureItemObtained = (player.inventory.get("matriarch_edge")?.quantity ?? 0) > run.edgeAtStart;
+    const rank = silverDepthsRank(durationMs, run.damageTaken);
+    const intendedAward = silverDepthsMoonstoneReward(rank);
+    let moonstone = player.inventory.get("moonstone");
+    if (!moonstone) { moonstone = new InventoryItemState(); player.inventory.set("moonstone", moonstone); }
+    moonstone.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), run.moonstoneAtStart + intendedAward);
+    const moonstoneAwarded = moonstone.quantity - run.moonstoneAtStart;
     client.send("dungeon:run", { runId: run.runId, phase: "completed", dungeon: "silver-depths", partySize: 1,
-      durationMs, rank: silverDepthsRank(durationMs, run.damageTaken), bestTimeMs: player.silverDepthsBestTimeMs, newBest,
-      reward: signatureItemObtained ? "Matriarch's Edge obtained" : "Matriarch's Edge secured",
+      durationMs, rank, bestTimeMs: player.silverDepthsBestTimeMs, newBest,
+      reward: `+${moonstoneAwarded} Moonstone · ${signatureItemObtained ? "Matriarch's Edge obtained" : "Matriarch's Edge secured"}`,
       stats: { enemiesDefeated: run.enemiesDefeated, damageTaken: run.damageTaken,
-        moonstoneCollected: run.moonstoneCollected, signatureItemObtained } } satisfies DungeonRunUpdate);
+        moonstoneCollected: run.moonstoneCollected, moonstoneAwarded, moonstoneTotal: moonstone.quantity, signatureItemObtained } } satisfies DungeonRunUpdate);
     this.silverDepthsRuns.delete(client.sessionId);
+  }
+
+  private restoreRunMoonstone(player: PlayerState, run: SilverDepthsRunStats): void {
+    const item = player.inventory.get("moonstone");
+    if (item) item.quantity = run.moonstoneAtStart;
   }
 
   private useForestPortal(client: Client, payload: unknown): void {
@@ -3182,6 +3199,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const stored = this.getChunk(address.chunkX, address.chunkZ);
     const block = getBlock(stored.chunk, address.localX, request.y, address.localZ);
     if (block === Block.MoonstoneOre && player.silverDepthsStage < 2) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
+    const depthsRun = this.silverDepthsRuns.get(client.sessionId);
+    if (block === Block.MoonstoneOre && (!depthsRun || depthsRun.completedAt > 0 || depthsRun.moonstoneCollected >= 1)) {
+      return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
+    }
     const reason = miningRejectionReason(player, request, block, stored.revision);
     if (reason) return this.reject(client, { requestId: request.requestId, action: "mine", reason });
     const movement = this.movementInputs.get(client.sessionId)?.request;
@@ -3234,6 +3255,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const address = worldToChunk(request.x, request.z);
     const stored = this.getChunk(address.chunkX, address.chunkZ);
     const current = getBlock(stored.chunk, address.localX, request.y, address.localZ);
+    const depthsRun = this.silverDepthsRuns.get(client.sessionId);
+    if (current === Block.MoonstoneOre && (!depthsRun || depthsRun.completedAt > 0 || depthsRun.moonstoneCollected >= 1)) {
+      return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
+    }
     const rejection = miningRejectionReason(player, request, current, stored.revision);
     if (rejection) return this.reject(client, { requestId: request.requestId, action: "mine", reason: rejection });
     if (!miningLineClear(player, request, this.readWorldBlock)) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "collision" });
@@ -3266,7 +3291,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       const before = item.quantity;
       item.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), inventoryTotal(before,
-        minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player)));
+        mineral === "moonstone" ? 1 : minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player)));
       if (mineral === "moonstone") {
         const run = this.silverDepthsRuns.get(client.sessionId);
         if (run && run.completedAt === 0) {

@@ -6,3 +6,7 @@ export function silverDepthsRank(durationMs: number, damageTaken: number): Silve
   if (durationMs <= 300_000 && damageTaken <= 8) return "SILVER";
   return "BRONZE";
 }
+
+export function silverDepthsMoonstoneReward(rank: SilverDepthsRank): number {
+  return rank === "GOLD" ? 3 : rank === "SILVER" ? 2 : 1;
+}

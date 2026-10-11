@@ -283,7 +283,7 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
   panel.dataset.dungeon = silverDepths ? "silver-depths" : "forest";
   panel.setAttribute("aria-label", silverDepths ? "Silver Depths expedition results" : "Forest Dungeon complete");
   panel.innerHTML = silverDepths
-    ? '<small>SILVER DEPTHS · EXPEDITION COMPLETE</small><h2>CRYSTAL MATRIARCH DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>MOONSTONE</small><b data-stat="moonstone">0</b></span><span><small>RELIC</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time"></p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">RETURN TO TOWN</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
+    ? '<small>SILVER DEPTHS · EXPEDITION COMPLETE</small><h2>CRYSTAL MATRIARCH DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>MOONSTONE AWARD</small><b data-stat="moonstone">0</b></span><span><small>MOONSTONE HELD</small><b data-stat="wallet">0</b></span><span><small>RELIC</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time"></p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">RETURN TO TOWN</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
     : '<small>FOREST DUNGEON</small><h2>ROOT GUARDIAN DEFEATED</h2><p class="dungeon-run-time"></p><strong class="dungeon-run-reward"></strong><p>Collect your personal equipment bag, then take the return portal.</p><button class="dungeon-return" type="button">CONTINUE</button>';
   const seconds = Math.max(1, Math.round((update.durationMs ?? 0) / 1000));
   panel.querySelector(".dungeon-run-time")!.textContent = `${update.partySize > 1 ? `${update.partySize}-player party` : "Solo clear"} · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -294,7 +294,8 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
     panel.querySelector(".dungeon-rank")!.textContent = `${update.rank ?? "BRONZE"} RANK`;
     panel.querySelector<HTMLElement>('[data-stat="enemies"]')!.textContent = String(stats?.enemiesDefeated ?? 0);
     panel.querySelector<HTMLElement>('[data-stat="damage"]')!.textContent = String(stats?.damageTaken ?? 0);
-    panel.querySelector<HTMLElement>('[data-stat="moonstone"]')!.textContent = String(stats?.moonstoneCollected ?? 0);
+    panel.querySelector<HTMLElement>('[data-stat="moonstone"]')!.textContent = `+${stats?.moonstoneAwarded ?? stats?.moonstoneCollected ?? 0} ◆`;
+    panel.querySelector<HTMLElement>('[data-stat="wallet"]')!.textContent = `${stats?.moonstoneTotal ?? 0} ◆`;
     panel.querySelector<HTMLElement>('[data-stat="relic"]')!.textContent = stats?.signatureItemObtained ? "OBTAINED" : "SECURED";
     const best = Math.max(1, Math.round((update.bestTimeMs ?? update.durationMs ?? 0) / 1000));
     panel.querySelector(".dungeon-best-time")!.textContent = `${update.newBest ? "NEW PERSONAL BEST" : "PERSONAL BEST"} · ${Math.floor(best / 60)}:${String(best % 60).padStart(2, "0")}`;
@@ -3905,6 +3906,7 @@ let blacksmithPending = false;
 let blacksmithIronCapacity = 12;
 let blacksmithShopTab: BlacksmithShopTab = "sell";
 let blacksmithCharacterLevel = 1;
+let selectedDepthsRewardId: SilverDepthsRewardId = "depths_compass";
 let lastShopPurchaseCategory: InventoryTab = "weapons";
 const weaponShop = document.createElement("div");
 weaponShop.id = "blacksmith-weapons";
@@ -4007,6 +4009,9 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   const ownedDepths = new Set(update.ownedDepthsRewards ?? []);
   const moonstone = update.moonstone ?? 0;
   const depthsUnlocked = owned.has("moonstone_edge");
+  if (ownedDepths.has(selectedDepthsRewardId)) {
+    selectedDepthsRewardId = (Object.keys(SILVER_DEPTHS_REWARDS) as SilverDepthsRewardId[]).find(id => !ownedDepths.has(id)) ?? selectedDepthsRewardId;
+  }
   document.querySelector<HTMLElement>("#blacksmith-moonstone")!.textContent = `${moonstone} ◆`;
   for (const card of depthsRewardCards) {
     const rewardId = card.dataset.depthsReward as SilverDepthsRewardId;
@@ -4014,9 +4019,14 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     const button = card.querySelector<HTMLButtonElement>("button")!;
     const isOwned = ownedDepths.has(rewardId);
     card.classList.toggle("owned", isOwned);
+    card.classList.toggle("selected", selectedDepthsRewardId === rewardId);
     button.disabled = isOwned || !depthsUnlocked || blacksmithPending || moonstone < reward.cost;
     button.textContent = isOwned ? "ATTUNED" : !depthsUnlocked ? "EXPEDITION LOCKED" : moonstone < reward.cost ? `NEED ${reward.cost - moonstone} MORE ◆` : `ATTUNE · ${reward.cost} ◆`;
   }
+  const selectedReward = SILVER_DEPTHS_REWARDS[selectedDepthsRewardId];
+  const goal = document.querySelector<HTMLElement>("#blacksmith-depths-goal")!;
+  goal.querySelector("strong")!.textContent = `${selectedReward.name} · ${Math.min(moonstone, selectedReward.cost)} / ${selectedReward.cost} ◆`;
+  goal.style.setProperty("--depths-progress", `${Math.min(100, moonstone / selectedReward.cost * 100)}%`);
   if (update.phase === "traded" && update.goldGranted) {
     showCombatFeedback(`+${update.goldGranted} GOLD`, "dodge");
     status.textContent = update.message;
@@ -4065,6 +4075,11 @@ for (const card of blacksmithUpgradeCards) {
   });
 }
 for (const card of depthsRewardCards) {
+  card.addEventListener("click", event => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    selectedDepthsRewardId = card.dataset.depthsReward as SilverDepthsRewardId;
+    if (room) room.send("blacksmith:sync");
+  });
   card.querySelector<HTMLButtonElement>("button")!.addEventListener("click", () => {
     if (!room || blacksmithPending) return;
     const rewardId = card.dataset.depthsReward as SilverDepthsRewardId;

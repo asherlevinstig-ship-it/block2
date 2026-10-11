@@ -658,11 +658,18 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .blacksmith-shop-heading small { display: block; margin-top: 4px; color: #887d6c; font-size: .58rem; font-weight: 600; letter-spacing: .02em; text-transform: none; }
 #blacksmith-upgrades { display: grid; gap: 7px; }
 #blacksmith-depths-rewards { display: grid; gap: 7px; margin-top: 8px; }
+#blacksmith-depths-goal { position: relative; overflow: hidden; margin: 8px 0 10px; padding: 9px 11px 12px; border: 1px solid #9463b777; border-radius: 8px; background: #171322; }
+#blacksmith-depths-goal span, #blacksmith-depths-goal strong { position: relative; z-index: 1; display: block; }
+#blacksmith-depths-goal span { color: #9f88b3; font-size: .57rem; font-weight: 900; letter-spacing: .11em; }
+#blacksmith-depths-goal strong { margin-top: 3px; color: #ebd5ff; font-size: .75rem; }
+#blacksmith-depths-goal i { position: absolute; left: 0; bottom: 0; width: var(--depths-progress, 0%); height: 4px; background: linear-gradient(90deg, #9f5bd0, #66d8ea); box-shadow: 0 0 10px #b56cff; transition: width .25s ease; }
 #blacksmith-depths-shop .blacksmith-shop-heading.depths { color: #cf9bff; }
 .blacksmith-trade-row.moonstone { border: 1px solid #a667d177; border-radius: 8px; background: linear-gradient(90deg, #63368233, #143f5333); }
 .blacksmith-trade-row.moonstone strong { color: #e7b4ff; text-shadow: 0 0 10px #ad5cffaa; }
 #blacksmith-upgrades article { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 9px; padding: 9px; border: 1px solid #8c6a454d; border-radius: 9px; background: linear-gradient(90deg, #ffffff0a, #00000018); }
 #blacksmith-depths-rewards article { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 9px; padding: 9px; border: 1px solid #9362b866; border-radius: 9px; background: linear-gradient(90deg, #70439720, #17364a22); }
+#blacksmith-depths-rewards article:not(.owned) { cursor: pointer; }
+#blacksmith-depths-rewards article.selected { border-color: #d19cff; box-shadow: 0 0 0 1px #9162bd88, inset 0 0 18px #8a55b829; }
 #blacksmith-upgrades .upgrade-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #bd854d; border-radius: 7px; background: #1b2020; color: #f2b86f; font-size: 1.1rem; }
 #blacksmith-depths-rewards .upgrade-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #b369dc; border-radius: 7px; background: #191626; color: #e0a8ff; font-size: 1.1rem; box-shadow: inset 0 0 12px #8b4fba33; }
 #blacksmith-upgrades article div strong, #blacksmith-upgrades article div small { display: block; }

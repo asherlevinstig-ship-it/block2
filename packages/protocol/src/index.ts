@@ -178,7 +178,7 @@ export type DungeonRunUpdate = {
   rank?: "GOLD" | "SILVER" | "BRONZE";
   bestTimeMs?: number;
   newBest?: boolean;
-  stats?: { enemiesDefeated: number; damageTaken: number; moonstoneCollected: number; signatureItemObtained: boolean };
+  stats?: { enemiesDefeated: number; damageTaken: number; moonstoneCollected: number; moonstoneAwarded?: number; moonstoneTotal?: number; signatureItemObtained: boolean };
 };
 export type DungeonRewardClaimed = {
   runId: string;
