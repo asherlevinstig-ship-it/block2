@@ -1383,10 +1383,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (mobId === "buried-chamber-brute") for (const playerId of recipients) this.advanceFirstExpedition(playerId, "defeated_warden");
     if ((SILVER_DEPTHS_GUARDS as readonly string[]).includes(mobId)) for (const playerId of recipients) {
       const otherGuardsDead = SILVER_DEPTHS_GUARDS.filter(id => id !== mobId).every(id => this.state.mobs.get(id)?.alive === false);
-      if (otherGuardsDead) this.advanceSilverDepthsExpedition(playerId, "defeated_guards");
+      if (otherGuardsDead) {
+        this.advanceSilverDepthsExpedition(playerId, "defeated_guards");
+        const player = this.state.players.get(playerId);
+        if (player && player.silverDepthsRunStage >= 2) player.silverDepthsRunStage = 3;
+      }
     }
     if (mobId === CRYSTAL_MATRIARCH_ID) {
-      for (const playerId of recipients) this.advanceSilverDepthsExpedition(playerId, "defeated_matriarch");
+      for (const playerId of recipients) {
+        this.advanceSilverDepthsExpedition(playerId, "defeated_matriarch");
+        const player = this.state.players.get(playerId); if (player) player.silverDepthsRunStage = 4;
+      }
       if (!this.state.portals.has("depths-return")) {
         const returnPortal = new ForestPortalState();
         Object.assign(returnPortal, SILVER_DEPTHS_EXIT_POSITION, { kind: "return" });
@@ -1619,7 +1626,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
       quantity: drop.quantity, total: item.quantity } satisfies LootPickedUp);
     if (utilityId && this.advanceFirstExpedition(client, "claimed_lantern")) this.sendObjectiveState(client, true);
-    if (drop.itemId === "matriarch_edge" && this.advanceSilverDepthsExpedition(client, "claimed_moonstone")) this.sendObjectiveState(client, true);
+    if (drop.itemId === "matriarch_edge") {
+      player.silverDepthsRunStage = 5;
+      if (this.advanceSilverDepthsExpedition(client, "claimed_moonstone")) this.sendObjectiveState(client, true);
+    }
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
       : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
@@ -1671,6 +1681,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     if (!defeated) return true;
     this.silverDepthsRuns.delete(playerId);
+    player.silverDepthsRunStage = 0;
     leaveRecoveryBag(player, `${now}-${++this.lootDropSequence}`);
     void this.persistPlayer(playerId, player);
     player.defending = false;
@@ -1981,6 +1992,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       ? "Silver Depths entered · clear the gallery and confront the Crystal Matriarch."
       : "Expedition complete · returned safely to the Town of Beginnings.");
     if (!entering && activeRun?.completedAt) this.completeSilverDepthsRun(client, player, activeRun);
+    if (!entering) player.silverDepthsRunStage = 0;
     this.sendObjectiveState(client, true);
     void this.persistPlayer(client.sessionId, player, !entering);
   }
@@ -2000,6 +2012,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const run: SilverDepthsRunStats = { runId: `depths-run-${++this.silverDepthsRunSequence}`, startedAt: now, completedAt: 0,
       enemiesDefeated: 0, damageTaken: 0, moonstoneCollected: 0, edgeAtStart: player.inventory.get("matriarch_edge")?.quantity ?? 0 };
     this.silverDepthsRuns.set(client.sessionId, run);
+    player.silverDepthsRunStage = 1;
     client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: 1 } satisfies DungeonRunUpdate);
   }
 
@@ -3226,7 +3239,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player)));
       if (mineral === "moonstone") {
         const run = this.silverDepthsRuns.get(client.sessionId);
-        if (run && run.completedAt === 0) run.moonstoneCollected += item.quantity - before;
+        if (run && run.completedAt === 0) {
+          run.moonstoneCollected += item.quantity - before;
+          const guardsDead = SILVER_DEPTHS_GUARDS.every(id => this.state.mobs.get(id)?.alive === false);
+          player.silverDepthsRunStage = guardsDead ? 3 : 2;
+        }
       }
       this.grantProgression(client.sessionId, mineral === "moonstone" ? 15 : 4, mineral === "moonstone" ? "Moonstone mined" : "Mineral mined");
       void this.persistPlayer(client.sessionId, player);

@@ -37,6 +37,7 @@ export const PlayerState = schema({
   silverDepthsBestTimeMs: t.uint32().default(0),
   miningExpeditionStage: t.uint8().default(0),
   silverDepthsStage: t.uint8().default(0),
+  silverDepthsRunStage: t.uint8().default(0),
   dodgeSequence: t.int32().default(0),
   defending: t.boolean().default(false),
   defenseStartedAt: t.float64().default(0),

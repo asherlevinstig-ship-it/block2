@@ -1169,6 +1169,24 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #world-objective h2 { margin: 5px 0 2px; font: 800 18px/1.15 system-ui, sans-serif; }
 #world-objective p { margin: 0 0 8px; color: #b7c8b8; font: 600 12px/1.35 system-ui, sans-serif; }
 #world-objective footer { color: #dce7d7; font: 800 11px/1 system-ui, sans-serif; letter-spacing: .06em; }
+#depths-route-map { position: fixed; z-index: 18; right: 18px; bottom: 18px; width: min(370px, calc(100vw - 36px)); box-sizing: border-box; padding: 12px 14px 10px; color: #eee9ff; pointer-events: none; border: 1px solid #8e66c888; border-radius: 12px; background: linear-gradient(150deg, #181228ee, #0b101fee); box-shadow: 0 10px 32px #0008, inset 0 0 24px #874ed51a; }
+#depths-route-map header, #depths-route-map footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#depths-route-map header { color: #c5a2f2; font: 900 9px/1 system-ui; letter-spacing: .14em; }
+#depths-route-map h2 { margin: 7px 0 4px; color: #f4eaff; font: 900 14px/1.15 system-ui; }
+.depths-route-diagram { position: relative; height: 122px; }
+.depths-route-diagram svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.depths-route-diagram path { fill: none; stroke: #695183; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; }
+.depths-route-diagram > i { position: absolute; left: var(--map-x); top: var(--map-y); width: 30px; height: 30px; transform: translate(-50%, -50%); color: #8d7ba5; border: 2px solid #604b7a; border-radius: 50%; background: #171323; box-shadow: 0 0 0 3px #0d0a16; font-style: normal; text-align: center; }
+.depths-route-diagram > i b { display: grid; height: 100%; place-items: center; font: 900 10px system-ui; }
+.depths-route-diagram > i small { position: absolute; top: 35px; left: 50%; width: 62px; transform: translateX(-50%); color: #857795; font: 800 8px/1 system-ui; }
+.depths-route-diagram > i.completed { color: #c6eeff; border-color: #68bfd9; background: #193442; }
+.depths-route-diagram > i.completed::after { content: "✓"; position: absolute; right: -5px; top: -7px; color: #bff7dc; font: 900 10px system-ui; }
+.depths-route-diagram > i.active { color: #fff; border-color: #d999ff; background: #7544a6; box-shadow: 0 0 0 3px #0d0a16, 0 0 18px #cb75ff; animation: depths-node-pulse 1.25s ease-in-out infinite; }
+.depths-route-diagram > i.active small { color: #efd8ff; }
+#depths-route-map footer { color: #ab9bbb; font: 800 9px system-ui; letter-spacing: .05em; }
+#depths-route-distance { color: #d9c6f7; }
+.depths-route-key i { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: #d999ff; box-shadow: 0 0 8px #d999ff; }
+@keyframes depths-node-pulse { 50% { transform: translate(-50%, -50%) scale(1.12); } }
 #objective-progress { color: #f1cc5c; }
 #objective-marker {
   position: fixed;
@@ -1233,6 +1251,10 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   #world-objective h2 { font-size: 15px; }
   #world-objective p { display: none; }
   #objective-complete { min-width: min(300px, calc(100vw - 28px)); padding-inline: 18px; }
+  #depths-route-map { right: 8px; bottom: 118px; width: 250px; padding: 9px 10px 7px; }
+  .depths-route-diagram { height: 92px; }
+  .depths-route-diagram > i { width: 24px; height: 24px; }
+  .depths-route-diagram > i small { display: none; }
 }
 /* Defeat is a deliberate pause, not an immediate unexplained teleport. */
 .defeat-screen { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(8, 14, 18, .86); }

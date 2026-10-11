@@ -65,6 +65,7 @@ describe("Silver Depths room travel", () => {
   it("reports authoritative run stats, rank, and a persisted personal best", () => {
     const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
     internal.beginSilverDepthsRun(client, player, 10_000);
+    expect(player.silverDepthsRunStage).toBe(1);
     const run = internal.silverDepthsRuns.get("miner");
     Object.assign(run, { completedAt: 160_000, enemiesDefeated: 3, damageTaken: 2, moonstoneCollected: 2 });
     const edge = new InventoryItemState(); edge.quantity = 1; player.inventory.set("matriarch_edge", edge);

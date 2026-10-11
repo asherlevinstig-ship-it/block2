@@ -31,6 +31,7 @@ import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
+import { silverDepthsRoute, type DepthsNodeId, type DepthsRouteState } from "./silver-depths-map.js";
 import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } from "./cave-navigation.js";
 import { miningAvailability, miningReach, miningProgress, miningDurationMs, miningLineClear, miningMessage, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
@@ -421,6 +422,11 @@ const objectiveMarkerLabel = document.querySelector<HTMLElement>("#objective-mar
 const objectiveComplete = document.querySelector<HTMLElement>("#objective-complete")!;
 const objectiveCompleteTitle = document.querySelector<HTMLElement>("#objective-complete-title")!;
 const objectiveCompleteReward = document.querySelector<HTMLElement>("#objective-complete-reward")!;
+const depthsRouteMap = document.querySelector<HTMLElement>("#depths-route-map")!;
+const depthsRouteTitle = document.querySelector<HTMLElement>("#depths-route-title")!;
+const depthsRouteCount = document.querySelector<HTMLElement>("#depths-route-count")!;
+const depthsRouteDistance = document.querySelector<HTMLElement>("#depths-route-distance")!;
+const depthsRouteNodes = [...document.querySelectorAll<HTMLElement>("[data-depths-node]")];
 const inventoryPanel = document.querySelector<HTMLElement>("#inventory-panel")!;
 const inventoryTotal = document.querySelector<HTMLElement>("#inventory-total")!;
 const inventoryToggle = document.querySelector<HTMLButtonElement>("#inventory-toggle")!;
@@ -460,6 +466,9 @@ if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blac
 }
 if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
   throw new Error("World objective shell is missing required elements");
+}
+if (!depthsRouteMap || !depthsRouteTitle || !depthsRouteCount || !depthsRouteDistance || depthsRouteNodes.length !== 6) {
+  throw new Error("Silver Depths route shell is missing required elements");
 }
 if ([playerLevel, playerLevelValue, playerXpFill, playerXpValue, inventoryLevel, characterPoints, statPower, statVitality, statAgility, statMining, levelUpPanel, levelUpTitle, levelUpMessage, levelUpPoints].some(element => !element) || characterStatButtons.length !== 4) {
   throw new Error("Character progression shell is missing required elements");
@@ -1092,6 +1101,14 @@ for (let index = 0; index < 16; index++) {
 }
 silverDepthsRoot.enabled = false;
 app.root.addChild(silverDepthsRoot);
+const depthsBreadcrumbRoot = new pc.Entity("silver-depths-breadcrumbs");
+const depthsBreadcrumbs = Array.from({ length: 6 }, (_, index) => {
+  const shard = addBox(depthsBreadcrumbRoot, "route-crystal", moonstoneCore, [.1, .22, .1], [0, 0, 0]);
+  shard.setLocalEulerAngles(0, index * 37, 45); return shard;
+});
+depthsBreadcrumbRoot.enabled = false;
+app.root.addChild(depthsBreadcrumbRoot);
+let localSilverDepthsRunStage = 0;
 
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false): VoxelCharacterRig {
   const root = new pc.Entity("voxel-character");
@@ -1439,6 +1456,7 @@ interface NetworkPlayer {
   miningPoints: number;
   coins: number;
   blacksmithUpgrades: number;
+  silverDepthsRunStage: number;
   dodgeSequence: number;
   invulnerableUntil: number;
   mainHandId: string;
@@ -3286,6 +3304,7 @@ function bindPlayers(joinedRoom: Room): void {
   players.onAdd((player: NetworkPlayer, sessionId: string) => {
     const isLocal = sessionId === joinedRoom.sessionId;
     if (isLocal) {
+      localSilverDepthsRunStage = player.silverDepthsRunStage;
       updateTavernCoins(player.coins);
       renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
         experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
@@ -3339,6 +3358,9 @@ function bindPlayers(joinedRoom: Room): void {
     };
     if (isLocal) for (const field of ["level", "experience", "unspentStatPoints", "powerPoints", "vitalityPoints", "agilityPoints", "miningPoints"] as const)
       playerCallbacks.listen(field, updateLocalProgression);
+    playerCallbacks.listen("silverDepthsRunStage", () => {
+      if (isLocal) localSilverDepthsRunStage = player.silverDepthsRunStage;
+    }, true);
     if (isLocal) {
       playerCallbacks.inventory.onAdd((item: { quantity: number }, itemId: string) => {
         if (!isItemId(itemId)) return;
@@ -4625,6 +4647,43 @@ function updateObjectiveGuidance(): void {
   objectiveMarker.style.top = `${y}px`;
   objectiveMarker.style.setProperty("--marker-rotation", onScreen ? "0deg" : `${angle}deg`);
   objectiveMarker.dataset.onscreen = String(onScreen);
+}
+
+let visibleDepthsRoute: DepthsRouteState | null = null;
+let depthsRouteFingerprint = "";
+function updateSilverDepthsRoute(now: number): void {
+  const player = localPlayer.getPosition();
+  const inside = player.y < 5 && player.x >= 59 && player.x <= 78 && player.z >= 3 && player.z <= 16;
+  const guardAAlive = mobVisuals.get("silver-depths-spitter-a")?.state.alive ?? true;
+  const guardBAlive = mobVisuals.get("silver-depths-spitter-b")?.state.alive ?? true;
+  visibleDepthsRoute = inside ? silverDepthsRoute(localSilverDepthsRunStage, guardAAlive, guardBAlive) : null;
+  depthsRouteMap.hidden = visibleDepthsRoute === null;
+  minimapPanel.hidden = visibleDepthsRoute !== null;
+  depthsBreadcrumbRoot.enabled = visibleDepthsRoute !== null;
+  if (!visibleDepthsRoute) { depthsRouteFingerprint = ""; return; }
+  const distance = Math.hypot(visibleDepthsRoute.target.x - player.x, visibleDepthsRoute.target.z - player.z);
+  const fingerprint = `${visibleDepthsRoute.active}:${[...visibleDepthsRoute.completed].join(",")}:${visibleDepthsRoute.title}`;
+  if (fingerprint !== depthsRouteFingerprint) {
+    depthsRouteFingerprint = fingerprint;
+    depthsRouteTitle.textContent = visibleDepthsRoute.title;
+    depthsRouteCount.textContent = `${visibleDepthsRoute.completed.size} / 6 CLEARED`;
+    for (const node of depthsRouteNodes) {
+      const id = node.dataset.depthsNode!;
+      node.classList.toggle("completed", visibleDepthsRoute.completed.has(id as DepthsNodeId));
+      node.classList.toggle("active", visibleDepthsRoute.active === id);
+    }
+  }
+  depthsRouteDistance.textContent = distance <= 2 ? "ARRIVED" : `${Math.round(distance)}m TO NEXT`;
+  for (let index = 0; index < depthsBreadcrumbs.length; index++) {
+    const shard = depthsBreadcrumbs[index]!, t = (index + 1) / (depthsBreadcrumbs.length + 1);
+    shard.enabled = distance > 2.2;
+    shard.setPosition(player.x + (visibleDepthsRoute.target.x - player.x) * t,
+      Math.max(1.16, player.y + .18) + Math.sin(now * .0035 + index * .9) * .11,
+      player.z + (visibleDepthsRoute.target.z - player.z) * t);
+    const pulse = .78 + Math.sin(now * .005 + index) * .16;
+    shard.setLocalScale(pulse, pulse, pulse);
+    shard.rotate(0, .8, 0);
+  }
 }
 
 const bossHud = document.querySelector<HTMLElement>("#boss-hud")!;
@@ -6584,6 +6643,7 @@ app.on("update", (dt: number) => {
   updatePerformanceMetrics(now);
   if (worldReady) {
     updateCaveNavigation(localPlayer.getPosition(), now);
+    updateSilverDepthsRoute(now);
     minimap.setChampionState(mobVisuals.get("frontier-brute-west")?.state ?? null);
     if (now - lastNameplateSampleAt >= 100) {
     lastNameplateSampleAt = now;
