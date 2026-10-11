@@ -75,5 +75,9 @@ describe("two-level mine", () => {
     expect(read(68, 1, 9)).toBe(Block.MoonstoneOre);
     expect(read(72, 1, 9)).toBe(Block.Air);
     expect(read(72, 0, 9)).not.toBe(Block.Air);
+    expect(read(62, 1, 8)).toBe(Block.Stone);
+    expect(read(62, 1, 9)).toBe(Block.Air);
+    expect(read(70, 2, 6)).toBe(Block.Stone);
+    expect(read(72, 1, 6)).toBe(Block.Air);
   });
 });

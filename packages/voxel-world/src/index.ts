@@ -38,6 +38,12 @@ export const CAVE_DEEP_HOME = { x: 48.5, y: 1, z: 10.5 } as const;
 export const CAVE_HIDDEN_HOME = { x: 56.5, y: 1, z: 9.5 } as const;
 export const SILVER_DEPTHS_SPITTER_HOMES = [{ x: 64.5, y: 1, z: 6.5 }, { x: 65.5, y: 1, z: 11.5 }] as const;
 export const CRYSTAL_MATRIARCH_HOME = { x: 72.5, y: 1, z: 9.5 } as const;
+export const SILVER_DEPTHS_COVER = [
+  { x: 62, z: 8, height: 2 }, { x: 62, z: 10, height: 2 },
+  { x: 65, z: 8, height: 1 }, { x: 65, z: 10, height: 1 },
+  { x: 70, z: 6, height: 2 }, { x: 70, z: 12, height: 2 },
+  { x: 74, z: 6, height: 2 }, { x: 74, z: 12, height: 2 },
+] as const;
 /** Side veins are excavated horizontally, leaving the main stairway intact. */
 export const CAVE_ORE_POCKETS = [
   { id: "shallow-iron", minX: 38, maxX: 40, minZ: 3, maxZ: 4, floorY: 2, block: 5 },
@@ -416,6 +422,8 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
       // The Lantern route continues beyond the old vault through a narrow seal,
       // opens into a split spitter gallery, then the Crystal Matriarch arena.
       if (worldX === 59 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 3) return Block.SilverOre;
+      const depthsCover = SILVER_DEPTHS_COVER.find(cover => cover.x === worldX && cover.z === worldZ);
+      if (depthsCover && y >= 1 && y <= depthsCover.height) return Block.Stone;
       if (worldX >= 60 && worldX <= 67 && worldZ >= 5 && worldZ <= 13 && y >= 1 && y <= 3) return Block.Air;
       if (worldX === 68 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 3) return Block.MoonstoneOre;
       if (worldX >= 69 && worldX <= 75 && worldZ >= 5 && worldZ <= 13 && y >= 1 && y <= 4) return Block.Air;

@@ -615,10 +615,11 @@ function materialFor(kind: VoxelTextureKind): pc.StandardMaterial {
     material.diffuse = new pc.Color(1, 1, 1);
     material.diffuseMap = createVoxelTexture(kind);
     material.diffuseVertexColor = true;
-    const metal = kind === "bronze" || kind === "iron" || kind === "silver";
+    const metal = kind === "bronze" || kind === "iron" || kind === "silver" || kind === "moonstone";
     material.specular = new pc.Color(metal ? 0.26 : 0.035, metal ? 0.2 : 0.035, metal ? 0.12 : 0.035);
     material.gloss = metal ? 0.28 : 0.06;
     if (kind === "bronze") material.emissive = new pc.Color(0.05, 0.029, 0.008);
+    if (kind === "moonstone") { material.emissive = new pc.Color(.2, .045, .32); material.gloss = .48; }
     material.update();
     materials.set(kind, material);
   }
@@ -995,6 +996,52 @@ for (const point of [
   root.enabled = false; app.root.addChild(root);
   caveLanterns.push({ root, ...point });
 }
+
+// Silver Depths dressing is deliberately sparse: the voxel cover remains the
+// real collision/shot geometry while these crystals provide identity and light.
+const silverDepthsRoot = new pc.Entity("silver-depths-atmosphere");
+const moonstoneCrystal = new pc.StandardMaterial();
+moonstoneCrystal.diffuse = new pc.Color(.48, .16, .76);
+moonstoneCrystal.emissive = new pc.Color(.32, .07, .58);
+moonstoneCrystal.gloss = .62;
+moonstoneCrystal.update();
+const moonstoneCore = new pc.StandardMaterial();
+moonstoneCore.diffuse = new pc.Color(.32, .82, 1);
+moonstoneCore.emissive = new pc.Color(.12, .55, .9);
+moonstoneCore.useLighting = false;
+moonstoneCore.update();
+const depthsStone = coloredMaterial(new pc.Color(.12, .12, .19));
+for (const z of [5.15, 13.85]) {
+  addBox(silverDepthsRoot, "depths-entrance-pillar", depthsStone, [.48, 2.8, .48], [60.15, 2.4, z]);
+  const shard = addBox(silverDepthsRoot, "entrance-moonstone", moonstoneCrystal, [.22, .95, .22], [60.02, 2.2, z + (z < 9 ? .42 : -.42)]);
+  shard.setLocalEulerAngles(0, 0, z < 9 ? -18 : 18);
+}
+addBox(silverDepthsRoot, "depths-entrance-lintel", depthsStone, [.55, .4, 9.15], [60.15, 4.05, 9.5]);
+const crystalSites = [
+  [61.2, 1.35, 6.1, -.18], [61.4, 1.5, 12.4, .2], [66.4, 1.4, 6.1, -.12], [66.2, 1.3, 12.7, .14],
+  [69.7, 1.55, 5.45, -.18], [69.5, 1.45, 13.25, .18], [75.25, 1.65, 5.55, -.22], [75.35, 1.55, 13.15, .22],
+] as const;
+for (const [x, y, z, lean] of crystalSites) {
+  const cluster = new pc.Entity("moonstone-crystal-cluster"); cluster.setPosition(x, y, z); silverDepthsRoot.addChild(cluster);
+  for (const [index, offset] of [[0, 0], [-.27, -.08], [.25, .06]] as const) {
+    const shard = addBox(cluster, "moonstone-shard", index === 0 ? moonstoneCore : moonstoneCrystal,
+      [index === 0 ? .22 : .15, index === 0 ? 1.05 : .68, index === 0 ? .22 : .15], [offset, index === 0 ? .2 : -.02, offset * .5]);
+    shard.setLocalEulerAngles(0, index * 36, (lean + index * .18) * 55);
+  }
+}
+for (const [x, z] of [[63, 9], [67, 9], [71, 9], [74, 9]] as const) {
+  const glow = new pc.Entity("moonstone-cavern-light");
+  glow.addComponent("light", { type: "omni", color: new pc.Color(.42, .24, 1), intensity: 1.15, range: 7.5, castShadows: false });
+  glow.setPosition(x, 2.2, z); silverDepthsRoot.addChild(glow);
+}
+const silverDepthsMotes: { entity: pc.Entity; baseY: number; phase: number }[] = [];
+for (let index = 0; index < 16; index++) {
+  const mote = addBox(silverDepthsRoot, "moonstone-mote", moonstoneCore, [.035, .035, .035],
+    [61 + (index * 37 % 140) / 10, 1.35 + (index % 5) * .42, 5.5 + (index * 23 % 75) / 10]);
+  silverDepthsMotes.push({ entity: mote, baseY: mote.getLocalPosition().y, phase: index * 1.73 });
+}
+silverDepthsRoot.enabled = false;
+app.root.addChild(silverDepthsRoot);
 
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false): VoxelCharacterRig {
   const root = new pc.Entity("voxel-character");
@@ -1928,14 +1975,16 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const frontierArena = position.y >= SURFACE_HEIGHT && isInFrontierBruteArena(position.x, position.z);
   const dungeonAtmosphere = forestDungeonAtmosphere(position.x, position.z);
   const forestDungeon = dungeonAtmosphere.room > 0;
+  const silverDepths = position.y < 5 && position.x >= 59.5 && position.x <= 76.5 && position.z >= 4 && position.z <= 14;
   const dungeonDetail = dungeonAtmosphere.room === 1 ? "Split the rootbound crawlers · the return portal remains behind you"
     : dungeonAtmosphere.room === 2 ? "Use stone cover · read aimed shots and fan gaps"
       : "Root volleys become committed charges below half health";
-  const label = forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
+  const label = silverDepths ? { name: position.x >= 69 ? "CRYSTAL MATRIARCH SANCTUM" : "THE SILVER DEPTHS", detail: position.x >= 69 ? "Read committed volleys · cross the fan gaps · punish recovery" : "Miner's Lantern required · use crystal-lit cover against overlapping volleys" }
+    : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}:${silverDepths}:${position.x >= 69}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -4321,6 +4370,8 @@ let surfaceRestoreStartSliceY: number | null = null;
 let undergroundLightingBlend = 0;
 let greenwoodLightingBlend = 0;
 let forestDungeonLightingBlend = 0;
+let silverDepthsLightingBlend = 0;
+let silverDepthsSection = 0;
 const forestDungeonAmbient = { r: .2, g: .31, b: .22 };
 const forestDungeonFog = { r: .075, g: .17, b: .105 };
 let forestDungeonFogStart = 25;
@@ -4740,18 +4791,28 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
     forestDungeonFogStart += (dungeon.fogStart - forestDungeonFogStart) * dungeonResponse;
     forestDungeonFogEnd += (dungeon.fogEnd - forestDungeonFogEnd) * dungeonResponse;
   }
+  const inSilverDepths = visibilityCutaway && position.y < 5 && position.x >= 59.5 && position.x <= 76.5 && position.z >= 4 && position.z <= 14;
+  const depthsResponse = 1 - Math.exp(-Math.max(0, dt) * 1.45);
+  silverDepthsLightingBlend += ((inSilverDepths ? 1 : 0) - silverDepthsLightingBlend) * depthsResponse;
+  if (Math.abs((inSilverDepths ? 1 : 0) - silverDepthsLightingBlend) < .001) silverDepthsLightingBlend = inSilverDepths ? 1 : 0;
+  silverDepthsRoot.enabled = silverDepthsLightingBlend > .015;
+  const nextDepthsSection = inSilverDepths ? position.x >= 69 ? 2 : 1 : 0;
+  if (nextDepthsSection !== silverDepthsSection) {
+    silverDepthsSection = nextDepthsSection;
+    if (nextDepthsSection > 0) showCombatFeedback(nextDepthsSection === 2 ? "CRYSTAL MATRIARCH SANCTUM" : "THE SILVER DEPTHS", "dodge");
+  }
   updateDangerZone(localDangerTier, position);
   caveLight.enabled = undergroundLightingBlend > 0.001;
   if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
   exitTrail.enabled = visibilityCutaway;
   exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
-  if (light.light) light.light.intensity = (1.45 + (0.45 - 1.45) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend);
+  if (light.light) light.light.intensity = (1.45 + (0.45 - 1.45) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend);
   if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend);
   if (caveLight.light) {
     const lanternOwned = (inventoryCounts.get("miners_lantern") ?? 0) > 0;
-    caveLight.light.intensity = (lanternOwned ? 2.45 : 1.7) * undergroundLightingBlend;
-    caveLight.light.range = lanternOwned ? 18 : 12;
+    caveLight.light.intensity = (lanternOwned ? 2.65 : 1.25) * undergroundLightingBlend;
+    caveLight.light.range = lanternOwned ? 19 : silverDepthsLightingBlend > .2 ? 8 : 12;
   }
   const surfaceAmbient = {
     r: 0.43 + (0.3 - 0.43) * greenwoodLightingBlend,
@@ -4761,21 +4822,29 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const ambientR = surfaceAmbient.r + (0.2 - surfaceAmbient.r) * undergroundLightingBlend;
   const ambientG = surfaceAmbient.g + (0.24 - surfaceAmbient.g) * undergroundLightingBlend;
   const ambientB = surfaceAmbient.b + (0.31 - surfaceAmbient.b) * undergroundLightingBlend;
+  const mixedAmbientR = ambientR + (forestDungeonAmbient.r - ambientR) * forestDungeonLightingBlend;
+  const mixedAmbientG = ambientG + (forestDungeonAmbient.g - ambientG) * forestDungeonLightingBlend;
+  const mixedAmbientB = ambientB + (forestDungeonAmbient.b - ambientB) * forestDungeonLightingBlend;
   app.scene.ambientLight.set(
-    ambientR + (forestDungeonAmbient.r - ambientR) * forestDungeonLightingBlend,
-    ambientG + (forestDungeonAmbient.g - ambientG) * forestDungeonLightingBlend,
-    ambientB + (forestDungeonAmbient.b - ambientB) * forestDungeonLightingBlend,
+    mixedAmbientR + (.085 - mixedAmbientR) * silverDepthsLightingBlend,
+    mixedAmbientG + (.075 - mixedAmbientG) * silverDepthsLightingBlend,
+    mixedAmbientB + (.18 - mixedAmbientB) * silverDepthsLightingBlend,
   );
   const surfaceFogR = 0.21 + (0.11 - 0.21) * greenwoodLightingBlend;
   const surfaceFogG = 0.3 + (0.24 - 0.3) * greenwoodLightingBlend;
   const surfaceFogB = 0.32 + (0.2 - 0.32) * greenwoodLightingBlend;
+  const mixedFogR = surfaceFogR + (forestDungeonFog.r - surfaceFogR) * forestDungeonLightingBlend;
+  const mixedFogG = surfaceFogG + (forestDungeonFog.g - surfaceFogG) * forestDungeonLightingBlend;
+  const mixedFogB = surfaceFogB + (forestDungeonFog.b - surfaceFogB) * forestDungeonLightingBlend;
   app.scene.fog.color.set(
-    surfaceFogR + (forestDungeonFog.r - surfaceFogR) * forestDungeonLightingBlend,
-    surfaceFogG + (forestDungeonFog.g - surfaceFogG) * forestDungeonLightingBlend,
-    surfaceFogB + (forestDungeonFog.b - surfaceFogB) * forestDungeonLightingBlend,
+    mixedFogR + (.035 - mixedFogR) * silverDepthsLightingBlend,
+    mixedFogG + (.025 - mixedFogG) * silverDepthsLightingBlend,
+    mixedFogB + (.095 - mixedFogB) * silverDepthsLightingBlend,
   );
-  app.scene.fog.start = 34 + (forestDungeonFogStart - 34) * forestDungeonLightingBlend;
-  app.scene.fog.end = 58 + (forestDungeonFogEnd - 58) * forestDungeonLightingBlend;
+  const baseFogStart = 34 + (forestDungeonFogStart - 34) * forestDungeonLightingBlend;
+  const baseFogEnd = 58 + (forestDungeonFogEnd - 58) * forestDungeonLightingBlend;
+  app.scene.fog.start = baseFogStart + (15 - baseFogStart) * silverDepthsLightingBlend;
+  app.scene.fog.end = baseFogEnd + (34 - baseFogEnd) * silverDepthsLightingBlend;
   camera.camera?.clearColor.copy(app.scene.fog.color);
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(
@@ -5709,6 +5778,10 @@ app.on("update", (dt: number) => {
   const animationNow = performance.now();
   sceneDressing.update(animationNow);
   const animationTime = animationNow / 1000;
+  if (silverDepthsRoot.enabled) for (const mote of silverDepthsMotes) {
+    mote.entity.setLocalPosition(mote.entity.getLocalPosition().x, mote.baseY + Math.sin(animationTime * 1.35 + mote.phase) * .16, mote.entity.getLocalPosition().z);
+    mote.entity.rotateLocal(0, frameTime * 32, frameTime * 18);
+  }
   const localActionElapsed = localActionStartedAt === null ? null : animationNow - localActionStartedAt;
   const localPowerElapsed = localPowerStartedAt === null ? null : animationNow - localPowerStartedAt;
   const activePowerDefinition = localActivePower ? POWER_DEFINITIONS[localActivePower] : null;
@@ -6741,6 +6814,11 @@ async function connect(): Promise<void> {
     if (message.itemId === "timber") {
       showCombatFeedback(`+${message.quantity} GREENWOOD TIMBER`, "dodge");
       status.textContent = `Chopped Greenwood oak · ${message.total} timber carried.`;
+      return;
+    }
+    if (message.itemId === "moonstone" && message.quantity > 0) {
+      showCombatFeedback(`+${message.quantity} MOONSTONE · OBJECTIVE SECURED`, "dodge");
+      status.textContent = `Moonstone secured · ${message.total} carried. Clear the gallery and continue to the Crystal Matriarch.`;
       return;
     }
     if (message.quantity > 0) {
