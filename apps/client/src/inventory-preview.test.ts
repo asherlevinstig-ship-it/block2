@@ -26,9 +26,9 @@ describe("lightweight inventory paper doll", () => {
   it("draws every weapon family and armour without animation", () => {
     const { portrait, context } = setup();
     for (const hand of ["longsword", "bow", "magic_focus", "forged_sword", "forged_bow", "forged_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "acid_gland_focus"] as const) {
-      for (const armour of ["none", "leather_armour", "iron_armour"] as const) portrait.refresh(hand, armour);
+      for (const armour of ["none", "leather_armour", "iron_armour", "rootguard_armour"] as const) portrait.refresh(hand, armour);
     }
-    expect(context.restore).toHaveBeenCalledTimes(30);
+    expect(context.restore).toHaveBeenCalledTimes(40);
   });
   it("handles unavailable canvas and disposal", () => {
     createInventoryPortrait({ getContext: () => null } as unknown as HTMLCanvasElement).refresh("bow", "none");

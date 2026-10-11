@@ -940,7 +940,7 @@ interface VoxelCharacterRig {
   scarf: pc.Entity;
   silhouette: pc.Entity | null;
   mainHands: Record<MainHandId, pc.Entity>;
-  armour: Record<"leather_armour" | "iron_armour", pc.Entity>;
+  armour: Record<"leather_armour" | "iron_armour" | "rootguard_armour", pc.Entity>;
   locomotionPhase: number;
   locomotionWeight: number;
 }
@@ -1185,22 +1185,28 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     silhouette.enabled = false;
     root.addChild(silhouette);
   }
-  const armour = { leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour") };
+  const armour = { leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour"),
+    rootguard_armour: new pc.Entity("rootguard-armour") };
   for (const [id, layer] of Object.entries(armour)) {
     const iron = id === "iron_armour";
-    const material = iron ? bladeMaterial : weaponWoodMaterial;
+    const rootguard = id === "rootguard_armour";
+    const material = iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
     torso.addChild(layer);
     addBox(layer, "chest-protection", material, [.53, .43, .07], [0, -.025, .205]);
     addBox(layer, "armour-back", material, [.53, .43, .06], [0, -.025, -.185]);
     for (const x of [-.28, .28]) {
-      addBox(layer, "shoulder-rim", bootMaterial, [iron ? .28 : .21, .08, iron ? .44 : .36], [x, .235, 0]);
-      addBox(layer, "shoulder-protection", material, [iron ? .25 : .19, iron ? .17 : .1, iron ? .42 : .34], [x, .28, 0]);
+      addBox(layer, "shoulder-rim", bootMaterial, [iron || rootguard ? .28 : .21, .08, iron || rootguard ? .44 : .36], [x, .235, 0]);
+      addBox(layer, "shoulder-protection", material, [iron || rootguard ? .25 : .19, iron || rootguard ? .17 : .1, iron || rootguard ? .42 : .34], [x, .28, 0]);
       addBox(layer, "shoulder-rivet", brassMaterial, [.055, .045, .025], [x, .29, iron ? .224 : .184]);
     }
     if (iron) {
       addBox(layer, "iron-ridge", brassMaterial, [.09, .43, .025], [0, -.025, .253]);
       addBox(layer, "iron-collar", bladeMaterial, [.4, .095, .4], [0, .225, 0]);
       for (const y of [-.15, -.05]) addBox(layer, "iron-lower-plate", bladeMaterial, [.56, .07, .04], [0, y, .26]);
+    } else if (rootguard) {
+      addBox(layer, "rootguard-heart", coreGlowMaterial, [.16, .18, .04], [0, .02, .253]).setLocalEulerAngles(0, 0, 45);
+      addBox(layer, "rootguard-collar", weaponWoodMaterial, [.43, .11, .4], [0, .225, 0]);
+      for (const x of [-.22, .22]) addBox(layer, "rootguard-vine", weaponWoodMaterial, [.075, .48, .055], [x, -.03, .255]).setLocalEulerAngles(0, 0, x < 0 ? -18 : 18);
     } else {
       const strap = addBox(layer, "leather-cross-strap", bootMaterial, [.06, .47, .035], [0, -.015, .26]);
       strap.setLocalEulerAngles(0, 0, -28);
@@ -1499,7 +1505,7 @@ function fillArmourComparison(element: HTMLElement, id: ArmourId) {
   const comparison = armourComparison(id);
   element.replaceChildren();
   const title = document.createElement("strong"); title.textContent = comparison.name; element.append(title);
-  for (const [label, value] of [["Reduction", comparison.reduction], ["Movement", comparison.speed], ["Minimum hit", comparison.minimum]]) {
+  for (const [label, value] of [["Reduction", comparison.reduction], ["Movement", comparison.speed], ["Projectiles", comparison.ranged], ["Hazards", comparison.hazards], ["Minimum hit", comparison.minimum]]) {
     const row = document.createElement("div"); row.className = "loot-stat";
     const key = document.createElement("span"); key.textContent = label!;
     const stat = document.createElement("span"); stat.textContent = value!;
@@ -1519,11 +1525,12 @@ function openLoot(id: string) {
   inspectedDropId = id; lootPending = false; lootPanel.hidden = false;
   document.querySelector<HTMLElement>("#loot-title")!.textContent = rewardCache ? "Personal Rootbound Cache" : ITEM_DEFINITIONS[drop.itemId as ItemId].name;
   document.querySelector<HTMLElement>("#loot-description")!.textContent = rewardCache
-    ? "Your secured dungeon reward: gold, supplies, minerals, and Rootbound equipment."
+    ? `Your secured dungeon reward features ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "veteran supplies"}.`
     : `${drop.quantity} item · ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].description : "Enemy equipment"}`;
   if (rewardCache) {
-    document.querySelector<HTMLElement>("#loot-new")!.innerHTML = "<strong>Cache contents</strong><p>Gold · Stone Cores · Ore · Healing Potion · Rootbound Hammer</p>";
-    document.querySelector<HTMLElement>("#loot-current")!.innerHTML = "<strong>Personal reward</strong><p>Only you can see and claim this cache.</p>";
+    const featuredName = isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Veteran supplies";
+    document.querySelector<HTMLElement>("#loot-new")!.innerHTML = `<strong>Featured: ${featuredName}</strong><p>Also contains gold · Stone Cores · Iron Ore · Healing Potion${drop.itemId === "silver_ore" ? " · bonus Silver Ore" : ""}</p>`;
+    document.querySelector<HTMLElement>("#loot-current")!.innerHTML = `<strong>${hand || armour ? "New fixed equipment" : "Repeat-clear supplies"}</strong><p>Only you can see and claim this cache. Duplicate equipment converts into silver, materials, and gold.</p>`;
   } else if (armour) {
     fillArmourComparison(document.querySelector<HTMLElement>("#loot-new")!, armour);
     fillArmourComparison(document.querySelector<HTMLElement>("#loot-current")!, localArmourId);
@@ -2792,6 +2799,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
 const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   leather_armour: coloredMaterial(new pc.Color(.44, .26, .12)),
   iron_armour: coloredMaterial(new pc.Color(.76, .8, .85)),
+  rootguard_armour: coloredMaterial(new pc.Color(.2, .55, .24)),
   forged_sword: coloredMaterial(new pc.Color(.76, .8, .85)),
   forged_bow: coloredMaterial(new pc.Color(.65, .45, .25)),
   forged_focus: coloredMaterial(new pc.Color(.3, .65, .95)),
@@ -3573,7 +3581,7 @@ for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipme
     const hand = card.querySelector<HTMLElement>("[data-equip-main-hand]")?.dataset.equipMainHand;
     const armour = card.querySelector<HTMLElement>("[data-equip-armour]")?.dataset.equipArmour;
     if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; }
-    else if (armour === "leather_armour" || armour === "iron_armour") { previewArmour = armour; previewSlot = "armour"; }
+    else if (armour && armourForItem(armour)) { previewArmour = armourForItem(armour)!; previewSlot = "armour"; }
     inventoryPreviewDrawer.open = true;
     refreshInventoryPreview();
     inventoryPreviewDrawer.scrollIntoView({ block: "nearest" });

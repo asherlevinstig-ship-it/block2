@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-rootbound-combo-v90";
+export const WORLD_ROOM = "world-rootguard-rewards-v91";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -51,21 +51,28 @@ export const BlacksmithForgeSchema = z.object({ upgradeId: z.enum(["reinforced_p
 export const BLACKSMITH_WEAPONS = { forged_sword: { price: 45 }, forged_bow: { price: 50 }, forged_focus: { price: 55 } } as const;
 export type BlacksmithWeaponId = keyof typeof BLACKSMITH_WEAPONS;
 export const ARMOUR_DEFINITIONS = {
-  none: { name: "No armour", reduction: 0, speed: 1 },
-  leather_armour: { name: "Leather Armour", reduction: 1, speed: 1 },
-  iron_armour: { name: "Iron Armour", reduction: 2, speed: .92 },
+  none: { name: "No armour", reduction: 0, speed: 1, projectileReduction: 0, hazardReduction: 0 },
+  leather_armour: { name: "Leather Armour", reduction: 1, speed: 1, projectileReduction: 0, hazardReduction: 0 },
+  iron_armour: { name: "Iron Armour", reduction: 2, speed: .92, projectileReduction: 0, hazardReduction: 0 },
+  rootguard_armour: { name: "Rootguard Armour", reduction: 1, speed: .98, projectileReduction: 2, hazardReduction: 2 },
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
-  return id === "leather_armour" || id === "iron_armour" ? id : null;
+  return id === "leather_armour" || id === "iron_armour" || id === "rootguard_armour" ? id : null;
 }
 export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null; }
-export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour"]) });
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
 export function armourStats(id: string) { return ARMOUR_DEFINITIONS[Object.hasOwn(ARMOUR_DEFINITIONS, id) ? id as ArmourId : "none"]; }
-export function armouredDamage(damage: number, id: string): number { return damage <= 0 ? 0 : Math.max(1, damage - armourStats(id).reduction); }
+export type IncomingDamageKind = "melee" | "projectile" | "hazard";
+export function armouredDamage(damage: number, id: string, kind: IncomingDamageKind = "melee"): number {
+  if (damage <= 0) return 0;
+  const armour = armourStats(id);
+  const situational = kind === "projectile" ? armour.projectileReduction : kind === "hazard" ? armour.hazardReduction : 0;
+  return Math.max(1, damage - armour.reduction - situational);
+}
 export type BlacksmithUpdate = {
   phase: "idle" | "traded" | "purchased" | "error";
   ironOre: number;
@@ -137,6 +144,7 @@ export type TavernQuizUpdate = {
 export const ITEM_DEFINITIONS = {
   leather_armour: { id: "leather_armour", name: "Leather Armour", description: "Reduce damage by 1 (minimum hit 1) · full movement speed" },
   iron_armour: { id: "iron_armour", name: "Iron Armour", description: "Reduce damage by 2 (minimum hit 1) · 8% slower movement" },
+  rootguard_armour: { id: "rootguard_armour", name: "Rootguard Armour", description: "Reduce damage by 1 · extra protection from projectiles and hazards · 2% slower" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
   forged_focus: { id: "forged_focus", name: "Forged Focus", description: "Smith-made focus · 2 bolt damage · equip from your pack" },

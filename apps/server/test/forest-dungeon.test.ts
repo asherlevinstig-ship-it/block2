@@ -3,7 +3,7 @@ import { canUseForestPortal, FOREST_PORTAL_LIFETIME_MS } from "@blockcraft/proto
 import { Block, FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, isProtectedVoxel, isPlayerSupported, playerCollides } from "@blockcraft/voxel-world";
 import { ForestPortalCycle } from "../src/forest-portal-cycle.js";
 import { WorldRoom } from "../src/game-room.js";
-import { InventoryItemState, PlayerState, WorldState } from "../src/schema.js";
+import { InventoryItemState, LootDropState, PlayerState, WorldState } from "../src/schema.js";
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 function fixture() {
   vi.useFakeTimers(); vi.setSystemTime(10000);
@@ -130,7 +130,7 @@ describe("forest dungeon portal", () => {
     expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "stone_core_hammer")).toBe(false);
     expect(room.state.portals.has("forest-victory")).toBe(true);
     expect(player.forestBestTimeMs).toBeGreaterThan(0);
-    expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ phase: "completed", reward: "Personal Rootbound Cache unlocked" }));
+    expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ phase: "completed", reward: expect.stringContaining("Rootbound Hammer") }));
     const victoryPortal = room.state.portals.get("forest-victory")!;
     Object.assign(player, { x: victoryPortal.x, y: victoryPortal.y, z: victoryPortal.z }); vi.setSystemTime(12000);
     internal.useForestPortal(client, { id: "forest-victory" });
@@ -154,6 +154,27 @@ describe("forest dungeon portal", () => {
     expect({ x: player.x, y: player.y, z: player.z }).toEqual(FOREST_PORTAL_POSITION);
     vi.setSystemTime(30000); internal.simulatePlayers(.033);
     expect(FOREST_DUNGEON_MOBS.every(entry => room.state.mobs.get(entry.id)?.alive !== true)).toBe(true);
+  });
+  it("grants Rootguard Armour after the hammer and converts a stale duplicate into veteran supplies", () => {
+    const { room, internal, player, client } = fixture();
+    const hammer = new InventoryItemState(); hammer.quantity = 1; player.inventory.set("rootbound_hammer", hammer);
+    internal.forestDungeonRun = { id: "replay", allowed: new Set(["tester"]), entered: new Set(["tester"]), ready: new Set(),
+      claimed: new Set(), scalePlayers: 1, startedAt: 9000, completedAt: 10000 };
+    const cache = new LootDropState(); Object.assign(cache, { ownerId: "tester", itemId: "rootguard_armour", quantity: 1,
+      x: player.x, y: player.y, z: player.z, expiresAt: Number.MAX_SAFE_INTEGER });
+    room.state.lootDrops.set("forest-cache:replay:tester", cache);
+    internal.handleLootCollect(client, { dropId: "forest-cache:replay:tester", equip: false });
+    expect(player.inventory.get("rootguard_armour")?.quantity).toBe(1);
+
+    internal.forestDungeonRun.claimed.clear(); internal.forestDungeonRun.id = "duplicate";
+    const duplicate = new LootDropState(); Object.assign(duplicate, { ownerId: "tester", itemId: "rootguard_armour", quantity: 1,
+      x: player.x, y: player.y, z: player.z, expiresAt: Number.MAX_SAFE_INTEGER });
+    room.state.lootDrops.set("forest-cache:duplicate:tester", duplicate);
+    const gold = player.coins;
+    internal.handleLootCollect(client, { dropId: "forest-cache:duplicate:tester", equip: false });
+    expect(player.inventory.get("rootguard_armour")?.quantity).toBe(1);
+    expect(player.inventory.get("silver_ore")?.quantity).toBe(3);
+    expect(player.coins).toBe(gold + 30);
   });
   it("uses complementary spitter patterns in room two and switches the guardian from volleys to charges below half health", () => {
     const { room, internal, player, client, kill, open, ready } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" }); ready();

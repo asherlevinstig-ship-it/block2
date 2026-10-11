@@ -106,6 +106,7 @@ import {
   type WorldObjectiveUpdate,
   type WeaponAttackReleased,
   type ItemId,
+  type IncomingDamageKind,
   type LootPickedUp,
   type ResourceGathered,
   type TavernQuizUpdate,
@@ -176,6 +177,7 @@ import { nearbyObjective, createObjectiveProgress, type WorldObjectiveProgress }
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
+import { FOREST_CACHE_DUPLICATE_GOLD, forestCacheFeaturedReward, forestCacheRewardLabel } from "./forest-dungeon-rewards.js";
 
 interface MutableChunk {
   chunk: GeneratedChunk;
@@ -1378,12 +1380,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (!run || run.completedAt === 0 || !run.entered.has(client.sessionId) || run.claimed.has(client.sessionId)) return reply(false, "That cache is no longer available.");
       if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside your cache with a clear path to it.");
       const rewards: { itemId: ItemId; quantity: number; total: number }[] = [];
+      const featuredItemId = drop.itemId as ItemId;
+      const featuredEquipment = equipmentForItem(featuredItemId) || armourForItem(featuredItemId);
+      const duplicateFeatured = Boolean(featuredEquipment)
+        && (player.inventory.get(featuredItemId)?.quantity ?? 0) + (player.storage.get(featuredItemId)?.quantity ?? 0) > 0;
+      const veteranSupplies = featuredItemId === "silver_ore" || duplicateFeatured;
       const bundle: { itemId: ItemId; quantity: number }[] = [
-        { itemId: "stone_core", quantity: 2 + run.scalePlayers },
+        { itemId: "stone_core", quantity: 2 + run.scalePlayers + (veteranSupplies ? 2 : 0) },
         { itemId: "iron_ore", quantity: 2 },
-        ...(run.scalePlayers >= 2 ? [{ itemId: "silver_ore" as ItemId, quantity: 1 }] : []),
+        ...(run.scalePlayers >= 2 || veteranSupplies ? [{ itemId: "silver_ore" as ItemId, quantity: (run.scalePlayers >= 2 ? 1 : 0) + (veteranSupplies ? 3 : 0) }] : []),
         { itemId: "healing_potion", quantity: 1 },
-        { itemId: "rootbound_hammer", quantity: 1 },
+        ...(!veteranSupplies ? [{ itemId: featuredItemId, quantity: 1 }] : []),
       ];
       for (const reward of bundle) {
         let item = player.inventory.get(reward.itemId);
@@ -1396,13 +1403,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         item.quantity = inventoryTotal(before, quantity);
         rewards.push({ itemId: reward.itemId, quantity, total: item.quantity });
       }
-      const goldGranted = 12 + Math.max(0, run.scalePlayers - 1) * 3;
+      const goldGranted = 12 + Math.max(0, run.scalePlayers - 1) * 3 + (veteranSupplies ? FOREST_CACHE_DUPLICATE_GOLD : 0);
       const beforeGold = player.coins;
       player.coins = Math.min(1_000_000, player.coins + goldGranted);
       run.claimed.add(client.sessionId);
       this.state.lootDrops.delete(parsed.data.dropId);
       for (const reward of rewards) this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, ...reward } satisfies LootPickedUp);
-      const message = `Rootbound Cache claimed · +${player.coins - beforeGold} gold · ${rewards.map(reward => `${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name}`).join(" · ")}`;
+      const conversion = duplicateFeatured ? ` · duplicate ${ITEM_DEFINITIONS[featuredItemId].name} converted` : "";
+      const message = `Rootbound Cache claimed${conversion} · +${player.coins - beforeGold} gold · ${rewards.map(reward => `${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name}`).join(" · ")}`;
       client.send("dungeon:reward", { runId: run.id, goldGranted: player.coins - beforeGold, totalGold: player.coins, items: rewards, message } satisfies DungeonRewardClaimed);
       void this.persistPlayer(client.sessionId, player, true).catch(() => {});
       this.refreshNearbyObjectives();
@@ -1429,7 +1437,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     reply(true, `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
 
-  private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true): boolean {
+  private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,
+    kind: IncomingDamageKind = "melee"): boolean {
     const player = this.state.players.get(playerId);
     if (!player || player.health <= 0 || now < player.invulnerableUntil || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
     const mob = this.state.mobs.get(mobId);
@@ -1446,7 +1455,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.staggerMob(mobId, mob, now, PARRY_STAGGER_MS, true);
     }
     if (player.stamina <= 0) player.defending = false;
-    defense.damage = armouredDamage(defense.damage, player.armourId);
+    defense.damage = armouredDamage(defense.damage, player.armourId, kind);
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
     player.health = Math.max(0, player.health - defense.damage);
     const defeated = player.health === 0;
@@ -1574,17 +1583,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             participant.forestBestTimeMs = durationMs;
             void this.persistPlayer(playerId, participant);
           }
+          const featuredReward = participant
+            ? forestCacheFeaturedReward(itemId => (participant.inventory.get(itemId)?.quantity ?? 0) + (participant.storage.get(itemId)?.quantity ?? 0))
+            : "silver_ore";
           this.clients.find(client => client.sessionId === playerId)?.send("dungeon:run", {
             runId: this.forestDungeonRun.id,
             phase: "completed",
             partySize: this.forestDungeonRun.entered.size,
             durationMs,
             cooldownUntil,
-            reward: "Personal Rootbound Cache unlocked",
+            reward: `Personal cache: ${forestCacheRewardLabel(featuredReward)}`,
           } satisfies DungeonRunUpdate);
           const angle = (cacheIndex++ / Math.max(1, this.forestDungeonRun.entered.size)) * Math.PI * 2;
           const cache = new LootDropState();
-          Object.assign(cache, { ownerId: playerId, itemId: "rootbound_hammer", quantity: 1,
+          Object.assign(cache, { ownerId: playerId, itemId: featuredReward, quantity: 1,
             x: guardian.x + Math.cos(angle) * 1.25, y: guardian.y + .22, z: guardian.z + Math.sin(angle) * 1.25,
             expiresAt: Number.MAX_SAFE_INTEGER });
           this.state.lootDrops.set(`forest-cache:${this.forestDungeonRun.id}:${playerId}`, cache);
@@ -1808,7 +1820,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const definition = mobArchetype(projectile.archetype);
       const target = collision?.targetId ? this.state.players.get(collision.targetId) : undefined;
       if (target && collision?.targetId) {
-        this.damagePlayer(projectile.mobId, collision.targetId, projectile.damage, now);
+        this.damagePlayer(projectile.mobId, collision.targetId, projectile.damage, now, true, "projectile");
       }
       const hazardDurationMs = projectile.hazardDurationMs ?? definition.hazardDurationMs;
       const hazardRadius = projectile.hazardRadius ?? definition.hazardRadius;
@@ -1848,7 +1860,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const lastDamageAt = hazard.lastDamageAt.get(playerId) ?? 0;
         if (now - lastDamageAt < 900 || !isInsideImpact(player, hazard, hazard.radius, 1.25)
           || !hasCombatLineOfSight(hazard, player, this.readWorldBlock)) continue;
-        if (this.damagePlayer(hazard.mobId, playerId, hazard.damage, now, false)) hazard.lastDamageAt.set(playerId, now);
+        if (this.damagePlayer(hazard.mobId, playerId, hazard.damage, now, false, "hazard")) hazard.lastDamageAt.set(playerId, now);
       }
     }
   }

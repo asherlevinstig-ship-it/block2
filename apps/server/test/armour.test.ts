@@ -34,12 +34,15 @@ describe("armour", () => {
     expect(armouredDamage(3, "iron_armour")).toBe(1);
     expect(armouredDamage(1, "iron_armour")).toBe(1);
     expect(armouredDamage(0, "iron_armour")).toBe(0);
+    expect(armouredDamage(4, "rootguard_armour", "melee")).toBe(3);
+    expect(armouredDamage(4, "rootguard_armour", "projectile")).toBe(1);
+    expect(armouredDamage(4, "rootguard_armour", "hazard")).toBe(1);
     expect(armourStats("iron_armour").speed).toBe(.92);
     expect(armourStats("leather_armour").speed).toBe(1);
     expect(armourStats("toString").reduction).toBe(0);
   });
   it("applies reduction on actual server damage", () => {
-    for (const [armourId, health] of [["none", 2], ["leather_armour", 3], ["iron_armour", 4]] as const) {
+    for (const [armourId, health] of [["none", 2], ["leather_armour", 3], ["iron_armour", 4], ["rootguard_armour", 3]] as const) {
       const { room, player } = fixture(); player.armourId = armourId;
       (room as any).damagePlayer("mob", "player", 3, 1000, false);
       expect(player.health).toBe(health);
@@ -57,7 +60,7 @@ describe("armour", () => {
     }
   });
   it("round-trips worn armour and safely loads legacy or unowned armour saves", () => {
-    for (const id of ["leather_armour", "iron_armour"] as ArmourId[]) {
+    for (const id of ["leather_armour", "iron_armour", "rootguard_armour"] as ArmourId[]) {
       const { player, own, equip } = fixture(); own(id); equip(id);
       const restored = new PlayerState(); applyPlayerSave(restored, parsePlayerSave(serializePlayerSave(player))!);
       expect(restored.armourId).toBe(id);

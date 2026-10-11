@@ -3,7 +3,9 @@ import { armourStats, type ArmourId } from "@blockcraft/protocol";
 export function armourComparison(id: ArmourId) {
   const stats = armourStats(id);
   return { name: stats.name, reduction: `${stats.reduction} damage`, speed: `${Math.round(stats.speed * 100)}%`, minimum: "1 damage per hit",
-    note: "One armour slot · reduces damage after guard · no rarity tiers" };
+    ranged: stats.projectileReduction > 0 ? `Extra −${stats.projectileReduction}` : "No extra protection",
+    hazards: stats.hazardReduction > 0 ? `Extra −${stats.hazardReduction}` : "No extra protection",
+    note: "One armour slot · fixed item identity · no rarity tiers" };
 }
 export function weaponComparison(id: MainHandId, ironSwordOwned = false) {
   const weapon = WEAPON_ATTACK_DEFINITIONS[id];

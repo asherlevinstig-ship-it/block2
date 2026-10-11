@@ -38,14 +38,14 @@ describe("authoritative equipment loot bags", () => {
     internal.spawnLootDrops("frontier", mob, 10000);
     expect([...room.state.lootDrops.values()].map(drop => drop.itemId)).toEqual(["stone_core", "stone_core_hammer", "iron_armour"]);
   });
-  it.each(["leather_armour", "iron_armour"])("keeps %s as an inspectable bag and stores it without equipping", id => {
+  it.each(["leather_armour", "iron_armour", "rootguard_armour"])("keeps %s as an inspectable bag and stores it without equipping", id => {
     const { internal, room, drop, player, collect, persist } = fixture(); drop.itemId = id;
     internal.resolveLootPickups(10000); expect(room.state.lootDrops.has("bag")).toBe(true);
     expect(player.inventory.has(id)).toBe(false); collect(false);
     expect(player.inventory.get(id)?.quantity).toBe(1); expect(player.armourId).toBe("none");
     expect(player.mainHandId).toBe("longsword"); expect(persist).toHaveBeenCalled();
   });
-  it.each(["leather_armour", "iron_armour"])("equips %s once without changing the weapon or duplicating on replay", id => {
+  it.each(["leather_armour", "iron_armour", "rootguard_armour"])("equips %s once without changing the weapon or duplicating on replay", id => {
     const { player, drop, collect, room, internal } = fixture(); drop.itemId = id;
     const other = new PlayerState(); Object.assign(other, { x: player.x, y: player.y, z: player.z }); room.state.players.set("other", other);
     collect(true); collect(true);
