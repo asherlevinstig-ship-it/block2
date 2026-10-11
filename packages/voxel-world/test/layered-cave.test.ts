@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Block, CAVE_ORE_POCKETS, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, CHUNK_HEIGHT, generateChunk, getBlock, setBlock, worldToChunk, isPlayerSupported, playerCollides, resolvePlayerMotion, isProtectedVoxel } from "../src/index.js";
+import { Block, CAVE_ORE_POCKETS, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, CHUNK_HEIGHT, generateChunk, getBlock, setBlock, worldToChunk, isPlayerSupported, playerCollides, resolvePlayerMotion, isProtectedVoxel, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE } from "../src/index.js";
 function fixture(seed: string) {
   const chunks = new Map<string, ReturnType<typeof generateChunk>>();
   const chunkAt = (x: number, z: number) => {
@@ -89,10 +89,17 @@ describe("two-level mine", () => {
     expect(read(126, 1, 0)).toBe(Block.Air);
     expect(read(138, 1, 30)).toBe(Block.Air);
     expect(read(131, 1, 14)).toBe(Block.Air);
+    for (const gate of [SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE]) {
+      expect(isProtectedVoxel(gate.x, gate.minZ)).toBe(true);
+      for (let z = gate.minZ; z <= gate.maxZ; z++) for (let y = 1; y <= 4; y++) expect(read(gate.x, y, z)).toBe(Block.Stone);
+    }
 
-    // Once the party mines the seal, every authored room has a connected,
-    // collision-safe route from the arrival chamber.
+    // Once encounter victories open both protected gates, every authored room
+    // has a connected, collision-safe route from the arrival chamber.
     for (let z = 10; z <= 15; z++) mine(82, 1, z);
+    for (const gate of [SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE]) {
+      for (let z = gate.minZ; z <= gate.maxZ; z++) for (let y = 1; y <= 4; y++) mine(gate.x, y, z);
+    }
     const key = (x: number, z: number) => `${x}:${z}`;
     const reached = new Set<string>([key(63, 12)]), queue: [number, number][] = [[63, 12]];
     while (queue.length) {

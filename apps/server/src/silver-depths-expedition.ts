@@ -16,7 +16,7 @@ export function isInsideSilverDepths(position: { x: number; y: number; z: number
   return position.x >= 60 && position.x <= 141 && position.y <= 5.5 && position.z >= -20 && position.z <= 40;
 }
 
-export const SILVER_DEPTHS_GUARDS = ["silver-depths-spitter-a", "silver-depths-spitter-b"] as const;
+export const SILVER_DEPTHS_GUARDS = [...SILVER_DEPTHS_GALLERY_IDS, ...SILVER_DEPTHS_ANTECHAMBER_IDS] as const;
 export const CRYSTAL_MATRIARCH_ID = "crystal-matriarch";
 
 export type SilverDepthsPlayer = {
@@ -35,3 +35,4 @@ export function canExitSilverDepths(player: SilverDepthsPlayer): boolean {
   return player.health > 0 && player.silverDepthsStage >= 6
     && (player.inventory.get("matriarch_edge")?.quantity ?? 0) > 0;
 }
+import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_GALLERY_IDS } from "./silver-depths-encounters.js";

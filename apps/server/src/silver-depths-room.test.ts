@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
-import { Block, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
+import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
+import { silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 
 function roomWithPortal(id: "depths-entry" | "depths-return") {
   const room = new WorldRoom(); room.setState(new WorldState());
@@ -68,13 +69,44 @@ describe("Silver Depths room travel", () => {
   });
 
   it("opens all six party lanes when one Moonstone seal block is mined", () => {
-    const { room } = roomWithPortal("depths-entry"); const internal = room as any;
+    const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
     vi.spyOn(room, "broadcast").mockImplementation(() => {});
     vi.spyOn(internal, "recordWorldDelta").mockImplementation(() => {});
+    internal.roomKind = "silver-depths";
+    player.silverDepthsStage = 2;
+    internal.beginSilverDepthsRun(client, player, 10_000);
     internal.restoreSilverDepthsMoonstone();
     internal.openSilverDepthsMoonstoneGate("test-seal");
     const x = Math.floor(SILVER_DEPTHS_MOONSTONE_SEAL_POSITION.x);
     for (let z = 10; z <= 15; z++) expect(internal.readWorldBlock(x, 1, z)).toBe(Block.Air);
+    expect(player.silverDepthsRunStage).toBe(2);
+    expect(player.silverDepthsStage).toBe(3);
+    expect([...room.state.lootDrops.keys()].filter(id => id.startsWith("depths-supply:miner"))).toHaveLength(2);
+  });
+
+  it("runs two gallery waves, activates the checkpoint, then unlocks and scales the boss", () => {
+    const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    vi.spyOn(internal, "recordWorldDelta").mockImplementation(() => {});
+    internal.roomKind = "silver-depths"; internal.instancePartySize = 2; player.silverDepthsStage = 2;
+    internal.resetSilverDepthsInstance(); internal.beginSilverDepthsRun(client, player, 10_000);
+    internal.openSilverDepthsMoonstoneGate("test-seal");
+    const clear = (stage: 1 | 2 | 3) => {
+      const entries = silverDepthsStageSpawns(stage);
+      for (const entry of entries.slice(0, -1)) room.state.mobs.get(entry.id)!.alive = false;
+      internal.advanceSilverDepthsEncounter(entries.at(-1)!.id);
+    };
+    clear(1);
+    expect(player.silverDepthsRunStage).toBe(3);
+    expect(silverDepthsStageSpawns(2).every(entry => room.state.mobs.has(entry.id))).toBe(true);
+    player.health = 1; player.stamina = 1; clear(2);
+    expect(player.silverDepthsRunStage).toBe(4);
+    expect(player.health).toBe(player.maxHealth); expect(player.stamina).toBe(player.maxStamina);
+    expect(internal.readWorldBlock(SILVER_DEPTHS_GALLERY_GATE.x, 1, SILVER_DEPTHS_GALLERY_GATE.minZ)).toBe(Block.Air);
+    clear(3);
+    expect(player.silverDepthsRunStage).toBe(5);
+    expect(internal.readWorldBlock(SILVER_DEPTHS_BOSS_GATE.x, 1, SILVER_DEPTHS_BOSS_GATE.minZ)).toBe(Block.Air);
+    expect(room.state.mobs.get("crystal-matriarch")).toMatchObject({ health: 40, maxHealth: 40, alive: true });
   });
 
   it("only transfers back to the overworld after the fixed boss weapon is claimed", async () => {

@@ -6,7 +6,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, m
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-expanded-depths-v110";
-export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v2";
+export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;

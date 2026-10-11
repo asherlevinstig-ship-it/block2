@@ -7003,7 +7003,7 @@ async function connect(): Promise<void> {
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
     if (update.phase === "started") status.textContent = update.dungeon === "ember-vault"
       ? "Ember Vault expedition started · clear the sentinels, break the brute, then face the Forge Colossus."
-      : update.dungeon === "silver-depths" ? "Silver Depths expedition started · defeat the guards, mine Moonstone, and overcome the Matriarch."
+      : update.dungeon === "silver-depths" ? "Silver Depths expedition started · break the seal, clear both gallery waves, light the checkpoint, and overcome the Matriarch."
         : `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
     showDungeonRunResult(update);
   });

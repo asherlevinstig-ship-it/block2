@@ -35,6 +35,9 @@ export const SILVER_DEPTHS_PARTY_SPAWNS = [
   { x: 66.5, y: 1, z: 12.5 },
 ] as const;
 export const SILVER_DEPTHS_MOONSTONE_SEAL_POSITION = { x: 82.5, y: 1, z: 12.5 } as const;
+export const SILVER_DEPTHS_CHECKPOINT_POSITION = { x: 112.5, y: 1, z: 14.5 } as const;
+export const SILVER_DEPTHS_GALLERY_GATE = { x: 108, minZ: 10, maxZ: 19 } as const;
+export const SILVER_DEPTHS_BOSS_GATE = { x: 123, minZ: 7, maxZ: 22 } as const;
 export const SILVER_DEPTHS_EXIT_POSITION = { x: 137.5, y: 1, z: 14.5 } as const;
 export const TOWN_STORAGE_CHEST_POSITION = { x: 26.5, y: 8, z: 4.5 } as const;
 export function isAtTownStorage(player: { x: number; y: number; z: number }): boolean {
@@ -460,6 +463,7 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
       if (depthsCover && y >= 1 && y <= depthsCover.height) return Block.Stone;
       if (worldX === Math.floor(SILVER_DEPTHS_MOONSTONE_SEAL_POSITION.x)
         && worldZ >= 10 && worldZ <= 15 && y >= 1 && y <= 4) return y === 1 ? Block.MoonstoneOre : Block.Air;
+      if (isSilverDepthsProgressionGate(worldX, worldZ) && y >= 1 && y <= 4) return Block.Stone;
       // Optional mining wings reward exploration without creating a second
       // route around the Moonstone seal that gates the combat gallery.
       if (((worldZ === -15 && worldX >= 94 && worldX <= 101)
@@ -610,7 +614,13 @@ export function worldToChunk(x: number, z: number): ChunkAddress {
 export function isProtectedVoxel(x: number, z: number): boolean {
   return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS
     || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z) || isInForestDungeon(x, z) || isInEmberVault(x, z)
+    || isSilverDepthsProgressionGate(x, z)
     || (x >= 45 && x <= 46 && z >= 28 && z <= 29);
+}
+
+export function isSilverDepthsProgressionGate(x: number, z: number): boolean {
+  return x === SILVER_DEPTHS_GALLERY_GATE.x && z >= SILVER_DEPTHS_GALLERY_GATE.minZ && z <= SILVER_DEPTHS_GALLERY_GATE.maxZ
+    || x === SILVER_DEPTHS_BOSS_GATE.x && z >= SILVER_DEPTHS_BOSS_GATE.minZ && z <= SILVER_DEPTHS_BOSS_GATE.maxZ;
 }
 
 export function generateChunk(seedText: string, chunkX: number, chunkZ: number): GeneratedChunk {
