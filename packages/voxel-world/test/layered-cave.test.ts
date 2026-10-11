@@ -69,19 +69,43 @@ describe("two-level mine", () => {
     expect(isPlayerSupported(read, 52.5, 1, 8.5)).toBe(true);
     for (const x of [32, 33, 34, 35, 42, 43]) expect(isProtectedVoxel(x, 8)).toBe(true);
   });
-  it("continues into the Moonstone gallery and Crystal Matriarch arena", () => {
-    const { read } = fixture("silver-depths-regression");
-    // Fifteen-block-wide guard gallery with multiple lanes around cover.
-    expect(read(67, 1, 9)).toBe(Block.Air);
-    expect(read(64, 1, 4)).toBe(Block.Stone);
-    expect(read(64, 1, 9)).toBe(Block.Air);
-    // Seven-block-wide Moonstone gate avoids a single-file party choke.
-    for (let z = 6; z <= 12; z++) expect(read(73, 1, z)).toBe(Block.MoonstoneOre);
-    // The Matriarch arena is nineteen by seventeen clear blocks before cover.
-    expect(read(84, 1, 9)).toBe(Block.Air);
-    expect(read(84, 0, 9)).not.toBe(Block.Air);
-    expect(read(77, 2, 4)).toBe(Block.Stone);
-    expect(read(80, 1, 4)).toBe(Block.Air);
-    expect(read(92, 1, 3)).toBe(Block.MoonstoneOre);
+  it("expands into branching Moonstone wings and a party-scale Matriarch arena", () => {
+    const { read, mine } = fixture("silver-depths-regression");
+    // Arrival room and broad approach comfortably fit four players.
+    for (const [x, z] of [[63, 9], [63, 15], [70, 12], [78, 12]]) expect(read(x!, 1, z!)).toBe(Block.Air);
+    // One mined floor seal opens six traversable lanes with headroom already clear.
+    for (let z = 10; z <= 15; z++) {
+      expect(read(82, 1, z)).toBe(Block.MoonstoneOre);
+      expect(read(82, 2, z)).toBe(Block.Air);
+    }
+    // Gallery plus north and south exploration wings are connected and supported.
+    for (const [x, z] of [[90, 5], [105, 24], [96, -10], [100, 33], [114, 15], [120, 15]]) {
+      expect(read(x!, 1, z!)).toBe(Block.Air);
+      expect(read(x!, 0, z!)).not.toBe(Block.Air);
+    }
+    expect(read(98, 1, 8)).toBe(Block.Stone);
+    expect(read(98, 1, -15)).toBe(Block.SilverOre);
+    // The final chamber spans more than thirty blocks across its dodge axis.
+    expect(read(126, 1, 0)).toBe(Block.Air);
+    expect(read(138, 1, 30)).toBe(Block.Air);
+    expect(read(131, 1, 14)).toBe(Block.Air);
+
+    // Once the party mines the seal, every authored room has a connected,
+    // collision-safe route from the arrival chamber.
+    for (let z = 10; z <= 15; z++) mine(82, 1, z);
+    const key = (x: number, z: number) => `${x}:${z}`;
+    const reached = new Set<string>([key(63, 12)]), queue: [number, number][] = [[63, 12]];
+    while (queue.length) {
+      const [x, z] = queue.shift()!;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx, nz = z + dz, next = key(nx, nz);
+        if (nx < 60 || nx > 140 || nz < -20 || nz > 39 || reached.has(next)
+          || playerCollides(read, nx + .5, 1, nz + .5) || !isPlayerSupported(read, nx + .5, 1, nz + .5)) continue;
+        reached.add(next); queue.push([nx, nz]);
+      }
+    }
+    for (const [x, z] of [[94, -10], [100, 33], [114, 15], [131, 14], [137, 14]]) {
+      expect(reached.has(key(x!, z!))).toBe(true);
+    }
   });
 });

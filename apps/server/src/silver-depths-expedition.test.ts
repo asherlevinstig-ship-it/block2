@@ -25,11 +25,13 @@ describe("Silver Depths dungeon loop", () => {
     expect(advanceSilverDepths(2, "defeated_matriarch")).toBe(2);
   });
 
-  it("recognises only the authored deep route", () => {
+  it("recognises the expanded authored dungeon footprint", () => {
     expect(isInsideSilverDepths({ x: 64, y: 1, z: 9 })).toBe(true);
-    expect(isInsideSilverDepths({ x: 92, y: 1, z: 17 })).toBe(true);
+    expect(isInsideSilverDepths({ x: 100, y: 1, z: -12 })).toBe(true);
+    expect(isInsideSilverDepths({ x: 138, y: 1, z: 30 })).toBe(true);
     expect(isInsideSilverDepths({ x: 58, y: 1, z: 9 })).toBe(false);
-    expect(isInsideSilverDepths({ x: 94, y: 1, z: 9 })).toBe(false);
+    expect(isInsideSilverDepths({ x: 142, y: 1, z: 9 })).toBe(false);
+    expect(isInsideSilverDepths({ x: 100, y: 1, z: 41 })).toBe(false);
     expect(isInsideSilverDepths({ x: 64, y: 8, z: 9 })).toBe(false);
   });
 });

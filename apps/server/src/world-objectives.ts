@@ -1,7 +1,7 @@
 import { isEquipmentItem, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
 import { MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
-import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION } from "@blockcraft/voxel-world";
+import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; level?: number; combatState: string; targetId: string };
 type Player = Pose & { health: number; level?: number; miningExpeditionStage?: number; silverDepthsStage?: number; inventory: { get(id: string): { quantity: number } | undefined } };
@@ -58,17 +58,17 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   const depths = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => ({ ...update, recommendedLevel: "LV 7–12", progressLabel: `SILVER DEPTHS · STEP ${step} / 7` });
   if (depthsUnlocked && depthsStage === 0) return depths(make("depths-briefing", "Speak to the Blacksmith", "Your first expedition is complete. Return to the blacksmith to unlock The Silver Depths.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
   if (depthsUnlocked && depthsStage === 1) return depths(make("depths-enter", "Enter the Silver Depths", "Use the violet expedition portal in town to begin the level-7 dungeon run.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 2);
-  if (depthsUnlocked && depthsStage === 2) return depths(make("depths-moonstone", "Mine the Moonstone Seal", "Mine one glowing Moonstone block from the seal dividing the gallery and Matriarch arena.", { x: 68.5, y: 1, z: 9.5 }, "explore", 3), 3);
+  if (depthsUnlocked && depthsStage === 2) return depths(make("depths-moonstone", "Mine the Moonstone Seal", "Mine one glowing Moonstone block to open the six-lane gate into the expedition wings.", SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, "explore", 3), 3);
   if (depthsUnlocked && depthsStage === 3) {
     const ids = ["silver-depths-spitter-a", "silver-depths-spitter-b"];
     const living = ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive ? [{ id, mob }] : []; });
-    const target = living[0] ?? { id: ids[0]!, mob: { x: 65.5, y: 1, z: 9.5 } };
+    const target = living[0] ?? { id: ids[0]!, mob: SILVER_DEPTHS_SPITTER_HOMES[0] };
     const update = make("depths-gallery", "Clear the Spitter Gallery", "Use the stone gaps to split overlapping aimed shots and fans. Defeat both Moonstone Spitters.", target.mob, "encounter", 3);
     update.targetMobId = target.id; update.targetMobIds = ids; update.completedMobIds = ids.filter(id => mobs.get(id)?.alive === false);
     return depths(update, 4);
   }
   if (depthsUnlocked && depthsStage === 4) {
-    const boss = mobs.get("crystal-matriarch") ?? { x: 72.5, y: 1, z: 9.5 };
+    const boss = mobs.get("crystal-matriarch") ?? CRYSTAL_MATRIARCH_HOME;
     const update = make("depths-matriarch", "Defeat the Crystal Matriarch", "Read the committed aimed shot, cross her fan gaps, and punish recovery. Below half health she fires two-phase fans.", boss, "encounter", 3);
     update.targetMobId = "crystal-matriarch"; update.targetMobIds = ["crystal-matriarch"];
     return depths(update, 5);
@@ -76,7 +76,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   if (depthsUnlocked && depthsStage === 5) {
     const cache = [...lootEntries].find(([, drop]) => drop.ownerId === playerId && drop.itemId === "matriarch_edge" && now < drop.expiresAt);
     return depths(cache ? make(`loot-${cache[0]}`, "Claim Matriarch's Edge", "Approach your personal weapon cache and press E to claim the fixed equipment reward.", cache[1], "loot")
-      : make("depths-recover", "Recover Matriarch's Edge", "If your personal cache expired, defeat the Crystal Matriarch again.", mobs.get("crystal-matriarch") ?? { x: 72.5, y: 1, z: 9.5 }, "encounter", 3), 6);
+      : make("depths-recover", "Recover Matriarch's Edge", "If your personal cache expired, defeat the Crystal Matriarch again.", mobs.get("crystal-matriarch") ?? CRYSTAL_MATRIARCH_HOME, "encounter", 3), 6);
   }
   if (depthsUnlocked && depthsStage === 6) return depths(make("depths-return", "Extract to Town", "Use the violet return portal after claiming Matriarch's Edge. The Moonstone you mined will be forged into a permanent weapon bonus.", SILVER_DEPTHS_EXIT_POSITION, "portal", 3), 7);
   if (depthsUnlocked && depthsStage === 7 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) <= TOWN_SAFE_RADIUS && sameFloor({ x: 0, y: 8, z: 0 })) {

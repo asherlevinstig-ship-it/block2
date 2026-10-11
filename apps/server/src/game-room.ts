@@ -29,7 +29,7 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -894,14 +894,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (next === player.silverDepthsStage) return false;
     player.silverDepthsStage = next;
     if (next === 2) {
-      const seal = { x: 68, y: 1, z: 9 };
-      const address = worldToChunk(seal.x, seal.z);
-      const stored = this.getChunk(address.chunkX, address.chunkZ);
-      if (getBlock(stored.chunk, address.localX, seal.y, address.localZ) === Block.Air) {
-        setBlock(stored.chunk, address.localX, seal.y, address.localZ, Block.MoonstoneOre); stored.revision++;
-        this.recordWorldDelta(seal.x, seal.y, seal.z, Block.MoonstoneOre);
-        this.broadcast("block:changed", { requestId: "silver-depths-seal", ...seal, block: Block.MoonstoneOre, revision: stored.revision } satisfies BlockChanged);
-      }
+      this.restoreSilverDepthsMoonstone();
     }
     const labels = ["", "The Silver Depths accepted · use the violet expedition portal in town.", "Depths entered · mine the Moonstone seal.",
       "Moonstone exposed · defeat both gallery spitters.", "Gallery clear · confront the Crystal Matriarch.",
@@ -1876,16 +1869,26 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private restoreSilverDepthsMoonstone(): void {
-    const cells = [
-      ...[8, 9, 10].flatMap(z => [1, 2, 3].map(y => ({ x: 68, y, z }))),
-      ...[6, 12].flatMap(z => [1, 2].map(y => ({ x: 75, y, z }))),
-    ];
+    const x = Math.floor(SILVER_DEPTHS_MOONSTONE_SEAL_POSITION.x);
+    const cells = [10, 11, 12, 13, 14, 15].map(z => ({ x, y: 1, z }));
     for (const cell of cells) {
       const address = worldToChunk(cell.x, cell.z), stored = this.getChunk(address.chunkX, address.chunkZ);
       if (getBlock(stored.chunk, address.localX, cell.y, address.localZ) === Block.MoonstoneOre) continue;
       setBlock(stored.chunk, address.localX, cell.y, address.localZ, Block.MoonstoneOre); stored.revision++;
       this.broadcast("block:changed", { requestId: `depths-moonstone-${cell.x}:${cell.y}:${cell.z}-restore`, ...cell,
         block: Block.MoonstoneOre, revision: stored.revision } satisfies BlockChanged);
+    }
+  }
+
+  private openSilverDepthsMoonstoneGate(requestId: string): void {
+    const x = Math.floor(SILVER_DEPTHS_MOONSTONE_SEAL_POSITION.x);
+    for (let z = 10; z <= 15; z++) {
+      const address = worldToChunk(x, z), stored = this.getChunk(address.chunkX, address.chunkZ);
+      if (getBlock(stored.chunk, address.localX, 1, address.localZ) === Block.Air) continue;
+      setBlock(stored.chunk, address.localX, 1, address.localZ, Block.Air); stored.revision++;
+      this.recordWorldDelta(x, 1, z, Block.Air);
+      this.broadcast("block:changed", { requestId: `${requestId}-gate-${z}`, x, y: 1, z,
+        block: Block.Air, revision: stored.revision } satisfies BlockChanged);
     }
   }
 
@@ -3459,6 +3462,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       revision: stored.revision,
     };
     this.broadcast("block:changed", changed);
+    if (current === Block.MoonstoneOre && request.x === Math.floor(SILVER_DEPTHS_MOONSTONE_SEAL_POSITION.x)
+      && request.y === 1 && request.z >= 10 && request.z <= 15) this.openSilverDepthsMoonstoneGate(request.requestId);
     if (mineral) this.broadcast("mineral:status", this.mineralStatus());
     if (mineral) {
       let item = player.inventory.get(mineral);

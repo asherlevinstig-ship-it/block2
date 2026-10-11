@@ -1097,16 +1097,16 @@ moonstoneCore.emissive = new pc.Color(.12, .55, .9);
 moonstoneCore.useLighting = false;
 moonstoneCore.update();
 const depthsStone = coloredMaterial(new pc.Color(.12, .12, .19));
-for (const z of [2.15, 16.85]) {
+for (const z of [5.15, 19.85]) {
   addBox(silverDepthsRoot, "depths-entrance-pillar", depthsStone, [.48, 2.8, .48], [60.15, 2.4, z]);
-  const shard = addBox(silverDepthsRoot, "entrance-moonstone", moonstoneCrystal, [.22, .95, .22], [60.02, 2.2, z + (z < 9 ? .42 : -.42)]);
-  shard.setLocalEulerAngles(0, 0, z < 9 ? -18 : 18);
+  const shard = addBox(silverDepthsRoot, "entrance-moonstone", moonstoneCrystal, [.22, .95, .22], [60.02, 2.2, z + (z < 12 ? .42 : -.42)]);
+  shard.setLocalEulerAngles(0, 0, z < 12 ? -18 : 18);
 }
-addBox(silverDepthsRoot, "depths-entrance-lintel", depthsStone, [.55, .4, 15.15], [60.15, 4.05, 9.5]);
+addBox(silverDepthsRoot, "depths-entrance-lintel", depthsStone, [.55, .4, 15.15], [60.15, 4.05, 12.5]);
 const crystalSites = [
-  [61.8, 1.35, 2.7, -.18], [62.1, 1.5, 16.2, .2], [69.8, 1.4, 2.8, -.12], [69.5, 1.3, 16.1, .14],
-  [76.1, 1.55, 1.8, -.18], [76.2, 1.45, 17.1, .18], [84.2, 1.65, 1.8, -.22], [84.4, 1.55, 17.1, .22],
-  [91.2, 1.6, 4.2, -.2], [91.1, 1.5, 14.8, .2],
+  [62.1, 1.35, 6.0, -.18], [62.1, 1.5, 19.0, .2], [72.1, 1.4, 6.0, -.12], [72.1, 1.3, 19.0, .14],
+  [85.0, 1.55, 4.0, -.18], [85.0, 1.45, 25.5, .18], [97.0, 1.65, -13.0, -.22], [103.0, 1.55, 34.0, .22],
+  [112.0, 1.6, 11.0, -.2], [121.0, 1.5, 21.0, .2], [126.0, 1.6, 0.0, -.2], [138.0, 1.5, 30.0, .2],
 ] as const;
 for (const [x, y, z, lean] of crystalSites) {
   const cluster = new pc.Entity("moonstone-crystal-cluster"); cluster.setPosition(x, y, z); silverDepthsRoot.addChild(cluster);
@@ -1116,15 +1116,15 @@ for (const [x, y, z, lean] of crystalSites) {
     shard.setLocalEulerAngles(0, index * 36, (lean + index * .18) * 55);
   }
 }
-for (const [x, z] of [[63, 9], [69, 9], [77, 9], [84, 9], [90, 9]] as const) {
+for (const [x, z] of [[64, 12], [78, 12], [90, 8], [90, 22], [101, -7], [103, 31], [113, 15], [122, 15], [128, 4], [132, 15], [136, 27]] as const) {
   const glow = new pc.Entity("moonstone-cavern-light");
   glow.addComponent("light", { type: "omni", color: new pc.Color(.42, .24, 1), intensity: 1.15, range: 7.5, castShadows: false });
   glow.setPosition(x, 2.2, z); silverDepthsRoot.addChild(glow);
 }
 const silverDepthsMotes: { entity: pc.Entity; baseY: number; phase: number }[] = [];
-for (let index = 0; index < 28; index++) {
+for (let index = 0; index < 54; index++) {
   const mote = addBox(silverDepthsRoot, "moonstone-mote", moonstoneCore, [.035, .035, .035],
-    [61 + (index * 37 % 300) / 10, 1.35 + (index % 5) * .42, 2 + (index * 23 % 145) / 10]);
+    [61 + (index * 47 % 780) / 10, 1.35 + (index % 5) * .42, -14 + (index * 31 % 490) / 10]);
   silverDepthsMotes.push({ entity: mote, baseY: mote.getLocalPosition().y, phase: index * 1.73 });
 }
 silverDepthsRoot.enabled = false;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
-import { Block, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
+import { Block, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 
@@ -65,6 +65,16 @@ describe("Silver Depths room travel", () => {
       const first = SILVER_DEPTHS_PARTY_SPAWNS[a]!, second = SILVER_DEPTHS_PARTY_SPAWNS[b]!;
       expect(Math.hypot(first.x - second.x, first.z - second.z)).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it("opens all six party lanes when one Moonstone seal block is mined", () => {
+    const { room } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    vi.spyOn(internal, "recordWorldDelta").mockImplementation(() => {});
+    internal.restoreSilverDepthsMoonstone();
+    internal.openSilverDepthsMoonstoneGate("test-seal");
+    const x = Math.floor(SILVER_DEPTHS_MOONSTONE_SEAL_POSITION.x);
+    for (let z = 10; z <= 15; z++) expect(internal.readWorldBlock(x, 1, z)).toBe(Block.Air);
   });
 
   it("only transfers back to the overworld after the fixed boss weapon is claimed", async () => {
