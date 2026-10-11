@@ -31,7 +31,12 @@ import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
-import { silverDepthsRoute, type DepthsNodeId, type DepthsRouteState } from "./silver-depths-map.js";
+import {
+  DEPTHS_ROUTE_NODES,
+  silverDepthsRoute,
+  type DepthsNodeId,
+  type DepthsRouteState,
+} from "./silver-depths-map.js";
 import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } from "./cave-navigation.js";
 import { miningAvailability, miningReach, miningProgress, miningDurationMs, miningLineClear, miningMessage, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
@@ -494,7 +499,13 @@ if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blac
 if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
   throw new Error("World objective shell is missing required elements");
 }
-if (!depthsRouteMap || !depthsRouteTitle || !depthsRouteCount || !depthsRouteDistance || depthsRouteNodes.length !== 6) {
+if (
+  !depthsRouteMap ||
+  !depthsRouteTitle ||
+  !depthsRouteCount ||
+  !depthsRouteDistance ||
+  depthsRouteNodes.length !== DEPTHS_ROUTE_NODES.length
+) {
   throw new Error("Silver Depths route shell is missing required elements");
 }
 if ([playerLevel, playerLevelValue, playerXpFill, playerXpValue, inventoryLevel, characterPoints, statPower, statVitality, statAgility, statMining, levelUpPanel, levelUpTitle, levelUpMessage, levelUpPoints].some(element => !element) || characterStatButtons.length !== 4) {
