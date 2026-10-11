@@ -56,6 +56,7 @@ import {
   bruteSlamOutline,
   bruteSmashOutline,
   BLACKSMITH_UPGRADES,
+  SILVER_DEPTHS_REWARDS,
   BLACKSMITH_STOCK,
   type BlacksmithStockId,
   ARMOUR_DEFINITIONS,
@@ -79,6 +80,7 @@ import {
   type ActionRejected,
   type BlacksmithUpdate,
   type BlacksmithUpgradeId,
+  type SilverDepthsRewardId,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -326,6 +328,7 @@ const blacksmithPrice = document.querySelector<HTMLElement>("#blacksmith-price")
 const blacksmithSell = document.querySelector<HTMLButtonElement>("#blacksmith-sell")!;
 const blacksmithClose = document.querySelector<HTMLButtonElement>("#blacksmith-close")!;
 const blacksmithUpgradeCards = [...document.querySelectorAll<HTMLElement>("[data-blacksmith-upgrade]")];
+const depthsRewardCards = [...document.querySelectorAll<HTMLElement>("[data-depths-reward]")];
 const tavernDialogueLine = document.querySelector<HTMLElement>("#tavern-dialogue-line")!;
 const tavernDialogueNext = document.querySelector<HTMLButtonElement>("#tavern-dialogue-next")!;
 const tavernDialogueClose = document.querySelector<HTMLButtonElement>("#tavern-dialogue-close")!;
@@ -1744,6 +1747,7 @@ let localSpecialCooldownUntil = 0;
 let localMainHandId: MainHandId = "longsword";
 let localArmourId: ArmourId = "none";
 let localIronSwordOwned = false;
+let localDepthsRewardFlags = 0;
 let localCharacterProgression: ProgressionUpdate = {
   reason: "sync", level: 1, experience: 0, experienceRequired: 40, unspentStatPoints: 0,
   powerPoints: 0, vitalityPoints: 0, agilityPoints: 0, miningPoints: 0,
@@ -3462,6 +3466,7 @@ function bindPlayers(joinedRoom: Room): void {
     }, true);
     playerCallbacks.listen("blacksmithUpgrades", () => {
       if (!isLocal) return;
+      localDepthsRewardFlags = player.blacksmithUpgrades;
       localIronSwordOwned = (player.blacksmithUpgrades & 2) !== 0;
       refreshPowerCompatibility();
     }, true);
@@ -3910,6 +3915,7 @@ function renderWeaponShop(): void {
   weaponShop.hidden = !shopping;
   document.querySelector<HTMLElement>("#blacksmith-mineral-shop")!.hidden = blacksmithShopTab !== "sell";
   document.querySelector<HTMLElement>("#blacksmith-upgrade-shop")!.hidden = blacksmithShopTab !== "upgrades";
+  document.querySelector<HTMLElement>("#blacksmith-depths-shop")!.hidden = blacksmithShopTab !== "depths";
   for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {
     tab.setAttribute("aria-pressed", String(tab.dataset.smithTab === blacksmithShopTab));
   }
@@ -3998,6 +4004,19 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     button.disabled = isOwned || expeditionLocked || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre;
     button.textContent = isOwned ? "EQUIPPED" : expeditionLocked ? "EXPEDITION LOCKED" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
   }
+  const ownedDepths = new Set(update.ownedDepthsRewards ?? []);
+  const moonstone = update.moonstone ?? 0;
+  const depthsUnlocked = owned.has("moonstone_edge");
+  document.querySelector<HTMLElement>("#blacksmith-moonstone")!.textContent = `${moonstone} ◆`;
+  for (const card of depthsRewardCards) {
+    const rewardId = card.dataset.depthsReward as SilverDepthsRewardId;
+    const reward = SILVER_DEPTHS_REWARDS[rewardId];
+    const button = card.querySelector<HTMLButtonElement>("button")!;
+    const isOwned = ownedDepths.has(rewardId);
+    card.classList.toggle("owned", isOwned);
+    button.disabled = isOwned || !depthsUnlocked || blacksmithPending || moonstone < reward.cost;
+    button.textContent = isOwned ? "ATTUNED" : !depthsUnlocked ? "EXPEDITION LOCKED" : moonstone < reward.cost ? `NEED ${reward.cost - moonstone} MORE ◆` : `ATTUNE · ${reward.cost} ◆`;
+  }
   if (update.phase === "traded" && update.goldGranted) {
     showCombatFeedback(`+${update.goldGranted} GOLD`, "dodge");
     status.textContent = update.message;
@@ -4006,7 +4025,11 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     showCombatFeedback(update.purchasedUpgradeId === "reinforced_pickaxe" ? "PICKAXE BOUGHT · EQUIPPED" : "EQUIPMENT FORGED", "dodge");
     status.textContent = update.message;
   }
-  if (update.phase === "purchased" && !update.purchasedUpgradeId) {
+  if (update.phase === "purchased" && update.purchasedDepthsRewardId) {
+    showCombatFeedback(`${SILVER_DEPTHS_REWARDS[update.purchasedDepthsRewardId].name.toUpperCase()} ATTUNED`, "dodge");
+    status.textContent = update.message;
+  }
+  if (update.phase === "purchased" && !update.purchasedUpgradeId && !update.purchasedDepthsRewardId) {
     showCombatFeedback("EQUIPMENT ADDED TO PACK", "dodge");
     status.textContent = update.message;
   }
@@ -4039,6 +4062,15 @@ for (const card of blacksmithUpgradeCards) {
     button.disabled = true;
     blacksmithMessage.textContent = `${upgradeId === "reinforced_pickaxe" ? "Buying" : "Forging"} ${BLACKSMITH_UPGRADES[upgradeId].name}...`;
     room.send("blacksmith:forge", { upgradeId });
+  });
+}
+for (const card of depthsRewardCards) {
+  card.querySelector<HTMLButtonElement>("button")!.addEventListener("click", () => {
+    if (!room || blacksmithPending) return;
+    const rewardId = card.dataset.depthsReward as SilverDepthsRewardId;
+    blacksmithPending = true;
+    blacksmithMessage.textContent = `Attuning ${SILVER_DEPTHS_REWARDS[rewardId].name}...`;
+    room.send("blacksmith:depths-buy", { rewardId });
   });
 }
 
@@ -4659,7 +4691,7 @@ function updateSilverDepthsRoute(now: number): void {
   visibleDepthsRoute = inside ? silverDepthsRoute(localSilverDepthsRunStage, guardAAlive, guardBAlive) : null;
   depthsRouteMap.hidden = visibleDepthsRoute === null;
   minimapPanel.hidden = visibleDepthsRoute !== null;
-  depthsBreadcrumbRoot.enabled = visibleDepthsRoute !== null;
+  depthsBreadcrumbRoot.enabled = visibleDepthsRoute !== null && (localDepthsRewardFlags & 128) !== 0;
   if (!visibleDepthsRoute) { depthsRouteFingerprint = ""; return; }
   const distance = Math.hypot(visibleDepthsRoute.target.x - player.x, visibleDepthsRoute.target.z - player.z);
   const fingerprint = `${visibleDepthsRoute.active}:${[...visibleDepthsRoute.completed].join(",")}:${visibleDepthsRoute.title}`;
@@ -4671,6 +4703,8 @@ function updateSilverDepthsRoute(now: number): void {
       const id = node.dataset.depthsNode!;
       node.classList.toggle("completed", visibleDepthsRoute.completed.has(id as DepthsNodeId));
       node.classList.toggle("active", visibleDepthsRoute.active === id);
+      node.classList.toggle("uncharted", (localDepthsRewardFlags & 128) === 0
+        && !visibleDepthsRoute.completed.has(id as DepthsNodeId) && visibleDepthsRoute.active !== id);
     }
   }
   depthsRouteDistance.textContent = distance <= 2 ? "ARRIVED" : `${Math.round(distance)}m TO NEXT`;
@@ -5074,8 +5108,9 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend);
   if (caveLight.light) {
     const lanternOwned = (inventoryCounts.get("miners_lantern") ?? 0) > 0;
-    caveLight.light.intensity = (lanternOwned ? 2.65 : 1.25) * undergroundLightingBlend;
-    caveLight.light.range = lanternOwned ? 19 : silverDepthsLightingBlend > .2 ? 8 : 12;
+    const crystalLantern = (localDepthsRewardFlags & 32) !== 0 && silverDepthsLightingBlend > .2;
+    caveLight.light.intensity = (crystalLantern ? 3.4 : lanternOwned ? 2.65 : 1.25) * undergroundLightingBlend;
+    caveLight.light.range = crystalLantern ? 27 : lanternOwned ? 19 : silverDepthsLightingBlend > .2 ? 8 : 12;
   }
   const surfaceAmbient = {
     r: 0.43 + (0.3 - 0.43) * greenwoodLightingBlend,

@@ -635,9 +635,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   transform: translate(-50%, -50%);
 }
 #blacksmith-panel[hidden] { display: none; }
-#blacksmith-mineral-shop[hidden], #blacksmith-upgrade-shop[hidden], #blacksmith-weapons[hidden] { display: none; }
+#blacksmith-mineral-shop[hidden], #blacksmith-upgrade-shop[hidden], #blacksmith-depths-shop[hidden], #blacksmith-weapons[hidden] { display: none; }
 .blacksmith-loop { color: #d6b87f; font-size: .74rem; line-height: 1.5; margin: 0 0 12px; }
-#blacksmith-shop-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
+#blacksmith-shop-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
 #blacksmith-shop-tabs button { margin: 0; padding: 8px 4px; font-size: .7rem; background: #251e16; border-color: #836744; color: #b9a88d; }
 #blacksmith-shop-tabs button[aria-pressed="true"] { color: #fff0cb; background: #765021; border-color: #dfb76c; }
 #blacksmith-weapons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -657,17 +657,29 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .blacksmith-shop-heading { margin: 18px 0 8px; color: #d4ad79; font-size: .67rem; letter-spacing: .12em; }
 .blacksmith-shop-heading small { display: block; margin-top: 4px; color: #887d6c; font-size: .58rem; font-weight: 600; letter-spacing: .02em; text-transform: none; }
 #blacksmith-upgrades { display: grid; gap: 7px; }
+#blacksmith-depths-rewards { display: grid; gap: 7px; margin-top: 8px; }
+#blacksmith-depths-shop .blacksmith-shop-heading.depths { color: #cf9bff; }
+.blacksmith-trade-row.moonstone { border: 1px solid #a667d177; border-radius: 8px; background: linear-gradient(90deg, #63368233, #143f5333); }
+.blacksmith-trade-row.moonstone strong { color: #e7b4ff; text-shadow: 0 0 10px #ad5cffaa; }
 #blacksmith-upgrades article { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 9px; padding: 9px; border: 1px solid #8c6a454d; border-radius: 9px; background: linear-gradient(90deg, #ffffff0a, #00000018); }
+#blacksmith-depths-rewards article { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 9px; padding: 9px; border: 1px solid #9362b866; border-radius: 9px; background: linear-gradient(90deg, #70439720, #17364a22); }
 #blacksmith-upgrades .upgrade-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #bd854d; border-radius: 7px; background: #1b2020; color: #f2b86f; font-size: 1.1rem; }
+#blacksmith-depths-rewards .upgrade-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #b369dc; border-radius: 7px; background: #191626; color: #e0a8ff; font-size: 1.1rem; box-shadow: inset 0 0 12px #8b4fba33; }
 #blacksmith-upgrades article div strong, #blacksmith-upgrades article div small { display: block; }
+#blacksmith-depths-rewards article div strong, #blacksmith-depths-rewards article div small { display: block; }
 #blacksmith-upgrades article div strong { color: #f0dfc5; font-size: .78rem; }
+#blacksmith-depths-rewards article div strong { color: #f0ddff; font-size: .78rem; }
 #blacksmith-upgrades article div small { margin-top: 2px; color: #a99e8e; font-size: .62rem; line-height: 1.25; }
+#blacksmith-depths-rewards article div small { margin-top: 2px; color: #b8a9c7; font-size: .62rem; line-height: 1.25; }
 .forge-costs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .forge-costs b { padding: 3px 5px; border: 1px solid #794c304f; border-radius: 5px; background: #170f0b9c; color: #c77f69; font-size: .52rem; letter-spacing: .04em; }
 .forge-costs b.met { border-color: #6e9e5570; color: #b8df8c; }
 #blacksmith-upgrades article button { min-height: 32px; margin: 0; padding: 6px 9px; font-size: .64rem; white-space: nowrap; }
+#blacksmith-depths-rewards article button { min-height: 32px; margin: 0; padding: 6px 9px; border-color: #a968d0; background: linear-gradient(#754698, #48265f); font-size: .64rem; white-space: nowrap; }
 #blacksmith-upgrades article.owned { border-color: #76a85c80; background: linear-gradient(90deg, #3b6b2c2e, #00000018); }
+#blacksmith-depths-rewards article.owned { border-color: #69b8c780; background: linear-gradient(90deg, #34677936, #39285422); }
 #blacksmith-upgrades article.owned button { border-color: #5d8750; background: #294423; color: #bfe2a5; }
+#blacksmith-depths-rewards article.owned button { border-color: #558a96; background: #25464f; color: #bcebf2; }
 #blacksmith-close { display: block; margin-left: auto; border-color: #736b5e !important; background: #352e28 !important; font-size: .75rem !important; }
 #blacksmith-weapons article { padding: 12px; margin: 8px 0; border: 1px solid #a67a4e80; border-radius: 9px; background: #ffffff08; }
 #blacksmith-weapons strong { color: #ffe2aa; }
@@ -1183,6 +1195,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .depths-route-diagram > i.completed::after { content: "✓"; position: absolute; right: -5px; top: -7px; color: #bff7dc; font: 900 10px system-ui; }
 .depths-route-diagram > i.active { color: #fff; border-color: #d999ff; background: #7544a6; box-shadow: 0 0 0 3px #0d0a16, 0 0 18px #cb75ff; animation: depths-node-pulse 1.25s ease-in-out infinite; }
 .depths-route-diagram > i.active small { color: #efd8ff; }
+.depths-route-diagram > i.uncharted { opacity: .18; }
+.depths-route-diagram > i.uncharted b, .depths-route-diagram > i.uncharted small { visibility: hidden; }
 #depths-route-map footer { color: #ab9bbb; font: 800 9px system-ui; letter-spacing: .05em; }
 #depths-route-distance { color: #d9c6f7; }
 .depths-route-key i { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: #d999ff; box-shadow: 0 0 8px #d999ff; }

@@ -115,6 +115,15 @@ export const BLACKSMITH_UPGRADES = {
 } as const;
 export type BlacksmithUpgradeId = keyof typeof BLACKSMITH_UPGRADES;
 export const BlacksmithForgeSchema = z.object({ upgradeId: z.enum(["reinforced_pickaxe", "iron_sword", "miners_pack", "moonstone_edge"]) });
+export const SILVER_DEPTHS_REWARDS = {
+  moonstone_pickaxe: { id: "moonstone_pickaxe", name: "Moonstone Pickaxe", cost: 2, description: "Extract one additional mineral from every ore block" },
+  crystal_lantern: { id: "crystal_lantern", name: "Crystal Lantern", cost: 2, description: "Greatly improves visibility throughout the Silver Depths" },
+  matriarch_guard: { id: "matriarch_guard", name: "Matriarch Guard", cost: 3, description: "Reduces projectile and hazard damage by 1" },
+  depths_compass: { id: "depths_compass", name: "Depths Compass", cost: 1, description: "Reveals the complete dungeon route and breadcrumb trail" },
+  edge_tempering: { id: "edge_tempering", name: "Edge Tempering", cost: 4, description: "Permanently adds +1 damage to every weapon" },
+} as const;
+export type SilverDepthsRewardId = keyof typeof SILVER_DEPTHS_REWARDS;
+export const SilverDepthsRewardBuySchema = z.object({ rewardId: z.enum(["moonstone_pickaxe", "crystal_lantern", "matriarch_guard", "depths_compass", "edge_tempering"]) });
 export const BLACKSMITH_WEAPONS = { forged_sword: { price: 45 }, forged_bow: { price: 50 }, forged_focus: { price: 55 } } as const;
 export type BlacksmithWeaponId = keyof typeof BLACKSMITH_WEAPONS;
 export const ARMOUR_DEFINITIONS = {
@@ -150,7 +159,9 @@ export type BlacksmithUpdate = {
   gold: number;
   characterLevel: number;
   ownedUpgrades: BlacksmithUpgradeId[];
+  ownedDepthsRewards?: SilverDepthsRewardId[];
   purchasedUpgradeId?: BlacksmithUpgradeId;
+  purchasedDepthsRewardId?: SilverDepthsRewardId;
   weapons?: Partial<Record<BlacksmithStockId, number>>;
   sold?: number;
   goldGranted?: number;

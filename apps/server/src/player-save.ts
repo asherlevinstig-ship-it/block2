@@ -169,7 +169,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     miningPoints: Math.floor(finiteNumber(value.miningPoints, 0, 0, 5)),
     coins: Math.floor(finiteNumber(value.coins, TAVERN_QUIZ_STARTING_COINS, 0, 1_000_000)),
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
-    blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 15)),
+    blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 511)),
     forestBestTimeMs: Math.floor(finiteNumber(value.forestBestTimeMs, 0, 0, 86_400_000)),
     silverDepthsBestTimeMs: Math.floor(finiteNumber(value.silverDepthsBestTimeMs, 0, 0, 86_400_000)),
     miningExpeditionStage: Math.floor(finiteNumber(value.miningExpeditionStage,

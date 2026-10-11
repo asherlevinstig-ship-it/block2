@@ -41,6 +41,8 @@ import {
   mobAimCommitMs,
   BLACKSMITH_UPGRADES,
   BlacksmithForgeSchema,
+  SILVER_DEPTHS_REWARDS,
+  SilverDepthsRewardBuySchema,
   ChunkRegionRequestSchema,
   IRON_ORE_GOLD_PRICE,
   BRAMBLE_SNARE,
@@ -75,6 +77,7 @@ import {
   type ActionRejected,
   type BlacksmithUpdate,
   type BlacksmithUpgradeId,
+  type SilverDepthsRewardId,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -161,7 +164,7 @@ import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FORE
 import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
-import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
+import { blacksmithNextStep, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards, ownsBlacksmithUpgrade, ownsDepthsReward } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import {
   applyWorldDeltasToChunk,
@@ -497,6 +500,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
+    aliveMessage("blacksmith:depths-buy", (client, payload) => this.handleDepthsRewardBuy(client, payload));
     this.onMessage("potion:buy", client => this.handlePotion(client, true));
     this.onMessage("potion:use", client => this.handlePotion(client, false));
     this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 33);
@@ -745,7 +749,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       message: message ?? (canUseStorage(player) ? "Your personal chest. Choose an item to deposit or withdraw." : "Stand beside the chest to transfer items.") });
   }
 
-  private sendBlacksmithState(client: Client, message: string | undefined = undefined, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId): void {
+  private sendBlacksmithState(client: Client, message: string | undefined = undefined, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId, purchasedDepthsRewardId?: SilverDepthsRewardId): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     client.send("blacksmith:update", {
@@ -757,10 +761,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       gold: player.coins,
       characterLevel: player.level,
       ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
+      ownedDepthsRewards: ownedDepthsRewards(player.blacksmithUpgrades),
       weapons: Object.fromEntries(Object.keys(BLACKSMITH_STOCK).map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       sold,
       goldGranted,
       purchasedUpgradeId,
+      purchasedDepthsRewardId,
       message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
     } satisfies BlacksmithUpdate);
   }
@@ -950,6 +956,27 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     void this.persistPlayer(client.sessionId, player);
     this.sendBlacksmithState(client, `${BLACKSMITH_UPGRADES[upgradeId].name} ${upgradeId === "reinforced_pickaxe" ? "bought" : "forged"} and equipped. ${BLACKSMITH_UPGRADES[upgradeId].description}.`, "purchased", 0, 0, upgradeId);
+  }
+
+  private handleDepthsRewardBuy(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = SilverDepthsRewardBuySchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a Silver Depths reward.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to attune Moonstone.", "error");
+    if (player.silverDepthsStage < 7) return this.sendBlacksmithState(client, "Complete The Silver Depths before attuning its rewards.", "error");
+    const rewardId = parsed.data.rewardId;
+    const moonstone = player.inventory.get("moonstone");
+    const purchase = buyDepthsReward(player.blacksmithUpgrades, moonstone?.quantity ?? 0, rewardId);
+    if (!purchase.bought) {
+      const message = purchase.reason === "owned"
+        ? `${SILVER_DEPTHS_REWARDS[rewardId].name} is already attuned.`
+        : `You need ${SILVER_DEPTHS_REWARDS[rewardId].cost} Moonstone for ${SILVER_DEPTHS_REWARDS[rewardId].name}.`;
+      return this.sendBlacksmithState(client, message, "error");
+    }
+    player.blacksmithUpgrades = purchase.flags;
+    if (moonstone) moonstone.quantity = purchase.moonstone;
+    void this.persistPlayer(client.sessionId, player, true);
+    this.sendBlacksmithState(client, `${SILVER_DEPTHS_REWARDS[rewardId].name} attuned. ${SILVER_DEPTHS_REWARDS[rewardId].description}.`, "purchased", 0, 0, undefined, rewardId);
   }
 
   private handlePotion(client: Client, buying: boolean): void {
@@ -1653,6 +1680,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     if (player.stamina <= 0) player.defending = false;
     defense.damage = armouredDamage(defense.damage, player.armourId, kind);
+    if (defense.damage > 0 && kind !== "melee" && ownsDepthsReward(player.blacksmithUpgrades, "matriarch_guard")) {
+      defense.damage = Math.max(1, defense.damage - 1);
+    }
     player.momentumStacks = momentumAfterDefense(player.momentumStacks, defense.damage, defense.parried, traitId);
     player.health = Math.max(0, player.health - defense.damage);
     const depthsRun = this.silverDepthsRuns.get(playerId);

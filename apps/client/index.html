@@ -177,6 +177,7 @@
         <button type="button" data-smith-tab="weapons" aria-pressed="false">Weapons</button>
         <button type="button" data-smith-tab="armour" aria-pressed="false">Armour</button>
         <button type="button" data-smith-tab="upgrades" aria-pressed="false">Upgrades</button>
+        <button type="button" data-smith-tab="depths" aria-pressed="false">Depths</button>
       </nav>
       <p id="blacksmith-message" aria-live="polite">Sell your iron and silver here, then choose Weapons or Armour to spend your gold.</p>
       <div id="blacksmith-mineral-shop">
@@ -194,6 +195,17 @@
         <article data-blacksmith-upgrade="miners_pack"><span class="upgrade-icon">▣</span><div><strong>Miner's Pack</strong><small>Carry 30 of each mineral instead of 12</small><span class="forge-costs"><b data-cost="gold">0 / 25 GOLD</b></span></div><button type="button">FORGE</button></article>
         <article data-blacksmith-upgrade="moonstone_edge"><span class="upgrade-icon">◆</span><div><strong>Moonstone Edge</strong><small>The Silver Depths reward · permanent +1 damage to every weapon</small></div><button type="button" disabled>EXPEDITION LOCKED</button></article>
       </div>
+      </div>
+      <div id="blacksmith-depths-shop" hidden>
+        <h3 class="blacksmith-shop-heading depths">SILVER DEPTHS ATTUNEMENTS <small>Permanent rewards · paid with Moonstone recovered from repeat expeditions</small></h3>
+        <div class="blacksmith-trade-row moonstone"><span>MOONSTONE IN PACK</span><strong id="blacksmith-moonstone">0</strong></div>
+        <div id="blacksmith-depths-rewards">
+          <article data-depths-reward="moonstone_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Moonstone Pickaxe</strong><small>Extract +1 mineral from every ore block</small></div><button type="button">ATTUNE · 2 ◆</button></article>
+          <article data-depths-reward="crystal_lantern"><span class="upgrade-icon">✦</span><div><strong>Crystal Lantern</strong><small>Greatly improves visibility in the Silver Depths</small></div><button type="button">ATTUNE · 2 ◆</button></article>
+          <article data-depths-reward="matriarch_guard"><span class="upgrade-icon">◈</span><div><strong>Matriarch Guard</strong><small>Take 1 less projectile and hazard damage</small></div><button type="button">ATTUNE · 3 ◆</button></article>
+          <article data-depths-reward="depths_compass"><span class="upgrade-icon">⌖</span><div><strong>Depths Compass</strong><small>Reveal the full route and breadcrumb trail</small></div><button type="button">ATTUNE · 1 ◆</button></article>
+          <article data-depths-reward="edge_tempering"><span class="upgrade-icon">⚔</span><div><strong>Edge Tempering</strong><small>Permanent +1 damage for every weapon</small></div><button type="button">ATTUNE · 4 ◆</button></article>
+        </div>
       </div>
       <button id="blacksmith-open-pack" type="button">Open pack to equip gear</button>
       <button id="blacksmith-close" type="button">Leave stall</button>

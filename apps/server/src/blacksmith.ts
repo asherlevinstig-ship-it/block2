@@ -1,4 +1,4 @@
-import { BLACKSMITH_UPGRADES, IRON_ORE_GOLD_PRICE, SILVER_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId } from "@blockcraft/protocol";
+import { BLACKSMITH_UPGRADES, IRON_ORE_GOLD_PRICE, SILVER_DEPTHS_REWARDS, SILVER_ORE_GOLD_PRICE, type BlacksmithUpgradeId, type MainHandId, type SilverDepthsRewardId } from "@blockcraft/protocol";
 import { Block, TOWN_BLACKSMITH_STALL_POSITION, type BlockId } from "@blockcraft/voxel-world";
 import { BLACKSMITH_STOCK, type BlacksmithStockId } from "@blockcraft/protocol";
 
@@ -20,12 +20,35 @@ const UPGRADE_BITS: Record<BlacksmithUpgradeId, number> = {
   moonstone_edge: 8,
 };
 
+const DEPTHS_REWARD_BITS: Record<SilverDepthsRewardId, number> = {
+  moonstone_pickaxe: 16,
+  crystal_lantern: 32,
+  matriarch_guard: 64,
+  depths_compass: 128,
+  edge_tempering: 256,
+};
+
 export function ownsBlacksmithUpgrade(flags: number, upgradeId: BlacksmithUpgradeId): boolean {
   return (flags & UPGRADE_BITS[upgradeId]) !== 0;
 }
 
 export function ownedBlacksmithUpgrades(flags: number): BlacksmithUpgradeId[] {
   return (Object.keys(BLACKSMITH_UPGRADES) as BlacksmithUpgradeId[]).filter(id => ownsBlacksmithUpgrade(flags, id));
+}
+
+export function ownsDepthsReward(flags: number, rewardId: SilverDepthsRewardId): boolean {
+  return (flags & DEPTHS_REWARD_BITS[rewardId]) !== 0;
+}
+
+export function ownedDepthsRewards(flags: number): SilverDepthsRewardId[] {
+  return (Object.keys(SILVER_DEPTHS_REWARDS) as SilverDepthsRewardId[]).filter(id => ownsDepthsReward(flags, id));
+}
+
+export function buyDepthsReward(flags: number, moonstone: number, rewardId: SilverDepthsRewardId) {
+  if (ownsDepthsReward(flags, rewardId)) return { bought: false as const, flags, moonstone, reason: "owned" as const };
+  const cost = SILVER_DEPTHS_REWARDS[rewardId].cost;
+  if (moonstone < cost) return { bought: false as const, flags, moonstone, reason: "moonstone" as const };
+  return { bought: true as const, flags: flags | DEPTHS_REWARD_BITS[rewardId], moonstone: moonstone - cost };
 }
 
 export function forgeBlacksmithUpgrade(
@@ -51,12 +74,13 @@ export function ironCapacity(flags: number): number {
 }
 
 export function minedIronQuantity(flags: number): number {
-  return ownsBlacksmithUpgrade(flags, "reinforced_pickaxe") ? 2 : 1;
+  return (ownsBlacksmithUpgrade(flags, "reinforced_pickaxe") ? 2 : 1) + (ownsDepthsReward(flags, "moonstone_pickaxe") ? 1 : 0);
 }
 
 export function ironSwordDamageBonus(flags: number, mainHandId: MainHandId = "longsword"): number {
   return (mainHandId === "longsword" && ownsBlacksmithUpgrade(flags, "iron_sword") ? 1 : 0)
-    + (ownsBlacksmithUpgrade(flags, "moonstone_edge") ? 1 : 0);
+    + (ownsBlacksmithUpgrade(flags, "moonstone_edge") ? 1 : 0)
+    + (ownsDepthsReward(flags, "edge_tempering") ? 1 : 0);
 }
 
 export function blacksmithNextStep(flags: number, gold: number, ore: number): string {

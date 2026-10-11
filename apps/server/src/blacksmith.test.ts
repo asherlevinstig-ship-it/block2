@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
-import { blacksmithNextStep, BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades } from "./blacksmith.js";
+import { blacksmithNextStep, BASE_IRON_CAPACITY, UPGRADED_IRON_CAPACITY, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, ironOreSale, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards } from "./blacksmith.js";
 
 describe("blacksmith trading", () => {
+  it("spends Moonstone once and applies permanent Depths reward effects", () => {
+    const purchase = buyDepthsReward(0, 2, "moonstone_pickaxe");
+    expect(purchase).toMatchObject({ bought: true, moonstone: 0 });
+    expect(ownedDepthsRewards(purchase.flags)).toEqual(["moonstone_pickaxe"]);
+    expect(minedIronQuantity(purchase.flags)).toBe(2);
+    expect(buyDepthsReward(purchase.flags, 9, "moonstone_pickaxe")).toMatchObject({ bought: false, reason: "owned", moonstone: 9 });
+    expect(buyDepthsReward(0, 3, "edge_tempering")).toMatchObject({ bought: false, reason: "moonstone", moonstone: 3 });
+    const tempered = buyDepthsReward(0, 4, "edge_tempering");
+    expect(ironSwordDamageBonus(tempered.flags, "bow")).toBe(1);
+  });
   it("buys actual silver and iron at different fixed prices while respecting the purse cap", () => {
     expect(minedMineral(Block.SilverOre)).toBe("silver_ore");
     expect(mineralSale(2, 3, 20)).toEqual({ ironSold: 2, silverSold: 3, goldGranted: 30 });

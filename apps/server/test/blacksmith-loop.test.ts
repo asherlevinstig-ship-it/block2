@@ -64,6 +64,19 @@ describe("ore to forged sword to item loot", () => {
     internal.handleMine(client, { requestId: "upgraded-silver", x: 68, y: 7, z: 27, expectedRevision: stored.revision });
     expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
   });
+  it("attunes completed Silver Depths rewards with Moonstone exactly once", () => {
+    const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
+    const persist = vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION, { silverDepthsStage: 7, blacksmithUpgrades: 8 });
+    const moonstone = new InventoryItemState(); moonstone.quantity = 2; player.inventory.set("moonstone", moonstone);
+    room.state.players.set("depths-buyer", player); const client = { sessionId: "depths-buyer", send: vi.fn() } as any;
+    internal.handleDepthsRewardBuy(client, { rewardId: "crystal_lantern" });
+    expect(moonstone.quantity).toBe(0); expect(player.blacksmithUpgrades & 32).toBe(32);
+    expect(persist).toHaveBeenCalledWith("depths-buyer", player, true);
+    expect(client.send).toHaveBeenLastCalledWith("blacksmith:update", expect.objectContaining({ phase: "purchased", purchasedDepthsRewardId: "crystal_lantern" }));
+    moonstone.quantity = 2; internal.handleDepthsRewardBuy(client, { rewardId: "crystal_lantern" });
+    expect(moonstone.quantity).toBe(2);
+  });
   it("mines visible silver once, preserves a full-pack block, and sells both minerals at the stall", () => {
     const room = new WorldRoom(); room.setState(new WorldState());
     const internal = room as any;

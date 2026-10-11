@@ -32,7 +32,7 @@ export const PlayerState = schema({
   miningPoints: t.uint8().default(0),
   coins: t.uint32().default(20),
   potionCooldownUntil: t.float64().default(0),
-  blacksmithUpgrades: t.uint8().default(0),
+  blacksmithUpgrades: t.uint16().default(0),
   forestBestTimeMs: t.uint32().default(0),
   silverDepthsBestTimeMs: t.uint32().default(0),
   miningExpeditionStage: t.uint8().default(0),
