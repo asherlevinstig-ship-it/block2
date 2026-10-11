@@ -110,7 +110,7 @@ describe("forest dungeon portal", () => {
     expect(room.state.mobs.has("forest-room1-a")).toBe(true);
     expect(room.state.portals.has("forest-entry")).toBe(false);
   });
-  it("clears two gated rooms, spawns the guardian once, guarantees a personal hammer and never respawns slain dungeon mobs", () => {
+  it("clears the dungeon, locks extraction until the personal cache is claimed and grants its complete bundle once", () => {
     const { room, internal, player, client, kill, open, ready } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" }); ready();
     (room.clients as any[]).push(client);
     expect(internal.readWorldBlock(168, 8, 165)).toBe(Block.OakLog);
@@ -124,13 +124,36 @@ describe("forest dungeon portal", () => {
     }
     expect(client.send.mock.calls.filter((call: any[]) => call[0] === "portal:notice" && String(call[1]).includes("gate has opened"))).toHaveLength(2);
     Object.assign(player, { x: 187.5, y: 8, z: 165.5 }); kill("forest-guardian");
-    expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "rootbound_hammer")).toBe(true);
+    const cacheId = [...room.state.lootDrops.keys()].find(id => id.startsWith("forest-cache:"))!;
+    const cache = room.state.lootDrops.get(cacheId)!;
+    expect(cache).toMatchObject({ ownerId: "tester", itemId: "rootbound_hammer" });
     expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "stone_core_hammer")).toBe(false);
     expect(room.state.portals.has("forest-victory")).toBe(true);
     expect(player.forestBestTimeMs).toBeGreaterThan(0);
     expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ phase: "completed", reward: "Personal Rootbound Cache unlocked" }));
+    const victoryPortal = room.state.portals.get("forest-victory")!;
+    Object.assign(player, { x: victoryPortal.x, y: victoryPortal.y, z: victoryPortal.z }); vi.setSystemTime(12000);
+    internal.useForestPortal(client, { id: "forest-victory" });
+    expect(player.x).toBe(room.state.portals.get("forest-victory")!.x);
+    expect(client.send).toHaveBeenCalledWith("portal:notice", expect.stringContaining("Rootbound Cache"));
+    Object.assign(player, { x: cache.x, y: cache.y, z: cache.z });
+    const goldBefore = player.coins;
+    internal.handleLootCollect(client, { dropId: cacheId, equip: false });
+    expect(room.state.lootDrops.has(cacheId)).toBe(false);
+    expect(internal.forestDungeonRun.claimed.has("tester")).toBe(true);
+    expect(player.coins).toBe(goldBefore + 12);
+    expect(player.inventory.get("stone_core")?.quantity).toBe(3);
+    expect(player.inventory.get("iron_ore")?.quantity).toBe(2);
+    expect(player.inventory.get("healing_potion")?.quantity).toBe(1);
+    expect(player.inventory.get("rootbound_hammer")?.quantity).toBe(1);
+    expect(client.send).toHaveBeenCalledWith("dungeon:reward", expect.objectContaining({ goldGranted: 12 }));
+    internal.handleLootCollect(client, { dropId: cacheId, equip: false });
+    expect(player.coins).toBe(goldBefore + 12);
+    Object.assign(player, { x: victoryPortal.x, y: victoryPortal.y, z: victoryPortal.z }); vi.setSystemTime(14000);
+    internal.useForestPortal(client, { id: "forest-victory" });
+    expect({ x: player.x, y: player.y, z: player.z }).toEqual(FOREST_PORTAL_POSITION);
     vi.setSystemTime(30000); internal.simulatePlayers(.033);
-    expect(FOREST_DUNGEON_MOBS.every(entry => room.state.mobs.get(entry.id)?.alive === false)).toBe(true);
+    expect(FOREST_DUNGEON_MOBS.every(entry => room.state.mobs.get(entry.id)?.alive !== true)).toBe(true);
   });
   it("uses complementary spitter patterns in room two and switches the guardian from volleys to charges below half health", () => {
     const { room, internal, player, client, kill, open, ready } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" }); ready();

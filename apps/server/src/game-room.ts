@@ -91,6 +91,7 @@ import {
   type PowerId,
   type PowerResolved,
   type DungeonRunUpdate,
+  type DungeonRewardClaimed,
   DungeonBoardRequestSchema,
   type DungeonBoardUpdate,
   DungeonLobbyRequestSchema,
@@ -296,7 +297,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly wildernessEvent = new WildernessEventCycle();
   private readonly forestPortalCycle = new ForestPortalCycle();
   private forestDungeonActive = false;
-  private forestDungeonRun: { id: string; key: string; allowed: Set<string>; entered: Set<string>; ready: Set<string>; phase: "lobby" | "active"; scalePlayers: number; startedAt: number; completedAt: number } | null = null;
+  private forestDungeonRun: { id: string; key: string; allowed: Set<string>; entered: Set<string>; ready: Set<string>; claimed: Set<string>; phase: "lobby" | "active"; scalePlayers: number; startedAt: number; completedAt: number } | null = null;
   private forestDungeonRunSequence = 0;
   private forestDungeonUnlocked = false;
   private forestDungeonReopenAt = Infinity;
@@ -1308,8 +1309,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
-    const baseDrops = mobId === "forest-guardian" ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "rootbound_hammer" as const, quantity: 1 }]
-      : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
+    if (mobId === "forest-guardian") return;
+    const baseDrops = mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
       : mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
       : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
       : lootForArchetype(mob.archetype as MobArchetypeId, mobId);
@@ -1371,6 +1372,41 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const drop = this.state.lootDrops.get(parsed.data.dropId);
     if (!drop || Date.now() >= drop.expiresAt) return reply(false, "That bag is no longer available.");
     if (drop.ownerId && drop.ownerId !== client.sessionId) return reply(false, "That is another player's personal loot.");
+    if (parsed.data.dropId.startsWith("forest-cache:")) {
+      const run = this.forestDungeonRun;
+      if (!run || run.completedAt === 0 || !run.entered.has(client.sessionId) || run.claimed.has(client.sessionId)) return reply(false, "That cache is no longer available.");
+      if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside your cache with a clear path to it.");
+      const rewards: { itemId: ItemId; quantity: number; total: number }[] = [];
+      const bundle: { itemId: ItemId; quantity: number }[] = [
+        { itemId: "stone_core", quantity: 2 + run.scalePlayers },
+        { itemId: "iron_ore", quantity: 2 },
+        ...(run.scalePlayers >= 2 ? [{ itemId: "silver_ore" as ItemId, quantity: 1 }] : []),
+        { itemId: "healing_potion", quantity: 1 },
+        { itemId: "rootbound_hammer", quantity: 1 },
+      ];
+      for (const reward of bundle) {
+        let item = player.inventory.get(reward.itemId);
+        const before = item?.quantity ?? 0;
+        const capacity = reward.itemId === "healing_potion" ? HEALING_POTION.capacity
+          : reward.itemId === "iron_ore" || reward.itemId === "silver_ore" ? ironCapacity(player.blacksmithUpgrades) : 65535;
+        const quantity = Math.max(0, Math.min(reward.quantity, capacity - before));
+        if (quantity === 0) continue;
+        if (!item) { item = new InventoryItemState(); player.inventory.set(reward.itemId, item); }
+        item.quantity = inventoryTotal(before, quantity);
+        rewards.push({ itemId: reward.itemId, quantity, total: item.quantity });
+      }
+      const goldGranted = 12 + Math.max(0, run.scalePlayers - 1) * 3;
+      const beforeGold = player.coins;
+      player.coins = Math.min(1_000_000, player.coins + goldGranted);
+      run.claimed.add(client.sessionId);
+      this.state.lootDrops.delete(parsed.data.dropId);
+      for (const reward of rewards) this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, ...reward } satisfies LootPickedUp);
+      const message = `Rootbound Cache claimed · +${player.coins - beforeGold} gold · ${rewards.map(reward => `${reward.quantity} ${ITEM_DEFINITIONS[reward.itemId].name}`).join(" · ")}`;
+      client.send("dungeon:reward", { runId: run.id, goldGranted: player.coins - beforeGold, totalGold: player.coins, items: rewards, message } satisfies DungeonRewardClaimed);
+      void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+      this.refreshNearbyObjectives();
+      return reply(true, message);
+    }
     const mainHandId = equipmentForItem(drop.itemId);
     const armourId = armourForItem(drop.itemId);
     if (!mainHandId && !armourId) return reply(false, "Materials are collected automatically.");
@@ -1528,6 +1564,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         this.forestDungeonRun.completedAt = Date.now();
         const durationMs = Math.max(1, Date.now() - this.forestDungeonRun.startedAt);
         const cooldownUntil = Date.now() + 45_000;
+        const guardian = this.state.mobs.get("forest-guardian")!;
+        let cacheIndex = 0;
         for (const playerId of this.forestDungeonRun.entered) {
           this.forestDungeonCooldownUntil.set(playerId, cooldownUntil);
           const participant = this.state.players.get(playerId);
@@ -1543,11 +1581,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             cooldownUntil,
             reward: "Personal Rootbound Cache unlocked",
           } satisfies DungeonRunUpdate);
+          const angle = (cacheIndex++ / Math.max(1, this.forestDungeonRun.entered.size)) * Math.PI * 2;
+          const cache = new LootDropState();
+          Object.assign(cache, { ownerId: playerId, itemId: "rootbound_hammer", quantity: 1,
+            x: guardian.x + Math.cos(angle) * 1.25, y: guardian.y + .22, z: guardian.z + Math.sin(angle) * 1.25,
+            expiresAt: Number.MAX_SAFE_INTEGER });
+          this.state.lootDrops.set(`forest-cache:${this.forestDungeonRun.id}:${playerId}`, cache);
         }
       }
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
-        if (player && isInForestDungeon(player.x, player.z)) client.send("portal:notice", "Guardian defeated! Collect your equipment bag, then use the return portal.");
+        if (player && isInForestDungeon(player.x, player.z)) client.send("portal:notice", "Guardian defeated! Claim your personal Rootbound Cache, then use the return portal.");
       }
     }
   }
@@ -1598,7 +1642,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const cohort = this.parties.cohort(client.sessionId);
     this.forestDungeonUnlocked = true;
     this.forestDungeonRun = { id: `forest-run-${++this.forestDungeonRunSequence}`, key: cohort.key,
-      allowed: new Set(cohort.members.filter(id => this.state.players.has(id))), entered: new Set(), ready: new Set(), phase: "lobby", scalePlayers: 1, startedAt: 0, completedAt: 0 };
+      allowed: new Set(cohort.members.filter(id => this.state.players.has(id))), entered: new Set(), ready: new Set(), claimed: new Set(), phase: "lobby", scalePlayers: 1, startedAt: 0, completedAt: 0 };
     const portal = new ForestPortalState();
     Object.assign(portal, TOWN_EXPEDITION_PORTAL_POSITION, { kind: "entry", expiresAt: now + 30_000 });
     this.state.portals.set("forest-entry", portal);
@@ -1656,6 +1700,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       || now - (this.forestTravelAt.get(client.sessionId) ?? -Infinity) < 1000
       || !hasCombatLineOfSight(player, portal, this.readWorldBlock)) return;
     if (portal.kind === "return" && !this.forestReturns.has(client.sessionId)) return;
+    if (portal.kind === "return" && this.forestDungeonRun?.completedAt && this.forestDungeonRun.entered.has(client.sessionId)
+      && !this.forestDungeonRun.claimed.has(client.sessionId)) {
+      client.send("portal:notice", "Claim your personal Rootbound Cache before returning to town.");
+      return;
+    }
     this.forestTravelAt.set(client.sessionId, now);
     let destination = this.forestReturns.get(client.sessionId) ?? FOREST_PORTAL_POSITION;
     if (portal.kind === "entry") {
@@ -1677,7 +1726,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if (!this.forestDungeonRun) {
           const cohort = this.parties.cohort(client.sessionId);
           this.forestDungeonRun = { id: `forest-run-${++this.forestDungeonRunSequence}`, key: cohort.key,
-            allowed: new Set(cohort.members.filter(id => this.state.players.has(id))), entered: new Set(), ready: new Set(), phase: "lobby", scalePlayers: 1, startedAt: 0, completedAt: 0 };
+            allowed: new Set(cohort.members.filter(id => this.state.players.has(id))), entered: new Set(), ready: new Set(), claimed: new Set(), phase: "lobby", scalePlayers: 1, startedAt: 0, completedAt: 0 };
         }
         this.state.portals.delete("forest-victory");
         this.forestGate(168, false); this.forestGate(180, false);
@@ -1890,6 +1939,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.forestDungeonReopenAt = now + 45_000;
     this.state.portals.delete("forest-return"); this.state.portals.delete("forest-entry");
     this.state.portals.delete("forest-victory");
+    for (const dropId of [...this.state.lootDrops.keys()]) if (dropId.startsWith("forest-cache:")) this.state.lootDrops.delete(dropId);
     this.forestReturns.clear();
     this.forestGate(168, false); this.forestGate(180, false);
     for (const cover of FOREST_DUNGEON_COVER.filter(entry => entry.stage === 3)) this.setGuardianCover(cover, false);

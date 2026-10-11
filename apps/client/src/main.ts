@@ -88,6 +88,7 @@ import {
   type CombatStagger,
   type DefenseResolved,
   type DungeonRunUpdate,
+  type DungeonRewardClaimed,
   type DungeonBoardUpdate,
   type DungeonLobbyUpdate,
   type ItemId,
@@ -1502,23 +1503,31 @@ function fillArmourComparison(element: HTMLElement, id: ArmourId) {
 }
 function openLoot(id: string) {
   const drop = lootVisuals.get(id)?.state;
+  const rewardCache = id.startsWith("forest-cache:");
   const hand = drop && equipmentForItem(drop.itemId);
   const armour = drop && armourForItem(drop.itemId);
-  if (!drop || (!hand && !armour) || !room || !worldReady) return;
+  if (!drop || (!rewardCache && !hand && !armour) || !room || !worldReady) return;
   setInventoryOpen(false); quizPanel.hidden = true; blacksmithPanel.hidden = true; closeTavernDialogue();
   if (localDefending) requestDefense(false);
   resetMovementControls();
   inspectedDropId = id; lootPending = false; lootPanel.hidden = false;
-  document.querySelector<HTMLElement>("#loot-title")!.textContent = ITEM_DEFINITIONS[drop.itemId as ItemId].name;
-  document.querySelector<HTMLElement>("#loot-description")!.textContent = `${drop.quantity} item · ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].description : "Enemy equipment"}`;
-  if (armour) {
+  document.querySelector<HTMLElement>("#loot-title")!.textContent = rewardCache ? "Personal Rootbound Cache" : ITEM_DEFINITIONS[drop.itemId as ItemId].name;
+  document.querySelector<HTMLElement>("#loot-description")!.textContent = rewardCache
+    ? "Your secured dungeon reward: gold, supplies, minerals, and Rootbound equipment."
+    : `${drop.quantity} item · ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].description : "Enemy equipment"}`;
+  if (rewardCache) {
+    document.querySelector<HTMLElement>("#loot-new")!.innerHTML = "<strong>Cache contents</strong><p>Gold · Stone Cores · Ore · Healing Potion · Rootbound Hammer</p>";
+    document.querySelector<HTMLElement>("#loot-current")!.innerHTML = "<strong>Personal reward</strong><p>Only you can see and claim this cache.</p>";
+  } else if (armour) {
     fillArmourComparison(document.querySelector<HTMLElement>("#loot-new")!, armour);
     fillArmourComparison(document.querySelector<HTMLElement>("#loot-current")!, localArmourId);
   } else if (hand) {
     fillLootComparison(document.querySelector<HTMLElement>("#loot-new")!, hand);
     fillLootComparison(document.querySelector<HTMLElement>("#loot-current")!, localMainHandId);
   }
-  lootMessage.textContent = "Choose how to use this item. The world keeps moving.";
+  lootMessage.textContent = rewardCache ? "Claim this cache before using the victory portal." : "Choose how to use this item. The world keeps moving.";
+  lootEquip.hidden = rewardCache;
+  lootKeep.textContent = rewardCache ? "CLAIM CACHE" : "KEEP IN PACK";
   lootEquip.disabled = lootKeep.disabled = false;
   lootClose.focus();
 }
@@ -2789,8 +2798,15 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
   const material = lootMaterials[itemId];
   const sourceId = lootSourceMob(dropId);
-  const guardianDrop = sourceId === "forest-guardian" && isEquipmentItem(itemId);
-  if (isEquipmentItem(itemId)) {
+  const rewardCache = dropId.startsWith("forest-cache:");
+  const guardianDrop = rewardCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
+  if (rewardCache) {
+    addBox(root, "rootbound-cache-base", weaponWoodMaterial, [1.05, .55, .72], [0, 0, 0]);
+    addBox(root, "rootbound-cache-lid", material, [1.08, .22, .76], [0, .38, 0]);
+    addBox(root, "rootbound-cache-band", coreGlowMaterial, [.14, .78, .8], [0, .12, 0]);
+    addBox(root, "rootbound-cache-lock", coreGlowMaterial, [.26, .26, .08], [0, .12, -.4]);
+    for (const side of [-1, 1]) addBox(root, `rootbound-cache-root-${side}`, weaponWoodMaterial, [.14, .72, .14], [side * .5, .02, 0]).setLocalEulerAngles(0, 0, side * 25);
+  } else if (isEquipmentItem(itemId)) {
     addBox(root, guardianDrop ? "rootbound-equipment-cache" : "loot-bag", weaponWoodMaterial, guardianDrop ? [.7, .5, .54] : [.55, .42, .44], [0, 0, 0]);
     addBox(root, "bag-tie", material, [.25, .12, .25], [0, .27, 0]);
     addBox(root, "equipment-emblem", material, [.28, .2, .06], [0, .02, -.25]);
@@ -4001,7 +4017,7 @@ function updateTarget(): void {
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
   mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
-  if (nearbyLoot) targetLabel.textContent = "Equipment bag · press E or Loot to inspect and compare";
+  if (nearbyLoot) targetLabel.textContent = nearbyLoot.startsWith("forest-cache:") ? "Personal Rootbound Cache · press E or Loot to claim" : "Equipment bag · press E or Loot to inspect and compare";
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Expedition Board · press E to plan a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
@@ -6339,6 +6355,11 @@ async function connect(): Promise<void> {
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
     if (update.phase === "started") status.textContent = `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
     showDungeonRunResult(update);
+  });
+  room.onMessage("dungeon:reward", (reward: DungeonRewardClaimed) => {
+    updateTavernCoins(reward.totalGold);
+    showCombatFeedback(`CACHE CLAIMED · +${reward.goldGranted} GOLD`, "dodge");
+    status.textContent = reward.message;
   });
   room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
   room.onMessage("dungeon:lobby", (update: DungeonLobbyUpdate) => renderDungeonLobby(update));
