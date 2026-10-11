@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forestDungeonAtmosphere, forestDungeonNotice } from "./forest-dungeon-presentation.js";
+import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 
 describe("Forest Dungeon presentation", () => {
   it("gives every room a distinct, darker atmosphere", () => {
@@ -15,5 +15,13 @@ describe("Forest Dungeon presentation", () => {
     expect(forestDungeonNotice("Room 2 cleared · the next root gate has opened.")).toMatchObject({ kind: "gate", x: 180.5 });
     expect(forestDungeonNotice("Guardian defeated! Collect your equipment bag, then use the return portal.")).toMatchObject({ kind: "victory", x: 189.5 });
     expect(forestDungeonNotice("Something else")).toBeNull();
+  });
+
+  it("distinguishes locked portals, arrivals, and real completions", () => {
+    expect(portalNoticeFeedback("The Ember Vault requires two Silver Depths attunements.")).toEqual({ title: "PORTAL LOCKED", cue: "hit" });
+    expect(portalNoticeFeedback("The Ember Vault is occupied by another expedition.")).toEqual({ title: "PORTAL LOCKED", cue: "hit" });
+    expect(portalNoticeFeedback("Ember Vault entered · cross the heat lanes and defeat the Forge Colossus.")).toEqual({ title: "EMBER VAULT", cue: "dodge" });
+    expect(portalNoticeFeedback("Ember Vault cleared · returned to the frontier.")).toEqual({ title: "VAULT CLEARED", cue: "dodge" });
+    expect(portalNoticeFeedback("An unrelated status message")).toBeNull();
   });
 });

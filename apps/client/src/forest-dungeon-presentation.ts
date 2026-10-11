@@ -32,3 +32,17 @@ export function forestDungeonNotice(message: string): ForestDungeonNotice {
   if (/Guardian defeated/i.test(message)) return { kind: "victory", x: 189.5, z: 165.5, title: "GUARDIAN DEFEATED" };
   return null;
 }
+
+export interface PortalNoticeFeedback { title: string; cue: "hit" | "dodge" }
+
+export function portalNoticeFeedback(message: string): PortalNoticeFeedback | null {
+  if (/Ember Vault entered/i.test(message)) return { title: "EMBER VAULT", cue: "dodge" };
+  if (/Ember Vault cleared/i.test(message)) return { title: "VAULT CLEARED", cue: "dodge" };
+  if (/Silver Depths entered/i.test(message)) return { title: "SILVER DEPTHS", cue: "dodge" };
+  if (/Expedition complete/i.test(message)) return { title: "EXPEDITION COMPLETE", cue: "dodge" };
+  if (/portal opened/i.test(message)) return { title: "EXPEDITION PORTAL OPEN", cue: "dodge" };
+  if (/requires|unlock|complete the first|before extracting|still active|occupied|recovering|late entry|claim your/i.test(message)) {
+    return { title: "PORTAL LOCKED", cue: "hit" };
+  }
+  return null;
+}

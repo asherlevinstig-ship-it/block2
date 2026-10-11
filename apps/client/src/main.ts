@@ -3,7 +3,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { advanceBossHud, initialBossHud } from "./boss-hud.js";
-import { forestDungeonAtmosphere, forestDungeonNotice } from "./forest-dungeon-presentation.js";
+import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
@@ -6941,7 +6941,11 @@ async function connect(): Promise<void> {
   room.onMessage("portal:notice", (message: string) => {
     status.textContent = message;
     const notice = forestDungeonNotice(message);
-    if (!notice) { showCombatFeedback("DUNGEON CLEARED", "hit"); return; }
+    if (!notice) {
+      const feedback = portalNoticeFeedback(message);
+      if (feedback) showCombatFeedback(feedback.title, feedback.cue);
+      return;
+    }
     createDungeonBurst(notice.x, notice.z, notice.kind);
     combatAudio.play(notice.kind === "victory" ? "dungeonVictory" : "dungeonGate");
     showCombatFeedback(notice.title, notice.kind === "victory" ? "dodge" : "hit");
