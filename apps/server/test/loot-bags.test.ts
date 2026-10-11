@@ -80,6 +80,13 @@ describe("authoritative equipment loot bags", () => {
     expect(player.inventory.get("fang_dagger")?.quantity).toBe(1); expect(player.mainHandId).toBe("longsword");
     expect(persist).toHaveBeenCalled(); expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({ ok: true }));
   });
+  it("keeps the Miner's Lantern inspectable and auto-activates it when claimed", () => {
+    const { internal, room, drop, player, collect, client } = fixture(); drop.itemId = "miners_lantern";
+    internal.resolveLootPickups(10000); expect(room.state.lootDrops.has("bag")).toBe(true);
+    collect(false);
+    expect(player.inventory.get("miners_lantern")?.quantity).toBe(1);
+    expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({ ok: true, message: expect.stringContaining("auto-equipped") }));
+  });
   it.each(["fang_dagger", "stone_core_hammer", "acid_gland_focus"])("collects and equips %s through the normal loadout rules", id => {
     const { player, drop, collect } = fixture(); drop.itemId = id; collect(true);
     expect(player.mainHandId).toBe(id); expect(player.inventory.get(id)?.quantity).toBe(1);

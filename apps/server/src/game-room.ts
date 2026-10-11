@@ -356,6 +356,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("stone-brute", "stone_brute", STONE_BRUTE_ARENA_HOME);
     this.registerMob("shallow-cave-crawler", "moss_crawler", CAVE_SHALLOW_HOME);
     this.registerMob("deep-cave-spitter", "cave_spitter", CAVE_DEEP_HOME);
+    this.registerMob("buried-vault-crawler", "moss_crawler", { x: 54.5, y: 1, z: 10.5 });
     this.registerMob("buried-chamber-brute", "stone_brute", CAVE_HIDDEN_HOME);
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
@@ -1313,7 +1314,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
     if (mobId === "forest-guardian") return;
-    const baseDrops = mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
+    const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
+    const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
+      + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
+    const baseDrops = mobId === "buried-chamber-brute"
+      ? ownsLantern
+        ? [{ itemId: "stone_core" as const, quantity: 2 }, { itemId: "silver_ore" as const, quantity: 3 }]
+        : [{ itemId: "stone_core" as const, quantity: 1 }, { itemId: "miners_lantern" as const, quantity: 1 }]
+      : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
       : mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
       : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
       : lootForArchetype(mob.archetype as MobArchetypeId, mobId);
@@ -1418,7 +1426,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     const mainHandId = equipmentForItem(drop.itemId);
     const armourId = armourForItem(drop.itemId);
-    if (!mainHandId && !armourId) return reply(false, "Materials are collected automatically.");
+    const utilityId = drop.itemId === "miners_lantern" ? drop.itemId : null;
+    if (!mainHandId && !armourId && !utilityId) return reply(false, "Materials are collected automatically.");
     if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside the bag with a clear path to it.");
     if (parsed.data.equip && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
     const itemId = drop.itemId as ItemId;
@@ -1434,7 +1443,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     void this.persistPlayer(client.sessionId, player);
     this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
       quantity: drop.quantity, total: item.quantity } satisfies LootPickedUp);
-    reply(true, `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
+    reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
+      : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,

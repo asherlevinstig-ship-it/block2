@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-rootguard-rewards-v91";
+export const WORLD_ROOM = "world-buried-vault-v92";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -60,7 +60,8 @@ export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
   return id === "leather_armour" || id === "iron_armour" || id === "rootguard_armour" ? id : null;
 }
-export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null; }
+export function utilityForItem(id: string): "miners_lantern" | null { return id === "miners_lantern" ? id : null; }
+export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null || utilityForItem(id) !== null; }
 export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
@@ -153,6 +154,7 @@ export const ITEM_DEFINITIONS = {
   silver_ore: { id: "silver_ore", name: "Silver Ore", description: "Wilderness mineral · sell to the blacksmith for 8 gold each" },
   timber: { id: "timber", name: "Greenwood Timber", description: "Fresh timber harvested from Greenwood oak trees" },
   reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", description: "Forged mining tool that extracts two minerals per ore block" },
+  miners_lantern: { id: "miners_lantern", name: "Miner's Lantern", description: "Vault relic · auto-equipped · brighter, wider underground light" },
   moss_fibre: { id: "moss_fibre", name: "Moss Fibre", description: "Soft living fibre gathered from Moss Crawlers" },
   crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang shed by a defeated crawler" },
   stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core from a Stone Brute" },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armourForItem, isEquipmentItem, equipmentForItem } from "@blockcraft/protocol";
+import { armourForItem, isEquipmentItem, equipmentForItem, utilityForItem } from "@blockcraft/protocol";
 import { armourComparison } from "./loot-comparison.js";
 describe("armour loot comparisons", () => {
   it("recognizes armour as inspectable equipment, not a weapon", () => {
@@ -7,6 +7,8 @@ describe("armour loot comparisons", () => {
       expect(armourForItem(id)).toBe(id); expect(isEquipmentItem(id)).toBe(true); expect(equipmentForItem(id)).toBeNull();
     }
     expect(isEquipmentItem("fang_dagger")).toBe(true);
+    expect(utilityForItem("miners_lantern")).toBe("miners_lantern");
+    expect(isEquipmentItem("miners_lantern")).toBe(true);
     for (const id of ["none", "iron_ore", "unknown", "toString"]) expect(isEquipmentItem(id)).toBe(false);
   });
   it("compares protection and movement against the armour slot, including no armour", () => {

@@ -8,7 +8,7 @@ import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
-import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
+import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createInventoryPortrait } from "./inventory-preview.js";
 import { rangedStyle } from "./ranged-style.js";
@@ -1518,7 +1518,8 @@ function openLoot(id: string) {
   const rewardCache = id.startsWith("forest-cache:");
   const hand = drop && equipmentForItem(drop.itemId);
   const armour = drop && armourForItem(drop.itemId);
-  if (!drop || (!rewardCache && !hand && !armour) || !room || !worldReady) return;
+  const utility = drop && utilityForItem(drop.itemId);
+  if (!drop || (!rewardCache && !hand && !armour && !utility) || !room || !worldReady) return;
   setInventoryOpen(false); quizPanel.hidden = true; blacksmithPanel.hidden = true; closeTavernDialogue();
   if (localDefending) requestDefense(false);
   resetMovementControls();
@@ -1537,10 +1538,15 @@ function openLoot(id: string) {
   } else if (hand) {
     fillLootComparison(document.querySelector<HTMLElement>("#loot-new")!, hand);
     fillLootComparison(document.querySelector<HTMLElement>("#loot-current")!, localMainHandId);
+  } else if (utility) {
+    document.querySelector<HTMLElement>("#loot-new")!.innerHTML = `<strong>Miner's Lantern</strong><p>18-block cave light · brighter warm glow · auto-equipped</p>`;
+    document.querySelector<HTMLElement>("#loot-current")!.innerHTML = `<strong>${(inventoryCounts.get("miners_lantern") ?? 0) > 0 ? "Already owned" : "Explorer's lamp"}</strong><p>12-block cave light · standard intensity</p>`;
   }
-  lootMessage.textContent = rewardCache ? "Claim this cache before using the victory portal." : "Choose how to use this item. The world keeps moving.";
-  lootEquip.hidden = rewardCache;
-  lootKeep.textContent = rewardCache ? "CLAIM CACHE" : "KEEP IN PACK";
+  lootMessage.textContent = rewardCache ? "Claim this cache before using the victory portal."
+    : utility ? "The Stone Warden's personal cache. The lantern auto-equips when claimed."
+    : "Choose how to use this item. The world keeps moving.";
+  lootEquip.hidden = rewardCache || Boolean(utility);
+  lootKeep.textContent = rewardCache ? "CLAIM CACHE" : utility ? "CLAIM & AUTO-EQUIP" : "KEEP IN PACK";
   lootEquip.disabled = lootKeep.disabled = false;
   lootClose.focus();
 }
@@ -2808,6 +2814,7 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   silver_ore: coloredMaterial(new pc.Color(0.7, 0.88, 0.98)),
   timber: coloredMaterial(new pc.Color(0.48, 0.3, 0.14)),
   reinforced_pickaxe: coloredMaterial(new pc.Color(0.76, 0.8, 0.78)),
+  miners_lantern: coloredMaterial(new pc.Color(1, 0.68, 0.2)),
   moss_fibre: coloredMaterial(new pc.Color(0.28, 0.68, 0.2)),
   crawler_fang: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
   stone_core: coloredMaterial(new pc.Color(0.38, 0.52, 0.62)),
@@ -2830,7 +2837,8 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const material = lootMaterials[itemId];
   const sourceId = lootSourceMob(dropId);
   const rewardCache = dropId.startsWith("forest-cache:");
-  const guardianDrop = rewardCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
+  const vaultCache = sourceId === "buried-chamber-brute" && itemId === "miners_lantern";
+  const guardianDrop = rewardCache || vaultCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
   if (rewardCache) {
     addBox(root, "rootbound-cache-base", weaponWoodMaterial, [1.05, .55, .72], [0, 0, 0]);
     addBox(root, "rootbound-cache-lid", material, [1.08, .22, .76], [0, .38, 0]);
@@ -2848,6 +2856,11 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
     if (armourForItem(itemId)) {
       addBox(root, "armour-left-shoulder", material, [.12, .1, .06], [-.16, .12, -.25]);
       addBox(root, "armour-right-shoulder", material, [.12, .1, .06], [.16, .12, -.25]);
+    }
+    if (vaultCache) {
+      addBox(root, "lantern-frame", lanternMetal, [.36, .5, .36], [0, .04, -.3]);
+      addBox(root, "lantern-glow", lanternGlow, [.2, .28, .2], [0, .04, -.34]);
+      addBox(root, "lantern-handle", lanternMetal, [.4, .07, .08], [0, .38, -.3]);
     }
   } else if (itemId === "fang_dagger") {
     addBox(root, "dropped-dagger-grip", weaponWoodMaterial, [0.1, 0.26, 0.1], [0, 0.17, 0]);
@@ -4716,7 +4729,11 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
   if (light.light) light.light.intensity = (1.45 + (0.45 - 1.45) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend);
   if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend);
-  if (caveLight.light) caveLight.light.intensity = 1.7 * undergroundLightingBlend;
+  if (caveLight.light) {
+    const lanternOwned = (inventoryCounts.get("miners_lantern") ?? 0) > 0;
+    caveLight.light.intensity = (lanternOwned ? 2.45 : 1.7) * undergroundLightingBlend;
+    caveLight.light.range = lanternOwned ? 18 : 12;
+  }
   const surfaceAmbient = {
     r: 0.43 + (0.3 - 0.43) * greenwoodLightingBlend,
     g: 0.48 + (0.43 - 0.48) * greenwoodLightingBlend,

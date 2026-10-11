@@ -905,6 +905,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article[data-item="silver_ore"] i { background: linear-gradient(135deg, #f1fbff, #68a7c6); }
 .inventory-grid article[data-item="timber"] i { background: repeating-linear-gradient(90deg, #5b351c 0 5px, #9b6331 6px 12px); }
 .inventory-grid article[data-item="reinforced_pickaxe"] i { background: linear-gradient(135deg, #d6ddd8 0 38%, #98632f 40% 62%, #54351f 64%); }
+.inventory-grid article[data-item="miners_lantern"] i { background: radial-gradient(circle, #fff2a8 0 16%, #f4a52e 18% 42%, #4d3721 45% 68%, #17120d 70%); box-shadow: 0 0 14px #ffb43f99; }
 .inventory-grid article[data-item="crawler_fang"] i { background: #e6d9aa; }
 .inventory-grid article[data-item="stone_core"] i { background: #7791a0; }
 .inventory-grid article[data-item="acid_gland"] i { background: #a3dd31; }

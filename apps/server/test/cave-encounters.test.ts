@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, playerCollides } from "@blockcraft/voxel-world";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "../src/cave-encounters.js";
 import { WorldRoom } from "../src/game-room.js";
-import { WorldState, PlayerState } from "../src/schema.js";
+import { WorldState, PlayerState, InventoryItemState } from "../src/schema.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 function fixture() {
@@ -12,6 +12,7 @@ function fixture() {
   const internal = room as any;
   internal.registerMob("shallow-cave-crawler", "moss_crawler", CAVE_SHALLOW_HOME);
   internal.registerMob("deep-cave-spitter", "cave_spitter", CAVE_DEEP_HOME);
+  internal.registerMob("buried-vault-crawler", "moss_crawler", { x: 54.5, y: 1, z: 10.5 });
   internal.registerMob("buried-chamber-brute", "stone_brute", CAVE_HIDDEN_HOME);
   return { room, internal };
 }
@@ -22,6 +23,7 @@ describe("chamber-specific encounters", () => {
     expect(caveEncounterAllows("deep-cave-spitter", { ...CAVE_DEEP_HOME, y: 8 })).toBe(false);
     expect(caveEncounterAllows("deep-cave-spitter", CAVE_HIDDEN_HOME)).toBe(false);
     expect(caveEncounterAllows("buried-chamber-brute", CAVE_DEEP_HOME)).toBe(false);
+    expect(caveEncounterAllows("buried-vault-crawler", CAVE_HIDDEN_HOME)).toBe(true);
     expect(caveEncounterAllows("ordinary-surface-mob", { x: 100, y: 8, z: 100 })).toBe(true);
   });
   it("patrols real cave terrain without entering walls or leaving its chamber", () => {
@@ -74,7 +76,7 @@ describe("chamber-specific encounters", () => {
       expect(caveEncounterAllows("deep-cave-spitter", room.state.mobs.get("deep-cave-spitter")!)).toBe(true);
     }
   });
-  it("drops the guardian's guaranteed core and hammer once on defeat", () => {
+  it("drops the Stone Warden's guaranteed core and personal lantern once on defeat", () => {
     // Keep optional equipment rolls out of this guaranteed-reward assertion.
     vi.spyOn(Math, "random").mockReturnValue(.99);
     const { room, internal } = fixture();
@@ -83,8 +85,17 @@ describe("chamber-specific encounters", () => {
     room.state.players.set("visitor", visitor);
     internal.combatContributions.record("buried-chamber-brute", "visitor", mob.maxHealth, 10_000);
     internal.defeatMob("buried-chamber-brute", mob, "visitor", 10_000);
-    expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity])).toEqual([["stone_core", 1], ["stone_core_hammer", 1]]);
+    expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity])).toEqual([["stone_core", 1], ["miners_lantern", 1]]);
     internal.simulatePlayers(0.1);
     expect(room.state.lootDrops.size).toBe(2);
+  });
+  it("converts a repeat Stone Warden lantern into useful vault supplies", () => {
+    vi.spyOn(Math, "random").mockReturnValue(.99);
+    const { room, internal } = fixture();
+    const mob = room.state.mobs.get("buried-chamber-brute")!;
+    const visitor = new PlayerState(); const lantern = new InventoryItemState(); lantern.quantity = 1;
+    visitor.inventory.set("miners_lantern", lantern); room.state.players.set("visitor", visitor);
+    internal.spawnLootDrops("buried-chamber-brute", mob, 10_000, "visitor");
+    expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity])).toEqual([["stone_core", 2], ["silver_ore", 3]]);
   });
 });
