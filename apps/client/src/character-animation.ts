@@ -73,7 +73,7 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   }
 
   const impact = combatTiming?.impactMs ?? 95;
-  if (mainHandId === "stone_core_hammer" || mainHandId === "rootbound_hammer") {
+  if (mainHandId === "stone_core_hammer" || mainHandId === "rootbound_hammer" && comboStep === 3) {
     const liftEnd = impact - 90;
     const settleStart = impact + 90;
     const smooth = (t: number) => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };
@@ -115,11 +115,11 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   };
   if (comboStep === 2) return {
     active: true,
-    torsoYaw: 18 * strength - 22 * followThrough,
-    leftArmPitch: 0,
-    leftArmRoll: 0,
-    rightArmPitch: -78 * strength,
-    rightArmRoll: -58 * strength + 28 * followThrough,
+    torsoYaw: (mainHandId === "rootbound_hammer" ? 26 : 18) * strength - 22 * followThrough,
+    leftArmPitch: mainHandId === "rootbound_hammer" ? -42 * strength : 0,
+    leftArmRoll: mainHandId === "rootbound_hammer" ? 14 * strength : 0,
+    rightArmPitch: (mainHandId === "rootbound_hammer" ? -96 : -78) * strength,
+    rightArmRoll: (mainHandId === "rootbound_hammer" ? -72 : -58) * strength + 28 * followThrough,
   };
   if (comboStep === 3) return {
     active: true,
@@ -131,11 +131,11 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   };
   return {
     active: true,
-    torsoYaw: -12 * strength + 24 * followThrough,
-    leftArmPitch: 0,
-    leftArmRoll: 0,
-    rightArmPitch: -116 * strength,
-    rightArmRoll: -9 * strength + 30 * followThrough,
+    torsoYaw: (mainHandId === "rootbound_hammer" ? -20 : -12) * strength + 24 * followThrough,
+    leftArmPitch: mainHandId === "rootbound_hammer" ? -34 * strength : 0,
+    leftArmRoll: mainHandId === "rootbound_hammer" ? -12 * strength : 0,
+    rightArmPitch: (mainHandId === "rootbound_hammer" ? -128 : -116) * strength,
+    rightArmRoll: (mainHandId === "rootbound_hammer" ? -20 : -9) * strength + 30 * followThrough,
   };
 }
 

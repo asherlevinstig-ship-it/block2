@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-dungeon-cache-v89";
+export const WORLD_ROOM = "world-rootbound-combo-v90";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -151,7 +151,7 @@ export const ITEM_DEFINITIONS = {
   acid_gland: { id: "acid_gland", name: "Acid Gland", description: "A volatile gland taken from a Cave Spitter" },
   fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", description: "A fast three-hit melee weapon" },
   stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", description: "Slow overhead smash · heavy knockback · can stagger enemy windups" },
-  rootbound_hammer: { id: "rootbound_hammer", name: "Rootbound Hammer", description: "Guardian relic · powerful overhead smash · line Powers bind surviving enemies" },
+  rootbound_hammer: { id: "rootbound_hammer", name: "Rootbound Hammer", description: "Guardian relic · heavy three-hit combo · finisher releases a binding root shockwave" },
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", description: "A ranged focus that fires corrosive bolts" },
   venom_focus: { id: "venom_focus", name: "Venom Focus", description: "Matriarch focus: corrosive bolts and a three-shot Venom Fan special" },
 } as const;
@@ -305,12 +305,16 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     attacks: [{ step: 1, durationMs: 820, impactMs: 430, damage: 3, knockback: 1.35 }],
   },
   rootbound_hammer: {
-    combo: false,
-    comboWindowMs: 0,
+    combo: true,
+    comboWindowMs: 620,
     range: 2.25,
     minimumFacingDot: 0.24,
     projectileTravelMs: 0,
-    attacks: [{ step: 1, durationMs: 760, impactMs: 390, damage: 4, knockback: 1.5 }],
+    attacks: [
+      { step: 1, durationMs: 520, impactMs: 250, damage: 2, knockback: 0.42 },
+      { step: 2, durationMs: 570, impactMs: 285, damage: 2, knockback: 0.62 },
+      { step: 3, durationMs: 820, impactMs: 430, damage: 4, knockback: 1.25 },
+    ],
   },
   acid_gland_focus: {
     combo: false,
@@ -655,7 +659,13 @@ export interface CombatHit {
   knockback: number;
   momentumStacks: number;
   traitBonusDamage?: number;
+  /** Rootbound finisher origin; clients render one shockwave from this hit. */
+  rootShockwave?: boolean;
+  /** Secondary enemy struck by the Rootbound finisher's area shockwave. */
+  secondary?: boolean;
 }
+
+export const ROOTBOUND_FINISHER = { radius: 2.35, damage: 1, rootMs: 650 } as const;
 
 export interface CombatMiss {
   attackerId: string;

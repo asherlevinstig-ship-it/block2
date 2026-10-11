@@ -53,11 +53,13 @@ export interface MeleeStrikeProfile {
 export function playerMeleeStrike(mainHandId: MainHandId, step: number): MeleeStrikeProfile | null {
   if (mainHandId !== "longsword" && mainHandId !== "forged_sword" && mainHandId !== "fang_dagger" && mainHandId !== "stone_core_hammer" && mainHandId !== "rootbound_hammer") return null;
   const dagger = mainHandId === "fang_dagger";
-  const hammer = mainHandId === "stone_core_hammer" || mainHandId === "rootbound_hammer";
-  const overhead = step === 3 || hammer;
+  const stoneHammer = mainHandId === "stone_core_hammer";
+  const rootboundHammer = mainHandId === "rootbound_hammer";
+  const hammer = stoneHammer || rootboundHammer;
+  const overhead = step === 3 || stoneHammer;
   const reverse = step === 2;
   return {
-    reach: dagger ? 1.25 : hammer ? 1.72 : 1.7,
+    reach: dagger ? 1.25 : rootboundHammer ? 1.85 : hammer ? 1.72 : 1.7,
     radius: hammer ? 0.24 : dagger ? 0.08 : 0.09,
     startAngle: overhead ? 5 : reverse ? -58 : 58,
     endAngle: overhead ? -5 : reverse ? 58 : -58,

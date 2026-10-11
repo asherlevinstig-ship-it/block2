@@ -44,5 +44,9 @@ describe("combat collision and stagger rules", () => {
     expect(basicStaggerDuration("longsword", 3, "stone_brute", "windup")).toBe(0);
     expect(basicStaggerDuration("stone_core_hammer", 1, "stone_brute", "windup")).toBe(450);
     expect(basicStaggerDuration("stone_core_hammer", 1, "moss_crawler", "recover")).toBe(0);
+    expect(basicStaggerDuration("rootbound_hammer", 1, "moss_crawler", "windup")).toBe(0);
+    expect(basicStaggerDuration("rootbound_hammer", 3, "moss_crawler", "windup")).toBe(1050);
+    expect(basicStaggerDuration("rootbound_hammer", 3, "stone_brute", "windup")).toBe(750);
+    expect(basicStaggerDuration("rootbound_hammer", 3, "cave_spitter", "windup", true)).toBe(750);
   });
 });

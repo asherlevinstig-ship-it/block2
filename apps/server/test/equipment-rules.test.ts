@@ -23,8 +23,9 @@ describe("equipment ownership", () => {
     expect(WEAPON_ATTACK_DEFINITIONS.fang_dagger.attacks[0]?.durationMs).toBeLessThan(300);
     expect(WEAPON_ATTACK_DEFINITIONS.stone_core_hammer.attacks[0]?.damage).toBe(3);
     expect(WEAPON_ATTACK_DEFINITIONS.stone_core_hammer.attacks[0]?.knockback).toBeGreaterThan(1);
-    expect(WEAPON_ATTACK_DEFINITIONS.rootbound_hammer.attacks[0]?.damage).toBe(4);
-    expect(WEAPON_ATTACK_DEFINITIONS.rootbound_hammer.attacks[0]?.durationMs).toBeLessThan(WEAPON_ATTACK_DEFINITIONS.stone_core_hammer.attacks[0]!.durationMs);
+    expect(WEAPON_ATTACK_DEFINITIONS.rootbound_hammer.combo).toBe(true);
+    expect(WEAPON_ATTACK_DEFINITIONS.rootbound_hammer.attacks.map(attack => attack.damage)).toEqual([2, 2, 4]);
+    expect(WEAPON_ATTACK_DEFINITIONS.rootbound_hammer.attacks[2]?.durationMs).toBe(WEAPON_ATTACK_DEFINITIONS.stone_core_hammer.attacks[0]!.durationMs);
     expect(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.range).toBeGreaterThan(7);
     expect(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0]?.damage).toBe(2);
   });

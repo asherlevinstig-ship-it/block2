@@ -99,6 +99,19 @@ describe("voxel character animation", () => {
     expect(primaryActionPose(820, 1, "stone_core_hammer")).toEqual(primaryActionPose(null));
   });
 
+  it("gives the Rootbound Hammer two weighty sweeps and an overhead finisher", () => {
+    const first = primaryActionPose(250, 1, "rootbound_hammer");
+    const second = primaryActionPose(285, 2, "rootbound_hammer");
+    const finisher = primaryActionPose(430, 3, "rootbound_hammer");
+    expect(first.torsoYaw).toBeLessThan(-15);
+    expect(first.leftArmPitch).toBeLessThan(-25);
+    expect(second.torsoYaw).toBeGreaterThan(20);
+    expect(second.rightArmRoll).toBeLessThan(-60);
+    expect(finisher.leftArmPitch).toBeGreaterThan(20);
+    expect(finisher.rightArmPitch).toBeGreaterThan(25);
+    expect(primaryActionPose(820, 3, "rootbound_hammer")).toEqual(primaryActionPose(null));
+  });
+
   it("raises the weapon before snapping into a committed Seismic Cleave slam", () => {
     const windup = seismicPowerPose(225);
     const impact = seismicPowerPose(500);

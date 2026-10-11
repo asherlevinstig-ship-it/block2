@@ -70,6 +70,7 @@ import {
   HEALING_POTION,
   type PotionUpdate,
   POWER_DEFINITIONS,
+  ROOTBOUND_FINISHER,
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
   WEAPON_ATTACK_DEFINITIONS,
@@ -209,7 +210,7 @@ let latestDungeonBoard: DungeonBoardUpdate | null = null;
 const expeditionPanel = document.createElement("section");
 expeditionPanel.id = "expedition-board-panel";
 expeditionPanel.hidden = true;
-expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST EXPEDITION</h2><p class="expedition-message"></p><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>4-damage smash · line Powers bind enemies</span></div><button class="expedition-launch" type="button">OPEN EXPEDITION PORTAL</button>';
+expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST EXPEDITION</h2><p class="expedition-message"></p><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>Heavy 3-hit combo · finisher roots groups</span></div><button class="expedition-launch" type="button">OPEN EXPEDITION PORTAL</button>';
 document.body.append(expeditionPanel);
 const formatDungeonTime = (milliseconds: number) => milliseconds > 0
   ? `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, "0")}` : "—";
@@ -1107,6 +1108,11 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(rootboundHammer, "rootbound-heart", rootGlow, [0.2, 0.24, 0.42], [0, -0.46, 0]);
   for (const x of [-.28, .28]) addBox(rootboundHammer, "rootbound-root", rootWood, [.08, .4, .44], [x, -.46, 0]);
   for (const x of [-.18, .18]) addBox(rootboundHammer, "rootbound-rune", rootGlow, [.045, .27, .45], [x, -.46, 0]);
+  for (const z of [-.24, .24]) {
+    const thorn = addBox(rootboundHammer, "rootbound-thorn", rootWood, [.12, .18, .12], [0, -.49, z]);
+    thorn.setLocalEulerAngles(z < 0 ? -28 : 28, 0, 45);
+  }
+  addBox(rootboundHammer, "rootbound-crown", rootGlow, [.38, .07, .12], [0, -.25, 0]);
   rightElbow.addChild(rootboundHammer);
 
   const acidGlandFocus = new pc.Entity("main-hand-acid-gland-focus");
@@ -2550,6 +2556,23 @@ function createHammerHitImpact(mob: MobVisual): void {
   app.root.addChild(root);
   markPayoffVisuals.push({ root, material, startedAt: performance.now(), durationMs: 380 });
   combatAudio.play("hammerImpact", enemyCuePan(position.x, localPlayer.getPosition().x));
+}
+
+function createRootboundShockwave(mob: MobVisual): void {
+  const root = new pc.Entity("rootbound-finisher-wave");
+  const material = powerMaterial(new pc.Color(0.28, 0.92, 0.24), 0.92);
+  for (let index = 0; index < 16; index += 1) {
+    const angle = index / 16 * Math.PI * 2;
+    const rootSpike = addBox(root, "root-shockwave-spike", material, [0.13, 0.12 + index % 3 * 0.06, 0.42],
+      [Math.sin(angle) * ROOTBOUND_FINISHER.radius / 1.8, 0.08, Math.cos(angle) * ROOTBOUND_FINISHER.radius / 1.8]);
+    rootSpike.setLocalEulerAngles(index % 2 ? -12 : 12, angle * 180 / Math.PI, 0);
+  }
+  const position = mob.entity.getPosition();
+  root.setPosition(position.x, position.y + 0.04, position.z);
+  app.root.addChild(root);
+  markPayoffVisuals.push({ root, material, startedAt: performance.now(), durationMs: 560 });
+  cameraShakeStrength = Math.max(cameraShakeStrength, 0.18);
+  cameraShakeUntil = performance.now() + 260;
 }
 
 function createBruteSlamImpact(mob: MobVisual): void {
@@ -6540,7 +6563,12 @@ async function connect(): Promise<void> {
     }
     if ((message.mainHandId === "stone_core_hammer" || message.mainHandId === "rootbound_hammer") && message.damage > 0 && mob
       && localPlayer.getPosition().distance(mob.entity.getPosition()) <= 9) createHammerHitImpact(mob);
+    if (message.rootShockwave && mob) createRootboundShockwave(mob);
     if (message.defeated) mob?.marks.clear();
+    if (message.secondary) {
+      logMovementEvent(`ROOT WAVE ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
+      return;
+    }
     const name = mob?.state.name ?? "Mob";
     const respawnSeconds = mob?.state.archetype === "stone_brute" ? 8.5 : 5;
     status.textContent = message.defeated

@@ -23,6 +23,7 @@ interface Internals {
   simulatePlayers(dt: number): void;
   handleMove(client: { sessionId: string }, payload: unknown): void;
   staggerMob(id: string, mob: MobState, now: number, duration: number, force?: boolean): boolean;
+  applyRootboundShockwave(sessionId: string, primaryMobId: string, origin: MobState, now: number): void;
 }
 const flat: WorldBlockReader = (_x, y) => y <= 0 ? Block.Stone : Block.Air;
 function fixture(read = flat) {
@@ -312,6 +313,18 @@ describe("authoritative combat impacts", () => {
     const { mob, release } = fixture(); mob.x = 102; mob.combatState = "windup"; mob.stateUntil = 11_000;
     release("longsword", 1); expect(mob.health).toBeLessThan(30); expect(mob.combatState).toBe("windup");
     release("longsword", 3); expect(mob.combatState).toBe("stagger");
+  });
+  it("roots and damages nearby enemies once when the Rootbound finisher lands", () => {
+    const { room, mob, internal, events } = fixture();
+    mob.x = 102; mob.combatState = "windup";
+    const near = new MobState(); near.x = 103.5; near.y = 1; near.z = 100.5; near.health = 10; near.maxHealth = 10;
+    const far = new MobState(); far.x = 106; far.y = 1; far.z = 100.5; far.health = 10; far.maxHealth = 10;
+    room.state.mobs.set("near", near); room.state.mobs.set("far", far);
+    internal.applyRootboundShockwave("player", "mob", mob, 10_000);
+    expect(near.health).toBe(9);
+    expect(near.combatState).toBe("stagger");
+    expect(far.health).toBe(10);
+    expect(events.filter(event => event.type === "combat:hit" && event.payload.secondary)).toHaveLength(1);
   });
   it("prevents repeated stagger extension, but preserves a deliberate perfect parry", () => {
     const { mob, internal } = fixture();

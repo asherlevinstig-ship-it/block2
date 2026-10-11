@@ -74,9 +74,10 @@ export function isInsideCommittedArc(origin: Position, target: Position, yaw: nu
   return (Math.sin(radians) * dx + Math.cos(radians) * dz) / length >= minimumDot;
 }
 
-export function basicStaggerDuration(mainHandId: MainHandId, step: number, archetype: string, state: string): number {
+export function basicStaggerDuration(mainHandId: MainHandId, step: number, archetype: string, state: string, isChampion = false): number {
   if (state !== "windup") return 0;
-  if (mainHandId === "stone_core_hammer" || mainHandId === "rootbound_hammer") return archetype === "stone_brute" ? 450 : 850;
+  if (mainHandId === "rootbound_hammer") return step === 3 ? (archetype === "stone_brute" || isChampion ? 750 : 1050) : 0;
+  if (mainHandId === "stone_core_hammer") return archetype === "stone_brute" ? 450 : 850;
   if ((mainHandId === "longsword" || mainHandId === "forged_sword" || mainHandId === "fang_dagger") && step === 3 && archetype !== "stone_brute") return 650;
   return 0;
 }

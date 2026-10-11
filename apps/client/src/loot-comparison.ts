@@ -15,7 +15,7 @@ export function weaponComparison(id: MainHandId, ironSwordOwned = false) {
     speed: `${weapon.attacks[0].durationMs} ms`,
     style: MAIN_HAND_DEFINITIONS[id].attackName,
     benefit: id === "fang_dagger" ? "Faster attacks, shorter reach"
-      : id === "rootbound_hammer" ? "4 damage · line Powers briefly bind enemies"
+      : id === "rootbound_hammer" ? "Heavy 2 / 2 / 4 combo · finisher roots nearby enemies"
       : id === "stone_core_hammer" ? "Heavy knockback · can stagger windups"
         : id === "venom_focus" ? "F: three-shot Venom Fan · 8s cooldown" : id === "acid_gland_focus" ? "Ranged corrosive bolts" : "Your current weapon",
   };

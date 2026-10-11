@@ -53,6 +53,7 @@ import {
   MineBlockRequestSchema,
   MoveRequestSchema,
   POWER_DEFINITIONS,
+  ROOTBOUND_FINISHER,
   PlayerProfileTokenSchema,
   WEAPON_ATTACK_DEFINITIONS,
   PowerCancelRequestSchema,
@@ -3255,11 +3256,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.alertHitMob(mobId, sessionId, now, source);
       mob.hitSequence += 1;
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
-      const staggerDuration = basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState);
+      const staggerDuration = basicStaggerDuration(pending.mainHandId, pending.step, mob.archetype, mob.combatState, mob.isChampion);
       if (this.staggerMob(mobId, mob, now, staggerDuration)) {
         const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };
         this.broadcast("combat:stagger", stagger);
       }
+      const rootShockwave = pending.mainHandId === "rootbound_hammer" && pending.step === 3;
+      if (rootShockwave) this.applyRootboundShockwave(sessionId, mobId, mob, now);
       const deltaX = mob.x - (source?.x ?? player.x);
       const deltaZ = mob.z - (source?.z ?? player.z);
       const distance = Math.hypot(deltaX, deltaZ);
@@ -3282,8 +3285,40 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         knockback: timing.knockback,
         momentumStacks: player.momentumStacks,
         traitBonusDamage,
+        rootShockwave,
       };
       this.broadcast("combat:hit", hit);
       if (mob.alive) this.progressSpecialMark(sessionId, mobId, now);
+  }
+
+  private applyRootboundShockwave(sessionId: string, primaryMobId: string, origin: MobState, now: number): void {
+    const player = this.state.players.get(sessionId);
+    if (!player) return;
+    for (const [mobId, mob] of this.state.mobs) {
+      if (mobId === primaryMobId || !mob.alive || mob.health <= 0 || Math.abs(mob.y - origin.y) > 2.25) continue;
+      if (Math.hypot(mob.x - origin.x, mob.z - origin.z) > ROOTBOUND_FINISHER.radius) continue;
+      if (!hasCombatLineOfSight(origin, mob, this.readWorldBlock)) continue;
+      const damage = damageAfterArmor(ROOTBOUND_FINISHER.damage, mob.armor);
+      this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
+      mob.health = Math.max(0, mob.health - damage);
+      this.alertHitMob(mobId, sessionId, now, { x: origin.x, z: origin.z });
+      mob.hitSequence += 1;
+      if (this.staggerMob(mobId, mob, now, ROOTBOUND_FINISHER.rootMs, true)) {
+        this.broadcast("combat:stagger", { attackerId: sessionId, mobId, durationMs: ROOTBOUND_FINISHER.rootMs } satisfies CombatStagger);
+      }
+      if (mob.health === 0) this.defeatMob(mobId, mob, sessionId, now);
+      this.broadcast("combat:hit", {
+        attackerId: sessionId,
+        mainHandId: "rootbound_hammer",
+        mobId,
+        damage,
+        health: mob.health,
+        defeated: !mob.alive,
+        comboStep: 3,
+        knockback: 0,
+        momentumStacks: player.momentumStacks,
+        secondary: true,
+      } satisfies CombatHit);
+    }
   }
 }
