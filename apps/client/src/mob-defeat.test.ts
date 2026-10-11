@@ -17,6 +17,13 @@ describe("enemy defeat presentation", () => {
     expect(mobDefeatPose(kind, defeatDuration(kind)).visible).toBe(false);
     expect(mobDefeatPose(kind, 0).height).toBe(1);
   });
+  it("gives the Root Guardian a longer, heavier unique collapse", () => {
+    expect(defeatDuration("root_guardian")).toBeGreaterThan(defeatDuration("stone_brute"));
+    const guardian = mobDefeatPose("root_guardian", 1200);
+    const brute = mobDefeatPose("stone_brute", 800);
+    expect(guardian.pitch).toBeGreaterThan(brute.pitch);
+    expect(guardian.width).toBeGreaterThan(brute.width);
+  });
   it("keeps pack IDs intact and reveals a steady, non-pulsing marker", () => {
     expect(lootSourceMob("wilds-east-pack:0:10000:2")).toBe("wilds-east-pack:0");
     expect(lootSourceMob("frontier-brute:10000:1")).toBe("frontier-brute");

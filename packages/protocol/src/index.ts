@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-forest-dungeon-v83";
+export const WORLD_ROOM = "world-root-guardian-v84";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -651,6 +651,7 @@ export interface MobProjectileReleased {
 export interface MobHazardPlaced {
   hazardId: string;
   mobId: string;
+  kind?: "acid" | "root";
   x: number;
   y: number;
   z: number;

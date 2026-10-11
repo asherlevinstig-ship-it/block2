@@ -119,6 +119,17 @@ describe("forest dungeon portal", () => {
     expect(guardian.enraged).toBe(true); expect(guardian.attackPattern).toBe("charge");
     expect(guardian.combatState).toBe("windup");
   });
+  it("creates cardinal root hazards with diagonal safe gaps and restores breakable Guardian cover", () => {
+    const { room, internal } = fixture();
+    const mob = { attackStrikeX: 187.5, attackStrikeY: 8, attackStrikeZ: 165.5, actionSequence: 3 };
+    internal.placeGuardianRootLanes(mob, 10000);
+    expect(internal.mobHazards.size).toBe(12);
+    expect([...internal.mobHazards.values()].every((hazard: any) => hazard.x === 187.5 || hazard.z === 165.5)).toBe(true);
+    expect((room.broadcast as any).mock.calls.filter((call: any[]) => call[0] === "combat:mob-hazard" && call[1].kind === "root")).toHaveLength(12);
+    const cover = FOREST_DUNGEON_COVER.find(prop => prop.stage === 3)!;
+    internal.setGuardianCover(cover, true); expect(internal.readWorldBlock(cover.x, 8, cover.z)).toBe(Block.Air);
+    internal.setGuardianCover(cover, false); expect(internal.readWorldBlock(cover.x, 8, cover.z)).toBe(Block.OakLog);
+  });
   it("keeps a safe return available after the outside entrance expires", () => {
     const { room, internal, player, client, open } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" });
     vi.setSystemTime(140000); internal.simulatePlayers(.033);

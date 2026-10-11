@@ -144,8 +144,9 @@ import { CombatContributions } from "./combat-contributions.js";
 import { SilverGuardVolley } from "./silver-guard-volley.js";
 import { ForestPortalCycle } from "./forest-portal-cycle.js";
 import { FOREST_PORTAL_LIFETIME_MS, canUseForestPortal } from "@blockcraft/protocol";
-import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, isInForestDungeon } from "@blockcraft/voxel-world";
+import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, isInForestDungeon } from "@blockcraft/voxel-world";
 import { ForestPortalState } from "./schema.js";
+import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownsBlacksmithUpgrade } from "./blacksmith.js";
 import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
@@ -1454,6 +1455,28 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
+  private setGuardianCover(cover: typeof FOREST_DUNGEON_COVER[number], broken: boolean): void {
+    const block = broken ? Block.Air : cover.kind === "stone" ? Block.Stone : Block.OakLog;
+    for (let y = SURFACE_HEIGHT; y <= SURFACE_HEIGHT + cover.height; y++) {
+      const address = worldToChunk(cover.x, cover.z), stored = this.getChunk(address.chunkX, address.chunkZ);
+      if (getBlock(stored.chunk, address.localX, y, address.localZ) === block) continue;
+      setBlock(stored.chunk, address.localX, y, address.localZ, block); stored.revision++;
+      this.broadcast("block:changed", { requestId: `guardian-cover-${cover.x}-${cover.z}-${broken ? "break" : "restore"}`,
+        x: cover.x, y, z: cover.z, block, revision: stored.revision } satisfies BlockChanged);
+    }
+  }
+
+  private placeGuardianRootLanes(mob: MobState, now: number): void {
+    for (const [index, root] of rootLaneHazards({ x: mob.attackStrikeX, y: mob.attackStrikeY, z: mob.attackStrikeZ }).entries()) {
+      const hazardId = `root:forest-guardian:${mob.actionSequence}:${index}`;
+      const expiresAt = now + ROOT_LANE_DURATION_MS;
+      this.mobHazards.set(hazardId, { hazardId, mobId: "forest-guardian", ...root, radius: ROOT_LANE_RADIUS,
+        damage: 1, expiresAt, nextDamageAt: now + 350, lastDamageAt: new Map() });
+      this.broadcast("combat:mob-hazard", { hazardId, mobId: "forest-guardian", kind: "root", ...root,
+        radius: ROOT_LANE_RADIUS, expiresAt } satisfies MobHazardPlaced);
+    }
+  }
+
   private spawnForestStage(stage: number): void {
     for (const entry of FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage)) {
       if (this.state.mobs.has(entry.id)) continue;
@@ -1503,6 +1526,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         this.forestDungeonActive = true;
         this.state.portals.delete("forest-victory");
         this.forestGate(168, false); this.forestGate(180, false);
+        for (const cover of FOREST_DUNGEON_COVER.filter(entry => entry.stage === 3)) this.setGuardianCover(cover, false);
         this.spawnForestStage(1);
         const exit = new ForestPortalState(); Object.assign(exit, FOREST_DUNGEON_EXIT, { kind: "return" });
         this.state.portals.set("forest-return", exit);
@@ -2773,6 +2797,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const progress = Math.max(charge.progress, Math.min(1, Math.max(0, (now - charge.startedAt) / CHAMPION_CHARGE.durationMs)));
       const travel = CHAMPION_CHARGE.distance * (progress - charge.progress);
       const start = { x: mob.x, y: mob.y, z: mob.z };
+      if (id === "forest-guardian") {
+        const cover = guardianCoverHit(start, charge.yaw, Math.max(travel, 1.5));
+        if (cover) this.setGuardianCover(cover, true);
+      }
       const next = moveChampionCharge(start, charge.yaw, travel, this.readWorldBlock,
         pose => this.mobPositionAllowed(pose) && this.championAllowed(id, pose) && !isInStoneBruteArena(pose.x, pose.z));
       mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = charge.yaw;
@@ -2821,6 +2849,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             || !hasCombatLineOfSight(center, target, this.readWorldBlock)) continue;
           this.damagePlayer(mobId, id, mob.attackDamage, now);
         }
+        if (mobId === "forest-guardian" && mob.attackPattern === "slam") this.placeGuardianRootLanes(mob, now);
         continue;
       }
       if (!player) { this.pendingMobMelee.delete(mobId); continue; }

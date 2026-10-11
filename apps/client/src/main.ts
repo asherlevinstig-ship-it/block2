@@ -2023,16 +2023,18 @@ function createMobProjectile(message: MobProjectileReleased): void {
 function createMobHazard(message: MobHazardPlaced): void {
   mobHazardVisuals.get(message.hazardId)?.root.destroy();
   const root = new pc.Entity(`mob-hazard:${message.hazardId}`);
-  const material = powerMaterial(new pc.Color(0.4, 0.9, 0.06), 0.58);
-  for (let index = 0; index < 18; index += 1) {
-    const angle = index / 18 * Math.PI * 2;
+  const rootHazard = message.kind === "root";
+  const material = powerMaterial(rootHazard ? new pc.Color(.52, .3, .08) : new pc.Color(0.4, 0.9, 0.06), rootHazard ? .74 : .58);
+  const pieces = rootHazard ? 7 : 18;
+  for (let index = 0; index < pieces; index += 1) {
+    const angle = index / pieces * Math.PI * 2;
     const radius = message.radius * (0.38 + (index % 3) * 0.22);
     const blob = addBox(
       root,
-      "acid-puddle",
+      rootHazard ? "root-spike" : "acid-puddle",
       material,
-      [0.32 + index % 2 * 0.16, 0.035, 0.3 + (index + 1) % 2 * 0.16],
-      [Math.sin(angle) * radius, 0.035, Math.cos(angle) * radius],
+      rootHazard ? [.13, .1 + index % 2 * .08, .58] : [0.32 + index % 2 * 0.16, 0.035, 0.3 + (index + 1) % 2 * 0.16],
+      [Math.sin(angle) * radius, rootHazard ? .08 : .035, Math.cos(angle) * radius],
     );
     blob.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
   }
@@ -2549,8 +2551,10 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.depthWrite = false;
   markMaterial.update();
   const matriarch = mobId === "greenwood-venom-matriarch";
-  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch);
-  if (mob.isChampion && !matriarch) {
+  const rootGuardian = mobId === "forest-guardian";
+  if (rootGuardian) { bodyMaterial.diffuse.set(.28, .24, .16); bodyMaterial.update(); bodyRoot.setLocalScale(1.16, 1.16, 1.16); }
+  const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian);
+  if (mob.isChampion && !matriarch && !rootGuardian) {
     const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
     const crestY = isSpitter ? 1.18 : 2.02;
     addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, crestY, 0]);
@@ -2687,10 +2691,16 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
   const material = lootMaterials[itemId];
+  const sourceId = lootSourceMob(dropId);
+  const guardianDrop = sourceId === "forest-guardian" && isEquipmentItem(itemId);
   if (isEquipmentItem(itemId)) {
-    addBox(root, "loot-bag", weaponWoodMaterial, [.55, .42, .44], [0, 0, 0]);
+    addBox(root, guardianDrop ? "rootbound-equipment-cache" : "loot-bag", weaponWoodMaterial, guardianDrop ? [.7, .5, .54] : [.55, .42, .44], [0, 0, 0]);
     addBox(root, "bag-tie", material, [.25, .12, .25], [0, .27, 0]);
     addBox(root, "equipment-emblem", material, [.28, .2, .06], [0, .02, -.25]);
+    if (guardianDrop) {
+      addBox(root, "heartwood-rune", coreGlowMaterial, [.18, .18, .07], [0, .04, -.32]).setLocalEulerAngles(0, 0, 45);
+      for (const side of [-1, 1]) addBox(root, `cache-root-${side}`, weaponWoodMaterial, [.11, .58, .11], [side * .34, .08, 0]).setLocalEulerAngles(0, 0, side * 34);
+    }
     if (armourForItem(itemId)) {
       addBox(root, "armour-left-shoulder", material, [.12, .1, .06], [-.16, .12, -.25]);
       addBox(root, "armour-right-shoulder", material, [.12, .1, .06], [.16, .12, -.25]);
@@ -2722,9 +2732,9 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   marker.addComponent("render", { type: "cylinder", material: lootMarkerMaterial, castShadows: false, receiveShadows: false });
   marker.setLocalScale(.85, .012, .85); marker.enabled = false;
   root.addChild(marker);
-  const sourceId = lootSourceMob(dropId), source = sourceId ? mobVisuals.get(sourceId) : undefined;
+  const source = sourceId ? mobVisuals.get(sourceId) : undefined;
   const now = performance.now();
-  const revealAt = source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.state.archetype) : now + 180;
+  const revealAt = source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
   app.root.addChild(root);
   return { root, marker, revealAt, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17 };
 }
@@ -5611,7 +5621,7 @@ app.on("update", (dt: number) => {
         mob.renderYaw = mob.state.yaw;
       }
     }
-    const deathPose = mobDefeatPose(mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
+    const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
     const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
@@ -5726,7 +5736,7 @@ app.on("update", (dt: number) => {
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
     const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
-    const bodySize = mob.state.isChampion ? 1.25 : 1;
+    const bodySize = mob.art.rootGuardian ? 1.38 : mob.state.isChampion ? 1.25 : 1;
     mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
     mob.bodyRoot.setLocalPosition(
       0,

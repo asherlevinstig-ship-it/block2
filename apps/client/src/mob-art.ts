@@ -21,6 +21,7 @@ export interface MobArtRig {
   phase: number;
   walk: number;
   matriarch: boolean;
+  rootGuardian: boolean;
   phaseSurfaces: pc.Entity[];
   enraged: boolean;
   defeated: boolean;
@@ -55,7 +56,11 @@ const mouth = material("creature-mouth", [0.085, 0.06, 0.1]);
 const matriarchVenom = material("matriarch-jade-venom", [.2, .95, .65], [.08, .5, .25]);
 const matriarchEnragedVenom = material("matriarch-enraged-venom", [1, .35, .12], [.65, .12, .025]);
 const matriarchArmour = material("matriarch-dark-jade-armour", [.12, .28, .26]);
-const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom]
+const guardianBark = material("guardian-heartwood", [.24, .13, .055]);
+const guardianMoss = material("guardian-ancient-moss", [.28, .48, .18]);
+const guardianCore = material("guardian-living-heart", [.45, 1, .24], [.18, .72, .055]);
+const guardianEnragedCore = material("guardian-broken-heart", [1, .48, .12], [.82, .16, .025]);
+const dimGlowMaterials = new Map<pc.StandardMaterial, pc.StandardMaterial>([core, acid, crawlerEye, matriarchVenom, matriarchEnragedVenom, guardianCore, guardianEnragedCore]
   .map(live => [live, material(`defeated-${live.name}`, [live.diffuse.r * .5, live.diffuse.g * .5, live.diffuse.b * .5])]));
 
 function box(parent: pc.Entity, name: string, surface: pc.StandardMaterial, size: Triple, at: Triple, angle?: Triple): pc.Entity {
@@ -75,11 +80,11 @@ function pivot(parent: pc.Entity, name: string, at: Triple): pc.Entity {
   return result;
 }
 
-export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false): MobArtRig {
+export function createMobArt(parent: pc.Entity, archetype: string, body: pc.StandardMaterial, matriarch = false, rootGuardian = false): MobArtRig {
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter" : "moss_crawler";
   const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
-  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, matriarch, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
+  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
   if (kind === "moss_crawler") {
     box(parent, "bark-abdomen", shellDark, [0.82, 0.34, 1.04], [0, 0.4, -0.1]);
@@ -131,6 +136,17 @@ export function createMobArt(parent: pc.Entity, archetype: string, body: pc.Stan
       box(leg, "foot", rockDark, [0.48, 0.21, 0.62], [0, -0.43, 0.1]);
       rig.limbs.push({ pivot: leg, knee: null, side, offset: side < 0 ? 0 : Math.PI });
     }
+    if (rootGuardian) {
+      box(parent, "guardian-bark-cuirass", guardianBark, [1.18, .38, .82], [0, 1.25, -.18], [-8, 0, 0]);
+      box(parent, "guardian-moss-mantle", guardianMoss, [1.34, .21, .72], [0, 1.66, -.12], [0, 0, 4]);
+      rig.phaseSurfaces.push(box(parent, "guardian-heart-core", guardianCore, [.31, .42, .17], [0, 1.15, .5], [0, 0, 45]));
+      for (const side of [-1, 1]) {
+        box(head, `guardian-antler-${side}`, guardianBark, [.16, .8, .18], [side * .32, .62, -.02], [0, 0, side * -24]);
+        box(head, `guardian-antler-branch-${side}`, guardianBark, [.48, .13, .15], [side * .48, .78, -.02], [0, 0, side * -28]);
+        box(parent, `guardian-shoulder-root-${side}`, guardianBark, [.22, .88, .2], [side * .82, 1.54, -.18], [-12, 0, side * -34]);
+        box(parent, `guardian-vine-${side}`, guardianMoss, [.12, .92, .13], [side * .47, 1.02, .38], [18, 0, side * 16]);
+      }
+    }
   } else {
     box(parent, "abdomen", body, [0.88, 0.44, 1.13], [0, 0.42, -0.16]);
     box(parent, "shell-middle", spitterDark, [0.92, 0.18, 0.33], [0, 0.67, -0.12]);
@@ -176,10 +192,10 @@ export function createMobArt(parent: pc.Entity, archetype: string, body: pc.Stan
 }
 
 export function setMobArtEnraged(rig: MobArtRig, enraged: boolean): void {
-  if (!rig.matriarch || rig.enraged === enraged) return;
+  if ((!rig.matriarch && !rig.rootGuardian) || rig.enraged === enraged) return;
   rig.enraged = enraged;
   for (const part of rig.phaseSurfaces) if (part.render) {
-    const live = enraged ? matriarchEnragedVenom : matriarchVenom;
+    const live = rig.rootGuardian ? enraged ? guardianEnragedCore : guardianCore : enraged ? matriarchEnragedVenom : matriarchVenom;
     const glow = rig.glowSurfaces.find(surface => surface.part === part);
     if (glow) glow.liveMaterial = live;
     part.render.material = rig.defeated ? dimGlowMaterials.get(live)! : live;
