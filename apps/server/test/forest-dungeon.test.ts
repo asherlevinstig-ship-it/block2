@@ -22,7 +22,8 @@ function fixture() {
     internal.registerMob("frontier-spitter", "cave_spitter", { x: 50.5, y: 8, z: 25.5 });
     kill("cave-spitter"); kill("frontier-spitter");
   };
-  return { room, internal, player, client, kill, open };
+  const ready = (who = client) => internal.handleDungeonLobby(who, { action: "ready" });
+  return { room, internal, player, client, kill, open, ready };
 }
 describe("forest dungeon portal", () => {
   it("lets a nearby solo leader open a reserved town portal and reports persistent board details", () => {
@@ -102,9 +103,15 @@ describe("forest dungeon portal", () => {
     expect(isPlayerSupported(internal.readWorldBlock, player.x, player.y, player.z)).toBe(true);
     expect(playerCollides(internal.readWorldBlock, player.x, player.y, player.z)).toBe(false);
     expect(room.state.portals.get("forest-return")?.expiresAt).toBe(0);
+    expect(room.state.mobs.has("forest-room1-a")).toBe(false);
+    expect(internal.forestDungeonRun.startedAt).toBe(0);
+    internal.handleDungeonLobby(client, { action: "ready" });
+    expect(internal.forestDungeonRun.startedAt).toBe(10000);
+    expect(room.state.mobs.has("forest-room1-a")).toBe(true);
+    expect(room.state.portals.has("forest-entry")).toBe(false);
   });
   it("clears two gated rooms, spawns the guardian once, guarantees a personal hammer and never respawns slain dungeon mobs", () => {
-    const { room, internal, player, client, kill, open } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" });
+    const { room, internal, player, client, kill, open, ready } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" }); ready();
     (room.clients as any[]).push(client);
     expect(internal.readWorldBlock(168, 8, 165)).toBe(Block.OakLog);
     expect(isProtectedVoxel(168, 165)).toBe(true);
@@ -126,7 +133,7 @@ describe("forest dungeon portal", () => {
     expect(FOREST_DUNGEON_MOBS.every(entry => room.state.mobs.get(entry.id)?.alive === false)).toBe(true);
   });
   it("uses complementary spitter patterns in room two and switches the guardian from volleys to charges below half health", () => {
-    const { room, internal, player, client, kill, open } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" });
+    const { room, internal, player, client, kill, open, ready } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" }); ready();
     for (const entry of FOREST_DUNGEON_MOBS.filter(mob => mob.stage === 1)) { Object.assign(player, entry); kill(entry.id); }
     vi.setSystemTime(10100); internal.simulatePlayers(.033);
     const roomTwo = FOREST_DUNGEON_MOBS.filter(entry => entry.stage === 2).map(entry => room.state.mobs.get(entry.id)!);
@@ -171,14 +178,17 @@ describe("forest dungeon portal", () => {
     const inviteId = internal.parties.snapshot("friend", room.state.players, 10000).invite.id;
     internal.parties.handle("friend", { action: "respond", inviteId, accept: true }, room.state.players, 10000);
     internal.useForestPortal(client, { id: "forest-entry" });
-    Object.assign(player, { x: 164.5, y: 8, z: 161.5 }); kill("forest-room1-a");
     const outsider = new PlayerState(); Object.assign(outsider, FOREST_PORTAL_POSITION); room.state.players.set("outsider", outsider);
     const outsiderClient = { sessionId: "outsider", send: vi.fn() } as any;
     internal.useForestPortal(outsiderClient, { id: "forest-entry" });
     expect(outsider.x).toBe(FOREST_PORTAL_POSITION.x);
     expect(outsiderClient.send).toHaveBeenCalledWith("portal:notice", expect.stringContaining("occupied"));
-    internal.useForestPortal({ sessionId: "friend", send: vi.fn() }, { id: "forest-entry" });
-    expect(friend.x).toBe(FOREST_DUNGEON_ENTRY.x); expect(room.state.mobs.get("forest-room1-a")?.alive).toBe(false);
+    const friendClient = { sessionId: "friend", send: vi.fn() } as any;
+    internal.useForestPortal(friendClient, { id: "forest-entry" });
+    expect(room.state.mobs.has("forest-room1-a")).toBe(false);
+    internal.handleDungeonLobby(client, { action: "ready" }); internal.handleDungeonLobby(friendClient, { action: "ready" });
+    expect(friend.x).toBe(FOREST_DUNGEON_ENTRY.x); expect(room.state.mobs.get("forest-room1-a")?.maxHealth).toBe(15);
+    Object.assign(player, { x: 164.5, y: 8, z: 161.5 }); kill("forest-room1-a");
     expect(internal.forestReturns.size).toBe(2);
   });
   it("rejects forged IDs, remote entry, expired entry and dead players", () => {
@@ -189,7 +199,7 @@ describe("forest dungeon portal", () => {
     player.health = 5; vi.setSystemTime(140000); internal.useForestPortal(client, { id: "forest-entry" }); expect(player.x).toBe(FOREST_PORTAL_POSITION.x);
   });
   it("ends an abandoned run after death-return without losing the recovery bag", () => {
-    const { room, internal, player, client, open } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" });
+    const { room, internal, player, client, open, ready } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" }); ready();
     const ore = new InventoryItemState(); ore.quantity = 3; player.inventory.set("silver_ore", ore);
     vi.setSystemTime(12000); internal.damagePlayer("forest-room1-a", "tester", 99, Date.now(), false);
     expect(player.health).toBe(0); const bags = player.recoveryBags.size; expect(bags).toBe(1);

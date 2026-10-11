@@ -1362,3 +1362,15 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .expedition-reward b { color: #84d779; font-size: 9px; letter-spacing: .12em; }.expedition-reward strong { color: #d8ffc8; }.expedition-reward span { color: #9cbd9b; font-size: 11px; }
 .expedition-launch { width: 100%; margin-top: 14px; padding: 12px; cursor: pointer; color: #1c180d; border: 0; border-radius: 7px; background: #d8ba69; font: 900 11px system-ui; letter-spacing: .08em; }
 .expedition-launch:disabled { cursor: default; opacity: .5; }
+#dungeon-lobby-panel { position: fixed; z-index: 66; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(430px, calc(100vw - 36px)); box-sizing: border-box; padding: 25px; color: #e7f4de; border: 2px solid #6da95c; border-radius: 14px; background: linear-gradient(145deg, #172b1cf8, #08120dfb); box-shadow: 0 0 0 100vmax #0205038f, 0 18px 60px #000c; font-family: system-ui; }
+#dungeon-lobby-panel[hidden] { display: none; }
+#dungeon-lobby-panel > small { color: #87ca72; font-weight: 900; letter-spacing: .14em; }
+#dungeon-lobby-panel h2 { margin: 7px 0; color: #fff0bd; font-size: 23px; }
+.dungeon-lobby-message, .dungeon-lobby-scaling { color: #aebfa9; font-size: 12px; line-height: 1.4; }
+.dungeon-lobby-members { margin: 14px 0; padding: 0; list-style: none; }
+.dungeon-lobby-members li { display: flex; justify-content: space-between; margin: 6px 0; padding: 10px; border: 1px solid #ffffff18; border-radius: 6px; background: #ffffff08; }
+.dungeon-lobby-members li span { color: #9aa79a; font: 900 10px system-ui; letter-spacing: .08em; }
+.dungeon-lobby-members li.entered span { color: #f0cf7a; }.dungeon-lobby-members li.ready { border-color: #71c96066; background: #21432288; }.dungeon-lobby-members li.ready span { color: #9df484; }.dungeon-lobby-members li.outside { opacity: .62; }
+.dungeon-lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 15px; }
+.dungeon-lobby-actions button { padding: 12px; cursor: pointer; color: #13200f; border: 0; border-radius: 7px; background: #a9e184; font: 900 11px system-ui; letter-spacing: .07em; }
+.dungeon-lobby-actions .dungeon-start { color: #251a08; background: #e5bf67; }.dungeon-lobby-actions button:disabled { cursor: default; opacity: .45; }

@@ -89,6 +89,7 @@ import {
   type DefenseResolved,
   type DungeonRunUpdate,
   type DungeonBoardUpdate,
+  type DungeonLobbyUpdate,
   type ItemId,
   type LootPickedUp,
   type ResourceGathered,
@@ -229,6 +230,32 @@ function openDungeonBoard(): void {
 }
 expeditionPanel.querySelector(".expedition-close")!.addEventListener("click", () => { expeditionPanel.hidden = true; });
 expeditionPanel.querySelector(".expedition-launch")!.addEventListener("click", () => room?.send("dungeon:board", { action: "open" }));
+
+const dungeonLobbyPanel = document.createElement("section");
+dungeonLobbyPanel.id = "dungeon-lobby-panel";
+dungeonLobbyPanel.hidden = true;
+dungeonLobbyPanel.innerHTML = '<small>FOREST DUNGEON</small><h2>EXPEDITION ASSEMBLY</h2><p class="dungeon-lobby-message"></p><ul class="dungeon-lobby-members"></ul><div class="dungeon-lobby-scaling"></div><div class="dungeon-lobby-actions"><button class="dungeon-ready" type="button">READY</button><button class="dungeon-start" type="button">START EXPEDITION</button></div>';
+document.body.append(dungeonLobbyPanel);
+function renderDungeonLobby(update: DungeonLobbyUpdate): void {
+  if (update.phase === "active") { dungeonLobbyPanel.hidden = true; return; }
+  dungeonLobbyPanel.hidden = false; resetMovementControls();
+  dungeonLobbyPanel.querySelector(".dungeon-lobby-message")!.textContent = update.message;
+  const members = dungeonLobbyPanel.querySelector(".dungeon-lobby-members")!; members.replaceChildren();
+  for (const member of update.members) {
+    const row = document.createElement("li");
+    row.className = member.ready ? "ready" : member.entered ? "entered" : "outside";
+    row.innerHTML = `<strong>${member.name}</strong><span>${member.ready ? "READY" : member.entered ? "AT ENTRANCE" : "OUTSIDE"}</span>`;
+    members.append(row);
+  }
+  dungeonLobbyPanel.querySelector(".dungeon-lobby-scaling")!.textContent = `Combat scales to players present when the run begins. Current entry: ${update.members.filter(member => member.entered).length}.`;
+  const self = update.members.find(member => member.id === room?.sessionId);
+  const ready = dungeonLobbyPanel.querySelector<HTMLButtonElement>(".dungeon-ready")!;
+  ready.disabled = !self?.entered || Boolean(self.ready); ready.textContent = self?.ready ? "READY ✓" : "READY";
+  const start = dungeonLobbyPanel.querySelector<HTMLButtonElement>(".dungeon-start")!;
+  start.hidden = !update.leader; start.disabled = !update.members.some(member => member.entered);
+}
+dungeonLobbyPanel.querySelector(".dungeon-ready")!.addEventListener("click", () => room?.send("dungeon:lobby", { action: "ready" }));
+dungeonLobbyPanel.querySelector(".dungeon-start")!.addEventListener("click", () => room?.send("dungeon:lobby", { action: "start" }));
 
 function showDungeonRunResult(update: DungeonRunUpdate): void {
   if (update.phase !== "completed") return;
@@ -6299,7 +6326,7 @@ async function connect(): Promise<void> {
     const own = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room!.sessionId);
     pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
     worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
-    status.textContent = spawn.entering ? "Forest Dungeon · clear two rooms, defeat the guardian, then collect your equipment bag." : "Returned to the silver clearing with your loot.";
+    status.textContent = spawn.entering ? "Forest Dungeon lobby · assemble, ready up, then begin the expedition." : "Returned from the Forest Dungeon with your loot.";
   });
   room.onMessage("portal:notice", (message: string) => {
     status.textContent = message;
@@ -6314,6 +6341,7 @@ async function connect(): Promise<void> {
     showDungeonRunResult(update);
   });
   room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
+  room.onMessage("dungeon:lobby", (update: DungeonLobbyUpdate) => renderDungeonLobby(update));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
