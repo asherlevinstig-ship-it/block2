@@ -2,7 +2,8 @@ export type EnemyCue = "warning" | "hurt" | "stagger" | "defeat";
 export type PowerCue = "seismicWindup" | "seismicImpact";
 export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit" | "nearMiss";
 export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
-type CombatCue = EnemyCue | PowerCue | WeaponCue | MiningCue;
+export type DungeonCue = "dungeonGate" | "guardianPhase" | "dungeonVictory";
+type CombatCue = EnemyCue | PowerCue | WeaponCue | MiningCue | DungeonCue;
 
 interface ToneLayer {
   wave: OscillatorType;
@@ -89,11 +90,28 @@ export const MINING_CUE_DEFINITIONS: Record<MiningCue, EnemyCueDefinition> = {
   miningBreak: { minimumIntervalMs: 90, tones: [{ wave: "sawtooth", startHz: 120, endHz: 40, gain: 0.06, delayMs: 0, durationMs: 150 }] },
 };
 
+export const DUNGEON_CUE_DEFINITIONS: Record<DungeonCue, EnemyCueDefinition> = {
+  dungeonGate: { minimumIntervalMs: 500, tones: [
+    { wave: "triangle", startHz: 92, endHz: 48, gain: .065, delayMs: 0, durationMs: 320 },
+    { wave: "sine", startHz: 260, endHz: 390, gain: .04, delayMs: 150, durationMs: 260 },
+  ] },
+  guardianPhase: { minimumIntervalMs: 1000, tones: [
+    { wave: "sawtooth", startHz: 72, endHz: 42, gain: .075, delayMs: 0, durationMs: 420 },
+    { wave: "triangle", startHz: 180, endHz: 92, gain: .04, delayMs: 110, durationMs: 360 },
+  ] },
+  dungeonVictory: { minimumIntervalMs: 1500, tones: [
+    { wave: "sine", startHz: 262, endHz: 392, gain: .055, delayMs: 0, durationMs: 240 },
+    { wave: "sine", startHz: 330, endHz: 494, gain: .05, delayMs: 170, durationMs: 260 },
+    { wave: "triangle", startHz: 392, endHz: 784, gain: .045, delayMs: 350, durationMs: 420 },
+  ] },
+};
+
 const COMBAT_CUE_DEFINITIONS: Record<CombatCue, EnemyCueDefinition> = {
   ...ENEMY_CUE_DEFINITIONS,
   ...POWER_CUE_DEFINITIONS,
   ...WEAPON_CUE_DEFINITIONS,
   ...MINING_CUE_DEFINITIONS,
+  ...DUNGEON_CUE_DEFINITIONS,
 };
 
 export interface EnemyCueSnapshot {

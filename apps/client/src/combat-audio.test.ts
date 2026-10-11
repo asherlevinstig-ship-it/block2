@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENEMY_CUE_DEFINITIONS, POWER_CUE_DEFINITIONS, WEAPON_CUE_DEFINITIONS, enemyCuePan, enemyCuesForTransition, type EnemyCueSnapshot } from "./combat-audio.js";
+import { DUNGEON_CUE_DEFINITIONS, ENEMY_CUE_DEFINITIONS, POWER_CUE_DEFINITIONS, WEAPON_CUE_DEFINITIONS, enemyCuePan, enemyCuesForTransition, type EnemyCueSnapshot } from "./combat-audio.js";
 
 const idle: EnemyCueSnapshot = {
   alive: true,
@@ -45,6 +45,13 @@ describe("enemy combat audio", () => {
     expect(Object.keys(POWER_CUE_DEFINITIONS).sort()).toEqual(["seismicImpact", "seismicWindup"]);
     expect(POWER_CUE_DEFINITIONS.seismicImpact.tones.length).toBeGreaterThan(POWER_CUE_DEFINITIONS.seismicWindup.tones.length);
     expect(POWER_CUE_DEFINITIONS.seismicImpact.tones[0]!.startHz).not.toBe(POWER_CUE_DEFINITIONS.seismicWindup.tones[0]!.startHz);
+  });
+
+  it("gives gates, guardian phase changes, and victory distinct restrained cues", () => {
+    expect(Object.keys(DUNGEON_CUE_DEFINITIONS).sort()).toEqual(["dungeonGate", "dungeonVictory", "guardianPhase"]);
+    expect(DUNGEON_CUE_DEFINITIONS.dungeonVictory.tones).toHaveLength(3);
+    expect(DUNGEON_CUE_DEFINITIONS.guardianPhase.tones[0]!.startHz).toBeLessThan(100);
+    expect(Object.values(DUNGEON_CUE_DEFINITIONS).every(cue => cue.tones.every(tone => tone.gain <= .075))).toBe(true);
   });
 
   it("positions cues across the stereo field and clamps distant enemies", () => {

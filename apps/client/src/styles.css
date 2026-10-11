@@ -1159,6 +1159,11 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #boss-notice { min-height: 14px; margin: 7px 0 0; text-align: center; color: #f4d587; font: 800 10px/1.4 system-ui, sans-serif; }
 #boss-hud[data-enraged="true"] { border-color: #f17c55; }
 #boss-hud[data-enraged="true"] #boss-phase { color: #ff9b77; }
+#boss-hud[data-encounter="dungeon"] { background: linear-gradient(180deg, #102017f2, #111713f2); border-color: #729449; box-shadow: 0 4px 22px #0009, 0 0 22px #31582d55; }
+#boss-hud[data-encounter="dungeon"] header span { color: #9fd374; }
+#boss-hud[data-encounter="dungeon"] #boss-health { background: #25301f; }
+#boss-hud[data-encounter="dungeon"] #boss-health-fill { background: linear-gradient(90deg, #567c34, #c5a84c); }
+#boss-hud[data-encounter="dungeon"][data-enraged="true"] { border-color: #d99a42; box-shadow: 0 4px 22px #0009, 0 0 26px #b3682555; }
 @media (min-width: 821px) { #boss-hud { left: max(50%, 610px); width: min(430px, calc(100vw - 440px)); } }
 #objective-marker i { display: block; color: var(--objective-color, #f5c846); font-style: normal; font-size: 23px; line-height: 24px; }
 #objective-marker[data-kind="encounter"] { --objective-color: #ff9678; }

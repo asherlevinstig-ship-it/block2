@@ -30,4 +30,14 @@ describe("boss HUD", () => {
     expect(advanceBossHud(arrived, undefined, player, 2000)).toEqual(initialBossHud());
     expect(advanceBossHud(arrived, boss, { ...player, health: 0 }, 2000).visible).toBe(false);
   });
+  it("uses dungeon-specific guardian phase and victory language", () => {
+    const guardian = { ...boss, x: 187, z: 165, name: "Ancient Root Guardian", maxHealth: 28, health: 28 };
+    const explorer = { ...player, x: 186, z: 165 };
+    const arrived = advanceBossHud(initialBossHud(), guardian, explorer, 1000);
+    expect(arrived.message).toContain("AWAKENS");
+    const enraged = advanceBossHud(arrived, { ...guardian, health: 13, enraged: true }, explorer, 5000);
+    expect(enraged.message).toContain("CHARGE");
+    const defeated = advanceBossHud(enraged, { ...guardian, alive: false, health: 0, enraged: true }, explorer, 6000);
+    expect(defeated.message).toContain("CLAIM YOUR REWARD");
+  });
 });

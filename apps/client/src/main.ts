@@ -3,6 +3,7 @@ import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
 import { advanceBossHud, initialBossHud } from "./boss-hud.js";
+import { forestDungeonAtmosphere, forestDungeonNotice } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
@@ -1798,12 +1799,16 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const territory = position.y >= SURFACE_HEIGHT && tier > 0 ? wildernessTerritoryAt(position.x, position.z) : null;
   const silverGuard = position.y >= SURFACE_HEIGHT && isInSilverGuardClearing(position.x, position.z);
   const frontierArena = position.y >= SURFACE_HEIGHT && isInFrontierBruteArena(position.x, position.z);
-  const forestDungeon = isInForestDungeon(position.x, position.z);
-  const label = forestDungeon ? { name: "FOREST DUNGEON", detail: "Root flanks → spitter crossfire → two-phase Guardian · cleared gates open visibly · return portal stays at the entrance" } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
+  const dungeonAtmosphere = forestDungeonAtmosphere(position.x, position.z);
+  const forestDungeon = dungeonAtmosphere.room > 0;
+  const dungeonDetail = dungeonAtmosphere.room === 1 ? "Split the rootbound crawlers · the return portal remains behind you"
+    : dungeonAtmosphere.room === 2 ? "Use stone cover · read aimed shots and fan gaps"
+      : "Root volleys become committed charges below half health";
+  const label = forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${forestDungeon}:${territory?.tier ?? 0}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -3758,6 +3763,21 @@ function visibleMarkState(mob: MobVisual, now = Date.now()): MarkVisualState | n
 }
 
 const forestPortalVisuals = new Map<string, { root: pc.Entity; glow: pc.Entity; label: HTMLButtonElement; state: ForestPortal; materials: pc.Material[] }>();
+interface DungeonBurstVisual { root: pc.Entity; material: pc.StandardMaterial; startedAt: number; kind: "gate" | "victory" }
+const dungeonBurstVisuals: DungeonBurstVisual[] = [];
+function createDungeonBurst(x: number, z: number, kind: "gate" | "victory"): void {
+  const root = new pc.Entity(`dungeon-${kind}-burst`);
+  const material = powerMaterial(kind === "victory" ? new pc.Color(1, .78, .28) : new pc.Color(.42, 1, .48), .88);
+  const segments = kind === "victory" ? 16 : 12;
+  for (let i = 0; i < segments; i++) {
+    const angle = i / segments * Math.PI * 2;
+    const segment = addBox(root, "dungeon-burst-ray", material, [.16, .07, kind === "victory" ? .75 : .55], [Math.sin(angle) * 1.15, .08, Math.cos(angle) * 1.15]);
+    segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+    if (segment.render) segment.render.castShadows = false;
+  }
+  root.setPosition(x, 8.08, z); app.root.addChild(root);
+  dungeonBurstVisuals.push({ root, material, startedAt: performance.now(), kind });
+}
 let nearbyForestPortal: string | null = null;
 let pendingPortalDestination: { x: number; y: number; z: number } | null = null;
 function useNearbyForestPortal(): void {
@@ -3776,7 +3796,8 @@ function updateForestPortals(): void {
     if (!visual) {
       const root = new pc.Entity(`portal-${id}`);
       const frame = coloredMaterial(new pc.Color(.2, .12, .3));
-      const light = powerMaterial(portal.kind === "entry" ? new pc.Color(.45, 1, .65) : new pc.Color(1, .75, .25), .6);
+      const victory = id === "forest-victory";
+      const light = powerMaterial(portal.kind === "entry" ? new pc.Color(.45, 1, .65) : victory ? new pc.Color(1, .88, .42) : new pc.Color(1, .75, .25), victory ? .82 : .6);
       addBox(root, "left-arch", frame, [.35, 2.9, .4], [-1, 1.45, 0]);
       addBox(root, "right-arch", frame, [.35, 2.9, .4], [1, 1.45, 0]);
       addBox(root, "arch-crown", frame, [2.35, .35, .4], [0, 2.8, 0]);
@@ -3791,14 +3812,17 @@ function updateForestPortals(): void {
     const distance = Math.hypot(player.x - portal.x, player.z - portal.z);
     const active = worldReady && (portal.expiresAt === 0 || now < portal.expiresAt);
     visual.root.enabled = active && distance < 45;
-    visual.glow.setLocalScale(1, .96 + Math.sin(performance.now() / 600) * .04, 1);
+    const victory = id === "forest-victory";
+    const pulse = victory ? Math.sin(performance.now() / 220) * .1 : Math.sin(performance.now() / 600) * .04;
+    visual.glow.setLocalScale(victory ? 1.08 : 1, .96 + pulse, victory ? 1.08 : 1);
     const screen = camera.camera!.worldToScreen(new pc.Vec3(portal.x, portal.y + 3.3, portal.z));
     const rect = canvas.getBoundingClientRect();
     visual.label.hidden = !active || distance > 25 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
     visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
     const reachable = canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
     visual.label.disabled = !reachable;
-    const text = `${portal.kind === "entry" ? "FOREST DUNGEON" : "RETURN TO WILDERNESS"}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable ? " · E TO ENTER" : ""}`;
+    const portalName = portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
+    const text = `${portalName}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
   });
@@ -4107,6 +4131,11 @@ let surfaceReturnStartedAt: number | null = null;
 let surfaceRestoreStartSliceY: number | null = null;
 let undergroundLightingBlend = 0;
 let greenwoodLightingBlend = 0;
+let forestDungeonLightingBlend = 0;
+const forestDungeonAmbient = { r: .2, g: .31, b: .22 };
+const forestDungeonFog = { r: .075, g: .17, b: .105 };
+let forestDungeonFogStart = 25;
+let forestDungeonFogEnd = 47;
 let undergroundClassification = false;
 let excavationClassification = false;
 let surfaceReturnClassification = false;
@@ -4167,6 +4196,7 @@ function updateObjectiveGuidance(): void {
 }
 
 const bossHud = document.querySelector<HTMLElement>("#boss-hud")!;
+const bossEncounter = document.querySelector<HTMLElement>("#boss-encounter")!;
 const bossName = document.querySelector<HTMLElement>("#boss-name")!;
 const bossPhase = document.querySelector<HTMLElement>("#boss-phase")!;
 const bossHealth = document.querySelector<HTMLElement>("#boss-health")!;
@@ -4175,17 +4205,30 @@ const bossHealthText = document.querySelector<HTMLElement>("#boss-health-text")!
 const bossNotice = document.querySelector<HTMLElement>("#boss-notice")!;
 let bossHudState = initialBossHud();
 let bossHudFingerprint = "";
+let activeBossId = "";
 function updateBossHud(now: number): void {
-  const boss = mobVisuals.get("greenwood-venom-matriarch")?.state;
   const position = localPlayer.getPosition();
+  const nextBossId = isInForestDungeon(position.x, position.z) ? "forest-guardian" : "greenwood-venom-matriarch";
+  const boss = mobVisuals.get(nextBossId)?.state;
+  if (activeBossId !== nextBossId) {
+    activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = "";
+  }
+  const previous = bossHudState;
   bossHudState = advanceBossHud(bossHudState, boss, { x: position.x, y: position.y, z: position.z, health: potionHealth }, now);
+  if (nextBossId === "forest-guardian" && bossHudState.visible && bossHudState.enraged && !previous.enraged) {
+    combatAudio.play("guardianPhase");
+    if (boss) createDungeonBurst(boss.x, boss.z, "gate");
+  }
   const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, bossHudState.enraged, bossHudState.message]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
   if (!boss || !bossHudState.visible) return;
   bossName.textContent = boss.name;
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : bossHudState.enraged ? "PHASE 2 · ENRAGED" : "PHASE 1";
+  const guardian = nextBossId === "forest-guardian";
+  bossEncounter.textContent = guardian ? "FOREST DUNGEON BOSS" : "SHARED WILDERNESS EVENT";
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : bossHudState.enraged ? `PHASE 2 · ${guardian ? "HEARTWOOD CHARGE" : "ENRAGED"}` : `PHASE 1 · ${guardian ? "ROOT VOLLEY" : "VENOM FAN"}`;
+  bossHud.dataset.encounter = guardian ? "dungeon" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
@@ -4493,30 +4536,54 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const greenwoodTarget = !visibilityCutaway && isInGreenwoodRegion(position.x, position.z) ? 1 : 0;
   greenwoodLightingBlend += (greenwoodTarget - greenwoodLightingBlend) * (1 - Math.exp(-Math.max(0, dt) * 2.2));
   if (Math.abs(greenwoodTarget - greenwoodLightingBlend) < 0.001) greenwoodLightingBlend = greenwoodTarget;
+  const dungeon = forestDungeonAtmosphere(position.x, position.z);
+  const dungeonTarget = !visibilityCutaway && dungeon.room > 0 ? 1 : 0;
+  const dungeonResponse = 1 - Math.exp(-Math.max(0, dt) * 1.8);
+  forestDungeonLightingBlend += (dungeonTarget - forestDungeonLightingBlend) * dungeonResponse;
+  if (Math.abs(dungeonTarget - forestDungeonLightingBlend) < 0.001) forestDungeonLightingBlend = dungeonTarget;
+  if (dungeon.room > 0) {
+    forestDungeonAmbient.r += (dungeon.ambient[0] - forestDungeonAmbient.r) * dungeonResponse;
+    forestDungeonAmbient.g += (dungeon.ambient[1] - forestDungeonAmbient.g) * dungeonResponse;
+    forestDungeonAmbient.b += (dungeon.ambient[2] - forestDungeonAmbient.b) * dungeonResponse;
+    forestDungeonFog.r += (dungeon.fog[0] - forestDungeonFog.r) * dungeonResponse;
+    forestDungeonFog.g += (dungeon.fog[1] - forestDungeonFog.g) * dungeonResponse;
+    forestDungeonFog.b += (dungeon.fog[2] - forestDungeonFog.b) * dungeonResponse;
+    forestDungeonFogStart += (dungeon.fogStart - forestDungeonFogStart) * dungeonResponse;
+    forestDungeonFogEnd += (dungeon.fogEnd - forestDungeonFogEnd) * dungeonResponse;
+  }
   updateDangerZone(localDangerTier, position);
   caveLight.enabled = undergroundLightingBlend > 0.001;
   if (localPlayerSilhouette) localPlayerSilhouette.enabled = visibilityCutaway;
   exitTrail.enabled = visibilityCutaway;
   exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
-  if (light.light) light.light.intensity = 1.45 + (0.45 - 1.45) * undergroundLightingBlend;
-  if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend);
+  if (light.light) light.light.intensity = (1.45 + (0.45 - 1.45) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend);
+  if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend);
   if (caveLight.light) caveLight.light.intensity = 1.7 * undergroundLightingBlend;
   const surfaceAmbient = {
     r: 0.43 + (0.3 - 0.43) * greenwoodLightingBlend,
     g: 0.48 + (0.43 - 0.48) * greenwoodLightingBlend,
     b: 0.54 + (0.36 - 0.54) * greenwoodLightingBlend,
   };
+  const ambientR = surfaceAmbient.r + (0.2 - surfaceAmbient.r) * undergroundLightingBlend;
+  const ambientG = surfaceAmbient.g + (0.24 - surfaceAmbient.g) * undergroundLightingBlend;
+  const ambientB = surfaceAmbient.b + (0.31 - surfaceAmbient.b) * undergroundLightingBlend;
   app.scene.ambientLight.set(
-    surfaceAmbient.r + (0.2 - surfaceAmbient.r) * undergroundLightingBlend,
-    surfaceAmbient.g + (0.24 - surfaceAmbient.g) * undergroundLightingBlend,
-    surfaceAmbient.b + (0.31 - surfaceAmbient.b) * undergroundLightingBlend,
+    ambientR + (forestDungeonAmbient.r - ambientR) * forestDungeonLightingBlend,
+    ambientG + (forestDungeonAmbient.g - ambientG) * forestDungeonLightingBlend,
+    ambientB + (forestDungeonAmbient.b - ambientB) * forestDungeonLightingBlend,
   );
+  const surfaceFogR = 0.21 + (0.11 - 0.21) * greenwoodLightingBlend;
+  const surfaceFogG = 0.3 + (0.24 - 0.3) * greenwoodLightingBlend;
+  const surfaceFogB = 0.32 + (0.2 - 0.32) * greenwoodLightingBlend;
   app.scene.fog.color.set(
-    0.21 + (0.11 - 0.21) * greenwoodLightingBlend,
-    0.3 + (0.24 - 0.3) * greenwoodLightingBlend,
-    0.32 + (0.2 - 0.32) * greenwoodLightingBlend,
+    surfaceFogR + (forestDungeonFog.r - surfaceFogR) * forestDungeonLightingBlend,
+    surfaceFogG + (forestDungeonFog.g - surfaceFogG) * forestDungeonLightingBlend,
+    surfaceFogB + (forestDungeonFog.b - surfaceFogB) * forestDungeonLightingBlend,
   );
+  app.scene.fog.start = 34 + (forestDungeonFogStart - 34) * forestDungeonLightingBlend;
+  app.scene.fog.end = 58 + (forestDungeonFogEnd - 58) * forestDungeonLightingBlend;
+  camera.camera?.clearColor.copy(app.scene.fog.color);
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(
     `SLICE ${cutawayStateKey} → ${nextKey} y=${position.y.toFixed(3)} underground=${underground} return=${Math.round(surfaceDurationMs)}ms`,
@@ -5704,6 +5771,19 @@ app.on("update", (dt: number) => {
   }
   updatePowerAimVisual();
   updateSpecialAimVisual();
+  for (let index = dungeonBurstVisuals.length - 1; index >= 0; index -= 1) {
+    const burst = dungeonBurstVisuals[index]!;
+    const duration = burst.kind === "victory" ? 1450 : 900;
+    const progress = (animationNow - burst.startedAt) / duration;
+    if (progress >= 1) {
+      burst.root.destroy(); burst.material.destroy(); dungeonBurstVisuals.splice(index, 1); continue;
+    }
+    const eased = 1 - (1 - Math.max(0, progress)) ** 3;
+    const scale = .45 + eased * (burst.kind === "victory" ? 2.8 : 1.8);
+    burst.root.setLocalScale(scale, .55 + Math.sin(progress * Math.PI) * 1.4, scale);
+    burst.root.rotate(0, frameTime * (burst.kind === "victory" ? 95 : 55), 0);
+    burst.material.opacity = Math.max(0, (1 - progress) * .88); burst.material.update();
+  }
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
@@ -6133,7 +6213,14 @@ async function connect(): Promise<void> {
     worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
     status.textContent = spawn.entering ? "Forest Dungeon · clear two rooms, defeat the guardian, then collect your equipment bag." : "Returned to the silver clearing with your loot.";
   });
-  room.onMessage("portal:notice", (message: string) => { status.textContent = message; showCombatFeedback("DUNGEON CLEARED", "hit"); });
+  room.onMessage("portal:notice", (message: string) => {
+    status.textContent = message;
+    const notice = forestDungeonNotice(message);
+    if (!notice) { showCombatFeedback("DUNGEON CLEARED", "hit"); return; }
+    createDungeonBurst(notice.x, notice.z, notice.kind);
+    combatAudio.play(notice.kind === "victory" ? "dungeonVictory" : "dungeonGate");
+    showCombatFeedback(notice.title, notice.kind === "victory" ? "dodge" : "hit");
+  });
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
@@ -6534,6 +6621,8 @@ async function connect(): Promise<void> {
     room = null;
     for (const visual of forestPortalVisuals.values()) { visual.root.destroy(); visual.materials.forEach(material => material.destroy()); visual.label.remove(); }
     forestPortalVisuals.clear(); nearbyForestPortal = null;
+    for (const burst of dungeonBurstVisuals) { burst.root.destroy(); burst.material.destroy(); }
+    dungeonBurstVisuals.length = 0;
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();
@@ -6546,7 +6635,7 @@ async function connect(): Promise<void> {
     for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
     for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
-    bossHudState = initialBossHud(); bossHudFingerprint = ""; bossHud.hidden = true;
+    bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true;
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();
     for (const visual of recoveryVisuals.values()) visual.destroy();
