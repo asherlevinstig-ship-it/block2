@@ -2038,11 +2038,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       || now - (this.forestTravelAt.get(client.sessionId) ?? -Infinity) < 1000
       || !hasCombatLineOfSight(player, portal, this.readWorldBlock)) return;
     const entering = payload.id === "depths-entry";
-    if (entering && !canEnterSilverDepths(player)) {
-      client.send("portal:notice", player.level < 7 ? "The Silver Depths unlock at character level 7."
-        : "Complete the first mining expedition and accept the Silver Depths contract at the blacksmith.");
-      return;
-    }
     if (!entering && !canExitSilverDepths(player)) {
       client.send("portal:notice", "Defeat the Crystal Matriarch and claim your personal Matriarch's Edge before extracting.");
       return;

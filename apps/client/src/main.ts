@@ -4416,15 +4416,16 @@ function updateForestPortals(): void {
     const rect = canvas.getBoundingClientRect();
     visual.label.hidden = !active || distance > 25 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
     visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
-    const reachable = id === "ember-entry"
+    const testEntry = id === "ember-entry" || id === "depths-entry";
+    const reachable = testEntry
       ? defeatScreen.hidden && active && Math.abs(player.y - portal.y) <= 3 && distance <= 3.5
       : canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
     visual.label.disabled = !reachable;
     const portalName = id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
       : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
       : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
-    const emberState = visual.ember && id === "ember-entry" ? "\nTEST ACCESS · E TO ENTER" : "";
-    const text = `${portalName}${emberState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !emberState ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
+    const testState = testEntry ? "\nTEST ACCESS · E TO ENTER" : "";
+    const text = `${portalName}${testState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !testState ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
   });

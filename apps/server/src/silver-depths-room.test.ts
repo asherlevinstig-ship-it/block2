@@ -40,10 +40,18 @@ describe("Silver Depths room travel", () => {
     expect([...room.state.lootDrops.values()]).toContainEqual(expect.objectContaining({ ownerId: "miner", itemId: "matriarch_edge", quantity: 1 }));
   });
 
-  it("enters through the level-gated town portal and advances the run", () => {
+  it("enters through the town portal and advances an accepted run", () => {
     const { room, player, client } = roomWithPortal("depths-entry");
     (room as any).useSilverDepthsPortal(client, { id: "depths-entry" });
     expect(player.silverDepthsStage).toBe(2);
+    expect(player).toMatchObject(SILVER_DEPTHS_ENTRY_POSITION);
+    expect(client.send).toHaveBeenCalledWith("player:portal", { ...SILVER_DEPTHS_ENTRY_POSITION, entering: true });
+  });
+
+  it("allows direct test entry before the level and expedition gates", () => {
+    const { room, player, client } = roomWithPortal("depths-entry");
+    Object.assign(player, { level: 1, miningExpeditionStage: 0, silverDepthsStage: 0 });
+    (room as any).useSilverDepthsPortal(client, { id: "depths-entry" });
     expect(player).toMatchObject(SILVER_DEPTHS_ENTRY_POSITION);
     expect(client.send).toHaveBeenCalledWith("player:portal", { ...SILVER_DEPTHS_ENTRY_POSITION, entering: true });
   });

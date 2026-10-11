@@ -20,6 +20,8 @@ describe("Forest Dungeon presentation", () => {
   it("distinguishes locked portals, arrivals, and real completions", () => {
     expect(portalNoticeFeedback("The Ember Vault requires two Silver Depths attunements.")).toEqual({ title: "TEST ACCESS UPDATED · RELOAD", cue: "dodge" });
     expect(portalNoticeFeedback("The Ember Vault is occupied by another expedition.")).toEqual({ title: "TEST ACCESS UPDATED · RELOAD", cue: "dodge" });
+    expect(portalNoticeFeedback("The Silver Depths unlock at character level 7.")).toEqual({ title: "TEST ACCESS UPDATED · RELOAD", cue: "dodge" });
+    expect(portalNoticeFeedback("Complete the first mining expedition and accept the Silver Depths contract at the blacksmith.")).toEqual({ title: "TEST ACCESS UPDATED · RELOAD", cue: "dodge" });
     expect(portalNoticeFeedback("Ember Vault entered · cross the heat lanes and defeat the Forge Colossus.")).toEqual({ title: "EMBER VAULT", cue: "dodge" });
     expect(portalNoticeFeedback("Ember Vault cleared · returned to the frontier.")).toEqual({ title: "VAULT CLEARED", cue: "dodge" });
     expect(portalNoticeFeedback("An unrelated status message")).toBeNull();
