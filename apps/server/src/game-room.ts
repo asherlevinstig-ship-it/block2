@@ -1,4 +1,5 @@
 import { Client, Room } from "@colyseus/core";
+import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
 import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
@@ -547,6 +548,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       typeof options === "object" && options && "profileToken" in options ? options.profileToken : undefined,
     );
     const profileToken = profileTokenResult.success ? profileTokenResult.data : null;
+    const requestedAdminPass = typeof options === "object" && options && "adminPass" in options ? options.adminPass : undefined;
     const requestedName = typeof options === "object" && options && "name" in options ? String(options.name) : "Explorer";
     player.name = requestedName.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer";
     if (profileToken) {
@@ -558,6 +560,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       this.profileTokens.set(client.sessionId, profileToken);
       this.profileSaveFingerprints.set(client.sessionId, serializePlayerSave(player, 0));
+      player.isAdmin = await this.resolveAdminAccess(profileToken, requestedAdminPass);
     }
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
     const spawn = process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
@@ -2125,7 +2128,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!player || !portal || !canUseForestPortal(player, portal, now)
       || (payload.id !== "ember-entry" && payload.id !== "ember-return")) return;
     const entering = payload.id === "ember-entry";
-    if (entering && ownedDepthsRewards(player.blacksmithUpgrades).length < 2) {
+    if (entering && !player.isAdmin && ownedDepthsRewards(player.blacksmithUpgrades).length < 2) {
       client.send("portal:notice", "The Ember Vault requires two Silver Depths attunements."); return;
     }
     if (entering && [...this.state.players.entries()].some(([id, other]) => id !== client.sessionId && other.health > 0 && isInEmberVault(other.x, other.z))) {
@@ -2180,6 +2183,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         emberCoresAwarded: awarded, emberCoresTotal: cores.quantity, signatureItemObtained: equipmentObtained },
     } satisfies DungeonRunUpdate);
     this.emberVaultRuns.delete(client.sessionId);
+  }
+
+  private async resolveAdminAccess(profileToken: string, requestedPass: unknown): Promise<boolean> {
+    const profileKey = adminProfileKey(profileToken);
+    try {
+      if (await this.presence.hget(ADMIN_PROFILE_HASH, profileKey) === "1") return true;
+      if (!matchesAdminBootstrapPass(requestedPass)) return false;
+      const claimedBy = await this.presence.hget(ADMIN_BOOTSTRAP_HASH, "claimedBy");
+      if (claimedBy && claimedBy !== profileKey) return false;
+      await this.presence.hset(ADMIN_BOOTSTRAP_HASH, "claimedBy", profileKey);
+      await this.presence.hset(ADMIN_PROFILE_HASH, profileKey, "1");
+      return true;
+    } catch (error) {
+      console.warn("Admin entitlement could not be resolved.", error);
+      return false;
+    }
   }
 
   private useForestPortal(client: Client, payload: unknown): void {

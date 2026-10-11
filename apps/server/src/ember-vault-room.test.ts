@@ -3,10 +3,10 @@ import { EMBER_VAULT_ENTRY, EMBER_VAULT_PORTAL_POSITION } from "@blockcraft/voxe
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, PlayerState, WorldState } from "./schema.js";
 
-function emberRoom(attuned = true) {
+function emberRoom(attuned = true, admin = false) {
   const room = new WorldRoom(); room.setState(new WorldState());
   const player = new PlayerState();
-  Object.assign(player, EMBER_VAULT_PORTAL_POSITION, { level: 12, blacksmithUpgrades: attuned ? 16 | 32 : 16 });
+  Object.assign(player, EMBER_VAULT_PORTAL_POSITION, { level: 12, blacksmithUpgrades: attuned ? 16 | 32 : 16, isAdmin: admin });
   room.state.players.set("smith", player);
   const portal = new ForestPortalState();
   Object.assign(portal, EMBER_VAULT_PORTAL_POSITION, { kind: "entry", expiresAt: 0 });
@@ -32,6 +32,13 @@ describe("Ember Vault room", () => {
     expect(client.send).toHaveBeenCalledWith("player:portal", { ...EMBER_VAULT_ENTRY, entering: true });
     expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ dungeon: "ember-vault", phase: "started" }));
     expect((room as any).emberVaultRuns.has("smith")).toBe(true);
+  });
+
+  it("lets an authenticated administrator bypass the attunement gate", () => {
+    const { room, player, client } = emberRoom(false, true);
+    (room as any).useEmberVaultPortal(client, { id: "ember-entry" });
+    expect(player).toMatchObject(EMBER_VAULT_ENTRY);
+    expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ dungeon: "ember-vault", phase: "started" }));
   });
 
   it("awards ranked Ember Cores and reports secured forge equipment", () => {

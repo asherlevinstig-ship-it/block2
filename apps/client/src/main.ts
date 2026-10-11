@@ -220,6 +220,15 @@ function browserProfileToken() {
   }
 }
 
+function consumeAdminInvitation(): string | null {
+  const url = new URL(window.location.href);
+  const invitation = url.searchParams.get("admin");
+  if (!invitation || !/^[a-f0-9]{64}$/i.test(invitation)) return null;
+  url.searchParams.delete("admin");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  return invitation;
+}
+
 let latestDungeonBoard: DungeonBoardUpdate | null = null;
 const expeditionPanel = document.createElement("section");
 expeditionPanel.id = "expedition-board-panel";
@@ -319,6 +328,7 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
 }
 
 const profileToken = browserProfileToken();
+const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
 const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`);
 
@@ -1496,6 +1506,7 @@ interface NetworkPlayer {
   specialCooldownUntil: number;
   equippedSpecial: string;
   dangerTier: number;
+  isAdmin: boolean;
   name: string;
   defending: boolean;
   defenseStartedAt: number;
@@ -1769,6 +1780,7 @@ let localMainHandId: MainHandId = "longsword";
 let localArmourId: ArmourId = "none";
 let localIronSwordOwned = false;
 let localDepthsRewardFlags = 0;
+let localIsAdmin = false;
 let localCharacterProgression: ProgressionUpdate = {
   reason: "sync", level: 1, experience: 0, experienceRequired: 40, unspentStatPoints: 0,
   powerPoints: 0, vitalityPoints: 0, agilityPoints: 0, miningPoints: 0,
@@ -3495,6 +3507,11 @@ function bindPlayers(joinedRoom: Room): void {
       localIronSwordOwned = (player.blacksmithUpgrades & 2) !== 0;
       refreshPowerCompatibility();
     }, true);
+    playerCallbacks.listen("isAdmin", () => {
+      if (!isLocal) return;
+      localIsAdmin = player.isAdmin;
+      if (localIsAdmin) status.textContent = "ADMIN ACCESS ACTIVE · progression gates are bypassed for testing.";
+    }, true);
     playerCallbacks.listen("health", () => {
       if (isLocal) {
         updatePlayerHealth(player.health, player.maxHealth);
@@ -4380,7 +4397,7 @@ function updateForestPortals(): void {
     const animationNow = performance.now();
     const pulse = victory ? Math.sin(animationNow / 220) * .1 : Math.sin(animationNow / 600) * .04;
     const attunements = [16, 32, 64, 128, 256].filter(bit => (localDepthsRewardFlags & bit) !== 0).length;
-    const emberUnlocked = !visual.ember || id === "ember-return" || attunements >= 2;
+    const emberUnlocked = !visual.ember || id === "ember-return" || localIsAdmin || attunements >= 2;
     visual.glow.setLocalScale(victory ? 1.08 : visual.ember ? .94 + Math.sin(animationNow / 260) * .045 : 1,
       visual.ember ? .98 + Math.sin(animationNow / 390) * .035 : .96 + pulse, victory ? 1.08 : 1);
     if (visual.ember) {
@@ -4405,7 +4422,8 @@ function updateForestPortals(): void {
     const portalName = id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
       : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
       : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
-    const emberState = visual.ember && id === "ember-entry" ? emberUnlocked ? "\nFORGE ATTUNED · E TO ENTER" : `\nLOCKED · ${attunements}/2 SILVER ATTUNEMENTS` : "";
+    const emberState = visual.ember && id === "ember-entry" ? localIsAdmin ? "\nADMIN OVERRIDE · E TO ENTER"
+      : emberUnlocked ? "\nFORGE ATTUNED · E TO ENTER" : `\nLOCKED · ${attunements}/2 SILVER ATTUNEMENTS` : "";
     const text = `${portalName}${emberState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !emberState ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
@@ -6905,7 +6923,7 @@ async function connect(): Promise<void> {
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
   const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
-  const joinOptions = { name: "Explorer", profileToken, ...(qaSpawn ? { qaSpawn } : {}) };
+  const joinOptions = { name: "Explorer", profileToken, ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
       const client = new Client(endpoint, {

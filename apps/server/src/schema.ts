@@ -60,6 +60,7 @@ export const PlayerState = schema({
   specialCooldownUntil: t.float64().default(0),
   equippedSpecial: t.string().default(""),
   dangerTier: t.int8().default(0),
+  isAdmin: t.boolean().default(false),
   name: t.string().default("Explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
