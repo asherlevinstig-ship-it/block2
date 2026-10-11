@@ -159,7 +159,7 @@ import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
-import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, matriarchSecondVolleyYaw } from "@blockcraft/protocol";
+import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, crystalMatriarchPattern, matriarchSecondVolleyYaw } from "@blockcraft/protocol";
 import { CombatContributions } from "./combat-contributions.js";
 import { SilverGuardVolley } from "./silver-guard-volley.js";
 import { ForestPortalCycle } from "./forest-portal-cycle.js";
@@ -1876,7 +1876,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.level = entry.level;
       mob.difficultyTier = stage === 1 ? 2 : 3;
       if (entry.id === CRYSTAL_MATRIARCH_ID) {
-        mob.isChampion = true; mob.enraged = false; mob.attackPattern = matriarchPattern(0, false); mob.rewardMultiplier *= 1.5;
+        mob.isChampion = true; mob.enraged = false; mob.attackPattern = crystalMatriarchPattern(0, false); mob.rewardMultiplier *= 1.5;
       }
     }
   }
@@ -2437,7 +2437,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const end = { x: aim.x, y: aim.y + .08, z: aim.z };
       this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
         start, end, position: start, startedAt: now, impactAt: now + travelMs });
-      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
+      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: mobId === CRYSTAL_MATRIARCH_ID ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
     }
   }
 
@@ -2668,7 +2668,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (!mob.alive && this.roomKind === "silver-depths" && SILVER_DEPTHS_ENEMY_IDS.includes(mobId)) continue;
       if (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) {
         if (!mob.enraged && matriarchEnraged(mob.health, mob.maxHealth)) mob.enraged = true;
-        if (mob.combatState === "idle") mob.attackPattern = matriarchPattern(mob.actionSequence, mob.enraged);
+        if (mob.combatState === "idle") mob.attackPattern = mobId === CRYSTAL_MATRIARCH_ID
+          ? crystalMatriarchPattern(mob.actionSequence, mob.enraged) : matriarchPattern(mob.actionSequence, mob.enraged);
       }
       else if (mobId === "forest-guardian") {
         if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
@@ -2712,7 +2713,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.speedMultiplier = stats.speedMultiplier;
         mob.rewardMultiplier = stats.rewardMultiplier;
         if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
-        if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = matriarchPattern(0, false); }
+        if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = crystalMatriarchPattern(0, false); }
         if (mobId === "forge-colossus") { mob.health = mob.maxHealth = 38; mob.attackDamage = 3; mob.attackPattern = "rocks"; }
         if (mobId === CRYSTAL_MATRIARCH_ID) this.restoreMatriarchCover();
         mob.alive = true;
@@ -2919,8 +2920,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.yaw = waiting ? Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI : pursuit.yaw;
       }
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
-      const windupMs = mobId === "frontier-brute" && mob.attackPattern !== "rocks"
-        ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs;
+      const windupMs = mobId === CRYSTAL_MATRIARCH_ID && mob.attackPattern === "crystal-burst"
+        ? MATRIARCH_PHASE.crystalBurstWindupMs
+        : mobId === "frontier-brute" && mob.attackPattern !== "rocks"
+          ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs;
       if (definition.attackKind === "projectile" && mob.archetype === "cave_spitter"
         && !allyFireLaneClear(mobId, mob, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
         positioning.sidestepPending = true;
@@ -3696,6 +3699,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt;
       mob.attackRecoveryEndAt = releaseAt + BRUTE_VOLLEY.recoveryMs;
+      return;
+    }
+    if (mobId === CRYSTAL_MATRIARCH_ID && mob.attackPattern === "crystal-burst") {
+      mob.attackContactAt = releaseAt;
+      mob.attackContactEndAt = releaseAt;
+      mob.attackRecoveryEndAt = releaseAt + MATRIARCH_PHASE.crystalBurstRecoveryMs;
       return;
     }
     if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) && mob.attackPattern === "double-fan") {

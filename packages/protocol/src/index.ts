@@ -1,6 +1,6 @@
 import { z } from "zod";
 export { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints, bruteRockLanes } from "./brute-volley.js";
-export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
+export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, crystalMatriarchPattern, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
 
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
@@ -807,7 +807,7 @@ export interface ProjectileResolved {
 }
 
 export interface MobProjectileReleased {
-  kind?: "rock" | "acid";
+  kind?: "rock" | "acid" | "crystal";
   releasedAt?: number;
   projectileId: string;
   mobId: string;

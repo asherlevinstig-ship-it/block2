@@ -76,7 +76,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   }
   if (depthsUnlocked && depthsStage === 4) {
     const boss = mobs.get("crystal-matriarch") ?? CRYSTAL_MATRIARCH_HOME;
-    const update = make("depths-matriarch", "Defeat the Crystal Matriarch", "Read the committed aimed shot, cross her fan gaps, and punish recovery. Below half health she fires two-phase fans.", boss, "encounter", 3);
+    const update = make("depths-matriarch", "Defeat the Crystal Matriarch", "Dodge between the marked crystal burst lanes, then counter during her recovery. Below half health she adds two-phase fans.", boss, "encounter", 3);
     update.targetMobId = "crystal-matriarch"; update.targetMobIds = ["crystal-matriarch"];
     return depths(update, 5);
   }

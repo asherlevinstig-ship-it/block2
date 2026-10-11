@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SPITTER_PATTERN, spitterWarningLanes } from "@blockcraft/protocol";
+import { CRYSTAL_BURST_OFFSETS, SPITTER_PATTERN, crystalMatriarchPattern, spitterShotEndpoints, spitterWarningLanes } from "@blockcraft/protocol";
 import { Block } from "@blockcraft/voxel-world";
 import { enemyShotGuideLength } from "./enemy-combat-cues.js";
 describe("spitter warning lanes", () => {
@@ -19,5 +19,22 @@ describe("spitter warning lanes", () => {
       expect(lane).toHaveLength(4);
     }
     expect(spitterWarningLanes(0, "aimed")).toHaveLength(1);
+  });
+  it("marks every crystal burst projectile while leaving wide gaps for a party to dodge", () => {
+    expect([0, 1, 2, 3, 4, 5].map(sequence => crystalMatriarchPattern(sequence, true)))
+      .toEqual(["aimed", "crystal-burst", "double-fan", "fan", "crystal-burst", "double-fan"]);
+    const shots = spitterShotEndpoints({ x: 0, y: 1, z: 0 }, 0, "crystal-burst");
+    const lanes = spitterWarningLanes(0, "crystal-burst");
+    expect(shots).toHaveLength(CRYSTAL_BURST_OFFSETS.length);
+    expect(lanes).toHaveLength(shots.length);
+    for (const [index, offset] of CRYSTAL_BURST_OFFSETS.entries()) {
+      const angle = offset * Math.PI / 180;
+      expect(shots[index]!.x).toBeCloseTo(Math.sin(angle) * SPITTER_PATTERN.range);
+      expect(shots[index]!.z).toBeCloseTo(Math.cos(angle) * SPITTER_PATTERN.range);
+      const lane = lanes[index]!;
+      expect((lane[2]!.x + lane[3]!.x) / 2).toBeCloseTo(shots[index]!.x);
+      expect((lane[2]!.z + lane[3]!.z) / 2).toBeCloseTo(shots[index]!.z);
+    }
+    expect(CRYSTAL_BURST_OFFSETS.every((offset, index) => index === 0 || offset - CRYSTAL_BURST_OFFSETS[index - 1]! >= 60)).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
+import { MATRIARCH_PHASE, SILVER_DEPTHS_ROOM, WORLD_ROOM, crystalMatriarchPattern, spitterShotEndpoints } from "@blockcraft/protocol";
 import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
@@ -21,6 +21,23 @@ function roomWithPortal(id: "depths-entry" | "depths-return") {
 }
 
 describe("Silver Depths room travel", () => {
+  it("releases six crystal shots after a longer tell and grants a full counter window", () => {
+    const { room } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.registerMob("crystal-matriarch", "cave_spitter", { x: 131.5, y: 1, z: 14.5 });
+    const boss = room.state.mobs.get("crystal-matriarch")!;
+    boss.isChampion = true;
+    boss.attackPattern = crystalMatriarchPattern(1, false);
+    expect(boss.attackPattern).toBe("crystal-burst");
+    internal.setMobAttackTimeline(boss, 1000, 1000 + MATRIARCH_PHASE.crystalBurstWindupMs, "crystal-matriarch");
+    expect(boss.attackRecoveryEndAt - boss.attackReleaseAt).toBe(MATRIARCH_PHASE.crystalBurstRecoveryMs);
+    const origin = { x: boss.x, y: boss.y, z: boss.z };
+    const shots = spitterShotEndpoints(origin, boss.yaw, boss.attackPattern);
+    internal.releaseMobVolley("crystal-matriarch", boss, origin, shots, boss.attackReleaseAt, 1250, 1, 0, 0);
+    expect(internal.pendingMobProjectiles.size).toBe(6);
+    expect(vi.mocked(room.broadcast).mock.calls.map(([, message]) => message.kind)).toEqual(Array(6).fill("crystal"));
+  });
+
   it("lets Matriarch projectiles shatter cover after two hits and restores it for a new encounter", () => {
     const { room } = roomWithPortal("depths-entry"); const internal = room as any;
     vi.spyOn(room, "broadcast").mockImplementation(() => {});

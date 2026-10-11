@@ -2188,7 +2188,7 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
     : dungeonAtmosphere.room === 2 ? "Use stone cover · read aimed shots and fan gaps"
       : "Root volleys become committed charges below half health";
   const label = emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus · dodge the committed smash · claim its forge loot" : "Use iron pillars as cover · clear each sealed forge chamber" }
-    : silverDepths ? { name: position.x >= 74 ? "CRYSTAL MATRIARCH SANCTUM" : "THE SILVER DEPTHS", detail: position.x >= 74 ? "Read committed volleys · cross the fan gaps · punish recovery" : "Miner's Lantern required · use crystal-lit cover against overlapping volleys" }
+    : silverDepths ? { name: position.x >= 74 ? "CRYSTAL MATRIARCH SANCTUM" : "THE SILVER DEPTHS", detail: position.x >= 74 ? "Dodge between crystal burst lanes · counter during recovery" : "Miner's Lantern required · use crystal-lit cover against overlapping volleys" }
     : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
@@ -2388,12 +2388,13 @@ function createMobProjectile(message: MobProjectileReleased): void {
   const flight = projectilePresentation(message.releasedAt, serverClock.offset, performance.now(), message.travelMs);
   if (flight.expired) return;
   const rock = message.kind === "rock";
-  const entity = new pc.Entity(rock ? "rock-projectile" : "acid-projectile");
-  entity.addComponent("render", { type: rock ? "box" : "sphere" });
-  const material = powerMaterial(rock ? new pc.Color(.72, .57, .38) : new pc.Color(0.54, 1, 0.08), 0.94);
+  const crystal = message.kind === "crystal";
+  const entity = new pc.Entity(rock ? "rock-projectile" : crystal ? "crystal-projectile" : "acid-projectile");
+  entity.addComponent("render", { type: rock || crystal ? "box" : "sphere" });
+  const material = powerMaterial(rock ? new pc.Color(.72, .57, .38) : crystal ? new pc.Color(.75, .42, 1) : new pc.Color(0.54, 1, 0.08), 0.94);
   if (entity.render) entity.render.material = material;
   entity.setLocalScale(0.3, 0.3, 0.3);
-  if (rock) entity.setEulerAngles(28, 35, 18);
+  if (rock || crystal) entity.setEulerAngles(28, 35, 18);
   const start = new pc.Vec3(message.x, message.y + 1.05, message.z);
   const end = new pc.Vec3(message.targetX, message.targetY + 0.08, message.targetZ);
   entity.setPosition(start);
@@ -6469,8 +6470,11 @@ app.on("update", (dt: number) => {
         mob.warning.setLocalScale(1, 1, length / 6.9);
         mob.warning.setEulerAngles(0, mob.state.yaw, 0);
       }
+      const crystalWarning = mob.state.attackPattern === "crystal-burst";
       const fanWarning = mob.state.attackPattern === "fan" || mob.state.attackPattern === "double-fan";
-      mob.warningMaterial.diffuse.set(mob.isSpitter ? fanWarning ? .35 : .85 : 1, mob.isSpitter ? fanWarning ? .62 : 1 : mob.isBrute ? .25 : .72, mob.isSpitter ? fanWarning ? 1 : .16 : mob.isBrute ? .08 : .18);
+      mob.warningMaterial.diffuse.set(crystalWarning ? .72 : mob.isSpitter ? fanWarning ? .35 : .85 : 1,
+        crystalWarning ? .32 : mob.isSpitter ? fanWarning ? .62 : 1 : mob.isBrute ? .25 : .72,
+        crystalWarning ? 1 : mob.isSpitter ? fanWarning ? 1 : .16 : mob.isBrute ? .08 : .18);
       mob.warningMaterial.emissive.copy(mob.warningMaterial.diffuse);
       mob.warningMaterial.opacity = presentation.aimLocked ? .65 : .38;
       mob.warningMaterial.update();

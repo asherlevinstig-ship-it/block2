@@ -26,6 +26,13 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue({ ...boss, combatState: "idle" }, 5200).label).toBe("ENRAGED");
     expect(enemyCombatCue({ ...boss, alive: false }, 5200).visible).toBe(false);
   });
+  it("labels the crystal burst and opens its counter cue after the projectile release", () => {
+    const crystal = { ...mob, archetype: "cave_spitter", attackPattern: "crystal-burst",
+      attackReleaseAt: 2400, attackContactAt: 2400, attackContactEndAt: 2400, attackRecoveryEndAt: 5400 };
+    expect(enemyCombatCue(crystal, 1800).label).toBe("CRYSTAL BURST · AIMING");
+    expect(enemyCombatCue({ ...crystal, aimCommitted: true }, 2200).label).toBe("CRYSTAL BURST · LOCKED");
+    expect(enemyCombatCue({ ...crystal, combatState: "recover" }, 2600).label).toBe("RECOVER · COUNTER");
+  });
   it("shows a brief spotted cue without replaying expired alerts", () => {
     const state = { alive: true, combatState: "idle", awarenessState: "engaged", alertUntil: 1900 };
     expect(enemyAwarenessCue(state, 1000)).toMatchObject({ visible: true, label: "! SPOTTED", kind: "alert" });
