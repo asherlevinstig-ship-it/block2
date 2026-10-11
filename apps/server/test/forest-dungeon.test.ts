@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { canUseForestPortal, FOREST_PORTAL_LIFETIME_MS } from "@blockcraft/protocol";
-import { Block, FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, isProtectedVoxel, isPlayerSupported, playerCollides } from "@blockcraft/voxel-world";
+import { Block, FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, isProtectedVoxel, isPlayerSupported, playerCollides } from "@blockcraft/voxel-world";
 import { ForestPortalCycle } from "../src/forest-portal-cycle.js";
 import { WorldRoom } from "../src/game-room.js";
 import { InventoryItemState, PlayerState, WorldState } from "../src/schema.js";
@@ -25,6 +25,29 @@ function fixture() {
   return { room, internal, player, client, kill, open };
 }
 describe("forest dungeon portal", () => {
+  it("lets a nearby solo leader open a reserved town portal and reports persistent board details", () => {
+    const { room, internal, player, client } = fixture();
+    Object.assign(player, TOWN_EXPEDITION_BOARD_POSITION, { forestBestTimeMs: 65432 });
+    internal.handleDungeonBoard(client, { action: "sync" });
+    expect(client.send).toHaveBeenCalledWith("dungeon:board", expect.objectContaining({ available: true, leader: true, partySize: 1, bestTimeMs: 65432 }));
+    internal.handleDungeonBoard(client, { action: "open" });
+    expect(room.state.portals.get("forest-entry")).toMatchObject({ ...TOWN_EXPEDITION_PORTAL_POSITION, kind: "entry", expiresAt: 40000 });
+    expect(internal.forestDungeonRun.allowed).toEqual(new Set(["tester"]));
+  });
+  it("rejects remote board launches and reserves party launches for the leader", () => {
+    const { room, internal, player, client } = fixture();
+    internal.handleDungeonBoard(client, { action: "open" });
+    expect(room.state.portals.has("forest-entry")).toBe(false);
+    const friend = new PlayerState(); Object.assign(friend, TOWN_EXPEDITION_BOARD_POSITION); room.state.players.set("friend", friend);
+    Object.assign(player, TOWN_EXPEDITION_BOARD_POSITION);
+    internal.parties.handle("tester", { action: "invite", targetId: "friend" }, room.state.players, 10000);
+    const inviteId = internal.parties.snapshot("friend", room.state.players, 10000).invite.id;
+    internal.parties.handle("friend", { action: "respond", inviteId, accept: true }, room.state.players, 10000);
+    const friendClient = { sessionId: "friend", send: vi.fn() } as any;
+    internal.handleDungeonBoard(friendClient, { action: "open" });
+    expect(room.state.portals.has("forest-entry")).toBe(false);
+    expect(friendClient.send).toHaveBeenCalledWith("dungeon:board", expect.objectContaining({ leader: false, message: expect.stringContaining("leader") }));
+  });
   it("builds distinct blocking cover while preserving each room's central route", () => {
     const { internal } = fixture();
     expect(FOREST_DUNGEON_COVER.filter(prop => prop.stage === 1)).toHaveLength(2);
@@ -97,6 +120,7 @@ describe("forest dungeon portal", () => {
     expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "rootbound_hammer")).toBe(true);
     expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "stone_core_hammer")).toBe(false);
     expect(room.state.portals.has("forest-victory")).toBe(true);
+    expect(player.forestBestTimeMs).toBeGreaterThan(0);
     expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ phase: "completed", reward: "Personal Rootbound Cache unlocked" }));
     vi.setSystemTime(30000); internal.simulatePlayers(.033);
     expect(FOREST_DUNGEON_MOBS.every(entry => room.state.mobs.get(entry.id)?.alive === false)).toBe(true);
@@ -172,8 +196,10 @@ describe("forest dungeon portal", () => {
     internal.returnPlayerToTown(client); internal.simulatePlayers(.033);
     expect(player.health).toBe(5); expect(player.recoveryBags.size).toBe(bags);
     expect(room.state.portals.size).toBe(0); expect(internal.forestDungeonActive).toBe(false);
-    Object.assign(player, FOREST_PORTAL_POSITION); vi.setSystemTime(57000); internal.simulatePlayers(.033);
+    Object.assign(player, TOWN_EXPEDITION_BOARD_POSITION); vi.setSystemTime(57000); internal.simulatePlayers(.033);
+    internal.handleDungeonBoard(client, { action: "open" });
     expect(room.state.portals.has("forest-entry")).toBe(true);
+    Object.assign(player, TOWN_EXPEDITION_PORTAL_POSITION);
     internal.useForestPortal(client, { id: "forest-entry" });
     expect(player.x).toBe(FOREST_DUNGEON_ENTRY.x);
   });

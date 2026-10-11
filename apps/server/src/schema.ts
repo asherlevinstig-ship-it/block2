@@ -26,6 +26,7 @@ export const PlayerState = schema({
   coins: t.uint32().default(20),
   potionCooldownUntil: t.float64().default(0),
   blacksmithUpgrades: t.uint8().default(0),
+  forestBestTimeMs: t.uint32().default(0),
   dodgeSequence: t.int32().default(0),
   defending: t.boolean().default(false),
   defenseStartedAt: t.float64().default(0),

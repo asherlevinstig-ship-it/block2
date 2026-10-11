@@ -34,6 +34,7 @@ export interface PlayerSaveData {
   coins: number;
   potionCooldownUntil?: number;
   blacksmithUpgrades: number;
+  forestBestTimeMs?: number;
   inventory: Partial<Record<ItemId, number>>;
   storage?: Partial<Record<ItemId, number>>;
   recoveryBags?: RecoveryBagData[];
@@ -79,6 +80,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     coins: player.coins,
     potionCooldownUntil: player.potionCooldownUntil,
     blacksmithUpgrades: player.blacksmithUpgrades,
+    forestBestTimeMs: player.forestBestTimeMs,
     inventory,
     storage,
     recoveryBags: snapshotRecoveryBags(player),
@@ -136,6 +138,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     coins: Math.floor(finiteNumber(value.coins, TAVERN_QUIZ_STARTING_COINS, 0, 1_000_000)),
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 7)),
+    forestBestTimeMs: Math.floor(finiteNumber(value.forestBestTimeMs, 0, 0, 86_400_000)),
     inventory,
     storage,
     mainHandId,
@@ -156,6 +159,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.coins = save.coins;
   player.potionCooldownUntil = save.potionCooldownUntil ?? 0;
   player.blacksmithUpgrades = save.blacksmithUpgrades;
+  player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.stamina = save.stamina;
   restoreRecoveryBags(player, save.recoveryBags ?? []);
   for (const [itemId, quantity] of Object.entries(save.inventory) as [ItemId, number][]) {

@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { MINERAL_DEPOSITS, WILDERNESS_CAMPS } from "@blockcraft/voxel-world";
 import { STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
-import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_EXPEDITION_BOARD_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 import { TOWN_STORAGE_CHEST_POSITION } from "@blockcraft/voxel-world";
 
@@ -484,6 +484,22 @@ export class SceneDressing {
       }
       solid.box(chest.x, 8.71, chest.z + .475, .19, .23, .04, GOLD);
       solid.box(chest.x, 8.71, chest.z + .50, .055, .1, .02, SOOT);
+    }
+    const board = TOWN_EXPEDITION_BOARD_POSITION;
+    if (read(Math.floor(board.x), SURFACE_HEIGHT, Math.floor(board.z)) !== Block.Air) {
+      for (const dx of [-1.18, 1.18]) {
+        solid.box(board.x + dx, 9.05, board.z, .18, 2.1, .18, DARK_OAK);
+        solid.box(board.x + dx, 8.12, board.z, .34, .22, .34, SLATE);
+      }
+      solid.box(board.x, 9.45, board.z, 2.7, 1.55, .18, DARK_OAK);
+      solid.box(board.x, 9.45, board.z + .11, 2.42, 1.27, .05, CANVAS);
+      solid.box(board.x, 10.22, board.z, 3.05, .18, .28, OAK);
+      solid.box(board.x, 9.82, board.z + .16, 1.5, .11, .035, GOLD);
+      for (const [dx, dy] of [[-.78, .28], [.72, .22], [-.42, -.2], [.48, -.28]] as const) {
+        solid.box(board.x + dx, 9.42 + dy, board.z + .17, .62, .36, .025, CREAM);
+        solid.box(board.x + dx, 9.42 + dy, board.z + .19, .08, .08, .018, COPPER);
+      }
+      glow.box(board.x, 9.2, board.z + .18, .28, .28, .03, GOLD);
     }
     // A compact smithy: heavy timber, a striped awning, forge and metal goods.
     if (read(Math.floor(TOWN_BLACKSMITH_STALL_POSITION.x), SURFACE_HEIGHT, Math.floor(TOWN_BLACKSMITH_STALL_POSITION.z)) !== Block.Air) {

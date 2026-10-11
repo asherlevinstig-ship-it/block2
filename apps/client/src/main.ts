@@ -26,6 +26,7 @@ import { canUseForestPortal, type ForestPortal } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
 import { SPITTER_PATTERN, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
+import { TOWN_EXPEDITION_BOARD_POSITION } from "@blockcraft/voxel-world";
 import { equipmentPickupCard } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
@@ -87,6 +88,7 @@ import {
   type CombatStagger,
   type DefenseResolved,
   type DungeonRunUpdate,
+  type DungeonBoardUpdate,
   type ItemId,
   type LootPickedUp,
   type ResourceGathered,
@@ -200,6 +202,33 @@ function browserProfileToken() {
     return newGuestProfileToken();
   }
 }
+
+let latestDungeonBoard: DungeonBoardUpdate | null = null;
+const expeditionPanel = document.createElement("section");
+expeditionPanel.id = "expedition-board-panel";
+expeditionPanel.hidden = true;
+expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST EXPEDITION</h2><p class="expedition-message"></p><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>4-damage smash · line Powers bind enemies</span></div><button class="expedition-launch" type="button">OPEN EXPEDITION PORTAL</button>';
+document.body.append(expeditionPanel);
+const formatDungeonTime = (milliseconds: number) => milliseconds > 0
+  ? `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, "0")}` : "—";
+function renderDungeonBoard(update: DungeonBoardUpdate): void {
+  latestDungeonBoard = update;
+  expeditionPanel.querySelector(".expedition-message")!.textContent = update.message;
+  expeditionPanel.querySelector(".expedition-party")!.textContent = update.partySize > 1 ? `${update.partySize} PLAYERS` : "SOLO";
+  expeditionPanel.querySelector(".expedition-best")!.textContent = formatDungeonTime(update.bestTimeMs);
+  expeditionPanel.querySelectorAll<HTMLElement>("[data-stage]").forEach(row => {
+    const stage = Number(row.dataset.stage); row.classList.toggle("complete", update.stage > stage || update.stage === 3 && stage === 3);
+    row.classList.toggle("active", update.active && stage === Math.max(1, update.stage));
+  });
+  const launch = expeditionPanel.querySelector<HTMLButtonElement>(".expedition-launch")!;
+  launch.disabled = !update.available || !update.leader;
+  launch.textContent = !update.leader ? "PARTY LEADER REQUIRED" : update.active ? "EXPEDITION OCCUPIED" : update.cooldownUntil > Date.now() ? "EXPEDITION RECOVERING" : "OPEN EXPEDITION PORTAL";
+}
+function openDungeonBoard(): void {
+  expeditionPanel.hidden = false; resetMovementControls(); room?.send("dungeon:board", { action: "sync" });
+}
+expeditionPanel.querySelector(".expedition-close")!.addEventListener("click", () => { expeditionPanel.hidden = true; });
+expeditionPanel.querySelector(".expedition-launch")!.addEventListener("click", () => room?.send("dungeon:board", { action: "open" }));
 
 function showDungeonRunResult(update: DungeonRunUpdate): void {
   if (update.phase !== "completed") return;
@@ -3896,6 +3925,8 @@ function updateTarget(): void {
     caveEntranceSign.style.top = `${bounds.top + caveSignScreen.y * bounds.height / canvas.height}px`;
   }
   const blacksmithNearby = worldReady && room !== null && canTradeAtBlacksmithStall(player, sceneDressing.blacksmithVisible);
+  const expeditionBoardNearby = worldReady && room !== null && Math.abs(player.y - TOWN_EXPEDITION_BOARD_POSITION.y) <= 1.6
+    && Math.hypot(player.x - TOWN_EXPEDITION_BOARD_POSITION.x, player.z - TOWN_EXPEDITION_BOARD_POSITION.z) <= 3;
   const chestNearby = worldReady && room !== null && sceneDressing.blacksmithVisible && isAtTownStorage(player);
   storagePrompt.hidden = !chestNearby || !inventoryPanel.hidden || !blacksmithPanel.hidden || !quizPanel.hidden;
   if (!storagePrompt.hidden) {
@@ -3934,7 +3965,7 @@ function updateTarget(): void {
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
   const nearbyLoot = nearestEquipmentDrop();
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${nearbyLoot}:${nearbyForestPortal}`;
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${nearbyForestPortal}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -3942,9 +3973,10 @@ function updateTarget(): void {
   targetMaterial.emissive = tint.clone().mulScalar(0.3);
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
-  mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
+  mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (nearbyLoot) targetLabel.textContent = "Equipment bag · press E or Loot to inspect and compare";
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
+  else if (expeditionBoardNearby) targetLabel.textContent = "Forest Expedition Board · press E to plan a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
@@ -5107,6 +5139,11 @@ function requestPrimaryAction(): void {
   const nearbyLoot = nearestEquipmentDrop();
   if (nearbyLoot) { openLoot(nearbyLoot); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
+  const boardPosition = localPlayer.getPosition();
+  if (Math.abs(boardPosition.y - TOWN_EXPEDITION_BOARD_POSITION.y) <= 1.6
+    && Math.hypot(boardPosition.x - TOWN_EXPEDITION_BOARD_POSITION.x, boardPosition.z - TOWN_EXPEDITION_BOARD_POSITION.z) <= 3) {
+    openDungeonBoard(); return;
+  }
   if (canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
     openBlacksmith();
     return;
@@ -6276,6 +6313,7 @@ async function connect(): Promise<void> {
     if (update.phase === "started") status.textContent = `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
     showDungeonRunResult(update);
   });
+  room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });

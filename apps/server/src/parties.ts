@@ -15,6 +15,10 @@ export class Parties {
     const partyId = this.partyId(id);
     return partyId ? { key: partyId, members: [...(this.groups.get(partyId) ?? [id])] } : { key: `solo:${id}`, members: [id] };
   }
+  isLeader(id: string): boolean {
+    const partyId = this.partyId(id);
+    return !partyId || this.groups.get(partyId)?.[0] === id;
+  }
   expire(now: number): void { for (const [id, invite] of this.invites) if (now >= invite.expiresAt) this.invites.delete(id); }
   leave(id: string): void {
     const groupId = this.partyId(id); this.membership.delete(id);

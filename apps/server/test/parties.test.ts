@@ -22,6 +22,7 @@ describe("consent-based four-player parties", () => {
     f.group();
     expect(f.parties.cohort("a").members).toEqual(["a", "b"]);
     expect(f.parties.cohort("b").key).toBe(f.parties.cohort("a").key);
+    expect(f.parties.isLeader("a")).toBe(true); expect(f.parties.isLeader("b")).toBe(false);
   });
   it("declines and expires invitations without changing membership", () => {
     const f = fixture(); f.invite("a", "b"); f.respond("b", false); expect(f.snapshot("b").invite).toBeNull();
