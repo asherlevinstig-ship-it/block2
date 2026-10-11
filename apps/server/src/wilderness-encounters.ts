@@ -11,6 +11,8 @@ export const MIXED_FRONTIER_SPITTER = { x: 68.5, y: 8, z: 36.5 };
 export const isMixedFrontierMob = (id: string) => MIXED_FRONTIER_IDS.some(member => member === id);
 export const mixedFrontierAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - MIXED_FRONTIER_CENTER.y) <= 1.5
   && Math.hypot(pose.x - MIXED_FRONTIER_CENTER.x, pose.z - MIXED_FRONTIER_CENTER.z) <= 14;
+export const frontierBruteAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
+  && pose.x >= 56 && pose.x <= 76 && pose.z >= 18 && pose.z <= 35;
 /** Existing encounter IDs remain stable for objective tracking and saved worlds. */
 export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchetypeId; x: number; y: number; z: number }[] = [
   { id: "moss-crawler", archetype: "moss_crawler", x: 35.5, y: 8, z: -8.5 },

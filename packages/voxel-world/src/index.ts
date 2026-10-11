@@ -51,6 +51,11 @@ export const GREENWOOD_CRAWLER_HOMES = [
 export const STONE_BRUTE_ARENA = { minX: 35, maxX: 49, minZ: 34, maxZ: 48 } as const;
 export const STONE_BRUTE_ARENA_HOME = { x: 42.5, y: 8, z: 41.5 } as const;
 export const FRONTIER_BRUTE_ARENA = { minX: 60, maxX: 75, minZ: 19, maxZ: 34 } as const;
+export const FRONTIER_BRUTE_COVER = [
+  { x: 64, z: 23, height: 2 }, { x: 72, z: 23, height: 3 },
+  { x: 64, z: 31, height: 3 }, { x: 72, z: 31, height: 2 },
+  { x: 61, z: 27, height: 2 }, { x: 74, z: 27, height: 2 },
+] as const;
 export const FOREST_DUNGEON = { minX: 156, maxX: 192, minZ: 156, maxZ: 174 } as const;
 export const FOREST_PORTAL_POSITION = { x: 46.5, y: 8, z: 28.5 } as const;
 export const FOREST_DUNGEON_ENTRY = { x: 160.5, y: 8, z: 165.5 } as const;
@@ -83,9 +88,9 @@ export function frontierBruteArenaBlock(x: number, y: number, z: number): BlockI
     const edge = arena && (x === 60 || x === 75 || z === 19 || z === 34);
     return edge || approach ? Block.Dirt : Block.Stone;
   }
-  // Ruined corner pillars keep the centre and retreat lane open.
-  const pillar = (x === 64 || x === 72) && (z === 23 || z === 31);
-  return pillar && y <= SURFACE_HEIGHT + 2 ? Block.Stone : Block.Air;
+  // Uneven perimeter ruins catch rock volleys while the central silver and dodge lanes stay open.
+  const pillar = FRONTIER_BRUTE_COVER.find(cover => cover.x === x && cover.z === z);
+  return pillar && y <= SURFACE_HEIGHT + pillar.height ? Block.Stone : Block.Air;
 }
 export function isInStoneBruteArena(x: number, z: number): boolean {
   return x >= STONE_BRUTE_ARENA.minX && x <= STONE_BRUTE_ARENA.maxX + 1
