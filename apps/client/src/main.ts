@@ -331,7 +331,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 7 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== 8 || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -1024,6 +1024,18 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   for (const x of [-.23, .23]) addBox(stoneCoreHammer, "hammer-binding", brassMaterial, [.055, .34, .4], [x, -.42, 0]);
   rightElbow.addChild(stoneCoreHammer);
 
+  const rootboundHammer = new pc.Entity("main-hand-rootbound-hammer");
+  rootboundHammer.setLocalPosition(0, -0.28, 0.1);
+  const rootWood = coloredMaterial(new pc.Color(0.24, 0.13, 0.055));
+  const rootStone = coloredMaterial(new pc.Color(0.16, 0.28, 0.17));
+  const rootGlow = coloredMaterial(new pc.Color(0.34, 0.92, 0.3));
+  addBox(rootboundHammer, "rootbound-handle", rootWood, [0.13, 0.58, 0.13], [0, -0.1, 0]);
+  addBox(rootboundHammer, "rootbound-head", rootStone, [0.7, 0.34, 0.4], [0, -0.46, 0]);
+  addBox(rootboundHammer, "rootbound-heart", rootGlow, [0.2, 0.24, 0.42], [0, -0.46, 0]);
+  for (const x of [-.28, .28]) addBox(rootboundHammer, "rootbound-root", rootWood, [.08, .4, .44], [x, -.46, 0]);
+  for (const x of [-.18, .18]) addBox(rootboundHammer, "rootbound-rune", rootGlow, [.045, .27, .45], [x, -.46, 0]);
+  rightElbow.addChild(rootboundHammer);
+
   const acidGlandFocus = new pc.Entity("main-hand-acid-gland-focus");
   acidGlandFocus.setLocalPosition(0, -0.28, 0.11);
   addBox(acidGlandFocus, "acid-focus-handle", weaponWoodMaterial, [0.1, 0.48, 0.1], [0, 0, 0]);
@@ -1054,12 +1066,14 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     magic_focus: magicFocus,
     fang_dagger: fangDagger,
     stone_core_hammer: stoneCoreHammer,
+    rootbound_hammer: rootboundHammer,
     acid_gland_focus: acidGlandFocus,
   };
   bow.enabled = false;
   magicFocus.enabled = false;
   fangDagger.enabled = false;
   stoneCoreHammer.enabled = false;
+  rootboundHammer.enabled = false;
   acidGlandFocus.enabled = false;
 
   const leftLeg = new pc.Entity("left-leg-pivot");
@@ -1171,7 +1185,7 @@ function animateVoxelCharacter(
   rig.leftKnee.setLocalEulerAngles(pose.leftKneePitch, 0, 0);
   rig.rightKnee.setLocalEulerAngles(pose.rightKneePitch, 0, 0);
   rig.scarf.setLocalEulerAngles(pose.scarfPitch, 0, pose.torsoRoll * -1.5);
-  for (const id of ["longsword", "forged_sword", "fang_dagger", "stone_core_hammer"] as const) {
+  for (const id of ["longsword", "forged_sword", "fang_dagger", "stone_core_hammer", "rootbound_hammer"] as const) {
     const weapon = rig.mainHands[id];
     const sword = id === "longsword" || id === "forged_sword";
     weapon.setLocalPosition(0, sword ? -0.29 : -0.28, sword ? 0.085 : 0.1);
@@ -2257,7 +2271,9 @@ function createPowerImpact(message: PowerResolved): void {
   const waveSegments: PowerAimSegment[] = [];
   const fractureSegments: PowerAimSegment[] = [];
   const material = powerMaterial(
-    message.powerId === "shockwave"
+    message.rootbound
+      ? new pc.Color(0.28, 0.92, 0.25)
+      : message.powerId === "shockwave"
       ? new pc.Color(0.2, 0.76, 1)
       : message.powerId === "eruption"
         ? new pc.Color(1, 0.22, 0.035)
@@ -2321,6 +2337,14 @@ function createPowerImpact(message: PowerResolved): void {
         branch.setLocalEulerAngles(0, side * (24 + distance * 3), 0);
         branch.enabled = false;
         waveSegments.push({ entity: branch, distance });
+      }
+      if (message.rootbound) {
+        for (const side of [-1, 1]) {
+          const rootSpike = addBox(root, "rootbound-surge", material, [0.1, 0.45 + (Math.floor(distance * 10) % 3) * 0.12, 0.1], [side * impactWidth * 0.34, 0.22, distance]);
+          rootSpike.setLocalEulerAngles(side * 12, 0, side * 24);
+          rootSpike.enabled = false;
+          waveSegments.push({ entity: rootSpike, distance });
+        }
       }
     }
     if ((message.aftershockHitCount ?? 0) > 0) {
@@ -2678,6 +2702,7 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   acid_gland: coloredMaterial(new pc.Color(0.58, 0.9, 0.1)),
   fang_dagger: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
   stone_core_hammer: coloredMaterial(new pc.Color(0.42, 0.52, 0.58)),
+  rootbound_hammer: coloredMaterial(new pc.Color(0.22, 0.58, 0.25)),
   acid_gland_focus: coloredMaterial(new pc.Color(0.62, 0.96, 0.12)),
   venom_focus: coloredMaterial(new pc.Color(.15, .95, .65)),
 };
@@ -2708,7 +2733,7 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   } else if (itemId === "fang_dagger") {
     addBox(root, "dropped-dagger-grip", weaponWoodMaterial, [0.1, 0.26, 0.1], [0, 0.17, 0]);
     addBox(root, "dropped-dagger-fang", material, [0.18, 0.48, 0.12], [0, -0.18, 0]).setLocalEulerAngles(0, 0, 8);
-  } else if (itemId === "stone_core_hammer") {
+  } else if (itemId === "stone_core_hammer" || itemId === "rootbound_hammer") {
     addBox(root, "dropped-hammer-handle", weaponWoodMaterial, [0.11, 0.7, 0.11], [0, 0, 0]);
     addBox(root, "dropped-hammer-head", material, [0.64, 0.34, 0.4], [0, -0.38, 0]);
   } else if (itemId === "acid_gland_focus") {
@@ -6315,7 +6340,7 @@ async function connect(): Promise<void> {
             : powerLabel,
       );
       status.textContent = message.hitCount > 0
-        ? `${definition.name} struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage${(message.aftershockHitCount ?? 0) > 0 ? ` · AFTERSHOCK ×${message.aftershockHitCount}` : ""}${(message.traitBonusHitCount ?? 0) > 0 ? ` · EXECUTIONER ×${message.traitBonusHitCount}` : ""}.`
+        ? `${definition.name} struck ${message.hitCount} target${message.hitCount === 1 ? "" : "s"} for ${message.damage} damage${message.rootbound ? ` · ROOTBOUND ${message.rootDurationMs}ms` : ""}${(message.aftershockHitCount ?? 0) > 0 ? ` · AFTERSHOCK ×${message.aftershockHitCount}` : ""}${(message.traitBonusHitCount ?? 0) > 0 ? ` · EXECUTIONER ×${message.traitBonusHitCount}` : ""}.`
         : definition.fracturesTerrain
           ? `${definition.name} fractured ${message.fractures.length} terrain block${message.fractures.length === 1 ? "" : "s"}.`
           : `${definition.name} released with no targets in range.`;
@@ -6406,7 +6431,7 @@ async function connect(): Promise<void> {
         createRangedPopup(position, `−${message.damage}`, "damage", message.defeated);
       }
     }
-    if (message.mainHandId === "stone_core_hammer" && message.damage > 0 && mob
+    if ((message.mainHandId === "stone_core_hammer" || message.mainHandId === "rootbound_hammer") && message.damage > 0 && mob
       && localPlayer.getPosition().distance(mob.entity.getPosition()) <= 9) createHammerHitImpact(mob);
     if (message.defeated) mob?.marks.clear();
     const name = mob?.state.name ?? "Mob";
@@ -6418,7 +6443,7 @@ async function connect(): Promise<void> {
     if (message.attackerId === room?.sessionId) {
       updateMomentum(message.momentumStacks);
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
-      if (!rangedHit) localHitPauseUntil = performance.now() + (message.mainHandId === "stone_core_hammer" ? 80 : comboStep === 3 ? 75 : 48);
+      if (!rangedHit) localHitPauseUntil = performance.now() + ((message.mainHandId === "stone_core_hammer" || message.mainHandId === "rootbound_hammer") ? 80 : comboStep === 3 ? 75 : 48);
       const hitLabel = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo && comboStep === 3
         ? `FINISHER  −${message.damage}`
         : `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName.toUpperCase()}  −${message.damage}`;

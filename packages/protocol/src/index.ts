@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, s
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-root-guardian-v84";
+export const WORLD_ROOM = "world-rootbound-hammer-v85";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -109,6 +109,7 @@ export const ITEM_DEFINITIONS = {
   acid_gland: { id: "acid_gland", name: "Acid Gland", description: "A volatile gland taken from a Cave Spitter" },
   fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", description: "A fast three-hit melee weapon" },
   stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", description: "Slow overhead smash · heavy knockback · can stagger enemy windups" },
+  rootbound_hammer: { id: "rootbound_hammer", name: "Rootbound Hammer", description: "Guardian relic · powerful overhead smash · line Powers bind surviving enemies" },
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", description: "A ranged focus that fires corrosive bolts" },
   venom_focus: { id: "venom_focus", name: "Venom Focus", description: "Matriarch focus: corrosive bolts and a three-shot Venom Fan special" },
 } as const;
@@ -182,6 +183,7 @@ export const MAIN_HAND_DEFINITIONS = {
   magic_focus: { id: "magic_focus", name: "Magic Focus", tag: "focus", attackName: "Arcane Bolt" },
   fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", tag: "melee", attackName: "Fang Flurry", requiredItemId: "fang_dagger" },
   stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", tag: "melee", attackName: "Core Smash", requiredItemId: "stone_core_hammer" },
+  rootbound_hammer: { id: "rootbound_hammer", name: "Rootbound Hammer", tag: "melee", attackName: "Rootfall Smash", requiredItemId: "rootbound_hammer" },
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", tag: "focus", attackName: "Corrosive Bolt", requiredItemId: "acid_gland_focus" },
   venom_focus: { id: "venom_focus", name: "Venom Focus", tag: "focus", attackName: "Venom Bolt", requiredItemId: "venom_focus" },
 } as const satisfies Record<string, MainHandDefinition>;
@@ -259,6 +261,14 @@ export const WEAPON_ATTACK_DEFINITIONS = {
     minimumFacingDot: 0.28,
     projectileTravelMs: 0,
     attacks: [{ step: 1, durationMs: 820, impactMs: 430, damage: 3, knockback: 1.35 }],
+  },
+  rootbound_hammer: {
+    combo: false,
+    comboWindowMs: 0,
+    range: 2.25,
+    minimumFacingDot: 0.24,
+    projectileTravelMs: 0,
+    attacks: [{ step: 1, durationMs: 760, impactMs: 390, damage: 4, knockback: 1.5 }],
   },
   acid_gland_focus: {
     combo: false,
@@ -519,7 +529,7 @@ export const SpecialEquipRequestSchema = z.object({
 
 export const MainHandEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "acid_gland_focus", "venom_focus", "forged_sword", "forged_bow", "forged_focus"]),
+  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "acid_gland_focus", "venom_focus", "forged_sword", "forged_bow", "forged_focus"]),
 });
 
 export const TraitEquipRequestSchema = z.object({
@@ -741,6 +751,8 @@ export interface PowerResolved {
   aftershockHitCount?: number;
   traitBonusHitCount?: number;
   seismicMastery?: SeismicMasteryId;
+  rootbound?: boolean;
+  rootDurationMs?: number;
 }
 
 export interface PowerCancelled {

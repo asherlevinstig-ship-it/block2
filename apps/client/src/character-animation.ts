@@ -73,7 +73,7 @@ export function primaryActionPose(elapsedMilliseconds: number | null, comboStep 
   }
 
   const impact = combatTiming?.impactMs ?? 95;
-  if (mainHandId === "stone_core_hammer") {
+  if (mainHandId === "stone_core_hammer" || mainHandId === "rootbound_hammer") {
     const liftEnd = impact - 90;
     const settleStart = impact + 90;
     const smooth = (t: number) => { const p = Math.max(0, Math.min(1, t)); return p * p * (3 - 2 * p); };

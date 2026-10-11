@@ -1294,7 +1294,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
-    const baseDrops = mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
+    const baseDrops = mobId === "forest-guardian" ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "rootbound_hammer" as const, quantity: 1 }]
+      : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
       : mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
       : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
       : lootForArchetype(mob.archetype as MobArchetypeId, mobId);
@@ -2481,6 +2482,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       let resolvedDamage: number = definition.damage;
       let aftershockHitCount = 0;
       let traitBonusHitCount = 0;
+      const rootbound = player.mainHandId === "rootbound_hammer" && definition.core === "line";
+      const rootDurationMs = rootbound ? 700 : 0;
       for (const target of targets) {
         const mob = this.state.mobs.get(target.id);
         if (!mob || !mob.alive || !hasCombatLineOfSight(impactCenter, mob, this.readWorldBlock)) continue;
@@ -2523,7 +2526,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           const consumed = consumedMarks.find(mark => mark.mobId === target.id);
           if (consumed) consumed.staggerMs = 0;
         } else {
-          const duration = definition.staggerMs + payoff.staggerBonusMs
+          const duration = definition.staggerMs + payoff.staggerBonusMs + rootDurationMs
             + (aftershock ? SEISMIC_CLEAVE_UPGRADES.aftershockStaggerBonusMs : 0);
           const resistedDuration = Math.round(duration * (mob.archetype === "stone_brute" ? 0.65 : 1));
           const staggered = this.staggerMob(target.id, mob, now, resistedDuration);
@@ -2554,6 +2557,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           aftershockHitCount,
           seismicMastery: pending.seismicMastery ?? "advancing_fault",
         } : {}),
+        ...(rootbound ? { rootbound: true, rootDurationMs } : {}),
       };
       this.broadcast("power:resolved", resolved);
       for (const consumed of consumedMarks) this.broadcast("special:consumed", consumed);

@@ -13,6 +13,8 @@ describe("equipment ownership", () => {
     expect(canEquipMainHand("fang_dagger", () => 0)).toBe(false);
     expect(canEquipMainHand("fang_dagger", itemId => itemId === "fang_dagger" ? 1 : 0)).toBe(true);
     expect(canEquipMainHand("stone_core_hammer", itemId => itemId === "stone_core_hammer" ? 1 : 0)).toBe(true);
+    expect(canEquipMainHand("rootbound_hammer", () => 0)).toBe(false);
+    expect(canEquipMainHand("rootbound_hammer", itemId => itemId === "rootbound_hammer" ? 1 : 0)).toBe(true);
     expect(canEquipMainHand("acid_gland_focus", itemId => itemId === "acid_gland_focus" ? 1 : 0)).toBe(true);
   });
 
@@ -21,6 +23,8 @@ describe("equipment ownership", () => {
     expect(WEAPON_ATTACK_DEFINITIONS.fang_dagger.attacks[0]?.durationMs).toBeLessThan(300);
     expect(WEAPON_ATTACK_DEFINITIONS.stone_core_hammer.attacks[0]?.damage).toBe(3);
     expect(WEAPON_ATTACK_DEFINITIONS.stone_core_hammer.attacks[0]?.knockback).toBeGreaterThan(1);
+    expect(WEAPON_ATTACK_DEFINITIONS.rootbound_hammer.attacks[0]?.damage).toBe(4);
+    expect(WEAPON_ATTACK_DEFINITIONS.rootbound_hammer.attacks[0]?.durationMs).toBeLessThan(WEAPON_ATTACK_DEFINITIONS.stone_core_hammer.attacks[0]!.durationMs);
     expect(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.range).toBeGreaterThan(7);
     expect(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0]?.damage).toBe(2);
   });

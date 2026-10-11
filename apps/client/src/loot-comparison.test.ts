@@ -9,11 +9,12 @@ describe("equipment loot comparisons", () => {
   it("recognises only owned-item weapons as inspectable equipment", () => {
     expect(equipmentForItem("fang_dagger")).toBe("fang_dagger");
     expect(equipmentForItem("stone_core_hammer")).toBe("stone_core_hammer");
+    expect(equipmentForItem("rootbound_hammer")).toBe("rootbound_hammer");
     expect(equipmentForItem("acid_gland_focus")).toBe("acid_gland_focus");
     for (const item of ["moss_fibre", "longsword", "reinforced_pickaxe", "unknown", "toString"]) expect(equipmentForItem(item)).toBeNull();
   });
   it("uses real attack data instead of arbitrary rarity or power ratings", () => {
-    for (const id of ["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "acid_gland_focus"] as const) {
+    for (const id of ["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "acid_gland_focus"] as const) {
       const stats = weaponComparison(id); const weapon = WEAPON_ATTACK_DEFINITIONS[id];
       expect(stats.damage).toBe(weapon.attacks.map(step => step.damage).join(" / "));
       expect(stats.speed).toBe(`${weapon.attacks[0].durationMs} ms`);

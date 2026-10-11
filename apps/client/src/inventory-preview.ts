@@ -37,8 +37,9 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       } else if (hand.includes("focus")) {
         box("#795735", 180, 125, 7, 82);
         box(hand === "venom_focus" ? "#36d7a2" : hand === "acid_gland_focus" ? "#b1db54" : "#79c4e5", 172, 105, 23, 24); box("#ddf4f0", 179, 109, 7, 10);
-      } else if (hand === "stone_core_hammer") {
+      } else if (hand === "stone_core_hammer" || hand === "rootbound_hammer") {
         box("#8b623b", 183, 118, 8, 91); box("#819baa", 167, 97, 39, 27); box("#c6d5dc", 169, 97, 35, 7);
+        if (hand === "rootbound_hammer") { box("#3c7b43", 164, 98, 45, 8); box("#72d76f", 180, 103, 12, 15); }
       } else {
         const dagger = hand === "fang_dagger";
         box("#6f4b2d", 182, 173, 8, 29); box("#cba65c", 174, 169, 24, 7);

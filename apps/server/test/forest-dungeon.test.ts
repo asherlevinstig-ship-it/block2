@@ -94,7 +94,8 @@ describe("forest dungeon portal", () => {
     }
     expect(client.send.mock.calls.filter((call: any[]) => call[0] === "portal:notice" && String(call[1]).includes("gate has opened"))).toHaveLength(2);
     Object.assign(player, { x: 187.5, y: 8, z: 165.5 }); kill("forest-guardian");
-    expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "stone_core_hammer")).toBe(true);
+    expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "rootbound_hammer")).toBe(true);
+    expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "stone_core_hammer")).toBe(false);
     expect(room.state.portals.has("forest-victory")).toBe(true);
     vi.setSystemTime(30000); internal.simulatePlayers(.033);
     expect(FOREST_DUNGEON_MOBS.every(entry => room.state.mobs.get(entry.id)?.alive === false)).toBe(true);

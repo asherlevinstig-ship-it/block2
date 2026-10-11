@@ -51,20 +51,21 @@ export interface MeleeStrikeProfile {
 }
 
 export function playerMeleeStrike(mainHandId: MainHandId, step: number): MeleeStrikeProfile | null {
-  if (mainHandId !== "longsword" && mainHandId !== "forged_sword" && mainHandId !== "fang_dagger" && mainHandId !== "stone_core_hammer") return null;
+  if (mainHandId !== "longsword" && mainHandId !== "forged_sword" && mainHandId !== "fang_dagger" && mainHandId !== "stone_core_hammer" && mainHandId !== "rootbound_hammer") return null;
   const dagger = mainHandId === "fang_dagger";
-  const overhead = step === 3 || mainHandId === "stone_core_hammer";
+  const hammer = mainHandId === "stone_core_hammer" || mainHandId === "rootbound_hammer";
+  const overhead = step === 3 || hammer;
   const reverse = step === 2;
   return {
-    reach: dagger ? 1.25 : mainHandId === "stone_core_hammer" ? 1.65 : 1.7,
-    radius: mainHandId === "stone_core_hammer" ? 0.22 : dagger ? 0.08 : 0.09,
+    reach: dagger ? 1.25 : hammer ? 1.72 : 1.7,
+    radius: hammer ? 0.24 : dagger ? 0.08 : 0.09,
     startAngle: overhead ? 5 : reverse ? -58 : 58,
     endAngle: overhead ? -5 : reverse ? 58 : -58,
     startHeight: overhead ? 1.8 : 0.95,
     endHeight: overhead ? 0.35 : 0.8,
     beforeImpactMs: overhead ? 50 : 40,
     afterImpactMs: dagger ? 65 : 90,
-    weaponLength: mainHandId === "stone_core_hammer" ? 0.57 : dagger ? 0.61 : 0.63,
+    weaponLength: hammer ? 0.6 : dagger ? 0.61 : 0.63,
   };
 }
 

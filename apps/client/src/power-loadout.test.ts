@@ -8,6 +8,7 @@ describe("Power loadout compatibility", () => {
     expect(compatiblePowerIds("magic_focus")).toEqual(["shockwave", "eruption"]);
     expect(compatiblePowerIds("fang_dagger")).toEqual(["shockwave", "seismic_cleave", "eruption", "lunge_strike"]);
     expect(compatiblePowerIds("stone_core_hammer")).toEqual(["shockwave", "seismic_cleave", "eruption", "lunge_strike"]);
+    expect(compatiblePowerIds("rootbound_hammer")).toEqual(["shockwave", "seismic_cleave", "eruption", "lunge_strike"]);
     expect(compatiblePowerIds("acid_gland_focus")).toEqual(["shockwave", "eruption"]);
   });
 });

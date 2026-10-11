@@ -3,7 +3,7 @@ import { equipmentPickupCard } from "./equipment-pickup.js";
 describe("equipment pickup cards", () => {
   it("identifies weapon silhouettes without rarity labels", () => {
     for (const [id, category] of [["forged_sword", "Sword"], ["forged_bow", "Bow"], ["acid_gland_focus", "Focus"],
-      ["stone_core_hammer", "Hammer"], ["fang_dagger", "Dagger"]] as const) {
+      ["stone_core_hammer", "Hammer"], ["rootbound_hammer", "Hammer"], ["fang_dagger", "Dagger"]] as const) {
       expect(equipmentPickupCard(id, 1)).toMatchObject({ category, title: "EQUIPMENT COLLECTED", quantity: "" });
     }
   });
