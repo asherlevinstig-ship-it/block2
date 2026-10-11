@@ -22,6 +22,10 @@ describe("blacksmith trading", () => {
       expect(ironSwordDamageBonus(2, weapon)).toBe(0);
     }
   });
+  it("applies the Moonstone Edge to every weapon", () => {
+    expect(ironSwordDamageBonus(8, "forged_bow")).toBe(1);
+    expect(ironSwordDamageBonus(10, "longsword")).toBe(2);
+  });
   it("only awards iron ore for actual iron ore blocks", () => {
     expect(minedMineral(Block.IronOre)).toBe("iron_ore");
     expect(minedMineral(Block.Stone)).toBeNull();

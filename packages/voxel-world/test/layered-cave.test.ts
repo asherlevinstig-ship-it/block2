@@ -69,4 +69,11 @@ describe("two-level mine", () => {
     expect(isPlayerSupported(read, 52.5, 1, 8.5)).toBe(true);
     for (const x of [32, 33, 34, 35, 42, 43]) expect(isProtectedVoxel(x, 8)).toBe(true);
   });
+  it("continues into the Moonstone gallery and Crystal Matriarch arena", () => {
+    const { read } = fixture("silver-depths-regression");
+    expect(read(64, 1, 9)).toBe(Block.Air);
+    expect(read(68, 1, 9)).toBe(Block.MoonstoneOre);
+    expect(read(72, 1, 9)).toBe(Block.Air);
+    expect(read(72, 0, 9)).not.toBe(Block.Air);
+  });
 });

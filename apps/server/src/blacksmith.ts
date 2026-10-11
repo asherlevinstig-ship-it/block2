@@ -17,6 +17,7 @@ const UPGRADE_BITS: Record<BlacksmithUpgradeId, number> = {
   reinforced_pickaxe: 1,
   iron_sword: 2,
   miners_pack: 4,
+  moonstone_edge: 8,
 };
 
 export function ownsBlacksmithUpgrade(flags: number, upgradeId: BlacksmithUpgradeId): boolean {
@@ -54,7 +55,8 @@ export function minedIronQuantity(flags: number): number {
 }
 
 export function ironSwordDamageBonus(flags: number, mainHandId: MainHandId = "longsword"): number {
-  return mainHandId === "longsword" && ownsBlacksmithUpgrade(flags, "iron_sword") ? 1 : 0;
+  return (mainHandId === "longsword" && ownsBlacksmithUpgrade(flags, "iron_sword") ? 1 : 0)
+    + (ownsBlacksmithUpgrade(flags, "moonstone_edge") ? 1 : 0);
 }
 
 export function blacksmithNextStep(flags: number, gold: number, ore: number): string {
@@ -65,8 +67,8 @@ export function blacksmithNextStep(flags: number, gold: number, ore: number): st
   return `Mine ${needed - ore} more iron ore, sell it here for 3 gold each, then forge the Iron Sword for 45 gold.`;
 }
 
-export function minedMineral(block: BlockId): "iron_ore" | "silver_ore" | null {
-  return block === Block.IronOre ? "iron_ore" : block === Block.SilverOre ? "silver_ore" : null;
+export function minedMineral(block: BlockId): "iron_ore" | "silver_ore" | "moonstone" | null {
+  return block === Block.IronOre ? "iron_ore" : block === Block.SilverOre ? "silver_ore" : block === Block.MoonstoneOre ? "moonstone" : null;
 }
 
 export function canTradeAtBlacksmith(player: { x: number; y: number; z: number }): boolean {

@@ -36,6 +36,8 @@ export const MILESTONE_CAVE_X_OFFSET = 14;
 export const CAVE_SHALLOW_HOME = { x: 39.5, y: 3, z: 6.5 } as const;
 export const CAVE_DEEP_HOME = { x: 48.5, y: 1, z: 10.5 } as const;
 export const CAVE_HIDDEN_HOME = { x: 56.5, y: 1, z: 9.5 } as const;
+export const SILVER_DEPTHS_SPITTER_HOMES = [{ x: 64.5, y: 1, z: 6.5 }, { x: 65.5, y: 1, z: 11.5 }] as const;
+export const CRYSTAL_MATRIARCH_HOME = { x: 72.5, y: 1, z: 9.5 } as const;
 /** Side veins are excavated horizontally, leaving the main stairway intact. */
 export const CAVE_ORE_POCKETS = [
   { id: "shallow-iron", minX: 38, maxX: 40, minZ: 3, maxZ: 4, floorY: 2, block: 5 },
@@ -143,6 +145,7 @@ export const Block = {
   OakLog: 6,
   Leaves: 7,
   SilverOre: 8,
+  MoonstoneOre: 9,
 } as const;
 
 export type BlockId = (typeof Block)[keyof typeof Block];
@@ -166,6 +169,7 @@ export function wildernessSurfaceBlock(x: number, z: number): BlockId {
 
 // Shared by authoritative mining and the local progress presentation.
 export function miningDurationMs(block: number): number {
+  if (block === Block.MoonstoneOre) return 1600;
   if (block === Block.SilverOre) return 1200;
   if (block === Block.IronOre) return 850;
   if (block === Block.Stone) return 600;
@@ -395,7 +399,7 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
     if (worldZ >= pocket.minZ && worldZ <= pocket.maxZ || worldZ === pocket.minZ - 1) return Block.Stone;
   }
   // Authored stone enclosure prevents random generation from puncturing floors or the sealed chamber.
-  if (worldX >= 31 && worldX <= 59 && worldZ >= 4 && worldZ <= 13 && y < SURFACE_HEIGHT) {
+  if (worldX >= 31 && worldX <= 76 && worldZ >= 4 && worldZ <= 14 && y < SURFACE_HEIGHT) {
     if (worldX === 31) return y === SURFACE_HEIGHT ? Block.Grass : Block.Stone;
     if (worldX >= 42) {
       if (worldX <= 43 && worldZ >= 7 && worldZ <= 9) {
@@ -409,6 +413,13 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
       if (worldX === 52 && worldZ >= 8 && worldZ <= 9 && y >= 1 && y <= 3) return Block.SilverOre;
       if (worldX >= 46 && worldX <= 49 && worldZ === 13 && y >= 1 && y <= 2) return Block.SilverOre;
       if (worldX === 58 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 2) return Block.SilverOre;
+      // The Lantern route continues beyond the old vault through a narrow seal,
+      // opens into a split spitter gallery, then the Crystal Matriarch arena.
+      if (worldX === 59 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 3) return Block.SilverOre;
+      if (worldX >= 60 && worldX <= 67 && worldZ >= 5 && worldZ <= 13 && y >= 1 && y <= 3) return Block.Air;
+      if (worldX === 68 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 3) return Block.MoonstoneOre;
+      if (worldX >= 69 && worldX <= 75 && worldZ >= 5 && worldZ <= 13 && y >= 1 && y <= 4) return Block.Air;
+      if (worldX === 75 && (worldZ === 6 || worldZ === 12) && y >= 1 && y <= 2) return Block.MoonstoneOre;
       return y === SURFACE_HEIGHT ? Block.Grass : Block.Stone;
     }
     if (worldX >= 37 && worldX <= 40 && worldZ === 12 && y >= 3 && y <= 4) return Block.IronOre;

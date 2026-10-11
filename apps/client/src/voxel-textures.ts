@@ -1,6 +1,6 @@
 import { Block, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, isInGreenwoodRegion, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
 
-export type VoxelTextureKind = "bedrock" | "stone" | "dirt" | "grass-top" | "grass-side" | "iron" | "silver"
+export type VoxelTextureKind = "bedrock" | "stone" | "dirt" | "grass-top" | "grass-side" | "iron" | "silver" | "moonstone"
   | "forest-grass-top" | "forest-grass-side" | "oak-bark" | "oak-rings" | "leaves"
   | "timber" | "slate-roof" | "paving" | "path" | "dressed-stone" | "bronze";
 
@@ -40,6 +40,7 @@ export function voxelTextureKind(block: number, normalY: number, x: number, y: n
   }
   if (block === Block.Bedrock) return "bedrock";
   if (block === Block.SilverOre) return "silver";
+  if (block === Block.MoonstoneOre) return "moonstone";
   if (block === Block.Stone) return "stone";
   if (block === Block.Dirt) return "dirt";
   if (block === Block.OakLog) return normalY === 0 ? "oak-bark" : "oak-rings";
@@ -189,16 +190,21 @@ export function createVoxelTexturePixels(kind: VoxelTextureKind, size = 32): Uin
         else if (kind === "bedrock") color = vary(stonePixel(x, y), -60);
         else {
           color = stonePixel(x, y);
-          if (kind === "iron" || kind === "silver") {
+          if (kind === "iron" || kind === "silver" || kind === "moonstone") {
             // Rust nodules versus angular icy crystals: readable without hue alone.
             if (kind === "iron") {
               const nodule = ((x - 8) ** 2 + (y - 9) ** 2 < 26) || ((x - 23) ** 2 + (y - 22) ** 2 < 38) || ((x - 9) ** 2 + (y - 27) ** 2 < 12);
               if (nodule) color = (x + y) % 7 < 2 ? [246, 185, 104] : y % 5 === 0 ? [125, 67, 39] : [197, 115, 54];
-            } else {
+            } else if (kind === "silver") {
               color = vary(color, -17);
               const crystal = Math.abs(x - 9) + Math.abs(y - 11) < 7 || Math.abs(x - 24) + Math.abs(y - 22) < 9;
               const vein = Math.abs(x - (27 - Math.floor(y * 0.6))) < 2;
               if (crystal || vein) color = (x + y) % 6 < 2 ? [242, 253, 255] : x < 16 ? [164, 222, 242] : [115, 169, 205];
+            } else {
+              color = vary(color, -28);
+              const crystal = Math.abs(x - 10) + Math.abs(y - 10) < 8 || Math.abs(x - 23) + Math.abs(y - 23) < 8;
+              const vein = Math.abs(x - (8 + Math.floor(y * .55))) < 2;
+              if (crystal || vein) color = (x + y) % 5 < 2 ? [245, 223, 255] : x < 16 ? [185, 93, 235] : [100, 222, 255];
             }
           }
         }

@@ -28,7 +28,7 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -176,6 +176,7 @@ import {
 } from "./movement-input.js";
 import { nearbyObjective, createObjectiveProgress, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMiningExpedition, isBuriedVaultSeal, isInsideEastMine, type MiningExpeditionEvent } from "./mining-expedition.js";
+import { advanceSilverDepths, isInsideSilverDepths, SILVER_DEPTHS_GUARDS, CRYSTAL_MATRIARCH_ID, type SilverDepthsEvent } from "./silver-depths-expedition.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
@@ -360,6 +361,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("deep-cave-spitter", "cave_spitter", CAVE_DEEP_HOME);
     this.registerMob("buried-vault-crawler", "moss_crawler", { x: 54.5, y: 1, z: 10.5 });
     this.registerMob("buried-chamber-brute", "stone_brute", CAVE_HIDDEN_HOME);
+    SILVER_DEPTHS_SPITTER_HOMES.forEach((home, index) => this.registerMob(SILVER_DEPTHS_GUARDS[index]!, "cave_spitter", home));
+    SILVER_DEPTHS_GUARDS.forEach(id => { this.state.mobs.get(id)!.name = "Moonstone Spitter"; });
+    this.registerMob(CRYSTAL_MATRIARCH_ID, "cave_spitter", CRYSTAL_MATRIARCH_HOME);
+    const crystalMatriarch = this.state.mobs.get(CRYSTAL_MATRIARCH_ID)!;
+    crystalMatriarch.name = "Crystal Matriarch"; crystalMatriarch.isChampion = true;
+    crystalMatriarch.health = crystalMatriarch.maxHealth = 28; crystalMatriarch.rewardMultiplier *= 1.5;
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
     this.registerMob("frontier-support-spitter", "cave_spitter", MIXED_FRONTIER_SPITTER);
@@ -714,6 +721,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       phase,
       ironOre: player.inventory.get("iron_ore")?.quantity ?? 0,
       silverOre: player.inventory.get("silver_ore")?.quantity ?? 0,
+      moonstone: player.inventory.get("moonstone")?.quantity ?? 0,
       ironCapacity: ironCapacity(player.blacksmithUpgrades),
       gold: player.coins,
       ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
@@ -754,6 +762,39 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     return true;
   }
 
+  private advanceSilverDepthsExpedition(clientOrId: Client | string, event: SilverDepthsEvent): boolean {
+    const sessionId = typeof clientOrId === "string" ? clientOrId : clientOrId.sessionId;
+    const client = typeof clientOrId === "string" ? this.clients.find(candidate => candidate.sessionId === sessionId) : clientOrId;
+    const player = this.state.players.get(sessionId);
+    if (!player || player.miningExpeditionStage < 8) return false;
+    const next = advanceSilverDepths(player.silverDepthsStage, event);
+    if (next === player.silverDepthsStage) return false;
+    player.silverDepthsStage = next;
+    if (next === 2) {
+      const seal = { x: 68, y: 1, z: 9 };
+      const address = worldToChunk(seal.x, seal.z);
+      const stored = this.getChunk(address.chunkX, address.chunkZ);
+      if (getBlock(stored.chunk, address.localX, seal.y, address.localZ) === Block.Air) {
+        setBlock(stored.chunk, address.localX, seal.y, address.localZ, Block.MoonstoneOre); stored.revision++;
+        this.recordWorldDelta(seal.x, seal.y, seal.z, Block.MoonstoneOre);
+        this.broadcast("block:changed", { requestId: "silver-depths-seal", ...seal, block: Block.MoonstoneOre, revision: stored.revision } satisfies BlockChanged);
+      }
+    }
+    const labels = ["", "The Silver Depths accepted · follow the Lantern route beyond the vault.", "Depths entered · mine the Moonstone seal.",
+      "Moonstone exposed · defeat both gallery spitters.", "Gallery clear · confront the Crystal Matriarch.",
+      "Crystal Matriarch defeated · claim her Moonstone cache.", "Moonstone secured · return to the blacksmith.", "The Silver Depths complete · Moonstone Edge forged."];
+    client?.send("chat:notice", labels[next] ?? "Silver Depths updated.");
+    if (next === 7) {
+      const moonstone = player.inventory.get("moonstone");
+      if (moonstone) moonstone.quantity = Math.max(0, moonstone.quantity - 1);
+      player.blacksmithUpgrades |= 8;
+      client?.send("objective:completed", { objectiveId: "silver-depths-expedition", title: "The Silver Depths",
+        rewardLabel: "Moonstone Edge · permanent +1 weapon damage", coinsGranted: 0 } satisfies WorldObjectiveCompleted);
+    }
+    void this.persistPlayer(sessionId, player, next === 7);
+    return true;
+  }
+
   private handleBlacksmithSync(client: Client): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
@@ -762,6 +803,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       message = "First expedition: enter the East Ore Mine, gather iron and silver, breach the buried vault, and return with its lantern.";
     } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 7 && this.advanceFirstExpedition(client, "returned_to_blacksmith")) {
       message = "Expedition complete. Warden's Resolve permanently increased your maximum health, and 25 gold was added to your purse.";
+    } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && this.advanceSilverDepthsExpedition(client, "briefed")) {
+      message = "Second expedition: use the Miner's Lantern to cross the old vault, mine Moonstone, clear the spitter gallery, and defeat the Crystal Matriarch.";
+    } else if (canTradeAtBlacksmith(player) && player.silverDepthsStage === 6 && this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith")) {
+      message = "Moonstone Edge forged. Every weapon now deals +1 permanent damage.";
     }
     this.sendBlacksmithState(client, message);
     this.sendObjectiveState(client, true);
@@ -820,6 +865,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!parsed.success || !player) return;
     if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to forge equipment.", "error");
     const upgradeId = parsed.data.upgradeId as BlacksmithUpgradeId;
+    if (upgradeId === "moonstone_edge") return this.sendBlacksmithState(client, "Complete The Silver Depths to unlock the Moonstone Edge.", "error");
     const ore = player.inventory.get("iron_ore");
     const forge = forgeBlacksmithUpgrade(player.blacksmithUpgrades, player.coins, ore?.quantity ?? 0, upgradeId);
     if (!forge.forged) {
@@ -1268,6 +1314,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const definition = combatMobDefinition(mob);
     for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
     if (mobId === "buried-chamber-brute") for (const playerId of recipients) this.advanceFirstExpedition(playerId, "defeated_warden");
+    if ((SILVER_DEPTHS_GUARDS as readonly string[]).includes(mobId)) for (const playerId of recipients) {
+      const otherGuardsDead = SILVER_DEPTHS_GUARDS.filter(id => id !== mobId).every(id => this.state.mobs.get(id)?.alive === false);
+      if (otherGuardsDead) this.advanceSilverDepthsExpedition(playerId, "defeated_guards");
+    }
+    if (mobId === CRYSTAL_MATRIARCH_ID) for (const playerId of recipients) this.advanceSilverDepthsExpedition(playerId, "defeated_matriarch");
     mob.alive = false;
     this.delayedMatriarchVolleys.delete(mobId);
     this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
@@ -1332,6 +1383,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     if (player.miningExpeditionStage === 1 && isInsideEastMine(player)) this.advanceFirstExpedition(client, "entered_mine");
+    if (player.silverDepthsStage === 1 && isInsideSilverDepths(player)) this.advanceSilverDepthsExpedition(client, "entered_depths");
     const progress = this.objectiveProgress.get(client.sessionId) ?? createObjectiveProgress();
     this.objectiveProgress.set(client.sessionId, progress);
     const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id, this.wildernessEvent.warningUntil);
@@ -1363,7 +1415,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
-    const baseDrops = mobId === "buried-chamber-brute"
+    const baseDrops = mobId === CRYSTAL_MATRIARCH_ID ? [{ itemId: "moonstone" as const, quantity: 1 }]
+      : mobId === "buried-chamber-brute"
       ? ownsLantern
         ? [{ itemId: "stone_core" as const, quantity: 2 }, { itemId: "silver_ore" as const, quantity: 3 }]
         : [{ itemId: "stone_core" as const, quantity: 1 }, { itemId: "miners_lantern" as const, quantity: 1 }]
@@ -1472,7 +1525,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     const mainHandId = equipmentForItem(drop.itemId);
     const armourId = armourForItem(drop.itemId);
-    const utilityId = drop.itemId === "miners_lantern" ? drop.itemId : null;
+    const utilityId = drop.itemId === "miners_lantern" || drop.itemId === "moonstone" ? drop.itemId : null;
     if (!mainHandId && !armourId && !utilityId) return reply(false, "Materials are collected automatically.");
     if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside the bag with a clear path to it.");
     if (parsed.data.equip && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
@@ -1490,6 +1543,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
       quantity: drop.quantity, total: item.quantity } satisfies LootPickedUp);
     if (utilityId && this.advanceFirstExpedition(client, "claimed_lantern")) this.sendObjectiveState(client, true);
+    if (drop.itemId === "moonstone" && this.advanceSilverDepthsExpedition(client, "claimed_moonstone")) this.sendObjectiveState(client, true);
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
       : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
@@ -2069,7 +2123,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const [mobId, mob] of this.state.mobs) {
       if (mobId === WILDERNESS_EVENT_ID && !mob.alive) continue;
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
-      if (mobId === WILDERNESS_EVENT_ID) {
+      if (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) {
         if (!mob.enraged && matriarchEnraged(mob.health, mob.maxHealth)) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = matriarchPattern(mob.actionSequence, mob.enraged);
       }
@@ -2195,10 +2249,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
             mob.targetId = ""; continue;
           }
           const shots = mob.attackPattern === "rocks" ? bruteRockEndpoints(mob, aim.yaw)
-            : mob.isChampion && mobId !== WILDERNESS_EVENT_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
+            : mob.isChampion && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage, definition.hazardRadius, definition.hazardDurationMs);
-          if (mobId === WILDERNESS_EVENT_ID && mob.attackPattern === "double-fan")
+          if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) && mob.attackPattern === "double-fan")
             this.delayedMatriarchVolleys.set(mobId, { origin, shots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
           mob.targetId = "";
           continue;
@@ -2865,6 +2919,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const address = worldToChunk(request.x, request.z);
     const stored = this.getChunk(address.chunkX, address.chunkZ);
     const block = getBlock(stored.chunk, address.localX, request.y, address.localZ);
+    if (block === Block.MoonstoneOre && player.silverDepthsStage !== 2) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
     const reason = miningRejectionReason(player, request, block, stored.revision);
     if (reason) return this.reject(client, { requestId: request.requestId, action: "mine", reason });
     const movement = this.movementInputs.get(client.sessionId)?.request;
@@ -2954,6 +3009,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       let expeditionAdvanced = mineral === "iron_ore" && this.advanceFirstExpedition(client, "mined_iron");
       expeditionAdvanced = (mineral === "silver_ore" && this.advanceFirstExpedition(client, "mined_silver")) || expeditionAdvanced;
       expeditionAdvanced = (isBuriedVaultSeal(request.x, request.y, request.z) && this.advanceFirstExpedition(client, "breached_vault")) || expeditionAdvanced;
+      expeditionAdvanced = (mineral === "moonstone" && this.advanceSilverDepthsExpedition(client, "mined_moonstone")) || expeditionAdvanced;
       if (expeditionAdvanced) this.sendObjectiveState(client, true);
     } else if (current === Block.OakLog) {
       let item = player.inventory.get("timber");

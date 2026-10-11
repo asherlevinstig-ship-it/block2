@@ -4,7 +4,7 @@ import { MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; combatState: string; targetId: string };
-type Player = Pose & { health: number; miningExpeditionStage?: number; inventory: { get(id: string): { quantity: number } | undefined } };
+type Player = Pose & { health: number; miningExpeditionStage?: number; silverDepthsStage?: number; inventory: { get(id: string): { quantity: number } | undefined } };
 type Loot = Pose & { ownerId: string; itemId: string; expiresAt: number };
 export interface WorldObjectiveProgress { id: string | null; fingerprint: string }
 export const createObjectiveProgress = (): WorldObjectiveProgress => ({ id: null, fingerprint: "" });
@@ -52,6 +52,32 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       : make("expedition-recover-lantern", "Recover the Miner's Lantern", "Your personal cache is inside the vault. If it expired, defeat the Stone Warden again.", mobs.get("buried-chamber-brute") ?? { x: 56.5, y: 1, z: 9.5 }, "encounter", 3), 7);
   }
   if (expeditionStage === 7) return expedition(make("expedition-return", "Return to the Blacksmith", "Bring the Miner's Lantern back to town and press E at the blacksmith stall to complete the expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 8);
+  const depthsStage = player.silverDepthsStage ?? 0;
+  const depthsUnlocked = depthsStage > 0 || (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0;
+  const depths = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => ({ ...update, progressLabel: `SILVER DEPTHS · STEP ${step} / 7` });
+  if (depthsUnlocked && depthsStage === 0) return depths(make("depths-briefing", "Speak to the Blacksmith", "Your first expedition is complete. Return to the blacksmith to unlock The Silver Depths.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
+  if (depthsUnlocked && depthsStage === 1) return depths(make("depths-enter", "Follow the Lantern Route", "Pass through the eastern wall of the buried vault. Your Miner's Lantern reveals the route into the Silver Depths.", { x: 61.5, y: 1, z: 9.5 }, "explore", 3), 2);
+  if (depthsUnlocked && depthsStage === 2) return depths(make("depths-moonstone", "Mine the Moonstone Seal", "Mine one glowing Moonstone block from the seal dividing the gallery and Matriarch arena.", { x: 68.5, y: 1, z: 9.5 }, "explore", 3), 3);
+  if (depthsUnlocked && depthsStage === 3) {
+    const ids = ["silver-depths-spitter-a", "silver-depths-spitter-b"];
+    const living = ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive ? [{ id, mob }] : []; });
+    const target = living[0] ?? { id: ids[0]!, mob: { x: 65.5, y: 1, z: 9.5 } };
+    const update = make("depths-gallery", "Clear the Spitter Gallery", "Use the stone gaps to split overlapping aimed shots and fans. Defeat both Moonstone Spitters.", target.mob, "encounter", 3);
+    update.targetMobId = target.id; update.targetMobIds = ids; update.completedMobIds = ids.filter(id => mobs.get(id)?.alive === false);
+    return depths(update, 4);
+  }
+  if (depthsUnlocked && depthsStage === 4) {
+    const boss = mobs.get("crystal-matriarch") ?? { x: 72.5, y: 1, z: 9.5 };
+    const update = make("depths-matriarch", "Defeat the Crystal Matriarch", "Read the committed aimed shot, cross her fan gaps, and punish recovery. Below half health she fires two-phase fans.", boss, "encounter", 3);
+    update.targetMobId = "crystal-matriarch"; update.targetMobIds = ["crystal-matriarch"];
+    return depths(update, 5);
+  }
+  if (depthsUnlocked && depthsStage === 5) {
+    const cache = [...lootEntries].find(([, drop]) => drop.ownerId === playerId && drop.itemId === "moonstone" && now < drop.expiresAt);
+    return depths(cache ? make(`loot-${cache[0]}`, "Claim the Matriarch's Moonstone", "Approach your personal Moonstone cache and press E.", cache[1], "loot")
+      : make("depths-recover", "Recover the Moonstone", "If your personal cache expired, defeat the Crystal Matriarch again.", mobs.get("crystal-matriarch") ?? { x: 72.5, y: 1, z: 9.5 }, "encounter", 3), 6);
+  }
+  if (depthsUnlocked && depthsStage === 6) return depths(make("depths-return", "Forge the Moonstone Edge", "Return the fixed Moonstone reward to the blacksmith. It will permanently add +1 damage to every weapon.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 7);
   if (Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) <= TOWN_SAFE_RADIUS && sameFloor({ x: 0, y: 8, z: 0 })) {
     const minerals = (player.inventory.get("iron_ore")?.quantity ?? 0) + (player.inventory.get("silver_ore")?.quantity ?? 0);
     return minerals > 0 ? make("blacksmith", "Trade Your Minerals", "Take your minerals to the blacksmith and press E to trade them for gold.", TOWN_BLACKSMITH_STALL_POSITION, "hub")

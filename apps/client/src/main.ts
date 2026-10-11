@@ -1547,10 +1547,15 @@ function openLoot(id: string) {
     fillLootComparison(document.querySelector<HTMLElement>("#loot-new")!, hand);
     fillLootComparison(document.querySelector<HTMLElement>("#loot-current")!, localMainHandId);
   } else if (utility) {
-    document.querySelector<HTMLElement>("#loot-new")!.innerHTML = `<strong>Miner's Lantern</strong><p>18-block cave light · brighter warm glow · auto-equipped</p>`;
-    document.querySelector<HTMLElement>("#loot-current")!.innerHTML = `<strong>${(inventoryCounts.get("miners_lantern") ?? 0) > 0 ? "Already owned" : "Explorer's lamp"}</strong><p>12-block cave light · standard intensity</p>`;
+    document.querySelector<HTMLElement>("#loot-new")!.innerHTML = utility === "moonstone"
+      ? `<strong>Matriarch's Moonstone</strong><p>Fixed expedition reward · forge a permanent weapon upgrade</p>`
+      : `<strong>Miner's Lantern</strong><p>18-block cave light · brighter warm glow · auto-equipped</p>`;
+    document.querySelector<HTMLElement>("#loot-current")!.innerHTML = utility === "moonstone"
+      ? `<strong>Moonstone Edge</strong><p>Return this stone to the blacksmith · +1 damage to every weapon</p>`
+      : `<strong>${(inventoryCounts.get("miners_lantern") ?? 0) > 0 ? "Already owned" : "Explorer's lamp"}</strong><p>12-block cave light · standard intensity</p>`;
   }
   lootMessage.textContent = rewardCache ? "Claim this cache before using the victory portal."
+    : utility === "moonstone" ? "The Crystal Matriarch's personal cache. Return it to the blacksmith."
     : utility ? "The Stone Warden's personal cache. The lantern auto-equips when claimed."
     : "Choose how to use this item. The world keeps moving.";
   lootEquip.hidden = rewardCache || Boolean(utility);
@@ -2699,7 +2704,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   markMaterial.blendType = pc.BLEND_NORMAL;
   markMaterial.depthWrite = false;
   markMaterial.update();
-  const matriarch = mobId === "greenwood-venom-matriarch";
+  const matriarch = mobId === "greenwood-venom-matriarch" || mobId === "crystal-matriarch";
   const rootGuardian = mobId === "forest-guardian";
   if (rootGuardian) { bodyMaterial.diffuse.set(.28, .24, .16); bodyMaterial.update(); bodyRoot.setLocalScale(1.16, 1.16, 1.16); }
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian);
@@ -2820,6 +2825,7 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   healing_potion: coloredMaterial(new pc.Color(.85, .15, .3)),
   iron_ore: coloredMaterial(new pc.Color(0.57, 0.65, 0.68)),
   silver_ore: coloredMaterial(new pc.Color(0.7, 0.88, 0.98)),
+  moonstone: coloredMaterial(new pc.Color(0.68, 0.32, 0.94)),
   timber: coloredMaterial(new pc.Color(0.48, 0.3, 0.14)),
   reinforced_pickaxe: coloredMaterial(new pc.Color(0.76, 0.8, 0.78)),
   miners_lantern: coloredMaterial(new pc.Color(1, 0.68, 0.2)),
@@ -3417,7 +3423,7 @@ function updateMining(now: number): void {
     } else {
       const progress = miningProgress(startedAt, now, miningDurationMs(cell.block));
       miningFill.style.width = `${progress * 100}%`;
-      const name = cell.block === Block.SilverOre ? "Silver" : cell.block === Block.IronOre ? "Iron" : "Block";
+      const name = cell.block === Block.MoonstoneOre ? "Moonstone" : cell.block === Block.SilverOre ? "Silver" : cell.block === Block.IronOre ? "Iron" : "Block";
       miningCaption.textContent = progress >= 1 ? "Impact · confirming…" : `${name} · ${Math.round(progress * 100)}%`;
       const stage = Math.min(3, 1 + Math.floor(progress * 3));
       updateMiningCracks(cell, stage);
@@ -3704,6 +3710,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   updateInventoryItem("iron_ore", update.ironOre);
   const silver = update.silverOre ?? 0;
   updateInventoryItem("silver_ore", silver);
+  updateInventoryItem("moonstone", update.moonstone ?? 0);
   document.querySelector<HTMLElement>("#blacksmith-silver")!.textContent = `${silver} / ${update.ironCapacity}`;
   document.querySelector<HTMLElement>("#blacksmith-sale-value")!.textContent = `${update.ironOre * IRON_ORE_GOLD_PRICE + silver * SILVER_ORE_GOLD_PRICE} gold`;
   blacksmithOre.textContent = `${update.ironOre.toLocaleString()} / ${update.ironCapacity.toLocaleString()}`;
@@ -3728,8 +3735,9 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
       goldCost.classList.toggle("met", update.gold >= recipe.price);
     }
     card.classList.toggle("owned", isOwned);
-    button.disabled = isOwned || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre;
-    button.textContent = isOwned ? "EQUIPPED" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
+    const expeditionLocked = upgradeId === "moonstone_edge" && !isOwned;
+    button.disabled = isOwned || expeditionLocked || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre;
+    button.textContent = isOwned ? "EQUIPPED" : expeditionLocked ? "EXPEDITION LOCKED" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
   }
   if (update.phase === "traded" && update.goldGranted) {
     showCombatFeedback(`+${update.goldGranted} GOLD`, "dodge");
@@ -4096,9 +4104,11 @@ function updateTarget(): void {
   else if (!currentTarget) targetLabel.textContent = "Target: move near a block and point at it";
   else if (isProtectedVoxel(currentTarget.x, currentTarget.z)) targetLabel.textContent = `Target: ${targetKey} · protected`;
   else if (currentTarget.block === Block.OakLog) targetLabel.textContent = `Greenwood oak · ${targetKey} · chop for timber`;
-  else if (currentTarget.block === Block.IronOre || currentTarget.block === Block.SilverOre) {
+  else if (currentTarget.block === Block.IronOre || currentTarget.block === Block.SilverOre || currentTarget.block === Block.MoonstoneOre) {
+    const moonstone = currentTarget.block === Block.MoonstoneOre;
     const silver = currentTarget.block === Block.SilverOre;
-    targetLabel.textContent = `${silver ? "Silver" : "Iron"} deposit · ${silver ? SILVER_ORE_GOLD_PRICE : IRON_ORE_GOLD_PRICE} gold per ore · click to mine`;
+    targetLabel.textContent = moonstone ? "Moonstone seal · fixed expedition mineral · click to mine"
+      : `${silver ? "Silver" : "Iron"} deposit · ${silver ? SILVER_ORE_GOLD_PRICE : IRON_ORE_GOLD_PRICE} gold per ore · click to mine`;
   }
   else if (currentTarget.block === Block.Leaves) targetLabel.textContent = `Greenwood canopy · ${targetKey} · clear foliage`;
   else targetLabel.textContent = `Target: ${targetKey} · mineable`;
@@ -4810,7 +4820,7 @@ function requestMine(): void {
     status.textContent = miningMessage("collision");
     return;
   }
-  const mineralId = currentTarget.block === Block.IronOre ? "iron_ore" : currentTarget.block === Block.SilverOre ? "silver_ore" : null;
+  const mineralId = currentTarget.block === Block.IronOre ? "iron_ore" : currentTarget.block === Block.SilverOre ? "silver_ore" : currentTarget.block === Block.MoonstoneOre ? "moonstone" : null;
   if (mineralId && (inventoryCounts.get(mineralId) ?? 0) >= blacksmithIronCapacity) {
     status.textContent = "Mineral pack full · sell ore at the blacksmith.";
     return;
