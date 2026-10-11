@@ -34,6 +34,15 @@ describe("Ember Vault room", () => {
     expect((room as any).emberVaultRuns.has("smith")).toBe(true);
   });
 
+  it("allows concurrent entry during public testing", () => {
+    const { room, player, client } = emberRoom(false);
+    const tester = new PlayerState(); Object.assign(tester, EMBER_VAULT_ENTRY, { health: 5 });
+    room.state.players.set("other-tester", tester);
+    (room as any).useEmberVaultPortal(client, { id: "ember-entry" });
+    expect(player).toMatchObject(EMBER_VAULT_ENTRY);
+    expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ dungeon: "ember-vault", phase: "started" }));
+  });
+
   it("awards ranked Ember Cores and reports secured forge equipment", () => {
     const { room, player, client } = emberRoom(); const internal = room as any;
     internal.beginEmberVaultRun(client, player, 10_000);
