@@ -16,7 +16,9 @@ const GROUPS = [
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"] },
   { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against rock volleys, leave the slam circle, then counter during recovery. Collect the hammer and rich silver.", ids: ["frontier-brute"] },
   ...[1, 2, 3].map(stage => ({ id: `forest-stage-${stage}`, title: stage === 3 ? "Ancient Root Guardian" : `Forest Dungeon · Room ${stage}`,
-    detail: stage === 3 ? "Defeat the guardian, collect your equipment bag, then use the return portal." : "Clear this room to open the next gate. The entrance return portal stays available.",
+    detail: stage === 3 ? "Use roots against phase-one rock volleys. Below half health, sidestep committed charges and counter during recovery. Collect your equipment bag, then return."
+      : stage === 2 ? "Use stone cover and dodge alternating aimed shots and fan gaps to open the guardian gate."
+      : "Split the flanking crawlers around the root piles to open the next gate. The entrance return portal remains available.",
     ids: FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage).map(mob => mob.id) })),
 ];
 export function nearbyObjective(playerId: string, player: Player, mobEntries: Iterable<readonly [string, Mob]>, portalEntries: Iterable<readonly [string, ForestPortal]>, lootEntries: Iterable<readonly [string, Loot]>, now: number, previousId: string | null, eventWarningUntil = 0): WorldObjectiveUpdate {

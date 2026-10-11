@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { canUseForestPortal, FOREST_PORTAL_LIFETIME_MS } from "@blockcraft/protocol";
-import { Block, FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, isProtectedVoxel, isPlayerSupported, playerCollides } from "@blockcraft/voxel-world";
+import { Block, FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, isProtectedVoxel, isPlayerSupported, playerCollides } from "@blockcraft/voxel-world";
 import { ForestPortalCycle } from "../src/forest-portal-cycle.js";
 import { WorldRoom } from "../src/game-room.js";
 import { InventoryItemState, PlayerState, WorldState } from "../src/schema.js";
@@ -25,6 +25,23 @@ function fixture() {
   return { room, internal, player, client, kill, open };
 }
 describe("forest dungeon portal", () => {
+  it("builds distinct blocking cover while preserving each room's central route", () => {
+    const { internal } = fixture();
+    expect(FOREST_DUNGEON_COVER.filter(prop => prop.stage === 1)).toHaveLength(2);
+    expect(FOREST_DUNGEON_COVER.filter(prop => prop.stage === 2)).toHaveLength(3);
+    expect(FOREST_DUNGEON_COVER.filter(prop => prop.stage === 3)).toHaveLength(4);
+    for (const prop of FOREST_DUNGEON_COVER) {
+      const block = prop.kind === "stone" ? Block.Stone : Block.OakLog;
+      expect(internal.readWorldBlock(prop.x, 8, prop.z)).toBe(block);
+      expect(internal.readWorldBlock(prop.x, 7 + prop.height, prop.z)).toBe(block);
+      expect(internal.readWorldBlock(prop.x, 8 + prop.height, prop.z)).toBe(Block.Air);
+      expect(playerCollides(internal.readWorldBlock, prop.x + .5, 8, prop.z + .5)).toBe(true);
+    }
+    for (const x of [160.5, 164.5, 170.5, 174.5, 178.5, 182.5, 187.5, 191.5]) {
+      expect(playerCollides(internal.readWorldBlock, x, 8, 165.5)).toBe(false);
+      expect(isPlayerSupported(internal.readWorldBlock, x, 8, 165.5)).toBe(true);
+    }
+  });
   it("requires both fresh guard defeats, ignores unrelated mobs and consumes the pair once", () => {
     const cycle = new ForestPortalCycle();
     expect(cycle.record("moss-crawler", 1000)).toBe(false);
@@ -65,6 +82,7 @@ describe("forest dungeon portal", () => {
   });
   it("clears two gated rooms, spawns the guardian once, guarantees a personal hammer and never respawns slain dungeon mobs", () => {
     const { room, internal, player, client, kill, open } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" });
+    (room.clients as any[]).push(client);
     expect(internal.readWorldBlock(168, 8, 165)).toBe(Block.OakLog);
     expect(isProtectedVoxel(168, 165)).toBe(true);
     for (const stage of [1, 2]) {
@@ -74,11 +92,32 @@ describe("forest dungeon portal", () => {
       }
       expect(internal.readWorldBlock(stage === 1 ? 168 : 180, 8, 165)).toBe(Block.Air);
     }
+    expect(client.send.mock.calls.filter((call: any[]) => call[0] === "portal:notice" && String(call[1]).includes("gate has opened"))).toHaveLength(2);
     Object.assign(player, { x: 187.5, y: 8, z: 165.5 }); kill("forest-guardian");
     expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "tester" && drop.itemId === "stone_core_hammer")).toBe(true);
     expect(room.state.portals.has("forest-victory")).toBe(true);
     vi.setSystemTime(30000); internal.simulatePlayers(.033);
     expect(FOREST_DUNGEON_MOBS.every(entry => room.state.mobs.get(entry.id)?.alive === false)).toBe(true);
+  });
+  it("uses complementary spitter patterns in room two and switches the guardian from volleys to charges below half health", () => {
+    const { room, internal, player, client, kill, open } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" });
+    for (const entry of FOREST_DUNGEON_MOBS.filter(mob => mob.stage === 1)) { Object.assign(player, entry); kill(entry.id); }
+    vi.setSystemTime(10100); internal.simulatePlayers(.033);
+    const roomTwo = FOREST_DUNGEON_MOBS.filter(entry => entry.stage === 2).map(entry => room.state.mobs.get(entry.id)!);
+    expect(roomTwo.map(mob => mob.archetype)).toEqual(["cave_spitter", "cave_spitter"]);
+    expect(roomTwo.map(mob => mob.attackPattern)).toEqual(["aimed", "fan"]);
+    for (const entry of FOREST_DUNGEON_MOBS.filter(mob => mob.stage === 2)) { Object.assign(player, entry); kill(entry.id); }
+    const guardian = room.state.mobs.get("forest-guardian")!;
+    expect(guardian.isChampion).toBe(true); expect(guardian.maxHealth).toBe(28);
+    Object.assign(player, { x: guardian.x, y: 8, z: guardian.z + 6, health: 10000, maxHealth: 10000, invulnerableUntil: 100000 });
+    vi.setSystemTime(10200); internal.simulatePlayers(.033);
+    expect(guardian.enraged).toBe(false); expect(guardian.attackPattern).toBe("rocks");
+    internal.clearMobAttackTimeline(guardian); internal.pendingMobMelee.delete("forest-guardian");
+    Object.assign(guardian, { combatState: "idle", stateUntil: 0, targetId: "", actionSequence: 1, health: 13 });
+    Object.assign(player, { x: guardian.x, z: guardian.z + 3 });
+    vi.setSystemTime(10300); internal.simulatePlayers(.033);
+    expect(guardian.enraged).toBe(true); expect(guardian.attackPattern).toBe("charge");
+    expect(guardian.combatState).toBe("windup");
   });
   it("keeps a safe return available after the outside entrance expires", () => {
     const { room, internal, player, client, open } = fixture(); open(); internal.useForestPortal(client, { id: "forest-entry" });

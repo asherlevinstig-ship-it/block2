@@ -65,8 +65,15 @@ export const FOREST_DUNGEON_MOBS = [
   { id: "forest-room1-a", archetype: "briar_crawler", x: 164.5, y: 8, z: 161.5, stage: 1 },
   { id: "forest-room1-b", archetype: "moss_crawler", x: 164.5, y: 8, z: 169.5, stage: 1 },
   { id: "forest-room2-a", archetype: "cave_spitter", x: 176.5, y: 8, z: 161.5, stage: 2 },
-  { id: "forest-room2-b", archetype: "briar_crawler", x: 176.5, y: 8, z: 169.5, stage: 2 },
+  { id: "forest-room2-b", archetype: "cave_spitter", x: 176.5, y: 8, z: 169.5, stage: 2 },
   { id: "forest-guardian", archetype: "stone_brute", x: 187.5, y: 8, z: 165.5, stage: 3 },
+] as const;
+export const FOREST_DUNGEON_COVER = [
+  { stage: 1, x: 161, z: 162, height: 1, kind: "root" }, { stage: 1, x: 166, z: 171, height: 1, kind: "root" },
+  { stage: 2, x: 172, z: 161, height: 2, kind: "stone" }, { stage: 2, x: 172, z: 170, height: 2, kind: "stone" },
+  { stage: 2, x: 176, z: 164, height: 2, kind: "stone" },
+  { stage: 3, x: 184, z: 160, height: 2, kind: "root" }, { stage: 3, x: 184, z: 171, height: 2, kind: "root" },
+  { stage: 3, x: 190, z: 160, height: 2, kind: "root" }, { stage: 3, x: 190, z: 171, height: 2, kind: "root" },
 ] as const;
 export function isInForestDungeon(x: number, z: number): boolean {
   return x >= 156 && x <= 193 && z >= 156 && z <= 175;
@@ -75,7 +82,10 @@ export function forestDungeonBlock(x: number, y: number, z: number): BlockId | n
   if (x < 152 || x > 196 || z < 152 || z > 178 || y < SURFACE_HEIGHT) return null;
   if (y === SURFACE_HEIGHT) return isInForestDungeon(x, z) ? (z >= 164 && z <= 166 ? Block.Dirt : Block.Grass) : Block.Stone;
   const wall = isInForestDungeon(x, z) && (x === 156 || x === 192 || z === 156 || z === 174 || x === 168 || x === 180);
-  return wall && y <= 10 ? Block.OakLog : Block.Air;
+  if (wall && y <= 10) return Block.OakLog;
+  const cover = FOREST_DUNGEON_COVER.find(prop => prop.x === x && prop.z === z);
+  if (cover && y <= SURFACE_HEIGHT + cover.height) return cover.kind === "stone" ? Block.Stone : Block.OakLog;
+  return Block.Air;
 }
 export function isInFrontierBruteArena(x: number, z: number): boolean {
   const a = FRONTIER_BRUTE_ARENA;

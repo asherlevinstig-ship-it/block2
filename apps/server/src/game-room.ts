@@ -1462,13 +1462,22 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       mob.name = stage === 3 ? "Ancient Root Guardian" : stage === 2 ? "Thicket Guard" : "Forest Sentinel";
       mob.health = mob.maxHealth = stage === 3 ? 28 : entry.archetype === "cave_spitter" ? 8 : 10;
       mob.attackDamage = stage === 3 ? 2 : 1; mob.speedMultiplier = 1; mob.rewardMultiplier = 1;
+      if (stage === 2 && entry.id.endsWith("-b")) mob.actionSequence = 1;
+      if (stage === 3) { mob.isChampion = true; mob.enraged = false; mob.attackPattern = "slam"; mob.rewardMultiplier = 1.5; }
     }
   }
 
   private advanceForestDungeon(): void {
     for (const stage of [1, 2]) {
       const cleared = FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage).every(entry => this.state.mobs.get(entry.id)?.alive === false);
-      if (cleared) { this.forestGate(stage === 1 ? 168 : 180, true); this.spawnForestStage(stage + 1); }
+      const nextSpawned = FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage + 1).some(entry => this.state.mobs.has(entry.id));
+      if (cleared && !nextSpawned) {
+        this.forestGate(stage === 1 ? 168 : 180, true); this.spawnForestStage(stage + 1);
+        for (const client of this.clients) {
+          const player = this.state.players.get(client.sessionId);
+          if (player && isInForestDungeon(player.x, player.z)) client.send("portal:notice", `Room ${stage} cleared · the next root gate has opened.`);
+        }
+      }
     }
     if (this.state.mobs.get("forest-guardian")?.alive === false && !this.state.portals.has("forest-victory")) {
       const portal = new ForestPortalState(); Object.assign(portal, { kind: "return", x: 189.5, y: 8, z: 165.5 });
@@ -1750,6 +1759,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if (!mob.enraged && matriarchEnraged(mob.health, mob.maxHealth)) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = matriarchPattern(mob.actionSequence, mob.enraged);
       }
+      else if (mobId === "forest-guardian") {
+        if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
+        if (mob.combatState === "idle") mob.attackPattern = mob.enraged ? championPattern(mob) : "slam";
+      }
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
@@ -1757,7 +1770,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const eligible = [...this.state.players.values()].filter(player => player.health > 0 && !isInsideTownSafeZone(player)
           && Math.abs(player.y - mob.y) <= 1.75 && caveEncounterAllows(mobId, player) && this.roamingAllowed(mobId, player) && this.championAllowed(mobId, player));
         const distance = Math.min(...eligible.map(player => Math.hypot(player.x - mob.x, player.z - mob.z)));
-        mob.attackPattern = bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
+        mob.attackPattern = mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
+          : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
           : mob.isChampion ? championPattern(mob) : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence) : "slam";
       }
       const definition = combatMobDefinition(mob);
