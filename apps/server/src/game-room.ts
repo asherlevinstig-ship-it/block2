@@ -2125,9 +2125,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private useEmberVaultPortal(client: Client, payload: unknown): void {
     if (!payload || typeof payload !== "object" || !("id" in payload) || typeof payload.id !== "string") return;
     const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(payload.id), now = Date.now();
-    if (!player || !portal || !canUseForestPortal(player, portal, now)
-      || (payload.id !== "ember-entry" && payload.id !== "ember-return")) return;
+    if (!player || !portal || (payload.id !== "ember-entry" && payload.id !== "ember-return")) return;
     const entering = payload.id === "ember-entry";
+    if (!entering && !canUseForestPortal(player, portal, now)) return;
     const run = this.emberVaultRuns.get(client.sessionId);
     if (!entering && (!run || run.completedAt === 0)) {
       client.send("portal:notice", "Defeat the Forge Colossus before extracting from the Ember Vault."); return;

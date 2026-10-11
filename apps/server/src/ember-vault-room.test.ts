@@ -43,6 +43,13 @@ describe("Ember Vault room", () => {
     expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ dungeon: "ember-vault", phase: "started" }));
   });
 
+  it("accepts the test entry command independently of the legacy portal reach gate", () => {
+    const { room, player, client } = emberRoom(false);
+    Object.assign(player, { x: 8.5, y: 8, z: 8.5 });
+    (room as any).useEmberVaultPortal(client, { id: "ember-entry" });
+    expect(player).toMatchObject(EMBER_VAULT_ENTRY);
+  });
+
   it("awards ranked Ember Cores and reports secured forge equipment", () => {
     const { room, player, client } = emberRoom(); const internal = room as any;
     internal.beginEmberVaultRun(client, player, 10_000);

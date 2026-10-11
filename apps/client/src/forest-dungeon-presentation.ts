@@ -36,6 +36,7 @@ export function forestDungeonNotice(message: string): ForestDungeonNotice {
 export interface PortalNoticeFeedback { title: string; cue: "hit" | "dodge" }
 
 export function portalNoticeFeedback(message: string): PortalNoticeFeedback | null {
+  if (/Ember Vault requires|Ember Vault is occupied/i.test(message)) return { title: "TEST ACCESS UPDATED · RELOAD", cue: "dodge" };
   if (/Ember Vault entered/i.test(message)) return { title: "EMBER VAULT", cue: "dodge" };
   if (/Ember Vault cleared/i.test(message)) return { title: "VAULT CLEARED", cue: "dodge" };
   if (/Silver Depths entered/i.test(message)) return { title: "SILVER DEPTHS", cue: "dodge" };

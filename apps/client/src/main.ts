@@ -4416,7 +4416,9 @@ function updateForestPortals(): void {
     const rect = canvas.getBoundingClientRect();
     visual.label.hidden = !active || distance > 25 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
     visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
-    const reachable = canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
+    const reachable = id === "ember-entry"
+      ? defeatScreen.hidden && active && Math.abs(player.y - portal.y) <= 3 && distance <= 3.5
+      : canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
     visual.label.disabled = !reachable;
     const portalName = id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
       : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
