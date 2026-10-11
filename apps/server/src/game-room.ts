@@ -2128,9 +2128,6 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!player || !portal || !canUseForestPortal(player, portal, now)
       || (payload.id !== "ember-entry" && payload.id !== "ember-return")) return;
     const entering = payload.id === "ember-entry";
-    if (entering && !player.isAdmin && ownedDepthsRewards(player.blacksmithUpgrades).length < 2) {
-      client.send("portal:notice", "The Ember Vault requires two Silver Depths attunements."); return;
-    }
     if (entering && [...this.state.players.entries()].some(([id, other]) => id !== client.sessionId && other.health > 0 && isInEmberVault(other.x, other.z))) {
       client.send("portal:notice", "The Ember Vault is occupied by another expedition."); return;
     }

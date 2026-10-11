@@ -17,12 +17,12 @@ function emberRoom(attuned = true, admin = false) {
 }
 
 describe("Ember Vault room", () => {
-  it("requires two Silver Depths attunements", () => {
+  it("allows an unattuned player to enter during public testing", () => {
     const { room, player, client } = emberRoom(false);
     (room as any).useEmberVaultPortal(client, { id: "ember-entry" });
-    expect(player).toMatchObject(EMBER_VAULT_PORTAL_POSITION);
-    expect(client.send).toHaveBeenCalledWith("portal:notice", expect.stringContaining("two Silver Depths attunements"));
-    expect((room as any).emberVaultRuns.has("smith")).toBe(false);
+    expect(player).toMatchObject(EMBER_VAULT_ENTRY);
+    expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ dungeon: "ember-vault", phase: "started" }));
+    expect((room as any).emberVaultRuns.has("smith")).toBe(true);
   });
 
   it("starts an isolated expedition when an attuned player enters", () => {
@@ -32,13 +32,6 @@ describe("Ember Vault room", () => {
     expect(client.send).toHaveBeenCalledWith("player:portal", { ...EMBER_VAULT_ENTRY, entering: true });
     expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ dungeon: "ember-vault", phase: "started" }));
     expect((room as any).emberVaultRuns.has("smith")).toBe(true);
-  });
-
-  it("lets an authenticated administrator bypass the attunement gate", () => {
-    const { room, player, client } = emberRoom(false, true);
-    (room as any).useEmberVaultPortal(client, { id: "ember-entry" });
-    expect(player).toMatchObject(EMBER_VAULT_ENTRY);
-    expect(client.send).toHaveBeenCalledWith("dungeon:run", expect.objectContaining({ dungeon: "ember-vault", phase: "started" }));
   });
 
   it("awards ranked Ember Cores and reports secured forge equipment", () => {

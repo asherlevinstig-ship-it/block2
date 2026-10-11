@@ -4396,8 +4396,7 @@ function updateForestPortals(): void {
     const victory = id === "forest-victory";
     const animationNow = performance.now();
     const pulse = victory ? Math.sin(animationNow / 220) * .1 : Math.sin(animationNow / 600) * .04;
-    const attunements = [16, 32, 64, 128, 256].filter(bit => (localDepthsRewardFlags & bit) !== 0).length;
-    const emberUnlocked = !visual.ember || id === "ember-return" || localIsAdmin || attunements >= 2;
+    const emberUnlocked = true;
     visual.glow.setLocalScale(victory ? 1.08 : visual.ember ? .94 + Math.sin(animationNow / 260) * .045 : 1,
       visual.ember ? .98 + Math.sin(animationNow / 390) * .035 : .96 + pulse, victory ? 1.08 : 1);
     if (visual.ember) {
@@ -4422,8 +4421,7 @@ function updateForestPortals(): void {
     const portalName = id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
       : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
       : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
-    const emberState = visual.ember && id === "ember-entry" ? localIsAdmin ? "\nADMIN OVERRIDE · E TO ENTER"
-      : emberUnlocked ? "\nFORGE ATTUNED · E TO ENTER" : `\nLOCKED · ${attunements}/2 SILVER ATTUNEMENTS` : "";
+    const emberState = visual.ember && id === "ember-entry" ? "\nTEST ACCESS · E TO ENTER" : "";
     const text = `${portalName}${emberState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !emberState ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
