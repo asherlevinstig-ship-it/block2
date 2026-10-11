@@ -160,7 +160,7 @@ import { CombatContributions } from "./combat-contributions.js";
 import { SilverGuardVolley } from "./silver-guard-volley.js";
 import { ForestPortalCycle } from "./forest-portal-cycle.js";
 import { FOREST_PORTAL_LIFETIME_MS, canUseForestPortal } from "@blockcraft/protocol";
-import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, isInForestDungeon } from "@blockcraft/voxel-world";
+import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, isInForestDungeon, EMBER_VAULT_PORTAL_POSITION, EMBER_VAULT_ENTRY, EMBER_VAULT_EXIT, EMBER_VAULT_MOBS, isInEmberVault } from "@blockcraft/voxel-world";
 import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
@@ -222,6 +222,16 @@ interface SilverDepthsRunStats {
   moonstoneCollected: number;
   moonstoneAtStart: number;
   edgeAtStart: number;
+}
+
+interface EmberVaultRunStats {
+  runId: string;
+  startedAt: number;
+  completedAt: number;
+  enemiesDefeated: number;
+  damageTaken: number;
+  coreAtStart: number;
+  armourAtStart: number;
 }
 
 interface ActiveBrambleSnare {
@@ -299,6 +309,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly matriarchCoverHits = new Map<string, number>();
   private readonly silverDepthsRuns = new Map<string, SilverDepthsRunStats>();
   private silverDepthsRunSequence = 0;
+  private readonly emberVaultRuns = new Map<string, EmberVaultRunStats>();
+  private emberVaultRunSequence = 0;
   private readonly pendingWeaponProjectiles = new Map<string, PendingWeaponProjectile>();
   private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
@@ -376,6 +388,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const depthsEntry = new ForestPortalState();
     Object.assign(depthsEntry, TOWN_SILVER_DEPTHS_PORTAL_POSITION, { kind: "entry" });
     this.state.portals.set("depths-entry", depthsEntry);
+    const emberEntry = new ForestPortalState();
+    Object.assign(emberEntry, EMBER_VAULT_PORTAL_POSITION, { kind: "entry" });
+    this.state.portals.set("ember-entry", emberEntry);
     if (this.pendingWorldDeltaWrites.size) void this.flushWorldDeltaWrites();
     for (const spawn of WILDERNESS_ENCOUNTERS) this.registerMob(spawn.id, spawn.archetype, spawn);
     for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) {
@@ -394,6 +409,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const crystalMatriarch = this.state.mobs.get(CRYSTAL_MATRIARCH_ID)!;
     crystalMatriarch.name = "Crystal Matriarch"; crystalMatriarch.isChampion = true;
     crystalMatriarch.health = crystalMatriarch.maxHealth = 28; crystalMatriarch.rewardMultiplier *= 1.5;
+    for (const spawn of EMBER_VAULT_MOBS) this.registerMob(spawn.id, spawn.archetype, spawn);
+    this.state.mobs.get("ember-sentinel-a")!.name = "Ember Sentinel";
+    this.state.mobs.get("ember-sentinel-b")!.name = "Ember Sentinel";
+    this.state.mobs.get("ember-brute")!.name = "Molten Brute";
+    const forgeColossus = this.state.mobs.get("forge-colossus")!;
+    forgeColossus.name = "Forge Colossus"; forgeColossus.isChampion = true;
+    forgeColossus.health = forgeColossus.maxHealth = 38; forgeColossus.attackDamage = 3; forgeColossus.rewardMultiplier *= 2;
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
     this.registerMob("frontier-support-spitter", "cave_spitter", MIXED_FRONTIER_SPITTER);
@@ -456,6 +478,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("portal:use", (client, payload: unknown) => {
       const id = payload && typeof payload === "object" && "id" in payload ? String(payload.id) : "";
       if (id.startsWith("depths-")) this.useSilverDepthsPortal(client, payload);
+      else if (id.startsWith("ember-")) this.useEmberVaultPortal(client, payload);
       else this.useForestPortal(client, payload);
     });
     this.onMessage("recovery:collect", (client, payload: unknown) => {
@@ -602,6 +625,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.state.players.delete(client.sessionId);
     this.silverDepthsRuns.delete(client.sessionId);
+    this.emberVaultRuns.delete(client.sessionId);
     this.forestReturns.delete(client.sessionId);
     this.forestTravelAt.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
@@ -1234,7 +1258,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
-    mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion, mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian");
+    mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion, mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
     this.state.mobs.set(mobId, mob);
   }
 
@@ -1242,6 +1266,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    if (EMBER_VAULT_MOBS.some(mob => mob.id === id)) return pose.y >= 7 && pose.y <= 9 && isInEmberVault(pose.x, pose.z);
     if (isGreenwoodCampMob(id)) return greenwoodCampAllows(pose);
     if (isSilverGuard(id)) return silverGuardAllows(pose);
     if (id === "frontier-brute") return frontierBruteAllows(pose);
@@ -1408,6 +1433,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if (mobId === CRYSTAL_MATRIARCH_ID) run.completedAt = now;
       }
     }
+    if (EMBER_VAULT_MOBS.some(candidate => candidate.id === mobId)) {
+      for (const playerId of recipients) {
+        const run = this.emberVaultRuns.get(playerId);
+        if (!run || run.completedAt > 0) continue;
+        run.enemiesDefeated++;
+        if (mobId === "forge-colossus") run.completedAt = now;
+      }
+    }
     const definition = combatMobDefinition(mob);
     for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
     if (mobId === "buried-chamber-brute") for (const playerId of recipients) this.advanceFirstExpedition(playerId, "defeated_warden");
@@ -1429,6 +1462,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         Object.assign(returnPortal, SILVER_DEPTHS_EXIT_POSITION, { kind: "return" });
         this.state.portals.set("depths-return", returnPortal);
       }
+    }
+    if (mobId === "forge-colossus" && !this.state.portals.has("ember-return")) {
+      const returnPortal = new ForestPortalState();
+      Object.assign(returnPortal, EMBER_VAULT_EXIT, { kind: "return" });
+      this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
     this.delayedMatriarchVolleys.delete(mobId);
@@ -1529,6 +1567,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
     const baseDrops = mobId === CRYSTAL_MATRIARCH_ID ? [{ itemId: "matriarch_edge" as const, quantity: 1 }]
+      : mobId === "forge-colossus" ? [{ itemId: "iron_armour" as const, quantity: 1 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
       : mobId === "buried-chamber-brute"
       ? ownsLantern
         ? [{ itemId: "stone_core" as const, quantity: 2 }, { itemId: "silver_ore" as const, quantity: 3 }]
@@ -1690,6 +1729,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     player.health = Math.max(0, player.health - defense.damage);
     const depthsRun = this.silverDepthsRuns.get(playerId);
     if (depthsRun && depthsRun.completedAt === 0) depthsRun.damageTaken += defense.damage;
+    const emberRun = this.emberVaultRuns.get(playerId);
+    if (emberRun && emberRun.completedAt === 0) emberRun.damageTaken += defense.damage;
     const defeated = player.health === 0;
     this.broadcast("combat:player-hit", {
       mobId,
@@ -1716,6 +1757,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const failedDepthsRun = this.silverDepthsRuns.get(playerId);
     if (failedDepthsRun) this.restoreRunMoonstone(player, failedDepthsRun);
     this.silverDepthsRuns.delete(playerId);
+    this.emberVaultRuns.delete(playerId);
     player.silverDepthsRunStage = 0;
     leaveRecoveryBag(player, `${now}-${++this.lootDropSequence}`);
     void this.persistPlayer(playerId, player);
@@ -2077,6 +2119,69 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (item) item.quantity = run.moonstoneAtStart;
   }
 
+  private useEmberVaultPortal(client: Client, payload: unknown): void {
+    if (!payload || typeof payload !== "object" || !("id" in payload) || typeof payload.id !== "string") return;
+    const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(payload.id), now = Date.now();
+    if (!player || !portal || !canUseForestPortal(player, portal, now)
+      || (payload.id !== "ember-entry" && payload.id !== "ember-return")) return;
+    const entering = payload.id === "ember-entry";
+    if (entering && ownedDepthsRewards(player.blacksmithUpgrades).length < 2) {
+      client.send("portal:notice", "The Ember Vault requires two Silver Depths attunements."); return;
+    }
+    if (entering && [...this.state.players.entries()].some(([id, other]) => id !== client.sessionId && other.health > 0 && isInEmberVault(other.x, other.z))) {
+      client.send("portal:notice", "The Ember Vault is occupied by another expedition."); return;
+    }
+    const run = this.emberVaultRuns.get(client.sessionId);
+    if (!entering && (!run || run.completedAt === 0)) {
+      client.send("portal:notice", "Defeat the Forge Colossus before extracting from the Ember Vault."); return;
+    }
+    if (entering) this.beginEmberVaultRun(client, player, now);
+    const destination = entering ? EMBER_VAULT_ENTRY : EMBER_VAULT_PORTAL_POSITION;
+    this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
+    this.pendingPowers.delete(client.sessionId); this.cancelWeaponProjectiles(client.sessionId);
+    player.defending = false; player.x = destination.x; player.y = destination.y; player.z = destination.z;
+    player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 1200);
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
+    this.verticalVelocities.set(client.sessionId, 0);
+    client.send("player:portal", { ...destination, entering });
+    client.send("world:bootstrap", this.bootstrapPayload(destination));
+    client.send("portal:notice", entering ? "Ember Vault entered · cross the heat lanes and defeat the Forge Colossus." : "Ember Vault cleared · returned to the frontier.");
+    if (!entering && run) this.completeEmberVaultRun(client, player, run);
+    this.sendObjectiveState(client, true);
+    void this.persistPlayer(client.sessionId, player, !entering);
+  }
+
+  private beginEmberVaultRun(client: Client, player: PlayerState, now: number): void {
+    this.state.portals.delete("ember-return");
+    for (const definition of EMBER_VAULT_MOBS) {
+      const mob = this.state.mobs.get(definition.id); if (!mob) continue;
+      mob.alive = false; mob.respawnAt = now; this.clearMobAttackTimeline(mob);
+    }
+    const run: EmberVaultRunStats = {
+      runId: `ember-run-${++this.emberVaultRunSequence}`, startedAt: now, completedAt: 0, enemiesDefeated: 0, damageTaken: 0,
+      coreAtStart: player.inventory.get("ember_core")?.quantity ?? 0, armourAtStart: player.inventory.get("iron_armour")?.quantity ?? 0,
+    };
+    this.emberVaultRuns.set(client.sessionId, run);
+    client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "ember-vault", partySize: 1 } satisfies DungeonRunUpdate);
+  }
+
+  private completeEmberVaultRun(client: Client, player: PlayerState, run: EmberVaultRunStats): void {
+    const durationMs = Math.max(1, run.completedAt - run.startedAt);
+    const rank = silverDepthsRank(durationMs, run.damageTaken);
+    const awarded = silverDepthsMoonstoneReward(rank);
+    let cores = player.inventory.get("ember_core");
+    if (!cores) { cores = new InventoryItemState(); player.inventory.set("ember_core", cores); }
+    cores.quantity = Math.min(65_535, cores.quantity + awarded);
+    const equipmentObtained = (player.inventory.get("iron_armour")?.quantity ?? 0) > run.armourAtStart;
+    client.send("dungeon:run", {
+      runId: run.runId, phase: "completed", dungeon: "ember-vault", partySize: 1, durationMs, rank,
+      reward: `+${awarded} Ember Core${awarded === 1 ? "" : "s"} · ${equipmentObtained ? "Forged armour obtained" : "Colossus equipment secured"}`,
+      stats: { enemiesDefeated: run.enemiesDefeated, damageTaken: run.damageTaken, moonstoneCollected: 0,
+        emberCoresAwarded: awarded, emberCoresTotal: cores.quantity, signatureItemObtained: equipmentObtained },
+    } satisfies DungeonRunUpdate);
+    this.emberVaultRuns.delete(client.sessionId);
+  }
+
   private useForestPortal(client: Client, payload: unknown): void {
     if (!payload || typeof payload !== "object" || !("id" in payload) || typeof payload.id !== "string") return;
     const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(payload.id), now = Date.now();
@@ -2434,6 +2539,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         mob.rewardMultiplier = stats.rewardMultiplier;
         if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
         if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = matriarchPattern(0, false); }
+        if (mobId === "forge-colossus") { mob.health = mob.maxHealth = 38; mob.attackDamage = 3; mob.attackPattern = "rocks"; }
         if (mobId === CRYSTAL_MATRIARCH_ID) this.restoreMatriarchCover();
         mob.alive = true;
         mob.respawnAt = 0;

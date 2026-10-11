@@ -951,6 +951,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article[data-item="reinforced_pickaxe"] i { background: linear-gradient(135deg, #d6ddd8 0 38%, #98632f 40% 62%, #54351f 64%); }
 .inventory-grid article[data-item="miners_lantern"] i { background: radial-gradient(circle, #fff2a8 0 16%, #f4a52e 18% 42%, #4d3721 45% 68%, #17120d 70%); box-shadow: 0 0 14px #ffb43f99; }
 .inventory-grid article[data-item="moonstone"] i { background: radial-gradient(circle at 38% 34%, #f8e8ff 0 12%, #b560e8 14% 40%, #48cce8 43% 62%, #202641 65%); box-shadow: 0 0 15px #a75cff99; }
+.inventory-grid article[data-item="ember_core"] i { background: radial-gradient(circle at 38% 34%, #fff3b0 0 12%, #ff8b32 14% 42%, #a62618 45% 67%, #2b1717 70%); box-shadow: 0 0 15px #ff6529aa; }
 .inventory-grid article[data-item="crawler_fang"] i { background: #e6d9aa; }
 .inventory-grid article[data-item="stone_core"] i { background: #7791a0; }
 .inventory-grid article[data-item="acid_gland"] i { background: #a3dd31; }
@@ -1469,6 +1470,15 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 #dungeon-completion .dungeon-result-actions { display: flex; justify-content: center; gap: 10px; }
 #dungeon-completion[data-dungeon="silver-depths"] button { color: #f6efff; background: #69419d; }
 #dungeon-completion[data-dungeon="silver-depths"] .dungeon-replay { color: #1c1128; background: linear-gradient(135deg, #c99aff, #8de8ff); }
+#dungeon-completion[data-dungeon="ember-vault"] { width: min(560px, calc(100vw - 28px)); color: #fff0dc; border-color: #e55b25; background: radial-gradient(circle at 50% 0, #7d2711 0, #28120d 50%, #0e0908 100%); box-shadow: 0 0 0 100vmax #080201b8, 0 18px 70px #000d, inset 0 0 42px #ff5b202b; }
+#dungeon-completion[data-dungeon="ember-vault"] > small { color: #ff9a65; }
+#dungeon-completion[data-dungeon="ember-vault"] h2 { color: #fff0cf; text-shadow: 0 0 18px #ff531f77; }
+#dungeon-completion[data-dungeon="ember-vault"] .dungeon-stat-grid span { border-color: #d95c2d66; background: #32140eb8; }
+#dungeon-completion[data-dungeon="ember-vault"] .dungeon-stat-grid small { color: #d99675; }
+#dungeon-completion[data-dungeon="ember-vault"] .dungeon-best-time { color: #e9ad8b; }
+#dungeon-completion[data-dungeon="ember-vault"] strong { color: #ffc06c; border-color: #e55b2588; background: #4d1b1088; }
+#dungeon-completion[data-dungeon="ember-vault"] button { color: #fff7e8; background: #8f3218; }
+#dungeon-completion[data-dungeon="ember-vault"] .dungeon-replay { color: #321006; background: linear-gradient(135deg, #ff7a2f, #ffd36d); }
 #dungeon-completion button:disabled { cursor: wait; filter: saturate(.45); opacity: .72; }
 @media (max-width: 560px) { #dungeon-completion .dungeon-stat-grid { grid-template-columns: repeat(2, 1fr); } #dungeon-completion .dungeon-result-actions { flex-direction: column; } }
 #expedition-board-panel { position: fixed; z-index: 65; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(480px, calc(100vw - 36px)); box-sizing: border-box; padding: 25px; color: #e8efd9; border: 2px solid #b99857; border-radius: 12px; background: linear-gradient(145deg, #2e2418f7, #101b15fa 58%, #0a120dfb); box-shadow: 0 0 0 100vmax #0205039c, 0 20px 70px #000c, inset 0 0 35px #d4a94c12; font-family: system-ui; }

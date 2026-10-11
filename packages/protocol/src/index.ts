@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, m
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-depths-route-v102";
+export const WORLD_ROOM = "world-ember-vault-v103";
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -170,7 +170,7 @@ export type BlacksmithUpdate = {
 export type DungeonRunUpdate = {
   runId: string;
   phase: "started" | "completed";
-  dungeon?: "forest" | "silver-depths";
+  dungeon?: "forest" | "silver-depths" | "ember-vault";
   partySize: number;
   durationMs?: number;
   cooldownUntil?: number;
@@ -178,7 +178,7 @@ export type DungeonRunUpdate = {
   rank?: "GOLD" | "SILVER" | "BRONZE";
   bestTimeMs?: number;
   newBest?: boolean;
-  stats?: { enemiesDefeated: number; damageTaken: number; moonstoneCollected: number; moonstoneAwarded?: number; moonstoneTotal?: number; signatureItemObtained: boolean };
+  stats?: { enemiesDefeated: number; damageTaken: number; moonstoneCollected: number; moonstoneAwarded?: number; moonstoneTotal?: number; emberCoresAwarded?: number; emberCoresTotal?: number; signatureItemObtained: boolean };
 };
 export type DungeonRewardClaimed = {
   runId: string;
@@ -238,6 +238,7 @@ export const ITEM_DEFINITIONS = {
   iron_ore: { id: "iron_ore", name: "Iron Ore", description: "Mined iron ore that can be sold to the town blacksmith" },
   silver_ore: { id: "silver_ore", name: "Silver Ore", description: "Wilderness mineral · sell to the blacksmith for 8 gold each" },
   moonstone: { id: "moonstone", name: "Moonstone", description: "Fixed Silver Depths objective mineral · return it to the blacksmith" },
+  ember_core: { id: "ember_core", name: "Ember Core", description: "Forge Colossus currency · earned from ranked Ember Vault clears" },
   timber: { id: "timber", name: "Greenwood Timber", description: "Fresh timber harvested from Greenwood oak trees" },
   reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", description: "Forged mining tool that extracts two minerals per ore block" },
   miners_lantern: { id: "miners_lantern", name: "Miner's Lantern", description: "Vault relic · auto-equipped · brighter, wider underground light" },

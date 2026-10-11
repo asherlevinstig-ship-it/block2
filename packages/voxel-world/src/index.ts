@@ -74,6 +74,16 @@ export const FOREST_DUNGEON = { minX: 156, maxX: 192, minZ: 156, maxZ: 174 } as 
 export const FOREST_PORTAL_POSITION = { x: 46.5, y: 8, z: 28.5 } as const;
 export const FOREST_DUNGEON_ENTRY = { x: 160.5, y: 8, z: 165.5 } as const;
 export const FOREST_DUNGEON_EXIT = { x: 158.5, y: 8, z: 165.5 } as const;
+export const EMBER_VAULT = { minX: 208, maxX: 240, minZ: 156, maxZ: 174 } as const;
+export const EMBER_VAULT_PORTAL_POSITION = { x: 68.5, y: 8, z: 37.5 } as const;
+export const EMBER_VAULT_ENTRY = { x: 212.5, y: 8, z: 165.5 } as const;
+export const EMBER_VAULT_EXIT = { x: 210.5, y: 8, z: 165.5 } as const;
+export const EMBER_VAULT_MOBS = [
+  { id: "ember-sentinel-a", archetype: "cave_spitter", x: 218.5, y: 8, z: 161.5, stage: 1 },
+  { id: "ember-sentinel-b", archetype: "cave_spitter", x: 218.5, y: 8, z: 169.5, stage: 1 },
+  { id: "ember-brute", archetype: "stone_brute", x: 227.5, y: 8, z: 165.5, stage: 2 },
+  { id: "forge-colossus", archetype: "stone_brute", x: 236.5, y: 8, z: 165.5, stage: 3 },
+] as const;
 export const FOREST_DUNGEON_MOBS = [
   { id: "forest-room1-a", archetype: "briar_crawler", x: 164.5, y: 8, z: 161.5, stage: 1 },
   { id: "forest-room1-b", archetype: "moss_crawler", x: 164.5, y: 8, z: 169.5, stage: 1 },
@@ -98,6 +108,22 @@ export function forestDungeonBlock(x: number, y: number, z: number): BlockId | n
   if (wall && y <= 10) return Block.OakLog;
   const cover = FOREST_DUNGEON_COVER.find(prop => prop.x === x && prop.z === z);
   if (cover && y <= SURFACE_HEIGHT + cover.height) return cover.kind === "stone" ? Block.Stone : Block.OakLog;
+  return Block.Air;
+}
+export function isInEmberVault(x: number, z: number): boolean {
+  return x >= EMBER_VAULT.minX && x <= EMBER_VAULT.maxX + 1 && z >= EMBER_VAULT.minZ && z <= EMBER_VAULT.maxZ + 1;
+}
+export function emberVaultBlock(x: number, y: number, z: number): BlockId | null {
+  if (x < EMBER_VAULT.minX - 4 || x > EMBER_VAULT.maxX + 4 || z < EMBER_VAULT.minZ - 4 || z > EMBER_VAULT.maxZ + 4 || y < SURFACE_HEIGHT) return null;
+  if (y === SURFACE_HEIGHT) {
+    if (!isInEmberVault(x, z)) return Block.Bedrock;
+    const hotLane = z === 159 || z === 171 || (x >= 224 && x <= 229 && (z === 163 || z === 168));
+    return hotLane ? Block.IronOre : Block.Stone;
+  }
+  const wall = isInEmberVault(x, z) && (x === EMBER_VAULT.minX || x === EMBER_VAULT.maxX || z === EMBER_VAULT.minZ || z === EMBER_VAULT.maxZ || x === 223 || x === 232);
+  if (wall && y <= 11 && !((x === 223 || x === 232) && z >= 164 && z <= 166)) return Block.Bedrock;
+  const pillar = isInEmberVault(x, z) && ((x === 216 || x === 228 || x === 236) && (z === 160 || z === 170));
+  if (pillar && y <= 10) return Block.IronOre;
   return Block.Air;
 }
 export function isInFrontierBruteArena(x: number, z: number): boolean {
@@ -547,7 +573,7 @@ export function worldToChunk(x: number, z: number): ChunkAddress {
 
 export function isProtectedVoxel(x: number, z: number): boolean {
   return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS
-    || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z) || isInForestDungeon(x, z)
+    || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z) || isInForestDungeon(x, z) || isInEmberVault(x, z)
     || (x >= 45 && x <= 46 && z >= 28 && z <= 29);
 }
 
@@ -586,6 +612,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;
         const dungeonBlock = forestDungeonBlock(worldX, y, worldZ);
         if (dungeonBlock !== null) blocks[chunkIndex(localX, y, localZ)] = dungeonBlock;
+        const emberBlock = emberVaultBlock(worldX, y, worldZ);
+        if (emberBlock !== null) blocks[chunkIndex(localX, y, localZ)] = emberBlock;
         // The authored cave owns its subsurface geometry, regardless of surface biome overlays.
         if (caveBlock !== null && y < SURFACE_HEIGHT) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
         const townBlock = townOfBeginningsBlock(worldX, y, worldZ);

@@ -21,7 +21,7 @@ import { inventoryItemVisible } from "./inventory-ownership.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
-import { isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon } from "@blockcraft/voxel-world";
+import { isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
 import { SPITTER_PATTERN, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
@@ -280,28 +280,38 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
   panel.id = "dungeon-completion";
   panel.setAttribute("role", "dialog");
   const silverDepths = update.dungeon === "silver-depths";
-  panel.dataset.dungeon = silverDepths ? "silver-depths" : "forest";
-  panel.setAttribute("aria-label", silverDepths ? "Silver Depths expedition results" : "Forest Dungeon complete");
-  panel.innerHTML = silverDepths
+  const emberVault = update.dungeon === "ember-vault";
+  panel.dataset.dungeon = silverDepths ? "silver-depths" : emberVault ? "ember-vault" : "forest";
+  panel.setAttribute("aria-label", silverDepths ? "Silver Depths expedition results" : emberVault ? "Ember Vault expedition results" : "Forest Dungeon complete");
+  panel.innerHTML = emberVault
+    ? '<small>EMBER VAULT · FORGE CONQUERED</small><h2>FORGE COLOSSUS DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>EMBER CORES</small><b data-stat="ember">0</b></span><span><small>CORES HELD</small><b data-stat="wallet">0</b></span><span><small>FORGE LOOT</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time">The return portal is stable. Collect the Colossus loot before leaving.</p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">CONTINUE</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
+    : silverDepths
     ? '<small>SILVER DEPTHS · EXPEDITION COMPLETE</small><h2>CRYSTAL MATRIARCH DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>MOONSTONE AWARD</small><b data-stat="moonstone">0</b></span><span><small>MOONSTONE HELD</small><b data-stat="wallet">0</b></span><span><small>RELIC</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time"></p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">RETURN TO TOWN</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
     : '<small>FOREST DUNGEON</small><h2>ROOT GUARDIAN DEFEATED</h2><p class="dungeon-run-time"></p><strong class="dungeon-run-reward"></strong><p>Collect your personal equipment bag, then take the return portal.</p><button class="dungeon-return" type="button">CONTINUE</button>';
   const seconds = Math.max(1, Math.round((update.durationMs ?? 0) / 1000));
   panel.querySelector(".dungeon-run-time")!.textContent = `${update.partySize > 1 ? `${update.partySize}-player party` : "Solo clear"} · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   panel.querySelector(".dungeon-run-reward")!.textContent = update.reward ?? "Personal reward unlocked";
-  if (silverDepths) {
+  if (silverDepths || emberVault) {
     const stats = update.stats;
     panel.dataset.rank = (update.rank ?? "BRONZE").toLowerCase();
     panel.querySelector(".dungeon-rank")!.textContent = `${update.rank ?? "BRONZE"} RANK`;
     panel.querySelector<HTMLElement>('[data-stat="enemies"]')!.textContent = String(stats?.enemiesDefeated ?? 0);
     panel.querySelector<HTMLElement>('[data-stat="damage"]')!.textContent = String(stats?.damageTaken ?? 0);
-    panel.querySelector<HTMLElement>('[data-stat="moonstone"]')!.textContent = `+${stats?.moonstoneAwarded ?? stats?.moonstoneCollected ?? 0} ◆`;
-    panel.querySelector<HTMLElement>('[data-stat="wallet"]')!.textContent = `${stats?.moonstoneTotal ?? 0} ◆`;
+    if (emberVault) {
+      panel.querySelector<HTMLElement>('[data-stat="ember"]')!.textContent = `+${stats?.emberCoresAwarded ?? 0}`;
+      panel.querySelector<HTMLElement>('[data-stat="wallet"]')!.textContent = String(stats?.emberCoresTotal ?? 0);
+    } else {
+      panel.querySelector<HTMLElement>('[data-stat="moonstone"]')!.textContent = `+${stats?.moonstoneAwarded ?? stats?.moonstoneCollected ?? 0} ◆`;
+      panel.querySelector<HTMLElement>('[data-stat="wallet"]')!.textContent = `${stats?.moonstoneTotal ?? 0} ◆`;
+    }
     panel.querySelector<HTMLElement>('[data-stat="relic"]')!.textContent = stats?.signatureItemObtained ? "OBTAINED" : "SECURED";
-    const best = Math.max(1, Math.round((update.bestTimeMs ?? update.durationMs ?? 0) / 1000));
-    panel.querySelector(".dungeon-best-time")!.textContent = `${update.newBest ? "NEW PERSONAL BEST" : "PERSONAL BEST"} · ${Math.floor(best / 60)}:${String(best % 60).padStart(2, "0")}`;
+    if (silverDepths) {
+      const best = Math.max(1, Math.round((update.bestTimeMs ?? update.durationMs ?? 0) / 1000));
+      panel.querySelector(".dungeon-best-time")!.textContent = `${update.newBest ? "NEW PERSONAL BEST" : "PERSONAL BEST"} · ${Math.floor(best / 60)}:${String(best % 60).padStart(2, "0")}`;
+    }
     panel.querySelector<HTMLButtonElement>(".dungeon-replay")!.addEventListener("click", event => {
       const button = event.currentTarget as HTMLButtonElement; button.disabled = true; button.textContent = "OPENING PORTAL…";
-      setTimeout(() => { panel.remove(); room?.send("portal:use", { id: "depths-entry" }); }, 1050);
+      setTimeout(() => { panel.remove(); room?.send("portal:use", { id: emberVault ? "ember-entry" : "depths-entry" }); }, 1050);
     });
   }
   panel.querySelector<HTMLButtonElement>(".dungeon-return")!.addEventListener("click", () => panel.remove());
@@ -1105,6 +1115,15 @@ for (let index = 0; index < 16; index++) {
 }
 silverDepthsRoot.enabled = false;
 app.root.addChild(silverDepthsRoot);
+const emberVaultRoot = new pc.Entity("ember-vault-atmosphere");
+for (const [x, z, intensity, range] of [[216, 165.5, 1.8, 10], [227.5, 165.5, 2.25, 12], [236, 165.5, 2.8, 13]] as const) {
+  const forgeLight = new pc.Entity("ember-forge-light");
+  forgeLight.addComponent("light", { type: "omni", color: new pc.Color(1, .22, .035), intensity, range, castShadows: false });
+  forgeLight.setPosition(x, 9.1, z);
+  emberVaultRoot.addChild(forgeLight);
+}
+emberVaultRoot.enabled = false;
+app.root.addChild(emberVaultRoot);
 const depthsBreadcrumbRoot = new pc.Entity("silver-depths-breadcrumbs");
 const depthsBreadcrumbs = Array.from({ length: 6 }, (_, index) => {
   const shard = addBox(depthsBreadcrumbRoot, "route-crystal", moonstoneCore, [.1, .22, .1], [0, 0, 0]);
@@ -2136,19 +2155,22 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const dungeonAtmosphere = forestDungeonAtmosphere(position.x, position.z);
   const forestDungeon = dungeonAtmosphere.room > 0;
   const silverDepths = position.y < 5 && position.x >= 59.5 && position.x <= 76.5 && position.z >= 4 && position.z <= 14;
+  const emberVault = isInEmberVault(position.x, position.z);
   const dungeonDetail = dungeonAtmosphere.room === 1 ? "Split the rootbound crawlers · the return portal remains behind you"
     : dungeonAtmosphere.room === 2 ? "Use stone cover · read aimed shots and fan gaps"
       : "Root volleys become committed charges below half health";
-  const label = silverDepths ? { name: position.x >= 69 ? "CRYSTAL MATRIARCH SANCTUM" : "THE SILVER DEPTHS", detail: position.x >= 69 ? "Read committed volleys · cross the fan gaps · punish recovery" : "Miner's Lantern required · use crystal-lit cover against overlapping volleys" }
+  const label = emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus · dodge the committed smash · claim its forge loot" : "Use iron pillars as cover · clear each sealed forge chamber" }
+    : silverDepths ? { name: position.x >= 69 ? "CRYSTAL MATRIARCH SANCTUM" : "THE SILVER DEPTHS", detail: position.x >= 69 ? "Read committed volleys · cross the fan gaps · punish recovery" : "Miner's Lantern required · use crystal-lit cover against overlapping volleys" }
     : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
-  const recommendedLevel = tier === 0 ? "SAFE"
-    : silverDepths ? position.x >= 69 ? "LV 10–12" : "LV 7–10"
+  const recommendedLevel = emberVault ? position.x >= 232 ? "LV 14–16" : "LV 12–14"
+    : tier === 0 ? "SAFE"
+      : silverDepths ? position.x >= 69 ? "LV 10–12" : "LV 7–10"
       : forestDungeon ? dungeonAtmosphere.room === 3 ? "LV 10–12" : dungeonAtmosphere.room === 2 ? "LV 8–10" : "LV 6–8"
         : frontierArena ? "LV 9–12" : silverGuard ? "LV 5–8" : arena ? "LV 4–6" : worldLevelRange(territory?.tier ?? tier).label;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}:${silverDepths}:${position.x >= 69}:${recommendedLevel}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}:${silverDepths}:${emberVault}:${position.x >= 69}:${recommendedLevel}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -3051,6 +3073,7 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   iron_ore: coloredMaterial(new pc.Color(0.57, 0.65, 0.68)),
   silver_ore: coloredMaterial(new pc.Color(0.7, 0.88, 0.98)),
   moonstone: coloredMaterial(new pc.Color(0.68, 0.32, 0.94)),
+  ember_core: powerMaterial(new pc.Color(1, .18, .025), .9),
   timber: coloredMaterial(new pc.Color(0.48, 0.3, 0.14)),
   reinforced_pickaxe: coloredMaterial(new pc.Color(0.76, 0.8, 0.78)),
   miners_lantern: coloredMaterial(new pc.Color(1, 0.68, 0.2)),
@@ -4288,8 +4311,9 @@ function updateForestPortals(): void {
       const frame = coloredMaterial(new pc.Color(.2, .12, .3));
       const victory = id === "forest-victory";
       const depths = id.startsWith("depths-");
-      const light = powerMaterial(depths ? new pc.Color(.64, .28, 1)
-        : portal.kind === "entry" ? new pc.Color(.45, 1, .65) : victory ? new pc.Color(1, .88, .42) : new pc.Color(1, .75, .25), victory || depths ? .82 : .6);
+      const ember = id.startsWith("ember-");
+      const light = powerMaterial(ember ? new pc.Color(1, .19, .025) : depths ? new pc.Color(.64, .28, 1)
+        : portal.kind === "entry" ? new pc.Color(.45, 1, .65) : victory ? new pc.Color(1, .88, .42) : new pc.Color(1, .75, .25), victory || depths || ember ? .82 : .6);
       addBox(root, "left-arch", frame, [.35, 2.9, .4], [-1, 1.45, 0]);
       addBox(root, "right-arch", frame, [.35, 2.9, .4], [1, 1.45, 0]);
       addBox(root, "arch-crown", frame, [2.35, .35, .4], [0, 2.8, 0]);
@@ -4313,7 +4337,8 @@ function updateForestPortals(): void {
     visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
     const reachable = canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
     visual.label.disabled = !reachable;
-    const portalName = id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
+    const portalName = id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
+      : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
       : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
     const text = `${portalName}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     if (visual.label.textContent !== text) visual.label.textContent = text;
@@ -4631,6 +4656,7 @@ let undergroundLightingBlend = 0;
 let greenwoodLightingBlend = 0;
 let forestDungeonLightingBlend = 0;
 let silverDepthsLightingBlend = 0;
+let emberVaultLightingBlend = 0;
 let silverDepthsSection = 0;
 const forestDungeonAmbient = { r: .2, g: .31, b: .22 };
 const forestDungeonFog = { r: .075, g: .17, b: .105 };
@@ -5104,10 +5130,14 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
     forestDungeonFogEnd += (dungeon.fogEnd - forestDungeonFogEnd) * dungeonResponse;
   }
   const inSilverDepths = visibilityCutaway && position.y < 5 && position.x >= 59.5 && position.x <= 76.5 && position.z >= 4 && position.z <= 14;
+  const inEmberVault = isInEmberVault(position.x, position.z);
   const depthsResponse = 1 - Math.exp(-Math.max(0, dt) * 1.45);
   silverDepthsLightingBlend += ((inSilverDepths ? 1 : 0) - silverDepthsLightingBlend) * depthsResponse;
   if (Math.abs((inSilverDepths ? 1 : 0) - silverDepthsLightingBlend) < .001) silverDepthsLightingBlend = inSilverDepths ? 1 : 0;
   silverDepthsRoot.enabled = silverDepthsLightingBlend > .015;
+  emberVaultLightingBlend += ((inEmberVault ? 1 : 0) - emberVaultLightingBlend) * depthsResponse;
+  if (Math.abs((inEmberVault ? 1 : 0) - emberVaultLightingBlend) < .001) emberVaultLightingBlend = inEmberVault ? 1 : 0;
+  emberVaultRoot.enabled = emberVaultLightingBlend > .015;
   const nextDepthsSection = inSilverDepths ? position.x >= 69 ? 2 : 1 : 0;
   if (nextDepthsSection !== silverDepthsSection) {
     silverDepthsSection = nextDepthsSection;
@@ -5119,8 +5149,8 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   exitTrail.enabled = visibilityCutaway;
   exitGuide.hidden = !visibilityCutaway;
   caveLight.setPosition(position.x, position.y + 1.2, position.z);
-  if (light.light) light.light.intensity = (1.45 + (0.45 - 1.45) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend);
-  if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend);
+  if (light.light) light.light.intensity = (1.45 + (0.45 - 1.45) * undergroundLightingBlend) * (1 - .36 * forestDungeonLightingBlend) * (1 - .58 * silverDepthsLightingBlend) * (1 - .72 * emberVaultLightingBlend);
+  if (skyFill.light) skyFill.light.intensity = 0.32 * (1 - undergroundLightingBlend) * (1 - .5 * forestDungeonLightingBlend) * (1 - .75 * emberVaultLightingBlend);
   if (caveLight.light) {
     const lanternOwned = (inventoryCounts.get("miners_lantern") ?? 0) > 0;
     const crystalLantern = (localDepthsRewardFlags & 32) !== 0 && silverDepthsLightingBlend > .2;
@@ -5138,10 +5168,13 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const mixedAmbientR = ambientR + (forestDungeonAmbient.r - ambientR) * forestDungeonLightingBlend;
   const mixedAmbientG = ambientG + (forestDungeonAmbient.g - ambientG) * forestDungeonLightingBlend;
   const mixedAmbientB = ambientB + (forestDungeonAmbient.b - ambientB) * forestDungeonLightingBlend;
+  const depthsAmbientR = mixedAmbientR + (.085 - mixedAmbientR) * silverDepthsLightingBlend;
+  const depthsAmbientG = mixedAmbientG + (.075 - mixedAmbientG) * silverDepthsLightingBlend;
+  const depthsAmbientB = mixedAmbientB + (.18 - mixedAmbientB) * silverDepthsLightingBlend;
   app.scene.ambientLight.set(
-    mixedAmbientR + (.085 - mixedAmbientR) * silverDepthsLightingBlend,
-    mixedAmbientG + (.075 - mixedAmbientG) * silverDepthsLightingBlend,
-    mixedAmbientB + (.18 - mixedAmbientB) * silverDepthsLightingBlend,
+    depthsAmbientR + (.19 - depthsAmbientR) * emberVaultLightingBlend,
+    depthsAmbientG + (.055 - depthsAmbientG) * emberVaultLightingBlend,
+    depthsAmbientB + (.025 - depthsAmbientB) * emberVaultLightingBlend,
   );
   const surfaceFogR = 0.21 + (0.11 - 0.21) * greenwoodLightingBlend;
   const surfaceFogG = 0.3 + (0.24 - 0.3) * greenwoodLightingBlend;
@@ -5149,15 +5182,20 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const mixedFogR = surfaceFogR + (forestDungeonFog.r - surfaceFogR) * forestDungeonLightingBlend;
   const mixedFogG = surfaceFogG + (forestDungeonFog.g - surfaceFogG) * forestDungeonLightingBlend;
   const mixedFogB = surfaceFogB + (forestDungeonFog.b - surfaceFogB) * forestDungeonLightingBlend;
+  const depthsFogR = mixedFogR + (.035 - mixedFogR) * silverDepthsLightingBlend;
+  const depthsFogG = mixedFogG + (.025 - mixedFogG) * silverDepthsLightingBlend;
+  const depthsFogB = mixedFogB + (.095 - mixedFogB) * silverDepthsLightingBlend;
   app.scene.fog.color.set(
-    mixedFogR + (.035 - mixedFogR) * silverDepthsLightingBlend,
-    mixedFogG + (.025 - mixedFogG) * silverDepthsLightingBlend,
-    mixedFogB + (.095 - mixedFogB) * silverDepthsLightingBlend,
+    depthsFogR + (.12 - depthsFogR) * emberVaultLightingBlend,
+    depthsFogG + (.025 - depthsFogG) * emberVaultLightingBlend,
+    depthsFogB + (.012 - depthsFogB) * emberVaultLightingBlend,
   );
   const baseFogStart = 34 + (forestDungeonFogStart - 34) * forestDungeonLightingBlend;
   const baseFogEnd = 58 + (forestDungeonFogEnd - 58) * forestDungeonLightingBlend;
-  app.scene.fog.start = baseFogStart + (15 - baseFogStart) * silverDepthsLightingBlend;
-  app.scene.fog.end = baseFogEnd + (34 - baseFogEnd) * silverDepthsLightingBlend;
+  const depthsFogStart = baseFogStart + (15 - baseFogStart) * silverDepthsLightingBlend;
+  const depthsFogEnd = baseFogEnd + (34 - baseFogEnd) * silverDepthsLightingBlend;
+  app.scene.fog.start = depthsFogStart + (19 - depthsFogStart) * emberVaultLightingBlend;
+  app.scene.fog.end = depthsFogEnd + (40 - depthsFogEnd) * emberVaultLightingBlend;
   camera.camera?.clearColor.copy(app.scene.fog.color);
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(
@@ -6829,8 +6867,10 @@ async function connect(): Promise<void> {
     pendingPortalDestination = own && portalArrivalSnapshot(spawn, own) ? null : spawn;
     worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
     status.textContent = spawn.entering
-      ? spawn.y < 5 ? "Silver Depths entered · the expedition clock is running." : "Forest Dungeon lobby · assemble, ready up, then begin the expedition."
-      : "Returned to the Town of Beginnings with your loot.";
+      ? isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered · breach the forge chambers and defeat the Colossus."
+        : spawn.y < 5 ? "Silver Depths entered · the expedition clock is running." : "Forest Dungeon lobby · assemble, ready up, then begin the expedition."
+      : isInEmberVault(spawn.x, spawn.z) ? "Returned to the Ember Vault."
+        : spawn.x > 40 ? "Returned to the Deep Frontier with your forge rewards." : "Returned to the Town of Beginnings with your loot.";
   });
   room.onMessage("portal:notice", (message: string) => {
     status.textContent = message;
@@ -6841,9 +6881,10 @@ async function connect(): Promise<void> {
     showCombatFeedback(notice.title, notice.kind === "victory" ? "dodge" : "hit");
   });
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
-    if (update.phase === "started") status.textContent = update.dungeon === "silver-depths"
-      ? "Silver Depths expedition started · defeat the guards, mine Moonstone, and overcome the Matriarch."
-      : `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
+    if (update.phase === "started") status.textContent = update.dungeon === "ember-vault"
+      ? "Ember Vault expedition started · clear the sentinels, break the brute, then face the Forge Colossus."
+      : update.dungeon === "silver-depths" ? "Silver Depths expedition started · defeat the guards, mine Moonstone, and overcome the Matriarch."
+        : `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
     showDungeonRunResult(update);
   });
   room.onMessage("dungeon:reward", (reward: DungeonRewardClaimed) => {
