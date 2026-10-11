@@ -157,7 +157,7 @@ import { CombatContributions } from "./combat-contributions.js";
 import { SilverGuardVolley } from "./silver-guard-volley.js";
 import { ForestPortalCycle } from "./forest-portal-cycle.js";
 import { FOREST_PORTAL_LIFETIME_MS, canUseForestPortal } from "@blockcraft/protocol";
-import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, isInForestDungeon } from "@blockcraft/voxel-world";
+import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, isInForestDungeon } from "@blockcraft/voxel-world";
 import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
@@ -180,7 +180,7 @@ import {
 } from "./movement-input.js";
 import { nearbyObjective, createObjectiveProgress, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMiningExpedition, isBuriedVaultSeal, isInsideEastMine, type MiningExpeditionEvent } from "./mining-expedition.js";
-import { advanceSilverDepths, isInsideSilverDepths, SILVER_DEPTHS_GUARDS, CRYSTAL_MATRIARCH_ID, type SilverDepthsEvent } from "./silver-depths-expedition.js";
+import { advanceSilverDepths, canEnterSilverDepths, canExitSilverDepths, isInsideSilverDepths, SILVER_DEPTHS_GUARDS, CRYSTAL_MATRIARCH_ID, type SilverDepthsEvent } from "./silver-depths-expedition.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
@@ -355,6 +355,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       console.warn("Persistent terrain could not be loaded; using the generated world for this room.", error);
     }
     this.setState(new WorldState());
+    const depthsEntry = new ForestPortalState();
+    Object.assign(depthsEntry, TOWN_SILVER_DEPTHS_PORTAL_POSITION, { kind: "entry" });
+    this.state.portals.set("depths-entry", depthsEntry);
     if (this.pendingWorldDeltaWrites.size) void this.flushWorldDeltaWrites();
     for (const spawn of WILDERNESS_ENCOUNTERS) this.registerMob(spawn.id, spawn.archetype, spawn);
     for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) {
@@ -432,7 +435,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("player:return", client => this.returnPlayerToTown(client));
     this.onMessage("dungeon:board", (client, payload: unknown) => this.handleDungeonBoard(client, payload));
     this.onMessage("dungeon:lobby", (client, payload: unknown) => this.handleDungeonLobby(client, payload));
-    this.onMessage("portal:use", (client, payload: unknown) => this.useForestPortal(client, payload));
+    this.onMessage("portal:use", (client, payload: unknown) => {
+      const id = payload && typeof payload === "object" && "id" in payload ? String(payload.id) : "";
+      if (id.startsWith("depths-")) this.useSilverDepthsPortal(client, payload);
+      else this.useForestPortal(client, payload);
+    });
     this.onMessage("recovery:collect", (client, payload: unknown) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !payload || typeof payload !== "object" || !("bagId" in payload) || typeof payload.bagId !== "string" || payload.bagId.length > 80) return;
@@ -810,16 +817,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         this.broadcast("block:changed", { requestId: "silver-depths-seal", ...seal, block: Block.MoonstoneOre, revision: stored.revision } satisfies BlockChanged);
       }
     }
-    const labels = ["", "The Silver Depths accepted · follow the Lantern route beyond the vault.", "Depths entered · mine the Moonstone seal.",
+    const labels = ["", "The Silver Depths accepted · use the violet expedition portal in town.", "Depths entered · mine the Moonstone seal.",
       "Moonstone exposed · defeat both gallery spitters.", "Gallery clear · confront the Crystal Matriarch.",
-      "Crystal Matriarch defeated · claim her Moonstone cache.", "Moonstone secured · return to the blacksmith.", "The Silver Depths complete · Moonstone Edge forged."];
+      "Crystal Matriarch defeated · claim your personal Matriarch's Edge.", "Matriarch's Edge secured · use the return portal.", "The Silver Depths complete · returned safely to town."];
     client?.send("chat:notice", labels[next] ?? "Silver Depths updated.");
     if (next === 7) {
       const moonstone = player.inventory.get("moonstone");
       if (moonstone) moonstone.quantity = Math.max(0, moonstone.quantity - 1);
       player.blacksmithUpgrades |= 8;
       client?.send("objective:completed", { objectiveId: "silver-depths-expedition", title: "The Silver Depths",
-        rewardLabel: "Moonstone Edge · permanent +1 weapon damage", coinsGranted: 0 } satisfies WorldObjectiveCompleted);
+        rewardLabel: "Matriarch's Edge · fixed equipment · Moonstone attunement +1 weapon damage", coinsGranted: 0 } satisfies WorldObjectiveCompleted);
       this.grantProgression(sessionId, 75, "The Silver Depths");
     }
     void this.persistPlayer(sessionId, player, next === 7);
@@ -838,8 +845,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       message = "The Silver Depths unlock at character level 7. Continue exploring and completing encounters.";
     } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && this.advanceSilverDepthsExpedition(client, "briefed")) {
       message = "Second expedition: use the Miner's Lantern to cross the old vault, mine Moonstone, clear the spitter gallery, and defeat the Crystal Matriarch.";
-    } else if (canTradeAtBlacksmith(player) && player.silverDepthsStage === 6 && this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith")) {
-      message = "Moonstone Edge forged. Every weapon now deals +1 permanent damage.";
+    } else if (canTradeAtBlacksmith(player) && canExitSilverDepths(player) && player.silverDepthsStage === 6 && this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith")) {
+      message = "Matriarch's Edge secured. Your Moonstone was attuned for +1 permanent weapon damage.";
     }
     this.sendBlacksmithState(client, message);
     this.sendObjectiveState(client, true);
@@ -1355,7 +1362,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const otherGuardsDead = SILVER_DEPTHS_GUARDS.filter(id => id !== mobId).every(id => this.state.mobs.get(id)?.alive === false);
       if (otherGuardsDead) this.advanceSilverDepthsExpedition(playerId, "defeated_guards");
     }
-    if (mobId === CRYSTAL_MATRIARCH_ID) for (const playerId of recipients) this.advanceSilverDepthsExpedition(playerId, "defeated_matriarch");
+    if (mobId === CRYSTAL_MATRIARCH_ID) {
+      for (const playerId of recipients) this.advanceSilverDepthsExpedition(playerId, "defeated_matriarch");
+      if (!this.state.portals.has("depths-return")) {
+        const returnPortal = new ForestPortalState();
+        Object.assign(returnPortal, SILVER_DEPTHS_EXIT_POSITION, { kind: "return" });
+        this.state.portals.set("depths-return", returnPortal);
+      }
+    }
     mob.alive = false;
     this.delayedMatriarchVolleys.delete(mobId);
     this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
@@ -1454,7 +1468,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
-    const baseDrops = mobId === CRYSTAL_MATRIARCH_ID ? [{ itemId: "moonstone" as const, quantity: 1 }]
+    const baseDrops = mobId === CRYSTAL_MATRIARCH_ID ? [{ itemId: "matriarch_edge" as const, quantity: 1 }]
       : mobId === "buried-chamber-brute"
       ? ownsLantern
         ? [{ itemId: "stone_core" as const, quantity: 2 }, { itemId: "silver_ore" as const, quantity: 3 }]
@@ -1582,7 +1596,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
       quantity: drop.quantity, total: item.quantity } satisfies LootPickedUp);
     if (utilityId && this.advanceFirstExpedition(client, "claimed_lantern")) this.sendObjectiveState(client, true);
-    if (drop.itemId === "moonstone" && this.advanceSilverDepthsExpedition(client, "claimed_moonstone")) this.sendObjectiveState(client, true);
+    if (drop.itemId === "matriarch_edge" && this.advanceSilverDepthsExpedition(client, "claimed_moonstone")) this.sendObjectiveState(client, true);
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
       : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
@@ -1855,6 +1869,44 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const everyoneReady = [...run.allowed].every(id => run.entered.has(id) && run.ready.has(id));
     if (parsed.data.action === "start" || everyoneReady) this.startForestDungeonRun(Date.now());
     else this.sendDungeonLobby(`${run.ready.size}/${run.allowed.size} ready · waiting at the entrance.`);
+  }
+
+  private useSilverDepthsPortal(client: Client, payload: unknown): void {
+    if (!payload || typeof payload !== "object" || !("id" in payload) || typeof payload.id !== "string") return;
+    const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(payload.id), now = Date.now();
+    if (!player || !portal || !canUseForestPortal(player, portal, now)
+      || now - (this.forestTravelAt.get(client.sessionId) ?? -Infinity) < 1000
+      || !hasCombatLineOfSight(player, portal, this.readWorldBlock)) return;
+    const entering = payload.id === "depths-entry";
+    if (entering && !canEnterSilverDepths(player)) {
+      client.send("portal:notice", player.level < 7 ? "The Silver Depths unlock at character level 7."
+        : "Complete the first mining expedition and accept the Silver Depths contract at the blacksmith.");
+      return;
+    }
+    if (!entering && !canExitSilverDepths(player)) {
+      client.send("portal:notice", "Defeat the Crystal Matriarch and claim your personal Matriarch's Edge before extracting.");
+      return;
+    }
+    this.forestTravelAt.set(client.sessionId, now);
+    const destination = entering ? SILVER_DEPTHS_ENTRY_POSITION : TOWN_SILVER_DEPTHS_PORTAL_POSITION;
+    if (entering && player.silverDepthsStage === 1) this.advanceSilverDepthsExpedition(client, "entered_depths");
+    if (!entering && player.silverDepthsStage === 6) this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith");
+    this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
+    this.pendingPowers.delete(client.sessionId); this.cancelWeaponProjectiles(client.sessionId);
+    this.attackChains.delete(client.sessionId); this.brambleSnares.delete(client.sessionId); this.specialMarks.delete(client.sessionId);
+    this.trading.disconnect(client.sessionId);
+    player.defending = false; player.powerCastStartedAt = 0;
+    player.x = destination.x; player.y = destination.y; player.z = destination.z;
+    player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 1200);
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
+    this.verticalVelocities.set(client.sessionId, 0);
+    client.send("player:portal", { ...destination, entering });
+    client.send("world:bootstrap", this.bootstrapPayload(destination));
+    client.send("portal:notice", entering
+      ? "Silver Depths entered · clear the gallery and confront the Crystal Matriarch."
+      : "Expedition complete · returned safely to the Town of Beginnings.");
+    this.sendObjectiveState(client, true);
+    void this.persistPlayer(client.sessionId, player, !entering);
   }
 
   private useForestPortal(client: Client, payload: unknown): void {

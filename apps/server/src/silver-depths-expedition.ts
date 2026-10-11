@@ -18,3 +18,20 @@ export function isInsideSilverDepths(position: { x: number; y: number; z: number
 
 export const SILVER_DEPTHS_GUARDS = ["silver-depths-spitter-a", "silver-depths-spitter-b"] as const;
 export const CRYSTAL_MATRIARCH_ID = "crystal-matriarch";
+
+export type SilverDepthsPlayer = {
+  health: number;
+  level: number;
+  miningExpeditionStage: number;
+  silverDepthsStage: number;
+  inventory: { get(id: string): { quantity: number } | undefined };
+};
+
+export function canEnterSilverDepths(player: SilverDepthsPlayer): boolean {
+  return player.health > 0 && player.level >= 7 && player.miningExpeditionStage >= 8 && player.silverDepthsStage >= 1;
+}
+
+export function canExitSilverDepths(player: SilverDepthsPlayer): boolean {
+  return player.health > 0 && player.silverDepthsStage >= 6
+    && (player.inventory.get("matriarch_edge")?.quantity ?? 0) > 0;
+}

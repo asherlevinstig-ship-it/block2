@@ -51,7 +51,7 @@ export interface MeleeStrikeProfile {
 }
 
 export function playerMeleeStrike(mainHandId: MainHandId, step: number): MeleeStrikeProfile | null {
-  if (mainHandId !== "longsword" && mainHandId !== "forged_sword" && mainHandId !== "fang_dagger" && mainHandId !== "stone_core_hammer" && mainHandId !== "rootbound_hammer") return null;
+  if (mainHandId !== "longsword" && mainHandId !== "forged_sword" && mainHandId !== "fang_dagger" && mainHandId !== "stone_core_hammer" && mainHandId !== "rootbound_hammer" && mainHandId !== "matriarch_edge") return null;
   const dagger = mainHandId === "fang_dagger";
   const stoneHammer = mainHandId === "stone_core_hammer";
   const rootboundHammer = mainHandId === "rootbound_hammer";

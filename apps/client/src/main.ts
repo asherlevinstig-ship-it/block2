@@ -1216,6 +1216,14 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(forgedSword, "forged-sword-collar", bladeMaterial, [.18, .09, .13], [0, -.16, 0]);
   addBox(forgedFocus, "forged-focus-frame", bladeMaterial, [.34, .07, .34], [0, -.34, 0]);
   forgedSword.enabled = forgedBow.enabled = forgedFocus.enabled = false;
+  const matriarchEdge = longsword.clone();
+  matriarchEdge.name = "main-hand-matriarch-edge";
+  rightElbow.addChild(matriarchEdge);
+  const moonstoneBlade = coloredMaterial(new pc.Color(.58, .28, .9));
+  const moonstoneGlow = coloredMaterial(new pc.Color(.42, .82, 1));
+  addBox(matriarchEdge, "matriarch-edge-rune", moonstoneGlow, [.045, .38, .025], [0, -.35, .05]);
+  addBox(matriarchEdge, "matriarch-edge-crystal", moonstoneBlade, [.17, .13, .12], [0, -.14, 0]).setLocalEulerAngles(0, 45, 0);
+  matriarchEdge.enabled = false;
   const venomFocus = acidGlandFocus.clone();
   venomFocus.name = "venom-focus";
   acidGlandFocus.parent!.addChild(venomFocus);
@@ -1232,6 +1240,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     fang_dagger: fangDagger,
     stone_core_hammer: stoneCoreHammer,
     rootbound_hammer: rootboundHammer,
+    matriarch_edge: matriarchEdge,
     acid_gland_focus: acidGlandFocus,
   };
   bow.enabled = false;
@@ -1356,9 +1365,9 @@ function animateVoxelCharacter(
   rig.leftKnee.setLocalEulerAngles(pose.leftKneePitch, 0, 0);
   rig.rightKnee.setLocalEulerAngles(pose.rightKneePitch, 0, 0);
   rig.scarf.setLocalEulerAngles(pose.scarfPitch, 0, pose.torsoRoll * -1.5);
-  for (const id of ["longsword", "forged_sword", "fang_dagger", "stone_core_hammer", "rootbound_hammer"] as const) {
+  for (const id of ["longsword", "forged_sword", "matriarch_edge", "fang_dagger", "stone_core_hammer", "rootbound_hammer"] as const) {
     const weapon = rig.mainHands[id];
-    const sword = id === "longsword" || id === "forged_sword";
+    const sword = id === "longsword" || id === "forged_sword" || id === "matriarch_edge";
     weapon.setLocalPosition(0, sword ? -0.29 : -0.28, sword ? 0.085 : 0.1);
     weapon.setLocalEulerAngles(0, 0, 0);
     weapon.setLocalScale(1, 1, 1);
@@ -3001,6 +3010,7 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   fang_dagger: coloredMaterial(new pc.Color(0.92, 0.84, 0.62)),
   stone_core_hammer: coloredMaterial(new pc.Color(0.42, 0.52, 0.58)),
   rootbound_hammer: coloredMaterial(new pc.Color(0.22, 0.58, 0.25)),
+  matriarch_edge: coloredMaterial(new pc.Color(.58, .28, .9)),
   acid_gland_focus: coloredMaterial(new pc.Color(0.62, 0.96, 0.12)),
   venom_focus: coloredMaterial(new pc.Color(.15, .95, .65)),
 };
@@ -4180,7 +4190,9 @@ function updateForestPortals(): void {
       const root = new pc.Entity(`portal-${id}`);
       const frame = coloredMaterial(new pc.Color(.2, .12, .3));
       const victory = id === "forest-victory";
-      const light = powerMaterial(portal.kind === "entry" ? new pc.Color(.45, 1, .65) : victory ? new pc.Color(1, .88, .42) : new pc.Color(1, .75, .25), victory ? .82 : .6);
+      const depths = id.startsWith("depths-");
+      const light = powerMaterial(depths ? new pc.Color(.64, .28, 1)
+        : portal.kind === "entry" ? new pc.Color(.45, 1, .65) : victory ? new pc.Color(1, .88, .42) : new pc.Color(1, .75, .25), victory || depths ? .82 : .6);
       addBox(root, "left-arch", frame, [.35, 2.9, .4], [-1, 1.45, 0]);
       addBox(root, "right-arch", frame, [.35, 2.9, .4], [1, 1.45, 0]);
       addBox(root, "arch-crown", frame, [2.35, .35, .4], [0, 2.8, 0]);
@@ -4204,7 +4216,8 @@ function updateForestPortals(): void {
     visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
     const reachable = canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
     visual.label.disabled = !reachable;
-    const portalName = portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
+    const portalName = id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
+      : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
     const text = `${portalName}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }

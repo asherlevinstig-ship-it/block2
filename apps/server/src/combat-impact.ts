@@ -78,6 +78,6 @@ export function basicStaggerDuration(mainHandId: MainHandId, step: number, arche
   if (state !== "windup") return 0;
   if (mainHandId === "rootbound_hammer") return step === 3 ? (archetype === "stone_brute" || isChampion ? 750 : 1050) : 0;
   if (mainHandId === "stone_core_hammer") return archetype === "stone_brute" ? 450 : 850;
-  if ((mainHandId === "longsword" || mainHandId === "forged_sword" || mainHandId === "fang_dagger") && step === 3 && archetype !== "stone_brute") return 650;
+  if ((mainHandId === "longsword" || mainHandId === "forged_sword" || mainHandId === "fang_dagger" || mainHandId === "matriarch_edge") && step === 3 && archetype !== "stone_brute") return 650;
   return 0;
 }

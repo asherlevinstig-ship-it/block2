@@ -25,6 +25,9 @@ export const TOWN_TAVERN_KEEPER_POSITION = { x: 5.1, y: 8, z: 24.35 } as const;
 export const TOWN_BLACKSMITH_STALL_POSITION = { x: 22.5, y: 8, z: 2.5 } as const;
 export const TOWN_EXPEDITION_BOARD_POSITION = { x: 14.5, y: 8, z: 3.5 } as const;
 export const TOWN_EXPEDITION_PORTAL_POSITION = { x: 17.5, y: 8, z: 3.5 } as const;
+export const TOWN_SILVER_DEPTHS_PORTAL_POSITION = { x: 18.5, y: 8, z: 7.5 } as const;
+export const SILVER_DEPTHS_ENTRY_POSITION = { x: 61.5, y: 1, z: 9.5 } as const;
+export const SILVER_DEPTHS_EXIT_POSITION = { x: 75.5, y: 1, z: 9.5 } as const;
 export const TOWN_STORAGE_CHEST_POSITION = { x: 26.5, y: 8, z: 4.5 } as const;
 export function isAtTownStorage(player: { x: number; y: number; z: number }): boolean {
   const chest = TOWN_STORAGE_CHEST_POSITION;
