@@ -26,8 +26,15 @@ export const TOWN_BLACKSMITH_STALL_POSITION = { x: 22.5, y: 8, z: 2.5 } as const
 export const TOWN_EXPEDITION_BOARD_POSITION = { x: 14.5, y: 8, z: 3.5 } as const;
 export const TOWN_EXPEDITION_PORTAL_POSITION = { x: 17.5, y: 8, z: 3.5 } as const;
 export const TOWN_SILVER_DEPTHS_PORTAL_POSITION = { x: 18.5, y: 8, z: 7.5 } as const;
-export const SILVER_DEPTHS_ENTRY_POSITION = { x: 61.5, y: 1, z: 9.5 } as const;
-export const SILVER_DEPTHS_EXIT_POSITION = { x: 75.5, y: 1, z: 9.5 } as const;
+export const SILVER_DEPTHS = { minX: 60, maxX: 92, minZ: 1, maxZ: 17 } as const;
+export const SILVER_DEPTHS_ENTRY_POSITION = { x: 62.5, y: 1, z: 9.5 } as const;
+export const SILVER_DEPTHS_PARTY_SPAWNS = [
+  SILVER_DEPTHS_ENTRY_POSITION,
+  { x: 62.5, y: 1, z: 6.5 },
+  { x: 62.5, y: 1, z: 12.5 },
+  { x: 65.5, y: 1, z: 9.5 },
+] as const;
+export const SILVER_DEPTHS_EXIT_POSITION = { x: 90.5, y: 1, z: 9.5 } as const;
 export const TOWN_STORAGE_CHEST_POSITION = { x: 26.5, y: 8, z: 4.5 } as const;
 export function isAtTownStorage(player: { x: number; y: number; z: number }): boolean {
   const chest = TOWN_STORAGE_CHEST_POSITION;
@@ -39,13 +46,14 @@ export const MILESTONE_CAVE_X_OFFSET = 14;
 export const CAVE_SHALLOW_HOME = { x: 39.5, y: 3, z: 6.5 } as const;
 export const CAVE_DEEP_HOME = { x: 48.5, y: 1, z: 10.5 } as const;
 export const CAVE_HIDDEN_HOME = { x: 56.5, y: 1, z: 9.5 } as const;
-export const SILVER_DEPTHS_SPITTER_HOMES = [{ x: 64.5, y: 1, z: 6.5 }, { x: 65.5, y: 1, z: 11.5 }] as const;
-export const CRYSTAL_MATRIARCH_HOME = { x: 72.5, y: 1, z: 9.5 } as const;
+export const SILVER_DEPTHS_SPITTER_HOMES = [{ x: 67.5, y: 1, z: 5.5 }, { x: 67.5, y: 1, z: 13.5 }] as const;
+export const CRYSTAL_MATRIARCH_HOME = { x: 84.5, y: 1, z: 9.5 } as const;
 export const SILVER_DEPTHS_COVER = [
-  { x: 62, z: 8, height: 2 }, { x: 62, z: 10, height: 2 },
-  { x: 65, z: 8, height: 1 }, { x: 65, z: 10, height: 1 },
-  { x: 70, z: 6, height: 2 }, { x: 70, z: 12, height: 2 },
-  { x: 74, z: 6, height: 2 }, { x: 74, z: 12, height: 2 },
+  { x: 64, z: 4, height: 2 }, { x: 64, z: 14, height: 2 },
+  { x: 69, z: 7, height: 1 }, { x: 69, z: 11, height: 1 },
+  { x: 77, z: 4, height: 2 }, { x: 77, z: 14, height: 2 },
+  { x: 83, z: 2, height: 2 }, { x: 83, z: 16, height: 2 },
+  { x: 89, z: 5, height: 2 }, { x: 89, z: 13, height: 2 },
 ] as const;
 /** Side veins are excavated horizontally, leaving the main stairway intact. */
 export const CAVE_ORE_POCKETS = [
@@ -434,7 +442,7 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
     if (worldZ >= pocket.minZ && worldZ <= pocket.maxZ || worldZ === pocket.minZ - 1) return Block.Stone;
   }
   // Authored stone enclosure prevents random generation from puncturing floors or the sealed chamber.
-  if (worldX >= 31 && worldX <= 76 && worldZ >= 4 && worldZ <= 14 && y < SURFACE_HEIGHT) {
+  if (worldX >= 31 && worldX <= SILVER_DEPTHS.maxX && worldZ >= SILVER_DEPTHS.minZ && worldZ <= SILVER_DEPTHS.maxZ && y < SURFACE_HEIGHT) {
     if (worldX === 31) return y === SURFACE_HEIGHT ? Block.Grass : Block.Stone;
     if (worldX >= 42) {
       if (worldX <= 43 && worldZ >= 7 && worldZ <= 9) {
@@ -450,13 +458,13 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
       if (worldX === 58 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 2) return Block.SilverOre;
       // The Lantern route continues beyond the old vault through a narrow seal,
       // opens into a split spitter gallery, then the Crystal Matriarch arena.
-      if (worldX === 59 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 3) return Block.SilverOre;
+      if (worldX === 59 && worldZ >= 6 && worldZ <= 12 && y >= 1 && y <= 4) return Block.SilverOre;
       const depthsCover = SILVER_DEPTHS_COVER.find(cover => cover.x === worldX && cover.z === worldZ);
       if (depthsCover && y >= 1 && y <= depthsCover.height) return Block.Stone;
-      if (worldX >= 60 && worldX <= 67 && worldZ >= 5 && worldZ <= 13 && y >= 1 && y <= 3) return Block.Air;
-      if (worldX === 68 && worldZ >= 8 && worldZ <= 10 && y >= 1 && y <= 3) return Block.MoonstoneOre;
-      if (worldX >= 69 && worldX <= 75 && worldZ >= 5 && worldZ <= 13 && y >= 1 && y <= 4) return Block.Air;
-      if (worldX === 75 && (worldZ === 6 || worldZ === 12) && y >= 1 && y <= 2) return Block.MoonstoneOre;
+      if (worldX >= 60 && worldX <= 72 && worldZ >= 2 && worldZ <= 16 && y >= 1 && y <= 4) return Block.Air;
+      if (worldX === 73 && worldZ >= 6 && worldZ <= 12 && y >= 1 && y <= 4) return Block.MoonstoneOre;
+      if (worldX === 92 && (worldZ === 3 || worldZ === 15) && y >= 1 && y <= 3) return Block.MoonstoneOre;
+      if (worldX >= 74 && worldX <= 92 && worldZ >= 1 && worldZ <= 17 && y >= 1 && y <= 5) return Block.Air;
       return y === SURFACE_HEIGHT ? Block.Grass : Block.Stone;
     }
     if (worldX >= 37 && worldX <= 40 && worldZ === 12 && y >= 3 && y <= 4) return Block.IronOre;

@@ -8,9 +8,9 @@ export const CAVE_ENCOUNTERS: Record<string, { name: string; minX: number; maxX:
 };
 
 const SILVER_DEPTHS_ENCOUNTERS: typeof CAVE_ENCOUNTERS = {
-  "silver-depths-spitter-a": { name: "Moonstone Spitter", minX: 60.3, maxX: 67.7, minZ: 4.3, maxZ: 13.7, minY: 0.8, maxY: 3.2 },
-  "silver-depths-spitter-b": { name: "Moonstone Spitter", minX: 60.3, maxX: 67.7, minZ: 4.3, maxZ: 13.7, minY: 0.8, maxY: 3.2 },
-  "crystal-matriarch": { name: "Crystal Matriarch", minX: 69.3, maxX: 75.7, minZ: 4.3, maxZ: 13.7, minY: 0.8, maxY: 4.2 },
+  "silver-depths-spitter-a": { name: "Moonstone Spitter", minX: 60.3, maxX: 72.7, minZ: 1.3, maxZ: 16.7, minY: 0.8, maxY: 4.2 },
+  "silver-depths-spitter-b": { name: "Moonstone Spitter", minX: 60.3, maxX: 72.7, minZ: 1.3, maxZ: 16.7, minY: 0.8, maxY: 4.2 },
+  "crystal-matriarch": { name: "Crystal Matriarch", minX: 74.3, maxX: 92.7, minZ: 0.3, maxZ: 17.7, minY: 0.8, maxY: 5.2 },
 };
 
 /** Exclude the surface, but allow mined ledges and falling within the room. */

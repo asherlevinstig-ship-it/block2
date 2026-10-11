@@ -71,13 +71,17 @@ describe("two-level mine", () => {
   });
   it("continues into the Moonstone gallery and Crystal Matriarch arena", () => {
     const { read } = fixture("silver-depths-regression");
+    // Fifteen-block-wide guard gallery with multiple lanes around cover.
+    expect(read(67, 1, 9)).toBe(Block.Air);
+    expect(read(64, 1, 4)).toBe(Block.Stone);
     expect(read(64, 1, 9)).toBe(Block.Air);
-    expect(read(68, 1, 9)).toBe(Block.MoonstoneOre);
-    expect(read(72, 1, 9)).toBe(Block.Air);
-    expect(read(72, 0, 9)).not.toBe(Block.Air);
-    expect(read(62, 1, 8)).toBe(Block.Stone);
-    expect(read(62, 1, 9)).toBe(Block.Air);
-    expect(read(70, 2, 6)).toBe(Block.Stone);
-    expect(read(72, 1, 6)).toBe(Block.Air);
+    // Seven-block-wide Moonstone gate avoids a single-file party choke.
+    for (let z = 6; z <= 12; z++) expect(read(73, 1, z)).toBe(Block.MoonstoneOre);
+    // The Matriarch arena is nineteen by seventeen clear blocks before cover.
+    expect(read(84, 1, 9)).toBe(Block.Air);
+    expect(read(84, 0, 9)).not.toBe(Block.Air);
+    expect(read(77, 2, 4)).toBe(Block.Stone);
+    expect(read(80, 1, 4)).toBe(Block.Air);
+    expect(read(92, 1, 3)).toBe(Block.MoonstoneOre);
   });
 });

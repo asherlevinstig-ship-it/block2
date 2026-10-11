@@ -13,7 +13,7 @@ export function advanceSilverDepths(stage: number, event: SilverDepthsEvent): nu
 }
 
 export function isInsideSilverDepths(position: { x: number; y: number; z: number }): boolean {
-  return position.x >= 60 && position.x <= 76 && position.y <= 4.5 && position.z >= 4 && position.z <= 14;
+  return position.x >= 60 && position.x <= 93 && position.y <= 5.5 && position.z >= 0 && position.z <= 18;
 }
 
 export const SILVER_DEPTHS_GUARDS = ["silver-depths-spitter-a", "silver-depths-spitter-b"] as const;

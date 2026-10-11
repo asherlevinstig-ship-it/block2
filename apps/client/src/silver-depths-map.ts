@@ -1,11 +1,13 @@
+import { CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_SPITTER_HOMES } from "@blockcraft/voxel-world";
+
 export type DepthsPoint = { x: number; y: number; z: number };
 export const DEPTHS_ROUTE_NODES = [
-  { id: "entrance", label: "Entrance", short: "IN", point: { x: 61.5, y: 1, z: 9.5 } },
-  { id: "guard-a", label: "North Guard", short: "I", point: { x: 64.5, y: 1, z: 6.5 } },
-  { id: "guard-b", label: "South Guard", short: "II", point: { x: 65.5, y: 1, z: 11.5 } },
-  { id: "seal", label: "Moonstone Seal", short: "◆", point: { x: 68.5, y: 1, z: 9.5 } },
-  { id: "matriarch", label: "Matriarch", short: "♛", point: { x: 72.5, y: 1, z: 9.5 } },
-  { id: "extraction", label: "Extraction", short: "↑", point: { x: 75.5, y: 1, z: 9.5 } },
+  { id: "entrance", label: "Entrance", short: "IN", point: SILVER_DEPTHS_ENTRY_POSITION },
+  { id: "guard-a", label: "North Guard", short: "I", point: SILVER_DEPTHS_SPITTER_HOMES[0] },
+  { id: "guard-b", label: "South Guard", short: "II", point: SILVER_DEPTHS_SPITTER_HOMES[1] },
+  { id: "seal", label: "Moonstone Seal", short: "◆", point: { x: 73.5, y: 1, z: 9.5 } },
+  { id: "matriarch", label: "Matriarch", short: "♛", point: CRYSTAL_MATRIARCH_HOME },
+  { id: "extraction", label: "Extraction", short: "↑", point: SILVER_DEPTHS_EXIT_POSITION },
 ] as const;
 export type DepthsNodeId = typeof DEPTHS_ROUTE_NODES[number]["id"];
 

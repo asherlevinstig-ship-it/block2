@@ -161,7 +161,7 @@ import { CombatContributions } from "./combat-contributions.js";
 import { SilverGuardVolley } from "./silver-guard-volley.js";
 import { ForestPortalCycle } from "./forest-portal-cycle.js";
 import { FOREST_PORTAL_LIFETIME_MS, canUseForestPortal } from "@blockcraft/protocol";
-import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, isInForestDungeon, EMBER_VAULT_PORTAL_POSITION, EMBER_VAULT_ENTRY, EMBER_VAULT_EXIT, EMBER_VAULT_MOBS, isInEmberVault } from "@blockcraft/voxel-world";
+import { FOREST_PORTAL_POSITION, FOREST_DUNGEON_ENTRY, FOREST_DUNGEON_EXIT, FOREST_DUNGEON_MOBS, FOREST_DUNGEON_COVER, TOWN_EXPEDITION_BOARD_POSITION, TOWN_EXPEDITION_PORTAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, isInForestDungeon, EMBER_VAULT_PORTAL_POSITION, EMBER_VAULT_ENTRY, EMBER_VAULT_EXIT, EMBER_VAULT_MOBS, isInEmberVault } from "@blockcraft/voxel-world";
 import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
@@ -216,6 +216,7 @@ interface PendingAttack {
 
 interface SilverDepthsRunStats {
   runId: string;
+  partySize: number;
   startedAt: number;
   completedAt: number;
   enemiesDefeated: number;
@@ -2048,7 +2049,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return;
     }
     this.forestTravelAt.set(client.sessionId, now);
-    const destination = entering ? SILVER_DEPTHS_ENTRY_POSITION : TOWN_SILVER_DEPTHS_PORTAL_POSITION;
+    const occupiedDepths = [...this.state.players.entries()]
+      .filter(([id, other]) => id !== client.sessionId && other.health > 0 && isInsideSilverDepths(other))
+      .map(([, other]) => other);
+    const destination = entering
+      ? SILVER_DEPTHS_PARTY_SPAWNS.find(spawn => occupiedDepths.every(other => Math.hypot(other.x - spawn.x, other.z - spawn.z) >= 1.25))
+        ?? SILVER_DEPTHS_ENTRY_POSITION
+      : TOWN_SILVER_DEPTHS_PORTAL_POSITION;
     if (entering) this.beginSilverDepthsRun(client, player, now);
     if (entering && player.silverDepthsStage === 1) this.advanceSilverDepthsExpedition(client, "entered_depths");
     if (!entering && player.silverDepthsStage === 6) this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith");
@@ -2084,12 +2091,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.restoreMatriarchCover();
       this.restoreSilverDepthsMoonstone();
     }
-    const run: SilverDepthsRunStats = { runId: `depths-run-${++this.silverDepthsRunSequence}`, startedAt: now, completedAt: 0,
+    const run: SilverDepthsRunStats = { runId: `depths-run-${++this.silverDepthsRunSequence}`,
+      partySize: Math.max(1, this.parties.cohort(client.sessionId).members.length), startedAt: now, completedAt: 0,
       enemiesDefeated: 0, damageTaken: 0, moonstoneCollected: 0, moonstoneAtStart: player.inventory.get("moonstone")?.quantity ?? 0,
       edgeAtStart: player.inventory.get("matriarch_edge")?.quantity ?? 0 };
     this.silverDepthsRuns.set(client.sessionId, run);
     player.silverDepthsRunStage = 1;
-    client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: 1 } satisfies DungeonRunUpdate);
+    client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: run.partySize } satisfies DungeonRunUpdate);
   }
 
   private completeSilverDepthsRun(client: Client, player: PlayerState, run: SilverDepthsRunStats): void {
@@ -2104,7 +2112,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!moonstone) { moonstone = new InventoryItemState(); player.inventory.set("moonstone", moonstone); }
     moonstone.quantity = Math.min(ironCapacity(player.blacksmithUpgrades), run.moonstoneAtStart + intendedAward);
     const moonstoneAwarded = moonstone.quantity - run.moonstoneAtStart;
-    client.send("dungeon:run", { runId: run.runId, phase: "completed", dungeon: "silver-depths", partySize: 1,
+    client.send("dungeon:run", { runId: run.runId, phase: "completed", dungeon: "silver-depths", partySize: run.partySize,
       durationMs, rank, bestTimeMs: player.silverDepthsBestTimeMs, newBest,
       reward: `+${moonstoneAwarded} Moonstone · ${signatureItemObtained ? "Matriarch's Edge obtained" : "Matriarch's Edge secured"}`,
       stats: { enemiesDefeated: run.enemiesDefeated, damageTaken: run.damageTaken,

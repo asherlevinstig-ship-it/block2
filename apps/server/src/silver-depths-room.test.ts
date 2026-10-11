@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Block, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
+import { Block, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 
@@ -54,6 +54,14 @@ describe("Silver Depths room travel", () => {
     (room as any).useSilverDepthsPortal(client, { id: "depths-entry" });
     expect(player).toMatchObject(SILVER_DEPTHS_ENTRY_POSITION);
     expect(client.send).toHaveBeenCalledWith("player:portal", { ...SILVER_DEPTHS_ENTRY_POSITION, entering: true });
+  });
+
+  it("spreads arriving party members across clear entry positions", () => {
+    const { room, player, client } = roomWithPortal("depths-entry");
+    const first = new PlayerState(); Object.assign(first, SILVER_DEPTHS_PARTY_SPAWNS[0], { health: 5 });
+    room.state.players.set("party-member", first);
+    (room as any).useSilverDepthsPortal(client, { id: "depths-entry" });
+    expect(player).toMatchObject(SILVER_DEPTHS_PARTY_SPAWNS[1]);
   });
 
   it("only extracts after the fixed boss weapon is claimed", () => {
