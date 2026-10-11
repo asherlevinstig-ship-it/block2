@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { Block, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
@@ -40,32 +41,35 @@ describe("Silver Depths room travel", () => {
     expect([...room.state.lootDrops.values()]).toContainEqual(expect.objectContaining({ ownerId: "miner", itemId: "matriarch_edge", quantity: 1 }));
   });
 
-  it("enters through the town portal and advances an accepted run", () => {
+  it("transfers an accepted player from the overworld into a private dungeon room", async () => {
     const { room, player, client } = roomWithPortal("depths-entry");
     (room as any).useSilverDepthsPortal(client, { id: "depths-entry" });
-    expect(player.silverDepthsStage).toBe(2);
-    expect(player).toMatchObject(SILVER_DEPTHS_ENTRY_POSITION);
-    expect(client.send).toHaveBeenCalledWith("player:portal", { ...SILVER_DEPTHS_ENTRY_POSITION, entering: true });
+    await vi.waitFor(() => expect(client.send).toHaveBeenCalledWith("room:transfer", expect.objectContaining({
+      room: SILVER_DEPTHS_ROOM, instanceKey: expect.stringMatching(/^silver-/), partySize: 1,
+    })));
+    expect(player.silverDepthsStage).toBe(1);
+    expect(player).toMatchObject(TOWN_SILVER_DEPTHS_PORTAL_POSITION);
   });
 
-  it("allows direct test entry before the level and expedition gates", () => {
+  it("allows direct test transfer before the level and expedition gates", async () => {
     const { room, player, client } = roomWithPortal("depths-entry");
     Object.assign(player, { level: 1, miningExpeditionStage: 0, silverDepthsStage: 0 });
     (room as any).useSilverDepthsPortal(client, { id: "depths-entry" });
-    expect(player).toMatchObject(SILVER_DEPTHS_ENTRY_POSITION);
-    expect(client.send).toHaveBeenCalledWith("player:portal", { ...SILVER_DEPTHS_ENTRY_POSITION, entering: true });
+    await vi.waitFor(() => expect(client.send).toHaveBeenCalledWith("room:transfer", expect.objectContaining({ room: SILVER_DEPTHS_ROOM })));
+    expect(player).toMatchObject(TOWN_SILVER_DEPTHS_PORTAL_POSITION);
   });
 
-  it("spreads arriving party members across clear entry positions", () => {
-    const { room, player, client } = roomWithPortal("depths-entry");
-    const first = new PlayerState(); Object.assign(first, SILVER_DEPTHS_PARTY_SPAWNS[0], { health: 5 });
-    room.state.players.set("party-member", first);
-    (room as any).useSilverDepthsPortal(client, { id: "depths-entry" });
-    expect(player).toMatchObject(SILVER_DEPTHS_PARTY_SPAWNS[1]);
+  it("provides four separated spawn slots inside each dungeon instance", () => {
+    expect(SILVER_DEPTHS_PARTY_SPAWNS).toHaveLength(4);
+    for (let a = 0; a < SILVER_DEPTHS_PARTY_SPAWNS.length; a++) for (let b = a + 1; b < SILVER_DEPTHS_PARTY_SPAWNS.length; b++) {
+      const first = SILVER_DEPTHS_PARTY_SPAWNS[a]!, second = SILVER_DEPTHS_PARTY_SPAWNS[b]!;
+      expect(Math.hypot(first.x - second.x, first.z - second.z)).toBeGreaterThanOrEqual(3);
+    }
   });
 
-  it("only extracts after the fixed boss weapon is claimed", () => {
+  it("only transfers back to the overworld after the fixed boss weapon is claimed", async () => {
     const { room, player, client } = roomWithPortal("depths-return");
+    (room as any).roomKind = "silver-depths";
     (room as any).useSilverDepthsPortal(client, { id: "depths-return" });
     expect(player.silverDepthsStage).toBe(6);
     expect(client.send).toHaveBeenCalledWith("portal:notice", expect.stringContaining("Matriarch's Edge"));
@@ -73,8 +77,9 @@ describe("Silver Depths room travel", () => {
     const edge = new InventoryItemState(); edge.quantity = 1; player.inventory.set("matriarch_edge", edge);
     const stone = new InventoryItemState(); stone.quantity = 1; player.inventory.set("moonstone", stone);
     (room as any).useSilverDepthsPortal(client, { id: "depths-return" });
+    await vi.waitFor(() => expect(client.send).toHaveBeenCalledWith("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths" }));
     expect(player.silverDepthsStage).toBe(7);
-    expect(player).toMatchObject(TOWN_SILVER_DEPTHS_PORTAL_POSITION);
+    expect(player).toMatchObject(SILVER_DEPTHS_EXIT_POSITION);
     expect(player.inventory.get("moonstone")?.quantity).toBe(0);
   });
 

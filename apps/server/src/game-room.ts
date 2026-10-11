@@ -119,6 +119,9 @@ import {
   type LootPickedUp,
   type ResourceGathered,
   type TavernQuizUpdate,
+  SILVER_DEPTHS_ROOM,
+  WORLD_ROOM,
+  type RoomTransfer,
   WORLD_BOOTSTRAP_CHUNK_RADIUS,
   WORLD_STREAM_CHUNK_RADIUS,
   type ChunkRegion,
@@ -225,6 +228,12 @@ interface SilverDepthsRunStats {
   moonstoneAtStart: number;
   edgeAtStart: number;
 }
+
+type WorldRoomOptions = {
+  roomKind?: "overworld" | "silver-depths";
+  instanceKey?: string;
+  partySize?: number;
+};
 
 interface EmberVaultRunStats {
   runId: string;
@@ -368,23 +377,31 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private weaponProjectileSequence = 0;
   private lootDropSequence = 0;
   private worldSeed = "blockcraft-dev";
+  private roomKind: "overworld" | "silver-depths" = "overworld";
+  private instancePartySize = 1;
+  private silverInstanceSequence = 0;
 
-  override async onCreate(): Promise<void> {
+  override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
+    this.roomKind = options.roomKind === "silver-depths" ? "silver-depths" : "overworld";
+    this.instancePartySize = Math.max(1, Math.min(4, Math.floor(options.partySize ?? 1)));
+    if (this.roomKind === "silver-depths") this.maxClients = 4;
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
     this.worldDeltaStorageKey = worldDeltaHashKey(this.worldSeed);
-    try {
-      const storedDeltas = parseWorldDeltas(await this.presence.hgetall(this.worldDeltaStorageKey));
-      for (const delta of storedDeltas) {
-        this.indexWorldDelta(delta);
-        if (delta.block === Block.Air && authoredMineralAt(delta.x, delta.y, delta.z) !== null) {
-          const regrowAt = delta.regrowAt ?? Date.now() + MINERAL_REGROWTH_MS;
-          const field = worldDeltaField(delta.x, delta.y, delta.z);
-          this.mineralRegrowth.set(field, { ...delta, regrowAt });
-          if (delta.regrowAt === undefined) this.pendingWorldDeltaWrites.set(field, JSON.stringify({ block: delta.block, regrowAt }));
+    if (this.roomKind === "overworld") {
+      try {
+        const storedDeltas = parseWorldDeltas(await this.presence.hgetall(this.worldDeltaStorageKey));
+        for (const delta of storedDeltas) {
+          this.indexWorldDelta(delta);
+          if (delta.block === Block.Air && authoredMineralAt(delta.x, delta.y, delta.z) !== null) {
+            const regrowAt = delta.regrowAt ?? Date.now() + MINERAL_REGROWTH_MS;
+            const field = worldDeltaField(delta.x, delta.y, delta.z);
+            this.mineralRegrowth.set(field, { ...delta, regrowAt });
+            if (delta.regrowAt === undefined) this.pendingWorldDeltaWrites.set(field, JSON.stringify({ block: delta.block, regrowAt }));
+          }
         }
+      } catch (error) {
+        console.warn("Persistent terrain could not be loaded; using the generated world for this room.", error);
       }
-    } catch (error) {
-      console.warn("Persistent terrain could not be loaded; using the generated world for this room.", error);
     }
     this.setState(new WorldState());
     const depthsEntry = new ForestPortalState();
@@ -421,9 +438,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.registerMob("wild-crawler", "moss_crawler", GREENWOOD_CRAWLER_HOMES[0]);
     this.registerMob("frontier-crawler", "moss_crawler", { x: 63.5, y: 8, z: 35.5 });
     this.registerMob("frontier-support-spitter", "cave_spitter", MIXED_FRONTIER_SPITTER);
+    if (this.roomKind === "silver-depths") {
+      const retained = new Set<string>([...SILVER_DEPTHS_GUARDS, CRYSTAL_MATRIARCH_ID]);
+      for (const id of [...this.state.mobs.keys()]) if (!retained.has(id)) this.state.mobs.delete(id);
+      this.state.portals.clear();
+    }
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
       client.send("mineral:status", this.mineralStatus());
+      const run = this.silverDepthsRuns.get(client.sessionId);
+      if (this.roomKind === "silver-depths" && run) {
+        client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: run.partySize } satisfies DungeonRunUpdate);
+      }
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
     this.onMessage("chat:send", (client, payload: unknown) => this.handleNearbyChat(client, payload));
@@ -564,7 +590,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.isAdmin = await this.resolveAdminAccess(profileToken, requestedAdminPass);
     }
     const requestedQaSpawn = typeof options === "object" && options && "qaSpawn" in options ? String(options.qaSpawn) : "";
-    const spawn = process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
+    const returningFromDepths = typeof options === "object" && options && "returnFrom" in options && options.returnFrom === "silver-depths";
+    const instanceSpawn = SILVER_DEPTHS_PARTY_SPAWNS.find(candidate => [...this.state.players.values()]
+      .every(other => Math.hypot(other.x - candidate.x, other.z - candidate.z) >= 1.25)) ?? SILVER_DEPTHS_ENTRY_POSITION;
+    const spawn = this.roomKind === "silver-depths" ? instanceSpawn
+      : process.env.NODE_ENV !== "production" && requestedQaSpawn === "cave"
       ? { x: 37.5, y: 3, z: 8.5 }
       : process.env.NODE_ENV !== "production" && requestedQaSpawn === "spitter"
         ? { x: 40.5, y: 8, z: 6.5 }
@@ -576,7 +606,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           ? { x: 39.5, y: 8, z: 13.5 }
         : process.env.NODE_ENV !== "production" && requestedQaSpawn === "stream"
           ? { x: -75.5, y: 8, z: -7.5 }
-        : this.spawnPoint();
+        : returningFromDepths ? TOWN_SILVER_DEPTHS_PORTAL_POSITION : this.spawnPoint();
     player.x = spawn.x;
     player.y = spawn.y;
     player.z = spawn.z;
@@ -598,6 +628,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.objectiveProgress.set(client.sessionId, createObjectiveProgress());
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
     this.verticalVelocities.set(client.sessionId, 0);
+    if (this.roomKind === "silver-depths") {
+      this.beginSilverDepthsRun(client, player, Date.now());
+      if (player.silverDepthsStage === 1) this.advanceSilverDepthsExpedition(client, "entered_depths");
+    }
     if (profileToken) {
       try {
         await this.persistPlayer(client.sessionId, player, true);
@@ -1089,9 +1123,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (regrowAt !== undefined) this.mineralRegrowth.set(field, { ...delta, regrowAt });
     else this.mineralRegrowth.delete(field);
     this.indexWorldDelta(delta);
-    this.pendingWorldDeltaWrites.set(field, regrowAt === undefined ? String(block) : JSON.stringify({ block, regrowAt }));
-    this.lastWorldDeltaRetryAt = Date.now();
-    void this.flushWorldDeltaWrites();
+    if (this.roomKind === "overworld") {
+      this.pendingWorldDeltaWrites.set(field, regrowAt === undefined ? String(block) : JSON.stringify({ block, regrowAt }));
+      this.lastWorldDeltaRetryAt = Date.now();
+      void this.flushWorldDeltaWrites();
+    }
   }
 
   private mineralStatus(): MineralDepositStatus[] {
@@ -1136,6 +1172,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private flushWorldDeltaWrites(): Promise<void> {
+    if (this.roomKind !== "overworld") return Promise.resolve();
     if (this.worldDeltaFlush) return this.worldDeltaFlush;
     const flush = (async () => {
       while (this.pendingWorldDeltaWrites.size > 0) {
@@ -2039,44 +2076,53 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       || now - (this.forestTravelAt.get(client.sessionId) ?? -Infinity) < 1000
       || !hasCombatLineOfSight(player, portal, this.readWorldBlock)) return;
     const entering = payload.id === "depths-entry";
-    if (!entering && !canExitSilverDepths(player)) {
-      client.send("portal:notice", "Defeat the Crystal Matriarch and claim your personal Matriarch's Edge before extracting.");
+    if (entering) {
+      if (this.roomKind !== "overworld") return;
+      this.forestTravelAt.set(client.sessionId, now);
+      void this.transferPartyToSilverDepths(client);
       return;
     }
     const activeRun = this.silverDepthsRuns.get(client.sessionId);
-    if (!entering && activeRun && activeRun.completedAt === 0) {
+    const ownsEdge = (player.inventory.get("matriarch_edge")?.quantity ?? 0) > 0;
+    if (!canExitSilverDepths(player) && !(activeRun?.completedAt && ownsEdge)) {
+      client.send("portal:notice", "Defeat the Crystal Matriarch and claim your personal Matriarch's Edge before extracting.");
+      return;
+    }
+    if (activeRun && activeRun.completedAt === 0) {
       client.send("portal:notice", "This expedition is still active · defeat the Crystal Matriarch before extracting.");
       return;
     }
     this.forestTravelAt.set(client.sessionId, now);
-    const occupiedDepths = [...this.state.players.entries()]
-      .filter(([id, other]) => id !== client.sessionId && other.health > 0 && isInsideSilverDepths(other))
-      .map(([, other]) => other);
-    const destination = entering
-      ? SILVER_DEPTHS_PARTY_SPAWNS.find(spawn => occupiedDepths.every(other => Math.hypot(other.x - spawn.x, other.z - spawn.z) >= 1.25))
-        ?? SILVER_DEPTHS_ENTRY_POSITION
-      : TOWN_SILVER_DEPTHS_PORTAL_POSITION;
-    if (entering) this.beginSilverDepthsRun(client, player, now);
-    if (entering && player.silverDepthsStage === 1) this.advanceSilverDepthsExpedition(client, "entered_depths");
-    if (!entering && player.silverDepthsStage === 6) this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith");
+    if (player.silverDepthsStage === 6) this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith");
     this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
     this.pendingPowers.delete(client.sessionId); this.cancelWeaponProjectiles(client.sessionId);
     this.attackChains.delete(client.sessionId); this.brambleSnares.delete(client.sessionId); this.specialMarks.delete(client.sessionId);
     this.trading.disconnect(client.sessionId);
     player.defending = false; player.powerCastStartedAt = 0;
-    player.x = destination.x; player.y = destination.y; player.z = destination.z;
-    player.invulnerableUntil = Math.max(player.invulnerableUntil, now + 1200);
-    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: now });
-    this.verticalVelocities.set(client.sessionId, 0);
-    client.send("player:portal", { ...destination, entering });
-    client.send("world:bootstrap", this.bootstrapPayload(destination));
-    client.send("portal:notice", entering
-      ? "Silver Depths entered · clear the gallery and confront the Crystal Matriarch."
-      : "Expedition complete · returned safely to the Town of Beginnings.");
-    if (!entering && activeRun?.completedAt) this.completeSilverDepthsRun(client, player, activeRun);
-    if (!entering) player.silverDepthsRunStage = 0;
+    if (activeRun?.completedAt) this.completeSilverDepthsRun(client, player, activeRun);
+    player.silverDepthsRunStage = 0;
     this.sendObjectiveState(client, true);
-    void this.persistPlayer(client.sessionId, player, !entering);
+    void this.returnFromSilverDepths(client, player);
+  }
+
+  private async transferPartyToSilverDepths(trigger: Client): Promise<void> {
+    const cohort = this.parties.cohort(trigger.sessionId);
+    const memberIds = new Set(cohort.members);
+    const members = this.clients.filter(candidate => memberIds.has(candidate.sessionId));
+    if (!members.some(candidate => candidate.sessionId === trigger.sessionId)) members.push(trigger);
+    const instanceKey = `silver-${this.roomId || "world"}-${Date.now().toString(36)}-${++this.silverInstanceSequence}`;
+    await Promise.allSettled(members.map(member => {
+      const player = this.state.players.get(member.sessionId);
+      return player ? this.persistPlayer(member.sessionId, player, true) : Promise.resolve();
+    }));
+    const transfer: RoomTransfer = { room: SILVER_DEPTHS_ROOM, instanceKey, partySize: Math.max(1, Math.min(4, members.length)) };
+    for (const member of members) member.send("room:transfer", transfer);
+  }
+
+  private async returnFromSilverDepths(client: Client, player: PlayerState): Promise<void> {
+    await this.persistPlayer(client.sessionId, player, true);
+    client.send("portal:notice", "Expedition complete · returning to the Town of Beginnings.");
+    client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths" } satisfies RoomTransfer);
   }
 
   private beginSilverDepthsRun(client: Client, player: PlayerState, now: number): void {
@@ -2092,7 +2138,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.restoreSilverDepthsMoonstone();
     }
     const run: SilverDepthsRunStats = { runId: `depths-run-${++this.silverDepthsRunSequence}`,
-      partySize: Math.max(1, this.parties.cohort(client.sessionId).members.length), startedAt: now, completedAt: 0,
+      partySize: this.roomKind === "silver-depths" ? this.instancePartySize : Math.max(1, this.parties.cohort(client.sessionId).members.length), startedAt: now, completedAt: 0,
       enemiesDefeated: 0, damageTaken: 0, moonstoneCollected: 0, moonstoneAtStart: player.inventory.get("moonstone")?.quantity ?? 0,
       edgeAtStart: player.inventory.get("matriarch_edge")?.quantity ?? 0 };
     this.silverDepthsRuns.set(client.sessionId, run);
@@ -2468,20 +2514,23 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private simulatePlayers(deltaTime: number): void {
     if (Date.now() - this.lastPartyUpdateAt >= 500) {
-      this.sendPartyUpdates(Date.now());
+      if (this.roomKind === "overworld") this.sendPartyUpdates(Date.now());
+      else this.lastPartyUpdateAt = Date.now();
       for (const client of this.clients) this.sendObjectiveState(client);
     }
     const now = Date.now();
-    const entrance = this.state.portals.get("forest-entry");
-    if (entrance && entrance.expiresAt > 0 && now >= entrance.expiresAt) {
-      this.state.portals.delete("forest-entry");
-      if (!this.forestDungeonActive) this.forestDungeonRun = null;
-    }
-    if (this.forestDungeonActive && ![...this.state.players.values()].some(player => isInForestDungeon(player.x, player.z))) {
-      this.resetForestDungeon(now);
+    if (this.roomKind === "overworld") {
+      const entrance = this.state.portals.get("forest-entry");
+      if (entrance && entrance.expiresAt > 0 && now >= entrance.expiresAt) {
+        this.state.portals.delete("forest-entry");
+        if (!this.forestDungeonActive) this.forestDungeonRun = null;
+      }
+      if (this.forestDungeonActive && ![...this.state.players.values()].some(player => isInForestDungeon(player.x, player.z))) {
+        this.resetForestDungeon(now);
+      }
     }
     this.resolveMining(now);
-    this.regrowMinerals(now);
+    if (this.roomKind === "overworld") this.regrowMinerals(now);
     if (this.pendingWorldDeltaWrites.size > 0 && now - this.lastWorldDeltaRetryAt >= 5_000) {
       this.lastWorldDeltaRetryAt = now;
       void this.flushWorldDeltaWrites();
@@ -2495,15 +2544,17 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.resolveBrambleSnares(now);
     this.resolveMobProjectiles(now);
     this.resolveMobHazards(now);
-    this.advanceWildernessEvent(now);
-    for (const pack of ROAMING_PACKS) {
-      const route = this.roamingRoutes.get(pack.id) ?? createRoamingRouteState(now);
-      this.roamingRoutes.set(pack.id, route);
-      const members = pack.offsets.flatMap((_, index) => {
-        const mob = this.state.mobs.get(roamingMemberId(pack, index));
-        return mob?.alive ? [{ index, pose: mob, idle: mob.combatState === "idle" && !this.roamingEngaged.has(roamingMemberId(pack, index)) && !this.roamingReturning.has(roamingMemberId(pack, index)) }] : [];
-      });
-      advanceRoamingRoute(pack, route, now, members);
+    if (this.roomKind === "overworld") {
+      this.advanceWildernessEvent(now);
+      for (const pack of ROAMING_PACKS) {
+        const route = this.roamingRoutes.get(pack.id) ?? createRoamingRouteState(now);
+        this.roamingRoutes.set(pack.id, route);
+        const members = pack.offsets.flatMap((_, index) => {
+          const mob = this.state.mobs.get(roamingMemberId(pack, index));
+          return mob?.alive ? [{ index, pose: mob, idle: mob.combatState === "idle" && !this.roamingEngaged.has(roamingMemberId(pack, index)) && !this.roamingReturning.has(roamingMemberId(pack, index)) }] : [];
+        });
+        advanceRoamingRoute(pack, route, now, members);
+      }
     }
     for (const [mobId, mob] of this.state.mobs) {
       if (mobId === WILDERNESS_EVENT_ID && !mob.alive) continue;

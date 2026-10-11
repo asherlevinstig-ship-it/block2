@@ -77,6 +77,8 @@ import {
   SPECIAL_DEFINITIONS,
   WEAPON_ATTACK_DEFINITIONS,
   WORLD_ROOM,
+  SILVER_DEPTHS_ROOM,
+  type RoomTransfer,
   type ActionRejected,
   type BlacksmithUpdate,
   type BlacksmithUpgradeId,
@@ -4725,6 +4727,7 @@ joystickZone.addEventListener("pointerup", event => releaseJoystick(event.pointe
 joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.pointerId));
 
 let room: Room | null = null;
+let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM = WORLD_ROOM;
 let currentWorldObjective: WorldObjectiveUpdate | null = null;
 let objectiveCompleteTimer = 0;
 let worldReady = false;
@@ -5083,7 +5086,7 @@ function logMovementEvent(message: string): void {
 movementDebugCopy.addEventListener("click", async () => {
   const trace = activeStopTrace ? formatStopTrace(activeStopTrace) : completedStopTrace;
   const snapTrace = activeSnapTrace ? formatStopTrace(activeSnapTrace, "SNAP") : "";
-  const text = `SNAP DIAGNOSTICS v1\nurl=${window.location.origin}${window.location.pathname} room=${WORLD_ROOM}\n${movementDebugLive.textContent ?? ""}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
+  const text = `SNAP DIAGNOSTICS v1\nurl=${window.location.origin}${window.location.pathname} room=${activeRoomName}\n${movementDebugLive.textContent ?? ""}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
   await navigator.clipboard.writeText(text);
   movementDebugCopy.textContent = "COPIED";
   window.setTimeout(() => { movementDebugCopy.textContent = "COPY LOG"; }, 1000);
@@ -6927,16 +6930,23 @@ async function connect(): Promise<void> {
   const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
-  const qaSpawn = import.meta.env.DEV ? new URLSearchParams(window.location.search).get("qa") : null;
-  const joinOptions = { name: "Explorer", profileToken, ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}) };
+  const query = new URLSearchParams(window.location.search);
+  const qaSpawn = import.meta.env.DEV ? query.get("qa") : null;
+  activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM : WORLD_ROOM;
+  const instanceKey = query.get("instanceKey");
+  const requestedPartySize = Number(query.get("partySize"));
+  const returnFrom = query.get("returnFrom") === "silver-depths" ? "silver-depths" : null;
+  const joinOptions = { name: "Explorer", profileToken, ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}),
+    ...(activeRoomName === SILVER_DEPTHS_ROOM && instanceKey ? { instanceKey, partySize: Number.isFinite(requestedPartySize) ? requestedPartySize : 1 } : {}),
+    ...(activeRoomName === WORLD_ROOM && returnFrom ? { returnFrom } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
       const client = new Client(endpoint, {
         fetchFn: (input, init) => fetch(input, { ...init, signal }),
       });
-      return attempt === 1
-        ? client.joinOrCreate(WORLD_ROOM, joinOptions)
-        : client.create(WORLD_ROOM, joinOptions);
+      return attempt === 1 || activeRoomName === SILVER_DEPTHS_ROOM
+        ? client.joinOrCreate(activeRoomName, joinOptions)
+        : client.create(activeRoomName, joinOptions);
     },
     (attempt, delay) => {
       status.textContent = attempt === 2
@@ -6950,6 +6960,23 @@ async function connect(): Promise<void> {
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
+  room.onMessage("room:transfer", (transfer: RoomTransfer) => {
+    const url = new URL(window.location.href);
+    if (transfer.room === SILVER_DEPTHS_ROOM) {
+      url.searchParams.set("room", "silver-depths");
+      url.searchParams.set("instanceKey", transfer.instanceKey ?? "solo");
+      url.searchParams.set("partySize", String(transfer.partySize ?? 1));
+      url.searchParams.delete("returnFrom");
+      status.textContent = `Opening a private Silver Depths instance for ${transfer.partySize ?? 1} player${transfer.partySize === 1 ? "" : "s"}...`;
+    } else {
+      url.searchParams.delete("room");
+      url.searchParams.delete("instanceKey");
+      url.searchParams.delete("partySize");
+      if (transfer.returnFrom) url.searchParams.set("returnFrom", transfer.returnFrom);
+      status.textContent = "Returning to the shared Town of Beginnings...";
+    }
+    window.setTimeout(() => window.location.replace(url), 180);
+  });
   room.onMessage("player:portal", (spawn: { x: number; y: number; z: number; entering: boolean }) => {
     clearDefeatCombat(); closeLoot();
     const own = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room!.sessionId);
@@ -7459,6 +7486,10 @@ async function connect(): Promise<void> {
   const clockPingId = `ping-${++pingSequence}`;
   pendingPings.set(clockPingId, performance.now());
   room.send("ping", { id: clockPingId });
+  if (activeRoomName === WORLD_ROOM && returnFrom) {
+    const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete("returnFrom");
+    window.history.replaceState(null, "", cleanUrl);
+  }
 }
 
 connect().catch(error => {

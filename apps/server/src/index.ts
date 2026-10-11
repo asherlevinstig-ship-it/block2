@@ -1,12 +1,15 @@
 import { listen } from "@colyseus/tools";
 import { defineRoom, defineServer } from "@colyseus/core";
-import { WORLD_ROOM } from "@blockcraft/protocol";
+import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "silver-party-layout-v140";
+const SERVER_BUILD = "silver-depths-instances-v141";
 
 const gameServer = defineServer({
-  rooms: { [WORLD_ROOM]: defineRoom(WorldRoom) },
+  rooms: {
+    [WORLD_ROOM]: defineRoom(WorldRoom, { roomKind: "overworld" }),
+    [SILVER_DEPTHS_ROOM]: defineRoom(WorldRoom, { roomKind: "silver-depths" }).filterBy(["instanceKey"]),
+  },
   express: app => {
     app.get("/health", (_request, response) => response.json({
       ok: true,
