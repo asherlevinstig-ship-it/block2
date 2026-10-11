@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { INVENTORY_TABS, nextInventoryTab } from "./inventory-tabs.js";
 import { readFileSync } from "node:fs";
+import { ITEM_DEFINITIONS, MAIN_HAND_DEFINITIONS } from "@blockcraft/protocol";
 it("wraps tab keyboard navigation and supports Home/End", () => {
   expect(nextInventoryTab("weapons", "ArrowLeft")).toBe("supplies");
   expect(nextInventoryTab("supplies", "ArrowRight")).toBe("weapons");
@@ -16,4 +17,15 @@ it("starts with one category visible and the character preview open", () => {
     expect(panel.includes(" hidden")).toBe(tab !== "weapons");
   }
   expect(html).toMatch(/<details id="inventory-preview-drawer" open>/);
+});
+it("keeps the inventory shell synchronized with protocol items and equippable main hands", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const itemCounts = new Set([...html.matchAll(/data-item-count="([^"]+)"/g)].map(match => match[1]));
+  const equipButtons = [...html.matchAll(/data-equip-main-hand="([^"]+)"/g)].map(match => match[1]);
+  const requiredMainHands = Object.values(MAIN_HAND_DEFINITIONS)
+    .filter(definition => "requiredItemId" in definition)
+    .map(definition => definition.id);
+  expect(itemCounts).toEqual(new Set(Object.keys(ITEM_DEFINITIONS)));
+  expect(new Set(equipButtons)).toEqual(new Set(requiredMainHands));
+  expect(equipButtons).toHaveLength(requiredMainHands.length);
 });
