@@ -1,4 +1,13 @@
-import type { ArmourId, MainHandId } from "@blockcraft/protocol";
+import { APPEARANCE_PALETTE, DEFAULT_APPEARANCE, type Appearance, type ArmourId, type MainHandId } from "@blockcraft/protocol";
+
+function appearanceHex(group: keyof Appearance, id: string): string {
+  const options = APPEARANCE_PALETTE[group] as readonly { id: string; color: string }[];
+  return (options.find(option => option.id === id) ?? options[0]!).color;
+}
+
+function shade(hex: string, factor: number): string {
+  return `#${[1, 3, 5].map(index => Math.round(parseInt(hex.slice(index, index + 2), 16) * factor).toString(16).padStart(2, "0")).join("")}`;
+}
 
 /** Static paper doll: no engine entities, render targets, readbacks or animation loop. */
 export function createInventoryPortrait(canvas: HTMLCanvasElement) {
@@ -9,22 +18,24 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
     context!.fillStyle = colour; context!.fillRect(x, y, w, h);
   };
   return {
-    refresh(hand: MainHandId, armour: ArmourId) {
-      const key = hand + ":" + armour;
+    refresh(hand: MainHandId, armour: ArmourId, appearance: Appearance = DEFAULT_APPEARANCE) {
+      const key = `${hand}:${armour}:${appearance.skin}:${appearance.hair}:${appearance.coat}`;
       if (!context || destroyed || key === cachedKey) return;
       cachedKey = key;
       context.save(); context.scale(canvas.width / 240, canvas.height / 280);
       box("#0e1713", 0, 0, 240, 280); box("#213329", 52, 248, 136, 8);
       box("#182c2c", 92, 182, 24, 57); box("#223a3a", 124, 182, 24, 57);
       box("#34291f", 88, 227, 29, 18); box("#34291f", 123, 227, 29, 18);
-      const coat = armour === "bastion_plate" ? "#8192a5" : armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39" : armour === "leather_armour" ? "#95633c" : "#267d7c";
+      const coat = armour === "bastion_plate" ? "#8192a5" : armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39" : armour === "leather_armour" ? "#95633c" : appearanceHex("coat", appearance.coat);
       box(coat, 86, 103, 68, 82);
-      box(armour === "iron_armour" ? "#738b9c" : "#225453", 86, 103, 12, 82);
+      box(armour === "iron_armour" ? "#738b9c" : shade(coat, .78), 86, 103, 12, 82);
       box(coat, 62, 106, 22, 61); box(coat, 156, 106, 22, 61);
-      box("#d8a775", 64, 167, 18, 18); box("#d8a775", 158, 167, 18, 18);
+      const skin = appearanceHex("skin", appearance.skin);
+      const hair = appearanceHex("hair", appearance.hair);
+      box(skin, 64, 167, 18, 18); box(skin, 158, 167, 18, 18);
       box("#442d22", 86, 165, 68, 12); box("#dbb466", 114, 165, 13, 12);
-      box("#e9bd8b", 96, 53, 48, 48); box("#c59161", 132, 53, 12, 48);
-      box("#563729", 92, 45, 56, 16); box("#563729", 92, 58, 10, 13);
+      box(skin, 96, 53, 48, 48); box(shade(skin, .82), 132, 53, 12, 48);
+      box(hair, 92, 45, 56, 16); box(hair, 92, 58, 10, 13);
       box("#282520", 107, 76, 5, 5); box("#282520", 127, 76, 5, 5);
       box("#e4b84f", 92, 98, 56, 11); box("#bf9037", 96, 109, 12, 31);
       if (armour === "iron_armour" || armour === "bastion_plate") {

@@ -879,6 +879,10 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid #9bbc8050; }
 .inventory-header p { margin: 0; color: #aede8e; }
 .inventory-header h2 { margin: 2px 0 0; color: #f2e4c5; font: 700 2rem Georgia, serif; }
+.inventory-header-actions { display: flex; align-items: center; gap: 7px; }
+#inventory-customize { min-height: 38px; padding: 0 11px; border: 1px solid #b5a069; border-radius: 9px; background: #3b321e; color: #ffe5aa; font-size: .62rem; font-weight: 900; letter-spacing: .04em; cursor: pointer; }
+#inventory-customize:hover, #inventory-customize:focus-visible { border-color: #ffe5aa; background: #574527; }
+#inventory-panel[data-storage="true"] #inventory-customize { display: none; }
 #inventory-close { width: 38px; height: 38px; border: 1px solid #ffffff24; border-radius: 9px; background: #ffffff09; color: #b9c4bb; cursor: pointer; font-size: 1.5rem; line-height: 1; }
 #inventory-close:hover { border-color: #d4b574; color: white; }
 .inventory-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 10px; }
@@ -916,6 +920,16 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #inventory-portrait { display: block; width: 100%; height: auto; border-radius: 8px; }
 .inventory-portrait p { color: #e5c885; font-size: .7rem; }
 .inventory-portrait button { padding: 8px; border: 1px solid #978052; border-radius: 6px; background: #30281b; color: #ead7a6; cursor: pointer; font-size: .6rem; }
+#appearance-customizer { padding: 10px 12px 12px; border-top: 1px solid #b6985830; background: #0c1911; }
+#appearance-customizer > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 10px; margin-bottom: 8px; }
+#appearance-customizer strong { color: #f0d799; font-size: .68rem; letter-spacing: .07em; }
+#appearance-customizer span { color: #90a89a; font-size: .62rem; }
+#appearance-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.appearance-choice { display: grid; grid-template-columns: repeat(3, 28px); gap: 5px; align-content: start; min-width: 0; }
+.appearance-choice > span { grid-column: 1 / -1; font-size: .63rem; font-weight: 800; text-transform: uppercase; }
+.appearance-choice button { width: 28px; height: 28px; border: 2px solid #768476; border-radius: 7px; background: var(--swatch); cursor: pointer; }
+.appearance-choice button[aria-pressed="true"] { border-color: #fff0bd; box-shadow: 0 0 0 2px #a47a37, 0 0 10px #e9c96a66; }
+.appearance-choice button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .inventory-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .inventory-comparison h3 { font-size: .75rem; color: #acbfae; }
 .inventory-comparison strong { font-size: .8rem; color: #f3d28b; }

@@ -13,6 +13,8 @@ import {
   type SeismicMasteryId,
   type SpecialId,
   type TraitId,
+  resolveAppearance,
+  type Appearance,
 } from "@blockcraft/protocol";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { ArmourEquipSchema, type ArmourId } from "@blockcraft/protocol";
@@ -27,6 +29,7 @@ export interface PlayerSaveData {
   version: typeof PLAYER_SAVE_VERSION;
   savedAt: number;
   name: string;
+  appearance?: Appearance;
   health: number;
   maxHealth: number;
   stamina: number;
@@ -84,6 +87,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     version: PLAYER_SAVE_VERSION,
     savedAt: now,
     name: player.name,
+    appearance: resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat }),
     health: player.health,
     maxHealth: player.maxHealth,
     stamina: player.stamina,
@@ -156,6 +160,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     version: PLAYER_SAVE_VERSION,
     savedAt: finiteNumber(value.savedAt, 0, 0, Number.MAX_SAFE_INTEGER),
     name: typeof value.name === "string" ? value.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer" : "Explorer",
+    appearance: resolveAppearance(value.appearance),
     health: Math.floor(finiteNumber(value.health, maxHealth, 1, maxHealth)),
     maxHealth,
     stamina: finiteNumber(value.stamina, maxStamina, 0, maxStamina),
@@ -190,6 +195,10 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
 
 export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void {
   player.name = save.name;
+  const appearance = resolveAppearance(save.appearance);
+  player.appearanceSkin = appearance.skin;
+  player.appearanceHair = appearance.hair;
+  player.appearanceCoat = appearance.coat;
   player.maxHealth = save.maxHealth;
   player.health = save.health;
   player.maxStamina = save.maxStamina;

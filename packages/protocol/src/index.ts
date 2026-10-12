@@ -24,6 +24,34 @@ export type PartyUpdate = { partyId: string | null; members: { id: string; name:
   nearby: { id: string; name: string }[]; invite: { id: string; name: string; expiresAt: number } | null };
 export const ChatSendSchema = z.object({ text: z.string().min(1).max(160) });
 export const PlayerNameSchema = z.string().trim().min(2).max(20).regex(/^[A-Za-z0-9 _-]+$/);
+export const APPEARANCE_PALETTE = {
+  skin: [
+    { id: "warm", name: "Warm", color: "#db9c66" },
+    { id: "light", name: "Light", color: "#efc6a2" },
+    { id: "deep", name: "Deep", color: "#865438" },
+  ],
+  hair: [
+    { id: "dark", name: "Dark", color: "#291810" },
+    { id: "brown", name: "Brown", color: "#70472a" },
+    { id: "silver", name: "Silver", color: "#b6c0be" },
+  ],
+  coat: [
+    { id: "teal", name: "Teal", color: "#1f7375" },
+    { id: "rust", name: "Rust", color: "#aa5a36" },
+    { id: "violet", name: "Violet", color: "#654f9a" },
+  ],
+} as const;
+export const AppearanceSchema = z.object({
+  skin: z.enum(["warm", "light", "deep"]),
+  hair: z.enum(["dark", "brown", "silver"]),
+  coat: z.enum(["teal", "rust", "violet"]),
+}).strict();
+export type Appearance = z.infer<typeof AppearanceSchema>;
+export const DEFAULT_APPEARANCE: Appearance = { skin: "warm", hair: "dark", coat: "teal" };
+export function resolveAppearance(value: unknown): Appearance {
+  const parsed = AppearanceSchema.safeParse(value);
+  return parsed.success ? parsed.data : { ...DEFAULT_APPEARANCE };
+}
 export type NearbyChatMessage = { senderId: string; name: string; text: string };
 export const EQUIPMENT_LOOT_RANGE = 1.8;
 export const LootCollectRequestSchema = z.object({ dropId: z.string().min(1).max(160), equip: z.boolean() });

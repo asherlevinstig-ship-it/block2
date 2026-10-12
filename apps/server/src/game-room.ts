@@ -6,7 +6,7 @@ import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdmin
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
 import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
-import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, type NearbyChatMessage } from "@blockcraft/protocol";
+import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
 import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
@@ -571,6 +571,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.lastNameAt.set(client.sessionId, Date.now()); player.name = name.data;
       void this.persistPlayer(client.sessionId, player, true).catch(() => {});
       client.send("chat:notice", `Your name is now ${player.name}.`);
+    });
+    this.onMessage("player:appearance", (client, payload: unknown) => {
+      const player = this.state.players.get(client.sessionId), appearance = AppearanceSchema.safeParse(payload);
+      if (!player || !appearance.success) return;
+      player.appearanceSkin = appearance.data.skin;
+      player.appearanceHair = appearance.data.hair;
+      player.appearanceCoat = appearance.data.coat;
+      void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     });
     this.onMessage("objective:sync", client => this.sendObjectiveState(client, true));
     this.onMessage("depths:route", (client, payload: unknown) => this.chooseSilverDepthsWing(client, payload));

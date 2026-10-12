@@ -64,6 +64,9 @@ export const PlayerState = schema({
   dangerTier: t.int8().default(0),
   isAdmin: t.boolean().default(false),
   name: t.string().default("Explorer"),
+  appearanceSkin: t.string().default("warm"),
+  appearanceHair: t.string().default("dark"),
+  appearanceCoat: t.string().default("teal"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
 

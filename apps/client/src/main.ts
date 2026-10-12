@@ -71,6 +71,10 @@ import {
   ARMOUR_DEFINITIONS,
   armourStats,
   type ArmourId,
+  APPEARANCE_PALETTE,
+  DEFAULT_APPEARANCE,
+  resolveAppearance,
+  type Appearance,
   IRON_ORE_GOLD_PRICE,
   SILVER_ORE_GOLD_PRICE,
   MAIN_HAND_DEFINITIONS,
@@ -1052,13 +1056,11 @@ silhouetteMaterial.depthTest = false;
 silhouetteMaterial.depthWrite = false;
 silhouetteMaterial.update();
 
-const skinMaterial = new pc.StandardMaterial();
-skinMaterial.diffuse = new pc.Color(0.86, 0.61, 0.4);
-skinMaterial.shininess = 12;
-skinMaterial.update();
-const hairMaterial = new pc.StandardMaterial();
-hairMaterial.diffuse = new pc.Color(0.16, 0.095, 0.065);
-hairMaterial.update();
+function appearanceColor(group: keyof Appearance, id: string): pc.Color {
+  const options = APPEARANCE_PALETTE[group] as readonly { id: string; color: string }[];
+  const hex = (options.find(option => option.id === id) ?? options[0]!).color;
+  return new pc.Color(parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255);
+}
 const bootMaterial = new pc.StandardMaterial();
 bootMaterial.diffuse = new pc.Color(0.23, 0.15, 0.105);
 bootMaterial.update();
@@ -1100,6 +1102,7 @@ function coloredMaterial(color: pc.Color): pc.StandardMaterial {
 }
 
 interface VoxelCharacterRig {
+  appearanceMaterials: { skin: pc.StandardMaterial; hair: pc.StandardMaterial; coat: pc.StandardMaterial };
   root: pc.Entity;
   torso: pc.Entity;
   head: pc.Entity;
@@ -1264,9 +1267,13 @@ depthsCheckpointReady.addEventListener("click", () => {
   if (room && depthsCheckpointStatus?.phase === "waiting") room.send("depths:ready");
 });
 
-function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false): VoxelCharacterRig {
+function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false, appearance: Appearance = DEFAULT_APPEARANCE): VoxelCharacterRig {
   const root = new pc.Entity("voxel-character");
   parent.addChild(root);
+  const skinMaterial = coloredMaterial(appearanceColor("skin", appearance.skin));
+  skinMaterial.shininess = 12; skinMaterial.update();
+  const hairMaterial = coloredMaterial(appearanceColor("hair", appearance.hair));
+  clothing.diffuse = appearanceColor("coat", appearance.coat); clothing.update();
 
   // Transform pivots stay at unit scale: attachments retain their real voxel
   // dimensions instead of inheriting the dimensions of a head or torso box.
@@ -1513,7 +1520,15 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     }
     layer.enabled = false;
   }
-  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, locomotionPhase: 0, locomotionWeight: 0, travelFrames: [], lastFacingYaw: null, turnLean: 0 };
+  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, appearanceMaterials: { skin: skinMaterial, hair: hairMaterial, coat: clothing }, locomotionPhase: 0, locomotionWeight: 0, travelFrames: [], lastFacingYaw: null, turnLean: 0 };
+}
+
+function setRigAppearance(rig: VoxelCharacterRig, appearance: Appearance): void {
+  for (const group of ["skin", "hair", "coat"] as const) {
+    const material = rig.appearanceMaterials[group];
+    material.diffuse = appearanceColor(group, appearance[group]);
+    material.update();
+  }
 }
 
 function setRigArmour(rig: VoxelCharacterRig, id: string): void {
@@ -1610,6 +1625,9 @@ localPlayer.setPosition(8.5, 11, 8.5);
 app.root.addChild(localPlayer);
 
 interface NetworkPlayer {
+  appearanceSkin: string;
+  appearanceHair: string;
+  appearanceCoat: string;
   potionCooldownUntil: number;
   x: number;
   y: number;
@@ -1781,7 +1799,6 @@ interface MarkVisualState {
   maxStacks: number;
 }
 
-const remoteMaterial = coloredMaterial(new pc.Color(0.18, 0.55, 0.86));
 const remotePlayers = new Map<string, RemotePlayerVisual>();
 const social = createSocialUI((type, payload) => { if (!room || !worldReady) return false; room.send(type, payload); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 const tradeUI = createTradeUI(request => { if (!room || !worldReady) return false; room.send("trade:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
@@ -2045,6 +2062,38 @@ function refreshInventoryEquipped(): void {
 }
 
 let inventoryPortrait: ReturnType<typeof createInventoryPortrait> | undefined;
+let localAppearance: Appearance = { ...DEFAULT_APPEARANCE };
+const appearanceOptions = document.querySelector<HTMLElement>("#appearance-options")!;
+function updateLocalAppearance(appearance: Appearance): void {
+  localAppearance = appearance;
+  setRigAppearance(localPlayerRig, appearance);
+  for (const button of appearanceOptions.querySelectorAll<HTMLButtonElement>("button[data-appearance-group]")) {
+    const group = button.dataset.appearanceGroup as keyof Appearance;
+    button.setAttribute("aria-pressed", String(appearance[group] === button.dataset.appearanceId));
+  }
+  refreshInventoryPreview();
+}
+for (const group of ["skin", "hair", "coat"] as const) {
+  const row = document.createElement("div"); row.className = "appearance-choice";
+  const label = document.createElement("span"); label.textContent = group === "coat" ? "Coat" : group === "hair" ? "Hair" : "Skin";
+  row.append(label);
+  for (const option of APPEARANCE_PALETTE[group]) {
+    const button = document.createElement("button"); button.type = "button";
+    button.dataset.appearanceGroup = group; button.dataset.appearanceId = option.id;
+    button.style.setProperty("--swatch", option.color);
+    button.setAttribute("aria-label", `${label.textContent}: ${option.name}`);
+    button.setAttribute("title", `${label.textContent}: ${option.name}`);
+    button.setAttribute("aria-pressed", String(localAppearance[group] === option.id));
+    button.addEventListener("click", () => {
+      if (!room) { status.textContent = "Connect to the world before changing your look."; return; }
+      const next = resolveAppearance({ ...localAppearance, [group]: option.id });
+      updateLocalAppearance(next);
+      room.send("player:appearance", next);
+    });
+    row.append(button);
+  }
+  appearanceOptions.append(row);
+}
 let previewHand: MainHandId | undefined;
 let previewArmour: ArmourId | undefined;
 let previewSlot: "weapon" | "armour" = "weapon";
@@ -2058,9 +2107,9 @@ function refreshInventoryPreview(): void {
   }
   const hand = previewHand ?? localMainHandId;
   const armour = previewArmour ?? localArmourId;
-  const appearanceKey = `${hand}:${armour}`;
+  const appearanceKey = `${hand}:${armour}:${localAppearance.skin}:${localAppearance.hair}:${localAppearance.coat}`;
   const comparisonKey = `${appearanceKey}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${previewSlot}`;
-  inventoryPortrait.refresh(hand, armour);
+  inventoryPortrait.refresh(hand, armour, localAppearance);
   if (comparisonKey === inventoryComparisonKey) return;
   inventoryComparisonKey = comparisonKey;
   const worn = document.querySelector<HTMLElement>("#inventory-worn-stats")!;
@@ -3073,7 +3122,8 @@ function updatePlayerCount(): void {
 
 function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePlayerVisual {
   const entity = new pc.Entity(`remote-player:${sessionId}`);
-  const rig = createVoxelCharacter(entity, remoteMaterial);
+  const appearance = resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat });
+  const rig = createVoxelCharacter(entity, coloredMaterial(appearanceColor("coat", appearance.coat)), false, appearance);
   if (isMainHandId(player.mainHandId)) setRigMainHand(rig, player.mainHandId);
   setRigArmour(rig, player.armourId);
   entity.setPosition(player.x, player.y, player.z);
@@ -3559,6 +3609,12 @@ function bindPlayers(joinedRoom: Room): void {
       updatePlayerCount();
     }
 
+    const updateAppearance = () => {
+      const appearance = resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat });
+      if (isLocal) updateLocalAppearance(appearance);
+      else if (remote) setRigAppearance(remote.rig, appearance);
+    };
+
     const updatePosition = () => {
       if (isLocal) {
         captureLocalSnapshot();
@@ -3697,6 +3753,9 @@ function bindPlayers(joinedRoom: Room): void {
         setRigArmour(localPlayerRig, localArmourId); refreshInventoryEquipped();
       } else if (remote) setRigArmour(remote.rig, player.armourId);
     }, true);
+    for (const field of ["appearanceSkin", "appearanceHair", "appearanceCoat"] as const) {
+      playerCallbacks.listen(field, updateAppearance, true);
+    }
     playerCallbacks.listen("blacksmithUpgrades", () => {
       if (!isLocal) return;
       localDepthsRewardFlags = player.blacksmithUpgrades;
@@ -4071,6 +4130,10 @@ function updateRecoveryMarker(): void {
   }
 }
 const inventoryPreviewDrawer = document.querySelector<HTMLDetailsElement>("#inventory-preview-drawer")!;
+document.querySelector<HTMLButtonElement>("#inventory-customize")!.addEventListener("click", () => {
+  inventoryPreviewDrawer.open = true;
+  document.querySelector<HTMLElement>("#appearance-customizer")!.scrollIntoView({ block: "center" });
+});
 const inventoryTabs = [...inventoryPanel.querySelectorAll<HTMLButtonElement>("[data-inventory-tab]")];
 function selectInventoryCategory(category: InventoryTab, focus = false): void {
   for (const tab of inventoryTabs) {
