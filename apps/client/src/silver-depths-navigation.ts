@@ -26,6 +26,26 @@ export function silverDepthsWalkableCell(x: number, z: number, gates: SilverDept
 }
 
 export type DungeonMapRoute = { points: Point[]; reachesObjective: boolean };
+export function silverDepthsBreadcrumbPositions(player: Point, route: DungeonMapRoute | null,
+  count = 6, spacing = 2.4): Point[] {
+  if (!route || count <= 0 || spacing <= 0 || route.points.length === 0) return [];
+  const path = [player, ...route.points];
+  const result: Point[] = [];
+  let travelled = 0, nextDistance = spacing;
+  for (let index = 1; index < path.length && result.length < count; index++) {
+    const from = path[index - 1]!, to = path[index]!;
+    const length = Math.hypot(to.x - from.x, to.z - from.z);
+    if (length < .001) continue;
+    while (nextDistance <= travelled + length + .0001 && result.length < count) {
+      const t = (nextDistance - travelled) / length;
+      result.push({ x: from.x + (to.x - from.x) * t, z: from.z + (to.z - from.z) * t });
+      nextDistance += spacing;
+    }
+    travelled += length;
+  }
+  if (result.length === 0 && travelled >= .8) result.push(path.at(-1)!);
+  return result;
+}
 export function silverDepthsMapRoute(player: Point, objective: Point, gates: SilverDepthsGateStatus): DungeonMapRoute | null {
   const startX = Math.floor(player.x), startZ = Math.floor(player.z);
   let start: [number, number] | null = null;

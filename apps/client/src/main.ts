@@ -37,6 +37,7 @@ import {
   type DepthsNodeId,
   type DepthsRouteState,
 } from "./silver-depths-map.js";
+import { silverDepthsBreadcrumbPositions, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
 import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } from "./cave-navigation.js";
 import { miningAvailability, miningReach, miningProgress, miningDurationMs, miningLineClear, miningMessage, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
@@ -5002,6 +5003,9 @@ function updateObjectiveGuidance(): void {
 }
 
 let visibleDepthsRoute: DepthsRouteState | null = null;
+let latestDepthsGateStatus: SilverDepthsGateStatus | null = null;
+let depthsBreadcrumbRouteKey = "";
+let depthsBreadcrumbRoute: DungeonMapRoute | null = null;
 let depthsRouteFingerprint = "";
 let depthsWingRewardStatus: SilverDepthsWingRewardStatus | null = null;
 let depthsCheckpointStatus: SilverDepthsCheckpointStatus | null = null;
@@ -5053,8 +5057,14 @@ function updateSilverDepthsRoute(now: number): void {
       : depthsCheckpointStatus.selfReady ? "Your party can ready up beside the checkpoint." : "Prepared? Press Ready to open the boss gate together.";
   }
   minimapPanel.hidden = false;
-  depthsBreadcrumbRoot.enabled = visibleDepthsRoute !== null && (localDepthsRewardFlags & 128) !== 0;
-  if (!visibleDepthsRoute) { depthsRouteFingerprint = ""; return; }
+  depthsBreadcrumbRoot.enabled = visibleDepthsRoute !== null && latestDepthsGateStatus !== null && (localDepthsRewardFlags & 128) !== 0;
+  if (!visibleDepthsRoute) { depthsRouteFingerprint = ""; depthsBreadcrumbRouteKey = ""; return; }
+  const routeKey = latestDepthsGateStatus
+    ? `${Math.floor(player.x)},${Math.floor(player.z)}:${Math.floor(visibleDepthsRoute.target.x)},${Math.floor(visibleDepthsRoute.target.z)}:${Object.values(latestDepthsGateStatus).join(",")}` : "";
+  if (routeKey !== depthsBreadcrumbRouteKey) {
+    depthsBreadcrumbRouteKey = routeKey;
+    depthsBreadcrumbRoute = latestDepthsGateStatus ? silverDepthsMapRoute(player, visibleDepthsRoute.target, latestDepthsGateStatus) : null;
+  }
   const distance = Math.hypot(visibleDepthsRoute.target.x - player.x, visibleDepthsRoute.target.z - player.z);
   const title = depthsCheckpointStatus?.phase === "waiting" ? "Regroup and Ready for the Matriarch" : visibleDepthsRoute.title;
   const fingerprint = `${visibleDepthsRoute.active}:${[...visibleDepthsRoute.completed].join(",")}:${title}`;
@@ -5071,12 +5081,14 @@ function updateSilverDepthsRoute(now: number): void {
     }
   }
   depthsRouteDistance.textContent = distance <= 2 ? "ARRIVED" : `${Math.round(distance)}m TO NEXT`;
+  const breadcrumbPositions = silverDepthsBreadcrumbPositions(player, depthsBreadcrumbRoute, depthsBreadcrumbs.length);
   for (let index = 0; index < depthsBreadcrumbs.length; index++) {
-    const shard = depthsBreadcrumbs[index]!, t = (index + 1) / (depthsBreadcrumbs.length + 1);
-    shard.enabled = distance > 2.2;
-    shard.setPosition(player.x + (visibleDepthsRoute.target.x - player.x) * t,
+    const shard = depthsBreadcrumbs[index]!, point = breadcrumbPositions[index];
+    shard.enabled = Boolean(point) && depthsBreadcrumbRoot.enabled;
+    if (!point) continue;
+    shard.setPosition(point.x,
       Math.max(1.16, player.y + .18) + Math.sin(now * .0035 + index * .9) * .11,
-      player.z + (visibleDepthsRoute.target.z - player.z) * t);
+      point.z);
     const pulse = .78 + Math.sin(now * .005 + index) * .16;
     shard.setLocalScale(pulse, pulse, pulse);
     shard.rotate(0, .8, 0);
@@ -7336,7 +7348,11 @@ async function connect(): Promise<void> {
   room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
   room.onMessage("depths:checkpoint", (update: SilverDepthsCheckpointStatus) => renderDepthsCheckpointStatus(update));
   room.onMessage("depths:party-status", (update: SilverDepthsPartyStatus) => renderDepthsPartyStatus(update));
-  room.onMessage("depths:gates", (status: SilverDepthsGateStatus) => minimap.setDungeonGateStatus(status));
+  room.onMessage("depths:gates", (status: SilverDepthsGateStatus) => {
+    latestDepthsGateStatus = status;
+    depthsBreadcrumbRouteKey = "";
+    minimap.setDungeonGateStatus(status);
+  });
   room.onMessage("depths:ping", (ping: SilverDepthsPing) => minimap.setDungeonPing(ping));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
   room.onMessage("progression:update", (update: ProgressionUpdate) => {

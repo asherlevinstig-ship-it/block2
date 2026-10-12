@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLOSED_DEPTHS_GATES, silverDepthsMapRoute, silverDepthsWalkableCell } from "./silver-depths-navigation.js";
+import { CLOSED_DEPTHS_GATES, silverDepthsBreadcrumbPositions, silverDepthsMapRoute, silverDepthsWalkableCell } from "./silver-depths-navigation.js";
 
 describe("Silver Depths gate-aware minimap route", () => {
   const entry = { x: 63.5, z: 12.5 };
@@ -45,5 +45,27 @@ describe("Silver Depths gate-aware minimap route", () => {
     const route = silverDepthsMapRoute({ x: 102.5, z: 12.5 }, { x: 106.5, z: 14.5 }, CLOSED_DEPTHS_GATES)!;
     expect(route.reachesObjective).toBe(true);
     expect(route.points.every(point => silverDepthsWalkableCell(Math.floor(point.x), Math.floor(point.z), CLOSED_DEPTHS_GATES))).toBe(true);
+  });
+  it("places nearby world breadcrumbs along the route and never through a locked gate", () => {
+    const player = { x: 94.5, z: 14.5 }, target = { x: 112.5, z: 14.5 };
+    const locked = silverDepthsMapRoute(player, target, CLOSED_DEPTHS_GATES)!;
+    const lockedCrystals = silverDepthsBreadcrumbPositions(player, locked, 12, 1.5);
+    expect(lockedCrystals.length).toBeGreaterThan(0);
+    expect(lockedCrystals.every(point => point.x < 108)).toBe(true);
+    const openGates = { ...CLOSED_DEPTHS_GATES, gallery: true };
+    const open = silverDepthsMapRoute(player, target, openGates)!;
+    const openCrystals = silverDepthsBreadcrumbPositions(player, open, 12, 1.5);
+    expect(openCrystals.some(point => point.x > 108)).toBe(true);
+    expect(openCrystals.every(point => silverDepthsWalkableCell(Math.floor(point.x), Math.floor(point.z), openGates))).toBe(true);
+  });
+  it("keeps breadcrumbs close to the player and hides them at the endpoint", () => {
+    const player = { x: 63.5, z: 12.5 };
+    const longRoute = silverDepthsMapRoute(player, { x: 131.5, z: 14.5 },
+      { seal: true, iron: true, silver: false, gallery: true, boss: true })!;
+    const crystals = silverDepthsBreadcrumbPositions(player, longRoute);
+    expect(crystals).toHaveLength(6);
+    expect(Math.hypot(crystals[0]!.x - player.x, crystals[0]!.z - player.z)).toBeCloseTo(2.4);
+    expect(silverDepthsBreadcrumbPositions({ x: 131.5, z: 14.5 },
+      silverDepthsMapRoute({ x: 131.5, z: 14.5 }, { x: 131.5, z: 14.5 }, CLOSED_DEPTHS_GATES))).toEqual([]);
   });
 });
