@@ -7140,6 +7140,8 @@ async function connect(): Promise<void> {
   const qaSpawn = import.meta.env.DEV ? query.get("qa") : null;
   activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM : WORLD_ROOM;
   const instanceKey = query.get("instanceKey");
+  const partyTicket = query.get("partyTicket");
+  const worldRoomId = query.get("worldRoomId");
   const reconnectStorageKey = activeRoomName === SILVER_DEPTHS_ROOM && instanceKey
     ? `blockcraft:silver-depths:reconnect:${instanceKey}` : null;
   const storedReconnectToken = (() => {
@@ -7159,13 +7161,17 @@ async function connect(): Promise<void> {
   const retryFromDepths = activeRoomName === WORLD_ROOM && returnFrom === "silver-depths" && query.get("retry") === "1";
   const joinOptions = { name: "Explorer", profileToken, ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}),
     ...(activeRoomName === SILVER_DEPTHS_ROOM && instanceKey ? { instanceKey, partySize: Number.isFinite(requestedPartySize) ? requestedPartySize : 1 } : {}),
-    ...(activeRoomName === WORLD_ROOM && returnFrom ? { returnFrom } : {}) };
+    ...(activeRoomName === WORLD_ROOM && returnFrom ? { returnFrom } : {}),
+    ...(partyTicket ? { partyTicket } : {}) };
   room = await retryConnection(
     (signal, attempt) => {
       const client = new Client(endpoint, {
         fetchFn: (input, init) => fetch(input, { ...init, signal }),
       });
       if (storedReconnectToken) return client.reconnect(storedReconnectToken);
+      if (activeRoomName === WORLD_ROOM && returnFrom && worldRoomId) {
+        return client.joinById(worldRoomId, joinOptions).catch(() => client.joinOrCreate(activeRoomName, joinOptions));
+      }
       return attempt === 1 || activeRoomName === SILVER_DEPTHS_ROOM
         ? client.joinOrCreate(activeRoomName, joinOptions)
         : client.create(activeRoomName, joinOptions);
@@ -7199,6 +7205,7 @@ async function connect(): Promise<void> {
   room.onMessage("world:bootstrap", (payload: WorldBootstrap) => {
     renderBootstrap(payload);
     if (retryFromDepths) depthsRetryPrompt.hidden = false;
+    if (retryFromDepths && partyTicket) depthsRetryPrompt.querySelector("span")!.textContent = "Your party will regroup here as members return. Enter together when ready.";
   });
   room.onMessage("room:transfer", (transfer: RoomTransfer) => {
     const url = new URL(window.location.href);
@@ -7206,6 +7213,9 @@ async function connect(): Promise<void> {
       url.searchParams.set("room", "silver-depths");
       url.searchParams.set("instanceKey", transfer.instanceKey ?? "solo");
       url.searchParams.set("partySize", String(transfer.partySize ?? 1));
+      if (transfer.partyTicket) url.searchParams.set("partyTicket", transfer.partyTicket);
+      else url.searchParams.delete("partyTicket");
+      url.searchParams.delete("worldRoomId");
       url.searchParams.delete("returnFrom");
       status.textContent = `Opening a private Silver Depths instance for ${transfer.partySize ?? 1} player${transfer.partySize === 1 ? "" : "s"}...`;
     } else {
@@ -7213,6 +7223,10 @@ async function connect(): Promise<void> {
       url.searchParams.delete("room");
       url.searchParams.delete("instanceKey");
       url.searchParams.delete("partySize");
+      if (transfer.partyTicket) url.searchParams.set("partyTicket", transfer.partyTicket);
+      else url.searchParams.delete("partyTicket");
+      if (transfer.worldRoomId) url.searchParams.set("worldRoomId", transfer.worldRoomId);
+      else url.searchParams.delete("worldRoomId");
       if (transfer.returnFrom) url.searchParams.set("returnFrom", transfer.returnFrom);
       if (transfer.retry) url.searchParams.set("retry", "1");
       else url.searchParams.delete("retry");
@@ -7751,6 +7765,7 @@ async function connect(): Promise<void> {
   room.send("ping", { id: clockPingId });
   if (activeRoomName === WORLD_ROOM && returnFrom) {
     const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete("returnFrom"); cleanUrl.searchParams.delete("retry");
+    cleanUrl.searchParams.delete("partyTicket"); cleanUrl.searchParams.delete("worldRoomId");
     window.history.replaceState(null, "", cleanUrl);
   }
 }

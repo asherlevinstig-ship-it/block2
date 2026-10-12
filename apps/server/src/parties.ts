@@ -19,6 +19,21 @@ export class Parties {
     const partyId = this.partyId(id);
     return !partyId || this.groups.get(partyId)?.[0] === id;
   }
+  /** Restore consenting expedition members after they reconnect to the same town room. */
+  restore(ids: string[]): void {
+    const members = [...new Set(ids)].slice(0, 4);
+    if (members.length < 2) return;
+    const groupId = members.map(id => this.partyId(id)).find((id): id is string => id !== null)
+      ?? `party-${++this.sequence}`;
+    const group = this.groups.get(groupId) ?? [];
+    if (group.some(id => !members.includes(id))) return;
+    for (const id of members) {
+      if (this.partyId(id) && this.partyId(id) !== groupId) continue;
+      if (!group.includes(id) && group.length < 4) group.push(id);
+      this.membership.set(id, groupId);
+    }
+    if (group.length >= 2) this.groups.set(groupId, group);
+  }
   expire(now: number): void { for (const [id, invite] of this.invites) if (now >= invite.expiresAt) this.invites.delete(id); }
   leave(id: string): void {
     const groupId = this.partyId(id); this.membership.delete(id);

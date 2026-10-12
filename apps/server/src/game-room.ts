@@ -1,4 +1,5 @@
 import { Client, Room } from "@colyseus/core";
+import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
 import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows } from "./wilderness-encounters.js";
@@ -241,6 +242,19 @@ type WorldRoomOptions = {
   instanceKey?: string;
   partySize?: number;
 };
+type ExpeditionPartyTicket = { instanceKey: string; worldRoomId: string; profiles: string[] };
+const expeditionPartyKey = (ticket: string) => `blockcraft:expedition-party:${ticket}`;
+function parseExpeditionPartyTicket(raw: unknown): ExpeditionPartyTicket | null {
+  if (typeof raw !== "string") return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object") return null;
+    const record = value as Partial<ExpeditionPartyTicket>;
+    return typeof record.instanceKey === "string" && typeof record.worldRoomId === "string"
+      && Array.isArray(record.profiles) && record.profiles.length >= 2 && record.profiles.length <= 4
+      && record.profiles.every(profile => typeof profile === "string") ? record as ExpeditionPartyTicket : null;
+  } catch { return null; }
+}
 
 interface EmberVaultRunStats {
   runId: string;
@@ -352,6 +366,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly lastChatAt = new Map<string, number>();
   private readonly lastNameAt = new Map<string, number>();
   private readonly parties = new Parties();
+  private readonly expeditionTicketBySession = new Map<string, string>();
   private readonly combatContributions = new CombatContributions();
   private readonly silverGuardVolley = new SilverGuardVolley();
   private readonly attackCoordination = new AttackCoordination();
@@ -386,6 +401,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private lootDropSequence = 0;
   private worldSeed = "blockcraft-dev";
   private roomKind: "overworld" | "silver-depths" = "overworld";
+  private silverInstanceKey = "";
   private instancePartySize = 1;
   private silverDepthsEncounterStage: SilverDepthsEncounterStage = 1;
   private silverDepthsWing: SilverDepthsWing | null = null;
@@ -402,6 +418,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
     this.roomKind = options.roomKind === "silver-depths" ? "silver-depths" : "overworld";
+    this.silverInstanceKey = this.roomKind === "silver-depths" ? options.instanceKey ?? "" : "";
     this.instancePartySize = Math.max(1, Math.min(4, Math.floor(options.partySize ?? 1)));
     if (this.roomKind === "silver-depths") this.maxClients = 4;
     this.worldSeed = String(process.env.WORLD_SEED || "blockcraft-dev");
@@ -465,6 +482,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
+      if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));
       client.send("mineral:status", this.mineralStatus());
       const run = this.silverDepthsRuns.get(client.sessionId);
       if (this.roomKind === "silver-depths" && run) {
@@ -505,6 +523,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (now - (this.lastPartyRequestAt.get(client.sessionId) ?? -Infinity) < 300) return;
       this.lastPartyRequestAt.set(client.sessionId, now);
       client.send("chat:notice", this.parties.handle(client.sessionId, parsed.data, this.state.players, Date.now()));
+      if (parsed.data.action === "leave") this.expeditionTicketBySession.delete(client.sessionId);
       this.sendPartyUpdates(Date.now());
     });
     this.onMessage("player:name", (client, payload: unknown) => {
@@ -652,6 +671,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.inventory.set("reinforced_pickaxe", forgedPickaxe);
     }
     this.state.players.set(client.sessionId, player);
+    if (profileToken && typeof options === "object" && options && "partyTicket" in options
+      && typeof options.partyTicket === "string" && /^[a-f0-9-]{36}$/.test(options.partyTicket)) {
+      try {
+        const ticket = parseExpeditionPartyTicket(await this.presence.get(expeditionPartyKey(options.partyTicket)));
+        const eligible = ticket?.profiles.includes(profileToken) && (this.roomKind === "silver-depths"
+          ? ticket.instanceKey === this.silverInstanceKey : returningFromDepths);
+        if (eligible) {
+          this.expeditionTicketBySession.set(client.sessionId, options.partyTicket);
+          if (this.roomKind === "overworld") this.restoreExpeditionParty(options.partyTicket);
+        }
+      } catch (error) { console.warn("Expedition party could not be restored.", error); }
+    }
     this.objectiveProgress.set(client.sessionId, createObjectiveProgress());
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
     this.verticalVelocities.set(client.sessionId, 0);
@@ -674,6 +705,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const [id, drop] of this.state.lootDrops) if (drop.ownerId === client.sessionId) this.state.lootDrops.delete(id);
     this.trading.disconnect(client.sessionId); this.lastTradeRequestAt.delete(client.sessionId);
     this.parties.disconnect(client.sessionId);
+    this.expeditionTicketBySession.delete(client.sessionId);
     this.lastPartyRequestAt.delete(client.sessionId);
     this.lastChatAt.delete(client.sessionId); this.lastNameAt.delete(client.sessionId);
     this.pendingMining.delete(client.sessionId);
@@ -772,6 +804,19 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, now));
       client.send("trade:update", this.trading.snapshot(client.sessionId, this.state.players));
     }
+  }
+
+  private restoreExpeditionParty(ticket: string): void {
+    const profiles = new Set<string>();
+    const members = [...this.expeditionTicketBySession].filter(([id, candidate]) => {
+      const profile = this.profileTokens.get(id);
+      if (candidate !== ticket || !this.state.players.has(id) || !profile || profiles.has(profile)) return false;
+      profiles.add(profile);
+      return true;
+    }).map(([id]) => id);
+    if (members.length < 2) return;
+    this.parties.restore(members);
+    this.sendPartyUpdates(Date.now());
   }
 
   private sendQuizState(client: Client, message?: string): void {
@@ -2444,18 +2489,36 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const members = this.clients.filter(candidate => memberIds.has(candidate.sessionId));
     if (!members.some(candidate => candidate.sessionId === trigger.sessionId)) members.push(trigger);
     const instanceKey = `silver-${this.roomId || "world"}-${Date.now().toString(36)}-${++this.silverInstanceSequence}`;
+    const profiles = members.map(member => this.profileTokens.get(member.sessionId)).filter((token): token is string => !!token);
+    let partyTicket: string | undefined;
+    if (members.length > 1 && profiles.length === members.length && new Set(profiles).size === profiles.length) {
+      try {
+        partyTicket = randomUUID();
+        await this.presence.setex(expeditionPartyKey(partyTicket), JSON.stringify({ instanceKey, worldRoomId: this.roomId, profiles } satisfies ExpeditionPartyTicket), 7200);
+      } catch (error) { partyTicket = undefined; console.warn("Expedition party ticket could not be saved.", error); }
+    }
     await Promise.allSettled(members.map(member => {
       const player = this.state.players.get(member.sessionId);
       return player ? this.persistPlayer(member.sessionId, player, true) : Promise.resolve();
     }));
-    const transfer: RoomTransfer = { room: SILVER_DEPTHS_ROOM, instanceKey, partySize: Math.max(1, Math.min(4, members.length)) };
+    const transfer: RoomTransfer = { room: SILVER_DEPTHS_ROOM, instanceKey, partySize: Math.max(1, Math.min(4, members.length)), ...(partyTicket ? { partyTicket } : {}) };
     for (const member of members) member.send("room:transfer", transfer);
   }
 
   private async returnFromSilverDepths(client: Client, player: PlayerState): Promise<void> {
     await this.persistPlayer(client.sessionId, player, true);
     client.send("portal:notice", "Expedition complete · returning to the Town of Beginnings.");
-    client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths" } satisfies RoomTransfer);
+    client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", ...await this.expeditionReturnTicket(client.sessionId) } satisfies RoomTransfer);
+  }
+
+  private async expeditionReturnTicket(sessionId: string): Promise<Pick<RoomTransfer, "partyTicket" | "worldRoomId">> {
+    const partyTicket = this.expeditionTicketBySession.get(sessionId);
+    if (!partyTicket) return {};
+    try {
+      const record = parseExpeditionPartyTicket(await this.presence.get(expeditionPartyKey(partyTicket)));
+      return record && record.instanceKey === this.silverInstanceKey
+        ? { partyTicket, worldRoomId: record.worldRoomId } : {};
+    } catch { return {}; }
   }
 
   private beginSilverDepthsRun(client: Client, player: PlayerState, now: number): void {
@@ -2656,7 +2719,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     await this.persistPlayer(client.sessionId, player, true);
     if (returningFromSilverDepths) {
       client.send("portal:notice", "Expedition failed · returning to the Town of Beginnings.");
-      client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", retry: true } satisfies RoomTransfer);
+      client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", retry: true,
+        ...await this.expeditionReturnTicket(client.sessionId) } satisfies RoomTransfer);
     } else client.send("player:returned", spawn);
   }
 
