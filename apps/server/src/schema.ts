@@ -67,6 +67,8 @@ export const PlayerState = schema({
   appearanceSkin: t.string().default("warm"),
   appearanceHair: t.string().default("dark"),
   appearanceCoat: t.string().default("teal"),
+  appearanceHairStyle: t.string().default("swept"),
+  appearanceCoatStyle: t.string().default("explorer"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
 

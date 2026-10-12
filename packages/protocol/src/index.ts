@@ -41,16 +41,36 @@ export const APPEARANCE_PALETTE = {
     { id: "violet", name: "Violet", color: "#654f9a" },
   ],
 } as const;
+export const APPEARANCE_STYLES = {
+  hairStyle: [
+    { id: "swept", name: "Swept" },
+    { id: "spiked", name: "Spiked" },
+    { id: "long", name: "Long" },
+  ],
+  coatStyle: [
+    { id: "explorer", name: "Explorer" },
+    { id: "short", name: "Short jacket" },
+    { id: "long", name: "Long coat" },
+  ],
+} as const;
 export const AppearanceSchema = z.object({
   skin: z.enum(["warm", "light", "deep"]),
   hair: z.enum(["dark", "brown", "silver"]),
   coat: z.enum(["teal", "rust", "violet"]),
+  hairStyle: z.enum(["swept", "spiked", "long"]),
+  coatStyle: z.enum(["explorer", "short", "long"]),
 }).strict();
 export type Appearance = z.infer<typeof AppearanceSchema>;
-export const DEFAULT_APPEARANCE: Appearance = { skin: "warm", hair: "dark", coat: "teal" };
+export const DEFAULT_APPEARANCE: Appearance = { skin: "warm", hair: "dark", coat: "teal", hairStyle: "swept", coatStyle: "explorer" };
 export function resolveAppearance(value: unknown): Appearance {
-  const parsed = AppearanceSchema.safeParse(value);
-  return parsed.success ? parsed.data : { ...DEFAULT_APPEARANCE };
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    skin: AppearanceSchema.shape.skin.safeParse(source.skin).data ?? DEFAULT_APPEARANCE.skin,
+    hair: AppearanceSchema.shape.hair.safeParse(source.hair).data ?? DEFAULT_APPEARANCE.hair,
+    coat: AppearanceSchema.shape.coat.safeParse(source.coat).data ?? DEFAULT_APPEARANCE.coat,
+    hairStyle: AppearanceSchema.shape.hairStyle.safeParse(source.hairStyle).data ?? DEFAULT_APPEARANCE.hairStyle,
+    coatStyle: AppearanceSchema.shape.coatStyle.safeParse(source.coatStyle).data ?? DEFAULT_APPEARANCE.coatStyle,
+  };
 }
 export type NearbyChatMessage = { senderId: string; name: string; text: string };
 export const EQUIPMENT_LOOT_RANGE = 1.8;

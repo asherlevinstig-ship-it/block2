@@ -1,6 +1,6 @@
 import { APPEARANCE_PALETTE, DEFAULT_APPEARANCE, type Appearance, type ArmourId, type MainHandId } from "@blockcraft/protocol";
 
-function appearanceHex(group: keyof Appearance, id: string): string {
+function appearanceHex(group: keyof typeof APPEARANCE_PALETTE, id: string): string {
   const options = APPEARANCE_PALETTE[group] as readonly { id: string; color: string }[];
   return (options.find(option => option.id === id) ?? options[0]!).color;
 }
@@ -19,7 +19,7 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
   };
   return {
     refresh(hand: MainHandId, armour: ArmourId, appearance: Appearance = DEFAULT_APPEARANCE) {
-      const key = `${hand}:${armour}:${appearance.skin}:${appearance.hair}:${appearance.coat}`;
+      const key = `${hand}:${armour}:${appearance.skin}:${appearance.hair}:${appearance.coat}:${appearance.hairStyle}:${appearance.coatStyle}`;
       if (!context || destroyed || key === cachedKey) return;
       cachedKey = key;
       context.save(); context.scale(canvas.width / 240, canvas.height / 280);
@@ -28,6 +28,13 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       box("#34291f", 88, 227, 29, 18); box("#34291f", 123, 227, 29, 18);
       const coat = armour === "bastion_plate" ? "#8192a5" : armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39" : armour === "leather_armour" ? "#95633c" : appearanceHex("coat", appearance.coat);
       box(coat, 86, 103, 68, 82);
+      if (appearance.coatStyle === "short") {
+        box(shade(coat, 1.18), 76, 103, 16, 18); box(shade(coat, 1.18), 148, 103, 16, 18);
+        box("#ddbd70", 118, 111, 4, 63); box(shade(coat, .68), 86, 174, 68, 11);
+      } else if (appearance.coatStyle === "long") {
+        box(coat, 86, 183, 29, 35); box(coat, 125, 183, 29, 35);
+        box(shade(coat, .7), 86, 183, 29, 5); box(shade(coat, .7), 125, 183, 29, 5);
+      }
       box(armour === "iron_armour" ? "#738b9c" : shade(coat, .78), 86, 103, 12, 82);
       box(coat, 62, 106, 22, 61); box(coat, 156, 106, 22, 61);
       const skin = appearanceHex("skin", appearance.skin);
@@ -35,7 +42,12 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       box(skin, 64, 167, 18, 18); box(skin, 158, 167, 18, 18);
       box("#442d22", 86, 165, 68, 12); box("#dbb466", 114, 165, 13, 12);
       box(skin, 96, 53, 48, 48); box(shade(skin, .82), 132, 53, 12, 48);
-      box(hair, 92, 45, 56, 16); box(hair, 92, 58, 10, 13);
+      box(hair, 92, 45, 56, 16);
+      if (appearance.hairStyle === "spiked") {
+        box(hair, 96, 30, 11, 17); box(hair, 114, 23, 12, 24); box(hair, 133, 30, 11, 17);
+      } else if (appearance.hairStyle === "long") {
+        box(hair, 88, 48, 9, 58); box(hair, 144, 48, 9, 58); box(shade(hair, .8), 96, 94, 48, 12);
+      } else box(hair, 92, 58, 10, 13);
       box("#282520", 107, 76, 5, 5); box("#282520", 127, 76, 5, 5);
       box("#e4b84f", 92, 98, 56, 11); box("#bf9037", 96, 109, 12, 31);
       if (armour === "iron_armour" || armour === "bastion_plate") {

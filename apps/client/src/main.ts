@@ -72,6 +72,7 @@ import {
   armourStats,
   type ArmourId,
   APPEARANCE_PALETTE,
+  APPEARANCE_STYLES,
   DEFAULT_APPEARANCE,
   resolveAppearance,
   type Appearance,
@@ -1056,7 +1057,7 @@ silhouetteMaterial.depthTest = false;
 silhouetteMaterial.depthWrite = false;
 silhouetteMaterial.update();
 
-function appearanceColor(group: keyof Appearance, id: string): pc.Color {
+function appearanceColor(group: keyof typeof APPEARANCE_PALETTE, id: string): pc.Color {
   const options = APPEARANCE_PALETTE[group] as readonly { id: string; color: string }[];
   const hex = (options.find(option => option.id === id) ?? options[0]!).color;
   return new pc.Color(parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255);
@@ -1103,6 +1104,8 @@ function coloredMaterial(color: pc.Color): pc.StandardMaterial {
 
 interface VoxelCharacterRig {
   appearanceMaterials: { skin: pc.StandardMaterial; hair: pc.StandardMaterial; coat: pc.StandardMaterial };
+  hairStyles: Record<Appearance["hairStyle"], pc.Entity>;
+  coatStyles: Record<Appearance["coatStyle"], pc.Entity>;
   root: pc.Entity;
   torso: pc.Entity;
   head: pc.Entity;
@@ -1288,6 +1291,21 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   addBox(torso, "field-pack", bootMaterial, [0.35, 0.38, 0.16], [0, 0.025, -0.235]);
   addBox(torso, "pack-flap", brassMaterial, [0.37, 0.08, 0.18], [0, 0.17, -0.245]);
   addBox(torso, "scarf-collar", scarfMaterial, [0.34, 0.1, 0.35], [0, 0.28, 0]);
+  const coatStyles = {
+    explorer: new pc.Entity("explorer-coat-shape"),
+    short: new pc.Entity("short-jacket-shape"),
+    long: new pc.Entity("long-coat-shape"),
+  };
+  for (const style of Object.values(coatStyles)) torso.addChild(style);
+  for (const x of [-.21, .21]) {
+    addBox(coatStyles.explorer, "explorer-pocket", bootMaterial, [.11, .105, .025], [x, -.115, .18]);
+    addBox(coatStyles.short, "jacket-shoulder", clothing, [.14, .13, .37], [x * 1.38, .2, 0]);
+    addBox(coatStyles.short, "jacket-hem", coatTrimMaterial, [.22, .085, .355], [x / 2, -.27, 0]);
+    addBox(coatStyles.long, "coat-tail", clothing, [.215, .29, .06], [x / 2, -.39, -.19]);
+    addBox(coatStyles.long, "coat-front-panel", clothing, [.215, .25, .055], [x / 2, -.35, .17]);
+  }
+  addBox(coatStyles.short, "jacket-front-zip", brassMaterial, [.035, .4, .025], [0, 0, .176]);
+  addBox(coatStyles.long, "long-coat-back-seam", coatTrimMaterial, [.04, .36, .025], [0, -.35, -.228]);
   const scarf = new pc.Entity("scarf-pivot");
   scarf.setLocalPosition(-0.12, 0.29, -0.2);
   torso.addChild(scarf);
@@ -1297,8 +1315,22 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   head.setLocalPosition(0, 0.46, 0.015);
   torso.addChild(head);
   addBox(head, "face", skinMaterial, [0.4, 0.38, 0.38], [0, 0, 0]);
-  addBox(head, "hair-cap", hairMaterial, [0.43, 0.105, 0.415], [0, 0.2, -0.006]);
-  addBox(head, "swept-fringe", hairMaterial, [0.26, 0.085, 0.055], [-0.08, 0.13, 0.191]);
+  const hairStyles = {
+    swept: new pc.Entity("swept-hair"),
+    spiked: new pc.Entity("spiked-hair"),
+    long: new pc.Entity("long-hair"),
+  };
+  for (const style of Object.values(hairStyles)) head.addChild(style);
+  addBox(hairStyles.swept, "hair-cap", hairMaterial, [.43, .105, .415], [0, .2, -.006]);
+  addBox(hairStyles.swept, "swept-fringe", hairMaterial, [.26, .085, .055], [-.08, .13, .191]);
+  addBox(hairStyles.spiked, "hair-base", hairMaterial, [.43, .09, .41], [0, .19, 0]);
+  for (const x of [-.145, 0, .145]) {
+    const spike = addBox(hairStyles.spiked, "hair-spike", hairMaterial, [.115, .18, .12], [x, .32, -.025]);
+    spike.setLocalEulerAngles(0, 0, x * -65);
+  }
+  addBox(hairStyles.long, "hair-crown", hairMaterial, [.44, .115, .43], [0, .19, 0]);
+  addBox(hairStyles.long, "hair-back", hairMaterial, [.42, .34, .08], [0, -.005, -.235]);
+  for (const x of [-.215, .215]) addBox(hairStyles.long, "hair-side", hairMaterial, [.075, .28, .33], [x, -.04, -.035]);
   addBox(head, "left-eye", eyeWhiteMaterial, [0.077, 0.055, 0.022], [-0.09, 0.025, 0.195]);
   addBox(head, "right-eye", eyeWhiteMaterial, [0.077, 0.055, 0.022], [0.09, 0.025, 0.195]);
   addBox(head, "left-pupil", faceMaterial, [0.035, 0.05, 0.025], [-0.076, 0.025, 0.209]);
@@ -1520,7 +1552,9 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     }
     layer.enabled = false;
   }
-  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, appearanceMaterials: { skin: skinMaterial, hair: hairMaterial, coat: clothing }, locomotionPhase: 0, locomotionWeight: 0, travelFrames: [], lastFacingYaw: null, turnLean: 0 };
+  const rig: VoxelCharacterRig = { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, hairStyles, coatStyles, appearanceMaterials: { skin: skinMaterial, hair: hairMaterial, coat: clothing }, locomotionPhase: 0, locomotionWeight: 0, travelFrames: [], lastFacingYaw: null, turnLean: 0 };
+  setRigAppearance(rig, appearance);
+  return rig;
 }
 
 function setRigAppearance(rig: VoxelCharacterRig, appearance: Appearance): void {
@@ -1529,6 +1563,8 @@ function setRigAppearance(rig: VoxelCharacterRig, appearance: Appearance): void 
     material.diffuse = appearanceColor(group, appearance[group]);
     material.update();
   }
+  for (const [id, style] of Object.entries(rig.hairStyles)) style.enabled = id === appearance.hairStyle;
+  for (const [id, style] of Object.entries(rig.coatStyles)) style.enabled = id === appearance.coatStyle;
 }
 
 function setRigArmour(rig: VoxelCharacterRig, id: string): void {
@@ -1628,6 +1664,8 @@ interface NetworkPlayer {
   appearanceSkin: string;
   appearanceHair: string;
   appearanceCoat: string;
+  appearanceHairStyle: string;
+  appearanceCoatStyle: string;
   potionCooldownUntil: number;
   x: number;
   y: number;
@@ -2094,6 +2132,25 @@ for (const group of ["skin", "hair", "coat"] as const) {
   }
   appearanceOptions.append(row);
 }
+for (const group of ["hairStyle", "coatStyle"] as const) {
+  const row = document.createElement("div"); row.className = "appearance-choice appearance-style-choice";
+  const label = document.createElement("span"); label.textContent = group === "hairStyle" ? "Hair shape" : "Outfit shape";
+  row.append(label);
+  for (const option of APPEARANCE_STYLES[group]) {
+    const button = document.createElement("button"); button.type = "button";
+    button.dataset.appearanceGroup = group; button.dataset.appearanceId = option.id;
+    button.textContent = option.name;
+    button.setAttribute("aria-pressed", String(localAppearance[group] === option.id));
+    button.addEventListener("click", () => {
+      if (!room) { status.textContent = "Connect to the world before changing your look."; return; }
+      const next = resolveAppearance({ ...localAppearance, [group]: option.id });
+      updateLocalAppearance(next);
+      room.send("player:appearance", next);
+    });
+    row.append(button);
+  }
+  appearanceOptions.append(row);
+}
 let previewHand: MainHandId | undefined;
 let previewArmour: ArmourId | undefined;
 let previewSlot: "weapon" | "armour" = "weapon";
@@ -2107,7 +2164,7 @@ function refreshInventoryPreview(): void {
   }
   const hand = previewHand ?? localMainHandId;
   const armour = previewArmour ?? localArmourId;
-  const appearanceKey = `${hand}:${armour}:${localAppearance.skin}:${localAppearance.hair}:${localAppearance.coat}`;
+  const appearanceKey = `${hand}:${armour}:${localAppearance.skin}:${localAppearance.hair}:${localAppearance.coat}:${localAppearance.hairStyle}:${localAppearance.coatStyle}`;
   const comparisonKey = `${appearanceKey}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${previewSlot}`;
   inventoryPortrait.refresh(hand, armour, localAppearance);
   if (comparisonKey === inventoryComparisonKey) return;
@@ -3122,7 +3179,8 @@ function updatePlayerCount(): void {
 
 function createRemotePlayer(sessionId: string, player: NetworkPlayer): RemotePlayerVisual {
   const entity = new pc.Entity(`remote-player:${sessionId}`);
-  const appearance = resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat });
+  const appearance = resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat,
+    hairStyle: player.appearanceHairStyle, coatStyle: player.appearanceCoatStyle });
   const rig = createVoxelCharacter(entity, coloredMaterial(appearanceColor("coat", appearance.coat)), false, appearance);
   if (isMainHandId(player.mainHandId)) setRigMainHand(rig, player.mainHandId);
   setRigArmour(rig, player.armourId);
@@ -3610,7 +3668,8 @@ function bindPlayers(joinedRoom: Room): void {
     }
 
     const updateAppearance = () => {
-      const appearance = resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat });
+      const appearance = resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat,
+        hairStyle: player.appearanceHairStyle, coatStyle: player.appearanceCoatStyle });
       if (isLocal) updateLocalAppearance(appearance);
       else if (remote) setRigAppearance(remote.rig, appearance);
     };
@@ -3753,7 +3812,7 @@ function bindPlayers(joinedRoom: Room): void {
         setRigArmour(localPlayerRig, localArmourId); refreshInventoryEquipped();
       } else if (remote) setRigArmour(remote.rig, player.armourId);
     }, true);
-    for (const field of ["appearanceSkin", "appearanceHair", "appearanceCoat"] as const) {
+    for (const field of ["appearanceSkin", "appearanceHair", "appearanceCoat", "appearanceHairStyle", "appearanceCoatStyle"] as const) {
       playerCallbacks.listen(field, updateAppearance, true);
     }
     playerCallbacks.listen("blacksmithUpgrades", () => {

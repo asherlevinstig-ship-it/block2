@@ -931,6 +931,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .appearance-choice button { width: 28px; height: 28px; border: 2px solid #768476; border-radius: 7px; background: var(--swatch); cursor: pointer; }
 .appearance-choice button[aria-pressed="true"] { border-color: #fff0bd; box-shadow: 0 0 0 2px #a47a37, 0 0 10px #e9c96a66; }
 .appearance-choice button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.appearance-style-choice { grid-column: span 3; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.appearance-style-choice button { width: auto; min-height: 30px; height: auto; padding: 4px 6px; background: #23382c; color: #e1e8d7; font-size: .65rem; font-weight: 700; }
+@media (max-width: 480px) { #appearance-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } .appearance-style-choice { grid-column: span 2; } }
 .inventory-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .inventory-comparison h3 { font-size: .75rem; color: #acbfae; }
 .inventory-comparison strong { font-size: .8rem; color: #f3d28b; }

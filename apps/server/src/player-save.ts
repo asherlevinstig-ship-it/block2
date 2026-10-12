@@ -87,7 +87,8 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     version: PLAYER_SAVE_VERSION,
     savedAt: now,
     name: player.name,
-    appearance: resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat }),
+    appearance: resolveAppearance({ skin: player.appearanceSkin, hair: player.appearanceHair, coat: player.appearanceCoat,
+      hairStyle: player.appearanceHairStyle, coatStyle: player.appearanceCoatStyle }),
     health: player.health,
     maxHealth: player.maxHealth,
     stamina: player.stamina,
@@ -199,6 +200,8 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.appearanceSkin = appearance.skin;
   player.appearanceHair = appearance.hair;
   player.appearanceCoat = appearance.coat;
+  player.appearanceHairStyle = appearance.hairStyle;
+  player.appearanceCoatStyle = appearance.coatStyle;
   player.maxHealth = save.maxHealth;
   player.health = save.health;
   player.maxStamina = save.maxStamina;

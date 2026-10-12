@@ -578,6 +578,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.appearanceSkin = appearance.data.skin;
       player.appearanceHair = appearance.data.hair;
       player.appearanceCoat = appearance.data.coat;
+      player.appearanceHairStyle = appearance.data.hairStyle;
+      player.appearanceCoatStyle = appearance.data.coatStyle;
       void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     });
     this.onMessage("objective:sync", client => this.sendObjectiveState(client, true));
