@@ -13,7 +13,9 @@
     "@blockcraft/protocol": "*",
     "@blockcraft/voxel-world": "*",
     "@colyseus/sdk": "latest",
-    "playcanvas": "latest"
+    "@preact/signals": "^2.11.3",
+    "playcanvas": "latest",
+    "preact": "^11.0.1"
   },
   "devDependencies": {
     "typescript": "latest",

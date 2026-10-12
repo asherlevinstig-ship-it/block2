@@ -18,6 +18,7 @@ import { projectilePresentation } from "./projectile-clock.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
+import { playerHud } from "./player-hud.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
@@ -467,14 +468,10 @@ const movementDebugLive = document.querySelector<HTMLElement>("#movement-debug-l
 const movementDebugEvents = document.querySelector<HTMLOListElement>("#movement-debug-events")!;
 const movementDebugCopy = document.querySelector<HTMLButtonElement>("#movement-debug-copy")!;
 const movementDebugTrace = document.querySelector<HTMLElement>("#movement-debug-trace")!;
-const playerHealthFill = document.querySelector<HTMLElement>("#player-health-fill")!;
-const playerHealthValue = document.querySelector<HTMLElement>("#player-health-value")!;
-const playerStaminaFill = document.querySelector<HTMLElement>("#player-stamina-fill")!;
-const playerStaminaValue = document.querySelector<HTMLElement>("#player-stamina-value")!;
+const playerHudRoot = document.querySelector<HTMLElement>("#player-hud-root")!;
+if (!playerHudRoot) throw new Error("Player HUD root is missing");
+playerHud.mount(playerHudRoot);
 const playerLevel = document.querySelector<HTMLButtonElement>("#player-level")!;
-const playerLevelValue = document.querySelector<HTMLElement>("#player-level-value")!;
-const playerXpFill = document.querySelector<HTMLElement>("#player-xp-fill")!;
-const playerXpValue = document.querySelector<HTMLElement>("#player-xp-value")!;
 const inventoryLevel = document.querySelector<HTMLElement>("#inventory-level")!;
 const characterPoints = document.querySelector<HTMLElement>("#character-points")!;
 const statPower = document.querySelector<HTMLElement>("#stat-power")!;
@@ -588,7 +585,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !playerHealthFill || !playerHealthValue || !playerStaminaFill || !playerStaminaValue || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -608,7 +605,7 @@ if (
 ) {
   throw new Error("Silver Depths route shell is missing required elements");
 }
-if ([playerLevel, playerLevelValue, playerXpFill, playerXpValue, inventoryLevel, characterPoints, statPower, statVitality, statAgility, statMining, levelUpPanel, levelUpTitle, levelUpMessage, levelUpPoints].some(element => !element) || characterStatButtons.length !== 4) {
+if ([playerLevel, inventoryLevel, characterPoints, statPower, statVitality, statAgility, statMining, levelUpPanel, levelUpTitle, levelUpMessage, levelUpPoints].some(element => !element) || characterStatButtons.length !== 4) {
   throw new Error("Character progression shell is missing required elements");
 }
 
@@ -2616,24 +2613,17 @@ function requestTraitEquip(traitId: TraitId): void {
 function updatePlayerHealth(health: number, maximumHealth: number): void {
   potionHealth = health;
   potionMaxHealth = maximumHealth;
-  const fraction = Math.max(0, Math.min(1, health / Math.max(1, maximumHealth)));
-  playerHealthFill.style.width = `${fraction * 100}%`;
-  playerHealthValue.textContent = `${health} / ${maximumHealth}`;
+  playerHud.setHealth(health, maximumHealth);
 }
 
 function updatePlayerStamina(stamina: number, maximumStamina: number): void {
-  const fraction = Math.max(0, Math.min(1, stamina / Math.max(1, maximumStamina)));
-  playerStaminaFill.style.width = `${fraction * 100}%`;
-  playerStaminaValue.textContent = `${Math.round(stamina)}`;
+  playerHud.setStamina(stamina, maximumStamina);
 }
 
 function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = potionMaxHealth): void {
   localCharacterProgression = update;
   const required = Math.max(0, update.experienceRequired);
-  const fraction = required > 0 ? Math.max(0, Math.min(1, update.experience / required)) : 1;
-  playerLevelValue.textContent = String(update.level);
-  playerXpFill.style.width = `${fraction * 100}%`;
-  playerXpValue.textContent = required > 0 ? `${update.experience} / ${required} XP` : "MAX LEVEL";
+  playerHud.setProgression(update.level, update.experience, required);
   inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} XP` : `${update.level} · MAX`;
   characterPoints.textContent = update.unspentStatPoints > 0 ? `${update.unspentStatPoints} POINT${update.unspentStatPoints === 1 ? "" : "S"} AVAILABLE` : "NO POINTS AVAILABLE";
   statPower.textContent = `${update.powerPoints} · +${characterPowerBonus(update.powerPoints)} damage`;
