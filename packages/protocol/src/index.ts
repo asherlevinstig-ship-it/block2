@@ -193,6 +193,21 @@ export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_a
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
+export const BLACKSMITH_DISMANTLE = {
+  forged_sword: { gold: 14 }, forged_bow: { gold: 16 }, forged_focus: { gold: 18 },
+  leather_armour: { gold: 8 }, iron_armour: { gold: 20 },
+  fang_dagger: { gold: 3, materialId: "crawler_fang", materialQuantity: 1 },
+  stone_core_hammer: { gold: 6, materialId: "stone_core", materialQuantity: 1 },
+  rootbound_hammer: { gold: 16, materialId: "timber", materialQuantity: 2 },
+  matriarch_edge: { gold: 22, materialId: "moonstone", materialQuantity: 1 },
+  acid_gland_focus: { gold: 6, materialId: "acid_gland", materialQuantity: 1 },
+  venom_focus: { gold: 16, materialId: "acid_gland", materialQuantity: 2 },
+  echo_prism: { gold: 18, materialId: "silver_ore", materialQuantity: 1 },
+  rootguard_armour: { gold: 14, materialId: "moss_fibre", materialQuantity: 2 },
+  bastion_plate: { gold: 18, materialId: "stone_core", materialQuantity: 1 },
+} as const satisfies Partial<Record<ItemId, { gold: number; materialId?: ItemId; materialQuantity?: number }>>;
+export type BlacksmithDismantleItemId = keyof typeof BLACKSMITH_DISMANTLE;
+export const BlacksmithDismantleSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_DISMANTLE) as [BlacksmithDismantleItemId, ...BlacksmithDismantleItemId[]]) });
 export function armourStats(id: string) { return ARMOUR_DEFINITIONS[Object.hasOwn(ARMOUR_DEFINITIONS, id) ? id as ArmourId : "none"]; }
 export type IncomingDamageKind = "melee" | "projectile" | "hazard";
 export function armouredDamage(damage: number, id: string, kind: IncomingDamageKind = "melee"): number {
@@ -202,7 +217,7 @@ export function armouredDamage(damage: number, id: string, kind: IncomingDamageK
   return Math.max(1, damage - armour.reduction - situational);
 }
 export type BlacksmithUpdate = {
-  phase: "idle" | "traded" | "purchased" | "error";
+  phase: "idle" | "traded" | "purchased" | "dismantled" | "error";
   ironOre: number;
   silverOre?: number;
   moonstone?: number;
@@ -214,6 +229,10 @@ export type BlacksmithUpdate = {
   purchasedUpgradeId?: BlacksmithUpgradeId;
   purchasedDepthsRewardId?: SilverDepthsRewardId;
   weapons?: Partial<Record<BlacksmithStockId, number>>;
+  dismantleItems?: Partial<Record<BlacksmithDismantleItemId, number>>;
+  dismantledItemId?: BlacksmithDismantleItemId;
+  materialGranted?: ItemId;
+  materialQuantity?: number;
   sold?: number;
   goldGranted?: number;
   message: string;

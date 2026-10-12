@@ -650,9 +650,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   transform: translate(-50%, -50%);
 }
 #blacksmith-panel[hidden] { display: none; }
-#blacksmith-mineral-shop[hidden], #blacksmith-upgrade-shop[hidden], #blacksmith-depths-shop[hidden], #blacksmith-weapons[hidden] { display: none; }
+#blacksmith-mineral-shop[hidden], #blacksmith-upgrade-shop[hidden], #blacksmith-depths-shop[hidden], #blacksmith-weapons[hidden], #blacksmith-dismantle[hidden] { display: none; }
 .blacksmith-loop { color: #d6b87f; font-size: .74rem; line-height: 1.5; margin: 0 0 12px; }
-#blacksmith-shop-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
+#blacksmith-shop-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
 #blacksmith-shop-tabs button { margin: 0; padding: 8px 4px; font-size: .7rem; background: #251e16; border-color: #836744; color: #b9a88d; }
 #blacksmith-shop-tabs button[aria-pressed="true"] { color: #fff0cb; background: #765021; border-color: #dfb76c; }
 #blacksmith-weapons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -708,6 +708,18 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #blacksmith-weapons p { font-size: .76rem; color: #d8e5df; line-height: 1.5; }
 #blacksmith-weapons small { display: block; color: #b6ad9d; line-height: 1.5; }
 #blacksmith-weapons button { width: 100%; }
+#blacksmith-dismantle { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+#blacksmith-dismantle > h3, #blacksmith-dismantle > .blacksmith-dismantle-help, #blacksmith-dismantle > .blacksmith-dismantle-empty { grid-column: 1 / -1; }
+.blacksmith-dismantle-help, .blacksmith-dismantle-empty { margin: 0 0 5px; color: #bcb2a0; font-size: .72rem; line-height: 1.45; }
+#blacksmith-dismantle article { padding: 11px; border: 1px solid #ad7a4580; border-radius: 9px; background: linear-gradient(145deg, #35271b, #1b1d1a); }
+#blacksmith-dismantle article strong, #blacksmith-dismantle article small { display: block; }
+#blacksmith-dismantle article strong { color: #ffe0a5; font-size: .78rem; }
+#blacksmith-dismantle article p { margin: 6px 0; color: #e8bd70; font-size: .7rem; }
+#blacksmith-dismantle article small { min-height: 2.5em; color: #aaa193; font-size: .61rem; line-height: 1.35; }
+#blacksmith-dismantle article button { width: 100%; margin-top: 9px; }
+#blacksmith-dismantle article.protected { opacity: .7; border-color: #776c5d66; }
+#blacksmith-panel[data-phase="dismantled"] #blacksmith-message { color: #ffd27f; }
+@media (max-width: 580px) { #blacksmith-shop-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); } #blacksmith-dismantle { grid-template-columns: 1fr; } #blacksmith-dismantle > h3, #blacksmith-dismantle > .blacksmith-dismantle-help, #blacksmith-dismantle > .blacksmith-dismantle-empty { grid-column: 1; } }
 .inventory-grid article[data-item="leather_armour"] i { background: linear-gradient(135deg, #aa7643, #55301a); }
 .inventory-grid article[data-item="iron_armour"] i { background: linear-gradient(135deg, #dce4ec, #6e8095); }
 .inventory-grid article[data-item="rootguard_armour"] i { background: radial-gradient(circle, #a5f17c 0 18%, #315d39 21% 58%, #6a4224 61%); box-shadow: 0 0 12px #75dc6980; }

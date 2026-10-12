@@ -67,7 +67,9 @@ import {
   BLACKSMITH_UPGRADES,
   SILVER_DEPTHS_REWARDS,
   BLACKSMITH_STOCK,
+  BLACKSMITH_DISMANTLE,
   type BlacksmithStockId,
+  type BlacksmithDismantleItemId,
   ARMOUR_DEFINITIONS,
   armourStats,
   type ArmourId,
@@ -4363,6 +4365,53 @@ let lastShopPurchaseCategory: InventoryTab = "weapons";
 const weaponShop = document.createElement("div");
 weaponShop.id = "blacksmith-weapons";
 blacksmithClose.before(weaponShop);
+const dismantleShop = document.createElement("div");
+dismantleShop.id = "blacksmith-dismantle";
+blacksmithClose.before(dismantleShop);
+function renderDismantleShop(): void {
+  dismantleShop.replaceChildren();
+  dismantleShop.hidden = blacksmithShopTab !== "dismantle";
+  if (dismantleShop.hidden) return;
+  const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
+  heading.textContent = "DISMANTLE EQUIPMENT · ONE ITEM AT A TIME";
+  const help = document.createElement("p"); help.className = "blacksmith-dismantle-help";
+  help.textContent = "Break unwanted gear into gold and useful materials. Your last equipped copy is protected.";
+  dismantleShop.append(heading, help);
+  let shown = 0;
+  for (const itemId of Object.keys(BLACKSMITH_DISMANTLE) as BlacksmithDismantleItemId[]) {
+    const owned = inventoryCounts.get(itemId) ?? 0;
+    if (owned <= 0) continue;
+    shown++;
+    const recipe = BLACKSMITH_DISMANTLE[itemId];
+    const hand = equipmentForItem(itemId);
+    const armour = armourForItem(itemId);
+    const equipped = hand === localMainHandId || armour === localArmourId;
+    const protectedLastCopy = equipped && owned <= 1;
+    const card = document.createElement("article");
+    card.className = protectedLastCopy ? "protected" : "";
+    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[itemId].name} ×${owned}`;
+    const reward = document.createElement("p");
+    const material = "materialId" in recipe ? ` + ${recipe.materialQuantity} ${ITEM_DEFINITIONS[recipe.materialId].name}` : "";
+    reward.textContent = `Returns ${recipe.gold} gold${material}`;
+    const note = document.createElement("small");
+    note.textContent = protectedLastCopy ? "Equipped · keep or equip something else first" : equipped ? "Duplicate copy · equipped copy remains safe" : "Removes one item from your pack";
+    const button = document.createElement("button"); button.type = "button";
+    button.textContent = protectedLastCopy ? "EQUIPPED · PROTECTED" : blacksmithPending ? "PLEASE WAIT…" : "DISMANTLE ONE";
+    button.disabled = protectedLastCopy || blacksmithPending || !room || tavernCoinBalance + recipe.gold > 1_000_000;
+    button.addEventListener("click", () => {
+      if (!room || blacksmithPending || protectedLastCopy) return;
+      blacksmithPending = true; renderDismantleShop();
+      blacksmithMessage.textContent = `Dismantling ${ITEM_DEFINITIONS[itemId].name}...`;
+      room.send("blacksmith:dismantle", { itemId });
+    });
+    card.append(title, reward, note, button); dismantleShop.append(card);
+  }
+  if (shown === 0) {
+    const empty = document.createElement("p"); empty.className = "blacksmith-dismantle-empty";
+    empty.textContent = "No dismantlable equipment in your pack. Enemy weapons and armour will appear here.";
+    dismantleShop.append(empty);
+  }
+}
 function renderWeaponShop(): void {
   weaponShop.replaceChildren();
   const shopping = blacksmithShopTab === "weapons" || blacksmithShopTab === "armour";
@@ -4370,6 +4419,7 @@ function renderWeaponShop(): void {
   document.querySelector<HTMLElement>("#blacksmith-mineral-shop")!.hidden = blacksmithShopTab !== "sell";
   document.querySelector<HTMLElement>("#blacksmith-upgrade-shop")!.hidden = blacksmithShopTab !== "upgrades";
   document.querySelector<HTMLElement>("#blacksmith-depths-shop")!.hidden = blacksmithShopTab !== "depths";
+  renderDismantleShop();
   for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {
     tab.setAttribute("aria-pressed", String(tab.dataset.smithTab === blacksmithShopTab));
   }
@@ -4435,6 +4485,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithOre.textContent = `${update.ironOre.toLocaleString()} / ${update.ironCapacity.toLocaleString()}`;
   updateTavernCoins(update.gold);
   for (const id of Object.keys(BLACKSMITH_STOCK) as BlacksmithStockId[]) updateInventoryItem(id, update.weapons?.[id] ?? 0);
+  for (const id of Object.keys(BLACKSMITH_DISMANTLE) as BlacksmithDismantleItemId[]) updateInventoryItem(id, update.dismantleItems?.[id] ?? 0);
   renderWeaponShop();
   blacksmithSell.disabled = update.ironOre + silver <= 0 || blacksmithPending || update.gold >= 1_000_000;
   const owned = new Set(update.ownedUpgrades);
@@ -4493,6 +4544,12 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   }
   if (update.phase === "purchased" && !update.purchasedUpgradeId && !update.purchasedDepthsRewardId) {
     showCombatFeedback("EQUIPMENT ADDED TO PACK", "dodge");
+    status.textContent = update.message;
+  }
+  if (update.phase === "dismantled" && update.dismantledItemId) {
+    const material = update.materialGranted && update.materialQuantity
+      ? ` · +${update.materialQuantity} ${ITEM_DEFINITIONS[update.materialGranted].name}` : "";
+    showCombatFeedback(`DISMANTLED · +${update.goldGranted ?? 0} GOLD${material}`.toUpperCase(), "dodge");
     status.textContent = update.message;
   }
 }

@@ -12,7 +12,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BlacksmithBuySchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BlacksmithBuySchema, BlacksmithDismantleSchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage, type BlacksmithDismantleItemId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
 import { spacedMobDesired, mobPersonalSpace } from "./mob-spacing.js";
@@ -661,6 +661,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.sendStorageState(client, message);
     });
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
+    aliveMessage("blacksmith:dismantle", (client, payload) => this.handleBlacksmithDismantle(client, payload));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
     aliveMessage("blacksmith:depths-buy", (client, payload) => this.handleDepthsRewardBuy(client, payload));
@@ -1019,7 +1020,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       message: message ?? (canUseStorage(player) ? "Your personal chest. Choose an item to deposit or withdraw." : "Stand beside the chest to transfer items.") });
   }
 
-  private sendBlacksmithState(client: Client, message: string | undefined = undefined, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId, purchasedDepthsRewardId?: SilverDepthsRewardId): void {
+  private sendBlacksmithState(client: Client, message: string | undefined = undefined, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId, purchasedDepthsRewardId?: SilverDepthsRewardId,
+    dismantled?: { itemId: BlacksmithDismantleItemId; materialId?: ItemId; materialQuantity?: number }): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     client.send("blacksmith:update", {
@@ -1033,10 +1035,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ownedUpgrades: ownedBlacksmithUpgrades(player.blacksmithUpgrades),
       ownedDepthsRewards: ownedDepthsRewards(player.blacksmithUpgrades),
       weapons: Object.fromEntries(Object.keys(BLACKSMITH_STOCK).map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
+      dismantleItems: Object.fromEntries(Object.keys(BLACKSMITH_DISMANTLE).map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       sold,
       goldGranted,
       purchasedUpgradeId,
       purchasedDepthsRewardId,
+      dismantledItemId: dismantled?.itemId,
+      materialGranted: dismantled?.materialId,
+      materialQuantity: dismantled?.materialQuantity,
       message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
     } satisfies BlacksmithUpdate);
   }
@@ -1183,6 +1189,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(client.sessionId, player);
     const minerals = [ironSold ? `${ironSold} iron ore` : "", silverSold ? `${silverSold} silver ore` : ""].filter(Boolean).join(" + ");
     this.sendBlacksmithState(client, `Sold ${minerals} for ${goldGranted} gold.`, "traded", sold, goldGranted);
+  }
+
+  private handleBlacksmithDismantle(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = BlacksmithDismantleSchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose an equipment item to dismantle.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to dismantle equipment.", "error");
+    const itemId = parsed.data.itemId;
+    const recipe = BLACKSMITH_DISMANTLE[itemId];
+    const item = player.inventory.get(itemId);
+    const quantity = item?.quantity ?? 0;
+    if (quantity <= 0) return this.sendBlacksmithState(client, `You do not have ${ITEM_DEFINITIONS[itemId].name} in your pack.`, "error");
+    const equipped = equipmentForItem(itemId) === player.mainHandId || armourForItem(itemId) === player.armourId;
+    if (equipped && quantity <= 1) return this.sendBlacksmithState(client, `Your equipped ${ITEM_DEFINITIONS[itemId].name} is protected. Equip something else before dismantling it.`, "error");
+    if (player.coins + recipe.gold > 1_000_000) return this.sendBlacksmithState(client, "Your gold purse does not have room for the dismantling return.", "error");
+    const materialId = "materialId" in recipe ? recipe.materialId : undefined;
+    const materialQuantity = "materialQuantity" in recipe ? recipe.materialQuantity : undefined;
+    if (materialId && materialQuantity) {
+      const held = player.inventory.get(materialId)?.quantity ?? 0;
+      const capacity = materialId === "silver_ore" ? ironCapacity(player.blacksmithUpgrades) : 65_535;
+      if (held + materialQuantity > capacity) return this.sendBlacksmithState(client, `Make room for ${ITEM_DEFINITIONS[materialId].name} before dismantling this item.`, "error");
+    }
+    item!.quantity = quantity - 1;
+    player.coins += recipe.gold;
+    if (materialId && materialQuantity) {
+      let material = player.inventory.get(materialId);
+      if (!material) { material = new InventoryItemState(); player.inventory.set(materialId, material); }
+      material.quantity = inventoryTotal(material.quantity, materialQuantity);
+    }
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    const materialMessage = materialId && materialQuantity ? ` and ${materialQuantity} ${ITEM_DEFINITIONS[materialId].name}` : "";
+    this.sendBlacksmithState(client, `Dismantled ${ITEM_DEFINITIONS[itemId].name} for ${recipe.gold} gold${materialMessage}.`, "dismantled", 1, recipe.gold,
+      undefined, undefined, { itemId, materialId, materialQuantity });
   }
 
   private handleBlacksmithForge(client: Client, payload: unknown): void {
