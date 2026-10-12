@@ -2356,9 +2356,9 @@ function powerDuration(powerId: PowerId | null): number {
   return definition.windupMs + definition.activeMs + definition.recoveryMs;
 }
 
-function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" = "hit"): void {
+function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" | "miss" | "block" | "stagger" = "hit"): void {
   combatFeedback.textContent = text;
-  combatFeedback.classList.remove("show", "hurt", "dodge");
+  combatFeedback.classList.remove("show", "hurt", "dodge", "miss", "block", "stagger");
   void combatFeedback.offsetWidth;
   if (style !== "hit") combatFeedback.classList.add(style);
   combatFeedback.classList.add("show");
@@ -2367,14 +2367,15 @@ function showCombatFeedback(text: string, style: "hit" | "hurt" | "dodge" = "hit
 let rangedReticleHitUntil = 0;
 let rangedPopupSequence = 0;
 const rangedPopups: { element: HTMLElement; position: pc.Vec3; startedAt: number; duration: number; damage: boolean; offset: number }[] = [];
-function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "enemy" | "terrain" | "near-miss", defeated = false, color?: readonly number[]): void {
+function createRangedPopup(position: pc.Vec3, text: string, kind: "damage" | "melee" | "stagger" | "enemy" | "terrain" | "near-miss", defeated = false, color?: readonly number[]): void {
   const element = document.createElement("span");
   element.className = `ranged-popup ranged-popup-${kind}${defeated ? " defeated" : ""}`;
   element.textContent = text; element.setAttribute("aria-hidden", "true");
   if (color) element.style.color = `rgb(${color.map(channel => Math.round(channel * 255)).join(",")})`;
   document.body.append(element);
-  rangedPopups.push({ element, position: position.clone(), startedAt: performance.now(), duration: kind === "damage" ? 800 : kind === "near-miss" ? 160 : 240,
-    damage: kind === "damage", offset: kind === "damage" ? (++rangedPopupSequence % 3 - 1) * 14 : 0 });
+  const combatCue = kind === "damage" || kind === "melee" || kind === "stagger";
+  rangedPopups.push({ element, position: position.clone(), startedAt: performance.now(), duration: combatCue ? 800 : kind === "near-miss" ? 160 : 240,
+    damage: combatCue, offset: combatCue ? (++rangedPopupSequence % 3 - 1) * 14 : 0 });
   while (rangedPopups.length > 32) rangedPopups.shift()!.element.remove();
 }
 function updateRangedFeedback(now: number): void {
@@ -7725,6 +7726,10 @@ async function connect(): Promise<void> {
     if (message.attackerId === room?.sessionId) {
       updateMomentum(message.momentumStacks);
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
+      if (!rangedHit && mob && message.damage > 0) {
+        const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
+        createRangedPopup(position, `−${message.damage}`, "melee", message.defeated);
+      }
       if (!rangedHit) localHitPauseUntil = performance.now() + ((message.mainHandId === "stone_core_hammer" || message.mainHandId === "rootbound_hammer") ? 80 : comboStep === 3 ? 75 : 48);
       const hitLabel = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo && comboStep === 3
         ? `FINISHER  −${message.damage}`
@@ -7747,7 +7752,7 @@ async function connect(): Promise<void> {
       logMovementEvent(`MISS ${message.mainHandId} step=${message.comboStep}`);
       return;
     }
-    showCombatFeedback("MISS", "hurt");
+    showCombatFeedback("MISS", "miss");
     const attackName = WEAPON_ATTACK_DEFINITIONS[message.mainHandId].combo
       ? `${MAIN_HAND_DEFINITIONS[message.mainHandId].attackName} ${message.comboStep}`
       : MAIN_HAND_DEFINITIONS[message.mainHandId].attackName;
@@ -7756,7 +7761,12 @@ async function connect(): Promise<void> {
   });
   room.onMessage("combat:stagger", (message: CombatStagger) => {
     if (message.attackerId !== room?.sessionId) return;
-    showCombatFeedback("STAGGER!", "dodge");
+    const staggeredMob = mobVisuals.get(message.mobId);
+    if (staggeredMob) {
+      const position = staggeredMob.entity.getPosition().clone(); position.y += staggeredMob.healthBarY + .7;
+      createRangedPopup(position, "STAGGER", "stagger");
+    }
+    showCombatFeedback("STAGGER!", "stagger");
     status.textContent = `Heavy interrupt · enemy staggered for ${(message.durationMs / 1000).toFixed(1)}s.`;
     logMovementEvent(`STAGGER ${message.mobId} ${message.durationMs}ms`);
   });
@@ -7801,7 +7811,7 @@ async function connect(): Promise<void> {
     if (message.playerId !== room?.sessionId) return;
     updateMomentum(message.momentumStacks);
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
-    showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "dodge");
+    showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "block");
     status.textContent = message.parried
       ? localTraitId === "bulwark"
         ? `${attackerName} parried and staggered · Bulwark restored stamina · counter now.`

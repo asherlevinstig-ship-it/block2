@@ -449,6 +449,9 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 .ranged-popup { position: fixed; z-index: 18; pointer-events: none; font: 900 24px/1 system-ui, sans-serif; text-shadow: 0 2px 2px #000, 1px 0 #000, -1px 0 #000; }
 .ranged-popup-damage { color: #fff3c5; }
 .ranged-popup-damage.defeated { color: #ffb56d; }
+.ranged-popup-melee { color: #ffe2a0; }
+.ranged-popup-melee.defeated { color: #ffae72; }
+.ranged-popup-stagger { color: #e2b8ff; font-size: 18px; letter-spacing: .08em; text-shadow: 0 2px 2px #000, 0 0 12px #a657dd; }
 .ranged-popup-enemy { color: #ffe9a3; font-size: 28px; }
 .ranged-popup-terrain { color: #b8c2c3; font-size: 36px; }
 canvas.ranged-aim { cursor: none; }
@@ -709,6 +712,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #blacksmith-panel[data-phase="error"] #blacksmith-message { color: #ffaf92; }
 #combat-feedback.hurt { color: #ff9a86; font-size: 1.2rem; }
 #combat-feedback.dodge { color: #9cecff; text-shadow: 0 2px 4px #000, 0 0 18px #35bce9; }
+#combat-feedback.miss { color: #d3d7d4; text-shadow: 0 2px 4px #000, 0 0 12px #626e6c; }
+#combat-feedback.block { color: #a9e5ff; text-shadow: 0 2px 4px #000, 0 0 18px #4aa6e9; }
+#combat-feedback.stagger { color: #e9c0ff; text-shadow: 0 2px 4px #000, 0 0 18px #b05ce2; }
 @keyframes combat-feedback {
   0% { opacity: 0; transform: translate(-50%, 8px) scale(.85); }
   18% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
