@@ -12,7 +12,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
 import { spacedMobDesired, mobPersonalSpace } from "./mob-spacing.js";
@@ -59,7 +59,6 @@ import {
   MineBlockRequestSchema,
   MoveRequestSchema,
   POWER_DEFINITIONS,
-  ROOTBOUND_FINISHER,
   PlayerProfileTokenSchema,
   ProgressionChooseSchema,
   WEAPON_ATTACK_DEFINITIONS,
@@ -358,6 +357,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly emberVaultRuns = new Map<string, EmberVaultRunStats>();
   private emberVaultRunSequence = 0;
   private readonly pendingWeaponProjectiles = new Map<string, PendingWeaponProjectile>();
+  private readonly venomBuildup = new Map<string, { stacks: number; expiresAt: number }>();
+  private readonly bastionWardReadyAt = new Map<string, number>();
   private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
@@ -791,6 +792,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   override async onLeave(client: Client): Promise<void> {
     this.silverDepthsReconnectInvulnerability.delete(client.sessionId);
+    this.bastionWardReadyAt.delete(client.sessionId);
+    for (const key of this.venomBuildup.keys()) if (key.startsWith(`${client.sessionId}:`)) this.venomBuildup.delete(key);
     this.combatContributions.disconnect(client.sessionId);
     for (const [id, drop] of this.state.lootDrops) if (drop.ownerId === client.sessionId) this.state.lootDrops.delete(id);
     this.trading.disconnect(client.sessionId); this.lastTradeRequestAt.delete(client.sessionId);
@@ -1747,6 +1750,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
+    for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
     const credited = this.combatContributions.eligible(mobId, mob, this.state.players, now);
     const recipients = mobId === CRYSTAL_MATRIARCH_ID && this.roomKind === "silver-depths"
       ? [...new Set([...credited, ...this.activeSilverDepthsParticipants()])]
@@ -2107,10 +2111,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.stamina = Math.max(0, player.stamina - cost);
       if (defense.parried) player.stamina = Math.min(player.maxStamina, player.stamina + parryStaminaRestore(traitId));
     }
+    let perkStaminaRestored = 0;
+    if (defense.guarded && player.armourId === "rootguard_armour") {
+      const perk = equipmentPerkStats("rootguard_armour", equipmentReforgeRank(player.reforgeRanksJson, "rootguard_armour"));
+      perkStaminaRestored = Math.min(perk?.stamina ?? 0, player.maxStamina - player.stamina);
+      player.stamina += perkStaminaRestored;
+    }
     if (defense.parried && mob) {
       this.staggerMob(mobId, mob, now, PARRY_STAGGER_MS, true);
     }
     if (player.stamina <= 0) player.defending = false;
+    let absorbed = false;
+    if (!defense.guarded && defense.damage >= 3 && player.armourId === "bastion_plate"
+      && now >= (this.bastionWardReadyAt.get(playerId) ?? 0)) {
+      const perk = equipmentPerkStats("bastion_plate", equipmentReforgeRank(player.reforgeRanksJson, "bastion_plate"));
+      this.bastionWardReadyAt.set(playerId, now + (perk?.cooldownMs ?? 14_000));
+      defense.damage = 0;
+      absorbed = true;
+    }
     defense.damage = armouredDamage(defense.damage, player.armourId, kind,
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
     if (defense.damage > 0 && kind !== "melee" && ownsDepthsReward(player.blacksmithUpgrades, "matriarch_guard")) {
@@ -2132,6 +2150,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       guarded: defense.guarded,
       parried: defense.parried,
       momentumStacks: player.momentumStacks,
+      absorbed,
     } satisfies PlayerHit);
     if (defense.guarded) {
       this.broadcast("combat:defense", {
@@ -2142,6 +2161,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         damage: defense.damage,
         stamina: Math.round(player.stamina),
         momentumStacks: player.momentumStacks,
+        perkStaminaRestored,
       } satisfies DefenseResolved);
     }
     if (!defeated) return true;
@@ -4784,10 +4804,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ?? WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[0];
       if (!player || player.health <= 0 || !mob || !mob.alive || !timing) return;
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
+      let perk: EquipmentPerkId | undefined;
+      let perkStacks: number | undefined;
+      let perkBonusDamage = 0;
+      if (pending.mainHandId === "venom_focus") {
+        const venom = equipmentPerkStats("venom_focus", equipmentReforgeRank(player.reforgeRanksJson, "venom_focus"))!;
+        const key = `${sessionId}:${mobId}`;
+        const previous = this.venomBuildup.get(key);
+        const stacks = now <= (previous?.expiresAt ?? 0) ? previous!.stacks + 1 : 1;
+        if (stacks >= (venom.stacks ?? 3)) {
+          perk = "venom_bloom"; perkStacks = 0; perkBonusDamage = venom.damage ?? 2;
+          this.venomBuildup.delete(key);
+        } else {
+          perkStacks = stacks;
+          this.venomBuildup.set(key, { stacks, expiresAt: now + (venom.windowMs ?? 4_000) });
+        }
+      }
       const damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
-          + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now),
+          + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage,
         mob.armor,
       ) + traitBonusDamage;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
@@ -4825,25 +4861,66 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         momentumStacks: player.momentumStacks,
         traitBonusDamage,
         rootShockwave,
+        perk,
+        perkStacks,
       };
       this.broadcast("combat:hit", hit);
       if (mob.alive) this.progressSpecialMark(sessionId, mobId, now);
+      const equipmentRank = equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId);
+      if (pending.mainHandId === "stone_core_hammer") {
+        const quake = equipmentPerkStats("stone_core_hammer", equipmentRank)!;
+        this.applyEquipmentAreaDamage(sessionId, mobId, mob, now, pending.mainHandId, pending.step,
+          quake.radius!, quake.damage!, "core_quake");
+      } else if (pending.mainHandId === "matriarch_edge" && pending.step === 3) {
+        const arc = equipmentPerkStats("matriarch_edge", equipmentRank)!;
+        this.applyEquipmentAreaDamage(sessionId, mobId, mob, now, pending.mainHandId, pending.step,
+          arc.radius!, arc.damage!, "moon_arc");
+      } else if (pending.mainHandId === "echo_prism") {
+        const chain = equipmentPerkStats("echo_prism", equipmentRank)!;
+        this.applyEquipmentAreaDamage(sessionId, mobId, mob, now, pending.mainHandId, pending.step,
+          chain.radius!, chain.damage!, "echo_chain", 1);
+      }
+  }
+
+  private applyEquipmentAreaDamage(sessionId: string, primaryMobId: string, origin: MobState, now: number,
+    mainHandId: MainHandId, comboStep: number, radius: number, baseDamage: number, perk: EquipmentPerkId,
+    limit = Number.POSITIVE_INFINITY): void {
+    const player = this.state.players.get(sessionId);
+    if (!player) return;
+    const nearby = [...this.state.mobs.entries()]
+      .filter(([id, mob]) => id !== primaryMobId && mob.alive && mob.health > 0 && Math.abs(mob.y - origin.y) <= 2.25
+        && Math.hypot(mob.x - origin.x, mob.z - origin.z) <= radius
+        && hasCombatLineOfSight(origin, mob, this.readWorldBlock))
+      .sort((a, b) => Math.hypot(a[1].x - origin.x, a[1].z - origin.z) - Math.hypot(b[1].x - origin.x, b[1].z - origin.z))
+      .slice(0, limit);
+    for (const [mobId, mob] of nearby) {
+      const damage = damageAfterArmor(baseDamage, mob.armor);
+      this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
+      mob.health = Math.max(0, mob.health - damage);
+      this.alertHitMob(mobId, sessionId, now, { x: origin.x, z: origin.z });
+      mob.hitSequence += 1;
+      if (mob.health === 0) this.defeatMob(mobId, mob, sessionId, now);
+      this.broadcast("combat:hit", { attackerId: sessionId, mainHandId, mobId, damage, health: mob.health,
+        defeated: !mob.alive, comboStep, knockback: 0, momentumStacks: player.momentumStacks,
+        secondary: true, perk } satisfies CombatHit);
+    }
   }
 
   private applyRootboundShockwave(sessionId: string, primaryMobId: string, origin: MobState, now: number): void {
     const player = this.state.players.get(sessionId);
     if (!player) return;
+    const perk = equipmentPerkStats("rootbound_hammer", equipmentReforgeRank(player.reforgeRanksJson, "rootbound_hammer"))!;
     for (const [mobId, mob] of this.state.mobs) {
       if (mobId === primaryMobId || !mob.alive || mob.health <= 0 || Math.abs(mob.y - origin.y) > 2.25) continue;
-      if (Math.hypot(mob.x - origin.x, mob.z - origin.z) > ROOTBOUND_FINISHER.radius) continue;
+      if (Math.hypot(mob.x - origin.x, mob.z - origin.z) > perk.radius!) continue;
       if (!hasCombatLineOfSight(origin, mob, this.readWorldBlock)) continue;
-      const damage = damageAfterArmor(ROOTBOUND_FINISHER.damage, mob.armor);
+      const damage = damageAfterArmor(perk.damage!, mob.armor);
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage);
       this.alertHitMob(mobId, sessionId, now, { x: origin.x, z: origin.z });
       mob.hitSequence += 1;
-      if (this.staggerMob(mobId, mob, now, ROOTBOUND_FINISHER.rootMs, true)) {
-        this.broadcast("combat:stagger", { attackerId: sessionId, mobId, durationMs: ROOTBOUND_FINISHER.rootMs } satisfies CombatStagger);
+      if (this.staggerMob(mobId, mob, now, perk.durationMs!, true)) {
+        this.broadcast("combat:stagger", { attackerId: sessionId, mobId, durationMs: perk.durationMs! } satisfies CombatStagger);
       }
       if (mob.health === 0) this.defeatMob(mobId, mob, sessionId, now);
       this.broadcast("combat:hit", {
@@ -4857,6 +4934,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         knockback: 0,
         momentumStacks: player.momentumStacks,
         secondary: true,
+        perk: "rootfall",
       } satisfies CombatHit);
     }
   }

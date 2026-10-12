@@ -8196,7 +8196,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (message.rootShockwave && mob) createRootboundShockwave(mob);
     if (message.defeated) mob?.marks.clear();
     if (message.secondary) {
-      logMovementEvent(`ROOT WAVE ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
+      if (message.attackerId === room?.sessionId && !rangedHit && mob) {
+        const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
+        createRangedPopup(position, `−${message.damage}`, "damage", message.defeated);
+      }
+      const perkName = message.perk === "core_quake" ? "CORE QUAKE" : message.perk === "moon_arc" ? "MOON ARC"
+        : message.perk === "echo_chain" ? "ECHO CHAIN" : "ROOTFALL";
+      if (message.attackerId === room?.sessionId) showCombatFeedback(`${perkName}  −${message.damage}`, "dodge");
+      logMovementEvent(`${perkName} ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
       return;
     }
     const name = mob?.state.name ?? "Mob";
@@ -8219,12 +8226,16 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       showCombatFeedback(
         message.defeated
           ? "DEFEATED"
+          : message.perk === "venom_bloom"
+            ? `VENOM BLOOM!  −${message.damage}`
           : (message.traitBonusDamage ?? 0) > 0
             ? `EXECUTION!  −${message.damage}`
           : hitLabel,
       );
       if (localTraitId === "momentum") status.textContent += ` · Momentum ${message.momentumStacks}/${MOMENTUM_TRAIT.maxStacks}.`;
       else if ((message.traitBonusDamage ?? 0) > 0) status.textContent += ` · Executioner +${message.traitBonusDamage} damage.`;
+      if (message.mainHandId === "venom_focus" && message.perk !== "venom_bloom") status.textContent += ` · Venom ${message.perkStacks ?? 0}/3.`;
+      else if (message.perk === "venom_bloom") status.textContent += " · Venom Bloom detonated.";
     }
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {
@@ -8271,6 +8282,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (message.playerId !== room?.sessionId) return;
     if (message.momentumStacks !== undefined) updateMomentum(message.momentumStacks);
     if (message.defeated) showDefeat(mobVisuals.get(message.mobId)?.state.name ?? "An enemy");
+    if (message.absorbed) {
+      showCombatFeedback("BASTION WARD", "block");
+      status.textContent = "Bastion Ward absorbed the heavy hit · the ward is recharging.";
+      logMovementEvent(`BASTION WARD ${message.mobId}`);
+      return;
+    }
     if (message.guarded) return;
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
     showCombatFeedback(message.defeated ? "DEFEATED" : `HURT  −${message.damage}`, "hurt");
@@ -8294,11 +8311,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     updateMomentum(message.momentumStacks);
     const attackerName = mobVisuals.get(message.mobId)?.state.name ?? "Enemy";
     showCombatFeedback(message.parried ? "PARRY!" : message.damage > 0 ? `GUARD  −${message.damage}` : "BLOCK", "block");
+    if ((message.perkStaminaRestored ?? 0) > 0) showCombatFeedback(`LIVING GUARD  +${message.perkStaminaRestored} ST`, "block");
     status.textContent = message.parried
       ? localTraitId === "bulwark"
         ? `${attackerName} parried and staggered · Bulwark restored stamina · counter now.`
         : `${attackerName} parried and staggered · counter now.`
-      : `${attackerName} guarded · ${message.damage} damage taken · ${message.stamina} stamina remaining.`;
+      : `${attackerName} guarded · ${message.damage} damage taken · ${message.stamina} stamina remaining.${(message.perkStaminaRestored ?? 0) > 0 ? ` Living Guard restored ${message.perkStaminaRestored}.` : ""}`;
     logMovementEvent(`${message.parried ? "PARRY" : "GUARD"} ${message.mobId} damage=${message.damage} stamina=${message.stamina}`);
   });
   room.onMessage("combat:reward", (message: CombatReward) => {

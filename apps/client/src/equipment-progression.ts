@@ -5,6 +5,7 @@ import {
   armourForItem,
   equipmentForItem,
   itemRarity,
+  equipmentPerkStats,
   type BlacksmithReforgeItemId,
   type ItemId,
 } from "@blockcraft/protocol";
@@ -48,11 +49,13 @@ export function collectionProgress(owned: ReadonlyMap<ItemId, number>): { found:
 
 export function equipmentProgressionText(itemId: ItemId, rank: number): string {
   const recipe = BLACKSMITH_REFORGE[itemId as BlacksmithReforgeItemId];
-  if (!recipe) return itemId === "reinforced_pickaxe" || itemId === "miners_lantern" ? "Utility gear · automatically active when owned" : "No reforge path";
+  const perk = equipmentPerkStats(itemId, rank);
+  const perkText = perk ? `${perk.name}: ${perk.detail}` : "";
+  if (!recipe) return perkText || (itemId === "reinforced_pickaxe" || itemId === "miners_lantern" ? "Utility gear · automatically active when owned" : "No reforge path");
   const safeRank = Math.max(0, Math.min(recipe.costs.length, Math.floor(rank)));
-  if (safeRank >= recipe.costs.length) return "Reforge Rank III · fully upgraded";
+  if (safeRank >= recipe.costs.length) return `${perkText ? `${perkText} · ` : ""}Reforge Rank III · fully upgraded`;
   const cost = recipe.costs[safeRank]!;
-  return `Next: Rank ${["I", "II", "III"][safeRank]} · ${cost.gold} gold + ${cost.material} ${ITEM_DEFINITIONS[recipe.materialId].name}`;
+  return `${perkText ? `${perkText} · ` : ""}Next: Rank ${["I", "II", "III"][safeRank]} · ${cost.gold} gold + ${cost.material} ${ITEM_DEFINITIONS[recipe.materialId].name}`;
 }
 
 export function equipmentCollectionLabel(itemId: ItemId, owned: boolean, rank = 0): string {

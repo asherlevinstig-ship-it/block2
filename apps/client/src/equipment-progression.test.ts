@@ -20,5 +20,6 @@ describe("equipment progression", () => {
     expect(equipmentCollectionLabel("matriarch_edge", true, 2)).toBe("LEGENDARY · RANK II");
     expect(equipmentProgressionText("forged_sword", 0)).toContain("18 gold + 3 Iron Ore");
     expect(equipmentProgressionText("forged_sword", 3)).toContain("fully upgraded");
+    expect(equipmentProgressionText("venom_focus", 2)).toContain("Venom Bloom: Three hits within 4s burst for 4 bonus damage");
   });
 });

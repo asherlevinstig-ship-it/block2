@@ -402,6 +402,51 @@ export const EQUIPMENT_RARITY = {
 export function itemRarity(itemId: string): ItemRarity {
   return Object.hasOwn(EQUIPMENT_RARITY, itemId) ? EQUIPMENT_RARITY[itemId as keyof typeof EQUIPMENT_RARITY] : "common";
 }
+
+export type EquipmentPerkId = "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain";
+export const EQUIPMENT_PERK_ITEMS = {
+  stone_core_hammer: "core_quake",
+  rootbound_hammer: "rootfall",
+  matriarch_edge: "moon_arc",
+  rootguard_armour: "living_guard",
+  bastion_plate: "bastion_ward",
+  venom_focus: "venom_bloom",
+  echo_prism: "echo_chain",
+} as const satisfies Partial<Record<ItemId, EquipmentPerkId>>;
+export function equipmentPerkStats(itemId: string, rank = 0): { id: EquipmentPerkId; name: string; detail: string; damage?: number; radius?: number; durationMs?: number; stamina?: number; cooldownMs?: number; stacks?: number; windowMs?: number } | null {
+  const safeRank = Math.max(0, Math.min(3, Math.floor(rank)));
+  switch (EQUIPMENT_PERK_ITEMS[itemId as keyof typeof EQUIPMENT_PERK_ITEMS]) {
+    case "core_quake": {
+      const radius = 1.7 + safeRank * .15, damage = 1 + Math.floor(safeRank / 2);
+      return { id: "core_quake", name: "Core Quake", damage, radius, detail: `Overhead hits pulse for ${damage} damage within ${radius.toFixed(2)}m` };
+    }
+    case "rootfall": {
+      const radius = 2.35 + safeRank * .15, damage = 1 + Math.floor(safeRank / 2), rootMs = 650 + safeRank * 75;
+      return { id: "rootfall", name: "Rootfall", damage, radius, durationMs: rootMs, detail: `Combo finishers deal ${damage} damage within ${radius.toFixed(2)}m and root for ${(rootMs / 1000).toFixed(2)}s` };
+    }
+    case "moon_arc": {
+      const radius = 2.7 + safeRank * .15, damage = 2 + Math.floor(safeRank / 2);
+      return { id: "moon_arc", name: "Moon Arc", damage, radius, detail: `Third combo hits arc for ${damage} damage within ${radius.toFixed(2)}m` };
+    }
+    case "living_guard": {
+      const stamina = 8 + safeRank * 2;
+      return { id: "living_guard", name: "Living Guard", stamina, detail: `Successful guards restore ${stamina} stamina` };
+    }
+    case "bastion_ward": {
+      const cooldownMs = 14_000 - safeRank * 1_000;
+      return { id: "bastion_ward", name: "Bastion Ward", cooldownMs, detail: `Negates one unguarded hit of 3+ damage every ${cooldownMs / 1000}s` };
+    }
+    case "venom_bloom": {
+      const damage = 2 + safeRank;
+      return { id: "venom_bloom", name: "Venom Bloom", damage, stacks: 3, windowMs: 4_000, detail: `Three hits within 4s burst for ${damage} bonus damage` };
+    }
+    case "echo_chain": {
+      const radius = 3.5 + safeRank * .25, damage = 1 + Math.ceil(safeRank / 2);
+      return { id: "echo_chain", name: "Echo Chain", damage, radius, detail: `Bolts ricochet once for ${damage} damage within ${radius.toFixed(2)}m` };
+    }
+    default: return null;
+  }
+}
 export const TradeRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
   z.object({ action: z.literal("accept"), tradeId: z.string().max(160) }),
@@ -978,6 +1023,10 @@ export interface CombatHit {
   rootShockwave?: boolean;
   /** Secondary enemy struck by the Rootbound finisher's area shockwave. */
   secondary?: boolean;
+  /** Fixed equipment identity responsible for bonus damage or area impact. */
+  perk?: EquipmentPerkId;
+  /** Current buildup for stacking perks such as Venom Bloom. */
+  perkStacks?: number;
 }
 
 export const ROOTBOUND_FINISHER = { radius: 2.35, damage: 1, rootMs: 650 } as const;
@@ -1056,6 +1105,7 @@ export interface PlayerHit {
   guarded?: boolean;
   parried?: boolean;
   momentumStacks?: number;
+  absorbed?: boolean;
 }
 
 export interface DefenseResolved {
@@ -1066,6 +1116,7 @@ export interface DefenseResolved {
   damage: number;
   stamina: number;
   momentumStacks: number;
+  perkStaminaRestored?: number;
 }
 
 export interface CombatReward {
