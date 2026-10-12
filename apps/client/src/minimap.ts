@@ -1,5 +1,5 @@
 import { Block, RENEWABLE_MINERAL_DEPOSITS, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
-import type { MineralDepositStatus, SilverDepthsGateStatus, SilverDepthsPing } from "@blockcraft/protocol";
+import { ITEM_DEFINITIONS, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
 
@@ -96,6 +96,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
   setDungeonGateStatus(status: SilverDepthsGateStatus): void;
+  setDungeonCacheStatus(status: SilverDepthsCacheStatus): void;
   setDungeonPing(ping: SilverDepthsPing): void;
   setPingHandler(handler: (x: number, z: number) => void): void;
   surfaceGuideEnabled(): boolean;
@@ -114,6 +115,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let cachedRoute: DungeonMapRoute | null = null;
   let cachedRouteKey = "";
   const dungeonPings = new Map<string, SilverDepthsPing & { expiresAt: number }>();
+  let dungeonCache: SilverDepthsCacheStatus | null = null;
   let pingHandler: ((x: number, z: number) => void) | null = null;
   const panel = canvas.closest<HTMLElement>("#minimap");
   const surfaceButton = document.querySelector<HTMLButtonElement>("#minimap-surface")!;
@@ -182,7 +184,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     setCaveState(state) { caveState = state; },
     setDungeonState(state) {
       dungeonState = state;
-      if (!state) { dungeonPings.clear(); dungeonGates = null; cachedRouteKey = ""; }
+      if (!state) { dungeonPings.clear(); dungeonGates = null; dungeonCache = null; cachedRouteKey = ""; }
       if (panel && panel.dataset.dungeon !== String(state !== null)) {
         panel.dataset.dungeon = String(state !== null);
         panel.querySelector<HTMLElement>("#minimap-title")!.textContent = state ? "SILVER DEPTHS MAP" : "EXPLORER MAP";
@@ -190,6 +192,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     },
     setDungeonGateStatus(status) {
       dungeonGates = status; cachedRouteKey = ""; lastUpdate = -Infinity;
+    },
+    setDungeonCacheStatus(status: SilverDepthsCacheStatus) {
+      dungeonCache = status; lastUpdate = -Infinity;
     },
     setDungeonPing(ping) {
       if (!Number.isFinite(ping.x + ping.z) || ping.durationMs <= 0) return;
@@ -224,7 +229,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         const distance = Math.round(Math.hypot(state.objective.x - player.x, state.objective.z - player.z));
         const newestPing = pings.at(-1);
         const routeDescription = !dungeonGates ? "Checking gates" : !cachedRoute ? "No route" : cachedRoute.reachesObjective ? "Route open" : "Route blocked by a closed gate";
-        detail.textContent = `Next: ${state.objective.title} · ${distance}m · ${routeDescription}${newestPing ? ` · ${newestPing.senderName} pinged` : ""} · Click map to ping`;
+        detail.textContent = `Next: ${state.objective.title} · ${distance}m · ${routeDescription}${dungeonCache && !dungeonCache.opened ? ` · Optional cache: mine wall ore for ${dungeonCache.quantity} ${ITEM_DEFINITIONS[dungeonCache.itemId].name}` : ""}${newestPing ? ` · ${newestPing.senderName} pinged` : ""} · Click map to ping`;
         canvas.setAttribute("aria-label", `Silver Depths map. Next: ${state.objective.title}, ${distance} metres away. ${routeDescription}. ${points.teammates.map(teammate => `${teammate.name} ${teammate.state}`).join(", ") || "No teammates on this floor"}.`);
         if (!visible || !context) return;
         const ctx = context, scale = MAP_SIZE / (MAP_RANGE * 2);
@@ -257,6 +262,15 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           ctx.strokeStyle = !known ? "#a6a1b4" : open ? "#76dfad" : "#ff806f"; ctx.lineWidth = open ? 3 : 5; ctx.stroke();
           ctx.fillStyle = !known ? "#e0d9ec" : open ? "#a8f9cb" : "#ffc0b5"; ctx.font = "bold 8px system-ui"; ctx.textAlign = "center";
           ctx.fillText(`${gate.label} ${!known ? "…" : open ? "OPEN" : "LOCKED"}`, middle.x, middle.y - 7);
+        }
+        if (dungeonCache && !dungeonCache.opened) {
+          const cache = mapPoint(player, { x: dungeonCache.x + .5, z: dungeonCache.z + .5 });
+          ctx.fillStyle = dungeonCache.wing === "iron" ? "#ffc177" : "#bcecff";
+          ctx.strokeStyle = "#251536"; ctx.lineWidth = 2;
+          ctx.fillRect(cache.x - 5, cache.y - 5, 10, 10);
+          ctx.strokeRect(cache.x - 5, cache.y - 5, 10, 10);
+          ctx.font = "bold 8px system-ui"; ctx.textAlign = "center";
+          ctx.fillText("ORE CACHE", cache.x, cache.y - 10);
         }
         const center = MAP_SIZE / 2, target = points.objective;
         ctx.beginPath(); ctx.moveTo(target.x, target.y - 8); ctx.lineTo(target.x + 8, target.y);

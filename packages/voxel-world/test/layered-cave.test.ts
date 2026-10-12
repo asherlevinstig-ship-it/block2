@@ -84,7 +84,8 @@ describe("two-level mine", () => {
       expect(read(x!, 0, z!)).not.toBe(Block.Air);
     }
     expect(read(98, 1, 8)).toBe(Block.Stone);
-    expect(read(98, 1, -15)).toBe(Block.SilverOre);
+    expect(read(98, 1, -15)).toBe(Block.IronOre);
+    expect(read(100, 1, 36)).toBe(Block.SilverOre);
     // The final chamber spans more than thirty blocks across its dodge axis.
     expect(read(126, 1, 0)).toBe(Block.Air);
     expect(read(138, 1, 30)).toBe(Block.Air);

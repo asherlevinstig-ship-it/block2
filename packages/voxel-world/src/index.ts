@@ -40,6 +40,10 @@ export const SILVER_DEPTHS_GALLERY_GATE = { x: 108, minZ: 10, maxZ: 19 } as cons
 export const SILVER_DEPTHS_BOSS_GATE = { x: 123, minZ: 7, maxZ: 22 } as const;
 export const SILVER_DEPTHS_IRON_GATE = { z: 3, minX: 96, maxX: 100 } as const;
 export const SILVER_DEPTHS_SILVER_GATE = { z: 26, minX: 96, maxX: 100 } as const;
+export const SILVER_DEPTHS_WING_CACHES = {
+  iron: { x: 100, y: 1, z: -15, block: 5, itemId: "stone_core", quantity: 2, dropZ: -13.5 },
+  silver: { x: 100, y: 1, z: 36, block: 8, itemId: "acid_gland", quantity: 2, dropZ: 35.5 },
+} as const;
 export const SILVER_DEPTHS_EXIT_POSITION = { x: 137.5, y: 1, z: 14.5 } as const;
 export const SILVER_DEPTHS_ROOMS = [
   { minX: 61, maxX: 73, minZ: 5, maxZ: 20 }, // arrival chamber
@@ -484,8 +488,8 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
       if (isSilverDepthsProgressionGate(worldX, worldZ) && y >= 1 && y <= 4) return Block.Stone;
       // Optional mining wings reward exploration without creating a second
       // route around the Moonstone seal that gates the combat gallery.
-      if (((worldZ === -15 && worldX >= 94 && worldX <= 101)
-        || (worldZ === 36 && worldX >= 96 && worldX <= 104)) && y >= 1 && y <= 2) return Block.SilverOre;
+      if (worldZ === -15 && worldX >= 94 && worldX <= 101 && y >= 1 && y <= 2) return Block.IronOre;
+      if (worldZ === 36 && worldX >= 96 && worldX <= 104 && y >= 1 && y <= 2) return Block.SilverOre;
       const walkable = SILVER_DEPTHS_ROOMS.some(room => worldX >= room.minX && worldX <= room.maxX
         && worldZ >= room.minZ && worldZ <= room.maxZ);
       if (walkable && y >= 1 && y <= 5) return Block.Air;

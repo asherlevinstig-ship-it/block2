@@ -141,6 +141,7 @@ import {
   type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
   type SilverDepthsWingRewardStatus,
+  type SilverDepthsCacheStatus,
   type SilverDepthsCheckpointStatus,
   type SilverDepthsPartyStatus,
   type SilverDepthsGateStatus,
@@ -7383,6 +7384,10 @@ async function connect(): Promise<void> {
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
+  room.onMessage("depths:cache", (update: SilverDepthsCacheStatus) => {
+    minimap.setDungeonCacheStatus(update);
+    if (update.opened) showCombatFeedback("HIDDEN ORE CACHE OPENED", "dodge");
+  });
   room.onMessage("depths:checkpoint", (update: SilverDepthsCheckpointStatus) => renderDepthsCheckpointStatus(update));
   room.onMessage("depths:party-status", (update: SilverDepthsPartyStatus) => renderDepthsPartyStatus(update));
   room.onMessage("depths:gates", (status: SilverDepthsGateStatus) => {

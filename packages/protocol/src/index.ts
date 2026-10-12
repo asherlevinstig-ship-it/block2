@@ -764,6 +764,15 @@ export type SilverDepthsWingRewardStatus = {
   partyGearTotal: number;
 };
 
+export type SilverDepthsCacheStatus = {
+  wing: "iron" | "silver";
+  x: number;
+  z: number;
+  itemId: "stone_core" | "acid_gland";
+  quantity: number;
+  opened: boolean;
+};
+
 export type SilverDepthsCheckpointStatus = {
   phase: "waiting" | "open";
   readyCount: number;

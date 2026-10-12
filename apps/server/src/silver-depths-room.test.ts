@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { MATRIARCH_PHASE, SILVER_DEPTHS_ROOM, WORLD_ROOM, crystalMatriarchPattern, spitterShotEndpoints } from "@blockcraft/protocol";
-import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
+import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, worldToChunk } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
+import { ironCapacity } from "./blacksmith.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 import { silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 
@@ -267,6 +268,47 @@ describe("Silver Depths room travel", () => {
     expect(internal.readWorldBlock(SILVER_DEPTHS_SILVER_GATE.minX, 1, SILVER_DEPTHS_SILVER_GATE.z)).toBe(Block.Stone);
     expect(room.state.lootDrops.has("depths-wing-reward:friend")).toBe(false);
     expect(room.state.lootDrops.has("depths-wing-gear:friend")).toBe(false);
+  });
+
+  it.each(["iron", "silver"] as const)("opens the optional %s cache only after its route is chosen and only once per run", wing => {
+    const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.roomKind = "silver-depths";
+    internal.silverDepthsRuns.set("miner", { completedAt: 0 });
+    const friend = new PlayerState(); room.state.players.set("friend", friend);
+    internal.silverDepthsRuns.set("friend", { completedAt: 0 });
+    const cache = SILVER_DEPTHS_WING_CACHES[wing];
+    Object.assign(player, { x: cache.x + .5, y: 1, z: cache.dropZ });
+    const oreId = wing === "iron" ? "iron_ore" : "silver_ore";
+    const oreCapacity = ironCapacity(player.blacksmithUpgrades);
+    const fullOre = new InventoryItemState(); fullOre.quantity = oreCapacity;
+    player.inventory.set(oreId, fullOre);
+    const address = worldToChunk(cache.x, cache.z);
+    const request = () => ({ requestId: "cache-mine", x: cache.x, y: cache.y, z: cache.z,
+      expectedRevision: internal.getChunk(address.chunkX, address.chunkZ).revision });
+    expect(internal.readWorldBlock(cache.x, cache.y, cache.z)).toBe(cache.block);
+    expect(internal.readWorldBlock(cache.x, cache.y, wing === "iron" ? -14 : 35)).toBe(Block.Air);
+    internal.beginMine(client, request());
+    expect(internal.pendingMining.size).toBe(0);
+    client.send.mockClear();
+    internal.silverDepthsWing = wing;
+    internal.silverDepthsEncounterStage = 2;
+    internal.beginMine(client, request());
+    expect(internal.pendingMining.size).toBe(1);
+    internal.resolveMining(Date.now() + 2_000);
+    expect(internal.pendingMining.size).toBe(0);
+    expect(client.send.mock.calls.filter(([name]) => name === "action:rejected")).toEqual([]);
+    expect(internal.readWorldBlock(cache.x, cache.y, cache.z)).toBe(Block.Air);
+    expect(player.inventory.get(oreId)?.quantity).toBe(oreCapacity);
+    expect(internal.silverDepthsCacheStatus()).toMatchObject({ wing, opened: true, itemId: cache.itemId });
+    for (const id of ["miner", "friend"]) expect(room.state.lootDrops.get(`depths-mining-cache:${id}`))
+      .toMatchObject({ ownerId: id, itemId: cache.itemId, quantity: cache.quantity, z: cache.dropZ });
+    internal.handleMine(client, request());
+    expect([...room.state.lootDrops.keys()].filter(id => id.startsWith("depths-mining-cache:"))).toHaveLength(2);
+    internal.resetSilverDepthsInstance();
+    expect(internal.readWorldBlock(cache.x, cache.y, cache.z)).toBe(cache.block);
+    expect(internal.silverDepthsCacheStatus()).toBeNull();
+    expect([...room.state.lootDrops.keys()].filter(id => id.startsWith("depths-mining-cache:"))).toHaveLength(0);
   });
 
   it("keeps the Matriarch gate shut until each remaining player readies at the checkpoint", () => {

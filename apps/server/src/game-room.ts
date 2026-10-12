@@ -30,7 +30,7 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, silverDepthsPingLocation } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -81,6 +81,7 @@ import {
   type BlacksmithUpgradeId,
   type SilverDepthsRewardId,
   type SilverDepthsWingRewardStatus,
+  type SilverDepthsCacheStatus,
   type SilverDepthsCheckpointStatus,
   type SilverDepthsPartyStatus,
   type SilverDepthsGateStatus,
@@ -409,6 +410,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private instancePartySize = 1;
   private silverDepthsEncounterStage: SilverDepthsEncounterStage = 1;
   private silverDepthsWing: SilverDepthsWing | null = null;
+  private silverDepthsCacheOpened = false;
   private silverDepthsNextHazardAt = 0;
   private silverDepthsHazardSequence = 0;
   private readonly silverDepthsPendingHazards: DepthsRouteHazard[] = [];
@@ -498,6 +500,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const run = this.silverDepthsRuns.get(client.sessionId);
       if (this.roomKind === "silver-depths" && run) {
         client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: run.partySize } satisfies DungeonRunUpdate);
+        this.sendSilverDepthsCacheStatus(client);
         const rewards = this.silverDepthsWingRewardStatus(client.sessionId);
         if (rewards) client.send("depths:wing-rewards", rewards);
         this.sendSilverDepthsCheckpointStatus(client.sessionId);
@@ -802,6 +805,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.broadcastSilverDepthsPartyStatus();
     const rewards = this.silverDepthsWingRewardStatus(client.sessionId);
     if (rewards) client.send("depths:wing-rewards", rewards);
+    this.sendSilverDepthsCacheStatus(client);
     this.sendSilverDepthsCheckpointStatus(client.sessionId);
   }
 
@@ -2096,6 +2100,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return;
     }
     this.silverDepthsWing = parsed.data.wing;
+    this.silverDepthsCacheOpened = false;
     this.silverDepthsNextHazardAt = Date.now() + 3_500;
     this.setSilverDepthsWingGate(this.silverDepthsWing === "iron" ? SILVER_DEPTHS_IRON_GATE : SILVER_DEPTHS_SILVER_GATE,
       true, `${this.silverDepthsWing}-wing-gate`);
@@ -2108,7 +2113,40 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           : "SILVER ECHO CHOSEN · dodge the Echo Spitters in the southern wing for silver ore.");
     }
     this.spawnSilverDepthsStage(2);
+    this.broadcastSilverDepthsCacheStatus();
     this.refreshNearbyObjectives();
+  }
+
+  private silverDepthsCacheStatus(): SilverDepthsCacheStatus | null {
+    if (this.roomKind !== "silver-depths" || !this.silverDepthsWing) return null;
+    const cache = SILVER_DEPTHS_WING_CACHES[this.silverDepthsWing];
+    return { wing: this.silverDepthsWing, x: cache.x, z: cache.z, itemId: cache.itemId,
+      quantity: cache.quantity, opened: this.silverDepthsCacheOpened };
+  }
+
+  private sendSilverDepthsCacheStatus(client: Client): void {
+    const status = this.silverDepthsCacheStatus();
+    if (status) client.send("depths:cache", status);
+  }
+
+  private broadcastSilverDepthsCacheStatus(): void {
+    const status = this.silverDepthsCacheStatus();
+    if (status) this.broadcast("depths:cache", status);
+  }
+
+  private openSilverDepthsCache(): void {
+    if (!this.silverDepthsWing || this.silverDepthsCacheOpened) return;
+    this.silverDepthsCacheOpened = true;
+    const cache = SILVER_DEPTHS_WING_CACHES[this.silverDepthsWing];
+    for (const id of this.activeSilverDepthsParticipants()) {
+      const drop = new LootDropState();
+      Object.assign(drop, { x: cache.x + .5, y: 1.22, z: cache.dropZ, ownerId: id,
+        itemId: cache.itemId, quantity: cache.quantity, expiresAt: Number.MAX_SAFE_INTEGER });
+      this.state.lootDrops.set(`depths-mining-cache:${id}`, drop);
+      this.clients.find(client => client.sessionId === id)?.send("portal:notice",
+        `HIDDEN ${this.silverDepthsWing.toUpperCase()} CACHE OPENED · collect ${cache.quantity} ${ITEM_DEFINITIONS[cache.itemId].name} at the seam.`);
+    }
+    this.broadcastSilverDepthsCacheStatus();
   }
 
   private silverDepthsWingRewardStatus(playerId: string): SilverDepthsWingRewardStatus | null {
@@ -2248,7 +2286,15 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private resetSilverDepthsInstance(): void {
     for (const id of SILVER_DEPTHS_ENEMY_IDS) this.state.mobs.delete(id);
-    for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:") || id.startsWith("depths-wing-gear:")) this.state.lootDrops.delete(id);
+    for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:") || id.startsWith("depths-wing-gear:") || id.startsWith("depths-mining-cache:")) this.state.lootDrops.delete(id);
+    this.silverDepthsCacheOpened = false;
+    for (const cache of Object.values(SILVER_DEPTHS_WING_CACHES)) {
+      const address = worldToChunk(cache.x, cache.z), stored = this.getChunk(address.chunkX, address.chunkZ);
+      if (getBlock(stored.chunk, address.localX, cache.y, address.localZ) === cache.block) continue;
+      setBlock(stored.chunk, address.localX, cache.y, address.localZ, cache.block); stored.revision++;
+      this.broadcast("block:changed", { requestId: `depths-cache-${cache.x}:${cache.z}-restore`,
+        x: cache.x, y: cache.y, z: cache.z, block: cache.block, revision: stored.revision } satisfies BlockChanged);
+    }
     this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false; this.silverDepthsGates.seal = false; this.silverDepthsWing = null;
     this.silverDepthsAwaitingReady = false; this.silverDepthsCheckpointReady.clear();
     this.silverDepthsRoster.clear(); this.silverDepthsFallen.clear(); this.silverDepthsDisconnected.clear();
@@ -3928,6 +3974,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const address = worldToChunk(request.x, request.z);
     const stored = this.getChunk(address.chunkX, address.chunkZ);
     const block = getBlock(stored.chunk, address.localX, request.y, address.localZ);
+    const cacheWing = (Object.keys(SILVER_DEPTHS_WING_CACHES) as SilverDepthsWing[]).find(wing => {
+      const cache = SILVER_DEPTHS_WING_CACHES[wing];
+      return request.x === cache.x && request.y === cache.y && request.z === cache.z;
+    });
+    if (this.roomKind === "silver-depths" && cacheWing && (cacheWing !== this.silverDepthsWing
+      || this.silverDepthsEncounterStage < 2 || this.silverDepthsCacheOpened
+      || !this.silverDepthsRuns.has(client.sessionId)))
+      return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
     if (block === Block.MoonstoneOre && player.silverDepthsStage < 2) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
     const depthsRun = this.silverDepthsRuns.get(client.sessionId);
     if (block === Block.MoonstoneOre && (!depthsRun || depthsRun.completedAt > 0 || depthsRun.moonstoneCollected >= 1)) {
@@ -3939,7 +3993,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (movement && Math.hypot(movement.strafe, movement.forward) > 0.01) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "moving" });
     if (!miningLineClear(player, request, this.readWorldBlock)) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "collision" });
     const mineral = minedMineral(block);
-    if (mineral && (player.inventory.get(mineral)?.quantity ?? 0) >= ironCapacity(player.blacksmithUpgrades)) {
+    if (mineral && !cacheWing && (player.inventory.get(mineral)?.quantity ?? 0) >= ironCapacity(player.blacksmithUpgrades)) {
       client.send("resource:gathered", { itemId: mineral, quantity: 0, total: player.inventory.get(mineral)!.quantity } satisfies ResourceGathered);
       return;
     }
@@ -3985,6 +4039,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const address = worldToChunk(request.x, request.z);
     const stored = this.getChunk(address.chunkX, address.chunkZ);
     const current = getBlock(stored.chunk, address.localX, request.y, address.localZ);
+    const cacheWing = (Object.keys(SILVER_DEPTHS_WING_CACHES) as SilverDepthsWing[]).find(wing => {
+      const cache = SILVER_DEPTHS_WING_CACHES[wing];
+      return request.x === cache.x && request.y === cache.y && request.z === cache.z;
+    });
+    if (this.roomKind === "silver-depths" && cacheWing && (cacheWing !== this.silverDepthsWing
+      || this.silverDepthsEncounterStage < 2 || this.silverDepthsCacheOpened
+      || !this.silverDepthsRuns.has(client.sessionId)))
+      return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
     const depthsRun = this.silverDepthsRuns.get(client.sessionId);
     if (current === Block.MoonstoneOre && (!depthsRun || depthsRun.completedAt > 0 || depthsRun.moonstoneCollected >= 1)) {
       return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
@@ -3995,14 +4057,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const mineral = minedMineral(current);
     if (mineral) {
       const carried = player.inventory.get(mineral)?.quantity ?? 0;
-      if (carried >= ironCapacity(player.blacksmithUpgrades)) {
+      if (!cacheWing && carried >= ironCapacity(player.blacksmithUpgrades)) {
         client.send("resource:gathered", { itemId: mineral, quantity: 0, total: carried } satisfies ResourceGathered);
         return;
       }
     }
     setBlock(stored.chunk, address.localX, request.y, address.localZ, Block.Air);
     stored.revision += 1;
-    this.recordWorldDelta(request.x, request.y, request.z, Block.Air);
+    if (this.roomKind !== "silver-depths" || !cacheWing) this.recordWorldDelta(request.x, request.y, request.z, Block.Air);
     const changed: BlockChanged = {
       requestId: request.requestId,
       x: request.x,
@@ -4012,6 +4074,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       revision: stored.revision,
     };
     this.broadcast("block:changed", changed);
+    if (this.roomKind === "silver-depths" && cacheWing) this.openSilverDepthsCache();
     if (current === Block.MoonstoneOre && request.x === Math.floor(SILVER_DEPTHS_MOONSTONE_SEAL_POSITION.x)
       && request.y === 1 && request.z >= 10 && request.z <= 15) this.openSilverDepthsMoonstoneGate(request.requestId);
     if (mineral) this.broadcast("mineral:status", this.mineralStatus());
