@@ -17,6 +17,26 @@ describe("world objective director", () => {
     pose.miningExpeditionStage = 4; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Breach the Buried Vault");
     pose.miningExpeditionStage = 7; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Return to the Blacksmith");
   });
+  it("temporarily shows nearby wilderness activity instead of a distant expedition step", () => {
+    const pose = { ...player(8.5, 8.5), miningExpeditionStage: 0 };
+    const sentries = new Map([["ashglass-sentry-west", mob(88.5, 57.5, { name: "Ashglass Sentry", difficultyTier: 3, level: 11 })],
+      ["ashglass-sentry-east", mob(106.5, 67.5, { name: "Ashglass Sentry", difficultyTier: 3, level: 11 })]]);
+    expect(nearbyObjective("tester", pose, sentries, [], [], 10000, null).objectiveId).toBe("expedition-briefing");
+    Object.assign(pose, { x: 98, z: 62 });
+    expect(nearbyObjective("tester", pose, sentries, [], [], 10000, null).objectiveId).toBe("ashen-sentries");
+    const defeated = new Map([...sentries].map(([id, enemy]) => [id, { ...enemy, alive: false }]));
+    expect(nearbyObjective("tester", pose, defeated, [], [], 10000, "ashen-sentries").objectiveId).toBe("ashen-spire");
+    Object.assign(pose, { x: 135, z: 80 });
+    expect(nearbyObjective("tester", pose, defeated, [], [], 10000, "ashen-spire").objectiveId).toBe("explore");
+    Object.assign(pose, { x: 23, z: 3 });
+    expect(nearbyObjective("tester", pose, defeated, [], [], 10000, "explore").objectiveId).toBe("expedition-briefing");
+  });
+  it("keeps mine and dungeon progression when actually inside those rooms", () => {
+    const expedition = { ...player(39.5, 6.5, 3), miningExpeditionStage: 2 };
+    expect(nearbyObjective("tester", expedition, [["deep-cave-spitter", mob(40, 6)]], [], [], 10000, null).objectiveId).toBe("expedition-iron");
+    const depths = { ...player(94, 14, 1), miningExpeditionStage: 8, silverDepthsStage: 3, silverDepthsRunStage: 3, silverDepthsWing: "" };
+    expect(nearbyObjective("tester", depths, [], [], [], 10000, null).objectiveId).toBe("depths-route-choice");
+  });
   it("groups the mixed frontier enemies into one nearby encounter", () => {
     const mobs = new Map([["frontier-crawler", mob(63.5, 35.5)], ["frontier-support-spitter", mob(68.5, 36.5)],
       ["frontier-brute-east", mob(70.5, 32.5)]]);
@@ -101,6 +121,20 @@ describe("world objective director", () => {
     internal.sendObjectiveState(client, true); expect(client.send).toHaveBeenCalledTimes(2);
     Object.assign(pose, { x: 65, z: 23 }); internal.sendObjectiveState(client);
     expect(client.send.mock.calls[2][1].objectiveId).toBe("frontier-ruins");
+  });
+  it("updates the live banner when a new player leaves town for Ashen Reach", () => {
+    const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
+    Object.defineProperty(room, "readWorldBlock", { value: (_x: number, y: number) => y <= 7 ? Block.Stone : Block.Air });
+    const pose = new PlayerState(); Object.assign(pose, { x: 22.5, y: 8, z: 2.5, miningExpeditionStage: 0 });
+    room.state.players.set("tester", pose);
+    const client = { sessionId: "tester", send: vi.fn() } as any;
+    internal.sendObjectiveState(client);
+    expect(client.send.mock.calls[0][1].objectiveId).toBe("expedition-briefing");
+    Object.assign(pose, { x: 97.5, z: 62.5 });
+    internal.sendObjectiveState(client);
+    expect(client.send.mock.calls[1][1].objectiveId).toBe("ashen-spire");
+    internal.sendObjectiveState(client);
+    expect(client.send).toHaveBeenCalledTimes(2);
   });
   it("keeps actual kill rewards without adding fixed-checklist completion gold", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;

@@ -1,7 +1,7 @@
 import { isEquipmentItem, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
-import { MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
-import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
+import { ASHEN_SENTRY_IDS, MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
+import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; level?: number; combatState: string; targetId: string };
@@ -17,6 +17,7 @@ const GROUPS = [
   { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"] },
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"] },
   { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against rock volleys, leave the slam circle, then counter during recovery. Collect the hammer and rich silver.", ids: ["frontier-brute"] },
+  { id: "ashen-sentries", title: "Ashglass Sentries", detail: "Use the broken cover and dodge between sweeping fan volleys. Counter after their aimed shot.", ids: [...ASHEN_SENTRY_IDS] },
   ...[1, 2, 3].map(stage => ({ id: `forest-stage-${stage}`, title: stage === 3 ? "Ancient Root Guardian" : `Forest Dungeon · Room ${stage}`,
     detail: stage === 3 ? "Use roots against phase-one rock volleys. Below half health, sidestep committed charges and counter during recovery. Collect your equipment bag, then return."
       : stage === 2 ? "Use stone cover and dodge alternating aimed shots and fan gaps to open the guardian gate."
@@ -32,8 +33,62 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   });
   if (player.health <= 0) return { ...make("defeated", "Return to Town", "Use Return to Town to recover. Your dropped items remain in your recovery bag.", player, "hub"), showMarker: false };
   const mobs = new Map(mobEntries);
+  const portals = [...portalEntries], drops = [...lootEntries];
+  const localObjective = (includeFallback: boolean): WorldObjectiveUpdate | null => {
+    const town = Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) <= TOWN_SAFE_RADIUS && sameFloor({ x: 0, y: 8, z: 0 });
+    if (town) {
+      if (!includeFallback) return null;
+      const minerals = (player.inventory.get("iron_ore")?.quantity ?? 0) + (player.inventory.get("silver_ore")?.quantity ?? 0);
+      return minerals > 0 ? make("blacksmith", "Trade Your Minerals", "Take your minerals to the blacksmith and press E to trade them for gold.", TOWN_BLACKSMITH_STALL_POSITION, "hub")
+        : make("leave-town", "Explore the Wilderness", "Leave through the east gate. Nearby encounters will become your objective as you explore.", { x: 30.5, y: 8, z: 8.5 }, "hub");
+    }
+    const dungeon = isInForestDungeon(player.x, player.z);
+    const groups = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({ id: `mob-${id}`, title: mob.name, detail: "Defeat this nearby enemy and collect your item drops.", ids: [id] }))];
+    const candidates = groups.flatMap(group => {
+      const living = group.ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive && sameFloor(mob) && isInForestDungeon(mob.x, mob.z) === dungeon ? [{ id, mob }] : []; }).sort((a, b) => distance(a.mob) - distance(b.mob));
+      const target = living[0]; if (!target || distance(target.mob) > (group.id === previousId ? 32 : dungeon ? 48 : 26)) return [];
+      const update = make(group.id, group.title, group.detail, target.mob, "encounter", target.mob.difficultyTier);
+      update.recommendedLevel = `LV ${target.mob.level ?? worldLevelRange(target.mob.difficultyTier).min}`;
+      update.targetMobId = target.id; update.targetMobIds = group.ids.filter(id => mobs.has(id)); update.completedMobIds = group.ids.filter(id => mobs.get(id)?.alive === false);
+      return [{ update, distance: distance(target.mob), engaged: living.some(({ mob }) => mob.targetId === playerId || mob.combatState !== "idle" && distance(mob) <= 8) }];
+    }).sort((a, b) => a.distance - b.distance);
+    const lockedFrontier = candidates.find(candidate => candidate.update.objectiveId.includes("frontier"));
+    if ((player.level ?? 1) < 10 && lockedFrontier && !lockedFrontier.engaged) {
+      return { ...lockedFrontier.update, objectiveId: "frontier-locked", title: "Frontier Contracts Locked",
+        detail: "Reach character level 10 to track elite Frontier encounters. You may still explore and fight here.",
+        recommendedLevel: "UNLOCKS AT LV 10", showMarker: false };
+    }
+    const activeFight = candidates.find(candidate => candidate.engaged && candidate.update.objectiveId === previousId) ?? candidates.find(candidate => candidate.engaged);
+    if (activeFight) return activeFight.update;
+    if (eventWarningUntil > now && sameFloor(WILDERNESS_EVENT_POSITION) && distance(WILDERNESS_EVENT_POSITION) <= 26)
+      return make("greenwood-event-warning", `Venom Matriarch · ${Math.ceil((eventWarningUntil - now) / 1000)}s`, "Shared event incoming at the cleared camp. Gather nearby and prepare to dodge.", WILDERNESS_EVENT_POSITION, "encounter", 1);
+    const event = candidates.find(candidate => candidate.update.objectiveId === "greenwood-event");
+    if (event) return event.update;
+    const loot = drops.filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6 && isEquipmentItem(drop.itemId as ItemId)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
+    if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your equipment bag and press E to inspect or equip the item.", loot[1], "loot");
+    const portal = portals.filter(([, point]) => (point.expiresAt === 0 || now < point.expiresAt) && sameFloor(point) && distance(point) <= 18
+      && (!dungeon ? point.kind === "entry" : point.kind === "return" && candidates.length === 0)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
+    if (portal) {
+      const update = make(`portal-${portal[0]}`, dungeon ? "Return to the Wilderness" : "Enter the Forest Dungeon", "Approach the glowing portal and press E to travel.", portal[1], "portal", dungeon ? 0 : 2);
+      update.recommendedLevel = dungeon ? "SAFE RETURN" : "LV 6–10";
+      return update;
+    }
+    const nearest = candidates[0], previous = candidates.find(candidate => candidate.update.objectiveId === previousId);
+    if (nearest && (nearest.distance <= 12 || !isInAshenReach(player.x, player.z)))
+      return previous && previous.distance <= nearest.distance + 4 ? previous.update : nearest.update;
+    if (sameFloor(ASHEN_SPIRE_POSITION) && distance(ASHEN_SPIRE_POSITION) <= 28)
+      return make("ashen-spire", "Investigate the Ashen Spire", "Explore the split spire at the heart of the Ashen Reach. Beware the sentries guarding it.", ASHEN_SPIRE_POSITION, "explore", 3);
+    if (nearest) return previous && previous.distance <= nearest.distance + 4 ? previous.update : nearest.update;
+    return { ...make("explore", "Explore the Wilderness", "Move toward nearby encounters. Your objective changes with your surroundings.", player, "explore"), showMarker: false };
+  };
+  const preferNearby = (quest: WorldObjectiveUpdate): WorldObjectiveUpdate => {
+    const target = { x: quest.targetX, y: quest.targetY, z: quest.targetZ };
+    if (player.y < 7 || isInForestDungeon(player.x, player.z)
+      || sameFloor(target) && distance(target) <= (previousId === quest.objectiveId ? 22 : 18)) return quest;
+    return localObjective(false) ?? quest;
+  };
   const expeditionStage = player.miningExpeditionStage ?? 8;
-  const expedition = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => ({ ...update, recommendedLevel: "LV 1–4", progressLabel: `STEP ${step} / 8` });
+  const expedition = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => preferNearby({ ...update, recommendedLevel: "LV 1–4", progressLabel: `STEP ${step} / 8` });
   if (expeditionStage === 0) return expedition(make("expedition-briefing", "Speak to the Blacksmith", "Visit the blacksmith stall and press E to receive your first mining expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
   if (expeditionStage === 1) return expedition(make("expedition-enter-mine", "Enter the East Ore Mine", "Leave through the east gate and descend beneath the gold mine gateway.", { x: 34.5, y: 3, z: 8.5 }, "explore"), 2);
   if (expeditionStage === 2) return expedition(make("expedition-iron", "Mine Iron Ore", "Find and mine an iron block in the first underground chamber.", { x: 39.5, y: 3, z: 6.5 }, "explore"), 3);
@@ -56,7 +111,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   if (expeditionStage === 7) return expedition(make("expedition-return", "Return to the Blacksmith", "Bring the Miner's Lantern back to town and press E at the blacksmith stall to complete the expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 8);
   const depthsStage = player.silverDepthsStage ?? 0;
   const depthsUnlocked = depthsStage > 0 || (player.level ?? 1) >= 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0;
-  const depths = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => ({ ...update, recommendedLevel: "LV 7–12", progressLabel: `SILVER DEPTHS · STEP ${step} / 7` });
+  const depths = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => preferNearby({ ...update, recommendedLevel: "LV 7–12", progressLabel: `SILVER DEPTHS · STEP ${step} / 7` });
   if (depthsUnlocked && depthsStage === 0) return depths(make("depths-briefing", "Speak to the Blacksmith", "Your first expedition is complete. Return to the blacksmith to unlock The Silver Depths.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
   if (depthsUnlocked && depthsStage === 1) return depths(make("depths-enter", "Enter the Silver Depths", "Use the violet expedition portal in town to begin the level-7 dungeon run.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 2);
   if (depthsUnlocked && depthsStage === 2) return depths(make("depths-moonstone", "Mine the Moonstone Seal", "Mine one glowing Moonstone block to open the six-lane gate into the expedition wings.", SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, "explore", 3), 3);
@@ -101,43 +156,5 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   if (depthsUnlocked && depthsStage === 7 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) <= TOWN_SAFE_RADIUS && sameFloor({ x: 0, y: 8, z: 0 })) {
     return { ...depths(make("depths-repeat", "Repeat the Silver Depths", "The expedition portal remains open for repeat runs, combat practice, and additional Matriarch encounters.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 7), progressLabel: "SILVER DEPTHS · MASTERED" };
   }
-  if (Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) <= TOWN_SAFE_RADIUS && sameFloor({ x: 0, y: 8, z: 0 })) {
-    const minerals = (player.inventory.get("iron_ore")?.quantity ?? 0) + (player.inventory.get("silver_ore")?.quantity ?? 0);
-    return minerals > 0 ? make("blacksmith", "Trade Your Minerals", "Take your minerals to the blacksmith and press E to trade them for gold.", TOWN_BLACKSMITH_STALL_POSITION, "hub")
-      : make("leave-town", "Explore the Wilderness", "Leave through the east gate. Nearby encounters will become your objective as you explore.", { x: 30.5, y: 8, z: 8.5 }, "hub");
-  }
-  const dungeon = isInForestDungeon(player.x, player.z);
-  const groups = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({ id: `mob-${id}`, title: mob.name, detail: "Defeat this nearby enemy and collect your item drops.", ids: [id] }))];
-  const candidates = groups.flatMap(group => {
-    const living = group.ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive && sameFloor(mob) && isInForestDungeon(mob.x, mob.z) === dungeon ? [{ id, mob }] : []; }).sort((a, b) => distance(a.mob) - distance(b.mob));
-    const target = living[0]; if (!target || distance(target.mob) > (group.id === previousId ? 32 : dungeon ? 48 : 26)) return [];
-    const update = make(group.id, group.title, group.detail, target.mob, "encounter", target.mob.difficultyTier);
-    update.recommendedLevel = `LV ${target.mob.level ?? worldLevelRange(target.mob.difficultyTier).min}`;
-    update.targetMobId = target.id; update.targetMobIds = group.ids.filter(id => mobs.has(id)); update.completedMobIds = group.ids.filter(id => mobs.get(id)?.alive === false);
-    return [{ update, distance: distance(target.mob), engaged: living.some(({ mob }) => mob.targetId === playerId || mob.combatState !== "idle" && distance(mob) <= 8) }];
-  }).sort((a, b) => a.distance - b.distance);
-  const lockedFrontier = candidates.find(candidate => candidate.update.objectiveId.includes("frontier"));
-  if ((player.level ?? 1) < 10 && lockedFrontier && !lockedFrontier.engaged) {
-    return { ...lockedFrontier.update, objectiveId: "frontier-locked", title: "Frontier Contracts Locked",
-      detail: "Reach character level 10 to track elite Frontier encounters. You may still explore and fight here.",
-      recommendedLevel: "UNLOCKS AT LV 10", showMarker: false };
-  }
-  const activeFight = candidates.find(candidate => candidate.engaged && candidate.update.objectiveId === previousId) ?? candidates.find(candidate => candidate.engaged);
-  if (activeFight) return activeFight.update;
-  if (eventWarningUntil > now && sameFloor(WILDERNESS_EVENT_POSITION) && distance(WILDERNESS_EVENT_POSITION) <= 26)
-    return make("greenwood-event-warning", `Venom Matriarch · ${Math.ceil((eventWarningUntil - now) / 1000)}s`, "Shared event incoming at the cleared camp. Gather nearby and prepare to dodge.", WILDERNESS_EVENT_POSITION, "encounter", 1);
-  const event = candidates.find(candidate => candidate.update.objectiveId === "greenwood-event");
-  if (event) return event.update;
-  const loot = [...lootEntries].filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6 && isEquipmentItem(drop.itemId as ItemId)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
-  if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your equipment bag and press E to inspect or equip the item.", loot[1], "loot");
-  const portal = [...portalEntries].filter(([, point]) => (point.expiresAt === 0 || now < point.expiresAt) && sameFloor(point) && distance(point) <= 18
-    && (!dungeon ? point.kind === "entry" : point.kind === "return" && candidates.length === 0)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
-  if (portal) {
-    const update = make(`portal-${portal[0]}`, dungeon ? "Return to the Wilderness" : "Enter the Forest Dungeon", "Approach the glowing portal and press E to travel.", portal[1], "portal", dungeon ? 0 : 2);
-    update.recommendedLevel = dungeon ? "SAFE RETURN" : "LV 6–10";
-    return update;
-  }
-  const nearest = candidates[0], previous = candidates.find(candidate => candidate.update.objectiveId === previousId);
-  if (nearest) return previous && previous.distance <= nearest.distance + 4 ? previous.update : nearest.update;
-  return { ...make("explore", "Explore the Wilderness", "Move toward nearby encounters. Your objective changes with your surroundings.", player, "explore"), showMarker: false };
+  return localObjective(true)!;
 }
