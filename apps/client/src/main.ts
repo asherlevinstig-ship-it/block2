@@ -9,7 +9,7 @@ import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectAction, type LootCollectResult } from "@blockcraft/protocol";
-import { weaponComparison, armourComparison } from "./loot-comparison.js";
+import { weaponComparison, armourComparison, comparisonTrend } from "./loot-comparison.js";
 import { createCharacterPortrait } from "./character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
 import { projectileNearMiss } from "./projectile-near-miss.js";
@@ -94,6 +94,7 @@ import {
   ITEM_DEFINITIONS,
   ITEM_RARITIES,
   itemRarity,
+  equipmentPerkStats,
   type ItemRarity,
   HEALING_POTION,
   type PotionUpdate,
@@ -1917,30 +1918,56 @@ function updateLootWorldLabel(): void {
   lootWorldLabel.style.top = `${rect.top + screen.y}px`;
   lootWorldLabel.hidden = false;
 }
-function fillLootComparison(element: HTMLElement, id: MainHandId) {
-  const comparison = weaponComparison(id, localIronSwordOwned);
+function itemForMainHand(id: MainHandId): ItemId | null {
+  const definition = MAIN_HAND_DEFINITIONS[id];
+  return "requiredItemId" in definition ? definition.requiredItemId as ItemId : null;
+}
+function equipmentRank(itemId: ItemId | null): number {
+  return itemId ? blacksmithReforgeRanks[itemId as BlacksmithReforgeItemId] ?? 0 : 0;
+}
+function appendComparisonRow(element: HTMLElement, label: string, value: string, selectedValue: number,
+  wornValue?: number, lowerIsBetter = false): void {
+  const row = document.createElement("div"); row.className = "loot-stat";
+  if (wornValue !== undefined) row.dataset.trend = comparisonTrend(selectedValue, wornValue, lowerIsBetter);
+  const key = document.createElement("span"); key.textContent = label;
+  const stat = document.createElement("span"); stat.textContent = value;
+  row.append(key, stat); element.append(row);
+}
+function appendEquipmentIdentity(element: HTMLElement, itemId: ItemId | null, rank: number): void {
+  const rankNode = document.createElement("small"); rankNode.className = "inventory-rank";
+  rankNode.textContent = itemId ? rankLabel(rank) : "STARTER"; element.append(rankNode);
+  if (!itemId) return;
+  const perk = equipmentPerkStats(itemId, rank);
+  if (!perk) return;
+  const perkNode = document.createElement("p"); perkNode.className = "inventory-perk";
+  const perkName = document.createElement("strong"); perkName.textContent = perk.name.toUpperCase();
+  perkNode.append(perkName, document.createTextNode(perk.detail)); element.append(perkNode);
+}
+function fillLootComparison(element: HTMLElement, id: MainHandId, rank = equipmentRank(itemForMainHand(id)), compareId?: MainHandId) {
+  const comparison = weaponComparison(id, localIronSwordOwned, rank);
+  const worn = compareId ? weaponComparison(compareId, localIronSwordOwned, equipmentRank(itemForMainHand(compareId))) : null;
   element.replaceChildren();
   const title = document.createElement("strong"); title.textContent = comparison.name; element.append(title);
-  if (isEquipmentItem(id)) { const rarity = document.createElement("b"); rarity.className = "loot-rarity"; rarity.dataset.rarity = itemRarity(id); rarity.textContent = ITEM_RARITIES[itemRarity(id)].label; element.append(rarity); }
-  for (const [label, value] of [["Damage", comparison.damage], ["Reach", comparison.range], ["First attack", comparison.speed]] as const) {
-    const row = document.createElement("div"); row.className = "loot-stat";
-    const key = document.createElement("span"); key.textContent = label;
-    const stat = document.createElement("span"); stat.textContent = value;
-    row.append(key, stat); element.append(row);
-  }
+  const itemId = itemForMainHand(id);
+  if (itemId) { const rarity = document.createElement("b"); rarity.className = "loot-rarity"; rarity.dataset.rarity = itemRarity(itemId); rarity.textContent = ITEM_RARITIES[itemRarity(itemId)].label; element.append(rarity); }
+  appendEquipmentIdentity(element, itemId, rank);
+  appendComparisonRow(element, "Damage", comparison.damage, comparison.damageValue, worn?.damageValue);
+  appendComparisonRow(element, "Reach", comparison.range, comparison.rangeValue, worn?.rangeValue);
+  appendComparisonRow(element, "First attack", comparison.speed, comparison.speedValue, worn?.speedValue, true);
   const note = document.createElement("p"); note.textContent = `${comparison.style} · ${comparison.benefit}`; element.append(note);
 }
-function fillArmourComparison(element: HTMLElement, id: ArmourId) {
-  const comparison = armourComparison(id);
+function fillArmourComparison(element: HTMLElement, id: ArmourId, rank = equipmentRank(id === "none" ? null : id), compareId?: ArmourId) {
+  const comparison = armourComparison(id, rank);
+  const worn = compareId ? armourComparison(compareId, equipmentRank(compareId === "none" ? null : compareId)) : null;
   element.replaceChildren();
   const title = document.createElement("strong"); title.textContent = comparison.name; element.append(title);
   if (id !== "none") { const rarity = document.createElement("b"); rarity.className = "loot-rarity"; rarity.dataset.rarity = itemRarity(id); rarity.textContent = ITEM_RARITIES[itemRarity(id)].label; element.append(rarity); }
-  for (const [label, value] of [["Reduction", comparison.reduction], ["Movement", comparison.speed], ["Projectiles", comparison.ranged], ["Hazards", comparison.hazards], ["Minimum hit", comparison.minimum]]) {
-    const row = document.createElement("div"); row.className = "loot-stat";
-    const key = document.createElement("span"); key.textContent = label!;
-    const stat = document.createElement("span"); stat.textContent = value!;
-    row.append(key, stat); element.append(row);
-  }
+  appendEquipmentIdentity(element, id === "none" ? null : id, rank);
+  appendComparisonRow(element, "Reduction", comparison.reduction, comparison.reductionValue, worn?.reductionValue);
+  appendComparisonRow(element, "Movement", comparison.speed, comparison.speedValue, worn?.speedValue);
+  appendComparisonRow(element, "Projectiles", comparison.ranged, comparison.rangedValue, worn?.rangedValue);
+  appendComparisonRow(element, "Hazards", comparison.hazards, comparison.hazardValue, worn?.hazardValue);
+  appendComparisonRow(element, "Minimum hit", comparison.minimum, 1, worn ? 1 : undefined);
   const note = document.createElement("p"); note.textContent = comparison.note; element.append(note);
 }
 function openLoot(id: string) {
@@ -1972,10 +1999,12 @@ function openLoot(id: string) {
     document.querySelector<HTMLElement>("#loot-new")!.innerHTML = `<strong>Featured: ${featuredName}</strong><p>Also contains gold · Stone Cores · Iron Ore · Healing Potion${drop.itemId === "silver_ore" ? " · bonus Silver Ore" : ""}</p>`;
     document.querySelector<HTMLElement>("#loot-current")!.innerHTML = `<strong>${hand || armour ? "New fixed equipment" : "Repeat-clear supplies"}</strong><p>Only you can see and claim this cache. Duplicate equipment converts into silver, materials, and gold.</p>`;
   } else if (armour) {
-    fillArmourComparison(document.querySelector<HTMLElement>("#loot-new")!, armour);
+    const dropRank = owned > 0 ? equipmentRank(drop.itemId as ItemId) : 0;
+    fillArmourComparison(document.querySelector<HTMLElement>("#loot-new")!, armour, dropRank, localArmourId);
     fillArmourComparison(document.querySelector<HTMLElement>("#loot-current")!, localArmourId);
   } else if (hand) {
-    fillLootComparison(document.querySelector<HTMLElement>("#loot-new")!, hand);
+    const dropRank = owned > 0 ? equipmentRank(drop.itemId as ItemId) : 0;
+    fillLootComparison(document.querySelector<HTMLElement>("#loot-new")!, hand, dropRank, localMainHandId);
     fillLootComparison(document.querySelector<HTMLElement>("#loot-current")!, localMainHandId);
   } else if (utility) {
     document.querySelector<HTMLElement>("#loot-new")!.innerHTML = utility === "moonstone"
@@ -2034,8 +2063,8 @@ for (const entry of EQUIPMENT_COLLECTION) {
   card.querySelector<HTMLButtonElement>("button")!.addEventListener("click", () => {
     const hand = equipmentForItem(entry.itemId);
     const armour = armourForItem(entry.itemId);
-    if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; }
-    else if (armour) { previewArmour = armour; previewSlot = "armour"; }
+    if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; selectedInventoryItem = entry.itemId; }
+    else if (armour) { previewArmour = armour; previewSlot = "armour"; selectedInventoryItem = entry.itemId; }
     else return;
     inventoryPreviewDrawer.open = true;
     refreshInventoryPreview();
@@ -2270,9 +2299,33 @@ for (const group of ["hairStyle", "coatStyle"] as const) {
 }
 let previewHand: MainHandId | undefined;
 let previewArmour: ArmourId | undefined;
+let selectedInventoryItem: ItemId | undefined;
 let previewSlot: "weapon" | "armour" = "weapon";
 let inventoryComparisonKey = "";
 let inventoryBackgroundFrameAt = 0;
+const inventorySelectionActions = document.querySelector<HTMLElement>("#inventory-selection-actions")!;
+const inventorySelectedEquip = document.querySelector<HTMLButtonElement>("#inventory-selected-equip")!;
+const inventorySelectedKeep = document.querySelector<HTMLButtonElement>("#inventory-selected-keep")!;
+const inventorySelectedDismantle = document.querySelector<HTMLButtonElement>("#inventory-selected-dismantle")!;
+
+function refreshInventorySelectionActions(): void {
+  const itemId = selectedInventoryItem;
+  const hand = itemId ? equipmentForItem(itemId) : null;
+  const armour = itemId ? armourForItem(itemId) : null;
+  const owned = itemId ? (inventoryCounts.get(itemId) ?? 0) > 0 : false;
+  inventorySelectionActions.hidden = !itemId || !owned || (!hand && !armour);
+  if (inventorySelectionActions.hidden) return;
+  const equipped = hand ? hand === localMainHandId : armour === localArmourId;
+  inventorySelectedEquip.disabled = equipped;
+  inventorySelectedEquip.textContent = equipped ? "EQUIPPED" : "EQUIP NOW";
+  const recipe = Object.hasOwn(BLACKSMITH_DISMANTLE, itemId!)
+    ? BLACKSMITH_DISMANTLE[itemId! as BlacksmithDismantleItemId] : null;
+  inventorySelectedDismantle.hidden = !recipe;
+  inventorySelectedDismantle.disabled = !recipe || (equipped && (inventoryCounts.get(itemId!) ?? 0) <= 1);
+  inventorySelectedDismantle.textContent = recipe
+    ? `${inventorySelectedDismantle.disabled ? "EQUIPPED · " : ""}DISMANTLE AT SMITH · +${recipe.gold} GOLD`
+    : "DISMANTLE AT SMITH";
+}
 
 function refreshInventoryPreview(): void {
   if (inventoryPanel.hidden || !document.querySelector<HTMLDetailsElement>("#inventory-preview-drawer")!.open) return;
@@ -2290,17 +2343,18 @@ function refreshInventoryPreview(): void {
   const hand = previewHand ?? localMainHandId;
   const armour = previewArmour ?? localArmourId;
   const appearanceKey = `${hand}:${armour}:${localAppearance.skin}:${localAppearance.hair}:${localAppearance.coat}:${localAppearance.hairStyle}:${localAppearance.coatStyle}`;
-  const comparisonKey = `${appearanceKey}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${previewSlot}`;
+  const comparisonKey = `${appearanceKey}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${previewSlot}:${selectedInventoryItem ?? "worn"}:${JSON.stringify(blacksmithReforgeRanks)}`;
   inventoryPortrait.refresh(hand, armour, appearanceKey);
   if (comparisonKey === inventoryComparisonKey) return;
   inventoryComparisonKey = comparisonKey;
   const worn = document.querySelector<HTMLElement>("#inventory-worn-stats")!;
   const selected = document.querySelector<HTMLElement>("#inventory-selected-stats")!;
   if (previewSlot === "armour") {
-    fillArmourComparison(worn, localArmourId); fillArmourComparison(selected, armour);
+    fillArmourComparison(worn, localArmourId); fillArmourComparison(selected, armour, equipmentRank(selectedInventoryItem ?? (armour === "none" ? null : armour)), localArmourId);
   } else {
-    fillLootComparison(worn, localMainHandId); fillLootComparison(selected, hand);
+    fillLootComparison(worn, localMainHandId); fillLootComparison(selected, hand, equipmentRank(selectedInventoryItem ?? itemForMainHand(hand)), localMainHandId);
   }
+  refreshInventorySelectionActions();
   const changed = hand !== localMainHandId || armour !== localArmourId;
   document.querySelector<HTMLElement>("#inventory-preview-label")!.textContent = changed ? "Preview only · not equipped" : "Currently equipped";
 }
@@ -4332,7 +4386,7 @@ function setInventoryOpen(open: boolean): void {
     inventoryPreviewDrawer.open = true;
     refreshOwnedInventory();
     inventoryPanel.scrollTop = 0;
-    previewHand = undefined; previewArmour = undefined;
+    previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
     previewSlot = inventoryTabs.find(tab => tab.getAttribute("aria-selected") === "true")?.dataset.inventoryTab === "armour" ? "armour" : "weapon";
     refreshInventoryPreview();
     performancePanel.hidden = true;
@@ -4427,7 +4481,7 @@ function selectInventoryCategory(category: InventoryTab, focus = false): void {
   for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
     section.hidden = section.dataset.inventoryCategory !== category;
   }
-  previewHand = undefined; previewArmour = undefined;
+  previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
   previewSlot = category === "armour" ? "armour" : "weapon";
   if (category === "collection") inventoryPreviewDrawer.open = false;
   refreshInventoryPreview();
@@ -4444,7 +4498,7 @@ for (const tab of inventoryTabs) {
 inventoryPreviewDrawer.addEventListener("toggle", () => { if (inventoryPreviewDrawer.open) refreshInventoryPreview(); });
 refreshOwnedInventory();
 document.querySelector("#inventory-preview-reset")!.addEventListener("click", () => {
-  previewHand = undefined; previewArmour = undefined; refreshInventoryPreview();
+  previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined; inventoryComparisonKey = ""; refreshInventoryPreview();
 });
 document.querySelector<HTMLButtonElement>("#inventory-turn-left")!.addEventListener("click", () => inventoryPortrait?.turn(-45));
 document.querySelector<HTMLButtonElement>("#inventory-turn-right")!.addEventListener("click", () => inventoryPortrait?.turn(45));
@@ -4455,8 +4509,8 @@ for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipme
   button.addEventListener("click", () => {
     const hand = card.querySelector<HTMLElement>("[data-equip-main-hand]")?.dataset.equipMainHand;
     const armour = card.querySelector<HTMLElement>("[data-equip-armour]")?.dataset.equipArmour;
-    if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; }
-    else if (armour && armourForItem(armour)) { previewArmour = armourForItem(armour)!; previewSlot = "armour"; }
+    if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; selectedInventoryItem = card.dataset.item as ItemId; }
+    else if (armour && armourForItem(armour)) { previewArmour = armourForItem(armour)!; previewSlot = "armour"; selectedInventoryItem = card.dataset.item as ItemId; }
     inventoryPreviewDrawer.open = true;
     refreshInventoryPreview();
     inventoryPreviewDrawer.scrollIntoView({ block: "nearest" });
@@ -4465,6 +4519,27 @@ for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipme
   const equip = card.querySelector<HTMLButtonElement>("[data-equip-main-hand], [data-equip-armour]")!;
   actions.append(equip, button); card.append(actions);
 }
+inventorySelectedEquip.addEventListener("click", () => {
+  if (!selectedInventoryItem) return;
+  const hand = equipmentForItem(selectedInventoryItem);
+  const armour = armourForItem(selectedInventoryItem);
+  if (hand && isMainHandId(hand)) requestMainHandEquip(hand);
+  else if (armour && room && worldReady) room.send("armour:equip", { armourId: armour });
+});
+inventorySelectedKeep.addEventListener("click", () => {
+  previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
+  inventoryComparisonKey = ""; refreshInventoryPreview();
+});
+inventorySelectedDismantle.addEventListener("click", () => {
+  if (!selectedInventoryItem || inventorySelectedDismantle.disabled) return;
+  if (!canTradeAtBlacksmithStall(localPlayer.getPosition(), sceneDressing.blacksmithVisible)) {
+    setInventoryOpen(false);
+    status.textContent = "Take this item to the Town of Beginnings blacksmith to dismantle it.";
+    showCombatFeedback("BLACKSMITH REQUIRED", "hurt");
+    return;
+  }
+  openBlacksmith(); blacksmithShopTab = "dismantle"; renderWeaponShop();
+});
 window.addEventListener("pagehide", event => {
   if (event.persisted) { inventoryPortrait?.hide(); return; }
   inventoryPortrait?.destroy(); inventoryPortrait = undefined;

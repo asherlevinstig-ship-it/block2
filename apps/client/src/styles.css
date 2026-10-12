@@ -1043,6 +1043,18 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-comparison strong { font-size: .8rem; color: #f3d28b; }
 .inventory-comparison p, .inventory-preview-help { font-size: .65rem; line-height: 1.5; color: #94a89c; }
 .inventory-comparison .loot-stat { font-size: .65rem; gap: 6px; }
+.inventory-comparison .loot-stat[data-trend="better"] span:last-child { color: #7ee28b; }
+.inventory-comparison .loot-stat[data-trend="better"] span:last-child::before { content: "▲ "; }
+.inventory-comparison .loot-stat[data-trend="worse"] span:last-child { color: #ff9b87; }
+.inventory-comparison .loot-stat[data-trend="worse"] span:last-child::before { content: "▼ "; }
+.inventory-rank { display: block; margin: 3px 0 6px; color: #9eb7aa; font-size: .55rem; font-weight: 900; letter-spacing: .08em; }
+.inventory-perk { margin: 8px 0 0 !important; padding: 7px 8px; border: 1px solid #a778d855; border-radius: 6px; background: #4a246033; color: #ddb8ff !important; }
+.inventory-perk strong { display: block; color: #f0d6ff; font-size: .61rem; }
+.inventory-selection-actions { display: grid; grid-template-columns: 1.1fr 1fr 1.25fr; gap: 6px; margin-top: 10px; }
+.inventory-selection-actions button { min-height: 34px; padding: 7px; border: 1px solid #618975; border-radius: 7px; background: #173426; color: #d8f4df; cursor: pointer; font-size: .56rem; font-weight: 900; letter-spacing: .05em; }
+.inventory-selection-actions button:first-child { border-color: #6ab8da; background: #19465a; color: #dff7ff; }
+.inventory-selection-actions button:last-child { border-color: #986c58; background: #40251f; color: #f3c4ad; }
+.inventory-selection-actions button:disabled { opacity: .45; cursor: default; }
 .inventory-preview-stats > .eyebrow { font-size: .6rem; }
 .inventory-grid article.equipment button.inventory-preview-button { grid-row: 3; border-color: #91ac9870; background: #152c22; color: #bcd8c7; }
 .inventory-grid article.equipment .inventory-item-actions { grid-column: 1 / -1; display: flex; gap: 6px; }
