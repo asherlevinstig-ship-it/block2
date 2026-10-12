@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "nearby-objectives-v163";
+const SERVER_BUILD = "dungeon-room-objectives-v164";
 
 const gameServer = defineServer({
   rooms: {

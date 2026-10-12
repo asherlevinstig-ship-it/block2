@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MATRIARCH_PHASE, SILVER_DEPTHS_ROOM, WORLD_ROOM, crystalMatriarchPattern, spitterShotEndpoints } from "@blockcraft/protocol";
-import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, worldToChunk } from "@blockcraft/voxel-world";
+import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, setBlock, worldToChunk } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ironCapacity } from "./blacksmith.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
@@ -23,6 +23,17 @@ function roomWithPortal(id: "depths-entry" | "depths-return") {
 }
 
 describe("Silver Depths room travel", () => {
+  it("lets an active dungeon run mine its seal even when the town quest is unfinished", () => {
+    const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
+    internal.roomKind = "silver-depths";
+    Object.assign(player, { x: 80.5, y: 1, z: 12.5, miningExpeditionStage: 0, silverDepthsStage: 0 });
+    internal.silverDepthsRuns.set("miner", { completedAt: 0, moonstoneCollected: 0 });
+    const address = worldToChunk(82, 12), stored = internal.getChunk(address.chunkX, address.chunkZ);
+    setBlock(stored.chunk, address.localX, 1, address.localZ, Block.MoonstoneOre);
+    internal.beginMine(client, { requestId: "seal-test", expectedRevision: stored.revision, x: 82, y: 1, z: 12 });
+    expect(client.send).not.toHaveBeenCalledWith("action:rejected", expect.objectContaining({ reason: "protected" }));
+    expect(internal.pendingMining.has("miner")).toBe(true);
+  });
   it("tracks who is fighting, reconnecting, and fallen without ending a surviving teammate's run", () => {
     const { room, player, client } = roomWithPortal("depths-return"); const internal = room as any;
     internal.roomKind = "silver-depths";

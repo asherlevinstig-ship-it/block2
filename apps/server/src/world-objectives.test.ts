@@ -59,6 +59,36 @@ describe("world objective director", () => {
     expect(nearbyObjective("tester", pose, [], [], [["depths-wing-gear:tester", personalGear]], 10_000, null).title).toBe("Claim Echo Prism");
     expect(nearbyObjective("tester", pose, [], [], [["depths-wing-gear:other", { ...personalGear, ownerId: "other" }]], 10_000, null).title).toBe("Clear the Crystal Antechamber");
   });
+  it("uses the separate dungeon room's run stage even when the saved town quest is unfinished", () => {
+    const pose = { ...player(63.5, 12.5, 1), miningExpeditionStage: 0, silverDepthsStage: 0, silverDepthsRunStage: 1, silverDepthsWing: "" };
+    const selectDungeon = () => nearbyObjective("tester", pose, [], [], [], 10000, null, 0, "silver-depths");
+    expect(selectDungeon().objectiveId).toBe("depths-moonstone");
+    pose.silverDepthsRunStage = 2; expect(selectDungeon().objectiveId).toBe("depths-gallery");
+    pose.silverDepthsRunStage = 3; expect(selectDungeon().objectiveId).toBe("depths-route-choice");
+    pose.silverDepthsRunStage = 4; expect(selectDungeon().objectiveId).toBe("depths-antechamber");
+    pose.silverDepthsRunStage = 5; expect(selectDungeon().objectiveId).toBe("depths-matriarch");
+    pose.silverDepthsRunStage = 6; expect(selectDungeon().objectiveId).toBe("depths-recover");
+    pose.silverDepthsRunStage = 7; expect(selectDungeon().objectiveId).toBe("depths-return");
+    pose.silverDepthsStage = 7;
+    pose.silverDepthsRunStage = 1; expect(selectDungeon().objectiveId).toBe("depths-moonstone");
+  });
+  it("sends a dungeon objective from the room instead of a blacksmith banner", () => {
+    const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
+    internal.roomKind = "silver-depths";
+    const pose = new PlayerState(); Object.assign(pose, { x: 63.5, y: 1, z: 12.5, miningExpeditionStage: 0, silverDepthsRunStage: 1 });
+    room.state.players.set("tester", pose);
+    const client = { sessionId: "tester", send: vi.fn() } as any;
+    internal.sendObjectiveState(client);
+    expect(client.send.mock.calls[0][1].objectiveId).toBe("depths-moonstone");
+    pose.silverDepthsRunStage = 2;
+    internal.sendObjectiveState(client);
+    expect(client.send.mock.calls[1][1].objectiveId).toBe("depths-gallery");
+  });
+  it("shows the local forest encounter over an unfinished town quest", () => {
+    const pose = { ...player(172, 165), miningExpeditionStage: 0 };
+    const update = nearbyObjective("tester", pose, [["forest-room2-a", mob(176.5, 161.5)]], [], [], 10000, null);
+    expect(update.objectiveId).toBe("forest-stage-2");
+  });
   it("holds Frontier contracts until level 10 without preventing exploration", () => {
     const mobs = new Map([["frontier-crawler", mob(63.5, 35.5)], ["frontier-support-spitter", mob(68.5, 36.5)],
       ["frontier-brute-east", mob(70.5, 32.5)]]);

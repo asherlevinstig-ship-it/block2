@@ -1718,7 +1718,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (player.silverDepthsStage === 1 && isInsideSilverDepths(player)) this.advanceSilverDepthsExpedition(client, "entered_depths");
     const progress = this.objectiveProgress.get(client.sessionId) ?? createObjectiveProgress();
     this.objectiveProgress.set(client.sessionId, progress);
-    const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id, this.wildernessEvent.warningUntil);
+    const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id, this.wildernessEvent.warningUntil, this.roomKind);
     const fingerprint = JSON.stringify({ ...update, targetX: Math.round(update.targetX), targetY: Math.round(update.targetY), targetZ: Math.round(update.targetZ) });
     if (!force && fingerprint === progress.fingerprint) return;
     progress.id = update.objectiveId; progress.fingerprint = fingerprint;
@@ -4047,7 +4047,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       || this.silverDepthsEncounterStage < 2 || this.silverDepthsCacheOpened
       || !this.silverDepthsRuns.has(client.sessionId)))
       return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
-    if (block === Block.MoonstoneOre && player.silverDepthsStage < 2) return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
+    if (block === Block.MoonstoneOre && player.silverDepthsStage < 2 && this.roomKind !== "silver-depths")
+      return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });
     const depthsRun = this.silverDepthsRuns.get(client.sessionId);
     if (block === Block.MoonstoneOre && (!depthsRun || depthsRun.completedAt > 0 || depthsRun.moonstoneCollected >= 1)) {
       return this.reject(client, { requestId: request.requestId, action: "mine", reason: "protected" });

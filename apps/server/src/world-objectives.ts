@@ -24,7 +24,7 @@ const GROUPS = [
       : "Split the flanking crawlers around the root piles to open the next gate. The entrance return portal remains available.",
     ids: FOREST_DUNGEON_MOBS.filter(mob => mob.stage === stage).map(mob => mob.id) })),
 ];
-export function nearbyObjective(playerId: string, player: Player, mobEntries: Iterable<readonly [string, Mob]>, portalEntries: Iterable<readonly [string, ForestPortal]>, lootEntries: Iterable<readonly [string, Loot]>, now: number, previousId: string | null, eventWarningUntil = 0): WorldObjectiveUpdate {
+export function nearbyObjective(playerId: string, player: Player, mobEntries: Iterable<readonly [string, Mob]>, portalEntries: Iterable<readonly [string, ForestPortal]>, lootEntries: Iterable<readonly [string, Loot]>, now: number, previousId: string | null, eventWarningUntil = 0, roomKind: "overworld" | "silver-depths" = "overworld"): WorldObjectiveUpdate {
   const distance = (point: Pose) => Math.hypot(point.x - player.x, point.z - player.z);
   const sameFloor = (point: Pose) => Math.abs(point.y - player.y) <= 2.5;
   const make = (id: string, title: string, detail: string, point: Pose, kind: WorldObjectiveUpdate["kind"], tier = 0): WorldObjectiveUpdate => ({
@@ -83,11 +83,12 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   };
   const preferNearby = (quest: WorldObjectiveUpdate): WorldObjectiveUpdate => {
     const target = { x: quest.targetX, y: quest.targetY, z: quest.targetZ };
-    if (player.y < 7 || isInForestDungeon(player.x, player.z)
+    if (player.y < 7
       || sameFloor(target) && distance(target) <= (previousId === quest.objectiveId ? 22 : 18)) return quest;
     return localObjective(false) ?? quest;
   };
-  const expeditionStage = player.miningExpeditionStage ?? 8;
+  // A dungeon run is its own room and must not inherit an unfinished town quest.
+  const expeditionStage = roomKind === "silver-depths" ? 8 : player.miningExpeditionStage ?? 8;
   const expedition = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => preferNearby({ ...update, recommendedLevel: "LV 1–4", progressLabel: `STEP ${step} / 8` });
   if (expeditionStage === 0) return expedition(make("expedition-briefing", "Speak to the Blacksmith", "Visit the blacksmith stall and press E to receive your first mining expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
   if (expeditionStage === 1) return expedition(make("expedition-enter-mine", "Enter the East Ore Mine", "Leave through the east gate and descend beneath the gold mine gateway.", { x: 34.5, y: 3, z: 8.5 }, "explore"), 2);
@@ -109,8 +110,11 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       : make("expedition-recover-lantern", "Recover the Miner's Lantern", "Your personal cache is inside the vault. If it expired, defeat the Stone Warden again.", mobs.get("buried-chamber-brute") ?? { x: 56.5, y: 1, z: 9.5 }, "encounter", 3), 7);
   }
   if (expeditionStage === 7) return expedition(make("expedition-return", "Return to the Blacksmith", "Bring the Miner's Lantern back to town and press E at the blacksmith stall to complete the expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 8);
-  const depthsStage = player.silverDepthsStage ?? 0;
-  const depthsUnlocked = depthsStage > 0 || (player.level ?? 1) >= 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0;
+  const runStage = player.silverDepthsRunStage ?? 1;
+  const depthsStage = roomKind === "silver-depths"
+    ? runStage <= 1 ? 2 : runStage <= 4 ? 3 : runStage === 5 ? 4 : runStage === 6 ? 5 : 6
+    : player.silverDepthsStage ?? 0;
+  const depthsUnlocked = roomKind === "silver-depths" || depthsStage > 0 || (player.level ?? 1) >= 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0;
   const depths = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => preferNearby({ ...update, recommendedLevel: "LV 7–12", progressLabel: `SILVER DEPTHS · STEP ${step} / 7` });
   if (depthsUnlocked && depthsStage === 0) return depths(make("depths-briefing", "Speak to the Blacksmith", "Your first expedition is complete. Return to the blacksmith to unlock The Silver Depths.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
   if (depthsUnlocked && depthsStage === 1) return depths(make("depths-enter", "Enter the Silver Depths", "Use the violet expedition portal in town to begin the level-7 dungeon run.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 2);
