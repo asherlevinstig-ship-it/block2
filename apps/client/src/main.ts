@@ -38,6 +38,7 @@ import {
   type DepthsRouteState,
 } from "./silver-depths-map.js";
 import { silverDepthsBreadcrumbPositions, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
+import { SILVER_DEPTHS_ATMOSPHERES, silverDepthsLightColour, silverDepthsZone, type SilverDepthsZone } from "./silver-depths-atmosphere.js";
 import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } from "./cave-navigation.js";
 import { miningAvailability, miningReach, miningProgress, miningDurationMs, miningLineClear, miningMessage, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
@@ -1165,6 +1166,7 @@ for (const point of [
 // Silver Depths dressing is deliberately sparse: the voxel cover remains the
 // real collision/shot geometry while these crystals provide identity and light.
 const silverDepthsRoot = new pc.Entity("silver-depths-atmosphere");
+const silverDepthsFixtures: { entity: pc.Entity; x: number; z: number; intensity: number }[] = [];
 const moonstoneCrystal = new pc.StandardMaterial();
 moonstoneCrystal.diffuse = new pc.Color(.48, .16, .76);
 moonstoneCrystal.emissive = new pc.Color(.32, .07, .58);
@@ -1186,6 +1188,7 @@ for (const [name, z, tint] of [
   const light = new pc.Entity(`${name}-marker-light`);
   light.addComponent("light", { type: "omni", color: tint, intensity: 1.8, range: 6.5, castShadows: false });
   light.setPosition(90.5, 2.1, z); silverDepthsRoot.addChild(light);
+  silverDepthsFixtures.push({ entity: light, x: 90.5, z, intensity: 1.8 });
 }
 for (const z of [5.15, 19.85]) {
   addBox(silverDepthsRoot, "depths-entrance-pillar", depthsStone, [.48, 2.8, .48], [60.15, 2.4, z]);
@@ -1208,8 +1211,11 @@ for (const [x, y, z, lean] of crystalSites) {
 }
 for (const [x, z] of [[64, 12], [78, 12], [90, 8], [90, 22], [101, -7], [103, 31], [113, 15], [122, 15], [128, 4], [132, 15], [136, 27]] as const) {
   const glow = new pc.Entity("moonstone-cavern-light");
-  glow.addComponent("light", { type: "omni", color: new pc.Color(.42, .24, 1), intensity: 1.15, range: 7.5, castShadows: false });
+  const tint = silverDepthsLightColour(x, z);
+  const intensity = x >= 124 ? 1.45 : x < 83 ? 1.3 : 1.15;
+  glow.addComponent("light", { type: "omni", color: new pc.Color(...tint), intensity, range: 8.5, castShadows: false });
   glow.setPosition(x, 2.2, z); silverDepthsRoot.addChild(glow);
+  silverDepthsFixtures.push({ entity: glow, x, z, intensity });
 }
 const silverDepthsMotes: { entity: pc.Entity; baseY: number; phase: number }[] = [];
 for (let index = 0; index < 54; index++) {
@@ -2288,22 +2294,24 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const forestDungeon = dungeonAtmosphere.room > 0;
   const silverDepths = position.y < 6 && position.x >= SILVER_DEPTHS.minX - .5 && position.x <= SILVER_DEPTHS.maxX + 1.5
     && position.z >= SILVER_DEPTHS.minZ - 1 && position.z <= SILVER_DEPTHS.maxZ + 1;
+  const depthsZone = silverDepths ? silverDepthsZone(position) : null;
+  const depthsProfile = depthsZone ? SILVER_DEPTHS_ATMOSPHERES[depthsZone] : null;
   const emberVault = isInEmberVault(position.x, position.z);
   const dungeonDetail = dungeonAtmosphere.room === 1 ? "Split the rootbound crawlers · the return portal remains behind you"
     : dungeonAtmosphere.room === 2 ? "Use stone cover · read aimed shots and fan gaps"
       : "Root volleys become committed charges below half health";
   const label = emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus · dodge the committed smash · claim its forge loot" : "Use iron pillars as cover · clear each sealed forge chamber" }
-    : silverDepths ? { name: position.x >= 74 ? "CRYSTAL MATRIARCH SANCTUM" : "THE SILVER DEPTHS", detail: position.x >= 74 ? "Dodge between crystal burst lanes · counter during recovery" : "Miner's Lantern required · use crystal-lit cover against overlapping volleys" }
+    : depthsProfile ? { name: depthsProfile.name, detail: depthsProfile.detail }
     : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
   const recommendedLevel = emberVault ? position.x >= 232 ? "LV 14–16" : "LV 12–14"
     : tier === 0 ? "SAFE"
-      : silverDepths ? position.x >= 74 ? "LV 10–12" : "LV 7–10"
+      : silverDepths ? depthsZone === "arena" ? "LV 10–12" : "LV 7–10"
       : forestDungeon ? dungeonAtmosphere.room === 3 ? "LV 10–12" : dungeonAtmosphere.room === 2 ? "LV 8–10" : "LV 6–8"
         : frontierArena ? "LV 9–12" : silverGuard ? "LV 5–8" : arena ? "LV 4–6" : worldLevelRange(territory?.tier ?? tier).label;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}:${silverDepths}:${emberVault}:${position.x >= 74}:${recommendedLevel}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}:${depthsZone}:${emberVault}:${recommendedLevel}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -4937,7 +4945,12 @@ let greenwoodLightingBlend = 0;
 let forestDungeonLightingBlend = 0;
 let silverDepthsLightingBlend = 0;
 let emberVaultLightingBlend = 0;
-let silverDepthsSection = 0;
+let activeSilverDepthsZone: SilverDepthsZone | null = null;
+let lastDepthsAtmosphereCueAt = -Infinity;
+const depthsAmbient = { r: .18, g: .16, b: .18 };
+const depthsFog = { r: .065, g: .055, b: .095 };
+let depthsFogStart = 20;
+let depthsFogEnd = 40;
 const forestDungeonAmbient = { r: .2, g: .31, b: .22 };
 const forestDungeonFog = { r: .075, g: .17, b: .105 };
 let forestDungeonFogStart = 25;
@@ -5463,20 +5476,44 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
     forestDungeonFogStart += (dungeon.fogStart - forestDungeonFogStart) * dungeonResponse;
     forestDungeonFogEnd += (dungeon.fogEnd - forestDungeonFogEnd) * dungeonResponse;
   }
-  const inSilverDepths = visibilityCutaway && position.y < 6 && position.x >= SILVER_DEPTHS.minX - .5
-    && position.x <= SILVER_DEPTHS.maxX + 1.5 && position.z >= SILVER_DEPTHS.minZ - 1 && position.z <= SILVER_DEPTHS.maxZ + 1;
+  const currentDepthsZone = visibilityCutaway ? silverDepthsZone(position) : null;
+  const inSilverDepths = currentDepthsZone !== null;
   const inEmberVault = isInEmberVault(position.x, position.z);
   const depthsResponse = 1 - Math.exp(-Math.max(0, dt) * 1.45);
   silverDepthsLightingBlend += ((inSilverDepths ? 1 : 0) - silverDepthsLightingBlend) * depthsResponse;
   if (Math.abs((inSilverDepths ? 1 : 0) - silverDepthsLightingBlend) < .001) silverDepthsLightingBlend = inSilverDepths ? 1 : 0;
   silverDepthsRoot.enabled = silverDepthsLightingBlend > .015;
+  for (const fixture of silverDepthsFixtures) {
+    const nearby = inSilverDepths && Math.hypot(fixture.x - position.x, fixture.z - position.z) <= 21;
+    fixture.entity.enabled = nearby;
+    if (nearby && fixture.x >= 124 && fixture.entity.light)
+      fixture.entity.light.intensity = fixture.intensity * (1 + Math.sin(performance.now() * .0016) * .08);
+  }
   emberVaultLightingBlend += ((inEmberVault ? 1 : 0) - emberVaultLightingBlend) * depthsResponse;
   if (Math.abs((inEmberVault ? 1 : 0) - emberVaultLightingBlend) < .001) emberVaultLightingBlend = inEmberVault ? 1 : 0;
   emberVaultRoot.enabled = emberVaultLightingBlend > .015;
-  const nextDepthsSection = inSilverDepths ? position.x >= 74 ? 2 : 1 : 0;
-  if (nextDepthsSection !== silverDepthsSection) {
-    silverDepthsSection = nextDepthsSection;
-    if (nextDepthsSection > 0) showCombatFeedback(nextDepthsSection === 2 ? "CRYSTAL MATRIARCH SANCTUM" : "THE SILVER DEPTHS", "dodge");
+  if (currentDepthsZone !== activeSilverDepthsZone) {
+    activeSilverDepthsZone = currentDepthsZone;
+    if (currentDepthsZone) {
+      const profile = SILVER_DEPTHS_ATMOSPHERES[currentDepthsZone];
+      showCombatFeedback(profile.name, "dodge");
+      const cueNow = performance.now();
+      if (cueNow - lastDepthsAtmosphereCueAt >= 1800) {
+        combatAudio.play(profile.cue);
+        lastDepthsAtmosphereCueAt = cueNow;
+      }
+    }
+  }
+  if (currentDepthsZone) {
+    const profile = SILVER_DEPTHS_ATMOSPHERES[currentDepthsZone];
+    depthsAmbient.r += (profile.ambient[0] - depthsAmbient.r) * depthsResponse;
+    depthsAmbient.g += (profile.ambient[1] - depthsAmbient.g) * depthsResponse;
+    depthsAmbient.b += (profile.ambient[2] - depthsAmbient.b) * depthsResponse;
+    depthsFog.r += (profile.fog[0] - depthsFog.r) * depthsResponse;
+    depthsFog.g += (profile.fog[1] - depthsFog.g) * depthsResponse;
+    depthsFog.b += (profile.fog[2] - depthsFog.b) * depthsResponse;
+    depthsFogStart += (profile.fogStart - depthsFogStart) * depthsResponse;
+    depthsFogEnd += (profile.fogEnd - depthsFogEnd) * depthsResponse;
   }
   updateDangerZone(localDangerTier, position);
   caveLight.enabled = undergroundLightingBlend > 0.001;
@@ -5503,9 +5540,9 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const mixedAmbientR = ambientR + (forestDungeonAmbient.r - ambientR) * forestDungeonLightingBlend;
   const mixedAmbientG = ambientG + (forestDungeonAmbient.g - ambientG) * forestDungeonLightingBlend;
   const mixedAmbientB = ambientB + (forestDungeonAmbient.b - ambientB) * forestDungeonLightingBlend;
-  const depthsAmbientR = mixedAmbientR + (.085 - mixedAmbientR) * silverDepthsLightingBlend;
-  const depthsAmbientG = mixedAmbientG + (.075 - mixedAmbientG) * silverDepthsLightingBlend;
-  const depthsAmbientB = mixedAmbientB + (.18 - mixedAmbientB) * silverDepthsLightingBlend;
+  const depthsAmbientR = mixedAmbientR + (depthsAmbient.r - mixedAmbientR) * silverDepthsLightingBlend;
+  const depthsAmbientG = mixedAmbientG + (depthsAmbient.g - mixedAmbientG) * silverDepthsLightingBlend;
+  const depthsAmbientB = mixedAmbientB + (depthsAmbient.b - mixedAmbientB) * silverDepthsLightingBlend;
   app.scene.ambientLight.set(
     depthsAmbientR + (.19 - depthsAmbientR) * emberVaultLightingBlend,
     depthsAmbientG + (.055 - depthsAmbientG) * emberVaultLightingBlend,
@@ -5517,9 +5554,9 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   const mixedFogR = surfaceFogR + (forestDungeonFog.r - surfaceFogR) * forestDungeonLightingBlend;
   const mixedFogG = surfaceFogG + (forestDungeonFog.g - surfaceFogG) * forestDungeonLightingBlend;
   const mixedFogB = surfaceFogB + (forestDungeonFog.b - surfaceFogB) * forestDungeonLightingBlend;
-  const depthsFogR = mixedFogR + (.035 - mixedFogR) * silverDepthsLightingBlend;
-  const depthsFogG = mixedFogG + (.025 - mixedFogG) * silverDepthsLightingBlend;
-  const depthsFogB = mixedFogB + (.095 - mixedFogB) * silverDepthsLightingBlend;
+  const depthsFogR = mixedFogR + (depthsFog.r - mixedFogR) * silverDepthsLightingBlend;
+  const depthsFogG = mixedFogG + (depthsFog.g - mixedFogG) * silverDepthsLightingBlend;
+  const depthsFogB = mixedFogB + (depthsFog.b - mixedFogB) * silverDepthsLightingBlend;
   app.scene.fog.color.set(
     depthsFogR + (.12 - depthsFogR) * emberVaultLightingBlend,
     depthsFogG + (.025 - depthsFogG) * emberVaultLightingBlend,
@@ -5527,10 +5564,10 @@ function updateUndergroundPresentation(position: pc.Vec3, dt: number): void {
   );
   const baseFogStart = 34 + (forestDungeonFogStart - 34) * forestDungeonLightingBlend;
   const baseFogEnd = 58 + (forestDungeonFogEnd - 58) * forestDungeonLightingBlend;
-  const depthsFogStart = baseFogStart + (15 - baseFogStart) * silverDepthsLightingBlend;
-  const depthsFogEnd = baseFogEnd + (34 - baseFogEnd) * silverDepthsLightingBlend;
-  app.scene.fog.start = depthsFogStart + (19 - depthsFogStart) * emberVaultLightingBlend;
-  app.scene.fog.end = depthsFogEnd + (40 - depthsFogEnd) * emberVaultLightingBlend;
+  const mixedDepthsFogStart = baseFogStart + (depthsFogStart - baseFogStart) * silverDepthsLightingBlend;
+  const mixedDepthsFogEnd = baseFogEnd + (depthsFogEnd - baseFogEnd) * silverDepthsLightingBlend;
+  app.scene.fog.start = mixedDepthsFogStart + (19 - mixedDepthsFogStart) * emberVaultLightingBlend;
+  app.scene.fog.end = mixedDepthsFogEnd + (40 - mixedDepthsFogEnd) * emberVaultLightingBlend;
   camera.camera?.clearColor.copy(app.scene.fog.color);
   if (nextKey === cutawayStateKey) return;
   logMovementEvent(
