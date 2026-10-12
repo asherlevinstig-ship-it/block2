@@ -47,6 +47,7 @@ import { createServerClock, sampleServerClock, enemyAttackPresentation } from ".
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
+import { advanceCameraFollow } from "./camera-follow.js";
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
 import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
@@ -1966,6 +1967,7 @@ let pendingStopInputSequence: number | null = null;
 let pendingStopDeadline = 0;
 const cameraFocus = new pc.Vec3(8.5, 11, 8.5);
 const cameraTarget = new pc.Vec3(8.5, 11, 8.5);
+let cameraFollow = { x: 8.5, z: 8.5 };
 
 function isPowerId(value: string): value is PowerId {
   return value in POWER_DEFINITIONS;
@@ -4760,6 +4762,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
   authoritativeLocalPosition.set(initialPosition.x, initialPosition.y, initialPosition.z);
   cameraFocus.set(initialPosition.x, initialPosition.y, initialPosition.z);
+  cameraFollow = { x: initialPosition.x, z: initialPosition.z };
   const cameraOffset = cameraOrbitOffset(cameraOrbit);
   camera.setPosition(initialPosition.x + cameraOffset.x, initialPosition.y - 2 + cameraOffset.y, initialPosition.z + cameraOffset.z);
   camera.lookAt(initialPosition.x, initialPosition.y - 2, initialPosition.z);
@@ -7080,7 +7083,8 @@ app.on("update", (dt: number) => {
     player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z,
   );
   indoorCameraBlend = advanceIndoorCameraBlend(indoorCameraBlend, indoorRoofBuilding !== null && !playerCutaway.active, frameTime);
-  cameraFocus.copy(cameraTarget);
+  cameraFollow = advanceCameraFollow(cameraFollow, cameraTarget, frameTime);
+  cameraFocus.set(cameraFollow.x, cameraTarget.y, cameraFollow.z);
   // A small, fixed room-center bias keeps the bar and tables in view without tracking furniture as the player walks.
   cameraFocus.x += (8.5 - cameraFocus.x) * indoorCameraBlend * 0.16;
   cameraFocus.z += (15 - cameraFocus.z) * indoorCameraBlend * 0.16;
@@ -7763,6 +7767,7 @@ async function connect(): Promise<void> {
     localPlayer.setPosition(spawn.x, spawn.y, spawn.z);
     authoritativeLocalPosition.set(spawn.x, spawn.y, spawn.z);
     cameraFocus.set(spawn.x, spawn.y, spawn.z);
+    cameraFollow = { x: spawn.x, z: spawn.z };
     localPowerCooldownUntil = 0; localSpecialCooldownUntil = 0;
     cutawaySliceY = null;
     defeatScreen.hidden = true;
