@@ -1199,6 +1199,19 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #depths-route-map header, #depths-route-map footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #depths-route-map header { color: #c5a2f2; font: 900 9px/1 system-ui; letter-spacing: .14em; }
 #depths-route-map h2 { margin: 7px 0 4px; color: #f4eaff; font: 900 14px/1.15 system-ui; }
+.depths-party-status { display: grid; gap: 3px; margin: 7px 0; padding: 7px 9px; border: 1px solid #6b9ac080; border-radius: 7px; background: #163244ad; }
+.depths-party-status[hidden] { display: none; }
+.depths-party-status strong { color: #b9e8ff; font: 900 10px system-ui; letter-spacing: .08em; }
+.depths-party-status small { color: #d7e4ec; font: 700 10px/1.4 system-ui; }
+.depths-party-status[data-alert="true"] { border-color: #d66a6488; background: #4a232dad; }
+.depths-party-status[data-alert="true"] strong { color: #ffb8aa; }
+.depths-retry-prompt { position: fixed; z-index: 38; right: 18px; bottom: 18px; width: min(360px, calc(100vw - 36px)); box-sizing: border-box; display: grid; gap: 5px; padding: 12px 38px 12px 14px; color: #f0e5ff; border: 1px solid #b279e9; border-radius: 10px; background: #251638ed; box-shadow: 0 10px 36px #0008; }
+.depths-retry-prompt[hidden] { display: none; }
+.depths-retry-prompt strong { font: 900 11px system-ui; letter-spacing: .08em; }
+.depths-retry-prompt span { font: 600 11px/1.4 system-ui; }
+.depths-retry-prompt #depths-retry-enter { width: max-content; margin-top: 4px; padding: 7px 10px; border: 1px solid #d4a4ff; border-radius: 6px; background: #6c429d; color: white; cursor: pointer; font: 900 10px system-ui; letter-spacing: .06em; }
+.depths-retry-prompt #depths-retry-enter:disabled { opacity: .6; cursor: wait; }
+.depths-retry-prompt #depths-retry-dismiss { position: absolute; right: 9px; top: 7px; border: 0; background: transparent; color: #f0e5ff; cursor: pointer; font: 900 20px system-ui; }
 .depths-wing-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; pointer-events: auto; }
 .depths-wing-choice[hidden] { display: none; }
 .depths-wing-choice p { grid-column: 1 / -1; margin: 0; color: #d8c1f1; font: 700 10px system-ui; }

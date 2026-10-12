@@ -81,6 +81,7 @@ import {
   type SilverDepthsRewardId,
   type SilverDepthsWingRewardStatus,
   type SilverDepthsCheckpointStatus,
+  type SilverDepthsPartyStatus,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -394,6 +395,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private silverDepthsSealOpened = false;
   private silverDepthsAwaitingReady = false;
   private readonly silverDepthsCheckpointReady = new Set<string>();
+  private readonly silverDepthsRoster = new Map<string, string>();
+  private readonly silverDepthsFallen = new Set<string>();
+  private readonly silverDepthsDisconnected = new Set<string>();
   private silverInstanceSequence = 0;
 
   override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
@@ -469,6 +473,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         if (rewards) client.send("depths:wing-rewards", rewards);
         this.sendSilverDepthsCheckpointStatus(client.sessionId);
       }
+      if (this.roomKind === "silver-depths" && this.silverDepthsRoster.has(client.sessionId))
+        client.send("depths:party-status", this.silverDepthsPartyStatus());
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
     this.onMessage("chat:send", (client, payload: unknown) => this.handleNearbyChat(client, payload));
@@ -685,6 +691,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.state.players.delete(client.sessionId);
     this.silverDepthsRuns.delete(client.sessionId);
+    this.silverDepthsDisconnected.delete(client.sessionId);
+    if (depthsRun?.completedAt === 0) this.broadcastSilverDepthsPartyStatus();
     this.silverDepthsCheckpointReady.delete(client.sessionId);
     if (this.silverDepthsAwaitingReady) this.refreshSilverDepthsCheckpointReady();
     this.emberVaultRuns.delete(client.sessionId);
@@ -718,6 +726,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.pendingMining.delete(client.sessionId);
     this.pendingAttacks.delete(client.sessionId);
     this.pendingPowers.delete(client.sessionId);
+    this.silverDepthsDisconnected.add(client.sessionId);
+    this.broadcastSilverDepthsPartyStatus();
     void this.allowReconnection(client, 45).catch(() => undefined);
   }
 
@@ -730,6 +740,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.silverDepthsReconnectInvulnerability.delete(client.sessionId);
     }
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
+    this.silverDepthsDisconnected.delete(client.sessionId);
+    this.broadcastSilverDepthsPartyStatus();
     const rewards = this.silverDepthsWingRewardStatus(client.sessionId);
     if (rewards) client.send("depths:wing-rewards", rewards);
     this.sendSilverDepthsCheckpointStatus(client.sessionId);
@@ -1552,6 +1564,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
+    if (mobId === CRYSTAL_MATRIARCH_ID && this.roomKind === "silver-depths") this.broadcastSilverDepthsPartyStatus();
     this.delayedMatriarchVolleys.delete(mobId);
     this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
     mob.awarenessState = "patrol"; mob.alertUntil = 0;
@@ -1849,6 +1862,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const failedDepthsRun = this.silverDepthsRuns.get(playerId);
     if (failedDepthsRun) this.restoreRunMoonstone(player, failedDepthsRun);
     this.silverDepthsRuns.delete(playerId);
+    if (failedDepthsRun && this.roomKind === "silver-depths") {
+      this.silverDepthsFallen.add(playerId);
+      this.silverDepthsDisconnected.delete(playerId);
+      this.broadcastSilverDepthsPartyStatus();
+    }
     this.silverDepthsCheckpointReady.delete(playerId);
     if (this.silverDepthsAwaitingReady) this.refreshSilverDepthsCheckpointReady();
     this.emberVaultRuns.delete(playerId);
@@ -1902,6 +1920,25 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private activeSilverDepthsParticipants(): string[] {
     return [...this.silverDepthsRuns.entries()].flatMap(([id, run]) =>
       run.completedAt === 0 && this.state.players.has(id) ? [id] : []);
+  }
+
+  private silverDepthsPartyStatus(): SilverDepthsPartyStatus {
+    const active = new Set(this.activeSilverDepthsParticipants());
+    const cleared = this.state.mobs.get(CRYSTAL_MATRIARCH_ID)?.alive === false;
+    return { phase: cleared ? "cleared" : active.size > 0 ? "active" : "wiped",
+      stage: this.silverDepthsEncounterStage,
+      activeCount: [...active].filter(id => !this.silverDepthsDisconnected.has(id)).length,
+      partySize: this.silverDepthsRoster.size,
+      members: [...this.silverDepthsRoster].map(([id, name]) => ({ id, name,
+        state: this.silverDepthsFallen.has(id) ? "fallen" as const
+          : !active.has(id) ? "left" as const
+          : this.silverDepthsDisconnected.has(id) ? "reconnecting" as const : "fighting" as const })) };
+  }
+
+  private broadcastSilverDepthsPartyStatus(): void {
+    if (this.roomKind !== "silver-depths" || this.silverDepthsRoster.size === 0) return;
+    const status = this.silverDepthsPartyStatus();
+    for (const client of this.clients) client.send("depths:party-status", status);
   }
 
   private setSilverDepthsRunStage(stage: number): void {
@@ -2117,6 +2154,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:") || id.startsWith("depths-wing-gear:")) this.state.lootDrops.delete(id);
     this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false; this.silverDepthsWing = null;
     this.silverDepthsAwaitingReady = false; this.silverDepthsCheckpointReady.clear();
+    this.silverDepthsRoster.clear(); this.silverDepthsFallen.clear(); this.silverDepthsDisconnected.clear();
     this.silverDepthsNextHazardAt = 0; this.silverDepthsPendingHazards.length = 0;
     this.setSilverDepthsWingGate(SILVER_DEPTHS_IRON_GATE, false, "iron-wing-gate");
     this.setSilverDepthsWingGate(SILVER_DEPTHS_SILVER_GATE, false, "silver-wing-gate");
@@ -2432,6 +2470,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       enemiesDefeated: 0, damageTaken: 0, moonstoneCollected: 0, moonstoneAtStart: player.inventory.get("moonstone")?.quantity ?? 0,
       edgeAtStart: player.inventory.get("matriarch_edge")?.quantity ?? 0 };
     this.silverDepthsRuns.set(client.sessionId, run);
+    this.silverDepthsRoster.set(client.sessionId, player.name);
+    this.broadcastSilverDepthsPartyStatus();
     player.silverDepthsWing = this.silverDepthsWing ?? "";
     player.silverDepthsRunStage = this.silverDepthsSealOpened ? this.silverDepthsEncounterStage + 1 : 1;
     client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: run.partySize } satisfies DungeonRunUpdate);
@@ -2455,6 +2495,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       stats: { enemiesDefeated: run.enemiesDefeated, damageTaken: run.damageTaken,
         moonstoneCollected: run.moonstoneCollected, moonstoneAwarded, moonstoneTotal: moonstone.quantity, signatureItemObtained } } satisfies DungeonRunUpdate);
     this.silverDepthsRuns.delete(client.sessionId);
+    this.broadcastSilverDepthsPartyStatus();
   }
 
   private restoreRunMoonstone(player: PlayerState, run: SilverDepthsRunStats): void {
@@ -2615,7 +2656,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     await this.persistPlayer(client.sessionId, player, true);
     if (returningFromSilverDepths) {
       client.send("portal:notice", "Expedition failed · returning to the Town of Beginnings.");
-      client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths" } satisfies RoomTransfer);
+      client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", retry: true } satisfies RoomTransfer);
     } else client.send("player:returned", spawn);
   }
 

@@ -95,6 +95,10 @@
     <aside id="depths-route-map" aria-label="Silver Depths expedition map" hidden>
       <header><span>SILVER DEPTHS</span><strong id="depths-route-count">1 / 7</strong></header>
       <h2 id="depths-route-title">Break the Moonstone Seal</h2>
+      <div id="depths-party-status" class="depths-party-status" hidden aria-live="polite">
+        <strong id="depths-party-count">1 FIGHTING</strong>
+        <small id="depths-party-members"></small>
+      </div>
       <div id="depths-wing-choice" class="depths-wing-choice" hidden>
         <p>First choice locks the route for your party.</p>
         <button type="button" data-depths-wing="iron"><b>IRON BASTION</b><small>Warden + crawlers · Bastion Plate + 5 iron</small></button>
@@ -382,6 +386,12 @@
         <button id="mine-button" type="button" data-mode="build">Mine</button>
       </div>
     </section>
+    <aside id="depths-retry-prompt" class="depths-retry-prompt" hidden aria-live="polite">
+      <strong>SILVER DEPTHS · TRY AGAIN</strong>
+      <span>You are back beside the portal. Re-form your party for a group run, or enter now.</span>
+      <button id="depths-retry-enter" type="button">ENTER SILVER DEPTHS</button>
+      <button id="depths-retry-dismiss" type="button" aria-label="Dismiss retry guidance">×</button>
+    </aside>
     <section id="defeat-screen" class="defeat-screen" hidden role="dialog" aria-modal="true" aria-labelledby="defeat-title">
       <div class="defeat-card">
         <span class="defeat-eyebrow">YOUR JOURNEY CONTINUES</span>

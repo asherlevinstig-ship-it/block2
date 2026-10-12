@@ -21,6 +21,47 @@ function roomWithPortal(id: "depths-entry" | "depths-return") {
 }
 
 describe("Silver Depths room travel", () => {
+  it("tracks who is fighting, reconnecting, and fallen without ending a surviving teammate's run", () => {
+    const { room, player, client } = roomWithPortal("depths-return"); const internal = room as any;
+    internal.roomKind = "silver-depths";
+    const friend = new PlayerState(); friend.name = "Ally";
+    room.state.players.set("friend", friend);
+    internal.silverDepthsRuns.set("miner", { completedAt: 0 });
+    internal.silverDepthsRuns.set("friend", { completedAt: 0 });
+    internal.silverDepthsRoster.set("miner", player.name);
+    internal.silverDepthsRoster.set("friend", friend.name);
+    expect(internal.silverDepthsPartyStatus()).toMatchObject({ phase: "active", activeCount: 2, partySize: 2 });
+    vi.spyOn(room, "allowReconnection").mockImplementation(() => ({ catch: () => undefined }) as any);
+    room.onDrop(client as any);
+    expect(internal.silverDepthsPartyStatus().members[0]).toMatchObject({ id: "miner", state: "reconnecting" });
+    expect(internal.silverDepthsPartyStatus()).toMatchObject({ phase: "active", activeCount: 1 });
+    room.onReconnect(client as any);
+    expect(internal.silverDepthsPartyStatus().members[0]).toMatchObject({ id: "miner", state: "fighting" });
+    internal.silverDepthsRuns.delete("friend"); internal.silverDepthsFallen.add("friend");
+    expect(internal.silverDepthsPartyStatus()).toMatchObject({ phase: "active", activeCount: 1,
+      members: [{ id: "miner", state: "fighting" }, { id: "friend", state: "fallen" }] });
+    expect(internal.silverDepthsRuns.has("miner")).toBe(true);
+    internal.silverDepthsRuns.delete("miner"); internal.silverDepthsFallen.add("miner");
+    expect(internal.silverDepthsPartyStatus()).toMatchObject({ phase: "wiped", activeCount: 0, partySize: 2 });
+  });
+
+  it("only declares a wipe after the last Silver Depths survivor falls", () => {
+    const { room, player } = roomWithPortal("depths-return"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.roomKind = "silver-depths";
+    Object.assign(player, { x: 130.5, y: 1, z: 14.5, health: 1 });
+    const friend = new PlayerState(); Object.assign(friend, { x: 131.5, y: 1, z: 14.5, health: 1 });
+    room.state.players.set("friend", friend);
+    for (const id of ["miner", "friend"]) {
+      internal.silverDepthsRuns.set(id, { completedAt: 0, moonstoneAtStart: 0 });
+      internal.silverDepthsRoster.set(id, id);
+    }
+    expect(internal.damagePlayer("test-mob", "miner", 5, Date.now())).toBe(true);
+    expect(internal.silverDepthsPartyStatus()).toMatchObject({ phase: "active", activeCount: 1 });
+    expect(internal.silverDepthsRuns.has("friend")).toBe(true);
+    expect(internal.damagePlayer("test-mob", "friend", 5, Date.now())).toBe(true);
+    expect(internal.silverDepthsPartyStatus()).toMatchObject({ phase: "wiped", activeCount: 0 });
+  });
   it("reserves a disconnected player's dungeon seat and restores their run on reconnect", () => {
     const { room, player, client } = roomWithPortal("depths-return");
     const internal = room as any;
@@ -320,7 +361,7 @@ describe("Silver Depths room travel", () => {
 
     expect(player.health).toBe(player.maxHealth);
     expect(player).toMatchObject(TOWN_SILVER_DEPTHS_PORTAL_POSITION);
-    expect(client.send).toHaveBeenCalledWith("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths" });
+    expect(client.send).toHaveBeenCalledWith("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", retry: true });
     expect(client.send).not.toHaveBeenCalledWith("player:returned", expect.anything());
     expect((room as any).persistPlayer).toHaveBeenCalledWith("miner", player, true);
   });

@@ -7,7 +7,7 @@ export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, MATRIARCH_PHASE, matriarchEnrag
 // otherwise let a new client join a room still serving the old terrain.
 export const WORLD_ROOM = "world-expanded-depths-v110";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
-export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths" };
+export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths"; retry?: boolean };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
 export const FOREST_PORTAL_LIFETIME_MS = 120_000;
 export function canUseForestPortal(player: { x: number; y: number; z: number; health: number }, portal: ForestPortal, now: number): boolean {
@@ -763,6 +763,14 @@ export type SilverDepthsCheckpointStatus = {
   partyTotal: number;
   selfReady: boolean;
   rewardsCollected: boolean;
+};
+
+export type SilverDepthsPartyStatus = {
+  phase: "active" | "wiped" | "cleared";
+  stage: number;
+  activeCount: number;
+  partySize: number;
+  members: { id: string; name: string; state: "fighting" | "reconnecting" | "fallen" | "left" }[];
 };
 
 export type WorldObjectiveCompleted = {

@@ -139,6 +139,7 @@ import {
   type WorldObjectiveUpdate,
   type SilverDepthsWingRewardStatus,
   type SilverDepthsCheckpointStatus,
+  type SilverDepthsPartyStatus,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
 import {
@@ -460,6 +461,18 @@ const depthsRouteMap = document.querySelector<HTMLElement>("#depths-route-map")!
 const depthsRouteTitle = document.querySelector<HTMLElement>("#depths-route-title")!;
 const depthsRouteCount = document.querySelector<HTMLElement>("#depths-route-count")!;
 const depthsRouteDistance = document.querySelector<HTMLElement>("#depths-route-distance")!;
+const depthsPartyPanel = document.querySelector<HTMLElement>("#depths-party-status")!;
+const depthsPartyCount = document.querySelector<HTMLElement>("#depths-party-count")!;
+const depthsPartyMembers = document.querySelector<HTMLElement>("#depths-party-members")!;
+const depthsRetryPrompt = document.querySelector<HTMLElement>("#depths-retry-prompt")!;
+const depthsRetryEnter = document.querySelector<HTMLButtonElement>("#depths-retry-enter")!;
+document.querySelector<HTMLButtonElement>("#depths-retry-dismiss")!.addEventListener("click", () => { depthsRetryPrompt.hidden = true; });
+depthsRetryEnter.addEventListener("click", () => {
+  if (!room || !worldReady) { status.textContent = "Wait for the town to finish loading before re-entering."; return; }
+  depthsRetryEnter.disabled = true;
+  room.send("portal:use", { id: "depths-entry" });
+  window.setTimeout(() => { depthsRetryEnter.disabled = false; }, 2500);
+});
 const depthsWingChoice = document.querySelector<HTMLElement>("#depths-wing-choice")!;
 const depthsWingRewards = document.querySelector<HTMLElement>("#depths-wing-rewards")!;
 const depthsRewardsTitle = document.querySelector<HTMLElement>("#depths-rewards-title")!;
@@ -4725,8 +4738,35 @@ const keys = new Set<string>();
 let awaitingReturnState = false;
 let townReturnPosition: { x: number; y: number; z: number } | null = null;
 const defeatScreen = document.querySelector<HTMLElement>("#defeat-screen")!;
+const defeatTitle = document.querySelector<HTMLElement>("#defeat-title")!;
 const returnToTownButton = document.querySelector<HTMLButtonElement>("#return-to-town")!;
 const defeatDetail = document.querySelector<HTMLElement>("#defeat-detail")!;
+let latestDepthsPartyStatus: SilverDepthsPartyStatus | null = null;
+function depthsStageName(stage: number): string {
+  return stage >= 4 ? "Matriarch approach" : stage === 3 ? "Crystal Antechamber"
+    : stage === 2 ? "chosen wing" : "Moonstone Gallery";
+}
+function renderDepthsPartyStatus(next: SilverDepthsPartyStatus | null): void {
+  latestDepthsPartyStatus = next;
+  depthsPartyPanel.hidden = !next || next.phase === "cleared";
+  if (!next) return;
+  depthsPartyCount.textContent = next.phase === "wiped" ? "PARTY WIPED"
+    : `${next.activeCount} / ${next.partySize} FIGHTING`;
+  depthsPartyPanel.dataset.alert = String(next.phase === "wiped" || next.members.some(member => member.state === "fallen"));
+  depthsPartyMembers.textContent = next.members.map(member => `${member.name}: ${member.state.toUpperCase()}`).join(" · ");
+  if (defeatScreen.hidden) return;
+  if (next.members.find(member => member.id === room?.sessionId)?.state === "fighting") return;
+  if (next.phase === "wiped") {
+    defeatTitle.textContent = "Party wiped";
+    defeatDetail.textContent = `The party fell at the ${depthsStageName(next.stage)}. Your permanent gear and gold are safe. Return to town beside the Silver Depths portal to regroup and try again.`;
+    returnToTownButton.textContent = "Return to Town · Retry";
+  } else if (next.phase === "active") {
+    defeatTitle.textContent = next.activeCount > 0 ? "You fell — party still fighting" : "You fell — party reconnecting";
+    defeatDetail.textContent = next.activeCount > 0
+      ? `${next.activeCount} teammate${next.activeCount === 1 ? " is" : "s are"} still fighting. Returning to town will not reset their run. Your permanent gear and gold are safe.`
+      : "A teammate is reconnecting; their place is held briefly. Returning to town will not reset their run. Your permanent gear and gold are safe.";
+  }
+}
 function clearDefeatCombat(): void {
   keys.clear(); touchStrafe = 0; touchForward = 0;
   smoothedMovement = { x: 0, z: 0 };
@@ -4757,9 +4797,11 @@ function showDefeat(attackerName: string): void {
   clearDefeatCombat();
   quizPanel.hidden = true; blacksmithPanel.hidden = true; setInventoryOpen(false); closeTavernDialogue();
   defeatDetail.textContent = `${attackerName} defeated you. Carried minerals stay in your personal recovery bag. Levels, equipment, other loot, gold, supplies and chest contents are safe. Return to town, then follow your bag marker.`;
+  defeatTitle.textContent = "You were defeated";
   defeatScreen.hidden = false;
   returnToTownButton.disabled = !room;
   returnToTownButton.textContent = "Return to Town";
+  if (activeRoomName === SILVER_DEPTHS_ROOM && latestDepthsPartyStatus) renderDepthsPartyStatus(latestDepthsPartyStatus);
   returnToTownButton.focus();
 }
 returnToTownButton.addEventListener("click", () => {
@@ -7114,6 +7156,7 @@ async function connect(): Promise<void> {
   };
   const requestedPartySize = Number(query.get("partySize"));
   const returnFrom = query.get("returnFrom") === "silver-depths" ? "silver-depths" : null;
+  const retryFromDepths = activeRoomName === WORLD_ROOM && returnFrom === "silver-depths" && query.get("retry") === "1";
   const joinOptions = { name: "Explorer", profileToken, ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}),
     ...(activeRoomName === SILVER_DEPTHS_ROOM && instanceKey ? { instanceKey, partySize: Number.isFinite(requestedPartySize) ? requestedPartySize : 1 } : {}),
     ...(activeRoomName === WORLD_ROOM && returnFrom ? { returnFrom } : {}) };
@@ -7153,7 +7196,10 @@ async function connect(): Promise<void> {
   bindLootDrops(room);
   updatePlayerCount();
   status.textContent = "Connected. Loading the authoritative world...";
-  room.onMessage("world:bootstrap", (payload: WorldBootstrap) => renderBootstrap(payload));
+  room.onMessage("world:bootstrap", (payload: WorldBootstrap) => {
+    renderBootstrap(payload);
+    if (retryFromDepths) depthsRetryPrompt.hidden = false;
+  });
   room.onMessage("room:transfer", (transfer: RoomTransfer) => {
     const url = new URL(window.location.href);
     if (transfer.room === SILVER_DEPTHS_ROOM) {
@@ -7168,6 +7214,8 @@ async function connect(): Promise<void> {
       url.searchParams.delete("instanceKey");
       url.searchParams.delete("partySize");
       if (transfer.returnFrom) url.searchParams.set("returnFrom", transfer.returnFrom);
+      if (transfer.retry) url.searchParams.set("retry", "1");
+      else url.searchParams.delete("retry");
       status.textContent = "Returning to the shared Town of Beginnings...";
     }
     window.setTimeout(() => window.location.replace(url), 180);
@@ -7221,6 +7269,7 @@ async function connect(): Promise<void> {
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
   room.onMessage("depths:checkpoint", (update: SilverDepthsCheckpointStatus) => renderDepthsCheckpointStatus(update));
+  room.onMessage("depths:party-status", (update: SilverDepthsPartyStatus) => renderDepthsPartyStatus(update));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
     renderCharacterProgression(update);
@@ -7639,6 +7688,8 @@ async function connect(): Promise<void> {
     localSilverDepthsWing = null;
     renderDepthsWingRewards(null);
     renderDepthsCheckpointStatus(null);
+    renderDepthsPartyStatus(null);
+    depthsRetryPrompt.hidden = true;
     setDefensePresentation(false);
     cancelPowerAim();
     cancelSpecialAim();
@@ -7699,7 +7750,7 @@ async function connect(): Promise<void> {
   pendingPings.set(clockPingId, performance.now());
   room.send("ping", { id: clockPingId });
   if (activeRoomName === WORLD_ROOM && returnFrom) {
-    const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete("returnFrom");
+    const cleanUrl = new URL(window.location.href); cleanUrl.searchParams.delete("returnFrom"); cleanUrl.searchParams.delete("retry");
     window.history.replaceState(null, "", cleanUrl);
   }
 }

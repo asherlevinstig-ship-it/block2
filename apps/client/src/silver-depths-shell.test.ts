@@ -17,6 +17,9 @@ describe("Silver Depths route shell", () => {
     for (const id of ["depths-checkpoint", "depths-checkpoint-count", "depths-checkpoint-hint", "depths-checkpoint-ready"]) {
       expect(html).toContain(`id="${id}"`);
     }
+    for (const id of ["depths-party-status", "depths-party-count", "depths-party-members", "depths-retry-prompt", "depths-retry-enter", "depths-retry-dismiss"]) {
+      expect(html).toContain(`id="${id}"`);
+    }
     expect(html).toContain("Bastion Plate + 5 iron");
     expect(html).toContain("Echo Prism + 3 silver");
   });
