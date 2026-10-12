@@ -171,6 +171,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equipment-reforge.js";
+import { parseSignaturePity, resolveSignatureDrop, serializeSignaturePity, signatureLootHint, type SignatureItemId } from "./signature-loot.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
@@ -1775,7 +1776,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (mobId === CRYSTAL_MATRIARCH_ID) {
       for (const playerId of recipients) {
         this.advanceSilverDepthsExpedition(playerId, "defeated_matriarch");
-        const player = this.state.players.get(playerId); if (player) player.silverDepthsRunStage = 6;
+        const player = this.state.players.get(playerId);
+        if (player) {
+          const hasNewEdge = [...this.state.lootDrops.values()].some(drop => drop.ownerId === playerId && drop.itemId === "matriarch_edge");
+          const alreadyOwnsEdge = (player.inventory.get("matriarch_edge")?.quantity ?? 0) + (player.storage.get("matriarch_edge")?.quantity ?? 0) > 0;
+          player.silverDepthsRunStage = !hasNewEdge && alreadyOwnsEdge ? 7 : 6;
+        }
       }
       if (!this.state.portals.has("depths-return")) {
         const returnPortal = new ForestPortalState();
@@ -1859,6 +1865,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const progress = this.objectiveProgress.get(client.sessionId) ?? createObjectiveProgress();
     this.objectiveProgress.set(client.sessionId, progress);
     const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id, this.wildernessEvent.warningUntil, this.roomKind);
+    const signatureItemId: SignatureItemId | null = update.objectiveId.includes("depths-matriarch") || update.objectiveId === "depths-recover"
+      ? "matriarch_edge"
+      : update.objectiveId === "greenwood-event" ? "venom_focus" : null;
+    if (signatureItemId) {
+      const ownsSignature = (player.inventory.get(signatureItemId)?.quantity ?? 0) + (player.storage.get(signatureItemId)?.quantity ?? 0) > 0;
+      update.lootHint = signatureLootHint(signatureItemId, ownsSignature, parseSignaturePity(player.signaturePityJson));
+    } else if (update.kind === "loot") {
+      const signatureDrop = [...this.state.lootDrops.values()].find(drop => drop.ownerId === client.sessionId
+        && (drop.itemId === "matriarch_edge" || drop.itemId === "venom_focus") && Date.now() < drop.expiresAt);
+      if (signatureDrop) update.lootHint = "LEGENDARY · Guaranteed personal drop ready to claim";
+    }
     const fingerprint = JSON.stringify({ ...update, targetX: Math.round(update.targetX), targetY: Math.round(update.targetY), targetZ: Math.round(update.targetZ) });
     if (!force && fingerprint === progress.fingerprint) return;
     progress.id = update.objectiveId; progress.fingerprint = fingerprint;
@@ -1888,16 +1905,33 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
-    const baseDrops = mobId === CRYSTAL_MATRIARCH_ID ? [{ itemId: "matriarch_edge" as const, quantity: 1 }]
-      : mobId === "forge-colossus" ? [{ itemId: "iron_armour" as const, quantity: 1 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
+    const signatureDrops = (itemId: SignatureItemId): { itemId: ItemId; quantity: number }[] => {
+      if (!rewardPlayer) return [{ itemId, quantity: 1 }];
+      const ownsItem = (rewardPlayer.inventory.get(itemId)?.quantity ?? 0) + (rewardPlayer.storage.get(itemId)?.quantity ?? 0) > 0;
+      const pity = parseSignaturePity(rewardPlayer.signaturePityJson);
+      const result = resolveSignatureDrop(itemId, ownsItem, pity[itemId] ?? 0, Math.random());
+      pity[itemId] = result.nextMisses;
+      rewardPlayer.signaturePityJson = serializeSignaturePity(pity);
+      void this.persistPlayer(ownerId, rewardPlayer, true).catch(() => {});
+      const client = this.clients.find(entry => entry.sessionId === ownerId);
+      if (result.drop) {
+        const reason = result.firstClear ? "First victory guarantee" : result.pityTriggered ? "Bad-luck protection activated" : `${result.chancePercent}% signature roll succeeded`;
+        client?.send("chat:notice", `${reason} · your Legendary ${ITEM_DEFINITIONS[itemId].name} is ready.`);
+        return [{ itemId, quantity: 1 }];
+      }
+      client?.send("chat:notice", `No Legendary this clear · guaranteed within ${result.guaranteedIn} more clear${result.guaranteedIn === 1 ? "" : "s"}.`);
+      return [];
+    };
+    const baseDrops: { itemId: ItemId; quantity: number }[] = mobId === CRYSTAL_MATRIARCH_ID ? signatureDrops("matriarch_edge")
+      : mobId === "forge-colossus" ? [{ itemId: "iron_armour", quantity: 1 }, { itemId: "stone_core_hammer", quantity: 1 }]
       : mobId === "buried-chamber-brute"
       ? ownsLantern
-        ? [{ itemId: "stone_core" as const, quantity: 2 }, { itemId: "silver_ore" as const, quantity: 3 }]
-        : [{ itemId: "stone_core" as const, quantity: 1 }, { itemId: "miners_lantern" as const, quantity: 1 }]
-      : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "venom_focus" as const, quantity: 1 }]
-      : mob.isChampion && mob.archetype === "cave_spitter" ? [{ itemId: "acid_gland" as const, quantity: 3 }, { itemId: "acid_gland_focus" as const, quantity: 1 }]
-      : mob.isChampion ? [{ itemId: "stone_core" as const, quantity: 3 }, { itemId: "stone_core_hammer" as const, quantity: 1 }]
-      : lootForArchetype(mob.archetype as MobArchetypeId, mobId);
+        ? [{ itemId: "stone_core", quantity: 2 }, { itemId: "silver_ore", quantity: 3 }]
+        : [{ itemId: "stone_core", quantity: 1 }, { itemId: "miners_lantern", quantity: 1 }]
+      : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland", quantity: 3 }, ...signatureDrops("venom_focus")]
+      : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "champion")
+        .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
+      : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random())];
     const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;

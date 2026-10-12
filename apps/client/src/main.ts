@@ -515,6 +515,7 @@ const worldObjective = document.querySelector<HTMLElement>("#world-objective")!;
 const objectiveTier = document.querySelector<HTMLElement>("#objective-tier")!;
 const objectiveTitle = document.querySelector<HTMLElement>("#objective-title")!;
 const objectiveDetail = document.querySelector<HTMLElement>("#objective-detail")!;
+const objectiveLoot = document.querySelector<HTMLElement>("#objective-loot")!;
 const objectiveProgress = document.querySelector<HTMLElement>("#objective-progress")!;
 const objectiveDistance = document.querySelector<HTMLElement>("#objective-distance")!;
 const objectiveMarker = document.querySelector<HTMLElement>("#objective-marker")!;
@@ -591,7 +592,7 @@ if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine
 if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
-if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
+if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveLoot, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
   throw new Error("World objective shell is missing required elements");
 }
 if (
@@ -5410,6 +5411,8 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   objectiveTier.textContent = `${update.progressLabel ? "EXPEDITION" : update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : "NEARBY"} · ${recommendation}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
+  objectiveLoot.hidden = !update.lootHint;
+  objectiveLoot.textContent = update.lootHint ?? "";
   objectiveProgress.hidden = !update.progressLabel && (update.kind !== "encounter" || update.targetMobIds.length === 0);
   objectiveProgress.textContent = update.progressLabel ?? `${update.targetMobIds.length - update.completedMobIds.length} remaining`;
   objectiveDistance.hidden = update.showMarker === false;

@@ -2,11 +2,10 @@ import { describe, expect, it } from "vitest";
 import { inventoryTotal, isLootInPickupRange, lootForArchetype } from "../src/loot-rules.js";
 
 describe("item loot", () => {
-  it("uses fixed thematic drops without rarity rolls", () => {
+  it("keeps materials reliable and rolls equipment at rarity-aware rates", () => {
     expect(lootForArchetype("moss_crawler")).toEqual([
       { itemId: "moss_fibre", quantity: 1 },
       { itemId: "crawler_fang", quantity: 1 },
-      { itemId: "fang_dagger", quantity: 1 },
     ]);
     expect(lootForArchetype("briar_crawler")).toEqual([
       { itemId: "moss_fibre", quantity: 1 },
@@ -14,12 +13,13 @@ describe("item loot", () => {
     ]);
     expect(lootForArchetype("stone_brute")).toEqual([
       { itemId: "stone_core", quantity: 1 },
-      { itemId: "stone_core_hammer", quantity: 1 },
     ]);
     expect(lootForArchetype("cave_spitter")).toEqual([
       { itemId: "acid_gland", quantity: 1 },
-      { itemId: "acid_gland_focus", quantity: 1 },
     ]);
+    expect(lootForArchetype("moss_crawler", "", .13)).toContainEqual({ itemId: "fang_dagger", quantity: 1 });
+    expect(lootForArchetype("moss_crawler", "", .14)).not.toContainEqual({ itemId: "fang_dagger", quantity: 1 });
+    expect(lootForArchetype("stone_brute", "", .2, "champion")).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
   });
 
   it("collects only inside the pickup radius", () => {

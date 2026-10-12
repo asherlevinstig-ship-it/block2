@@ -1304,6 +1304,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #world-objective header span, #world-objective header strong { color: #cce77b; font: 800 10px/1.2 system-ui, sans-serif; letter-spacing: .14em; }
 #world-objective h2 { margin: 5px 0 2px; font: 800 18px/1.15 system-ui, sans-serif; }
 #world-objective p { margin: 0 0 8px; color: #b7c8b8; font: 600 12px/1.35 system-ui, sans-serif; }
+#world-objective #objective-loot { color: #e8b7ff; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
 #world-objective footer { color: #dce7d7; font: 800 11px/1 system-ui, sans-serif; letter-spacing: .06em; }
 #depths-route-map { position: fixed; z-index: 18; right: 18px; bottom: 18px; width: min(370px, calc(100vw - 36px)); box-sizing: border-box; padding: 12px 14px 10px; color: #eee9ff; pointer-events: none; border: 1px solid #8e66c888; border-radius: 12px; background: linear-gradient(150deg, #181228ee, #0b101fee); box-shadow: 0 10px 32px #0008, inset 0 0 24px #874ed51a; }
 #depths-route-map header, #depths-route-map footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1423,7 +1424,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 @media (max-width: 820px) {
   #world-objective { top: 42px; width: min(290px, calc(100vw - 110px)); padding: 9px 12px 8px; }
   #world-objective h2 { font-size: 15px; }
-  #world-objective p { display: none; }
+  #world-objective #objective-detail { display: none; }
   #objective-complete { min-width: min(300px, calc(100vw - 28px)); padding-inline: 18px; }
   #depths-route-map { right: 8px; bottom: 118px; width: 250px; padding: 9px 10px 7px; }
   .depths-route-diagram { height: 92px; }

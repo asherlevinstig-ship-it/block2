@@ -35,8 +35,9 @@ describe("polished silver guard clearing", () => {
     }
     for (const mob of room.state.mobs.values()) expect(mob.actionSequence).toBeGreaterThan(1);
   });
-  it("creates fixed personal focus and potion drops without changing ordinary spitters", () => {
+  it("keeps personal guard materials fixed while focus equipment remains a roll", () => {
     const { room, internal } = fixture();
+    vi.spyOn(Math, "random").mockReturnValueOnce(.01).mockReturnValueOnce(.99).mockReturnValueOnce(.01).mockReturnValue(.99);
     for (const id of SILVER_GUARD_IDS) internal.spawnLootDrops(id, room.state.mobs.get(id), 10000, "contributor");
     const drops = [...room.state.lootDrops.values()];
     expect(drops.every(drop => drop.ownerId === "contributor")).toBe(true);

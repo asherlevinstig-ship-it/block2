@@ -23,6 +23,7 @@ import { compatiblePowerOrFallback } from "./power-rules.js";
 import { InventoryItemState, type PlayerState } from "./schema.js";
 import { parseRecoveryBags, restoreRecoveryBags, snapshotRecoveryBags, type RecoveryBagData } from "./death-recovery.js";
 import { parseReforgeRanks, serializeReforgeRanks } from "./equipment-reforge.js";
+import { parseSignaturePity, serializeSignaturePity, type SignaturePity } from "./signature-loot.js";
 
 export const PLAYER_SAVE_VERSION = 1;
 export const PLAYER_SAVE_HASH = "blockcraft:player-saves:v1";
@@ -47,6 +48,7 @@ export interface PlayerSaveData {
   potionCooldownUntil?: number;
   blacksmithUpgrades: number;
   reforgeRanks?: EquipmentReforgeRanks;
+  signaturePity?: SignaturePity;
   forestBestTimeMs?: number;
   silverDepthsBestTimeMs?: number;
   miningExpeditionStage?: number;
@@ -107,6 +109,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     potionCooldownUntil: player.potionCooldownUntil,
     blacksmithUpgrades: player.blacksmithUpgrades,
     reforgeRanks: parseReforgeRanks(player.reforgeRanksJson),
+    signaturePity: parseSignaturePity(player.signaturePityJson),
     forestBestTimeMs: player.forestBestTimeMs,
     silverDepthsBestTimeMs: player.silverDepthsBestTimeMs,
     miningExpeditionStage: player.miningExpeditionStage,
@@ -181,6 +184,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
     blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 511)),
     reforgeRanks: parseReforgeRanks(value.reforgeRanks),
+    signaturePity: parseSignaturePity(value.signaturePity),
     forestBestTimeMs: Math.floor(finiteNumber(value.forestBestTimeMs, 0, 0, 86_400_000)),
     silverDepthsBestTimeMs: Math.floor(finiteNumber(value.silverDepthsBestTimeMs, 0, 0, 86_400_000)),
     miningExpeditionStage: Math.floor(finiteNumber(value.miningExpeditionStage,
@@ -221,6 +225,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.potionCooldownUntil = save.potionCooldownUntil ?? 0;
   player.blacksmithUpgrades = save.blacksmithUpgrades;
   player.reforgeRanksJson = serializeReforgeRanks(save.reforgeRanks ?? {});
+  player.signaturePityJson = serializeSignaturePity(save.signaturePity ?? {});
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;
   player.miningExpeditionStage = save.miningExpeditionStage ?? 0;

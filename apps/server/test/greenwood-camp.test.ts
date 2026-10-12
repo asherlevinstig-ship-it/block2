@@ -41,12 +41,13 @@ describe("Greenwood beginner crawler camp", () => {
     }
     for (const mob of room.state.mobs.values()) expect(mob.actionSequence).toBeGreaterThan(0);
   });
-  it("keeps beginner drops fixed and item-based", () => {
+  it("keeps beginner materials fixed while rolling uncommon equipment", () => {
     expect(lootForArchetype("moss_crawler")).toEqual([
-      { itemId: "moss_fibre", quantity: 1 }, { itemId: "crawler_fang", quantity: 1 }, { itemId: "fang_dagger", quantity: 1 },
+      { itemId: "moss_fibre", quantity: 1 }, { itemId: "crawler_fang", quantity: 1 },
     ]);
     expect(lootForArchetype("briar_crawler")).toEqual([
       { itemId: "moss_fibre", quantity: 1 }, { itemId: "crawler_fang", quantity: 1 },
     ]);
+    expect(lootForArchetype("briar_crawler", "", 0)).toContainEqual({ itemId: "fang_dagger", quantity: 1 });
   });
 });

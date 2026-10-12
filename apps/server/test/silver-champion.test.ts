@@ -18,12 +18,13 @@ function fixture(pattern = "fan", wall = false) {
   return { room, internal, mob, player, release };
 }
 describe("Silver Venom Champion", () => {
-  it("promotes a real silver guard with fixed focus loot", () => {
+  it("promotes a real silver guard with an improved focus chance", () => {
     expect(WILDERNESS_ENCOUNTERS.some(mob => mob.id === SILVER_CHAMPION_ID)).toBe(true);
     const { room, internal } = fixture();
     internal.registerMob(SILVER_CHAMPION_ID, "cave_spitter", { x: -30.5, y: 8, z: 12.5 });
     const mob = room.state.mobs.get(SILVER_CHAMPION_ID)!;
     expect(mob.name).toBe("Silver Venom Champion"); expect(mob.isChampion).toBe(true);
+    vi.spyOn(Math, "random").mockReturnValueOnce(.1).mockReturnValue(.99);
     internal.spawnLootDrops(SILVER_CHAMPION_ID, mob, 10000);
     expect([...room.state.lootDrops.values()].some(drop => drop.itemId === "acid_gland_focus" && drop.quantity === 1)).toBe(true);
   });

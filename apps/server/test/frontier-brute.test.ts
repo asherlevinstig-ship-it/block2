@@ -118,8 +118,8 @@ describe("frontier brute ruins", () => {
     vi.setSystemTime(mob.attackReleaseAt); internal.simulatePlayers(.033);
     expect(mob.yaw).toBe(yaw); expect(mob.combatState).toBe("strike");
   });
-  it("guarantees a personal hammer drop without a rarity roll", () => {
-    const { internal, room, mob } = fixture(); vi.spyOn(Math, "random").mockReturnValue(.99);
+  it("rolls a personal rare hammer in the frontier", () => {
+    const { internal, room, mob } = fixture(); vi.spyOn(Math, "random").mockReturnValueOnce(.05).mockReturnValue(.99);
     internal.spawnLootDrops("frontier-brute", mob, 10000, "tester");
     const hammer = [...room.state.lootDrops.values()].find(drop => drop.itemId === "stone_core_hammer");
     expect(hammer?.quantity).toBe(1); expect(hammer?.ownerId).toBe("tester");

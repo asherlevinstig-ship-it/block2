@@ -28,7 +28,8 @@ describe("distinct radial wilderness territories", () => {
       expect(radiusFromSafeCenter(mob)).toBeGreaterThanOrEqual(MOB_TOWN_MINIMUM_RADIUS - .001);
     }
     expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(4);
-    expect(lootForArchetype("stone_brute")).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
+    expect(lootForArchetype("stone_brute", "", 0)).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
+    expect(lootForArchetype("stone_brute", "", .5)).not.toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
   });
   it("gives frontier deposits 50 renewable ore cells versus 18 in the wilds", () => {
     const { internal } = fixture();

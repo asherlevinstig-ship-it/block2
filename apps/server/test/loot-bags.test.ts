@@ -22,16 +22,16 @@ function fixture(read = flat) {
 describe("authoritative equipment loot bags", () => {
   it("rolls armour only for crawlers and frontier brutes at exact chance boundaries", () => {
     for (const archetype of ["moss_crawler", "briar_crawler"]) {
-      expect(armourDropForMob(archetype, 1, .199)).toEqual([{ itemId: "leather_armour", quantity: 1 }]);
-      expect(armourDropForMob(archetype, 3, .2)).toEqual([]);
+      expect(armourDropForMob(archetype, 1, .079)).toEqual([{ itemId: "leather_armour", quantity: 1 }]);
+      expect(armourDropForMob(archetype, 3, .08)).toEqual([]);
     }
-    expect(armourDropForMob("stone_brute", 3, .249)).toEqual([{ itemId: "iron_armour", quantity: 1 }]);
-    expect(armourDropForMob("stone_brute", 3, .25)).toEqual([]);
+    expect(armourDropForMob("stone_brute", 3, .099)).toEqual([{ itemId: "iron_armour", quantity: 1 }]);
+    expect(armourDropForMob("stone_brute", 3, .1)).toEqual([]);
     expect(armourDropForMob("stone_brute", 2, 0)).toEqual([]);
     expect(armourDropForMob("cave_spitter", 3, 0)).toEqual([]);
     for (const roll of [-1, 1, NaN]) expect(armourDropForMob("moss_crawler", 1, roll)).toEqual([]);
   });
-  it("adds rolled armour without replacing guaranteed drops", () => {
+  it("can roll weapon and armour equipment independently", () => {
     const { internal, room } = fixture(); room.state.lootDrops.clear();
     vi.spyOn(Math, "random").mockReturnValue(0);
     const mob = new MobState(); mob.archetype = "stone_brute"; mob.difficultyTier = 3;

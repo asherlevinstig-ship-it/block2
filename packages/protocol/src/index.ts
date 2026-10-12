@@ -860,6 +860,7 @@ export type WorldObjectiveUpdate = {
   objectiveId: string;
   title: string;
   detail: string;
+  lootHint?: string;
   tier: number;
   recommendedLevel?: string;
   targetMobId: string;

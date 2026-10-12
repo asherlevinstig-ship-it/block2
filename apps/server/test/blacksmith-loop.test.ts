@@ -124,6 +124,7 @@ describe("ore to forged sword to item loot", () => {
     Object.assign(player, { x: 100.5, y: 1, z: 100.5 });
     const mob = new MobState(); Object.assign(mob, { x: 102, y: 1, z: 100.5, health: 2 });
     room.state.mobs.set("crawler", mob);
+    vi.spyOn(Math, "random").mockReturnValueOnce(.01).mockReturnValue(.99);
     internal.pendingAttacks.set("visitor", { requestId: "sword", mainHandId: "longsword", step: 1, yaw: 90, impactAt: 10_135 });
     internal.resolvePendingAttacks(10_225);
     expect(mob.alive).toBe(false); expect(room.state.lootDrops.size).toBe(3);
