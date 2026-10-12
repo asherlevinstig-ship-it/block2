@@ -91,6 +91,9 @@ import {
   TRAIT_DEFINITIONS,
   HUNTERS_MARK,
   ITEM_DEFINITIONS,
+  ITEM_RARITIES,
+  itemRarity,
+  type ItemRarity,
   HEALING_POTION,
   type PotionUpdate,
   POWER_DEFINITIONS,
@@ -1861,6 +1864,7 @@ const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
 const lootWorldLabel = document.querySelector<HTMLButtonElement>("#loot-world-label")!;
 const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
 const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action")!;
+const lootHeadingLabel = document.querySelector<HTMLElement>(".loot-heading span")!;
 const lootClose = document.querySelector<HTMLButtonElement>("#loot-close")!;
 const lootEquip = document.querySelector<HTMLButtonElement>("#loot-equip")!;
 const lootKeep = document.querySelector<HTMLButtonElement>("#loot-keep")!;
@@ -1898,7 +1902,9 @@ function updateLootWorldLabel(): void {
   if (screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height) return;
   const seconds = Math.max(0, Math.ceil((drop.expiresAt - Date.now()) / 1000));
   const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
-  lootWorldName.textContent = ITEM_DEFINITIONS[drop.itemId].name;
+  const rarity = itemRarity(drop.itemId);
+  lootWorldLabel.dataset.rarity = rarity;
+  lootWorldName.textContent = `${ITEM_DEFINITIONS[drop.itemId].name} · ${ITEM_RARITIES[rarity].label.toUpperCase()}`;
   lootWorldAction.textContent = `${near ? "E · INSPECT" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.style.left = `${rect.left + screen.x}px`;
@@ -1909,6 +1915,7 @@ function fillLootComparison(element: HTMLElement, id: MainHandId) {
   const comparison = weaponComparison(id, localIronSwordOwned);
   element.replaceChildren();
   const title = document.createElement("strong"); title.textContent = comparison.name; element.append(title);
+  if (isEquipmentItem(id)) { const rarity = document.createElement("b"); rarity.className = "loot-rarity"; rarity.dataset.rarity = itemRarity(id); rarity.textContent = ITEM_RARITIES[itemRarity(id)].label; element.append(rarity); }
   for (const [label, value] of [["Damage", comparison.damage], ["Reach", comparison.range], ["First attack", comparison.speed]] as const) {
     const row = document.createElement("div"); row.className = "loot-stat";
     const key = document.createElement("span"); key.textContent = label;
@@ -1921,6 +1928,7 @@ function fillArmourComparison(element: HTMLElement, id: ArmourId) {
   const comparison = armourComparison(id);
   element.replaceChildren();
   const title = document.createElement("strong"); title.textContent = comparison.name; element.append(title);
+  if (id !== "none") { const rarity = document.createElement("b"); rarity.className = "loot-rarity"; rarity.dataset.rarity = itemRarity(id); rarity.textContent = ITEM_RARITIES[itemRarity(id)].label; element.append(rarity); }
   for (const [label, value] of [["Reduction", comparison.reduction], ["Movement", comparison.speed], ["Projectiles", comparison.ranged], ["Hazards", comparison.hazards], ["Minimum hit", comparison.minimum]]) {
     const row = document.createElement("div"); row.className = "loot-stat";
     const key = document.createElement("span"); key.textContent = label!;
@@ -1940,6 +1948,9 @@ function openLoot(id: string) {
   if (localDefending) requestDefense(false);
   resetMovementControls();
   inspectedDropId = id; lootPending = false; lootPanel.hidden = false;
+  const rarity = itemRarity(drop.itemId);
+  lootPanel.dataset.rarity = rarity;
+  lootHeadingLabel.textContent = rewardCache ? "PERSONAL DUNGEON CACHE" : `${ITEM_RARITIES[rarity].label.toUpperCase()} · ENEMY EQUIPMENT`;
   document.querySelector<HTMLElement>("#loot-title")!.textContent = rewardCache ? "Personal Rootbound Cache" : ITEM_DEFINITIONS[drop.itemId as ItemId].name;
   document.querySelector<HTMLElement>("#loot-description")!.textContent = rewardCache
     ? `Your secured dungeon reward features ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "veteran supplies"}.`
@@ -3454,7 +3465,13 @@ function isItemId(value: string): value is ItemId {
   return value in ITEM_DEFINITIONS;
 }
 
-const lootMarkerMaterial = powerMaterial(new pc.Color(.8, .88, .62), .24);
+const rarityLootMaterials: Record<ItemRarity, pc.StandardMaterial> = {
+  common: powerMaterial(new pc.Color(.72, .76, .72), .18),
+  uncommon: powerMaterial(new pc.Color(.28, .88, .4), .32),
+  rare: powerMaterial(new pc.Color(.25, .58, 1), .45),
+  epic: powerMaterial(new pc.Color(.72, .3, 1), .6),
+  legendary: powerMaterial(new pc.Color(1, .58, .12), .82),
+};
 function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.StandardMaterial): boolean {
   if (armourForItem(itemId)) {
     addBox(root, "dropped-armour-chest", material, [.64, .58, .3], [0, 0, 0]);
@@ -3557,10 +3574,17 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
     addBox(root, "fibre-b", material, [0.12, 0.42, 0.12], [0.09, 0.02, 0]).setLocalEulerAngles(-22, 0, -18);
   }
   root.setPosition(drop.x, drop.y + 0.36, drop.z);
+  const rarity = itemRarity(itemId);
   const marker = new pc.Entity("personal-loot-marker");
-  marker.addComponent("render", { type: "cylinder", material: lootMarkerMaterial, castShadows: false, receiveShadows: false });
+  marker.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
   marker.setLocalScale(.85, .012, .85); marker.enabled = false;
   root.addChild(marker);
+  if (isEquipmentItem(itemId)) {
+    const beam = new pc.Entity(`loot-${rarity}-beam`);
+    beam.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
+    beam.setLocalScale(rarity === "legendary" ? .065 : .045, rarity === "legendary" ? 2.4 : 1.65, rarity === "legendary" ? .065 : .045);
+    beam.setLocalPosition(0, rarity === "legendary" ? 1.25 : .88, 0); root.addChild(beam);
+  }
   const source = sourceId ? mobVisuals.get(sourceId) : undefined;
   const now = performance.now();
   const revealAt = source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
@@ -3590,7 +3614,15 @@ function bindLootDrops(joinedRoom: Room): void {
 
 function refreshOwnedInventory(): void {
   for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article[data-item]")) {
-    card.hidden = !inventoryItemVisible(inventoryCounts.get(card.dataset.item as ItemId));
+    const itemId = card.dataset.item as ItemId;
+    card.hidden = !inventoryItemVisible(inventoryCounts.get(itemId));
+    if ((equipmentForItem(itemId) || armourForItem(itemId)) && !card.querySelector(".item-rarity")) {
+      const rarity = itemRarity(itemId);
+      card.dataset.rarity = rarity;
+      const badge = document.createElement("span"); badge.className = "item-rarity"; badge.dataset.rarity = rarity;
+      badge.textContent = ITEM_RARITIES[rarity].label;
+      card.querySelector("div")?.append(badge);
+    }
   }
   for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
     let empty = section.querySelector<HTMLElement>(".inventory-empty");
@@ -4400,8 +4432,9 @@ function renderReforgeShop(): void {
     const currentBonus = armour ? reforgeArmourReduction(rank) : reforgeWeaponDamageBonus(rank);
     const nextBonus = armour ? reforgeArmourReduction(rank + 1) : reforgeWeaponDamageBonus(rank + 1);
     const card = document.createElement("article"); card.className = complete ? "complete" : "";
+    card.dataset.rarity = itemRarity(itemId);
     const title = document.createElement("header");
-    title.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name}</strong><b>${rankLabel(rank)}</b>`;
+    title.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name}<small class="smith-rarity">${ITEM_RARITIES[itemRarity(itemId)].label}</small></strong><b>${rankLabel(rank)}</b>`;
     const comparison = document.createElement("p");
     comparison.textContent = complete ? `${armour ? "Reinforcement" : "Weapon damage"} bonus +${currentBonus} · fully reforged`
       : `${armour ? "Reinforcement" : "Weapon damage"} +${currentBonus} → +${nextBonus}`;
@@ -4445,8 +4478,9 @@ function renderDismantleShop(): void {
     const equipped = hand === localMainHandId || armour === localArmourId;
     const protectedLastCopy = equipped && owned <= 1;
     const card = document.createElement("article");
+    card.dataset.rarity = itemRarity(itemId);
     card.className = protectedLastCopy ? "protected" : "";
-    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[itemId].name} ×${owned}`;
+    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[itemId].name} · ${ITEM_RARITIES[itemRarity(itemId)].label} ×${owned}`;
     const reward = document.createElement("p");
     const material = "materialId" in recipe ? ` + ${recipe.materialQuantity} ${ITEM_DEFINITIONS[recipe.materialId].name}` : "";
     reward.textContent = `Returns ${recipe.gold} gold${material}`;
@@ -4489,7 +4523,8 @@ function renderWeaponShop(): void {
     const armour = id === "leather_armour" || id === "iron_armour" ? armourStats(id) : null;
     const stats = armour ? null : weaponComparison(id as MainHandId);
     const card = document.createElement("article");
-    const title = document.createElement("strong"); title.textContent = ITEM_DEFINITIONS[id].name;
+    card.dataset.rarity = itemRarity(id);
+    const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[id].name} · ${ITEM_RARITIES[itemRarity(id)].label}`;
     const description = document.createElement("p");
     description.textContent = armour ? `Damage reduction ${armour.reduction} · movement ${Math.round(armour.speed * 100)}% · minimum hit 1` : `Damage ${stats!.damage} · attack ${stats!.speed} · reach ${stats!.range}`;
     const comparison = document.createElement("small");

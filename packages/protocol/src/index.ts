@@ -360,6 +360,33 @@ export const ITEM_DEFINITIONS = {
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
+export const ITEM_RARITIES = {
+  common: { label: "Common", order: 0 },
+  uncommon: { label: "Uncommon", order: 1 },
+  rare: { label: "Rare", order: 2 },
+  epic: { label: "Epic", order: 3 },
+  legendary: { label: "Legendary", order: 4 },
+} as const;
+export type ItemRarity = keyof typeof ITEM_RARITIES;
+export const EQUIPMENT_RARITY = {
+  leather_armour: "common",
+  iron_armour: "uncommon",
+  rootguard_armour: "epic",
+  bastion_plate: "epic",
+  forged_sword: "uncommon",
+  forged_bow: "uncommon",
+  forged_focus: "uncommon",
+  fang_dagger: "uncommon",
+  stone_core_hammer: "rare",
+  rootbound_hammer: "epic",
+  matriarch_edge: "legendary",
+  acid_gland_focus: "uncommon",
+  venom_focus: "legendary",
+  echo_prism: "epic",
+} as const satisfies Partial<Record<ItemId, ItemRarity>>;
+export function itemRarity(itemId: string): ItemRarity {
+  return Object.hasOwn(EQUIPMENT_RARITY, itemId) ? EQUIPMENT_RARITY[itemId as keyof typeof EQUIPMENT_RARITY] : "common";
+}
 export const TradeRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("invite"), targetId: z.string().min(1).max(80) }),
   z.object({ action: z.literal("accept"), tradeId: z.string().max(160) }),

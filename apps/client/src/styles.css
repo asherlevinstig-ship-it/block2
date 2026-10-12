@@ -19,8 +19,28 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 #loot-world-label strong { letter-spacing: .04em; }
 #loot-world-label span { margin-top: 3px; color: #a9c5b1; font-size: 9px; letter-spacing: .08em; }
 #loot-world-label[data-near="false"] { border-color: #718579; color: #d5dfd4; cursor: default; box-shadow: 0 4px 12px #0007; }
+#loot-world-label[data-rarity="common"] { --rarity: #c3cbc5; }
+#loot-world-label[data-rarity="uncommon"] { --rarity: #68dc72; }
+#loot-world-label[data-rarity="rare"] { --rarity: #63a5ff; }
+#loot-world-label[data-rarity="epic"] { --rarity: #c276ff; }
+#loot-world-label[data-rarity="legendary"] { --rarity: #ffb44f; }
+#loot-world-label[data-rarity] { border-color: var(--rarity); color: var(--rarity); box-shadow: 0 4px 15px #0009, 0 0 22px color-mix(in srgb, var(--rarity) 45%, transparent); }
 body:has(#inventory-panel:not([hidden])) #loot-world-label, body:has(#loot-panel:not([hidden])) #loot-world-label { display: none; }
 .loot-card { width: min(560px, 100%); max-height: 85vh; overflow: auto; padding: 24px; border: 2px solid #cda750; border-radius: 16px; background: linear-gradient(145deg, #23342a, #101b16); box-shadow: 0 20px 70px #0009; }
+.loot-panel[data-rarity="common"] { --rarity: #c3cbc5; }
+.loot-panel[data-rarity="uncommon"] { --rarity: #68dc72; }
+.loot-panel[data-rarity="rare"] { --rarity: #63a5ff; }
+.loot-panel[data-rarity="epic"] { --rarity: #c276ff; }
+.loot-panel[data-rarity="legendary"] { --rarity: #ffb44f; }
+.loot-panel[data-rarity] .loot-card { border-color: var(--rarity); box-shadow: 0 20px 70px #0009, 0 0 32px color-mix(in srgb, var(--rarity) 26%, transparent); }
+.loot-panel[data-rarity] .loot-heading, .loot-panel[data-rarity] .loot-card h2 { color: var(--rarity); }
+.loot-rarity, .item-rarity, .smith-rarity { display: inline-block !important; width: fit-content; margin-top: 4px; padding: 2px 5px; border: 1px solid currentColor; border-radius: 999px; font-size: .52rem !important; font-style: normal; line-height: 1; letter-spacing: .08em; text-transform: uppercase; }
+[data-rarity="common"] { --item-rarity: #c3cbc5; }
+[data-rarity="uncommon"] { --item-rarity: #68dc72; }
+[data-rarity="rare"] { --item-rarity: #63a5ff; }
+[data-rarity="epic"] { --item-rarity: #c276ff; }
+[data-rarity="legendary"] { --item-rarity: #ffb44f; }
+.loot-rarity[data-rarity], .item-rarity[data-rarity], .smith-rarity { color: var(--item-rarity); }
 .loot-heading { display: flex; align-items: center; justify-content: space-between; color: #f3ce76; font-weight: 800; font-size: 12px; letter-spacing: .08em; }
 .loot-heading button { min-width: 44px; min-height: 44px; }
 .loot-card h2 { margin: 10px 0; color: #fff3cf; }
@@ -718,6 +738,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #blacksmith-dismantle article small { min-height: 2.5em; color: #aaa193; font-size: .61rem; line-height: 1.35; }
 #blacksmith-dismantle article button { width: 100%; margin-top: 9px; }
 #blacksmith-dismantle article.protected { opacity: .7; border-color: #776c5d66; }
+#blacksmith-dismantle article[data-rarity], #blacksmith-reforge article[data-rarity], #blacksmith-weapons article[data-rarity] { border-color: color-mix(in srgb, var(--item-rarity) 58%, transparent); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--item-rarity) 75%, transparent); }
 #blacksmith-panel[data-phase="dismantled"] #blacksmith-message { color: #ffd27f; }
 #blacksmith-reforge { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 #blacksmith-reforge > h3, #blacksmith-reforge > .blacksmith-reforge-help, #blacksmith-reforge > .blacksmith-reforge-empty { grid-column: 1 / -1; }
@@ -1058,6 +1079,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article.empty { opacity: .48; }
 .equipment-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .inventory-grid article.equipment { grid-template-columns: 38px 1fr auto; grid-template-rows: auto auto; border-color: rgb(116 183 220 / 20%); }
+.inventory-grid article.equipment[data-rarity] { border-color: color-mix(in srgb, var(--item-rarity) 50%, transparent); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--item-rarity) 72%, transparent); }
 .inventory-grid article.equipment button {
   grid-column: 1 / -1;
   min-height: 30px;
