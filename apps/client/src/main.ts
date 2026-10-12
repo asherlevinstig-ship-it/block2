@@ -8,7 +8,7 @@ import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
-import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
+import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectAction, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
 import { createCharacterPortrait } from "./character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
@@ -1800,6 +1800,7 @@ interface LootVisual {
   revealAt: number;
   state: NetworkLootDrop;
   phase: number;
+  audioPlayed: boolean;
 }
 
 interface MobVisual {
@@ -1869,6 +1870,9 @@ const lootHeadingLabel = document.querySelector<HTMLElement>(".loot-heading span
 const lootClose = document.querySelector<HTMLButtonElement>("#loot-close")!;
 const lootEquip = document.querySelector<HTMLButtonElement>("#loot-equip")!;
 const lootKeep = document.querySelector<HTMLButtonElement>("#loot-keep")!;
+const lootDismantle = document.querySelector<HTMLButtonElement>("#loot-dismantle")!;
+const lootAcquisitionState = document.querySelector<HTMLElement>("#loot-acquisition-state")!;
+const lootSource = document.querySelector<HTMLElement>("#loot-source")!;
 const lootMessage = document.querySelector<HTMLElement>("#loot-message")!;
 let inspectedDropId: string | null = null;
 let lootPending = false;
@@ -1950,7 +1954,13 @@ function openLoot(id: string) {
   resetMovementControls();
   inspectedDropId = id; lootPending = false; lootPanel.hidden = false;
   const rarity = itemRarity(drop.itemId);
+  const owned = inventoryCounts.get(drop.itemId as ItemId) ?? 0;
+  const duplicate = owned > 0;
   lootPanel.dataset.rarity = rarity;
+  lootAcquisitionState.dataset.duplicate = String(duplicate);
+  lootAcquisitionState.textContent = duplicate ? `DUPLICATE · ${owned} OWNED` : "NEW FIND";
+  const sourceId = lootSourceMob(id);
+  lootSource.textContent = sourceId ? `Dropped by ${mobVisuals.get(sourceId)?.state.name ?? "enemy"}` : rewardCache ? "Personal dungeon reward" : "Personal equipment drop";
   lootHeadingLabel.textContent = rewardCache ? "PERSONAL DUNGEON CACHE" : `${ITEM_RARITIES[rarity].label.toUpperCase()} · ENEMY EQUIPMENT`;
   document.querySelector<HTMLElement>("#loot-title")!.textContent = rewardCache ? "Personal Rootbound Cache" : ITEM_DEFINITIONS[drop.itemId as ItemId].name;
   document.querySelector<HTMLElement>("#loot-description")!.textContent = rewardCache
@@ -1980,24 +1990,33 @@ function openLoot(id: string) {
     : "Choose how to use this item. The world keeps moving.";
   lootEquip.hidden = rewardCache || Boolean(utility);
   lootKeep.textContent = rewardCache ? "CLAIM CACHE" : utility ? "CLAIM & AUTO-EQUIP" : "KEEP IN PACK";
-  lootEquip.disabled = lootKeep.disabled = false;
+  const dismantleRecipe = Object.hasOwn(BLACKSMITH_DISMANTLE, drop.itemId)
+    ? BLACKSMITH_DISMANTLE[drop.itemId as BlacksmithDismantleItemId] : null;
+  lootDismantle.hidden = rewardCache || Boolean(utility) || !dismantleRecipe;
+  lootDismantle.textContent = dismantleRecipe ? `DISMANTLE · +${dismantleRecipe.gold} GOLD` : "DISMANTLE";
+  lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = false;
   lootClose.focus();
 }
-function collectInspectedLoot(equip: boolean) {
+function collectInspectedLoot(action: LootCollectAction) {
   if (!room || !inspectedDropId || lootPending) return;
-  lootPending = true; lootEquip.disabled = lootKeep.disabled = true;
-  lootMessage.textContent = "Collecting…";
+  lootPending = true; lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = true;
+  lootMessage.textContent = action === "dismantle" ? "Dismantling…" : "Collecting…";
   const id = inspectedDropId;
-  room.send("loot:collect", { dropId: id, equip });
+  // Keep/equip can cross an older rolling server safely; dismantle omits the
+  // legacy flag so an old server rejects it instead of accidentally keeping it.
+  room.send("loot:collect", action === "dismantle"
+    ? { dropId: id, action }
+    : { dropId: id, action, equip: action === "equip" });
   window.setTimeout(() => {
     if (inspectedDropId !== id || !lootPending) return;
-    lootPending = false; lootEquip.disabled = lootKeep.disabled = false;
+    lootPending = false; lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = false;
     lootMessage.textContent = "No confirmation yet. You can try again.";
   }, 3000);
 }
 lootClose.addEventListener("click", closeLoot);
-lootEquip.addEventListener("click", () => collectInspectedLoot(true));
-lootKeep.addEventListener("click", () => collectInspectedLoot(false));
+lootEquip.addEventListener("click", () => collectInspectedLoot("equip"));
+lootKeep.addEventListener("click", () => collectInspectedLoot("keep"));
+lootDismantle.addEventListener("click", () => collectInspectedLoot("dismantle"));
 lootWorldLabel.addEventListener("click", () => {
   const nearby = nearestVisibleEquipmentDrop(EQUIPMENT_LOOT_RANGE);
   if (nearby) openLoot(nearby.id);
@@ -3585,12 +3604,22 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
     beam.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
     beam.setLocalScale(rarity === "legendary" ? .065 : .045, rarity === "legendary" ? 2.4 : 1.65, rarity === "legendary" ? .065 : .045);
     beam.setLocalPosition(0, rarity === "legendary" ? 1.25 : .88, 0); root.addChild(beam);
+    if (ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
+      const halo = new pc.Entity(`loot-${rarity}-halo`);
+      halo.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
+      halo.setLocalScale(rarity === "legendary" ? 1.25 : .95, .018, rarity === "legendary" ? 1.25 : .95);
+      halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
+      const glow = new pc.Entity(`loot-${rarity}-light`);
+      const tint = rarity === "legendary" ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1) : new pc.Color(.25, .55, 1);
+      glow.addComponent("light", { type: "omni", color: tint, intensity: rarity === "legendary" ? 1.6 : .85, range: rarity === "legendary" ? 5.5 : 3.5, castShadows: false });
+      glow.setLocalPosition(0, .45, 0); root.addChild(glow);
+    }
   }
   const source = sourceId ? mobVisuals.get(sourceId) : undefined;
   const now = performance.now();
   const revealAt = source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
   app.root.addChild(root);
-  return { root, marker, revealAt, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17 };
+  return { root, marker, revealAt, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17, audioPlayed: false };
 }
 
 function bindLootDrops(joinedRoom: Room): void {
@@ -4121,12 +4150,13 @@ function showResourcePickup(name: string, quantity: number, itemId?: string): vo
   setTimeout(() => toast.remove(), 2200);
 }
 
-function showEquipmentPickup(itemId: ItemId, quantity: number): void {
+function showEquipmentPickup(itemId: ItemId, quantity: number, total: number): void {
   const card = equipmentPickupCard(itemId, quantity);
   if (!card) return;
   const toast = document.createElement("div"); toast.className = "resource-toast equipment-pickup";
   toast.dataset.category = card.category.toLowerCase();
-  const title = document.createElement("small"); title.textContent = `${card.title} · ${card.category}`;
+  const rarity = itemRarity(itemId); toast.dataset.rarity = rarity;
+  const title = document.createElement("small"); title.textContent = `${total > quantity ? "DUPLICATE" : "NEW"} · ${ITEM_RARITIES[rarity].label.toUpperCase()} ${card.category.toUpperCase()}`;
   const name = document.createElement("strong"); name.textContent = `${card.name}${card.quantity}`;
   const hint = document.createElement("span"); hint.textContent = card.hint;
   toast.append(title, name, hint); resourceToasts.prepend(toast);
@@ -6590,7 +6620,7 @@ window.addEventListener("keydown", event => {
   if (!lootPanel.hidden) {
     if (event.code === "Escape") closeLoot();
     if (event.code === "Tab") {
-      const buttons = [lootClose, lootEquip, lootKeep].filter(button => !button.disabled);
+      const buttons = [lootClose, lootEquip, lootKeep, lootDismantle].filter(button => !button.disabled && !button.hidden);
       const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
       buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
       event.preventDefault();
@@ -7063,6 +7093,16 @@ app.on("update", (dt: number) => {
     loot.root.setPosition(loot.state.x, loot.state.y + 0.36 + bob, loot.state.z);
     loot.root.setEulerAngles(0, (animationTime * 58 + loot.phase * 23) % 360, 0);
     loot.marker.enabled = animationNow >= loot.revealAt;
+    if (!loot.audioPlayed && loot.marker.enabled && isEquipmentItem(loot.state.itemId)) {
+      loot.audioPlayed = true;
+      const rarity = itemRarity(loot.state.itemId);
+      const player = localPlayer.getPosition();
+      if (Math.hypot(loot.state.x - player.x, loot.state.z - player.z) <= 18) {
+        if (rarity === "rare") combatAudio.play("lootRare", enemyCuePan(loot.state.x, player.x, 18));
+        if (rarity === "epic") combatAudio.play("lootEpic", enemyCuePan(loot.state.x, player.x, 18));
+        if (rarity === "legendary") combatAudio.play("lootLegendary", enemyCuePan(loot.state.x, player.x, 18));
+      }
+    }
     if (loot.marker.enabled) {
       const scale = lootMarkerScale(animationNow, loot.revealAt);
       loot.marker.setLocalScale(.85 * scale, .012, .85 * scale);
@@ -8211,15 +8251,22 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("loot:result", (message: LootCollectResult) => {
     if (message.dropId !== inspectedDropId) return;
-    lootPending = false; lootEquip.disabled = lootKeep.disabled = !lootVisuals.has(message.dropId);
+    lootPending = false; lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = !lootVisuals.has(message.dropId);
     lootMessage.textContent = message.message;
-    if (message.ok) { closeLoot(); status.textContent = message.message; }
+    if (message.ok) {
+      if (message.action === "dismantle" && message.itemId && isItemId(message.itemId)) {
+        const toast = document.createElement("div"); toast.className = "resource-toast equipment-pickup"; toast.dataset.rarity = itemRarity(message.itemId);
+        toast.innerHTML = `<small>DISMANTLED · ${ITEM_RARITIES[itemRarity(message.itemId)].label.toUpperCase()}</small><strong>${ITEM_DEFINITIONS[message.itemId].name}</strong><span>+${message.goldGranted ?? 0} gold${message.materialGranted ? ` · +${message.materialQuantity ?? 0} ${ITEM_DEFINITIONS[message.materialGranted].name}` : ""}</span>`;
+        resourceToasts.prepend(toast); setTimeout(() => toast.remove(), 4500);
+      }
+      closeLoot(); status.textContent = message.message;
+    }
   });
   room.onMessage("loot:picked-up", (message: LootPickedUp) => {
     if (message.playerId !== room?.sessionId || !isItemId(message.itemId)) return;
     updateInventoryItem(message.itemId, message.total);
     const item = ITEM_DEFINITIONS[message.itemId];
-    if (isEquipmentItem(message.itemId)) showEquipmentPickup(message.itemId, message.quantity);
+    if (isEquipmentItem(message.itemId)) showEquipmentPickup(message.itemId, message.quantity, message.total);
     showCombatFeedback(`+${message.quantity} ${item.name.toUpperCase()}`, "dodge");
     status.textContent = `Picked up ${item.name} · ${message.total} total.`;
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);

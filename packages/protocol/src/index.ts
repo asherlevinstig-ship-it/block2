@@ -74,8 +74,23 @@ export function resolveAppearance(value: unknown): Appearance {
 }
 export type NearbyChatMessage = { senderId: string; name: string; text: string };
 export const EQUIPMENT_LOOT_RANGE = 1.8;
-export const LootCollectRequestSchema = z.object({ dropId: z.string().min(1).max(160), equip: z.boolean() });
-export type LootCollectResult = { ok: boolean; dropId: string; message: string };
+export type LootCollectAction = "keep" | "equip" | "dismantle";
+export const LootCollectRequestSchema = z.object({
+  dropId: z.string().min(1).max(160),
+  // `equip` remains accepted for clients crossing a rolling deployment.
+  equip: z.boolean().optional(),
+  action: z.enum(["keep", "equip", "dismantle"]).optional(),
+}).refine(value => value.action !== undefined || value.equip !== undefined);
+export type LootCollectResult = {
+  ok: boolean;
+  dropId: string;
+  message: string;
+  action?: LootCollectAction;
+  itemId?: ItemId;
+  goldGranted?: number;
+  materialGranted?: ItemId;
+  materialQuantity?: number;
+};
 export const HEALING_POTION = { price: 5, heal: 2, capacity: 3, cooldownMs: 5000 } as const;
 export type PotionUpdate = { phase: "bought" | "healed" | "error"; message: string; quantity: number; gold: number; health: number; maxHealth: number; cooldownUntil: number; healed: number };
 export const MINERAL_REGROWTH_MS = 120_000;

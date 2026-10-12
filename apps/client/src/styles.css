@@ -44,18 +44,23 @@ body:has(#inventory-panel:not([hidden])) #loot-world-label, body:has(#loot-panel
 .loot-heading { display: flex; align-items: center; justify-content: space-between; color: #f3ce76; font-weight: 800; font-size: 12px; letter-spacing: .08em; }
 .loot-heading button { min-width: 44px; min-height: 44px; }
 .loot-card h2 { margin: 10px 0; color: #fff3cf; }
+.loot-acquisition { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -3px 0 12px; }
+.loot-acquisition b { padding: 4px 7px; border: 1px solid var(--rarity, #cda750); border-radius: 999px; color: var(--rarity, #f3ce76); font-size: 9px; letter-spacing: .1em; }
+.loot-acquisition b[data-duplicate="true"] { border-color: #88968d; color: #b9c5bd; }
+.loot-acquisition span { color: #8fa399; font-size: 10px; }
 .loot-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
 .loot-compare section { padding: 16px; border: 1px solid #64775b; border-radius: 10px; background: #0b171a88; }
 .loot-compare h3 { font-size: 11px; color: #eaca76; letter-spacing: .1em; }
 .loot-compare strong { display: block; min-height: 40px; }
 .loot-stat { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid #ffffff12; font-size: 13px; }
 .loot-compare p { font-size: 13px; color: #b9d4b3; }
-.loot-actions { display: flex; gap: 10px; margin: 16px 0; }
+.loot-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
 .loot-actions button { flex: 1; min-height: 48px; border: 1px solid #bb984d; border-radius: 8px; background: #754d18; color: #fff3cc; font-weight: 800; cursor: pointer; }
-.loot-actions button:last-child { background: #25362c; }
+#loot-keep { background: #25362c; }
+#loot-dismantle { border-color: #a75e4d; background: #48231f; color: #ffd1c7; }
 .loot-actions button:disabled { opacity: .5; cursor: wait; }
 .loot-card small { color: #aab6a8; }
-@media (max-width: 520px) { .loot-card { padding: 16px; } .loot-compare { gap: 8px; } .loot-compare section { padding: 10px; } .loot-stat { flex-direction: column; gap: 2px; } }
+@media (max-width: 520px) { .loot-card { padding: 16px; } .loot-compare { gap: 8px; } .loot-compare section { padding: 10px; } .loot-stat { flex-direction: column; gap: 2px; } .loot-actions { grid-template-columns: 1fr; } }
 
 #potion-use { position: fixed; right: 24px; bottom: 84px; z-index: 12; padding: 12px 16px; border: 1px solid #f38e9e; border-radius: 9px; background: #331922; color: #ffe3e9; font-weight: 800; min-height: 44px; }
 #potion-use:disabled { opacity: .55; }
@@ -1558,7 +1563,12 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .resource-toast { padding: 9px 18px; border: 1px solid #cbdcaa88; border-radius: 20px; color: #f6edbc; background: #163026ed; font: 800 15px system-ui; text-align: center; animation: resource-pickup 2.2s both; }
 .resource-toast[data-item="iron_ore"] { color: #ffd19e; border-color: #d89851; background: #352416ed; box-shadow: 0 0 18px #ce8b3a33; }
 .resource-toast[data-item="silver_ore"] { color: #d3f1ff; border-color: #9acfe6; background: #172d3ced; box-shadow: 0 0 18px #83c5e333; }
-.equipment-pickup { width: min(340px, calc(100vw - 52px)); border-radius: 12px; border: 2px solid #c6d3b4; background: linear-gradient(135deg, #243b35, #101c23); padding: 14px 20px; animation-duration: 4.5s; box-shadow: 0 8px 24px #0006; }
+.equipment-pickup { --rarity: #c6d3b4; width: min(370px, calc(100vw - 52px)); border-radius: 12px; border: 2px solid var(--rarity); background: linear-gradient(135deg, color-mix(in srgb, var(--rarity) 18%, #15271f), #101c23); padding: 14px 20px; animation-duration: 4.5s; box-shadow: 0 8px 24px #0006, 0 0 26px color-mix(in srgb, var(--rarity) 25%, transparent); }
+.equipment-pickup[data-rarity="common"] { --rarity: #c3cbc5; }
+.equipment-pickup[data-rarity="uncommon"] { --rarity: #68dc72; }
+.equipment-pickup[data-rarity="rare"] { --rarity: #63a5ff; }
+.equipment-pickup[data-rarity="epic"] { --rarity: #c276ff; }
+.equipment-pickup[data-rarity="legendary"] { --rarity: #ffb44f; }
 .equipment-pickup small { display: block; font-size: 10px; letter-spacing: .08em; color: #b9d4c8; }
 .equipment-pickup strong { display: block; margin: 6px 0; font-size: 19px; color: #fff4d6; }
 .equipment-pickup > span { display: block; font-size: 12px; font-weight: 500; color: #c6d6dd; }

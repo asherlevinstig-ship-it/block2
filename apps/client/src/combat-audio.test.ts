@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DUNGEON_CUE_DEFINITIONS, ENEMY_CUE_DEFINITIONS, POWER_CUE_DEFINITIONS, WEAPON_CUE_DEFINITIONS, enemyCuePan, enemyCuesForTransition, type EnemyCueSnapshot } from "./combat-audio.js";
+import { DUNGEON_CUE_DEFINITIONS, ENEMY_CUE_DEFINITIONS, LOOT_CUE_DEFINITIONS, POWER_CUE_DEFINITIONS, WEAPON_CUE_DEFINITIONS, enemyCuePan, enemyCuesForTransition, type EnemyCueSnapshot } from "./combat-audio.js";
 
 const idle: EnemyCueSnapshot = {
   alive: true,
@@ -52,6 +52,13 @@ describe("enemy combat audio", () => {
     expect(DUNGEON_CUE_DEFINITIONS.dungeonVictory.tones).toHaveLength(3);
     expect(DUNGEON_CUE_DEFINITIONS.guardianPhase.tones[0]!.startHz).toBeLessThan(100);
     expect(Object.values(DUNGEON_CUE_DEFINITIONS).every(cue => cue.tones.every(tone => tone.gain <= .075))).toBe(true);
+  });
+
+  it("escalates rare, epic, and legendary loot reveals", () => {
+    expect(Object.keys(LOOT_CUE_DEFINITIONS).sort()).toEqual(["lootEpic", "lootLegendary", "lootRare"]);
+    expect(LOOT_CUE_DEFINITIONS.lootRare.tones).toHaveLength(2);
+    expect(LOOT_CUE_DEFINITIONS.lootEpic.tones).toHaveLength(3);
+    expect(LOOT_CUE_DEFINITIONS.lootLegendary.tones).toHaveLength(4);
   });
 
   it("positions cues across the stereo field and clamps distant enemies", () => {

@@ -80,6 +80,29 @@ describe("authoritative equipment loot bags", () => {
     expect(player.inventory.get("fang_dagger")?.quantity).toBe(1); expect(player.mainHandId).toBe("longsword");
     expect(persist).toHaveBeenCalled(); expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({ ok: true }));
   });
+  it("dismantles equipment directly from a personal bag without first adding the item", () => {
+    const { internal, room, player, client, drop, persist } = fixture();
+    drop.itemId = "stone_core_hammer";
+    const goldBefore = player.coins;
+    internal.handleLootCollect(client, { dropId: "bag", action: "dismantle" });
+    expect(room.state.lootDrops.has("bag")).toBe(false);
+    expect(player.inventory.has("stone_core_hammer")).toBe(false);
+    expect(player.coins).toBe(goldBefore + 6);
+    expect(player.inventory.get("stone_core")?.quantity).toBe(1);
+    expect(persist).toHaveBeenCalled();
+    expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({
+      ok: true, action: "dismantle", itemId: "stone_core_hammer", goldGranted: 6,
+      materialGranted: "stone_core", materialQuantity: 1,
+    }));
+  });
+  it("rejects direct dismantling for protected utility rewards", () => {
+    const { internal, room, player, client, drop } = fixture();
+    drop.itemId = "miners_lantern";
+    internal.handleLootCollect(client, { dropId: "bag", action: "dismantle" });
+    expect(room.state.lootDrops.has("bag")).toBe(true);
+    expect(player.inventory.has("miners_lantern")).toBe(false);
+    expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({ ok: false }));
+  });
   it("keeps the Miner's Lantern inspectable and auto-activates it when claimed", () => {
     const { internal, room, drop, player, collect, client } = fixture(); drop.itemId = "miners_lantern";
     player.miningExpeditionStage = 6;

@@ -1987,14 +1987,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private handleLootCollect(client: Client, payload: unknown): void {
     const parsed = LootCollectRequestSchema.safeParse(payload);
-    const reply = (ok: boolean, message: string) => client.send("loot:result", { ok, dropId: parsed.success ? parsed.data.dropId : "", message } satisfies LootCollectResult);
+    const reply = (ok: boolean, message: string, details: Partial<LootCollectResult> = {}) => client.send("loot:result", {
+      ok, dropId: parsed.success ? parsed.data.dropId : "", message, ...details,
+    } satisfies LootCollectResult);
     if (!parsed.success) return reply(false, "Invalid loot request.");
     const player = this.state.players.get(client.sessionId);
     if (!player || player.health <= 0) return reply(false, "You must be alive to collect loot.");
     const drop = this.state.lootDrops.get(parsed.data.dropId);
     if (!drop || Date.now() >= drop.expiresAt) return reply(false, "That bag is no longer available.");
     if (drop.ownerId && drop.ownerId !== client.sessionId) return reply(false, "That is another player's personal loot.");
+    const action = parsed.data.action ?? (parsed.data.equip ? "equip" : "keep");
     if (parsed.data.dropId.startsWith("forest-cache:")) {
+      if (action === "dismantle") return reply(false, "Claim the cache before dismantling equipment at the blacksmith.");
       const run = this.forestDungeonRun;
       if (!run || run.completedAt === 0 || !run.entered.has(client.sessionId) || run.claimed.has(client.sessionId)) return reply(false, "That cache is no longer available.");
       if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside your cache with a clear path to it.");
@@ -2040,8 +2044,29 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const utilityId = drop.itemId === "miners_lantern" || drop.itemId === "moonstone" ? drop.itemId : null;
     if (!mainHandId && !armourId && !utilityId) return reply(false, "Materials are collected automatically.");
     if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside the bag with a clear path to it.");
-    if (parsed.data.equip && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
+    if (action === "equip" && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
     const itemId = drop.itemId as ItemId;
+    if (action === "dismantle") {
+      if (utilityId || !Object.hasOwn(BLACKSMITH_DISMANTLE, itemId)) return reply(false, "This item cannot be dismantled from the loot bag.");
+      const recipe = BLACKSMITH_DISMANTLE[itemId as BlacksmithDismantleItemId] as { gold: number; materialId?: ItemId; materialQuantity?: number };
+      const materialId = recipe.materialId;
+      const materialQuantity = recipe.materialQuantity ?? 0;
+      if (materialId && materialQuantity > 0) {
+        let material = player.inventory.get(materialId);
+        if (!material) { material = new InventoryItemState(); player.inventory.set(materialId, material); }
+        material.quantity = inventoryTotal(material.quantity, materialQuantity);
+        this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId: materialId,
+          quantity: materialQuantity, total: material.quantity } satisfies LootPickedUp);
+      }
+      const beforeGold = player.coins;
+      player.coins = Math.min(1_000_000, player.coins + recipe.gold);
+      this.state.lootDrops.delete(parsed.data.dropId);
+      void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+      const materialMessage = materialId && materialQuantity > 0 ? ` · +${materialQuantity} ${ITEM_DEFINITIONS[materialId].name}` : "";
+      return reply(true, `Dismantled ${ITEM_DEFINITIONS[itemId].name} · +${player.coins - beforeGold} gold${materialMessage}.`, {
+        action, itemId, goldGranted: player.coins - beforeGold, materialGranted: materialId, materialQuantity,
+      });
+    }
     let item = player.inventory.get(itemId);
     const before = item?.quantity ?? 0;
     if (before + drop.quantity > 65535) return reply(false, "Your pack cannot hold another of that item.");
@@ -2049,8 +2074,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     item.quantity = inventoryTotal(before, drop.quantity);
     // Synchronous removal makes competing and replayed requests collect at most once.
     this.state.lootDrops.delete(parsed.data.dropId);
-    if (parsed.data.equip && mainHandId) this.handleMainHandEquip(client, { requestId: `loot-equip-${Date.now()}`, mainHandId });
-    if (parsed.data.equip && armourId) this.handleArmourEquip(client, { armourId });
+    if (action === "equip" && mainHandId) this.handleMainHandEquip(client, { requestId: `loot-equip-${Date.now()}`, mainHandId });
+    if (action === "equip" && armourId) this.handleArmourEquip(client, { armourId });
     void this.persistPlayer(client.sessionId, player);
     this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
       quantity: drop.quantity, total: item.quantity } satisfies LootPickedUp);
@@ -2065,7 +2090,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.sendSilverDepthsCheckpointStatus(client.sessionId);
     }
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
-      : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
+      : `${ITEM_DEFINITIONS[itemId].name} ${action === "equip" ? "equipped" : "kept in your pack"}.`, { action, itemId });
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,

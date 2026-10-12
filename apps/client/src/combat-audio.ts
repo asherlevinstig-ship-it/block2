@@ -3,7 +3,8 @@ export type PowerCue = "seismicWindup" | "seismicImpact";
 export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit" | "nearMiss";
 export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
 export type DungeonCue = "dungeonGate" | "guardianPhase" | "dungeonVictory" | "depthsEntrance" | "depthsWing" | "depthsArena";
-type CombatCue = EnemyCue | PowerCue | WeaponCue | MiningCue | DungeonCue;
+export type LootCue = "lootRare" | "lootEpic" | "lootLegendary";
+type CombatCue = EnemyCue | PowerCue | WeaponCue | MiningCue | DungeonCue | LootCue;
 
 interface ToneLayer {
   wave: OscillatorType;
@@ -118,12 +119,31 @@ export const DUNGEON_CUE_DEFINITIONS: Record<DungeonCue, EnemyCueDefinition> = {
   ] },
 };
 
+export const LOOT_CUE_DEFINITIONS: Record<LootCue, EnemyCueDefinition> = {
+  lootRare: { minimumIntervalMs: 650, tones: [
+    { wave: "sine", startHz: 392, endHz: 588, gain: .035, delayMs: 0, durationMs: 150 },
+    { wave: "triangle", startHz: 588, endHz: 784, gain: .025, delayMs: 115, durationMs: 190 },
+  ] },
+  lootEpic: { minimumIntervalMs: 850, tones: [
+    { wave: "sine", startHz: 330, endHz: 660, gain: .038, delayMs: 0, durationMs: 220 },
+    { wave: "triangle", startHz: 494, endHz: 988, gain: .03, delayMs: 150, durationMs: 260 },
+    { wave: "sine", startHz: 660, endHz: 1320, gain: .02, delayMs: 300, durationMs: 280 },
+  ] },
+  lootLegendary: { minimumIntervalMs: 1200, tones: [
+    { wave: "triangle", startHz: 196, endHz: 392, gain: .045, delayMs: 0, durationMs: 300 },
+    { wave: "sine", startHz: 392, endHz: 784, gain: .04, delayMs: 180, durationMs: 340 },
+    { wave: "sine", startHz: 523, endHz: 1046, gain: .032, delayMs: 390, durationMs: 420 },
+    { wave: "triangle", startHz: 784, endHz: 1568, gain: .022, delayMs: 610, durationMs: 460 },
+  ] },
+};
+
 const COMBAT_CUE_DEFINITIONS: Record<CombatCue, EnemyCueDefinition> = {
   ...ENEMY_CUE_DEFINITIONS,
   ...POWER_CUE_DEFINITIONS,
   ...WEAPON_CUE_DEFINITIONS,
   ...MINING_CUE_DEFINITIONS,
   ...DUNGEON_CUE_DEFINITIONS,
+  ...LOOT_CUE_DEFINITIONS,
 };
 
 export interface EnemyCueSnapshot {
