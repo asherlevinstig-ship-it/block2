@@ -1848,6 +1848,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.openTemporaryForestPortal(now);
     }
     if (mobId === WILDERNESS_EVENT_ID) {
+      this.wildernessEvent.complete(now);
       const opened = this.openTemporaryForestPortal(now);
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);

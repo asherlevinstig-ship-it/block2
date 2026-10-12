@@ -17,7 +17,8 @@
     "@colyseus/schema": "latest",
     "@colyseus/tools": "^0.18.7",
     "@colyseus/ws-transport": "latest",
-    "express": "latest"
+    "express": "latest",
+    "xstate": "^5.33.2"
   },
   "devDependencies": {
     "@colyseus/testing": "^0.18.6",

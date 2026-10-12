@@ -53,9 +53,11 @@ describe("shared wilderness event", () => {
   it("arms once and gives eight seconds of warning", () => {
     const cycle = new WildernessEventCycle();
     expect(clear(cycle, 10000)).toBe(true);
+    expect(cycle.phase).toBe("warning");
     expect(clear(cycle, 10001)).toBe(false);
     expect(cycle.release(17999)).toBe(false);
     expect(cycle.release(18000)).toBe(true);
+    expect(cycle.phase).toBe("active");
     expect(cycle.release(18001)).toBe(false);
   });
   it("requires a fresh full clear", () => {
@@ -69,8 +71,19 @@ describe("shared wilderness event", () => {
     expect(clear(cycle, 1000, true)).toBe(false);
     expect(clear(cycle, 1000)).toBe(true);
     cycle.release(9000);
+    expect(cycle.complete(9001)).toBe(true);
+    expect(cycle.phase).toBe("cooldown");
     expect(clear(cycle, 10000)).toBe(false);
     expect(clear(cycle, 121000)).toBe(true);
+    expect(cycle.phase).toBe("warning");
+  });
+  it("rejects invalid lifecycle transitions", () => {
+    const cycle = new WildernessEventCycle();
+    expect(cycle.complete(1000)).toBe(false);
+    expect(cycle.release(1000)).toBe(false);
+    expect(clear(cycle, 2000)).toBe(true);
+    expect(cycle.complete(3000)).toBe(false);
+    expect(cycle.phase).toBe("warning");
   });
   it("scales health and rewards for nearby participants without unbounded raid inflation", () => {
     expect(wildernessEventScale(0)).toEqual({ players: 1, maxHealth: 24, attackDamage: 1, rewardMultiplier: 1.5 });
