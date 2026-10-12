@@ -297,7 +297,8 @@
       <summary>Your character &amp; worn gear <span>Show / hide preview</span></summary>
       <section class="inventory-loadout" aria-label="Character and equipment preview">
         <div class="inventory-portrait">
-          <canvas id="inventory-portrait" width="240" height="280" role="img" aria-label="Simplified 2D voxel preview of your selected weapon and armour"></canvas>
+          <canvas id="inventory-portrait" width="240" height="280" role="img" aria-label="Rotatable 3D preview of your actual character, selected weapon and armour. Drag to turn."></canvas>
+          <div class="inventory-portrait-turn"><button id="inventory-turn-left" type="button" aria-label="Turn character left">↶</button><span>DRAG TO TURN</span><button id="inventory-turn-right" type="button" aria-label="Turn character right">↷</button></div>
           <p id="inventory-preview-label">Currently equipped</p>
           <button id="inventory-preview-reset" type="button">SHOW WORN GEAR</button>
         </div>
@@ -307,7 +308,7 @@
             <section><h3>Worn</h3><div id="inventory-worn-stats"></div></section>
             <section><h3>Selected</h3><div id="inventory-selected-stats" aria-live="polite"></div></section>
           </div>
-          <p class="inventory-preview-help">Preview any item below. Use EQUIP to wear owned gear; remove armour to return to your coat.</p>
+          <p class="inventory-preview-help">Drag the character or use the turn buttons. Preview any item below; EQUIP wears owned gear. Remove armour to reveal your coat.</p>
         </div>
       </section>
       <section id="appearance-customizer" aria-label="Character appearance">

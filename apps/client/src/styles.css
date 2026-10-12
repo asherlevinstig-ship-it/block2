@@ -916,9 +916,13 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #inventory-preview-drawer { margin-bottom: 12px; border: 1px solid #7e8d6045; border-radius: 9px; background: #0c1911; }
 #inventory-preview-drawer > summary { padding: 10px; cursor: pointer; color: #c9d7be; font-size: .72rem; }
 #inventory-preview-drawer > summary span { float: right; font-size: .6rem; color: #859a85; }
-.inventory-loadout { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 10px; border-top: 1px solid #b6985830; background: #08130f; }
+.inventory-loadout { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 12px; padding: 10px; border-top: 1px solid #b6985830; background: #08130f; }
 .inventory-portrait { text-align: center; }
-#inventory-portrait { display: block; width: 100%; height: auto; border-radius: 8px; }
+#inventory-portrait { display: block; width: 100%; height: auto; border-radius: 8px; cursor: grab; touch-action: none; }
+#inventory-portrait:active { cursor: grabbing; }
+.inventory-portrait-turn { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 5px; }
+.inventory-portrait-turn span { color: #8da697; font-size: .53rem; font-weight: 800; letter-spacing: .04em; }
+.inventory-portrait .inventory-portrait-turn button { padding: 3px 8px; font-size: 1rem; line-height: 1; }
 .inventory-portrait p { color: #e5c885; font-size: .7rem; }
 .inventory-portrait button { padding: 8px; border: 1px solid #978052; border-radius: 6px; background: #30281b; color: #ead7a6; cursor: pointer; font-size: .6rem; }
 #appearance-customizer { padding: 10px 12px 12px; border-top: 1px solid #b6985830; background: #0c1911; }
@@ -945,7 +949,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article.equipment .inventory-item-actions button { flex: 1; min-width: 0; grid-row: auto; }
 .inventory-section > button { margin-bottom: 10px; padding: 7px 10px; border: 1px solid #856d43; border-radius: 6px; background: #362d1f; color: #e8d39f; font-size: .65rem; }
 @media (max-width: 540px) {
-  .inventory-loadout { grid-template-columns: 75px minmax(0, 1fr); }
+  .inventory-loadout { grid-template-columns: 100px minmax(0, 1fr); }
+  .inventory-portrait-turn span { display: none; }
   .inventory-portrait { width: auto; }
   .inventory-tabs button { font-size: .6rem; }
   .inventory-preview-help { display: none; }

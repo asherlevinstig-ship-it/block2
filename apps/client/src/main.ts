@@ -10,7 +10,7 @@ import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison } from "./loot-comparison.js";
-import { createInventoryPortrait } from "./inventory-preview.js";
+import { createCharacterPortrait } from "./character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
 import { projectileNearMiss } from "./projectile-near-miss.js";
 import { BRUTE_VOLLEY, bruteRockLanes } from "@blockcraft/protocol";
@@ -2099,7 +2099,7 @@ function refreshInventoryEquipped(): void {
   if (!inventoryPanel.hidden) refreshInventoryPreview();
 }
 
-let inventoryPortrait: ReturnType<typeof createInventoryPortrait> | undefined;
+let inventoryPortrait: ReturnType<typeof createCharacterPortrait> | undefined;
 let localAppearance: Appearance = { ...DEFAULT_APPEARANCE };
 const appearanceOptions = document.querySelector<HTMLElement>("#appearance-options")!;
 function updateLocalAppearance(appearance: Appearance): void {
@@ -2160,13 +2160,21 @@ let inventoryBackgroundFrameAt = 0;
 function refreshInventoryPreview(): void {
   if (inventoryPanel.hidden || !document.querySelector<HTMLDetailsElement>("#inventory-preview-drawer")!.open) return;
   if (!inventoryPortrait) {
-    inventoryPortrait = createInventoryPortrait(document.querySelector<HTMLCanvasElement>("#inventory-portrait")!);
+    inventoryPortrait = createCharacterPortrait(document.querySelector<HTMLCanvasElement>("#inventory-portrait")!, localPlayerRig.root,
+      (hand, armour) => {
+        setRigMainHand(localPlayerRig, hand);
+        setRigArmour(localPlayerRig, armour);
+        return () => {
+          setRigMainHand(localPlayerRig, localMainHandId);
+          setRigArmour(localPlayerRig, localArmourId);
+        };
+      });
   }
   const hand = previewHand ?? localMainHandId;
   const armour = previewArmour ?? localArmourId;
   const appearanceKey = `${hand}:${armour}:${localAppearance.skin}:${localAppearance.hair}:${localAppearance.coat}:${localAppearance.hairStyle}:${localAppearance.coatStyle}`;
   const comparisonKey = `${appearanceKey}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${previewSlot}`;
-  inventoryPortrait.refresh(hand, armour, localAppearance);
+  inventoryPortrait.refresh(hand, armour, appearanceKey);
   if (comparisonKey === inventoryComparisonKey) return;
   inventoryComparisonKey = comparisonKey;
   const worn = document.querySelector<HTMLElement>("#inventory-worn-stats")!;
@@ -4221,6 +4229,8 @@ refreshOwnedInventory();
 document.querySelector("#inventory-preview-reset")!.addEventListener("click", () => {
   previewHand = undefined; previewArmour = undefined; refreshInventoryPreview();
 });
+document.querySelector<HTMLButtonElement>("#inventory-turn-left")!.addEventListener("click", () => inventoryPortrait?.turn(-45));
+document.querySelector<HTMLButtonElement>("#inventory-turn-right")!.addEventListener("click", () => inventoryPortrait?.turn(45));
 for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipment")) {
   const button = document.createElement("button"); button.type = "button"; button.className = "inventory-preview-button";
   button.textContent = "PREVIEW";
