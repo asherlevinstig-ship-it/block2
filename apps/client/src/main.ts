@@ -3711,21 +3711,22 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   marker.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
   marker.setLocalScale(.85, .012, .85); marker.enabled = false;
   root.addChild(marker);
-  if (isEquipmentItem(itemId)) {
-    const beam = new pc.Entity(`loot-${rarity}-beam`);
-    beam.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
-    beam.setLocalScale(rarity === "legendary" ? .065 : .045, rarity === "legendary" ? 2.4 : 1.65, rarity === "legendary" ? .065 : .045);
-    beam.setLocalPosition(0, rarity === "legendary" ? 1.25 : .88, 0); root.addChild(beam);
-    if (ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
-      const halo = new pc.Entity(`loot-${rarity}-halo`);
-      halo.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
-      halo.setLocalScale(rarity === "legendary" ? 1.25 : .95, .018, rarity === "legendary" ? 1.25 : .95);
-      halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
-      const glow = new pc.Entity(`loot-${rarity}-light`);
-      const tint = rarity === "legendary" ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1) : new pc.Color(.25, .55, 1);
-      glow.addComponent("light", { type: "omni", color: tint, intensity: rarity === "legendary" ? 1.6 : .85, range: rarity === "legendary" ? 5.5 : 3.5, castShadows: false });
-      glow.setLocalPosition(0, .45, 0); root.addChild(glow);
-    }
+  const equipmentDrop = isEquipmentItem(itemId);
+  const legendaryDrop = rarity === "legendary";
+  const beam = new pc.Entity(`loot-${rarity}-beam`);
+  beam.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
+  const beamHeight = equipmentDrop ? legendaryDrop ? 2.4 : 1.65 : legendaryDrop ? 1.5 : .82;
+  beam.setLocalScale(equipmentDrop ? legendaryDrop ? .065 : .045 : .028, beamHeight, equipmentDrop ? legendaryDrop ? .065 : .045 : .028);
+  beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
+  if (ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
+    const halo = new pc.Entity(`loot-${rarity}-halo`);
+    halo.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
+    halo.setLocalScale(legendaryDrop ? 1.25 : .95, .018, legendaryDrop ? 1.25 : .95);
+    halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
+    const glow = new pc.Entity(`loot-${rarity}-light`);
+    const tint = legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1) : new pc.Color(.25, .55, 1);
+    glow.addComponent("light", { type: "omni", color: tint, intensity: legendaryDrop ? 1.6 : .85, range: legendaryDrop ? 5.5 : 3.5, castShadows: false });
+    glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   }
   const source = sourceId ? mobVisuals.get(sourceId) : undefined;
   const now = performance.now();
@@ -3745,7 +3746,13 @@ function bindLootDrops(joinedRoom: Room): void {
     lootVisuals.set(dropId, createLootVisual(dropId, drop));
   }, true);
   drops.onRemove((_drop: NetworkLootDrop, dropId: string) => {
-    lootVisuals.get(dropId)?.root.destroy();
+    const visual = lootVisuals.get(dropId);
+    const collectedHere = pendingFloorLoot.has(dropId) || inspectedDropId === dropId && lootPending;
+    if (visual && collectedHere) {
+      lootPickupBurst(visual.state);
+      combatAudio.play("lootPickup");
+    }
+    visual?.root.destroy();
     lootVisuals.delete(dropId);
     pendingFloorLoot.delete(dropId);
     if (inspectedDropId === dropId && !lootPending) {
@@ -4269,6 +4276,24 @@ function miningBurst(cell: MiningCell, count: number): void {
     const entity = addBox(app.root, "mining-chip", material, [0.08, 0.08, 0.08], [origin.x, origin.y, origin.z]);
     if (entity.render) entity.render.castShadows = false;
     miningChips.push({ entity, origin, velocity: new pc.Vec3(Math.sin(angle) * 1.6, 1.6 + i % 3 * 0.3, Math.cos(angle) * 1.6), startedAt: performance.now() });
+  }
+}
+
+function lootPickupBurst(drop: NetworkLootDrop): void {
+  const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
+  const origin = new pc.Vec3(drop.x, drop.y + .42, drop.z);
+  const count = Math.min(10, 5 + Math.ceil(Math.log2(Math.max(1, drop.quantity))));
+  for (let index = 0; index < count; index++) {
+    if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
+    const angle = index / count * Math.PI * 2;
+    const entity = addBox(app.root, "loot-pickup-spark", rarityLootMaterials[itemRarity(itemId)], [.07, .07, .07], [origin.x, origin.y, origin.z]);
+    if (entity.render) entity.render.castShadows = false;
+    miningChips.push({
+      entity,
+      origin,
+      velocity: new pc.Vec3(Math.sin(angle) * 1.25, 1.45 + index % 3 * .22, Math.cos(angle) * 1.25),
+      startedAt: performance.now(),
+    });
   }
 }
 
@@ -7248,13 +7273,17 @@ app.on("update", (dt: number) => {
     }
     trimRemoteSnapshots(remote.snapshots, renderAt);
   }
-  for (const loot of lootVisuals.values()) {
+  const highlightedLootId = nearestLootDrop();
+  for (const [lootId, loot] of lootVisuals) {
     const visible = undergroundKnown(loot.state.x, loot.state.y, loot.state.z) && !isCutawayHidden(Math.floor(loot.state.x), Math.floor(loot.state.y), Math.floor(loot.state.z));
     loot.root.enabled = visible;
     if (!visible) continue;
     const bob = Math.sin(animationTime * 3.2 + loot.phase) * 0.08;
     loot.root.setPosition(loot.state.x, loot.state.y + 0.36 + bob, loot.state.z);
     loot.root.setEulerAngles(0, (animationTime * 58 + loot.phase * 23) % 360, 0);
+    const pileScale = isEquipmentItem(loot.state.itemId) ? 1 : 1 + Math.min(.28, Math.log2(Math.max(1, loot.state.quantity)) * .08);
+    const focusPulse = lootId === highlightedLootId ? 1.08 + Math.sin(animationTime * 7) * .025 : 1;
+    loot.root.setLocalScale(pileScale * focusPulse, pileScale * focusPulse, pileScale * focusPulse);
     loot.marker.enabled = animationNow >= loot.revealAt;
     if (!loot.audioPlayed && loot.marker.enabled && isEquipmentItem(loot.state.itemId)) {
       loot.audioPlayed = true;
@@ -7268,7 +7297,8 @@ app.on("update", (dt: number) => {
     }
     if (loot.marker.enabled) {
       const scale = lootMarkerScale(animationNow, loot.revealAt);
-      loot.marker.setLocalScale(.85 * scale, .012, .85 * scale);
+      const focusScale = lootId === highlightedLootId ? 1.25 + Math.sin(animationTime * 7) * .08 : .72;
+      loot.marker.setLocalScale(focusScale * scale, .012, focusScale * scale);
       loot.marker.setLocalPosition(0, -.54 - bob, 0);
     }
   }

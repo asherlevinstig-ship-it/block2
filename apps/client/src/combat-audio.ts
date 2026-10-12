@@ -3,7 +3,7 @@ export type PowerCue = "seismicWindup" | "seismicImpact";
 export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit" | "nearMiss";
 export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
 export type DungeonCue = "dungeonGate" | "guardianPhase" | "dungeonVictory" | "depthsEntrance" | "depthsWing" | "depthsArena";
-export type LootCue = "lootRare" | "lootEpic" | "lootLegendary";
+export type LootCue = "lootPickup" | "lootRare" | "lootEpic" | "lootLegendary";
 type CombatCue = EnemyCue | PowerCue | WeaponCue | MiningCue | DungeonCue | LootCue;
 
 interface ToneLayer {
@@ -120,6 +120,10 @@ export const DUNGEON_CUE_DEFINITIONS: Record<DungeonCue, EnemyCueDefinition> = {
 };
 
 export const LOOT_CUE_DEFINITIONS: Record<LootCue, EnemyCueDefinition> = {
+  lootPickup: { minimumIntervalMs: 90, tones: [
+    { wave: "sine", startHz: 440, endHz: 720, gain: .025, delayMs: 0, durationMs: 90 },
+    { wave: "triangle", startHz: 660, endHz: 980, gain: .018, delayMs: 55, durationMs: 110 },
+  ] },
   lootRare: { minimumIntervalMs: 650, tones: [
     { wave: "sine", startHz: 392, endHz: 588, gain: .035, delayMs: 0, durationMs: 150 },
     { wave: "triangle", startHz: 588, endHz: 784, gain: .025, delayMs: 115, durationMs: 190 },

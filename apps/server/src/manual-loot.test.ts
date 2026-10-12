@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
-import { LootDropState, PlayerState, WorldState } from "./schema.js";
+import { LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
+
+afterEach(() => vi.restoreAllMocks());
 
 function roomWithMaterialDrop() {
   const room = new WorldRoom();
@@ -46,5 +48,17 @@ describe("manual floor loot", () => {
     expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({
       ok: true, dropId: "iron-drop", message: "Picked up 2 Iron Ore.",
     }));
+  });
+
+  it("combines identical nearby material drops into readable floor piles", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    room.state.players.set("miner", new PlayerState());
+    const mob = new MobState(); Object.assign(mob, { x: 30.5, y: 8, z: 30.5, archetype: "moss_crawler" });
+    vi.spyOn(Math, "random").mockReturnValue(.99);
+    (room as any).spawnLootDrops("crawler-one", mob, 10_000, "miner");
+    (room as any).spawnLootDrops("crawler-two", mob, 10_500, "miner");
+    expect(room.state.lootDrops.size).toBe(2);
+    expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity]).sort())
+      .toEqual([["crawler_fang", 2], ["moss_fibre", 2]]);
   });
 });

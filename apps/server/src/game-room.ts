@@ -1939,13 +1939,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
+      const x = mob.x + Math.cos(angle) * 0.42;
+      const y = mob.y + 0.22;
+      const z = mob.z + Math.sin(angle) * 0.42;
+      const stackable = !isEquipmentItem(entry.itemId) && entry.itemId !== "miners_lantern" && entry.itemId !== "moonstone";
+      const nearbyPile = stackable ? [...this.state.lootDrops.values()].find(existing =>
+        existing.ownerId === ownerId && existing.itemId === entry.itemId && existing.expiresAt > now
+        && existing.quantity + entry.quantity <= 255
+        && Math.hypot(existing.x - x, existing.y - y, existing.z - z) <= 1.5) : undefined;
+      if (nearbyPile) {
+        nearbyPile.quantity += entry.quantity;
+        nearbyPile.expiresAt = Math.max(nearbyPile.expiresAt, now + LOOT_DESPAWN_MS);
+        continue;
+      }
       const drop = new LootDropState();
       drop.ownerId = ownerId;
       drop.itemId = entry.itemId;
       drop.quantity = entry.quantity;
-      drop.x = mob.x + Math.cos(angle) * 0.42;
-      drop.y = mob.y + 0.22;
-      drop.z = mob.z + Math.sin(angle) * 0.42;
+      drop.x = x;
+      drop.y = y;
+      drop.z = z;
       drop.expiresAt = mobId === CRYSTAL_MATRIARCH_ID ? Number.MAX_SAFE_INTEGER : now + LOOT_DESPAWN_MS;
       this.state.lootDrops.set(`${mobId}:${now}:${++this.lootDropSequence}`, drop);
     }
