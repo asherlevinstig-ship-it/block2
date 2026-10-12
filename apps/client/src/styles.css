@@ -1215,6 +1215,13 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .depths-wing-rewards .collected { color: #b4eed1; }
 .depths-wing-rewards > small { display: block; padding-top: 5px; border-top: 1px solid #b693df55; text-align: left; }
 .depths-wing-rewards > small[hidden] { display: none; }
+.depths-checkpoint { display: grid; gap: 6px; margin: 9px 0; padding: 9px; border: 1px solid #8dc6d988; border-radius: 8px; background: #143747c9; }
+.depths-checkpoint[hidden] { display: none; }
+.depths-checkpoint > strong { color: #c5efff; font: 900 10px system-ui; letter-spacing: .1em; }
+.depths-checkpoint > span { color: #fff0cb; font: 800 12px system-ui; }
+.depths-checkpoint > small { color: #bed3d8; font: 600 10px system-ui; }
+.depths-checkpoint > button { min-height: 32px; cursor: pointer; }
+.depths-checkpoint > button:disabled { cursor: not-allowed; opacity: .55; }
 .depths-route-diagram { position: relative; height: 122px; }
 .depths-route-diagram svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .depths-route-diagram path { fill: none; stroke: #695183; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; }

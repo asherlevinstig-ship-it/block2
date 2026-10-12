@@ -21,7 +21,7 @@ import { inventoryItemVisible } from "./inventory-ownership.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
-import { SILVER_DEPTHS, isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
+import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
 import { SPITTER_PATTERN, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
@@ -138,6 +138,7 @@ import {
   type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
   type SilverDepthsWingRewardStatus,
+  type SilverDepthsCheckpointStatus,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
 import {
@@ -467,6 +468,10 @@ const depthsRewardOreState = document.querySelector<HTMLElement>("#depths-reward
 const depthsRewardGearName = document.querySelector<HTMLElement>("#depths-reward-gear-name")!;
 const depthsRewardGearState = document.querySelector<HTMLElement>("#depths-reward-gear-state")!;
 const depthsRewardParty = document.querySelector<HTMLElement>("#depths-reward-party")!;
+const depthsCheckpoint = document.querySelector<HTMLElement>("#depths-checkpoint")!;
+const depthsCheckpointCount = document.querySelector<HTMLElement>("#depths-checkpoint-count")!;
+const depthsCheckpointHint = document.querySelector<HTMLElement>("#depths-checkpoint-hint")!;
+const depthsCheckpointReady = document.querySelector<HTMLButtonElement>("#depths-checkpoint-ready")!;
 const depthsWingButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-depths-wing]")];
 const depthsRouteNodes = [...document.querySelectorAll<HTMLElement>("[data-depths-node]")];
 const inventoryPanel = document.querySelector<HTMLElement>("#inventory-panel")!;
@@ -1189,6 +1194,9 @@ for (const button of depthsWingButtons) {
     if (wing === "iron" || wing === "silver") room.send("depths:route", { wing });
   });
 }
+depthsCheckpointReady.addEventListener("click", () => {
+  if (room && depthsCheckpointStatus?.phase === "waiting") room.send("depths:ready");
+});
 
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false): VoxelCharacterRig {
   const root = new pc.Entity("voxel-character");
@@ -4915,6 +4923,13 @@ function updateObjectiveGuidance(): void {
 let visibleDepthsRoute: DepthsRouteState | null = null;
 let depthsRouteFingerprint = "";
 let depthsWingRewardStatus: SilverDepthsWingRewardStatus | null = null;
+let depthsCheckpointStatus: SilverDepthsCheckpointStatus | null = null;
+function renderDepthsCheckpointStatus(next: SilverDepthsCheckpointStatus | null): void {
+  depthsCheckpointStatus = next;
+  depthsCheckpoint.hidden = next?.phase !== "waiting";
+  if (!next) return;
+  depthsCheckpointCount.textContent = `${next.readyCount} / ${next.partyTotal} READY`;
+}
 function renderDepthsWingRewards(next: SilverDepthsWingRewardStatus | null): void {
   const previous = depthsWingRewardStatus;
   depthsWingRewardStatus = next;
@@ -4945,14 +4960,26 @@ function updateSilverDepthsRoute(now: number): void {
   visibleDepthsRoute = inside ? silverDepthsRoute(localSilverDepthsRunStage, guardAAlive, guardBAlive, localSilverDepthsWing) : null;
   depthsWingChoice.hidden = !visibleDepthsRoute || localSilverDepthsRunStage !== 3 || localSilverDepthsWing !== null;
   depthsRouteMap.hidden = visibleDepthsRoute === null;
+  if (depthsCheckpointStatus?.phase === "waiting" && visibleDepthsRoute) {
+    const distanceToCheckpoint = Math.hypot(player.x - SILVER_DEPTHS_CHECKPOINT_POSITION.x,
+      player.z - SILVER_DEPTHS_CHECKPOINT_POSITION.z);
+    const nearby = distanceToCheckpoint <= 6 && Math.abs(player.y - SILVER_DEPTHS_CHECKPOINT_POSITION.y) <= 3;
+    depthsCheckpointReady.disabled = depthsCheckpointStatus.selfReady || !nearby;
+    depthsCheckpointReady.textContent = depthsCheckpointStatus.selfReady ? "READY · WAITING FOR PARTY" : "READY FOR MATRIARCH";
+    depthsCheckpointHint.textContent = !nearby ? `Regroup at the checkpoint · ${Math.round(distanceToCheckpoint)}m away`
+      : !depthsCheckpointStatus.rewardsCollected && !depthsCheckpointStatus.selfReady
+        ? "Personal rewards remain in the wing. Collect them before Ready if you want them."
+      : depthsCheckpointStatus.selfReady ? "Your party can ready up beside the checkpoint." : "Prepared? Press Ready to open the boss gate together.";
+  }
   minimapPanel.hidden = visibleDepthsRoute !== null;
   depthsBreadcrumbRoot.enabled = visibleDepthsRoute !== null && (localDepthsRewardFlags & 128) !== 0;
   if (!visibleDepthsRoute) { depthsRouteFingerprint = ""; return; }
   const distance = Math.hypot(visibleDepthsRoute.target.x - player.x, visibleDepthsRoute.target.z - player.z);
-  const fingerprint = `${visibleDepthsRoute.active}:${[...visibleDepthsRoute.completed].join(",")}:${visibleDepthsRoute.title}`;
+  const title = depthsCheckpointStatus?.phase === "waiting" ? "Regroup and Ready for the Matriarch" : visibleDepthsRoute.title;
+  const fingerprint = `${visibleDepthsRoute.active}:${[...visibleDepthsRoute.completed].join(",")}:${title}`;
   if (fingerprint !== depthsRouteFingerprint) {
     depthsRouteFingerprint = fingerprint;
-    depthsRouteTitle.textContent = visibleDepthsRoute.title;
+    depthsRouteTitle.textContent = title;
     depthsRouteCount.textContent = `${visibleDepthsRoute.completed.size} / 6 CLEARED`;
     for (const node of depthsRouteNodes) {
       const id = node.dataset.depthsNode!;
@@ -7169,7 +7196,9 @@ async function connect(): Promise<void> {
     showCombatFeedback(notice.title, notice.kind === "victory" ? "dodge" : "hit");
   });
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
-    if (update.phase === "started" && update.dungeon === "silver-depths") renderDepthsWingRewards(null);
+    if (update.phase === "started" && update.dungeon === "silver-depths") {
+      renderDepthsWingRewards(null); renderDepthsCheckpointStatus(null);
+    }
     if (update.phase === "started") status.textContent = update.dungeon === "ember-vault"
       ? "Ember Vault expedition started · clear the sentinels, break the brute, then face the Forge Colossus."
       : update.dungeon === "silver-depths" ? "Silver Depths expedition started · break the seal, clear both gallery waves, light the checkpoint, and overcome the Matriarch."
@@ -7191,6 +7220,7 @@ async function connect(): Promise<void> {
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
+  room.onMessage("depths:checkpoint", (update: SilverDepthsCheckpointStatus) => renderDepthsCheckpointStatus(update));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
     renderCharacterProgression(update);
@@ -7608,6 +7638,7 @@ async function connect(): Promise<void> {
     localSilverDepthsRunStage = 0;
     localSilverDepthsWing = null;
     renderDepthsWingRewards(null);
+    renderDepthsCheckpointStatus(null);
     setDefensePresentation(false);
     cancelPowerAim();
     cancelSpecialAim();

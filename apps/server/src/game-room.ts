@@ -80,6 +80,7 @@ import {
   type BlacksmithUpgradeId,
   type SilverDepthsRewardId,
   type SilverDepthsWingRewardStatus,
+  type SilverDepthsCheckpointStatus,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -391,6 +392,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private silverDepthsHazardSequence = 0;
   private readonly silverDepthsPendingHazards: DepthsRouteHazard[] = [];
   private silverDepthsSealOpened = false;
+  private silverDepthsAwaitingReady = false;
+  private readonly silverDepthsCheckpointReady = new Set<string>();
   private silverInstanceSequence = 0;
 
   override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
@@ -464,6 +467,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: run.partySize } satisfies DungeonRunUpdate);
         const rewards = this.silverDepthsWingRewardStatus(client.sessionId);
         if (rewards) client.send("depths:wing-rewards", rewards);
+        this.sendSilverDepthsCheckpointStatus(client.sessionId);
       }
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
@@ -506,6 +510,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     });
     this.onMessage("objective:sync", client => this.sendObjectiveState(client, true));
     this.onMessage("depths:route", (client, payload: unknown) => this.chooseSilverDepthsWing(client, payload));
+    this.onMessage("depths:ready", client => this.handleSilverDepthsCheckpointReady(client));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
         client.send("pong", { id: payload.id, serverTime: Date.now() });
@@ -680,6 +685,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.state.players.delete(client.sessionId);
     this.silverDepthsRuns.delete(client.sessionId);
+    this.silverDepthsCheckpointReady.delete(client.sessionId);
+    if (this.silverDepthsAwaitingReady) this.refreshSilverDepthsCheckpointReady();
     this.emberVaultRuns.delete(client.sessionId);
     this.forestReturns.delete(client.sessionId);
     this.forestTravelAt.delete(client.sessionId);
@@ -725,6 +732,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
     const rewards = this.silverDepthsWingRewardStatus(client.sessionId);
     if (rewards) client.send("depths:wing-rewards", rewards);
+    this.sendSilverDepthsCheckpointStatus(client.sessionId);
   }
 
   override async onDispose(): Promise<void> {
@@ -1695,7 +1703,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           quantity: drop.quantity,
           total,
         } satisfies LootPickedUp);
-        if (dropId === `depths-wing-reward:${playerId}`) this.sendSilverDepthsWingRewardStatus(playerId);
+        if (dropId === `depths-wing-reward:${playerId}`) {
+          this.sendSilverDepthsWingRewardStatus(playerId);
+          this.sendSilverDepthsCheckpointStatus(playerId);
+        }
         break;
       }
     }
@@ -1778,6 +1789,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (parsed.data.dropId === `depths-wing-gear:${client.sessionId}`) {
       this.sendObjectiveState(client, true);
       for (const id of this.activeSilverDepthsParticipants()) this.sendSilverDepthsWingRewardStatus(id);
+      this.sendSilverDepthsCheckpointStatus(client.sessionId);
     }
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
       : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
@@ -1837,6 +1849,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const failedDepthsRun = this.silverDepthsRuns.get(playerId);
     if (failedDepthsRun) this.restoreRunMoonstone(player, failedDepthsRun);
     this.silverDepthsRuns.delete(playerId);
+    this.silverDepthsCheckpointReady.delete(playerId);
+    if (this.silverDepthsAwaitingReady) this.refreshSilverDepthsCheckpointReady();
     this.emberVaultRuns.delete(playerId);
     player.silverDepthsRunStage = 0;
     leaveRecoveryBag(player, `${now}-${++this.lootDropSequence}`);
@@ -1981,6 +1995,51 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (status) this.clients.find(client => client.sessionId === playerId)?.send("depths:wing-rewards", status);
   }
 
+  private silverDepthsCheckpointStatus(playerId: string): SilverDepthsCheckpointStatus | null {
+    if (this.roomKind !== "silver-depths" || !this.silverDepthsRuns.has(playerId)
+      || (!this.silverDepthsAwaitingReady && this.silverDepthsEncounterStage !== 4)) return null;
+    const participants = this.activeSilverDepthsParticipants();
+    const rewards = this.silverDepthsWingRewardStatus(playerId);
+    return { phase: this.silverDepthsAwaitingReady ? "waiting" : "open",
+      readyCount: participants.filter(id => this.silverDepthsCheckpointReady.has(id)).length,
+      partyTotal: participants.length, selfReady: this.silverDepthsCheckpointReady.has(playerId),
+      rewardsCollected: Boolean(rewards?.oreCollected && rewards.gearCollected) };
+  }
+
+  private sendSilverDepthsCheckpointStatus(playerId: string): void {
+    const status = this.silverDepthsCheckpointStatus(playerId);
+    if (status) this.clients.find(client => client.sessionId === playerId)?.send("depths:checkpoint", status);
+  }
+
+  private refreshSilverDepthsCheckpointReady(): void {
+    if (!this.silverDepthsAwaitingReady) return;
+    const participants = this.activeSilverDepthsParticipants();
+    if (participants.length > 0 && participants.every(id => this.silverDepthsCheckpointReady.has(id))) {
+      this.silverDepthsAwaitingReady = false;
+      this.setSilverDepthsGate(SILVER_DEPTHS_BOSS_GATE, true, "boss-gate");
+      this.spawnSilverDepthsStage(4); this.setSilverDepthsRunStage(5);
+      for (const id of participants) {
+        this.advanceSilverDepthsExpedition(id, "defeated_guards");
+        this.clients.find(client => client.sessionId === id)?.send("portal:notice",
+          "PARTY READY · the Matriarch arena is open.");
+      }
+    }
+    for (const id of participants) this.sendSilverDepthsCheckpointStatus(id);
+  }
+
+  private handleSilverDepthsCheckpointReady(client: Client): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!this.silverDepthsAwaitingReady || !player || player.health <= 0
+      || !this.activeSilverDepthsParticipants().includes(client.sessionId)) return;
+    if (Math.hypot(player.x - SILVER_DEPTHS_CHECKPOINT_POSITION.x, player.z - SILVER_DEPTHS_CHECKPOINT_POSITION.z) > 6
+      || Math.abs(player.y - SILVER_DEPTHS_CHECKPOINT_POSITION.y) > 3) {
+      client.send("portal:notice", "Move to the Crystal Checkpoint to ready up."); return;
+    }
+    if (this.silverDepthsCheckpointReady.has(client.sessionId)) return;
+    this.silverDepthsCheckpointReady.add(client.sessionId);
+    this.refreshSilverDepthsCheckpointReady();
+  }
+
   private spawnSilverDepthsWingRewards(): void {
     if (!this.silverDepthsWing) return;
     const iron = this.silverDepthsWing === "iron";
@@ -2043,12 +2102,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.setSilverDepthsGate(SILVER_DEPTHS_GALLERY_GATE, true, "gallery-gate");
       this.activateSilverDepthsCheckpoint(); this.spawnSilverDepthsStage(3); this.setSilverDepthsRunStage(4);
     } else {
-      this.setSilverDepthsGate(SILVER_DEPTHS_BOSS_GATE, true, "boss-gate");
-      this.spawnSilverDepthsStage(4); this.setSilverDepthsRunStage(5);
+      this.silverDepthsAwaitingReady = true;
+      this.silverDepthsCheckpointReady.clear();
       for (const id of this.activeSilverDepthsParticipants()) {
-        this.advanceSilverDepthsExpedition(id, "defeated_guards");
         this.clients.find(client => client.sessionId === id)?.send("portal:notice",
-          "CRYSTAL ANTECHAMBER CLEARED · the Matriarch arena is open.");
+          "CRYSTAL ANTECHAMBER CLEARED · collect your rewards, regroup at the checkpoint, then ready up for the Matriarch.");
+        this.sendSilverDepthsCheckpointStatus(id);
       }
     }
   }
@@ -2057,6 +2116,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const id of SILVER_DEPTHS_ENEMY_IDS) this.state.mobs.delete(id);
     for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:") || id.startsWith("depths-wing-gear:")) this.state.lootDrops.delete(id);
     this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false; this.silverDepthsWing = null;
+    this.silverDepthsAwaitingReady = false; this.silverDepthsCheckpointReady.clear();
     this.silverDepthsNextHazardAt = 0; this.silverDepthsPendingHazards.length = 0;
     this.setSilverDepthsWingGate(SILVER_DEPTHS_IRON_GATE, false, "iron-wing-gate");
     this.setSilverDepthsWingGate(SILVER_DEPTHS_SILVER_GATE, false, "silver-wing-gate");

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MATRIARCH_PHASE, SILVER_DEPTHS_ROOM, WORLD_ROOM, crystalMatriarchPattern, spitterShotEndpoints } from "@blockcraft/protocol";
-import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
+import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 import { silverDepthsStageSpawns } from "./silver-depths-encounters.js";
@@ -179,8 +179,12 @@ describe("Silver Depths room travel", () => {
     expect(player.health).toBe(player.maxHealth); expect(player.stamina).toBe(player.maxStamina);
     expect(internal.readWorldBlock(SILVER_DEPTHS_GALLERY_GATE.x, 1, SILVER_DEPTHS_GALLERY_GATE.minZ)).toBe(Block.Air);
     clear(3);
-    expect(player.silverDepthsRunStage).toBe(5);
+    expect(player.silverDepthsRunStage).toBe(4);
+    expect(internal.readWorldBlock(SILVER_DEPTHS_BOSS_GATE.x, 1, SILVER_DEPTHS_BOSS_GATE.minZ)).toBe(Block.Stone);
+    Object.assign(player, SILVER_DEPTHS_CHECKPOINT_POSITION);
+    internal.handleSilverDepthsCheckpointReady(client);
     expect(internal.readWorldBlock(SILVER_DEPTHS_BOSS_GATE.x, 1, SILVER_DEPTHS_BOSS_GATE.minZ)).toBe(Block.Air);
+    expect(player.silverDepthsRunStage).toBe(5);
     expect(room.state.mobs.get("crystal-matriarch")).toMatchObject({ health: 40, maxHealth: 40, alive: true });
   });
 
@@ -222,6 +226,32 @@ describe("Silver Depths room travel", () => {
     expect(internal.readWorldBlock(SILVER_DEPTHS_SILVER_GATE.minX, 1, SILVER_DEPTHS_SILVER_GATE.z)).toBe(Block.Stone);
     expect(room.state.lootDrops.has("depths-wing-reward:friend")).toBe(false);
     expect(room.state.lootDrops.has("depths-wing-gear:friend")).toBe(false);
+  });
+
+  it("keeps the Matriarch gate shut until each remaining player readies at the checkpoint", () => {
+    const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.roomKind = "silver-depths"; internal.silverDepthsWing = "iron";
+    internal.silverDepthsEncounterStage = 4; internal.silverDepthsAwaitingReady = true;
+    const friend = new PlayerState(); Object.assign(friend, SILVER_DEPTHS_CHECKPOINT_POSITION);
+    room.state.players.set("friend", friend);
+    internal.silverDepthsRuns.set("miner", { completedAt: 0 });
+    internal.silverDepthsRuns.set("friend", { completedAt: 0 });
+    internal.spawnSilverDepthsWingRewards();
+    expect(internal.silverDepthsCheckpointStatus("miner")).toMatchObject({ readyCount: 0, rewardsCollected: false });
+    internal.handleSilverDepthsCheckpointReady(client);
+    expect(internal.silverDepthsCheckpointStatus("miner")?.readyCount).toBe(0);
+    room.state.lootDrops.delete("depths-wing-reward:miner");
+    room.state.lootDrops.delete("depths-wing-gear:miner");
+    Object.assign(player, SILVER_DEPTHS_CHECKPOINT_POSITION);
+    internal.handleSilverDepthsCheckpointReady(client);
+    expect(internal.silverDepthsCheckpointStatus("miner")).toMatchObject({ phase: "waiting", readyCount: 1, partyTotal: 2, selfReady: true });
+    expect(internal.readWorldBlock(SILVER_DEPTHS_BOSS_GATE.x, 1, SILVER_DEPTHS_BOSS_GATE.minZ)).toBe(Block.Stone);
+    expect(internal.silverDepthsCheckpointStatus("friend")?.rewardsCollected).toBe(false);
+    internal.handleSilverDepthsCheckpointReady({ sessionId: "friend", send: vi.fn() } as any);
+    expect(internal.silverDepthsCheckpointStatus("miner")).toMatchObject({ phase: "open", readyCount: 2 });
+    expect(internal.readWorldBlock(SILVER_DEPTHS_BOSS_GATE.x, 1, SILVER_DEPTHS_BOSS_GATE.minZ)).toBe(Block.Air);
+    expect(room.state.mobs.get("crystal-matriarch")?.alive).toBe(true);
   });
 
   it("warns before an Iron Bastion rock and only hurts players still in its marked circle", () => {

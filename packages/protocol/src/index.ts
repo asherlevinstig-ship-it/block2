@@ -757,6 +757,14 @@ export type SilverDepthsWingRewardStatus = {
   partyGearTotal: number;
 };
 
+export type SilverDepthsCheckpointStatus = {
+  phase: "waiting" | "open";
+  readyCount: number;
+  partyTotal: number;
+  selfReady: boolean;
+  rewardsCollected: boolean;
+};
+
 export type WorldObjectiveCompleted = {
   objectiveId: string;
   title: string;
