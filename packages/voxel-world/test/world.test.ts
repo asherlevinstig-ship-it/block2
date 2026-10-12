@@ -341,6 +341,16 @@ describe("deterministic voxel world", () => {
     expect(blocked.stepped).toBe(false);
   });
 
+  it("does not mistake a settled player's floor for a horizontal wall", () => {
+    const floor = (_x: number, y: number) => y === 0 ? Block.Stone : Block.Air;
+    // Gravity lands at the collider's 0.06-foot inset. Tiny float differences
+    // must not make a client stick while the authoritative player keeps moving.
+    const start = { x: 63.582, y: 0.94 - 1e-10, z: 12.467 };
+    const next = resolvePlayerMotion(start, { x: 0.15, y: 0, z: 0 }, floor);
+    expect(next.x).toBeGreaterThan(start.x);
+    expect(next.stepped).toBe(false);
+  });
+
   it("recognizes a one-block step when approaching in normal frame-sized increments", () => {
     const step = (x: number, y: number) => (y === 0 || (x === 2 && y === 1) ? Block.Stone : Block.Air);
     let position = { x: 1.5, y: 1, z: 0.5 };

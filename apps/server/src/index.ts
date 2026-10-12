@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "crystal-matriarch-burst-v146";
+const SERVER_BUILD = "floor-collision-epsilon-v147";
 
 const gameServer = defineServer({
   rooms: {

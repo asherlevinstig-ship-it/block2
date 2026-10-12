@@ -719,7 +719,9 @@ export function playerCollides(readBlock: WorldBlockReader, x: number, y: number
     })) return true;
   const minX = Math.floor(x - PLAYER_RADIUS);
   const maxX = Math.floor(x + PLAYER_RADIUS);
-  const minY = Math.floor(y + 0.06);
+  // A player settled on a block can be a few floating-point ulps below the
+  // 0.06-foot inset. Do not then treat the supporting floor as a wall.
+  const minY = Math.floor(y + 0.06 + 1e-6);
   const maxY = Math.floor(y + PLAYER_HEIGHT - 0.06);
   const minZ = Math.floor(z - PLAYER_RADIUS);
   const maxZ = Math.floor(z + PLAYER_RADIUS);
