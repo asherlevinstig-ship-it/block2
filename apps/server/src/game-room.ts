@@ -696,8 +696,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     );
     const profileToken = profileTokenResult.success ? profileTokenResult.data : null;
     const requestedAdminPass = typeof options === "object" && options && "adminPass" in options ? options.adminPass : undefined;
-    const requestedName = typeof options === "object" && options && "name" in options ? String(options.name) : "Explorer";
-    player.name = requestedName.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 20) || "Explorer";
+    const requestedName = PlayerNameSchema.safeParse(
+      typeof options === "object" && options && "name" in options ? options.name : undefined,
+    );
+    player.name = requestedName.success ? requestedName.data : "Explorer";
+    const requestedAppearance = AppearanceSchema.safeParse(
+      typeof options === "object" && options && "appearance" in options ? options.appearance : undefined,
+    );
+    if (requestedAppearance.success) {
+      player.appearanceSkin = requestedAppearance.data.skin;
+      player.appearanceHair = requestedAppearance.data.hair;
+      player.appearanceCoat = requestedAppearance.data.coat;
+      player.appearanceHairStyle = requestedAppearance.data.hairStyle;
+      player.appearanceCoatStyle = requestedAppearance.data.coatStyle;
+    }
     if (profileToken) {
       try {
         const save = parsePlayerSave(await this.presence.hget(PLAYER_SAVE_HASH, profileToken));

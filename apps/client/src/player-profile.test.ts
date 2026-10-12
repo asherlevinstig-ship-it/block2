@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLAYER_PROFILE_STORAGE_KEY, createGuestProfileToken, getOrCreateProfileToken } from "./player-profile";
+import { CHARACTER_CREATION_PENDING_KEY, PLAYER_PROFILE_STORAGE_KEY, characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken } from "./player-profile";
 
 function memoryStorage(initial: string | null = null) {
   let value = initial;
@@ -27,5 +27,27 @@ describe("guest player profiles", () => {
     const replacement = "guest_ffffffffffffffffffffffffffffffff";
     expect(getOrCreateProfileToken(storage, () => replacement)).toBe(replacement);
     expect(storage.value()).toBe(replacement);
+  });
+});
+
+describe("first-spawn character creation", () => {
+  const token = "guest_0123456789abcdef0123456789abcdef";
+  it("does not interrupt profiles that existed before the creator", () => {
+    const storage = memoryStorage(token);
+    expect(characterCreationNeeded(storage)).toBe(false);
+  });
+
+  it("keeps a new profile in creation across a refresh, then enters normally", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+    };
+    expect(characterCreationNeeded(storage)).toBe(true);
+    expect(values.get(CHARACTER_CREATION_PENDING_KEY)).toBe("1");
+    getOrCreateProfileToken(storage, () => token);
+    expect(characterCreationNeeded(storage)).toBe(true);
+    finishCharacterCreation(storage);
+    expect(characterCreationNeeded(storage)).toBe(false);
   });
 });

@@ -918,6 +918,33 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #inventory-preview-drawer > summary span { float: right; font-size: .6rem; color: #859a85; }
 .inventory-loadout { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 12px; padding: 10px; border-top: 1px solid #b6985830; background: #08130f; }
 .inventory-portrait { text-align: center; }
+#character-creator { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow: auto; padding: 28px 16px; background: radial-gradient(circle at 50% 35%, #244638ed, #07110ff7 75%); color: #f1e9cf; font-family: system-ui, sans-serif; }
+#character-creator[hidden] { display: none; }
+.creator-card { width: min(850px, 100%); max-height: calc(100dvh - 56px); overflow: auto; border: 1px solid #b99954; border-radius: 16px; background: #0e1d17; box-shadow: 0 24px 80px #000a, inset 0 1px #eacb7b55; }
+.creator-card header { padding: 24px 30px 20px; border-bottom: 1px solid #b9995444; background: linear-gradient(110deg, #1d3428, #101d19); }
+.creator-card header p { margin: 0 0 4px; color: #e5bb68; font-size: .68rem; font-weight: 900; letter-spacing: .17em; }
+.creator-card header h2 { margin: 0 0 4px; font-size: clamp(1.4rem, 3vw, 2rem); }
+.creator-card header span { color: #b4c5b8; font-size: .84rem; }
+.creator-content { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 28px; padding: 24px 30px 30px; }
+.creator-preview { align-self: start; padding: 8px; border: 1px solid #b9995444; border-radius: 12px; background: #101d19; }
+#creator-portrait { display: block; width: 100%; height: auto; border-radius: 8px; cursor: grab; touch-action: none; }
+#creator-portrait:active { cursor: grabbing; }
+.creator-preview .inventory-portrait-turn button { padding: 5px 12px; border: 1px solid #927b4d; border-radius: 6px; background: #30281b; color: #f1e5c4; cursor: pointer; }
+#creator-form { min-width: 0; }
+#creator-form > label { display: block; margin-bottom: 7px; color: #e8cc89; font-size: .72rem; font-weight: 900; letter-spacing: .08em; }
+#creator-name { box-sizing: border-box; width: 100%; padding: 11px 12px; border: 1px solid #8d9f8d; border-radius: 8px; outline: none; background: #07130f; color: #f7f1de; font: 600 .95rem system-ui; }
+#creator-name:focus { border-color: #e9c06b; box-shadow: 0 0 0 3px #e9c06b33; }
+.creator-help { margin: 5px 0 20px; color: #94aa9c; font-size: .7rem; }
+#creator-appearance-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 7px; }
+#creator-appearance-options .appearance-choice { grid-template-columns: repeat(3, 32px); }
+#creator-appearance-options .appearance-choice button { width: 32px; height: 32px; }
+#creator-appearance-options .appearance-style-choice { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#creator-appearance-options .appearance-style-choice button { width: auto; min-height: 35px; }
+#creator-error { min-height: 1.1em; margin: 16px 0 8px; color: #ffad98; font-size: .75rem; }
+#creator-enter { width: 100%; padding: 13px 16px; border: 1px solid #f2cf81; border-radius: 8px; background: #805521; color: #fff1c9; cursor: pointer; font-weight: 900; letter-spacing: .04em; }
+#creator-enter:hover:not(:disabled) { background: #a06b29; }
+#creator-enter:disabled { opacity: .65; cursor: wait; }
+@media (max-width: 650px) { .creator-card { max-height: calc(100dvh - 28px); } .creator-content { grid-template-columns: 1fr; gap: 16px; padding: 16px; } .creator-card header { padding: 18px 16px; } .creator-preview { width: min(190px, 100%); justify-self: center; } #creator-appearance-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } #creator-appearance-options .appearance-style-choice { grid-column: span 2; } }
 #inventory-portrait { display: block; width: 100%; height: auto; border-radius: 8px; cursor: grab; touch-action: none; }
 #inventory-portrait:active { cursor: grabbing; }
 .inventory-portrait-turn { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-top: 5px; }

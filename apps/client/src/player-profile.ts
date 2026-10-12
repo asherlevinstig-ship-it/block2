@@ -1,6 +1,7 @@
 import { PlayerProfileTokenSchema, type PlayerProfileToken } from "@blockcraft/protocol";
 
 export const PLAYER_PROFILE_STORAGE_KEY = "blockcraft.profile-token.v1";
+export const CHARACTER_CREATION_PENDING_KEY = "blockcraft.character-creation-pending.v1";
 
 export interface ProfileStorage {
   getItem(key: string): string | null;
@@ -19,4 +20,15 @@ export function getOrCreateProfileToken(storage: ProfileStorage, createToken: ()
   const token = createToken();
   storage.setItem(PLAYER_PROFILE_STORAGE_KEY, token);
   return token;
+}
+
+/** An existing profile predates the creator; never force it through setup. */
+export function characterCreationNeeded(storage: ProfileStorage): boolean {
+  const existing = PlayerProfileTokenSchema.safeParse(storage.getItem(PLAYER_PROFILE_STORAGE_KEY));
+  if (!existing.success) storage.setItem(CHARACTER_CREATION_PENDING_KEY, "1");
+  return storage.getItem(CHARACTER_CREATION_PENDING_KEY) === "1";
+}
+
+export function finishCharacterCreation(storage: ProfileStorage): void {
+  storage.setItem(CHARACTER_CREATION_PENDING_KEY, "0");
 }

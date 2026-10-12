@@ -10,6 +10,25 @@
   <body>
     <div id="development-banner" role="status">Under Development</div>
     <canvas id="game" aria-label="Blockcraft game world"></canvas>
+    <section id="character-creator" role="dialog" aria-modal="true" aria-labelledby="creator-title" hidden>
+      <div class="creator-card">
+        <header><p>YOUR STORY STARTS HERE</p><h2 id="creator-title">Create your explorer</h2><span>Choose the face that enters the Town of Beginnings.</span></header>
+        <div class="creator-content">
+          <div class="creator-preview">
+            <canvas id="creator-portrait" width="300" height="350" role="img" aria-label="Rotatable preview of your character. Drag to turn."></canvas>
+            <div class="inventory-portrait-turn"><button id="creator-turn-left" type="button" aria-label="Turn character left">↶</button><span>DRAG TO TURN</span><button id="creator-turn-right" type="button" aria-label="Turn character right">↷</button></div>
+          </div>
+          <form id="creator-form">
+            <label for="creator-name">EXPLORER NAME</label>
+            <input id="creator-name" name="name" type="text" minlength="2" maxlength="20" autocomplete="off" placeholder="2–20 letters, numbers, spaces" required />
+            <p class="creator-help">This name will appear to other players.</p>
+            <div id="creator-appearance-options"></div>
+            <p id="creator-error" role="alert" aria-live="polite"></p>
+            <button id="creator-enter" type="submit">ENTER TOWN OF BEGINNINGS →</button>
+          </form>
+        </div>
+      </div>
+    </section>
     <div id="mining-progress" hidden><span id="mining-progress-label">Mining</span><div><i id="mining-progress-fill"></i></div></div>
     <div id="resource-toasts" role="status" aria-live="polite" aria-label="Item pickups"></div>
     <div id="cave-entrance" hidden>↓ EAST ORE MINE <small>Shallow iron pockets · deep silver · guarded chambers<br>Follow gold lanterns back up · sell minerals to the blacksmith</small></div>

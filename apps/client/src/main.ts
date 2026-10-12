@@ -74,6 +74,7 @@ import {
   APPEARANCE_PALETTE,
   APPEARANCE_STYLES,
   DEFAULT_APPEARANCE,
+  PlayerNameSchema,
   resolveAppearance,
   type Appearance,
   IRON_ORE_GOLD_PRICE,
@@ -228,7 +229,7 @@ import {
   voxelCharacterPose,
 } from "./character-animation.js";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
-import { createGuestProfileToken, getOrCreateProfileToken } from "./player-profile.js";
+import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken } from "./player-profile.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
@@ -388,6 +389,11 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
   document.body.append(panel);
 }
 
+const characterCreationRequired = (() => {
+  const query = new URLSearchParams(window.location.search);
+  if (query.has("room") || query.has("returnFrom") || query.has("qa")) return false;
+  try { return characterCreationNeeded(window.localStorage); } catch { return true; }
+})();
 const profileToken = browserProfileToken();
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
@@ -7458,7 +7464,7 @@ function applyBlockChange(message: BlockChanged): void {
   if (message.block === Block.Air) status.textContent = "Block broken.";
 }
 
-async function connect(): Promise<void> {
+async function connect(initialCharacter?: { name: string; appearance: Appearance }): Promise<void> {
   const localHost = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
@@ -7489,7 +7495,9 @@ async function connect(): Promise<void> {
   const requestedPartySize = Number(query.get("partySize"));
   const returnFrom = query.get("returnFrom") === "silver-depths" ? "silver-depths" : null;
   const retryFromDepths = activeRoomName === WORLD_ROOM && returnFrom === "silver-depths" && query.get("retry") === "1";
-  const joinOptions = { name: "Explorer", profileToken, ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}),
+  const joinOptions = { name: initialCharacter?.name ?? "Explorer", profileToken,
+    ...(initialCharacter ? { appearance: initialCharacter.appearance } : {}),
+    ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}),
     ...(activeRoomName === SILVER_DEPTHS_ROOM && instanceKey ? { instanceKey, partySize: Number.isFinite(requestedPartySize) ? requestedPartySize : 1 } : {}),
     ...(activeRoomName === WORLD_ROOM && returnFrom ? { returnFrom } : {}),
     ...(partyTicket ? { partyTicket } : {}) };
@@ -8161,6 +8169,71 @@ async function connect(): Promise<void> {
   }
 }
 
-connect().catch(error => {
+function showCharacterCreator(): void {
+  const panel = document.querySelector<HTMLElement>("#character-creator")!;
+  const form = document.querySelector<HTMLFormElement>("#creator-form")!;
+  const nameInput = document.querySelector<HTMLInputElement>("#creator-name")!;
+  const errorLabel = document.querySelector<HTMLElement>("#creator-error")!;
+  const enterButton = document.querySelector<HTMLButtonElement>("#creator-enter")!;
+  const options = document.querySelector<HTMLElement>("#creator-appearance-options")!;
+  const portrait = createCharacterPortrait(document.querySelector<HTMLCanvasElement>("#creator-portrait")!, localPlayerRig.root,
+    () => () => {});
+  let appearance: Appearance = { ...DEFAULT_APPEARANCE };
+  const refresh = () => {
+    updateLocalAppearance(appearance);
+    portrait.refresh("longsword", "none", Object.values(appearance).join(":"));
+    for (const button of options.querySelectorAll<HTMLButtonElement>("button[data-appearance-group]")) {
+      const group = button.dataset.appearanceGroup as keyof Appearance;
+      button.setAttribute("aria-pressed", String(appearance[group] === button.dataset.appearanceId));
+    }
+  };
+  for (const group of ["skin", "hair", "coat", "hairStyle", "coatStyle"] as const) {
+    const row = document.createElement("div");
+    row.className = `appearance-choice${group.endsWith("Style") ? " appearance-style-choice" : ""}`;
+    const label = document.createElement("span");
+    label.textContent = ({ skin: "Skin", hair: "Hair", coat: "Coat", hairStyle: "Hair shape", coatStyle: "Outfit shape" })[group];
+    row.append(label);
+    const choices = group === "skin" || group === "hair" || group === "coat"
+      ? APPEARANCE_PALETTE[group] : APPEARANCE_STYLES[group];
+    for (const choice of choices) {
+      const button = document.createElement("button"); button.type = "button";
+      button.dataset.appearanceGroup = group; button.dataset.appearanceId = choice.id;
+      button.setAttribute("aria-label", `${label.textContent}: ${choice.name}`);
+      button.title = `${label.textContent}: ${choice.name}`;
+      if ("color" in choice) button.style.setProperty("--swatch", choice.color);
+      else button.textContent = choice.name;
+      button.addEventListener("click", () => { appearance = resolveAppearance({ ...appearance, [group]: choice.id }); refresh(); });
+      row.append(button);
+    }
+    options.append(row);
+  }
+  document.querySelector<HTMLButtonElement>("#creator-turn-left")!.addEventListener("click", () => portrait.turn(-30));
+  document.querySelector<HTMLButtonElement>("#creator-turn-right")!.addEventListener("click", () => portrait.turn(30));
+  panel.hidden = false;
+  status.textContent = "Create your explorer to enter the world.";
+  refresh();
+  nameInput.focus();
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const name = PlayerNameSchema.safeParse(nameInput.value);
+    if (!name.success) { errorLabel.textContent = "Use 2–20 letters, numbers, spaces, hyphens or underscores."; nameInput.focus(); return; }
+    errorLabel.textContent = "";
+    enterButton.disabled = true;
+    enterButton.textContent = "ENTERING THE WORLD…";
+    try {
+      await connect({ name: name.data, appearance });
+      try { finishCharacterCreation(window.localStorage); } catch { /* Private browsing may prevent storage. */ }
+      portrait.destroy();
+      panel.hidden = true;
+    } catch (error) {
+      errorLabel.textContent = `Could not enter the world: ${error instanceof Error ? error.message : String(error)}`;
+      enterButton.disabled = false;
+      enterButton.textContent = "TRY AGAIN →";
+    }
+  });
+}
+
+if (characterCreationRequired) showCharacterCreator();
+else connect().catch(error => {
   status.textContent = `Connection failed: ${error instanceof Error ? error.message : String(error)}`;
 });
