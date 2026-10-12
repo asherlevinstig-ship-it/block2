@@ -19,6 +19,9 @@ export const PLAYER_HEIGHT = 1.45;
 export const GRAVITY = 18;
 export const TERMINAL_VELOCITY = 12;
 
+export interface NetcodePlayerPose { x: number; y: number; z: number; verticalVelocity: number }
+export interface NetcodeMoveDirection { strafe: number; forward: number }
+
 export const TOWN_TAVERN_TABLE_CENTERS = [[4.5, 19.5], [12.5, 19.5], [12.5, 22.5]] as const;
 export const TOWN_TAVERN_QUIZ_TABLE_POSITION = { x: 12.5, y: 8, z: 22.5 } as const;
 export const TOWN_TAVERN_KEEPER_POSITION = { x: 5.1, y: 8, z: 24.35 } as const;
@@ -843,6 +846,28 @@ export function resolvePlayerMotion(
     hitVertical: vertical.hit,
     stepped: steppedX || steppedZ,
   };
+}
+
+/** One deterministic movement input step, shared by server authority and client replay. */
+export function stepPlayerNetcode(
+  pose: NetcodePlayerPose,
+  direction: NetcodeMoveDirection,
+  speed: number,
+  dt: number,
+  readBlock: WorldBlockReader,
+): NetcodePlayerPose {
+  const length = Math.hypot(direction.strafe, direction.forward);
+  const scale = length > 1 ? 1 / length : 1;
+  const grounded = isPlayerSupported(readBlock, pose.x, pose.y, pose.z);
+  const verticalVelocity = grounded && pose.verticalVelocity < 0 ? 0
+    : Math.max(-TERMINAL_VELOCITY, pose.verticalVelocity - GRAVITY * dt);
+  const next = resolvePlayerMotion(pose, {
+    x: direction.strafe * scale * speed * dt,
+    y: verticalVelocity * dt,
+    z: direction.forward * scale * speed * dt,
+  }, readBlock);
+  return { x: next.x, y: next.y, z: next.z,
+    verticalVelocity: next.hitVertical || next.grounded ? 0 : verticalVelocity };
 }
 
 export function resolveSweptHorizontalMotion(

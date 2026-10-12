@@ -50,7 +50,8 @@ import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./cam
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
 import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
-import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
+import { Client, Predict, getStateCallbacks, type InputHandle, type Room } from "@colyseus/sdk";
+import { stepPlayerNetcode } from "@blockcraft/voxel-world";
 import {
   BRAMBLE_SNARE,
   playerMeleeStrike,
@@ -1598,6 +1599,7 @@ interface NetworkPlayer {
   x: number;
   y: number;
   z: number;
+  pilotVy: number;
   yaw: number;
   lastProcessedInput: number;
   actionSequence: number;
@@ -3514,6 +3516,7 @@ function bindPlayers(joinedRoom: Room): void {
   players.onAdd((player: NetworkPlayer, sessionId: string) => {
     const isLocal = sessionId === joinedRoom.sessionId;
     if (isLocal) {
+      activateMovementPilot(joinedRoom);
       localSilverDepthsRunStage = player.silverDepthsRunStage;
       localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
       updateTavernCoins(player.coins);
@@ -4933,6 +4936,37 @@ joystickZone.addEventListener("pointerup", event => releaseJoystick(event.pointe
 joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.pointerId));
 
 let room: Room | null = null;
+let movementShadowInput: InputHandle<{ strafe: number; forward: number; yaw: number }> | null = null;
+let movementPilotRequested = false;
+let movementPilotReady = false;
+let movementPilotController: { tick: (now: number) => number; pose: () => { x: number; y: number; z: number; pilotVy: number } } | null = null;
+let movementShadowAccumulator = 0;
+let movementShadowDifference: number | null = null;
+let movementShadowReset = false;
+const movementShadowDifferences: number[] = [];
+function activateMovementPilot(joinedRoom: Room): void {
+  if (!movementPilotReady || movementPilotController || !movementShadowInput) return;
+  const playerState = (joinedRoom.state as { players: Map<string, NetworkPlayer> }).players.get(joinedRoom.sessionId);
+  if (!playerState) return;
+  const predictor = Predict.get(joinedRoom);
+  const controller = predictor.reconciler(playerState, {
+    input: movementShadowInput,
+    fields: ["x", "y", "z", "pilotVy"],
+    step: (ctx, state, command) => {
+      const next = stepPlayerNetcode({ x: state.x, y: state.y, z: state.z, verticalVelocity: state.pilotVy },
+        command, localMovementSpeed(), ctx.dt, readCollisionWorldBlock);
+      state.x = next.x; state.y = next.y; state.z = next.z; state.pilotVy = next.verticalVelocity;
+    },
+    smoothMs: 65,
+  });
+  movementPilotController = { tick: now => predictor.tick(now), pose: () => controller.state };
+  localPlayer.setPosition(playerState.x, playerState.y, playerState.z);
+  localVerticalVelocity = playerState.pilotVy;
+  localNetworkVisualOffset = { x: 0, z: 0 };
+  localRecoveryVisualOffset = { x: 0, z: 0 };
+  pendingPredictionFrames.length = 0;
+  logMovementEvent("COLYSEUS CONTROLLING MOVEMENT");
+}
 minimap.setPingHandler((x, z) => {
   if (activeRoomName === SILVER_DEPTHS_ROOM && room) room.send("depths:ping", { x, z });
 });
@@ -5368,7 +5402,7 @@ function resetMovementControls(): void {
   touchForward = 0;
   smoothedMovement = { x: 0, z: 0 };
   lastSentMovement = { x: 0, z: 0 };
-  if (!room || !worldReady) return;
+  if (!room || !worldReady || movementPilotController) return;
   moveSequence += 1;
   room.send("move", { sequence: moveSequence, strafe: 0, forward: 0, yaw: localFacingYaw });
 }
@@ -6462,11 +6496,29 @@ app.on("update", (dt: number) => {
     ? mouseRangedYaw(localFacingYaw)
     : movementYaw(desiredMovement.x, desiredMovement.z, localFacingYaw);
   localFacingYaw = approachYaw(localFacingYaw, desiredFacingYaw, frameTime);
+  if (movementShadowInput && room && worldReady) {
+    const steps = movementPilotController ? movementPilotController.tick(performance.now()) : (() => {
+      movementShadowAccumulator = Math.min(0.1, movementShadowAccumulator + frameTime);
+      const due = Math.floor(movementShadowAccumulator * 30);
+      movementShadowAccumulator -= due / 30;
+      return due;
+    })();
+    for (let step = 0; step < steps; step += 1) {
+      movementShadowInput.data.strafe = smoothedMovement.x;
+      movementShadowInput.data.forward = smoothedMovement.z;
+      movementShadowInput.data.yaw = ((localFacingYaw % 360) + 360) % 360;
+      movementShadowInput.send();
+    }
+  }
   const current = localPlayer.getPosition();
   const grounded = isPlayerSupported(readCollisionWorldBlock, current.x, current.y, current.z);
-  if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;
+  if (movementPilotController) localVerticalVelocity = movementPilotController.pose().pilotVy;
+  else if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;
   else localVerticalVelocity = Math.max(-TERMINAL_VELOCITY, localVerticalVelocity - GRAVITY * frameTime);
-  const predicted = worldReady ? resolvePlayerMotion(
+  const pilotPose = movementPilotController?.pose();
+  const predicted = pilotPose ? { x: pilotPose.x, y: pilotPose.y, z: pilotPose.z,
+    grounded: isPlayerSupported(readCollisionWorldBlock, pilotPose.x, pilotPose.y, pilotPose.z),
+    hitVertical: false, stepped: false } : worldReady ? resolvePlayerMotion(
     current,
     {
       x: smoothedMovement.x * localMovementSpeed() * frameTime,
@@ -6478,7 +6530,7 @@ app.on("update", (dt: number) => {
   const requestedTravel = Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed() * frameTime;
   const sendMovementThisFrame = movementDirectionChanged(lastSentMovement, smoothedMovement)
     || performance.now() - lastMoveSentAt >= 50;
-  if (room && worldReady) {
+  if (room && worldReady && !movementPilotController) {
     pendingPredictionFrames.push({
       sequence: moveSequence + Number(sendMovementThisFrame),
       x: smoothedMovement.x * localMovementSpeed() * frameTime,
@@ -6509,7 +6561,9 @@ app.on("update", (dt: number) => {
   }
   const authoritativeInputReady = pendingStopInputSequence === null;
   const sequenceLag = Math.max(0, moveSequence - lastProcessedInputSequence);
-  const reconciliation = reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded, authoritativeInputReady);
+  const reconciliation = movementPilotController
+    ? { distance: localPlayer.getPosition().distance(authoritativeLocalPosition), rate: 0 }
+    : reconcileLocalPlayer(dt, moving, sequenceLag, predicted.grounded || grounded, authoritativeInputReady);
   if (!Number.isFinite(reconciliation.rate)) localNetworkVisualOffset = { x: 0, z: 0 };
   else {
     const reconciledPosition = localPlayer.getPosition();
@@ -7169,7 +7223,7 @@ app.on("update", (dt: number) => {
     room.send("ping", { id });
   }
   const directionChanged = movementDirectionChanged(lastSentMovement, smoothedMovement);
-  if (room && worldReady && sendMovementThisFrame) {
+  if (room && worldReady && sendMovementThisFrame && !movementPilotController) {
     lastMoveSentAt = now;
     moveSequence += 1;
     const stopPosition = Math.hypot(smoothedMovement.x, smoothedMovement.z) <= 0.01
@@ -7195,6 +7249,7 @@ app.on("update", (dt: number) => {
       `yaw        ${localFacingYaw.toFixed(1)} → ${desiredFacingYaw.toFixed(1)}`,
       `local      ${player.x.toFixed(3)}, ${player.y.toFixed(3)}, ${player.z.toFixed(3)}`,
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
+      `A/B ${movementPilotController ? "COLYSEUS CONTROLS" : movementShadowInput ? "shadow only" : "off"} · diff=${movementShadowDifference?.toFixed(3) ?? "waiting"}m p50/p95=${percentile(movementShadowDifferences, 0.5).toFixed(3)}/${percentile(movementShadowDifferences, 0.95).toFixed(3)}m${movementShadowReset ? " reset" : ""}`,
       `pending    ${pendingPredictionFrames.length} prediction frames · raw d=${localPlayer.getPosition().distance(authoritativeLocalPosition).toFixed(3)}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `net visual ${localNetworkVisualOffset.x.toFixed(3)}, ${localNetworkVisualOffset.z.toFixed(3)}`,
@@ -7249,6 +7304,10 @@ async function connect(): Promise<void> {
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
   const query = new URLSearchParams(window.location.search);
+  // Colyseus prediction is the default. Keep local A/B switches for diagnosing
+  // regressions without exposing a legacy movement selector to public players.
+  movementPilotRequested = !import.meta.env.DEV
+    || (query.get("movementLegacy") !== "1" && query.get("movementShadow") !== "1");
   const qaSpawn = import.meta.env.DEV ? query.get("qa") : null;
   activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM : WORLD_ROOM;
   const instanceKey = query.get("instanceKey");
@@ -7305,10 +7364,36 @@ async function connect(): Promise<void> {
     saveReconnectToken();
     room?.send("world:ready");
     room?.send("objective:sync");
+    if (movementShadowInput) room?.send("movement:shadow:hello", { control: movementPilotRequested });
     status.textContent = "Reconnected to your dungeon run.";
   });
   room.onDrop(() => { status.textContent = activeRoomName === SILVER_DEPTHS_ROOM
     ? "Connection interrupted. Holding your place in the dungeon…" : "Connection interrupted. Reconnecting…"; });
+  if (movementPilotRequested || (import.meta.env.DEV && query.get("movementShadow") === "1")) {
+    room.onMessage("movement:shadow:ready", (message: { tickRate: number; control?: boolean }) => {
+      // The SDK resets an existing input handle on reconnect. Preserve it so
+      // the reconciler keeps observing the stream that is actually sent.
+      movementShadowInput ??= room!.input<{ strafe: number; forward: number; yaw: number }>({ mode: "reliable" });
+      movementShadowAccumulator = 0;
+      movementShadowDifferences.length = 0;
+      movementPilotReady = movementPilotRequested && message.control === true;
+      if (movementPilotReady) activateMovementPilot(room!);
+      if (movementPilotReady) movementDebug.open = true;
+      logMovementEvent(movementPilotReady ? "COLYSEUS PILOT READY" : "A/B SHADOW READY — legacy still controls movement");
+    });
+    room.onMessage("movement:shadow:sample", (sample: {
+      x: number; y: number; z: number; authorityX: number; authorityY: number; authorityZ: number; reset: boolean;
+    }) => {
+      movementShadowDifference = movementPilotController
+        ? localPlayer.getPosition().distance(new pc.Vec3(sample.authorityX, sample.authorityY, sample.authorityZ))
+        : Math.hypot(sample.x - sample.authorityX, sample.y - sample.authorityY, sample.z - sample.authorityZ);
+      movementShadowReset = sample.reset;
+      if (!sample.reset) {
+        movementShadowDifferences.push(movementShadowDifference);
+        if (movementShadowDifferences.length > 300) movementShadowDifferences.shift();
+      }
+    });
+  }
   bindPlayers(room);
   bindMobs(room);
   bindLootDrops(room);
@@ -7808,6 +7893,12 @@ async function connect(): Promise<void> {
     }
   });
   room.onLeave(() => {
+    movementShadowInput = null;
+    movementPilotReady = false;
+    movementPilotController = null;
+    movementShadowDifference = null;
+    movementShadowAccumulator = 0;
+    movementShadowDifferences.length = 0;
     clearReconnectToken();
     document.querySelector<HTMLElement>("#waypoint-guide")!.hidden = true;
     awaitingReturnState = false; townReturnPosition = null;
@@ -7888,6 +7979,8 @@ async function connect(): Promise<void> {
     updatePlayerCount();
   });
   room.send("world:ready");
+  if (movementPilotRequested || (import.meta.env.DEV && query.get("movementShadow") === "1"))
+    room.send("movement:shadow:hello", { control: movementPilotRequested });
   room.send("objective:sync");
   const clockPingId = `ping-${++pingSequence}`;
   pendingPings.set(clockPingId, performance.now());

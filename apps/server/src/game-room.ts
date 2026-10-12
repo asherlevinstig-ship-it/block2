@@ -1,4 +1,6 @@
 import { Client, Room } from "@colyseus/core";
+import type { SchemaType } from "@colyseus/schema";
+import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
@@ -323,11 +325,15 @@ interface ActiveMobHazard {
   lastDamageAt: Map<string, number>;
 }
 
-export class WorldRoom extends Room<{ state: WorldState }> {
+export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeof ShadowMoveInput> }> {
   override maxClients = 20;
   override patchRate = 33;
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
+  private readonly movementShadows = new Map<string, ShadowPose>();
+  private readonly movementPilotControllers = new Set<string>();
+  private movementShadowEnabled = false;
+  private movementShadowSampleAt = 0;
   private readonly silverDepthsReconnectInvulnerability = new Map<string, number>();
   private readonly movementRateWindows = new Map<string, MovementRateWindow>();
   private readonly verticalVelocities = new Map<string, number>();
@@ -431,6 +437,14 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
     this.roomKind = options.roomKind === "silver-depths" ? "silver-depths" : "overworld";
+    // The Colyseus input stream is the default. Keep an explicit server-side
+    // rollback while older clients can still use the legacy "move" messages.
+    this.movementShadowEnabled = process.env.MOVEMENT_NETCODE_LEGACY !== "1";
+    if (this.movementShadowEnabled) {
+      this.inputs = this.defineInput(ShadowMoveInput, {
+        sanitize: { strafe: [-1, 1], forward: [-1, 1], yaw: [-1080, 1080] }, bufferMaxSize: 64,
+      });
+    }
     this.silverInstanceKey = this.roomKind === "silver-depths" ? options.instanceKey ?? "" : "";
     this.instancePartySize = Math.max(1, Math.min(4, Math.floor(options.partySize ?? 1)));
     if (this.roomKind === "silver-depths") this.maxClients = 4;
@@ -590,6 +604,20 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       client.send("recovery:result", message);
     });
     aliveMessage("move", (client, payload) => this.handleMove(client, payload));
+    if (this.movementShadowEnabled) {
+      this.onMessage("movement:shadow:hello", (client, payload: unknown) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player) return;
+        this.movementShadows.set(client.sessionId, { x: player.x, y: player.y, z: player.z, verticalVelocity: 0 });
+        const control = typeof payload === "object" && payload !== null && "control" in payload && payload.control === true;
+        if (control) {
+          this.movementPilotControllers.add(client.sessionId);
+          player.pilotVy = 0;
+          this.verticalVelocities.set(client.sessionId, 0);
+        }
+        client.send("movement:shadow:ready", { tickRate: 30, control });
+      });
+    }
     aliveMessage("mine", (client, payload) => this.beginMine(client, payload));
     this.onMessage("mine:cancel", (client, payload: unknown) => {
       const pending = this.pendingMining.get(client.sessionId);
@@ -628,7 +656,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     aliveMessage("blacksmith:depths-buy", (client, payload) => this.handleDepthsRewardBuy(client, payload));
     this.onMessage("potion:buy", client => this.handlePotion(client, true));
     this.onMessage("potion:use", client => this.handlePotion(client, false));
-    this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 33);
+    if (this.movementShadowEnabled) {
+      // Colyseus owns one simulation timer per room. Pilot and legacy clients
+      // advance on this same fixed tick while older clients remain connected.
+      this.setFixedTimestep(ctx => {
+        this.simulateMovementShadows(ctx.dt);
+        this.simulatePlayers(ctx.dt);
+      }, 30);
+    } else {
+      this.setSimulationInterval(deltaTime => this.simulatePlayers(Math.min(deltaTime / 1000, 0.1)), 33);
+    }
   }
 
   override async onJoin(client: Client, options: unknown): Promise<void> {
@@ -762,6 +799,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.forestReturns.delete(client.sessionId);
     this.forestTravelAt.delete(client.sessionId);
     this.movementInputs.delete(client.sessionId);
+    this.movementShadows.delete(client.sessionId);
+    this.movementPilotControllers.delete(client.sessionId);
     this.movementRateWindows.delete(client.sessionId);
     this.verticalVelocities.delete(client.sessionId);
     this.attackChains.delete(client.sessionId);
@@ -779,6 +818,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   override onDrop(client: Client): void {
     if (this.roomKind !== "silver-depths" || !this.state.players.has(client.sessionId)) return;
+    this.inputs?.get(client.sessionId).clear();
     const player = this.state.players.get(client.sessionId)!;
     if (!this.silverDepthsReconnectInvulnerability.has(client.sessionId)) {
       this.silverDepthsReconnectInvulnerability.set(client.sessionId, player.invulnerableUntil);
@@ -797,6 +837,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   override onReconnect(client: Client): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    this.inputs?.get(client.sessionId).clear();
     const previousInvulnerability = this.silverDepthsReconnectInvulnerability.get(client.sessionId);
     if (previousInvulnerability !== undefined) {
       player.invulnerableUntil = Math.max(previousInvulnerability, Date.now() + 1200);
@@ -3067,6 +3108,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   private handleMove(client: Client, payload: unknown): void {
+    if (this.movementPilotControllers.has(client.sessionId)) return;
     const parsed = MoveRequestSchema.safeParse(payload);
     if (!parsed.success) return this.reject(client, { action: "move", reason: "payload" });
     const player = this.state.players.get(client.sessionId);
@@ -3168,6 +3210,49 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         this.pendingMobProjectiles.delete(id); this.resolveProjectileVisual(id, shot.position, "miss");
       }
       for (const [id, hazard] of this.mobHazards) if (hazard.mobId === entry.id) this.mobHazards.delete(id);
+    }
+  }
+
+  private simulateMovementShadows(deltaTime: number): void {
+    if (!this.inputs) return;
+    const now = Date.now();
+    const report = now - this.movementShadowSampleAt >= 100;
+    if (report) this.movementShadowSampleAt = now;
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      const shadow = this.movementShadows.get(client.sessionId);
+      if (!player || player.health <= 0) continue;
+      const command = this.inputs.get(client.sessionId).next();
+      if (this.movementPilotControllers.has(client.sessionId)) {
+        const direction = command ?? { strafe: 0, forward: 0, yaw: player.yaw };
+        const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId)
+          * armourStats(player.armourId).speed * progressionSpeedMultiplier(player);
+        const next = stepShadowMovement({ x: player.x, y: player.y, z: player.z, verticalVelocity: player.pilotVy },
+          direction, speed, deltaTime, this.readWorldBlock);
+        player.x = next.x; player.y = next.y; player.z = next.z; player.pilotVy = next.verticalVelocity;
+        if (command && Number.isFinite(command.yaw)) player.yaw = command.yaw;
+        const previous = this.movementInputs.get(client.sessionId)?.request.sequence ?? 0;
+        this.movementInputs.set(client.sessionId, { request: { sequence: previous + 1,
+          strafe: direction.strafe, forward: direction.forward, yaw: player.yaw }, receivedAt: now });
+        if (Math.hypot(direction.strafe, direction.forward) > 0.01) this.pendingMining.delete(client.sessionId);
+        if (report) client.send("movement:shadow:sample", { x: next.x, y: next.y, z: next.z,
+          authorityX: player.x, authorityY: player.y, authorityZ: player.z, reset: false, control: true });
+        continue;
+      }
+      if (!shadow) continue;
+      const teleportDistance = Math.hypot(player.x - shadow.x, player.y - shadow.y, player.z - shadow.z);
+      if (teleportDistance > 8) {
+        this.movementShadows.set(client.sessionId, { x: player.x, y: player.y, z: player.z, verticalVelocity: 0 });
+        if (report) client.send("movement:shadow:sample", { x: player.x, y: player.y, z: player.z,
+          authorityX: player.x, authorityY: player.y, authorityZ: player.z, reset: true });
+        continue;
+      }
+      const speed = movementSpeedWithMomentum(player.defending ? 2.1 : 4.2, player.momentumStacks, player.equippedTrait as TraitId)
+        * armourStats(player.armourId).speed * progressionSpeedMultiplier(player);
+      const next = stepShadowMovement(shadow, command ?? { strafe: 0, forward: 0 }, speed, deltaTime, this.readWorldBlock);
+      this.movementShadows.set(client.sessionId, next);
+      if (report) client.send("movement:shadow:sample", { x: next.x, y: next.y, z: next.z,
+        authorityX: player.x, authorityY: player.y, authorityZ: player.z, reset: false });
     }
   }
 
@@ -3524,6 +3609,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       } else {
         player.stamina = Math.min(player.maxStamina, player.stamina + staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId) * deltaTime);
       }
+      if (this.movementPilotControllers.has(sessionId)) continue;
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
       const inputLength = Math.hypot(input.strafe, input.forward);
       const scale = inputLength > 1 ? 1 / inputLength : 1;

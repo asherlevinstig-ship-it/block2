@@ -15,6 +15,7 @@ export const PlayerState = schema({
   x: t.float32().default(8.5),
   y: t.float32().default(11),
   z: t.float32().default(8.5),
+  pilotVy: t.float32().default(0),
   yaw: t.float32().default(0),
   lastProcessedInput: t.int32().default(0),
   actionSequence: t.int32().default(0),
