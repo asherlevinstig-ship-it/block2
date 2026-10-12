@@ -18,6 +18,34 @@ export function mobLocomotionSpeed(snapshots: readonly RemoteSnapshot[], moving:
   return duration > 0 ? Math.min(2.2, Math.hypot(last.x - first.x, last.z - first.z) * 1000 / duration) : 0;
 }
 
+/** Never turn network catch-up into extra footsteps, or run in place while the
+ * rendered mob is standing still. */
+export function visibleMobGaitSpeed(authoritativeSpeed: number, visibleTravel: number, dt: number): number {
+  if (dt <= 0 || authoritativeSpeed <= 0 || visibleTravel <= 0) return 0;
+  return Math.min(authoritativeSpeed, visibleTravel / dt);
+}
+
+export function mobGaitTargets(kind: string, awareness: string, speed: number, windup: number, stagger: number, defeat: number) {
+  const activity = (1 - Math.min(1, windup + stagger)) * (1 - defeat);
+  const urgent = awareness === "engaged" || awareness === "search";
+  const walking = Math.min(1, Math.max(0, speed) / (kind === "stone_brute" ? 0.85 : 1.4)) * activity;
+  return {
+    walking,
+    pursuit: urgent ? activity : 0,
+    cadence: Math.min(Math.max(0, speed), 6) * (kind === "stone_brute" ? 3.5 : kind === "cave_spitter" ? 6.5 : 8) * activity * (urgent ? 1.08 : 1),
+  };
+}
+
+/** Art-only body follow-through; attack-facing remains authoritative. */
+export function advanceMobTurnLean(previous: number, oldYaw: number, newYaw: number, dt: number, aimLocked: boolean): number {
+  if (aimLocked) return 0;
+  const elapsed = Math.max(0, Math.min(dt, 0.1));
+  if (elapsed === 0) return previous;
+  const delta = ((newYaw - oldYaw + 540) % 360) - 180;
+  const target = Math.max(-1, Math.min(1, delta / (360 * elapsed)));
+  return previous + (target - previous) * (1 - Math.exp(-14 * elapsed));
+}
+
 /** Bound packet catch-up independently from gait. Never use a correction as a footstep. */
 export function advanceMobMotion(current: SampledRemotePose, previousGait: number,
   snapshots: readonly RemoteSnapshot[], now: number, dt: number, moving: boolean, impulse: boolean) {

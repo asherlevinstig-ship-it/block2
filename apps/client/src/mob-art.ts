@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { mobGaitTargets } from "./mob-motion.js";
 
 type MobKind = "stone_brute" | "cave_spitter" | "moss_crawler";
 type Triple = [number, number, number];
@@ -20,6 +21,7 @@ export interface MobArtRig {
   sacs: pc.Entity[];
   phase: number;
   walk: number;
+  pursuit: number;
   matriarch: boolean;
   rootGuardian: boolean;
   phaseSurfaces: pc.Entity[];
@@ -84,7 +86,7 @@ export function createMobArt(parent: pc.Entity, archetype: string, body: pc.Stan
   const kind: MobKind = archetype === "stone_brute" ? "stone_brute" : archetype === "cave_spitter" ? "cave_spitter" : "moss_crawler";
   const head = pivot(parent, "head-joint", kind === "stone_brute" ? [0, 1.6, 0.06] : kind === "cave_spitter" ? [0, 0.56, 0.56] : [0, 0.53, 0.48]);
   const jaw = pivot(head, "jaw-joint", kind === "stone_brute" ? [0, -0.2, 0.14] : [0, -0.11, 0.27]);
-  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
+  const rig: MobArtRig = { kind, head, jaw, limbs: [], arms: [], sacs: [], phase: 0, walk: 0, pursuit: 0, matriarch, rootGuardian, phaseSurfaces: [], enraged: false, defeated: false, glowSurfaces: [] };
 
   if (kind === "moss_crawler") {
     box(parent, "bark-abdomen", shellDark, [0.82, 0.34, 1.04], [0, 0.4, -0.1]);
@@ -210,21 +212,23 @@ export function setMobArtDefeated(rig: MobArtRig, defeated: boolean): void {
 }
 
 /** No per-frame geometry/material creation; only transform the prebuilt joints. */
-export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: number, windup: number, attack: number, hurt: number, stagger: number, defeat: number): void {
+export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: number, awareness: string, windup: number, attack: number, hurt: number, stagger: number, defeat: number): void {
   const brute = rig.kind === "stone_brute";
   const spitter = rig.kind === "cave_spitter";
-  const activity = (1 - Math.min(1, windup + stagger)) * (1 - defeat);
-  const desiredWalk = Math.min(1, speed / (brute ? 0.85 : 1.4)) * activity;
-  rig.walk += (desiredWalk - rig.walk) * Math.min(1, dt * 14);
-  if (defeat > 0) rig.walk = 0;
-  rig.phase += dt * Math.min(speed, 6) * (brute ? 3.5 : spitter ? 6.5 : 8);
+  const targets = mobGaitTargets(rig.kind, awareness, speed, windup, stagger, defeat);
+  const elapsed = Math.max(0, Math.min(dt, 0.1));
+  rig.walk += (targets.walking - rig.walk) * (1 - Math.exp(-16 * elapsed));
+  rig.pursuit += (targets.pursuit - rig.pursuit) * (1 - Math.exp(-9 * elapsed));
+  if (defeat > 0) { rig.walk = 0; rig.pursuit = 0; }
+  rig.phase += elapsed * targets.cadence;
+  const strideScale = 1 + rig.pursuit * 0.12;
   for (const leg of rig.limbs) {
     const stride = Math.sin(rig.phase + leg.offset);
     const lift = Math.max(0, Math.cos(rig.phase + leg.offset));
     if (brute) {
-      leg.pivot.setLocalEulerAngles(stride * rig.walk * 23 - defeat * 16, 0, leg.side * defeat * 14);
+      leg.pivot.setLocalEulerAngles(stride * rig.walk * strideScale * 23 - defeat * 16, 0, leg.side * defeat * 14);
     } else {
-      leg.pivot.setLocalEulerAngles(stride * rig.walk * 16 + defeat * 35, stride * rig.walk * 15, leg.side * (lift * rig.walk * 21 + windup * 11 - defeat * 68));
+      leg.pivot.setLocalEulerAngles(stride * rig.walk * strideScale * 16 + defeat * 35, stride * rig.walk * 15, leg.side * (lift * rig.walk * 21 + windup * 11 - defeat * 68));
       leg.knee?.setLocalEulerAngles(lift * rig.walk * -22 - defeat * 40, 0, leg.side * windup * -10);
     }
   }
@@ -234,7 +238,7 @@ export function animateMobArt(rig: MobArtRig, dt: number, time: number, speed: n
     arm.knee?.setLocalEulerAngles(-windup * 32 - attack * 14 - defeat * 24, 0, 0);
   }
   rig.head.setLocalEulerAngles(
-    (brute ? -windup * 12 + attack * 20 : spitter ? -windup * 20 + attack * 25 : windup * 13 - attack * 18) - hurt * 14 + defeat * 27,
+    (brute ? -windup * 12 + attack * 20 : spitter ? -windup * 20 + attack * 25 : windup * 13 - attack * 18) - hurt * 14 + defeat * 27 - rig.pursuit * rig.walk * 3,
     Math.sin(time * 1.3) * 3 * (1 - rig.walk) * (1 - windup) * (1 - defeat),
     Math.sin(time * 21) * stagger * 8,
   );

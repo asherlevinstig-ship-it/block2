@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceMobMotion, advanceMobYaw, mobLocomotionSpeed, trimMobSnapshots } from "./mob-motion.js";
+import { advanceMobMotion, advanceMobTurnLean, advanceMobYaw, mobGaitTargets, mobLocomotionSpeed, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
 import type { RemoteSnapshot } from "./movement-network.js";
 
 const sample = (receivedAt: number, x: number): RemoteSnapshot => ({ receivedAt, x, y: 8, z: 0, yaw: 90 });
@@ -65,5 +65,26 @@ describe("mob movement presentation", () => {
     expect(snapshots.length).toBeGreaterThan(5); expect(snapshots.length).toBeLessThanOrEqual(30);
     const motion = advanceMobMotion({ x: -10, y: 8, z: 0, yaw: 90 }, 1, snapshots, 1300, 0.016, true, false);
     expect(motion.pose.x).toBeGreaterThan(1); expect(motion.gaitSpeed).toBe(0);
+  });
+  it("paces feet by visible travel without using a packet correction as a sprint", () => {
+    expect(visibleMobGaitSpeed(1.4, 0, 1 / 60)).toBe(0);
+    expect(visibleMobGaitSpeed(1.4, 0.01, 1 / 60)).toBeCloseTo(0.6);
+    expect(visibleMobGaitSpeed(1.4, 0.2, 1 / 60)).toBe(1.4);
+  });
+  it("blends a livelier pursuit gait while stopping feet for committed attacks", () => {
+    const patrol = mobGaitTargets("moss_crawler", "patrol", 1, 0, 0, 0);
+    const chase = mobGaitTargets("moss_crawler", "engaged", 1, 0, 0, 0);
+    expect(chase.walking).toBe(patrol.walking);
+    expect(chase.cadence).toBeGreaterThan(patrol.cadence);
+    expect(chase.pursuit).toBe(1);
+    expect(mobGaitTargets("stone_brute", "engaged", 1, 1, 0, 0).walking).toBe(0);
+    expect(mobGaitTargets("stone_brute", "engaged", 1, 0, 0, 1).cadence).toBe(0);
+  });
+  it("adds a restrained body turn cue but leaves committed aim alone", () => {
+    const turning = advanceMobTurnLean(0, 355, 5, 1 / 60, false);
+    expect(turning).toBeGreaterThan(0);
+    expect(turning).toBeLessThan(1);
+    expect(advanceMobTurnLean(turning, 5, 5, 1 / 60, false)).toBeLessThan(turning);
+    expect(advanceMobTurnLean(turning, 5, 45, 1 / 60, true)).toBe(0);
   });
 });

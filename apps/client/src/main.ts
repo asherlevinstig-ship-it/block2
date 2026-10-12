@@ -42,7 +42,7 @@ import { SILVER_DEPTHS_ATMOSPHERES, silverDepthsLightColour, silverDepthsZone, t
 import { CAVE_CHAMBERS, caveReturnPath, discoverChambers, type CavePosition } from "./cave-navigation.js";
 import { miningAvailability, miningReach, miningProgress, miningDurationMs, miningLineClear, miningMessage, type MiningCell } from "./mining-feedback.js";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
-import { advanceMobMotion, trimMobSnapshots } from "./mob-motion.js";
+import { advanceMobMotion, advanceMobTurnLean, trimMobSnapshots, visibleMobGaitSpeed } from "./mob-motion.js";
 import { createServerClock, sampleServerClock, enemyAttackPresentation } from "./enemy-timeline.js";
 import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear, enemyShotGuideLength } from "./enemy-combat-cues.js";
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
@@ -1731,6 +1731,7 @@ interface LootVisual {
 interface MobVisual {
   locomotionSpeed: number;
   renderYaw: number;
+  turnLean: number;
   entity: pc.Entity;
   snapshots: RemoteSnapshot[];
   bodyRoot: pc.Entity;
@@ -3246,6 +3247,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     state: mob,
     locomotionSpeed: 0,
     renderYaw: mob.yaw,
+    turnLean: 0,
     lastHitSequence: mob.hitSequence,
     hitAt: 0,
     lastActionSequence: mob.actionSequence,
@@ -3490,6 +3492,7 @@ function bindMobs(joinedRoom: Room): void {
           visual.snapshots.length = 0;
           visual.entity.setPosition(snapshot.x, snapshot.y, snapshot.z);
           visual.renderYaw = snapshot.yaw;
+          visual.turnLean = 0;
           visual.entity.setEulerAngles(0, snapshot.yaw, 0);
         }
         visual.snapshots.push(snapshot);
@@ -6693,7 +6696,9 @@ app.on("update", (dt: number) => {
       mob.frameAlive = mob.state.alive;
       if (mob.state.alive) {
         mob.art.walk = 0;
+        mob.art.pursuit = 0;
         mob.locomotionSpeed = 0;
+        mob.turnLean = 0;
         mob.snapshots.length = 0;
         mob.snapshots.push({ receivedAt: animationNow, x: mob.state.x, y: mob.state.y, z: mob.state.z, yaw: mob.state.yaw });
         mob.entity.setPosition(mob.state.x, mob.state.y, mob.state.z);
@@ -6709,13 +6714,15 @@ app.on("update", (dt: number) => {
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
     const currentMobPosition = mob.entity.getPosition();
+    const previousYaw = mob.renderYaw;
     const motion = advanceMobMotion({ x: currentMobPosition.x, y: currentMobPosition.y,
       z: currentMobPosition.z, yaw: mob.renderYaw }, mob.locomotionSpeed,
       mob.snapshots, animationNow, frameTime, mob.state.alive && mob.state.combatState === "idle",
       mob.state.combatState === "strike" || (mob.hitAt > 0 && animationNow - mob.hitAt < 180));
     const sampled = motion.pose;
     mob.locomotionSpeed = motion.gaitSpeed;
-    const moveSpeed = motion.gaitSpeed;
+    const moveSpeed = visibleMobGaitSpeed(motion.gaitSpeed,
+      Math.hypot(sampled.x - currentMobPosition.x, sampled.z - currentMobPosition.z), frameTime);
     mob.entity.setPosition(sampled.x, sampled.y, sampled.z);
     mob.renderYaw = sampled.yaw;
     trimMobSnapshots(mob.snapshots, animationNow);
@@ -6724,6 +6731,7 @@ app.on("update", (dt: number) => {
     // Committed attacks must match the authoritative strike direction. Keep
     // the scalar in sync so recovery never resumes from an aliased Euler Y.
     if (presentation.aimLocked) mob.renderYaw = mob.state.yaw;
+    mob.turnLean = advanceMobTurnLean(mob.turnLean, previousYaw, mob.renderYaw, frameTime, presentation.aimLocked);
     mob.entity.setEulerAngles(0, mob.renderYaw, 0);
     const attackElapsed = presentation.elapsed;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
@@ -6827,7 +6835,7 @@ app.on("update", (dt: number) => {
       mob.warningMaterial.opacity = presentation.aimLocked ? .65 : .38;
       mob.warningMaterial.update();
     }
-    animateMobArt(mob.art, frameTime, animationTime, moveSpeed, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
+    animateMobArt(mob.art, frameTime, animationTime, moveSpeed, mob.state.awarenessState, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
     setMobArtEnraged(mob.art, mob.state.enraged === true);
     setMobArtDefeated(mob.art, !mob.state.alive && deathPose.progress >= .3);
     const crawlerRecovery = !mob.isBrute && !mob.isSpitter && presentation.phase === "recover"
@@ -6843,15 +6851,15 @@ app.on("update", (dt: number) => {
       attackStrength * (mob.isBrute ? 0.42 : mob.isSpitter ? -0.3 : 0.24) - windupStrength * (mob.isBrute ? 0.25 : mob.isSpitter ? -0.18 : 0.16),
     );
     mob.bodyRoot.setLocalEulerAngles(
-      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 + bruteRecovery * 14 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5),
+      (mob.isBrute ? windupStrength * -11 + attackStrength * 18 + bruteRecovery * 14 : mob.isSpitter ? windupStrength * 12 - attackStrength * 20 : windupStrength * -7 + attackStrength * 9 + crawlerRecovery * 8) + defeat * (mob.isBrute ? 17 : 5) - mob.art.pursuit * mob.art.walk * (mob.isBrute ? 2 : 4),
       0,
-      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3) + defeat * (mob.isBrute ? 7 : 12),
+      Math.sin(animationTime * 35) * staggerStrength * (mob.isBrute ? 7 : 12) + Math.sin(mob.art.phase) * mob.art.walk * (mob.isBrute ? 2.5 : 1.3) + mob.turnLean * 4 + defeat * (mob.isBrute ? 7 : 12),
     );
     if (mob.art.matriarch) {
       const pose = matriarchBodyPose(defeat, attackStrength);
       mob.bodyRoot.setLocalScale(pose.width, pose.height, pose.length);
       mob.bodyRoot.setLocalPosition(0, gaitBob + pose.drop - hitStrength * .035, pose.recoilZ - windupStrength * .18);
-      mob.bodyRoot.setLocalEulerAngles(windupStrength * 12 - attackStrength * 20, 0, pose.roll);
+      mob.bodyRoot.setLocalEulerAngles(windupStrength * 12 - attackStrength * 20 - mob.art.pursuit * mob.art.walk * 3, 0, pose.roll + mob.turnLean * 4);
       mob.bodyMaterial.diffuse.set(mob.state.enraged ? .5 : .15, mob.state.enraged ? .16 : .34, mob.state.enraged ? .12 : .31);
     }
     if (!mob.state.alive) {
