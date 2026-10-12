@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, MINERAL_DEPOSITS, RENEWABLE_MINERAL_DEPOSITS, wildernessTerritoryAt, wildernessSurfaceBlock, authoredMineralAt, playerCollides } from "@blockcraft/voxel-world";
-import { WILDERNESS_ENCOUNTERS } from "../src/wilderness-encounters.js";
+import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry } from "../src/wilderness-encounters.js";
 import { WorldRoom } from "../src/game-room.js";
 import { WorldState } from "../src/schema.js";
 import { dangerBandAt, MOB_TOWN_MINIMUM_RADIUS, radiusFromSafeCenter } from "../src/radial-difficulty.js";
@@ -24,10 +24,10 @@ describe("distinct radial wilderness territories", () => {
     const { room } = fixture();
     for (const spawn of WILDERNESS_ENCOUNTERS) {
       const mob = room.state.mobs.get(spawn.id)!;
-      expect(mob.difficultyTier).toBe(spawn.archetype === "stone_brute" ? 3 : spawn.archetype === "cave_spitter" ? 2 : 1);
+      expect(mob.difficultyTier).toBe(spawn.archetype === "stone_brute" || isAshenSentry(spawn.id) ? 3 : spawn.archetype === "cave_spitter" ? 2 : 1);
       expect(radiusFromSafeCenter(mob)).toBeGreaterThanOrEqual(MOB_TOWN_MINIMUM_RADIUS - .001);
     }
-    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter")).toHaveLength(4);
+    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(4);
     expect(lootForArchetype("stone_brute")).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
   });
   it("gives frontier deposits 50 renewable ore cells versus 18 in the wilds", () => {
@@ -43,11 +43,23 @@ describe("distinct radial wilderness territories", () => {
   });
   it("places every guard near the appropriate mineral site", () => {
     for (const spawn of WILDERNESS_ENCOUNTERS) {
+      if (isAshenSentry(spawn.id)) continue;
       const block = spawn.archetype === "moss_crawler" ? Block.IronOre : Block.SilverOre;
       const nearest = Math.min(...MINERAL_DEPOSITS.filter(d => d.block === block && (spawn.archetype !== "stone_brute" || d.radius === 2))
         .map(d => Math.hypot(spawn.x - d.x, spawn.z - d.z)));
       expect(nearest).toBeLessThan(8);
     }
+  });
+  it("keeps Ashglass Sentries by the spire and gives them a distinct readable volley rhythm", () => {
+    const { room, internal } = fixture();
+    for (const id of ASHEN_SENTRY_IDS) {
+      const mob = room.state.mobs.get(id)!;
+      expect(mob.name).toBe("Ashglass Sentry");
+      expect(mob.difficultyTier).toBe(3);
+      expect(ashenSentryAllows(mob)).toBe(true);
+      expect(internal.roamingAllowed(id, { x: 35, y: 8, z: 35 })).toBe(false);
+    }
+    expect([0, 1, 2, 3].map(ashenSentryPattern)).toEqual(["fan", "fan", "aimed", "fan"]);
   });
   it("patrols generated terrain smoothly without placing mobs in solid blocks or inside town", () => {
     vi.useFakeTimers(); vi.setSystemTime(10000);

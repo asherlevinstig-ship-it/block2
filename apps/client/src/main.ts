@@ -2312,7 +2312,7 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
       : silverDepths ? depthsZone === "arena" ? "LV 10–12" : "LV 7–10"
       : forestDungeon ? dungeonAtmosphere.room === 3 ? "LV 10–12" : dungeonAtmosphere.room === 2 ? "LV 8–10" : "LV 6–8"
         : frontierArena ? "LV 9–12" : silverGuard ? "LV 5–8" : arena ? "LV 4–6" : worldLevelRange(territory?.tier ?? tier).label;
-  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.tier ?? 0}:${depthsZone}:${emberVault}:${recommendedLevel}`;
+  const nextKey = `${tier}:${greenwood}:${camp}:${arena}:${silverGuard}:${frontierArena}:${dungeonAtmosphere.room}:${territory?.name ?? ""}:${depthsZone}:${emberVault}:${recommendedLevel}`;
   if (nextKey === dangerZoneKey) return;
   dangerZoneKey = nextKey;
   dangerZone.dataset.tier = String(tier);
@@ -3086,6 +3086,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   entity.addChild(bodyRoot);
   const isBrute = mob.archetype === "stone_brute";
   const isSpitter = mob.archetype === "cave_spitter";
+  const isAshglass = mobId.startsWith("ashglass-sentry-");
   const isBriar = mob.archetype === "briar_crawler";
   const tierColor = mob.difficultyTier >= 3
     ? new pc.Color(1, 0.2, 0.08)
@@ -3093,14 +3094,14 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
       ? new pc.Color(1, 0.62, 0.08)
       : new pc.Color(0.35, 0.9, 0.28);
   const bodyMaterial = coloredMaterial(
-    isBrute ? new pc.Color(0.38, 0.43, 0.48) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
+    isBrute ? new pc.Color(0.38, 0.43, 0.48) : isAshglass ? new pc.Color(0.31, 0.22, 0.2) : isSpitter ? new pc.Color(0.34, 0.29, 0.43) : isBriar ? new pc.Color(0.31, 0.19, 0.12) : new pc.Color(0.28, 0.42, 0.21),
   );
   bodyMaterial.shininess = 12;
   // Keep the emissive shader feature active while varying cue intensity.
   bodyMaterial.emissive.set(0.001, 0.001, 0.001);
   bodyMaterial.update();
   const healthBackMaterial = coloredMaterial(new pc.Color(0.16, 0.025, 0.02));
-  const healthMaterial = coloredMaterial(mob.difficultyTier > 1 ? tierColor : isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : tierColor);
+  const healthMaterial = coloredMaterial(isAshglass ? new pc.Color(1, 0.63, 0.19) : mob.difficultyTier > 1 ? tierColor : isBrute ? new pc.Color(0.94, 0.48, 0.12) : isSpitter ? new pc.Color(0.58, 0.92, 0.12) : tierColor);
   const warningMaterial = new pc.StandardMaterial();
   warningMaterial.diffuse = new pc.Color(0.9, 0.16, 0.06);
   warningMaterial.emissive = new pc.Color(0.7, 0.08, 0.02);
@@ -3120,6 +3121,15 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const rootGuardian = mobId === "forest-guardian";
   if (rootGuardian) { bodyMaterial.diffuse.set(.28, .24, .16); bodyMaterial.update(); bodyRoot.setLocalScale(1.16, 1.16, 1.16); }
   const art = createMobArt(bodyRoot, mob.archetype, bodyMaterial, matriarch, rootGuardian);
+  if (isAshglass) {
+    const glass = coloredMaterial(new pc.Color(0.95, 0.42, 0.11));
+    glass.emissive.set(0.33, 0.08, 0.015); glass.update();
+    addBox(bodyRoot, "ashglass-back", glass, [.58, .2, .62], [0, .83, -.25]);
+    for (const side of [-1, 1]) {
+      const spike = addBox(bodyRoot, `ashglass-spike-${side}`, glass, [.18, .48, .2], [side * .42, 1.08, -.32]);
+      spike.setLocalEulerAngles(0, 0, side * -25);
+    }
+  }
   if (mob.isChampion && !matriarch && !rootGuardian) {
     const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
     const crestY = isSpitter ? 1.18 : 2.02;

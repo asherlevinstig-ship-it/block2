@@ -2,7 +2,7 @@ import { Client, Room } from "@colyseus/core";
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -1434,6 +1434,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
+    if (isAshenSentry(mobId)) mob.name = "Ashglass Sentry";
     mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion, mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
     this.state.mobs.set(mobId, mob);
   }
@@ -1450,6 +1451,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (EMBER_VAULT_MOBS.some(mob => mob.id === id)) return pose.y >= 7 && pose.y <= 9 && isInEmberVault(pose.x, pose.z);
     if (isGreenwoodCampMob(id)) return greenwoodCampAllows(pose);
     if (isSilverGuard(id)) return silverGuardAllows(pose);
+    if (isAshenSentry(id)) return ashenSentryAllows(pose);
     if (id === "frontier-brute") return frontierBruteAllows(pose);
     if (isMixedFrontierMob(id)) return mixedFrontierAllows(pose);
     const forest = FOREST_DUNGEON_MOBS.find(mob => mob.id === id);
@@ -3232,7 +3234,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
-      else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
+      else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = isAshenSentry(mobId)
+        ? ashenSentryPattern(mob.actionSequence) : spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
       if (mob.archetype === "stone_brute" && mob.combatState === "idle") {
         const eligible = [...this.state.players.values()].filter(player => player.health > 0 && !isInsideTownSafeZone(player)
           && Math.abs(player.y - mob.y) <= 1.75 && caveEncounterAllows(mobId, player) && this.roamingAllowed(mobId, player) && this.championAllowed(mobId, player));

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   Block,
+  ASHEN_REACH,
+  ASHEN_SPIRE_POSITION,
+  ASHEN_SENTRY_HOMES,
+  ashenReachBlock,
+  isInAshenReach,
+  wildernessTerritoryAt,
   MINERAL_DEPOSITS,
   CHUNK_HEIGHT,
   CHUNK_SIZE,
@@ -34,6 +40,31 @@ import {
 } from "../src/index.js";
 
 describe("deterministic voxel world", () => {
+  it("builds a distinct, walkable Ashen Reach with a protected visible spire", () => {
+    const cache = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const address = worldToChunk(x, z), key = `${address.chunkX},${address.chunkZ}`;
+      if (!cache.has(key)) cache.set(key, generateChunk("ash-test", address.chunkX, address.chunkZ));
+      return getBlock(cache.get(key)!, address.localX, y, address.localZ);
+    };
+    expect(isInAshenReach(ASHEN_REACH.x, ASHEN_REACH.z)).toBe(true);
+    expect(isInAshenReach(75, 62)).toBe(false);
+    expect(wildernessTerritoryAt(ASHEN_REACH.x, ASHEN_REACH.z)?.name).toBe("ASHEN REACH");
+    expect(read(ASHEN_REACH.x, 15, ASHEN_REACH.z)).toBe(Block.IronOre);
+    expect(isProtectedVoxel(ASHEN_REACH.x, ASHEN_REACH.z)).toBe(true);
+    expect(isProtectedVoxel(ASHEN_REACH.x + 8, ASHEN_REACH.z)).toBe(false);
+    expect(ASHEN_SPIRE_POSITION.x).toBe(ASHEN_REACH.x + .5);
+    for (const home of ASHEN_SENTRY_HOMES) {
+      expect(isInAshenReach(home.x, home.z)).toBe(true);
+      expect(isPlayerSupported(read, home.x, home.y, home.z)).toBe(true);
+      expect(playerCollides(read, home.x, home.y, home.z)).toBe(false);
+    }
+    for (let x = 78; x <= 84; x++) for (let z = 44; z <= 50; z++) {
+      if (!isInAshenReach(x, z)) continue;
+      expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+      expect(read(x, SURFACE_HEIGHT, z)).toBe(ashenReachBlock(x, SURFACE_HEIGHT, z));
+    }
+  });
   it("exposes supported mineral deposits outside town, with silver farther than iron", () => {
     for (const deposit of MINERAL_DEPOSITS) {
       const address = worldToChunk(deposit.x, deposit.z);

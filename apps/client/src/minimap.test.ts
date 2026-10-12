@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT } from "./minimap.js";
+import { mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, discoverAshenSpire } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
+  it("reveals the Ashen Reach spire only when approached on the surface", () => {
+    const known = new Set<string>();
+    expect(discoverAshenSpire({ ...ASHEN_SPIRE_WAYPOINT, x: ASHEN_SPIRE_WAYPOINT.x + 19 }, known)).toBe(false);
+    expect(discoverAshenSpire({ ...ASHEN_SPIRE_WAYPOINT, y: 3 }, known)).toBe(false);
+    expect(discoverAshenSpire(ASHEN_SPIRE_WAYPOINT, known)).toBe(true);
+    expect(discoverAshenSpire(ASHEN_SPIRE_WAYPOINT, known)).toBe(false);
+    expect(knownWaypoints(known)).toContainEqual(ASHEN_SPIRE_WAYPOINT);
+    expect(parseDiscoveries(JSON.stringify([...known]))).toEqual(known);
+  });
   it("reveals the champion only when alive and nearby on the surface", () => {
     const known = new Set<string>(); const champion = { ...CHAMPION_WAYPOINT, alive: true };
     expect(discoverChampion({ ...champion, x: champion.x + 11 }, champion, known)).toBe(false);

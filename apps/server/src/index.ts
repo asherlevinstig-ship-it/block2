@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "silver-depths-cache-ambush-v161";
+const SERVER_BUILD = "ashen-reach-v162";
 
 const gameServer = defineServer({
   rooms: {

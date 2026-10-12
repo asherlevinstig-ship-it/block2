@@ -1,5 +1,11 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
-import { SILVER_GUARD_HOMES } from "@blockcraft/voxel-world";
+import { ASHEN_REACH, ASHEN_SENTRY_HOMES, SILVER_GUARD_HOMES, isInAshenReach } from "@blockcraft/voxel-world";
+export const ASHEN_SENTRY_IDS = ["ashglass-sentry-west", "ashglass-sentry-east"] as const;
+export const isAshenSentry = (id: string) => ASHEN_SENTRY_IDS.some(member => member === id);
+export const ashenSentryAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
+  && isInAshenReach(pose.x, pose.z) && Math.hypot(pose.x - ASHEN_REACH.x, pose.z - ASHEN_REACH.z) <= ASHEN_REACH.radius - 1;
+/** Two sweeping fans before a committed aimed shot leave readable gaps. */
+export const ashenSentryPattern = (sequence: number): "fan" | "aimed" => sequence % 3 === 2 ? "aimed" : "fan";
 export const SILVER_GUARD_IDS = ["cave-spitter", "frontier-spitter"] as const;
 export const GREENWOOD_CAMP_IDS = ["wild-crawler", "greenwood-briar", "greenwood-briar-north"] as const;
 export const isGreenwoodCampMob = (id: string) => GREENWOOD_CAMP_IDS.some(member => member === id);
@@ -29,4 +35,5 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: "frontier-brute", archetype: "stone_brute", x: 65.5, y: 8, z: 23.5 },
   { id: "frontier-brute-east", archetype: "stone_brute", x: 70.5, y: 8, z: 32.5 },
   { id: "frontier-brute-west", archetype: "stone_brute", x: -48.5, y: 8, z: 12.5 },
+  ...ASHEN_SENTRY_IDS.map((id, index) => ({ id, archetype: "cave_spitter" as const, ...ASHEN_SENTRY_HOMES[index]! })),
 ];

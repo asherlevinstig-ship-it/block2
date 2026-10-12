@@ -107,6 +107,31 @@ export const FRONTIER_BRUTE_COVER = [
   { x: 64, z: 31, height: 3 }, { x: 72, z: 31, height: 2 },
   { x: 61, z: 27, height: 2 }, { x: 74, z: 27, height: 2 },
 ] as const;
+export const ASHEN_REACH = { x: 97, z: 62, radius: 21 } as const;
+export const ASHEN_SPIRE_POSITION = { x: 97.5, y: 8, z: 62.5 } as const;
+export const ASHEN_SENTRY_HOMES = [
+  { x: 88.5, y: 8, z: 57.5 }, { x: 106.5, y: 8, z: 67.5 },
+] as const;
+export function isInAshenReach(x: number, z: number): boolean {
+  return Math.hypot(x - ASHEN_REACH.x, z - ASHEN_REACH.z) <= ASHEN_REACH.radius;
+}
+/** Flat ash-and-stone ground, broken cover, and a tall split spire visible on approach. */
+export function ashenReachBlock(x: number, y: number, z: number): BlockId | null {
+  if (!isInAshenReach(x, z) || y < SURFACE_HEIGHT) return null;
+  const dx = x - ASHEN_REACH.x, dz = z - ASHEN_REACH.z;
+  if (y === SURFACE_HEIGHT) {
+    if (Math.abs(dx) <= 3 && Math.abs(dz) <= 3) return Block.Stone;
+    const stripe = Math.abs(Math.imul(x, 13) + Math.imul(z, 7)) % 11;
+    return stripe < 2 ? Block.Bedrock : stripe < 8 ? Block.Stone : Block.Dirt;
+  }
+  const core = dx === 0 && dz === 0 && y <= 15;
+  const fork = dz === 0 && Math.abs(dx) === 1 && y <= (dx < 0 ? 12 : 11);
+  const brokenCap = dz === 0 && Math.abs(dx) === 2 && y >= 11 && y <= 13;
+  if (core || fork || brokenCap) return y === 15 || y === 13 && Math.abs(dx) === 2 ? Block.IronOre : Block.Bedrock;
+  const cover = (Math.abs(dx) === 7 && Math.abs(dz) === 3)
+    || (Math.abs(dx) === 4 && Math.abs(dz) === 9);
+  return cover && y <= SURFACE_HEIGHT + 2 ? Block.Stone : Block.Air;
+}
 export const FOREST_DUNGEON = { minX: 156, maxX: 192, minZ: 156, maxZ: 174 } as const;
 export const FOREST_PORTAL_POSITION = { x: 46.5, y: 8, z: 28.5 } as const;
 export const FOREST_DUNGEON_ENTRY = { x: 160.5, y: 8, z: 165.5 } as const;
@@ -227,9 +252,11 @@ export const WILDERNESS_TERRITORIES = [
   { tier: 2, name: "SILVER WILDS", detail: "Spitter pairs guard silver · use cover and dodge their shots" },
   { tier: 3, name: "STONE FRONTIER", detail: "Brutes guard rich silver seams · defeat them for Stone Core Hammers" },
 ] as const;
+export const ASHEN_REACH_TERRITORY = { tier: 3, name: "ASHEN REACH", detail: "Find the split spire · Ashglass Sentries fire sweeping fans" } as const;
 export function wildernessTerritoryAt(x: number, z: number) {
   const radius = Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z);
-  return radius < TOWN_SAFE_RADIUS ? null : WILDERNESS_TERRITORIES[radius >= FRONTIER_MINIMUM_RADIUS ? 2 : radius >= WILDS_MINIMUM_RADIUS ? 1 : 0]!;
+  return radius < TOWN_SAFE_RADIUS ? null : isInAshenReach(x, z) ? ASHEN_REACH_TERRITORY
+    : WILDERNESS_TERRITORIES[radius >= FRONTIER_MINIMUM_RADIUS ? 2 : radius >= WILDS_MINIMUM_RADIUS ? 1 : 0]!;
 }
 /** Flat ground palettes distinguish rings without adding collision geometry. */
 export function wildernessSurfaceBlock(x: number, z: number): BlockId {
@@ -627,7 +654,8 @@ export function isProtectedVoxel(x: number, z: number): boolean {
   return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS
     || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z) || isInForestDungeon(x, z) || isInEmberVault(x, z)
     || isSilverDepthsProgressionGate(x, z)
-    || (x >= 45 && x <= 46 && z >= 28 && z <= 29);
+    || (x >= 45 && x <= 46 && z >= 28 && z <= 29)
+    || (Math.abs(x - ASHEN_REACH.x) <= 2 && z === ASHEN_REACH.z);
 }
 
 export function isSilverDepthsProgressionGate(x: number, z: number): boolean {
@@ -669,6 +697,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         const silverGuardBlock = silverGuardEncounterBlock(worldX, y, worldZ);
         if (silverGuardBlock !== null) blocks[chunkIndex(localX, y, localZ)] = silverGuardBlock;
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;
+        const ashenBlock = ashenReachBlock(worldX, y, worldZ);
+        if (ashenBlock !== null) blocks[chunkIndex(localX, y, localZ)] = ashenBlock;
         const dungeonBlock = forestDungeonBlock(worldX, y, worldZ);
         if (dungeonBlock !== null) blocks[chunkIndex(localX, y, localZ)] = dungeonBlock;
         const emberBlock = emberVaultBlock(worldX, y, worldZ);
