@@ -167,6 +167,7 @@ import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDe
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS } from "./loot-rules.js";
+import { findLootLanding } from "./loot-placement.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equipment-reforge.js";
@@ -1939,9 +1940,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
-      const x = mob.x + Math.cos(angle) * 0.42;
-      const y = mob.y + 0.22;
-      const z = mob.z + Math.sin(angle) * 0.42;
+      const landing = findLootLanding(
+        { x: mob.x, y: mob.y, z: mob.z },
+        { x: mob.x + Math.cos(angle) * .85, y: mob.y, z: mob.z + Math.sin(angle) * .85 },
+        this.readWorldBlock,
+      );
+      const x = landing.x;
+      const y = landing.y + .22;
+      const z = landing.z;
       const stackable = !isEquipmentItem(entry.itemId) && entry.itemId !== "miners_lantern" && entry.itemId !== "moonstone";
       const nearbyPile = stackable ? [...this.state.lootDrops.values()].find(existing =>
         existing.ownerId === ownerId && existing.itemId === entry.itemId && existing.expiresAt > now

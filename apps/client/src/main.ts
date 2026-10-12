@@ -1800,6 +1800,8 @@ interface LootVisual {
   root: pc.Entity;
   marker: pc.Entity;
   revealAt: number;
+  landedAt: number;
+  tossFrom: pc.Vec3;
   state: NetworkLootDrop;
   phase: number;
   audioPlayed: boolean;
@@ -1888,7 +1890,7 @@ function nearestVisibleLootDrop(maxDistance: number): { id: string; distance: nu
   for (const [id, visual] of lootVisuals) {
     const drop = visual.state;
     const d = Math.hypot(drop.x - player.x, drop.y - player.y, drop.z - player.z);
-    if (!isItemId(drop.itemId) || !visual.root.enabled || d > distance
+    if (!isItemId(drop.itemId) || !visual.root.enabled || performance.now() < visual.landedAt || d > distance
       || !enemyCueLineClear({ x: player.x, y: player.y + .72, z: player.z },
         { x: drop.x, y: drop.y + .72, z: drop.z }, readCollisionWorldBlock)) continue;
     nearest = id; distance = d;
@@ -3731,8 +3733,12 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const source = sourceId ? mobVisuals.get(sourceId) : undefined;
   const now = performance.now();
   const revealAt = source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
+  const landedAt = revealAt + (source ? 520 : 260);
+  const tossFrom = source
+    ? new pc.Vec3(source.state.x, source.state.y + .72, source.state.z)
+    : new pc.Vec3(drop.x, drop.y + 1.05, drop.z);
   app.root.addChild(root);
-  return { root, marker, revealAt, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17, audioPlayed: false };
+  return { root, marker, revealAt, landedAt, tossFrom, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17, audioPlayed: false };
 }
 
 function bindLootDrops(joinedRoom: Room): void {
@@ -7275,16 +7281,29 @@ app.on("update", (dt: number) => {
   }
   const highlightedLootId = nearestLootDrop();
   for (const [lootId, loot] of lootVisuals) {
-    const visible = undergroundKnown(loot.state.x, loot.state.y, loot.state.z) && !isCutawayHidden(Math.floor(loot.state.x), Math.floor(loot.state.y), Math.floor(loot.state.z));
+    const visible = animationNow >= loot.revealAt && undergroundKnown(loot.state.x, loot.state.y, loot.state.z)
+      && !isCutawayHidden(Math.floor(loot.state.x), Math.floor(loot.state.y), Math.floor(loot.state.z));
     loot.root.enabled = visible;
     if (!visible) continue;
-    const bob = Math.sin(animationTime * 3.2 + loot.phase) * 0.08;
-    loot.root.setPosition(loot.state.x, loot.state.y + 0.36 + bob, loot.state.z);
-    loot.root.setEulerAngles(0, (animationTime * 58 + loot.phase * 23) % 360, 0);
+    const flight = Math.max(0, Math.min(1, (animationNow - loot.revealAt) / Math.max(1, loot.landedAt - loot.revealAt)));
+    const bob = flight >= 1 ? Math.sin(animationTime * 3.2 + loot.phase) * 0.08 : 0;
+    const targetY = loot.state.y + .36;
+    if (flight < 1) {
+      const eased = 1 - (1 - flight) ** 2;
+      loot.root.setPosition(
+        loot.tossFrom.x + (loot.state.x - loot.tossFrom.x) * eased,
+        loot.tossFrom.y + (targetY - loot.tossFrom.y) * eased + Math.sin(flight * Math.PI) * .9,
+        loot.tossFrom.z + (loot.state.z - loot.tossFrom.z) * eased,
+      );
+      loot.root.setEulerAngles(flight * 260, (flight * 520 + loot.phase * 23) % 360, flight * 180);
+    } else {
+      loot.root.setPosition(loot.state.x, targetY + bob, loot.state.z);
+      loot.root.setEulerAngles(0, (animationTime * 58 + loot.phase * 23) % 360, 0);
+    }
     const pileScale = isEquipmentItem(loot.state.itemId) ? 1 : 1 + Math.min(.28, Math.log2(Math.max(1, loot.state.quantity)) * .08);
     const focusPulse = lootId === highlightedLootId ? 1.08 + Math.sin(animationTime * 7) * .025 : 1;
     loot.root.setLocalScale(pileScale * focusPulse, pileScale * focusPulse, pileScale * focusPulse);
-    loot.marker.enabled = animationNow >= loot.revealAt;
+    loot.marker.enabled = animationNow >= loot.landedAt;
     if (!loot.audioPlayed && loot.marker.enabled && isEquipmentItem(loot.state.itemId)) {
       loot.audioPlayed = true;
       const rarity = itemRarity(loot.state.itemId);
