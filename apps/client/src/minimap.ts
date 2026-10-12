@@ -229,7 +229,12 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         const distance = Math.round(Math.hypot(state.objective.x - player.x, state.objective.z - player.z));
         const newestPing = pings.at(-1);
         const routeDescription = !dungeonGates ? "Checking gates" : !cachedRoute ? "No route" : cachedRoute.reachesObjective ? "Route open" : "Route blocked by a closed gate";
-        detail.textContent = `Next: ${state.objective.title} · ${distance}m · ${routeDescription}${dungeonCache && !dungeonCache.opened ? ` · Optional cache: mine wall ore for ${dungeonCache.quantity} ${ITEM_DEFINITIONS[dungeonCache.itemId].name}` : ""}${newestPing ? ` · ${newestPing.senderName} pinged` : ""} · Click map to ping`;
+        const cacheHint = !dungeonCache ? "" : dungeonCache.phase === "sealed"
+          ? ` · Optional cache: mine wall ore for ${dungeonCache.quantity} ${ITEM_DEFINITIONS[dungeonCache.itemId].name}`
+          : dungeonCache.phase === "warning" ? " · CACHE AMBUSH INCOMING · retreat west toward the gate"
+          : dungeonCache.phase === "fighting" ? ` · CACHE GUARDS ${dungeonCache.guardsRemaining} LEFT · west lane open`
+          : ` · Cache secured · collect ${dungeonCache.quantity} ${ITEM_DEFINITIONS[dungeonCache.itemId].name} at the seam`;
+        detail.textContent = `Next: ${state.objective.title} · ${distance}m · ${routeDescription}${cacheHint}${newestPing ? ` · ${newestPing.senderName} pinged` : ""} · Click map to ping`;
         canvas.setAttribute("aria-label", `Silver Depths map. Next: ${state.objective.title}, ${distance} metres away. ${routeDescription}. ${points.teammates.map(teammate => `${teammate.name} ${teammate.state}`).join(", ") || "No teammates on this floor"}.`);
         if (!visible || !context) return;
         const ctx = context, scale = MAP_SIZE / (MAP_RANGE * 2);
@@ -263,14 +268,16 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           ctx.fillStyle = !known ? "#e0d9ec" : open ? "#a8f9cb" : "#ffc0b5"; ctx.font = "bold 8px system-ui"; ctx.textAlign = "center";
           ctx.fillText(`${gate.label} ${!known ? "…" : open ? "OPEN" : "LOCKED"}`, middle.x, middle.y - 7);
         }
-        if (dungeonCache && !dungeonCache.opened) {
+        if (dungeonCache) {
           const cache = mapPoint(player, { x: dungeonCache.x + .5, z: dungeonCache.z + .5 });
-          ctx.fillStyle = dungeonCache.wing === "iron" ? "#ffc177" : "#bcecff";
+          ctx.fillStyle = dungeonCache.phase === "warning" || dungeonCache.phase === "fighting" ? "#ff806f"
+            : dungeonCache.wing === "iron" ? "#ffc177" : "#bcecff";
           ctx.strokeStyle = "#251536"; ctx.lineWidth = 2;
           ctx.fillRect(cache.x - 5, cache.y - 5, 10, 10);
           ctx.strokeRect(cache.x - 5, cache.y - 5, 10, 10);
           ctx.font = "bold 8px system-ui"; ctx.textAlign = "center";
-          ctx.fillText("ORE CACHE", cache.x, cache.y - 10);
+          ctx.fillText(dungeonCache.phase === "fighting" ? `GUARDS ${dungeonCache.guardsRemaining}`
+            : dungeonCache.phase === "warning" ? "AMBUSH" : dungeonCache.phase === "cleared" ? "CACHE LOOT" : "ORE CACHE", cache.x, cache.y - 10);
         }
         const center = MAP_SIZE / 2, target = points.objective;
         ctx.beginPath(); ctx.moveTo(target.x, target.y - 8); ctx.lineTo(target.x + 8, target.y);

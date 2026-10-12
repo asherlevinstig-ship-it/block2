@@ -5022,6 +5022,7 @@ let depthsBreadcrumbRouteKey = "";
 let depthsBreadcrumbRoute: DungeonMapRoute | null = null;
 let depthsRouteFingerprint = "";
 let depthsWingRewardStatus: SilverDepthsWingRewardStatus | null = null;
+let lastDepthsCachePhase: SilverDepthsCacheStatus["phase"] | null = null;
 let depthsCheckpointStatus: SilverDepthsCheckpointStatus | null = null;
 function renderDepthsCheckpointStatus(next: SilverDepthsCheckpointStatus | null): void {
   depthsCheckpointStatus = next;
@@ -7386,7 +7387,12 @@ async function connect(): Promise<void> {
   room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
   room.onMessage("depths:cache", (update: SilverDepthsCacheStatus) => {
     minimap.setDungeonCacheStatus(update);
-    if (update.opened) showCombatFeedback("HIDDEN ORE CACHE OPENED", "dodge");
+    if (update.phase !== lastDepthsCachePhase) {
+      lastDepthsCachePhase = update.phase;
+      if (update.phase === "warning") showCombatFeedback("CACHE AMBUSH INCOMING", "hurt");
+      else if (update.phase === "fighting") showCombatFeedback("CACHE GUARDS ARRIVED", "hurt");
+      else if (update.phase === "cleared") showCombatFeedback("CACHE SECURED", "dodge");
+    }
   });
   room.onMessage("depths:checkpoint", (update: SilverDepthsCheckpointStatus) => renderDepthsCheckpointStatus(update));
   room.onMessage("depths:party-status", (update: SilverDepthsPartyStatus) => renderDepthsPartyStatus(update));
@@ -7812,6 +7818,7 @@ async function connect(): Promise<void> {
     localSpecialCooldownUntil = 0;
     localSilverDepthsRunStage = 0;
     localSilverDepthsWing = null;
+    lastDepthsCachePhase = null;
     renderDepthsWingRewards(null);
     renderDepthsCheckpointStatus(null);
     renderDepthsPartyStatus(null);

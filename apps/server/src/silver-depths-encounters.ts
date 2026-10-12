@@ -32,6 +32,20 @@ export const SILVER_DEPTHS_ENCOUNTERS: readonly SilverDepthsEncounterSpawn[] = [
   { id: "crystal-matriarch", name: "Crystal Matriarch", archetype: "cave_spitter", stage: 4, x: 131.5, y: 1, z: 14.5, baseHealth: 28, level: 12 },
 ] as const;
 
+// Optional cache guards spawn east of the wall seams. The western lane back
+// toward the wing gate remains open even while the ambush is active.
+export const SILVER_DEPTHS_CACHE_GUARDS = {
+  iron: [
+    { id: "depths-cache-iron-warden", name: "Cache Warden", archetype: "stone_brute", x: 105.5, y: 1, z: -10.5, baseHealth: 12, level: 9 },
+    { id: "depths-cache-iron-crawler", name: "Cache Crawler", archetype: "moss_crawler", x: 107.5, y: 1, z: -6.5, baseHealth: 7, level: 9 },
+  ],
+  silver: [
+    { id: "depths-cache-silver-spitter-a", name: "Cache Spitter", archetype: "cave_spitter", x: 106.5, y: 1, z: 32.5, baseHealth: 8, level: 9 },
+    { id: "depths-cache-silver-spitter-b", name: "Cache Spitter", archetype: "cave_spitter", x: 110.5, y: 1, z: 33.5, baseHealth: 8, level: 9 },
+  ],
+} as const satisfies Record<SilverDepthsWing, readonly (Pick<SilverDepthsEncounterSpawn, "id" | "name" | "archetype" | "x" | "y" | "z" | "baseHealth" | "level">)[]>;
+export const SILVER_DEPTHS_CACHE_GUARD_IDS: readonly string[] = Object.values(SILVER_DEPTHS_CACHE_GUARDS).flat().map(guard => guard.id);
+
 export const SILVER_DEPTHS_GALLERY_IDS = SILVER_DEPTHS_ENCOUNTERS.filter(entry => entry.stage <= 2).map(entry => entry.id);
 export const SILVER_DEPTHS_ANTECHAMBER_IDS = SILVER_DEPTHS_ENCOUNTERS.filter(entry => entry.stage === 3).map(entry => entry.id);
 export const SILVER_DEPTHS_ENEMY_IDS = SILVER_DEPTHS_ENCOUNTERS.map(entry => entry.id);

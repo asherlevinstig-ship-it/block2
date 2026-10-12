@@ -5,6 +5,7 @@ import { WorldRoom } from "./game-room.js";
 import { ironCapacity } from "./blacksmith.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 import { silverDepthsStageSpawns } from "./silver-depths-encounters.js";
+import { SILVER_DEPTHS_CACHE_GUARDS } from "./silver-depths-encounters.js";
 
 function roomWithPortal(id: "depths-entry" | "depths-return") {
   const room = new WorldRoom(); room.setState(new WorldState());
@@ -300,9 +301,30 @@ describe("Silver Depths room travel", () => {
     expect(client.send.mock.calls.filter(([name]) => name === "action:rejected")).toEqual([]);
     expect(internal.readWorldBlock(cache.x, cache.y, cache.z)).toBe(Block.Air);
     expect(player.inventory.get(oreId)?.quantity).toBe(oreCapacity);
-    expect(internal.silverDepthsCacheStatus()).toMatchObject({ wing, opened: true, itemId: cache.itemId });
+    expect(internal.silverDepthsCacheStatus()).toMatchObject({ wing, opened: true, phase: "warning", itemId: cache.itemId, guardsRemaining: 2 });
+    expect([...room.state.lootDrops.keys()].filter(id => id.startsWith("depths-mining-cache:"))).toHaveLength(0);
+    const guards = SILVER_DEPTHS_CACHE_GUARDS[wing];
+    internal.advanceSilverDepthsCacheAmbush(internal.silverDepthsCacheAmbushReleaseAt - 1);
+    expect(guards.some(guard => room.state.mobs.has(guard.id))).toBe(false);
+    internal.advanceSilverDepthsCacheAmbush(internal.silverDepthsCacheAmbushReleaseAt);
+    expect(internal.silverDepthsCacheStatus()).toMatchObject({ phase: "fighting", guardsRemaining: 2 });
+    for (const guard of guards) {
+      const mob = room.state.mobs.get(guard.id)!;
+      expect(mob).toMatchObject({ alive: true, name: guard.name });
+      expect(mob.x).toBeGreaterThanOrEqual(100);
+      expect(internal.roamingAllowed(guard.id, { x: 99.5, y: 1, z: guard.z })).toBe(false);
+    }
+    for (let z = wing === "iron" ? -14 : 27; z <= (wing === "iron" ? 2 : 35); z++)
+      expect(internal.readWorldBlock(99, 1, z)).toBe(Block.Air);
+    internal.defeatMob(guards[0]!.id, room.state.mobs.get(guards[0]!.id)!, "miner", Date.now());
+    expect(internal.silverDepthsCacheStatus()).toMatchObject({ phase: "fighting", guardsRemaining: 1 });
+    expect([...room.state.lootDrops.keys()].filter(id => id.startsWith("depths-mining-cache:"))).toHaveLength(0);
+    internal.defeatMob(guards[1]!.id, room.state.mobs.get(guards[1]!.id)!, "miner", Date.now());
+    expect(internal.silverDepthsCacheStatus()).toMatchObject({ phase: "cleared", guardsRemaining: 0 });
+    expect(internal.silverDepthsEncounterStage).toBe(2);
     for (const id of ["miner", "friend"]) expect(room.state.lootDrops.get(`depths-mining-cache:${id}`))
       .toMatchObject({ ownerId: id, itemId: cache.itemId, quantity: cache.quantity, z: cache.dropZ });
+    expect([...room.state.lootDrops.keys()].filter(id => !id.startsWith("depths-mining-cache:"))).toHaveLength(0);
     internal.handleMine(client, request());
     expect([...room.state.lootDrops.keys()].filter(id => id.startsWith("depths-mining-cache:"))).toHaveLength(2);
     internal.resetSilverDepthsInstance();

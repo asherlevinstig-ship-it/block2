@@ -200,7 +200,7 @@ import {
 import { nearbyObjective, createObjectiveProgress, type WorldObjectiveProgress } from "./world-objectives.js";
 import { advanceMiningExpedition, isBuriedVaultSeal, isInsideEastMine, type MiningExpeditionEvent } from "./mining-expedition.js";
 import { advanceSilverDepths, canEnterSilverDepths, canExitSilverDepths, isInsideSilverDepths, SILVER_DEPTHS_GUARDS, CRYSTAL_MATRIARCH_ID, type SilverDepthsEvent } from "./silver-depths-expedition.js";
-import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, SILVER_DEPTHS_ENEMY_IDS, SILVER_DEPTHS_GALLERY_IDS, silverDepthsScaledStats, silverDepthsStageSpawns, type SilverDepthsEncounterStage } from "./silver-depths-encounters.js";
+import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_CACHE_GUARDS, SILVER_DEPTHS_CACHE_GUARD_IDS, SILVER_DEPTHS_ENCOUNTERS, SILVER_DEPTHS_ENEMY_IDS, SILVER_DEPTHS_GALLERY_IDS, silverDepthsScaledStats, silverDepthsStageSpawns, type SilverDepthsEncounterStage } from "./silver-depths-encounters.js";
 import { silverDepthsMoonstoneReward, silverDepthsRank } from "./silver-depths-results.js";
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
@@ -411,6 +411,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private silverDepthsEncounterStage: SilverDepthsEncounterStage = 1;
   private silverDepthsWing: SilverDepthsWing | null = null;
   private silverDepthsCacheOpened = false;
+  private silverDepthsCacheAmbushPhase: SilverDepthsCacheStatus["phase"] = "sealed";
+  private silverDepthsCacheAmbushReleaseAt = 0;
   private silverDepthsNextHazardAt = 0;
   private silverDepthsHazardSequence = 0;
   private readonly silverDepthsPendingHazards: DepthsRouteHazard[] = [];
@@ -1440,6 +1442,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    if (SILVER_DEPTHS_CACHE_GUARD_IDS.includes(id)) {
+      const iron = SILVER_DEPTHS_CACHE_GUARDS.iron.some(guard => guard.id === id);
+      return pose.y >= .8 && pose.y <= 4.5 && pose.x >= 100 && pose.x <= 112
+        && (iron ? pose.z >= -14 && pose.z <= 2 : pose.z >= 27 && pose.z <= 35);
+    }
     if (EMBER_VAULT_MOBS.some(mob => mob.id === id)) return pose.y >= 7 && pose.y <= 9 && isInEmberVault(pose.x, pose.z);
     if (isGreenwoodCampMob(id)) return greenwoodCampAllows(pose);
     if (isSilverGuard(id)) return silverGuardAllows(pose);
@@ -1619,7 +1626,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
     }
     const definition = combatMobDefinition(mob);
-    for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
+    if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))
+      for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
     if (mobId === "buried-chamber-brute") for (const playerId of recipients) this.advanceFirstExpedition(playerId, "defeated_warden");
     this.advanceSilverDepthsEncounter(mobId);
     if (mobId === CRYSTAL_MATRIARCH_ID) {
@@ -1639,6 +1647,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
+    if (SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) this.advanceSilverDepthsCacheAmbush();
     if (mobId === CRYSTAL_MATRIARCH_ID && this.roomKind === "silver-depths") this.broadcastSilverDepthsPartyStatus();
     this.delayedMatriarchVolleys.delete(mobId);
     this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
@@ -2101,6 +2110,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     this.silverDepthsWing = parsed.data.wing;
     this.silverDepthsCacheOpened = false;
+    this.silverDepthsCacheAmbushPhase = "sealed";
+    this.silverDepthsCacheAmbushReleaseAt = 0;
     this.silverDepthsNextHazardAt = Date.now() + 3_500;
     this.setSilverDepthsWingGate(this.silverDepthsWing === "iron" ? SILVER_DEPTHS_IRON_GATE : SILVER_DEPTHS_SILVER_GATE,
       true, `${this.silverDepthsWing}-wing-gate`);
@@ -2121,7 +2132,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (this.roomKind !== "silver-depths" || !this.silverDepthsWing) return null;
     const cache = SILVER_DEPTHS_WING_CACHES[this.silverDepthsWing];
     return { wing: this.silverDepthsWing, x: cache.x, z: cache.z, itemId: cache.itemId,
-      quantity: cache.quantity, opened: this.silverDepthsCacheOpened };
+      quantity: cache.quantity, opened: this.silverDepthsCacheOpened, phase: this.silverDepthsCacheAmbushPhase,
+      guardsRemaining: this.silverDepthsCacheAmbushPhase === "warning" ? SILVER_DEPTHS_CACHE_GUARDS[this.silverDepthsWing].length
+        : this.silverDepthsCacheAmbushPhase === "fighting" ? SILVER_DEPTHS_CACHE_GUARDS[this.silverDepthsWing]
+          .filter(guard => this.state.mobs.get(guard.id)?.alive).length : 0 };
   }
 
   private sendSilverDepthsCacheStatus(client: Client): void {
@@ -2137,6 +2151,44 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private openSilverDepthsCache(): void {
     if (!this.silverDepthsWing || this.silverDepthsCacheOpened) return;
     this.silverDepthsCacheOpened = true;
+    this.silverDepthsCacheAmbushPhase = "warning";
+    this.silverDepthsCacheAmbushReleaseAt = Date.now() + 2_200;
+    for (const id of this.activeSilverDepthsParticipants()) {
+      this.clients.find(client => client.sessionId === id)?.send("portal:notice",
+        `CACHE DISTURBED · guards arrive in two seconds! Retreat toward the wing gate; the western lane stays open.`);
+    }
+    this.broadcastSilverDepthsCacheStatus();
+  }
+
+  private advanceSilverDepthsCacheAmbush(now: number = Date.now()): void {
+    if (this.roomKind !== "silver-depths" || !this.silverDepthsWing) return;
+    const guards = SILVER_DEPTHS_CACHE_GUARDS[this.silverDepthsWing];
+    if (this.silverDepthsCacheAmbushPhase === "warning") {
+      if (now < this.silverDepthsCacheAmbushReleaseAt) return;
+      this.silverDepthsCacheAmbushReleaseAt = 0;
+      this.silverDepthsCacheAmbushPhase = "fighting";
+      for (const entry of guards) {
+        this.registerMob(entry.id, entry.archetype, entry);
+        const mob = this.state.mobs.get(entry.id)!;
+        const scaled = silverDepthsScaledStats({ ...entry, stage: 2, wing: this.silverDepthsWing }, this.instancePartySize);
+        mob.name = entry.name;
+        mob.health = mob.maxHealth = scaled.health;
+        mob.attackDamage += scaled.damageBonus;
+        mob.speedMultiplier *= scaled.speedMultiplier;
+        mob.level = entry.level;
+        mob.difficultyTier = 3;
+      }
+      for (const id of this.activeSilverDepthsParticipants()) this.clients.find(client => client.sessionId === id)?.send("portal:notice",
+        `CACHE AMBUSH · defeat ${guards.length} guards for the guaranteed materials, or retreat toward the gate.`);
+      this.broadcastSilverDepthsCacheStatus();
+      return;
+    }
+    if (this.silverDepthsCacheAmbushPhase !== "fighting") return;
+    if (guards.some(guard => this.state.mobs.get(guard.id)?.alive !== false)) {
+      this.broadcastSilverDepthsCacheStatus();
+      return;
+    }
+    this.silverDepthsCacheAmbushPhase = "cleared";
     const cache = SILVER_DEPTHS_WING_CACHES[this.silverDepthsWing];
     for (const id of this.activeSilverDepthsParticipants()) {
       const drop = new LootDropState();
@@ -2144,7 +2196,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         itemId: cache.itemId, quantity: cache.quantity, expiresAt: Number.MAX_SAFE_INTEGER });
       this.state.lootDrops.set(`depths-mining-cache:${id}`, drop);
       this.clients.find(client => client.sessionId === id)?.send("portal:notice",
-        `HIDDEN ${this.silverDepthsWing.toUpperCase()} CACHE OPENED · collect ${cache.quantity} ${ITEM_DEFINITIONS[cache.itemId].name} at the seam.`);
+        `CACHE SECURED · collect ${cache.quantity} ${ITEM_DEFINITIONS[cache.itemId].name} at the seam.`);
     }
     this.broadcastSilverDepthsCacheStatus();
   }
@@ -2286,8 +2338,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private resetSilverDepthsInstance(): void {
     for (const id of SILVER_DEPTHS_ENEMY_IDS) this.state.mobs.delete(id);
+    for (const id of SILVER_DEPTHS_CACHE_GUARD_IDS) {
+      this.state.mobs.delete(id);
+      this.mobHomes.delete(id);
+      this.mobNavigation.delete(id);
+      this.combatContributions.clear(id);
+    }
     for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:") || id.startsWith("depths-wing-gear:") || id.startsWith("depths-mining-cache:")) this.state.lootDrops.delete(id);
     this.silverDepthsCacheOpened = false;
+    this.silverDepthsCacheAmbushPhase = "sealed";
+    this.silverDepthsCacheAmbushReleaseAt = 0;
     for (const cache of Object.values(SILVER_DEPTHS_WING_CACHES)) {
       const address = worldToChunk(cache.x, cache.z), stored = this.getChunk(address.chunkX, address.chunkZ);
       if (getBlock(stored.chunk, address.localX, cache.y, address.localZ) === cache.block) continue;
@@ -3128,6 +3188,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
     }
     this.resolveMining(now);
+    if (this.silverDepthsCacheAmbushPhase === "warning") this.advanceSilverDepthsCacheAmbush(now);
     if (this.roomKind === "overworld") this.regrowMinerals(now);
     if (this.pendingWorldDeltaWrites.size > 0 && now - this.lastWorldDeltaRetryAt >= 5_000) {
       this.lastWorldDeltaRetryAt = now;
@@ -3158,7 +3219,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const [mobId, mob] of this.state.mobs) {
       if (mobId === WILDERNESS_EVENT_ID && !mob.alive) continue;
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
-      if (!mob.alive && this.roomKind === "silver-depths" && SILVER_DEPTHS_ENEMY_IDS.includes(mobId)) continue;
+      if (!mob.alive && this.roomKind === "silver-depths"
+        && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
       if (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) {
         if (!mob.enraged && matriarchEnraged(mob.health, mob.maxHealth)) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = mobId === CRYSTAL_MATRIARCH_ID

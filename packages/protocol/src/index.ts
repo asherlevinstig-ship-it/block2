@@ -771,6 +771,8 @@ export type SilverDepthsCacheStatus = {
   itemId: "stone_core" | "acid_gland";
   quantity: number;
   opened: boolean;
+  phase: "sealed" | "warning" | "fighting" | "cleared";
+  guardsRemaining: number;
 };
 
 export type SilverDepthsCheckpointStatus = {
