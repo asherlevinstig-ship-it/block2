@@ -97,8 +97,14 @@
       <h2 id="depths-route-title">Break the Moonstone Seal</h2>
       <div id="depths-wing-choice" class="depths-wing-choice" hidden>
         <p>First choice locks the route for your party.</p>
-        <button type="button" data-depths-wing="iron"><b>IRON BASTION</b><small>Warden + crawlers · 5 iron ore</small></button>
-        <button type="button" data-depths-wing="silver"><b>SILVER ECHO</b><small>Spitters + crawler · 3 silver ore</small></button>
+        <button type="button" data-depths-wing="iron"><b>IRON BASTION</b><small>Warden + crawlers · Bastion Plate + 5 iron</small></button>
+        <button type="button" data-depths-wing="silver"><b>SILVER ECHO</b><small>Spitters + crawler · Echo Prism + 3 silver</small></button>
+      </div>
+      <div id="depths-wing-rewards" class="depths-wing-rewards" hidden aria-live="polite">
+        <strong id="depths-rewards-title">YOUR WING REWARDS</strong>
+        <div id="depths-reward-ore"><span id="depths-reward-ore-name"></span><small id="depths-reward-ore-state"></small></div>
+        <div id="depths-reward-gear"><span id="depths-reward-gear-name"></span><small id="depths-reward-gear-state"></small></div>
+        <small id="depths-reward-party" hidden></small>
       </div>
       <div class="depths-route-diagram" aria-hidden="true">
         <svg viewBox="0 0 320 150" preserveAspectRatio="none">

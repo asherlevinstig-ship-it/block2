@@ -170,6 +170,12 @@ describe("Silver Depths room travel", () => {
     expect(player.silverDepthsRunStage).toBe(4);
     expect(room.state.lootDrops.get("depths-wing-reward:miner")).toMatchObject({ ownerId: "miner", itemId: "iron_ore", quantity: 5 });
     expect(room.state.lootDrops.get("depths-wing-gear:miner")).toMatchObject({ ownerId: "miner", itemId: "bastion_plate", quantity: 1 });
+    expect(internal.silverDepthsWingRewardStatus("miner")).toMatchObject({ wing: "iron", oreCollected: false, gearCollected: false,
+      partyGearClaimed: 0, partyGearTotal: 1 });
+    room.state.lootDrops.delete("depths-wing-reward:miner");
+    expect(internal.silverDepthsWingRewardStatus("miner")).toMatchObject({ oreCollected: true, gearCollected: false });
+    room.state.lootDrops.delete("depths-wing-gear:miner");
+    expect(internal.silverDepthsWingRewardStatus("miner")).toMatchObject({ oreCollected: true, gearCollected: true, partyGearClaimed: 1 });
     expect(player.health).toBe(player.maxHealth); expect(player.stamina).toBe(player.maxStamina);
     expect(internal.readWorldBlock(SILVER_DEPTHS_GALLERY_GATE.x, 1, SILVER_DEPTHS_GALLERY_GATE.minZ)).toBe(Block.Air);
     clear(3);
@@ -202,9 +208,17 @@ describe("Silver Depths room travel", () => {
       .toMatchObject({ ownerId: id, itemId: "silver_ore", quantity: 3 });
     for (const id of ["miner", "friend"]) expect(room.state.lootDrops.get(`depths-wing-gear:${id}`))
       .toMatchObject({ ownerId: id, itemId: "echo_prism", quantity: 1 });
+    expect(internal.silverDepthsWingRewardStatus("miner")).toMatchObject({ wing: "silver", gearItemId: "echo_prism",
+      gearCollected: false, partyGearClaimed: 0, partyGearTotal: 2 });
+    room.state.lootDrops.delete("depths-wing-gear:miner");
+    expect(internal.silverDepthsWingRewardStatus("miner")).toMatchObject({ gearCollected: true, partyGearClaimed: 1 });
+    expect(internal.silverDepthsWingRewardStatus("friend")).toMatchObject({ gearCollected: false, partyGearClaimed: 1 });
+    room.state.lootDrops.delete("depths-wing-gear:friend");
+    expect(internal.silverDepthsWingRewardStatus("friend")).toMatchObject({ gearCollected: true, partyGearClaimed: 2 });
     expect(player.silverDepthsRunStage).toBe(4);
     expect(friend.silverDepthsRunStage).toBe(4);
     internal.resetSilverDepthsInstance();
+    expect(internal.silverDepthsWingRewardStatus("miner")).toBeNull();
     expect(internal.readWorldBlock(SILVER_DEPTHS_SILVER_GATE.minX, 1, SILVER_DEPTHS_SILVER_GATE.z)).toBe(Block.Stone);
     expect(room.state.lootDrops.has("depths-wing-reward:friend")).toBe(false);
     expect(room.state.lootDrops.has("depths-wing-gear:friend")).toBe(false);

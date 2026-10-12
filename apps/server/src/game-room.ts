@@ -79,6 +79,7 @@ import {
   type BlacksmithUpdate,
   type BlacksmithUpgradeId,
   type SilverDepthsRewardId,
+  type SilverDepthsWingRewardStatus,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -461,6 +462,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       const run = this.silverDepthsRuns.get(client.sessionId);
       if (this.roomKind === "silver-depths" && run) {
         client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: run.partySize } satisfies DungeonRunUpdate);
+        const rewards = this.silverDepthsWingRewardStatus(client.sessionId);
+        if (rewards) client.send("depths:wing-rewards", rewards);
       }
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
@@ -720,6 +723,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.silverDepthsReconnectInvulnerability.delete(client.sessionId);
     }
     this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
+    const rewards = this.silverDepthsWingRewardStatus(client.sessionId);
+    if (rewards) client.send("depths:wing-rewards", rewards);
   }
 
   override async onDispose(): Promise<void> {
@@ -1690,6 +1695,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
           quantity: drop.quantity,
           total,
         } satisfies LootPickedUp);
+        if (dropId === `depths-wing-reward:${playerId}`) this.sendSilverDepthsWingRewardStatus(playerId);
         break;
       }
     }
@@ -1769,7 +1775,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.silverDepthsRunStage = 7;
       if (this.advanceSilverDepthsExpedition(client, "claimed_moonstone")) this.sendObjectiveState(client, true);
     }
-    if (parsed.data.dropId.startsWith("depths-wing-gear:")) this.sendObjectiveState(client, true);
+    if (parsed.data.dropId === `depths-wing-gear:${client.sessionId}`) {
+      this.sendObjectiveState(client, true);
+      for (const id of this.activeSilverDepthsParticipants()) this.sendSilverDepthsWingRewardStatus(id);
+    }
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
       : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
@@ -1954,11 +1963,30 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.refreshNearbyObjectives();
   }
 
+  private silverDepthsWingRewardStatus(playerId: string): SilverDepthsWingRewardStatus | null {
+    if (this.roomKind !== "silver-depths" || !this.silverDepthsWing || this.silverDepthsEncounterStage < 3
+      || !this.silverDepthsRuns.has(playerId)) return null;
+    const iron = this.silverDepthsWing === "iron";
+    const participants = this.activeSilverDepthsParticipants();
+    return { wing: this.silverDepthsWing, oreItemId: iron ? "iron_ore" : "silver_ore",
+      oreQuantity: iron ? 5 : 3, gearItemId: iron ? "bastion_plate" : "echo_prism",
+      oreCollected: !this.state.lootDrops.has(`depths-wing-reward:${playerId}`),
+      gearCollected: !this.state.lootDrops.has(`depths-wing-gear:${playerId}`),
+      partyGearClaimed: participants.filter(id => !this.state.lootDrops.has(`depths-wing-gear:${id}`)).length,
+      partyGearTotal: participants.length };
+  }
+
+  private sendSilverDepthsWingRewardStatus(playerId: string): void {
+    const status = this.silverDepthsWingRewardStatus(playerId);
+    if (status) this.clients.find(client => client.sessionId === playerId)?.send("depths:wing-rewards", status);
+  }
+
   private spawnSilverDepthsWingRewards(): void {
     if (!this.silverDepthsWing) return;
     const iron = this.silverDepthsWing === "iron";
     const site = iron ? { x: 102.5, y: 1.22, z: -9.5 } : { x: 104.5, y: 1.22, z: 33.5 };
-    for (const id of this.activeSilverDepthsParticipants()) {
+    const participants = this.activeSilverDepthsParticipants();
+    for (const id of participants) {
       const ore = new LootDropState();
       Object.assign(ore, site, { ownerId: id, itemId: iron ? "iron_ore" : "silver_ore",
         quantity: iron ? 5 : 3, expiresAt: Number.MAX_SAFE_INTEGER });
@@ -1970,6 +1998,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.clients.find(client => client.sessionId === id)?.send("portal:notice",
         `${iron ? "IRON BASTION" : "SILVER ECHO"} CLEARED · collect your personal ${iron ? "Bastion Plate and iron" : "Echo Prism and silver"} ore, then reach the checkpoint.`);
     }
+    for (const id of participants) this.sendSilverDepthsWingRewardStatus(id);
   }
 
   private spawnSilverDepthsWingSupplies(): void {

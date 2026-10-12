@@ -11,5 +11,10 @@ describe("Silver Depths route shell", () => {
 
     expect(renderedNodeIds).toEqual(DEPTHS_ROUTE_NODES.map(({ id }) => id));
     expect([...html.matchAll(/data-depths-wing="([^"]+)"/g)].map(([, wing]) => wing)).toEqual(["iron", "silver"]);
+    for (const id of ["depths-wing-rewards", "depths-reward-ore-name", "depths-reward-ore-state", "depths-reward-gear-name", "depths-reward-gear-state", "depths-reward-party"]) {
+      expect(html).toContain(`id="${id}"`);
+    }
+    expect(html).toContain("Bastion Plate + 5 iron");
+    expect(html).toContain("Echo Prism + 3 silver");
   });
 });

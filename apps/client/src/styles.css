@@ -1207,6 +1207,14 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .depths-wing-choice button b, .depths-wing-choice button small { display: block; }
 .depths-wing-choice button b { font: 900 9px system-ui; letter-spacing: .07em; }
 .depths-wing-choice button small { margin-top: 4px; color: #dccbe9; font: 700 9px system-ui; }
+.depths-wing-rewards { display: grid; gap: 5px; margin: 9px 0; padding: 8px; border: 1px solid #b693df88; border-radius: 8px; background: #39244e91; }
+.depths-wing-rewards[hidden] { display: none; }
+.depths-wing-rewards > strong { color: #efd9ff; font: 900 9px system-ui; letter-spacing: .11em; }
+.depths-wing-rewards > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #fff1d4; font: 700 11px system-ui; }
+.depths-wing-rewards small { color: #f2d488; font: 800 9px system-ui; text-align: right; }
+.depths-wing-rewards .collected { color: #b4eed1; }
+.depths-wing-rewards > small { display: block; padding-top: 5px; border-top: 1px solid #b693df55; text-align: left; }
+.depths-wing-rewards > small[hidden] { display: none; }
 .depths-route-diagram { position: relative; height: 122px; }
 .depths-route-diagram svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .depths-route-diagram path { fill: none; stroke: #695183; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 4 5; vector-effect: non-scaling-stroke; }

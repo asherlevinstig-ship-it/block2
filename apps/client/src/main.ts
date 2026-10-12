@@ -137,6 +137,7 @@ import {
   type WorldBootstrap,
   type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
+  type SilverDepthsWingRewardStatus,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
 import {
@@ -459,6 +460,13 @@ const depthsRouteTitle = document.querySelector<HTMLElement>("#depths-route-titl
 const depthsRouteCount = document.querySelector<HTMLElement>("#depths-route-count")!;
 const depthsRouteDistance = document.querySelector<HTMLElement>("#depths-route-distance")!;
 const depthsWingChoice = document.querySelector<HTMLElement>("#depths-wing-choice")!;
+const depthsWingRewards = document.querySelector<HTMLElement>("#depths-wing-rewards")!;
+const depthsRewardsTitle = document.querySelector<HTMLElement>("#depths-rewards-title")!;
+const depthsRewardOreName = document.querySelector<HTMLElement>("#depths-reward-ore-name")!;
+const depthsRewardOreState = document.querySelector<HTMLElement>("#depths-reward-ore-state")!;
+const depthsRewardGearName = document.querySelector<HTMLElement>("#depths-reward-gear-name")!;
+const depthsRewardGearState = document.querySelector<HTMLElement>("#depths-reward-gear-state")!;
+const depthsRewardParty = document.querySelector<HTMLElement>("#depths-reward-party")!;
 const depthsWingButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-depths-wing]")];
 const depthsRouteNodes = [...document.querySelectorAll<HTMLElement>("[data-depths-node]")];
 const inventoryPanel = document.querySelector<HTMLElement>("#inventory-panel")!;
@@ -4906,6 +4914,28 @@ function updateObjectiveGuidance(): void {
 
 let visibleDepthsRoute: DepthsRouteState | null = null;
 let depthsRouteFingerprint = "";
+let depthsWingRewardStatus: SilverDepthsWingRewardStatus | null = null;
+function renderDepthsWingRewards(next: SilverDepthsWingRewardStatus | null): void {
+  const previous = depthsWingRewardStatus;
+  depthsWingRewardStatus = next;
+  depthsWingRewards.hidden = next === null;
+  if (!next) return;
+  depthsRewardsTitle.textContent = next.wing === "iron" ? "YOUR IRON BASTION REWARDS" : "YOUR SILVER ECHO REWARDS";
+  depthsRewardOreName.textContent = `${next.oreQuantity} ${ITEM_DEFINITIONS[next.oreItemId].name}`;
+  depthsRewardOreState.textContent = next.oreCollected ? "✓ COLLECTED" : "WALK OVER TO COLLECT";
+  depthsRewardGearName.textContent = ITEM_DEFINITIONS[next.gearItemId].name;
+  depthsRewardGearState.textContent = next.gearCollected ? "✓ CLAIMED" : "APPROACH · PRESS E";
+  depthsRewardOreState.classList.toggle("collected", next.oreCollected);
+  depthsRewardGearState.classList.toggle("collected", next.gearCollected);
+  depthsRewardParty.hidden = next.partyGearTotal <= 1;
+  depthsRewardParty.textContent = next.partyGearClaimed === next.partyGearTotal
+    ? `ALL ${next.partyGearTotal} PARTY GEAR REWARDS CLAIMED`
+    : `PARTY GEAR CLAIMED ${next.partyGearClaimed} / ${next.partyGearTotal}`;
+  depthsRewardParty.classList.toggle("collected", next.partyGearClaimed === next.partyGearTotal);
+  if (next.gearCollected && previous && !previous.gearCollected && previous.wing === next.wing) {
+    showCombatFeedback(`${ITEM_DEFINITIONS[next.gearItemId].name.toUpperCase()} SECURED`, "dodge");
+  }
+}
 function updateSilverDepthsRoute(now: number): void {
   const player = localPlayer.getPosition();
   const inside = player.y < 6 && player.x >= SILVER_DEPTHS.minX - 1 && player.x <= SILVER_DEPTHS.maxX + 1
@@ -7139,6 +7169,7 @@ async function connect(): Promise<void> {
     showCombatFeedback(notice.title, notice.kind === "victory" ? "dodge" : "hit");
   });
   room.onMessage("dungeon:run", (update: DungeonRunUpdate) => {
+    if (update.phase === "started" && update.dungeon === "silver-depths") renderDepthsWingRewards(null);
     if (update.phase === "started") status.textContent = update.dungeon === "ember-vault"
       ? "Ember Vault expedition started · clear the sentinels, break the brute, then face the Forge Colossus."
       : update.dungeon === "silver-depths" ? "Silver Depths expedition started · break the seal, clear both gallery waves, light the checkpoint, and overcome the Matriarch."
@@ -7159,6 +7190,7 @@ async function connect(): Promise<void> {
   room.onMessage("trade:update", update => tradeUI.update(update));
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
+  room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
     renderCharacterProgression(update);
@@ -7575,6 +7607,7 @@ async function connect(): Promise<void> {
     localSpecialCooldownUntil = 0;
     localSilverDepthsRunStage = 0;
     localSilverDepthsWing = null;
+    renderDepthsWingRewards(null);
     setDefensePresentation(false);
     cancelPowerAim();
     cancelSpecialAim();

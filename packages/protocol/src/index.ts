@@ -746,6 +746,17 @@ export type WorldObjectiveUpdate = {
   targetZ: number;
 };
 
+export type SilverDepthsWingRewardStatus = {
+  wing: "iron" | "silver";
+  oreItemId: "iron_ore" | "silver_ore";
+  oreQuantity: number;
+  gearItemId: "bastion_plate" | "echo_prism";
+  oreCollected: boolean;
+  gearCollected: boolean;
+  partyGearClaimed: number;
+  partyGearTotal: number;
+};
+
 export type WorldObjectiveCompleted = {
   objectiveId: string;
   title: string;
