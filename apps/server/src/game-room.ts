@@ -83,6 +83,7 @@ import {
   type SilverDepthsWingRewardStatus,
   type SilverDepthsCheckpointStatus,
   type SilverDepthsPartyStatus,
+  type SilverDepthsGateStatus,
   SilverDepthsPingRequestSchema,
   type SilverDepthsPing,
   type BlockChanged,
@@ -412,6 +413,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private silverDepthsHazardSequence = 0;
   private readonly silverDepthsPendingHazards: DepthsRouteHazard[] = [];
   private silverDepthsSealOpened = false;
+  private readonly silverDepthsGates: SilverDepthsGateStatus = { seal: false, iron: false, silver: false, gallery: false, boss: false };
   private silverDepthsAwaitingReady = false;
   private readonly silverDepthsCheckpointReady = new Set<string>();
   private readonly silverDepthsRoster = new Map<string, string>();
@@ -502,6 +504,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       if (this.roomKind === "silver-depths" && this.silverDepthsRoster.has(client.sessionId))
         client.send("depths:party-status", this.silverDepthsPartyStatus());
+      if (this.roomKind === "silver-depths" && this.silverDepthsRoster.has(client.sessionId))
+        client.send("depths:gates", { ...this.silverDepthsGates } satisfies SilverDepthsGateStatus);
       if (this.roomKind === "silver-depths" && this.silverDepthsRoster.has(client.sessionId)) {
         const now = Date.now();
         for (const ping of this.silverDepthsPings.values()) if (ping.expiresAt > now)
@@ -2043,6 +2047,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.broadcast("block:changed", { requestId: `depths-${label}-${open ? "open" : "close"}-${z}:${y}`,
         x: gate.x, y, z, block, revision: stored.revision } satisfies BlockChanged);
     }
+    if (label === "gallery-gate" || label === "boss-gate") {
+      this.silverDepthsGates[label === "gallery-gate" ? "gallery" : "boss"] = open;
+      this.broadcast("depths:gates", { ...this.silverDepthsGates } satisfies SilverDepthsGateStatus);
+    }
   }
 
   private setSilverDepthsWingGate(gate: { z: number; minX: number; maxX: number }, open: boolean, label: string): void {
@@ -2053,6 +2061,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       setBlock(stored.chunk, address.localX, y, address.localZ, block); stored.revision++;
       this.broadcast("block:changed", { requestId: `depths-${label}-${open ? "open" : "close"}-${x}:${y}`,
         x, y, z: gate.z, block, revision: stored.revision } satisfies BlockChanged);
+    }
+    if (label === "iron-wing-gate" || label === "silver-wing-gate") {
+      this.silverDepthsGates[label === "iron-wing-gate" ? "iron" : "silver"] = open;
+      this.broadcast("depths:gates", { ...this.silverDepthsGates } satisfies SilverDepthsGateStatus);
     }
   }
 
@@ -2237,7 +2249,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private resetSilverDepthsInstance(): void {
     for (const id of SILVER_DEPTHS_ENEMY_IDS) this.state.mobs.delete(id);
     for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:") || id.startsWith("depths-wing-gear:")) this.state.lootDrops.delete(id);
-    this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false; this.silverDepthsWing = null;
+    this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false; this.silverDepthsGates.seal = false; this.silverDepthsWing = null;
     this.silverDepthsAwaitingReady = false; this.silverDepthsCheckpointReady.clear();
     this.silverDepthsRoster.clear(); this.silverDepthsFallen.clear(); this.silverDepthsDisconnected.clear();
     this.silverDepthsNextHazardAt = 0; this.silverDepthsPendingHazards.length = 0;
@@ -2301,6 +2313,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
     if (this.roomKind === "silver-depths" && !this.silverDepthsSealOpened) {
       this.silverDepthsSealOpened = true;
+      this.silverDepthsGates.seal = true;
+      this.broadcast("depths:gates", { ...this.silverDepthsGates } satisfies SilverDepthsGateStatus);
       this.spawnSilverDepthsWingSupplies();
       this.setSilverDepthsRunStage(2);
       for (const id of this.activeSilverDepthsParticipants()) this.advanceSilverDepthsExpedition(id, "mined_moonstone");

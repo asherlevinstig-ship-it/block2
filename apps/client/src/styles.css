@@ -1419,6 +1419,8 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .minimap-dungeon-legend span:nth-child(2) { color: #8edfff; }
 .minimap-dungeon-legend span:nth-child(3) { color: #ff917e; }
 .minimap-dungeon-legend span:nth-child(4) { color: #79f6c1; }
+.minimap-dungeon-legend span:nth-child(5) { color: #76dfad; }
+.minimap-dungeon-legend span:nth-child(6) { color: #ff806f; }
 #waypoint-guide { position: fixed; z-index: 21; right: max(14px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px; width: 240px; box-sizing: border-box; padding: 12px; border: 1px solid #e6c97688; border-radius: 12px; background: #16241ef2; color: #fff4bf; }
 #waypoint-guide[hidden] { display: none; }
 #waypoint-arrow { display: inline-block; font: 900 28px system-ui; flex-shrink: 0; }

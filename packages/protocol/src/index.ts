@@ -779,6 +779,13 @@ export type SilverDepthsPartyStatus = {
   partySize: number;
   members: { id: string; name: string; state: "fighting" | "reconnecting" | "fallen" | "left" }[];
 };
+export type SilverDepthsGateStatus = {
+  seal: boolean;
+  iron: boolean;
+  silver: boolean;
+  gallery: boolean;
+  boss: boolean;
+};
 export const SilverDepthsPingRequestSchema = z.object({
   x: z.number().finite().min(60).max(140),
   z: z.number().finite().min(-20).max(39),

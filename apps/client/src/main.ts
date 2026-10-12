@@ -141,6 +141,7 @@ import {
   type SilverDepthsWingRewardStatus,
   type SilverDepthsCheckpointStatus,
   type SilverDepthsPartyStatus,
+  type SilverDepthsGateStatus,
   type SilverDepthsPing,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
@@ -7335,6 +7336,7 @@ async function connect(): Promise<void> {
   room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
   room.onMessage("depths:checkpoint", (update: SilverDepthsCheckpointStatus) => renderDepthsCheckpointStatus(update));
   room.onMessage("depths:party-status", (update: SilverDepthsPartyStatus) => renderDepthsPartyStatus(update));
+  room.onMessage("depths:gates", (status: SilverDepthsGateStatus) => minimap.setDungeonGateStatus(status));
   room.onMessage("depths:ping", (ping: SilverDepthsPing) => minimap.setDungeonPing(ping));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
