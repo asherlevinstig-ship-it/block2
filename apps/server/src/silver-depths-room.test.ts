@@ -21,6 +21,48 @@ function roomWithPortal(id: "depths-entry" | "depths-return") {
 }
 
 describe("Silver Depths room travel", () => {
+  it("reserves a disconnected player's dungeon seat and restores their run on reconnect", () => {
+    const { room, player, client } = roomWithPortal("depths-return");
+    const internal = room as any;
+    internal.roomKind = "silver-depths";
+    player.x = 94.5; player.z = 12.5; player.silverDepthsRunStage = 4;
+    const run = { completedAt: 0, startedAt: 1234 };
+    internal.silverDepthsRuns.set(client.sessionId, run);
+    const drop = new InventoryItemState(); drop.quantity = 1;
+    player.inventory.set("iron_ore", drop);
+    const reserve = vi.spyOn(room, "allowReconnection").mockImplementation(() => ({ catch: () => undefined }) as any);
+    room.onDrop(client as any);
+    expect(reserve).toHaveBeenCalledWith(client, 45);
+    expect(room.state.players.get(client.sessionId)).toBe(player);
+    expect(internal.silverDepthsRuns.get(client.sessionId)).toBe(run);
+    expect(player).toMatchObject({ x: 94.5, z: 12.5, silverDepthsRunStage: 4 });
+    expect(player.inventory.get("iron_ore")?.quantity).toBe(1);
+    expect(player.invulnerableUntil).toBeGreaterThan(Date.now());
+    room.onReconnect(client as any);
+    expect(room.state.players.get(client.sessionId)).toBe(player);
+    expect(internal.silverDepthsRuns.get(client.sessionId)).toBe(run);
+    expect(internal.silverDepthsReconnectInvulnerability.has(client.sessionId)).toBe(false);
+    expect(player.invulnerableUntil).toBeLessThanOrEqual(Date.now() + 1300);
+  });
+
+  it("does not reserve an overworld seat on disconnect", () => {
+    const { room, client } = roomWithPortal("depths-entry");
+    const reserve = vi.spyOn(room, "allowReconnection").mockImplementation(() => undefined as any);
+    room.onDrop(client as any);
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
+  it("cleans up a dungeon player when the reconnect window expires", async () => {
+    const { room, client } = roomWithPortal("depths-return");
+    const internal = room as any;
+    internal.roomKind = "silver-depths";
+    vi.spyOn(room, "allowReconnection").mockImplementation(() => ({ catch: () => undefined }) as any);
+    room.onDrop(client as any);
+    await room.onLeave(client as any);
+    expect(room.state.players.has(client.sessionId)).toBe(false);
+    expect(internal.silverDepthsReconnectInvulnerability.has(client.sessionId)).toBe(false);
+  });
+
   it("releases six crystal shots after a longer tell and grants a full counter window", () => {
     const { room } = roomWithPortal("depths-entry"); const internal = room as any;
     vi.spyOn(room, "broadcast").mockImplementation(() => {});

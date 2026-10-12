@@ -303,6 +303,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   override patchRate = 33;
   private readonly chunks = new Map<string, MutableChunk>();
   private readonly movementInputs = new Map<string, StoredMovementInput>();
+  private readonly silverDepthsReconnectInvulnerability = new Map<string, number>();
   private readonly movementRateWindows = new Map<string, MovementRateWindow>();
   private readonly verticalVelocities = new Map<string, number>();
   private readonly attackChains = new Map<string, AttackChainState>();
@@ -646,6 +647,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   override async onLeave(client: Client): Promise<void> {
+    this.silverDepthsReconnectInvulnerability.delete(client.sessionId);
     this.combatContributions.disconnect(client.sessionId);
     for (const [id, drop] of this.state.lootDrops) if (drop.ownerId === client.sessionId) this.state.lootDrops.delete(id);
     this.trading.disconnect(client.sessionId); this.lastTradeRequestAt.delete(client.sessionId);
@@ -684,6 +686,32 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.profileSaveFingerprints.delete(client.sessionId);
     this.quizRounds.delete(client.sessionId);
     this.objectiveProgress.delete(client.sessionId);
+  }
+
+  override onDrop(client: Client): void {
+    if (this.roomKind !== "silver-depths" || !this.state.players.has(client.sessionId)) return;
+    const player = this.state.players.get(client.sessionId)!;
+    if (!this.silverDepthsReconnectInvulnerability.has(client.sessionId)) {
+      this.silverDepthsReconnectInvulnerability.set(client.sessionId, player.invulnerableUntil);
+    }
+    player.invulnerableUntil = Math.max(player.invulnerableUntil, Date.now() + 45_000);
+    player.defending = false;
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
+    this.pendingMining.delete(client.sessionId);
+    this.pendingAttacks.delete(client.sessionId);
+    this.pendingPowers.delete(client.sessionId);
+    void this.allowReconnection(client, 45).catch(() => undefined);
+  }
+
+  override onReconnect(client: Client): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const previousInvulnerability = this.silverDepthsReconnectInvulnerability.get(client.sessionId);
+    if (previousInvulnerability !== undefined) {
+      player.invulnerableUntil = Math.max(previousInvulnerability, Date.now() + 1200);
+      this.silverDepthsReconnectInvulnerability.delete(client.sessionId);
+    }
+    this.movementInputs.set(client.sessionId, { request: idleMovementInput(), receivedAt: Date.now() });
   }
 
   override async onDispose(): Promise<void> {

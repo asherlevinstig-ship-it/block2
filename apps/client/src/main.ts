@@ -6957,6 +6957,20 @@ async function connect(): Promise<void> {
   const qaSpawn = import.meta.env.DEV ? query.get("qa") : null;
   activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM : WORLD_ROOM;
   const instanceKey = query.get("instanceKey");
+  const reconnectStorageKey = activeRoomName === SILVER_DEPTHS_ROOM && instanceKey
+    ? `blockcraft:silver-depths:reconnect:${instanceKey}` : null;
+  const storedReconnectToken = (() => {
+    if (!reconnectStorageKey) return null;
+    try { return window.sessionStorage.getItem(reconnectStorageKey); } catch { return null; }
+  })();
+  const saveReconnectToken = () => {
+    if (!reconnectStorageKey || !room?.reconnectionToken) return;
+    try { window.sessionStorage.setItem(reconnectStorageKey, room.reconnectionToken); } catch { /* Storage may be disabled. */ }
+  };
+  const clearReconnectToken = () => {
+    if (!reconnectStorageKey) return;
+    try { window.sessionStorage.removeItem(reconnectStorageKey); } catch { /* Storage may be disabled. */ }
+  };
   const requestedPartySize = Number(query.get("partySize"));
   const returnFrom = query.get("returnFrom") === "silver-depths" ? "silver-depths" : null;
   const joinOptions = { name: "Explorer", profileToken, ...(adminInvitation ? { adminPass: adminInvitation } : {}), ...(qaSpawn ? { qaSpawn } : {}),
@@ -6967,6 +6981,7 @@ async function connect(): Promise<void> {
       const client = new Client(endpoint, {
         fetchFn: (input, init) => fetch(input, { ...init, signal }),
       });
+      if (storedReconnectToken) return client.reconnect(storedReconnectToken);
       return attempt === 1 || activeRoomName === SILVER_DEPTHS_ROOM
         ? client.joinOrCreate(activeRoomName, joinOptions)
         : client.create(activeRoomName, joinOptions);
@@ -6976,7 +6991,22 @@ async function connect(): Promise<void> {
         ? `Shared world is delayed. Starting a recovery world in ${Math.round(delay / 1000)}s…`
         : `Game server is restarting. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/5)`;
     },
-  );
+  ).catch(error => {
+    if (storedReconnectToken) {
+      clearReconnectToken();
+      throw new Error("Could not resume this dungeon run. Return to town and enter the portal again.", { cause: error });
+    }
+    throw error;
+  });
+  saveReconnectToken();
+  room.onReconnect(() => {
+    saveReconnectToken();
+    room?.send("world:ready");
+    room?.send("objective:sync");
+    status.textContent = "Reconnected to your dungeon run.";
+  });
+  room.onDrop(() => { status.textContent = activeRoomName === SILVER_DEPTHS_ROOM
+    ? "Connection interrupted. Holding your place in the dungeon…" : "Connection interrupted. Reconnecting…"; });
   bindPlayers(room);
   bindMobs(room);
   bindLootDrops(room);
@@ -6992,6 +7022,7 @@ async function connect(): Promise<void> {
       url.searchParams.delete("returnFrom");
       status.textContent = `Opening a private Silver Depths instance for ${transfer.partySize ?? 1} player${transfer.partySize === 1 ? "" : "s"}...`;
     } else {
+      clearReconnectToken();
       url.searchParams.delete("room");
       url.searchParams.delete("instanceKey");
       url.searchParams.delete("partySize");
@@ -7435,6 +7466,7 @@ async function connect(): Promise<void> {
     }
   });
   room.onLeave(() => {
+    clearReconnectToken();
     document.querySelector<HTMLElement>("#waypoint-guide")!.hidden = true;
     awaitingReturnState = false; townReturnPosition = null;
     if (!defeatScreen.hidden) {
