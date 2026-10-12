@@ -422,6 +422,8 @@ const potionUse = document.querySelector<HTMLButtonElement>("#potion-use")!;
 const potionShopStatus = document.querySelector<HTMLElement>("#potion-shop-status")!;
 const quizTablePrompt = document.querySelector<HTMLElement>("#quiz-table-prompt")!;
 const blacksmithPrompt = document.querySelector<HTMLElement>("#blacksmith-prompt")!;
+const playerTradePrompt = document.querySelector<HTMLButtonElement>("#player-trade-prompt")!;
+const playerTradeName = document.querySelector<HTMLElement>("#player-trade-name")!;
 const blacksmithPanel = document.querySelector<HTMLElement>("#blacksmith-panel")!;
 const blacksmithMessage = document.querySelector<HTMLElement>("#blacksmith-message")!;
 const blacksmithOre = document.querySelector<HTMLElement>("#blacksmith-ore")!;
@@ -584,7 +586,7 @@ const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-togg
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
-if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
+if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
 if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveLoot, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
@@ -1857,6 +1859,51 @@ const social = createSocialUI((type, payload) => { if (!room || !worldReady) ret
 const tradeUI = createTradeUI(request => { if (!room || !worldReady) return false; room.send("trade:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); }, id => tradeUI.invite(id), () => room?.sessionId ?? "");
 let lastNameplateSampleAt = -Infinity;
+let nearbyTradePlayerId: string | null = null;
+
+function requestNearbyPlayerTrade(): void {
+  if (!nearbyTradePlayerId || tradeUI.isOpen()) return;
+  const target = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(nearbyTradePlayerId);
+  tradeUI.invite(nearbyTradePlayerId);
+  status.textContent = `Trade request sent to ${target?.name || "the nearby explorer"}.`;
+}
+
+playerTradePrompt.addEventListener("click", requestNearbyPlayerTrade);
+
+function updatePlayerTradePrompt(blocked: boolean): void {
+  nearbyTradePlayerId = null;
+  if (blocked || !room || !worldReady || !camera.camera || tradeUI.isOpen() || !defeatScreen.hidden) {
+    playerTradePrompt.hidden = true;
+    return;
+  }
+  const local = localPlayer.getPosition();
+  let nearest: { id: string; position: pc.Vec3; distance: number; name: string } | null = null;
+  for (const [id, remote] of remotePlayers) {
+    if (!remote.entity.enabled) continue;
+    const position = remote.entity.getPosition();
+    const horizontal = Math.hypot(position.x - local.x, position.z - local.z);
+    if (horizontal > 4 || Math.abs(position.y - local.y) > 1.5 || horizontal >= (nearest?.distance ?? Infinity)) continue;
+    const player = (room.state.players as Map<string, NetworkPlayer>).get(id);
+    if (!player || player.health <= 0) continue;
+    nearest = { id, position, distance: horizontal, name: player.name || "Explorer" };
+  }
+  if (!nearest) {
+    playerTradePrompt.hidden = true;
+    return;
+  }
+  const screen = camera.camera.worldToScreen(new pc.Vec3(nearest.position.x, nearest.position.y + 2.35, nearest.position.z));
+  const rect = canvas.getBoundingClientRect();
+  if (screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height) {
+    playerTradePrompt.hidden = true;
+    return;
+  }
+  nearbyTradePlayerId = nearest.id;
+  playerTradeName.textContent = nearest.name;
+  playerTradePrompt.style.left = `${rect.left + screen.x}px`;
+  playerTradePrompt.style.top = `${rect.top + screen.y}px`;
+  playerTradePrompt.hidden = false;
+  playerTradePrompt.setAttribute("aria-label", `Trade with ${nearest.name}`);
+}
 const mobVisuals = new Map<string, MobVisual>();
 const lootVisuals = new Map<string, LootVisual>();
 const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
@@ -5306,6 +5353,7 @@ function updateTarget(): void {
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
   const nearbyLoot = nearestLootDrop();
+  updatePlayerTradePrompt(Boolean(nearbyLoot || nearbyForestPortal || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
   const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${nearbyForestPortal}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
@@ -6884,7 +6932,10 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
   if (event.code === "KeyE") {
     event.preventDefault();
-    if (!beginLootKeyInteraction()) requestPrimaryAction();
+    if (!beginLootKeyInteraction()) {
+      if (nearbyTradePlayerId) requestNearbyPlayerTrade();
+      else requestPrimaryAction();
+    }
   }
   if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyR") {

@@ -518,6 +518,31 @@ canvas.ranged-aim { cursor: none; }
 #quiz-table-prompt small, #blacksmith-prompt small { display: block; margin-top: 3px; color: white; font-size: .7rem; font-weight: 600; letter-spacing: 0; }
 #quiz-table-prompt[hidden], #blacksmith-prompt[hidden] { display: none; }
 #blacksmith-prompt { border-color: #f3aa63; color: #ffc88a; }
+#player-trade-prompt {
+  position: fixed;
+  z-index: 24;
+  min-width: 150px;
+  padding: 8px 12px 9px;
+  border: 1px solid #77ddc5;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgb(18 46 43 / 96%), rgb(7 24 22 / 97%));
+  color: #ecfff8;
+  cursor: pointer;
+  box-shadow: 0 8px 22px #0009, 0 0 18px rgb(65 219 183 / 22%);
+  text-align: center;
+  transform: translate(-50%, -100%);
+}
+#player-trade-prompt[hidden] { display: none; }
+#player-trade-prompt span, #player-trade-prompt strong, #player-trade-prompt small { display: block; }
+#player-trade-prompt span { color: #8fe4cf; font: 900 8px/1 system-ui; letter-spacing: .14em; }
+#player-trade-prompt strong { margin-top: 4px; font: 900 13px/1.1 system-ui; letter-spacing: .025em; }
+#player-trade-prompt small { margin-top: 6px; color: #f2d889; font: 900 9px/1 system-ui; letter-spacing: .11em; }
+#player-trade-prompt kbd { padding: 1px 4px; border: 1px solid #ecd170; border-radius: 4px; background: #604e20; color: #fff7cf; font: inherit; }
+#player-trade-prompt:hover { border-color: #c6ffec; box-shadow: 0 8px 25px #000a, 0 0 24px rgb(65 219 183 / 38%); transform: translate(-50%, -100%) scale(1.025); }
+body:has(#inventory-panel:not([hidden])) #player-trade-prompt,
+body:has(#loot-panel:not([hidden])) #player-trade-prompt,
+body:has(#trade-modal:not([hidden])) #player-trade-prompt,
+body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { display: none; }
 #combat-reticle span,
 #combat-reticle span::before { position: absolute; content: ""; background: #ffc4b8; }
 #combat-reticle span { top: 15px; left: 8px; width: 14px; height: 2px; }
