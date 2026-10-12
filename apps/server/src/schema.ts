@@ -34,6 +34,7 @@ export const PlayerState = schema({
   coins: t.uint32().default(20),
   potionCooldownUntil: t.float64().default(0),
   blacksmithUpgrades: t.uint16().default(0),
+  reforgeRanksJson: t.string().default("{}"),
   forestBestTimeMs: t.uint32().default(0),
   silverDepthsBestTimeMs: t.uint32().default(0),
   miningExpeditionStage: t.uint8().default(0),

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TOWN_BLACKSMITH_STALL_POSITION } from "@blockcraft/voxel-world";
 import { InventoryItemState, PlayerState, WorldState } from "../src/schema.js";
 import { WorldRoom } from "../src/game-room.js";
+import { equipmentReforgeRank, withReforgeRank } from "../src/equipment-reforge.js";
 
 function fixture() {
   const room = new WorldRoom(); room.setState(new WorldState());
@@ -41,9 +42,11 @@ describe("blacksmith equipment dismantling", () => {
 
   it("dismantles an unequipped final copy and rejects remote requests", () => {
     const { player, client, dismantle } = fixture(); own(player, "stone_core_hammer", 1);
+    player.reforgeRanksJson = withReforgeRank("{}", "stone_core_hammer", 2);
     dismantle({ itemId: "stone_core_hammer" });
     expect(player.inventory.get("stone_core_hammer")?.quantity).toBe(0);
     expect(player.inventory.get("stone_core")?.quantity).toBe(1);
+    expect(equipmentReforgeRank(player.reforgeRanksJson, "stone_core_hammer")).toBe(0);
     player.x += 20; own(player, "leather_armour", 1);
     dismantle({ itemId: "leather_armour" });
     expect(player.inventory.get("leather_armour")?.quantity).toBe(1);

@@ -68,8 +68,13 @@ import {
   SILVER_DEPTHS_REWARDS,
   BLACKSMITH_STOCK,
   BLACKSMITH_DISMANTLE,
+  BLACKSMITH_REFORGE,
   type BlacksmithStockId,
   type BlacksmithDismantleItemId,
+  type BlacksmithReforgeItemId,
+  type EquipmentReforgeRanks,
+  reforgeWeaponDamageBonus,
+  reforgeArmourReduction,
   ARMOUR_DEFINITIONS,
   armourStats,
   type ArmourId,
@@ -4361,6 +4366,7 @@ let blacksmithIronCapacity = 12;
 let blacksmithShopTab: BlacksmithShopTab = "sell";
 let blacksmithCharacterLevel = 1;
 let selectedDepthsRewardId: SilverDepthsRewardId = "depths_compass";
+let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
 let lastShopPurchaseCategory: InventoryTab = "weapons";
 const weaponShop = document.createElement("div");
 weaponShop.id = "blacksmith-weapons";
@@ -4368,6 +4374,57 @@ blacksmithClose.before(weaponShop);
 const dismantleShop = document.createElement("div");
 dismantleShop.id = "blacksmith-dismantle";
 blacksmithClose.before(dismantleShop);
+const reforgeShop = document.createElement("div");
+reforgeShop.id = "blacksmith-reforge";
+blacksmithClose.before(reforgeShop);
+const rankLabel = (rank: number): string => rank <= 0 ? "UNFORGED" : `RANK ${["I", "II", "III"][Math.min(3, rank) - 1]}`;
+function renderReforgeShop(): void {
+  reforgeShop.replaceChildren();
+  reforgeShop.hidden = blacksmithShopTab !== "reforge";
+  if (reforgeShop.hidden) return;
+  const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
+  heading.textContent = "REFORGE OWNED EQUIPMENT · MAXIMUM RANK III";
+  const help = document.createElement("p"); help.className = "blacksmith-reforge-help";
+  help.textContent = "Fixed upgrades only—no random rarity. Every weapon rank adds +1 damage; armour gains reinforcement at Ranks I and III.";
+  reforgeShop.append(heading, help);
+  let shown = 0;
+  for (const itemId of Object.keys(BLACKSMITH_REFORGE) as BlacksmithReforgeItemId[]) {
+    if ((inventoryCounts.get(itemId) ?? 0) <= 0) continue;
+    shown++;
+    const recipe = BLACKSMITH_REFORGE[itemId];
+    const rank = blacksmithReforgeRanks[itemId] ?? 0;
+    const complete = rank >= 3;
+    const cost = complete ? undefined : recipe.costs[rank];
+    const held = inventoryCounts.get(recipe.materialId) ?? 0;
+    const armour = armourForItem(itemId);
+    const currentBonus = armour ? reforgeArmourReduction(rank) : reforgeWeaponDamageBonus(rank);
+    const nextBonus = armour ? reforgeArmourReduction(rank + 1) : reforgeWeaponDamageBonus(rank + 1);
+    const card = document.createElement("article"); card.className = complete ? "complete" : "";
+    const title = document.createElement("header");
+    title.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name}</strong><b>${rankLabel(rank)}</b>`;
+    const comparison = document.createElement("p");
+    comparison.textContent = complete ? `${armour ? "Reinforcement" : "Weapon damage"} bonus +${currentBonus} · fully reforged`
+      : `${armour ? "Reinforcement" : "Weapon damage"} +${currentBonus} → +${nextBonus}`;
+    const costs = document.createElement("small");
+    costs.textContent = cost ? `${tavernCoinBalance} / ${cost.gold} gold · ${held} / ${cost.material} ${ITEM_DEFINITIONS[recipe.materialId].name}` : "Maximum forge rank reached";
+    const button = document.createElement("button"); button.type = "button";
+    const canAfford = !!cost && tavernCoinBalance >= cost.gold && held >= cost.material;
+    button.textContent = complete ? "FULLY REFORGED" : blacksmithPending ? "PLEASE WAIT…" : canAfford ? `REFORGE TO ${rankLabel(rank + 1)}` : "MATERIALS REQUIRED";
+    button.disabled = complete || blacksmithPending || !room || !canAfford;
+    button.addEventListener("click", () => {
+      if (!room || blacksmithPending || !canAfford) return;
+      blacksmithPending = true; renderReforgeShop();
+      blacksmithMessage.textContent = `Reforging ${ITEM_DEFINITIONS[itemId].name}...`;
+      room.send("blacksmith:reforge", { itemId });
+    });
+    card.append(title, comparison, costs, button); reforgeShop.append(card);
+  }
+  if (shown === 0) {
+    const empty = document.createElement("p"); empty.className = "blacksmith-reforge-empty";
+    empty.textContent = "No reforgeable equipment in your pack yet. Buy gear or recover equipment from enemies and dungeons.";
+    reforgeShop.append(empty);
+  }
+}
 function renderDismantleShop(): void {
   dismantleShop.replaceChildren();
   dismantleShop.hidden = blacksmithShopTab !== "dismantle";
@@ -4420,6 +4477,7 @@ function renderWeaponShop(): void {
   document.querySelector<HTMLElement>("#blacksmith-upgrade-shop")!.hidden = blacksmithShopTab !== "upgrades";
   document.querySelector<HTMLElement>("#blacksmith-depths-shop")!.hidden = blacksmithShopTab !== "depths";
   renderDismantleShop();
+  renderReforgeShop();
   for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {
     tab.setAttribute("aria-pressed", String(tab.dataset.smithTab === blacksmithShopTab));
   }
@@ -4486,6 +4544,8 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   updateTavernCoins(update.gold);
   for (const id of Object.keys(BLACKSMITH_STOCK) as BlacksmithStockId[]) updateInventoryItem(id, update.weapons?.[id] ?? 0);
   for (const id of Object.keys(BLACKSMITH_DISMANTLE) as BlacksmithDismantleItemId[]) updateInventoryItem(id, update.dismantleItems?.[id] ?? 0);
+  for (const [id, quantity] of Object.entries(update.reforgeMaterials ?? {})) updateInventoryItem(id as ItemId, quantity ?? 0);
+  blacksmithReforgeRanks = update.reforgeRanks ?? {};
   renderWeaponShop();
   blacksmithSell.disabled = update.ironOre + silver <= 0 || blacksmithPending || update.gold >= 1_000_000;
   const owned = new Set(update.ownedUpgrades);
@@ -4550,6 +4610,11 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     const material = update.materialGranted && update.materialQuantity
       ? ` · +${update.materialQuantity} ${ITEM_DEFINITIONS[update.materialGranted].name}` : "";
     showCombatFeedback(`DISMANTLED · +${update.goldGranted ?? 0} GOLD${material}`.toUpperCase(), "dodge");
+    status.textContent = update.message;
+  }
+  if (update.phase === "reforged" && update.reforgedItemId) {
+    const rank = blacksmithReforgeRanks[update.reforgedItemId] ?? 0;
+    showCombatFeedback(`${ITEM_DEFINITIONS[update.reforgedItemId].name.toUpperCase()} · ${rankLabel(rank)}`, "dodge");
     status.textContent = update.message;
   }
 }

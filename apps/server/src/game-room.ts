@@ -12,7 +12,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BlacksmithBuySchema, BlacksmithDismantleSchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage, type BlacksmithDismantleItemId } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
 import { spacedMobDesired, mobPersonalSpace } from "./mob-spacing.js";
@@ -170,6 +170,7 @@ import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInR
 import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS } from "./loot-rules.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
+import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equipment-reforge.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
@@ -662,6 +663,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     aliveMessage("blacksmith:dismantle", (client, payload) => this.handleBlacksmithDismantle(client, payload));
+    aliveMessage("blacksmith:reforge", (client, payload) => this.handleBlacksmithReforge(client, payload));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
     aliveMessage("blacksmith:depths-buy", (client, payload) => this.handleDepthsRewardBuy(client, payload));
@@ -1021,7 +1023,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private sendBlacksmithState(client: Client, message: string | undefined = undefined, phase: BlacksmithUpdate["phase"] = "idle", sold = 0, goldGranted = 0, purchasedUpgradeId?: BlacksmithUpgradeId, purchasedDepthsRewardId?: SilverDepthsRewardId,
-    dismantled?: { itemId: BlacksmithDismantleItemId; materialId?: ItemId; materialQuantity?: number }): void {
+    dismantled?: { itemId: BlacksmithDismantleItemId; materialId?: ItemId; materialQuantity?: number },
+    reforgedItemId?: BlacksmithReforgeItemId): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     client.send("blacksmith:update", {
@@ -1041,6 +1044,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       purchasedUpgradeId,
       purchasedDepthsRewardId,
       dismantledItemId: dismantled?.itemId,
+      reforgeRanks: parseReforgeRanks(player.reforgeRanksJson),
+      reforgeMaterials: Object.fromEntries([...new Set(Object.values(BLACKSMITH_REFORGE).map(recipe => recipe.materialId))]
+        .map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
+      reforgedItemId,
       materialGranted: dismantled?.materialId,
       materialQuantity: dismantled?.materialQuantity,
       message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
@@ -1212,6 +1219,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (held + materialQuantity > capacity) return this.sendBlacksmithState(client, `Make room for ${ITEM_DEFINITIONS[materialId].name} before dismantling this item.`, "error");
     }
     item!.quantity = quantity - 1;
+    if (item!.quantity === 0 && Object.hasOwn(BLACKSMITH_REFORGE, itemId)) {
+      player.reforgeRanksJson = withReforgeRank(player.reforgeRanksJson, itemId as BlacksmithReforgeItemId, 0);
+    }
     player.coins += recipe.gold;
     if (materialId && materialQuantity) {
       let material = player.inventory.get(materialId);
@@ -1222,6 +1232,34 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const materialMessage = materialId && materialQuantity ? ` and ${materialQuantity} ${ITEM_DEFINITIONS[materialId].name}` : "";
     this.sendBlacksmithState(client, `Dismantled ${ITEM_DEFINITIONS[itemId].name} for ${recipe.gold} gold${materialMessage}.`, "dismantled", 1, recipe.gold,
       undefined, undefined, { itemId, materialId, materialQuantity });
+  }
+
+  private handleBlacksmithReforge(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = BlacksmithReforgeSchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose owned equipment to reforge.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to reforge equipment.", "error");
+    const itemId = parsed.data.itemId;
+    if ((player.inventory.get(itemId)?.quantity ?? 0) <= 0) {
+      return this.sendBlacksmithState(client, `You need ${ITEM_DEFINITIONS[itemId].name} in your pack before it can be reforged.`, "error");
+    }
+    const currentRank = equipmentReforgeRank(player.reforgeRanksJson, itemId);
+    if (currentRank >= 3) return this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[itemId].name} is already Rank III.`, "error");
+    const recipe = BLACKSMITH_REFORGE[itemId];
+    const cost = recipe.costs[currentRank];
+    if (!cost) return this.sendBlacksmithState(client, "That equipment cannot be reforged further.", "error");
+    const material = player.inventory.get(recipe.materialId);
+    if (player.coins < cost.gold || (material?.quantity ?? 0) < cost.material) {
+      return this.sendBlacksmithState(client,
+        `Rank ${["I", "II", "III"][currentRank]} needs ${cost.gold} gold and ${cost.material} ${ITEM_DEFINITIONS[recipe.materialId].name}.`, "error");
+    }
+    player.coins -= cost.gold;
+    material!.quantity -= cost.material;
+    player.reforgeRanksJson = withReforgeRank(player.reforgeRanksJson, itemId, currentRank + 1);
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    this.sendBlacksmithState(client,
+      `${ITEM_DEFINITIONS[itemId].name} reforged to Rank ${["I", "II", "III"][currentRank]}.`, "reforged", 0, 0,
+      undefined, undefined, undefined, itemId);
   }
 
   private handleBlacksmithForge(client: Client, payload: unknown): void {
@@ -2014,7 +2052,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.staggerMob(mobId, mob, now, PARRY_STAGGER_MS, true);
     }
     if (player.stamina <= 0) player.defending = false;
-    defense.damage = armouredDamage(defense.damage, player.armourId, kind);
+    defense.damage = armouredDamage(defense.damage, player.armourId, kind,
+      equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
     if (defense.damage > 0 && kind !== "melee" && ownsDepthsReward(player.blacksmithUpgrades, "matriarch_guard")) {
       defense.damage = Math.max(1, defense.damage - 1);
     }
@@ -4687,7 +4726,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!player || player.health <= 0 || !mob || !mob.alive || !timing) return;
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
       const damage = damageAfterArmor(
-        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId) + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now),
+        timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
+          + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
+          + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now),
         mob.armor,
       ) + traitBonusDamage;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);

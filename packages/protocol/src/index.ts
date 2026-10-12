@@ -208,16 +208,37 @@ export const BLACKSMITH_DISMANTLE = {
 } as const satisfies Partial<Record<ItemId, { gold: number; materialId?: ItemId; materialQuantity?: number }>>;
 export type BlacksmithDismantleItemId = keyof typeof BLACKSMITH_DISMANTLE;
 export const BlacksmithDismantleSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_DISMANTLE) as [BlacksmithDismantleItemId, ...BlacksmithDismantleItemId[]]) });
+export const BLACKSMITH_REFORGE = {
+  forged_sword: { materialId: "iron_ore", costs: [{ gold: 18, material: 3 }, { gold: 36, material: 6 }, { gold: 70, material: 10 }] },
+  forged_bow: { materialId: "iron_ore", costs: [{ gold: 20, material: 3 }, { gold: 40, material: 6 }, { gold: 75, material: 10 }] },
+  forged_focus: { materialId: "silver_ore", costs: [{ gold: 22, material: 2 }, { gold: 44, material: 4 }, { gold: 80, material: 7 }] },
+  fang_dagger: { materialId: "crawler_fang", costs: [{ gold: 10, material: 2 }, { gold: 24, material: 4 }, { gold: 48, material: 7 }] },
+  stone_core_hammer: { materialId: "stone_core", costs: [{ gold: 14, material: 2 }, { gold: 30, material: 4 }, { gold: 60, material: 7 }] },
+  rootbound_hammer: { materialId: "timber", costs: [{ gold: 22, material: 3 }, { gold: 46, material: 6 }, { gold: 90, material: 10 }] },
+  matriarch_edge: { materialId: "moonstone", costs: [{ gold: 30, material: 1 }, { gold: 65, material: 2 }, { gold: 120, material: 3 }] },
+  acid_gland_focus: { materialId: "acid_gland", costs: [{ gold: 12, material: 2 }, { gold: 28, material: 4 }, { gold: 55, material: 7 }] },
+  venom_focus: { materialId: "acid_gland", costs: [{ gold: 24, material: 3 }, { gold: 50, material: 6 }, { gold: 95, material: 10 }] },
+  echo_prism: { materialId: "silver_ore", costs: [{ gold: 24, material: 3 }, { gold: 50, material: 6 }, { gold: 95, material: 10 }] },
+  leather_armour: { materialId: "moss_fibre", costs: [{ gold: 10, material: 2 }, { gold: 24, material: 4 }, { gold: 48, material: 7 }] },
+  iron_armour: { materialId: "iron_ore", costs: [{ gold: 18, material: 3 }, { gold: 38, material: 6 }, { gold: 75, material: 10 }] },
+  rootguard_armour: { materialId: "moss_fibre", costs: [{ gold: 20, material: 3 }, { gold: 42, material: 6 }, { gold: 85, material: 10 }] },
+  bastion_plate: { materialId: "stone_core", costs: [{ gold: 24, material: 3 }, { gold: 50, material: 6 }, { gold: 95, material: 10 }] },
+} as const satisfies Partial<Record<ItemId, { materialId: ItemId; costs: readonly { gold: number; material: number }[] }>>;
+export type BlacksmithReforgeItemId = keyof typeof BLACKSMITH_REFORGE;
+export type EquipmentReforgeRanks = Partial<Record<BlacksmithReforgeItemId, number>>;
+export const BlacksmithReforgeSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_REFORGE) as [BlacksmithReforgeItemId, ...BlacksmithReforgeItemId[]]) });
+export function reforgeWeaponDamageBonus(rank: number): number { return Math.max(0, Math.min(3, Math.floor(rank))); }
+export function reforgeArmourReduction(rank: number): number { return Math.max(0, Math.min(2, Math.ceil(Math.max(0, Math.min(3, Math.floor(rank))) / 2))); }
 export function armourStats(id: string) { return ARMOUR_DEFINITIONS[Object.hasOwn(ARMOUR_DEFINITIONS, id) ? id as ArmourId : "none"]; }
 export type IncomingDamageKind = "melee" | "projectile" | "hazard";
-export function armouredDamage(damage: number, id: string, kind: IncomingDamageKind = "melee"): number {
+export function armouredDamage(damage: number, id: string, kind: IncomingDamageKind = "melee", reforgeRank = 0): number {
   if (damage <= 0) return 0;
   const armour = armourStats(id);
   const situational = kind === "projectile" ? armour.projectileReduction : kind === "hazard" ? armour.hazardReduction : 0;
-  return Math.max(1, damage - armour.reduction - situational);
+  return Math.max(1, damage - armour.reduction - situational - reforgeArmourReduction(reforgeRank));
 }
 export type BlacksmithUpdate = {
-  phase: "idle" | "traded" | "purchased" | "dismantled" | "error";
+  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "error";
   ironOre: number;
   silverOre?: number;
   moonstone?: number;
@@ -231,6 +252,9 @@ export type BlacksmithUpdate = {
   weapons?: Partial<Record<BlacksmithStockId, number>>;
   dismantleItems?: Partial<Record<BlacksmithDismantleItemId, number>>;
   dismantledItemId?: BlacksmithDismantleItemId;
+  reforgeRanks?: EquipmentReforgeRanks;
+  reforgeMaterials?: Partial<Record<ItemId, number>>;
+  reforgedItemId?: BlacksmithReforgeItemId;
   materialGranted?: ItemId;
   materialQuantity?: number;
   sold?: number;
