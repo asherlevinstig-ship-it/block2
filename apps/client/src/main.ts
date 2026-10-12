@@ -4572,7 +4572,12 @@ function renderBootstrap(payload: WorldBootstrap): void {
   chunks.clear();
   payload.chunks.forEach(installChunk);
   const ownPlayer = room ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId) : undefined;
-  const initialPose = townReturnPosition ?? ownPlayer ?? payload.spawn;
+  // The bootstrap is the authoritative arrival snapshot. The schema player can
+  // still represent a different patch when a newly created room first joins.
+  const initialPose = townReturnPosition ?? payload.spawn;
+  const statePoseGap = ownPlayer
+    ? Math.hypot(ownPlayer.x - payload.spawn.x, ownPlayer.y - payload.spawn.y, ownPlayer.z - payload.spawn.z)
+    : null;
   townReturnPosition = null;
   const initialPosition = new pc.Vec3(initialPose.x, initialPose.y, initialPose.z);
   localPlayer.setPosition(initialPosition.x, initialPosition.y, initialPosition.z);
@@ -4586,6 +4591,9 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localNetworkVisualOffset = { x: 0, z: 0 };
   localRecoveryVisualOffset = { x: 0, z: 0 };
   pendingPredictionFrames.length = 0;
+  smoothedMovement = { x: 0, z: 0 };
+  lastSentMovement = { x: 0, z: 0 };
+  pendingStopInputSequence = null;
   localPowerVisualOffset.set(0, 0, 0);
   localPlayerVisual.setLocalPosition(0, 0, 0);
   surfaceReferenceY = SURFACE_HEIGHT + 1;
@@ -4617,7 +4625,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   sceneDressing.setSurfaceVisible(!playerCutaway.active);
   lastChunkBuildMs = performance.now() - buildStartedAt;
   logMovementEvent(
-    `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)}`,
+    `WORLD REFRESH ${previousSliceY === null ? "surface" : `slice:${previousSliceY}`} → ${cutawayStateKey} y=${initialPosition.y.toFixed(3)} surface=${surfaceReferenceY.toFixed(3)} stateGap=${statePoseGap?.toFixed(3) ?? "missing"} chunks=${payload.chunks.length} build=${lastChunkBuildMs.toFixed(1)}ms`,
   );
   worldReady = true;
   status.textContent = isInGreenwoodRegion(initialPosition.x, initialPosition.z)
@@ -6165,7 +6173,7 @@ app.on("update", (dt: number) => {
   const desiredMovement = quantizeMovementToEightDirections(
     cameraRelativeMovement(strafe, forward, cameraOffset.x, cameraOffset.z),
   );
-  smoothedMovement = approachMovement(smoothedMovement, desiredMovement, frameTime);
+  smoothedMovement = worldReady ? approachMovement(smoothedMovement, desiredMovement, frameTime) : { x: 0, z: 0 };
   const powerFacingActive = powerAimActive || (localPowerStartedAt !== null
     && performance.now() - localPowerStartedAt < powerDuration(localActivePower)
     && localPowerFacingYaw !== null);
@@ -6186,7 +6194,7 @@ app.on("update", (dt: number) => {
   const grounded = isPlayerSupported(readCollisionWorldBlock, current.x, current.y, current.z);
   if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;
   else localVerticalVelocity = Math.max(-TERMINAL_VELOCITY, localVerticalVelocity - GRAVITY * frameTime);
-  const predicted = resolvePlayerMotion(
+  const predicted = worldReady ? resolvePlayerMotion(
     current,
     {
       x: smoothedMovement.x * localMovementSpeed() * frameTime,
@@ -6194,7 +6202,7 @@ app.on("update", (dt: number) => {
       z: smoothedMovement.z * localMovementSpeed() * frameTime,
     },
     readCollisionWorldBlock,
-  );
+  ) : { x: current.x, y: current.y, z: current.z, grounded, hitVertical: false, stepped: false };
   const requestedTravel = Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed() * frameTime;
   const sendMovementThisFrame = movementDirectionChanged(lastSentMovement, smoothedMovement)
     || performance.now() - lastMoveSentAt >= 50;
