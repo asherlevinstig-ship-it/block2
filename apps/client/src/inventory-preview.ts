@@ -17,7 +17,7 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       box("#0e1713", 0, 0, 240, 280); box("#213329", 52, 248, 136, 8);
       box("#182c2c", 92, 182, 24, 57); box("#223a3a", 124, 182, 24, 57);
       box("#34291f", 88, 227, 29, 18); box("#34291f", 123, 227, 29, 18);
-      const coat = armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39" : armour === "leather_armour" ? "#95633c" : "#267d7c";
+      const coat = armour === "bastion_plate" ? "#8192a5" : armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39" : armour === "leather_armour" ? "#95633c" : "#267d7c";
       box(coat, 86, 103, 68, 82);
       box(armour === "iron_armour" ? "#738b9c" : "#225453", 86, 103, 12, 82);
       box(coat, 62, 106, 22, 61); box(coat, 156, 106, 22, 61);
@@ -27,8 +27,9 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       box("#563729", 92, 45, 56, 16); box("#563729", 92, 58, 10, 13);
       box("#282520", 107, 76, 5, 5); box("#282520", 127, 76, 5, 5);
       box("#e4b84f", 92, 98, 56, 11); box("#bf9037", 96, 109, 12, 31);
-      if (armour === "iron_armour") {
+      if (armour === "iron_armour" || armour === "bastion_plate") {
         box("#dbe5ea", 57, 101, 30, 16); box("#dbe5ea", 153, 101, 30, 16); box("#dbe5ea", 117, 113, 7, 47);
+        if (armour === "bastion_plate") { box("#d4b574", 109, 122, 22, 22); box("#d4b574", 57, 101, 30, 5); box("#d4b574", 153, 101, 30, 5); }
       } else if (armour === "rootguard_armour") {
         box("#60401f", 57, 101, 30, 16); box("#60401f", 153, 101, 30, 16);
         box("#79dd68", 113, 116, 14, 14); box("#60401f", 101, 112, 6, 51); box("#60401f", 133, 112, 6, 51);
@@ -39,7 +40,7 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
         box("#a27742", 191, 107, 8, 99); box("#a27742", 179, 99, 16, 8); box("#a27742", 179, 206, 16, 8); box("#d5d6bc", 179, 108, 2, 98);
       } else if (hand.includes("focus")) {
         box("#795735", 180, 125, 7, 82);
-        box(hand === "venom_focus" ? "#36d7a2" : hand === "acid_gland_focus" ? "#b1db54" : "#79c4e5", 172, 105, 23, 24); box("#ddf4f0", 179, 109, 7, 10);
+        box(hand === "venom_focus" ? "#36d7a2" : hand === "acid_gland_focus" ? "#b1db54" : hand === "echo_prism" ? "#9defff" : "#79c4e5", 172, 105, 23, 24); box("#ddf4f0", 179, 109, 7, 10);
       } else if (hand === "stone_core_hammer" || hand === "rootbound_hammer") {
         box("#8b623b", 183, 118, 8, 91); box("#819baa", 167, 97, 39, 27); box("#c6d5dc", 169, 97, 35, 7);
         if (hand === "rootbound_hammer") { box("#3c7b43", 164, 98, 45, 8); box("#72d76f", 180, 103, 12, 15); }

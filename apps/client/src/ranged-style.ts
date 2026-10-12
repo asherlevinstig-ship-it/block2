@@ -9,6 +9,9 @@ export function rangedStyle(weapon: MainHandId) {
   if (weapon === "venom_focus") return {
     shape: "box" as const, color: [.12, .95, .65], scale: [.18, .18, .42], glyph: "✦", hitSound: "venomHit" as const,
   };
+  if (weapon === "echo_prism") return {
+    shape: "box" as const, color: [.62, .91, 1], scale: [.2, .2, .38], glyph: "✧", hitSound: "rangedHit" as const,
+  };
   return {
     shape: "sphere" as const, color: [.28, .68, 1], scale: [.24, .24, .24], glyph: "✦", hitSound: "rangedHit" as const,
   };

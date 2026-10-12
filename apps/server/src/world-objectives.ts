@@ -65,6 +65,11 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     if (runStage === 3 && !player.silverDepthsWing) return depths(make("depths-route-choice", "Choose a Crystal Wing",
       "The first party member to choose a route on the dungeon map locks it for everyone: Iron Bastion or Silver Echo.",
       { x: 91.5, y: 1, z: 14.5 }, "explore", 3), 4);
+    const wingGear = runStage >= 4 ? [...lootEntries].find(([id, drop]) => id === `depths-wing-gear:${playerId}`
+      && drop.ownerId === playerId && now < drop.expiresAt) : undefined;
+    if (wingGear) return depths(make(`loot-${wingGear[0]}`,
+      player.silverDepthsWing === "iron" ? "Claim Bastion Plate" : "Claim Echo Prism",
+      "Approach your personal route equipment and press E to keep or equip it before the next fight.", wingGear[1], "loot"), 4);
     const wing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : undefined;
     const ids = runStage >= 4 ? SILVER_DEPTHS_ANTECHAMBER_IDS
       : silverDepthsStageSpawns(runStage >= 3 ? 2 : 1, wing).map(entry => entry.id);
@@ -75,8 +80,8 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     const update = make(runStage >= 4 ? "depths-antechamber" : "depths-gallery",
       runStage >= 4 ? "Clear the Crystal Antechamber" : runStage >= 3 ? wing === "iron" ? "Clear the Iron Bastion" : "Clear the Silver Echo" : "Clear Gallery Wave I",
       runStage >= 4 ? "Defeat the Crystal Warden and its escorts to unlock the Matriarch arena."
-        : runStage >= 3 ? wing === "iron" ? "Defeat the Warden and crawlers in the northern wing to earn iron ore."
-          : "Dodge the spitter volleys in the southern wing to earn silver ore."
+        : runStage >= 3 ? wing === "iron" ? "Defeat the Warden and crawlers in the northern wing to earn Bastion Plate and iron ore."
+          : "Dodge the spitter volleys in the southern wing to earn Echo Prism and silver ore."
         : "Use the stone cover to split the first gallery wave. Then choose a party route.", target.mob, "encounter", 3);
     update.targetMobId = target.id; update.targetMobIds = ids; update.completedMobIds = ids.filter(id => mobs.get(id)?.alive === false);
     return depths(update, 4);

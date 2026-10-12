@@ -169,6 +169,7 @@ describe("Silver Depths room travel", () => {
     player.health = 1; player.stamina = 1; clear(2);
     expect(player.silverDepthsRunStage).toBe(4);
     expect(room.state.lootDrops.get("depths-wing-reward:miner")).toMatchObject({ ownerId: "miner", itemId: "iron_ore", quantity: 5 });
+    expect(room.state.lootDrops.get("depths-wing-gear:miner")).toMatchObject({ ownerId: "miner", itemId: "bastion_plate", quantity: 1 });
     expect(player.health).toBe(player.maxHealth); expect(player.stamina).toBe(player.maxStamina);
     expect(internal.readWorldBlock(SILVER_DEPTHS_GALLERY_GATE.x, 1, SILVER_DEPTHS_GALLERY_GATE.minZ)).toBe(Block.Air);
     clear(3);
@@ -199,11 +200,14 @@ describe("Silver Depths room travel", () => {
     internal.advanceSilverDepthsEncounter(entries.at(-1)!.id);
     for (const id of ["miner", "friend"]) expect(room.state.lootDrops.get(`depths-wing-reward:${id}`))
       .toMatchObject({ ownerId: id, itemId: "silver_ore", quantity: 3 });
+    for (const id of ["miner", "friend"]) expect(room.state.lootDrops.get(`depths-wing-gear:${id}`))
+      .toMatchObject({ ownerId: id, itemId: "echo_prism", quantity: 1 });
     expect(player.silverDepthsRunStage).toBe(4);
     expect(friend.silverDepthsRunStage).toBe(4);
     internal.resetSilverDepthsInstance();
     expect(internal.readWorldBlock(SILVER_DEPTHS_SILVER_GATE.minX, 1, SILVER_DEPTHS_SILVER_GATE.z)).toBe(Block.Stone);
     expect(room.state.lootDrops.has("depths-wing-reward:friend")).toBe(false);
+    expect(room.state.lootDrops.has("depths-wing-gear:friend")).toBe(false);
   });
 
   it("warns before an Iron Bastion rock and only hurts players still in its marked circle", () => {

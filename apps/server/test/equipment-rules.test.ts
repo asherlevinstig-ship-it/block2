@@ -29,5 +29,7 @@ describe("equipment ownership", () => {
     expect(WEAPON_ATTACK_DEFINITIONS.rootbound_hammer.attacks[2]?.durationMs).toBe(WEAPON_ATTACK_DEFINITIONS.stone_core_hammer.attacks[0]!.durationMs);
     expect(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.range).toBeGreaterThan(7);
     expect(WEAPON_ATTACK_DEFINITIONS.acid_gland_focus.attacks[0]?.damage).toBe(2);
+    expect(WEAPON_ATTACK_DEFINITIONS.echo_prism.attacks[0]?.damage).toBe(2);
+    expect(WEAPON_ATTACK_DEFINITIONS.echo_prism.attacks[0]?.durationMs).toBeLessThan(WEAPON_ATTACK_DEFINITIONS.forged_focus.attacks[0]?.durationMs ?? 0);
   });
 });

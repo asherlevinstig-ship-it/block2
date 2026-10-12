@@ -1044,7 +1044,7 @@ interface VoxelCharacterRig {
   minersLantern: pc.Entity;
   silhouette: pc.Entity | null;
   mainHands: Record<MainHandId, pc.Entity>;
-  armour: Record<"leather_armour" | "iron_armour" | "rootguard_armour", pc.Entity>;
+  armour: Record<"leather_armour" | "iron_armour" | "rootguard_armour" | "bastion_plate", pc.Entity>;
   locomotionPhase: number;
   locomotionWeight: number;
 }
@@ -1337,7 +1337,16 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
   acidGlandFocus.parent!.addChild(venomFocus);
   addBox(venomFocus, "matriarch-jade-prongs", coloredMaterial(new pc.Color(.15, .9, .65)), [.45, .1, .18], [0, -.3, 0]);
   venomFocus.enabled = false;
+  const echoPrism = magicFocus.clone();
+  echoPrism.name = "main-hand-echo-prism";
+  rightElbow.addChild(echoPrism);
+  const echoCrystal = coloredMaterial(new pc.Color(.55, .87, 1));
+  const echoFrame = coloredMaterial(new pc.Color(.35, .31, .62));
+  addBox(echoPrism, "echo-prism-cage", echoFrame, [.36, .12, .36], [0, -.34, 0]);
+  addBox(echoPrism, "echo-prism-crystal", echoCrystal, [.25, .34, .25], [0, -.45, 0]).setLocalEulerAngles(0, 45, 0);
+  echoPrism.enabled = false;
   const mainHands = {
+    echo_prism: echoPrism,
     venom_focus: venomFocus,
     forged_sword: forgedSword,
     forged_bow: forgedBow,
@@ -1389,9 +1398,10 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     root.addChild(silhouette);
   }
   const armour = { leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour"),
-    rootguard_armour: new pc.Entity("rootguard-armour") };
+    rootguard_armour: new pc.Entity("rootguard-armour"), bastion_plate: new pc.Entity("bastion-plate") };
   for (const [id, layer] of Object.entries(armour)) {
-    const iron = id === "iron_armour";
+    const bastion = id === "bastion_plate";
+    const iron = id === "iron_armour" || bastion;
     const rootguard = id === "rootguard_armour";
     const material = iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
     torso.addChild(layer);
@@ -1406,6 +1416,10 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
       addBox(layer, "iron-ridge", brassMaterial, [.09, .43, .025], [0, -.025, .253]);
       addBox(layer, "iron-collar", bladeMaterial, [.4, .095, .4], [0, .225, 0]);
       for (const y of [-.15, -.05]) addBox(layer, "iron-lower-plate", bladeMaterial, [.56, .07, .04], [0, y, .26]);
+      if (bastion) {
+        addBox(layer, "bastion-crest", brassMaterial, [.22, .23, .035], [0, .025, .29]);
+        for (const x of [-.29, .29]) addBox(layer, "bastion-pauldrons", brassMaterial, [.08, .12, .46], [x, .3, 0]);
+      }
     } else if (rootguard) {
       addBox(layer, "rootguard-heart", coreGlowMaterial, [.16, .18, .04], [0, .02, .253]).setLocalEulerAngles(0, 0, 45);
       addBox(layer, "rootguard-collar", weaponWoodMaterial, [.43, .11, .4], [0, .225, 0]);
@@ -3147,6 +3161,7 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   leather_armour: coloredMaterial(new pc.Color(.44, .26, .12)),
   iron_armour: coloredMaterial(new pc.Color(.76, .8, .85)),
   rootguard_armour: coloredMaterial(new pc.Color(.2, .55, .24)),
+  bastion_plate: coloredMaterial(new pc.Color(.56, .63, .73)),
   forged_sword: coloredMaterial(new pc.Color(.76, .8, .85)),
   forged_bow: coloredMaterial(new pc.Color(.65, .45, .25)),
   forged_focus: coloredMaterial(new pc.Color(.3, .65, .95)),
@@ -3168,6 +3183,7 @@ const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
   matriarch_edge: coloredMaterial(new pc.Color(.58, .28, .9)),
   acid_gland_focus: coloredMaterial(new pc.Color(0.62, 0.96, 0.12)),
   venom_focus: coloredMaterial(new pc.Color(.15, .95, .65)),
+  echo_prism: coloredMaterial(new pc.Color(.55, .87, 1)),
 };
 
 function isItemId(value: string): value is ItemId {

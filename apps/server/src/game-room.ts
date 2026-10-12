@@ -1769,6 +1769,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       player.silverDepthsRunStage = 7;
       if (this.advanceSilverDepthsExpedition(client, "claimed_moonstone")) this.sendObjectiveState(client, true);
     }
+    if (parsed.data.dropId.startsWith("depths-wing-gear:")) this.sendObjectiveState(client, true);
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
       : `${ITEM_DEFINITIONS[itemId].name} ${parsed.data.equip ? "equipped" : "kept in your pack"}.`);
   }
@@ -1958,12 +1959,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const iron = this.silverDepthsWing === "iron";
     const site = iron ? { x: 102.5, y: 1.22, z: -9.5 } : { x: 104.5, y: 1.22, z: 33.5 };
     for (const id of this.activeSilverDepthsParticipants()) {
-      const drop = new LootDropState();
-      Object.assign(drop, site, { ownerId: id, itemId: iron ? "iron_ore" : "silver_ore",
+      const ore = new LootDropState();
+      Object.assign(ore, site, { ownerId: id, itemId: iron ? "iron_ore" : "silver_ore",
         quantity: iron ? 5 : 3, expiresAt: Number.MAX_SAFE_INTEGER });
-      this.state.lootDrops.set(`depths-wing-reward:${id}`, drop);
+      this.state.lootDrops.set(`depths-wing-reward:${id}`, ore);
+      const gear = new LootDropState();
+      Object.assign(gear, { ...site, x: site.x + 2 }, { ownerId: id,
+        itemId: iron ? "bastion_plate" : "echo_prism", quantity: 1, expiresAt: Number.MAX_SAFE_INTEGER });
+      this.state.lootDrops.set(`depths-wing-gear:${id}`, gear);
       this.clients.find(client => client.sessionId === id)?.send("portal:notice",
-        `${iron ? "IRON BASTION" : "SILVER ECHO"} CLEARED · collect your personal ${iron ? "iron" : "silver"} ore, then reach the checkpoint.`);
+        `${iron ? "IRON BASTION" : "SILVER ECHO"} CLEARED · collect your personal ${iron ? "Bastion Plate and iron" : "Echo Prism and silver"} ore, then reach the checkpoint.`);
     }
   }
 
@@ -2021,7 +2026,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private resetSilverDepthsInstance(): void {
     for (const id of SILVER_DEPTHS_ENEMY_IDS) this.state.mobs.delete(id);
-    for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:")) this.state.lootDrops.delete(id);
+    for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:") || id.startsWith("depths-wing-gear:")) this.state.lootDrops.delete(id);
     this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false; this.silverDepthsWing = null;
     this.silverDepthsNextHazardAt = 0; this.silverDepthsPendingHazards.length = 0;
     this.setSilverDepthsWingGate(SILVER_DEPTHS_IRON_GATE, false, "iron-wing-gate");

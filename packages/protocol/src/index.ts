@@ -133,14 +133,15 @@ export const ARMOUR_DEFINITIONS = {
   leather_armour: { name: "Leather Armour", reduction: 1, speed: 1, projectileReduction: 0, hazardReduction: 0 },
   iron_armour: { name: "Iron Armour", reduction: 2, speed: .92, projectileReduction: 0, hazardReduction: 0 },
   rootguard_armour: { name: "Rootguard Armour", reduction: 1, speed: .98, projectileReduction: 2, hazardReduction: 2 },
+  bastion_plate: { name: "Bastion Plate", reduction: 2, speed: .94, projectileReduction: 0, hazardReduction: 1 },
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
-  return id === "leather_armour" || id === "iron_armour" || id === "rootguard_armour" ? id : null;
+  return id === "leather_armour" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate" ? id : null;
 }
 export function utilityForItem(id: string): "miners_lantern" | "moonstone" | null { return id === "miners_lantern" || id === "moonstone" ? id : null; }
 export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null || utilityForItem(id) !== null; }
-export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour"]) });
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour", "bastion_plate"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
@@ -235,6 +236,7 @@ export const ITEM_DEFINITIONS = {
   leather_armour: { id: "leather_armour", name: "Leather Armour", description: "Reduce damage by 1 (minimum hit 1) · full movement speed" },
   iron_armour: { id: "iron_armour", name: "Iron Armour", description: "Reduce damage by 2 (minimum hit 1) · 8% slower movement" },
   rootguard_armour: { id: "rootguard_armour", name: "Rootguard Armour", description: "Reduce damage by 1 · extra protection from projectiles and hazards · 2% slower" },
+  bastion_plate: { id: "bastion_plate", name: "Bastion Plate", description: "Iron Bastion relic · reduce damage by 2 · extra protection from hazards · 6% slower" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
   forged_focus: { id: "forged_focus", name: "Forged Focus", description: "Smith-made focus · 2 bolt damage · equip from your pack" },
@@ -256,6 +258,7 @@ export const ITEM_DEFINITIONS = {
   matriarch_edge: { id: "matriarch_edge", name: "Matriarch's Edge", description: "Crystal Matriarch relic · swift moonstone combo with a powerful finisher" },
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", description: "A ranged focus that fires corrosive bolts" },
   venom_focus: { id: "venom_focus", name: "Venom Focus", description: "Matriarch focus: corrosive bolts and a three-shot Venom Fan special" },
+  echo_prism: { id: "echo_prism", name: "Echo Prism", description: "Silver Echo relic · quick 2-damage crystal bolts with longer reach" },
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
@@ -331,6 +334,7 @@ export const MAIN_HAND_DEFINITIONS = {
   matriarch_edge: { id: "matriarch_edge", name: "Matriarch's Edge", tag: "melee", attackName: "Moonstone Combo", requiredItemId: "matriarch_edge" },
   acid_gland_focus: { id: "acid_gland_focus", name: "Acid Gland Focus", tag: "focus", attackName: "Corrosive Bolt", requiredItemId: "acid_gland_focus" },
   venom_focus: { id: "venom_focus", name: "Venom Focus", tag: "focus", attackName: "Venom Bolt", requiredItemId: "venom_focus" },
+  echo_prism: { id: "echo_prism", name: "Echo Prism", tag: "focus", attackName: "Crystal Bolt", requiredItemId: "echo_prism" },
 } as const satisfies Record<string, MainHandDefinition>;
 
 export type MainHandId = keyof typeof MAIN_HAND_DEFINITIONS;
@@ -435,6 +439,8 @@ export const WEAPON_ATTACK_DEFINITIONS = {
   },
   venom_focus: { combo: false, comboWindowMs: 0, range: 7.5, minimumFacingDot: .58, projectileTravelMs: 300,
     attacks: [{ step: 1, durationMs: 560, impactMs: 235, damage: 2, knockback: .22 }] },
+  echo_prism: { combo: false, comboWindowMs: 0, range: 7.5, minimumFacingDot: .58, projectileTravelMs: 250,
+    attacks: [{ step: 1, durationMs: 430, impactMs: 175, damage: 2, knockback: .24 }] },
 } as const satisfies Record<MainHandId, WeaponAttackDefinition>;
 
 export interface PowerDefinition {
@@ -685,7 +691,7 @@ export const SpecialEquipRequestSchema = z.object({
 
 export const MainHandEquipRequestSchema = z.object({
   requestId: z.string().min(1).max(64),
-  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "matriarch_edge", "acid_gland_focus", "venom_focus", "forged_sword", "forged_bow", "forged_focus"]),
+  mainHandId: z.enum(["longsword", "bow", "magic_focus", "fang_dagger", "stone_core_hammer", "rootbound_hammer", "matriarch_edge", "acid_gland_focus", "venom_focus", "echo_prism", "forged_sword", "forged_bow", "forged_focus"]),
 });
 
 export const TraitEquipRequestSchema = z.object({

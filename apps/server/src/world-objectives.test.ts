@@ -34,6 +34,10 @@ describe("world objective director", () => {
     expect(update.title).toBe("Clear the Silver Echo");
     expect(update.targetMobIds).toEqual(["depths-silver-spitter-a", "depths-silver-crawler", "depths-silver-spitter-b"]);
     expect(update.targetMobIds).not.toContain("depths-iron-warden");
+    pose.silverDepthsRunStage = 4;
+    const personalGear = { x: 106.5, y: 1.22, z: 33.5, ownerId: "tester", itemId: "echo_prism", expiresAt: 20_000 };
+    expect(nearbyObjective("tester", pose, [], [], [["depths-wing-gear:tester", personalGear]], 10_000, null).title).toBe("Claim Echo Prism");
+    expect(nearbyObjective("tester", pose, [], [], [["depths-wing-gear:other", { ...personalGear, ownerId: "other" }]], 10_000, null).title).toBe("Clear the Crystal Antechamber");
   });
   it("holds Frontier contracts until level 10 without preventing exploration", () => {
     const mobs = new Map([["frontier-crawler", mob(63.5, 35.5)], ["frontier-support-spitter", mob(68.5, 36.5)],
