@@ -779,6 +779,17 @@ export type SilverDepthsPartyStatus = {
   partySize: number;
   members: { id: string; name: string; state: "fighting" | "reconnecting" | "fallen" | "left" }[];
 };
+export const SilverDepthsPingRequestSchema = z.object({
+  x: z.number().finite().min(60).max(140),
+  z: z.number().finite().min(-20).max(39),
+}).strict();
+export type SilverDepthsPing = {
+  senderId: string;
+  senderName: string;
+  x: number;
+  z: number;
+  durationMs: number;
+};
 
 export type WorldObjectiveCompleted = {
   objectiveId: string;

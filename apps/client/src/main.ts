@@ -141,6 +141,7 @@ import {
   type SilverDepthsWingRewardStatus,
   type SilverDepthsCheckpointStatus,
   type SilverDepthsPartyStatus,
+  type SilverDepthsPing,
   type WeaponAttackReleased,
 } from "@blockcraft/protocol";
 import {
@@ -4911,6 +4912,9 @@ joystickZone.addEventListener("pointerup", event => releaseJoystick(event.pointe
 joystickZone.addEventListener("pointercancel", event => releaseJoystick(event.pointerId));
 
 let room: Room | null = null;
+minimap.setPingHandler((x, z) => {
+  if (activeRoomName === SILVER_DEPTHS_ROOM && room) room.send("depths:ping", { x, z });
+});
 let activeRoomName: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM = WORLD_ROOM;
 let currentWorldObjective: WorldObjectiveUpdate | null = null;
 let objectiveCompleteTimer = 0;
@@ -7331,6 +7335,7 @@ async function connect(): Promise<void> {
   room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
   room.onMessage("depths:checkpoint", (update: SilverDepthsCheckpointStatus) => renderDepthsCheckpointStatus(update));
   room.onMessage("depths:party-status", (update: SilverDepthsPartyStatus) => renderDepthsPartyStatus(update));
+  room.onMessage("depths:ping", (ping: SilverDepthsPing) => minimap.setDungeonPing(ping));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
     renderCharacterProgression(update);

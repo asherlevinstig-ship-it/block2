@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "silver-depths-tactical-map-v157";
+const SERVER_BUILD = "silver-depths-party-pings-v158";
 
 const gameServer = defineServer({
   rooms: {

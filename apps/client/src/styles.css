@@ -1410,14 +1410,15 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .minimap-navigation select { flex: 1; width: 100%; }
 #minimap-canvas { cursor: pointer; }
 #minimap[data-dungeon="true"] { border-color: #a277c17a; background: #160f23ed; color: #f2e8ff; }
-#minimap[data-dungeon="true"] #minimap-canvas { cursor: default; }
+#minimap[data-dungeon="true"] #minimap-canvas { cursor: crosshair; }
 #minimap[data-dungeon="true"] .minimap-navigation, #minimap[data-dungeon="true"] .minimap-legend,
 #minimap[data-dungeon="true"] .minimap-danger, #minimap[data-dungeon="true"] > small { display: none; }
 .minimap-dungeon-legend { display: none; gap: 7px; flex-wrap: wrap; color: #d3b5ed; font: 800 9px system-ui; }
 #minimap[data-dungeon="true"] .minimap-dungeon-legend { display: flex; }
 .minimap-dungeon-legend span:first-child { color: #ffcb71; }
 .minimap-dungeon-legend span:nth-child(2) { color: #8edfff; }
-.minimap-dungeon-legend span:last-child { color: #ff917e; }
+.minimap-dungeon-legend span:nth-child(3) { color: #ff917e; }
+.minimap-dungeon-legend span:nth-child(4) { color: #79f6c1; }
 #waypoint-guide { position: fixed; z-index: 21; right: max(14px, env(safe-area-inset-right)); bottom: max(24px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px; width: 240px; box-sizing: border-box; padding: 12px; border: 1px solid #e6c97688; border-radius: 12px; background: #16241ef2; color: #fff4bf; }
 #waypoint-guide[hidden] { display: none; }
 #waypoint-arrow { display: inline-block; font: 900 28px system-ui; flex-shrink: 0; }

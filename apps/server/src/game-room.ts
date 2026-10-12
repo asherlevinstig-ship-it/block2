@@ -30,7 +30,7 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, silverDepthsPingLocation } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -83,6 +83,8 @@ import {
   type SilverDepthsWingRewardStatus,
   type SilverDepthsCheckpointStatus,
   type SilverDepthsPartyStatus,
+  SilverDepthsPingRequestSchema,
+  type SilverDepthsPing,
   type BlockChanged,
   type BrambleSnarePlaced,
   type BrambleSnareTriggered,
@@ -413,6 +415,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private silverDepthsAwaitingReady = false;
   private readonly silverDepthsCheckpointReady = new Set<string>();
   private readonly silverDepthsRoster = new Map<string, string>();
+  private readonly silverDepthsPings = new Map<string, SilverDepthsPing & { expiresAt: number }>();
+  private readonly lastSilverDepthsPingAt = new Map<string, number>();
   private readonly silverDepthsFallen = new Set<string>();
   private readonly silverDepthsDisconnected = new Set<string>();
   private silverInstanceSequence = 0;
@@ -498,6 +502,12 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       }
       if (this.roomKind === "silver-depths" && this.silverDepthsRoster.has(client.sessionId))
         client.send("depths:party-status", this.silverDepthsPartyStatus());
+      if (this.roomKind === "silver-depths" && this.silverDepthsRoster.has(client.sessionId)) {
+        const now = Date.now();
+        for (const ping of this.silverDepthsPings.values()) if (ping.expiresAt > now)
+          client.send("depths:ping", { senderId: ping.senderId, senderName: ping.senderName,
+            x: ping.x, z: ping.z, durationMs: ping.expiresAt - now } satisfies SilverDepthsPing);
+      }
     });
     this.onMessage("world:chunks", (client, payload) => this.handleChunkRegionRequest(client, payload));
     this.onMessage("chat:send", (client, payload: unknown) => this.handleNearbyChat(client, payload));
@@ -542,6 +552,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("objective:sync", client => this.sendObjectiveState(client, true));
     this.onMessage("depths:route", (client, payload: unknown) => this.chooseSilverDepthsWing(client, payload));
     this.onMessage("depths:ready", client => this.handleSilverDepthsCheckpointReady(client));
+    this.onMessage("depths:ping", (client, payload: unknown) => this.handleSilverDepthsPing(client, payload));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
         client.send("pong", { id: payload.id, serverTime: Date.now() });
@@ -716,6 +727,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.closeSilverDepthsLobby(key, "Assembly cancelled · a teammate disconnected.");
     this.expeditionTicketBySession.delete(client.sessionId);
     this.lastPartyRequestAt.delete(client.sessionId);
+    this.lastSilverDepthsPingAt.delete(client.sessionId);
+    this.silverDepthsPings.delete(client.sessionId);
     this.lastChatAt.delete(client.sessionId); this.lastNameAt.delete(client.sessionId);
     this.pendingMining.delete(client.sessionId);
     const player = this.state.players.get(client.sessionId);
@@ -1974,6 +1987,24 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private activeSilverDepthsParticipants(): string[] {
     return [...this.silverDepthsRuns.entries()].flatMap(([id, run]) =>
       run.completedAt === 0 && this.state.players.has(id) ? [id] : []);
+  }
+
+  private handleSilverDepthsPing(client: Client, payload: unknown): void {
+    if (this.roomKind !== "silver-depths" || !this.silverDepthsRoster.has(client.sessionId)
+      || !this.activeSilverDepthsParticipants().includes(client.sessionId)
+      || this.silverDepthsFallen.has(client.sessionId) || this.silverDepthsDisconnected.has(client.sessionId)) return;
+    const player = this.state.players.get(client.sessionId);
+    const parsed = SilverDepthsPingRequestSchema.safeParse(payload);
+    if (!player || player.health <= 0 || Math.abs(player.y - 1) > 3 || !parsed.success) return;
+    const location = silverDepthsPingLocation(parsed.data.x, parsed.data.z);
+    if (!location) return;
+    const now = Date.now();
+    if (now - (this.lastSilverDepthsPingAt.get(client.sessionId) ?? -Infinity) < 1500) return;
+    this.lastSilverDepthsPingAt.set(client.sessionId, now);
+    const ping: SilverDepthsPing = { senderId: client.sessionId, senderName: player.name,
+      ...location, durationMs: 8000 };
+    this.silverDepthsPings.set(client.sessionId, { ...ping, expiresAt: now + ping.durationMs });
+    this.broadcast("depths:ping", ping);
   }
 
   private silverDepthsPartyStatus(): SilverDepthsPartyStatus {

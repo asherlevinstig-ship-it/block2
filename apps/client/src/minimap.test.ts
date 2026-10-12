@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT } from "./minimap.js";
-import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
+import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
   it("reveals the champion only when alive and nearby on the surface", () => {
@@ -77,6 +77,14 @@ describe("north-up explorer minimap", () => {
     expect(points.objective.x).toBeGreaterThan(MAP_SIZE / 2);
     expect(points.teammates.map(teammate => teammate.id)).toEqual(["ally", "fallen"]);
     expect(points.teammates[0]!.x).toBeGreaterThan(MAP_SIZE / 2);
+  });
+  it("converts dungeon map clicks to playable world cells and ignores empty space", () => {
+    const player = { x: 63.5, z: 12.5 };
+    expect(dungeonPingAtMapClick(player, MAP_SIZE / 2, MAP_SIZE / 2)).toEqual(player);
+    const gallery = mapPoint(player, { x: 95.5, z: 14.5 });
+    expect(dungeonPingAtMapClick(player, gallery.x, gallery.y)).toEqual({ x: 95.5, z: 14.5 });
+    expect(dungeonPingAtMapClick(player, 0, 0)).toBeNull();
+    expect(dungeonPingAtMapClick(player, -1, 100)).toBeNull();
   });
   it("reveals deposits only nearby at surface height and remembers them after departure", () => {
     const discovered = new Set<string>();

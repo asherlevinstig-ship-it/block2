@@ -51,6 +51,12 @@ export const SILVER_DEPTHS_ROOMS = [
   { minX: 115, maxX: 124, minZ: 7, maxZ: 22 }, // boss antechamber
   { minX: 124, maxX: 139, minZ: -2, maxZ: 31 }, // Matriarch arena
 ] as const;
+export function silverDepthsPingLocation(x: number, z: number): { x: number; z: number } | null {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  return SILVER_DEPTHS_ROOMS.some(room => cellX >= room.minX && cellX <= room.maxX
+    && cellZ >= room.minZ && cellZ <= room.maxZ) ? { x: cellX + 0.5, z: cellZ + 0.5 } : null;
+}
 export const TOWN_STORAGE_CHEST_POSITION = { x: 26.5, y: 8, z: 4.5 } as const;
 export function isAtTownStorage(player: { x: number; y: number; z: number }): boolean {
   const chest = TOWN_STORAGE_CHEST_POSITION;
