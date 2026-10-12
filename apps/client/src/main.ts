@@ -210,11 +210,15 @@ import {
   PRIMARY_ACTION_DURATION_MS,
   actionArmSwingWeight,
   advanceLocomotionAnimation,
+  advanceTurnLean,
   eruptionPowerPose,
   lungePowerPose,
   primaryActionPose,
+  recentTravelSpeed,
   seismicPowerPose,
   shockwavePowerPose,
+  shortestYawDelta,
+  type TravelFrame,
   voxelCharacterPose,
 } from "./character-animation.js";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
@@ -1113,6 +1117,9 @@ interface VoxelCharacterRig {
   armour: Record<"leather_armour" | "iron_armour" | "rootguard_armour" | "bastion_plate", pc.Entity>;
   locomotionPhase: number;
   locomotionWeight: number;
+  travelFrames: TravelFrame[];
+  lastFacingYaw: number | null;
+  turnLean: number;
 }
 
 function addBox(
@@ -1505,7 +1512,7 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     }
     layer.enabled = false;
   }
-  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, locomotionPhase: 0, locomotionWeight: 0 };
+  return { root, torso, head, leftArm, rightArm, leftElbow, rightElbow, leftLeg, rightLeg, leftKnee, rightKnee, scarf, minersLantern, silhouette, mainHands, armour, locomotionPhase: 0, locomotionWeight: 0, travelFrames: [], lastFacingYaw: null, turnLean: 0 };
 }
 
 function setRigArmour(rig: VoxelCharacterRig, id: string): void {
@@ -1518,7 +1525,6 @@ function setRigMainHand(rig: VoxelCharacterRig, mainHandId: MainHandId): void {
 
 function animateVoxelCharacter(
   rig: VoxelCharacterRig,
-  speed: number,
   time: number,
   deltaTime: number,
   verticalVelocity: number,
@@ -1529,15 +1535,22 @@ function animateVoxelCharacter(
   powerElapsedMilliseconds: number | null = null,
   powerId: PowerId | null = null,
   actionYaw?: number | null,
+  travelDistance = 0,
+  facingYaw?: number,
 ): void {
+  const measuredSpeed = recentTravelSpeed(rig.travelFrames, travelDistance, deltaTime);
+  const animationSpeed = measuredSpeed < 0.12 ? 0 : Math.min(measuredSpeed, 4.2);
   const locomotion = advanceLocomotionAnimation(
     { phase: rig.locomotionPhase, weight: rig.locomotionWeight },
-    speed,
+    animationSpeed,
     deltaTime,
   );
   rig.locomotionPhase = locomotion.phase;
   rig.locomotionWeight = locomotion.weight;
-  const pose = voxelCharacterPose(speed, time, verticalVelocity, grounded, 4.2, locomotion);
+  const pose = voxelCharacterPose(animationSpeed, time, verticalVelocity, grounded, 4.2, locomotion);
+  const yawDelta = facingYaw === undefined || rig.lastFacingYaw === null ? 0 : shortestYawDelta(rig.lastFacingYaw, facingYaw);
+  rig.lastFacingYaw = facingYaw ?? rig.lastFacingYaw;
+  rig.turnLean = advanceTurnLean(rig.turnLean, yawDelta, deltaTime);
   const powerPose = powerId === "shockwave"
     ? shockwavePowerPose(powerElapsedMilliseconds)
     : powerId === "eruption"
@@ -1547,8 +1560,8 @@ function animateVoxelCharacter(
       : seismicPowerPose(powerElapsedMilliseconds);
   const action = powerPose.active ? powerPose : primaryActionPose(actionElapsedMilliseconds, actionStep, actionMainHandId);
   rig.root.setLocalPosition(0, pose.bodyY, 0);
-  rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw, pose.torsoRoll);
-  rig.head.setLocalEulerAngles(pose.headPitch, pose.headYaw - action.torsoYaw * 0.25, -pose.torsoRoll * 0.5);
+  rig.torso.setLocalEulerAngles(pose.torsoPitch, action.torsoYaw + rig.turnLean * 7, pose.torsoRoll - rig.turnLean * 4);
+  rig.head.setLocalEulerAngles(pose.headPitch, pose.headYaw - action.torsoYaw * 0.25 - rig.turnLean * 5, -pose.torsoRoll * 0.5);
   // Ease walking arms out and back in with the actual action pose. A boolean
   // active switch snaps the gait at both ends of an otherwise smooth attack.
   const armSwing = actionArmSwingWeight(action);
@@ -1556,8 +1569,9 @@ function animateVoxelCharacter(
   rig.rightArm.setLocalEulerAngles(-12 + pose.rightArmPitch * armSwing + action.rightArmPitch, 0, action.rightArmRoll - 4);
   rig.leftElbow.setLocalEulerAngles(pose.leftElbowPitch, 0, 0);
   rig.rightElbow.setLocalEulerAngles(pose.rightElbowPitch - 8, 0, 0);
-  rig.leftLeg.setLocalEulerAngles(pose.leftLegPitch, 0, 0);
-  rig.rightLeg.setLocalEulerAngles(pose.rightLegPitch, 0, 0);
+  const pivot = rig.turnLean * (1 - locomotion.weight) * 6;
+  rig.leftLeg.setLocalEulerAngles(pose.leftLegPitch + pivot, 0, 0);
+  rig.rightLeg.setLocalEulerAngles(pose.rightLegPitch - pivot, 0, 0);
   rig.leftKnee.setLocalEulerAngles(pose.leftKneePitch, 0, 0);
   rig.rightKnee.setLocalEulerAngles(pose.rightKneePitch, 0, 0);
   rig.scarf.setLocalEulerAngles(pose.scarfPitch, 0, pose.torsoRoll * -1.5);
@@ -6609,7 +6623,7 @@ app.on("update", (dt: number) => {
     localPowerStepApplied = true;
   }
   if (animationNow >= localHitPauseUntil) {
-    animateVoxelCharacter(localPlayerRig, Math.hypot(smoothedMovement.x, smoothedMovement.z) * localMovementSpeed(), animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower, localActionFacingYaw);
+    animateVoxelCharacter(localPlayerRig, animationTime, frameTime, localVerticalVelocity, predicted.grounded || grounded, localActionElapsed, localActionStep, localActionMainHandId, localPowerElapsed, localActivePower, localActionFacingYaw, moving ? collisionTravel : 0, localFacingYaw);
     if (localDefending) applyDefensePose(localPlayerRig);
   }
   const dodgeElapsed = localDodgeStartedAt === null ? null : animationNow - localDodgeStartedAt;
@@ -6640,13 +6654,13 @@ app.on("update", (dt: number) => {
     if (pose) {
       remote.entity.enabled = undergroundKnown(pose.x, pose.y, pose.z);
       const previousPosition = remote.entity.getPosition();
-      const remoteSpeed = Math.hypot(pose.x - previousPosition.x, pose.z - previousPosition.z) / Math.max(frameTime, 0.001);
+      const remoteTravel = Math.hypot(pose.x - previousPosition.x, pose.z - previousPosition.z);
       const remoteVerticalVelocity = (pose.y - previousPosition.y) / Math.max(frameTime, 0.001);
       remote.entity.setPosition(pose.x, pose.y, pose.z);
       remote.entity.setEulerAngles(0, pose.yaw, 0);
       const remoteActionElapsed = remote.actionStartedAt === null ? null : animationNow - remote.actionStartedAt;
       const remotePowerElapsed = remote.powerStartedAt === null ? null : animationNow - remote.powerStartedAt;
-      animateVoxelCharacter(remote.rig, remoteSpeed, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remote.actionMainHandId, remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y);
+      animateVoxelCharacter(remote.rig, animationTime, frameTime, remoteVerticalVelocity, true, remoteActionElapsed, remote.actionStep, remote.actionMainHandId, remotePowerElapsed, remote.powerId, remote.entity.getEulerAngles().y, remoteTravel, pose.yaw);
       if (remote.defending) applyDefensePose(remote.rig);
       if (remoteActionElapsed !== null && remoteActionElapsed >= remoteActionDuration(remote.actionMainHandId, remote.actionStep)) {
         remote.actionStartedAt = null;

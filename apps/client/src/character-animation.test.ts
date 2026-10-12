@@ -4,11 +4,14 @@ import {
   PRIMARY_ACTION_DURATION_MS,
   actionArmSwingWeight,
   advanceLocomotionAnimation,
+  advanceTurnLean,
   eruptionPowerPose,
   lungePowerPose,
   primaryActionPose,
+  recentTravelSpeed,
   seismicPowerPose,
   shockwavePowerPose,
+  shortestYawDelta,
   voxelCharacterPose,
 } from "./character-animation.js";
 
@@ -175,6 +178,25 @@ describe("voxel character animation", () => {
       return sample.weight;
     };
     expect(step(15)).toBeCloseTo(step(60), 8);
+  });
+
+  it("averages 30 Hz resolved movement across 60 Hz render frames", () => {
+    const frames: { distance: number; seconds: number }[] = [];
+    for (let index = 0; index < 8; index++) {
+      const speed = recentTravelSpeed(frames, index % 2 === 0 ? 0 : 4.2 / 30, 1 / 60);
+      if (index >= 5) expect(speed).toBeCloseTo(4.2, 5);
+    }
+    for (let index = 0; index < 8; index++) recentTravelSpeed(frames, 0, 1 / 60);
+    expect(recentTravelSpeed(frames, 0, 1 / 60)).toBe(0);
+  });
+
+  it("handles wrapped turns and lets the visual turn cue settle", () => {
+    expect(shortestYawDelta(350, 10)).toBe(20);
+    expect(shortestYawDelta(10, 350)).toBe(-20);
+    const turning = advanceTurnLean(0, 12, 1 / 60);
+    expect(turning).toBeGreaterThan(0);
+    expect(turning).toBeLessThan(1);
+    expect(advanceTurnLean(turning, 0, 1 / 60)).toBeLessThan(turning);
   });
 
   it("finishes attack recovery without an abrupt pose reset", () => {

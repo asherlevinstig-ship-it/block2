@@ -46,6 +46,38 @@ export interface LocomotionAnimationSample {
   weight: number;
 }
 
+export interface TravelFrame {
+  distance: number;
+  seconds: number;
+}
+
+/** Average resolved horizontal travel across a short window so 30 Hz prediction
+ * does not alternate between walking and idle on a 60 Hz display. */
+export function recentTravelSpeed(frames: TravelFrame[], distance: number, seconds: number, windowSeconds = 0.1): number {
+  if (seconds <= 0) return 0;
+  frames.push({ distance: Math.max(0, distance), seconds });
+  let duration = frames.reduce((sum, frame) => sum + frame.seconds, 0);
+  while (frames.length > 1 && duration - frames[0]!.seconds >= windowSeconds - 1e-6) {
+    duration -= frames.shift()!.seconds;
+  }
+  const travelled = frames.reduce((sum, frame) => sum + frame.distance, 0);
+  return travelled / duration;
+}
+
+/** Signed shortest turn, including across the 0/360 boundary. */
+export function shortestYawDelta(previous: number, next: number): number {
+  return ((next - previous + 540) % 360) - 180;
+}
+
+/** A visual-only turn cue: the collision body and input remain fully responsive. */
+export function advanceTurnLean(previous: number, yawDelta: number, deltaSeconds: number): number {
+  if (deltaSeconds <= 0) return previous;
+  const target = Math.max(-1, Math.min(1, yawDelta / (540 * deltaSeconds)));
+  const response = target === 0 ? 14 : 18;
+  const next = previous + (target - previous) * (1 - Math.exp(-response * deltaSeconds));
+  return Math.abs(next) < 0.001 ? 0 : next;
+}
+
 export function advanceLocomotionAnimation(
   previous: LocomotionAnimationSample,
   speed: number,
@@ -53,7 +85,7 @@ export function advanceLocomotionAnimation(
   maximumSpeed = 4.2,
 ): LocomotionAnimationSample {
   const targetWeight = Math.max(0, Math.min(1, speed / maximumSpeed));
-  const response = targetWeight > previous.weight ? 12 : 7;
+  const response = targetWeight > previous.weight ? 12 : 11;
   // Exponential damping keeps the gait consistent on both fast and slow frames.
   const weight = previous.weight + (targetWeight - previous.weight) * (1 - Math.exp(-Math.max(0, deltaSeconds) * response));
   return {
