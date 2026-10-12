@@ -18,6 +18,7 @@ import { projectilePresentation } from "./projectile-clock.js";
 import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
+import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
@@ -2022,6 +2023,26 @@ lootWorldLabel.addEventListener("click", () => {
   if (nearby) openLoot(nearby.id);
 });
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
+let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
+const rankLabel = (rank: number): string => rank <= 0 ? "UNFORGED" : `RANK ${["I", "II", "III"][Math.min(3, rank) - 1]}`;
+const equipmentCollectionGrid = document.querySelector<HTMLElement>("#equipment-collection-grid")!;
+for (const entry of EQUIPMENT_COLLECTION) {
+  const card = document.createElement("article");
+  card.dataset.collectionItem = entry.itemId;
+  card.dataset.slot = entry.slot;
+  card.innerHTML = `<i aria-hidden="true"></i><div class="collection-item-copy"><small class="collection-state">UNDISCOVERED</small><strong>${ITEM_DEFINITIONS[entry.itemId].name}</strong><span>${entry.source}</span><p class="collection-upgrade"></p></div><button type="button" disabled>PREVIEW</button>`;
+  card.querySelector<HTMLButtonElement>("button")!.addEventListener("click", () => {
+    const hand = equipmentForItem(entry.itemId);
+    const armour = armourForItem(entry.itemId);
+    if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; }
+    else if (armour) { previewArmour = armour; previewSlot = "armour"; }
+    else return;
+    inventoryPreviewDrawer.open = true;
+    refreshInventoryPreview();
+    inventoryPreviewDrawer.scrollIntoView({ block: "nearest" });
+  });
+  equipmentCollectionGrid.append(card);
+}
 const combatAudio = new CombatAudio();
 const unlockCombatAudio = (): void => combatAudio.unlock();
 window.addEventListener("pointerdown", unlockCombatAudio, { once: true, capture: true });
@@ -2161,6 +2182,29 @@ function refreshPowerCompatibility(): void {
 function refreshInventoryEquipped(): void {
   const tool = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0 ? "Reinforced Pickaxe" : "Starter Pickaxe";
   inventoryEquipped.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name} · ${tool} · ${armourStats(localArmourId).name}`;
+  const handDefinition = MAIN_HAND_DEFINITIONS[localMainHandId];
+  const handItem = ("requiredItemId" in handDefinition ? handDefinition.requiredItemId : null) as ItemId | null;
+  const armourItem = localArmourId === "none" ? null : localArmourId as ItemId;
+  const slotValues: Record<string, { name: string; detail: string; rarity?: ItemRarity }> = {
+    weapon: {
+      name: localMainHandId === "longsword" && localIronSwordOwned ? "Iron Sword" : handDefinition.name,
+      detail: handItem ? rankLabel(blacksmithReforgeRanks[handItem as BlacksmithReforgeItemId] ?? 0) : "STARTER",
+      rarity: handItem ? itemRarity(handItem) : undefined,
+    },
+    armour: {
+      name: armourStats(localArmourId).name,
+      detail: armourItem ? rankLabel(blacksmithReforgeRanks[armourItem as BlacksmithReforgeItemId] ?? 0) : "EMPTY",
+      rarity: armourItem ? itemRarity(armourItem) : undefined,
+    },
+    tool: { name: tool, detail: "AUTO" },
+    light: { name: (inventoryCounts.get("miners_lantern") ?? 0) > 0 ? "Miner's Lantern" : "Explorer's Lamp", detail: "AUTO" },
+  };
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-loadout-slot]")) {
+    const value = slotValues[button.dataset.loadoutSlot!]!;
+    button.querySelector("strong")!.textContent = value.name;
+    button.querySelector("span")!.textContent = value.detail;
+    if (value.rarity) button.dataset.rarity = value.rarity; else delete button.dataset.rarity;
+  }
   const slot = document.querySelector<HTMLElement>("#inventory-armour-slot");
   if (slot) slot.textContent = `ARMOUR SLOT: ${armourStats(localArmourId).name}`;
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-equip-armour]")) {
@@ -3655,6 +3699,7 @@ function refreshOwnedInventory(): void {
     }
   }
   for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
+    if (section.dataset.inventoryCategory === "collection") continue;
     let empty = section.querySelector<HTMLElement>(".inventory-empty");
     if (!empty) {
       empty = document.createElement("p"); empty.className = "inventory-empty";
@@ -3663,6 +3708,24 @@ function refreshOwnedInventory(): void {
       section.append(empty);
     }
     empty.hidden = [...section.querySelectorAll<HTMLElement>("article[data-item]")].some(card => !card.hidden);
+  }
+  refreshEquipmentProgression();
+}
+
+function refreshEquipmentProgression(): void {
+  const progress = collectionProgress(inventoryCounts);
+  document.querySelector<HTMLElement>("#collection-progress")!.textContent = `${progress.found} / ${progress.total}`;
+  for (const entry of EQUIPMENT_COLLECTION) {
+    const card = equipmentCollectionGrid.querySelector<HTMLElement>(`[data-collection-item="${entry.itemId}"]`)!;
+    const owned = (inventoryCounts.get(entry.itemId) ?? 0) > 0;
+    const rank = blacksmithReforgeRanks[entry.itemId as BlacksmithReforgeItemId] ?? 0;
+    card.classList.toggle("discovered", owned);
+    card.dataset.rarity = owned ? itemRarity(entry.itemId) : "locked";
+    card.querySelector<HTMLElement>(".collection-state")!.textContent = equipmentCollectionLabel(entry.itemId, owned, rank);
+    card.querySelector<HTMLElement>(".collection-upgrade")!.textContent = owned ? equipmentProgressionText(entry.itemId, rank) : "Find this item to reveal its rarity and upgrade path.";
+    const button = card.querySelector<HTMLButtonElement>("button")!;
+    button.disabled = !owned || (!equipmentForItem(entry.itemId) && !armourForItem(entry.itemId));
+    button.textContent = button.disabled && owned ? "AUTO-EQUIPPED" : "PREVIEW";
   }
 }
 
@@ -4366,6 +4429,7 @@ function selectInventoryCategory(category: InventoryTab, focus = false): void {
   }
   previewHand = undefined; previewArmour = undefined;
   previewSlot = category === "armour" ? "armour" : "weapon";
+  if (category === "collection") inventoryPreviewDrawer.open = false;
   refreshInventoryPreview();
   inventoryPanel.scrollTop = 0;
 }
@@ -4429,7 +4493,6 @@ let blacksmithIronCapacity = 12;
 let blacksmithShopTab: BlacksmithShopTab = "sell";
 let blacksmithCharacterLevel = 1;
 let selectedDepthsRewardId: SilverDepthsRewardId = "depths_compass";
-let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
 let lastShopPurchaseCategory: InventoryTab = "weapons";
 const weaponShop = document.createElement("div");
 weaponShop.id = "blacksmith-weapons";
@@ -4440,7 +4503,6 @@ blacksmithClose.before(dismantleShop);
 const reforgeShop = document.createElement("div");
 reforgeShop.id = "blacksmith-reforge";
 blacksmithClose.before(reforgeShop);
-const rankLabel = (rank: number): string => rank <= 0 ? "UNFORGED" : `RANK ${["I", "II", "III"][Math.min(3, rank) - 1]}`;
 function renderReforgeShop(): void {
   reforgeShop.replaceChildren();
   reforgeShop.hidden = blacksmithShopTab !== "reforge";
@@ -4612,6 +4674,8 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   for (const id of Object.keys(BLACKSMITH_DISMANTLE) as BlacksmithDismantleItemId[]) updateInventoryItem(id, update.dismantleItems?.[id] ?? 0);
   for (const [id, quantity] of Object.entries(update.reforgeMaterials ?? {})) updateInventoryItem(id as ItemId, quantity ?? 0);
   blacksmithReforgeRanks = update.reforgeRanks ?? {};
+  refreshEquipmentProgression();
+  refreshInventoryEquipped();
   renderWeaponShop();
   blacksmithSell.disabled = update.ironOre + silver <= 0 || blacksmithPending || update.gold >= 1_000_000;
   const owned = new Set(update.ownedUpgrades);

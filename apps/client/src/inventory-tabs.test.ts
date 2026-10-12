@@ -3,10 +3,10 @@ import { INVENTORY_TABS, nextInventoryTab } from "./inventory-tabs.js";
 import { readFileSync } from "node:fs";
 import { ITEM_DEFINITIONS, MAIN_HAND_DEFINITIONS } from "@blockcraft/protocol";
 it("wraps tab keyboard navigation and supports Home/End", () => {
-  expect(nextInventoryTab("weapons", "ArrowLeft")).toBe("supplies");
-  expect(nextInventoryTab("supplies", "ArrowRight")).toBe("weapons");
+  expect(nextInventoryTab("weapons", "ArrowLeft")).toBe("collection");
+  expect(nextInventoryTab("collection", "ArrowRight")).toBe("weapons");
   expect(nextInventoryTab("armour", "Home")).toBe("weapons");
-  expect(nextInventoryTab("tools", "End")).toBe("supplies");
+  expect(nextInventoryTab("tools", "End")).toBe("collection");
   expect(nextInventoryTab("materials", "Enter")).toBe("materials");
 });
 it("starts with one category visible and the character preview open", () => {

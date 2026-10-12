@@ -967,15 +967,30 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }
 .inventory-empty { margin: 12px 0; padding: 22px 16px; border: 1px dashed #70876866; border-radius: 9px; color: #92a68e; font-size: .8rem; text-align: center; }
-.inventory-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+.inventory-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
 .inventory-tabs button { min-height: 38px; padding: 8px 4px; border: 1px solid #6b88614d; border-radius: 7px; background: #13261b; color: #a3b69f; font-size: .72rem; font-weight: 800; }
 .inventory-tabs button[aria-selected="true"] { background: #4a3a1c; color: #ffe0a0; border-color: #c6a054; }
 .inventory-tabs button:hover, .inventory-tabs button:focus-visible { border-color: #e6c582; color: #fff0ce; }
 #inventory-preview-drawer { margin-bottom: 12px; border: 1px solid #7e8d6045; border-radius: 9px; background: #0c1911; }
 #inventory-preview-drawer > summary { padding: 10px; cursor: pointer; color: #c9d7be; font-size: .72rem; }
 #inventory-preview-drawer > summary span { float: right; font-size: .6rem; color: #859a85; }
-.inventory-loadout { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 12px; padding: 10px; border-top: 1px solid #b6985830; background: #08130f; }
-.inventory-portrait { text-align: center; }
+.inventory-loadout { display: grid; grid-template-columns: 245px minmax(0, 1fr); gap: 12px; padding: 10px; border-top: 1px solid #b6985830; background: #08130f; }
+.inventory-portrait { position: relative; min-height: 282px; text-align: center; }
+.equipment-slot-ring { position: absolute; z-index: 2; inset: 5px 0 58px; pointer-events: none; }
+.equipment-slot-ring button { position: absolute; width: 96px; min-height: 57px; padding: 6px 7px; border: 1px solid #71806d; border-radius: 8px; background: #0b1712ed; box-shadow: 0 5px 18px #0009, inset 3px 0 0 var(--item-rarity, #70806d); color: #dbe5d7; pointer-events: auto; text-align: left; }
+.equipment-slot-ring button:nth-child(1) { top: 5px; left: 0; }
+.equipment-slot-ring button:nth-child(2) { top: 5px; right: 0; }
+.equipment-slot-ring button:nth-child(3) { bottom: 3px; left: 0; }
+.equipment-slot-ring button:nth-child(4) { right: 0; bottom: 3px; }
+.equipment-slot-ring small, .equipment-slot-ring strong, .equipment-slot-ring span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.equipment-slot-ring small { color: #82958a; font-size: .46rem; font-weight: 900; letter-spacing: .09em; }
+.equipment-slot-ring strong { margin: 2px 0; color: #eff1db; font-size: .58rem; }
+.equipment-slot-ring span { color: var(--item-rarity, #9fb09f); font-size: .47rem; font-weight: 900; }
+.equipment-slot-ring button[data-rarity="common"] { --item-rarity: #c9d0ca; }
+.equipment-slot-ring button[data-rarity="uncommon"] { --item-rarity: #74d77a; }
+.equipment-slot-ring button[data-rarity="rare"] { --item-rarity: #68aefa; }
+.equipment-slot-ring button[data-rarity="epic"] { --item-rarity: #c080f2; }
+.equipment-slot-ring button[data-rarity="legendary"] { --item-rarity: #ffb84d; }
 #character-creator { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow: auto; padding: 28px 16px; background: radial-gradient(circle at 50% 35%, #244638ed, #07110ff7 75%); color: #f1e9cf; font-family: system-ui, sans-serif; }
 #character-creator[hidden] { display: none; }
 .creator-card { width: min(850px, 100%); max-height: calc(100dvh - 56px); overflow: auto; border: 1px solid #b99954; border-radius: 16px; background: #0e1d17; box-shadow: 0 24px 80px #000a, inset 0 1px #eacb7b55; }
@@ -1033,12 +1048,41 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article.equipment .inventory-item-actions { grid-column: 1 / -1; display: flex; gap: 6px; }
 .inventory-grid article.equipment .inventory-item-actions button { flex: 1; min-width: 0; grid-row: auto; }
 .inventory-section > button { margin-bottom: 10px; padding: 7px 10px; border: 1px solid #856d43; border-radius: 6px; background: #362d1f; color: #e8d39f; font-size: .65rem; }
+.collection-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.collection-header .eyebrow { margin: 0 0 2px; color: #9bcf83; font-size: .55rem; letter-spacing: .12em; }
+.collection-header h3 { margin: 0; color: #f2e7c9; font-size: 1rem; }
+#collection-progress { padding: 7px 10px; border: 1px solid #a98c4f; border-radius: 999px; background: #382e19; color: #ffe19a; font-size: .72rem; }
+.collection-help { margin: 7px 0 10px; color: #8fa096; font-size: .66rem; line-height: 1.45; }
+#equipment-collection-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+#equipment-collection-grid article { --item-rarity: #667068; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 82px; padding: 9px; border: 1px solid color-mix(in srgb, var(--item-rarity) 55%, transparent); border-radius: 9px; background: linear-gradient(125deg, color-mix(in srgb, var(--item-rarity) 8%, #101914), #09110d); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--item-rarity) 72%, transparent); }
+#equipment-collection-grid article[data-rarity="common"] { --item-rarity: #c9d0ca; }
+#equipment-collection-grid article[data-rarity="uncommon"] { --item-rarity: #74d77a; }
+#equipment-collection-grid article[data-rarity="rare"] { --item-rarity: #68aefa; }
+#equipment-collection-grid article[data-rarity="epic"] { --item-rarity: #c080f2; }
+#equipment-collection-grid article[data-rarity="legendary"] { --item-rarity: #ffb84d; }
+#equipment-collection-grid article:not(.discovered) { opacity: .64; filter: saturate(.2); }
+#equipment-collection-grid article > i { width: 27px; height: 27px; border: 1px solid var(--item-rarity); border-radius: 6px; background: var(--item-rarity); clip-path: polygon(50% 0, 88% 22%, 88% 76%, 50% 100%, 12% 76%, 12% 22%); opacity: .82; }
+#equipment-collection-grid article:not(.discovered) > i { background: #243029; }
+.collection-item-copy { min-width: 0; }
+.collection-item-copy > small, .collection-item-copy > strong, .collection-item-copy > span { display: block; }
+.collection-item-copy > small { color: var(--item-rarity); font-size: .48rem; font-weight: 900; letter-spacing: .09em; }
+.collection-item-copy > strong { overflow: hidden; margin-top: 2px; color: #e9eee4; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+.collection-item-copy > span { margin-top: 2px; color: #91a096; font-size: .54rem; line-height: 1.25; }
+.collection-upgrade { margin: 5px 0 0; color: #d3b873; font-size: .52rem; line-height: 1.25; }
+#equipment-collection-grid button { min-width: 68px; padding: 7px 6px; border: 1px solid #7b956f; border-radius: 6px; background: #1c3022; color: #cce2c3; cursor: pointer; font-size: .52rem; font-weight: 900; }
+#equipment-collection-grid button:disabled { cursor: default; opacity: .45; }
 @media (max-width: 540px) {
-  .inventory-loadout { grid-template-columns: 100px minmax(0, 1fr); }
+  .inventory-loadout { grid-template-columns: 150px minmax(0, 1fr); }
+  .inventory-portrait { min-height: 190px; }
+  .equipment-slot-ring { inset: 0 0 44px; }
+  .equipment-slot-ring button { width: 66px; min-height: 43px; padding: 4px; }
+  .equipment-slot-ring strong { font-size: .48rem; }
+  .equipment-slot-ring small, .equipment-slot-ring span { font-size: .39rem; }
   .inventory-portrait-turn span { display: none; }
   .inventory-portrait { width: auto; }
   .inventory-tabs button { font-size: .6rem; }
   .inventory-preview-help { display: none; }
+  #equipment-collection-grid { grid-template-columns: 1fr; }
 }
 .inventory-section h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; }
 .inventory-section h3 span { color: #dcebd2; font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; }

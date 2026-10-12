@@ -1,4 +1,4 @@
-export const INVENTORY_TABS = ["weapons", "armour", "tools", "materials", "supplies"] as const;
+export const INVENTORY_TABS = ["weapons", "armour", "tools", "materials", "supplies", "collection"] as const;
 export type InventoryTab = typeof INVENTORY_TABS[number];
 export function nextInventoryTab(current: InventoryTab, key: string): InventoryTab {
   const index = INVENTORY_TABS.indexOf(current);

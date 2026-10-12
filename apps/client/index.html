@@ -315,11 +315,18 @@
         <button id="inventory-tab-tools" type="button" role="tab" aria-controls="inventory-category-tools" aria-selected="false" tabindex="-1" data-inventory-tab="tools">Tools</button>
         <button id="inventory-tab-materials" type="button" role="tab" aria-controls="inventory-category-materials" aria-selected="false" tabindex="-1" data-inventory-tab="materials">Materials</button>
         <button id="inventory-tab-supplies" type="button" role="tab" aria-controls="inventory-category-supplies" aria-selected="false" tabindex="-1" data-inventory-tab="supplies">Supplies</button>
+        <button id="inventory-tab-collection" type="button" role="tab" aria-controls="inventory-category-collection" aria-selected="false" tabindex="-1" data-inventory-tab="collection">Collection</button>
       </nav>
       <details id="inventory-preview-drawer" open>
       <summary>Your character &amp; worn gear <span>Show / hide preview</span></summary>
       <section class="inventory-loadout" aria-label="Character and equipment preview">
         <div class="inventory-portrait">
+          <div class="equipment-slot-ring" aria-label="Equipped gear">
+            <button type="button" data-loadout-slot="weapon"><small>MAIN HAND</small><strong id="loadout-slot-weapon">Longsword</strong><span id="loadout-rank-weapon">STARTER</span></button>
+            <button type="button" data-loadout-slot="armour"><small>ARMOUR</small><strong id="loadout-slot-armour">No armour</strong><span id="loadout-rank-armour">EMPTY</span></button>
+            <button type="button" data-loadout-slot="tool"><small>TOOL</small><strong id="loadout-slot-tool">Starter Pickaxe</strong><span>AUTO</span></button>
+            <button type="button" data-loadout-slot="light"><small>LIGHT</small><strong id="loadout-slot-light">Explorer's Lamp</strong><span>AUTO</span></button>
+          </div>
           <canvas id="inventory-portrait" width="240" height="280" role="img" aria-label="Rotatable 3D preview of your actual character, selected weapon and armour. Drag to turn."></canvas>
           <div class="inventory-portrait-turn"><button id="inventory-turn-left" type="button" aria-label="Turn character left">↶</button><span>DRAG TO TURN</span><button id="inventory-turn-right" type="button" aria-label="Turn character right">↷</button></div>
           <p id="inventory-preview-label">Currently equipped</p>
@@ -388,6 +395,11 @@
           <article class="equipment" data-item="venom_focus"><i></i><div><strong>Venom Focus</strong><small>Matriarch drop · F: three-shot fan</small></div><em data-item-count="venom_focus">0</em><button type="button" data-equip-main-hand="venom_focus" disabled>EQUIP</button></article>
           <article class="equipment" data-item="echo_prism"><i></i><div><strong>Echo Prism</strong><small>Silver Echo reward · quick 2-damage crystal bolts</small></div><em data-item-count="echo_prism">0</em><button type="button" data-equip-main-hand="echo_prism" disabled>EQUIP</button></article>
         </div>
+      </section>
+      <section id="inventory-category-collection" class="inventory-section equipment-collection" role="tabpanel" aria-labelledby="inventory-tab-collection" data-inventory-category="collection" tabindex="0" hidden>
+        <header class="collection-header"><div><p class="eyebrow">EQUIPMENT CODEX</p><h3>Discovered gear</h3></div><strong id="collection-progress">0 / 16</strong></header>
+        <p class="collection-help">Undiscovered equipment stays out of your pack. Its silhouette and source live here so every drop has a clear goal.</p>
+        <div id="equipment-collection-grid"></div>
       </section>
       <section id="personal-storage" hidden aria-label="Personal chest">
         <p class="storage-help">Only your items · saved between visits · remove equipped copies before storing them · no gold storage</p>
