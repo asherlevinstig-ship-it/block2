@@ -43,13 +43,18 @@ describe("cooperative personal loot", () => {
     expect(room.state.players.get("a")!.inventory.get("fang_dagger")?.quantity).toBe(1);
     expect(room.state.players.get("b")!.inventory.size).toBe(0);
   });
-  it("auto-collects materials only for their owner, leaving full stacks and expiring leftovers", () => {
+  it("requires the owner to collect materials, leaving full stacks and expiring leftovers", () => {
     const { room, internal, contribute, defeat } = fixture(); contribute("a", 8); defeat();
     const a = room.state.players.get("a")!; a.x = 110;
     internal.resolveLootPickups(10000); expect(room.state.players.get("b")!.inventory.size).toBe(0);
     a.x = 101; const full = new InventoryItemState(); full.quantity = 65535; a.inventory.set("moss_fibre", full);
-    internal.resolveLootPickups(10000); expect(a.inventory.get("crawler_fang")?.quantity).toBe(1);
-    expect([...room.state.lootDrops.values()].some(drop => drop.itemId === "moss_fibre")).toBe(true);
+    const fangId = [...room.state.lootDrops].find(([, drop]) => drop.ownerId === "a" && drop.itemId === "crawler_fang")![0];
+    const fibreId = [...room.state.lootDrops].find(([, drop]) => drop.ownerId === "a" && drop.itemId === "moss_fibre")![0];
+    const send = vi.fn(); internal.handleLootCollect({ sessionId: "a", send }, { dropId: fangId, action: "keep" });
+    internal.handleLootCollect({ sessionId: "a", send }, { dropId: fibreId, action: "keep" });
+    expect(a.inventory.get("crawler_fang")?.quantity).toBe(1);
+    expect(room.state.lootDrops.has(fibreId)).toBe(true);
+    expect(send).toHaveBeenLastCalledWith("loot:result", expect.objectContaining({ ok: false }));
     internal.resolveLootPickups(40000); expect(room.state.lootDrops.size).toBe(0);
   });
   it("records actual weapon damage and caps overkill at remaining health", () => {

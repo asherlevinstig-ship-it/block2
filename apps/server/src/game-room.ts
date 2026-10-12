@@ -1857,7 +1857,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         health: player.health,
         stamina: Math.round(player.stamina),
       } satisfies CombatReward);
-      this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", "Kill contribution credited · your personal loot is ready. Equipment bags expire after 30 seconds.");
+      this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", "Kill contribution credited · your personal loot is on the ground. Press E beside each drop before it expires.");
     }
   }
 
@@ -1955,36 +1955,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const [dropId, drop] of this.state.lootDrops) {
       if (now >= drop.expiresAt) {
         this.state.lootDrops.delete(dropId);
-        continue;
-      }
-      if (isEquipmentItem(drop.itemId)) continue;
-      for (const [playerId, player] of this.state.players) {
-        if (drop.ownerId && drop.ownerId !== playerId) continue;
-        if (player.health <= 0 || !isLootInPickupRange(player, drop) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) continue;
-        const itemId = drop.itemId as ItemId;
-        let inventoryItem = player.inventory.get(itemId);
-        const capacity = itemId === "healing_potion" ? HEALING_POTION.capacity : itemId === "iron_ore" || itemId === "silver_ore" ? ironCapacity(player.blacksmithUpgrades) : 65535;
-        if ((inventoryItem?.quantity ?? 0) + drop.quantity > capacity) continue;
-        const total = inventoryTotal(inventoryItem?.quantity, drop.quantity);
-        if (!inventoryItem) {
-          inventoryItem = new InventoryItemState();
-          player.inventory.set(itemId, inventoryItem);
-        }
-        inventoryItem.quantity = total;
-        void this.persistPlayer(playerId, player);
-        this.state.lootDrops.delete(dropId);
-        this.broadcast("loot:picked-up", {
-          playerId,
-          dropId,
-          itemId,
-          quantity: drop.quantity,
-          total,
-        } satisfies LootPickedUp);
-        if (dropId === `depths-wing-reward:${playerId}`) {
-          this.sendSilverDepthsWingRewardStatus(playerId);
-          this.sendSilverDepthsCheckpointStatus(playerId);
-        }
-        break;
       }
     }
   }
@@ -2046,7 +2016,6 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const mainHandId = equipmentForItem(drop.itemId);
     const armourId = armourForItem(drop.itemId);
     const utilityId = drop.itemId === "miners_lantern" || drop.itemId === "moonstone" ? drop.itemId : null;
-    if (!mainHandId && !armourId && !utilityId) return reply(false, "Materials are collected automatically.");
     if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside the bag with a clear path to it.");
     if (action === "equip" && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
     const itemId = drop.itemId as ItemId;
@@ -2073,7 +2042,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     let item = player.inventory.get(itemId);
     const before = item?.quantity ?? 0;
-    if (before + drop.quantity > 65535) return reply(false, "Your pack cannot hold another of that item.");
+    const capacity = itemId === "healing_potion" ? HEALING_POTION.capacity
+      : itemId === "iron_ore" || itemId === "silver_ore" ? ironCapacity(player.blacksmithUpgrades) : 65_535;
+    if (before + drop.quantity > capacity) return reply(false, `Your ${ITEM_DEFINITIONS[itemId].name} capacity is full.`);
     if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
     item.quantity = inventoryTotal(before, drop.quantity);
     // Synchronous removal makes competing and replayed requests collect at most once.
@@ -2093,8 +2064,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       for (const id of this.activeSilverDepthsParticipants()) this.sendSilverDepthsWingRewardStatus(id);
       this.sendSilverDepthsCheckpointStatus(client.sessionId);
     }
+    if (parsed.data.dropId === `depths-wing-reward:${client.sessionId}`) {
+      this.sendSilverDepthsWingRewardStatus(client.sessionId);
+      this.sendSilverDepthsCheckpointStatus(client.sessionId);
+    }
     reply(true, utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
-      : `${ITEM_DEFINITIONS[itemId].name} ${action === "equip" ? "equipped" : "kept in your pack"}.`, { action, itemId });
+      : mainHandId || armourId ? `${ITEM_DEFINITIONS[itemId].name} ${action === "equip" ? "equipped" : "kept in your pack"}.`
+        : `Picked up ${drop.quantity} ${ITEM_DEFINITIONS[itemId].name}.`, { action, itemId });
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,

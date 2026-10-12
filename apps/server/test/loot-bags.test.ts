@@ -69,10 +69,12 @@ describe("authoritative equipment loot bags", () => {
     drop.itemId = "leather_armour"; collect(true);
     expect(player.inventory.has("leather_armour")).toBe(false); expect(player.armourId).toBe("none");
   });
-  it("leaves equipment for inspection but still automatically picks up materials", () => {
-    const { internal, room, drop, player } = fixture(); internal.resolveLootPickups(10000);
+  it("leaves both equipment and materials on the floor until explicitly collected", () => {
+    const { internal, room, drop, player, collect } = fixture(); internal.resolveLootPickups(10000);
     expect(room.state.lootDrops.has("bag")).toBe(true); expect(player.inventory.has("fang_dagger")).toBe(false);
     drop.itemId = "moss_fibre"; internal.resolveLootPickups(10000);
+    expect(room.state.lootDrops.size).toBe(1); expect(player.inventory.has("moss_fibre")).toBe(false);
+    collect(false);
     expect(room.state.lootDrops.size).toBe(0); expect(player.inventory.get("moss_fibre")?.quantity).toBe(1);
   });
   it("collects into the pack without changing the equipped weapon and persists it", () => {

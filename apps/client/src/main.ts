@@ -1878,29 +1878,42 @@ const lootSource = document.querySelector<HTMLElement>("#loot-source")!;
 const lootMessage = document.querySelector<HTMLElement>("#loot-message")!;
 let inspectedDropId: string | null = null;
 let lootPending = false;
+const pendingFloorLoot = new Map<string, number>();
 function closeLoot() {
   lootPanel.hidden = true; inspectedDropId = null; lootPending = false;
 }
-function nearestVisibleEquipmentDrop(maxDistance: number): { id: string; distance: number } | null {
+function nearestVisibleLootDrop(maxDistance: number): { id: string; distance: number } | null {
   const player = localPlayer.getPosition();
   let nearest: string | null = null; let distance = maxDistance;
   for (const [id, visual] of lootVisuals) {
     const drop = visual.state;
     const d = Math.hypot(drop.x - player.x, drop.y - player.y, drop.z - player.z);
-    if (!isEquipmentItem(drop.itemId) || !visual.root.enabled || d > distance
+    if (!isItemId(drop.itemId) || !visual.root.enabled || d > distance
       || !enemyCueLineClear({ x: player.x, y: player.y + .72, z: player.z },
         { x: drop.x, y: drop.y + .72, z: drop.z }, readCollisionWorldBlock)) continue;
     nearest = id; distance = d;
   }
   return nearest ? { id: nearest, distance } : null;
 }
-function nearestEquipmentDrop(): string | null {
-  return nearestVisibleEquipmentDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null;
+function nearestLootDrop(): string | null {
+  return nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null;
+}
+function lootNeedsInspection(dropId: string, drop: NetworkLootDrop): boolean {
+  return dropId.startsWith("forest-cache:") || isEquipmentItem(drop.itemId) || Boolean(utilityForItem(drop.itemId));
+}
+function interactWithLoot(dropId: string): void {
+  const drop = lootVisuals.get(dropId)?.state;
+  if (!drop || !room || !worldReady) return;
+  if (lootNeedsInspection(dropId, drop)) { openLoot(dropId); return; }
+  if ((pendingFloorLoot.get(dropId) ?? 0) > performance.now()) return;
+  pendingFloorLoot.set(dropId, performance.now() + 2_000);
+  room.send("loot:collect", { dropId, action: "keep" });
+  status.textContent = `Picking up ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}...`;
 }
 function updateLootWorldLabel(): void {
   lootWorldLabel.hidden = true;
   if (!worldReady || !camera.camera || !lootPanel.hidden || !inventoryPanel.hidden || !defeatScreen.hidden) return;
-  const nearest = nearestVisibleEquipmentDrop(8);
+  const nearest = nearestVisibleLootDrop(8);
   if (!nearest) return;
   const drop = lootVisuals.get(nearest.id)?.state;
   if (!drop || !isItemId(drop.itemId)) return;
@@ -1910,9 +1923,10 @@ function updateLootWorldLabel(): void {
   const seconds = Math.max(0, Math.ceil((drop.expiresAt - Date.now()) / 1000));
   const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
   const rarity = itemRarity(drop.itemId);
+  const inspect = lootNeedsInspection(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
-  lootWorldName.textContent = `${ITEM_DEFINITIONS[drop.itemId].name} · ${ITEM_RARITIES[rarity].label.toUpperCase()}`;
-  lootWorldAction.textContent = `${near ? "E · INSPECT" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
+  lootWorldName.textContent = `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${inspect ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
+  lootWorldAction.textContent = `${near ? `E · ${inspect ? "INSPECT" : "PICK UP"}` : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.style.left = `${rect.left + screen.x}px`;
   lootWorldLabel.style.top = `${rect.top + screen.y}px`;
@@ -2048,8 +2062,8 @@ lootEquip.addEventListener("click", () => collectInspectedLoot("equip"));
 lootKeep.addEventListener("click", () => collectInspectedLoot("keep"));
 lootDismantle.addEventListener("click", () => collectInspectedLoot("dismantle"));
 lootWorldLabel.addEventListener("click", () => {
-  const nearby = nearestVisibleEquipmentDrop(EQUIPMENT_LOOT_RANGE);
-  if (nearby) openLoot(nearby.id);
+  const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
+  if (nearby) interactWithLoot(nearby.id);
 });
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
@@ -3733,6 +3747,7 @@ function bindLootDrops(joinedRoom: Room): void {
   drops.onRemove((_drop: NetworkLootDrop, dropId: string) => {
     lootVisuals.get(dropId)?.root.destroy();
     lootVisuals.delete(dropId);
+    pendingFloorLoot.delete(dropId);
     if (inspectedDropId === dropId && !lootPending) {
       lootMessage.textContent = "That bag was collected or expired.";
       lootEquip.disabled = lootKeep.disabled = true;
@@ -5225,7 +5240,7 @@ function updateTarget(): void {
   const combatMark = combatMob ? visibleMarkState(combatMob.visual) : null;
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
-  const nearbyLoot = nearestEquipmentDrop();
+  const nearbyLoot = nearestLootDrop();
   const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${nearbyForestPortal}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
@@ -5235,7 +5250,16 @@ function updateTarget(): void {
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
   mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
-  if (nearbyLoot) targetLabel.textContent = nearbyLoot.startsWith("forest-cache:") ? "Personal Rootbound Cache · press E or Loot to claim" : "Equipment bag · press E or Loot to inspect and compare";
+  if (nearbyLoot) {
+    const drop = lootVisuals.get(nearbyLoot)?.state;
+    const itemName = drop && isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Loot";
+    const quantity = drop && drop.quantity > 1 ? `${drop.quantity}× ` : "";
+    targetLabel.textContent = nearbyLoot.startsWith("forest-cache:")
+      ? "Personal Rootbound Cache · press E or Loot to claim"
+      : drop && lootNeedsInspection(nearbyLoot, drop)
+        ? `${itemName} · press E or Loot to inspect and compare`
+        : `${quantity}${itemName} · press E or Loot to pick up`;
+  }
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Expedition Board · press E to plan a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
@@ -6651,8 +6675,8 @@ function requestPrimaryAction(): void {
   if (!defeatScreen.hidden) return;
   if (nearbyRecoveryBag) { recoverNearbyBag(); return; }
   if (sceneDressing.blacksmithVisible && isAtTownStorage(localPlayer.getPosition())) { openPersonalStorage(); return; }
-  const nearbyLoot = nearestEquipmentDrop();
-  if (nearbyLoot) { openLoot(nearbyLoot); return; }
+  const nearbyLoot = nearestLootDrop();
+  if (nearbyLoot) { interactWithLoot(nearbyLoot); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
   const boardPosition = localPlayer.getPosition();
   if (Math.abs(boardPosition.y - TOWN_EXPEDITION_BOARD_POSITION.y) <= 1.6
@@ -8407,7 +8431,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     logMovementEvent(`REWARD ${message.mobId} hp=${message.healthRestored} stamina=${message.staminaRestored}`);
   });
   room.onMessage("loot:result", (message: LootCollectResult) => {
-    if (message.dropId !== inspectedDropId) return;
+    if (message.dropId !== inspectedDropId) {
+      if (!pendingFloorLoot.delete(message.dropId)) return;
+      if (!message.ok) {
+        status.textContent = message.message;
+        showCombatFeedback(message.message.toUpperCase(), "hurt");
+      }
+      return;
+    }
     lootPending = false; lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = !lootVisuals.has(message.dropId);
     lootMessage.textContent = message.message;
     if (message.ok) {
