@@ -110,6 +110,7 @@ import {
   type DungeonBoardUpdate,
   DungeonLobbyRequestSchema,
   type DungeonLobbyUpdate,
+  type SilverDepthsLobbyUpdate,
   type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
@@ -415,6 +416,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private readonly silverDepthsFallen = new Set<string>();
   private readonly silverDepthsDisconnected = new Set<string>();
   private silverInstanceSequence = 0;
+  private readonly silverDepthsLobbies = new Map<string, { leaderId: string; members: string[]; ready: Set<string>; expiresAt: number }>();
+  private readonly silverDepthsTransferPending = new Map<string, number>();
 
   override async onCreate(options: WorldRoomOptions = {}): Promise<void> {
     this.roomKind = options.roomKind === "silver-depths" ? "silver-depths" : "overworld";
@@ -483,6 +486,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
       if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));
+      if (this.roomKind === "overworld") for (const [key, lobby] of this.silverDepthsLobbies)
+        if (lobby.members.includes(client.sessionId)) this.sendSilverDepthsLobby(key, lobby);
       client.send("mineral:status", this.mineralStatus());
       const run = this.silverDepthsRuns.get(client.sessionId);
       if (this.roomKind === "silver-depths" && run) {
@@ -524,6 +529,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.lastPartyRequestAt.set(client.sessionId, now);
       client.send("chat:notice", this.parties.handle(client.sessionId, parsed.data, this.state.players, Date.now()));
       if (parsed.data.action === "leave") this.expeditionTicketBySession.delete(client.sessionId);
+      this.validateSilverDepthsLobbies(Date.now());
       this.sendPartyUpdates(Date.now());
     });
     this.onMessage("player:name", (client, payload: unknown) => {
@@ -549,6 +555,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.onMessage("player:return", client => void this.returnPlayerToTown(client));
     this.onMessage("dungeon:board", (client, payload: unknown) => this.handleDungeonBoard(client, payload));
     this.onMessage("dungeon:lobby", (client, payload: unknown) => this.handleDungeonLobby(client, payload));
+    this.onMessage("depths:lobby", (client, payload: unknown) => this.handleSilverDepthsLobby(client, payload));
     this.onMessage("portal:use", (client, payload: unknown) => {
       const id = payload && typeof payload === "object" && "id" in payload ? String(payload.id) : "";
       if (id.startsWith("depths-")) this.useSilverDepthsPortal(client, payload);
@@ -705,6 +712,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const [id, drop] of this.state.lootDrops) if (drop.ownerId === client.sessionId) this.state.lootDrops.delete(id);
     this.trading.disconnect(client.sessionId); this.lastTradeRequestAt.delete(client.sessionId);
     this.parties.disconnect(client.sessionId);
+    for (const [key, lobby] of this.silverDepthsLobbies) if (lobby.members.includes(client.sessionId))
+      this.closeSilverDepthsLobby(key, "Assembly cancelled · a teammate disconnected.");
     this.expeditionTicketBySession.delete(client.sessionId);
     this.lastPartyRequestAt.delete(client.sessionId);
     this.lastChatAt.delete(client.sessionId); this.lastNameAt.delete(client.sessionId);
@@ -2447,6 +2456,49 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     else this.sendDungeonLobby(`${run.ready.size}/${run.allowed.size} ready · waiting at the entrance.`);
   }
 
+  private sendSilverDepthsLobby(key: string, lobby: { leaderId: string; members: string[]; ready: Set<string>; expiresAt: number },
+    message = `${lobby.ready.size}/${lobby.members.length} ready · waiting for the party.`): void {
+    const update: SilverDepthsLobbyUpdate = { phase: "assembling", leaderId: lobby.leaderId, expiresAt: lobby.expiresAt,
+      members: lobby.members.map(id => ({ id, name: this.state.players.get(id)?.name ?? "Explorer", ready: lobby.ready.has(id) })), message };
+    for (const id of lobby.members) this.clients.find(client => client.sessionId === id)?.send("depths:lobby", update);
+  }
+
+  private closeSilverDepthsLobby(key: string, message: string): void {
+    const lobby = this.silverDepthsLobbies.get(key);
+    if (!lobby) return;
+    this.silverDepthsLobbies.delete(key);
+    const update: SilverDepthsLobbyUpdate = { phase: "closed", leaderId: lobby.leaderId, members: [], expiresAt: 0, message };
+    for (const id of lobby.members) this.clients.find(client => client.sessionId === id)?.send("depths:lobby", update);
+  }
+
+  private validateSilverDepthsLobbies(now: number): void {
+    for (const [key, lobby] of this.silverDepthsLobbies) {
+      if (now >= lobby.expiresAt) { this.closeSilverDepthsLobby(key, "Assembly expired · use the portal to try again."); continue; }
+      const cohort = this.parties.cohort(lobby.leaderId);
+      if (cohort.key !== key || cohort.members.length !== lobby.members.length
+        || lobby.members.some(id => !cohort.members.includes(id) || !this.clients.some(client => client.sessionId === id)
+          || (this.state.players.get(id)?.health ?? 0) <= 0))
+        this.closeSilverDepthsLobby(key, "Assembly cancelled · the party changed.");
+    }
+  }
+
+  private handleSilverDepthsLobby(client: Client, payload: unknown): void {
+    if (this.roomKind !== "overworld" || !payload || typeof payload !== "object" || !("action" in payload)
+      || (payload.action !== "ready" && payload.action !== "cancel")) return;
+    this.validateSilverDepthsLobbies(Date.now());
+    const entry = [...this.silverDepthsLobbies].find(([, lobby]) => lobby.members.includes(client.sessionId));
+    if (!entry) return;
+    const [key, lobby] = entry;
+    if (payload.action === "cancel") { this.closeSilverDepthsLobby(key, "Assembly cancelled · the party remains together."); return; }
+    if ((this.state.players.get(client.sessionId)?.health ?? 0) <= 0) return;
+    lobby.ready.add(client.sessionId);
+    if (lobby.ready.size !== lobby.members.length) { this.sendSilverDepthsLobby(key, lobby); return; }
+    this.closeSilverDepthsLobby(key, "Everyone is ready · entering Silver Depths.");
+    this.silverDepthsTransferPending.set(key, Date.now() + 3000);
+    const leader = this.clients.find(member => member.sessionId === lobby.leaderId);
+    if (leader) void this.transferPartyToSilverDepths(leader);
+  }
+
   private useSilverDepthsPortal(client: Client, payload: unknown): void {
     if (!payload || typeof payload !== "object" || !("id" in payload) || typeof payload.id !== "string") return;
     const player = this.state.players.get(client.sessionId), portal = this.state.portals.get(payload.id), now = Date.now();
@@ -2456,6 +2508,19 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const entering = payload.id === "depths-entry";
     if (entering) {
       if (this.roomKind !== "overworld") return;
+      const cohort = this.parties.cohort(client.sessionId);
+      if (cohort.members.length > 1) {
+        if (!this.parties.isLeader(client.sessionId)) {
+          client.send("portal:notice", "Ask your party leader to start the Silver Depths ready check."); return;
+        }
+        if ((this.silverDepthsTransferPending.get(cohort.key) ?? 0) > now) return;
+        const existing = this.silverDepthsLobbies.get(cohort.key);
+        if (existing) { this.sendSilverDepthsLobby(cohort.key, existing); return; }
+        const lobby = { leaderId: client.sessionId, members: cohort.members, ready: new Set<string>(), expiresAt: now + 60_000 };
+        this.silverDepthsLobbies.set(cohort.key, lobby);
+        this.sendSilverDepthsLobby(cohort.key, lobby, "Party leader opened Silver Depths · everyone choose Ready within 60 seconds.");
+        return;
+      }
       this.forestTravelAt.set(client.sessionId, now);
       void this.transferPartyToSilverDepths(client);
       return;
@@ -2960,6 +3025,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       for (const client of this.clients) this.sendObjectiveState(client);
     }
     const now = Date.now();
+    if (this.roomKind === "overworld" && this.silverDepthsLobbies.size) this.validateSilverDepthsLobbies(now);
     if (this.roomKind === "overworld") {
       const entrance = this.state.portals.get("forest-entry");
       if (entrance && entrance.expiresAt > 0 && now >= entrance.expiresAt) {

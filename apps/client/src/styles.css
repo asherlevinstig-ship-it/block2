@@ -1552,3 +1552,15 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .dungeon-lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 15px; }
 .dungeon-lobby-actions button { padding: 12px; cursor: pointer; color: #13200f; border: 0; border-radius: 7px; background: #a9e184; font: 900 11px system-ui; letter-spacing: .07em; }
 .dungeon-lobby-actions .dungeon-start { color: #251a08; background: #e5bf67; }.dungeon-lobby-actions button:disabled { cursor: default; opacity: .45; }
+#silver-depths-lobby-panel { position: fixed; z-index: 67; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(430px, calc(100vw - 36px)); box-sizing: border-box; padding: 25px; color: #f4eaff; border: 2px solid #a96cde; border-radius: 14px; background: linear-gradient(145deg, #26183af8, #0d0b18fb); box-shadow: 0 0 0 100vmax #030207a3, 0 18px 60px #000c; font-family: system-ui; }
+#silver-depths-lobby-panel[hidden] { display: none; }
+#silver-depths-lobby-panel > small { color: #c995f4; font-weight: 900; letter-spacing: .14em; }
+#silver-depths-lobby-panel h2 { margin: 7px 0; color: #f7e3ff; font-size: 23px; }
+#silver-depths-lobby-panel .dungeon-lobby-members { margin: 14px 0; padding: 0; list-style: none; }
+#silver-depths-lobby-panel .dungeon-lobby-members li { display: flex; justify-content: space-between; margin: 6px 0; padding: 10px; border: 1px solid #ffffff20; border-radius: 6px; background: #ffffff08; }
+#silver-depths-lobby-panel .dungeon-lobby-members li.ready { border-color: #b989ec88; background: #4f287288; }
+#silver-depths-lobby-panel .dungeon-lobby-members li span { font: 900 10px system-ui; letter-spacing: .08em; color: #d9b2f5; }
+#silver-depths-lobby-panel .dungeon-lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 15px; }
+#silver-depths-lobby-panel .dungeon-lobby-actions button { padding: 12px; cursor: pointer; border: 0; border-radius: 7px; background: #bd8ae8; color: #1d102a; font: 900 11px system-ui; }
+#silver-depths-lobby-panel .dungeon-lobby-actions .depths-lobby-cancel { background: #4d3d5b; color: #f3e6fa; }
+#silver-depths-lobby-panel .dungeon-lobby-actions button:disabled { cursor: default; opacity: .5; }

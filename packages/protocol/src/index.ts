@@ -204,6 +204,13 @@ export type DungeonLobbyUpdate = {
   scalePlayers: number;
   message: string;
 };
+export type SilverDepthsLobbyUpdate = {
+  phase: "assembling" | "closed";
+  leaderId: string;
+  members: { id: string; name: string; ready: boolean }[];
+  expiresAt: number;
+  message: string;
+};
 export const DungeonBoardRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("sync") }),
   z.object({ action: z.literal("open") }),

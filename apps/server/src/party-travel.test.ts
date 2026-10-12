@@ -2,9 +2,67 @@ import { describe, expect, it, vi } from "vitest";
 import { SILVER_DEPTHS_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { Parties } from "./parties.js";
-import { PlayerState, WorldState } from "./schema.js";
+import { ForestPortalState, PlayerState, WorldState } from "./schema.js";
+import { TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 
 describe("expedition party travel", () => {
+  function partyAtSilverPortal() {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const portal = new ForestPortalState();
+    Object.assign(portal, TOWN_SILVER_DEPTHS_PORTAL_POSITION, { kind: "entry" });
+    room.state.portals.set("depths-entry", portal);
+    const leader = { sessionId: "leader", send: vi.fn() };
+    const ally = { sessionId: "ally", send: vi.fn() };
+    (room as any).clients.push(leader, ally);
+    for (const id of ["leader", "ally"]) {
+      const player = new PlayerState(); Object.assign(player, TOWN_SILVER_DEPTHS_PORTAL_POSITION);
+      room.state.players.set(id, player);
+    }
+    (room as any).parties.restore(["leader", "ally"]);
+    const transfer = vi.spyOn(room as any, "transferPartyToSilverDepths").mockResolvedValue(undefined);
+    return { room, leader, ally, transfer, internal: room as any };
+  }
+
+  it("waits for every teammate before entering and only the leader can open assembly", async () => {
+    const { internal, leader, ally, transfer } = partyAtSilverPortal();
+    internal.useSilverDepthsPortal(ally, { id: "depths-entry" });
+    expect(internal.silverDepthsLobbies.size).toBe(0);
+    internal.useSilverDepthsPortal(leader, { id: "depths-entry" });
+    expect(internal.silverDepthsLobbies.size).toBe(1);
+    expect(leader.send).toHaveBeenCalledWith("depths:lobby", expect.objectContaining({ phase: "assembling" }));
+    expect(ally.send).toHaveBeenCalledWith("depths:lobby", expect.objectContaining({ phase: "assembling" }));
+    internal.handleSilverDepthsLobby(leader, { action: "ready" });
+    expect(transfer).not.toHaveBeenCalled();
+    internal.handleSilverDepthsLobby(ally, { action: "ready" });
+    expect(transfer).toHaveBeenCalledTimes(1);
+    expect(transfer).toHaveBeenCalledWith(leader);
+    expect(internal.silverDepthsLobbies.size).toBe(0);
+  });
+
+  it("lets either member cancel, and expires an abandoned assembly", () => {
+    const { internal, leader, ally, transfer } = partyAtSilverPortal();
+    internal.useSilverDepthsPortal(leader, { id: "depths-entry" });
+    internal.handleSilverDepthsLobby(ally, { action: "cancel" });
+    expect(transfer).not.toHaveBeenCalled();
+    expect(internal.silverDepthsLobbies.size).toBe(0);
+    expect(leader.send).toHaveBeenCalledWith("depths:lobby", expect.objectContaining({ phase: "closed" }));
+    internal.useSilverDepthsPortal(leader, { id: "depths-entry" });
+    const lobby = [...internal.silverDepthsLobbies.values()][0] as { expiresAt: number };
+    internal.validateSilverDepthsLobbies(lobby.expiresAt);
+    expect(internal.silverDepthsLobbies.size).toBe(0);
+    expect(transfer).not.toHaveBeenCalled();
+  });
+
+  it("cancels the ready check if the party changes", () => {
+    const { internal, leader, ally, transfer } = partyAtSilverPortal();
+    internal.useSilverDepthsPortal(leader, { id: "depths-entry" });
+    internal.parties.leave("ally");
+    internal.validateSilverDepthsLobbies(Date.now());
+    expect(internal.silverDepthsLobbies.size).toBe(0);
+    internal.handleSilverDepthsLobby(leader, { action: "ready" });
+    expect(transfer).not.toHaveBeenCalled();
+  });
+
   it("restores members as they arrive, without overriding a different party", () => {
     const parties = new Parties();
     parties.restore(["leader"]);

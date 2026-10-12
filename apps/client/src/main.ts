@@ -103,6 +103,7 @@ import {
   type DungeonRewardClaimed,
   type DungeonBoardUpdate,
   type DungeonLobbyUpdate,
+  type SilverDepthsLobbyUpdate,
   type ItemId,
   type LootPickedUp,
   type ResourceGathered,
@@ -292,6 +293,39 @@ function renderDungeonLobby(update: DungeonLobbyUpdate): void {
 }
 dungeonLobbyPanel.querySelector(".dungeon-ready")!.addEventListener("click", () => room?.send("dungeon:lobby", { action: "ready" }));
 dungeonLobbyPanel.querySelector(".dungeon-start")!.addEventListener("click", () => room?.send("dungeon:lobby", { action: "start" }));
+
+const silverDepthsLobbyPanel = document.createElement("section");
+silverDepthsLobbyPanel.id = "silver-depths-lobby-panel";
+silverDepthsLobbyPanel.hidden = true;
+silverDepthsLobbyPanel.setAttribute("role", "dialog");
+silverDepthsLobbyPanel.setAttribute("aria-label", "Silver Depths party ready check");
+silverDepthsLobbyPanel.innerHTML = '<small>THE SILVER DEPTHS</small><h2>PARTY READY CHECK</h2><p class="dungeon-lobby-message"></p><ul class="dungeon-lobby-members"></ul><div class="dungeon-lobby-actions"><button class="depths-lobby-ready" type="button">READY</button><button class="depths-lobby-cancel" type="button">CANCEL ASSEMBLY</button></div>';
+document.body.append(silverDepthsLobbyPanel);
+function renderSilverDepthsLobby(update: SilverDepthsLobbyUpdate): void {
+  if (update.phase === "closed") {
+    silverDepthsLobbyPanel.hidden = true;
+    status.textContent = update.message;
+    return;
+  }
+  silverDepthsLobbyPanel.hidden = false;
+  resetMovementControls();
+  silverDepthsLobbyPanel.querySelector(".dungeon-lobby-message")!.textContent = update.message;
+  const list = silverDepthsLobbyPanel.querySelector(".dungeon-lobby-members")!;
+  list.replaceChildren();
+  for (const member of update.members) {
+    const row = document.createElement("li");
+    row.className = member.ready ? "ready" : "outside";
+    const name = document.createElement("strong"); name.textContent = member.name;
+    const state = document.createElement("span"); state.textContent = member.ready ? "READY" : "WAITING";
+    row.append(name, state); list.append(row);
+  }
+  const self = update.members.find(member => member.id === room?.sessionId);
+  const ready = silverDepthsLobbyPanel.querySelector<HTMLButtonElement>(".depths-lobby-ready")!;
+  ready.disabled = !self || self.ready;
+  ready.textContent = self?.ready ? "READY ✓" : "READY";
+}
+silverDepthsLobbyPanel.querySelector(".depths-lobby-ready")!.addEventListener("click", () => room?.send("depths:lobby", { action: "ready" }));
+silverDepthsLobbyPanel.querySelector(".depths-lobby-cancel")!.addEventListener("click", () => room?.send("depths:lobby", { action: "cancel" }));
 
 function showDungeonRunResult(update: DungeonRunUpdate): void {
   if (update.phase !== "completed") return;
@@ -4541,7 +4575,7 @@ function updateForestPortals(): void {
     const portalName = id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
       : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
       : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
-    const testState = testEntry ? "\nTEST ACCESS · E TO ENTER" : "";
+    const testState = id === "depths-entry" ? "\nE TO ENTER / ASSEMBLE PARTY" : testEntry ? "\nTEST ACCESS · E TO ENTER" : "";
     const text = `${portalName}${testState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !testState ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
@@ -7274,6 +7308,7 @@ async function connect(): Promise<void> {
   });
   room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
   room.onMessage("dungeon:lobby", (update: DungeonLobbyUpdate) => renderDungeonLobby(update));
+  room.onMessage("depths:lobby", (update: SilverDepthsLobbyUpdate) => renderSilverDepthsLobby(update));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
   room.onMessage("chat:message", message => social.message(message));
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
