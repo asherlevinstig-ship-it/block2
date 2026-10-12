@@ -1,6 +1,19 @@
 export const WILDERNESS_EVENT_ID = "greenwood-venom-matriarch";
 export const WILDERNESS_EVENT_POSITION = { x: 43.5, y: 8, z: 18.5 };
+export const WILDERNESS_EVENT_TRACKING_RADIUS = 64;
+export const WILDERNESS_EVENT_SCALING_RADIUS = 30;
+export const WILDERNESS_EVENT_MAX_PLAYERS = 6;
 const CAMP = ["wild-crawler", "greenwood-briar", "greenwood-briar-north"];
+
+export function wildernessEventScale(nearbyPlayers: number): { players: number; maxHealth: number; attackDamage: number; rewardMultiplier: number } {
+  const players = Math.max(1, Math.min(WILDERNESS_EVENT_MAX_PLAYERS, Math.floor(nearbyPlayers)));
+  return {
+    players,
+    maxHealth: 24 + (players - 1) * 12,
+    attackDamage: players >= 4 ? 2 : 1,
+    rewardMultiplier: 1.5 + (players - 1) * .25,
+  };
+}
 /** A fresh camp clear arms one shared encounter, not one spawn per player. */
 export class WildernessEventCycle {
   private readonly defeated = new Map<string, number>();

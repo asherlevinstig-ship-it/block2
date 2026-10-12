@@ -1,5 +1,5 @@
 import { isEquipmentItem, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
-import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
+import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { ASHEN_SENTRY_IDS, MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
@@ -12,7 +12,7 @@ export const createObjectiveProgress = (): WorldObjectiveProgress => ({ id: null
 const GROUPS = [
   { id: "buried-vault", title: "Breach the Buried Vault", detail: "Mine through the silver seal. Defeat the Vault Crawler and Stone Warden, then claim your personal Miner's Lantern cache.", ids: ["buried-vault-crawler", "buried-chamber-brute"] },
   { id: "frontier-mixed", title: "Frontier Warband", detail: "Draw out the crawler, dodge the brute's rocks, then pressure the support spitter. Counter during recovery.", ids: [...MIXED_FRONTIER_IDS] },
-  { id: "greenwood-event", title: "Venom Matriarch · Shared Event", detail: "Dodge aimed shots and fan gaps. Fight together: eligible contributors each receive personal equipment.", ids: [WILDERNESS_EVENT_ID] },
+  { id: "greenwood-event", title: "Venom Matriarch · Public Event", detail: "Follow the marker, dodge aimed shots and fan gaps, and contribute to earn personal floor loot. Victory opens a temporary dungeon portal.", ids: [WILDERNESS_EVENT_ID] },
   { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Follow the dirt road, clear the three root nests, collect crawler items, then mine the exposed iron seam east of the camp.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"] },
   { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"] },
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"] },
@@ -46,7 +46,9 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     const groups = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({ id: `mob-${id}`, title: mob.name, detail: "Defeat this nearby enemy and collect your item drops.", ids: [id] }))];
     const candidates = groups.flatMap(group => {
       const living = group.ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive && sameFloor(mob) && isInForestDungeon(mob.x, mob.z) === dungeon ? [{ id, mob }] : []; }).sort((a, b) => distance(a.mob) - distance(b.mob));
-      const target = living[0]; if (!target || distance(target.mob) > (group.id === previousId ? 32 : dungeon ? 48 : 26)) return [];
+      const acquisitionRadius = group.id === "greenwood-event" ? WILDERNESS_EVENT_TRACKING_RADIUS
+        : group.id === previousId ? 32 : dungeon ? 48 : 26;
+      const target = living[0]; if (!target || distance(target.mob) > acquisitionRadius) return [];
       const update = make(group.id, group.title, group.detail, target.mob, "encounter", target.mob.difficultyTier);
       update.recommendedLevel = `LV ${target.mob.level ?? worldLevelRange(target.mob.difficultyTier).min}`;
       update.targetMobId = target.id; update.targetMobIds = group.ids.filter(id => mobs.has(id)); update.completedMobIds = group.ids.filter(id => mobs.get(id)?.alive === false);
@@ -60,8 +62,8 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     }
     const activeFight = candidates.find(candidate => candidate.engaged && candidate.update.objectiveId === previousId) ?? candidates.find(candidate => candidate.engaged);
     if (activeFight) return activeFight.update;
-    if (eventWarningUntil > now && sameFloor(WILDERNESS_EVENT_POSITION) && distance(WILDERNESS_EVENT_POSITION) <= 26)
-      return make("greenwood-event-warning", `Venom Matriarch · ${Math.ceil((eventWarningUntil - now) / 1000)}s`, "Shared event incoming at the cleared camp. Gather nearby and prepare to dodge.", WILDERNESS_EVENT_POSITION, "encounter", 1);
+    if (eventWarningUntil > now && sameFloor(WILDERNESS_EVENT_POSITION) && distance(WILDERNESS_EVENT_POSITION) <= WILDERNESS_EVENT_TRACKING_RADIUS)
+      return make("greenwood-event-warning", `Venom Matriarch · ${Math.ceil((eventWarningUntil - now) / 1000)}s`, "Public event incoming at the Greenwood camp. Follow the marker and gather nearby before it arrives.", WILDERNESS_EVENT_POSITION, "encounter", 1);
     const event = candidates.find(candidate => candidate.update.objectiveId === "greenwood-event");
     if (event) return event.update;
     const loot = drops.filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6 && isEquipmentItem(drop.itemId as ItemId)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];

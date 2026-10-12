@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WildernessEventCycle } from "./wilderness-event.js";
+import { WildernessEventCycle, wildernessEventScale, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { WorldRoom } from "./game-room.js";
 import { PlayerState, WorldState } from "./schema.js";
 import { Block } from "@blockcraft/voxel-world";
@@ -72,10 +72,21 @@ describe("shared wilderness event", () => {
     expect(clear(cycle, 10000)).toBe(false);
     expect(clear(cycle, 121000)).toBe(true);
   });
+  it("scales health and rewards for nearby participants without unbounded raid inflation", () => {
+    expect(wildernessEventScale(0)).toEqual({ players: 1, maxHealth: 24, attackDamage: 1, rewardMultiplier: 1.5 });
+    expect(wildernessEventScale(3)).toEqual({ players: 3, maxHealth: 48, attackDamage: 1, rewardMultiplier: 2 });
+    expect(wildernessEventScale(20)).toEqual({ players: 6, maxHealth: 84, attackDamage: 2, rewardMultiplier: 2.75 });
+  });
   it("shows the local arrival countdown, not a distant event", () => {
     const player = { x: 43, y: 8, z: 18, health: 5, inventory: new Map() };
     expect(nearbyObjective("a", player, [], [], [], 1000, null, 9000).title).toContain("8s");
-    expect(nearbyObjective("a", { ...player, x: 90 }, [], [], [], 1000, null, 9000).objectiveId).toBe("explore");
+    expect(nearbyObjective("a", { ...player, x: 43 + WILDERNESS_EVENT_TRACKING_RADIUS + 1 }, [], [], [], 1000, null, 9000).objectiveId).toBe("explore");
+  });
+  it("tracks a live public event from across the nearby wilderness", () => {
+    const player = { x: 100, y: 8, z: 18.5, health: 5, inventory: new Map() };
+    const event = { ...WILDERNESS_EVENT_POSITION, alive: true, name: "Greenwood Venom Matriarch", difficultyTier: 1, level: 4, combatState: "idle", targetId: "" };
+    const objective = nearbyObjective("a", player, [["greenwood-venom-matriarch", event]], [], [], 1000, null);
+    expect(objective).toMatchObject({ objectiveId: "greenwood-event", showMarker: true, targetMobId: "greenwood-venom-matriarch" });
   });
   it("spawns once after a real camp clear and grants each contributor their own equipment", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
@@ -91,12 +102,13 @@ describe("shared wilderness event", () => {
     expect(room.state.mobs.has("greenwood-venom-matriarch")).toBe(false);
     internal.advanceWildernessEvent(9000);
     const boss = room.state.mobs.get("greenwood-venom-matriarch")!;
-    expect(boss.maxHealth).toBe(24); expect(boss.isChampion).toBe(true);
+    expect(boss.maxHealth).toBe(36); expect(boss.isChampion).toBe(true);
     internal.advanceWildernessEvent(10000);
     expect(room.state.mobs.get("greenwood-venom-matriarch")).toBe(boss);
     for (const id of ["a", "b"]) internal.combatContributions.record("greenwood-venom-matriarch", id, 12, 10000);
     internal.defeatMob("greenwood-venom-matriarch", boss, "a", 10000);
     const drops = [...room.state.lootDrops.values()].filter(drop => drop.itemId === "venom_focus");
     expect(drops.map(drop => drop.ownerId).sort()).toEqual(["a", "b"]);
+    expect(room.state.portals.get("forest-entry")).toMatchObject({ kind: "entry" });
   });
 });

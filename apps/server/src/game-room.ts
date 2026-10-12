@@ -22,7 +22,7 @@ import { checkMobProgress, type MobProgress } from "./mob-progress.js";
 import { mobAssistants, MOB_ASSIST_COOLDOWN_MS } from "./mob-assist.js";
 import { circleCrawler, createCrawlerPositioning, retreatCrawler, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
-import { WildernessEventCycle, WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
+import { WildernessEventCycle, wildernessEventScale, WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_SCALING_RADIUS, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
@@ -1741,6 +1741,23 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.broadcast("combat:projectile-resolved", { projectileId, ...point, reason } satisfies ProjectileResolved);
   }
 
+  private openTemporaryForestPortal(now: number): boolean {
+    if (this.state.portals.has("forest-entry") || this.forestDungeonActive) return false;
+    this.forestDungeonUnlocked = true;
+    // Repair the known arrival pad so the authoritative portal can never open over an excavation.
+    for (let x = 45; x <= 46; x++) for (let z = 28; z <= 29; z++) {
+      const a = worldToChunk(x, z), stored = this.getChunk(a.chunkX, a.chunkZ);
+      if (getBlock(stored.chunk, a.localX, 7, a.localZ) !== Block.Air) continue;
+      setBlock(stored.chunk, a.localX, 7, a.localZ, Block.Stone); stored.revision++;
+      this.broadcast("block:changed", { requestId: "forest-pad", x, y: 7, z, block: Block.Stone, revision: stored.revision } satisfies BlockChanged);
+    }
+    const portal = new ForestPortalState();
+    Object.assign(portal, FOREST_PORTAL_POSITION, { kind: "entry", expiresAt: now + FOREST_PORTAL_LIFETIME_MS });
+    this.state.portals.set("forest-entry", portal);
+    this.forestDungeonReopenAt = portal.expiresAt;
+    return true;
+  }
+
   private cancelWeaponProjectiles(attackerId: string): void {
     for (const [id, projectile] of this.pendingWeaponProjectiles) {
       if (projectile.attackerId !== attackerId) continue;
@@ -1815,22 +1832,22 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (this.wildernessEvent.record(mobId, now, this.state.mobs.get(WILDERNESS_EVENT_ID)?.alive === true)) {
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
-        if (player && Math.abs(player.y - 8) <= 2.5 && Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) <= 32)
+        if (player && Math.abs(player.y - 8) <= 2.5 && Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) <= WILDERNESS_EVENT_TRACKING_RADIUS)
           client.send("chat:notice", "Wilderness event · Venom Matriarch arrives at the Greenwood camp in 8 seconds. Gather and prepare!");
       }
     }
     if (this.forestPortalCycle.record(mobId, now) && !this.state.portals.has("forest-entry") && !this.forestDungeonActive) {
-      this.forestDungeonUnlocked = true;
-      // Repair an old excavation beneath the arrival pad before making it usable.
-      for (let x = 45; x <= 46; x++) for (let z = 28; z <= 29; z++) {
-        const a = worldToChunk(x, z), stored = this.getChunk(a.chunkX, a.chunkZ);
-        if (getBlock(stored.chunk, a.localX, 7, a.localZ) !== Block.Air) continue;
-        setBlock(stored.chunk, a.localX, 7, a.localZ, Block.Stone); stored.revision++;
-        this.broadcast("block:changed", { requestId: "forest-pad", x, y: 7, z, block: Block.Stone, revision: stored.revision } satisfies BlockChanged);
+      this.openTemporaryForestPortal(now);
+    }
+    if (mobId === WILDERNESS_EVENT_ID) {
+      const opened = this.openTemporaryForestPortal(now);
+      for (const client of this.clients) {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || Math.abs(player.y - 8) > 2.5 || Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) > WILDERNESS_EVENT_TRACKING_RADIUS) continue;
+        client.send("chat:notice", opened
+          ? `Public event complete · personal loot has landed and the Forest Dungeon portal is open for ${Math.round(FOREST_PORTAL_LIFETIME_MS / 1000)} seconds.`
+          : "Public event complete · personal loot has landed. The existing Forest Dungeon entrance remains active.");
       }
-      const portal = new ForestPortalState(); Object.assign(portal, FOREST_PORTAL_POSITION, { kind: "entry", expiresAt: now + FOREST_PORTAL_LIFETIME_MS });
-      this.state.portals.set("forest-entry", portal);
-      this.forestDungeonReopenAt = portal.expiresAt;
     }
     if (FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) this.advanceForestDungeon();
     mob.combatState = "idle";
@@ -1894,14 +1911,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private advanceWildernessEvent(now: number): void {
     if (!this.wildernessEvent.release(now)) return;
+    const nearbyPlayers = [...this.state.players.values()].filter(player => player.health > 0
+      && Math.abs(player.y - WILDERNESS_EVENT_POSITION.y) <= 2.5
+      && Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) <= WILDERNESS_EVENT_SCALING_RADIUS).length;
+    const scale = wildernessEventScale(nearbyPlayers);
     this.registerMob(WILDERNESS_EVENT_ID, "cave_spitter", WILDERNESS_EVENT_POSITION);
     const mob = this.state.mobs.get(WILDERNESS_EVENT_ID)!;
     mob.name = "Greenwood Venom Matriarch";
     mob.isChampion = true;
-    mob.health = mob.maxHealth = 24;
+    mob.health = mob.maxHealth = scale.maxHealth;
     mob.attackPattern = "aimed";
-    mob.rewardMultiplier *= 1.5;
+    mob.attackDamage = Math.max(mob.attackDamage, scale.attackDamage);
+    mob.rewardMultiplier *= scale.rewardMultiplier;
     mob.level = enemyLevelForTier(mob.difficultyTier, true, true);
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (player && Math.abs(player.y - 8) <= 2.5 && Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) <= WILDERNESS_EVENT_TRACKING_RADIUS)
+        client.send("chat:notice", `Public event live · Venom Matriarch scaled for ${scale.players} adventurer${scale.players === 1 ? "" : "s"}. Deal damage to qualify for personal loot.`);
+    }
     this.refreshNearbyObjectives();
   }
 
@@ -3114,7 +3141,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.state.portals.set("forest-return", exit);
       }
       this.forestDungeonRun!.entered.add(client.sessionId);
-      this.forestReturns.set(client.sessionId, { ...FOREST_PORTAL_POSITION });
+      this.forestReturns.set(client.sessionId, { x: portal.x, y: portal.y, z: portal.z });
       destination = FOREST_DUNGEON_ENTRY;
     } else this.forestReturns.delete(client.sessionId);
     this.pendingMining.delete(client.sessionId); this.pendingAttacks.delete(client.sessionId);
