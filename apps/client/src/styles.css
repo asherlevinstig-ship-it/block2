@@ -13,6 +13,13 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 }
 .loot-panel { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 18px; background: #09120ddd; }
 .loot-panel[hidden] { display: none; }
+#loot-world-label { position: fixed; z-index: 26; min-width: 150px; transform: translate(-50%, -100%); padding: 8px 12px; border: 1px solid #efd07a; border-radius: 8px; background: linear-gradient(180deg, #1c2d24f2, #09130ff4); color: #fff0bd; cursor: pointer; box-shadow: 0 4px 15px #0009, 0 0 18px #e7be5540; font: 800 11px/1.25 system-ui; text-align: center; }
+#loot-world-label[hidden] { display: none; }
+#loot-world-label strong, #loot-world-label span { display: block; }
+#loot-world-label strong { letter-spacing: .04em; }
+#loot-world-label span { margin-top: 3px; color: #a9c5b1; font-size: 9px; letter-spacing: .08em; }
+#loot-world-label[data-near="false"] { border-color: #718579; color: #d5dfd4; cursor: default; box-shadow: 0 4px 12px #0007; }
+body:has(#inventory-panel:not([hidden])) #loot-world-label, body:has(#loot-panel:not([hidden])) #loot-world-label { display: none; }
 .loot-card { width: min(560px, 100%); max-height: 85vh; overflow: auto; padding: 24px; border: 2px solid #cda750; border-radius: 16px; background: linear-gradient(145deg, #23342a, #101b16); box-shadow: 0 20px 70px #0009; }
 .loot-heading { display: flex; align-items: center; justify-content: space-between; color: #f3ce76; font-weight: 800; font-size: 12px; letter-spacing: .08em; }
 .loot-heading button { min-width: 44px; min-height: 44px; }

@@ -1851,6 +1851,9 @@ let lastNameplateSampleAt = -Infinity;
 const mobVisuals = new Map<string, MobVisual>();
 const lootVisuals = new Map<string, LootVisual>();
 const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
+const lootWorldLabel = document.querySelector<HTMLButtonElement>("#loot-world-label")!;
+const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
+const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action")!;
 const lootClose = document.querySelector<HTMLButtonElement>("#loot-close")!;
 const lootEquip = document.querySelector<HTMLButtonElement>("#loot-equip")!;
 const lootKeep = document.querySelector<HTMLButtonElement>("#loot-keep")!;
@@ -1860,9 +1863,9 @@ let lootPending = false;
 function closeLoot() {
   lootPanel.hidden = true; inspectedDropId = null; lootPending = false;
 }
-function nearestEquipmentDrop(): string | null {
+function nearestVisibleEquipmentDrop(maxDistance: number): { id: string; distance: number } | null {
   const player = localPlayer.getPosition();
-  let nearest: string | null = null; let distance = EQUIPMENT_LOOT_RANGE;
+  let nearest: string | null = null; let distance = maxDistance;
   for (const [id, visual] of lootVisuals) {
     const drop = visual.state;
     const d = Math.hypot(drop.x - player.x, drop.y - player.y, drop.z - player.z);
@@ -1871,7 +1874,29 @@ function nearestEquipmentDrop(): string | null {
         { x: drop.x, y: drop.y + .72, z: drop.z }, readCollisionWorldBlock)) continue;
     nearest = id; distance = d;
   }
-  return nearest;
+  return nearest ? { id: nearest, distance } : null;
+}
+function nearestEquipmentDrop(): string | null {
+  return nearestVisibleEquipmentDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null;
+}
+function updateLootWorldLabel(): void {
+  lootWorldLabel.hidden = true;
+  if (!worldReady || !camera.camera || !lootPanel.hidden || !inventoryPanel.hidden || !defeatScreen.hidden) return;
+  const nearest = nearestVisibleEquipmentDrop(8);
+  if (!nearest) return;
+  const drop = lootVisuals.get(nearest.id)?.state;
+  if (!drop || !isItemId(drop.itemId)) return;
+  const rect = canvas.getBoundingClientRect();
+  const screen = camera.camera.worldToScreen(new pc.Vec3(drop.x, drop.y + 1.4, drop.z));
+  if (screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height) return;
+  const seconds = Math.max(0, Math.ceil((drop.expiresAt - Date.now()) / 1000));
+  const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
+  lootWorldName.textContent = ITEM_DEFINITIONS[drop.itemId].name;
+  lootWorldAction.textContent = `${near ? "E · INSPECT" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
+  lootWorldLabel.dataset.near = String(near);
+  lootWorldLabel.style.left = `${rect.left + screen.x}px`;
+  lootWorldLabel.style.top = `${rect.top + screen.y}px`;
+  lootWorldLabel.hidden = false;
 }
 function fillLootComparison(element: HTMLElement, id: MainHandId) {
   const comparison = weaponComparison(id, localIronSwordOwned);
@@ -1954,6 +1979,10 @@ function collectInspectedLoot(equip: boolean) {
 lootClose.addEventListener("click", closeLoot);
 lootEquip.addEventListener("click", () => collectInspectedLoot(true));
 lootKeep.addEventListener("click", () => collectInspectedLoot(false));
+lootWorldLabel.addEventListener("click", () => {
+  const nearby = nearestVisibleEquipmentDrop(EQUIPMENT_LOOT_RANGE);
+  if (nearby) openLoot(nearby.id);
+});
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 const combatAudio = new CombatAudio();
 const unlockCombatAudio = (): void => combatAudio.unlock();
@@ -3419,6 +3448,58 @@ function isItemId(value: string): value is ItemId {
 }
 
 const lootMarkerMaterial = powerMaterial(new pc.Color(.8, .88, .62), .24);
+function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.StandardMaterial): boolean {
+  if (armourForItem(itemId)) {
+    addBox(root, "dropped-armour-chest", material, [.64, .58, .3], [0, 0, 0]);
+    addBox(root, "dropped-armour-waist", material, [.5, .18, .28], [0, -.37, 0]);
+    addBox(root, "dropped-armour-left-shoulder", material, [.25, .2, .38], [-.43, .18, 0]);
+    addBox(root, "dropped-armour-right-shoulder", material, [.25, .2, .38], [.43, .18, 0]);
+    if (itemId === "rootguard_armour") {
+      addBox(root, "rootguard-vine-a", weaponWoodMaterial, [.09, .78, .09], [-.22, 0, -.19]).setLocalEulerAngles(0, 0, 18);
+      addBox(root, "rootguard-vine-b", weaponWoodMaterial, [.09, .68, .09], [.2, -.04, -.19]).setLocalEulerAngles(0, 0, -20);
+    } else {
+      addBox(root, "armour-buckle", brassMaterial, [.16, .15, .05], [0, -.12, -.18]);
+    }
+    return true;
+  }
+  const hand = equipmentForItem(itemId);
+  if (!hand) return false;
+  if (hand === "fang_dagger") {
+    addBox(root, "dropped-dagger-grip", weaponWoodMaterial, [.12, .34, .12], [0, .28, 0]);
+    addBox(root, "dropped-dagger-guard", brassMaterial, [.34, .1, .12], [0, .06, 0]);
+    addBox(root, "dropped-dagger-fang", material, [.19, .62, .13], [0, -.3, 0]).setLocalEulerAngles(0, 0, 8);
+    return true;
+  }
+  if (hand === "stone_core_hammer" || hand === "rootbound_hammer") {
+    addBox(root, "dropped-hammer-handle", weaponWoodMaterial, [.13, .92, .13], [0, -.05, 0]);
+    addBox(root, "dropped-hammer-head", material, [.82, .38, .44], [0, .48, 0]);
+    addBox(root, "dropped-hammer-core", hand === "rootbound_hammer" ? coreGlowMaterial : brassMaterial, [.26, .25, .48], [0, .48, 0]);
+    return true;
+  }
+  if (hand === "forged_sword" || hand === "matriarch_edge") {
+    addBox(root, "dropped-sword-grip", weaponWoodMaterial, [.13, .42, .13], [0, .42, 0]);
+    addBox(root, "dropped-sword-guard", brassMaterial, [.52, .11, .16], [0, .16, 0]);
+    addBox(root, "dropped-sword-blade", material, [.2, .95, .12], [0, -.38, 0]);
+    addBox(root, "dropped-sword-tip", material, [.14, .24, .1], [0, -.96, 0]).setLocalEulerAngles(0, 0, 45);
+    return true;
+  }
+  if (hand === "forged_bow") {
+    addBox(root, "dropped-bow-grip", weaponWoodMaterial, [.14, .34, .14], [0, 0, 0]);
+    addBox(root, "dropped-bow-upper", material, [.12, .72, .12], [-.16, .48, 0]).setLocalEulerAngles(0, 0, -24);
+    addBox(root, "dropped-bow-lower", material, [.12, .72, .12], [-.16, -.48, 0]).setLocalEulerAngles(0, 0, 24);
+    addBox(root, "dropped-bow-string", eyeWhiteMaterial, [.035, 1.25, .035], [.15, 0, 0]);
+    return true;
+  }
+  if (hand === "acid_gland_focus" || hand === "venom_focus" || hand === "echo_prism" || hand === "forged_focus") {
+    addBox(root, "dropped-focus-handle", weaponWoodMaterial, [.12, .76, .12], [0, -.2, 0]);
+    addBox(root, "dropped-focus-head", material, [.42, .42, .42], [0, .36, 0]).setLocalEulerAngles(20, 45, 15);
+    addBox(root, "dropped-focus-prong-left", material, [.1, .34, .1], [-.2, .58, 0]).setLocalEulerAngles(0, 0, -25);
+    addBox(root, "dropped-focus-prong-right", material, [.1, .34, .1], [.2, .58, 0]).setLocalEulerAngles(0, 0, 25);
+    return true;
+  }
+  return false;
+}
+
 function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
@@ -3434,31 +3515,27 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
     addBox(root, "rootbound-cache-lock", coreGlowMaterial, [.26, .26, .08], [0, .12, -.4]);
     for (const side of [-1, 1]) addBox(root, `rootbound-cache-root-${side}`, weaponWoodMaterial, [.14, .72, .14], [side * .5, .02, 0]).setLocalEulerAngles(0, 0, side * 25);
   } else if (isEquipmentItem(itemId)) {
-    addBox(root, guardianDrop ? "rootbound-equipment-cache" : "loot-bag", weaponWoodMaterial, guardianDrop ? [.7, .5, .54] : [.55, .42, .44], [0, 0, 0]);
-    addBox(root, "bag-tie", material, [.25, .12, .25], [0, .27, 0]);
-    addBox(root, "equipment-emblem", material, [.28, .2, .06], [0, .02, -.25]);
-    if (guardianDrop) {
-      addBox(root, "heartwood-rune", coreGlowMaterial, [.18, .18, .07], [0, .04, -.32]).setLocalEulerAngles(0, 0, 45);
-      for (const side of [-1, 1]) addBox(root, `cache-root-${side}`, weaponWoodMaterial, [.11, .58, .11], [side * .34, .08, 0]).setLocalEulerAngles(0, 0, side * 34);
-    }
-    if (armourForItem(itemId)) {
-      addBox(root, "armour-left-shoulder", material, [.12, .1, .06], [-.16, .12, -.25]);
-      addBox(root, "armour-right-shoulder", material, [.12, .1, .06], [.16, .12, -.25]);
+    if (!addDroppedEquipmentModel(root, itemId, material)) {
+      addBox(root, guardianDrop ? "rootbound-equipment-cache" : "loot-bag", weaponWoodMaterial, guardianDrop ? [.7, .5, .54] : [.55, .42, .44], [0, 0, 0]);
+      addBox(root, "equipment-emblem", material, [.28, .2, .06], [0, .02, -.25]);
     }
     if (vaultCache) {
       addBox(root, "lantern-frame", lanternMetal, [.36, .5, .36], [0, .04, -.3]);
       addBox(root, "lantern-glow", lanternGlow, [.2, .28, .2], [0, .04, -.34]);
       addBox(root, "lantern-handle", lanternMetal, [.4, .07, .08], [0, .38, -.3]);
     }
-  } else if (itemId === "fang_dagger") {
-    addBox(root, "dropped-dagger-grip", weaponWoodMaterial, [0.1, 0.26, 0.1], [0, 0.17, 0]);
-    addBox(root, "dropped-dagger-fang", material, [0.18, 0.48, 0.12], [0, -0.18, 0]).setLocalEulerAngles(0, 0, 8);
-  } else if (itemId === "stone_core_hammer" || itemId === "rootbound_hammer") {
-    addBox(root, "dropped-hammer-handle", weaponWoodMaterial, [0.11, 0.7, 0.11], [0, 0, 0]);
-    addBox(root, "dropped-hammer-head", material, [0.64, 0.34, 0.4], [0, -0.38, 0]);
-  } else if (itemId === "acid_gland_focus") {
-    addBox(root, "dropped-focus-handle", weaponWoodMaterial, [0.1, 0.48, 0.1], [0, 0.08, 0]);
-    addBox(root, "dropped-focus-gland", material, [0.3, 0.32, 0.3], [0, -0.3, 0]);
+  } else if (itemId === "miners_lantern") {
+    addBox(root, "lantern-frame", lanternMetal, [.48, .6, .48], [0, 0, 0]);
+    addBox(root, "lantern-glow", lanternGlow, [.29, .38, .29], [0, 0, 0]);
+    addBox(root, "lantern-handle", lanternMetal, [.52, .08, .1], [0, .43, 0]);
+  } else if (itemId === "healing_potion") {
+    addBox(root, "potion-bottle", material, [.34, .46, .34], [0, -.04, 0]);
+    addBox(root, "potion-neck", eyeWhiteMaterial, [.16, .2, .16], [0, .28, 0]);
+    addBox(root, "potion-cork", weaponWoodMaterial, [.2, .12, .2], [0, .42, 0]);
+  } else if (itemId === "iron_ore" || itemId === "silver_ore" || itemId === "moonstone" || itemId === "ember_core") {
+    addBox(root, "mineral-core", material, [.46, .52, .42], [0, 0, 0]).setLocalEulerAngles(18, 42, 8);
+    addBox(root, "mineral-shard-a", material, [.2, .36, .2], [.28, .08, 0]).setLocalEulerAngles(0, 0, 35);
+    addBox(root, "mineral-shard-b", material, [.16, .28, .16], [-.25, -.04, .12]).setLocalEulerAngles(20, 0, -28);
   } else if (itemId === "crawler_fang") {
     addBox(root, "fang", material, [0.17, 0.48, 0.17], [0, 0, 0]).setLocalEulerAngles(0, 0, 32);
     addBox(root, "fang-tip", material, [0.12, 0.2, 0.12], [0.13, -0.2, 0]).setLocalEulerAngles(0, 0, 45);
@@ -6832,6 +6909,7 @@ app.on("update", (dt: number) => {
       loot.marker.setLocalPosition(0, -.54 - bob, 0);
     }
   }
+  updateLootWorldLabel();
   for (const mob of mobVisuals.values()) {
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
