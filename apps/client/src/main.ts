@@ -1870,6 +1870,9 @@ const lootPanel = document.querySelector<HTMLElement>("#loot-panel")!;
 const lootWorldLabel = document.querySelector<HTMLButtonElement>("#loot-world-label")!;
 const lootWorldName = document.querySelector<HTMLElement>("#loot-world-name")!;
 const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action")!;
+const lootWorldVerdict = document.querySelector<HTMLElement>("#loot-world-verdict")!;
+const lootWorldStats = document.querySelector<HTMLElement>("#loot-world-stats")!;
+const lootWorldCarry = document.querySelector<HTMLElement>("#loot-world-carry")!;
 const lootHeadingLabel = document.querySelector<HTMLElement>(".loot-heading span")!;
 const lootClose = document.querySelector<HTMLButtonElement>("#loot-close")!;
 const lootEquip = document.querySelector<HTMLButtonElement>("#loot-equip")!;
@@ -1881,6 +1884,9 @@ const lootMessage = document.querySelector<HTMLElement>("#loot-message")!;
 let inspectedDropId: string | null = null;
 let lootPending = false;
 const pendingFloorLoot = new Map<string, number>();
+let lootWorldDetailKey = "";
+const LOOT_EQUIP_HOLD_MS = 550;
+let lootEquipHold: { dropId: string; completed: boolean; timeoutId: number } | null = null;
 function closeLoot() {
   lootPanel.hidden = true; inspectedDropId = null; lootPending = false;
 }
@@ -1912,9 +1918,85 @@ function interactWithLoot(dropId: string): void {
   room.send("loot:collect", { dropId, action: "keep" });
   status.textContent = `Picking up ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}...`;
 }
+function beginLootKeyInteraction(): boolean {
+  const dropId = nearestLootDrop();
+  const drop = dropId ? lootVisuals.get(dropId)?.state : undefined;
+  if (!dropId || !drop || !isItemId(drop.itemId)
+    || (!equipmentForItem(drop.itemId) && !armourForItem(drop.itemId))) return false;
+  const itemId = drop.itemId;
+  const hold = { dropId, completed: false, timeoutId: 0 };
+  hold.timeoutId = window.setTimeout(() => {
+    if (lootEquipHold !== hold || nearestLootDrop() !== dropId || !room || !worldReady || !lootPanel.hidden) {
+      if (lootEquipHold === hold) lootEquipHold = null;
+      delete lootWorldLabel.dataset.holding;
+      return;
+    }
+    hold.completed = true;
+    pendingFloorLoot.set(dropId, performance.now() + 2_000);
+    room.send("loot:collect", { dropId, action: "equip", equip: true });
+    status.textContent = `Equipping ${ITEM_DEFINITIONS[itemId].name}...`;
+    lootWorldLabel.dataset.holding = "complete";
+  }, LOOT_EQUIP_HOLD_MS);
+  lootEquipHold = hold;
+  lootWorldLabel.dataset.holding = "true";
+  return true;
+}
+function finishLootKeyInteraction(): void {
+  const hold = lootEquipHold;
+  if (!hold) return;
+  window.clearTimeout(hold.timeoutId);
+  lootEquipHold = null;
+  delete lootWorldLabel.dataset.holding;
+  if (!hold.completed) interactWithLoot(hold.dropId);
+}
+function appendWorldLootStat(label: string, value: string, trend: "better" | "worse" | "same" = "same"): void {
+  const stat = document.createElement("span");
+  stat.dataset.trend = trend;
+  stat.textContent = `${label} ${value}`;
+  lootWorldStats.append(stat, document.createTextNode(" · "));
+}
+function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
+  if (!isItemId(drop.itemId)) return;
+  const owned = inventoryCounts.get(drop.itemId) ?? 0;
+  const hand = equipmentForItem(drop.itemId);
+  const armour = armourForItem(drop.itemId);
+  const detailKey = `${dropId}:${drop.itemId}:${drop.quantity}:${owned}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${equipmentRank(drop.itemId)}`;
+  if (detailKey === lootWorldDetailKey) return;
+  lootWorldDetailKey = detailKey;
+  lootWorldStats.replaceChildren();
+  let verdict = owned > 0 ? "DUPLICATE" : "NEW";
+  if (hand) {
+    const candidate = weaponComparison(hand, localIronSwordOwned || drop.itemId === "forged_sword", equipmentRank(drop.itemId));
+    const worn = weaponComparison(localMainHandId, localIronSwordOwned, equipmentRank(itemForMainHand(localMainHandId)));
+    const damageTrend = comparisonTrend(candidate.damageValue, worn.damageValue);
+    const rangeTrend = comparisonTrend(candidate.rangeValue, worn.rangeValue);
+    const speedTrend = comparisonTrend(candidate.speedValue, worn.speedValue, true);
+    const score = [damageTrend, rangeTrend, speedTrend].reduce((total, trend) => total + (trend === "better" ? 1 : trend === "worse" ? -1 : 0), 0);
+    if (owned === 0) verdict = score > 0 ? "UPGRADE" : "SIDEGRADE";
+    appendWorldLootStat("DMG", candidate.damage, damageTrend);
+    appendWorldLootStat("RANGE", candidate.range, rangeTrend);
+    appendWorldLootStat("SPEED", candidate.speed, speedTrend);
+  } else if (armour) {
+    const candidate = armourComparison(armour, equipmentRank(drop.itemId));
+    const worn = armourComparison(localArmourId, equipmentRank(localArmourId === "none" ? null : localArmourId));
+    const reductionTrend = comparisonTrend(candidate.reductionValue, worn.reductionValue);
+    const speedTrend = comparisonTrend(candidate.speedValue, worn.speedValue);
+    if (owned === 0 && localArmourId !== "none") verdict = reductionTrend === "better" && speedTrend !== "worse" ? "UPGRADE" : "SIDEGRADE";
+    appendWorldLootStat("ARMOUR", candidate.reduction, reductionTrend);
+    appendWorldLootStat("MOVE", candidate.speed, speedTrend);
+    appendWorldLootStat("RANGED", candidate.ranged, comparisonTrend(candidate.rangedValue, worn.rangedValue));
+  } else {
+    const description = document.createElement("span");
+    description.textContent = ITEM_DEFINITIONS[drop.itemId].description;
+    lootWorldStats.append(description);
+  }
+  if (lootWorldStats.lastChild?.nodeType === Node.TEXT_NODE) lootWorldStats.lastChild.remove();
+  lootWorldVerdict.textContent = verdict;
+  lootWorldCarry.textContent = `DROP ×${drop.quantity} · PACK ${owned} → ${owned + drop.quantity}`;
+}
 function updateLootWorldLabel(): void {
   lootWorldLabel.hidden = true;
-  if (!worldReady || !camera.camera || !lootPanel.hidden || !inventoryPanel.hidden || !defeatScreen.hidden) return;
+  if (!worldReady || !camera.camera || !lootPanel.hidden || !inventoryPanel.hidden || !defeatScreen.hidden) { lootWorldDetailKey = ""; return; }
   const nearest = nearestVisibleLootDrop(8);
   if (!nearest) return;
   const drop = lootVisuals.get(nearest.id)?.state;
@@ -1926,9 +2008,11 @@ function updateLootWorldLabel(): void {
   const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
   const rarity = itemRarity(drop.itemId);
   const inspect = lootNeedsInspection(nearest.id, drop);
+  updateLootWorldDetails(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
   lootWorldName.textContent = `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${inspect ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
-  lootWorldAction.textContent = `${near ? `E · ${inspect ? "INSPECT" : "PICK UP"}` : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
+  const equippable = Boolean(equipmentForItem(drop.itemId) || armourForItem(drop.itemId));
+  lootWorldAction.textContent = `${near ? equippable ? "TAP E · INSPECT   HOLD E · EQUIP" : `E · ${inspect ? "INSPECT" : "PICK UP"}` : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.style.left = `${rect.left + screen.x}px`;
   lootWorldLabel.style.top = `${rect.top + screen.y}px`;
@@ -6848,7 +6932,10 @@ window.addEventListener("keydown", event => {
   }
   if (event.code === "KeyQ") setInteractionMode(alternateInteractionMode(interactionMode));
   if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
-  if (event.code === "KeyE") requestPrimaryAction();
+  if (event.code === "KeyE") {
+    event.preventDefault();
+    if (!beginLootKeyInteraction()) requestPrimaryAction();
+  }
   if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyR") {
     activatePowerSlot("primary", false);
@@ -6866,6 +6953,7 @@ window.addEventListener("keydown", event => {
   }
 });
 window.addEventListener("keyup", event => {
+  if (event.code === "KeyE") finishLootKeyInteraction();
   if (event.code === "KeyC") requestDefense(false);
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();

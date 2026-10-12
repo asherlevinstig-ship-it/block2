@@ -13,11 +13,20 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 }
 .loot-panel { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 18px; background: #09120ddd; }
 .loot-panel[hidden] { display: none; }
-#loot-world-label { position: fixed; z-index: 26; min-width: 150px; transform: translate(-50%, -100%); padding: 8px 12px; border: 1px solid #efd07a; border-radius: 8px; background: linear-gradient(180deg, #1c2d24f2, #09130ff4); color: #fff0bd; cursor: pointer; box-shadow: 0 4px 15px #0009, 0 0 18px #e7be5540; font: 800 11px/1.25 system-ui; text-align: center; }
+#loot-world-label { position: fixed; z-index: 26; width: min(270px, calc(100vw - 24px)); transform: translate(-50%, -100%); padding: 9px 12px; border: 1px solid #efd07a; border-radius: 9px; background: linear-gradient(180deg, #1c2d24f5, #09130ff8); color: #fff0bd; cursor: pointer; box-shadow: 0 4px 15px #0009, 0 0 18px #e7be5540; font: 800 11px/1.25 system-ui; text-align: left; }
 #loot-world-label[hidden] { display: none; }
-#loot-world-label strong, #loot-world-label span { display: block; }
-#loot-world-label strong { letter-spacing: .04em; }
-#loot-world-label span { margin-top: 3px; color: #a9c5b1; font-size: 9px; letter-spacing: .08em; }
+#loot-world-label strong, #loot-world-label span, #loot-world-label small, #loot-world-label em { display: block; }
+#loot-world-label strong { margin-top: 2px; font-size: 13px; letter-spacing: .04em; }
+#loot-world-label em { float: right; margin-left: 8px; padding: 2px 5px; border: 1px solid currentColor; border-radius: 999px; font-size: 8px; font-style: normal; letter-spacing: .08em; }
+#loot-world-label small { margin-top: 3px; color: #c5d7cb; font-size: 9px; font-weight: 600; }
+#loot-world-label small [data-trend="better"] { color: #77ed87; }
+#loot-world-label small [data-trend="worse"] { color: #ff8a76; }
+#loot-world-label span { margin-top: 6px; color: #a9c5b1; font-size: 9px; letter-spacing: .06em; text-align: center; }
+#loot-world-hold { display: none; height: 3px; margin-top: 5px; overflow: hidden; border-radius: 3px; background: #ffffff18; }
+#loot-world-hold b { display: block; width: 0; height: 100%; background: currentColor; }
+#loot-world-label[data-holding="true"] #loot-world-hold { display: block; }
+#loot-world-label[data-holding="true"] #loot-world-hold b { animation: loot-hold .55s linear forwards; }
+@keyframes loot-hold { to { width: 100%; } }
 #loot-world-label[data-near="false"] { border-color: #718579; color: #d5dfd4; cursor: default; box-shadow: 0 4px 12px #0007; }
 #loot-world-label[data-rarity="common"] { --rarity: #c3cbc5; }
 #loot-world-label[data-rarity="uncommon"] { --rarity: #68dc72; }
