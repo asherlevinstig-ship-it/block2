@@ -166,7 +166,7 @@ import { MOB_TOWN_MINIMUM_RADIUS, dangerBandAt, isInsideTownSafeZone, keepMobOut
 import { executionerDamageBonus, gainMomentum, guardStaminaCost, momentumAfterDefense, movementSpeedWithMomentum, parryStaminaRestore, staminaRecoveryWithMomentum } from "./trait-rules.js";
 import { compatiblePowerOrFallback, fracturedBlockResult, isGroundPowerTargetInRange, isPowerCompatible, isSeismicAftershockTarget, mobilityAdvanceDistance, powerDirection, powerEvadeDirection, seismicCleaveProfile, selectBurstPowerTargets, selectGroundPowerTargets, selectLinePowerTargets, selectMobilityPowerTarget, widenedLineFractureColumns } from "./power-rules.js";
 import { huntersMarkDamageBonus, huntersMarkPowerPayoff, isBrambleSnareTargetInRange, isInsideBrambleSnare, progressHuntersMark, selectHuntersMarkTarget, type ActiveSpecialMark } from "./special-rules.js";
-import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS } from "./loot-rules.js";
+import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob, LOOT_DESPAWN_MS, NormalLootCadence } from "./loot-rules.js";
 import { findLootLanding } from "./loot-placement.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
@@ -403,6 +403,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly profileSaveQueues = new Map<string, Promise<void>>();
   private readonly quizRounds = new Map<string, QuizRound>();
   private readonly objectiveProgress = new Map<string, WorldObjectiveProgress>();
+  private readonly normalLootCadence = new NormalLootCadence();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, string>();
   private readonly mineralRegrowth = new Map<string, WorldBlockDelta & { regrowAt: number }>();
@@ -1791,8 +1792,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     const definition = combatMobDefinition(mob);
-    if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))
-      for (const playerId of recipients) this.spawnLootDrops(mobId, mob, now, playerId);
+    const recipientsWithLoot = new Set<string>();
+    if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) for (const playerId of recipients) {
+      const fixedReward = mob.isChampion || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
+        || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || mobId === WILDERNESS_EVENT_ID;
+      const cadenceId = this.profileTokens.get(playerId) ?? playerId;
+      if (!fixedReward && !this.normalLootCadence.record(cadenceId, Math.random())) continue;
+      this.spawnLootDrops(mobId, mob, now, playerId);
+      recipientsWithLoot.add(playerId);
+    }
     if (mobId === "buried-chamber-brute") for (const playerId of recipients) this.advanceFirstExpedition(playerId, "defeated_warden");
     this.advanceSilverDepthsEncounter(mobId);
     if (mobId === CRYSTAL_MATRIARCH_ID) {
@@ -1875,7 +1883,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         health: player.health,
         stamina: Math.round(player.stamina),
       } satisfies CombatReward);
-      this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", "Kill contribution credited · your personal loot is on the ground. Press E beside each drop before it expires.");
+      this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", recipientsWithLoot.has(playerId)
+        ? "Kill contribution credited · your personal loot is on the ground. Press E beside each drop before it expires."
+        : "Kill contribution credited · +2 gold and XP. No item drop this time.");
     }
   }
 
@@ -1963,7 +1973,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland", quantity: 3 }, ...signatureDrops("venom_focus")]
       : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "champion")
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
-      : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random())];
+      : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
     const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
     for (const [index, entry] of drops.entries()) {
       const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;

@@ -28,13 +28,14 @@ describe("cooperative personal loot", () => {
   });
   it("rolls optional equipment separately for each contributor", () => {
     const { room, contribute, defeat } = fixture(); vi.mocked(Math.random)
-      .mockReturnValueOnce(.99).mockReturnValueOnce(.01)
-      .mockReturnValueOnce(.99).mockReturnValueOnce(.99);
+      .mockReturnValueOnce(.99).mockReturnValueOnce(.99).mockReturnValueOnce(.01)
+      .mockReturnValueOnce(.99).mockReturnValueOnce(.99).mockReturnValueOnce(.99);
     contribute("a", 4); contribute("b", 4); defeat();
     expect([...room.state.lootDrops.values()].filter(drop => drop.itemId === "leather_armour").map(drop => drop.ownerId)).toEqual(["a"]);
   });
   it("prevents stealing and duplicate collection of another player's equipment", () => {
-    const { room, internal, contribute, defeat } = fixture(); vi.mocked(Math.random).mockReturnValueOnce(.01).mockReturnValue(.99); contribute("a", 8); defeat();
+    const { room, internal, contribute, defeat } = fixture(); vi.mocked(Math.random)
+      .mockReturnValueOnce(.99).mockReturnValueOnce(.01).mockReturnValue(.99); contribute("a", 8); defeat();
     const [id] = [...room.state.lootDrops].find(([, drop]) => drop.itemId === "fang_dagger")!;
     const send = vi.fn(); internal.handleLootCollect({ sessionId: "b", send }, { dropId: id, equip: false });
     expect(send).toHaveBeenLastCalledWith("loot:result", expect.objectContaining({ ok: false })); expect(room.state.lootDrops.has(id)).toBe(true);

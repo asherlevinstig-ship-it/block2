@@ -15,8 +15,26 @@ export const EQUIPMENT_DROP_CHANCES = {
 export type LootThreat = "normal" | "guard" | "champion";
 
 function equipmentChance(itemId: keyof typeof EQUIPMENT_DROP_CHANCES, threat: LootThreat): number {
-  const multiplier = threat === "champion" ? 3 : threat === "guard" ? 1.5 : 1;
-  return Math.min(.4, EQUIPMENT_DROP_CHANCES[itemId] * multiplier);
+  if (threat === "champion") return 1;
+  if (threat === "guard") return .3;
+  return EQUIPMENT_DROP_CHANCES[itemId];
+}
+
+export class NormalLootCadence {
+  private readonly progress = new Map<string, { kills: number; target: number }>();
+
+  record(playerId: string, roll: number): boolean {
+    const nextTarget = 3 + Math.min(2, Math.floor(Math.max(0, Math.min(.999999, Number.isFinite(roll) ? roll : .5)) * 3));
+    const current = this.progress.get(playerId);
+    if (!current) {
+      this.progress.set(playerId, { kills: 0, target: nextTarget });
+      return true;
+    }
+    current.kills++;
+    if (current.kills < current.target) return false;
+    this.progress.set(playerId, { kills: 0, target: nextTarget });
+    return true;
+  }
 }
 
 export function armourDropForMob(archetype: string, tier: number, roll: number): { itemId: ItemId; quantity: number }[] {
@@ -43,11 +61,11 @@ const MATERIAL_LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: Item
   ],
 };
 
-export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipmentRoll = 1, threat: LootThreat = "normal"): readonly { itemId: ItemId; quantity: number }[] {
+export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipmentRoll = 1, threat: LootThreat = "normal", consumableRoll = 1): readonly { itemId: ItemId; quantity: number }[] {
   const guard = archetypeId === "cave_spitter" && isSilverGuard(mobId);
   const effectiveThreat = threat === "champion" ? threat : guard ? "guard" : threat;
   const materials = guard
-    ? [{ itemId: "acid_gland" as const, quantity: 2 }, { itemId: "healing_potion" as const, quantity: 1 }]
+    ? [{ itemId: "acid_gland" as const, quantity: 2 }, ...(consumableRoll < .18 ? [{ itemId: "healing_potion" as const, quantity: 1 }] : [])]
     : [...MATERIAL_LOOT_BY_ARCHETYPE[archetypeId]];
   const equipmentId = archetypeId === "moss_crawler" || archetypeId === "briar_crawler" ? "fang_dagger"
     : archetypeId === "stone_brute" ? "stone_core_hammer"

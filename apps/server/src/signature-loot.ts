@@ -4,8 +4,8 @@ export type SignatureItemId = Extract<ItemId, "matriarch_edge" | "venom_focus">;
 export type SignaturePity = Partial<Record<SignatureItemId, number>>;
 
 export const SIGNATURE_DROP_RULES: Record<SignatureItemId, { chance: number; guaranteedBy: number; source: string }> = {
-  matriarch_edge: { chance: .15, guaranteedBy: 5, source: "Crystal Matriarch" },
-  venom_focus: { chance: .12, guaranteedBy: 6, source: "Venom Matriarch" },
+  matriarch_edge: { chance: .25, guaranteedBy: 4, source: "Crystal Matriarch" },
+  venom_focus: { chance: .2, guaranteedBy: 5, source: "Venom Matriarch" },
 };
 
 export type SignatureDropResult = {
