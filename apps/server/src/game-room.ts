@@ -88,6 +88,7 @@ import {
   type CombatReward,
   type CombatStagger,
   type DefenseResolved,
+  type DepthsRouteHazard,
   type MainHandId,
   type MobHazardPlaced,
   type MobProjectileReleased,
@@ -385,6 +386,9 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private instancePartySize = 1;
   private silverDepthsEncounterStage: SilverDepthsEncounterStage = 1;
   private silverDepthsWing: SilverDepthsWing | null = null;
+  private silverDepthsNextHazardAt = 0;
+  private silverDepthsHazardSequence = 0;
+  private readonly silverDepthsPendingHazards: DepthsRouteHazard[] = [];
   private silverDepthsSealOpened = false;
   private silverInstanceSequence = 0;
 
@@ -1934,6 +1938,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       return;
     }
     this.silverDepthsWing = parsed.data.wing;
+    this.silverDepthsNextHazardAt = Date.now() + 3_500;
     this.setSilverDepthsWingGate(this.silverDepthsWing === "iron" ? SILVER_DEPTHS_IRON_GATE : SILVER_DEPTHS_SILVER_GATE,
       true, `${this.silverDepthsWing}-wing-gate`);
     for (const id of this.activeSilverDepthsParticipants()) {
@@ -1991,6 +1996,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!cleared || entry.stage === 4) return;
     const nextStage = (entry.stage + 1) as SilverDepthsEncounterStage;
     this.silverDepthsEncounterStage = nextStage;
+    if (entry.stage === 2) {
+      this.silverDepthsNextHazardAt = 0;
+      this.silverDepthsPendingHazards.length = 0;
+    }
     if (entry.stage === 1) {
       this.setSilverDepthsRunStage(3);
       for (const id of this.activeSilverDepthsParticipants()) this.clients.find(client => client.sessionId === id)?.send("portal:notice",
@@ -2014,6 +2023,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     for (const id of SILVER_DEPTHS_ENEMY_IDS) this.state.mobs.delete(id);
     for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:")) this.state.lootDrops.delete(id);
     this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false; this.silverDepthsWing = null;
+    this.silverDepthsNextHazardAt = 0; this.silverDepthsPendingHazards.length = 0;
     this.setSilverDepthsWingGate(SILVER_DEPTHS_IRON_GATE, false, "iron-wing-gate");
     this.setSilverDepthsWingGate(SILVER_DEPTHS_SILVER_GATE, false, "silver-wing-gate");
     this.setSilverDepthsGate(SILVER_DEPTHS_GALLERY_GATE, false, "gallery-gate");
@@ -2598,6 +2608,47 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
+  private advanceSilverDepthsRouteHazards(now: number): void {
+    if (this.roomKind !== "silver-depths" || this.silverDepthsEncounterStage !== 2 || !this.silverDepthsWing) return;
+    const wing = this.silverDepthsWing;
+    const inWing = (player: PlayerState) => player.health > 0 && player.y >= .8 && player.y <= 5.2
+      && player.x >= 88 && player.x <= 112
+      && (wing === "iron" ? player.z >= -14 && player.z <= 2 : player.z >= 27 && player.z <= 35);
+    const participants = this.activeSilverDepthsParticipants()
+      .flatMap(id => { const player = this.state.players.get(id); return player && inWing(player) ? [{ id, player }] : []; });
+    if (participants.length && now >= this.silverDepthsNextHazardAt) {
+      const sequence = ++this.silverDepthsHazardSequence;
+      const impactAt = now + (wing === "iron" ? 1_500 : 1_700);
+      const sites = wing === "iron"
+        ? [{ x: participants[(sequence - 1) % participants.length]!.player.x,
+          z: participants[(sequence - 1) % participants.length]!.player.z, radius: 1.8 }]
+        : sequence % 2
+          ? [{ x: 96.5, z: 29.5, radius: 2.3 }, { x: 105.5, z: 32.5, radius: 2.3 }]
+          : [{ x: 96.5, z: 32.5, radius: 2.3 }, { x: 105.5, z: 29.5, radius: 2.3 }];
+      for (const [index, site] of sites.entries()) {
+        const hazard: DepthsRouteHazard = { hazardId: `depths-${wing}-${sequence}-${index}`,
+          kind: wing === "iron" ? "falling-rock" : "crystal-pulse", x: site.x, y: 1, z: site.z,
+          radius: site.radius, impactAt, expiresAt: impactAt + 550 };
+        this.silverDepthsPendingHazards.push(hazard);
+        this.broadcast("depths:hazard", hazard);
+      }
+      this.silverDepthsNextHazardAt = now + (wing === "iron" ? 5_200 : 5_800);
+    }
+    for (let index = this.silverDepthsPendingHazards.length - 1; index >= 0; index--) {
+      const hazard = this.silverDepthsPendingHazards[index]!;
+      if (now < hazard.impactAt) continue;
+      this.silverDepthsPendingHazards.splice(index, 1);
+      this.broadcast("depths:hazard-impact", hazard);
+      for (const { id, player } of participants) {
+        if (Math.hypot(player.x - hazard.x, player.z - hazard.z) <= hazard.radius
+          && this.damagePlayer("depths-environment", id, wing === "iron" ? 2 : 1, now, false, "hazard")) {
+          this.clients.find(client => client.sessionId === id)?.send("portal:notice",
+            wing === "iron" ? "FALLING ROCK · move out of the marked circle!" : "CRYSTAL PULSE · dodge into the clear lane!");
+        }
+      }
+    }
+  }
+
   private handleMove(client: Client, payload: unknown): void {
     const parsed = MoveRequestSchema.safeParse(payload);
     if (!parsed.success) return this.reject(client, { action: "move", reason: "payload" });
@@ -2735,6 +2786,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     this.resolveBrambleSnares(now);
     this.resolveMobProjectiles(now);
     this.resolveMobHazards(now);
+    this.advanceSilverDepthsRouteHazards(now);
     if (this.roomKind === "overworld") {
       this.advanceWildernessEvent(now);
       for (const pack of ROAMING_PACKS) {

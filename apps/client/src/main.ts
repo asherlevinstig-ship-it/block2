@@ -98,6 +98,7 @@ import {
   type CombatReward,
   type CombatStagger,
   type DefenseResolved,
+  type DepthsRouteHazard,
   type DungeonRunUpdate,
   type DungeonRewardClaimed,
   type DungeonBoardUpdate,
@@ -2357,6 +2358,13 @@ interface MobHazardVisual {
   expiresAt: number;
 }
 
+interface DepthsHazardVisual {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  impactAt: number;
+  expiresAt: number;
+}
+
 const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
@@ -2367,6 +2375,7 @@ let nextNearMissAt = 0;
 // Retain impact style after the short-lived mesh ends, until server confirmation arrives.
 const projectileWeapons = new Map<string, MainHandId>();
 const mobHazardVisuals = new Map<string, MobHazardVisual>();
+const depthsHazardVisuals = new Map<string, DepthsHazardVisual>();
 let powerAimVisual: PowerAimVisual | null = null;
 let specialAimVisual: PowerAimVisual | null = null;
 
@@ -2456,6 +2465,25 @@ function createMobHazard(message: MobHazardPlaced): void {
   root.setPosition(message.x, message.y + 0.015, message.z);
   app.root.addChild(root);
   mobHazardVisuals.set(message.hazardId, { root, material, expiresAt: message.expiresAt });
+}
+
+function createDepthsHazard(message: DepthsRouteHazard): void {
+  depthsHazardVisuals.get(message.hazardId)?.root.destroy();
+  const root = new pc.Entity(`depths-hazard:${message.hazardId}`);
+  const rock = message.kind === "falling-rock";
+  const material = powerMaterial(rock ? new pc.Color(1, .48, .12) : new pc.Color(.72, .32, 1), .7);
+  for (let index = 0; index < 16; index++) {
+    const angle = index / 16 * Math.PI * 2;
+    const marker = addBox(root, "impact-warning", material, [.38, .035, .12],
+      [Math.sin(angle) * message.radius, .045, Math.cos(angle) * message.radius]);
+    marker.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+  }
+  const center = addBox(root, rock ? "falling-rock-shadow" : "crystal-pulse-core", material,
+    rock ? [.5, .04, .5] : [.36, .07, .36], [0, .055, 0]);
+  center.setLocalEulerAngles(0, 45, 0);
+  root.setPosition(message.x, message.y, message.z);
+  app.root.addChild(root);
+  depthsHazardVisuals.set(message.hazardId, { root, material, impactAt: message.impactAt, expiresAt: message.expiresAt });
 }
 
 function startPowerTelegraph(
@@ -6714,6 +6742,17 @@ app.on("update", (dt: number) => {
     hazard.material.opacity = 0.5 + Math.sin(animationTime * 9) * 0.1;
     hazard.material.update();
   }
+  for (const [hazardId, hazard] of depthsHazardVisuals) {
+    const now = Date.now();
+    if (now >= hazard.expiresAt) {
+      hazard.root.destroy(); hazard.material.destroy(); depthsHazardVisuals.delete(hazardId);
+      continue;
+    }
+    const remaining = Math.max(0, (hazard.impactAt - now) / 1_700);
+    hazard.material.opacity = now < hazard.impactAt ? .34 + (1 - remaining) * .5 + Math.sin(animationTime * 14) * .08 : .9;
+    hazard.material.update();
+    hazard.root.setLocalScale(now < hazard.impactAt ? 1 : 1.25, 1, now < hazard.impactAt ? 1 : 1.25);
+  }
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
   const powerFraction = powerRemaining / POWER_DEFINITIONS[localEquippedPower].cooldownMs;
@@ -7160,6 +7199,11 @@ async function connect(): Promise<void> {
     createMobHazard(message);
     logMovementEvent(`ACID POOL ${message.hazardId}`);
   });
+  room.onMessage("depths:hazard", (message: DepthsRouteHazard) => createDepthsHazard(message));
+  room.onMessage("depths:hazard-impact", (message: DepthsRouteHazard) => {
+    const visual = depthsHazardVisuals.get(message.hazardId);
+    if (visual) { visual.impactAt = 0; visual.expiresAt = Math.min(visual.expiresAt, Date.now() + 450); }
+  });
   room.onMessage("power:cast", (message: PowerCast) => {
     if (message.casterId !== room?.sessionId) {
       const telegraphPosition = message.target ?? message;
@@ -7565,6 +7609,8 @@ async function connect(): Promise<void> {
     projectileWeapons.clear();
     for (const hazard of mobHazardVisuals.values()) hazard.root.destroy();
     mobHazardVisuals.clear();
+    for (const hazard of depthsHazardVisuals.values()) { hazard.root.destroy(); hazard.material.destroy(); }
+    depthsHazardVisuals.clear();
     updatePlayerCount();
   });
   room.send("world:ready");

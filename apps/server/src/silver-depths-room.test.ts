@@ -206,6 +206,47 @@ describe("Silver Depths room travel", () => {
     expect(room.state.lootDrops.has("depths-wing-reward:friend")).toBe(false);
   });
 
+  it("warns before an Iron Bastion rock and only hurts players still in its marked circle", () => {
+    const { room, player } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.roomKind = "silver-depths"; internal.silverDepthsEncounterStage = 2; internal.silverDepthsWing = "iron";
+    internal.silverDepthsRuns.set("miner", { completedAt: 0 });
+    Object.assign(player, { x: 100.5, y: 1, z: -6.5, health: 5, maxHealth: 5, invulnerableUntil: 0 });
+    internal.silverDepthsNextHazardAt = 1_000;
+    internal.advanceSilverDepthsRouteHazards(1_000);
+    expect(room.broadcast).toHaveBeenCalledWith("depths:hazard", expect.objectContaining({ kind: "falling-rock", impactAt: 2_500 }));
+    internal.advanceSilverDepthsRouteHazards(2_499);
+    expect(player.health).toBe(5);
+    player.x = 104.5;
+    internal.advanceSilverDepthsRouteHazards(2_500);
+    expect(player.health).toBe(5);
+    internal.silverDepthsNextHazardAt = 8_000;
+    internal.advanceSilverDepthsRouteHazards(8_000);
+    internal.advanceSilverDepthsRouteHazards(9_500);
+    expect(player.health).toBe(3);
+  });
+
+  it("pulses Silver Echo lanes while leaving a safe middle corridor and stops after the wave", () => {
+    const { room, player } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.roomKind = "silver-depths"; internal.silverDepthsEncounterStage = 2; internal.silverDepthsWing = "silver";
+    internal.silverDepthsRuns.set("miner", { completedAt: 0 });
+    Object.assign(player, { x: 100.5, y: 1, z: 31.5, health: 5, maxHealth: 5, invulnerableUntil: 0 });
+    internal.silverDepthsNextHazardAt = 1_000;
+    internal.advanceSilverDepthsRouteHazards(1_000);
+    expect(vi.mocked(room.broadcast).mock.calls.filter(([type]) => type === "depths:hazard")).toHaveLength(2);
+    internal.advanceSilverDepthsRouteHazards(2_700);
+    expect(player.health).toBe(5);
+    Object.assign(player, { x: 96.5, z: 32.5 });
+    internal.silverDepthsNextHazardAt = 8_000;
+    internal.advanceSilverDepthsRouteHazards(8_000);
+    internal.advanceSilverDepthsRouteHazards(9_700);
+    expect(player.health).toBe(4);
+    internal.silverDepthsEncounterStage = 3;
+    internal.advanceSilverDepthsRouteHazards(16_000);
+    expect(vi.mocked(room.broadcast).mock.calls.filter(([type]) => type === "depths:hazard")).toHaveLength(4);
+  });
+
   it("only transfers back to the overworld after the fixed boss weapon is claimed", async () => {
     const { room, player, client } = roomWithPortal("depths-return");
     (room as any).roomKind = "silver-depths";

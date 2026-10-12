@@ -833,6 +833,17 @@ export interface MobHazardPlaced {
   expiresAt: number;
 }
 
+export interface DepthsRouteHazard {
+  hazardId: string;
+  kind: "falling-rock" | "crystal-pulse";
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  impactAt: number;
+  expiresAt: number;
+}
+
 export interface PlayerHit {
   mobId: string;
   playerId: string;
