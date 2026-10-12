@@ -19,6 +19,7 @@ import { inventoryRenderDue } from "./inventory-render-budget.js";
 import { nextInventoryTab, type InventoryTab } from "./inventory-tabs.js";
 import { inventoryItemVisible } from "./inventory-ownership.js";
 import { playerHud } from "./player-hud.js";
+import { combatHud, cooldownState } from "./combat-hud.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
@@ -490,23 +491,18 @@ const traitDetail = document.querySelector<HTMLElement>("#trait-detail")!;
 const traitBonus = document.querySelector<HTMLElement>("#trait-bonus")!;
 const traitPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#trait-picker [data-trait]")];
 const momentumPips = [...document.querySelectorAll<HTMLElement>("#momentum-pips i")];
+const combatHudRoot = document.querySelector<HTMLElement>("#combat-hud-root")!;
+if (!combatHudRoot) throw new Error("Combat HUD root is missing");
+combatHud.mount(combatHudRoot);
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
-const powerName = document.querySelector<HTMLElement>("#power-name")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
 const powerLoadoutButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-loadout-slots [data-power-slot]")];
 const characterMilestones = document.querySelector<HTMLElement>("#character-milestones")!;
 const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
-const mainHandName = document.querySelector<HTMLElement>("#main-hand-name")!;
-const mainHandAttack = document.querySelector<HTMLElement>("#main-hand-attack")!;
-const powerCooldownFill = document.querySelector<HTMLElement>("#power-cooldown-fill")!;
-const powerCooldownLabel = document.querySelector<HTMLElement>("#power-cooldown-label")!;
 const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
 const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("#seismic-mastery-picker [data-seismic-mastery]")];
 const specialSlot = document.querySelector<HTMLButtonElement>("#special-slot")!;
-const specialName = document.querySelector<HTMLElement>("#special-name")!;
 const specialPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#special-picker [data-special]")];
-const specialCooldownFill = document.querySelector<HTMLElement>("#special-cooldown-fill")!;
-const specialCooldownLabel = document.querySelector<HTMLElement>("#special-cooldown-label")!;
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
 const combatFeedback = document.querySelector<HTMLElement>("#combat-feedback")!;
@@ -585,7 +581,7 @@ const specialButton = document.querySelector<HTMLButtonElement>("#special-button
 const touchModeButton = document.querySelector<HTMLButtonElement>("#touch-mode-button")!;
 const touchModeLabel = document.querySelector<HTMLElement>("#touch-mode-label")!;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-toggle [data-mode]")];
-if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !powerName || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || !specialName || !specialCooldownFill || !specialCooldownLabel || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !mainHandName || !mainHandAttack || !powerCooldownFill || !powerCooldownLabel || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
+if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
 if ([quizTablePrompt, blacksmithPrompt, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
@@ -2279,29 +2275,13 @@ function isTraitId(value: string): value is TraitId {
 }
 
 function refreshPowerCompatibility(): void {
-  const mainHand = MAIN_HAND_DEFINITIONS[localMainHandId];
-  mainHandName.textContent = localMainHandId === "longsword" && localIronSwordOwned ? "Iron Sword · +1 DMG" : mainHand.name;
-  mainHandAttack.textContent = mainHand.attackName;
+  combatHud.setWeapon(localMainHandId, localIronSwordOwned);
   refreshInventoryEquipped();
-  for (const button of mainHandPickerButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.mainHand === localMainHandId));
-  }
   for (const button of inventoryEquipButtons) {
     const equipped = button.dataset.equipMainHand === localMainHandId;
     button.setAttribute("aria-pressed", String(equipped));
     button.textContent = equipped ? "EQUIPPED" : "EQUIP";
   }
-  for (const button of powerPickerButtons) {
-    const powerId = button.dataset.power;
-    if (!powerId || !isPowerId(powerId)) continue;
-    const compatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[powerId], localMainHandId);
-    button.disabled = !compatible;
-    button.title = compatible
-      ? `${POWER_DEFINITIONS[powerId].name} is compatible with ${mainHand.name}`
-      : `${POWER_DEFINITIONS[powerId].name} requires a melee main hand`;
-  }
-  const equippedCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
-  powerSlot.classList.toggle("incompatible", !equippedCompatible);
   setRigMainHand(localPlayerRig, localMainHandId);
 }
 
@@ -2459,11 +2439,13 @@ function refreshInventoryPreview(): void {
 function updatePowerLoadout(powerId: PowerId): void {
   localPrimaryPower = powerId;
   if (activePowerSlot === "primary") activatePowerSlot("primary", false);
+  else combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, localCharacterProgression.level);
 }
 
 function updateSecondaryPowerLoadout(powerId: PowerId): void {
   localSecondaryPower = powerId;
   if (activePowerSlot === "secondary") activatePowerSlot("secondary", false);
+  else combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, localCharacterProgression.level);
 }
 
 function activatePowerSlot(slot: "primary" | "secondary", announce = true): boolean {
@@ -2473,32 +2455,15 @@ function activatePowerSlot(slot: "primary" | "secondary", announce = true): bool
   }
   activePowerSlot = slot;
   localEquippedPower = slot === "primary" ? localPrimaryPower : localSecondaryPower;
-  const powerId = localEquippedPower;
-  const definition = POWER_DEFINITIONS[powerId];
-  powerName.textContent = definition.name;
-  powerSlot.setAttribute("aria-label", `Use ${definition.name}`);
-  seismicUpgrades.hidden = powerId !== "seismic_cleave";
+  combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, localCharacterProgression.level);
   updateControlsHelp();
-  for (const button of powerPickerButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.power === powerId));
-  }
-  for (const button of powerLoadoutButtons) {
-    const buttonSlot = button.dataset.powerSlot as "primary" | "secondary";
-    const locked = buttonSlot === "secondary" && localCharacterProgression.level < 3;
-    button.disabled = locked;
-    button.setAttribute("aria-pressed", String(buttonSlot === activePowerSlot));
-    const equipped = buttonSlot === "primary" ? localPrimaryPower : localSecondaryPower;
-    button.querySelector("strong")!.textContent = locked ? "LOCKED · LV 3" : POWER_DEFINITIONS[equipped].name.toUpperCase();
-  }
   refreshPowerCompatibility();
   return true;
 }
 
 function updateSeismicMastery(masteryId: SeismicMasteryId): void {
   localSeismicMastery = masteryId;
-  for (const button of seismicMasteryButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.seismicMastery === masteryId));
-  }
+  combatHud.setSeismicMastery(masteryId);
 }
 
 function requestSeismicMastery(masteryId: SeismicMasteryId): void {
@@ -2527,14 +2492,8 @@ function updateControlsHelp(): void {
 
 function updateSpecialLoadout(specialId: SpecialId): void {
   localEquippedSpecial = specialId;
-  const definition = SPECIAL_DEFINITIONS[specialId];
-  specialName.textContent = definition.name;
-  specialSlot.setAttribute("aria-label", `Use ${definition.name}`);
+  combatHud.setSpecial(specialId);
   specialButton.textContent = specialId === "venom_fan" ? "Fan" : specialId === "hunters_mark" ? "Mark" : "Snare";
-  for (const button of specialPickerButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.special === specialId));
-    button.disabled = specialId === "venom_fan";
-  }
   updateControlsHelp();
 }
 
@@ -2624,6 +2583,7 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
   localCharacterProgression = update;
   const required = Math.max(0, update.experienceRequired);
   playerHud.setProgression(update.level, update.experience, required);
+  combatHud.setPowerLoadout(localPrimaryPower, localSecondaryPower, activePowerSlot, update.level);
   inventoryLevel.textContent = required > 0 ? `${update.level} · ${update.experience}/${required} XP` : `${update.level} · MAX`;
   characterPoints.textContent = update.unspentStatPoints > 0 ? `${update.unspentStatPoints} POINT${update.unspentStatPoints === 1 ? "" : "S"} AVAILABLE` : "NO POINTS AVAILABLE";
   statPower.textContent = `${update.powerPoints} · +${characterPowerBonus(update.powerPoints)} damage`;
@@ -6553,7 +6513,7 @@ function beginPowerAim(pointerId: number | null = null): void {
   localFacingYaw = powerAimYaw;
   createPowerAimVisual();
   updatePowerAimVisual();
-  powerSlot.classList.add("aiming");
+  combatHud.setPowerAiming(true);
   powerButton.classList.add("aiming");
   showCombatFeedback(`AIM ${definition.name.toUpperCase()}`, "dodge");
   status.textContent = definition.core === "ground"
@@ -6567,7 +6527,7 @@ function cancelPowerAim(): void {
   powerAimPointerId = null;
   powerAimKey = null;
   destroyPowerAimVisual();
-  powerSlot.classList.remove("aiming");
+  combatHud.setPowerAiming(false);
   powerButton.classList.remove("aiming");
   showCombatFeedback("POWER CANCELLED", "dodge");
 }
@@ -6629,7 +6589,7 @@ function commitPowerAim(): void {
   powerAimPointerId = null;
   powerAimKey = null;
   destroyPowerAimVisual();
-  powerSlot.classList.remove("aiming");
+  combatHud.setPowerAiming(false);
   powerButton.classList.remove("aiming");
   castPower(yaw, target);
 }
@@ -6735,7 +6695,7 @@ function beginSpecialAim(pointerId: number | null = null): void {
   localFacingYaw = specialAimYaw;
   createSpecialAimVisual();
   updateSpecialAimVisual();
-  specialSlot.classList.add("aiming");
+  combatHud.setSpecialAiming(true);
   specialButton.classList.add("aiming");
   showCombatFeedback("AIM BRAMBLE SNARE", "dodge");
   status.textContent = "Placing Bramble Snare · point within range, release to arm, dodge to cancel.";
@@ -6746,7 +6706,7 @@ function cancelSpecialAim(): void {
   specialAimActive = false;
   specialAimPointerId = null;
   destroySpecialAimVisual();
-  specialSlot.classList.remove("aiming");
+  combatHud.setSpecialAiming(false);
   specialButton.classList.remove("aiming");
   showCombatFeedback("SPECIAL CANCELLED", "dodge");
 }
@@ -6764,7 +6724,7 @@ function commitSpecialAim(): void {
   specialAimActive = false;
   specialAimPointerId = null;
   destroySpecialAimVisual();
-  specialSlot.classList.remove("aiming");
+  combatHud.setSpecialAiming(false);
   specialButton.classList.remove("aiming");
   localSpecialCooldownUntil = Date.now() + BRAMBLE_SNARE.cooldownMs;
   specialSequence += 1;
@@ -6811,7 +6771,7 @@ function setInteractionMode(mode: InteractionMode): void {
   const cancelledMining = mode !== "build" && Boolean(miningSwing || pendingMine);
   interactionMode = mode;
   if (mode !== "build") cancelMining("mode");
-  for (const button of modeButtons) button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
+  combatHud.setMode(mode);
   mineButton.textContent = mode === "build" ? "Mine" : "Attack";
   mineButton.dataset.mode = mode;
   touchModeLabel.textContent = mode === "build" ? "Build" : "Combat";
@@ -7756,29 +7716,14 @@ app.on("update", (dt: number) => {
   }
   const powerRemaining = Math.max(0, localPowerCooldownUntil - Date.now());
   const powerCompatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[localEquippedPower], localMainHandId);
-  const powerFraction = powerRemaining / POWER_DEFINITIONS[localEquippedPower].cooldownMs;
-  powerCooldownFill.style.width = `${Math.max(0, Math.min(1, powerFraction)) * 100}%`;
-  powerCooldownLabel.textContent = !powerServerReady
-    ? "SERVER UPDATE"
-    : !powerCompatible
-      ? "INCOMPATIBLE"
-    : powerAimActive
-      ? "RELEASE TO CAST"
-    : powerRemaining > 0
-      ? `${(powerRemaining / 1000).toFixed(1)}s`
-      : "READY · R";
-  powerSlot.classList.toggle("ready", powerServerReady && powerCompatible && powerRemaining <= 0 && !powerAimActive);
   powerButton.textContent = !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
   const specialRemaining = Math.max(0, localSpecialCooldownUntil - Date.now());
   const specialDefinition = SPECIAL_DEFINITIONS[localEquippedSpecial];
-  const specialFraction = specialRemaining / specialDefinition.cooldownMs;
-  specialCooldownFill.style.width = `${Math.max(0, Math.min(1, specialFraction)) * 100}%`;
-  specialCooldownLabel.textContent = specialAimActive
-    ? "RELEASE TO ARM"
-    : specialRemaining > 0
-      ? `${(specialRemaining / 1000).toFixed(1)}s`
-      : "READY · F";
-  specialSlot.classList.toggle("ready", specialRemaining <= 0 && !specialAimActive);
+  combatHud.setCooldowns(
+    cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY · R",
+      !powerServerReady ? "SERVER UPDATE" : !powerCompatible ? "INCOMPATIBLE" : powerAimActive ? "RELEASE TO CAST" : undefined),
+    cooldownState(specialRemaining, specialDefinition.cooldownMs, "READY · F", specialAimActive ? "RELEASE TO ARM" : undefined),
+  );
   specialButton.textContent = specialAimActive
     ? "Release"
     : specialRemaining > 0

@@ -60,45 +60,7 @@
         <small id="trait-detail">Hits build movement speed and stamina recovery</small>
       </div>
       <p id="exit-guide" hidden>EXIT ↑ · FOLLOW THE GOLD BLOCKS</p>
-      <div id="mode-toggle" role="group" aria-label="Primary action mode">
-        <button type="button" data-mode="build" aria-pressed="true">BUILD</button>
-        <button type="button" data-mode="combat" aria-pressed="false">COMBAT</button>
-      </div>
-      <div id="main-hand-loadout">
-        <p><span>MAIN HAND</span><strong id="main-hand-name">Longsword</strong><em id="main-hand-attack">Sword Combo</em></p>
-        <div id="main-hand-picker" role="group" aria-label="Main-hand weapon">
-          <button type="button" data-main-hand="longsword" aria-pressed="true">SWORD</button>
-          <button type="button" data-main-hand="bow" aria-pressed="false">BOW</button>
-          <button type="button" data-main-hand="magic_focus" aria-pressed="false">FOCUS</button>
-        </div>
-      </div>
-      <div id="power-picker" role="group" aria-label="Equipped Power">
-        <button type="button" data-power="shockwave" aria-pressed="true">SHOCKWAVE</button>
-        <button type="button" data-power="seismic_cleave" aria-pressed="false">SEISMIC</button>
-        <button type="button" data-power="eruption" aria-pressed="false">ERUPTION</button>
-        <button type="button" data-power="lunge_strike" aria-pressed="false">LUNGE</button>
-      </div>
-      <div id="power-loadout-slots" role="group" aria-label="Power loadout slots">
-        <button type="button" data-power-slot="primary" aria-pressed="true"><span>R</span><strong>PRIMARY</strong></button>
-        <button type="button" data-power-slot="secondary" aria-pressed="false"><span>T</span><strong>LOCKED · LV 3</strong></button>
-      </div>
-      <button id="power-slot" type="button" aria-label="Use Shockwave">
-        <span>POWER</span><strong id="power-name">Shockwave</strong><em id="power-cooldown-label">READY · R</em><i id="power-cooldown-fill"></i>
-      </button>
-      <section id="seismic-upgrades" hidden aria-label="Seismic Cleave upgrades">
-        <p><span>ACTIVE AUGMENTS</span><strong>Fault Reach · Aftershock</strong></p>
-        <div id="seismic-mastery-picker" role="group" aria-label="Seismic Cleave mastery">
-          <button type="button" data-seismic-mastery="advancing_fault" aria-pressed="true"><strong>ADVANCING</strong><small>Focused · mobile</small></button>
-          <button type="button" data-seismic-mastery="tectonic_stand" aria-pressed="false"><strong>TECTONIC</strong><small>Wide · planted</small></button>
-        </div>
-      </section>
-      <div id="special-picker" role="group" aria-label="Equipped Special">
-        <button type="button" data-special="hunters_mark" aria-pressed="true">MARK</button>
-        <button type="button" data-special="bramble_snare" aria-pressed="false">SNARE</button>
-      </div>
-      <button id="special-slot" type="button" aria-label="Use Hunter's Mark">
-        <span>SPECIAL</span><strong id="special-name">Hunter's Mark</strong><em id="special-cooldown-label">READY · F</em><i id="special-cooldown-fill"></i>
-      </button>
+      <div id="combat-hud-root"></div>
       <p id="controls-help" class="controls">WASD move · Arrows camera · I inventory · Space dodge/cancel · R Power · F Special · Q mode · E/click acts</p>
     </section>
     <aside id="world-objective" aria-live="polite" hidden>
