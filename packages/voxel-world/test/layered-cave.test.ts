@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Block, CAVE_ORE_POCKETS, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, CHUNK_HEIGHT, generateChunk, getBlock, setBlock, worldToChunk, isPlayerSupported, playerCollides, resolvePlayerMotion, isProtectedVoxel, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE } from "../src/index.js";
+import { Block, CAVE_ORE_POCKETS, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, CHUNK_HEIGHT, generateChunk, getBlock, setBlock, worldToChunk, isPlayerSupported, playerCollides, resolvePlayerMotion, isProtectedVoxel, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE } from "../src/index.js";
 function fixture(seed: string) {
   const chunks = new Map<string, ReturnType<typeof generateChunk>>();
   const chunkAt = (x: number, z: number) => {
@@ -78,7 +78,7 @@ describe("two-level mine", () => {
       expect(read(82, 1, z)).toBe(Block.MoonstoneOre);
       expect(read(82, 2, z)).toBe(Block.Air);
     }
-    // Gallery plus north and south exploration wings are connected and supported.
+    // Gallery plus north and south exploration wings have supported floors.
     for (const [x, z] of [[90, 5], [105, 24], [96, -10], [100, 33], [114, 15], [120, 15]]) {
       expect(read(x!, 1, z!)).toBe(Block.Air);
       expect(read(x!, 0, z!)).not.toBe(Block.Air);
@@ -93,12 +93,19 @@ describe("two-level mine", () => {
       expect(isProtectedVoxel(gate.x, gate.minZ)).toBe(true);
       for (let z = gate.minZ; z <= gate.maxZ; z++) for (let y = 1; y <= 4; y++) expect(read(gate.x, y, z)).toBe(Block.Stone);
     }
+    for (const gate of [SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE]) {
+      expect(isProtectedVoxel(gate.minX, gate.z)).toBe(true);
+      for (let x = gate.minX; x <= gate.maxX; x++) for (let y = 1; y <= 4; y++) expect(read(x, y, gate.z)).toBe(Block.Stone);
+    }
 
-    // Once encounter victories open both protected gates, every authored room
+    // Once the route doors and encounter gates are opened, every authored room
     // has a connected, collision-safe route from the arrival chamber.
     for (let z = 10; z <= 15; z++) mine(82, 1, z);
     for (const gate of [SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE]) {
       for (let z = gate.minZ; z <= gate.maxZ; z++) for (let y = 1; y <= 4; y++) mine(gate.x, y, z);
+    }
+    for (const gate of [SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE]) {
+      for (let x = gate.minX; x <= gate.maxX; x++) for (let y = 1; y <= 4; y++) mine(x, y, gate.z);
     }
     const key = (x: number, z: number) => `${x}:${z}`;
     const reached = new Set<string>([key(63, 12)]), queue: [number, number][] = [[63, 12]];

@@ -25,6 +25,16 @@ describe("world objective director", () => {
     expect(objective.targetMobIds).toHaveLength(3);
     expect(objective.title).toBe("Frontier Warband");
   });
+  it("guides Silver Depths players to their chosen wing instead of unspawned enemies", () => {
+    const pose = { ...player(94, 14, 1), miningExpeditionStage: 8, silverDepthsStage: 3,
+      silverDepthsRunStage: 3, silverDepthsWing: "" };
+    expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Choose a Crystal Wing");
+    pose.silverDepthsWing = "silver";
+    const update = nearbyObjective("tester", pose, [], [], [], 10000, null);
+    expect(update.title).toBe("Clear the Silver Echo");
+    expect(update.targetMobIds).toEqual(["depths-silver-spitter-a", "depths-silver-crawler", "depths-silver-spitter-b"]);
+    expect(update.targetMobIds).not.toContain("depths-iron-warden");
+  });
   it("holds Frontier contracts until level 10 without preventing exploration", () => {
     const mobs = new Map([["frontier-crawler", mob(63.5, 35.5)], ["frontier-support-spitter", mob(68.5, 36.5)],
       ["frontier-brute-east", mob(70.5, 32.5)]]);

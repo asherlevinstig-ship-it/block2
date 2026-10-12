@@ -9,7 +9,11 @@ export const CAVE_ENCOUNTERS: Record<string, { name: string; minX: number; maxX:
 };
 
 const SILVER_DEPTHS_AREAS: typeof CAVE_ENCOUNTERS = Object.fromEntries(SILVER_DEPTHS_ENCOUNTERS.map(entry => [entry.id,
-  entry.stage <= 2
+  entry.wing === "iron"
+    ? { name: entry.name, minX: 87.3, maxX: 108.7, minZ: -14.7, maxZ: 3.7, minY: 0.8, maxY: 5.2 }
+    : entry.wing === "silver"
+      ? { name: entry.name, minX: 87.3, maxX: 112.7, minZ: 25.3, maxZ: 35.7, minY: 0.8, maxY: 5.2 }
+    : entry.stage <= 2
     ? { name: entry.name, minX: 83.3, maxX: 107.7, minZ: 3.3, maxZ: 26.7, minY: 0.8, maxY: 5.2 }
     : entry.stage === 3
       ? { name: entry.name, minX: 115.3, maxX: 124.7, minZ: 7.3, maxZ: 22.7, minY: 0.8, maxY: 5.2 }

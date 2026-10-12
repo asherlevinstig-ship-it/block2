@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MATRIARCH_PHASE, SILVER_DEPTHS_ROOM, WORLD_ROOM, crystalMatriarchPattern, spitterShotEndpoints } from "@blockcraft/protocol";
-import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
+import { Block, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_COVER, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_PARTY_SPAWNS, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
 import { ForestPortalState, InventoryItemState, MobState, PlayerState, WorldState } from "./schema.js";
 import { silverDepthsStageSpawns } from "./silver-depths-encounters.js";
@@ -151,21 +151,59 @@ describe("Silver Depths room travel", () => {
     internal.resetSilverDepthsInstance(); internal.beginSilverDepthsRun(client, player, 10_000);
     internal.openSilverDepthsMoonstoneGate("test-seal");
     const clear = (stage: 1 | 2 | 3) => {
-      const entries = silverDepthsStageSpawns(stage);
+      const entries = silverDepthsStageSpawns(stage, "iron");
       for (const entry of entries.slice(0, -1)) room.state.mobs.get(entry.id)!.alive = false;
       internal.advanceSilverDepthsEncounter(entries.at(-1)!.id);
     };
     clear(1);
     expect(player.silverDepthsRunStage).toBe(3);
-    expect(silverDepthsStageSpawns(2).every(entry => room.state.mobs.has(entry.id))).toBe(true);
+    expect(internal.readWorldBlock(SILVER_DEPTHS_IRON_GATE.minX, 1, SILVER_DEPTHS_IRON_GATE.z)).toBe(Block.Stone);
+    expect(silverDepthsStageSpawns(2, "iron").some(entry => room.state.mobs.has(entry.id))).toBe(false);
+    Object.assign(player, { x: 94.5, y: 1, z: 14.5 });
+    internal.chooseSilverDepthsWing(client, { wing: "iron" });
+    expect(player.silverDepthsWing).toBe("iron");
+    expect(internal.readWorldBlock(SILVER_DEPTHS_IRON_GATE.minX, 1, SILVER_DEPTHS_IRON_GATE.z)).toBe(Block.Air);
+    expect(internal.readWorldBlock(SILVER_DEPTHS_SILVER_GATE.minX, 1, SILVER_DEPTHS_SILVER_GATE.z)).toBe(Block.Stone);
+    expect(silverDepthsStageSpawns(2, "iron").every(entry => room.state.mobs.has(entry.id))).toBe(true);
+    expect(silverDepthsStageSpawns(2, "silver").some(entry => room.state.mobs.has(entry.id))).toBe(false);
     player.health = 1; player.stamina = 1; clear(2);
     expect(player.silverDepthsRunStage).toBe(4);
+    expect(room.state.lootDrops.get("depths-wing-reward:miner")).toMatchObject({ ownerId: "miner", itemId: "iron_ore", quantity: 5 });
     expect(player.health).toBe(player.maxHealth); expect(player.stamina).toBe(player.maxStamina);
     expect(internal.readWorldBlock(SILVER_DEPTHS_GALLERY_GATE.x, 1, SILVER_DEPTHS_GALLERY_GATE.minZ)).toBe(Block.Air);
     clear(3);
     expect(player.silverDepthsRunStage).toBe(5);
     expect(internal.readWorldBlock(SILVER_DEPTHS_BOSS_GATE.x, 1, SILVER_DEPTHS_BOSS_GATE.minZ)).toBe(Block.Air);
     expect(room.state.mobs.get("crystal-matriarch")).toMatchObject({ health: 40, maxHealth: 40, alive: true });
+  });
+
+  it("locks the alternative route for every party member and gives each a personal silver reward", () => {
+    const { room, player, client } = roomWithPortal("depths-entry"); const internal = room as any;
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    internal.roomKind = "silver-depths"; player.silverDepthsStage = 3;
+    Object.assign(player, { x: 94.5, y: 1, z: 14.5, silverDepthsRunStage: 3 });
+    const friend = new PlayerState(); Object.assign(friend, { x: 92.5, y: 1, z: 14.5, silverDepthsRunStage: 3 });
+    room.state.players.set("friend", friend);
+    internal.silverDepthsRuns.set("miner", { completedAt: 0 });
+    internal.silverDepthsRuns.set("friend", { completedAt: 0 });
+    internal.silverDepthsEncounterStage = 2;
+    internal.chooseSilverDepthsWing(client, { wing: "silver" });
+    expect(player.silverDepthsWing).toBe("silver");
+    expect(friend.silverDepthsWing).toBe("silver");
+    expect(internal.readWorldBlock(SILVER_DEPTHS_SILVER_GATE.minX, 1, SILVER_DEPTHS_SILVER_GATE.z)).toBe(Block.Air);
+    expect(internal.readWorldBlock(SILVER_DEPTHS_IRON_GATE.minX, 1, SILVER_DEPTHS_IRON_GATE.z)).toBe(Block.Stone);
+    internal.chooseSilverDepthsWing(client, { wing: "iron" });
+    expect(internal.silverDepthsWing).toBe("silver");
+    const entries = silverDepthsStageSpawns(2, "silver");
+    for (const entry of entries.slice(0, -1)) room.state.mobs.get(entry.id)!.alive = false;
+    internal.advanceSilverDepthsEncounter(entries.at(-1)!.id);
+    for (const id of ["miner", "friend"]) expect(room.state.lootDrops.get(`depths-wing-reward:${id}`))
+      .toMatchObject({ ownerId: id, itemId: "silver_ore", quantity: 3 });
+    expect(player.silverDepthsRunStage).toBe(4);
+    expect(friend.silverDepthsRunStage).toBe(4);
+    internal.resetSilverDepthsInstance();
+    expect(internal.readWorldBlock(SILVER_DEPTHS_SILVER_GATE.minX, 1, SILVER_DEPTHS_SILVER_GATE.z)).toBe(Block.Stone);
+    expect(room.state.lootDrops.has("depths-wing-reward:friend")).toBe(false);
   });
 
   it("only transfers back to the overworld after the fixed boss weapon is claimed", async () => {

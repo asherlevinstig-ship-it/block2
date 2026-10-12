@@ -38,6 +38,8 @@ export const SILVER_DEPTHS_MOONSTONE_SEAL_POSITION = { x: 82.5, y: 1, z: 12.5 } 
 export const SILVER_DEPTHS_CHECKPOINT_POSITION = { x: 112.5, y: 1, z: 14.5 } as const;
 export const SILVER_DEPTHS_GALLERY_GATE = { x: 108, minZ: 10, maxZ: 19 } as const;
 export const SILVER_DEPTHS_BOSS_GATE = { x: 123, minZ: 7, maxZ: 22 } as const;
+export const SILVER_DEPTHS_IRON_GATE = { z: 3, minX: 96, maxX: 100 } as const;
+export const SILVER_DEPTHS_SILVER_GATE = { z: 26, minX: 96, maxX: 100 } as const;
 export const SILVER_DEPTHS_EXIT_POSITION = { x: 137.5, y: 1, z: 14.5 } as const;
 export const TOWN_STORAGE_CHEST_POSITION = { x: 26.5, y: 8, z: 4.5 } as const;
 export function isAtTownStorage(player: { x: number; y: number; z: number }): boolean {
@@ -620,7 +622,8 @@ export function isProtectedVoxel(x: number, z: number): boolean {
 
 export function isSilverDepthsProgressionGate(x: number, z: number): boolean {
   return x === SILVER_DEPTHS_GALLERY_GATE.x && z >= SILVER_DEPTHS_GALLERY_GATE.minZ && z <= SILVER_DEPTHS_GALLERY_GATE.maxZ
-    || x === SILVER_DEPTHS_BOSS_GATE.x && z >= SILVER_DEPTHS_BOSS_GATE.minZ && z <= SILVER_DEPTHS_BOSS_GATE.maxZ;
+    || x === SILVER_DEPTHS_BOSS_GATE.x && z >= SILVER_DEPTHS_BOSS_GATE.minZ && z <= SILVER_DEPTHS_BOSS_GATE.maxZ
+    || x >= 88 && x <= 107 && (z === SILVER_DEPTHS_IRON_GATE.z || z === SILVER_DEPTHS_SILVER_GATE.z);
 }
 
 export function generateChunk(seedText: string, chunkX: number, chunkZ: number): GeneratedChunk {

@@ -26,6 +26,14 @@ describe("chamber-specific encounters", () => {
     expect(caveEncounterAllows("buried-vault-crawler", CAVE_HIDDEN_HOME)).toBe(true);
     expect(caveEncounterAllows("ordinary-surface-mob", { x: 100, y: 8, z: 100 })).toBe(true);
   });
+  it("keeps the iron and silver route fights inside their separate wings", () => {
+    const ironWing = { x: 101.5, y: 1, z: -6.5 };
+    const silverWing = { x: 103.5, y: 1, z: 30.5 };
+    expect(caveEncounterAllows("depths-iron-warden", ironWing)).toBe(true);
+    expect(caveEncounterAllows("depths-iron-warden", silverWing)).toBe(false);
+    expect(caveEncounterAllows("depths-silver-spitter-a", silverWing)).toBe(true);
+    expect(caveEncounterAllows("depths-silver-spitter-a", ironWing)).toBe(false);
+  });
   it("patrols real cave terrain without entering walls or leaving its chamber", () => {
     const { room, internal } = fixture();
     const travelled = new Map<string, number>();

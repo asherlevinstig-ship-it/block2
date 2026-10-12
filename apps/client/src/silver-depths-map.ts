@@ -1,4 +1,5 @@
 import { CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_ENTRY_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION } from "@blockcraft/voxel-world";
+import type { SilverDepthsWing } from "@blockcraft/protocol";
 
 export type DepthsPoint = { x: number; y: number; z: number };
 export const DEPTHS_ROUTE_NODES = [
@@ -19,7 +20,7 @@ export interface DepthsRouteState {
   target: DepthsPoint;
 }
 
-export function silverDepthsRoute(runStage: number, _guardAAlive = true, _guardBAlive = true): DepthsRouteState | null {
+export function silverDepthsRoute(runStage: number, _guardAAlive = true, _guardBAlive = true, wing: SilverDepthsWing | null = null): DepthsRouteState | null {
   if (runStage <= 0) return null;
   const completed = new Set<DepthsNodeId>(["entrance"]);
   if (runStage >= 2) completed.add("seal");
@@ -29,11 +30,14 @@ export function silverDepthsRoute(runStage: number, _guardAAlive = true, _guardB
   if (runStage >= 6) completed.add("matriarch");
   let active: DepthsNodeId = "seal", title = "Break the Moonstone Seal";
   if (runStage === 2) { active = "wave-one"; title = "Clear Gallery Wave I"; }
-  else if (runStage === 3) { active = "wave-two"; title = "Survive Gallery Wave II"; }
+  else if (runStage === 3) { active = "wave-two"; title = wing === "iron" ? "Clear the Iron Bastion"
+    : wing === "silver" ? "Clear the Silver Echo" : "Choose a Crystal Wing"; }
   else if (runStage === 4) { active = "checkpoint"; title = "Clear the Crystal Antechamber"; }
   else if (runStage === 5) { active = "matriarch"; title = "Defeat the Crystal Matriarch"; }
   else if (runStage === 6) { active = "matriarch"; title = "Claim Matriarch's Edge"; }
   else if (runStage >= 7) { active = "extraction"; title = "Extract to the Town"; }
-  const target = DEPTHS_ROUTE_NODES.find(node => node.id === active)!.point;
+  const target = runStage === 3 ? wing === "iron" ? { x: 102.5, y: 1, z: -7.5 }
+    : wing === "silver" ? { x: 103.5, y: 1, z: 31.5 } : { x: 91.5, y: 1, z: 14.5 }
+    : DEPTHS_ROUTE_NODES.find(node => node.id === active)!.point;
   return { active, completed, title, target };
 }

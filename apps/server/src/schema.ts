@@ -38,6 +38,7 @@ export const PlayerState = schema({
   miningExpeditionStage: t.uint8().default(0),
   silverDepthsStage: t.uint8().default(0),
   silverDepthsRunStage: t.uint8().default(0),
+  silverDepthsWing: t.string().default(""),
   dodgeSequence: t.int32().default(0),
   defending: t.boolean().default(false),
   defenseStartedAt: t.float64().default(0),

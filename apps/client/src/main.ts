@@ -22,7 +22,7 @@ import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { SILVER_DEPTHS, isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
-import { canUseForestPortal, type ForestPortal } from "@blockcraft/protocol";
+import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
 import { SPITTER_PATTERN, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
@@ -457,6 +457,8 @@ const depthsRouteMap = document.querySelector<HTMLElement>("#depths-route-map")!
 const depthsRouteTitle = document.querySelector<HTMLElement>("#depths-route-title")!;
 const depthsRouteCount = document.querySelector<HTMLElement>("#depths-route-count")!;
 const depthsRouteDistance = document.querySelector<HTMLElement>("#depths-route-distance")!;
+const depthsWingChoice = document.querySelector<HTMLElement>("#depths-wing-choice")!;
+const depthsWingButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-depths-wing]")];
 const depthsRouteNodes = [...document.querySelectorAll<HTMLElement>("[data-depths-node]")];
 const inventoryPanel = document.querySelector<HTMLElement>("#inventory-panel")!;
 const inventoryTotal = document.querySelector<HTMLElement>("#inventory-total")!;
@@ -504,6 +506,8 @@ if (
   !depthsRouteTitle ||
   !depthsRouteCount ||
   !depthsRouteDistance ||
+  !depthsWingChoice ||
+  depthsWingButtons.length !== 2 ||
   depthsRouteNodes.length !== DEPTHS_ROUTE_NODES.length
 ) {
   throw new Error("Silver Depths route shell is missing required elements");
@@ -1108,6 +1112,17 @@ moonstoneCore.emissive = new pc.Color(.12, .55, .9);
 moonstoneCore.useLighting = false;
 moonstoneCore.update();
 const depthsStone = coloredMaterial(new pc.Color(.12, .12, .19));
+for (const [name, z, tint] of [
+  ["iron-bastion", 1.5, new pc.Color(1, .42, .12)],
+  ["silver-echo", 27.5, new pc.Color(.38, .86, 1)],
+] as const) {
+  addBox(silverDepthsRoot, `${name}-marker-base`, depthsStone, [.9, .32, .9], [90.5, 1.16, z]);
+  const marker = addBox(silverDepthsRoot, `${name}-marker-crystal`, coloredMaterial(tint), [.3, 1.05, .3], [90.5, 1.82, z]);
+  marker.setLocalEulerAngles(0, 45, 12);
+  const light = new pc.Entity(`${name}-marker-light`);
+  light.addComponent("light", { type: "omni", color: tint, intensity: 1.8, range: 6.5, castShadows: false });
+  light.setPosition(90.5, 2.1, z); silverDepthsRoot.addChild(light);
+}
 for (const z of [5.15, 19.85]) {
   addBox(silverDepthsRoot, "depths-entrance-pillar", depthsStone, [.48, 2.8, .48], [60.15, 2.4, z]);
   const shard = addBox(silverDepthsRoot, "entrance-moonstone", moonstoneCrystal, [.22, .95, .22], [60.02, 2.2, z + (z < 12 ? .42 : -.42)]);
@@ -1157,6 +1172,14 @@ const depthsBreadcrumbs = Array.from({ length: 6 }, (_, index) => {
 depthsBreadcrumbRoot.enabled = false;
 app.root.addChild(depthsBreadcrumbRoot);
 let localSilverDepthsRunStage = 0;
+let localSilverDepthsWing: SilverDepthsWing | null = null;
+for (const button of depthsWingButtons) {
+  button.addEventListener("click", () => {
+    if (!room || localSilverDepthsRunStage !== 3 || localSilverDepthsWing) return;
+    const wing = button.dataset.depthsWing;
+    if (wing === "iron" || wing === "silver") room.send("depths:route", { wing });
+  });
+}
 
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false): VoxelCharacterRig {
   const root = new pc.Entity("voxel-character");
@@ -1505,6 +1528,7 @@ interface NetworkPlayer {
   coins: number;
   blacksmithUpgrades: number;
   silverDepthsRunStage: number;
+  silverDepthsWing: string;
   dodgeSequence: number;
   invulnerableUntil: number;
   mainHandId: string;
@@ -3362,6 +3386,7 @@ function bindPlayers(joinedRoom: Room): void {
     const isLocal = sessionId === joinedRoom.sessionId;
     if (isLocal) {
       localSilverDepthsRunStage = player.silverDepthsRunStage;
+      localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
       updateTavernCoins(player.coins);
       renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
         experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
@@ -3417,6 +3442,9 @@ function bindPlayers(joinedRoom: Room): void {
       playerCallbacks.listen(field, updateLocalProgression);
     playerCallbacks.listen("silverDepthsRunStage", () => {
       if (isLocal) localSilverDepthsRunStage = player.silverDepthsRunStage;
+    }, true);
+    playerCallbacks.listen("silverDepthsWing", () => {
+      if (isLocal) localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
     }, true);
     if (isLocal) {
       playerCallbacks.inventory.onAdd((item: { quantity: number }, itemId: string) => {
@@ -4840,7 +4868,8 @@ function updateSilverDepthsRoute(now: number): void {
     && player.z >= SILVER_DEPTHS.minZ - 1 && player.z <= SILVER_DEPTHS.maxZ + 1;
   const guardAAlive = mobVisuals.get("silver-depths-spitter-a")?.state.alive ?? true;
   const guardBAlive = mobVisuals.get("silver-depths-spitter-b")?.state.alive ?? true;
-  visibleDepthsRoute = inside ? silverDepthsRoute(localSilverDepthsRunStage, guardAAlive, guardBAlive) : null;
+  visibleDepthsRoute = inside ? silverDepthsRoute(localSilverDepthsRunStage, guardAAlive, guardBAlive, localSilverDepthsWing) : null;
+  depthsWingChoice.hidden = !visibleDepthsRoute || localSilverDepthsRunStage !== 3 || localSilverDepthsWing !== null;
   depthsRouteMap.hidden = visibleDepthsRoute === null;
   minimapPanel.hidden = visibleDepthsRoute !== null;
   depthsBreadcrumbRoot.enabled = visibleDepthsRoute !== null && (localDepthsRewardFlags & 128) !== 0;
@@ -7484,6 +7513,8 @@ async function connect(): Promise<void> {
     objectiveComplete.hidden = true;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
+    localSilverDepthsRunStage = 0;
+    localSilverDepthsWing = null;
     setDefensePresentation(false);
     cancelPowerAim();
     cancelSpecialAim();

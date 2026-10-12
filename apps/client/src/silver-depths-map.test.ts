@@ -6,6 +6,9 @@ describe("Silver Depths route map", () => {
     expect(silverDepthsRoute(1, true, true)?.active).toBe("seal");
     expect(silverDepthsRoute(2)?.active).toBe("wave-one");
     expect(silverDepthsRoute(3)?.active).toBe("wave-two");
+    expect(silverDepthsRoute(3)?.title).toBe("Choose a Crystal Wing");
+    expect(silverDepthsRoute(3, true, true, "iron")?.target).toMatchObject({ z: -7.5 });
+    expect(silverDepthsRoute(3, true, true, "silver")?.target).toMatchObject({ z: 31.5 });
     expect(silverDepthsRoute(4)?.active).toBe("checkpoint");
     expect(silverDepthsRoute(5)?.active).toBe("matriarch");
     expect(silverDepthsRoute(7)?.active).toBe("extraction");

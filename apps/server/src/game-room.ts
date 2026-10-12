@@ -29,7 +29,7 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -120,6 +120,8 @@ import {
   type ResourceGathered,
   type TavernQuizUpdate,
   SILVER_DEPTHS_ROOM,
+  SilverDepthsRouteRequestSchema,
+  type SilverDepthsWing,
   WORLD_ROOM,
   type RoomTransfer,
   WORLD_BOOTSTRAP_CHUNK_RADIUS,
@@ -382,6 +384,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private roomKind: "overworld" | "silver-depths" = "overworld";
   private instancePartySize = 1;
   private silverDepthsEncounterStage: SilverDepthsEncounterStage = 1;
+  private silverDepthsWing: SilverDepthsWing | null = null;
   private silverDepthsSealOpened = false;
   private silverInstanceSequence = 0;
 
@@ -495,6 +498,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       client.send("chat:notice", `Your name is now ${player.name}.`);
     });
     this.onMessage("objective:sync", client => this.sendObjectiveState(client, true));
+    this.onMessage("depths:route", (client, payload: unknown) => this.chooseSilverDepthsWing(client, payload));
     this.onMessage("ping", (client, payload: unknown) => {
       if (typeof payload === "object" && payload && "id" in payload && typeof payload.id === "string") {
         client.send("pong", { id: payload.id, serverTime: Date.now() });
@@ -1891,8 +1895,19 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     }
   }
 
+  private setSilverDepthsWingGate(gate: { z: number; minX: number; maxX: number }, open: boolean, label: string): void {
+    for (let x = gate.minX; x <= gate.maxX; x++) for (let y = 1; y <= 4; y++) {
+      const address = worldToChunk(x, gate.z), stored = this.getChunk(address.chunkX, address.chunkZ);
+      const block = open ? Block.Air : Block.Stone;
+      if (getBlock(stored.chunk, address.localX, y, address.localZ) === block) continue;
+      setBlock(stored.chunk, address.localX, y, address.localZ, block); stored.revision++;
+      this.broadcast("block:changed", { requestId: `depths-${label}-${open ? "open" : "close"}-${x}:${y}`,
+        x, y, z: gate.z, block, revision: stored.revision } satisfies BlockChanged);
+    }
+  }
+
   private spawnSilverDepthsStage(stage: SilverDepthsEncounterStage): void {
-    for (const entry of silverDepthsStageSpawns(stage)) {
+    for (const entry of silverDepthsStageSpawns(stage, this.silverDepthsWing ?? undefined)) {
       if (this.state.mobs.has(entry.id)) continue;
       this.registerMob(entry.id, entry.archetype, entry);
       const mob = this.state.mobs.get(entry.id)!;
@@ -1906,6 +1921,44 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       if (entry.id === CRYSTAL_MATRIARCH_ID) {
         mob.isChampion = true; mob.enraged = false; mob.attackPattern = crystalMatriarchPattern(0, false); mob.rewardMultiplier *= 1.5;
       }
+    }
+  }
+
+  private chooseSilverDepthsWing(client: Client, payload: unknown): void {
+    const parsed = SilverDepthsRouteRequestSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player || player.health <= 0 || !isInsideSilverDepths(player)
+      || this.roomKind !== "silver-depths" || this.silverDepthsEncounterStage !== 2) return;
+    if (this.silverDepthsWing) {
+      client.send("portal:notice", `The party already chose the ${this.silverDepthsWing === "iron" ? "Iron Bastion" : "Silver Echo"} route.`);
+      return;
+    }
+    this.silverDepthsWing = parsed.data.wing;
+    this.setSilverDepthsWingGate(this.silverDepthsWing === "iron" ? SILVER_DEPTHS_IRON_GATE : SILVER_DEPTHS_SILVER_GATE,
+      true, `${this.silverDepthsWing}-wing-gate`);
+    for (const id of this.activeSilverDepthsParticipants()) {
+      const participant = this.state.players.get(id);
+      if (participant) participant.silverDepthsWing = this.silverDepthsWing;
+      this.clients.find(other => other.sessionId === id)?.send("portal:notice",
+        this.silverDepthsWing === "iron"
+          ? "IRON BASTION CHOSEN · defeat the Iron Warden in the northern wing for iron ore."
+          : "SILVER ECHO CHOSEN · dodge the Echo Spitters in the southern wing for silver ore.");
+    }
+    this.spawnSilverDepthsStage(2);
+    this.refreshNearbyObjectives();
+  }
+
+  private spawnSilverDepthsWingRewards(): void {
+    if (!this.silverDepthsWing) return;
+    const iron = this.silverDepthsWing === "iron";
+    const site = iron ? { x: 102.5, y: 1.22, z: -9.5 } : { x: 104.5, y: 1.22, z: 33.5 };
+    for (const id of this.activeSilverDepthsParticipants()) {
+      const drop = new LootDropState();
+      Object.assign(drop, site, { ownerId: id, itemId: iron ? "iron_ore" : "silver_ore",
+        quantity: iron ? 5 : 3, expiresAt: Number.MAX_SAFE_INTEGER });
+      this.state.lootDrops.set(`depths-wing-reward:${id}`, drop);
+      this.clients.find(client => client.sessionId === id)?.send("portal:notice",
+        `${iron ? "IRON BASTION" : "SILVER ECHO"} CLEARED · collect your personal ${iron ? "iron" : "silver"} ore, then reach the checkpoint.`);
     }
   }
 
@@ -1932,17 +1985,18 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private advanceSilverDepthsEncounter(mobId: string): void {
     if (this.roomKind !== "silver-depths") return;
     const entry = SILVER_DEPTHS_ENCOUNTERS.find(candidate => candidate.id === mobId);
-    if (!entry || entry.stage !== this.silverDepthsEncounterStage) return;
-    const cleared = silverDepthsStageSpawns(entry.stage).every(candidate =>
+    if (!entry || entry.stage !== this.silverDepthsEncounterStage || (entry.stage === 2 && entry.wing !== this.silverDepthsWing)) return;
+    const cleared = silverDepthsStageSpawns(entry.stage, this.silverDepthsWing ?? undefined).every(candidate =>
       candidate.id === mobId || this.state.mobs.get(candidate.id)?.alive === false);
     if (!cleared || entry.stage === 4) return;
     const nextStage = (entry.stage + 1) as SilverDepthsEncounterStage;
     this.silverDepthsEncounterStage = nextStage;
     if (entry.stage === 1) {
-      this.spawnSilverDepthsStage(2); this.setSilverDepthsRunStage(3);
+      this.setSilverDepthsRunStage(3);
       for (const id of this.activeSilverDepthsParticipants()) this.clients.find(client => client.sessionId === id)?.send("portal:notice",
-        "GALLERY WAVE CLEARED · reinforcements are entering from the crystal wings.");
+        "GALLERY WAVE CLEARED · choose the Iron Bastion or Silver Echo route on your dungeon map.");
     } else if (entry.stage === 2) {
+      this.spawnSilverDepthsWingRewards();
       this.setSilverDepthsGate(SILVER_DEPTHS_GALLERY_GATE, true, "gallery-gate");
       this.activateSilverDepthsCheckpoint(); this.spawnSilverDepthsStage(3); this.setSilverDepthsRunStage(4);
     } else {
@@ -1958,8 +2012,10 @@ export class WorldRoom extends Room<{ state: WorldState }> {
 
   private resetSilverDepthsInstance(): void {
     for (const id of SILVER_DEPTHS_ENEMY_IDS) this.state.mobs.delete(id);
-    for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:")) this.state.lootDrops.delete(id);
-    this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false;
+    for (const id of [...this.state.lootDrops.keys()]) if (id.startsWith("depths-supply:") || id.startsWith("depths-wing-reward:")) this.state.lootDrops.delete(id);
+    this.silverDepthsEncounterStage = 1; this.silverDepthsSealOpened = false; this.silverDepthsWing = null;
+    this.setSilverDepthsWingGate(SILVER_DEPTHS_IRON_GATE, false, "iron-wing-gate");
+    this.setSilverDepthsWingGate(SILVER_DEPTHS_SILVER_GATE, false, "silver-wing-gate");
     this.setSilverDepthsGate(SILVER_DEPTHS_GALLERY_GATE, false, "gallery-gate");
     this.setSilverDepthsGate(SILVER_DEPTHS_BOSS_GATE, false, "boss-gate");
     this.restoreMatriarchCover(); this.restoreSilverDepthsMoonstone(); this.spawnSilverDepthsStage(1);
@@ -2272,6 +2328,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       enemiesDefeated: 0, damageTaken: 0, moonstoneCollected: 0, moonstoneAtStart: player.inventory.get("moonstone")?.quantity ?? 0,
       edgeAtStart: player.inventory.get("matriarch_edge")?.quantity ?? 0 };
     this.silverDepthsRuns.set(client.sessionId, run);
+    player.silverDepthsWing = this.silverDepthsWing ?? "";
     player.silverDepthsRunStage = this.silverDepthsSealOpened ? this.silverDepthsEncounterStage + 1 : 1;
     client.send("dungeon:run", { runId: run.runId, phase: "started", dungeon: "silver-depths", partySize: run.partySize } satisfies DungeonRunUpdate);
   }
@@ -3609,8 +3666,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
         const run = this.silverDepthsRuns.get(client.sessionId);
         if (run && run.completedAt === 0) {
           run.moonstoneCollected += item.quantity - before;
-          const guardsDead = SILVER_DEPTHS_GUARDS.every(id => this.state.mobs.get(id)?.alive === false);
-          player.silverDepthsRunStage = guardsDead ? 3 : 2;
+          player.silverDepthsRunStage = Math.max(player.silverDepthsRunStage, this.silverDepthsEncounterStage + 1);
         }
       }
       this.grantProgression(client.sessionId, mineral === "moonstone" ? 15 : 4, mineral === "moonstone" ? "Moonstone mined" : "Mineral mined");

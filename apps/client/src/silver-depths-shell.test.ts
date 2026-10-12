@@ -10,5 +10,6 @@ describe("Silver Depths route shell", () => {
     );
 
     expect(renderedNodeIds).toEqual(DEPTHS_ROUTE_NODES.map(({ id }) => id));
+    expect([...html.matchAll(/data-depths-wing="([^"]+)"/g)].map(([, wing]) => wing)).toEqual(["iron", "silver"]);
   });
 });

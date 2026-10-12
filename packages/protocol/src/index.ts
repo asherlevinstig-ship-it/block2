@@ -182,6 +182,8 @@ export type DungeonRunUpdate = {
   newBest?: boolean;
   stats?: { enemiesDefeated: number; damageTaken: number; moonstoneCollected: number; moonstoneAwarded?: number; moonstoneTotal?: number; emberCoresAwarded?: number; emberCoresTotal?: number; signatureItemObtained: boolean };
 };
+export const SilverDepthsRouteRequestSchema = z.object({ wing: z.enum(["iron", "silver"]) });
+export type SilverDepthsWing = z.infer<typeof SilverDepthsRouteRequestSchema>["wing"];
 export type DungeonRewardClaimed = {
   runId: string;
   goldGranted: number;

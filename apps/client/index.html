@@ -95,6 +95,11 @@
     <aside id="depths-route-map" aria-label="Silver Depths expedition map" hidden>
       <header><span>SILVER DEPTHS</span><strong id="depths-route-count">1 / 7</strong></header>
       <h2 id="depths-route-title">Break the Moonstone Seal</h2>
+      <div id="depths-wing-choice" class="depths-wing-choice" hidden>
+        <p>First choice locks the route for your party.</p>
+        <button type="button" data-depths-wing="iron"><b>IRON BASTION</b><small>Warden + crawlers · 5 iron ore</small></button>
+        <button type="button" data-depths-wing="silver"><b>SILVER ECHO</b><small>Spitters + crawler · 3 silver ore</small></button>
+      </div>
       <div class="depths-route-diagram" aria-hidden="true">
         <svg viewBox="0 0 320 150" preserveAspectRatio="none">
           <path d="M25 75 L90 38 L170 75 L240 75 L298 75 M25 75 L90 112 L170 75" />
@@ -102,7 +107,7 @@
         <i data-depths-node="entrance" style="--map-x:6%;--map-y:50%"><b>IN</b><small>Entrance</small></i>
         <i data-depths-node="seal" style="--map-x:25%;--map-y:50%"><b>◆</b><small>Seal</small></i>
         <i data-depths-node="wave-one" style="--map-x:43%;--map-y:28%"><b>I</b><small>Wave I</small></i>
-        <i data-depths-node="wave-two" style="--map-x:43%;--map-y:72%"><b>II</b><small>Wave II</small></i>
+        <i data-depths-node="wave-two" style="--map-x:43%;--map-y:72%"><b>II</b><small>Wing</small></i>
         <i data-depths-node="checkpoint" style="--map-x:61%;--map-y:50%"><b>+</b><small>Checkpoint</small></i>
         <i data-depths-node="matriarch" style="--map-x:80%;--map-y:50%"><b>♛</b><small>Matriarch</small></i>
         <i data-depths-node="extraction" style="--map-x:94%;--map-y:50%"><b>↑</b><small>Extract</small></i>

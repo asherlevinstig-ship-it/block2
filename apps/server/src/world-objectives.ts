@@ -2,10 +2,10 @@ import { isEquipmentItem, worldLevelRange, type ForestPortal, type ItemId, type 
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION } from "./wilderness-event.js";
 import { MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { FOREST_DUNGEON_MOBS, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
-import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, SILVER_DEPTHS_GALLERY_IDS } from "./silver-depths-encounters.js";
+import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; level?: number; combatState: string; targetId: string };
-type Player = Pose & { health: number; level?: number; miningExpeditionStage?: number; silverDepthsStage?: number; silverDepthsRunStage?: number; inventory: { get(id: string): { quantity: number } | undefined } };
+type Player = Pose & { health: number; level?: number; miningExpeditionStage?: number; silverDepthsStage?: number; silverDepthsRunStage?: number; silverDepthsWing?: string; inventory: { get(id: string): { quantity: number } | undefined } };
 type Loot = Pose & { ownerId: string; itemId: string; expiresAt: number };
 export interface WorldObjectiveProgress { id: string | null; fingerprint: string }
 export const createObjectiveProgress = (): WorldObjectiveProgress => ({ id: null, fingerprint: "" });
@@ -62,15 +62,22 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   if (depthsUnlocked && depthsStage === 2) return depths(make("depths-moonstone", "Mine the Moonstone Seal", "Mine one glowing Moonstone block to open the six-lane gate into the expedition wings.", SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, "explore", 3), 3);
   if (depthsUnlocked && depthsStage === 3) {
     const runStage = player.silverDepthsRunStage ?? 2;
-    const ids = runStage >= 4 ? SILVER_DEPTHS_ANTECHAMBER_IDS : SILVER_DEPTHS_GALLERY_IDS;
+    if (runStage === 3 && !player.silverDepthsWing) return depths(make("depths-route-choice", "Choose a Crystal Wing",
+      "The first party member to choose a route on the dungeon map locks it for everyone: Iron Bastion or Silver Echo.",
+      { x: 91.5, y: 1, z: 14.5 }, "explore", 3), 4);
+    const wing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : undefined;
+    const ids = runStage >= 4 ? SILVER_DEPTHS_ANTECHAMBER_IDS
+      : silverDepthsStageSpawns(runStage >= 3 ? 2 : 1, wing).map(entry => entry.id);
     const living = ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive ? [{ id, mob }] : []; });
     const fallback = runStage >= 4 ? SILVER_DEPTHS_CHECKPOINT_POSITION
       : SILVER_DEPTHS_ENCOUNTERS.find(entry => entry.id === ids[0])!;
     const target = living[0] ?? { id: ids[0]!, mob: fallback };
     const update = make(runStage >= 4 ? "depths-antechamber" : "depths-gallery",
-      runStage >= 4 ? "Clear the Crystal Antechamber" : runStage >= 3 ? "Survive Gallery Wave II" : "Clear Gallery Wave I",
+      runStage >= 4 ? "Clear the Crystal Antechamber" : runStage >= 3 ? wing === "iron" ? "Clear the Iron Bastion" : "Clear the Silver Echo" : "Clear Gallery Wave I",
       runStage >= 4 ? "Defeat the Crystal Warden and its escorts to unlock the Matriarch arena."
-        : "Use the stone cover to split the staged enemy waves. The checkpoint opens after Wave II.", target.mob, "encounter", 3);
+        : runStage >= 3 ? wing === "iron" ? "Defeat the Warden and crawlers in the northern wing to earn iron ore."
+          : "Dodge the spitter volleys in the southern wing to earn silver ore."
+        : "Use the stone cover to split the first gallery wave. Then choose a party route.", target.mob, "encounter", 3);
     update.targetMobId = target.id; update.targetMobIds = ids; update.completedMobIds = ids.filter(id => mobs.get(id)?.alive === false);
     return depths(update, 4);
   }
