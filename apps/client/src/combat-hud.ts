@@ -1,5 +1,5 @@
 import { batch, signal } from "@preact/signals";
-import { Fragment, h, render } from "preact";
+import { h, render } from "preact";
 import {
   MAIN_HAND_DEFINITIONS,
   POWER_DEFINITIONS,
@@ -29,6 +29,7 @@ const powerAiming = signal(false);
 const specialAiming = signal(false);
 const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE", ready: false });
 const specialCooldown = signal<CooldownState>({ percent: 0, label: "READY · F", ready: true });
+const loadoutOpen = signal(false);
 
 const POWER_IDS = ["shockwave", "seismic_cleave", "eruption", "lunge_strike"] as const;
 const POWER_LABELS: Record<PowerId, string> = { shockwave: "SHOCKWAVE", seismic_cleave: "SEISMIC", eruption: "ERUPTION", lunge_strike: "LUNGE" };
@@ -57,9 +58,6 @@ function MainHandLoadout() {
   const name = selected === "longsword" && ironSwordOwned.value ? "Iron Sword · +1 DMG" : definition.name;
   return h("div", { id: "main-hand-loadout" },
     h("p", null, h("span", null, "MAIN HAND"), h("strong", { id: "main-hand-name" }, name), h("em", { id: "main-hand-attack" }, definition.attackName)),
-    h("div", { id: "main-hand-picker", role: "group", "aria-label": "Main-hand weapon" },
-      (["longsword", "bow", "magic_focus"] as const).map(id => h("button", { type: "button", "data-main-hand": id, "aria-pressed": String(id === selected) }, MAIN_HAND_LABELS[id])),
-    ),
   );
 }
 
@@ -69,26 +67,52 @@ function PowerLoadout() {
   const secondaryLocked = characterLevel.value < 3;
   const compatible = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[selectedPower], selectedHand);
   const cooldown = powerCooldown.value;
-  return h(Fragment, null,
-    h("div", { id: "power-picker", role: "group", "aria-label": "Equipped Power" }, POWER_IDS.map(id => {
-      const allowed = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[id], selectedHand);
-      return h("button", { type: "button", "data-power": id, "aria-pressed": String(id === selectedPower), disabled: !allowed,
-        title: allowed ? `${POWER_DEFINITIONS[id].name} is compatible with ${MAIN_HAND_DEFINITIONS[selectedHand].name}` : `${POWER_DEFINITIONS[id].name} requires a melee main hand` }, POWER_LABELS[id]);
-    })),
-    h("div", { id: "power-loadout-slots", role: "group", "aria-label": "Power loadout slots" },
-      h("button", { type: "button", "data-power-slot": "primary", "aria-pressed": String(activePowerSlot.value === "primary") }, h("span", null, "R"), h("strong", null, POWER_DEFINITIONS[primaryPower.value].name.toUpperCase())),
-      h("button", { type: "button", "data-power-slot": "secondary", "aria-pressed": String(activePowerSlot.value === "secondary"), disabled: secondaryLocked }, h("span", null, "T"), h("strong", null, secondaryLocked ? "LOCKED · LV 3" : POWER_DEFINITIONS[secondaryPower.value].name.toUpperCase())),
+  return h("button", { id: "power-slot", type: "button", "aria-label": `Use ${POWER_DEFINITIONS[selectedPower].name}`,
+    class: `${compatible ? "" : "incompatible"} ${cooldown.ready && compatible && !powerAiming.value ? "ready" : ""} ${powerAiming.value ? "aiming" : ""}`.trim() },
+    h("span", null, "POWER"), h("strong", { id: "power-name" }, POWER_DEFINITIONS[selectedPower].name),
+    h("em", { id: "power-cooldown-label" }, cooldown.label), h("i", { id: "power-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
+  );
+}
+
+function LoadoutDrawer() {
+  const selectedHand = mainHand.value;
+  const selectedPower = activePowerSlot.value === "primary" ? primaryPower.value : secondaryPower.value;
+  const secondaryLocked = characterLevel.value < 3;
+  return h("aside", { id: "combat-loadout-drawer", hidden: !loadoutOpen.value, "aria-label": "Combat loadout" },
+    h("header", null,
+      h("div", null, h("span", null, "FIELD LOADOUT"), h("strong", null, "Prepare your combat kit")),
+      h("button", { type: "button", class: "loadout-close", "aria-label": "Close loadout", onClick: () => { loadoutOpen.value = false; } }, "×"),
     ),
-    h("button", { id: "power-slot", type: "button", "aria-label": `Use ${POWER_DEFINITIONS[selectedPower].name}`,
-      class: `${compatible ? "" : "incompatible"} ${cooldown.ready && compatible && !powerAiming.value ? "ready" : ""} ${powerAiming.value ? "aiming" : ""}`.trim() },
-      h("span", null, "POWER"), h("strong", { id: "power-name" }, POWER_DEFINITIONS[selectedPower].name),
-      h("em", { id: "power-cooldown-label" }, cooldown.label), h("i", { id: "power-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
+    h("section", { class: "loadout-group" },
+      h("p", null, h("span", null, "MAIN HAND"), h("small", null, MAIN_HAND_DEFINITIONS[selectedHand].name)),
+      h("div", { id: "main-hand-picker", role: "group", "aria-label": "Main-hand weapon" },
+        (["longsword", "bow", "magic_focus"] as const).map(id => h("button", { type: "button", "data-main-hand": id, "aria-pressed": String(id === selectedHand) }, MAIN_HAND_LABELS[id])),
+      ),
     ),
-    h("section", { id: "seismic-upgrades", hidden: selectedPower !== "seismic_cleave", "aria-label": "Seismic Cleave upgrades" },
-      h("p", null, h("span", null, "ACTIVE AUGMENTS"), h("strong", null, "Fault Reach · Aftershock")),
-      h("div", { id: "seismic-mastery-picker", role: "group", "aria-label": "Seismic Cleave mastery" },
-        (["advancing_fault", "tectonic_stand"] as const).map(id => h("button", { type: "button", "data-seismic-mastery": id, "aria-pressed": String(seismicMastery.value === id) },
-          h("strong", null, id === "advancing_fault" ? "ADVANCING" : "TECTONIC"), h("small", null, id === "advancing_fault" ? "Focused · mobile" : "Wide · planted"))),
+    h("section", { class: "loadout-group" },
+      h("p", null, h("span", null, "POWERS"), h("small", null, "Choose slot, then technique")),
+      h("div", { id: "power-loadout-slots", role: "group", "aria-label": "Power loadout slots" },
+        h("button", { type: "button", "data-power-slot": "primary", "aria-pressed": String(activePowerSlot.value === "primary") }, h("span", null, "R"), h("strong", null, POWER_DEFINITIONS[primaryPower.value].name.toUpperCase())),
+        h("button", { type: "button", "data-power-slot": "secondary", "aria-pressed": String(activePowerSlot.value === "secondary"), disabled: secondaryLocked }, h("span", null, "T"), h("strong", null, secondaryLocked ? "LOCKED · LV 3" : POWER_DEFINITIONS[secondaryPower.value].name.toUpperCase())),
+      ),
+      h("div", { id: "power-picker", role: "group", "aria-label": "Equipped Power" }, POWER_IDS.map(id => {
+        const allowed = isPowerCompatibleWithMainHand(POWER_DEFINITIONS[id], selectedHand);
+        return h("button", { type: "button", "data-power": id, "aria-pressed": String(id === selectedPower), disabled: !allowed,
+          title: allowed ? `${POWER_DEFINITIONS[id].name} is compatible with ${MAIN_HAND_DEFINITIONS[selectedHand].name}` : `${POWER_DEFINITIONS[id].name} requires a melee main hand` }, POWER_LABELS[id]);
+      })),
+      h("section", { id: "seismic-upgrades", hidden: selectedPower !== "seismic_cleave", "aria-label": "Seismic Cleave upgrades" },
+        h("p", null, h("span", null, "ACTIVE AUGMENTS"), h("strong", null, "Fault Reach · Aftershock")),
+        h("div", { id: "seismic-mastery-picker", role: "group", "aria-label": "Seismic Cleave mastery" },
+          (["advancing_fault", "tectonic_stand"] as const).map(id => h("button", { type: "button", "data-seismic-mastery": id, "aria-pressed": String(seismicMastery.value === id) },
+            h("strong", null, id === "advancing_fault" ? "ADVANCING" : "TECTONIC"), h("small", null, id === "advancing_fault" ? "Focused · mobile" : "Wide · planted"))),
+        ),
+      ),
+    ),
+    h("section", { class: "loadout-group" },
+      h("p", null, h("span", null, "SPECIAL"), h("small", null, SPECIAL_DEFINITIONS[special.value].name)),
+      h("div", { id: "special-picker", role: "group", "aria-label": "Equipped Special" },
+        h("button", { type: "button", "data-special": "hunters_mark", "aria-pressed": String(special.value === "hunters_mark"), disabled: special.value === "venom_fan" }, "MARK"),
+        h("button", { type: "button", "data-special": "bramble_snare", "aria-pressed": String(special.value === "bramble_snare"), disabled: special.value === "venom_fan" }, "SNARE"),
       ),
     ),
   );
@@ -97,22 +121,23 @@ function PowerLoadout() {
 function SpecialLoadout() {
   const selected = special.value;
   const cooldown = specialCooldown.value;
-  const hiddenRewardSpecial = selected === "venom_fan";
-  return h(Fragment, null,
-    h("div", { id: "special-picker", role: "group", "aria-label": "Equipped Special" },
-      h("button", { type: "button", "data-special": "hunters_mark", "aria-pressed": String(selected === "hunters_mark"), disabled: hiddenRewardSpecial }, "MARK"),
-      h("button", { type: "button", "data-special": "bramble_snare", "aria-pressed": String(selected === "bramble_snare"), disabled: hiddenRewardSpecial }, "SNARE"),
-    ),
-    h("button", { id: "special-slot", type: "button", "aria-label": `Use ${SPECIAL_DEFINITIONS[selected].name}`,
+  return h("button", { id: "special-slot", type: "button", "aria-label": `Use ${SPECIAL_DEFINITIONS[selected].name}`,
       class: `${cooldown.ready && !specialAiming.value ? "ready" : ""} ${specialAiming.value ? "aiming" : ""}`.trim() },
       h("span", null, "SPECIAL"), h("strong", { id: "special-name" }, SPECIAL_DEFINITIONS[selected].name),
       h("em", { id: "special-cooldown-label" }, cooldown.label), h("i", { id: "special-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
-    ),
   );
 }
 
 function CombatHud() {
-  return h(Fragment, null, h(ModeToggle, null), h(MainHandLoadout, null), h(PowerLoadout, null), h(SpecialLoadout, null));
+  return h("div", { id: "combat-hud-shell", "data-loadout-open": String(loadoutOpen.value) },
+    h(ModeToggle, null),
+    h(MainHandLoadout, null),
+    h(PowerLoadout, null),
+    h(SpecialLoadout, null),
+    h("button", { id: "loadout-toggle", type: "button", "aria-expanded": String(loadoutOpen.value), "aria-controls": "combat-loadout-drawer", onClick: () => { loadoutOpen.value = !loadoutOpen.value; } },
+      h("span", { "aria-hidden": "true" }, "⚙"), h("strong", null, "KIT")),
+    h(LoadoutDrawer, null),
+  );
 }
 
 function setIfChanged<T>(target: { value: T }, value: T): void {

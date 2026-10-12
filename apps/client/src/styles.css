@@ -1765,3 +1765,186 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 #silver-depths-lobby-panel .dungeon-lobby-actions button { padding: 12px; cursor: pointer; border: 0; border-radius: 7px; background: #bd8ae8; color: #1d102a; font: 900 11px system-ui; }
 #silver-depths-lobby-panel .dungeon-lobby-actions .depths-lobby-cancel { background: #4d3d5b; color: #f3e6fa; }
 #silver-depths-lobby-panel .dungeon-lobby-actions button:disabled { cursor: default; opacity: .5; }
+
+/* Game HUD v2: keep world information at the edges and combat decisions near the player. */
+#hud {
+  z-index: 14;
+  width: min(310px, calc(100vw - 36px));
+  padding: 12px 14px;
+  border-color: rgb(174 219 142 / 18%);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgb(8 18 13 / 88%), rgb(10 25 20 / 76%));
+  box-shadow: 0 12px 38px rgb(0 0 0 / 28%), inset 3px 0 0 rgb(167 221 116 / 42%);
+  backdrop-filter: none;
+}
+#hud .eyebrow { font-size: .57rem; }
+#hud h1 { margin: 2px 0 5px; font-size: 1.04rem; letter-spacing: .01em; }
+#status { font-size: .72rem; line-height: 1.3; }
+#target { margin-top: 6px !important; font-size: .67rem; line-height: 1.28; }
+#players { margin-top: 4px !important; font-size: .63rem; }
+#danger-zone { margin-top: 7px; padding: 6px 8px; }
+#danger-zone span, #danger-zone strong { font-size: .56rem; }
+#danger-zone small { font-size: .52rem; }
+#controls-help { display: none; }
+
+#player-hud-root {
+  position: fixed;
+  z-index: 17;
+  bottom: calc(82px + env(safe-area-inset-bottom));
+  left: 50%;
+  display: grid;
+  grid-template: auto auto / 76px minmax(270px, 440px);
+  gap: 3px 10px;
+  width: min(536px, calc(100vw - 38px));
+  padding: 7px 10px;
+  border: 1px solid rgb(204 230 187 / 23%);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgb(9 18 14 / 89%), rgb(7 14 11 / 77%));
+  box-shadow: 0 8px 28px rgb(0 0 0 / 34%);
+  backdrop-filter: blur(8px);
+  transform: translateX(-50%);
+}
+#player-health, #player-stamina { grid-column: 2; margin-top: 0; }
+#player-health { grid-row: 1; }
+#player-stamina { grid-row: 2; }
+#player-health > div { height: 10px; border: 1px solid rgb(255 153 128 / 18%); }
+#player-stamina > div { height: 7px; border: 1px solid rgb(112 220 255 / 14%); }
+#player-level {
+  grid-row: 1 / 3;
+  grid-column: 1;
+  display: grid;
+  grid-template: auto auto / 1fr;
+  gap: 2px;
+  place-content: center;
+  margin: 0;
+  padding: 5px 7px;
+  text-align: center;
+}
+#player-level > div { order: 3; height: 4px; }
+#player-level em { font-size: .43rem; }
+
+#trait-slot { margin-top: 7px; padding: 6px 8px; }
+#trait-slot > span, #trait-slot > small { font-size: .48rem; }
+#trait-slot > strong { font-size: .6rem; }
+#trait-picker { display: none; }
+#trait-slot > small { margin-top: -2px; }
+body:has(#combat-hud-shell[data-loadout-open="true"]) #trait-picker { display: grid; }
+body:has(#combat-hud-shell[data-loadout-open="true"]) .forest-portal-label,
+body:has(#combat-hud-shell[data-loadout-open="true"]) #loot-world-label,
+body:has(#combat-hud-shell[data-loadout-open="true"]) #quiz-table-prompt,
+body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { display: none; }
+
+#combat-hud-root {
+  position: fixed;
+  z-index: 18;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: calc(50% + 58px);
+  width: min(590px, calc(100vw - 150px));
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+#combat-hud-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: 94px minmax(130px, 1fr) minmax(132px, 1fr) minmax(132px, 1fr) 46px;
+  gap: 6px;
+  align-items: stretch;
+  pointer-events: auto;
+}
+#mode-toggle,
+#main-hand-loadout,
+#power-slot,
+#special-slot,
+#loadout-toggle { height: 56px; margin: 0; }
+#mode-toggle { align-self: stretch; gap: 3px; padding: 3px; border-radius: 9px; }
+#mode-toggle button { min-width: 0; padding: 5px 4px; font-size: .54rem; letter-spacing: .06em; }
+#main-hand-loadout { display: grid; align-items: center; padding: 7px 9px; }
+#main-hand-loadout p { grid-template-columns: 1fr; gap: 1px; margin: 0; }
+#main-hand-loadout p span { font-size: .45rem; }
+#main-hand-loadout p strong { overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+#main-hand-loadout p em { font-size: .46rem; }
+#power-slot, #special-slot { grid-template: auto auto / 1fr auto; gap: 1px 6px; padding: 7px 9px; }
+#power-slot span, #special-slot span { grid-column: 1; font-size: .48rem; }
+#power-slot strong, #special-slot strong { grid-row: 2; grid-column: 1; overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+#power-slot em, #special-slot em { grid-row: 1 / 3; grid-column: 2; font-size: .5rem; }
+#loadout-toggle {
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  border: 1px solid rgb(201 220 207 / 23%);
+  border-radius: 9px;
+  background: rgb(15 27 22 / 89%);
+  color: #aac0b1;
+}
+#loadout-toggle span { font-size: 1rem; line-height: 1; }
+#loadout-toggle strong { font-size: .42rem; letter-spacing: .1em; }
+#loadout-toggle[aria-expanded="true"] { border-color: #d2b66b; background: #493819; color: #ffe39a; }
+
+#defense-slot {
+  position: fixed;
+  z-index: 18;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: calc(50% - 353px);
+  width: 110px;
+  height: 56px;
+  margin: 0;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  padding: 7px 9px;
+}
+#defense-slot span { font-size: .46rem; }
+#defense-slot strong { font-size: .64rem; }
+#defense-slot em { font-size: .45rem; }
+
+#combat-loadout-drawer {
+  position: absolute;
+  right: 0;
+  bottom: 68px;
+  width: min(430px, calc(100vw - 32px));
+  max-height: min(580px, calc(100dvh - 170px));
+  overflow: auto;
+  padding: 13px;
+  border: 1px solid rgb(218 190 111 / 44%);
+  border-radius: 13px;
+  background: linear-gradient(150deg, rgb(22 31 25 / 98%), rgb(9 17 13 / 98%));
+  box-shadow: 0 18px 54px rgb(0 0 0 / 58%), inset 0 0 32px rgb(214 176 82 / 5%);
+  backdrop-filter: blur(14px);
+}
+#combat-loadout-drawer[hidden] { display: none; }
+#combat-loadout-drawer > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+#combat-loadout-drawer > header span,
+.loadout-group > p span { display: block; color: #e0bd65; font-size: .53rem; font-weight: 1000; letter-spacing: .13em; }
+#combat-loadout-drawer > header strong { display: block; margin-top: 2px; color: #eef4e8; font-size: .78rem; }
+.loadout-close { width: 32px; height: 32px; border: 1px solid #ffffff22; border-radius: 8px; background: #ffffff09; color: #d5dfd7; font-size: 1.15rem; }
+.loadout-group { margin-top: 8px; padding: 9px; border: 1px solid #ffffff12; border-radius: 9px; background: #07110d66; }
+.loadout-group > p { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 1px 7px !important; }
+.loadout-group > p small { color: #8fa197; font-size: .52rem; }
+#combat-loadout-drawer #main-hand-picker,
+#combat-loadout-drawer #power-picker,
+#combat-loadout-drawer #power-loadout-slots,
+#combat-loadout-drawer #special-picker { margin-top: 5px; }
+
+@media (max-width: 900px) and (pointer: fine) {
+  #defense-slot { left: 18px; bottom: 18px; }
+  #combat-hud-root { width: min(590px, calc(100vw - 150px)); }
+}
+
+@media (pointer: coarse), (max-width: 820px) {
+  #hud { width: min(270px, calc(100vw - 28px)); padding: 10px 12px; }
+  #hud h1 { font-size: .96rem; }
+  #status, #target { font-size: .62rem; }
+  #danger-zone small, #players { display: none; }
+  #trait-slot { padding: 5px 7px; }
+  #trait-slot > small, #trait-picker { display: none !important; }
+  #combat-hud-root, #defense-slot { display: none; }
+  #player-hud-root { bottom: calc(142px + env(safe-area-inset-bottom)); width: min(380px, calc(100vw - 28px)); grid-template-columns: 65px minmax(190px, 1fr); }
+}
+
+@media (max-width: 520px) {
+  #hud { top: calc(46px + env(safe-area-inset-top)); left: 10px; width: 230px; }
+  #hud .eyebrow, #status, #target { display: none; }
+  #hud h1 { margin: 0 0 4px; font-size: .82rem; }
+  #danger-zone { margin-top: 4px; }
+  #player-hud-root { bottom: calc(108px + env(safe-area-inset-bottom)); grid-template-columns: 54px minmax(160px, 1fr); padding: 6px 8px; }
+  #player-health, #player-stamina { font-size: .58rem; }
+}
