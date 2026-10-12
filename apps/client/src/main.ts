@@ -5047,7 +5047,7 @@ function updateSilverDepthsRoute(now: number): void {
         ? "Personal rewards remain in the wing. Collect them before Ready if you want them."
       : depthsCheckpointStatus.selfReady ? "Your party can ready up beside the checkpoint." : "Prepared? Press Ready to open the boss gate together.";
   }
-  minimapPanel.hidden = visibleDepthsRoute !== null;
+  minimapPanel.hidden = false;
   depthsBreadcrumbRoot.enabled = visibleDepthsRoute !== null && (localDepthsRewardFlags & 128) !== 0;
   if (!visibleDepthsRoute) { depthsRouteFingerprint = ""; return; }
   const distance = Math.hypot(visibleDepthsRoute.target.x - player.x, visibleDepthsRoute.target.z - player.z);
@@ -7062,8 +7062,20 @@ app.on("update", (dt: number) => {
 
   updatePerformanceMetrics(now);
   if (worldReady) {
-    updateCaveNavigation(localPlayer.getPosition(), now);
     updateSilverDepthsRoute(now);
+    if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);
+    const dungeonRoute = visibleDepthsRoute;
+    if (dungeonRoute) {
+      const teammates = (latestDepthsPartyStatus?.members ?? []).flatMap(member => {
+        if (member.id === room?.sessionId || member.state !== "fighting" && member.state !== "fallen") return [];
+        const position = remotePlayers.get(member.id)?.entity.getPosition()
+          ?? (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(member.id);
+        return position ? [{ id: member.id, name: member.name, x: position.x, y: position.y, z: position.z,
+          state: member.state as "fighting" | "fallen" }] : [];
+      });
+      minimap.setDungeonState({ objective: { x: dungeonRoute.target.x, z: dungeonRoute.target.z,
+        title: depthsCheckpointStatus?.phase === "waiting" ? "Party checkpoint" : dungeonRoute.title }, teammates });
+    } else minimap.setDungeonState(null);
     minimap.setChampionState(mobVisuals.get("frontier-brute-west")?.state ?? null);
     if (now - lastNameplateSampleAt >= 100) {
     lastNameplateSampleAt = now;

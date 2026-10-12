@@ -1,4 +1,4 @@
-import { Block, RENEWABLE_MINERAL_DEPOSITS, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
+import { Block, RENEWABLE_MINERAL_DEPOSITS, SILVER_DEPTHS_ROOMS, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
 import type { MineralDepositStatus } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 
@@ -6,6 +6,12 @@ export const MAP_SIZE = 220;
 export const MAP_RANGE = 72;
 export const DISCOVERY_RADIUS = 10;
 type Position = { x: number; z: number };
+export type DungeonMapState = { objective: Position & { title: string }; teammates: (Position & { id: string; name: string; y: number; state: "fighting" | "fallen" })[] };
+export function dungeonMapPoints(player: Position & { y: number }, state: DungeonMapState) {
+  return { objective: mapPoint(player, state.objective), teammates: state.teammates
+    .filter(teammate => Math.abs(teammate.y - player.y) <= 3)
+    .map(teammate => ({ ...teammate, ...mapPoint(player, teammate) })) };
+}
 export const MAP_DEPOSITS = RENEWABLE_MINERAL_DEPOSITS;
 export function mineralStatusLabel(status: MineralDepositStatus | undefined, now: number): string {
   if (!status) return "Unknown";
@@ -81,6 +87,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setChampionState(champion: (Position & { y: number; alive: boolean }) | null): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
+  setDungeonState(state: DungeonMapState | null): void;
   surfaceGuideEnabled(): boolean;
   update(player: Position & { y: number }, yaw: number, now: number, visible: boolean, cameraYaw?: number, active?: boolean): void;
 } {
@@ -92,6 +99,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let waypoint: Waypoint | null = null;
   let surfaceGuide = false;
   let caveState: CaveMapState = { known: new Set(), chambers: [], route: [] };
+  let dungeonState: DungeonMapState | null = null;
+  const panel = canvas.closest<HTMLElement>("#minimap");
   const surfaceButton = document.querySelector<HTMLButtonElement>("#minimap-surface")!;
   const depthLabel = document.querySelector<HTMLElement>("#minimap-depth")!;
   const statuses = new Map<string, MineralDepositStatus>();
@@ -139,7 +148,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   });
   document.querySelector<HTMLButtonElement>("#waypoint-clear")!.addEventListener("click", () => setWaypoint(null));
   canvas.addEventListener("click", event => {
-    if (!lastPlayer) return;
+    if (!lastPlayer || dungeonState) return;
     const bounds = canvas.getBoundingClientRect();
     const target = waypointAtMapPoint(lastPlayer, (event.clientX - bounds.left) * MAP_SIZE / bounds.width, (event.clientY - bounds.top) * MAP_SIZE / bounds.height, discovered);
     if (target) setWaypoint(target);
@@ -149,6 +158,13 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   return {
     setChampionState(value) { champion = value; },
     setCaveState(state) { caveState = state; },
+    setDungeonState(state) {
+      dungeonState = state;
+      if (panel && panel.dataset.dungeon !== String(state !== null)) {
+        panel.dataset.dungeon = String(state !== null);
+        panel.querySelector<HTMLElement>("#minimap-title")!.textContent = state ? "SILVER DEPTHS MAP" : "EXPLORER MAP";
+      }
+    },
     surfaceGuideEnabled() { return surfaceGuide; },
     setMineralStatus(values) {
       statuses.clear();
@@ -160,6 +176,51 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (now - lastUpdate < 100 || !Number.isFinite(player.x + player.y + player.z + yaw)) return;
       lastUpdate = now;
       lastPlayer = { x: player.x, y: player.y, z: player.z };
+      if (dungeonState) {
+        const state = dungeonState;
+        const points = dungeonMapPoints(player, state);
+        depthLabel.textContent = "SILVER DEPTHS · FLOOR 1";
+        surfaceButton.hidden = true;
+        guide.hidden = true;
+        const distance = Math.round(Math.hypot(state.objective.x - player.x, state.objective.z - player.z));
+        detail.textContent = `Next: ${state.objective.title} · ${distance}m · ${state.teammates.length} teammate${state.teammates.length === 1 ? "" : "s"}`;
+        canvas.setAttribute("aria-label", `Silver Depths map. Next: ${state.objective.title}, ${distance} metres away. ${points.teammates.map(teammate => `${teammate.name} ${teammate.state}`).join(", ") || "No teammates on this floor"}.`);
+        if (!visible || !context) return;
+        const ctx = context, scale = MAP_SIZE / (MAP_RANGE * 2);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
+        ctx.fillStyle = "#100c19"; ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        for (const room of SILVER_DEPTHS_ROOMS) {
+          const x = MAP_SIZE / 2 + (room.minX - player.x) * scale;
+          const y = MAP_SIZE / 2 + (room.minZ - player.z) * scale;
+          const width = (room.maxX - room.minX + 1) * scale;
+          const height = (room.maxZ - room.minZ + 1) * scale;
+          ctx.fillStyle = "#413452"; ctx.fillRect(x, y, width, height);
+          ctx.strokeStyle = "#a277c17a"; ctx.lineWidth = 1; ctx.strokeRect(x, y, width, height);
+        }
+        const center = MAP_SIZE / 2, target = points.objective;
+        ctx.beginPath(); ctx.moveTo(center, center); ctx.lineTo(target.x, target.y);
+        ctx.strokeStyle = "#e8b967bd"; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(target.x, target.y - 8); ctx.lineTo(target.x + 8, target.y);
+        ctx.lineTo(target.x, target.y + 8); ctx.lineTo(target.x - 8, target.y); ctx.closePath();
+        ctx.fillStyle = "#ffcb71"; ctx.strokeStyle = "#251536"; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
+        if (target.offscreen) { ctx.beginPath(); ctx.arc(target.x, target.y, 11, 0, Math.PI * 2); ctx.strokeStyle = "#ffcb71"; ctx.stroke(); }
+        for (const teammate of points.teammates) {
+          ctx.beginPath(); ctx.arc(teammate.x, teammate.y, 6, 0, Math.PI * 2);
+          ctx.fillStyle = teammate.state === "fallen" ? "#ff917e" : "#8edfff";
+          ctx.strokeStyle = "#110b1b"; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
+          if (teammate.offscreen) { ctx.beginPath(); ctx.arc(teammate.x, teammate.y, 10, 0, Math.PI * 2); ctx.strokeStyle = ctx.fillStyle; ctx.stroke(); }
+          ctx.fillStyle = "#f7efff"; ctx.font = "bold 9px system-ui"; ctx.textAlign = "center";
+          ctx.fillText(teammate.name.slice(0, 10), teammate.x, teammate.y - 10);
+        }
+        const facing = mapFacing(yaw);
+        ctx.beginPath(); ctx.moveTo(center + facing.x * 9, center + facing.y * 9);
+        ctx.lineTo(center - facing.x * 5 + facing.y * 5, center - facing.y * 5 - facing.x * 5);
+        ctx.lineTo(center - facing.x * 5 - facing.y * 5, center - facing.y * 5 + facing.x * 5); ctx.closePath();
+        ctx.fillStyle = "#fff8da"; ctx.strokeStyle = "#100c19"; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#fff8da"; ctx.textAlign = "center"; ctx.font = "bold 11px system-ui"; ctx.fillText("N", center, 13);
+        return;
+      }
       const underground = caveDepth(player.y) > 0;
       depthLabel.textContent = underground ? `UNDERGROUND · DEPTH ${caveDepth(player.y)} BLOCKS` : "SURFACE";
       surfaceButton.hidden = !underground;

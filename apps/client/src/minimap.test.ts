@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT } from "./minimap.js";
-import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
+import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
   it("reveals the champion only when alive and nearby on the surface", () => {
@@ -65,6 +65,18 @@ describe("north-up explorer minimap", () => {
     const point = mapPoint({ x: 200, z: 200 }, { x: 8.5, z: 8.5 });
     expect(point.offscreen).toBe(true);
     expect(point.x).toBe(14); expect(point.y).toBe(14);
+  });
+  it("plots the Silver Depths objective and same-floor teammates without losing distant bearings", () => {
+    const player = { x: 63.5, y: 1, z: 12.5 };
+    const points = dungeonMapPoints(player, { objective: { x: 137.5, z: 14.5, title: "Extract" }, teammates: [
+      { id: "ally", name: "Ally", x: 70.5, y: 1, z: 12.5, state: "fighting" },
+      { id: "fallen", name: "Fallen", x: 100.5, y: 1, z: 20.5, state: "fallen" },
+      { id: "elsewhere", name: "Elsewhere", x: 68.5, y: 8, z: 12.5, state: "fighting" },
+    ] });
+    expect(points.objective.offscreen).toBe(true);
+    expect(points.objective.x).toBeGreaterThan(MAP_SIZE / 2);
+    expect(points.teammates.map(teammate => teammate.id)).toEqual(["ally", "fallen"]);
+    expect(points.teammates[0]!.x).toBeGreaterThan(MAP_SIZE / 2);
   });
   it("reveals deposits only nearby at surface height and remembers them after departure", () => {
     const discovered = new Set<string>();

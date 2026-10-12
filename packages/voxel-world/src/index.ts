@@ -41,6 +41,16 @@ export const SILVER_DEPTHS_BOSS_GATE = { x: 123, minZ: 7, maxZ: 22 } as const;
 export const SILVER_DEPTHS_IRON_GATE = { z: 3, minX: 96, maxX: 100 } as const;
 export const SILVER_DEPTHS_SILVER_GATE = { z: 26, minX: 96, maxX: 100 } as const;
 export const SILVER_DEPTHS_EXIT_POSITION = { x: 137.5, y: 1, z: 14.5 } as const;
+export const SILVER_DEPTHS_ROOMS = [
+  { minX: 61, maxX: 73, minZ: 5, maxZ: 20 }, // arrival chamber
+  { minX: 74, maxX: 81, minZ: 9, maxZ: 16 }, // sealed approach
+  { minX: 83, maxX: 107, minZ: 3, maxZ: 26 }, // spitter gallery
+  { minX: 88, maxX: 108, minZ: -14, maxZ: 3 }, // northern mining branch
+  { minX: 88, maxX: 112, minZ: 26, maxZ: 35 }, // southern echo branch
+  { minX: 108, maxX: 118, minZ: 10, maxZ: 19 }, // party checkpoint
+  { minX: 115, maxX: 124, minZ: 7, maxZ: 22 }, // boss antechamber
+  { minX: 124, maxX: 139, minZ: -2, maxZ: 31 }, // Matriarch arena
+] as const;
 export const TOWN_STORAGE_CHEST_POSITION = { x: 26.5, y: 8, z: 4.5 } as const;
 export function isAtTownStorage(player: { x: number; y: number; z: number }): boolean {
   const chest = TOWN_STORAGE_CHEST_POSITION;
@@ -470,17 +480,7 @@ function milestoneCaveBlock(worldX: number, y: number, worldZ: number): BlockId 
       // route around the Moonstone seal that gates the combat gallery.
       if (((worldZ === -15 && worldX >= 94 && worldX <= 101)
         || (worldZ === 36 && worldX >= 96 && worldX <= 104)) && y >= 1 && y <= 2) return Block.SilverOre;
-      const rooms = [
-        { minX: 61, maxX: 73, minZ: 5, maxZ: 20 }, // arrival chamber
-        { minX: 74, maxX: 81, minZ: 9, maxZ: 16 }, // sealed approach
-        { minX: 83, maxX: 107, minZ: 3, maxZ: 26 }, // spitter gallery
-        { minX: 88, maxX: 108, minZ: -14, maxZ: 3 }, // northern mining branch
-        { minX: 88, maxX: 112, minZ: 26, maxZ: 35 }, // southern echo branch
-        { minX: 108, maxX: 118, minZ: 10, maxZ: 19 }, // party checkpoint
-        { minX: 115, maxX: 124, minZ: 7, maxZ: 22 }, // boss antechamber
-        { minX: 124, maxX: 139, minZ: -2, maxZ: 31 }, // Matriarch arena
-      ];
-      const walkable = rooms.some(room => worldX >= room.minX && worldX <= room.maxX
+      const walkable = SILVER_DEPTHS_ROOMS.some(room => worldX >= room.minX && worldX <= room.maxX
         && worldZ >= room.minZ && worldZ <= room.maxZ);
       if (walkable && y >= 1 && y <= 5) return Block.Air;
       return Block.Stone;
