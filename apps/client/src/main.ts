@@ -2186,8 +2186,6 @@ function updateLootWorldLabel(): void {
   lootWorldAction.textContent = `${near ? full ? "INVENTORY FULL" : "E · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.dataset.full = String(full);
-  lootWorldLabel.style.left = `${rect.left + screen.x}px`;
-  lootWorldLabel.style.top = `${rect.top + screen.y}px`;
   lootWorldLabel.hidden = false;
 }
 function itemForMainHand(id: MainHandId): ItemId | null {
@@ -5976,7 +5974,14 @@ const movementEventLog: string[] = [];
 function renderWorldObjective(update: WorldObjectiveUpdate): void {
   const changedObjective = currentWorldObjective?.objectiveId !== update.objectiveId;
   currentWorldObjective = update;
-  worldObjective.hidden = false;
+  const mapOnlyEncounter = update.kind === "encounter";
+  worldObjective.hidden = mapOnlyEncounter;
+  minimap.setThreatState(mapOnlyEncounter ? {
+    x: update.targetX,
+    y: update.targetY,
+    z: update.targetZ,
+    name: update.title,
+  } : null);
   if (changedObjective || update.showMarker === false) objectiveMarker.hidden = update.showMarker === false;
   const recommendation = update.recommendedLevel ?? worldLevelRange(update.tier).label;
   objectiveTier.textContent = `${update.progressLabel?.startsWith("REALM THREAT") || update.progressLabel === "REALM BOSS" ? "REALM" : update.kind === "hub" ? "SAFE TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "PERSONAL LOOT" : update.kind === "explore" ? "WILDERNESS" : update.progressLabel ? "DUNGEON" : "THREAT"} · ${recommendation}`;
@@ -5990,6 +5995,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   objectiveMarkerLabel.textContent = update.title.toUpperCase();
   objectiveMarker.dataset.kind = update.kind ?? "encounter";
   objectiveMarker.querySelector("i")!.textContent = objectiveIcon(update.kind);
+  if (mapOnlyEncounter) objectiveMarker.hidden = true;
 }
 
 function showObjectiveComplete(message: WorldObjectiveCompleted): void {
@@ -6008,6 +6014,7 @@ function showObjectiveComplete(message: WorldObjectiveCompleted): void {
 function updateObjectiveGuidance(): void {
   const objective = currentWorldObjective;
   if (!objective || !camera.camera) return;
+  if (objective.kind === "encounter") { objectiveMarker.hidden = true; return; }
   if (objective.showMarker === false) { objectiveMarker.hidden = true; return; }
   const trackedMob = mobVisuals.get(objective.targetMobId);
   const targetPosition = trackedMob?.state.alive

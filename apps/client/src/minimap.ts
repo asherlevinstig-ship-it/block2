@@ -6,7 +6,17 @@ import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } f
 export const MAP_SIZE = 220;
 export const MAP_RANGE = 72;
 export const DISCOVERY_RADIUS = 10;
+export const THREAT_GUIDANCE_RADIUS = 28;
 type Position = { x: number; z: number };
+export type ThreatMapTarget = Position & { y: number; name: string };
+export function nearbyThreatMapTarget(
+  player: Position & { y: number },
+  threat: ThreatMapTarget | null,
+  radius = THREAT_GUIDANCE_RADIUS,
+): ThreatMapTarget | null {
+  return threat && Math.abs(threat.y - player.y) <= 2.5
+    && Math.hypot(threat.x - player.x, threat.z - player.z) <= radius ? threat : null;
+}
 export type EliteMapTarget = Position & { id: string; name: string; y: number; alive: boolean; isElite: boolean };
 export function activeEliteMapTargets(player: Position & { y: number }, elites: readonly EliteMapTarget[]): EliteMapTarget[] {
   return elites.filter(elite => elite.alive && elite.isElite && Math.abs(elite.y - player.y) <= 2.5);
@@ -105,6 +115,7 @@ export function discoverDeposits(player: Position & { y: number }, discovered: S
 export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, storageKey: string): {
   setChampionState(champion: (Position & { y: number; alive: boolean }) | null): void;
   setEliteStates(elites: EliteMapTarget[]): void;
+  setThreatState(threat: ThreatMapTarget | null): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
@@ -136,6 +147,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const statuses = new Map<string, MineralDepositStatus>();
   let champion: (Position & { y: number; alive: boolean }) | null = null;
   let elites: EliteMapTarget[] = [];
+  let threat: ThreatMapTarget | null = null;
   let lastStatusSecond = 0;
   const homeButton = document.querySelector<HTMLButtonElement>("#minimap-home")!;
   const destinations = document.querySelector<HTMLSelectElement>("#minimap-destination")!;
@@ -196,6 +208,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   return {
     setChampionState(value) { champion = value; },
     setEliteStates(values) { elites = values; },
+    setThreatState(value) { threat = value; lastUpdate = -Infinity; },
     setCaveState(state) { caveState = state; },
     setDungeonState(state) {
       dungeonState = state;
@@ -327,6 +340,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         return;
       }
       const underground = caveDepth(player.y) > 0;
+      const nearbyThreat = nearbyThreatMapTarget(player, threat);
       depthLabel.textContent = underground ? `UNDERGROUND · DEPTH ${caveDepth(player.y)} BLOCKS` : "SURFACE";
       surfaceButton.hidden = !underground;
       if (!underground && surfaceGuide) setWaypoint(null);
@@ -408,6 +422,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) marker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", true);
         for (const elite of activeEliteMapTargets(player, elites)) marker(elite, "★ ELITE", "#e890ff", false, true);
       }
+      if (nearbyThreat) marker(nearbyThreat, "⚔ THREAT", "#ff806f", false);
       marker(MINE_ENTRANCE, "MINE", "#ffe08c", true);
       for (const chamber of caveState.chambers) marker(chamber, `${chamber.label} · D${caveDepth(chamber.y)}`, "#a3dfeb", false);
       for (const deposit of underground ? [] : MAP_DEPOSITS) {
@@ -439,8 +454,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       ctx.fillStyle = "#fff8da"; ctx.textAlign = "center"; ctx.font = "bold 11px system-ui"; ctx.fillText("N", x, 13);
       const distance = Math.round(Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z));
       const depositCount = MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).length;
-      detail.textContent = underground ? `Depth ${caveDepth(player.y)} · ${caveState.chambers.length} chambers discovered` : `${distance}m from town · ${depositCount} deposits found`;
-      canvas.setAttribute("aria-label", `North-up ${underground ? `underground map at depth ${caveDepth(player.y)}, explored cells only` : "surface map"}. ${caveState.chambers.length} chambers discovered. White arrow shows your facing.`);
+      const threatDetail = nearbyThreat ? ` · Nearby threat: ${nearbyThreat.name}` : "";
+      detail.textContent = `${underground ? `Depth ${caveDepth(player.y)} · ${caveState.chambers.length} chambers discovered` : `${distance}m from town · ${depositCount} deposits found`}${threatDetail}`;
+      canvas.setAttribute("aria-label", `North-up ${underground ? `underground map at depth ${caveDepth(player.y)}, explored cells only` : "surface map"}. ${caveState.chambers.length} chambers discovered.${nearbyThreat ? ` Nearby threat: ${nearbyThreat.name}.` : ""} White arrow shows your facing.`);
     },
   };
 }

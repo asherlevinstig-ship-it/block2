@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { activeEliteMapTargets, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, discoverAshenSpire } from "./minimap.js";
+import { activeEliteMapTargets, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, discoverAshenSpire, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
+  it("reveals dynamic threat guidance only when nearby on the same floor", () => {
+    const threat = { x: 20, y: 8, z: 0, name: "Realm Warden" };
+    expect(nearbyThreatMapTarget({ x: 0, y: 8, z: 0 }, threat)).toEqual(threat);
+    expect(nearbyThreatMapTarget({ x: 20 + THREAT_GUIDANCE_RADIUS + .1, y: 8, z: 0 }, threat)).toBeNull();
+    expect(nearbyThreatMapTarget({ x: 20, y: 3, z: 0 }, threat)).toBeNull();
+  });
   it("shows living same-floor elites without permanently discovering them", () => {
     const player = { x: 0, y: 8, z: 0 };
     const elite = { id: "elite", name: "Volatile Spitter", x: 40, y: 8, z: 0, alive: true, isElite: true };
