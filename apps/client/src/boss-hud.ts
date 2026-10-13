@@ -1,9 +1,14 @@
 type Pose = { x: number; y: number; z: number };
-export type BossHudMob = Pose & { name: string; alive: boolean; health: number; maxHealth: number; enraged?: boolean };
+export type BossHudMob = Pose & { name: string; alive: boolean; health: number; maxHealth: number; enraged?: boolean; isMiniBoss?: boolean };
 export interface BossHudState { visible: boolean; alive?: boolean; enraged: boolean; message: string; messageUntil: number }
 export const initialBossHud = (): BossHudState => ({ visible: false, enraged: false, message: "", messageUntil: 0 });
 export interface BossHudCopy { arrival: string; enrage: string; defeat: string }
-export function bossHudCopy(name: string): BossHudCopy {
+export function bossHudCopy(name: string, isMiniBoss = false): BossHudCopy {
+  if (isMiniBoss) return {
+    arrival: `${name.toUpperCase()} DISCOVERED · AREA MINI-BOSS`,
+    enrage: `${name.toUpperCase()} IS ENRAGED`,
+    defeat: `${name.toUpperCase()} DEFEATED · PREMIUM LOOT DROPPED`,
+  };
   if (/Crystal Matriarch/i.test(name)) return {
     arrival: "CRYSTAL MATRIARCH AWAKENS · FIND THE GAPS",
     enrage: "PHASE 2 · ROTATING CRYSTAL WAVES",
@@ -39,7 +44,7 @@ export function bossHudCopy(name: string): BossHudCopy {
 export function advanceBossHud(previous: BossHudState, boss: BossHudMob | undefined, player: Pose & { health: number }, now: number): BossHudState {
   if (!boss || player.health <= 0) return initialBossHud();
   const nearby = Math.abs(player.y - boss.y) <= 2.5 && Math.hypot(player.x - boss.x, player.z - boss.z) <= (previous.visible ? 28 : 24);
-  const copy = bossHudCopy(boss.name);
+  const copy = bossHudCopy(boss.name, boss.isMiniBoss);
   let message = previous.message, messageUntil = previous.messageUntil;
   if (!nearby) { message = ""; messageUntil = 0; }
   else if (boss.alive && previous.alive !== true) { message = copy.arrival; messageUntil = now + 3000; }

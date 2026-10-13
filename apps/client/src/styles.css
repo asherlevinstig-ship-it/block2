@@ -1647,6 +1647,10 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #boss-hud[data-encounter="crystal"] #boss-health { background: #2b2140; }
 #boss-hud[data-encounter="crystal"] #boss-health-fill { background: linear-gradient(90deg, #7146ba, #d686ff); }
 #boss-hud[data-encounter="crystal"][data-enraged="true"] { border-color: #e187ff; box-shadow: 0 4px 22px #0009, 0 0 30px #b759ff88; }
+#boss-hud[data-encounter="miniboss"] { background: linear-gradient(180deg, #2b1b0bf2, #15110cf2); border-color: #f0ad3d; box-shadow: 0 4px 22px #0009, 0 0 26px #e98b2b55; }
+#boss-hud[data-encounter="miniboss"] header span { color: #ffd477; }
+#boss-hud[data-encounter="miniboss"] #boss-health { background: #38240f; }
+#boss-hud[data-encounter="miniboss"] #boss-health-fill { background: linear-gradient(90deg, #d56c20, #ffd45e); }
 @media (min-width: 821px) { #boss-hud { left: max(50%, 610px); width: min(430px, calc(100vw - 440px)); } }
 #objective-marker i { display: block; color: var(--objective-color, #f5c846); font-style: normal; font-size: 23px; line-height: 24px; }
 #objective-marker[data-kind="encounter"] { --objective-color: #ff9678; }
@@ -1952,6 +1956,7 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .enemy-combat-cue[data-kind="alert"] { color: #ffe48a; }
 .enemy-combat-cue[data-kind="search"] { color: #d6bcff; }
 .enemy-combat-cue[data-kind="return"] { color: #a8bcc4; opacity: .8; }
+.enemy-combat-cue[data-miniboss="true"] { padding: 6px 9px; color: #ffd067; border: 1px solid #e99a35aa; background: #261609e8; box-shadow: 0 0 18px #ed8d2855; }
 .enemy-combat-cue[data-kind="alert"] .enemy-combat-cue-track,
 .enemy-combat-cue[data-kind="search"] .enemy-combat-cue-track,
 .enemy-combat-cue[data-kind="return"] .enemy-combat-cue-track { display: none; }
@@ -1976,6 +1981,7 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .enemy-level-tag[data-threat="trivial"] { color: #91a78f; border-color: #60715e88; }
 .enemy-level-tag[data-threat="dangerous"] { color: #ffd268; border-color: #e3a637bb; box-shadow: 0 0 8px #e3a63733; }
 .enemy-level-tag[data-threat="deadly"] { color: #ff7968; border-color: #ff4d3dcc; box-shadow: 0 0 10px #ff382b55; }
+.enemy-level-tag[data-miniboss="true"] { color: #ffd36b; border-color: #e89a32cc; background: #24160bea; box-shadow: 0 0 14px #e8902f66; }
 .enemy-respawn-tag {
   position: fixed;
   z-index: 3;

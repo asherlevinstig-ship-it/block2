@@ -37,7 +37,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
-import { areaMiniBossDefinition, isAreaMiniBoss } from "./area-mini-bosses.js";
+import { areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss } from "./area-mini-bosses.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
@@ -1616,6 +1616,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.maxHealth = mob.health = stats.maxHealth; mob.rewardMultiplier *= 1.5;
     }
     const areaMiniBoss = areaMiniBossDefinition(mobId);
+    mob.isMiniBoss = Boolean(areaMainMobDefinition(mobId));
     if (areaMiniBoss && !mob.isChampion) {
       const stats = wildernessEliteStats({ maxHealth: mob.maxHealth, damage: mob.attackDamage, armor: mob.armor,
         speedMultiplier: mob.speedMultiplier, rewardMultiplier: mob.rewardMultiplier });
@@ -1882,6 +1883,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
+    const areaMainMob = areaMainMobDefinition(mobId);
+    if (areaMainMob) for (const playerId of recipients) {
+      this.clients.find(client => client.sessionId === playerId)?.send("objective:completed", {
+        objectiveId: `area-main-${mobId}`,
+        title: `${areaMainMob.name} Defeated`,
+        rewardLabel: "AREA LEADER CLEARED · premium personal loot dropped",
+        coinsGranted: 0,
+      } satisfies WorldObjectiveCompleted);
+    }
     if (SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) this.advanceSilverDepthsCacheAmbush();
     if (mobId === CRYSTAL_MATRIARCH_ID && this.roomKind === "silver-depths") this.broadcastSilverDepthsPartyStatus();
     this.delayedMatriarchVolleys.delete(mobId);

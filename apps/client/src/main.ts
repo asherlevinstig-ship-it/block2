@@ -1778,6 +1778,7 @@ interface NetworkMob {
   awarenessState: string;
   alertUntil: number;
   isChampion: boolean;
+  isMiniBoss: boolean;
   isElite: boolean;
   eliteKind: string;
   enraged?: boolean;
@@ -3688,7 +3689,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
       spike.setLocalEulerAngles(0, 0, side * -25);
     }
   }
-  if (mob.isChampion && !matriarch && !rootGuardian) {
+  if ((mob.isChampion || mob.isMiniBoss) && !matriarch && !rootGuardian) {
     const crestMaterial = coloredMaterial(new pc.Color(.87, .58, .16));
     const crestY = isSpitter ? 1.18 : 2.02;
     addBox(bodyRoot, "champion-stone-crest", crestMaterial, [.75, .22, .28], [0, crestY, 0]);
@@ -3697,7 +3698,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   const statusRoot = new pc.Entity("mob-status");
   entity.addChild(statusRoot);
   const healthWidth = isBrute ? 1.46 : isSpitter ? 1.12 : 0.96;
-  const healthBarY = matriarch ? 2.5 : mob.isChampion ? isSpitter ? 1.9 : 3.08 : isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
+  const healthBarY = matriarch ? 2.5 : mob.isChampion || mob.isMiniBoss ? isSpitter ? 1.9 : isBrute ? 3.08 : 1.72 : isBrute ? 2.32 : isSpitter ? 1.43 : 1.34;
   addBox(statusRoot, "health-back", healthBackMaterial, [healthWidth + 0.06, 0.1, 0.08], [0, healthBarY, 0]);
   const healthFill = addBox(statusRoot, "health-fill", healthMaterial, [healthWidth, 0.065, 0.09], [0, healthBarY, 0.01]);
   const tierMaterial = coloredMaterial(tierColor);
@@ -3763,7 +3764,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   respawnCue.enabled = false;
   entity.addChild(respawnCue);
   const eliteAura = new pc.Entity("elite-aura");
-  const eliteAuraMaterial = powerMaterial(new pc.Color(.88, .38, 1), .5);
+  const eliteAuraMaterial = powerMaterial(mob.isMiniBoss ? new pc.Color(1, .63, .12) : new pc.Color(.88, .38, 1), .5);
   for (let index = 0; index < 10; index++) {
     const angle = index * Math.PI / 5;
     const shard = addBox(eliteAura, "elite-aura-shard", eliteAuraMaterial, [.12, .12 + index % 2 * .1, .28],
@@ -4004,26 +4005,27 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   root.addChild(marker);
   const equipmentDrop = groupedBag ? bagItems.some(entry => isEquipmentItem(entry.itemId)) : isEquipmentItem(itemId);
   const legendaryDrop = bagTier === "white" || rarity === "legendary";
+  const source = sourceId ? mobVisuals.get(sourceId) : undefined;
+  const miniBossDrop = source?.state.isMiniBoss === true;
   const beam = new pc.Entity(`loot-${rarity}-beam`);
   beam.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-  const beamHeight = equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
-  beam.setLocalScale(equipmentDrop ? legendaryDrop ? .065 : .05 : .04, beamHeight, equipmentDrop ? legendaryDrop ? .065 : .05 : .04);
+  const beamHeight = miniBossDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
+  beam.setLocalScale(miniBossDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04, beamHeight, miniBossDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04);
   beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
-  if (ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
+  if (miniBossDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
     const halo = new pc.Entity(`loot-${rarity}-halo`);
     halo.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-    halo.setLocalScale(legendaryDrop ? 1.25 : .95, .018, legendaryDrop ? 1.25 : .95);
+    halo.setLocalScale(miniBossDrop ? 1.38 : legendaryDrop ? 1.25 : .95, .018, miniBossDrop ? 1.38 : legendaryDrop ? 1.25 : .95);
     halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
   }
   const glow = new pc.Entity(`loot-${rarity}-light`);
-  const tint = bagTier === "white" ? new pc.Color(1, 1, 1) : bagTier === "purple" ? new pc.Color(.7, .25, 1)
+  const tint = miniBossDrop ? new pc.Color(1, .62, .12) : bagTier === "white" ? new pc.Color(1, 1, 1) : bagTier === "purple" ? new pc.Color(.7, .25, 1)
     : bagTier === "blue" ? new pc.Color(.2, .55, 1) : bagTier === "brown" ? new pc.Color(.55, .3, .12)
       : legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
         : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
-  glow.addComponent("light", { type: "omni", color: tint, intensity: legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
-    range: legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
+  glow.addComponent("light", { type: "omni", color: tint, intensity: miniBossDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
+    range: miniBossDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
   glow.setLocalPosition(0, .45, 0); root.addChild(glow);
-  const source = sourceId ? mobVisuals.get(sourceId) : undefined;
   const now = performance.now();
   const revealAt = settled ? now : source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
   const landedAt = settled ? now : revealAt + (source ? 520 : 260);
@@ -4234,7 +4236,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["awarenessState", "alertUntil", "isChampion", "isElite", "eliteKind", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "respawnAt", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["awarenessState", "alertUntil", "isChampion", "isMiniBoss", "isElite", "eliteKind", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "respawnAt", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -6141,7 +6143,8 @@ let activeBossId = "";
 function updateBossHud(now: number): void {
   const position = localPlayer.getPosition();
   const inSilverDepths = position.y < 5 && position.x >= 59 && position.x <= 78 && position.z >= 3 && position.z <= 16;
-  const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian" : activeRealmEventId || "greenwood-venom-matriarch";
+  const trackedMiniBossId = currentWorldObjective?.kind === "miniboss" ? currentWorldObjective.targetMobId : "";
+  const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian" : activeRealmEventId || trackedMiniBossId || "greenwood-venom-matriarch";
   const boss = mobVisuals.get(nextBossId)?.state;
   if (activeBossId !== nextBossId) {
     activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = "";
@@ -6163,18 +6166,19 @@ function updateBossHud(now: number): void {
     combatAudio.play("guardianPhase");
     if (boss) createDungeonBurst(boss.x, boss.z, "gate");
   }
-  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, bossHudState.enraged, bossHudState.message]);
+  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
+  if (currentWorldObjective?.kind === "miniboss") worldObjective.hidden = bossHudState.visible;
   if (!boss || !bossHudState.visible) return;
   bossName.textContent = boss.name;
   const guardian = nextBossId === "forest-guardian";
   const realmBoss = /Realm Stone Warden/i.test(boss.name);
   const bruteEvent = /Stoneheart|Realm Stone Warden/i.test(boss.name);
-  bossEncounter.textContent = crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
-  bossHud.dataset.encounter = crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
+  bossEncounter.textContent = boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : boss.isMiniBoss ? `${boss.combatState === "recover" ? "OPENING · COUNTER NOW" : `${boss.attackPattern.replaceAll("-", " ").toUpperCase()} · WATCH THE WARNING`}` : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
+  bossHud.dataset.encounter = boss.isMiniBoss ? "miniboss" : crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
@@ -7872,7 +7876,8 @@ app.on("update", (dt: number) => {
         const threat = enemyThreat(localCharacterProgression.level, mob.state.level);
         const skulls = threat === "deadly" ? "☠☠ " : threat === "dangerous" ? "☠ " : "";
         mob.levelTag.dataset.threat = threat;
-        mob.levelTag.textContent = `${skulls}LV ${mob.state.level} · ${mob.state.name}`;
+        mob.levelTag.dataset.miniboss = String(mob.state.isMiniBoss);
+        mob.levelTag.textContent = `${mob.state.isMiniBoss ? "★ MINI-BOSS · " : skulls}LV ${mob.state.level} · ${mob.state.name}`;
         mob.levelTag.style.left = `${rect.left + screen.x}px`;
         mob.levelTag.style.top = `${rect.top + screen.y}px`;
       }
@@ -7889,6 +7894,7 @@ app.on("update", (dt: number) => {
       mob.combatCue.style.left = `${rect.left + screen.x}px`;
       mob.combatCue.style.top = `${rect.top + screen.y}px`;
       mob.combatCue.dataset.kind = cue.recovery ? "recovery" : cue.kind;
+      mob.combatCue.dataset.miniboss = String(mob.state.isMiniBoss);
       mob.combatCueLabel.textContent = cue.label;
       mob.combatCueFill.style.transform = `scaleX(${cue.progress})`;
     }
@@ -7917,15 +7923,19 @@ app.on("update", (dt: number) => {
         crystalWarning ? .32 : mob.isSpitter ? fanWarning ? .62 : 1 : mob.isBrute ? .25 : .72,
         crystalWarning ? 1 : mob.isSpitter ? fanWarning ? 1 : .16 : mob.isBrute ? .08 : .18);
       mob.warningMaterial.emissive.copy(mob.warningMaterial.diffuse);
-      mob.warningMaterial.opacity = presentation.aimLocked ? .65 : .38;
+      if (mob.state.isMiniBoss) {
+        mob.warningMaterial.diffuse.set(1, .56, .08);
+        mob.warningMaterial.emissive.set(1, .28, .02);
+      }
+      mob.warningMaterial.opacity = presentation.aimLocked ? mob.state.isMiniBoss ? .78 : .65 : mob.state.isMiniBoss ? .5 : .38;
       mob.warningMaterial.update();
     }
-    mob.eliteAura.enabled = mob.state.alive && mob.state.isElite;
+    mob.eliteAura.enabled = mob.state.alive && (mob.state.isElite || mob.state.isMiniBoss);
     if (mob.eliteAura.enabled) {
       const elitePulse = 1 + Math.sin(animationTime * 6.5) * .09;
       mob.eliteAura.setLocalScale(elitePulse, elitePulse, elitePulse);
       mob.eliteAura.setLocalEulerAngles(0, animationTime * 42, 0);
-      mob.eliteAuraMaterial.opacity = .38 + Math.sin(animationTime * 6.5) * .12;
+      mob.eliteAuraMaterial.opacity = (mob.state.isMiniBoss ? .5 : .38) + Math.sin(animationTime * 6.5) * .12;
       mob.eliteAuraMaterial.update();
     }
     animateMobArt(mob.art, frameTime, animationTime, moveSpeed, mob.state.awarenessState, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
@@ -7936,7 +7946,7 @@ app.on("update", (dt: number) => {
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
     const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
-    const bodySize = mob.art.rootGuardian ? 1.38 : mob.state.isChampion ? 1.25 : mob.state.isElite ? 1.12 : 1;
+    const bodySize = mob.art.rootGuardian ? 1.38 : mob.state.isChampion ? 1.25 : mob.state.isMiniBoss ? 1.18 : mob.state.isElite ? 1.12 : 1;
     mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
     mob.bodyRoot.setLocalPosition(
       0,
@@ -7962,9 +7972,9 @@ app.on("update", (dt: number) => {
       mob.bodyRoot.setLocalEulerAngles(deathPose.pitch, 0, deathPose.roll);
     }
     mob.bodyMaterial.emissive.set(
-      0.001 + (mob.state.isElite ? .12 : 0) + 0.55 * hitStrength + 0.34 * windupStrength,
-      0.001 + (mob.state.isElite ? .025 : 0) + 0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
-      0.001 + (mob.state.isElite ? .18 : 0) + 0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
+      0.001 + (mob.state.isMiniBoss ? .2 : mob.state.isElite ? .12 : 0) + 0.55 * hitStrength + 0.34 * windupStrength,
+      0.001 + (mob.state.isMiniBoss ? .08 : mob.state.isElite ? .025 : 0) + 0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
+      0.001 + (mob.state.isMiniBoss ? .01 : mob.state.isElite ? .18 : 0) + 0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
     );
     mob.bodyMaterial.update();
   }

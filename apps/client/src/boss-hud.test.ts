@@ -50,4 +50,11 @@ describe("boss HUD", () => {
     const defeated = advanceBossHud(enraged, { ...crystal, alive: false, health: 0, enraged: true }, explorer, 6000);
     expect(defeated.message).toContain("MATRIARCH'S EDGE");
   });
+  it("uses concise discovery and premium-loot copy for area mini-bosses", () => {
+    const leader = { ...boss, name: "Mossback Alpha", isMiniBoss: true };
+    const arrived = advanceBossHud(initialBossHud(), leader, player, 1000);
+    expect(arrived.message).toBe("MOSSBACK ALPHA DISCOVERED · AREA MINI-BOSS");
+    const defeated = advanceBossHud(arrived, { ...leader, alive: false, health: 0 }, player, 2000);
+    expect(defeated.message).toContain("PREMIUM LOOT DROPPED");
+  });
 });
