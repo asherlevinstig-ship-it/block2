@@ -1775,6 +1775,7 @@ interface NetworkMob {
   stateUntil: number;
   targetId: string;
   staggerSequence: number;
+  materializeUntil: number;
   yaw: number;
   name: string;
   archetype: string;
@@ -1832,6 +1833,8 @@ interface MobVisual {
   combatCueFill: HTMLSpanElement;
   levelTag: HTMLDivElement;
   recovery: pc.Entity;
+  respawnCue: pc.Entity;
+  respawnCueMaterial: pc.StandardMaterial;
   healthFill: pc.Entity;
   healthWidth: number;
   healthBarY: number;
@@ -3657,6 +3660,21 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   }
   recovery.enabled = false;
   entity.addChild(recovery);
+  const respawnCue = new pc.Entity("enemy-materialization");
+  const respawnCueMaterial = powerMaterial(new pc.Color(.34, 1, .52), .42);
+  for (let index = 0; index < 12; index++) {
+    const angle = index * Math.PI / 6;
+    const segment = addBox(respawnCue, "materialization-ring", respawnCueMaterial, [.28, .035, .08],
+      [Math.sin(angle) * .82, .04, Math.cos(angle) * .82]);
+    segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+  }
+  const respawnCore = new pc.Entity("materialization-core");
+  respawnCore.addComponent("render", { type: "cylinder", material: respawnCueMaterial, castShadows: false, receiveShadows: false });
+  respawnCore.setLocalPosition(0, .025, 0);
+  respawnCore.setLocalScale(1.12, .018, 1.12);
+  respawnCue.addChild(respawnCore);
+  respawnCue.enabled = false;
+  entity.addChild(respawnCue);
   const mark = new pc.Entity("hunters-mark");
   mark.addComponent("render", { type: "cylinder" });
   if (mark.render) mark.render.material = markMaterial;
@@ -3689,7 +3707,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warningPattern: mob.attackPattern,
     warningChargeLength: CHAMPION_CHARGE.distance,
     warningSequence: mob.actionSequence,
-    combatCue, combatCueLabel, combatCueFill, levelTag, recovery,
+    combatCue, combatCueLabel, combatCueFill, levelTag, recovery, respawnCue, respawnCueMaterial,
     healthFill,
     healthWidth,
     healthBarY,
@@ -4066,7 +4084,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["awarenessState", "alertUntil", "isChampion", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["awarenessState", "alertUntil", "isChampion", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -7526,14 +7544,27 @@ app.on("update", (dt: number) => {
         mob.renderYaw = mob.state.yaw;
       }
     }
+    const serverNow = animationNow + serverClock.offset;
+    const materializing = !mob.state.alive && mob.state.materializeUntil > serverNow;
     const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
-    const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
+    const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible || materializing) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
     mob.entity.enabled = visible;
     mob.combatCue.hidden = true;
     mob.levelTag.hidden = true;
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
+    mob.bodyRoot.enabled = mob.state.alive || deathPose.visible;
+    mob.respawnCue.enabled = materializing;
+    if (materializing) {
+      const progress = Math.max(0, Math.min(1, 1 - (mob.state.materializeUntil - serverNow) / 1_500));
+      const pulse = 1 + Math.sin(animationTime * 13) * .08;
+      mob.respawnCue.setLocalScale((.72 + progress * .38) * pulse, 1, (.72 + progress * .38) * pulse);
+      mob.respawnCue.setLocalEulerAngles(0, animationTime * 55, 0);
+      mob.respawnCueMaterial.opacity = .22 + progress * .42;
+      mob.respawnCueMaterial.emissive.set(.12 + progress * .22, .48 + progress * .42, .2 + progress * .3);
+      mob.respawnCueMaterial.update();
+    }
     const currentMobPosition = mob.entity.getPosition();
     const previousYaw = mob.renderYaw;
     const motion = advanceMobMotion({ x: currentMobPosition.x, y: currentMobPosition.y,
@@ -7548,7 +7579,7 @@ app.on("update", (dt: number) => {
     mob.renderYaw = sampled.yaw;
     trimMobSnapshots(mob.snapshots, animationNow);
     const hitStrength = mob.hitAt > 0 ? Math.max(0, 1 - (animationNow - mob.hitAt) / 180) : 0;
-    const presentation = enemyAttackPresentation(mob.state, animationNow + serverClock.offset);
+    const presentation = enemyAttackPresentation(mob.state, serverNow);
     // Committed attacks must match the authoritative strike direction. Keep
     // the scalar in sync so recovery never resumes from an aliased Euler Y.
     if (presentation.aimLocked) mob.renderYaw = mob.state.yaw;

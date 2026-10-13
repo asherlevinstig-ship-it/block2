@@ -114,6 +114,7 @@ export const MobState = schema({
   targetId: t.string().default(""),
   staggerSequence: t.int32().default(0),
   respawnAt: t.float64().default(0),
+  materializeUntil: t.float64().default(0),
   name: t.string().default("Moss Crawler"),
   archetype: t.string().default("moss_crawler"),
   armor: t.int8().default(0),

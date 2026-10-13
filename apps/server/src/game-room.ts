@@ -31,7 +31,8 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
-import { wildernessRespawnDelay } from "./wilderness-respawn.js";
+import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
+  wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
@@ -1867,6 +1868,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.championCharges.delete(mobId);
     this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
+    mob.materializeUntil = 0;
     const isWildernessEnemy = this.roomKind === "overworld" && !mob.isChampion
       && (WILDERNESS_ENCOUNTERS.some(encounter => encounter.id === mobId) || roamingMembership(mobId) !== null);
     mob.respawnAt = now + (isWildernessEnemy ? wildernessRespawnDelay(mobId, definition.id) : definition.respawnMs);
@@ -3650,12 +3652,32 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
+        const isWildernessEnemy = this.roomKind === "overworld" && !mob.isChampion
+          && (WILDERNESS_ENCOUNTERS.some(encounter => encounter.id === mobId) || roamingMembership(mobId) !== null);
+        const materializing = isWildernessEnemy && mob.materializeUntil > 0;
+        const spawn = materializing ? { x: mob.x, y: mob.y, z: mob.z }
+          : walkableMobSpawn(home, this.readWorldBlock, pose => this.mobPositionAllowed(pose)
+            && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose));
+        if (materializing && !wildernessSpawnClear(spawn, this.state.players.values())) {
+          mob.materializeUntil = 0;
+          mob.respawnAt = now + WILDERNESS_RESPAWN_RECHECK_MS;
+          continue;
+        }
+        if (isWildernessEnemy && !materializing) {
+          if (!wildernessSpawnClear(spawn, this.state.players.values())) {
+            mob.respawnAt = now + WILDERNESS_RESPAWN_RECHECK_MS;
+            continue;
+          }
+          mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
+          mob.materializeUntil = now + WILDERNESS_MATERIALIZE_MS;
+          mob.respawnAt = mob.materializeUntil;
+          continue;
+        }
         this.combatContributions.clear(mobId);
         this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
         mob.awarenessState = "patrol"; mob.alertUntil = 0;
         this.mobAwareness.delete(mobId);
         const stats = scaledMobStats(definition, dangerBandAt(home));
-        const spawn = walkableMobSpawn(home, this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose));
         mob.x = spawn.x;
         mob.y = spawn.y;
         mob.z = spawn.z;
@@ -3679,6 +3701,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mobId === CRYSTAL_MATRIARCH_ID) this.restoreMatriarchCover();
         mob.alive = true;
         mob.respawnAt = 0;
+        mob.materializeUntil = 0;
         mob.combatState = "idle";
         mob.stateUntil = 0;
         mob.targetId = "";

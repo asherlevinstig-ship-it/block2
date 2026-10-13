@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "colyseus-respawn-rhythm-v186";
+const SERVER_BUILD = "colyseus-safe-materialize-v187";
 
 const gameServer = defineServer({
   rooms: {

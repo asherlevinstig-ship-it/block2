@@ -12,6 +12,9 @@ export const WILDERNESS_RESPAWN_BASE_MS: Readonly<Record<MobArchetypeId, number>
 };
 
 export const WILDERNESS_RESPAWN_STAGGER_MS = 1_500;
+export const WILDERNESS_RESPAWN_SAFE_RADIUS = 8;
+export const WILDERNESS_RESPAWN_RECHECK_MS = 1_000;
+export const WILDERNESS_MATERIALIZE_MS = 1_500;
 const WILDERNESS_RESPAWN_STAGGER_SLOTS = 4;
 
 function stableSlot(id: string): number {
@@ -25,4 +28,13 @@ function stableSlot(id: string): number {
 /** Stable offsets stop a freshly cleared group from reforming on one frame. */
 export function wildernessRespawnDelay(mobId: string, archetype: MobArchetypeId): number {
   return WILDERNESS_RESPAWN_BASE_MS[archetype] + stableSlot(mobId) * WILDERNESS_RESPAWN_STAGGER_MS;
+}
+
+export function wildernessSpawnClear(spawn: { x: number; y: number; z: number },
+  players: Iterable<{ x: number; y: number; z: number; health: number }>): boolean {
+  for (const player of players) {
+    if (player.health <= 0 || Math.abs(player.y - spawn.y) > 2.5) continue;
+    if (Math.hypot(player.x - spawn.x, player.z - spawn.z) < WILDERNESS_RESPAWN_SAFE_RADIUS) return false;
+  }
+  return true;
 }
