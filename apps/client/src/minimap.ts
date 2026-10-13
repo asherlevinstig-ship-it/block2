@@ -17,9 +17,24 @@ export function nearbyThreatMapTarget(
   return threat && Math.abs(threat.y - player.y) <= 2.5
     && Math.hypot(threat.x - player.x, threat.z - player.z) <= radius ? threat : null;
 }
-export type EliteMapTarget = Position & { id: string; name: string; y: number; alive: boolean; isElite: boolean };
+export type EliteMapTarget = Position & { id: string; name: string; y: number; alive: boolean; isElite: boolean; isMiniBoss?: boolean };
 export function activeEliteMapTargets(player: Position & { y: number }, elites: readonly EliteMapTarget[]): EliteMapTarget[] {
   return elites.filter(elite => elite.alive && elite.isElite && Math.abs(elite.y - player.y) <= 2.5);
+}
+export const miniBossDiscoveryKey = (id: string): string => `leader:${id}`;
+export function discoverMiniBosses(player: Position & { y: number }, mobs: readonly EliteMapTarget[], discovered: Set<string>): boolean {
+  let changed = false;
+  for (const mob of mobs) {
+    const key = miniBossDiscoveryKey(mob.id);
+    if (!mob.isMiniBoss || mob.id === CHAMPION_WAYPOINT.id || !mob.alive || discovered.has(key)
+      || Math.abs(mob.y - player.y) > 2.5 || Math.hypot(mob.x - player.x, mob.z - player.z) > DISCOVERY_RADIUS) continue;
+    discovered.add(key);
+    changed = true;
+  }
+  return changed;
+}
+export function discoveredMiniBossTargets(mobs: readonly EliteMapTarget[], discovered: Set<string>): EliteMapTarget[] {
+  return mobs.filter(mob => mob.isMiniBoss && mob.id !== CHAMPION_WAYPOINT.id && discovered.has(miniBossDiscoveryKey(mob.id)));
 }
 export type DungeonMapState = { objective: Position & { title: string }; teammates: (Position & { id: string; name: string; y: number; state: "fighting" | "fallen" })[] };
 export function dungeonMapPoints(player: Position & { y: number }, state: DungeonMapState) {
@@ -96,7 +111,8 @@ export function parseDiscoveries(raw: string | null): Set<string> {
     const allowed = new Set(MAP_DEPOSITS.map(depositKey));
     allowed.add(CHAMPION_WAYPOINT.id);
     allowed.add(ASHEN_SPIRE_WAYPOINT.id);
-    return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === "string" && allowed.has(value)) : []);
+    return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === "string"
+      && (allowed.has(value) || /^leader:[a-z0-9:-]+$/.test(value))) : []);
   } catch { return new Set(); }
 }
 
@@ -348,8 +364,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (second !== lastStatusSecond) { lastStatusSecond = second; refreshDestinations(); }
       const depositsChanged = discoverDeposits(player, discovered);
       const championChanged = discoverChampion(player, champion, discovered);
+      const miniBossesChanged = discoverMiniBosses(player, elites, discovered);
       const spireChanged = discoverAshenSpire(player, discovered);
-      if (depositsChanged || championChanged || spireChanged) {
+      if (depositsChanged || championChanged || miniBossesChanged || spireChanged) {
         refreshDestinations();
         try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
       }
@@ -422,6 +439,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) marker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", true);
         for (const elite of activeEliteMapTargets(player, elites)) marker(elite, "★ ELITE", "#e890ff", false, true);
       }
+      for (const leader of discoveredMiniBossTargets(elites, discovered)) if (Math.abs(leader.y - player.y) <= 2.5)
+        marker(leader, leader.alive ? "♛ LEADER" : "LEADER · DOWN", leader.alive ? "#ffc95f" : "#77827c", true, true);
       if (nearbyThreat) marker(nearbyThreat, "⚔ THREAT", "#ff806f", false);
       marker(MINE_ENTRANCE, "MINE", "#ffe08c", true);
       for (const chamber of caveState.chambers) marker(chamber, `${chamber.label} · D${caveDepth(chamber.y)}`, "#a3dfeb", false);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeEliteMapTargets, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, discoverAshenSpire, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
+import { activeEliteMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, discoverAshenSpire, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
@@ -14,6 +14,15 @@ describe("north-up explorer minimap", () => {
     const elite = { id: "elite", name: "Volatile Spitter", x: 40, y: 8, z: 0, alive: true, isElite: true };
     expect(activeEliteMapTargets(player, [elite, { ...elite, id: "dead", alive: false }, { ...elite, id: "below", y: 3 }]))
       .toEqual([elite]);
+  });
+  it("permanently reveals an area leader only after the player approaches it", () => {
+    const known = new Set<string>();
+    const leader = { id: "wild-crawler", name: "Greenwood Broodmother", x: 20, y: 8, z: 0,
+      alive: true, isElite: false, isMiniBoss: true };
+    expect(discoverMiniBosses({ x: 0, y: 8, z: 0 }, [leader], known)).toBe(false);
+    expect(discoverMiniBosses({ x: 11, y: 8, z: 0 }, [leader], known)).toBe(true);
+    expect(discoveredMiniBossTargets([{ ...leader, alive: false }], known)).toEqual([{ ...leader, alive: false }]);
+    expect(parseDiscoveries(JSON.stringify([...known]))).toEqual(new Set([miniBossDiscoveryKey(leader.id)]));
   });
   it("reveals the Ashen Reach spire only when approached on the surface", () => {
     const known = new Set<string>();

@@ -37,7 +37,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
-import { areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss } from "./area-mini-bosses.js";
+import { areaLeaderPattern, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower } from "./area-mini-bosses.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
@@ -1625,6 +1625,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.armor = stats.armor;
       mob.speedMultiplier = stats.speedMultiplier;
       mob.rewardMultiplier = stats.rewardMultiplier;
+      if (mobId !== "frontier-brute" && mobId !== "frontier-spitter" && !isAshenSentry(mobId)) mob.attackPattern = areaLeaderPattern(archetypeId, 0);
     }
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
@@ -1883,12 +1884,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
+    this.openAreaLeaderAfterFollowerDefeat(mobId, recipients, now);
     const areaMainMob = areaMainMobDefinition(mobId);
     if (areaMainMob) for (const playerId of recipients) {
       this.clients.find(client => client.sessionId === playerId)?.send("objective:completed", {
         objectiveId: `area-main-${mobId}`,
         title: `${areaMainMob.name} Defeated`,
-        rewardLabel: "AREA LEADER CLEARED · premium personal loot dropped",
+        rewardLabel: `${areaMainMob.rewardLabel ?? "AREA LEADER CACHE"} · premium personal loot dropped`,
         coinsGranted: 0,
       } satisfies WorldObjectiveCompleted);
     }
@@ -1960,7 +1962,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.health = reward.health;
       player.stamina = reward.stamina;
       const coinsBefore = player.coins;
-      const coinsGranted = wasElite ? 5 : 2;
+      const coinsGranted = wasElite || Boolean(areaMainMob) ? 5 : 2;
       player.coins = Math.min(1_000_000, player.coins + coinsGranted);
       this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level), mob.name);
       void this.persistPlayer(playerId, player);
@@ -1977,6 +1979,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? "Kill contribution credited · your personal loot is on the ground. Press E beside each drop before it expires."
         : `Kill contribution credited · +${coinsGranted} gold and XP. No item drop this time.`);
     }
+  }
+
+  private openAreaLeaderAfterFollowerDefeat(followerId: string, recipients: readonly string[], now: number): void {
+    const leaderId = leaderForFollower(followerId);
+    const leader = leaderId ? this.state.mobs.get(leaderId) : undefined;
+    if (!leaderId || !leader?.alive) return;
+    leader.combatState = "recover";
+    leader.stateUntil = Math.max(leader.stateUntil, now + 2_500);
+    leader.targetId = "";
+    leader.aimCommitted = false;
+    this.pendingMobMelee.delete(leaderId);
+    this.mobCommittedAim.delete(leaderId);
+    this.clearMobAttackTimeline(leader);
+    for (const [projectileId, projectile] of this.pendingMobProjectiles) {
+      if (projectile.mobId !== leaderId) continue;
+      this.pendingMobProjectiles.delete(projectileId);
+      this.resolveProjectileVisual(projectileId, projectile.position, "miss");
+    }
+    for (const playerId of recipients) this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
+      `${leader.name} exposed · follower defeated · counter for 2.5 seconds!`);
   }
 
   private sendObjectiveState(client: Client, force = false): void {
@@ -2290,6 +2312,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(playerId);
     if (!player || player.health <= 0 || now < player.invulnerableUntil || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
     const mob = this.state.mobs.get(mobId);
+    const leaderId = leaderForFollower(mobId);
+    const leader = leaderId ? this.state.mobs.get(leaderId) : undefined;
+    if (leader?.alive && (leader.archetype === "moss_crawler" || leader.archetype === "briar_crawler")) damage += 1;
     const defense = blockable && mob
       ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
       : { damage, guarded: false, parried: false };
@@ -3737,6 +3762,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = mob.enraged ? championPattern(mob) : "slam";
       }
+      else if (isAreaMiniBoss(mobId) && mobId !== "frontier-brute" && mobId !== "frontier-spitter" && !isAshenSentry(mobId)
+        && mob.combatState === "idle") mob.attackPattern = areaLeaderPattern(mob.archetype, mob.actionSequence);
       else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
@@ -3750,7 +3777,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.attackPattern = realmPattern ?? (mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
           : mob.isElite ? wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence)
           : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
-          : mob.isChampion ? championPattern(mob) : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence) : "slam");
+          : mob.isChampion ? championPattern(mob)
+          : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence)
+          : isAreaMiniBoss(mobId) ? areaLeaderPattern(mob.archetype, mob.actionSequence) : "slam");
       }
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
@@ -3781,7 +3810,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
           mob.name = areaMiniBoss?.name ?? (mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName);
           mob.actionSequence = 0;
-          if (mob.isElite) mob.attackPattern = wildernessElitePattern(definition.id, 0);
+          if (areaMiniBoss && mobId !== "frontier-brute" && mobId !== "frontier-spitter" && !isAshenSentry(mobId)) mob.attackPattern = areaLeaderPattern(definition.id, 0);
+          else if (mob.isElite) mob.attackPattern = wildernessElitePattern(definition.id, 0);
           mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
           mob.materializeUntil = now + WILDERNESS_MATERIALIZE_MS;
           mob.respawnAt = mob.materializeUntil;
@@ -3897,7 +3927,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             mob.targetId = ""; continue;
           }
           const shots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, aim.yaw)
-            : (mob.isChampion || mob.isElite) && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID && !isRealmSpitterBoss(mobId) ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
+            : (mob.isChampion || mob.isElite || mob.isMiniBoss) && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID && !isRealmSpitterBoss(mobId) ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
@@ -3916,7 +3946,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const deltaZ = aim.z - mob.z;
         const distance = Math.hypot(deltaX, deltaZ);
         if (crawlerRushDistance(mob.archetype) > 0) {
-          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype) * (mob.isElite ? 1.3 : 1), startedAt: now, progress: 0 });
+          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype) * (mob.isElite ? 1.3 : mob.isMiniBoss ? 1.18 : 1), startedAt: now, progress: 0 });
         } else if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
           this.displaceMob(mobId, mob, {
@@ -4779,7 +4809,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.aimCommitted) { mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z; }
       return;
     }
-    if ((mob.isChampion || mob.isElite) && mob.archetype === "cave_spitter") {
+    if ((mob.isChampion || mob.isElite || mob.isMiniBoss) && mob.archetype === "cave_spitter") {
       if (mob.aimCommitted) return;
       const aim = this.mobCommittedAim.get(mobId);
       mob.attackStrikeX = mob.attackPattern === "pool" ? aim?.x ?? mob.x : mob.x;

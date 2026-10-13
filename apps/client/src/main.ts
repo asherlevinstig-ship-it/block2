@@ -8309,7 +8309,8 @@ app.on("update", (dt: number) => {
     } else minimap.setDungeonState(null);
     minimap.setChampionState(mobVisuals.get("frontier-brute-west")?.state ?? null);
     minimap.setEliteStates([...mobVisuals.entries()].map(([id, visual]) => ({ id, name: visual.state.name,
-      x: visual.state.x, y: visual.state.y, z: visual.state.z, alive: visual.state.alive, isElite: visual.state.isElite })));
+      x: visual.state.x, y: visual.state.y, z: visual.state.z, alive: visual.state.alive,
+      isElite: visual.state.isElite, isMiniBoss: visual.state.isMiniBoss })));
     if (now - lastNameplateSampleAt >= 100) {
     lastNameplateSampleAt = now;
     const nameplates: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean }[] = [];
