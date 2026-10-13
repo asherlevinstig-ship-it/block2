@@ -28,6 +28,7 @@ import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
+import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
@@ -1792,6 +1793,7 @@ interface NetworkMob {
   stateUntil: number;
   targetId: string;
   staggerSequence: number;
+  respawnAt: number;
   materializeUntil: number;
   yaw: number;
   name: string;
@@ -1849,6 +1851,7 @@ interface MobVisual {
   combatCueLabel: HTMLSpanElement;
   combatCueFill: HTMLSpanElement;
   levelTag: HTMLDivElement;
+  respawnTag: HTMLDivElement;
   recovery: pc.Entity;
   respawnCue: pc.Entity;
   respawnCueMaterial: pc.StandardMaterial;
@@ -3633,6 +3636,10 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   levelTag.className = "enemy-level-tag";
   levelTag.hidden = true;
   document.body.append(levelTag);
+  const respawnTag = document.createElement("div");
+  respawnTag.className = "enemy-respawn-tag";
+  respawnTag.hidden = true;
+  document.body.append(respawnTag);
   const recovery = new pc.Entity("enemy-recovery-opening");
   const recoveryMaterial = coloredMaterial(new pc.Color(0.15, 0.9, 1));
   recoveryMaterial.useLighting = false;
@@ -3702,7 +3709,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warningPattern: mob.attackPattern,
     warningChargeLength: CHAMPION_CHARGE.distance,
     warningSequence: mob.actionSequence,
-    combatCue, combatCueLabel, combatCueFill, levelTag, recovery, respawnCue, respawnCueMaterial, eliteAura, eliteAuraMaterial,
+    combatCue, combatCueLabel, combatCueFill, levelTag, respawnTag, recovery, respawnCue, respawnCueMaterial, eliteAura, eliteAuraMaterial,
     healthFill,
     healthWidth,
     healthBarY,
@@ -4096,7 +4103,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["awarenessState", "alertUntil", "isChampion", "isElite", "eliteKind", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["awarenessState", "alertUntil", "isChampion", "isElite", "eliteKind", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "respawnAt", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -4108,6 +4115,7 @@ function bindMobs(joinedRoom: Room): void {
     mobVisuals.get(mobId)?.warningMesh?.destroy();
     mobVisuals.get(mobId)?.combatCue.remove();
     mobVisuals.get(mobId)?.levelTag.remove();
+    mobVisuals.get(mobId)?.respawnTag.remove();
     mobVisuals.get(mobId)?.entity.destroy();
     mobVisuals.delete(mobId);
   });
@@ -7536,7 +7544,7 @@ app.on("update", (dt: number) => {
     }
   }
   updateLootWorldLabel();
-  for (const mob of mobVisuals.values()) {
+  for (const [mobId, mob] of mobVisuals) {
     if (mob.frameAlive !== mob.state.alive) {
       mob.defeatAt = mob.state.alive ? -Infinity : animationNow;
       mob.frameAlive = mob.state.alive;
@@ -7553,16 +7561,18 @@ app.on("update", (dt: number) => {
     }
     const serverNow = animationNow + serverClock.offset;
     const materializing = !mob.state.alive && mob.state.materializeUntil > serverNow;
+    const respawnIndicator = cavernRespawnIndicator(mobId, mob.state.alive, mob.state.respawnAt, serverNow);
     const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
-    const visible = undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible || materializing);
+    const visible = undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible || materializing || Boolean(respawnIndicator));
     mob.entity.enabled = visible;
     mob.combatCue.hidden = true;
     mob.levelTag.hidden = true;
+    mob.respawnTag.hidden = true;
     if (!visible) continue;
     mob.statusRoot.enabled = mob.state.alive;
     mob.bodyRoot.enabled = mob.state.alive || deathPose.visible;
-    mob.respawnCue.enabled = materializing;
+    mob.respawnCue.enabled = materializing || respawnIndicator?.phase === "warning";
     if (materializing) {
       const progress = Math.max(0, Math.min(1, 1 - (mob.state.materializeUntil - serverNow) / 1_500));
       const pulse = 1 + Math.sin(animationTime * 13) * .08;
@@ -7570,6 +7580,13 @@ app.on("update", (dt: number) => {
       mob.respawnCue.setLocalEulerAngles(0, animationTime * 55, 0);
       mob.respawnCueMaterial.opacity = .22 + progress * .42;
       mob.respawnCueMaterial.emissive.set(.12 + progress * .22, .48 + progress * .42, .2 + progress * .3);
+      mob.respawnCueMaterial.update();
+    } else if (respawnIndicator?.phase === "warning") {
+      const pulse = 1 + Math.sin(animationTime * 12) * .12;
+      mob.respawnCue.setLocalScale(pulse, 1, pulse);
+      mob.respawnCue.setLocalEulerAngles(0, animationTime * 70, 0);
+      mob.respawnCueMaterial.opacity = .38 + Math.sin(animationTime * 12) * .12;
+      mob.respawnCueMaterial.emissive.set(.72, .12, .025);
       mob.respawnCueMaterial.update();
     }
     const currentMobPosition = mob.entity.getPosition();
@@ -7637,6 +7654,22 @@ app.on("update", (dt: number) => {
     const cue = combatCue.visible ? combatCue : enemyAwarenessCue(mob.state, animationNow + serverClock.offset);
     const playerEye = localPlayer.getPosition();
     const mobDistance = Math.hypot(sampled.x - playerEye.x, sampled.y - playerEye.y, sampled.z - playerEye.z);
+    if (respawnIndicator && mobDistance <= 24 && camera.camera
+      && enemyCueLineClear({ x: playerEye.x, y: playerEye.y + .8, z: playerEye.z },
+        { x: mob.state.x, y: mob.state.y + .35, z: mob.state.z }, readCollisionWorldBlock)) {
+      const screen = camera.camera.worldToScreen(new pc.Vec3(mob.state.x, mob.state.y + .48, mob.state.z));
+      const rect = canvas.getBoundingClientRect();
+      const onScreen = screen.z > 0 && screen.x >= 0 && screen.x <= rect.width && screen.y >= 0 && screen.y <= rect.height;
+      mob.respawnTag.hidden = !onScreen;
+      if (onScreen) {
+        mob.respawnTag.dataset.phase = respawnIndicator.phase;
+        mob.respawnTag.textContent = respawnIndicator.phase === "warning"
+          ? `DANGER · RETURNING IN ${respawnIndicator.seconds}s`
+          : `AREA CLEAR · RETURNS IN ${respawnIndicator.seconds}s`;
+        mob.respawnTag.style.left = `${rect.left + screen.x}px`;
+        mob.respawnTag.style.top = `${rect.top + screen.y}px`;
+      }
+    }
     if (mob.state.alive && mobDistance <= 28 && camera.camera) {
       const screen = camera.camera.worldToScreen(new pc.Vec3(sampled.x, sampled.y + mob.healthBarY + .27, sampled.z));
       const rect = canvas.getBoundingClientRect();
@@ -8884,7 +8917,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = "Disconnected from the world.";
     for (const remote of remotePlayers.values()) remote.entity.destroy();
     remotePlayers.clear();
-    for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.levelTag.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
+    for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.levelTag.remove(); mob.respawnTag.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
     for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
     bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true;
