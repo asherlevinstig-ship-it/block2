@@ -31,6 +31,7 @@ import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
+import { wildernessRespawnDelay } from "./wilderness-respawn.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
@@ -1866,7 +1867,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.championCharges.delete(mobId);
     this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
-    mob.respawnAt = now + definition.respawnMs;
+    const isWildernessEnemy = this.roomKind === "overworld" && !mob.isChampion
+      && (WILDERNESS_ENCOUNTERS.some(encounter => encounter.id === mobId) || roamingMembership(mobId) !== null);
+    mob.respawnAt = now + (isWildernessEnemy ? wildernessRespawnDelay(mobId, definition.id) : definition.respawnMs);
     const armedEvent = this.realmEvents.recordTrigger(mobId, now,
       [...this.state.mobs].filter(([id, candidate]) => candidate.alive && isRealmEventId(id)).map(([id]) => id));
     if (armedEvent) {
