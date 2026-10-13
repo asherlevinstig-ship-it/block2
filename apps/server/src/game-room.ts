@@ -37,7 +37,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
-import { areaLeaderPattern, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower } from "./area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
@@ -379,6 +379,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobVerticalVelocities = new Map<string, number>();
   private readonly mobNavigation = new Map<string, MobNavigationState>();
   private readonly mobAwareness = new Map<string, MobAwareness>();
+  private readonly areaLeaderPhases = new Map<string, AreaLeaderPhase>();
   private readonly mobProgress = new Map<string, MobProgress>();
   private readonly mobUnreachableUntil = new Map<string, number>();
   private readonly mobReturning = new Set<string>();
@@ -1631,7 +1632,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.armor = stats.armor;
       mob.speedMultiplier = stats.speedMultiplier;
       mob.rewardMultiplier = stats.rewardMultiplier;
-      if (mobId !== "frontier-brute" && mobId !== "frontier-spitter" && !isAshenSentry(mobId)) mob.attackPattern = areaLeaderPattern(archetypeId, 0);
+      mob.attackPattern = areaLeaderPattern(archetypeId, 0, 1, mobId);
     }
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
@@ -1890,6 +1891,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
+    if (isAreaMiniBoss(mobId)) this.areaLeaderPhases.delete(mobId);
     this.openAreaLeaderAfterFollowerDefeat(mobId, now);
     const areaMainMob = areaMainMobDefinition(mobId);
     if (areaMainMob) for (const playerId of recipients) {
@@ -2008,6 +2010,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!player || player.health <= 0 || Math.abs(player.y - leader.y) > 2.5
         || Math.hypot(player.x - leader.x, player.z - leader.z) > 28) continue;
       client.send("leader:exposed", { mobId: leaderId, durationMs: 2_500 } satisfies AreaLeaderExposed);
+    }
+  }
+
+  private enterAreaLeaderPhase(leaderId: string, leader: MobState, previous: AreaLeaderPhase, phase: AreaLeaderPhase, now: number): void {
+    const awareness = this.mobAwareness.get(leaderId);
+    const targetId = leader.targetId || awareness?.targetId || "";
+    leader.enraged = phase === 3;
+    leader.combatState = "recover";
+    leader.stateUntil = now + (phase === 3 ? 1_400 : 1_200);
+    leader.targetId = "";
+    leader.aimCommitted = false;
+    this.pendingMobMelee.delete(leaderId);
+    this.mobCommittedAim.delete(leaderId);
+    this.crawlerRushes.delete(leaderId);
+    this.delayedMatriarchVolleys.delete(leaderId);
+    this.clearMobAttackTimeline(leader);
+    for (const [projectileId, projectile] of this.pendingMobProjectiles) {
+      if (projectile.mobId !== leaderId) continue;
+      this.pendingMobProjectiles.delete(projectileId);
+      this.resolveProjectileVisual(projectileId, projectile.position, "miss");
+    }
+    const target = targetId ? this.state.players.get(targetId) : undefined;
+    if (!target?.health) return;
+    const followers = (AREA_LEADER_FOLLOWERS[leaderId] ?? [])
+      .map(id => [id, this.state.mobs.get(id)] as const)
+      .filter((entry): entry is readonly [string, MobState] => Boolean(entry[1]?.alive));
+    const rallyCount = phase === 2 && previous === 1 ? 1 : followers.length;
+    for (const [followerId, follower] of followers.slice(0, rallyCount)) {
+      const followerAwareness = this.mobAwareness.get(followerId) ?? createMobAwareness();
+      provokeMob(followerAwareness, { id: targetId, x: target.x, y: target.y, z: target.z, health: target.health }, now);
+      this.mobAwareness.set(followerId, followerAwareness);
+      follower.awarenessState = "engaged";
+      follower.alertUntil = now + 900;
     }
   }
 
@@ -3766,6 +3801,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
       if (!mob.alive && this.roomKind === "silver-depths"
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
+      let currentAreaLeaderPhase: AreaLeaderPhase = 1;
+      if (isAreaMiniBoss(mobId) && mob.alive) {
+        currentAreaLeaderPhase = areaLeaderPhase(mob.health, mob.maxHealth);
+        const previousPhase = this.areaLeaderPhases.get(mobId);
+        if (previousPhase === undefined) this.areaLeaderPhases.set(mobId, currentAreaLeaderPhase);
+        else if (currentAreaLeaderPhase > previousPhase) {
+          this.areaLeaderPhases.set(mobId, currentAreaLeaderPhase);
+          this.enterAreaLeaderPhase(mobId, mob, previousPhase, currentAreaLeaderPhase, now);
+        }
+      }
       if (isRealmEventId(mobId)) {
         if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth) ?? mob.attackPattern;
@@ -3779,8 +3824,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = mob.enraged ? championPattern(mob) : "slam";
       }
-      else if (isAreaMiniBoss(mobId) && mobId !== "frontier-brute" && mobId !== "frontier-spitter" && !isAshenSentry(mobId)
-        && mob.combatState === "idle") mob.attackPattern = areaLeaderPattern(mob.archetype, mob.actionSequence);
+      else if (isAreaMiniBoss(mobId)
+        && mob.combatState === "idle") mob.attackPattern = areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId);
       else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
@@ -3792,11 +3837,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const distance = Math.min(...eligible.map(player => Math.hypot(player.x - mob.x, player.z - mob.z)));
         const realmPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth);
         mob.attackPattern = realmPattern ?? (mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
+          : isAreaMiniBoss(mobId) ? mobId === "frontier-brute" && currentAreaLeaderPhase === 1 && bruteVolleyReady(mob.actionSequence, distance)
+            ? "rocks" : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId)
           : mob.isElite ? wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence)
           : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
           : mob.isChampion ? championPattern(mob)
           : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence)
-          : isAreaMiniBoss(mobId) ? areaLeaderPattern(mob.archetype, mob.actionSequence) : "slam");
+          : "slam");
       }
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
@@ -3827,7 +3874,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
           mob.name = areaMiniBoss?.name ?? (mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName);
           mob.actionSequence = 0;
-          if (areaMiniBoss && mobId !== "frontier-brute" && mobId !== "frontier-spitter" && !isAshenSentry(mobId)) mob.attackPattern = areaLeaderPattern(definition.id, 0);
+          if (areaMiniBoss) mob.attackPattern = areaLeaderPattern(definition.id, 0, 1, mobId);
           else if (mob.isElite) mob.attackPattern = wildernessElitePattern(definition.id, 0);
           mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
           mob.materializeUntil = now + WILDERNESS_MATERIALIZE_MS;
@@ -3858,6 +3905,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.attackDamage = stats.damage;
         mob.speedMultiplier = stats.speedMultiplier;
         mob.rewardMultiplier = stats.rewardMultiplier;
+        mob.enraged = false;
         mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || isAreaMiniBoss(mobId), false);
         if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
         if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = crystalMatriarchPattern(0, false); }
@@ -3869,6 +3917,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.combatState = "idle";
         mob.stateUntil = 0;
         mob.targetId = "";
+        if (isAreaMiniBoss(mobId)) this.areaLeaderPhases.set(mobId, 1);
       }
       if (!mob.alive) continue;
       const gravity = advanceMobGravity(mob, this.mobVerticalVelocities.get(mobId) ?? 0, deltaTime, this.readWorldBlock);
@@ -3950,7 +3999,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
             venomPools ? .82 : definition.hazardRadius, venomPools ? 3_600 : definition.hazardDurationMs);
           if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage, mob.attackPattern === "warden-barrage");
-          if (usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId))) {
+          if (usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId) || isAreaMiniBoss(mobId))) {
             const secondYaw = matriarchSecondVolleyYaw(aim.yaw, Math.max(0, mob.actionSequence - 1));
             const secondShots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, secondYaw) : spitterShotEndpoints(mob, secondYaw, mob.attackPattern);
             this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
@@ -3963,7 +4012,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const deltaZ = aim.z - mob.z;
         const distance = Math.hypot(deltaX, deltaZ);
         if (crawlerRushDistance(mob.archetype) > 0) {
-          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype) * (mob.isElite ? 1.3 : mob.isMiniBoss ? 1.18 : 1), startedAt: now, progress: 0 });
+          const leaderRushMultiplier = mob.isMiniBoss ? currentAreaLeaderPhase === 1 ? 1.18 : currentAreaLeaderPhase === 2 ? 1.28 : 1.36 : 1;
+          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype) * (mob.isElite ? 1.3 : leaderRushMultiplier), startedAt: now, progress: 0 });
         } else if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
           this.displaceMob(mobId, mob, {
@@ -4074,8 +4124,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
       const windupMs = (mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")
         ? MATRIARCH_PHASE.crystalBurstWindupMs
-        : mobId === "frontier-brute" && mob.attackPattern !== "rocks"
-          ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs;
+        : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
+          ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
       if (definition.attackKind === "projectile" && mob.archetype === "cave_spitter"
         && !allyFireLaneClear(mobId, mob, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
         positioning.sidestepPending = true;
@@ -4094,7 +4144,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
-      if (mobId === "frontier-brute" && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
+      if (mobId === "frontier-brute" && !mob.isMiniBoss && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       mob.combatState = "windup";
       this.silverGuardVolley.started(mobId, now);
       this.crawlerPositioning.delete(mobId);
@@ -4877,7 +4927,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackRecoveryEndAt = releaseAt + MATRIARCH_PHASE.crystalBurstRecoveryMs;
       return;
     }
-    if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId)) && usesDoubleVolley(mob.attackPattern)) {
+    if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId) || isAreaMiniBoss(mobId)) && usesDoubleVolley(mob.attackPattern)) {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + MATRIARCH_PHASE.volleyGapMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + MATRIARCH_PHASE.recoveryMs;
@@ -4889,7 +4939,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackRecoveryEndAt = mob.attackContactEndAt + CHAMPION_CHARGE.recoveryMs;
       return;
     }
-    if (mobId === "frontier-brute") {
+    if (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute" && mob.attackPattern === "smash") {
       const timing = FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"];
       mob.attackContactAt = releaseAt + timing.impactMs;
       mob.attackContactEndAt = mob.attackContactAt + 100;

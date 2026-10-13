@@ -62,6 +62,8 @@ const ATTACK_NAMES: Readonly<Record<string, string>> = {
   pool: "VENOM POOL",
   "venom-ring": "VENOM RING",
   rush: "PACK RUSH",
+  "pack-rush": "PACK RUSH",
+  "alpha-rush": "ALPHA RUSH",
   rocks: "ROCK VOLLEY",
   "falling-rocks": "FALLING ROCKS",
   "warden-barrage": "ROCK BARRAGE",
@@ -87,6 +89,12 @@ export function leaderAttackLabel(pattern: string, combatState: string): string 
 export function leaderExposureLabel(expiresAt: number, now: number): string {
   const remaining = Math.max(0, expiresAt - now);
   return remaining > 0 ? `LEADER EXPOSED · ${(Math.ceil(remaining / 100) / 10).toFixed(1)}s` : "";
+}
+
+export function leaderHealthPhase(health: number, maxHealth: number): 1 | 2 | 3 {
+  if (maxHealth <= 0 || health * 4 <= maxHealth) return 3;
+  if (health * 5 <= maxHealth * 3) return 2;
+  return 1;
 }
 
 export function activeCombatNearby(playerId: string, player: Pose, mobs: Iterable<CombatHudMob>, radius = 18): boolean {

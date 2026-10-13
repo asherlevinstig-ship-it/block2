@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -74,5 +74,11 @@ describe("boss HUD", () => {
     expect(activeCombatNearby("tester", { x: 0, y: 8, z: 0 }, [{ ...active, combatState: "idle", targetId: "" }])).toBe(false);
     expect(activeCombatNearby("tester", { x: 0, y: 1, z: 0 }, [active])).toBe(false);
     expect(activeCombatNearby("tester", { x: 30, y: 8, z: 0 }, [active])).toBe(false);
+  });
+  it("shows leader phases at the 60 and 25 percent health markers", () => {
+    expect(leaderHealthPhase(20, 20)).toBe(1);
+    expect(leaderHealthPhase(12, 20)).toBe(2);
+    expect(leaderHealthPhase(6, 20)).toBe(2);
+    expect(leaderHealthPhase(5, 20)).toBe(3);
   });
 });

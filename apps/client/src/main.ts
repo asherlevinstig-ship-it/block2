@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -6192,7 +6192,8 @@ function updateBossHud(now: number): void {
   const realmBoss = /Realm Stone Warden/i.test(boss.name);
   const bruteEvent = /Stoneheart|Realm Stone Warden/i.test(boss.name);
   bossEncounter.textContent = boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : boss.isMiniBoss ? exposedLabel ? "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : "LEADER PHASE" : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
+  const leaderPhase = leaderHealthPhase(boss.health, boss.maxHealth);
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${exposedLabel ? "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING"}` : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
   bossHud.dataset.encounter = boss.isMiniBoss ? "miniboss" : crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHud.dataset.exposed = String(Boolean(exposedLabel));
@@ -6204,6 +6205,7 @@ function updateBossHud(now: number): void {
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
   bossHealth.setAttribute("aria-valuemax", String(boss.maxHealth));
   bossHealth.setAttribute("aria-valuenow", String(Math.max(0, boss.health)));
+  bossHealth.dataset.phased = String(boss.isMiniBoss);
   bossNotice.textContent = bossHudState.message;
 }
 
@@ -7943,7 +7945,7 @@ app.on("update", (dt: number) => {
         mob.warning.setEulerAngles(0, mob.state.yaw, 0);
       }
       const crystalWarning = mob.state.attackPattern === "crystal-burst";
-      const fanWarning = mob.state.attackPattern === "fan" || mob.state.attackPattern === "double-fan";
+      const fanWarning = mob.state.attackPattern === "fan" || mob.state.attackPattern === "double-fan" || mob.state.attackPattern === "venom-ring";
       mob.warningMaterial.diffuse.set(crystalWarning ? .72 : mob.isSpitter ? fanWarning ? .35 : .85 : 1,
         crystalWarning ? .32 : mob.isSpitter ? fanWarning ? .62 : 1 : mob.isBrute ? .25 : .72,
         crystalWarning ? 1 : mob.isSpitter ? fanWarning ? 1 : .16 : mob.isBrute ? .08 : .18);

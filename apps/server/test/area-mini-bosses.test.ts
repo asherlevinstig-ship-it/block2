@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AREA_LEADER_RELIC_IDS, ITEM_DEFINITIONS } from "@blockcraft/protocol";
-import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower } from "../src/area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower } from "../src/area-mini-bosses.js";
+import { spitterChampionShots } from "../src/frontier-champion.js";
 
 describe("area mini-bosses", () => {
   it("assigns one unique persistent leader id per authored area", () => {
@@ -27,8 +28,25 @@ describe("area mini-bosses", () => {
 
   it("gives crawler, spitter and brute leaders recognizable attack rhythms", () => {
     expect(areaLeaderPattern("moss_crawler", 3)).toBe("rush");
-    expect([0, 1, 2, 3].map(sequence => areaLeaderPattern("cave_spitter", sequence))).toEqual(["fan", "pool", "aimed", "fan"]);
+    expect([0, 1, 2, 3].map(sequence => areaLeaderPattern("cave_spitter", sequence))).toEqual(["aimed", "fan", "aimed", "fan"]);
     expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence))).toEqual(["rocks", "slam", "rocks"]);
+    expect([0, 1, 2].map(sequence => areaLeaderPattern("cave_spitter", sequence, 3))).toEqual(["venom-ring", "fan", "pool"]);
+    expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence, 3))).toEqual(["warden-barrage", "smash", "rocks"]);
+    expect([0, 1].map(sequence => areaLeaderPattern("moss_crawler", sequence, 3))).toEqual(["alpha-rush", "pack-rush"]);
+  });
+
+  it("advances through a long learning phase and short final stand", () => {
+    expect(areaLeaderPhase(10, 10)).toBe(1);
+    expect(areaLeaderPhase(6, 10)).toBe(2);
+    expect(areaLeaderPhase(3, 10)).toBe(2);
+    expect(areaLeaderPhase(2, 10)).toBe(3);
+    expect(areaLeaderPhase(0, 10)).toBe(3);
+  });
+
+  it("turns the final spitter phase into a readable eight-lane ring", () => {
+    const shots = spitterChampionShots({ x: 0, y: 1, z: 0 }, { x: 0, y: 1, z: 5 }, "venom-ring");
+    expect(shots).toHaveLength(8);
+    expect(shots.every(shot => Math.hypot(shot.x, shot.z) > 9.9)).toBe(true);
   });
 
   it("links authored followers to the leader opening they create", () => {

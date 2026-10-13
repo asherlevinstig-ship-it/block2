@@ -1634,7 +1634,11 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .boss-health-row { display: flex; align-items: stretch; gap: 8px; }
 #boss-health { position: relative; flex: 1 1 auto; min-width: 90px; height: 22px; overflow: hidden; border-radius: 5px; background: #392425; }
 #boss-health-fill { position: absolute; inset: 0; background: linear-gradient(90deg, #ac453d, #ef9c61); transform-origin: left; transition: transform 120ms linear; }
-#boss-health-text { position: relative; display: block; text-align: center; color: white; text-shadow: 0 1px 2px #000; font: 800 11px/22px system-ui, sans-serif; }
+#boss-health-text { position: relative; z-index: 2; display: block; text-align: center; color: white; text-shadow: 0 1px 2px #000; font: 800 11px/22px system-ui, sans-serif; }
+.boss-phase-marker { display: none; position: absolute; z-index: 3; top: 0; bottom: 0; width: 2px; background: #fff1a8; box-shadow: 0 0 4px #000; opacity: .9; }
+#boss-health[data-phased="true"] .boss-phase-marker { display: block; }
+.boss-phase-marker.phase-two { left: 60%; }
+.boss-phase-marker.phase-three { left: 25%; background: #ff9b71; }
 #boss-exposed { display: grid; place-items: center; flex: 0 0 auto; padding: 0 9px; border: 1px solid #efff91; border-radius: 5px; color: #f8ffbd; background: #415019; box-shadow: 0 0 16px #d9ff6670; font: 950 9px/1 system-ui, sans-serif; letter-spacing: .035em; animation: boss-exposed-pulse .55s ease-in-out infinite alternate; }
 #boss-exposed[hidden] { display: none; }
 #boss-attack-label { margin: 6px 0 0; text-align: center; color: #e8c77e; font: 900 10px/1.25 system-ui, sans-serif; letter-spacing: .12em; }

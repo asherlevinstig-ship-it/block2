@@ -7,6 +7,15 @@ export interface AreaMiniBossDefinition {
   rewardItemId: ItemId;
 }
 
+export type AreaLeaderPhase = 1 | 2 | 3;
+
+/** Deliberately asymmetric thresholds leave a long learning phase and a short final stand. */
+export function areaLeaderPhase(health: number, maxHealth: number): AreaLeaderPhase {
+  if (maxHealth <= 0 || health * 4 <= maxHealth) return 3;
+  if (health * 5 <= maxHealth * 3) return 2;
+  return 1;
+}
+
 /** One persistent leader for every authored overworld combat area. */
 export const AREA_MINI_BOSSES: readonly AreaMiniBossDefinition[] = [
   { id: "moss-crawler", name: "Mossback Alpha", rewardLabel: "Mossback Fang Cache", rewardItemId: "mossback_fang_relic" },
@@ -62,8 +71,17 @@ export function leaderForFollower(id: string): string | null {
   return Object.entries(AREA_LEADER_FOLLOWERS).find(([, followers]) => followers.includes(id))?.[0] ?? null;
 }
 
-export function areaLeaderPattern(archetype: string, sequence: number): string {
-  if (archetype === "cave_spitter") return ["fan", "pool", "aimed"][sequence % 3]!;
-  if (archetype === "stone_brute") return sequence % 2 === 0 ? "rocks" : "slam";
-  return "rush";
+export function areaLeaderPattern(archetype: string, sequence: number, phase: AreaLeaderPhase = 1, leaderId = ""): string {
+  if (archetype === "cave_spitter") {
+    const rotation = phase === 1 ? leaderId === "frontier-spitter" ? ["fan", "aimed"] : ["aimed", "fan"]
+      : phase === 2 ? ["fan", "pool", "aimed"] : ["venom-ring", "fan", "pool"];
+    return rotation[sequence % rotation.length]!;
+  }
+  if (archetype === "stone_brute") {
+    const rotation = phase === 1 ? leaderId === "frontier-brute" ? ["smash", "slam"] : ["rocks", "slam"]
+      : phase === 2 ? ["rocks", "smash", "slam"] : ["warden-barrage", "smash", "rocks"];
+    return rotation[sequence % rotation.length]!;
+  }
+  const rotation = phase === 1 ? ["rush"] : phase === 2 ? ["rush", "pack-rush"] : ["alpha-rush", "pack-rush"];
+  return rotation[sequence % rotation.length]!;
 }

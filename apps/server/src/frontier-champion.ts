@@ -4,12 +4,13 @@ import { mobArchetype } from "./mob-archetypes.js";
 import { moveMobSafely } from "./mob-navigation.js";
 import type { Position } from "./action-rules.js";
 import { usesRockVolley } from "./realm-boss-patterns.js";
+import { areaLeaderPhase } from "./area-mini-bosses.js";
 export const FRONTIER_CHAMPION_ID = "frontier-brute-west";
 export const SILVER_CHAMPION_ID = "wild-spitter-west";
 export const championPattern = (mob: { archetype: string; actionSequence: number }) => mob.archetype === "cave_spitter"
   ? mob.actionSequence % 2 === 0 ? "fan" : "pool" : mob.actionSequence % 2 === 0 ? "slam" : "charge";
 export function spitterChampionShots(start: Position, aim: Position, pattern: string): Position[] {
-  if (pattern === "fan") return spitterShotEndpoints(start, Math.atan2(aim.x - start.x, aim.z - start.z) * 180 / Math.PI, pattern);
+  if (["fan", "double-fan", "venom-ring"].includes(pattern)) return spitterShotEndpoints(start, Math.atan2(aim.x - start.x, aim.z - start.z) * 180 / Math.PI, pattern);
   return [aim];
 }
 export function championChargeHits(start: Position, end: Position, target: Position): boolean {
@@ -19,8 +20,9 @@ export function championChargeHits(start: Position, end: Position, target: Posit
   return Math.abs(target.y - start.y) <= 1.1
     && Math.hypot(target.x - start.x - dx * fraction, target.z - start.z - dz * fraction) <= CHAMPION_CHARGE.halfWidth;
 }
-export function combatMobDefinition(mob: { archetype: string; isChampion?: boolean; isElite?: boolean; isMiniBoss?: boolean; attackPattern?: string }) {
+export function combatMobDefinition(mob: { archetype: string; isChampion?: boolean; isElite?: boolean; isMiniBoss?: boolean; attackPattern?: string; health?: number; maxHealth?: number }) {
   const base = mobArchetype(mob.archetype);
+  const leaderPhase = mob.isMiniBoss ? areaLeaderPhase(mob.health ?? 1, mob.maxHealth ?? 1) : 1;
   if (mob.archetype === "stone_brute" && usesRockVolley(mob.attackPattern ?? "")) return { ...base, attackKind: "projectile" as const,
     stopDistance: BRUTE_VOLLEY.attackRange, minimumAttackRange: BRUTE_VOLLEY.minimumRange,
     windupMs: mob.isElite ? Math.round(BRUTE_VOLLEY.windupMs * .82) : BRUTE_VOLLEY.windupMs,
@@ -28,7 +30,8 @@ export function combatMobDefinition(mob: { archetype: string; isChampion?: boole
     cooldownMs: mob.isElite ? Math.round(BRUTE_VOLLEY.cooldownMs * .8) : BRUTE_VOLLEY.cooldownMs,
     projectileTravelMs: BRUTE_VOLLEY.travelMs, hazardDurationMs: 0, hazardRadius: 0 };
   if ((mob.isElite || mob.isMiniBoss) && !mob.isChampion && mob.archetype === "cave_spitter") return { ...base,
-    windupMs: mob.isMiniBoss ? base.windupMs : 1150, recoverMs: mob.isMiniBoss ? 1300 : 1500, cooldownMs: 2400,
+    windupMs: mob.isMiniBoss ? base.windupMs : 1150, recoverMs: mob.isMiniBoss ? 1300 : 1500,
+    cooldownMs: mob.isMiniBoss ? Math.round(2400 * (leaderPhase === 1 ? 1 : leaderPhase === 2 ? .94 : .88)) : 2400,
     projectileTravelMs: mob.attackPattern === "pool" ? 1050 : SPITTER_PATTERN.travelMs,
     hazardDurationMs: mob.attackPattern === "pool" ? 3200 : 0, hazardRadius: mob.attackPattern === "pool" ? 1.4 : 0 };
   if (mob.isChampion && mob.archetype === "cave_spitter") return { ...base, name: "Silver Venom Champion", maxHealth: 18,
@@ -37,7 +40,7 @@ export function combatMobDefinition(mob: { archetype: string; isChampion?: boole
   if ((mob.isElite || mob.isMiniBoss) && !mob.isChampion) return { ...base,
     windupMs: Math.round(base.windupMs * (mob.isMiniBoss ? .95 : .82)),
     recoverMs: Math.round(base.recoverMs * (mob.isMiniBoss ? 1.12 : .88)),
-    cooldownMs: Math.round(base.cooldownMs * (mob.isMiniBoss ? 1.05 : .8)) };
+    cooldownMs: Math.round(base.cooldownMs * (mob.isMiniBoss ? leaderPhase === 1 ? 1.05 : leaderPhase === 2 ? .98 : .92 : .8)) };
   return !mob.isChampion ? base : { ...base, name: "Frontier Stone Champion", maxHealth: 28,
     stopDistance: mob.attackPattern === "charge" ? 4.2 : base.stopDistance,
     windupMs: mob.attackPattern === "charge" ? CHAMPION_CHARGE.windupMs : base.windupMs,
