@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderHealthPhase, leaderRematchLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -56,6 +56,15 @@ describe("boss HUD", () => {
     expect(arrived.message).toBe("MOSSBACK ALPHA DISCOVERED · AREA MINI-BOSS");
     const defeated = advanceBossHud(arrived, { ...leader, alive: false, health: 0 }, player, 2000);
     expect(defeated.message).toContain("PREMIUM LOOT DROPPED");
+  });
+  it("keeps Path Champion identity and phase mechanics beside the boss bar", () => {
+    const champion = { ...boss, name: "Viridian Brood Oracle", isMiniBoss: true };
+    expect(advanceBossHud(initialBossHud(), champion, player, 1000).message).toContain("WATCH THE GROUND");
+    expect(pathChampionPhaseLabel(champion.name, 1)).toBe("PHASE 1 · VENOM SHOTS");
+    expect(pathChampionPhaseLabel(champion.name, 2)).toBe("PHASE 2 · SPREADING POOLS");
+    expect(pathChampionPhaseLabel(champion.name, 3)).toBe("PHASE 3 · VENOM RING");
+    expect(pathChampionPhaseLabel("Razorhide Pack Sovereign", 3)).toContain("ALPHA RUSH");
+    expect(pathChampionPhaseLabel("Worldsplitter Colossus", 2)).toContain("FALLING ROCKS");
   });
   it("turns internal attack patterns into clear combat labels", () => {
     expect(leaderAttackName("rocks")).toBe("ROCK VOLLEY");

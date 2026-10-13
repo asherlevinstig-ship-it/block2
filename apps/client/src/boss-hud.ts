@@ -5,6 +5,21 @@ export interface BossHudState { visible: boolean; alive?: boolean; enraged: bool
 export const initialBossHud = (): BossHudState => ({ visible: false, enraged: false, message: "", messageUntil: 0 });
 export interface BossHudCopy { arrival: string; enrage: string; defeat: string }
 export function bossHudCopy(name: string, isMiniBoss = false): BossHudCopy {
+  if (/Razorhide Pack Sovereign/i.test(name)) return {
+    arrival: "FANG PATH CHAMPION · RAZORHIDE CLAIMS THE HUNT",
+    enrage: "FINAL PHASE · ALPHA RUSH",
+    defeat: "RAZORHIDE DEFEATED · FANG CACHE DROPPED",
+  };
+  if (/Viridian Brood Oracle/i.test(name)) return {
+    arrival: "VENOM PATH CHAMPION · WATCH THE GROUND",
+    enrage: "FINAL PHASE · VENOM RING",
+    defeat: "VIRIDIAN ORACLE DEFEATED · VENOM CACHE DROPPED",
+  };
+  if (/Worldsplitter Colossus/i.test(name)) return {
+    arrival: "CRUSHER PATH CHAMPION · WORLDSPLITTER AWAKENS",
+    enrage: "FINAL PHASE · ROCK BARRAGE",
+    defeat: "WORLDSPLITTER DEFEATED · CRUSHER CACHE DROPPED",
+  };
   if (isMiniBoss) return {
     arrival: `${name.toUpperCase()} DISCOVERED · AREA MINI-BOSS`,
     enrage: `${name.toUpperCase()} IS ENRAGED`,
@@ -101,6 +116,17 @@ export function leaderHealthPhase(health: number, maxHealth: number): 1 | 2 | 3 
   if (maxHealth <= 0 || health * 4 <= maxHealth) return 3;
   if (health * 5 <= maxHealth * 3) return 2;
   return 1;
+}
+
+export function pathChampionPhaseLabel(name: string, phase: 1 | 2 | 3, recovering = false): string {
+  if (recovering) return `PHASE ${phase} · COUNTER WINDOW`;
+  if (/Razorhide Pack Sovereign/i.test(name))
+    return `PHASE ${phase} · ${phase === 1 ? "HUNTING RUSH" : phase === 2 ? "PACK RUSH" : "ALPHA RUSH"}`;
+  if (/Viridian Brood Oracle/i.test(name))
+    return `PHASE ${phase} · ${phase === 1 ? "VENOM SHOTS" : phase === 2 ? "SPREADING POOLS" : "VENOM RING"}`;
+  if (/Worldsplitter Colossus/i.test(name))
+    return `PHASE ${phase} · ${phase === 1 ? "ROCK VOLLEY" : phase === 2 ? "FALLING ROCKS" : "ROCK BARRAGE"}`;
+  return "";
 }
 
 export function realmBossHealthPhase(health: number, maxHealth: number): 1 | 2 | 3 {

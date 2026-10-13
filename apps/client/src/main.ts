@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderHealthPhase, leaderRematchLabel, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderHealthPhase, leaderRematchLabel, pathChampionPhaseLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -6345,6 +6345,7 @@ let bossHudState = initialBossHud();
 let bossHudFingerprint = "";
 let activeBossId = "";
 let displayedRealmBossPhase: 1 | 2 | 3 = 1;
+let displayedPathChampionPhase: 1 | 2 | 3 = 1;
 function updateBossHud(now: number): void {
   if (realmEventDisplayUntil > 0 && now >= realmEventDisplayUntil) {
     activeRealmEventId = ""; realmEventDisplayUntil = 0;
@@ -6357,13 +6358,16 @@ function updateBossHud(now: number): void {
       : activeRealmEventId || trackedMiniBossId || "greenwood-venom-matriarch";
   const boss = mobVisuals.get(nextBossId)?.state;
   if (activeBossId !== nextBossId) {
-    activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = ""; displayedRealmBossPhase = 1;
+    activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = "";
+    displayedRealmBossPhase = 1; displayedPathChampionPhase = 1;
   }
   const previous = bossHudState;
   bossHudState = advanceBossHud(bossHudState, boss, { x: position.x, y: position.y, z: position.z, health: potionHealth }, now);
   const crystal = nextBossId === "crystal-matriarch";
   const realmWarden = nextBossId === "realm-stone-warden";
   const realmPhase = boss ? realmBossHealthPhase(boss.health, boss.maxHealth) : 1;
+  const pathChampion = Boolean(boss && /Razorhide Pack Sovereign|Viridian Brood Oracle|Worldsplitter Colossus/i.test(boss.name));
+  const pathChampionPhase = boss ? realmBossHealthPhase(boss.health, boss.maxHealth) : 1;
   if (realmWarden && bossHudState.visible && boss?.alive && previous.alive !== true) {
     displayedRealmBossPhase = realmPhase;
     combatAudio.play("dungeonGate"); createDungeonBurst(boss.x, boss.z, "gate", boss.y + .08);
@@ -6389,21 +6393,36 @@ function updateBossHud(now: number): void {
     combatAudio.play("guardianPhase");
     if (boss) createDungeonBurst(boss.x, boss.z, "gate");
   }
+  if (pathChampion && bossHudState.visible && boss?.alive && previous.alive !== true) {
+    displayedPathChampionPhase = pathChampionPhase;
+    combatAudio.play("dungeonGate");
+    createDungeonBurst(boss.x, boss.z, /Viridian/i.test(boss.name) ? "crystal" : "gate", boss.y + .08);
+  } else if (pathChampion && bossHudState.visible && boss?.alive && pathChampionPhase > displayedPathChampionPhase) {
+    displayedPathChampionPhase = pathChampionPhase;
+    combatAudio.play("guardianPhase");
+    createDungeonBurst(boss.x, boss.z, /Viridian/i.test(boss.name) ? "crystal" : "gate", boss.y + .08);
+    cameraShakeStrength = Math.max(cameraShakeStrength, .12); cameraShakeUntil = performance.now() + 240;
+  }
+  if (pathChampion && previous.alive === true && boss?.alive === false) {
+    combatAudio.play("dungeonVictory"); createDungeonBurst(boss.x, boss.z, "victory", boss.y + .08);
+  }
   const exposedLabel = boss?.isMiniBoss ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "";
   const rematchLabel = boss?.isMiniBoss ? leaderRematchLabel(boss.leaderRematchTier, boss.leaderModifier) : "";
   const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
-  if (currentWorldObjective?.kind === "miniboss") worldObjective.hidden = bossHudState.visible;
+  if (currentWorldObjective?.kind === "miniboss" || currentWorldObjective?.kind === "hunt") worldObjective.hidden = bossHudState.visible;
   if (!boss || !bossHudState.visible) return;
   bossName.textContent = boss.name;
   const guardian = nextBossId === "forest-guardian";
   const realmBoss = /Realm Stone Warden/i.test(boss.name);
   const bruteEvent = /Stoneheart|Realm Stone Warden/i.test(boss.name);
-  bossEncounter.textContent = boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
+  bossEncounter.textContent = pathChampion ? "PATH CHAMPION" : boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
   const leaderPhase = leaderHealthPhase(boss.health, boss.maxHealth);
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${exposedLabel ? "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING"}`
+  const championPhase = realmBossHealthPhase(boss.health, boss.maxHealth);
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : pathChampion ? pathChampionPhaseLabel(boss.name, championPhase, boss.combatState === "recover")
+    : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${exposedLabel ? "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING"}`
     : realmBoss ? `PHASE ${realmPhase} · ${boss.combatState === "recover" ? "SHIFTING" : realmPhase === 3 ? "WARDEN BARRAGE" : realmPhase === 2 ? "FALLING ROCKS" : "STONE VOLLEYS"}`
     : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
   bossHud.dataset.encounter = boss.isMiniBoss ? "miniboss" : crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
@@ -6421,7 +6440,7 @@ function updateBossHud(now: number): void {
   bossHealth.setAttribute("aria-valuemax", String(boss.maxHealth));
   bossHealth.setAttribute("aria-valuenow", String(Math.max(0, boss.health)));
   bossHealth.dataset.phased = String(boss.isMiniBoss || realmBoss);
-  bossHealth.dataset.phaseModel = realmBoss ? "thirds" : boss.isMiniBoss ? "leader" : "none";
+  bossHealth.dataset.phaseModel = realmBoss || pathChampion ? "thirds" : boss.isMiniBoss ? "leader" : "none";
   bossNotice.textContent = bossHudState.message;
 }
 

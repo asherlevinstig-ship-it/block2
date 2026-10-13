@@ -47,6 +47,8 @@ import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, leader
 import { RealmHuntBoardRequestSchema, type RealmHuntBoardUpdate, type RealmHuntContractStatus, type RealmHuntStatus } from "@blockcraft/protocol";
 import { HUNT_PATHS, advanceHuntContract, beginHuntContract, huntContractTier, isHuntPathId,
   type HuntContractState, type HuntPathId } from "./hunt-contracts.js";
+import { huntChampionPattern, huntChampionPhase, huntChampionRushMultiplier,
+  huntChampionUsesSecondVolley, huntChampionVenomHazard } from "./hunt-champion-combat.js";
 import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE,
   dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
@@ -3451,7 +3453,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.speedMultiplier = stats.speedMultiplier; mob.rewardMultiplier = stats.rewardMultiplier * 1.5;
     mob.leaderRematchTier = 5; mob.leaderModifier = path.championModifier;
     mob.level = Math.min(20, Math.max(mob.level, (this.state.players.get(ownerId)?.level ?? 1) + 3));
-    mob.attackPattern = championPattern(mob); mob.combatState = "recover";
+    mob.attackPattern = huntChampionPattern(contract.pathId, 0, 1); mob.combatState = "recover";
     mob.materializeUntil = now + 2_500; mob.stateUntil = mob.materializeUntil;
     this.mobBaseNames.set(contract.championMobId, path.championName);
     this.huntChampions.set(contract.championMobId, { ownerId, pathId: contract.pathId, name: path.championName });
@@ -4344,6 +4346,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     for (const [mobId, mob] of this.state.mobs) {
+      const huntChampion = this.huntChampions.get(mobId);
       if (isRealmEventId(mobId) && !mob.alive) continue;
       if (!mob.alive && this.huntChampions.has(mobId)) {
         if (now >= mob.respawnAt) {
@@ -4357,7 +4360,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
       let currentAreaLeaderPhase: AreaLeaderPhase = 1;
       if (mob.isMiniBoss && mob.alive) {
-        currentAreaLeaderPhase = areaLeaderPhase(mob.health, mob.maxHealth);
+        currentAreaLeaderPhase = huntChampion
+          ? huntChampionPhase(mob.health, mob.maxHealth)
+          : areaLeaderPhase(mob.health, mob.maxHealth);
         const previousPhase = this.areaLeaderPhases.get(mobId);
         if (previousPhase === undefined) this.areaLeaderPhases.set(mobId, currentAreaLeaderPhase);
         else if (currentAreaLeaderPhase > previousPhase) {
@@ -4395,9 +4400,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId);
       }
       else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
-      else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = mob.isMiniBoss
-        && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now
-        ? miniBossOrbitCounterPattern(mob.archetype) : championPattern(mob);
+      else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = huntChampion
+        ? huntChampionPattern(huntChampion.pathId, mob.actionSequence, currentAreaLeaderPhase)
+        : mob.isMiniBoss && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now
+          ? miniBossOrbitCounterPattern(mob.archetype) : championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = isAshenSentry(mobId)
         ? ashenSentryPattern(mob.actionSequence) : spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
@@ -4413,11 +4419,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               ? "rocks" : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId)
           : mob.isElite ? wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence)
           : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
+          : huntChampion ? huntChampionPattern(huntChampion.pathId, mob.actionSequence, currentAreaLeaderPhase)
           : mob.isChampion ? championPattern(mob)
           : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence)
           : "slam");
       }
-      if (mob.isMiniBoss && mob.combatState === "idle" && mob.leaderRematchTier > 0) {
+      if (!huntChampion && mob.isMiniBoss && mob.combatState === "idle" && mob.leaderRematchTier > 0) {
         mob.attackPattern = leaderRematchPattern(mob.attackPattern, mob.archetype, mob.actionSequence, mob.leaderModifier);
       }
       const definition = combatMobDefinition(mob);
@@ -4599,11 +4606,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const shots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, aim.yaw)
             : (mob.isChampion || mob.isElite || mob.isMiniBoss) && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID && !isRealmSpitterBoss(mobId) ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           const origin = { x: mob.x, y: mob.y, z: mob.z };
+          const championVenom = huntChampion?.pathId === "venom" ? huntChampionVenomHazard(mob.attackPattern) : null;
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
-            venomPools ? .82 : definition.hazardRadius, venomPools ? 3_600 : definition.hazardDurationMs);
+            championVenom?.radius ?? (venomPools ? .82 : definition.hazardRadius),
+            championVenom?.durationMs ?? (venomPools ? 3_600 : definition.hazardDurationMs));
           if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage, mob.attackPattern === "warden-barrage");
-          if (usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId) || isAreaMiniBoss(mobId))) {
+          if ((usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId) || isAreaMiniBoss(mobId)))
+            || Boolean(huntChampion && huntChampionUsesSecondVolley(huntChampion.pathId, mob.attackPattern))) {
             const secondYaw = matriarchSecondVolleyYaw(aim.yaw, Math.max(0, mob.actionSequence - 1));
             const secondShots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, secondYaw) : spitterShotEndpoints(mob, secondYaw, mob.attackPattern);
             this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
@@ -4617,7 +4627,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const distance = Math.hypot(deltaX, deltaZ);
         if (crawlerRushDistance(mob.archetype) > 0) {
           const leaderRushMultiplier = mob.isMiniBoss ? currentAreaLeaderPhase === 1 ? 1.18 : currentAreaLeaderPhase === 2 ? 1.28 : 1.36 : 1;
-          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype) * (mob.isElite ? 1.3 : leaderRushMultiplier), startedAt: now, progress: 0 });
+          const championRushMultiplier = huntChampion?.pathId === "fang" ? huntChampionRushMultiplier(mob.attackPattern) : 1;
+          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype)
+            * (mob.isElite ? 1.3 : leaderRushMultiplier) * championRushMultiplier, startedAt: now, progress: 0 });
         } else if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
           this.displaceMob(mobId, mob, {
