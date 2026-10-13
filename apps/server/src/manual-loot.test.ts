@@ -75,4 +75,19 @@ describe("manual floor loot", () => {
     expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity]).sort())
       .toEqual([["crawler_fang", 2], ["moss_fibre", 2]]);
   });
+
+  it("restores a non-expiring lantern for a player stranded after defeating the Warden", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    const player = new PlayerState(); Object.assign(player, { x: 58, y: 1, z: 10, health: 5, miningExpeditionStage: 6 });
+    room.state.players.set("miner", player);
+    const client = { sessionId: "miner", send: vi.fn() };
+    vi.spyOn(room as any, "refreshNearbyObjectives").mockImplementation(() => {});
+    (room as any).ensureFirstExpeditionReward(client, 10_000);
+    const entry = [...room.state.lootDrops.entries()].find(([, drop]) => drop.itemId === "miners_lantern");
+    expect(entry?.[0]).toBe("first-expedition-lantern:miner");
+    expect(entry?.[1].ownerId).toBe("miner");
+    expect(entry?.[1].expiresAt).toBe(Number.MAX_SAFE_INTEGER);
+    (room as any).ensureFirstExpeditionReward(client, 20_000);
+    expect([...room.state.lootDrops.values()].filter(drop => drop.itemId === "miners_lantern")).toHaveLength(1);
+  });
 });

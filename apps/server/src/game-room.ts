@@ -1956,6 +1956,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private sendObjectiveState(client: Client, force = false): void {
+    this.ensureFirstExpeditionReward(client, Date.now());
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     if (player.miningExpeditionStage === 1 && isInsideEastMine(player)) this.advanceFirstExpedition(client, "entered_mine");
@@ -1979,6 +1980,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!force && fingerprint === progress.fingerprint) return;
     progress.id = update.objectiveId; progress.fingerprint = fingerprint;
     client.send("objective:update", update satisfies WorldObjectiveUpdate);
+  }
+
+  private ensureFirstExpeditionReward(client: Client, now: number): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player || player.miningExpeditionStage !== 6) return;
+    const ownsLantern = (player.inventory.get("miners_lantern")?.quantity ?? 0)
+      + (player.storage.get("miners_lantern")?.quantity ?? 0) > 0;
+    const pendingLantern = [...this.state.lootDrops.values()].some(drop => drop.ownerId === client.sessionId
+      && drop.itemId === "miners_lantern" && now < drop.expiresAt);
+    if (ownsLantern || pendingLantern) return;
+    const dropId = `first-expedition-lantern:${client.sessionId}`;
+    const drop = new LootDropState();
+    Object.assign(drop, CAVE_HIDDEN_HOME, { y: CAVE_HIDDEN_HOME.y + .22, ownerId: client.sessionId,
+      itemId: "miners_lantern", quantity: 1, expiresAt: Number.MAX_SAFE_INTEGER });
+    this.state.lootDrops.set(dropId, drop);
+    client.send("loot:spawned", { dropId, ownerId: drop.ownerId, itemId: drop.itemId, quantity: drop.quantity,
+      x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt });
+    client.send("chat:notice", "Stone Warden reward restored · collect your personal Miner's Lantern in the buried chamber.");
   }
 
   private refreshNearbyObjectives(): void {
@@ -2078,7 +2097,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       drop.x = x;
       drop.y = y;
       drop.z = z;
-      drop.expiresAt = mobId === CRYSTAL_MATRIARCH_ID ? Number.MAX_SAFE_INTEGER : now + LOOT_DESPAWN_MS;
+      drop.expiresAt = mobId === CRYSTAL_MATRIARCH_ID || entry.itemId === "miners_lantern"
+        ? Number.MAX_SAFE_INTEGER : now + LOOT_DESPAWN_MS;
       const dropId = `${mobId}:${now}:${++this.lootDropSequence}`;
       this.state.lootDrops.set(dropId, drop);
       this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {

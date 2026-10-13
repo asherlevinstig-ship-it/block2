@@ -51,6 +51,13 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
         : make("leave-town", "Explore the Wilderness", "Leave through the east gate. Nearby threats will be marked as you explore.", { x: 30.5, y: 8, z: 8.5 }, "hub");
     }
     const dungeon = isInForestDungeon(player.x, player.z);
+    const expeditionLantern = drops.find(([, drop]) => drop.ownerId === playerId && drop.itemId === "miners_lantern"
+      && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 10);
+    if ((player.miningExpeditionStage ?? 0) === 6 && expeditionLantern) {
+      return make(`loot-${expeditionLantern[0]}`, "Claim the Miner's Lantern",
+        "The Stone Warden is defeated. There are no more enemies required—approach your personal lantern and press E to pick it up.",
+        expeditionLantern[1], "loot");
+    }
     const groups = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({ id: `mob-${id}`, title: mob.name, detail: "Defeat this nearby enemy and collect your item drops.", ids: [id] }))];
     const candidates = groups.flatMap(group => {
       const living = group.ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive && sameFloor(mob) && isInForestDungeon(mob.x, mob.z) === dungeon ? [{ id, mob }] : []; }).sort((a, b) => distance(a.mob) - distance(b.mob));
@@ -87,8 +94,9 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       event.update.progressLabel = event.update.objectiveId === "realm-boss" ? "REALM BOSS" : `REALM THREAT ${eventStatus.completed} / ${eventStatus.required}`;
       return event.update;
     }
-    const loot = drops.filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6 && isEquipmentItem(drop.itemId as ItemId)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
-    if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your equipment bag and press E to inspect or equip the item.", loot[1], "loot");
+    const loot = drops.filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6
+      && (isEquipmentItem(drop.itemId as ItemId) || drop.itemId === "miners_lantern")).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
+    if (loot) return make(`loot-${loot[0]}`, "Collect Your Loot", "Approach your personal loot and press E to pick it up.", loot[1], "loot");
     const portal = portals.filter(([, point]) => (point.expiresAt === 0 || now < point.expiresAt) && sameFloor(point) && distance(point) <= 18
       && (!dungeon ? point.kind === "entry" : point.kind === "return" && candidates.length === 0)).sort((a, b) => distance(a[1]) - distance(b[1]))[0];
     if (portal) {

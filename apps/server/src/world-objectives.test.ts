@@ -131,6 +131,17 @@ describe("world objective director", () => {
     expect(nearbyObjective("tester", player(48, 28), [], [], [["bag", { ...drop, ownerId: "other" }]], 10000, null).kind).toBe("explore");
     expect(nearbyObjective("tester", player(48, 28), [], [], [["bag", drop]], 12000, null).kind).toBe("explore");
   });
+  it("stops counting cavern enemies after the Warden and points to the guaranteed lantern", () => {
+    const pose = { ...player(58, 10, 1), miningExpeditionStage: 6 };
+    const mobs = [["buried-vault-crawler", { ...mob(56, 10), y: 1 }],
+      ["buried-chamber-brute", { ...mob(56.5, 9.5, { alive: false, name: "Stone Warden" }), y: 1 }]] as const;
+    const lantern = { x: 56.5, y: 1.22, z: 9.5, itemId: "miners_lantern", ownerId: "tester", expiresAt: Number.MAX_SAFE_INTEGER };
+    const update = nearbyObjective("tester", pose, mobs, [], [["first-expedition-lantern:tester", lantern]], 10_000, "buried-vault");
+    expect(update.kind).toBe("loot");
+    expect(update.title).toBe("Claim the Miner's Lantern");
+    expect(update.targetMobIds).toEqual([]);
+    expect(update.detail).toContain("no more enemies required");
+  });
   it("follows dungeon rooms and guardian, then selects the return portal", () => {
     const pose = player(172, 165), portals = [["forest-return", { x: 158.5, y: 8, z: 165.5, kind: "return", expiresAt: 0 }]] as const;
     const room = [["forest-room2-a", mob(176.5, 161.5)]] as const;
