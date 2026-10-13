@@ -1,4 +1,6 @@
 export const DODGE_REQUEST_INTERVAL_MS = 350;
+export const DODGE_STAMINA_COST = 35;
+export const DODGE_STAMINA_RECOVERY_PER_SECOND = 18;
 
 export interface DodgeVisualOffset {
   x: number;
@@ -36,13 +38,14 @@ export function advanceDodgeVisualOffset(
   return { x: offset.x * fraction, z: offset.z * fraction };
 }
 
-/** Do not reconcile against a snapshot that predates the predicted dodge. */
-export function dodgeReconciliationPending(
-  now: number,
-  requestedAt: number,
-  roundTripMs: number | null,
-): boolean {
-  if (!Number.isFinite(requestedAt)) return false;
-  const confirmationWindow = Math.min(1_400, Math.max(450, (roundTripMs ?? 225) * 2));
-  return now - requestedAt < confirmationWindow;
+export function advancePredictedDodgeStamina(
+  stamina: number,
+  elapsedMs: number,
+  maximumStamina: number,
+): number {
+  return Math.min(maximumStamina, Math.max(0, stamina) + DODGE_STAMINA_RECOVERY_PER_SECOND * Math.max(0, elapsedMs) / 1_000);
+}
+
+export function canSpendPredictedDodgeStamina(stamina: number): boolean {
+  return stamina >= DODGE_STAMINA_COST;
 }

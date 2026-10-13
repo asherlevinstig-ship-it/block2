@@ -58,7 +58,14 @@ import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow } from "./camera-follow.js";
-import { advanceDodgeVisualOffset, beginDodgeVisualOffset, canRequestPredictedDodge, dodgeReconciliationPending } from "./dodge-input.js";
+import {
+  advanceDodgeVisualOffset,
+  advancePredictedDodgeStamina,
+  beginDodgeVisualOffset,
+  canRequestPredictedDodge,
+  canSpendPredictedDodgeStamina,
+  DODGE_STAMINA_COST,
+} from "./dodge-input.js";
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
 import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
@@ -2357,6 +2364,10 @@ let localComboExpiresAt = 0;
 let localHitPauseUntil = 0;
 let localDodgeStartedAt: number | null = null;
 let localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
+let localPredictedDodgeStamina = 0;
+let localPredictedDodgeStaminaAt = 0;
+let localPredictedDodgeStaminaMaximum = 100;
+let localPredictedDodgeStaminaReady = false;
 let localDefending = false;
 let localMomentumStacks = 0;
 let localTraitId: TraitId = "momentum";
@@ -2751,6 +2762,25 @@ function updatePlayerHealth(health: number, maximumHealth: number): void {
 
 function updatePlayerStamina(stamina: number, maximumStamina: number): void {
   playerHud.setStamina(stamina, maximumStamina);
+}
+
+function syncPredictedDodgeStamina(stamina: number, maximumStamina: number): void {
+  const now = performance.now();
+  localPredictedDodgeStaminaMaximum = maximumStamina;
+  if (!localPredictedDodgeStaminaReady) {
+    localPredictedDodgeStamina = stamina;
+    localPredictedDodgeStaminaReady = true;
+  } else {
+    const recovered = advancePredictedDodgeStamina(
+      localPredictedDodgeStamina,
+      now - localPredictedDodgeStaminaAt,
+      maximumStamina,
+    );
+    // A delayed server patch must never refund stamina already reserved by a
+    // newer local dodge prediction.
+    localPredictedDodgeStamina = Math.min(stamina, recovered);
+  }
+  localPredictedDodgeStaminaAt = now;
 }
 
 function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = potionMaxHealth): void {
@@ -4439,10 +4469,16 @@ function bindPlayers(joinedRoom: Room): void {
       if (isLocal) potionCooldownUntil = player.potionCooldownUntil;
     }, true);
     playerCallbacks.listen("stamina", () => {
-      if (isLocal) updatePlayerStamina(player.stamina, player.maxStamina);
+      if (isLocal) {
+        updatePlayerStamina(player.stamina, player.maxStamina);
+        syncPredictedDodgeStamina(player.stamina, player.maxStamina);
+      }
     }, true);
     playerCallbacks.listen("maxStamina", () => {
-      if (isLocal) updatePlayerStamina(player.stamina, player.maxStamina);
+      if (isLocal) {
+        updatePlayerStamina(player.stamina, player.maxStamina);
+        syncPredictedDodgeStamina(player.stamina, player.maxStamina);
+      }
     }, true);
     playerCallbacks.listen("coins", () => {
       if (isLocal) updateTavernCoins(player.coins);
@@ -6664,6 +6700,20 @@ function requestDodge(): void {
     status.textContent = "Dodge recovering...";
     return;
   }
+  if (localPredictedDodgeStaminaReady) {
+    localPredictedDodgeStamina = advancePredictedDodgeStamina(
+      localPredictedDodgeStamina,
+      now - localPredictedDodgeStaminaAt,
+      localPredictedDodgeStaminaMaximum,
+    );
+    localPredictedDodgeStaminaAt = now;
+    if (!canSpendPredictedDodgeStamina(localPredictedDodgeStamina)) {
+      showCombatFeedback("NO STAMINA", "hurt");
+      status.textContent = "Not enough stamina to dodge.";
+      return;
+    }
+    localPredictedDodgeStamina -= DODGE_STAMINA_COST;
+  }
   localDodgeRequestedAt = now;
   if (localDefending) requestDefense(false);
   if (powerAimActive) cancelPowerAim();
@@ -7374,9 +7424,7 @@ function reconcileLocalPlayer(
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
   const now = performance.now();
-  const reconciliationRate = dodgeReconciliationPending(now, localDodgeRequestedAt, networkRttMs)
-    ? 0
-    : localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, now - lastAuthoritativeMovementAt, now - lastAcknowledgementAdvancedAt);
+  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, now - lastAuthoritativeMovementAt, now - lastAcknowledgementAdvancedAt);
   if (!Number.isFinite(reconciliationRate)) {
     const mobilityAdvance = localActivePower !== null
       && POWER_DEFINITIONS[localActivePower].core === "mobility"
@@ -8968,6 +9016,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     );
     if (message.action === "move") localPlayer.setPosition(authoritativeLocalPosition);
     if (message.action === "dodge") {
+      const ownPlayer = room
+        ? (room.state as { players?: { get(id: string): NetworkPlayer | undefined } }).players?.get(room.sessionId)
+        : undefined;
+      if (ownPlayer) syncPredictedDodgeStamina(ownPlayer.stamina, ownPlayer.maxStamina);
       const rejectedPosition = localPlayer.getPosition();
       localRecoveryVisualOffset = {
         x: localRecoveryVisualOffset.x + rejectedPosition.x - authoritativeLocalPosition.x + localNetworkVisualOffset.x,

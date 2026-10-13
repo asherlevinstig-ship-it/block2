@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   advanceDodgeVisualOffset,
+  advancePredictedDodgeStamina,
   beginDodgeVisualOffset,
   canRequestPredictedDodge,
-  dodgeReconciliationPending,
+  canSpendPredictedDodgeStamina,
   DODGE_REQUEST_INTERVAL_MS,
+  DODGE_STAMINA_COST,
 } from "./dodge-input.js";
 
 describe("dodge input prediction", () => {
@@ -25,10 +27,23 @@ describe("dodge input prediction", () => {
     expect(offset).toEqual({ x: 0, z: 0 });
   });
 
-  it("waits for high-latency dodge confirmation before reconciling", () => {
-    expect(dodgeReconciliationPending(1_900, 1_000, 600)).toBe(true);
-    expect(dodgeReconciliationPending(2_201, 1_000, 600)).toBe(false);
-    expect(dodgeReconciliationPending(1_500, 1_000, 2_000)).toBe(true);
-    expect(dodgeReconciliationPending(2_401, 1_000, 2_000)).toBe(false);
+  it("conservatively budgets stamina before predicting another dodge", () => {
+    expect(DODGE_STAMINA_COST).toBe(35);
+    expect(canSpendPredictedDodgeStamina(34.99)).toBe(false);
+    expect(canSpendPredictedDodgeStamina(35)).toBe(true);
+    expect(advancePredictedDodgeStamina(30, 250, 100)).toBeCloseTo(34.5);
+    expect(advancePredictedDodgeStamina(30, 2_000, 100)).toBeCloseTo(66);
+    expect(advancePredictedDodgeStamina(95, 1_000, 100)).toBe(100);
+  });
+
+  it("blocks the fourth rapid dodge instead of predicting a server rejection", () => {
+    let stamina = 100;
+    for (let dodge = 0; dodge < 3; dodge += 1) {
+      expect(canSpendPredictedDodgeStamina(stamina)).toBe(true);
+      stamina -= DODGE_STAMINA_COST;
+      stamina = advancePredictedDodgeStamina(stamina, 350, 100);
+    }
+    expect(stamina).toBeCloseTo(13.9);
+    expect(canSpendPredictedDodgeStamina(stamina)).toBe(false);
   });
 });
