@@ -1,6 +1,6 @@
 import { isEquipmentItem, ITEM_DEFINITIONS, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
-import { REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
+import { REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
 import { ASHEN_SENTRY_IDS, MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
@@ -70,7 +70,8 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     }))];
     const candidates = groups.flatMap(group => {
       const living = group.ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive && sameFloor(mob) && isInForestDungeon(mob.x, mob.z) === dungeon ? [{ id, mob }] : []; }).sort((a, b) => distance(a.mob) - distance(b.mob));
-      const acquisitionRadius = group.ids.some(id => realmEventDefinition(id)) ? REALM_EVENT_TRACKING_RADIUS
+      const realmDefinition = group.ids.map(id => realmEventDefinition(id)).find(Boolean);
+      const acquisitionRadius = realmDefinition ? realmDefinition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS
         : group.id === previousId ? 32 : dungeon ? 48 : 26;
       const nearest = living[0]; if (!nearest || distance(nearest.mob) > acquisitionRadius) return [];
       const main = group.mainId ? living.find(entry => entry.id === group.mainId) : undefined;
@@ -95,7 +96,8 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     if (eventStatus.phase === "warning" && eventStatus.warningUntil > now) {
       const definition = realmEventDefinition(eventStatus.eventId);
       const point = definition?.position ?? WILDERNESS_EVENT_POSITION;
-      if (sameFloor(point) && distance(point) <= (legacyEventState ? WILDERNESS_EVENT_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS)) {
+      const trackingRadius = definition?.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS;
+      if (sameFloor(point) && distance(point) <= (legacyEventState ? WILDERNESS_EVENT_TRACKING_RADIUS : trackingRadius)) {
         const update = make(definition?.realmBoss ? "realm-boss-warning" : `${definition?.key ?? "greenwood"}-event-warning`,
           `${eventStatus.eventName ?? "Public event"} · ${Math.ceil((eventStatus.warningUntil - now) / 1000)}s`,
           definition?.realmBoss ? "The realm threat has peaked. Rally at the marker before the Warden arrives."

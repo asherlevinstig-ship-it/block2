@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderHealthPhase, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -80,5 +80,11 @@ describe("boss HUD", () => {
     expect(leaderHealthPhase(12, 20)).toBe(2);
     expect(leaderHealthPhase(6, 20)).toBe(2);
     expect(leaderHealthPhase(5, 20)).toBe(3);
+  });
+  it("shows the Realm Warden phases at two-thirds and one-third health", () => {
+    expect(realmBossHealthPhase(90, 90)).toBe(1);
+    expect(realmBossHealthPhase(60, 90)).toBe(2);
+    expect(realmBossHealthPhase(31, 90)).toBe(2);
+    expect(realmBossHealthPhase(30, 90)).toBe(3);
   });
 });

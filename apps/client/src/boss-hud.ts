@@ -97,6 +97,12 @@ export function leaderHealthPhase(health: number, maxHealth: number): 1 | 2 | 3 
   return 1;
 }
 
+export function realmBossHealthPhase(health: number, maxHealth: number): 1 | 2 | 3 {
+  if (maxHealth <= 0 || health * 3 <= maxHealth) return 3;
+  if (health * 3 <= maxHealth * 2) return 2;
+  return 1;
+}
+
 export function activeCombatNearby(playerId: string, player: Pose, mobs: Iterable<CombatHudMob>, radius = 18): boolean {
   for (const mob of mobs) {
     if (!mob.alive || Math.abs(player.y - mob.y) > 2.5

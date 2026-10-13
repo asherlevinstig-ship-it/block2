@@ -23,9 +23,9 @@ import { mobAssistants, MOB_ASSIST_COOLDOWN_MS } from "./mob-assist.js";
 import { circleCrawler, createCrawlerPositioning, retreatCrawler, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { WILDERNESS_EVENT_ID } from "./wilderness-event.js";
-import { RealmEventDirector, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
-import { ASHGLASS_ORACLE_ID, GREENWOOD_MATRIARCH_ID,
-  fallingRockSites, isRealmSpitterBoss, realmBossPattern, usesDoubleVolley, usesFallingRockZones, usesRockVolley } from "./realm-boss-patterns.js";
+import { RealmEventDirector, REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
+import { ASHGLASS_ORACLE_ID, GREENWOOD_MATRIARCH_ID, REALM_WARDEN_ID,
+  fallingRockSites, isRealmSpitterBoss, realmBossPattern, realmBossPhase, usesDoubleVolley, usesFallingRockZones, usesRockVolley, type RealmBossPhase } from "./realm-boss-patterns.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, normalizeLootBagItems,
@@ -380,6 +380,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobNavigation = new Map<string, MobNavigationState>();
   private readonly mobAwareness = new Map<string, MobAwareness>();
   private readonly areaLeaderPhases = new Map<string, AreaLeaderPhase>();
+  private readonly realmBossPhases = new Map<string, RealmBossPhase>();
   private readonly mobProgress = new Map<string, MobProgress>();
   private readonly mobUnreachableUntil = new Map<string, number>();
   private readonly mobReturning = new Set<string>();
@@ -1830,7 +1831,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!mob.alive) return;
     const wasElite = mob.isElite;
     for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
-    const credited = this.combatContributions.eligible(mobId, mob, this.state.players, now);
+    const credited = isRealmEventId(mobId)
+      ? this.combatContributions.eligiblePersistent(mobId, mob, this.state.players)
+      : this.combatContributions.eligible(mobId, mob, this.state.players, now);
     // A long solo fight can age its early hits out of the contribution window.
     // Never turn an actual killing blow into a rewardless defeat when nobody
     // else qualified; the caller has already validated the hit and attacker.
@@ -1892,6 +1895,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     mob.alive = false;
     if (isAreaMiniBoss(mobId)) this.areaLeaderPhases.delete(mobId);
+    if (isRealmEventId(mobId)) this.realmBossPhases.delete(mobId);
     this.openAreaLeaderAfterFollowerDefeat(mobId, now);
     const areaMainMob = areaMainMobDefinition(mobId);
     if (areaMainMob) for (const playerId of recipients) {
@@ -2054,6 +2058,26 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private enterRealmBossPhase(mobId: string, mob: MobState, phase: RealmBossPhase, now: number): void {
+    mob.enraged = phase >= 2;
+    mob.combatState = "recover";
+    mob.stateUntil = now + (phase === 3 ? 1_700 : 1_400);
+    mob.targetId = "";
+    mob.aimCommitted = false;
+    this.pendingMobMelee.delete(mobId);
+    this.mobCommittedAim.delete(mobId);
+    this.delayedMatriarchVolleys.delete(mobId);
+    this.clearMobAttackTimeline(mob);
+    for (const [projectileId, projectile] of this.pendingMobProjectiles) {
+      if (projectile.mobId !== mobId) continue;
+      this.pendingMobProjectiles.delete(projectileId);
+      this.resolveProjectileVisual(projectileId, projectile.position, "miss");
+    }
+    for (let index = this.realmBossPendingHazards.length - 1; index >= 0; index--) {
+      if (this.realmBossPendingHazards[index]!.mobId === mobId) this.realmBossPendingHazards.splice(index, 1);
+    }
+  }
+
   private sendObjectiveState(client: Client, force = false): void {
     this.ensureFirstExpeditionReward(client, Date.now());
     const player = this.state.players.get(client.sessionId);
@@ -2121,10 +2145,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.attackDamage = Math.max(mob.attackDamage, scale.attackDamage);
     mob.rewardMultiplier *= scale.rewardMultiplier;
     mob.level = enemyLevelForTier(mob.difficultyTier, true, true);
+    if (definition.realmBoss) {
+      mob.materializeUntil = now + 2_500;
+      mob.combatState = "recover";
+      mob.stateUntil = mob.materializeUntil;
+      this.realmBossPhases.set(definition.id, 1);
+    }
     for (const client of this.clients) {
       const player = this.state.players.get(client.sessionId);
+      const trackingRadius = definition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS;
       if (player && Math.abs(player.y - definition.position.y) <= 2.5
-        && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= REALM_EVENT_TRACKING_RADIUS)
+        && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= trackingRadius)
         client.send("chat:notice", `${definition.realmBoss ? "REALM BOSS" : "Public event"} live · ${definition.name} scaled for ${scale.players} adventurer${scale.players === 1 ? "" : "s"}. Deal damage to qualify for personal loot.`);
     }
     this.broadcastRealmEvent(now);
@@ -3820,7 +3851,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
       }
       if (isRealmEventId(mobId)) {
-        if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
+        if (mob.materializeUntil > now) {
+          mob.combatState = "recover"; mob.stateUntil = mob.materializeUntil; mob.targetId = ""; continue;
+        }
+        if (mob.materializeUntil > 0) mob.materializeUntil = 0;
+        const currentRealmPhase = realmBossPhase(mob.health, mob.maxHealth);
+        const previousRealmPhase = this.realmBossPhases.get(mobId);
+        if (previousRealmPhase === undefined) this.realmBossPhases.set(mobId, currentRealmPhase);
+        else if (currentRealmPhase > previousRealmPhase) {
+          this.realmBossPhases.set(mobId, currentRealmPhase);
+          this.enterRealmBossPhase(mobId, mob, currentRealmPhase, now);
+        }
+        mob.enraged = currentRealmPhase >= 2;
         if (mob.combatState === "idle") mob.attackPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth) ?? mob.attackPattern;
       }
       else if (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) {

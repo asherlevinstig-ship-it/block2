@@ -23,4 +23,13 @@ describe("kill contributions", () => {
     credit.record("other", "a", 10, 1000); credit.record("mob", "a", 10, 3000);
     expect(credit.eligible("mob", mob, [["a", player]], 1000)).toEqual([]);
   });
+  it("keeps lifetime public-boss credit without rewarding distant spectators", () => {
+    const credit = new CombatContributions();
+    credit.record("boss", "early", 1, 1_000); credit.record("boss", "steady", 1, 50_000);
+    expect(credit.eligible("boss", mob, [["early", player], ["steady", player]], 80_000)).toEqual([]);
+    expect(credit.eligiblePersistent("boss", mob, [["early", player], ["steady", player], ["far", { ...player, x: 140 }]], .05, 30))
+      .toEqual(["early", "steady"]);
+    credit.clear("boss");
+    expect(credit.eligiblePersistent("boss", mob, [["early", player]])).toEqual([]);
+  });
 });

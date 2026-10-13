@@ -26,6 +26,7 @@ export type RealmEventDefinition = {
 
 export const REALM_EVENT_REQUIRED = 3;
 export const REALM_EVENT_TRACKING_RADIUS = 160;
+export const REALM_BOSS_TRACKING_RADIUS = 64;
 export const REALM_EVENT_SCALING_RADIUS = 30;
 export const REALM_EVENT_MAX_PLAYERS = 6;
 export const REALM_EVENT_WARNING_MS = 8_000;

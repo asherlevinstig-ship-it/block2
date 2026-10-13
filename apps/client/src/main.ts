@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderHealthPhase, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -1926,6 +1926,7 @@ const playerInteractionUI = createPlayerInteractionUI({
   party: id => partyUI.invite(id),
 });
 let activeRealmEventId = "";
+let realmEventDisplayUntil = 0;
 let lastNameplateSampleAt = -Infinity;
 let nearbyTradePlayerId: string | null = null;
 
@@ -6163,18 +6164,34 @@ const leaderExposedUntil = new Map<string, number>();
 let bossHudState = initialBossHud();
 let bossHudFingerprint = "";
 let activeBossId = "";
+let displayedRealmBossPhase: 1 | 2 | 3 = 1;
 function updateBossHud(now: number): void {
+  if (realmEventDisplayUntil > 0 && now >= realmEventDisplayUntil) {
+    activeRealmEventId = ""; realmEventDisplayUntil = 0;
+  }
   const position = localPlayer.getPosition();
   const inSilverDepths = position.y < 5 && position.x >= 59 && position.x <= 78 && position.z >= 3 && position.z <= 16;
   const trackedMiniBossId = currentWorldObjective?.kind === "miniboss" ? currentWorldObjective.targetMobId : "";
   const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian" : activeRealmEventId || trackedMiniBossId || "greenwood-venom-matriarch";
   const boss = mobVisuals.get(nextBossId)?.state;
   if (activeBossId !== nextBossId) {
-    activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = "";
+    activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = ""; displayedRealmBossPhase = 1;
   }
   const previous = bossHudState;
   bossHudState = advanceBossHud(bossHudState, boss, { x: position.x, y: position.y, z: position.z, health: potionHealth }, now);
   const crystal = nextBossId === "crystal-matriarch";
+  const realmWarden = nextBossId === "realm-stone-warden";
+  const realmPhase = boss ? realmBossHealthPhase(boss.health, boss.maxHealth) : 1;
+  if (realmWarden && bossHudState.visible && boss?.alive && previous.alive !== true) {
+    displayedRealmBossPhase = realmPhase;
+    combatAudio.play("dungeonGate"); createDungeonBurst(boss.x, boss.z, "gate", boss.y + .08);
+  } else if (realmWarden && bossHudState.visible && boss?.alive && realmPhase > displayedRealmBossPhase) {
+    displayedRealmBossPhase = realmPhase;
+    combatAudio.play("guardianPhase"); createDungeonBurst(boss.x, boss.z, "gate", boss.y + .08);
+  }
+  if (realmWarden && previous.alive === true && boss?.alive === false) {
+    combatAudio.play("dungeonVictory"); createDungeonBurst(boss.x, boss.z, "victory", boss.y + .08);
+  }
   if (crystal && bossHudState.visible && boss?.alive && previous.alive !== true) {
     combatAudio.play("dungeonGate"); createDungeonBurst(boss.x, boss.z, "crystal", boss.y + .08);
   }
@@ -6202,7 +6219,9 @@ function updateBossHud(now: number): void {
   const bruteEvent = /Stoneheart|Realm Stone Warden/i.test(boss.name);
   bossEncounter.textContent = boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
   const leaderPhase = leaderHealthPhase(boss.health, boss.maxHealth);
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${exposedLabel ? "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING"}` : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : boss.isMiniBoss ? `PHASE ${leaderPhase} · ${exposedLabel ? "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : leaderPhase === 3 ? "FINAL ASSAULT" : leaderPhase === 2 ? "FOLLOWERS RALLIED" : "OPENING"}`
+    : realmBoss ? `PHASE ${realmPhase} · ${boss.combatState === "recover" ? "SHIFTING" : realmPhase === 3 ? "WARDEN BARRAGE" : realmPhase === 2 ? "FALLING ROCKS" : "STONE VOLLEYS"}`
+    : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
   bossHud.dataset.encounter = boss.isMiniBoss ? "miniboss" : crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHud.dataset.exposed = String(Boolean(exposedLabel));
@@ -6214,7 +6233,8 @@ function updateBossHud(now: number): void {
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
   bossHealth.setAttribute("aria-valuemax", String(boss.maxHealth));
   bossHealth.setAttribute("aria-valuenow", String(Math.max(0, boss.health)));
-  bossHealth.dataset.phased = String(boss.isMiniBoss);
+  bossHealth.dataset.phased = String(boss.isMiniBoss || realmBoss);
+  bossHealth.dataset.phaseModel = realmBoss ? "thirds" : boss.isMiniBoss ? "leader" : "none";
   bossNotice.textContent = bossHudState.message;
 }
 
@@ -7793,7 +7813,8 @@ app.on("update", (dt: number) => {
       }
     }
     const serverNow = animationNow + serverClock.offset;
-    const materializing = !mob.state.alive && mob.state.materializeUntil > serverNow;
+    const realmArrival = mobId === "realm-stone-warden" && mob.state.alive && mob.state.materializeUntil > serverNow;
+    const materializing = (!mob.state.alive || realmArrival) && mob.state.materializeUntil > serverNow;
     const respawnIndicator = cavernRespawnIndicator(mobId, mob.state.alive, mob.state.respawnAt, serverNow);
     const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
@@ -7803,16 +7824,17 @@ app.on("update", (dt: number) => {
     mob.levelTag.hidden = true;
     mob.respawnTag.hidden = true;
     if (!visible) continue;
-    mob.statusRoot.enabled = mob.state.alive;
-    mob.bodyRoot.enabled = mob.state.alive || deathPose.visible;
+    mob.statusRoot.enabled = mob.state.alive && !realmArrival;
+    mob.bodyRoot.enabled = mob.state.alive && !realmArrival || deathPose.visible;
     mob.respawnCue.enabled = materializing || respawnIndicator?.phase === "warning";
     if (materializing) {
-      const progress = Math.max(0, Math.min(1, 1 - (mob.state.materializeUntil - serverNow) / 1_500));
+      const progress = Math.max(0, Math.min(1, 1 - (mob.state.materializeUntil - serverNow) / (realmArrival ? 2_500 : 1_500)));
       const pulse = 1 + Math.sin(animationTime * 13) * .08;
       mob.respawnCue.setLocalScale((.72 + progress * .38) * pulse, 1, (.72 + progress * .38) * pulse);
       mob.respawnCue.setLocalEulerAngles(0, animationTime * 55, 0);
       mob.respawnCueMaterial.opacity = .22 + progress * .42;
-      mob.respawnCueMaterial.emissive.set(.12 + progress * .22, .48 + progress * .42, .2 + progress * .3);
+      if (realmArrival) mob.respawnCueMaterial.emissive.set(.8 + progress * .2, .24 + progress * .3, .04);
+      else mob.respawnCueMaterial.emissive.set(.12 + progress * .22, .48 + progress * .42, .2 + progress * .3);
       mob.respawnCueMaterial.update();
     } else if (respawnIndicator?.phase === "warning") {
       const pulse = 1 + Math.sin(animationTime * 12) * .12;
@@ -8631,7 +8653,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
   room.onMessage("party:update", update => partyUI.update(update));
   room.onMessage("realm:event", (update: RealmEventUpdate) => {
-    activeRealmEventId = update.phase === "active" ? update.eventId ?? "" : "";
+    if (update.phase === "active") {
+      activeRealmEventId = update.eventId ?? "";
+      realmEventDisplayUntil = 0;
+    } else if (activeRealmEventId && update.phase === "cooldown" && realmEventDisplayUntil === 0) {
+      realmEventDisplayUntil = performance.now() + 4_000;
+    } else if (realmEventDisplayUntil === 0) activeRealmEventId = "";
   });
   room.onMessage("trade:update", update => {
     if (update) playerInteractionUI.close();
@@ -9168,6 +9195,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     social.clearNames();
     partyUI.reset();
     activeRealmEventId = "";
+    realmEventDisplayUntil = 0;
     playerInteractionUI.close();
     tradeUI.update(null);
     pendingPings.clear();
