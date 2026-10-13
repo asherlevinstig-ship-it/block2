@@ -111,7 +111,8 @@ describe("authoritative equipment loot bags", () => {
     internal.resolveLootPickups(10000); expect(room.state.lootDrops.has("bag")).toBe(true);
     collect(false);
     expect(player.inventory.get("miners_lantern")?.quantity).toBe(1);
-    expect(player.miningExpeditionStage).toBe(7);
+    expect(player.miningExpeditionStage).toBe(8);
+    expect(client.send).toHaveBeenCalledWith("objective:completed", expect.objectContaining({ title: "Stone Warden Defeated" }));
     expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({ ok: true, message: expect.stringContaining("auto-equipped") }));
   });
   it.each(["fang_dagger", "stone_core_hammer", "acid_gland_focus", "echo_prism"])("collects and equips %s through the normal loadout rules", id => {

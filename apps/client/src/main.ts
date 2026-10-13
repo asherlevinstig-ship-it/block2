@@ -281,7 +281,7 @@ let latestDungeonBoard: DungeonBoardUpdate | null = null;
 const expeditionPanel = document.createElement("section");
 expeditionPanel.id = "expedition-board-panel";
 expeditionPanel.hidden = true;
-expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST EXPEDITION</h2><p class="expedition-message"></p><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>Heavy 3-hit combo · finisher roots groups</span></div><button class="expedition-launch" type="button">OPEN EXPEDITION PORTAL</button>';
+expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST DUNGEON</h2><p class="expedition-message"></p><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>Heavy 3-hit combo · finisher roots groups</span></div><button class="expedition-launch" type="button">OPEN DUNGEON PORTAL</button>';
 document.body.append(expeditionPanel);
 const formatDungeonTime = (milliseconds: number) => milliseconds > 0
   ? `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, "0")}` : "—";
@@ -5445,7 +5445,7 @@ function updateTarget(): void {
         : `${quantity}${itemName} · press E or Loot to pick up`;
   }
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
-  else if (expeditionBoardNearby) targetLabel.textContent = "Forest Expedition Board · press E to plan a solo or party run";
+  else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
   else if (keeperNearby) targetLabel.textContent = `${TAVERN_KEEPER.name} · Tavernkeeper — press E or Talk`;
@@ -5787,7 +5787,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   worldObjective.hidden = false;
   if (changedObjective || update.showMarker === false) objectiveMarker.hidden = update.showMarker === false;
   const recommendation = update.recommendedLevel ?? worldLevelRange(update.tier).label;
-  objectiveTier.textContent = `${update.progressLabel ? "EXPEDITION" : update.kind === "hub" ? "TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "LOOT" : update.kind === "explore" ? "EXPLORE" : "NEARBY"} · ${recommendation}`;
+  objectiveTier.textContent = `${update.progressLabel?.startsWith("REALM THREAT") || update.progressLabel === "REALM BOSS" ? "REALM" : update.kind === "hub" ? "SAFE TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "PERSONAL LOOT" : update.kind === "explore" ? "WILDERNESS" : update.progressLabel ? "DUNGEON" : "THREAT"} · ${recommendation}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
   objectiveLoot.hidden = !update.lootHint;
@@ -5810,7 +5810,7 @@ function showObjectiveComplete(message: WorldObjectiveCompleted): void {
     { duration: 260, easing: "ease-out" },
   );
   objectiveCompleteTimer = window.setTimeout(() => { objectiveComplete.hidden = true; }, 2700);
-  showCombatFeedback(`+${message.coinsGranted} GOLD`, "dodge");
+  showCombatFeedback(message.coinsGranted > 0 ? `+${message.coinsGranted} GOLD` : "REWARD SECURED", "dodge");
 }
 
 function updateObjectiveGuidance(): void {
@@ -8269,7 +8269,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     worldReady = false; awaitingReturnState = false; townReturnPosition = spawn; cutawaySliceY = null;
     status.textContent = spawn.entering
       ? isInEmberVault(spawn.x, spawn.z) ? "Ember Vault entered · breach the forge chambers and defeat the Colossus."
-        : spawn.y < 5 ? "Silver Depths entered · the expedition clock is running." : "Forest Dungeon lobby · assemble, ready up, then begin the expedition."
+        : spawn.y < 5 ? "Silver Depths entered · the dungeon clock is running." : "Forest Dungeon lobby · assemble, ready up, then begin the run."
       : isInEmberVault(spawn.x, spawn.z) ? "Returned to the Ember Vault."
         : spawn.x > 40 ? "Returned to the Deep Frontier with your forge rewards." : "Returned to the Town of Beginnings with your loot.";
   });
@@ -8290,8 +8290,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       renderDepthsWingRewards(null); renderDepthsCheckpointStatus(null);
     }
     if (update.phase === "started") status.textContent = update.dungeon === "ember-vault"
-      ? "Ember Vault expedition started · clear the sentinels, break the brute, then face the Forge Colossus."
-      : update.dungeon === "silver-depths" ? "Silver Depths expedition started · break the seal, clear both gallery waves, light the checkpoint, and overcome the Matriarch."
+      ? "Ember Vault run started · clear the sentinels, break the brute, then face the Forge Colossus."
+      : update.dungeon === "silver-depths" ? "Silver Depths run started · break the seal, clear both gallery waves, light the checkpoint, and overcome the Matriarch."
         : `Forest Dungeon run started · ${update.partySize > 1 ? `${update.partySize}-player party` : "solo"}.`;
     showDungeonRunResult(update);
   });

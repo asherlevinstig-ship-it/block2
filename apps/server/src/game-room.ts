@@ -769,7 +769,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       forgedPickaxe.quantity = 1;
       player.inventory.set("reinforced_pickaxe", forgedPickaxe);
     }
+    // New characters enter the world loop immediately. Stage 1 is now a hidden
+    // discovery milestone rather than a blacksmith briefing quest.
+    if (player.miningExpeditionStage === 0) player.miningExpeditionStage = 1;
     this.state.players.set(client.sessionId, player);
+    if (player.miningExpeditionStage === 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0) {
+      this.advanceFirstExpedition(client, "returned_to_blacksmith");
+    }
     if (profileToken && typeof options === "object" && options && "partyTicket" in options
       && typeof options.partyTicket === "string" && /^[a-f0-9-]{36}$/.test(options.partyTicket)) {
       try {
@@ -1117,11 +1123,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const next = advanceMiningExpedition(player.miningExpeditionStage, event);
     if (next === player.miningExpeditionStage) return false;
     player.miningExpeditionStage = next;
-    const labels = ["", "Expedition accepted · enter the East Ore Mine.", "Mine entered · locate iron in the first chamber.",
+    const labels = ["", "East Ore Mine discovered.", "Mine entered · locate iron in the first chamber.",
       "Iron secured · push deeper and mine silver.", "Silver secured · breach the eastern vault seal.",
       "Vault breached · defeat its defenders and the Stone Warden.", "Stone Warden defeated · claim your personal cache.",
-      "Miner's Lantern secured · return to the blacksmith.", "First Mining Expedition complete."];
-    client?.send("chat:notice", labels[next] ?? "First expedition updated.");
+      "Miner's Lantern secured.", "Mine mastery earned."];
+    client?.send("chat:notice", labels[next] ?? "Mine progress updated.");
     if (next === 8) {
       const before = player.coins;
       player.coins = Math.min(1_000_000, player.coins + 25);
@@ -1129,11 +1135,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.health = Math.min(player.maxHealth, player.health + 1);
       client?.send("objective:completed", {
         objectiveId: "first-mining-expedition",
-        title: "First Mining Expedition",
+        title: "Stone Warden Defeated",
         rewardLabel: `Warden's Resolve · +1 maximum health · +${player.coins - before} gold`,
         coinsGranted: player.coins - before,
       } satisfies WorldObjectiveCompleted);
-      this.grantProgression(sessionId, 40, "First Mining Expedition");
+      this.grantProgression(sessionId, 40, "Stone Warden defeated");
     }
     void this.persistPlayer(sessionId, player, next === 8);
     return true;
@@ -1150,10 +1156,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (next === 2) {
       this.restoreSilverDepthsMoonstone();
     }
-    const labels = ["", "The Silver Depths accepted · use the violet expedition portal in town.", "Depths entered · mine the Moonstone seal.",
+    const labels = ["", "The Silver Depths are open · use the violet portal in town.", "Depths entered · mine the Moonstone seal.",
       "Moonstone exposed · clear the staged gallery defenses.", "Antechamber clear · confront the Crystal Matriarch.",
       "Crystal Matriarch defeated · claim your personal Matriarch's Edge.", "Matriarch's Edge secured · use the return portal.", "The Silver Depths complete · returned safely to town."];
-    client?.send("chat:notice", labels[next] ?? "Silver Depths updated.");
+    client?.send("chat:notice", labels[next] ?? "Silver Depths progress updated.");
     if (next === 7) {
       const moonstone = player.inventory.get("moonstone");
       if (moonstone) moonstone.quantity = Math.max(0, moonstone.quantity - 1);
@@ -1170,14 +1176,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     let message: string | undefined;
-    if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 0 && this.advanceFirstExpedition(client, "briefed")) {
-      message = "First expedition: enter the East Ore Mine, gather iron and silver, breach the buried vault, and return with its lantern.";
-    } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 7 && this.advanceFirstExpedition(client, "returned_to_blacksmith")) {
-      message = "Expedition complete. Warden's Resolve permanently increased your maximum health, and 25 gold was added to your purse.";
-    } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && player.level < 7) {
+    if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && player.level < 7) {
       message = "The Silver Depths unlock at character level 7. Continue exploring and completing encounters.";
-    } else if (canTradeAtBlacksmith(player) && player.miningExpeditionStage === 8 && player.silverDepthsStage === 0 && this.advanceSilverDepthsExpedition(client, "briefed")) {
-      message = "Second expedition: use the Miner's Lantern to cross the old vault, mine Moonstone, clear the spitter gallery, and defeat the Crystal Matriarch.";
     } else if (canTradeAtBlacksmith(player) && canExitSilverDepths(player) && player.silverDepthsStage === 6 && this.advanceSilverDepthsExpedition(client, "returned_to_blacksmith")) {
       message = "Matriarch's Edge secured. Your Moonstone was attuned for +1 permanent weapon damage.";
     }
@@ -2963,6 +2963,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const entering = payload.id === "depths-entry";
     if (entering) {
       if (this.roomKind !== "overworld") return;
+      if (!canEnterSilverDepths(player) && process.env.NODE_ENV === "production") {
+        client.send("portal:notice", player.level < 7
+          ? "The Silver Depths open at level 7. Fight nearby threats and strengthen your gear."
+          : "Defeat the Stone Warden and claim its Miner's Lantern to open the Silver Depths.");
+        return;
+      }
+      if (player.silverDepthsStage === 0) this.advanceSilverDepthsExpedition(client, "briefed");
       const cohort = this.parties.cohort(client.sessionId);
       if (cohort.members.length > 1) {
         if (!this.parties.isLeader(client.sessionId)) {
@@ -3017,6 +3024,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         await this.presence.setex(expeditionPartyKey(partyTicket), JSON.stringify({ instanceKey, worldRoomId: this.roomId, profiles } satisfies ExpeditionPartyTicket), 7200);
       } catch (error) { partyTicket = undefined; console.warn("Expedition party ticket could not be saved.", error); }
     }
+    for (const member of members) {
+      const player = this.state.players.get(member.sessionId);
+      if (player?.silverDepthsStage === 0 && canEnterSilverDepths(player)) this.advanceSilverDepthsExpedition(member, "briefed");
+    }
     await Promise.allSettled(members.map(member => {
       const player = this.state.players.get(member.sessionId);
       return player ? this.persistPlayer(member.sessionId, player, true) : Promise.resolve();
@@ -3027,7 +3038,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private async returnFromSilverDepths(client: Client, player: PlayerState): Promise<void> {
     await this.persistPlayer(client.sessionId, player, true);
-    client.send("portal:notice", "Expedition complete · returning to the Town of Beginnings.");
+    client.send("portal:notice", "Dungeon cleared · returning to the Town of Beginnings.");
     client.send("room:transfer", { room: WORLD_ROOM, returnFrom: "silver-depths", ...await this.expeditionReturnTicket(client.sessionId) } satisfies RoomTransfer);
   }
 

@@ -7,11 +7,11 @@ const player = (overrides: Partial<{ health: number; level: number; miningExpedi
 };
 
 describe("Silver Depths dungeon loop", () => {
-  it("gates entry behind level seven and the completed first expedition", () => {
+  it("gates entry behind level seven and the Warden milestone without a briefing", () => {
     expect(canEnterSilverDepths(player())).toBe(true);
     expect(canEnterSilverDepths(player({ level: 6 }))).toBe(false);
     expect(canEnterSilverDepths(player({ miningExpeditionStage: 7 }))).toBe(false);
-    expect(canEnterSilverDepths(player({ silverDepthsStage: 0 }))).toBe(false);
+    expect(canEnterSilverDepths(player({ silverDepthsStage: 0 }))).toBe(true);
   });
 
   it("requires the personal fixed weapon before extraction", () => {

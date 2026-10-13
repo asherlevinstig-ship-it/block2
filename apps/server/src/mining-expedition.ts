@@ -23,6 +23,8 @@ const REQUIRED_STAGE: Record<MiningExpeditionEvent, number> = {
 
 export function advanceMiningExpedition(stage: number, event: MiningExpeditionEvent): number {
   const current = Math.max(0, Math.min(MINING_EXPEDITION_COMPLETE_STAGE, Math.floor(stage)));
+  // Claiming the Warden's lantern is the completion. There is no quest hand-in.
+  if (current === REQUIRED_STAGE.claimed_lantern && event === "claimed_lantern") return MINING_EXPEDITION_COMPLETE_STAGE;
   return current === REQUIRED_STAGE[event] ? current + 1 : current;
 }
 

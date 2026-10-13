@@ -8,20 +8,20 @@ const mob = (x: number, z: number, more = {}) => ({ x, y: 8, z, alive: true, nam
 const select = (pose = player(48, 28), mobs = new Map([["cave-spitter", mob(46.5, 31.5)], ["frontier-spitter", mob(50.5, 25.5)]]), previous: string | null = null) => nearbyObjective("tester", pose, mobs, [], [], 10000, previous);
 
 describe("world objective director", () => {
-  it("guides every stage of the first mining expedition before returning to local objectives", () => {
+  it("never exposes the hidden mining milestones as an overworld quest chain", () => {
     const pose = { ...player(8.5, 8.5), miningExpeditionStage: 0 };
-    expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Speak to the Blacksmith");
-    pose.miningExpeditionStage = 1; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Enter the East Ore Mine");
-    pose.miningExpeditionStage = 2; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Mine Iron Ore");
-    pose.miningExpeditionStage = 3; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Mine Silver Ore");
-    pose.miningExpeditionStage = 4; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Breach the Buried Vault");
-    pose.miningExpeditionStage = 7; expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Return to the Blacksmith");
+    for (const stage of [0, 1, 2, 3, 4, 7]) {
+      pose.miningExpeditionStage = stage;
+      const update = nearbyObjective("tester", pose, [], [], [], 10000, null);
+      expect(update.objectiveId).toBe("leave-town");
+      expect(update.progressLabel).toBeUndefined();
+    }
   });
   it("temporarily shows nearby wilderness activity instead of a distant expedition step", () => {
     const pose = { ...player(8.5, 8.5), miningExpeditionStage: 0 };
     const sentries = new Map([["ashglass-sentry-west", mob(88.5, 57.5, { name: "Ashglass Sentry", difficultyTier: 3, level: 11 })],
       ["ashglass-sentry-east", mob(106.5, 67.5, { name: "Ashglass Sentry", difficultyTier: 3, level: 11 })]]);
-    expect(nearbyObjective("tester", pose, sentries, [], [], 10000, null).objectiveId).toBe("expedition-briefing");
+    expect(nearbyObjective("tester", pose, sentries, [], [], 10000, null).objectiveId).toBe("leave-town");
     Object.assign(pose, { x: 98, z: 62 });
     expect(nearbyObjective("tester", pose, sentries, [], [], 10000, null).objectiveId).toBe("ashen-sentries");
     const defeated = new Map([...sentries].map(([id, enemy]) => [id, { ...enemy, alive: false }]));
@@ -29,13 +29,15 @@ describe("world objective director", () => {
     Object.assign(pose, { x: 135, z: 80 });
     expect(nearbyObjective("tester", pose, defeated, [], [], 10000, "ashen-spire").objectiveId).toBe("explore");
     Object.assign(pose, { x: 23, z: 3 });
-    expect(nearbyObjective("tester", pose, defeated, [], [], 10000, "explore").objectiveId).toBe("expedition-briefing");
+    expect(nearbyObjective("tester", pose, defeated, [], [], 10000, "explore").objectiveId).toBe("leave-town");
   });
-  it("keeps mine and dungeon progression when actually inside those rooms", () => {
+  it("uses nearby threats in the mine and room guidance inside a dungeon", () => {
     const expedition = { ...player(39.5, 6.5, 3), miningExpeditionStage: 2 };
-    expect(nearbyObjective("tester", expedition, [["deep-cave-spitter", mob(40, 6)]], [], [], 10000, null).objectiveId).toBe("expedition-iron");
+    expect(nearbyObjective("tester", expedition, [["deep-cave-spitter", { ...mob(40, 6), y: 3 }]], [], [], 10000, null).objectiveId).toBe("mob-deep-cave-spitter");
     const depths = { ...player(94, 14, 1), miningExpeditionStage: 8, silverDepthsStage: 3, silverDepthsRunStage: 3, silverDepthsWing: "" };
-    expect(nearbyObjective("tester", depths, [], [], [], 10000, null).objectiveId).toBe("depths-route-choice");
+    const update = nearbyObjective("tester", depths, [], [], [], 10000, null, 0, "silver-depths");
+    expect(update.objectiveId).toBe("depths-route-choice");
+    expect(update.progressLabel).toBe("SILVER DEPTHS");
   });
   it("groups the mixed frontier enemies into one nearby encounter", () => {
     const mobs = new Map([["frontier-crawler", mob(63.5, 35.5)], ["frontier-support-spitter", mob(68.5, 36.5)],
@@ -48,16 +50,17 @@ describe("world objective director", () => {
   it("guides Silver Depths players to their chosen wing instead of unspawned enemies", () => {
     const pose = { ...player(94, 14, 1), miningExpeditionStage: 8, silverDepthsStage: 3,
       silverDepthsRunStage: 3, silverDepthsWing: "" };
-    expect(nearbyObjective("tester", pose, [], [], [], 10000, null).title).toBe("Choose a Crystal Wing");
+    const selectDepths = (loot: Iterable<readonly [string, any]> = []) => nearbyObjective("tester", pose, [], [], loot, 10000, null, 0, "silver-depths");
+    expect(selectDepths().title).toBe("Choose a Crystal Wing");
     pose.silverDepthsWing = "silver";
-    const update = nearbyObjective("tester", pose, [], [], [], 10000, null);
+    const update = selectDepths();
     expect(update.title).toBe("Clear the Silver Echo");
     expect(update.targetMobIds).toEqual(["depths-silver-spitter-a", "depths-silver-crawler", "depths-silver-spitter-b"]);
     expect(update.targetMobIds).not.toContain("depths-iron-warden");
     pose.silverDepthsRunStage = 4;
     const personalGear = { x: 106.5, y: 1.22, z: 33.5, ownerId: "tester", itemId: "echo_prism", expiresAt: 20_000 };
-    expect(nearbyObjective("tester", pose, [], [], [["depths-wing-gear:tester", personalGear]], 10_000, null).title).toBe("Claim Echo Prism");
-    expect(nearbyObjective("tester", pose, [], [], [["depths-wing-gear:other", { ...personalGear, ownerId: "other" }]], 10_000, null).title).toBe("Clear the Crystal Antechamber");
+    expect(selectDepths([["depths-wing-gear:tester", personalGear]]).title).toBe("Claim Echo Prism");
+    expect(selectDepths([["depths-wing-gear:other", { ...personalGear, ownerId: "other" }]]).title).toBe("Clear the Crystal Antechamber");
   });
   it("uses the separate dungeon room's run stage even when the saved town quest is unfinished", () => {
     const pose = { ...player(63.5, 12.5, 1), miningExpeditionStage: 0, silverDepthsStage: 0, silverDepthsRunStage: 1, silverDepthsWing: "" };
@@ -159,7 +162,7 @@ describe("world objective director", () => {
     room.state.players.set("tester", pose);
     const client = { sessionId: "tester", send: vi.fn() } as any;
     internal.sendObjectiveState(client);
-    expect(client.send.mock.calls[0][1].objectiveId).toBe("expedition-briefing");
+    expect(client.send.mock.calls[0][1].objectiveId).toBe("leave-town");
     Object.assign(pose, { x: 97.5, z: 62.5 });
     internal.sendObjectiveState(client);
     expect(client.send.mock.calls[1][1].objectiveId).toBe("ashen-spire");

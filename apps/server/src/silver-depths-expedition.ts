@@ -28,7 +28,7 @@ export type SilverDepthsPlayer = {
 };
 
 export function canEnterSilverDepths(player: SilverDepthsPlayer): boolean {
-  return player.health > 0 && player.level >= 7 && player.miningExpeditionStage >= 8 && player.silverDepthsStage >= 1;
+  return player.health > 0 && player.level >= 7 && player.miningExpeditionStage >= 8;
 }
 
 export function canExitSilverDepths(player: SilverDepthsPlayer): boolean {

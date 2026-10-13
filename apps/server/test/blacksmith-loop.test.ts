@@ -5,7 +5,7 @@ import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/sc
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("ore to forged sword to item loot", () => {
-  it("enforces level-gated Power slots, advanced stock, and the Silver Depths briefing", () => {
+  it("enforces level-gated Power slots and advanced stock without creating a dungeon quest", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
     const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION, { coins: 100, miningExpeditionStage: 8 });
@@ -21,22 +21,22 @@ describe("ore to forged sword to item loot", () => {
     expect(player.equippedPowerSecondary).toBe("eruption");
     internal.handleBlacksmithBuy(client, { itemId: "forged_sword" });
     expect(player.inventory.get("forged_sword")?.quantity).toBe(1);
-    internal.handleBlacksmithSync(client); expect(player.silverDepthsStage).toBe(1);
+    internal.handleBlacksmithSync(client); expect(player.silverDepthsStage).toBe(0);
   });
-  it("starts and completes the first expedition at the blacksmith exactly once", () => {
+  it("keeps blacksmith visits out of the hidden mine milestone progression", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
     const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION); room.state.players.set("miner", player);
     const client = { sessionId: "miner", send: vi.fn() } as any;
     internal.handleBlacksmithSync(client);
-    expect(player.miningExpeditionStage).toBe(1);
+    expect(player.miningExpeditionStage).toBe(0);
     player.miningExpeditionStage = 7; player.coins = 20; player.health = player.maxHealth = 5;
     internal.handleBlacksmithSync(client);
-    expect(player.miningExpeditionStage).toBe(8); expect(player.coins).toBe(45);
-    expect(player.maxHealth).toBe(6); expect(player.health).toBe(6);
-    expect(client.send).toHaveBeenCalledWith("objective:completed", expect.objectContaining({ coinsGranted: 25 }));
+    expect(player.miningExpeditionStage).toBe(7); expect(player.coins).toBe(20);
+    expect(player.maxHealth).toBe(5); expect(player.health).toBe(5);
+    expect(client.send).not.toHaveBeenCalledWith("objective:completed", expect.anything());
     internal.handleBlacksmithSync(client);
-    expect(player.coins).toBe(45); expect(player.maxHealth).toBe(6);
+    expect(player.coins).toBe(20); expect(player.maxHealth).toBe(5);
   });
   it("requires stall proximity and sufficient gold, buys once, auto-equips and doubles silver yield", () => {
     const room = new WorldRoom(); room.setState(new WorldState());

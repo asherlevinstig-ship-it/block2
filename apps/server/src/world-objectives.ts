@@ -102,8 +102,12 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     if (sameFloor(ASHEN_SPIRE_POSITION) && distance(ASHEN_SPIRE_POSITION) <= 28)
       return make("ashen-spire", "Investigate the Ashen Spire", "Explore the split spire at the heart of the Ashen Reach. Beware the sentries guarding it.", ASHEN_SPIRE_POSITION, "explore", 3);
     if (nearest) return previous && previous.distance <= nearest.distance + 4 ? previous.update : nearest.update;
-    return { ...make("explore", "Explore the Wilderness", "Move toward nearby encounters. Your objective changes with your surroundings.", player, "explore"), showMarker: false };
+    return { ...make("explore", "Explore the Wilderness", "Roam toward nearby threats, collect stronger equipment, and raise the Realm Threat meter.", player, "explore"), showMarker: false };
   };
+  // Overworld guidance is deliberately reactive, not a quest log. Internal
+  // milestone fields still preserve unlocks and rewards, but they never pin the
+  // player to a scripted checklist or blacksmith hand-in.
+  if (roomKind !== "silver-depths") return localObjective(true)!;
   const preferNearby = (quest: WorldObjectiveUpdate): WorldObjectiveUpdate => {
     const target = { x: quest.targetX, y: quest.targetY, z: quest.targetZ };
     if (player.y < 7
@@ -138,7 +142,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     ? runStage <= 1 ? 2 : runStage <= 4 ? 3 : runStage === 5 ? 4 : runStage === 6 ? 5 : 6
     : player.silverDepthsStage ?? 0;
   const depthsUnlocked = roomKind === "silver-depths" || depthsStage > 0 || (player.level ?? 1) >= 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0;
-  const depths = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => preferNearby({ ...update, recommendedLevel: "LV 7–12", progressLabel: `SILVER DEPTHS · STEP ${step} / 7` });
+  const depths = (update: WorldObjectiveUpdate, _step: number): WorldObjectiveUpdate => preferNearby({ ...update, recommendedLevel: "LV 7–12", progressLabel: "SILVER DEPTHS" });
   if (depthsUnlocked && depthsStage === 0) return depths(make("depths-briefing", "Speak to the Blacksmith", "Your first expedition is complete. Return to the blacksmith to unlock The Silver Depths.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
   if (depthsUnlocked && depthsStage === 1) return depths(make("depths-enter", "Enter the Silver Depths", "Use the violet expedition portal in town to begin the level-7 dungeon run.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 2);
   if (depthsUnlocked && depthsStage === 2) return depths(make("depths-moonstone", "Mine the Moonstone Seal", "Mine one glowing Moonstone block to open the six-lane gate into the expedition wings.", SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, "explore", 3), 3);
@@ -181,7 +185,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   }
   if (depthsUnlocked && depthsStage === 6) return depths(make("depths-return", "Extract to Town", "Use the violet return portal after claiming Matriarch's Edge. The Moonstone you mined will be forged into a permanent weapon bonus.", SILVER_DEPTHS_EXIT_POSITION, "portal", 3), 7);
   if (depthsUnlocked && depthsStage === 7 && Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z) <= TOWN_SAFE_RADIUS && sameFloor({ x: 0, y: 8, z: 0 })) {
-    return { ...depths(make("depths-repeat", "Repeat the Silver Depths", "The expedition portal remains open for repeat runs, combat practice, and additional Matriarch encounters.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 7), progressLabel: "SILVER DEPTHS · MASTERED" };
+    return { ...depths(make("depths-repeat", "Repeat the Silver Depths", "The portal remains open for repeat runs, combat practice, and additional Matriarch encounters.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 7), progressLabel: "SILVER DEPTHS · MASTERED" };
   }
   return localObjective(true)!;
 }
