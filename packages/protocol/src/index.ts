@@ -1087,7 +1087,11 @@ export type WorldObjectiveUpdate = {
   targetZ: number;
 };
 
-export const RealmHuntBoardRequestSchema = z.object({ action: z.enum(["sync", "select"]), mobId: z.string().max(80).optional() }).strict();
+export const RealmHuntBoardRequestSchema = z.object({
+  action: z.enum(["sync", "select", "contract"]),
+  mobId: z.string().max(80).optional(),
+  pathId: z.enum(["fang", "venom", "crusher"]).optional(),
+}).strict();
 export type RealmHuntStatus = {
   mobId: string;
   name: string;
@@ -1105,7 +1109,21 @@ export type RealmHuntStatus = {
   targetY: number;
   targetZ: number;
 };
-export type RealmHuntBoardUpdate = { selectedMobId: string; hunts: RealmHuntStatus[]; message: string };
+export type RealmHuntContractStatus = {
+  pathId: "fang" | "venom" | "crusher";
+  pathName: string;
+  forgeName: string;
+  step: number;
+  required: number;
+  targetMobId: string;
+  targetName: string;
+  modifier: string;
+  tier: number;
+  championActive: boolean;
+  championName: string;
+  completed: boolean;
+};
+export type RealmHuntBoardUpdate = { selectedMobId: string; hunts: RealmHuntStatus[]; contract: RealmHuntContractStatus | null; message: string };
 
 export type SilverDepthsWingRewardStatus = {
   wing: "iron" | "silver";
