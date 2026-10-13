@@ -3,7 +3,7 @@ import { defineRoom, defineServer } from "@colyseus/core";
 import { SILVER_DEPTHS_ROOM, WORLD_ROOM } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 
-const SERVER_BUILD = "colyseus-stable-movement-v189";
+const SERVER_BUILD = "colyseus-visible-loot-v190";
 
 const gameServer = defineServer({
   rooms: {

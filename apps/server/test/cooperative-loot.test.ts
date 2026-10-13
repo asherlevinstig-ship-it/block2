@@ -56,7 +56,7 @@ describe("cooperative personal loot", () => {
     expect(a.inventory.get("crawler_fang")?.quantity).toBe(1);
     expect(room.state.lootDrops.has(fibreId)).toBe(true);
     expect(send).toHaveBeenLastCalledWith("loot:result", expect.objectContaining({ ok: false }));
-    internal.resolveLootPickups(40000); expect(room.state.lootDrops.size).toBe(0);
+    internal.resolveLootPickups(70000); expect(room.state.lootDrops.size).toBe(0);
   });
   it("records actual weapon damage and caps overkill at remaining health", () => {
     const { room, internal, mob, rewards } = fixture(); mob.maxHealth = 20; mob.health = 1;

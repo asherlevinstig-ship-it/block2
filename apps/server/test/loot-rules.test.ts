@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inventoryTotal, isLootInPickupRange, lootForArchetype, NormalLootCadence } from "../src/loot-rules.js";
+import { inventoryTotal, isLootInPickupRange, lootForArchetype, LOOT_DESPAWN_MS, NormalLootCadence } from "../src/loot-rules.js";
 
 describe("item loot", () => {
   it("keeps materials reliable and rolls equipment at rarity-aware rates", () => {
@@ -34,11 +34,11 @@ describe("item loot", () => {
     expect(lootForArchetype("cave_spitter", "cave-spitter", .3, "normal", .18)).toEqual([{ itemId: "acid_gland", quantity: 2 }]);
   });
 
-  it("gives an introductory bag then spaces normal bags three to five kills apart", () => {
+  it("gives every credited normal defeat a personal material bag", () => {
     const cadence = new NormalLootCadence();
-    expect([1, 2, 3, 4, 5, 6, 7].map(() => cadence.record("three", 0))).toEqual([true, false, false, true, false, false, true]);
-    expect([1, 2, 3, 4, 5, 6].map(() => cadence.record("five", .99))).toEqual([true, false, false, false, false, true]);
+    expect([1, 2, 3, 4, 5, 6, 7].map(() => cadence.record("player", 0))).toEqual(Array(7).fill(true));
     expect(cadence.record("other-player", .5)).toBe(true);
+    expect(LOOT_DESPAWN_MS).toBe(60_000);
   });
 
   it("collects only inside the pickup radius", () => {

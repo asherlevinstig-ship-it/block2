@@ -2,7 +2,7 @@ import type { ItemId } from "@blockcraft/protocol";
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import { isSilverGuard } from "./wilderness-encounters.js";
 
-export const LOOT_DESPAWN_MS = 30_000;
+export const LOOT_DESPAWN_MS = 60_000;
 export const LOOT_PICKUP_RADIUS = 1.35;
 export const EQUIPMENT_DROP_CHANCES = {
   fang_dagger: .14,
@@ -22,18 +22,9 @@ function equipmentChance(itemId: keyof typeof EQUIPMENT_DROP_CHANCES, threat: Lo
 }
 
 export class NormalLootCadence {
-  private readonly progress = new Map<string, { kills: number; target: number }>();
-
-  record(playerId: string, roll: number): boolean {
-    const nextTarget = 3 + Math.min(2, Math.floor(Math.max(0, Math.min(.999999, Number.isFinite(roll) ? roll : .5)) * 3));
-    const current = this.progress.get(playerId);
-    if (!current) {
-      this.progress.set(playerId, { kills: 0, target: nextTarget });
-      return true;
-    }
-    current.kills++;
-    if (current.kills < current.target) return false;
-    this.progress.set(playerId, { kills: 0, target: nextTarget });
+  record(_playerId: string, _roll: number): boolean {
+    // Every credited defeat should create a readable personal material bag.
+    // Equipment inside the bag still uses the per-archetype rarity roll below.
     return true;
   }
 }

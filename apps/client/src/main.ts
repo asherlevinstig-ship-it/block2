@@ -3849,6 +3849,10 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const rewardCache = dropId.startsWith("forest-cache:");
   const vaultCache = sourceId === "buried-chamber-brute" && itemId === "miners_lantern";
   const guardianDrop = rewardCache || vaultCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
+  if (!rewardCache && !isEquipmentItem(itemId)) {
+    addBox(root, `${rarity}-personal-loot-bag`, rarityLootMaterials[rarity], [.64, .2, .52], [0, -.4, 0]);
+    addBox(root, "loot-bag-clasp", brassMaterial, [.15, .11, .05], [0, -.36, -.27]);
+  }
   if (rewardCache) {
     addBox(root, "rootbound-cache-base", weaponWoodMaterial, [1.05, .55, .72], [0, 0, 0]);
     addBox(root, "rootbound-cache-lid", material, [1.08, .22, .76], [0, .38, 0]);
@@ -3901,19 +3905,21 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const legendaryDrop = rarity === "legendary";
   const beam = new pc.Entity(`loot-${rarity}-beam`);
   beam.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
-  const beamHeight = equipmentDrop ? legendaryDrop ? 2.4 : 1.65 : legendaryDrop ? 1.5 : .82;
-  beam.setLocalScale(equipmentDrop ? legendaryDrop ? .065 : .045 : .028, beamHeight, equipmentDrop ? legendaryDrop ? .065 : .045 : .028);
+  const beamHeight = equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
+  beam.setLocalScale(equipmentDrop ? legendaryDrop ? .065 : .05 : .04, beamHeight, equipmentDrop ? legendaryDrop ? .065 : .05 : .04);
   beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
   if (ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
     const halo = new pc.Entity(`loot-${rarity}-halo`);
     halo.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
     halo.setLocalScale(legendaryDrop ? 1.25 : .95, .018, legendaryDrop ? 1.25 : .95);
     halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
-    const glow = new pc.Entity(`loot-${rarity}-light`);
-    const tint = legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1) : new pc.Color(.25, .55, 1);
-    glow.addComponent("light", { type: "omni", color: tint, intensity: legendaryDrop ? 1.6 : .85, range: legendaryDrop ? 5.5 : 3.5, castShadows: false });
-    glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   }
+  const glow = new pc.Entity(`loot-${rarity}-light`);
+  const tint = legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
+    : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
+  glow.addComponent("light", { type: "omni", color: tint, intensity: legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
+    range: legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
+  glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   const source = sourceId ? mobVisuals.get(sourceId) : undefined;
   const now = performance.now();
   const revealAt = source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
