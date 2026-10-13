@@ -14,9 +14,16 @@ import {
   smoothRecoveryOffset,
   stabilizePilotPose,
   trimRemoteSnapshots,
+  useColyseusMovementPilot,
 } from "./movement-network.js";
 
 describe("movement networking", () => {
+  it("keeps the prediction pilot opt-in so normal play uses acknowledged movement", () => {
+    expect(useColyseusMovementPilot(new URLSearchParams())).toBe(false);
+    expect(useColyseusMovementPilot(new URLSearchParams("movementPilot=1"))).toBe(true);
+    expect(useColyseusMovementPilot(new URLSearchParams("movementShadow=1"))).toBe(false);
+  });
+
   it("faces movement and preserves the last facing direction while idle", () => {
     expect(movementYaw(1, 0, 12)).toBe(90);
     expect(movementYaw(0, -1, 12)).toBe(180);

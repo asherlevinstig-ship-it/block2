@@ -34,6 +34,12 @@ export interface StablePilotPose {
   confirmedJump: boolean;
 }
 
+/** Keep the prediction pilot behind an explicit diagnostics opt-in until its
+ * patch rewinds can no longer produce visible corrections on live latency. */
+export function useColyseusMovementPilot(query: URLSearchParams): boolean {
+  return query.get("movementPilot") === "1";
+}
+
 /**
  * Colyseus prediction rewinds its schema state while applying a patch. A render
  * frame can occasionally observe that intermediate state, producing a large

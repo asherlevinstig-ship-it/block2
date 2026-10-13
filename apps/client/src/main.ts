@@ -209,6 +209,7 @@ import {
   smoothRecoveryOffset,
   stabilizePilotPose,
   trimRemoteSnapshots,
+  useColyseusMovementPilot,
   type PilotPose,
   type RemoteSnapshot,
 } from "./movement-network.js";
@@ -8188,10 +8189,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   const endpoint = import.meta.env.VITE_GAME_SERVER_URL
     || (localHost ? "ws://localhost:2567" : `${window.location.origin}/game`);
   const query = new URLSearchParams(window.location.search);
-  // Colyseus prediction is the default. Keep local A/B switches for diagnosing
-  // regressions without exposing a legacy movement selector to public players.
-  movementPilotRequested = !import.meta.env.DEV
-    || (query.get("movementLegacy") !== "1" && query.get("movementShadow") !== "1");
+  // Live latency can expose the SDK reconciler's intermediate patch rewinds.
+  // Use the acknowledged movement path by default and retain the pilot as an
+  // explicit diagnostics opt-in while it is hardened further.
+  movementPilotRequested = useColyseusMovementPilot(query);
   const qaSpawn = import.meta.env.DEV ? query.get("qa") : null;
   activeRoomName = query.get("room") === "silver-depths" ? SILVER_DEPTHS_ROOM : WORLD_ROOM;
   const instanceKey = query.get("instanceKey");
