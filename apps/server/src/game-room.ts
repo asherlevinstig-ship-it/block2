@@ -38,6 +38,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
 import { AREA_LEADER_FOLLOWERS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
+import { MINI_BOSS_ENRAGE_MS, miniBossDamage, miniBossOrbitCounterPattern, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
@@ -380,6 +381,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobNavigation = new Map<string, MobNavigationState>();
   private readonly mobAwareness = new Map<string, MobAwareness>();
   private readonly areaLeaderPhases = new Map<string, AreaLeaderPhase>();
+  private readonly miniBossEngagedAt = new Map<string, number>();
+  private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
   private readonly realmBossPhases = new Map<string, RealmBossPhase>();
   private readonly mobProgress = new Map<string, MobProgress>();
   private readonly mobUnreachableUntil = new Map<string, number>();
@@ -1913,7 +1916,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
-    if (isAreaMiniBoss(mobId)) this.areaLeaderPhases.delete(mobId);
+    if (mob.isMiniBoss) {
+      this.areaLeaderPhases.delete(mobId);
+      this.miniBossEngagedAt.delete(mobId);
+      this.miniBossOrbitPressure.delete(mobId);
+    }
     if (isRealmEventId(mobId)) this.realmBossPhases.delete(mobId);
     this.openAreaLeaderAfterFollowerDefeat(mobId, now);
     const areaMainMob = areaMainMobDefinition(mobId);
@@ -2054,7 +2061,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private enterAreaLeaderPhase(leaderId: string, leader: MobState, previous: AreaLeaderPhase, phase: AreaLeaderPhase, now: number): void {
     const awareness = this.mobAwareness.get(leaderId);
     const targetId = leader.targetId || awareness?.targetId || "";
-    leader.enraged = phase === 3;
+    leader.enraged = leader.enraged || phase === 3;
     leader.combatState = "recover";
     leader.stateUntil = now + (phase === 3 ? 1_400 : 1_200);
     leader.targetId = "";
@@ -2476,6 +2483,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const leaderId = leaderForFollower(mobId);
     const leader = leaderId ? this.state.mobs.get(leaderId) : undefined;
     if (leader?.alive && (leader.archetype === "moss_crawler" || leader.archetype === "briar_crawler")) damage += 1;
+    if (mob?.isMiniBoss) damage = miniBossDamage(damage, mob.level, player.level);
     const defense = blockable && mob
       ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
       : { damage, guarded: false, parried: false };
@@ -3988,10 +3996,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = mob.enraged ? championPattern(mob) : "slam";
       }
-      else if (isAreaMiniBoss(mobId)
-        && mob.combatState === "idle") mob.attackPattern = areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId);
+      else if (isAreaMiniBoss(mobId) && mob.combatState === "idle") {
+        const orbitCounter = (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now;
+        mob.attackPattern = orbitCounter ? miniBossOrbitCounterPattern(mob.archetype)
+          : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId);
+      }
       else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
-      else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
+      else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = mob.isMiniBoss
+        && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now
+        ? miniBossOrbitCounterPattern(mob.archetype) : championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = isAshenSentry(mobId)
         ? ashenSentryPattern(mob.actionSequence) : spitterPattern(mob.actionSequence + (mobId === "frontier-spitter" ? 1 : 0));
@@ -4000,9 +4013,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           && Math.abs(player.y - mob.y) <= 1.75 && caveEncounterAllows(mobId, player) && this.roamingAllowed(mobId, player) && this.championAllowed(mobId, player));
         const distance = Math.min(...eligible.map(player => Math.hypot(player.x - mob.x, player.z - mob.z)));
         const realmPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth);
+        const orbitCounter = mob.isMiniBoss && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now;
         mob.attackPattern = realmPattern ?? (mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
+          : orbitCounter ? miniBossOrbitCounterPattern(mob.archetype)
           : isAreaMiniBoss(mobId) ? mobId === "frontier-brute" && currentAreaLeaderPhase === 1 && bruteVolleyReady(mob.actionSequence, distance)
-            ? "rocks" : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId)
+              ? "rocks" : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId)
           : mob.isElite ? wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence)
           : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
           : mob.isChampion ? championPattern(mob)
@@ -4062,6 +4077,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.spitterPositioning.delete(mobId);
         this.mobStaggerImmuneUntil.delete(mobId);
         this.mobCommittedAim.delete(mobId);
+        this.miniBossEngagedAt.delete(mobId);
+        this.miniBossOrbitPressure.delete(mobId);
         mob.aimCommitted = false;
         mob.health = stats.maxHealth;
         mob.maxHealth = stats.maxHealth;
@@ -4126,9 +4143,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         if (targetPlayer && now < mob.stateUntil - mobAimCommitMs(mob.archetype)
           && hasCombatLineOfSight(mob, targetPlayer, this.readWorldBlock)) {
-          const desiredYaw = Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI;
+          const predicted = mob.isMiniBoss
+            ? predictedMiniBossAim(mob, targetPlayer, activeMovementInput(this.movementInputs.get(mob.targetId), now, targetPlayer.yaw),
+              mob.archetype === "cave_spitter" ? .55 : mob.archetype === "stone_brute" ? .25 : .42)
+            : { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: Math.atan2(targetPlayer.x - mob.x, targetPlayer.z - mob.z) * 180 / Math.PI };
+          const desiredYaw = predicted.yaw;
           mob.yaw = mob.archetype === "stone_brute" ? turnBruteAim(mob.yaw, desiredYaw, deltaTime) : desiredYaw;
-          this.mobCommittedAim.set(mobId, { x: targetPlayer.x, y: targetPlayer.y, z: targetPlayer.z, yaw: mob.yaw });
+          this.mobCommittedAim.set(mobId, { x: predicted.x, y: predicted.y, z: predicted.z, yaw: mob.yaw });
         }
         if (now >= mob.stateUntil - mobAimCommitMs(mob.archetype)) mob.aimCommitted = true;
         this.updateMobStrikeOrigin(mobId, mob);
@@ -4212,6 +4233,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? null : awareMobTarget(mob, players, awareness, now, definition.aggroRange,
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       if (!target) {
+        if (mob.isMiniBoss) {
+          this.miniBossEngagedAt.delete(mobId);
+          this.miniBossOrbitPressure.delete(mobId);
+          mob.enraged = currentAreaLeaderPhase === 3;
+        }
         this.crawlerPositioning.delete(mobId);
         this.spitterPositioning.delete(mobId);
         if (previousTarget && !roamingMembership(mobId)) {
@@ -4239,6 +4265,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.patrolMob(mobId, mob, home, now, deltaTime, Math.min(0.9, definition.speed * mob.speedMultiplier * 0.65));
         mob.awarenessState = Math.hypot(mob.x - home.x, mob.z - home.z) > MOB_PATROL_RADIUS + .5 ? "return" : "patrol";
         continue;
+      }
+      if (mob.isMiniBoss && target.visible) {
+        const engagedAt = this.miniBossEngagedAt.get(mobId) ?? now;
+        this.miniBossEngagedAt.set(mobId, engagedAt);
+        if (now - engagedAt >= MINI_BOSS_ENRAGE_MS) mob.enraged = true;
+        this.miniBossOrbitPressure.set(mobId,
+          updateOrbitPressure(this.miniBossOrbitPressure.get(mobId), mob, target, now));
       }
       if (target.visible && previousTarget !== target.id) mob.alertUntil = now + 900;
       mob.awarenessState = target.visible ? "engaged" : "search";
@@ -4319,8 +4352,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.attackCoordination.started(mobId, target.id, mob, now, mob.stateUntil);
       mob.targetId = target.id;
       mob.aimCommitted = false;
-      mob.yaw = Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI;
-      this.mobCommittedAim.set(mobId, { x: target.x, y: target.y, z: target.z, yaw: mob.yaw });
+      const predicted = mob.isMiniBoss
+        ? predictedMiniBossAim(mob, target, activeMovementInput(this.movementInputs.get(target.id), now),
+          mob.archetype === "cave_spitter" ? .55 : mob.archetype === "stone_brute" ? .25 : .42)
+        : { x: target.x, y: target.y, z: target.z, yaw: Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI };
+      mob.yaw = predicted.yaw;
+      this.mobCommittedAim.set(mobId, predicted);
       this.updateMobStrikeOrigin(mobId, mob);
     }
     for (const [sessionId, player] of this.state.players) {
