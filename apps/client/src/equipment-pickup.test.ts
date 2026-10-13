@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { equipmentPickupCard } from "./equipment-pickup.js";
+import {
+  equipmentPickupCard,
+  LOOT_FEED_EQUIPMENT_MS,
+  LOOT_FEED_MATERIAL_MS,
+  LOOT_FEED_MAX_ITEMS,
+} from "./equipment-pickup.js";
 describe("equipment pickup cards", () => {
   it("identifies weapon silhouettes without rarity labels", () => {
     for (const [id, category] of [["forged_sword", "Sword"], ["forged_bow", "Bow"], ["acid_gland_focus", "Focus"],
@@ -15,5 +20,10 @@ describe("equipment pickup cards", () => {
     expect(equipmentPickupCard("iron_ore", 1)).toBeNull();
     expect(equipmentPickupCard("reinforced_pickaxe", 1)).toBeNull();
     for (const quantity of [0, -1, 1.5, NaN]) expect(equipmentPickupCard("iron_armour", quantity)).toBeNull();
+  });
+  it("keeps a readable side feed when a grouped bag contains several items", () => {
+    expect(LOOT_FEED_MAX_ITEMS).toBe(8);
+    expect(LOOT_FEED_MATERIAL_MS).toBeGreaterThanOrEqual(4_000);
+    expect(LOOT_FEED_EQUIPMENT_MS).toBeGreaterThanOrEqual(8_000);
   });
 });

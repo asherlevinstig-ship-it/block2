@@ -94,6 +94,18 @@ describe("manual floor loot", () => {
     expect(room.state.lootDrops.size).toBe(0);
   });
 
+  it("does not shorten an existing bag when newer loot appears", () => {
+    const room = new WorldRoom(); room.setState(new WorldState());
+    room.state.players.set("miner", new PlayerState());
+    const mob = new MobState(); Object.assign(mob, { x: 30.5, y: 8, z: 30.5, archetype: "moss_crawler" });
+    vi.spyOn(Math, "random").mockReturnValue(.99);
+    (room as any).spawnLootDrops("crawler-one", mob, 10_000, "miner");
+    (room as any).spawnLootDrops("crawler-two", mob, 60_000, "miner");
+    expect([...room.state.lootDrops.values()].map(drop => drop.expiresAt).sort()).toEqual([130_000, 180_000]);
+    (room as any).resolveLootPickups(130_000);
+    expect([...room.state.lootDrops.values()].map(drop => drop.expiresAt)).toEqual([180_000]);
+  });
+
   it("restores a two-minute lantern drop for a player stranded after defeating the Warden", () => {
     const room = new WorldRoom(); room.setState(new WorldState());
     const player = new PlayerState(); Object.assign(player, { x: 58, y: 1, z: 10, health: 5, miningExpeditionStage: 6 });

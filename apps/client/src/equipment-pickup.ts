@@ -1,4 +1,9 @@
 import { armourForItem, equipmentForItem, ITEM_DEFINITIONS, type ItemId } from "@blockcraft/protocol";
+
+export const LOOT_FEED_MAX_ITEMS = 8;
+export const LOOT_FEED_MATERIAL_MS = 4_500;
+export const LOOT_FEED_EQUIPMENT_MS = 8_000;
+
 export function equipmentPickupCard(itemId: ItemId, quantity: number) {
   if (!Number.isInteger(quantity) || quantity <= 0) return null;
   const armour = armourForItem(itemId); const hand = equipmentForItem(itemId);

@@ -37,7 +37,7 @@ import { portalArrivalSnapshot } from "./portal-travel.js";
 import { SPITTER_PATTERN, matriarchSecondVolleyYaw, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { TOWN_EXPEDITION_BOARD_POSITION } from "@blockcraft/voxel-world";
-import { equipmentPickupCard } from "./equipment-pickup.js";
+import { equipmentPickupCard, LOOT_FEED_EQUIPMENT_MS, LOOT_FEED_MATERIAL_MS, LOOT_FEED_MAX_ITEMS } from "./equipment-pickup.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
@@ -4637,14 +4637,18 @@ function lootPickupBurst(drop: NetworkLootDrop): void {
   }
 }
 
+function queueLootToast(toast: HTMLElement, lifetimeMs: number): void {
+  resourceToasts.prepend(toast);
+  while (resourceToasts.children.length > LOOT_FEED_MAX_ITEMS) resourceToasts.lastElementChild!.remove();
+  setTimeout(() => toast.remove(), lifetimeMs);
+}
+
 function showResourcePickup(name: string, quantity: number, itemId?: string): void {
   const toast = document.createElement("div");
   toast.className = "resource-toast";
   if (itemId) toast.dataset.item = itemId;
   toast.textContent = `+${quantity} ${name}`;
-  resourceToasts.prepend(toast);
-  while (resourceToasts.children.length > 3) resourceToasts.lastElementChild!.remove();
-  setTimeout(() => toast.remove(), 2200);
+  queueLootToast(toast, LOOT_FEED_MATERIAL_MS);
 }
 
 function showEquipmentPickup(itemId: ItemId, quantity: number, total: number): void {
@@ -4656,9 +4660,8 @@ function showEquipmentPickup(itemId: ItemId, quantity: number, total: number): v
   const title = document.createElement("small"); title.textContent = `${total > quantity ? "DUPLICATE" : "NEW"} · ${ITEM_RARITIES[rarity].label.toUpperCase()} ${card.category.toUpperCase()}`;
   const name = document.createElement("strong"); name.textContent = `${card.name}${card.quantity}`;
   const hint = document.createElement("span"); hint.textContent = card.hint;
-  toast.append(title, name, hint); resourceToasts.prepend(toast);
-  while (resourceToasts.children.length > 3) resourceToasts.lastElementChild!.remove();
-  setTimeout(() => toast.remove(), 4500);
+  toast.append(title, name, hint);
+  queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
 }
 
 function updateMining(now: number): void {
@@ -8955,7 +8958,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (message.action === "dismantle" && message.itemId && isItemId(message.itemId)) {
         const toast = document.createElement("div"); toast.className = "resource-toast equipment-pickup"; toast.dataset.rarity = itemRarity(message.itemId);
         toast.innerHTML = `<small>DISMANTLED · ${ITEM_RARITIES[itemRarity(message.itemId)].label.toUpperCase()}</small><strong>${ITEM_DEFINITIONS[message.itemId].name}</strong><span>+${message.goldGranted ?? 0} gold${message.materialGranted ? ` · +${message.materialQuantity ?? 0} ${ITEM_DEFINITIONS[message.materialGranted].name}` : ""}</span>`;
-        resourceToasts.prepend(toast); setTimeout(() => toast.remove(), 4500);
+        queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
       }
       closeLoot(); status.textContent = message.message;
     }
@@ -8965,7 +8968,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     updateInventoryItem(message.itemId, message.total);
     const item = ITEM_DEFINITIONS[message.itemId];
     if (isEquipmentItem(message.itemId)) showEquipmentPickup(message.itemId, message.quantity, message.total);
-    showCombatFeedback(`+${message.quantity} ${item.name.toUpperCase()}`, "dodge");
+    else showResourcePickup(item.name, message.quantity, message.itemId);
     status.textContent = `Picked up ${item.name} · ${message.total} total.`;
     logMovementEvent(`LOOT ${message.itemId} +${message.quantity} total=${message.total}`);
   });
