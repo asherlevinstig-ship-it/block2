@@ -2,7 +2,7 @@ import type { ItemId } from "@blockcraft/protocol";
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import { isSilverGuard } from "./wilderness-encounters.js";
 
-export const LOOT_DESPAWN_MS = 60_000;
+export const LOOT_DESPAWN_MS = 120_000;
 export const LOOT_PICKUP_RADIUS = 1.35;
 export const EQUIPMENT_DROP_CHANCES = {
   fang_dagger: .14,

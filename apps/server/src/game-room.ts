@@ -1993,7 +1993,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const dropId = `first-expedition-lantern:${client.sessionId}`;
     const drop = new LootDropState();
     Object.assign(drop, CAVE_HIDDEN_HOME, { y: CAVE_HIDDEN_HOME.y + .22, ownerId: client.sessionId,
-      itemId: "miners_lantern", quantity: 1, expiresAt: Number.MAX_SAFE_INTEGER });
+      itemId: "miners_lantern", quantity: 1, expiresAt: now + LOOT_DESPAWN_MS });
     this.state.lootDrops.set(dropId, drop);
     client.send("loot:spawned", { dropId, ownerId: drop.ownerId, itemId: drop.itemId, quantity: drop.quantity,
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt });
@@ -2097,8 +2097,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       drop.x = x;
       drop.y = y;
       drop.z = z;
-      drop.expiresAt = mobId === CRYSTAL_MATRIARCH_ID || entry.itemId === "miners_lantern"
-        ? Number.MAX_SAFE_INTEGER : now + LOOT_DESPAWN_MS;
+      drop.expiresAt = now + LOOT_DESPAWN_MS;
       const dropId = `${mobId}:${now}:${++this.lootDropSequence}`;
       this.state.lootDrops.set(dropId, drop);
       this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {

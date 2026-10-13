@@ -135,7 +135,7 @@ describe("world objective director", () => {
     const pose = { ...player(58, 10, 1), miningExpeditionStage: 6 };
     const mobs = [["buried-vault-crawler", { ...mob(56, 10), y: 1 }],
       ["buried-chamber-brute", { ...mob(56.5, 9.5, { alive: false, name: "Stone Warden" }), y: 1 }]] as const;
-    const lantern = { x: 56.5, y: 1.22, z: 9.5, itemId: "miners_lantern", ownerId: "tester", expiresAt: Number.MAX_SAFE_INTEGER };
+    const lantern = { x: 56.5, y: 1.22, z: 9.5, itemId: "miners_lantern", ownerId: "tester", expiresAt: 130_000 };
     const update = nearbyObjective("tester", pose, mobs, [], [["first-expedition-lantern:tester", lantern]], 10_000, "buried-vault");
     expect(update.kind).toBe("loot");
     expect(update.title).toBe("Claim the Miner's Lantern");

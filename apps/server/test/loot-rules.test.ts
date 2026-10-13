@@ -38,7 +38,7 @@ describe("item loot", () => {
     const cadence = new NormalLootCadence();
     expect([1, 2, 3, 4, 5, 6, 7].map(() => cadence.record("player", 0))).toEqual(Array(7).fill(true));
     expect(cadence.record("other-player", .5)).toBe(true);
-    expect(LOOT_DESPAWN_MS).toBe(60_000);
+    expect(LOOT_DESPAWN_MS).toBe(120_000);
   });
 
   it("collects only inside the pickup radius", () => {
