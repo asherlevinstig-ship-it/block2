@@ -6408,11 +6408,12 @@ function updateBossHud(now: number): void {
   }
   const exposedLabel = boss?.isMiniBoss ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "";
   const rematchLabel = boss?.isMiniBoss ? leaderRematchLabel(boss.leaderRematchTier, boss.leaderModifier) : "";
+  // Keep combat hierarchy stable even when a fresh objective update renders behind the boss card.
+  document.documentElement.classList.toggle("boss-hud-active", bossHudState.visible);
   const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
-  if (currentWorldObjective?.kind === "miniboss" || currentWorldObjective?.kind === "hunt") worldObjective.hidden = bossHudState.visible;
   if (!boss || !bossHudState.visible) return;
   bossName.textContent = boss.name;
   const guardian = nextBossId === "forest-guardian";

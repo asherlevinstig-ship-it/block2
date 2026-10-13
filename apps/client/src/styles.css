@@ -1567,6 +1567,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   box-shadow: 0 12px 34px rgba(0, 0, 0, .38);
   pointer-events: none;
 }
+html.boss-hud-active #world-objective { display: none !important; }
 #world-objective header, #world-objective footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #world-objective header span, #world-objective header strong { color: #cce77b; font: 800 10px/1.2 system-ui, sans-serif; letter-spacing: .14em; }
 #world-objective h2 { margin: 5px 0 2px; font: 800 18px/1.15 system-ui, sans-serif; }
