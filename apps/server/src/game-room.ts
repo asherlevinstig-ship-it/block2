@@ -13,6 +13,8 @@ import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
 import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId } from "@blockcraft/protocol";
+import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
+  type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
 import { awareMobTarget, createMobAwareness, provokeMob, type MobAwareness } from "./mob-awareness.js";
 import { spacedMobDesired, mobPersonalSpace } from "./mob-spacing.js";
@@ -712,6 +714,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     aliveMessage("blacksmith:dismantle", (client, payload) => this.handleBlacksmithDismantle(client, payload));
     aliveMessage("blacksmith:reforge", (client, payload) => this.handleBlacksmithReforge(client, payload));
+    aliveMessage("blacksmith:leader-forge", (client, payload) => this.handleLeaderForge(client, payload));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
     aliveMessage("blacksmith:depths-buy", (client, payload) => this.handleDepthsRewardBuy(client, payload));
@@ -1136,6 +1139,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       reforgeMaterials: Object.fromEntries([...new Set(Object.values(BLACKSMITH_REFORGE).map(recipe => recipe.materialId))]
         .map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       reforgedItemId,
+      leaderRelics: Object.fromEntries(AREA_LEADER_RELIC_IDS.map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
+      leaderMarks: Object.fromEntries((Object.keys(LEADER_FORGE_MARKS) as LeaderForgemarkId[])
+        .map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       materialGranted: dismantled?.materialId,
       materialQuantity: dismantled?.materialQuantity,
       message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
@@ -1342,6 +1348,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.sendBlacksmithState(client,
       `${ITEM_DEFINITIONS[itemId].name} reforged to Rank ${["I", "II", "III"][currentRank]}.`, "reforged", 0, 0,
       undefined, undefined, undefined, itemId);
+  }
+
+  private handleLeaderForge(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = LeaderForgeSchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a leader relic to forge.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Leader Forge.", "error");
+    const relicId = parsed.data.relicId as AreaLeaderRelicId;
+    const recipe = LEADER_FORGE_RECIPES[relicId];
+    const relic = player.inventory.get(relicId);
+    const held = relic?.quantity ?? 0;
+    const markOwned = (player.inventory.get(recipe.markId)?.quantity ?? 0) > 0;
+    if (parsed.data.action === "exchange") {
+      if (!markOwned) return this.sendBlacksmithState(client, `Awaken ${LEADER_FORGE_MARKS[recipe.markId].name} before exchanging spare relics.`, "error");
+      if (held < 1) return this.sendBlacksmithState(client, `You have no spare ${ITEM_DEFINITIONS[relicId].name} to exchange.`, "error");
+      if (player.coins + recipe.exchangeGold > 1_000_000) return this.sendBlacksmithState(client, "Your gold purse does not have room for the exchange.", "error");
+      relic!.quantity -= 1;
+      player.coins += recipe.exchangeGold;
+      void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+      return this.sendBlacksmithState(client, `Exchanged one ${ITEM_DEFINITIONS[relicId].name} for ${recipe.exchangeGold} gold.`, "exchanged", 1, recipe.exchangeGold);
+    }
+    if (markOwned) return this.sendBlacksmithState(client, `${LEADER_FORGE_MARKS[recipe.markId].name} is already awakened. Spare matching relics can be exchanged for gold.`, "error");
+    if (held < recipe.relics) return this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[relicId].name}: ${held} / ${recipe.relics}. Defeat that leader again to complete the set.`, "error");
+    if ((player.inventory.get(recipe.weaponId)?.quantity ?? 0) <= 0) {
+      return this.sendBlacksmithState(client, `You need ${ITEM_DEFINITIONS[recipe.weaponId].name} in your pack before awakening it.`, "error");
+    }
+    relic!.quantity -= recipe.relics;
+    let mark = player.inventory.get(recipe.markId);
+    if (!mark) { mark = new InventoryItemState(); player.inventory.set(recipe.markId, mark); }
+    mark.quantity = 1;
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    this.sendBlacksmithState(client,
+      `${LEADER_FORGE_MARKS[recipe.markId].name} awakened. ${LEADER_FORGE_MARKS[recipe.markId].perk}.`, "awakened");
   }
 
   private handleBlacksmithForge(client: Client, payload: unknown): void {
@@ -5536,6 +5575,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           perkStacks = stacks;
           this.venomBuildup.set(key, { stacks, expiresAt: now + (venom.windowMs ?? 4_000) });
         }
+      }
+      if (pending.mainHandId === "fang_dagger" && pending.step === 3 && (player.inventory.get("alpha_forgemark")?.quantity ?? 0) > 0) {
+        perk = "alpha_finish"; perkBonusDamage += 1;
+      } else if (pending.mainHandId === "acid_gland_focus" && player.actionSequence % 3 === 0
+        && (player.inventory.get("venom_forgemark")?.quantity ?? 0) > 0) {
+        perk = "venom_surge"; perkBonusDamage += 1;
+      } else if (pending.mainHandId === "stone_core_hammer" && mob.combatState === "stagger"
+        && (player.inventory.get("crusher_forgemark")?.quantity ?? 0) > 0) {
+        perk = "crusher_break"; perkBonusDamage += 1;
       }
       const damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)

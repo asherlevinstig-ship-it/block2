@@ -87,9 +87,14 @@ import {
   BLACKSMITH_STOCK,
   BLACKSMITH_DISMANTLE,
   BLACKSMITH_REFORGE,
+  AREA_LEADER_RELIC_IDS,
+  LEADER_FORGE_MARKS,
+  LEADER_FORGE_RECIPES,
   type BlacksmithStockId,
   type BlacksmithDismantleItemId,
   type BlacksmithReforgeItemId,
+  type AreaLeaderRelicId,
+  type LeaderForgemarkId,
   type EquipmentReforgeRanks,
   reforgeWeaponDamageBonus,
   reforgeArmourReduction,
@@ -4978,6 +4983,62 @@ blacksmithClose.before(dismantleShop);
 const reforgeShop = document.createElement("div");
 reforgeShop.id = "blacksmith-reforge";
 blacksmithClose.before(reforgeShop);
+const leaderForgeShop = document.createElement("div");
+leaderForgeShop.id = "blacksmith-leader-forge";
+blacksmithClose.before(leaderForgeShop);
+function renderLeaderForgeShop(): void {
+  leaderForgeShop.replaceChildren();
+  leaderForgeShop.hidden = blacksmithShopTab !== "leaders";
+  if (leaderForgeShop.hidden) return;
+  const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
+  heading.textContent = "LEADER FORGE · AWAKEN SIGNATURE WEAPONS";
+  const help = document.createElement("p"); help.className = "blacksmith-leader-help";
+  help.textContent = "Collect 3 matching relics from the same leader. Awakening consumes the relics, permanently records the set, and unlocks that weapon's boss perk.";
+  leaderForgeShop.append(heading, help);
+  let shown = 0;
+  const completedMarks = new Set<LeaderForgemarkId>();
+  for (const relicId of AREA_LEADER_RELIC_IDS) {
+    const recipe = LEADER_FORGE_RECIPES[relicId];
+    const held = inventoryCounts.get(relicId) ?? 0;
+    const markOwned = (inventoryCounts.get(recipe.markId) ?? 0) > 0;
+    if (held <= 0 && (!markOwned || completedMarks.has(recipe.markId))) continue;
+    if (markOwned) completedMarks.add(recipe.markId);
+    shown++;
+    const mark = LEADER_FORGE_MARKS[recipe.markId];
+    const weaponOwned = (inventoryCounts.get(recipe.weaponId) ?? 0) > 0;
+    const card = document.createElement("article"); card.className = markOwned ? "complete" : "";
+    card.dataset.rarity = markOwned ? "legendary" : itemRarity(relicId);
+    const title = document.createElement("header");
+    const name = document.createElement("strong"); name.textContent = markOwned ? `${mark.name} · AWAKENED` : ITEM_DEFINITIONS[relicId].name;
+    const progress = document.createElement("b"); progress.textContent = markOwned ? "COLLECTION MARK" : `${Math.min(held, recipe.relics)} / ${recipe.relics}`;
+    title.append(name, progress);
+    const perk = document.createElement("p"); perk.textContent = `${ITEM_DEFINITIONS[recipe.weaponId].name} · ${mark.perk}`;
+    const note = document.createElement("small");
+    note.textContent = markOwned
+      ? held > 0 ? `${held} spare relic${held === 1 ? "" : "s"} · exchange one for ${recipe.exchangeGold} gold` : "Permanent set completed · find another matching relic to exchange"
+      : held < recipe.relics ? `Defeat ${ITEM_DEFINITIONS[relicId].name.replace(/ (Fang|Heart|Sac|Heart-Core|Keystone|Crest|Lens|Totem|Gland|Crown|Shard|Lantern)$/, "")} again to finish this set`
+        : weaponOwned ? "Relics and weapon ready for awakening" : `Own ${ITEM_DEFINITIONS[recipe.weaponId].name} before awakening`;
+    const button = document.createElement("button"); button.type = "button";
+    const action = markOwned ? "exchange" : "awaken";
+    const canAct = markOwned ? held > 0 && tavernCoinBalance + recipe.exchangeGold <= 1_000_000 : held >= recipe.relics && weaponOwned;
+    button.textContent = blacksmithPending ? "PLEASE WAIT…" : markOwned
+      ? held > 0 ? `EXCHANGE 1 · +${recipe.exchangeGold} GOLD` : "AWAKENED · NO SPARES"
+      : held < recipe.relics ? `COLLECT ${recipe.relics - held} MORE` : !weaponOwned ? "OWN WEAPON FIRST" : `AWAKEN ${mark.name.toUpperCase()}`;
+    button.disabled = blacksmithPending || !room || !canAct;
+    button.addEventListener("click", () => {
+      if (!room || blacksmithPending || !canAct) return;
+      blacksmithPending = true; renderLeaderForgeShop();
+      blacksmithMessage.textContent = action === "awaken" ? `Awakening ${mark.name}...` : `Exchanging ${ITEM_DEFINITIONS[relicId].name}...`;
+      room.send("blacksmith:leader-forge", { relicId, action });
+    });
+    card.append(title, perk, note, button); leaderForgeShop.append(card);
+  }
+  if (shown === 0) {
+    const empty = document.createElement("p"); empty.className = "blacksmith-leader-empty";
+    empty.textContent = "No leader relics collected yet. Hunt the named main mob in each encounter area; every leader drops its signature relic.";
+    leaderForgeShop.append(empty);
+  }
+}
 function renderReforgeShop(): void {
   reforgeShop.replaceChildren();
   reforgeShop.hidden = blacksmithShopTab !== "reforge";
@@ -5080,6 +5141,7 @@ function renderWeaponShop(): void {
   document.querySelector<HTMLElement>("#blacksmith-depths-shop")!.hidden = blacksmithShopTab !== "depths";
   renderDismantleShop();
   renderReforgeShop();
+  renderLeaderForgeShop();
   for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {
     tab.setAttribute("aria-pressed", String(tab.dataset.smithTab === blacksmithShopTab));
   }
@@ -5148,6 +5210,8 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   for (const id of Object.keys(BLACKSMITH_STOCK) as BlacksmithStockId[]) updateInventoryItem(id, update.weapons?.[id] ?? 0);
   for (const id of Object.keys(BLACKSMITH_DISMANTLE) as BlacksmithDismantleItemId[]) updateInventoryItem(id, update.dismantleItems?.[id] ?? 0);
   for (const [id, quantity] of Object.entries(update.reforgeMaterials ?? {})) updateInventoryItem(id as ItemId, quantity ?? 0);
+  for (const [id, quantity] of Object.entries(update.leaderRelics ?? {})) updateInventoryItem(id as AreaLeaderRelicId, quantity ?? 0);
+  for (const [id, quantity] of Object.entries(update.leaderMarks ?? {})) updateInventoryItem(id as LeaderForgemarkId, quantity ?? 0);
   blacksmithReforgeRanks = update.reforgeRanks ?? {};
   refreshEquipmentProgression();
   refreshInventoryEquipped();
@@ -5220,6 +5284,14 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   if (update.phase === "reforged" && update.reforgedItemId) {
     const rank = blacksmithReforgeRanks[update.reforgedItemId] ?? 0;
     showCombatFeedback(`${ITEM_DEFINITIONS[update.reforgedItemId].name.toUpperCase()} · ${rankLabel(rank)}`, "dodge");
+    status.textContent = update.message;
+  }
+  if (update.phase === "awakened") {
+    showCombatFeedback("LEADER WEAPON AWAKENED", "dodge");
+    status.textContent = update.message;
+  }
+  if (update.phase === "exchanged") {
+    showCombatFeedback(`LEADER RELIC · +${update.goldGranted ?? 0} GOLD`, "dodge");
     status.textContent = update.message;
   }
 }
@@ -8972,6 +9044,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
           ? "DEFEATED"
           : message.perk === "venom_bloom"
             ? `VENOM BLOOM!  −${message.damage}`
+          : message.perk === "alpha_finish"
+            ? `ALPHA FINISH!  −${message.damage}`
+          : message.perk === "venom_surge"
+            ? `VENOM SURGE!  −${message.damage}`
+          : message.perk === "crusher_break"
+            ? `CRUSHER BREAK!  −${message.damage}`
           : (message.traitBonusDamage ?? 0) > 0
             ? `EXECUTION!  −${message.damage}`
           : hitLabel,
@@ -8980,6 +9058,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       else if ((message.traitBonusDamage ?? 0) > 0) status.textContent += ` · Executioner +${message.traitBonusDamage} damage.`;
       if (message.mainHandId === "venom_focus" && message.perk !== "venom_bloom") status.textContent += ` · Venom ${message.perkStacks ?? 0}/3.`;
       else if (message.perk === "venom_bloom") status.textContent += " · Venom Bloom detonated.";
+      else if (message.perk === "alpha_finish") status.textContent += " · Alpha Fang awakened finisher +1 damage.";
+      else if (message.perk === "venom_surge") status.textContent += " · Venom Surge awakened bolt +1 damage.";
+      else if (message.perk === "crusher_break") status.textContent += " · Crusher Break exploited stagger +1 damage.";
     }
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {

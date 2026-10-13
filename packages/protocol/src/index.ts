@@ -271,7 +271,7 @@ export function armouredDamage(damage: number, id: string, kind: IncomingDamageK
   return Math.max(1, damage - armour.reduction - situational - reforgeArmourReduction(reforgeRank));
 }
 export type BlacksmithUpdate = {
-  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "error";
+  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "awakened" | "exchanged" | "error";
   ironOre: number;
   silverOre?: number;
   moonstone?: number;
@@ -288,6 +288,8 @@ export type BlacksmithUpdate = {
   reforgeRanks?: EquipmentReforgeRanks;
   reforgeMaterials?: Partial<Record<ItemId, number>>;
   reforgedItemId?: BlacksmithReforgeItemId;
+  leaderRelics?: Partial<Record<AreaLeaderRelicId, number>>;
+  leaderMarks?: Partial<Record<LeaderForgemarkId, number>>;
   materialGranted?: ItemId;
   materialQuantity?: number;
   sold?: number;
@@ -401,6 +403,9 @@ export const ITEM_DEFINITIONS = {
   broodspitter_focus_shard: { id: "broodspitter_focus_shard", name: "Broodspitter Focus Shard", description: "Unique underground trophy claimed from the Silver Chamber Broodspitter" },
   stone_warden_lantern: { id: "stone_warden_lantern", name: "Stone Warden Lantern", description: "Unique vault trophy claimed from the Stone Warden" },
   frontier_champion_crest: { id: "frontier_champion_crest", name: "Frontier Champion Crest", description: "Unique trophy claimed from the Frontier Stone Champion" },
+  alpha_forgemark: { id: "alpha_forgemark", name: "Alpha Forgemark", description: "Leader collection badge · awakens Fang Dagger finishers with +1 damage" },
+  venom_forgemark: { id: "venom_forgemark", name: "Venom Forgemark", description: "Leader collection badge · every third Acid Focus hit surges for +1 damage" },
+  crusher_forgemark: { id: "crusher_forgemark", name: "Crusher Forgemark", description: "Leader collection badge · Stone Hammer attacks deal +1 damage to staggered enemies" },
   fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", description: "A fast three-hit melee weapon" },
   stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", description: "Slow overhead smash · heavy knockback · can stagger enemy windups" },
   rootbound_hammer: { id: "rootbound_hammer", name: "Rootbound Hammer", description: "Guardian relic · heavy three-hit combo · finisher releases a binding root shockwave" },
@@ -418,6 +423,27 @@ export const AREA_LEADER_RELIC_IDS = [
   "gloam_alpha_gland", "sunscar_alpha_gland", "ironburrow_crown", "broodspitter_focus_shard",
   "stone_warden_lantern", "frontier_champion_crest",
 ] as const satisfies readonly ItemId[];
+export type AreaLeaderRelicId = typeof AREA_LEADER_RELIC_IDS[number];
+export const LEADER_FORGE_MARKS = {
+  alpha_forgemark: { weaponId: "fang_dagger", name: "Alpha Fang", perk: "Combo finishers deal +1 damage" },
+  venom_forgemark: { weaponId: "acid_gland_focus", name: "Venom Surge", perk: "Every third bolt deals +1 damage" },
+  crusher_forgemark: { weaponId: "stone_core_hammer", name: "Crusher Break", perk: "Hits against staggered enemies deal +1 damage" },
+} as const;
+export type LeaderForgemarkId = keyof typeof LEADER_FORGE_MARKS;
+const leaderForgeRecipe = (markId: LeaderForgemarkId) => ({ markId, weaponId: LEADER_FORGE_MARKS[markId].weaponId, relics: 3 as const, exchangeGold: 12 as const });
+export const LEADER_FORGE_RECIPES = {
+  mossback_fang_relic: leaderForgeRecipe("alpha_forgemark"), westroad_fang_relic: leaderForgeRecipe("alpha_forgemark"),
+  northroad_fang_relic: leaderForgeRecipe("alpha_forgemark"), broodmother_heart: leaderForgeRecipe("alpha_forgemark"),
+  westroad_pack_totem: leaderForgeRecipe("alpha_forgemark"), northroad_pack_totem: leaderForgeRecipe("alpha_forgemark"),
+  ironburrow_crown: leaderForgeRecipe("alpha_forgemark"),
+  silverfang_venom_sac: leaderForgeRecipe("venom_forgemark"), gloomfang_venom_sac: leaderForgeRecipe("venom_forgemark"),
+  ashglass_lens: leaderForgeRecipe("venom_forgemark"), gloam_alpha_gland: leaderForgeRecipe("venom_forgemark"),
+  sunscar_alpha_gland: leaderForgeRecipe("venom_forgemark"), broodspitter_focus_shard: leaderForgeRecipe("venom_forgemark"),
+  stonehide_core_relic: leaderForgeRecipe("crusher_forgemark"), ruinbreaker_keystone: leaderForgeRecipe("crusher_forgemark"),
+  warleader_crest: leaderForgeRecipe("crusher_forgemark"), stone_warden_lantern: leaderForgeRecipe("crusher_forgemark"),
+  frontier_champion_crest: leaderForgeRecipe("crusher_forgemark"),
+} as const satisfies Record<AreaLeaderRelicId, { markId: LeaderForgemarkId; weaponId: "fang_dagger" | "acid_gland_focus" | "stone_core_hammer"; relics: 3; exchangeGold: 12 }>;
+export const LeaderForgeSchema = z.object({ relicId: z.enum(AREA_LEADER_RELIC_IDS), action: z.enum(["awaken", "exchange"]) });
 /** Capacity used when collecting a floor drop into the carried inventory. */
 export function lootCarryCapacity(itemId: ItemId, mineralCapacity: number): number {
   if (itemId === "healing_potion") return HEALING_POTION.capacity;
@@ -465,6 +491,9 @@ export const EQUIPMENT_RARITY = {
   broodspitter_focus_shard: "epic",
   stone_warden_lantern: "epic",
   frontier_champion_crest: "epic",
+  alpha_forgemark: "legendary",
+  venom_forgemark: "legendary",
+  crusher_forgemark: "legendary",
 } as const satisfies Partial<Record<ItemId, ItemRarity>>;
 export function itemRarity(itemId: string): ItemRarity {
   return Object.hasOwn(EQUIPMENT_RARITY, itemId) ? EQUIPMENT_RARITY[itemId as keyof typeof EQUIPMENT_RARITY] : "common";
@@ -528,7 +557,8 @@ export function lootBagRepresentative(items: readonly LootBagItem[]): LootBagIte
   })[0] ?? null;
 }
 
-export type EquipmentPerkId = "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain";
+export type EquipmentPerkId = "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain"
+  | "alpha_finish" | "venom_surge" | "crusher_break";
 export const EQUIPMENT_PERK_ITEMS = {
   stone_core_hammer: "core_quake",
   rootbound_hammer: "rootfall",
