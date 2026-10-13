@@ -20,6 +20,45 @@ export interface MovementVector {
   z: number;
 }
 
+export interface PilotPose {
+  x: number;
+  y: number;
+  z: number;
+  pilotVy: number;
+}
+
+export interface StablePilotPose {
+  pose: PilotPose;
+  candidate: PilotPose | null;
+  quarantined: boolean;
+  confirmedJump: boolean;
+}
+
+/**
+ * Colyseus prediction rewinds its schema state while applying a patch. A render
+ * frame can occasionally observe that intermediate state, producing a large
+ * jump which reverses on the next frame. Quarantine impossible one-frame poses,
+ * while accepting a sustained correction on its second nearby sample.
+ */
+export function stabilizePilotPose(
+  current: PilotPose,
+  incoming: PilotPose,
+  candidate: PilotPose | null,
+  maximumFrameTravel = 2.5,
+  confirmationRadius = 1,
+): StablePilotPose {
+  const distance = Math.hypot(incoming.x - current.x, incoming.y - current.y, incoming.z - current.z);
+  if (distance <= maximumFrameTravel) {
+    return { pose: incoming, candidate: null, quarantined: false, confirmedJump: false };
+  }
+  const confirmsCandidate = candidate !== null
+    && Math.hypot(incoming.x - candidate.x, incoming.y - candidate.y, incoming.z - candidate.z) <= confirmationRadius;
+  if (confirmsCandidate) {
+    return { pose: incoming, candidate: null, quarantined: false, confirmedJump: true };
+  }
+  return { pose: current, candidate: { ...incoming }, quarantined: true, confirmedJump: false };
+}
+
 export function cameraRelativeMovement(
   strafe: number,
   forward: number,

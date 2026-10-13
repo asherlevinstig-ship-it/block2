@@ -12,6 +12,7 @@ import {
   smoothVerticalOffset,
   smoothNetworkVisualOffset,
   smoothRecoveryOffset,
+  stabilizePilotPose,
   trimRemoteSnapshots,
 } from "./movement-network.js";
 
@@ -140,6 +141,29 @@ describe("movement networking", () => {
   it("caps visual-only correction so major server corrections remain visible", () => {
     const offset = smoothNetworkVisualOffset({ x: 0, z: 0 }, { x: -2, z: 0 }, false, 1 / 60);
     expect(offset.x).toBeCloseTo(-0.6);
+  });
+
+  it("quarantines a one-frame prediction rewind instead of snapping the player", () => {
+    const current = { x: 32.035, y: 7.94, z: 33.545, pilotVy: 0 };
+    const rewind = { x: 32.233, y: 7.94, z: 19.323, pilotVy: 0 };
+    const restored = { x: 32.431, y: 7.94, z: 33.941, pilotVy: 0 };
+    const first = stabilizePilotPose(current, rewind, null);
+    expect(first.quarantined).toBe(true);
+    expect(first.pose).toEqual(current);
+    const second = stabilizePilotPose(first.pose, restored, first.candidate);
+    expect(second.quarantined).toBe(false);
+    expect(second.pose).toEqual(restored);
+    expect(second.candidate).toBeNull();
+  });
+
+  it("accepts a sustained large authoritative correction after confirmation", () => {
+    const current = { x: 10, y: 8, z: 10, pilotVy: 0 };
+    const correction = { x: 20, y: 8, z: 20, pilotVy: 0 };
+    const first = stabilizePilotPose(current, correction, null);
+    const second = stabilizePilotPose(current, { ...correction, z: 20.2 }, first.candidate);
+    expect(second.quarantined).toBe(false);
+    expect(second.confirmedJump).toBe(true);
+    expect(second.pose.z).toBe(20.2);
   });
 
   it("smooths a one-block visual step without changing collision height", () => {

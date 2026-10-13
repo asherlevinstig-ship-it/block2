@@ -207,7 +207,9 @@ import {
   smoothVerticalOffset,
   smoothNetworkVisualOffset,
   smoothRecoveryOffset,
+  stabilizePilotPose,
   trimRemoteSnapshots,
+  type PilotPose,
   type RemoteSnapshot,
 } from "./movement-network.js";
 import {
@@ -5709,6 +5711,7 @@ let movementShadowInput: InputHandle<{ strafe: number; forward: number; yaw: num
 let movementPilotRequested = false;
 let movementPilotReady = false;
 let movementPilotController: { tick: (now: number) => number; pose: () => { x: number; y: number; z: number; pilotVy: number } } | null = null;
+let pendingPilotPoseCandidate: PilotPose | null = null;
 let movementShadowAccumulator = 0;
 let movementShadowDifference: number | null = null;
 let movementShadowReset = false;
@@ -5729,6 +5732,7 @@ function activateMovementPilot(joinedRoom: Room): void {
     smoothMs: 65,
   });
   movementPilotController = { tick: now => predictor.tick(now), pose: () => controller.state };
+  pendingPilotPoseCandidate = null;
   localPlayer.setPosition(playerState.x, playerState.y, playerState.z);
   localVerticalVelocity = playerState.pilotVy;
   localNetworkVisualOffset = { x: 0, z: 0 };
@@ -7301,7 +7305,26 @@ app.on("update", (dt: number) => {
   if (movementPilotController) localVerticalVelocity = movementPilotController.pose().pilotVy;
   else if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;
   else localVerticalVelocity = Math.max(-TERMINAL_VELOCITY, localVerticalVelocity - GRAVITY * frameTime);
-  const pilotPose = movementPilotController?.pose();
+  const rawPilotPose = movementPilotController?.pose();
+  const stablePilot = rawPilotPose
+    ? stabilizePilotPose(
+      { x: current.x, y: current.y, z: current.z, pilotVy: localVerticalVelocity },
+      rawPilotPose,
+      pendingPilotPoseCandidate,
+    )
+    : null;
+  if (stablePilot) {
+    const firstQuarantinedSample = stablePilot.quarantined && pendingPilotPoseCandidate === null;
+    pendingPilotPoseCandidate = stablePilot.candidate;
+    if (firstQuarantinedSample) logMovementEvent("PILOT PATCH QUARANTINED");
+    if (stablePilot.confirmedJump) {
+      localRecoveryVisualOffset.x += current.x - stablePilot.pose.x;
+      localRecoveryVisualOffset.z += current.z - stablePilot.pose.z;
+      localVisualVerticalOffset += current.y - stablePilot.pose.y;
+      logMovementEvent("PILOT CORRECTION CONFIRMED");
+    }
+  } else pendingPilotPoseCandidate = null;
+  const pilotPose = stablePilot?.pose;
   const predicted = pilotPose ? { x: pilotPose.x, y: pilotPose.y, z: pilotPose.z,
     grounded: isPlayerSupported(readCollisionWorldBlock, pilotPose.x, pilotPose.y, pilotPose.z),
     hitVertical: false, stepped: false } : worldReady ? resolvePlayerMotion(
