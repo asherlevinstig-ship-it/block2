@@ -1,27 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { WILDERNESS_RESPAWN_BASE_MS, WILDERNESS_RESPAWN_SAFE_RADIUS, WILDERNESS_RESPAWN_STAGGER_MS,
+import { WILDERNESS_RESPAWN_MIN_MS, WILDERNESS_RESPAWN_PER_LEVEL_MS, WILDERNESS_RESPAWN_SAFE_RADIUS, WILDERNESS_RESPAWN_STAGGER_MS,
   wildernessRespawnDelay, wildernessSpawnClear } from "../src/wilderness-respawn.js";
 
 describe("wilderness respawn rhythm", () => {
-  it("gives heavier enemies a longer post-fight breather", () => {
-    expect(WILDERNESS_RESPAWN_BASE_MS.moss_crawler).toBe(12_000);
-    expect(WILDERNESS_RESPAWN_BASE_MS.cave_spitter).toBe(16_000);
-    expect(WILDERNESS_RESPAWN_BASE_MS.stone_brute).toBe(22_000);
+  it("waits at least forty seconds and scales upward with enemy level", () => {
+    expect(wildernessRespawnDelay("enemy:0", 1)).toBe(WILDERNESS_RESPAWN_MIN_MS);
+    expect(wildernessRespawnDelay("enemy:0", 2)).toBe(45_000);
+    expect(wildernessRespawnDelay("enemy:0", 5)).toBe(60_000);
+    expect(wildernessRespawnDelay("enemy:0", 9)).toBe(80_000);
+    expect(wildernessRespawnDelay("enemy:0", 9) - wildernessRespawnDelay("enemy:0", 8)).toBe(WILDERNESS_RESPAWN_PER_LEVEL_MS);
   });
 
   it("rebuilds roaming packs in a predictable wave", () => {
-    const first = wildernessRespawnDelay("outskirts-west-pack:0", "moss_crawler");
-    const second = wildernessRespawnDelay("outskirts-west-pack:1", "moss_crawler");
-    const third = wildernessRespawnDelay("outskirts-west-pack:2", "moss_crawler");
+    const first = wildernessRespawnDelay("outskirts-west-pack:0", 2);
+    const second = wildernessRespawnDelay("outskirts-west-pack:1", 2);
+    const third = wildernessRespawnDelay("outskirts-west-pack:2", 2);
     expect(second - first).toBe(WILDERNESS_RESPAWN_STAGGER_MS);
     expect(third - second).toBe(WILDERNESS_RESPAWN_STAGGER_MS);
   });
 
   it("uses stable offsets for authored encounters", () => {
-    const delay = wildernessRespawnDelay("frontier-brute-west", "stone_brute");
-    expect(wildernessRespawnDelay("frontier-brute-west", "stone_brute")).toBe(delay);
-    expect(delay).toBeGreaterThanOrEqual(WILDERNESS_RESPAWN_BASE_MS.stone_brute);
-    expect(delay).toBeLessThan(WILDERNESS_RESPAWN_BASE_MS.stone_brute + 4 * WILDERNESS_RESPAWN_STAGGER_MS);
+    const delay = wildernessRespawnDelay("frontier-brute-west", 9);
+    expect(wildernessRespawnDelay("frontier-brute-west", 9)).toBe(delay);
+    expect(delay).toBeGreaterThanOrEqual(80_000);
+    expect(delay).toBeLessThan(80_000 + 4 * WILDERNESS_RESPAWN_STAGGER_MS);
+  });
+
+  it("sanitizes invalid levels without dropping below the minimum", () => {
+    expect(wildernessRespawnDelay("enemy:0", 0)).toBe(WILDERNESS_RESPAWN_MIN_MS);
+    expect(wildernessRespawnDelay("enemy:0", Number.NaN)).toBe(WILDERNESS_RESPAWN_MIN_MS);
   });
 
   it("waits while a living player is inside the spawn safety bubble", () => {

@@ -1,16 +1,9 @@
-import type { MobArchetypeId } from "./mob-archetypes.js";
-
 /**
- * The overworld should breathe after a fight. Lighter enemies return sooner,
- * while heavier threats leave a longer window to loot, heal, and reposition.
+ * The overworld should breathe after a fight. Every enemy leaves at least a
+ * forty-second clearing, while each level above one adds another five seconds.
  */
-export const WILDERNESS_RESPAWN_BASE_MS: Readonly<Record<MobArchetypeId, number>> = {
-  moss_crawler: 12_000,
-  briar_crawler: 14_000,
-  cave_spitter: 16_000,
-  stone_brute: 22_000,
-};
-
+export const WILDERNESS_RESPAWN_MIN_MS = 40_000;
+export const WILDERNESS_RESPAWN_PER_LEVEL_MS = 5_000;
 export const WILDERNESS_RESPAWN_STAGGER_MS = 1_500;
 export const WILDERNESS_RESPAWN_SAFE_RADIUS = 8;
 export const WILDERNESS_RESPAWN_RECHECK_MS = 1_000;
@@ -26,8 +19,10 @@ function stableSlot(id: string): number {
 }
 
 /** Stable offsets stop a freshly cleared group from reforming on one frame. */
-export function wildernessRespawnDelay(mobId: string, archetype: MobArchetypeId): number {
-  return WILDERNESS_RESPAWN_BASE_MS[archetype] + stableSlot(mobId) * WILDERNESS_RESPAWN_STAGGER_MS;
+export function wildernessRespawnDelay(mobId: string, level: number): number {
+  const safeLevel = Math.max(1, Math.floor(Number.isFinite(level) ? level : 1));
+  return WILDERNESS_RESPAWN_MIN_MS + (safeLevel - 1) * WILDERNESS_RESPAWN_PER_LEVEL_MS
+    + stableSlot(mobId) * WILDERNESS_RESPAWN_STAGGER_MS;
 }
 
 export function wildernessSpawnClear(spawn: { x: number; y: number; z: number },

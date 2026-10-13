@@ -1882,7 +1882,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.materializeUntil = 0;
     const isWildernessEnemy = this.roomKind === "overworld" && !mob.isChampion
       && (WILDERNESS_ENCOUNTERS.some(encounter => encounter.id === mobId) || roamingMembership(mobId) !== null);
-    mob.respawnAt = now + (isWildernessEnemy ? wildernessRespawnDelay(mobId, definition.id) : definition.respawnMs);
+    mob.respawnAt = now + (isWildernessEnemy ? wildernessRespawnDelay(mobId, mob.level) : definition.respawnMs);
     const armedEvent = this.realmEvents.recordTrigger(mobId, now,
       [...this.state.mobs].filter(([id, candidate]) => candidate.alive && isRealmEventId(id)).map(([id]) => id));
     if (armedEvent) {
