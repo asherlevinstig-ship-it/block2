@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { advanceBossHud, initialBossHud } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -175,6 +175,7 @@ import {
   type SpecialId,
   type TraitId,
   type WorldBootstrap,
+  type AreaLeaderExposed,
   type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
   type SilverDepthsWingRewardStatus,
@@ -6001,6 +6002,16 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
 
 function showObjectiveComplete(message: WorldObjectiveCompleted): void {
   window.clearTimeout(objectiveCompleteTimer);
+  if (localCombatActive()) {
+    objectiveComplete.hidden = true;
+    const toast = document.createElement("div"); toast.className = "resource-toast combat-reward";
+    const cue = document.createElement("small"); cue.textContent = "OBJECTIVE COMPLETE";
+    const title = document.createElement("strong"); title.textContent = message.title;
+    const reward = document.createElement("span"); reward.textContent = message.rewardLabel;
+    toast.append(cue, title, reward);
+    queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
+    return;
+  }
   objectiveCompleteTitle.textContent = message.title;
   objectiveCompleteReward.textContent = message.rewardLabel;
   objectiveComplete.hidden = false;
@@ -6136,7 +6147,10 @@ const bossPhase = document.querySelector<HTMLElement>("#boss-phase")!;
 const bossHealth = document.querySelector<HTMLElement>("#boss-health")!;
 const bossHealthFill = document.querySelector<HTMLElement>("#boss-health-fill")!;
 const bossHealthText = document.querySelector<HTMLElement>("#boss-health-text")!;
+const bossExposed = document.querySelector<HTMLElement>("#boss-exposed")!;
+const bossAttackLabel = document.querySelector<HTMLElement>("#boss-attack-label")!;
 const bossNotice = document.querySelector<HTMLElement>("#boss-notice")!;
+const leaderExposedUntil = new Map<string, number>();
 let bossHudState = initialBossHud();
 let bossHudFingerprint = "";
 let activeBossId = "";
@@ -6166,7 +6180,8 @@ function updateBossHud(now: number): void {
     combatAudio.play("guardianPhase");
     if (boss) createDungeonBurst(boss.x, boss.z, "gate");
   }
-  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message]);
+  const exposedLabel = boss?.isMiniBoss ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "";
+  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message, exposedLabel]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
@@ -6177,14 +6192,24 @@ function updateBossHud(now: number): void {
   const realmBoss = /Realm Stone Warden/i.test(boss.name);
   const bruteEvent = /Stoneheart|Realm Stone Warden/i.test(boss.name);
   bossEncounter.textContent = boss.isMiniBoss ? "AREA MINI-BOSS" : crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : boss.isMiniBoss ? `${boss.combatState === "recover" ? "OPENING · COUNTER NOW" : `${boss.attackPattern.replaceAll("-", " ").toUpperCase()} · WATCH THE WARNING`}` : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : boss.isMiniBoss ? exposedLabel ? "FOLLOWER BREAK" : boss.combatState === "recover" ? "COUNTER WINDOW" : "LEADER PHASE" : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
   bossHud.dataset.encounter = boss.isMiniBoss ? "miniboss" : crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
+  bossHud.dataset.exposed = String(Boolean(exposedLabel));
+  bossExposed.hidden = !exposedLabel;
+  bossExposed.textContent = exposedLabel;
+  bossAttackLabel.textContent = boss.alive ? leaderAttackLabel(boss.attackPattern, boss.combatState) : "ENCOUNTER COMPLETE";
+  bossAttackLabel.dataset.state = boss.combatState;
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
   bossHealth.setAttribute("aria-valuemax", String(boss.maxHealth));
   bossHealth.setAttribute("aria-valuenow", String(Math.max(0, boss.health)));
   bossNotice.textContent = bossHudState.message;
+}
+
+function localCombatActive(): boolean {
+  if (!room) return false;
+  return activeCombatNearby(room.sessionId, localPlayer.getPosition(), [...mobVisuals.values()].map(visual => visual.state));
 }
 
 interface StopTraceFrame {
@@ -8194,6 +8219,7 @@ app.on("update", (dt: number) => {
     else if (fire.fire) requestAttack();
   }
   updateBossHud(animationNow);
+  if (!objectiveComplete.hidden && localCombatActive()) objectiveComplete.hidden = true;
   const bodyY = localPlayerRig.root.getLocalPosition().y;
   const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
@@ -8621,6 +8647,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("depths:ping", (ping: SilverDepthsPing) => minimap.setDungeonPing(ping));
   room.onMessage("objective:completed", (message: WorldObjectiveCompleted) => showObjectiveComplete(message));
+  room.onMessage("leader:exposed", (message: AreaLeaderExposed) => {
+    if (!message?.mobId || !Number.isFinite(message.durationMs) || message.durationMs <= 0) return;
+    leaderExposedUntil.set(message.mobId, performance.now() + Math.min(5_000, message.durationMs));
+    bossHudFingerprint = "";
+  });
   room.onMessage("progression:update", (update: ProgressionUpdate) => {
     renderCharacterProgression(update);
     if (update.reason === "level_up") {
@@ -9136,7 +9167,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     for (const mob of mobVisuals.values()) { mob.combatCue.remove(); mob.levelTag.remove(); mob.respawnTag.remove(); mob.entity.destroy(); mob.warningMesh?.destroy(); }
     mobVisuals.clear();
     for (const popup of rangedPopups) popup.element.remove(); rangedPopups.length = 0; rangedReticleHitUntil = 0;
-    bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true;
+    bossHudState = initialBossHud(); bossHudFingerprint = ""; activeBossId = ""; bossHud.hidden = true; leaderExposedUntil.clear();
     for (const loot of lootVisuals.values()) loot.root.destroy();
     lootVisuals.clear();
     for (const visual of recoveryVisuals.values()) visual.destroy();

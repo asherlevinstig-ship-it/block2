@@ -1118,6 +1118,11 @@ export type WorldObjectiveCompleted = {
   coinsGranted: number;
 };
 
+export type AreaLeaderExposed = {
+  mobId: string;
+  durationMs: number;
+};
+
 export interface ChunkRegion {
   chunks: ChunkSnapshot[];
 }

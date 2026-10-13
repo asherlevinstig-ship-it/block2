@@ -133,6 +133,7 @@ import {
   type SpecialProgressed,
   type TraitId,
   type WorldBootstrap,
+  type AreaLeaderExposed,
   type WorldObjectiveCompleted,
   type WorldObjectiveUpdate,
   type WeaponAttackReleased,
@@ -1889,7 +1890,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.state.portals.set("ember-return", returnPortal);
     }
     mob.alive = false;
-    this.openAreaLeaderAfterFollowerDefeat(mobId, recipients, now);
+    this.openAreaLeaderAfterFollowerDefeat(mobId, now);
     const areaMainMob = areaMainMobDefinition(mobId);
     if (areaMainMob) for (const playerId of recipients) {
       this.clients.find(client => client.sessionId === playerId)?.send("objective:completed", {
@@ -1986,7 +1987,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
-  private openAreaLeaderAfterFollowerDefeat(followerId: string, recipients: readonly string[], now: number): void {
+  private openAreaLeaderAfterFollowerDefeat(followerId: string, now: number): void {
     const leaderId = leaderForFollower(followerId);
     const leader = leaderId ? this.state.mobs.get(leaderId) : undefined;
     if (!leaderId || !leader?.alive) return;
@@ -2002,8 +2003,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.pendingMobProjectiles.delete(projectileId);
       this.resolveProjectileVisual(projectileId, projectile.position, "miss");
     }
-    for (const playerId of recipients) this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
-      `${leader.name} exposed · follower defeated · counter for 2.5 seconds!`);
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.health <= 0 || Math.abs(player.y - leader.y) > 2.5
+        || Math.hypot(player.x - leader.x, player.z - leader.z) > 28) continue;
+      client.send("leader:exposed", { mobId: leaderId, durationMs: 2_500 } satisfies AreaLeaderExposed);
+    }
   }
 
   private sendObjectiveState(client: Client, force = false): void {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceBossHud, initialBossHud } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -56,5 +56,23 @@ describe("boss HUD", () => {
     expect(arrived.message).toBe("MOSSBACK ALPHA DISCOVERED · AREA MINI-BOSS");
     const defeated = advanceBossHud(arrived, { ...leader, alive: false, health: 0 }, player, 2000);
     expect(defeated.message).toContain("PREMIUM LOOT DROPPED");
+  });
+  it("turns internal attack patterns into clear combat labels", () => {
+    expect(leaderAttackName("rocks")).toBe("ROCK VOLLEY");
+    expect(leaderAttackLabel("pool", "windup")).toBe("VENOM POOL · INCOMING");
+    expect(leaderAttackLabel("rush", "strike")).toBe("PACK RUSH · ACTIVE");
+    expect(leaderAttackLabel("crystal-burst", "recover")).toBe("CRYSTAL BURST · RECOVERING");
+  });
+  it("counts the exposed opening down to zero", () => {
+    expect(leaderExposureLabel(3500, 1000)).toBe("LEADER EXPOSED · 2.5s");
+    expect(leaderExposureLabel(3500, 3499)).toBe("LEADER EXPOSED · 0.1s");
+    expect(leaderExposureLabel(3500, 3500)).toBe("");
+  });
+  it("recognises nearby combat without treating distant or idle mobs as combat", () => {
+    const active = { x: 5, y: 8, z: 0, alive: true, combatState: "windup", targetId: "tester" };
+    expect(activeCombatNearby("tester", { x: 0, y: 8, z: 0 }, [active])).toBe(true);
+    expect(activeCombatNearby("tester", { x: 0, y: 8, z: 0 }, [{ ...active, combatState: "idle", targetId: "" }])).toBe(false);
+    expect(activeCombatNearby("tester", { x: 0, y: 1, z: 0 }, [active])).toBe(false);
+    expect(activeCombatNearby("tester", { x: 30, y: 8, z: 0 }, [active])).toBe(false);
   });
 });

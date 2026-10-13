@@ -117,7 +117,11 @@
       <section id="boss-hud" hidden aria-label="Boss encounter">
         <header><span id="boss-encounter">BOSS ENCOUNTER</span><strong id="boss-phase">PHASE 1</strong></header>
       <h2 id="boss-name">Greenwood Venom Matriarch</h2>
-      <div id="boss-health" role="progressbar" aria-label="Boss health" aria-valuemin="0"><i id="boss-health-fill"></i><span id="boss-health-text"></span></div>
+      <div class="boss-health-row">
+        <div id="boss-health" role="progressbar" aria-label="Boss health" aria-valuemin="0"><i id="boss-health-fill"></i><span id="boss-health-text"></span></div>
+        <strong id="boss-exposed" role="status" aria-live="assertive" hidden>LEADER EXPOSED · 2.5s</strong>
+      </div>
+      <p id="boss-attack-label">ROCK VOLLEY · READY</p>
       <p id="boss-notice" role="status" aria-live="polite"></p>
     </section>
     <div id="combat-reticle" hidden aria-hidden="true"><span></span></div>
