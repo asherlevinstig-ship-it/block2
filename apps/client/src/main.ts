@@ -3103,16 +3103,17 @@ function createMobHazard(message: MobHazardPlaced): void {
   mobHazardVisuals.get(message.hazardId)?.root.destroy();
   const root = new pc.Entity(`mob-hazard:${message.hazardId}`);
   const rootHazard = message.kind === "root";
-  const material = powerMaterial(rootHazard ? new pc.Color(.52, .3, .08) : new pc.Color(0.4, 0.9, 0.06), rootHazard ? .74 : .58);
+  const pressureHazard = message.kind === "pressure";
+  const material = powerMaterial(rootHazard ? new pc.Color(.52, .3, .08) : pressureHazard ? new pc.Color(1, .31, .08) : new pc.Color(0.4, 0.9, 0.06), rootHazard ? .74 : pressureHazard ? .68 : .58);
   const pieces = rootHazard ? 7 : 18;
   for (let index = 0; index < pieces; index += 1) {
     const angle = index / pieces * Math.PI * 2;
     const radius = message.radius * (0.38 + (index % 3) * 0.22);
     const blob = addBox(
       root,
-      rootHazard ? "root-spike" : "acid-puddle",
+      rootHazard ? "root-spike" : pressureHazard ? "arena-pressure" : "acid-puddle",
       material,
-      rootHazard ? [.13, .1 + index % 2 * .08, .58] : [0.32 + index % 2 * 0.16, 0.035, 0.3 + (index + 1) % 2 * 0.16],
+      rootHazard ? [.13, .1 + index % 2 * .08, .58] : pressureHazard ? [.34, .045, .1] : [0.32 + index % 2 * 0.16, 0.035, 0.3 + (index + 1) % 2 * 0.16],
       [Math.sin(angle) * radius, rootHazard ? .08 : .035, Math.cos(angle) * radius],
     );
     blob.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
@@ -8787,7 +8788,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("combat:mob-hazard", (message: MobHazardPlaced) => {
     createMobHazard(message);
-    logMovementEvent(`ACID POOL ${message.hazardId}`);
+    logMovementEvent(`${message.kind === "pressure" ? "ARENA PRESSURE" : message.kind === "root" ? "ROOT HAZARD" : "ACID POOL"} ${message.hazardId}`);
   });
   room.onMessage("depths:hazard", (message: DepthsRouteHazard) => createDepthsHazard(message));
   room.onMessage("depths:hazard-impact", (message: DepthsRouteHazard) => {

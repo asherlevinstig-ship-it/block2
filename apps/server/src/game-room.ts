@@ -39,6 +39,7 @@ import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
 import { AREA_LEADER_FOLLOWERS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
+import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
 import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE,
   dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
@@ -342,6 +343,15 @@ interface ActiveMobHazard {
   lastDamageAt: Map<string, number>;
 }
 
+interface ActiveMiniBossCover {
+  x: number;
+  z: number;
+  minY: number;
+  maxY: number;
+  hits: number;
+  original: { y: number; block: BlockId }[];
+}
+
 export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeof ShadowMoveInput> }> {
   override maxClients = 20;
   override patchRate = 33;
@@ -388,6 +398,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly areaLeaderPhases = new Map<string, AreaLeaderPhase>();
   private readonly miniBossEngagedAt = new Map<string, number>();
   private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
+  private readonly miniBossArenaCover = new Map<string, Map<string, ActiveMiniBossCover>>();
   private readonly realmBossPhases = new Map<string, RealmBossPhase>();
   private readonly mobProgress = new Map<string, MobProgress>();
   private readonly mobUnreachableUntil = new Map<string, number>();
@@ -1925,6 +1936,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     mob.alive = false;
     if (mob.isMiniBoss) {
+      this.restoreMiniBossArena(mobId);
       this.areaLeaderPhases.delete(mobId);
       this.miniBossEngagedAt.delete(mobId);
       this.miniBossOrbitPressure.delete(mobId);
@@ -2084,6 +2096,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.pendingMobProjectiles.delete(projectileId);
       this.resolveProjectileVisual(projectileId, projectile.position, "miss");
     }
+    this.erodeMiniBossArenaCover(leaderId, phase);
+    this.placeMiniBossArenaPressure(leaderId, leader, phase, now);
     const target = targetId ? this.state.players.get(targetId) : undefined;
     if (!target?.health) return;
     const followers = (AREA_LEADER_FOLLOWERS[leaderId] ?? [])
@@ -2625,6 +2639,81 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       setBlock(stored.chunk, address.localX, y, address.localZ, block); stored.revision++;
       this.broadcast("block:changed", { requestId: `guardian-cover-${cover.x}-${cover.z}-${broken ? "break" : "restore"}`,
         x: cover.x, y, z: cover.z, block, revision: stored.revision } satisfies BlockChanged);
+    }
+  }
+
+  private setMiniBossArenaBlock(mobId: string, x: number, y: number, z: number, block: BlockId, reason: string): void {
+    const address = worldToChunk(x, z), stored = this.getChunk(address.chunkX, address.chunkZ);
+    if (getBlock(stored.chunk, address.localX, y, address.localZ) === block) return;
+    setBlock(stored.chunk, address.localX, y, address.localZ, block); stored.revision++;
+    this.broadcast("block:changed", { requestId: `leader-arena-${mobId}-${x}:${y}:${z}-${reason}`,
+      x, y, z, block, revision: stored.revision } satisfies BlockChanged);
+  }
+
+  private activateMiniBossArena(mobId: string, mob: MobState): void {
+    if (this.miniBossArenaCover.has(mobId)) return;
+    const home = this.mobHomes.get(mobId) ?? mob;
+    const active = new Map<string, ActiveMiniBossCover>();
+    for (const site of miniBossCoverSites(home, mob.archetype)) {
+      if (isProtectedVoxel(site.x, site.z)
+        || [...this.state.players.values()].some(player => player.health > 0 && Math.abs(player.y - site.y) <= 1.75
+          && Math.hypot(player.x - (site.x + .5), player.z - (site.z + .5)) <= .8)) continue;
+      const address = worldToChunk(site.x, site.z), stored = this.getChunk(address.chunkX, address.chunkZ);
+      if (getBlock(stored.chunk, address.localX, site.y - 1, address.localZ) === Block.Air) continue;
+      const original = [site.y, site.y + 1].map(y => ({ y, block: getBlock(stored.chunk, address.localX, y, address.localZ) }));
+      if (original.some(cell => cell.block !== Block.Air)) continue;
+      const cover = { x: site.x, z: site.z, minY: site.y, maxY: site.y + 1, hits: 0, original };
+      active.set(`${site.x}:${site.z}`, cover);
+      for (const cell of original) this.setMiniBossArenaBlock(mobId, site.x, cell.y, site.z, Block.Stone, "raise");
+    }
+    this.miniBossArenaCover.set(mobId, active);
+  }
+
+  private setMiniBossCoverHits(mobId: string, cover: ActiveMiniBossCover, hits: number): void {
+    cover.hits = Math.max(cover.hits, Math.min(2, hits));
+    const block = cover.hits >= 2 ? Block.Air : cover.hits === 1 ? Block.Dirt : Block.Stone;
+    for (let y = cover.minY; y <= cover.maxY; y++) this.setMiniBossArenaBlock(mobId, cover.x, y, cover.z, block,
+      cover.hits >= 2 ? "break" : "crack");
+  }
+
+  private damageMiniBossArenaCover(mobId: string, impact: { x: number; y: number; z: number }, radius = 1.15): void {
+    const covers = this.miniBossArenaCover.get(mobId);
+    if (!covers) return;
+    for (const cover of covers.values()) {
+      if (cover.hits >= 2 || impact.y < cover.minY - .5 || impact.y > cover.maxY + 1
+        || Math.hypot(impact.x - (cover.x + .5), impact.z - (cover.z + .5)) > radius) continue;
+      this.setMiniBossCoverHits(mobId, cover, cover.hits + 1);
+    }
+  }
+
+  private erodeMiniBossArenaCover(mobId: string, phase: AreaLeaderPhase): void {
+    const covers = [...(this.miniBossArenaCover.get(mobId)?.values() ?? [])];
+    const selected = phase === 2 ? covers.slice(0, 2) : covers;
+    for (const cover of selected) this.setMiniBossCoverHits(mobId, cover, phase === 3 ? 2 : 1);
+  }
+
+  private restoreMiniBossArena(mobId: string): void {
+    const covers = this.miniBossArenaCover.get(mobId);
+    if (!covers) return;
+    for (const cover of covers.values()) for (const cell of cover.original) {
+      this.setMiniBossArenaBlock(mobId, cover.x, cell.y, cover.z, cell.block, "restore");
+    }
+    this.miniBossArenaCover.delete(mobId);
+    for (const [hazardId, hazard] of this.mobHazards) if (hazard.mobId === mobId && hazardId.startsWith("arena-pressure:")) {
+      this.mobHazards.delete(hazardId);
+    }
+  }
+
+  private placeMiniBossArenaPressure(mobId: string, mob: MobState, phase: AreaLeaderPhase, now: number): void {
+    if (phase === 1) return;
+    const duration = phase === 3 ? 4_000 : 3_200;
+    for (const [index, site] of miniBossPressureSites(mob, phase, mob.actionSequence).entries()) {
+      const hazardId = `arena-pressure:${mobId}:${mob.actionSequence}:${index}`;
+      const expiresAt = now + duration;
+      this.mobHazards.set(hazardId, { hazardId, mobId, ...site, radius: .68, damage: 1,
+        expiresAt, nextDamageAt: now + 550, lastDamageAt: new Map() });
+      this.broadcast("combat:mob-hazard", { hazardId, mobId, kind: "pressure", ...site,
+        radius: .68, expiresAt } satisfies MobHazardPlaced);
     }
   }
 
@@ -3691,6 +3780,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.resolveProjectileVisual(projectileId, impact, collision?.kind === "terrain" ? "terrain" : collision ? "hit" : "miss");
       if (collision?.kind === "terrain") {
         if (projectile.mobId === CRYSTAL_MATRIARCH_ID) this.damageMatriarchCover(impact);
+        if (this.state.mobs.get(projectile.mobId)?.isMiniBoss) this.damageMiniBossArenaCover(projectile.mobId, impact);
         continue;
       }
       const definition = mobArchetype(projectile.archetype);
@@ -3986,7 +4076,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.alive && this.roomKind === "silver-depths"
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
       let currentAreaLeaderPhase: AreaLeaderPhase = 1;
-      if (isAreaMiniBoss(mobId) && mob.alive) {
+      if (mob.isMiniBoss && mob.alive) {
         currentAreaLeaderPhase = areaLeaderPhase(mob.health, mob.maxHealth);
         const previousPhase = this.areaLeaderPhases.get(mobId);
         if (previousPhase === undefined) this.areaLeaderPhases.set(mobId, currentAreaLeaderPhase);
@@ -4100,6 +4190,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.spitterPositioning.delete(mobId);
         this.mobStaggerImmuneUntil.delete(mobId);
         this.mobCommittedAim.delete(mobId);
+        this.restoreMiniBossArena(mobId);
         this.miniBossEngagedAt.delete(mobId);
         this.miniBossOrbitPressure.delete(mobId);
         mob.aimCommitted = false;
@@ -4121,7 +4212,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.combatState = "idle";
         mob.stateUntil = 0;
         mob.targetId = "";
-        if (isAreaMiniBoss(mobId)) this.areaLeaderPhases.set(mobId, 1);
+        if (mob.isMiniBoss) this.areaLeaderPhases.set(mobId, 1);
       }
       if (!mob.alive) continue;
       const gravity = advanceMobGravity(mob, this.mobVerticalVelocities.get(mobId) ?? 0, deltaTime, this.readWorldBlock);
@@ -4186,6 +4277,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.stateUntil = definition.attackKind === "melee" ? mob.attackContactEndAt : mob.attackRecoveryEndAt;
         mob.actionSequence += 1;
         this.lastMobAttackAt.set(mobId, now);
+        if (mob.isMiniBoss && currentAreaLeaderPhase >= 2 && mob.actionSequence % 3 === 0) {
+          this.placeMiniBossArenaPressure(mobId, mob, currentAreaLeaderPhase, now);
+        }
         if (!targetPlayer && mob.archetype !== "stone_brute") {
           mob.combatState = "recover";
           mob.stateUntil = now + definition.recoverMs;
@@ -4257,6 +4351,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         player => hasCombatLineOfSight(mob, player, this.readWorldBlock));
       if (!target) {
         if (mob.isMiniBoss) {
+          this.restoreMiniBossArena(mobId);
           this.miniBossEngagedAt.delete(mobId);
           this.miniBossOrbitPressure.delete(mobId);
           mob.enraged = currentAreaLeaderPhase === 3;
@@ -4290,6 +4385,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         continue;
       }
       if (mob.isMiniBoss && target.visible) {
+        this.activateMiniBossArena(mobId, mob);
         const engagedAt = this.miniBossEngagedAt.get(mobId) ?? now;
         this.miniBossEngagedAt.set(mobId, engagedAt);
         if (now - engagedAt >= MINI_BOSS_ENRAGE_MS) mob.enraged = true;
@@ -5200,6 +5296,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const next = moveChampionCharge(start, charge.yaw, travel, this.readWorldBlock,
         pose => this.mobPositionAllowed(pose) && this.championAllowed(id, pose) && !isInStoneBruteArena(pose.x, pose.z));
       mob.x = next.x; mob.y = next.y; mob.z = next.z; mob.yaw = charge.yaw;
+      if (mob.isMiniBoss) this.damageMiniBossArenaCover(id, mob, .9);
       for (const [playerId, player] of this.state.players) {
         if (charge.hit.has(playerId) || player.health <= 0 || Math.abs(player.y - mob.y) > 1.1
           || !hasCombatLineOfSight(start, player, this.readWorldBlock)) continue;
@@ -5245,6 +5342,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             || !hasCombatLineOfSight(center, target, this.readWorldBlock)) continue;
           this.damagePlayer(mobId, id, mob.attackDamage, now);
         }
+        if (mob.isMiniBoss) this.damageMiniBossArenaCover(mobId, center,
+          mob.attackPattern === "smash" ? 2.25 : BRUTE_SLAM.radius);
         if (mobId === "forest-guardian" && mob.attackPattern === "slam") this.placeGuardianRootLanes(mob, now);
         continue;
       }

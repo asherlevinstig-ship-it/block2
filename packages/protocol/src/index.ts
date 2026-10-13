@@ -1208,7 +1208,7 @@ export interface MobProjectileReleased {
 export interface MobHazardPlaced {
   hazardId: string;
   mobId: string;
-  kind?: "acid" | "root";
+  kind?: "acid" | "root" | "pressure";
   x: number;
   y: number;
   z: number;
