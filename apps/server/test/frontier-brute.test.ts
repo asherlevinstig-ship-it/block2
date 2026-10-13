@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FRONTIER_BRUTE, bruteSmashHits, bruteSmashOutline } from "@blockcraft/protocol";
+import { FRONTIER_BRUTE, bruteSmashHits, bruteSmashOutline, decodeLootBagItems } from "@blockcraft/protocol";
 import { Block, chunkIndex, generateChunk, worldToChunk, playerCollides, isPlayerSupported, frontierBruteArenaBlock, FRONTIER_BRUTE_COVER, voxelRaycast } from "@blockcraft/voxel-world";
 import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
@@ -121,7 +121,9 @@ describe("frontier brute ruins", () => {
   it("rolls a personal rare hammer in the frontier", () => {
     const { internal, room, mob } = fixture(); vi.spyOn(Math, "random").mockReturnValueOnce(.05).mockReturnValue(.99);
     internal.spawnLootDrops("frontier-brute", mob, 10000, "tester");
-    const hammer = [...room.state.lootDrops.values()].find(drop => drop.itemId === "stone_core_hammer");
-    expect(hammer?.quantity).toBe(1); expect(hammer?.ownerId).toBe("tester");
+    const bag = [...room.state.lootDrops.values()][0]!;
+    expect(decodeLootBagItems(bag.contentsJson)).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
+    expect(decodeLootBagItems(bag.contentsJson)).toContainEqual({ itemId: "ruinbreaker_keystone", quantity: 1 });
+    expect(bag.ownerId).toBe("tester");
   });
 });

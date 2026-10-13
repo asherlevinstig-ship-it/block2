@@ -41,6 +41,15 @@ describe("authoritative equipment loot bags", () => {
     expect(room.state.lootDrops.size).toBe(1);
     expect(decodeLootBagItems(bag.contentsJson).map(entry => entry.itemId)).toEqual(["stone_core", "stone_core_hammer", "iron_armour"]);
   });
+  it("guarantees each area's unique leader relic once without duplicating a pending reward", () => {
+    const { internal, room } = fixture(); room.state.lootDrops.clear();
+    const mob = new MobState(); mob.archetype = "moss_crawler"; mob.difficultyTier = 1;
+    internal.spawnLootDrops("moss-crawler", mob, 10000, "player");
+    internal.spawnLootDrops("moss-crawler", mob, 10001, "player");
+    const contents = [...room.state.lootDrops.values()].flatMap(drop => decodeLootBagItems(drop.contentsJson));
+    expect(contents.filter(entry => entry.itemId === "mossback_fang_relic")).toEqual([{ itemId: "mossback_fang_relic", quantity: 1 }]);
+    expect(contents.some(entry => entry.itemId === "fang_dagger")).toBe(true);
+  });
   it.each(["leather_armour", "iron_armour", "rootguard_armour", "bastion_plate"])("keeps %s as an inspectable bag and stores it without equipping", id => {
     const { internal, room, drop, player, collect, persist } = fixture(); drop.itemId = id;
     internal.resolveLootPickups(10000); expect(room.state.lootDrops.has("bag")).toBe(true);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AREA_LEADER_RELIC_IDS, ITEM_DEFINITIONS } from "@blockcraft/protocol";
 import { AREA_LEADER_FOLLOWERS, AREA_MINI_BOSSES, areaLeaderPattern, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower } from "../src/area-mini-bosses.js";
 
 describe("area mini-bosses", () => {
@@ -19,6 +20,9 @@ describe("area mini-bosses", () => {
   it("gives every new leader a distinctive guaranteed reward identity", () => {
     expect(AREA_MINI_BOSSES.every(definition => Boolean(definition.rewardLabel))).toBe(true);
     expect(new Set(AREA_MINI_BOSSES.map(definition => definition.rewardLabel)).size).toBe(AREA_MINI_BOSSES.length);
+    expect(new Set(AREA_MINI_BOSSES.map(definition => definition.rewardItemId)).size).toBe(AREA_MINI_BOSSES.length);
+    expect(AREA_MINI_BOSSES.every(definition => ITEM_DEFINITIONS[definition.rewardItemId].name.length > 0)).toBe(true);
+    expect(AREA_LEADER_RELIC_IDS).toContain(areaMainMobDefinition("frontier-brute-west")!.rewardItemId);
   });
 
   it("gives crawler, spitter and brute leaders recognizable attack rhythms", () => {

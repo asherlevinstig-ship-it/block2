@@ -96,7 +96,8 @@ describe("chamber-specific encounters", () => {
     internal.defeatMob("buried-chamber-brute", mob, "visitor", 10_000);
     expect(visitor.miningExpeditionStage).toBe(6);
     const bag = [...room.state.lootDrops.values()][0]!;
-    expect(decodeLootBagItems(bag.contentsJson)).toEqual([{ itemId: "stone_core", quantity: 1 }, { itemId: "miners_lantern", quantity: 1 }]);
+    expect(decodeLootBagItems(bag.contentsJson)).toEqual([{ itemId: "stone_core", quantity: 1 }, { itemId: "miners_lantern", quantity: 1 },
+      { itemId: "stone_warden_lantern", quantity: 1 }]);
     internal.simulatePlayers(0.1);
     expect(room.state.lootDrops.size).toBe(1);
   });
@@ -105,7 +106,8 @@ describe("chamber-specific encounters", () => {
     const { room, internal } = fixture();
     const mob = room.state.mobs.get("buried-chamber-brute")!;
     const visitor = new PlayerState(); const lantern = new InventoryItemState(); lantern.quantity = 1;
-    visitor.inventory.set("miners_lantern", lantern); room.state.players.set("visitor", visitor);
+    const relic = new InventoryItemState(); relic.quantity = 1;
+    visitor.inventory.set("miners_lantern", lantern); visitor.inventory.set("stone_warden_lantern", relic); room.state.players.set("visitor", visitor);
     internal.spawnLootDrops("buried-chamber-brute", mob, 10_000, "visitor");
     const bag = [...room.state.lootDrops.values()][0]!;
     expect(decodeLootBagItems(bag.contentsJson)).toEqual([{ itemId: "stone_core", quantity: 2 }, { itemId: "silver_ore", quantity: 3 }]);

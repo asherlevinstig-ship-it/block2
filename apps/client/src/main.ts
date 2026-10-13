@@ -3831,7 +3831,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   };
 }
 
-const lootMaterials: Record<ItemId, pc.StandardMaterial> = {
+const lootMaterials: Partial<Record<ItemId, pc.StandardMaterial>> = {
   leather_armour: coloredMaterial(new pc.Color(.44, .26, .12)),
   iron_armour: coloredMaterial(new pc.Color(.76, .8, .85)),
   rootguard_armour: coloredMaterial(new pc.Color(.2, .55, .24)),
@@ -3938,7 +3938,7 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const bagTier = groupedBag ? lootBagTierForItems(bagItems) : null;
   const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(itemId);
   const presentationMaterial = bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[rarity];
-  const material = lootMaterials[itemId];
+  const material = lootMaterials[itemId] ?? rarityLootMaterials[rarity];
   const sourceId = lootSourceMob(dropId);
   const rewardCache = dropId.startsWith("forest-cache:");
   const vaultCache = sourceId === "buried-chamber-brute" && itemId === "miners_lantern";

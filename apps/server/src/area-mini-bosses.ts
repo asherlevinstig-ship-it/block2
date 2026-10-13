@@ -1,33 +1,36 @@
+import type { ItemId } from "@blockcraft/protocol";
+
 export interface AreaMiniBossDefinition {
   id: string;
   name: string;
-  rewardLabel?: string;
+  rewardLabel: string;
+  rewardItemId: ItemId;
 }
 
 /** One persistent leader for every authored overworld combat area. */
 export const AREA_MINI_BOSSES: readonly AreaMiniBossDefinition[] = [
-  { id: "moss-crawler", name: "Mossback Alpha", rewardLabel: "Mossback Fang Cache" },
-  { id: "outskirts-crawler-west", name: "Westroad Alpha", rewardLabel: "Westroad Fang Cache" },
-  { id: "outskirts-crawler-north", name: "Northroad Alpha", rewardLabel: "Northroad Fang Cache" },
-  { id: "wild-crawler", name: "Greenwood Broodmother", rewardLabel: "Broodmother Fang Cache" },
-  { id: "frontier-spitter", name: "Silverfang Spitter", rewardLabel: "Silverfang Focus Cache" },
-  { id: "wild-spitter-west-north", name: "Gloomfang Spitter", rewardLabel: "Gloomfang Focus Cache" },
-  { id: "stone-brute", name: "Stonehide Crusher", rewardLabel: "Stonehide Hammer Cache" },
-  { id: "frontier-brute", name: "Ruinbreaker", rewardLabel: "Ruinbreaker Arsenal" },
-  { id: "frontier-brute-east", name: "Frontier Warleader", rewardLabel: "Warleader Arsenal" },
-  { id: "ashglass-sentry-east", name: "Ashglass High Sentry", rewardLabel: "Ashglass Focus Cache" },
-  { id: "outskirts-west-pack:0", name: "Roaming Westroad Packleader", rewardLabel: "Westroad Pack Cache" },
-  { id: "outskirts-north-pack:0", name: "Roaming Northroad Packleader", rewardLabel: "Northroad Pack Cache" },
-  { id: "wilds-west-pack:0", name: "Roaming Gloam Spitter Alpha", rewardLabel: "Gloam Focus Cache" },
-  { id: "wilds-east-pack:0", name: "Roaming Sunscar Spitter Alpha", rewardLabel: "Sunscar Focus Cache" },
-  { id: "shallow-cave-crawler", name: "Ironburrow Alpha", rewardLabel: "Ironburrow Fang Cache" },
-  { id: "deep-cave-spitter", name: "Silver Chamber Broodspitter", rewardLabel: "Broodspitter Focus Cache" },
-  { id: "buried-chamber-brute", name: "Stone Warden", rewardLabel: "Warden's Lantern Cache" },
+  { id: "moss-crawler", name: "Mossback Alpha", rewardLabel: "Mossback Fang Cache", rewardItemId: "mossback_fang_relic" },
+  { id: "outskirts-crawler-west", name: "Westroad Alpha", rewardLabel: "Westroad Fang Cache", rewardItemId: "westroad_fang_relic" },
+  { id: "outskirts-crawler-north", name: "Northroad Alpha", rewardLabel: "Northroad Fang Cache", rewardItemId: "northroad_fang_relic" },
+  { id: "wild-crawler", name: "Greenwood Broodmother", rewardLabel: "Broodmother Fang Cache", rewardItemId: "broodmother_heart" },
+  { id: "frontier-spitter", name: "Silverfang Spitter", rewardLabel: "Silverfang Focus Cache", rewardItemId: "silverfang_venom_sac" },
+  { id: "wild-spitter-west-north", name: "Gloomfang Spitter", rewardLabel: "Gloomfang Focus Cache", rewardItemId: "gloomfang_venom_sac" },
+  { id: "stone-brute", name: "Stonehide Crusher", rewardLabel: "Stonehide Hammer Cache", rewardItemId: "stonehide_core_relic" },
+  { id: "frontier-brute", name: "Ruinbreaker", rewardLabel: "Ruinbreaker Arsenal", rewardItemId: "ruinbreaker_keystone" },
+  { id: "frontier-brute-east", name: "Frontier Warleader", rewardLabel: "Warleader Arsenal", rewardItemId: "warleader_crest" },
+  { id: "ashglass-sentry-east", name: "Ashglass High Sentry", rewardLabel: "Ashglass Focus Cache", rewardItemId: "ashglass_lens" },
+  { id: "outskirts-west-pack:0", name: "Roaming Westroad Packleader", rewardLabel: "Westroad Pack Cache", rewardItemId: "westroad_pack_totem" },
+  { id: "outskirts-north-pack:0", name: "Roaming Northroad Packleader", rewardLabel: "Northroad Pack Cache", rewardItemId: "northroad_pack_totem" },
+  { id: "wilds-west-pack:0", name: "Roaming Gloam Spitter Alpha", rewardLabel: "Gloam Focus Cache", rewardItemId: "gloam_alpha_gland" },
+  { id: "wilds-east-pack:0", name: "Roaming Sunscar Spitter Alpha", rewardLabel: "Sunscar Focus Cache", rewardItemId: "sunscar_alpha_gland" },
+  { id: "shallow-cave-crawler", name: "Ironburrow Alpha", rewardLabel: "Ironburrow Fang Cache", rewardItemId: "ironburrow_crown" },
+  { id: "deep-cave-spitter", name: "Silver Chamber Broodspitter", rewardLabel: "Broodspitter Focus Cache", rewardItemId: "broodspitter_focus_shard" },
+  { id: "buried-chamber-brute", name: "Stone Warden", rewardLabel: "Warden's Lantern Cache", rewardItemId: "stone_warden_lantern" },
 ] as const;
 
 const AREA_MINI_BOSS_BY_ID = new Map(AREA_MINI_BOSSES.map(definition => [definition.id, definition]));
 const EXISTING_AREA_BOSSES: readonly AreaMiniBossDefinition[] = [
-  { id: "frontier-brute-west", name: "Frontier Stone Champion" },
+  { id: "frontier-brute-west", name: "Frontier Stone Champion", rewardLabel: "Frontier Champion Cache", rewardItemId: "frontier_champion_crest" },
 ];
 const AREA_MAIN_MOB_BY_ID = new Map([...AREA_MINI_BOSSES, ...EXISTING_AREA_BOSSES].map(definition => [definition.id, definition]));
 

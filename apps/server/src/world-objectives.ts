@@ -1,4 +1,4 @@
-import { isEquipmentItem, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
+import { isEquipmentItem, ITEM_DEFINITIONS, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
 import { ASHEN_SENTRY_IDS, MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
@@ -77,7 +77,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       const target = main ?? nearest;
       const miniBoss = main ? areaMainMobDefinition(main.id) : undefined;
       const update = make(group.id, miniBoss ? miniBoss.name : group.title,
-        miniBoss ? `AREA MINI-BOSS · Defeat ${miniBoss.name}. Guaranteed reward: ${miniBoss.rewardLabel ?? "Area Leader Cache"}.` : group.detail,
+        miniBoss ? `AREA MINI-BOSS · Defeat ${miniBoss.name}. First victory guarantees ${ITEM_DEFINITIONS[miniBoss.rewardItemId].name}.` : group.detail,
         target.mob, miniBoss ? "miniboss" : "encounter", target.mob.difficultyTier);
       update.recommendedLevel = `LV ${target.mob.level ?? worldLevelRange(target.mob.difficultyTier).min}`;
       update.targetMobId = target.id; update.targetMobIds = group.ids.filter(id => mobs.has(id)); update.completedMobIds = group.ids.filter(id => mobs.get(id)?.alive === false);

@@ -382,6 +382,24 @@ export const ITEM_DEFINITIONS = {
   crawler_fang: { id: "crawler_fang", name: "Crawler Fang", description: "A sharp fang shed by a defeated crawler" },
   stone_core: { id: "stone_core", name: "Stone Core", description: "A dense animated core from a Stone Brute" },
   acid_gland: { id: "acid_gland", name: "Acid Gland", description: "A volatile gland taken from a Cave Spitter" },
+  mossback_fang_relic: { id: "mossback_fang_relic", name: "Mossback Alpha Fang", description: "Unique trophy claimed from the Mossback Alpha" },
+  westroad_fang_relic: { id: "westroad_fang_relic", name: "Westroad Alpha Fang", description: "Unique trophy claimed from the Westroad Alpha" },
+  northroad_fang_relic: { id: "northroad_fang_relic", name: "Northroad Alpha Fang", description: "Unique trophy claimed from the Northroad Alpha" },
+  broodmother_heart: { id: "broodmother_heart", name: "Broodmother Heart", description: "Unique living trophy claimed from the Greenwood Broodmother" },
+  silverfang_venom_sac: { id: "silverfang_venom_sac", name: "Silverfang Venom Sac", description: "Unique trophy claimed from the Silverfang Spitter" },
+  gloomfang_venom_sac: { id: "gloomfang_venom_sac", name: "Gloomfang Venom Sac", description: "Unique trophy claimed from the Gloomfang Spitter" },
+  stonehide_core_relic: { id: "stonehide_core_relic", name: "Stonehide Heart-Core", description: "Unique trophy claimed from the Stonehide Crusher" },
+  ruinbreaker_keystone: { id: "ruinbreaker_keystone", name: "Ruinbreaker Keystone", description: "Unique trophy claimed from the Ruinbreaker" },
+  warleader_crest: { id: "warleader_crest", name: "Frontier Warleader Crest", description: "Unique trophy claimed from the Frontier Warleader" },
+  ashglass_lens: { id: "ashglass_lens", name: "Ashglass Sentry Lens", description: "Unique trophy claimed from the Ashglass High Sentry" },
+  westroad_pack_totem: { id: "westroad_pack_totem", name: "Westroad Pack Totem", description: "Unique trophy claimed from the roaming Westroad Packleader" },
+  northroad_pack_totem: { id: "northroad_pack_totem", name: "Northroad Pack Totem", description: "Unique trophy claimed from the roaming Northroad Packleader" },
+  gloam_alpha_gland: { id: "gloam_alpha_gland", name: "Gloam Alpha Gland", description: "Unique trophy claimed from the roaming Gloam Spitter Alpha" },
+  sunscar_alpha_gland: { id: "sunscar_alpha_gland", name: "Sunscar Alpha Gland", description: "Unique trophy claimed from the roaming Sunscar Spitter Alpha" },
+  ironburrow_crown: { id: "ironburrow_crown", name: "Ironburrow Crown", description: "Unique underground trophy claimed from the Ironburrow Alpha" },
+  broodspitter_focus_shard: { id: "broodspitter_focus_shard", name: "Broodspitter Focus Shard", description: "Unique underground trophy claimed from the Silver Chamber Broodspitter" },
+  stone_warden_lantern: { id: "stone_warden_lantern", name: "Stone Warden Lantern", description: "Unique vault trophy claimed from the Stone Warden" },
+  frontier_champion_crest: { id: "frontier_champion_crest", name: "Frontier Champion Crest", description: "Unique trophy claimed from the Frontier Stone Champion" },
   fang_dagger: { id: "fang_dagger", name: "Crawler Fang Dagger", description: "A fast three-hit melee weapon" },
   stone_core_hammer: { id: "stone_core_hammer", name: "Stone Core Hammer", description: "Slow overhead smash · heavy knockback · can stagger enemy windups" },
   rootbound_hammer: { id: "rootbound_hammer", name: "Rootbound Hammer", description: "Guardian relic · heavy three-hit combo · finisher releases a binding root shockwave" },
@@ -392,6 +410,13 @@ export const ITEM_DEFINITIONS = {
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
+export const AREA_LEADER_RELIC_IDS = [
+  "mossback_fang_relic", "westroad_fang_relic", "northroad_fang_relic", "broodmother_heart",
+  "silverfang_venom_sac", "gloomfang_venom_sac", "stonehide_core_relic", "ruinbreaker_keystone",
+  "warleader_crest", "ashglass_lens", "westroad_pack_totem", "northroad_pack_totem",
+  "gloam_alpha_gland", "sunscar_alpha_gland", "ironburrow_crown", "broodspitter_focus_shard",
+  "stone_warden_lantern", "frontier_champion_crest",
+] as const satisfies readonly ItemId[];
 /** Capacity used when collecting a floor drop into the carried inventory. */
 export function lootCarryCapacity(itemId: ItemId, mineralCapacity: number): number {
   if (itemId === "healing_potion") return HEALING_POTION.capacity;
@@ -421,6 +446,24 @@ export const EQUIPMENT_RARITY = {
   acid_gland_focus: "uncommon",
   venom_focus: "legendary",
   echo_prism: "epic",
+  mossback_fang_relic: "rare",
+  westroad_fang_relic: "rare",
+  northroad_fang_relic: "rare",
+  broodmother_heart: "epic",
+  silverfang_venom_sac: "epic",
+  gloomfang_venom_sac: "epic",
+  stonehide_core_relic: "rare",
+  ruinbreaker_keystone: "epic",
+  warleader_crest: "epic",
+  ashglass_lens: "epic",
+  westroad_pack_totem: "rare",
+  northroad_pack_totem: "rare",
+  gloam_alpha_gland: "rare",
+  sunscar_alpha_gland: "rare",
+  ironburrow_crown: "rare",
+  broodspitter_focus_shard: "epic",
+  stone_warden_lantern: "epic",
+  frontier_champion_crest: "epic",
 } as const satisfies Partial<Record<ItemId, ItemRarity>>;
 export function itemRarity(itemId: string): ItemRarity {
   return Object.hasOwn(EQUIPMENT_RARITY, itemId) ? EQUIPMENT_RARITY[itemId as keyof typeof EQUIPMENT_RARITY] : "common";

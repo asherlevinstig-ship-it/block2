@@ -931,10 +931,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
-  private ownsOrHasPendingSignature(playerId: string, itemId: SignatureItemId): boolean {
+  private ownsOrHasPendingItem(playerId: string, itemId: ItemId): boolean {
     const player = this.state.players.get(playerId);
     return Boolean(player && (player.inventory.get(itemId)?.quantity ?? 0) + (player.storage.get(itemId)?.quantity ?? 0) > 0)
-      || [...this.state.lootDrops.values()].some(drop => drop.ownerId === playerId && drop.itemId === itemId);
+      || [...this.state.lootDrops.values()].some(drop => drop.ownerId === playerId
+        && decodeLootBagItems(drop.contentsJson, drop.itemId, drop.quantity).some(entry => entry.itemId === itemId));
+  }
+
+  private ownsOrHasPendingSignature(playerId: string, itemId: SignatureItemId): boolean {
+    return this.ownsOrHasPendingItem(playerId, itemId);
   }
 
   private realmEventUpdateFor(client: Client, now: number): RealmEventUpdate {
@@ -1890,7 +1895,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.clients.find(client => client.sessionId === playerId)?.send("objective:completed", {
         objectiveId: `area-main-${mobId}`,
         title: `${areaMainMob.name} Defeated`,
-        rewardLabel: `${areaMainMob.rewardLabel ?? "AREA LEADER CACHE"} · premium personal loot dropped`,
+        rewardLabel: `${areaMainMob.rewardLabel} · ${ITEM_DEFINITIONS[areaMainMob.rewardItemId].name}`,
         coinsGranted: 0,
       } satisfies WorldObjectiveCompleted);
     }
@@ -2084,6 +2089,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
     if (mobId === "forest-guardian") return;
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
+    const areaReward = areaMainMobDefinition(mobId);
+    const areaRelicDrops: { itemId: ItemId; quantity: number }[] = rewardPlayer && areaReward
+      && !this.ownsOrHasPendingItem(ownerId, areaReward.rewardItemId)
+      ? [{ itemId: areaReward.rewardItemId, quantity: 1 }] : [];
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
     const signatureDrops = (itemId: SignatureItemId): { itemId: ItemId; quantity: number }[] => {
@@ -2119,6 +2128,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
     const items = normalizeLootBagItems([
       ...baseDrops,
+      ...areaRelicDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);
@@ -2146,6 +2156,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson,
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
     });
+    if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
+      `FIRST LEADER VICTORY · ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name} added to your personal cache.`);
   }
 
   private resolveLootPickups(now: number): void {
