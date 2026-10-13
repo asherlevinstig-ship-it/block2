@@ -19,15 +19,22 @@ export function championChargeHits(start: Position, end: Position, target: Posit
   return Math.abs(target.y - start.y) <= 1.1
     && Math.hypot(target.x - start.x - dx * fraction, target.z - start.z - dz * fraction) <= CHAMPION_CHARGE.halfWidth;
 }
-export function combatMobDefinition(mob: { archetype: string; isChampion?: boolean; attackPattern?: string }) {
+export function combatMobDefinition(mob: { archetype: string; isChampion?: boolean; isElite?: boolean; attackPattern?: string }) {
   const base = mobArchetype(mob.archetype);
   if (mob.archetype === "stone_brute" && usesRockVolley(mob.attackPattern ?? "")) return { ...base, attackKind: "projectile" as const,
     stopDistance: BRUTE_VOLLEY.attackRange, minimumAttackRange: BRUTE_VOLLEY.minimumRange,
-    windupMs: BRUTE_VOLLEY.windupMs, recoverMs: BRUTE_VOLLEY.recoveryMs, cooldownMs: BRUTE_VOLLEY.cooldownMs,
+    windupMs: mob.isElite ? Math.round(BRUTE_VOLLEY.windupMs * .82) : BRUTE_VOLLEY.windupMs,
+    recoverMs: mob.isElite ? Math.round(BRUTE_VOLLEY.recoveryMs * .88) : BRUTE_VOLLEY.recoveryMs,
+    cooldownMs: mob.isElite ? Math.round(BRUTE_VOLLEY.cooldownMs * .8) : BRUTE_VOLLEY.cooldownMs,
     projectileTravelMs: BRUTE_VOLLEY.travelMs, hazardDurationMs: 0, hazardRadius: 0 };
+  if (mob.isElite && mob.archetype === "cave_spitter") return { ...base,
+    windupMs: 1150, recoverMs: 1500, cooldownMs: 2400,
+    projectileTravelMs: mob.attackPattern === "pool" ? 1050 : SPITTER_PATTERN.travelMs,
+    hazardDurationMs: mob.attackPattern === "pool" ? 3200 : 0, hazardRadius: mob.attackPattern === "pool" ? 1.4 : 0 };
   if (mob.isChampion && mob.archetype === "cave_spitter") return { ...base, name: "Silver Venom Champion", maxHealth: 18,
     windupMs: 1400, recoverMs: 1900, cooldownMs: 3000, projectileTravelMs: mob.attackPattern === "pool" ? 1100 : SPITTER_PATTERN.travelMs,
     hazardDurationMs: mob.attackPattern === "pool" ? 4000 : 0, hazardRadius: mob.attackPattern === "pool" ? 1.6 : 0, respawnMs: 20000 };
+  if (mob.isElite) return { ...base, windupMs: Math.round(base.windupMs * .82), recoverMs: Math.round(base.recoverMs * .88), cooldownMs: Math.round(base.cooldownMs * .8) };
   return !mob.isChampion ? base : { ...base, name: "Frontier Stone Champion", maxHealth: 28,
     stopDistance: mob.attackPattern === "charge" ? 4.2 : base.stopDistance,
     windupMs: mob.attackPattern === "charge" ? CHAMPION_CHARGE.windupMs : base.windupMs,

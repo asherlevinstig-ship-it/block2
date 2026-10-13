@@ -33,6 +33,8 @@ import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, r
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
 import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
+import { shouldBecomeWildernessElite, wildernessEliteKind,
+  wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
@@ -410,6 +412,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly quizRounds = new Map<string, QuizRound>();
   private readonly objectiveProgress = new Map<string, WorldObjectiveProgress>();
   private readonly normalLootCadence = new NormalLootCadence();
+  private readonly mobBaseNames = new Map<string, string>();
   private readonly worldDeltasByChunk = new Map<string, Map<string, WorldBlockDelta>>();
   private readonly pendingWorldDeltaWrites = new Map<string, string>();
   private readonly mineralRegrowth = new Map<string, WorldBlockDelta & { regrowAt: number }>();
@@ -1613,6 +1616,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
     if (isAshenSentry(mobId)) mob.name = "Ashglass Sentry";
+    this.mobBaseNames.set(mobId, mob.name);
     mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion, mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
     this.state.mobs.set(mobId, mob);
   }
@@ -1801,6 +1805,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
+    const wasElite = mob.isElite;
     for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
     const credited = this.combatContributions.eligible(mobId, mob, this.state.players, now);
     const recipients = mobId === CRYSTAL_MATRIARCH_ID && this.roomKind === "silver-depths"
@@ -1826,7 +1831,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const definition = combatMobDefinition(mob);
     const recipientsWithLoot = new Set<string>();
     if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) for (const playerId of recipients) {
-      const fixedReward = mob.isChampion || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
+      const fixedReward = mob.isChampion || mob.isElite || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
         || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || isRealmEventId(mobId);
       const cadenceId = this.profileTokens.get(playerId) ?? playerId;
       if (!fixedReward && !this.normalLootCadence.record(cadenceId, Math.random())) continue;
@@ -1883,6 +1888,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       this.broadcastRealmEvent(now);
     }
+    if (wasElite) {
+      const eliteProgress = this.realmEvents.recordElite(now);
+      for (const playerId of recipients) this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", eliteProgress.bossArmed
+        ? "ELITE HUNT COMPLETE · the Realm Stone Warden awakens in 8 seconds. Rally at the marker!"
+        : eliteProgress.eliteKills === 0
+          ? "ELITE DEFEATED · bonus Realm Threat gained. Your improved personal loot has landed."
+          : `ELITE DEFEATED · ${eliteProgress.eliteKills}/${eliteProgress.eliteRequired} toward bonus Realm Threat. Improved personal loot has landed.`);
+      this.broadcastRealmEvent(now);
+    }
     if (this.forestPortalCycle.record(mobId, now) && !this.state.portals.has("forest-entry") && !this.forestDungeonActive) {
       this.openTemporaryForestPortal(now);
     }
@@ -1917,8 +1931,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.health = reward.health;
       player.stamina = reward.stamina;
       const coinsBefore = player.coins;
-      player.coins = Math.min(1_000_000, player.coins + 2);
-      this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion, player.level, mob.level), mob.name);
+      const coinsGranted = wasElite ? 5 : 2;
+      player.coins = Math.min(1_000_000, player.coins + coinsGranted);
+      this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level), mob.name);
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -1931,7 +1946,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       } satisfies CombatReward);
       this.clients.find(client => client.sessionId === playerId)?.send("chat:notice", recipientsWithLoot.has(playerId)
         ? "Kill contribution credited · your personal loot is on the ground. Press E beside each drop before it expires."
-        : "Kill contribution credited · +2 gold and XP. No item drop this time.");
+        : `Kill contribution credited · +${coinsGranted} gold and XP. No item drop this time.`);
     }
   }
 
@@ -2028,6 +2043,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ...(realmEventDefinition(mobId)?.signatureRewards ?? []).flatMap(itemId => signatureDrops(itemId as SignatureItemId))]
       : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "champion")
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
+      : mob.isElite ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "elite", Math.random())]
       : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
     const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
     for (const [index, entry] of drops.entries()) {
@@ -3636,6 +3652,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = mob.enraged ? championPattern(mob) : "slam";
       }
+      else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       else if (mob.archetype === "cave_spitter" && mob.combatState === "idle") mob.attackPattern = isAshenSentry(mobId)
@@ -3646,6 +3663,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const distance = Math.min(...eligible.map(player => Math.hypot(player.x - mob.x, player.z - mob.z)));
         const realmPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth);
         mob.attackPattern = realmPattern ?? (mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
+          : mob.isElite ? wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence)
           : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
           : mob.isChampion ? championPattern(mob) : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence) : "slam");
       }
@@ -3668,6 +3686,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             mob.respawnAt = now + WILDERNESS_RESPAWN_RECHECK_MS;
             continue;
           }
+          const band = dangerBandAt(home);
+          const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && candidate.isElite
+            && (candidate.alive || candidate.materializeUntil > now)).length;
+          mob.isElite = shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
+          const eliteKind = wildernessEliteKind(definition.id);
+          mob.eliteKind = mob.isElite ? eliteKind : "";
+          const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
+          mob.name = mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName;
+          mob.actionSequence = 0;
+          if (mob.isElite) mob.attackPattern = wildernessElitePattern(definition.id, 0);
           mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
           mob.materializeUntil = now + WILDERNESS_MATERIALIZE_MS;
           mob.respawnAt = mob.materializeUntil;
@@ -3677,7 +3705,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.mobProgress.delete(mobId); this.mobUnreachableUntil.delete(mobId); this.mobReturning.delete(mobId);
         mob.awarenessState = "patrol"; mob.alertUntil = 0;
         this.mobAwareness.delete(mobId);
-        const stats = scaledMobStats(definition, dangerBandAt(home));
+        const band = dangerBandAt(home);
+        const baseStats = scaledMobStats(definition, band);
+        const stats = mob.isElite ? wildernessEliteStats(baseStats) : baseStats;
         mob.x = spawn.x;
         mob.y = spawn.y;
         mob.z = spawn.z;
@@ -3695,6 +3725,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.attackDamage = stats.damage;
         mob.speedMultiplier = stats.speedMultiplier;
         mob.rewardMultiplier = stats.rewardMultiplier;
+        mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite, false);
         if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
         if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = crystalMatriarchPattern(0, false); }
         if (mobId === "forge-colossus") { mob.health = mob.maxHealth = 38; mob.attackDamage = 3; mob.attackPattern = "rocks"; }
@@ -3780,7 +3811,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             mob.targetId = ""; continue;
           }
           const shots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, aim.yaw)
-            : mob.isChampion && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID && !isRealmSpitterBoss(mobId) ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
+            : (mob.isChampion || mob.isElite) && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID && !isRealmSpitterBoss(mobId) ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
@@ -3799,7 +3830,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const deltaZ = aim.z - mob.z;
         const distance = Math.hypot(deltaX, deltaZ);
         if (crawlerRushDistance(mob.archetype) > 0) {
-          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype), startedAt: now, progress: 0 });
+          this.crawlerRushes.set(mobId, { yaw: aim.yaw, distance: crawlerRushDistance(mob.archetype) * (mob.isElite ? 1.3 : 1), startedAt: now, progress: 0 });
         } else if (distance > 0.001) {
           const lungeDistance = Math.min(definition.lungeDistance, Math.max(0, distance - definition.stopDistance * 0.6));
           this.displaceMob(mobId, mob, {
@@ -4662,7 +4693,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.aimCommitted) { mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z; }
       return;
     }
-    if (mob.isChampion && mob.archetype === "cave_spitter") {
+    if ((mob.isChampion || mob.isElite) && mob.archetype === "cave_spitter") {
       if (mob.aimCommitted) return;
       const aim = this.mobCommittedAim.get(mobId);
       mob.attackStrikeX = mob.attackPattern === "pool" ? aim?.x ?? mob.x : mob.x;

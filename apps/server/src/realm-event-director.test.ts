@@ -41,6 +41,16 @@ describe("Realm-style encounter director", () => {
     expect(realmEventScale(20, boss)).toEqual({ players: 6, maxHealth: 164, attackDamage: 3, rewardMultiplier: 3.75 });
   });
 
+  it("turns every two elite victories into one Realm Threat pip", () => {
+    const director = new RealmEventDirector();
+    expect(director.recordElite(1_000)).toMatchObject({ bossArmed: false, eliteKills: 1, eliteRequired: 2 });
+    expect(director.recordElite(2_000)).toMatchObject({ bossArmed: false, eliteKills: 0 });
+    expect(director.status(2_000)).toMatchObject({ completed: 1, eliteKills: 0, eliteRequired: 2 });
+    director.recordElite(3_000); director.recordElite(4_000); director.recordElite(5_000);
+    expect(director.recordElite(6_000).bossArmed).toBe(true);
+    expect(director.status(6_000)).toMatchObject({ phase: "warning", eventId: "realm-stone-warden", completed: 3 });
+  });
+
   it("assigns personal signature gear to every public boss", () => {
     expect(REALM_EVENT_DEFINITIONS.map(event => [event.key, event.signatureRewards])).toEqual([
       ["greenwood", ["venom_focus"]],

@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, discoverAshenSpire } from "./minimap.js";
+import { activeEliteMapTargets, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, discoverAshenSpire } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
+  it("shows living same-floor elites without permanently discovering them", () => {
+    const player = { x: 0, y: 8, z: 0 };
+    const elite = { id: "elite", name: "Volatile Spitter", x: 40, y: 8, z: 0, alive: true, isElite: true };
+    expect(activeEliteMapTargets(player, [elite, { ...elite, id: "dead", alive: false }, { ...elite, id: "below", y: 3 }]))
+      .toEqual([elite]);
+  });
   it("reveals the Ashen Reach spire only when approached on the surface", () => {
     const known = new Set<string>();
     expect(discoverAshenSpire({ ...ASHEN_SPIRE_WAYPOINT, x: ASHEN_SPIRE_WAYPOINT.x + 19 }, known)).toBe(false);

@@ -1752,6 +1752,8 @@ interface NetworkMob {
   awarenessState: string;
   alertUntil: number;
   isChampion: boolean;
+  isElite: boolean;
+  eliteKind: string;
   enraged?: boolean;
   attackPattern: string;
   x: number;
@@ -1835,6 +1837,8 @@ interface MobVisual {
   recovery: pc.Entity;
   respawnCue: pc.Entity;
   respawnCueMaterial: pc.StandardMaterial;
+  eliteAura: pc.Entity;
+  eliteAuraMaterial: pc.StandardMaterial;
   healthFill: pc.Entity;
   healthWidth: number;
   healthBarY: number;
@@ -3675,6 +3679,16 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
   respawnCue.addChild(respawnCore);
   respawnCue.enabled = false;
   entity.addChild(respawnCue);
+  const eliteAura = new pc.Entity("elite-aura");
+  const eliteAuraMaterial = powerMaterial(new pc.Color(.88, .38, 1), .5);
+  for (let index = 0; index < 10; index++) {
+    const angle = index * Math.PI / 5;
+    const shard = addBox(eliteAura, "elite-aura-shard", eliteAuraMaterial, [.12, .12 + index % 2 * .1, .28],
+      [Math.sin(angle) * .78, .16 + index % 2 * .13, Math.cos(angle) * .78]);
+    shard.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 28 : -28);
+  }
+  eliteAura.enabled = false;
+  entity.addChild(eliteAura);
   const mark = new pc.Entity("hunters-mark");
   mark.addComponent("render", { type: "cylinder" });
   if (mark.render) mark.render.material = markMaterial;
@@ -3707,7 +3721,7 @@ function createMobVisual(mobId: string, mob: NetworkMob): MobVisual {
     warningPattern: mob.attackPattern,
     warningChargeLength: CHAMPION_CHARGE.distance,
     warningSequence: mob.actionSequence,
-    combatCue, combatCueLabel, combatCueFill, levelTag, recovery, respawnCue, respawnCueMaterial,
+    combatCue, combatCueLabel, combatCueFill, levelTag, recovery, respawnCue, respawnCueMaterial, eliteAura, eliteAuraMaterial,
     healthFill,
     healthWidth,
     healthBarY,
@@ -4084,7 +4098,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["awarenessState", "alertUntil", "isChampion", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["awarenessState", "alertUntil", "isChampion", "isElite", "eliteKind", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -7687,6 +7701,14 @@ app.on("update", (dt: number) => {
       mob.warningMaterial.opacity = presentation.aimLocked ? .65 : .38;
       mob.warningMaterial.update();
     }
+    mob.eliteAura.enabled = mob.state.alive && mob.state.isElite;
+    if (mob.eliteAura.enabled) {
+      const elitePulse = 1 + Math.sin(animationTime * 6.5) * .09;
+      mob.eliteAura.setLocalScale(elitePulse, elitePulse, elitePulse);
+      mob.eliteAura.setLocalEulerAngles(0, animationTime * 42, 0);
+      mob.eliteAuraMaterial.opacity = .38 + Math.sin(animationTime * 6.5) * .12;
+      mob.eliteAuraMaterial.update();
+    }
     animateMobArt(mob.art, frameTime, animationTime, moveSpeed, mob.state.awarenessState, windupStrength, attackStrength, hitStrength, staggerStrength, defeat);
     setMobArtEnraged(mob.art, mob.state.enraged === true);
     setMobArtDefeated(mob.art, !mob.state.alive && deathPose.progress >= .3);
@@ -7695,7 +7717,7 @@ app.on("update", (dt: number) => {
         / Math.max(1, mob.state.attackRecoveryEndAt - mob.state.attackContactEndAt)))) : 0;
     const gaitBob = Math.abs(Math.sin(mob.art.phase)) * mob.art.walk * (mob.isBrute ? 0.026 : 0.018);
     const bruteRecovery = bruteRecoveryPose(mob.state, animationNow + serverClock.offset);
-    const bodySize = mob.art.rootGuardian ? 1.38 : mob.state.isChampion ? 1.25 : 1;
+    const bodySize = mob.art.rootGuardian ? 1.38 : mob.state.isChampion ? 1.25 : mob.state.isElite ? 1.12 : 1;
     mob.bodyRoot.setLocalScale(bodySize * (1 + defeat * 0.13), bodySize * (1 - defeat * (mob.isBrute ? 0.42 : 0.58)), bodySize * (1 + defeat * 0.1));
     mob.bodyRoot.setLocalPosition(
       0,
@@ -7721,9 +7743,9 @@ app.on("update", (dt: number) => {
       mob.bodyRoot.setLocalEulerAngles(deathPose.pitch, 0, deathPose.roll);
     }
     mob.bodyMaterial.emissive.set(
-      0.001 + 0.55 * hitStrength + 0.34 * windupStrength,
-      0.001 + 0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
-      0.001 + 0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
+      0.001 + (mob.state.isElite ? .12 : 0) + 0.55 * hitStrength + 0.34 * windupStrength,
+      0.001 + (mob.state.isElite ? .025 : 0) + 0.08 * hitStrength + 0.12 * windupStrength + 0.38 * staggerStrength,
+      0.001 + (mob.state.isElite ? .18 : 0) + 0.04 * hitStrength + 0.08 * windupStrength + 0.48 * staggerStrength,
     );
     mob.bodyMaterial.update();
   }
@@ -8057,6 +8079,8 @@ app.on("update", (dt: number) => {
         title: depthsCheckpointStatus?.phase === "waiting" ? "Party checkpoint" : dungeonRoute.title }, teammates });
     } else minimap.setDungeonState(null);
     minimap.setChampionState(mobVisuals.get("frontier-brute-west")?.state ?? null);
+    minimap.setEliteStates([...mobVisuals.entries()].map(([id, visual]) => ({ id, name: visual.state.name,
+      x: visual.state.x, y: visual.state.y, z: visual.state.z, alive: visual.state.alive, isElite: visual.state.isElite })));
     if (now - lastNameplateSampleAt >= 100) {
     lastNameplateSampleAt = now;
     const nameplates: { id: string; name: string; x: number; y: number; visible: boolean; local: boolean }[] = [];

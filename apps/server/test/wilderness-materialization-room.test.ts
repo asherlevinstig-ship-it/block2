@@ -59,4 +59,30 @@ describe("wilderness materialization", () => {
     expect(mob.materializeUntil).toBe(0);
     expect(mob.respawnAt).toBe(21_500 + WILDERNESS_RESPAWN_RECHECK_MS);
   });
+
+  it("reveals a distant elite during materialization and applies its stronger profile", () => {
+    vi.useFakeTimers(); vi.setSystemTime(30_000);
+    vi.spyOn(Math, "random").mockReturnValue(.01);
+    const room = new WorldRoom(); room.setState(new WorldState());
+    Object.defineProperty(room, "readWorldBlock", { value: flat });
+    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    const internal = room as any;
+    internal.registerMob("wild-spitter-west-north", "cave_spitter", { x: -30.5, y: 8, z: 3.5 });
+    const mob = room.state.mobs.get("wild-spitter-west-north") as MobState;
+    const ordinaryHealth = mob.maxHealth;
+    mob.alive = false; mob.respawnAt = 30_000;
+
+    internal.simulatePlayers(.033);
+    expect(mob.alive).toBe(false);
+    expect(mob.isElite).toBe(true);
+    expect(mob.eliteKind).toBe("volatile");
+    expect(mob.name).toBe("Volatile Cave Spitter");
+
+    vi.setSystemTime(mob.materializeUntil);
+    internal.simulatePlayers(.033);
+    expect(mob.alive).toBe(true);
+    expect(mob.maxHealth).toBeGreaterThan(ordinaryHealth);
+    expect(mob.attackDamage).toBeGreaterThan(1);
+    expect(mob.rewardMultiplier).toBeGreaterThan(1);
+  });
 });

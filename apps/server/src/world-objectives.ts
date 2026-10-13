@@ -31,7 +31,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     phase: realmEvent > now ? "warning" : "idle", eventId: realmEvent > now ? WILDERNESS_EVENT_ID : null,
     eventName: realmEvent > now ? "Greenwood Venom Matriarch" : null, eventTitle: realmEvent > now ? "Venom Matriarch · Public Event" : null,
     targetX: WILDERNESS_EVENT_POSITION.x, targetY: WILDERNESS_EVENT_POSITION.y, targetZ: WILDERNESS_EVENT_POSITION.z,
-    warningUntil: realmEvent, completed: 0, required: 3, realmBoss: false,
+    warningUntil: realmEvent, completed: 0, required: 3, realmBoss: false, eliteKills: 0, eliteRequired: 2,
   } : realmEvent;
   const distance = (point: Pose) => Math.hypot(point.x - player.x, point.z - player.z);
   const sameFloor = (point: Pose) => Math.abs(point.y - player.y) <= 2.5;

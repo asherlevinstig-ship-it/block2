@@ -30,6 +30,7 @@ export const REALM_EVENT_SCALING_RADIUS = 30;
 export const REALM_EVENT_MAX_PLAYERS = 6;
 export const REALM_EVENT_WARNING_MS = 8_000;
 export const REALM_EVENT_COOLDOWN_MS = 45_000;
+export const REALM_ELITE_KILLS_PER_THREAT = 2;
 const TRIGGER_WINDOW_MS = 60_000;
 
 export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
@@ -87,6 +88,8 @@ export type RealmEventStatus = {
   completed: number;
   required: number;
   realmBoss: boolean;
+  eliteKills: number;
+  eliteRequired: number;
 };
 
 export function realmEventDefinition(value: string | RealmEventKey | null): RealmEventDefinition | null {
@@ -115,14 +118,20 @@ export class RealmEventDirector {
   private nextAt = 0;
   private readonly defeated = new Map<string, number>();
   private readonly completed = new Set<RealmEventKey>();
+  private eliteKills = 0;
 
   get phase(): RealmEventPhase { return this.currentPhase; }
   get definition(): RealmEventDefinition | null { return realmEventDefinition(this.currentKey); }
+
+  private threatProgress(): number {
+    return Math.min(REALM_EVENT_REQUIRED, this.completed.size + Math.floor(this.eliteKills / REALM_ELITE_KILLS_PER_THREAT));
+  }
 
   private tick(now: number): void {
     if (this.currentPhase === "cooldown" && now >= this.nextAt) {
       this.currentPhase = "idle";
       this.currentKey = null;
+      if (this.threatProgress() >= REALM_EVENT_REQUIRED) this.arm(REALM_EVENT_DEFINITIONS.find(event => event.realmBoss)!, now);
     }
   }
 
@@ -147,6 +156,21 @@ export class RealmEventDirector {
     return null;
   }
 
+  recordElite(now: number): { bossArmed: boolean; eliteKills: number; eliteRequired: number } {
+    this.tick(now);
+    const current = this.definition;
+    if (current?.realmBoss && (this.currentPhase === "warning" || this.currentPhase === "active")) {
+      return { bossArmed: false, eliteKills: this.eliteKills % REALM_ELITE_KILLS_PER_THREAT, eliteRequired: REALM_ELITE_KILLS_PER_THREAT };
+    }
+    this.eliteKills++;
+    let bossArmed = false;
+    if (this.currentPhase === "idle" && this.threatProgress() >= REALM_EVENT_REQUIRED) {
+      this.arm(REALM_EVENT_DEFINITIONS.find(event => event.realmBoss)!, now);
+      bossArmed = true;
+    }
+    return { bossArmed, eliteKills: this.eliteKills % REALM_ELITE_KILLS_PER_THREAT, eliteRequired: REALM_ELITE_KILLS_PER_THREAT };
+  }
+
   release(now: number): RealmEventDefinition | null {
     if (this.currentPhase !== "warning" || now < this.warningEndsAt) return null;
     this.currentPhase = "active";
@@ -159,13 +183,14 @@ export class RealmEventDirector {
     if (this.currentPhase !== "active" || !definition || definition.id !== mobId) return null;
     if (definition.realmBoss) {
       this.completed.clear();
+      this.eliteKills = 0;
       this.currentPhase = "cooldown";
       this.currentKey = null;
       this.nextAt = now + REALM_EVENT_COOLDOWN_MS;
       return { definition, realmBossArmed: false, realmCleared: true };
     }
     this.completed.add(definition.key);
-    if (this.completed.size >= REALM_EVENT_REQUIRED) {
+    if (this.threatProgress() >= REALM_EVENT_REQUIRED) {
       this.arm(REALM_EVENT_DEFINITIONS.find(event => event.realmBoss)!, now);
       return { definition, realmBossArmed: true, realmCleared: false };
     }
@@ -187,9 +212,11 @@ export class RealmEventDirector {
       targetY: definition?.position.y ?? 0,
       targetZ: definition?.position.z ?? 0,
       warningUntil: this.warningEndsAt,
-      completed: this.completed.size,
+      completed: this.threatProgress(),
       required: REALM_EVENT_REQUIRED,
       realmBoss: definition?.realmBoss === true,
+      eliteKills: this.eliteKills % REALM_ELITE_KILLS_PER_THREAT,
+      eliteRequired: REALM_ELITE_KILLS_PER_THREAT,
     };
   }
 }

@@ -7,6 +7,10 @@ export const MAP_SIZE = 220;
 export const MAP_RANGE = 72;
 export const DISCOVERY_RADIUS = 10;
 type Position = { x: number; z: number };
+export type EliteMapTarget = Position & { id: string; name: string; y: number; alive: boolean; isElite: boolean };
+export function activeEliteMapTargets(player: Position & { y: number }, elites: readonly EliteMapTarget[]): EliteMapTarget[] {
+  return elites.filter(elite => elite.alive && elite.isElite && Math.abs(elite.y - player.y) <= 2.5);
+}
 export type DungeonMapState = { objective: Position & { title: string }; teammates: (Position & { id: string; name: string; y: number; state: "fighting" | "fallen" })[] };
 export function dungeonMapPoints(player: Position & { y: number }, state: DungeonMapState) {
   return { objective: mapPoint(player, state.objective), teammates: state.teammates
@@ -100,6 +104,7 @@ export function discoverDeposits(player: Position & { y: number }, discovered: S
 
 export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, storageKey: string): {
   setChampionState(champion: (Position & { y: number; alive: boolean }) | null): void;
+  setEliteStates(elites: EliteMapTarget[]): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
@@ -130,6 +135,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   const depthLabel = document.querySelector<HTMLElement>("#minimap-depth")!;
   const statuses = new Map<string, MineralDepositStatus>();
   let champion: (Position & { y: number; alive: boolean }) | null = null;
+  let elites: EliteMapTarget[] = [];
   let lastStatusSecond = 0;
   const homeButton = document.querySelector<HTMLButtonElement>("#minimap-home")!;
   const destinations = document.querySelector<HTMLSelectElement>("#minimap-destination")!;
@@ -189,6 +195,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   canvas.width = MAP_SIZE * ratio; canvas.height = MAP_SIZE * ratio;
   return {
     setChampionState(value) { champion = value; },
+    setEliteStates(values) { elites = values; },
     setCaveState(state) { caveState = state; },
     setDungeonState(state) {
       dungeonState = state;
@@ -382,9 +389,9 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       for (let i = 0; i < MAP_SIZE; i += 22) {
         ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, MAP_SIZE); ctx.moveTo(0, i); ctx.lineTo(MAP_SIZE, i); ctx.stroke();
       }
-      const marker = (point: Position, label: string, color: string, square: boolean) => {
+      const marker = (point: Position, label: string, color: string, square: boolean, showAtEdge = false) => {
         const p = mapPoint(player, point);
-        if (p.offscreen && label !== "HOME") return;
+        if (p.offscreen && label !== "HOME" && !showAtEdge) return;
         ctx.fillStyle = color; ctx.strokeStyle = "#071514"; ctx.lineWidth = 2;
         ctx.beginPath();
         if (square) ctx.rect(p.x - 4, p.y - 4, 8, 8); else ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
@@ -399,6 +406,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         marker(TOWN_BLACKSMITH_STALL_POSITION, "SMITH", "#ffd173", true);
         if (discovered.has(CHAMPION_WAYPOINT.id)) marker(CHAMPION_WAYPOINT, "♛ CHAMP", "#ffcf65", true);
         if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) marker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", true);
+        for (const elite of activeEliteMapTargets(player, elites)) marker(elite, "★ ELITE", "#e890ff", false, true);
       }
       marker(MINE_ENTRANCE, "MINE", "#ffe08c", true);
       for (const chamber of caveState.chambers) marker(chamber, `${chamber.label} · D${caveDepth(chamber.y)}`, "#a3dfeb", false);

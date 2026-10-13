@@ -20,6 +20,12 @@ describe("item loot", () => {
     expect(lootForArchetype("moss_crawler", "", .13)).toContainEqual({ itemId: "fang_dagger", quantity: 1 });
     expect(lootForArchetype("moss_crawler", "", .14)).not.toContainEqual({ itemId: "fang_dagger", quantity: 1 });
     expect(lootForArchetype("stone_brute", "", .999, "champion")).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
+    expect(lootForArchetype("stone_brute", "", .39, "elite", .34)).toEqual([
+      { itemId: "stone_core", quantity: 2 },
+      { itemId: "healing_potion", quantity: 1 },
+      { itemId: "stone_core_hammer", quantity: 1 },
+    ]);
+    expect(lootForArchetype("stone_brute", "", .4, "elite", .35)).toEqual([{ itemId: "stone_core", quantity: 2 }]);
     expect(lootForArchetype("cave_spitter", "cave-spitter", .29, "normal", .17)).toEqual([
       { itemId: "acid_gland", quantity: 2 },
       { itemId: "healing_potion", quantity: 1 },

@@ -13,8 +13,10 @@ export function realmEventLabel(update: RealmEventUpdate, now = Date.now()): { e
     detail: `Arrives in ${Math.max(0, Math.ceil((update.warningUntil - now) / 1000))}s · follow the marker`,
   };
   if (update.phase === "active") return { eyebrow: "PUBLIC EVENT ACTIVE", title: update.eventName ?? "Regional threat", detail: "Contribute damage for personal rewards" };
-  if (update.phase === "cooldown") return { eyebrow: "REALM STABILISING", title: `${update.completed} / ${update.required} threats defeated`, detail: "Another regional event can awaken shortly" };
-  return { eyebrow: "REALM THREAT", title: `${update.completed} / ${update.required} threats defeated`, detail: "Clear marked regional encounters to draw out public bosses" };
+  const eliteKills = update.eliteKills ?? 0;
+  const eliteDetail = eliteKills > 0 ? ` · elite hunt ${eliteKills}/${update.eliteRequired ?? 2}` : "";
+  if (update.phase === "cooldown") return { eyebrow: "REALM STABILISING", title: `${update.completed} / ${update.required} threats defeated`, detail: `Another regional event can awaken shortly${eliteDetail}` };
+  return { eyebrow: "REALM THREAT", title: `${update.completed} / ${update.required} threats defeated`, detail: `Clear marked encounters or hunt elites${eliteDetail}` };
 }
 
 export function createRealmEventUI() {
