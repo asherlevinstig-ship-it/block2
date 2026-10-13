@@ -58,7 +58,7 @@ import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow } from "./camera-follow.js";
-import { canRequestPredictedDodge } from "./dodge-input.js";
+import { advanceDodgeVisualOffset, beginDodgeVisualOffset, canRequestPredictedDodge, dodgeReconciliationPending } from "./dodge-input.js";
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
 import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
@@ -2346,6 +2346,7 @@ let localFacingYaw = 0;
 let localVisualVerticalOffset = 0;
 let localNetworkVisualOffset = { x: 0, z: 0 };
 let localRecoveryVisualOffset = { x: 0, z: 0 };
+let localDodgeVisualOffset = { x: 0, z: 0 };
 const localPowerVisualOffset = new pc.Vec3();
 let localActionStartedAt: number | null = null;
 let localActionFacingYaw: number | null = null;
@@ -5668,6 +5669,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localVisualVerticalOffset = 0;
   localNetworkVisualOffset = { x: 0, z: 0 };
   localRecoveryVisualOffset = { x: 0, z: 0 };
+  localDodgeVisualOffset = { x: 0, z: 0 };
   localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
   pendingPredictionFrames.length = 0;
   smoothedMovement = { x: 0, z: 0 };
@@ -5762,6 +5764,7 @@ function clearDefeatCombat(): void {
   localVisualVerticalOffset = 0;
   localNetworkVisualOffset = { x: 0, z: 0 };
   localRecoveryVisualOffset = { x: 0, z: 0 };
+  localDodgeVisualOffset = { x: 0, z: 0 };
   localPowerVisualOffset.set(0, 0, 0);
   if (room) {
     for (const mob of mobVisuals.values()) mob.marks.delete(room.sessionId);
@@ -5886,6 +5889,7 @@ function activateMovementPilot(joinedRoom: Room): void {
   localVerticalVelocity = playerState.pilotVy;
   localNetworkVisualOffset = { x: 0, z: 0 };
   localRecoveryVisualOffset = { x: 0, z: 0 };
+  localDodgeVisualOffset = { x: 0, z: 0 };
   pendingPredictionFrames.length = 0;
   logMovementEvent("COLYSEUS CONTROLLING MOVEMENT");
 }
@@ -6683,6 +6687,11 @@ function requestDodge(): void {
     { x: direction.x * 1.8, y: 0, z: direction.z * 1.8 },
     readCollisionWorldBlock,
   );
+  localDodgeVisualOffset = beginDodgeVisualOffset(
+    localDodgeVisualOffset,
+    { x: current.x, z: current.z },
+    { x: predicted.x, z: predicted.z },
+  );
   if (defeatScreen.hidden) localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   updateActiveChunkMeshes(predicted);
   localDodgeStartedAt = now;
@@ -7364,7 +7373,10 @@ function reconcileLocalPlayer(
   }
   target.y = reconciliationVerticalTarget(position.y, target.y, grounded);
   const distance = position.distance(target);
-  const reconciliationRate = localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, performance.now() - lastAuthoritativeMovementAt, performance.now() - lastAcknowledgementAdvancedAt);
+  const now = performance.now();
+  const reconciliationRate = dodgeReconciliationPending(now, localDodgeRequestedAt, networkRttMs)
+    ? 0
+    : localReconciliationRate(distance, moving, sequenceLag, authoritativeInputReady, now - lastAuthoritativeMovementAt, now - lastAcknowledgementAdvancedAt);
   if (!Number.isFinite(reconciliationRate)) {
     const mobilityAdvance = localActivePower !== null
       && POWER_DEFINITIONS[localActivePower].core === "mobility"
@@ -7539,7 +7551,8 @@ app.on("update", (dt: number) => {
   localVisualVerticalOffset = smoothVerticalOffset(localVisualVerticalOffset, frameTime);
   localPowerVisualOffset.mulScalar(Math.max(0, 1 - frameTime * 11));
   localRecoveryVisualOffset = smoothRecoveryOffset(localRecoveryVisualOffset, frameTime);
-  localPlayerVisual.setLocalPosition(localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z);
+  localDodgeVisualOffset = advanceDodgeVisualOffset(localDodgeVisualOffset, frameTime);
+  localPlayerVisual.setLocalPosition(localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x, localVisualVerticalOffset, localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z);
   const animationNow = performance.now();
   sceneDressing.update(animationNow);
   const animationTime = animationNow / 1000;
@@ -8083,9 +8096,9 @@ app.on("update", (dt: number) => {
       ? `${Math.ceil(specialRemaining / 1000)}s`
       : localEquippedSpecial === "venom_fan" ? "Fan" : localEquippedSpecial === "hunters_mark" ? "Mark" : "Snare";
   cameraTarget.set(
-    player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x,
+    player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x,
     player.y + localVisualVerticalOffset,
-    player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z,
+    player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z,
   );
   indoorCameraBlend = advanceIndoorCameraBlend(indoorCameraBlend, indoorRoofBuilding !== null && !playerCutaway.active, frameTime);
   cameraFollow = advanceCameraFollow(cameraFollow, cameraTarget, frameTime);
@@ -8115,7 +8128,7 @@ app.on("update", (dt: number) => {
   }
   updateBossHud(animationNow);
   const bodyY = localPlayerRig.root.getLocalPosition().y;
-  const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z);
+  const renderedPlayerPosition = new pc.Vec3(player.x + localPowerVisualOffset.x + localNetworkVisualOffset.x + localRecoveryVisualOffset.x + localDodgeVisualOffset.x, player.y + localVisualVerticalOffset + bodyY, player.z + localPowerVisualOffset.z + localNetworkVisualOffset.z + localRecoveryVisualOffset.z + localDodgeVisualOffset.z);
   const playerScreen = camera.camera?.worldToScreen(renderedPlayerPosition);
   updateUndergroundPresentation(player, frameTime);
   updateIndoorRoof(player);
