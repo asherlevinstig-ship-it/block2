@@ -1,5 +1,6 @@
 export const DODGE_REQUEST_INTERVAL_MS = 350;
-export const DODGE_STAMINA_COST = 35;
+import { DODGE_STAMINA_COST } from "@blockcraft/protocol";
+export { DODGE_STAMINA_COST } from "@blockcraft/protocol";
 export const DODGE_STAMINA_RECOVERY_PER_SECOND = 18;
 
 export interface DodgeVisualOffset {
@@ -46,6 +47,11 @@ export function advancePredictedDodgeStamina(
   return Math.min(maximumStamina, Math.max(0, stamina) + DODGE_STAMINA_RECOVERY_PER_SECOND * Math.max(0, elapsedMs) / 1_000);
 }
 
-export function canSpendPredictedDodgeStamina(stamina: number): boolean {
-  return stamina >= DODGE_STAMINA_COST;
+/** Exhaustion pauses regeneration; conservative prediction prevents a rejected snap at its boundary. */
+export function predictedDodgeRecoveryElapsed(from: number, to: number, exhaustedUntil: number): number {
+  return Math.max(0, to - Math.max(from, exhaustedUntil));
+}
+
+export function canSpendPredictedDodgeStamina(stamina: number, cost = DODGE_STAMINA_COST): boolean {
+  return stamina >= cost;
 }

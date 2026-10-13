@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MINI_BOSS_ENRAGE_MS, miniBossDamage, miniBossOrbitCounterPattern, predictedMiniBossAim, updateOrbitPressure } from "./mini-boss-pressure.js";
+import { MINI_BOSS_ENRAGE_MS, MINI_BOSS_FEINT_DELAY_MS, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure } from "./mini-boss-pressure.js";
 import { combatMobDefinition } from "./frontier-champion.js";
 
 describe("mini boss pressure", () => {
@@ -39,5 +39,11 @@ describe("mini boss pressure", () => {
     expect(enraged.cooldownMs).toBeLessThan(calm.cooldownMs);
     expect(enraged.recoverMs).toBeLessThan(calm.recoverMs);
     expect(enraged.windupMs).toBeGreaterThanOrEqual(500);
+  });
+
+  it("occasionally holds a telegraph to catch automatic early dodges", () => {
+    expect(miniBossWindupDelay(true, 2)).toBe(MINI_BOSS_FEINT_DELAY_MS);
+    expect(miniBossWindupDelay(true, 3)).toBe(0);
+    expect(miniBossWindupDelay(false, 2)).toBe(0);
   });
 });

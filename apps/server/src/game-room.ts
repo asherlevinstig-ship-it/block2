@@ -38,7 +38,9 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
 import { AREA_LEADER_FOLLOWERS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
-import { MINI_BOSS_ENRAGE_MS, miniBossDamage, miniBossOrbitCounterPattern, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
+import { MINI_BOSS_ENRAGE_MS, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
+import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE,
+  dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
@@ -363,6 +365,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly brambleSnares = new Map<string, ActiveBrambleSnare>();
   private readonly lastMobAttackAt = new Map<string, number>();
   private readonly lastDodgeAt = new Map<string, number>();
+  private readonly dodgePressure = new Map<string, { chain: number; lastAt: number; exhaustedUntil: number }>();
+  private readonly activeDodgeWindows = new Map<string, { startedAt: number; until: number }>();
+  private readonly dodgeCounterUntil = new Map<string, number>();
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
   private readonly delayedMatriarchVolleys = new Map<string, { origin: { x: number; y: number; z: number }; shots: { x: number; y: number; z: number }[]; releaseAt: number; damage: number; travelMs: number }>();
   private readonly matriarchCoverHits = new Map<string, number>();
@@ -875,6 +880,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.specialMarks.delete(client.sessionId);
     this.brambleSnares.delete(client.sessionId);
     this.lastDodgeAt.delete(client.sessionId);
+    this.dodgePressure.delete(client.sessionId);
+    this.activeDodgeWindows.delete(client.sessionId);
+    this.dodgeCounterUntil.delete(client.sessionId);
     this.profileTokens.delete(client.sessionId);
     this.profileSaveFingerprints.delete(client.sessionId);
     this.quizRounds.delete(client.sessionId);
@@ -2478,7 +2486,22 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,
     kind: IncomingDamageKind = "melee"): boolean {
     const player = this.state.players.get(playerId);
-    if (!player || player.health <= 0 || now < player.invulnerableUntil || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
+    if (!player || player.health <= 0 || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
+    if (now < player.invulnerableUntil) {
+      const dodge = this.activeDodgeWindows.get(playerId);
+      if (dodge && now >= dodge.startedAt && now <= dodge.until) {
+        this.activeDodgeWindows.delete(playerId);
+        this.dodgePressure.set(playerId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
+        const counterUntil = now + PERFECT_DODGE_COUNTER_MS;
+        this.dodgeCounterUntil.set(playerId, counterUntil);
+        player.stamina = Math.min(player.maxStamina, player.stamina + PERFECT_DODGE_STAMINA_RESTORE);
+        this.clients.find(client => client.sessionId === playerId)?.send("dodge:pressure", {
+          phase: "perfect", cost: 0, chain: 0, exhaustedUntil: 0, counterUntil,
+          staminaRestored: PERFECT_DODGE_STAMINA_RESTORE,
+        } satisfies DodgePressureUpdate);
+      }
+      return false;
+    }
     const mob = this.state.mobs.get(mobId);
     const leaderId = leaderForFollower(mobId);
     const leader = leaderId ? this.state.mobs.get(leaderId) : undefined;
@@ -4319,10 +4342,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.yaw = waiting ? Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI : pursuit.yaw;
       }
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
-      const windupMs = (mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")
+      const baseWindupMs = (mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")
         ? MATRIARCH_PHASE.crystalBurstWindupMs
         : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
+      const windupMs = baseWindupMs + miniBossWindupDelay(mob.isMiniBoss, mob.actionSequence);
       if (definition.attackKind === "projectile" && mob.archetype === "cave_spitter"
         && !allyFireLaneClear(mobId, mob, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
         positioning.sidestepPending = true;
@@ -4333,7 +4357,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? (rangedPursuit?.cornered || actualDistance >= definition.minimumAttackRange - 0.05) && actualDistance <= definition.stopDistance + 0.05
         : actualDistance <= definition.stopDistance + 0.05;
       if (waiting || (definition.attackKind === "melee" && meleeSlotsFull(target.id, attackers()))
-        || !this.silverGuardVolley.canStart(mobId, now)
+        || !this.silverGuardVolley.canStart(mobId, now, now + windupMs)
         || !this.attackCoordination.canStart(mobId, target.id, mob, now, now + windupMs, (id, startedAt) => {
           const peer = this.state.mobs.get(id);
           return Boolean(peer?.alive && peer.attackStartedAt === startedAt && ["windup", "strike", "recover"].includes(peer.combatState));
@@ -4343,7 +4367,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       if (mobId === "frontier-brute" && !mob.isMiniBoss && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
       mob.combatState = "windup";
-      this.silverGuardVolley.started(mobId, now);
+      this.silverGuardVolley.started(mobId, now + windupMs);
       this.crawlerPositioning.delete(mobId);
       if (definition.attackKind !== "projectile") this.spitterPositioning.delete(mobId);
       this.mobNavigation.set(mobId, createMobNavigationState());
@@ -4366,7 +4390,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (player.defending) {
         player.stamina = Math.max(0, player.stamina - guardStaminaCost(GUARD_STAMINA_DRAIN_PER_SECOND, player.equippedTrait as TraitId) * deltaTime);
         if (player.stamina <= 0) player.defending = false;
-      } else {
+      } else if (now >= (this.dodgePressure.get(sessionId)?.exhaustedUntil ?? 0)) {
         player.stamina = Math.min(player.maxStamina, player.stamina + staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId) * deltaTime);
       }
       if (this.movementPilotControllers.has(sessionId)) continue;
@@ -4409,7 +4433,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.defending = false;
     const lastDodgeAt = this.lastDodgeAt.get(client.sessionId) ?? 0;
     if (now - lastDodgeAt < 350) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "rate" });
-    if (player.stamina < 35) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "stamina" });
+    const previous = this.dodgePressure.get(client.sessionId);
+    if (now < (previous?.exhaustedUntil ?? 0)) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "rate" });
+    const chain = previous ? nextDodgeChain(previous.chain, previous.lastAt, now) : 0;
+    const cost = dodgeChainStaminaCost(chain);
+    if (player.stamina < cost) return this.reject(client, { requestId: parsed.data.requestId, action: "dodge", reason: "stamina" });
     this.cancelPendingPower(client.sessionId, "dodge");
     const direction = dodgeDirection(parsed.data.strafe, parsed.data.forward, parsed.data.yaw);
     const next = resolvePlayerMotion(
@@ -4421,8 +4449,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.y = next.y;
     player.z = next.z;
     player.yaw = parsed.data.yaw;
-    player.stamina -= 35;
+    player.stamina -= cost;
     player.invulnerableUntil = now + 320;
+    const exhaustedUntil = chain >= 1 ? now + DODGE_EXHAUSTION_MS : 0;
+    this.dodgePressure.set(client.sessionId, { chain, lastAt: now, exhaustedUntil });
+    this.activeDodgeWindows.set(client.sessionId, { startedAt: now, until: player.invulnerableUntil });
+    client.send("dodge:pressure", {
+      phase: exhaustedUntil > now ? "exhausted" : "dodge", cost, chain, exhaustedUntil, counterUntil: 0, staminaRestored: 0,
+    } satisfies DodgePressureUpdate);
     player.dodgeSequence += 1;
     this.lastDodgeAt.set(client.sessionId, now);
   }
@@ -5384,6 +5418,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const timing = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[pending.step - 1]
         ?? WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[0];
       if (!player || player.health <= 0 || !mob || !mob.alive || !timing) return;
+      const dodgeCounterBonus = now <= (this.dodgeCounterUntil.get(sessionId) ?? 0) ? 1 : 0;
+      if (dodgeCounterBonus > 0) this.dodgeCounterUntil.delete(sessionId);
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
       let perk: EquipmentPerkId | undefined;
       let perkStacks: number | undefined;
@@ -5406,7 +5442,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
           + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage,
         mob.armor,
-      ) + traitBonusDamage;
+      ) + traitBonusDamage + dodgeCounterBonus;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage);
       this.alertHitMob(mobId, sessionId, now, source);
@@ -5441,6 +5477,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         knockback: timing.knockback,
         momentumStacks: player.momentumStacks,
         traitBonusDamage,
+        dodgeCounterBonus,
         rootShockwave,
         perk,
         perkStacks,

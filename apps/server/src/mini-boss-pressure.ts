@@ -1,6 +1,7 @@
 export const MINI_BOSS_ENRAGE_MS = 45_000;
 export const MINI_BOSS_ORBIT_TRIGGER_RADIANS = Math.PI * .28;
 export const MINI_BOSS_ORBIT_COUNTER_MS = 3_000;
+export const MINI_BOSS_FEINT_DELAY_MS = 240;
 
 export interface OrbitPressureState {
   targetId: string;
@@ -67,4 +68,9 @@ export function predictedMiniBossAim(
 /** Being substantially under-levelled raises the cost of a mistake, without creating one-shot damage. */
 export function miniBossDamage(baseDamage: number, mobLevel: number, playerLevel: number): number {
   return Math.max(1, Math.round(baseDamage) + (mobLevel - playerLevel >= 3 ? 1 : 0));
+}
+
+/** A periodic held tell punishes dodge-on-animation while remaining fully readable. */
+export function miniBossWindupDelay(isMiniBoss: boolean, actionSequence: number): number {
+  return isMiniBoss && actionSequence % 4 === 2 ? MINI_BOSS_FEINT_DELAY_MS : 0;
 }

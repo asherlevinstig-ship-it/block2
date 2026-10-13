@@ -1,6 +1,7 @@
 import { z } from "zod";
 export { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints, bruteRockLanes } from "./brute-volley.js";
 export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, VENOM_RING_OFFSETS, MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, crystalMatriarchPattern, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterPattern, spitterShotOffsets, spitterShotEndpoints, spitterWarningLanes } from "./spitter-patterns.js";
+export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODGE_CHAIN_WINDOW_MS, DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "./dodge-pressure.js";
 
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
@@ -1147,6 +1148,8 @@ export interface CombatHit {
   knockback: number;
   momentumStacks: number;
   traitBonusDamage?: number;
+  /** Guaranteed bonus consumed by the first weapon hit after a perfect dodge. */
+  dodgeCounterBonus?: number;
   /** Rootbound finisher origin; clients render one shockwave from this hit. */
   rootShockwave?: boolean;
   /** Secondary enemy struck by the Rootbound finisher's area shockwave. */

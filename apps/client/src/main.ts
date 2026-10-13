@@ -10,6 +10,7 @@ import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
+import { DODGE_EXHAUSTION_MS, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
   type LootBagItem, type LootBagTier, type LootCollectAction, type LootCollectResult } from "@blockcraft/protocol";
@@ -63,7 +64,7 @@ import {
   beginDodgeVisualOffset,
   canRequestPredictedDodge,
   canSpendPredictedDodgeStamina,
-  DODGE_STAMINA_COST,
+  predictedDodgeRecoveryElapsed,
 } from "./dodge-input.js";
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
 import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
@@ -2367,6 +2368,8 @@ let localComboExpiresAt = 0;
 let localHitPauseUntil = 0;
 let localDodgeStartedAt: number | null = null;
 let localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
+let localDodgeChain = 0;
+let localDodgeExhaustedUntil = 0;
 let localPredictedDodgeStamina = 0;
 let localPredictedDodgeStaminaAt = 0;
 let localPredictedDodgeStaminaMaximum = 100;
@@ -2776,7 +2779,7 @@ function syncPredictedDodgeStamina(stamina: number, maximumStamina: number): voi
   } else {
     const recovered = advancePredictedDodgeStamina(
       localPredictedDodgeStamina,
-      now - localPredictedDodgeStaminaAt,
+      predictedDodgeRecoveryElapsed(localPredictedDodgeStaminaAt, now, localDodgeExhaustedUntil),
       maximumStamina,
     );
     // A delayed server patch must never refund stamina already reserved by a
@@ -5735,6 +5738,8 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localRecoveryVisualOffset = { x: 0, z: 0 };
   localDodgeVisualOffset = { x: 0, z: 0 };
   localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
+  localDodgeChain = 0;
+  localDodgeExhaustedUntil = 0;
   pendingPredictionFrames.length = 0;
   smoothedMovement = { x: 0, z: 0 };
   lastSentMovement = { x: 0, z: 0 };
@@ -5819,6 +5824,8 @@ function clearDefeatCombat(): void {
   localActionStartedAt = null;
   localDodgeStartedAt = null;
   localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
+  localDodgeChain = 0;
+  localDodgeExhaustedUntil = 0;
   localHitPauseUntil = 0;
   localComboStep = 0; localComboExpiresAt = 0;
   pendingPredictionFrames.length = 0;
@@ -6784,25 +6791,34 @@ function requestDodge(): void {
   if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
   const now = performance.now();
+  if (now < localDodgeExhaustedUntil) {
+    showCombatFeedback("EXHAUSTED", "hurt");
+    status.textContent = "Dodge exhausted · hold your ground for a moment.";
+    return;
+  }
   if (!canRequestPredictedDodge(now, localDodgeRequestedAt)) {
     status.textContent = "Dodge recovering...";
     return;
   }
+  const dodgeChain = nextDodgeChain(localDodgeChain, localDodgeRequestedAt, now);
+  const dodgeCost = dodgeChainStaminaCost(dodgeChain);
   if (localPredictedDodgeStaminaReady) {
     localPredictedDodgeStamina = advancePredictedDodgeStamina(
       localPredictedDodgeStamina,
-      now - localPredictedDodgeStaminaAt,
+      predictedDodgeRecoveryElapsed(localPredictedDodgeStaminaAt, now, localDodgeExhaustedUntil),
       localPredictedDodgeStaminaMaximum,
     );
     localPredictedDodgeStaminaAt = now;
-    if (!canSpendPredictedDodgeStamina(localPredictedDodgeStamina)) {
+    if (!canSpendPredictedDodgeStamina(localPredictedDodgeStamina, dodgeCost)) {
       showCombatFeedback("NO STAMINA", "hurt");
       status.textContent = "Not enough stamina to dodge.";
       return;
     }
-    localPredictedDodgeStamina -= DODGE_STAMINA_COST;
+    localPredictedDodgeStamina -= dodgeCost;
   }
   localDodgeRequestedAt = now;
+  localDodgeChain = dodgeChain;
+  if (dodgeChain >= 1) localDodgeExhaustedUntil = now + DODGE_EXHAUSTION_MS;
   if (localDefending) requestDefense(false);
   if (powerAimActive) cancelPowerAim();
   if (specialAimActive) cancelSpecialAim();
@@ -6840,7 +6856,7 @@ function requestDodge(): void {
     forward: direction.z,
     yaw: localFacingYaw,
   });
-  showCombatFeedback("DODGE", "dodge");
+  showCombatFeedback(dodgeChain >= 1 ? `DODGE −${dodgeCost} · EXHAUSTED` : `DODGE −${dodgeCost}`, "dodge");
   logMovementEvent(`DODGE ${direction.x.toFixed(2)}, ${direction.z.toFixed(2)}`);
   status.textContent = "Dodging · brief invulnerability active.";
 }
@@ -8898,6 +8914,18 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       : `${powerName} cancelled · cooldown refunded.`;
     logMovementEvent(`POWER CANCEL ${message.reason}`);
   });
+  room.onMessage("dodge:pressure", (message: DodgePressureUpdate) => {
+    localDodgeChain = message.chain;
+    const serverNow = performance.now() + serverClock.offset;
+    localDodgeExhaustedUntil = performance.now() + Math.max(0, message.exhaustedUntil - serverNow);
+    if (message.phase !== "perfect") return;
+    localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
+    localDodgeChain = 0;
+    localDodgeExhaustedUntil = 0;
+    showCombatFeedback("PERFECT DODGE · COUNTER +1", "dodge");
+    status.textContent = `Perfect dodge · +${message.staminaRestored} stamina · your next hit gains +1 damage.`;
+    logMovementEvent(`PERFECT_DODGE counterUntil=${message.counterUntil}`);
+  });
   room.onMessage("combat:hit", (message: CombatHit) => {
     const mob = mobVisuals.get(message.mobId);
     const rangedHit = confirmedRangedHit(message.mainHandId, message.damage, message.attackerId === room?.sessionId);
@@ -8932,6 +8960,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     logMovementEvent(`HIT ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
     if (message.attackerId === room?.sessionId) {
       updateMomentum(message.momentumStacks);
+      if ((message.dodgeCounterBonus ?? 0) > 0) showCombatFeedback(`DODGE COUNTER +${message.dodgeCounterBonus}`, "dodge");
       const comboStep = message.comboStep >= 1 && message.comboStep <= 3 ? message.comboStep : localActionStep || 1;
       if (!rangedHit && mob && message.damage > 0) {
         const position = mob.entity.getPosition().clone(); position.y += mob.healthBarY + .35;
@@ -9144,6 +9173,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       localNetworkVisualOffset = { x: 0, z: 0 };
       localPlayer.setPosition(authoritativeLocalPosition);
       localDodgeStartedAt = null;
+      if (message.reason === "rate") localDodgeExhaustedUntil = Math.max(localDodgeExhaustedUntil, performance.now() + 500);
+      if (message.reason === "stamina") localDodgeChain = 0;
       localPlayerVisual.setLocalEulerAngles(0, 0, 0);
       showCombatFeedback(message.reason === "stamina" ? "NO STAMINA" : "DODGE BLOCKED", "hurt");
     }

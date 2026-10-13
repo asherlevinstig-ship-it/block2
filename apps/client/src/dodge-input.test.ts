@@ -7,6 +7,7 @@ import {
   canSpendPredictedDodgeStamina,
   DODGE_REQUEST_INTERVAL_MS,
   DODGE_STAMINA_COST,
+  predictedDodgeRecoveryElapsed,
 } from "./dodge-input.js";
 
 describe("dodge input prediction", () => {
@@ -45,5 +46,16 @@ describe("dodge input prediction", () => {
     }
     expect(stamina).toBeCloseTo(13.9);
     expect(canSpendPredictedDodgeStamina(stamina)).toBe(false);
+  });
+
+  it("accepts the authoritative escalating cost", () => {
+    expect(canSpendPredictedDodgeStamina(44.99, 45)).toBe(false);
+    expect(canSpendPredictedDodgeStamina(45, 45)).toBe(true);
+  });
+
+  it("does not predict stamina recovery during exhaustion", () => {
+    expect(predictedDodgeRecoveryElapsed(1_000, 1_700, 1_900)).toBe(0);
+    expect(predictedDodgeRecoveryElapsed(1_000, 2_100, 1_900)).toBe(200);
+    expect(predictedDodgeRecoveryElapsed(2_000, 2_500, 1_900)).toBe(500);
   });
 });
