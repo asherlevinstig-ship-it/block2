@@ -56,6 +56,7 @@ import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow } from "./camera-follow.js";
+import { canRequestPredictedDodge } from "./dodge-input.js";
 import { animateMobArt, createMobArt, setMobArtEnraged, setMobArtDefeated, type MobArtRig } from "./mob-art";
 import { defeatDuration, mobDefeatPose, lootSourceMob, lootMarkerScale } from "./mob-defeat.js";
 import { matriarchBodyPose, matriarchRecoil } from "./matriarch-art.js";
@@ -2305,6 +2306,7 @@ let localComboStep = 0;
 let localComboExpiresAt = 0;
 let localHitPauseUntil = 0;
 let localDodgeStartedAt: number | null = null;
+let localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
 let localDefending = false;
 let localMomentumStacks = 0;
 let localTraitId: TraitId = "momentum";
@@ -5577,6 +5579,7 @@ function renderBootstrap(payload: WorldBootstrap): void {
   localVisualVerticalOffset = 0;
   localNetworkVisualOffset = { x: 0, z: 0 };
   localRecoveryVisualOffset = { x: 0, z: 0 };
+  localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
   pendingPredictionFrames.length = 0;
   smoothedMovement = { x: 0, z: 0 };
   lastSentMovement = { x: 0, z: 0 };
@@ -5660,6 +5663,7 @@ function clearDefeatCombat(): void {
   setDefensePresentation(false);
   localActionStartedAt = null;
   localDodgeStartedAt = null;
+  localDodgeRequestedAt = Number.NEGATIVE_INFINITY;
   localHitPauseUntil = 0;
   localComboStep = 0; localComboExpiresAt = 0;
   pendingPredictionFrames.length = 0;
@@ -6562,6 +6566,12 @@ function requestAttack(): void {
 function requestDodge(): void {
   if (!defeatScreen.hidden) return;
   if (!room || !worldReady) return;
+  const now = performance.now();
+  if (!canRequestPredictedDodge(now, localDodgeRequestedAt)) {
+    status.textContent = "Dodge recovering...";
+    return;
+  }
+  localDodgeRequestedAt = now;
   if (localDefending) requestDefense(false);
   if (powerAimActive) cancelPowerAim();
   if (specialAimActive) cancelSpecialAim();
@@ -6586,7 +6596,7 @@ function requestDodge(): void {
   );
   if (defeatScreen.hidden) localPlayer.setPosition(predicted.x, predicted.y, predicted.z);
   updateActiveChunkMeshes(predicted);
-  localDodgeStartedAt = performance.now();
+  localDodgeStartedAt = now;
   dodgeSequence += 1;
   room.send("dodge", {
     requestId: `dodge-${dodgeSequence}`,
@@ -7085,7 +7095,7 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyF") beginSpecialAim();
   if (event.code === "Space") {
     event.preventDefault();
-    requestDodge();
+    if (!event.repeat) requestDodge();
   }
 });
 window.addEventListener("keyup", event => {
@@ -8850,6 +8860,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     );
     if (message.action === "move") localPlayer.setPosition(authoritativeLocalPosition);
     if (message.action === "dodge") {
+      const rejectedPosition = localPlayer.getPosition();
+      localRecoveryVisualOffset = {
+        x: localRecoveryVisualOffset.x + rejectedPosition.x - authoritativeLocalPosition.x + localNetworkVisualOffset.x,
+        z: localRecoveryVisualOffset.z + rejectedPosition.z - authoritativeLocalPosition.z + localNetworkVisualOffset.z,
+      };
+      localNetworkVisualOffset = { x: 0, z: 0 };
       localPlayer.setPosition(authoritativeLocalPosition);
       localDodgeStartedAt = null;
       localPlayerVisual.setLocalEulerAngles(0, 0, 0);
