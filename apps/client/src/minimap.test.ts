@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeEliteMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, discoverAshenSpire, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
+import { activeEliteMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
@@ -32,6 +32,13 @@ describe("north-up explorer minimap", () => {
     expect(discoverAshenSpire(ASHEN_SPIRE_WAYPOINT, known)).toBe(false);
     expect(knownWaypoints(known)).toContainEqual(ASHEN_SPIRE_WAYPOINT);
     expect(parseDiscoveries(JSON.stringify([...known]))).toEqual(known);
+  });
+  it("shows the permanent Warden Gate waypoint only after the saved first clear", () => {
+    const known = new Set<string>();
+    expect(knownWaypoints(known, false)).not.toContainEqual(WARDEN_GATE_WAYPOINT);
+    expect(knownWaypoints(known, true)).toContainEqual(WARDEN_GATE_WAYPOINT);
+    const point = mapPoint(WARDEN_GATE_WAYPOINT, WARDEN_GATE_WAYPOINT);
+    expect(waypointAtMapPoint(WARDEN_GATE_WAYPOINT, point.x, point.y, known, true)).toEqual(WARDEN_GATE_WAYPOINT);
   });
   it("reveals the champion only when alive and nearby on the surface", () => {
     const known = new Set<string>(); const champion = { ...CHAMPION_WAYPOINT, alive: true };

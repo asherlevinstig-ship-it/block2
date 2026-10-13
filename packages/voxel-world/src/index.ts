@@ -112,6 +112,7 @@ export const FRONTIER_BRUTE_COVER = [
 ] as const;
 export const REALM_WARDEN_ARENA = { minX: 80, maxX: 94, minZ: 25, maxZ: 39 } as const;
 export const REALM_WARDEN_HOME = { x: 87.5, y: 8, z: 32.5 } as const;
+export const REALM_WARDEN_GATE_POSITION = { x: 87.5, y: 8, z: 41.5 } as const;
 export const REALM_WARDEN_COVER = [
   { x: 82, z: 28, height: 3 }, { x: 92, z: 28, height: 2 },
   { x: 82, z: 36, height: 2 }, { x: 92, z: 36, height: 3 },

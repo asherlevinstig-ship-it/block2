@@ -53,6 +53,7 @@ export interface PlayerSaveData {
   silverDepthsBestTimeMs?: number;
   miningExpeditionStage?: number;
   silverDepthsStage?: number;
+  realmWardenCleared?: boolean;
   inventory: Partial<Record<ItemId, number>>;
   storage?: Partial<Record<ItemId, number>>;
   recoveryBags?: RecoveryBagData[];
@@ -114,6 +115,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     silverDepthsBestTimeMs: player.silverDepthsBestTimeMs,
     miningExpeditionStage: player.miningExpeditionStage,
     silverDepthsStage: player.silverDepthsStage,
+    realmWardenCleared: player.realmWardenCleared,
     inventory,
     storage,
     recoveryBags: snapshotRecoveryBags(player),
@@ -190,6 +192,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     miningExpeditionStage: Math.floor(finiteNumber(value.miningExpeditionStage,
       (inventory.miners_lantern ?? 0) + (storage.miners_lantern ?? 0) > 0 ? 7 : 0, 0, 8)),
     silverDepthsStage: Math.floor(finiteNumber(value.silverDepthsStage, 0, 0, 7)),
+    realmWardenCleared: value.realmWardenCleared === true,
     inventory,
     storage,
     mainHandId,
@@ -230,6 +233,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;
   player.miningExpeditionStage = save.miningExpeditionStage ?? 0;
   player.silverDepthsStage = save.silverDepthsStage ?? 0;
+  player.realmWardenCleared = save.realmWardenCleared === true;
   player.stamina = save.stamina;
   restoreRecoveryBags(player, save.recoveryBags ?? []);
   for (const [itemId, quantity] of Object.entries(save.inventory) as [ItemId, number][]) {

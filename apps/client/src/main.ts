@@ -1737,6 +1737,7 @@ interface NetworkPlayer {
   blacksmithUpgrades: number;
   silverDepthsRunStage: number;
   silverDepthsWing: string;
+  realmWardenCleared: boolean;
   dodgeSequence: number;
   invulnerableUntil: number;
   mainHandId: string;
@@ -5478,9 +5479,10 @@ function updateForestPortals(): void {
       const victory = id === "forest-victory";
       const depths = id.startsWith("depths-");
       const ember = id.startsWith("ember-");
-      const frame = coloredMaterial(ember ? new pc.Color(.085, .07, .065) : new pc.Color(.2, .12, .3));
+      const wardenGate = id === "warden-gate";
+      const frame = coloredMaterial(ember ? new pc.Color(.085, .07, .065) : wardenGate ? new pc.Color(.18, .16, .1) : new pc.Color(.2, .12, .3));
       const trim = ember ? coloredMaterial(new pc.Color(.34, .14, .07)) : frame;
-      const light = powerMaterial(ember ? new pc.Color(1, .19, .025) : depths ? new pc.Color(.64, .28, 1)
+      const light = powerMaterial(ember ? new pc.Color(1, .19, .025) : wardenGate ? new pc.Color(1, .72, .18) : depths ? new pc.Color(.64, .28, 1)
         : portal.kind === "entry" ? new pc.Color(.45, 1, .65) : victory ? new pc.Color(1, .88, .42) : new pc.Color(1, .75, .25), victory || depths || ember ? .82 : .6);
       addBox(root, "left-arch", frame, [.35, 2.9, .4], [-1, 1.45, 0]);
       addBox(root, "right-arch", frame, [.35, 2.9, .4], [1, 1.45, 0]);
@@ -5529,6 +5531,9 @@ function updateForestPortals(): void {
     visual.state = portal;
     const distance = Math.hypot(player.x - portal.x, player.z - portal.z);
     const active = worldReady && (portal.expiresAt === 0 || now < portal.expiresAt);
+    const ownState = (room?.state as { players?: Map<string, NetworkPlayer> } | undefined)?.players?.get(room?.sessionId ?? "");
+    const wardenGate = id === "warden-gate";
+    const wardenGateUnlocked = ownState?.realmWardenCleared === true;
     visual.root.enabled = active && distance < 45;
     const victory = id === "forest-victory";
     const animationNow = performance.now();
@@ -5536,6 +5541,8 @@ function updateForestPortals(): void {
     const emberUnlocked = true;
     visual.glow.setLocalScale(victory ? 1.08 : visual.ember ? .94 + Math.sin(animationNow / 260) * .045 : 1,
       visual.ember ? .98 + Math.sin(animationNow / 390) * .035 : .96 + pulse, victory ? 1.08 : 1);
+    visual.glow.enabled = !wardenGate || wardenGateUnlocked;
+    if (wardenGate) visual.runes.forEach(rune => { rune.enabled = wardenGateUnlocked; });
     if (visual.ember) {
       visual.orbit?.setLocalEulerAngles(0, 0, animationNow * .018);
       visual.portalLight?.light && (visual.portalLight.light.intensity = emberUnlocked ? 2.25 + Math.sin(animationNow / 240) * .35 : .65);
@@ -5554,15 +5561,17 @@ function updateForestPortals(): void {
     visual.label.hidden = !active || distance > 25 || screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height;
     visual.label.style.left = `${rect.left + screen.x}px`; visual.label.style.top = `${rect.top + screen.y}px`;
     const testEntry = id === "ember-entry" || id === "depths-entry";
-    const reachable = testEntry
+    const reachable = wardenGate && !wardenGateUnlocked ? false : testEntry
       ? defeatScreen.hidden && active && Math.abs(player.y - portal.y) <= 3 && distance <= 3.5
       : canUseForestPortal({ ...player, health: defeatScreen.hidden ? 1 : 0 }, portal, now);
     visual.label.disabled = !reachable;
-    const portalName = id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
+    const portalName = id === "warden-gate" ? (wardenGateUnlocked ? "WARDEN GATE · ASCENDANT CHALLENGE" : "WARDEN GATE · LOCKED")
+      : id === "ember-entry" ? "THE EMBER VAULT" : id === "ember-return" ? "RETURN TO FRONTIER"
       : id === "depths-entry" ? "THE SILVER DEPTHS" : id === "depths-return" ? "RETURN TO TOWN"
       : portal.kind === "entry" ? "FOREST DUNGEON" : victory ? "VICTORY PORTAL" : "RETURN TO WILDERNESS";
     const testState = id === "depths-entry" ? "\nE TO ENTER / ASSEMBLE PARTY" : testEntry ? "\nTEST ACCESS · E TO ENTER" : "";
-    const text = `${portalName}${testState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !testState ? ` · E TO ${portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
+    const text = `${portalName}${testState}${portal.expiresAt ? ` · ${Math.max(0, Math.ceil((portal.expiresAt - now) / 1000))}s` : ""}${reachable && !testState ? ` · E TO ${wardenGate ? "CHALLENGE" : portal.kind === "entry" ? "ENTER" : "RETURN"}` : ""}`;
+    visual.label.classList.toggle("locked", wardenGate && !wardenGateUnlocked);
     if (visual.label.textContent !== text) visual.label.textContent = text;
     if (active && reachable && distance < nearest) { nearest = distance; nearbyForestPortal = id; }
   });
@@ -6179,7 +6188,9 @@ function updateBossHud(now: number): void {
   const position = localPlayer.getPosition();
   const inSilverDepths = position.y < 5 && position.x >= 59 && position.x <= 78 && position.z >= 3 && position.z <= 16;
   const trackedMiniBossId = currentWorldObjective?.kind === "miniboss" ? currentWorldObjective.targetMobId : "";
-  const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian" : activeRealmEventId || trackedMiniBossId || "greenwood-venom-matriarch";
+  const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian"
+    : isInRealmWardenArena(position.x, position.z) && mobVisuals.has("realm-stone-warden") ? "realm-stone-warden"
+      : activeRealmEventId || trackedMiniBossId || "greenwood-venom-matriarch";
   const boss = mobVisuals.get(nextBossId)?.state;
   if (activeBossId !== nextBossId) {
     activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = ""; displayedRealmBossPhase = 1;
@@ -8363,6 +8374,7 @@ app.on("update", (dt: number) => {
 
   updatePerformanceMetrics(now);
   if (worldReady) {
+    const localNetworkPlayer = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(room?.sessionId ?? "");
     updateSilverDepthsRoute(now);
     if (!visibleDepthsRoute) updateCaveNavigation(localPlayer.getPosition(), now);
     const dungeonRoute = visibleDepthsRoute;
@@ -8378,6 +8390,7 @@ app.on("update", (dt: number) => {
         title: depthsCheckpointStatus?.phase === "waiting" ? "Party checkpoint" : dungeonRoute.title }, teammates });
     } else minimap.setDungeonState(null);
     minimap.setChampionState(mobVisuals.get("frontier-brute-west")?.state ?? null);
+    minimap.setWardenGateUnlocked(localNetworkPlayer?.realmWardenCleared === true);
     minimap.setEliteStates([...mobVisuals.entries()].map(([id, visual]) => ({ id, name: visual.state.name,
       x: visual.state.x, y: visual.state.y, z: visual.state.z, alive: visual.state.alive,
       isElite: visual.state.isElite, isMiniBoss: visual.state.isMiniBoss })));
@@ -8670,6 +8683,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     } else if (activeRealmEventId && update.phase === "cooldown" && realmEventDisplayUntil === 0) {
       realmEventDisplayUntil = performance.now() + 4_000;
     } else if (realmEventDisplayUntil === 0) activeRealmEventId = "";
+  });
+  room.onMessage("realm:repeat", (update: { active: boolean }) => {
+    if (update.active) { activeRealmEventId = "realm-stone-warden"; realmEventDisplayUntil = 0; }
+    else if (activeRealmEventId === "realm-stone-warden") realmEventDisplayUntil = performance.now() + 4_000;
   });
   room.onMessage("trade:update", update => {
     if (update) playerInteractionUI.close();

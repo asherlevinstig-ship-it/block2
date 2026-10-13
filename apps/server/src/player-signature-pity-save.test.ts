@@ -12,4 +12,13 @@ describe("signature pity persistence", () => {
     const old = snapshotPlayerSave(new PlayerState()); delete old.signaturePity;
     expect(parsePlayerSave(JSON.stringify(old))?.signaturePity).toEqual({});
   });
+
+  it("persists the Realm Warden first-clear gate unlock and defaults older saves to locked", () => {
+    const player = new PlayerState(); player.realmWardenCleared = true;
+    const saved = parsePlayerSave(JSON.stringify(snapshotPlayerSave(player)))!;
+    const restored = new PlayerState(); applyPlayerSave(restored, saved);
+    expect(restored.realmWardenCleared).toBe(true);
+    const old = snapshotPlayerSave(new PlayerState()); delete old.realmWardenCleared;
+    expect(parsePlayerSave(JSON.stringify(old))?.realmWardenCleared).toBe(false);
+  });
 });

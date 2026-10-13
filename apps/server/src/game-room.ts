@@ -197,7 +197,7 @@ import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards, ownsBlacksmithUpgrade, ownsDepthsReward } from "./blacksmith.js";
-import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInRealmWardenArena, isInStoneBruteArena } from "@blockcraft/voxel-world";
+import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_GATE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInRealmWardenArena, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -432,6 +432,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private lootDropSequence = 0;
   private realmRewardLandingIndex = 0;
   private realmBossEmptySince = 0;
+  private realmWardenRepeatActive = false;
+  private realmWardenRepeatAvailableAt = 0;
   private worldSeed = "blockcraft-dev";
   private roomKind: "overworld" | "silver-depths" = "overworld";
   private silverInstanceKey = "";
@@ -497,6 +499,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const emberEntry = new ForestPortalState();
     Object.assign(emberEntry, EMBER_VAULT_PORTAL_POSITION, { kind: "entry" });
     this.state.portals.set("ember-entry", emberEntry);
+    const wardenGate = new ForestPortalState();
+    Object.assign(wardenGate, REALM_WARDEN_GATE_POSITION, { kind: "warden-gate" });
+    this.state.portals.set("warden-gate", wardenGate);
     if (this.pendingWorldDeltaWrites.size) void this.flushWorldDeltaWrites();
     for (const spawn of WILDERNESS_ENCOUNTERS) this.registerMob(spawn.id, spawn.archetype, spawn);
     for (const pack of ROAMING_PACKS) for (let index = 0; index < pack.offsets.length; index++) {
@@ -626,7 +631,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("depths:lobby", (client, payload: unknown) => this.handleSilverDepthsLobby(client, payload));
     this.onMessage("portal:use", (client, payload: unknown) => {
       const id = payload && typeof payload === "object" && "id" in payload ? String(payload.id) : "";
-      if (id.startsWith("depths-")) this.useSilverDepthsPortal(client, payload);
+      if (id === "warden-gate") this.useRealmWardenGate(client, payload);
+      else if (id.startsWith("depths-")) this.useSilverDepthsPortal(client, payload);
       else if (id.startsWith("ember-")) this.useEmberVaultPortal(client, payload);
       else this.useForestPortal(client, payload);
     });
@@ -1834,6 +1840,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
     const wasElite = mob.isElite;
+    const realmRepeatVictory = mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive;
     for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
     const credited = isRealmEventId(mobId)
       ? this.combatContributions.eligiblePersistent(mobId, mob, this.state.players)
@@ -1873,6 +1880,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!fixedReward && !this.normalLootCadence.record(cadenceId, Math.random())) continue;
       this.spawnLootDrops(mobId, mob, now, playerId);
       recipientsWithLoot.add(playerId);
+    }
+    if (mobId === REALM_WARDEN_ID) for (const playerId of recipients) {
+      const player = this.state.players.get(playerId);
+      if (!player) continue;
+      const firstClear = !player.realmWardenCleared;
+      player.realmWardenCleared = true;
+      if (firstClear) this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
+        "FIRST REALM CLEAR · the permanent Warden Gate has awakened at the south edge of the court.");
     }
     if (mobId === "buried-chamber-brute") for (const playerId of recipients) this.advanceFirstExpedition(playerId, "defeated_warden");
     this.advanceSilverDepthsEncounter(mobId);
@@ -1956,8 +1971,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.openTemporaryForestPortal(now);
     }
     if (isRealmEventId(mobId)) {
-      const completion = this.realmEvents.complete(mobId, now);
+      const completion = realmRepeatVictory ? null : this.realmEvents.complete(mobId, now);
       const opened = completion?.definition.opensForestPortal ? this.openTemporaryForestPortal(now) : false;
+      if (realmRepeatVictory) {
+        this.realmWardenRepeatActive = false;
+        this.realmWardenRepeatAvailableAt = now + 60_000;
+        this.broadcast("realm:repeat", { active: false });
+        for (const playerId of recipients) this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
+          "ASCENDANT WARDEN DEFEATED · enhanced personal caches have landed. The Warden Gate recovers for 60 seconds.");
+      }
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
         if (!player || !completion || Math.abs(player.y - completion.definition.position.y) > 2.5
@@ -2173,12 +2195,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private advanceRealmBossAbandonment(now: number): void {
     const mob = this.state.mobs.get(REALM_WARDEN_ID);
-    if (this.realmEvents.phase !== "active" || !mob?.alive) { this.realmBossEmptySince = 0; return; }
+    if ((this.realmEvents.phase !== "active" && !this.realmWardenRepeatActive) || !mob?.alive) { this.realmBossEmptySince = 0; return; }
     const participantPresent = [...this.state.players.values()].some(player => player.health > 0
       && Math.abs(player.y - REALM_WARDEN_HOME.y) <= 2.5 && isInRealmWardenArena(player.x, player.z));
     if (participantPresent) { this.realmBossEmptySince = 0; return; }
     if (!this.realmBossEmptySince) { this.realmBossEmptySince = now; return; }
-    if (now - this.realmBossEmptySince < 12_000 || !this.realmEvents.abandon(REALM_WARDEN_ID, now)) return;
+    if (now - this.realmBossEmptySince < 12_000) return;
+    if (!this.realmWardenRepeatActive && !this.realmEvents.abandon(REALM_WARDEN_ID, now)) return;
+    if (this.realmWardenRepeatActive) {
+      this.realmWardenRepeatActive = false;
+      this.realmWardenRepeatAvailableAt = now + 15_000;
+      this.broadcast("realm:repeat", { active: false });
+    }
     this.realmBossEmptySince = 0;
     this.state.mobs.delete(REALM_WARDEN_ID);
     this.mobHomes.delete(REALM_WARDEN_ID);
@@ -2243,6 +2271,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
     const items = normalizeLootBagItems([
       ...baseDrops,
+      ...(mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive
+        ? [{ itemId: "moonstone" as ItemId, quantity: 2 }, { itemId: "silver_ore" as ItemId, quantity: 6 }]
+        : []),
       ...areaRelicDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
@@ -3429,6 +3460,49 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       console.warn("Admin entitlement could not be resolved.", error);
       return false;
     }
+  }
+
+  private useRealmWardenGate(client: Client, payload: unknown): void {
+    if (!payload || typeof payload !== "object" || !("id" in payload) || payload.id !== "warden-gate") return;
+    const player = this.state.players.get(client.sessionId), portal = this.state.portals.get("warden-gate"), now = Date.now();
+    if (!player || !portal || !canUseForestPortal(player, portal, now) || !hasCombatLineOfSight(player, portal, this.readWorldBlock)) return;
+    if (!player.realmWardenCleared) {
+      client.send("portal:notice", "WARDEN GATE LOCKED · defeat the Realm Stone Warden once to awaken this challenge.");
+      return;
+    }
+    const existing = this.state.mobs.get(REALM_WARDEN_ID);
+    if (this.realmWardenRepeatActive || existing?.alive) {
+      client.send("portal:notice", "WARDEN GATE ACTIVE · the Ascendant Warden is already waiting in the court.");
+      return;
+    }
+    if (now < this.realmWardenRepeatAvailableAt) {
+      client.send("portal:notice", `WARDEN GATE RECOVERING · available in ${Math.ceil((this.realmWardenRepeatAvailableAt - now) / 1000)} seconds.`);
+      return;
+    }
+    const definition = realmEventDefinition(REALM_WARDEN_ID)!;
+    const nearbyPlayers = [...this.state.players.values()].filter(candidate => candidate.health > 0
+      && Math.abs(candidate.y - REALM_WARDEN_HOME.y) <= 2.5
+      && Math.hypot(candidate.x - REALM_WARDEN_HOME.x, candidate.z - REALM_WARDEN_HOME.z) <= REALM_EVENT_SCALING_RADIUS).length;
+    const scale = realmEventScale(nearbyPlayers, definition);
+    this.registerMob(definition.id, definition.archetype, definition.position);
+    const mob = this.state.mobs.get(definition.id)!;
+    mob.name = "Ascendant Realm Stone Warden";
+    mob.isChampion = true;
+    mob.health = mob.maxHealth = Math.min(120, Math.ceil(scale.maxHealth * 1.35));
+    mob.attackPattern = "rocks";
+    mob.attackDamage = Math.max(4, scale.attackDamage + 1);
+    mob.rewardMultiplier = Math.max(3.5, scale.rewardMultiplier + 1);
+    mob.level = Math.min(20, enemyLevelForTier(mob.difficultyTier, true, true) + 2);
+    mob.materializeUntil = now + 2_500;
+    mob.combatState = "recover";
+    mob.stateUntil = mob.materializeUntil;
+    this.realmBossPhases.set(definition.id, 1);
+    this.realmRewardLandingIndex = 0;
+    this.realmBossEmptySince = 0;
+    this.realmWardenRepeatActive = true;
+    this.broadcast("realm:repeat", { active: true });
+    this.broadcast("chat:notice", "WARDEN GATE OPENED · the Ascendant Realm Stone Warden has awakened. Improved personal rewards await contributors.");
+    this.refreshNearbyObjectives();
   }
 
   private useForestPortal(client: Client, payload: unknown): void {

@@ -1,4 +1,4 @@
-import { ASHEN_SPIRE_POSITION, Block, RENEWABLE_MINERAL_DEPOSITS, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
+import { ASHEN_SPIRE_POSITION, Block, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
 import { ITEM_DEFINITIONS, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
@@ -62,6 +62,7 @@ export type Waypoint = Position & { y: number; id: string; name: string };
 export const HOME_WAYPOINT: Waypoint = { x: TOWN_CENTER_X, z: TOWN_CENTER_Z, y: SURFACE_HEIGHT + 1, id: "home", name: "Town of Beginnings" };
 export const CHAMPION_WAYPOINT: Waypoint = { x: -48.5, y: SURFACE_HEIGHT + 1, z: 12.5, id: "frontier-brute-west", name: "Frontier Stone Champion" };
 export const ASHEN_SPIRE_WAYPOINT: Waypoint = { ...ASHEN_SPIRE_POSITION, id: "ashen-spire", name: "Ashen Reach Spire" };
+export const WARDEN_GATE_WAYPOINT: Waypoint = { ...REALM_WARDEN_GATE_POSITION, id: "warden-gate", name: "Warden Gate · Ascendant Challenge" };
 export function discoverAshenSpire(player: Position & { y: number }, discovered: Set<string>): boolean {
   if (discovered.has(ASHEN_SPIRE_WAYPOINT.id) || player.y < SURFACE_HEIGHT - 1
     || Math.hypot(player.x - ASHEN_SPIRE_WAYPOINT.x, player.z - ASHEN_SPIRE_WAYPOINT.z) > 18) return false;
@@ -72,15 +73,16 @@ export function discoverChampion(player: Position & { y: number }, champion: (Po
     || Math.abs(player.y - champion.y) > 2 || Math.hypot(player.x - champion.x, player.z - champion.z) > DISCOVERY_RADIUS) return false;
   discovered.add(CHAMPION_WAYPOINT.id); return true;
 }
-export function knownWaypoints(discovered: Set<string>): Waypoint[] {
+export function knownWaypoints(discovered: Set<string>, wardenGateUnlocked = false): Waypoint[] {
   return [HOME_WAYPOINT, { ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" }, MINE_ENTRANCE,
     ...(discovered.has(CHAMPION_WAYPOINT.id) ? [CHAMPION_WAYPOINT] : []),
     ...(discovered.has(ASHEN_SPIRE_WAYPOINT.id) ? [ASHEN_SPIRE_WAYPOINT] : []),
+    ...(wardenGateUnlocked ? [WARDEN_GATE_WAYPOINT] : []),
     ...MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).map(point => ({ ...point, y: SURFACE_HEIGHT + 1, id: depositKey(point), name: `${point.block === Block.SilverOre ? "Silver" : "Iron"} deposit (${point.x}, ${point.z})` }))];
 }
-export function waypointAtMapPoint(player: Position, x: number, y: number, discovered: Set<string>): Waypoint | null {
+export function waypointAtMapPoint(player: Position, x: number, y: number, discovered: Set<string>, wardenGateUnlocked = false): Waypoint | null {
   let closest: Waypoint | null = null, distance = 14;
-  for (const target of knownWaypoints(discovered)) {
+  for (const target of knownWaypoints(discovered, wardenGateUnlocked)) {
     const p = mapPoint(player, target);
     if (target.id !== "home" && p.offscreen) continue;
     const delta = Math.hypot(p.x - x, p.y - y);
@@ -132,6 +134,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setChampionState(champion: (Position & { y: number; alive: boolean }) | null): void;
   setEliteStates(elites: EliteMapTarget[]): void;
   setThreatState(threat: ThreatMapTarget | null): void;
+  setWardenGateUnlocked(unlocked: boolean): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
@@ -156,6 +159,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let cachedRouteKey = "";
   const dungeonPings = new Map<string, SilverDepthsPing & { expiresAt: number }>();
   let dungeonCache: SilverDepthsCacheStatus | null = null;
+  let wardenGateUnlocked = false;
   let pingHandler: ((x: number, z: number) => void) | null = null;
   const panel = canvas.closest<HTMLElement>("#minimap");
   const surfaceButton = document.querySelector<HTMLButtonElement>("#minimap-surface")!;
@@ -180,10 +184,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     if (target) { guideName.textContent = target.name; guideDistance.textContent = "Guiding…"; }
   };
   const refreshDestinations = () => {
-    const targets = knownWaypoints(discovered);
+    const targets = knownWaypoints(discovered, wardenGateUnlocked);
     if (destinations.options.length !== targets.length + 1) destinations.replaceChildren(new Option("Choose a destination…", ""), ...targets.map(target => new Option(target.name, target.id)));
     targets.forEach((target, index) => {
-      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" || target.id === CHAMPION_WAYPOINT.id || target.id === ASHEN_SPIRE_WAYPOINT.id ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
+      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" || target.id === CHAMPION_WAYPOINT.id || target.id === ASHEN_SPIRE_WAYPOINT.id || target.id === WARDEN_GATE_WAYPOINT.id ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
     });
     destinations.value = waypoint?.id ?? "";
   };
@@ -202,7 +206,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     });
   }
   destinations.addEventListener("change", () => {
-    setWaypoint(knownWaypoints(discovered).find(target => target.id === destinations.value) ?? null);
+    setWaypoint(knownWaypoints(discovered, wardenGateUnlocked).find(target => target.id === destinations.value) ?? null);
     destinations.blur();
   });
   document.querySelector<HTMLButtonElement>("#waypoint-clear")!.addEventListener("click", () => setWaypoint(null));
@@ -216,7 +220,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (point) pingHandler?.(point.x, point.z);
       return;
     }
-    const target = waypointAtMapPoint(lastPlayer, x, y, discovered);
+    const target = waypointAtMapPoint(lastPlayer, x, y, discovered, wardenGateUnlocked);
     if (target) setWaypoint(target);
   });
   const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -225,6 +229,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     setChampionState(value) { champion = value; },
     setEliteStates(values) { elites = values; },
     setThreatState(value) { threat = value; lastUpdate = -Infinity; },
+    setWardenGateUnlocked(unlocked) {
+      if (wardenGateUnlocked === unlocked) return;
+      wardenGateUnlocked = unlocked; refreshDestinations(); lastUpdate = -Infinity;
+    },
     setCaveState(state) { caveState = state; },
     setDungeonState(state) {
       dungeonState = state;
@@ -437,6 +445,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         marker(TOWN_BLACKSMITH_STALL_POSITION, "SMITH", "#ffd173", true);
         if (discovered.has(CHAMPION_WAYPOINT.id)) marker(CHAMPION_WAYPOINT, "♛ CHAMP", "#ffcf65", true);
         if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) marker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", true);
+        if (wardenGateUnlocked) marker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", true, true);
         for (const elite of activeEliteMapTargets(player, elites)) marker(elite, "★ ELITE", "#e890ff", false, true);
       }
       for (const leader of discoveredMiniBossTargets(elites, discovered)) if (Math.abs(leader.y - player.y) <= 2.5)
