@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeEliteMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
+import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
@@ -11,8 +11,8 @@ describe("north-up explorer minimap", () => {
   });
   it("shows living same-floor elites without permanently discovering them", () => {
     const player = { x: 0, y: 8, z: 0 };
-    const elite = { id: "elite", name: "Volatile Spitter", x: 40, y: 8, z: 0, alive: true, isElite: true };
-    expect(activeEliteMapTargets(player, [elite, { ...elite, id: "dead", alive: false }, { ...elite, id: "below", y: 3 }]))
+    const elite = { id: "elite", name: "Volatile Spitter", x: 20, y: 8, z: 0, alive: true, isElite: true };
+    expect(activeEliteMapTargets(player, [elite, { ...elite, id: "dead", alive: false }, { ...elite, id: "below", y: 3 }, { ...elite, id: "distant", x: 40 }]))
       .toEqual([elite]);
   });
   it("permanently reveals an area leader only after the player approaches it", () => {
@@ -23,6 +23,22 @@ describe("north-up explorer minimap", () => {
     expect(discoverMiniBosses({ x: 11, y: 8, z: 0 }, [leader], known)).toBe(true);
     expect(discoveredMiniBossTargets([{ ...leader, alive: false }], known)).toEqual([{ ...leader, alive: false }]);
     expect(parseDiscoveries(JSON.stringify([...known]))).toEqual(new Set([miniBossDiscoveryKey(leader.id)]));
+    expect(nearbyDiscoveredMiniBossTargets({ x: 0, y: 8, z: 0 }, [leader], known)).toEqual([leader]);
+    expect(nearbyDiscoveredMiniBossTargets({ x: -10, y: 8, z: 0 }, [leader], known)).toEqual([]);
+  });
+  it("clusters overlapping threats and reserves names for selected or approached markers", () => {
+    const base = { id: "a", name: "Alpha", x: 10, y: 8, z: 10, alive: true, isElite: true };
+    const clusters = clusterThreatMapTargets([base, { ...base, id: "b", x: 13 }, { ...base, id: "c", x: 30 }]);
+    expect(clusters.map(cluster => cluster.members.length)).toEqual([2, 1]);
+    expect(mapMarkerLabelVisible({ x: 0, z: 0 }, base, false)).toBe(false);
+    expect(mapMarkerLabelVisible({ x: 2, z: 10 }, base, false)).toBe(true);
+    expect(mapMarkerLabelVisible({ x: 0, z: 0 }, base, true)).toBe(true);
+  });
+  it("recognises the three contract champions for crown markers", () => {
+    expect(isPathChampionName("Razorhide Pack Sovereign")).toBe(true);
+    expect(isPathChampionName("Viridian Brood Oracle")).toBe(true);
+    expect(isPathChampionName("Worldsplitter Colossus")).toBe(true);
+    expect(isPathChampionName("Mossback Alpha")).toBe(false);
   });
   it("reveals the Ashen Reach spire only when approached on the surface", () => {
     const known = new Set<string>();

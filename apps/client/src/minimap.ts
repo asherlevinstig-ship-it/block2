@@ -7,6 +7,7 @@ export const MAP_SIZE = 220;
 export const MAP_RANGE = 72;
 export const DISCOVERY_RADIUS = 10;
 export const THREAT_GUIDANCE_RADIUS = 28;
+export const MAP_THREAT_DISPLAY_RADIUS = 24;
 type Position = { x: number; z: number };
 export type ThreatMapTarget = Position & { y: number; name: string };
 export function nearbyThreatMapTarget(
@@ -18,8 +19,9 @@ export function nearbyThreatMapTarget(
     && Math.hypot(threat.x - player.x, threat.z - player.z) <= radius ? threat : null;
 }
 export type EliteMapTarget = Position & { id: string; name: string; y: number; alive: boolean; isElite: boolean; isMiniBoss?: boolean };
-export function activeEliteMapTargets(player: Position & { y: number }, elites: readonly EliteMapTarget[]): EliteMapTarget[] {
-  return elites.filter(elite => elite.alive && elite.isElite && Math.abs(elite.y - player.y) <= 2.5);
+export function activeEliteMapTargets(player: Position & { y: number }, elites: readonly EliteMapTarget[], radius = MAP_THREAT_DISPLAY_RADIUS): EliteMapTarget[] {
+  return elites.filter(elite => elite.alive && elite.isElite && !elite.isMiniBoss && Math.abs(elite.y - player.y) <= 2.5
+    && Math.hypot(elite.x - player.x, elite.z - player.z) <= radius);
 }
 export const miniBossDiscoveryKey = (id: string): string => `leader:${id}`;
 export function discoverMiniBosses(player: Position & { y: number }, mobs: readonly EliteMapTarget[], discovered: Set<string>): boolean {
@@ -35,6 +37,29 @@ export function discoverMiniBosses(player: Position & { y: number }, mobs: reado
 }
 export function discoveredMiniBossTargets(mobs: readonly EliteMapTarget[], discovered: Set<string>): EliteMapTarget[] {
   return mobs.filter(mob => mob.isMiniBoss && mob.id !== CHAMPION_WAYPOINT.id && discovered.has(miniBossDiscoveryKey(mob.id)));
+}
+export function nearbyDiscoveredMiniBossTargets(player: Position & { y: number }, mobs: readonly EliteMapTarget[], discovered: Set<string>, radius = MAP_THREAT_DISPLAY_RADIUS): EliteMapTarget[] {
+  return discoveredMiniBossTargets(mobs, discovered).filter(mob => mob.alive && Math.abs(mob.y - player.y) <= 2.5
+    && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius);
+}
+export type ThreatMapCluster = { x: number; z: number; members: EliteMapTarget[] };
+/** Merge markers that would land almost on top of one another at the current map scale. */
+export function clusterThreatMapTargets(targets: readonly EliteMapTarget[], worldDistance = 7): ThreatMapCluster[] {
+  const clusters: ThreatMapCluster[] = [];
+  for (const target of targets) {
+    const cluster = clusters.find(candidate => Math.hypot(candidate.x - target.x, candidate.z - target.z) <= worldDistance);
+    if (!cluster) { clusters.push({ x: target.x, z: target.z, members: [target] }); continue; }
+    cluster.members.push(target);
+    cluster.x = cluster.members.reduce((sum, member) => sum + member.x, 0) / cluster.members.length;
+    cluster.z = cluster.members.reduce((sum, member) => sum + member.z, 0) / cluster.members.length;
+  }
+  return clusters;
+}
+export function mapMarkerLabelVisible(player: Position, point: Position, selected: boolean, radius = DISCOVERY_RADIUS): boolean {
+  return selected || Math.hypot(point.x - player.x, point.z - player.z) <= radius;
+}
+export function isPathChampionName(name: string): boolean {
+  return /Razorhide Pack Sovereign|Viridian Brood Oracle|Worldsplitter Colossus/i.test(name);
 }
 export type DungeonMapState = { objective: Position & { title: string }; teammates: (Position & { id: string; name: string; y: number; state: "fighting" | "fallen" })[] };
 export function dungeonMapPoints(player: Position & { y: number }, state: DungeonMapState) {
@@ -428,36 +453,65 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       for (let i = 0; i < MAP_SIZE; i += 22) {
         ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, MAP_SIZE); ctx.moveTo(0, i); ctx.lineTo(MAP_SIZE, i); ctx.stroke();
       }
-      const marker = (point: Position, label: string, color: string, square: boolean, showAtEdge = false) => {
+      const marker = (point: Position, label: string, color: string, square: boolean, showAtEdge = false, glyph = "") => {
         const p = mapPoint(player, point);
-        if (p.offscreen && label !== "HOME" && !showAtEdge) return;
+        if (p.offscreen && !showAtEdge) return;
         ctx.fillStyle = color; ctx.strokeStyle = "#071514"; ctx.lineWidth = 2;
         ctx.beginPath();
-        if (square) ctx.rect(p.x - 4, p.y - 4, 8, 8); else ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        if (square) ctx.rect(p.x - 5, p.y - 5, 10, 10); else ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
         ctx.fill(); ctx.stroke();
-        ctx.font = "bold 10px system-ui"; ctx.textAlign = "center";
-        const labelY = label === "♛ CHAMP" ? p.y + 18 : p.y - 8;
-        ctx.strokeText(label, p.x, labelY); ctx.fillText(label, p.x, labelY);
+        if (glyph) {
+          ctx.fillStyle = "#111b17"; ctx.font = "bold 8px system-ui"; ctx.textAlign = "center";
+          ctx.fillText(glyph, p.x, p.y + 3);
+        }
+        if (label) {
+          ctx.fillStyle = color; ctx.strokeStyle = "#071514"; ctx.lineWidth = 3;
+          ctx.font = "bold 9px system-ui"; ctx.textAlign = "center";
+          ctx.strokeText(label, p.x, p.y - 9); ctx.fillText(label, p.x, p.y - 9);
+        }
         if (p.offscreen) { ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke(); }
       };
       if (!underground) {
-        marker({ x: TOWN_CENTER_X, z: TOWN_CENTER_Z }, "HOME", "#abe3a0", true);
-        marker(TOWN_BLACKSMITH_STALL_POSITION, "SMITH", "#ffd173", true);
-        if (discovered.has(CHAMPION_WAYPOINT.id)) marker(CHAMPION_WAYPOINT, "♛ CHAMP", "#ffcf65", true);
-        if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) marker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", true);
-        if (wardenGateUnlocked) marker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", true, true);
-        for (const elite of activeEliteMapTargets(player, elites)) marker(elite, "★ ELITE", "#e890ff", false, true);
+        const staticMarker = (target: Waypoint, shortLabel: string, color: string, glyph: string, edge = false) =>
+          marker(target, mapMarkerLabelVisible(player, target, waypoint?.id === target.id) ? shortLabel : "", color, true, edge, glyph);
+        staticMarker(HOME_WAYPOINT, "HOME", "#abe3a0", "H", true);
+        staticMarker({ ...TOWN_BLACKSMITH_STALL_POSITION, id: "smith", name: "Blacksmith" }, "SMITH", "#ffd173", "S");
+        if (discovered.has(CHAMPION_WAYPOINT.id) && (waypoint?.id === CHAMPION_WAYPOINT.id
+          || Math.hypot(player.x - CHAMPION_WAYPOINT.x, player.z - CHAMPION_WAYPOINT.z) <= MAP_THREAT_DISPLAY_RADIUS))
+          staticMarker(CHAMPION_WAYPOINT, "CHAMPION", "#ffcf65", "♛");
+        if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) staticMarker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", "A");
+        if (wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "W", true);
       }
-      for (const leader of discoveredMiniBossTargets(elites, discovered)) if (Math.abs(leader.y - player.y) <= 2.5)
-        marker(leader, leader.alive ? "♛ LEADER" : "LEADER · DOWN", leader.alive ? "#ffc95f" : "#77827c", true, true);
-      if (nearbyThreat) marker(nearbyThreat, "⚔ THREAT", "#ff806f", false);
-      marker(MINE_ENTRANCE, "MINE", "#ffe08c", true);
-      for (const chamber of caveState.chambers) marker(chamber, `${chamber.label} · D${caveDepth(chamber.y)}`, "#a3dfeb", false);
+      const nearbyCombatTargets = [...nearbyDiscoveredMiniBossTargets(player, elites, discovered), ...activeEliteMapTargets(player, elites)]
+        .filter((target, index, values) => values.findIndex(candidate => candidate.id === target.id) === index)
+        .filter(target => !nearbyThreat || Math.hypot(target.x - nearbyThreat.x, target.z - nearbyThreat.z) > 1.5);
+      for (const cluster of clusterThreatMapTargets(nearbyCombatTargets)) {
+        if (cluster.members.length > 1) marker(cluster, "", "#ffc95f", false, false, String(cluster.members.length));
+        else {
+          const target = cluster.members[0]!;
+          const leader = target.isMiniBoss === true;
+          marker(target, mapMarkerLabelVisible(player, target, false) ? target.name.slice(0, 18).toUpperCase() : "",
+            leader ? "#ffc95f" : "#e890ff", leader, false, leader ? "♛" : "★");
+        }
+      }
+      if (nearbyThreat) {
+        const p = mapPoint(player, nearbyThreat);
+        const pulse = 9 + Math.sin(now / 150) * 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, pulse, 0, Math.PI * 2); ctx.strokeStyle = "#ff806f"; ctx.lineWidth = 2; ctx.stroke();
+        const championTarget = isPathChampionName(nearbyThreat.name);
+        marker(nearbyThreat, nearbyThreat.name.slice(0, 20).toUpperCase(), championTarget ? "#ffd55f" : "#ff806f", championTarget, false, championTarget ? "♛" : "!");
+      }
+      const mineTarget = { ...MINE_ENTRANCE, id: "mine", name: "Mine" };
+      marker(mineTarget, mapMarkerLabelVisible(player, mineTarget, waypoint?.id === "mine") ? "MINE" : "", "#ffe08c", true, false, "M");
+      for (const chamber of caveState.chambers) marker(chamber,
+        mapMarkerLabelVisible(player, chamber, false) ? `${chamber.label} · D${caveDepth(chamber.y)}` : "", "#a3dfeb", false, false, "○");
       for (const deposit of underground ? [] : MAP_DEPOSITS) {
         if (!discovered.has(depositKey(deposit))) continue;
         const silver = deposit.block === Block.SilverOre;
         const recovering = statuses.get(depositKey(deposit))?.available === 0;
-        marker(deposit, `${silver ? "Ag" : "Fe"}${recovering ? " · R" : ""}`, recovering ? "#8c929a" : silver ? "#b4eaff" : "#e3a76b", false);
+        const selected = waypoint?.id === depositKey(deposit);
+        marker(deposit, mapMarkerLabelVisible(player, deposit, selected) ? `${silver ? "SILVER" : "IRON"}${recovering ? " · R" : ""}` : "",
+          recovering ? "#8c929a" : silver ? "#b4eaff" : "#e3a76b", false, false, silver ? "Ag" : "Fe");
       }
       if (surfaceGuide && caveState.route.length > 1) {
         ctx.beginPath();
