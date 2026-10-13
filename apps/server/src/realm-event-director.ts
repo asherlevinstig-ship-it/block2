@@ -19,6 +19,7 @@ export type RealmEventDefinition = {
   baseDamage: number;
   rewardMultiplier: number;
   rewards: readonly { itemId: ItemId; quantity: number }[];
+  signatureRewards: readonly ItemId[];
   opensForestPortal?: boolean;
   realmBoss?: boolean;
 };
@@ -39,7 +40,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     archetype: "cave_spitter", position: { x: 43.5, y: 8, z: 18.5 },
     triggerIds: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"], tier: 1,
     baseHealth: 24, healthPerPlayer: 12, baseDamage: 1, rewardMultiplier: 1.5,
-    rewards: [{ itemId: "acid_gland", quantity: 3 }], opensForestPortal: true,
+    rewards: [{ itemId: "acid_gland", quantity: 3 }], signatureRewards: ["venom_focus"], opensForestPortal: true,
   },
   {
     key: "stoneheart", id: "stoneheart-siege-lord", name: "Stoneheart Siege Lord",
@@ -48,7 +49,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     archetype: "stone_brute", position: STONE_BRUTE_ARENA_HOME,
     triggerIds: ["stone-brute", "frontier-brute"], tier: 2,
     baseHealth: 32, healthPerPlayer: 14, baseDamage: 2, rewardMultiplier: 1.75,
-    rewards: [{ itemId: "stone_core", quantity: 4 }, { itemId: "rootbound_hammer", quantity: 1 }],
+    rewards: [{ itemId: "stone_core", quantity: 4 }], signatureRewards: ["stone_core_hammer"],
   },
   {
     key: "ashglass", id: "ashglass-oracle", name: "Ashglass Oracle",
@@ -57,7 +58,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     archetype: "cave_spitter", position: ASHEN_SPIRE_POSITION,
     triggerIds: ["ashglass-sentry-west", "ashglass-sentry-east"], tier: 3,
     baseHealth: 36, healthPerPlayer: 16, baseDamage: 2, rewardMultiplier: 2,
-    rewards: [{ itemId: "silver_ore", quantity: 5 }, { itemId: "echo_prism", quantity: 1 }],
+    rewards: [{ itemId: "silver_ore", quantity: 5 }], signatureRewards: ["echo_prism"],
   },
   {
     key: "realm-warden", id: "realm-stone-warden", name: "Realm Stone Warden",
@@ -66,7 +67,8 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     archetype: "stone_brute", position: { x: 68.5, y: 8, z: 34.5 },
     triggerIds: [], tier: 3,
     baseHealth: 54, healthPerPlayer: 22, baseDamage: 3, rewardMultiplier: 2.5,
-    rewards: [{ itemId: "moonstone", quantity: 1 }, { itemId: "rootguard_armour", quantity: 1 }, { itemId: "healing_potion", quantity: 2 }],
+    rewards: [{ itemId: "moonstone", quantity: 1 }, { itemId: "healing_potion", quantity: 2 }],
+    signatureRewards: ["rootbound_hammer", "rootguard_armour"],
     realmBoss: true,
   },
 ] as const;

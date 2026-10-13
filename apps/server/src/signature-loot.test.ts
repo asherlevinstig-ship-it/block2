@@ -4,6 +4,8 @@ import { parseSignaturePity, resolveSignatureDrop, serializeSignaturePity, signa
 describe("signature loot protection", () => {
   it("guarantees a signature item the first time", () => {
     expect(resolveSignatureDrop("matriarch_edge", false, 0, .99)).toMatchObject({ drop: true, firstClear: true, nextMisses: 0 });
+    for (const itemId of ["venom_focus", "stone_core_hammer", "echo_prism", "rootbound_hammer", "rootguard_armour"] as const)
+      expect(resolveSignatureDrop(itemId, false, 0, .99)).toMatchObject({ drop: true, firstClear: true });
   });
 
   it("uses chance on repeats and guarantees the configured clear", () => {
@@ -18,5 +20,6 @@ describe("signature loot protection", () => {
     expect(parseSignaturePity(serializeSignaturePity(pity))).toEqual(pity);
     expect(signatureLootHint("matriarch_edge", true, pity)).toContain("guaranteed within 2 clears");
     expect(signatureLootHint("venom_focus", false, pity)).toContain("First victory guarantees");
+    expect(signatureLootHint("echo_prism", false, pity)).toContain("EPIC");
   });
 });

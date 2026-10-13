@@ -2113,10 +2113,10 @@ function updateLootWorldLabel(): void {
   const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
   const rarity = itemRarity(drop.itemId);
   const inspect = lootNeedsInspection(nearest.id, drop);
+  const equippable = Boolean(equipmentForItem(drop.itemId) || armourForItem(drop.itemId));
   updateLootWorldDetails(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
-  lootWorldName.textContent = `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${inspect ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
-  const equippable = Boolean(equipmentForItem(drop.itemId) || armourForItem(drop.itemId));
+  lootWorldName.textContent = `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${inspect || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
   lootWorldAction.textContent = `${near ? equippable ? "TAP E · INSPECT   HOLD E · EQUIP" : `E · ${inspect ? "INSPECT" : "PICK UP"}` : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.style.left = `${rect.left + screen.x}px`;
@@ -3808,6 +3808,7 @@ function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.
 function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
+  const rarity = itemRarity(itemId);
   const material = lootMaterials[itemId];
   const sourceId = lootSourceMob(dropId);
   const rewardCache = dropId.startsWith("forest-cache:");
@@ -3820,6 +3821,8 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
     addBox(root, "rootbound-cache-lock", coreGlowMaterial, [.26, .26, .08], [0, .12, -.4]);
     for (const side of [-1, 1]) addBox(root, `rootbound-cache-root-${side}`, weaponWoodMaterial, [.14, .72, .14], [side * .5, .02, 0]).setLocalEulerAngles(0, 0, side * 25);
   } else if (isEquipmentItem(itemId)) {
+    addBox(root, `${rarity}-personal-loot-bag`, rarityLootMaterials[rarity], [.68, .18, .54], [0, -.46, 0]);
+    addBox(root, "loot-bag-clasp", brassMaterial, [.16, .12, .05], [0, -.42, -.29]);
     if (!addDroppedEquipmentModel(root, itemId, material)) {
       addBox(root, guardianDrop ? "rootbound-equipment-cache" : "loot-bag", weaponWoodMaterial, guardianDrop ? [.7, .5, .54] : [.55, .42, .44], [0, 0, 0]);
       addBox(root, "equipment-emblem", material, [.28, .2, .06], [0, .02, -.25]);
@@ -3855,7 +3858,6 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
     addBox(root, "fibre-b", material, [0.12, 0.42, 0.12], [0.09, 0.02, 0]).setLocalEulerAngles(-22, 0, -18);
   }
   root.setPosition(drop.x, drop.y + 0.36, drop.z);
-  const rarity = itemRarity(itemId);
   const marker = new pc.Entity("personal-loot-marker");
   marker.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
   marker.setLocalScale(.85, .012, .85); marker.enabled = false;

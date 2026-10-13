@@ -524,6 +524,8 @@ canvas.ranged-aim { cursor: none; }
 .realm-event-eyebrow { color: #77d8c2; font: 900 8px/1 system-ui; letter-spacing: .16em; }
 .realm-event-title { overflow: hidden; font: 900 13px/1.15 system-ui; text-overflow: ellipsis; white-space: nowrap; }
 .realm-event-detail { overflow: hidden; color: #99b9b0; font: 650 9px/1.2 system-ui; text-overflow: ellipsis; white-space: nowrap; }
+.realm-event-loot { overflow: hidden; color: #f4c869; font: 800 8px/1.2 system-ui; letter-spacing: .025em; text-overflow: ellipsis; white-space: nowrap; }
+.realm-event-loot[hidden] { display: none; }
 .realm-event-pips { display: flex; gap: 5px; }
 .realm-event-pips b { width: 9px; height: 22px; transform: skewX(-12deg); border: 1px solid #69bba955; border-radius: 2px; background: #071714; }
 .realm-event-pips b[data-filled="true"] { border-color: #f1c662; background: linear-gradient(#ffe38c, #c57920); box-shadow: 0 0 10px #e9a83c88; }

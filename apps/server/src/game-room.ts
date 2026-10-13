@@ -913,13 +913,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const client of this.clients) if (this.state.players.has(client.sessionId)) {
       client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, now));
       client.send("trade:update", this.trading.snapshot(client.sessionId, this.state.players));
-      client.send("realm:event", this.realmEvents.status(now) satisfies RealmEventUpdate);
+      client.send("realm:event", this.realmEventUpdateFor(client, now));
     }
   }
 
-  private broadcastRealmEvent(now: number): void {
+  private ownsOrHasPendingSignature(playerId: string, itemId: SignatureItemId): boolean {
+    const player = this.state.players.get(playerId);
+    return Boolean(player && (player.inventory.get(itemId)?.quantity ?? 0) + (player.storage.get(itemId)?.quantity ?? 0) > 0)
+      || [...this.state.lootDrops.values()].some(drop => drop.ownerId === playerId && drop.itemId === itemId);
+  }
+
+  private realmEventUpdateFor(client: Client, now: number): RealmEventUpdate {
     const update = this.realmEvents.status(now) satisfies RealmEventUpdate;
-    for (const client of this.clients) if (this.state.players.has(client.sessionId)) client.send("realm:event", update);
+    const definition = realmEventDefinition(update.eventId);
+    const player = this.state.players.get(client.sessionId);
+    if (!definition || !player || definition.signatureRewards.length === 0) return update;
+    const pity = parseSignaturePity(player.signaturePityJson);
+    const signatures = definition.signatureRewards as readonly SignatureItemId[];
+    const missing = signatures.filter(itemId => !this.ownsOrHasPendingSignature(client.sessionId, itemId));
+    const highlighted = missing.length > 0 ? missing : signatures;
+    return { ...update, lootHint: highlighted.map(itemId => signatureLootHint(itemId,
+      this.ownsOrHasPendingSignature(client.sessionId, itemId), pity)).join("  ·  ") };
+  }
+
+  private broadcastRealmEvent(now: number): void {
+    for (const client of this.clients) if (this.state.players.has(client.sessionId)) client.send("realm:event", this.realmEventUpdateFor(client, now));
   }
 
   private restoreExpeditionParty(ticket: string): void {
@@ -1979,7 +1997,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
     const signatureDrops = (itemId: SignatureItemId): { itemId: ItemId; quantity: number }[] => {
       if (!rewardPlayer) return [{ itemId, quantity: 1 }];
-      const ownsItem = (rewardPlayer.inventory.get(itemId)?.quantity ?? 0) + (rewardPlayer.storage.get(itemId)?.quantity ?? 0) > 0;
+      const ownsItem = this.ownsOrHasPendingSignature(ownerId, itemId);
       const pity = parseSignaturePity(rewardPlayer.signaturePityJson);
       const result = resolveSignatureDrop(itemId, ownsItem, pity[itemId] ?? 0, Math.random());
       pity[itemId] = result.nextMisses;
@@ -2001,7 +2019,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? [{ itemId: "stone_core", quantity: 2 }, { itemId: "silver_ore", quantity: 3 }]
         : [{ itemId: "stone_core", quantity: 1 }, { itemId: "miners_lantern", quantity: 1 }]
       : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland", quantity: 3 }, ...signatureDrops("venom_focus")]
-      : isRealmEventId(mobId) ? [...(realmEventDefinition(mobId)?.rewards ?? [])]
+      : isRealmEventId(mobId) ? [...(realmEventDefinition(mobId)?.rewards ?? []),
+        ...(realmEventDefinition(mobId)?.signatureRewards ?? []).flatMap(itemId => signatureDrops(itemId as SignatureItemId))]
       : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "champion")
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
       : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];

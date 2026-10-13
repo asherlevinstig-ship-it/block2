@@ -21,11 +21,12 @@ export function createRealmEventUI() {
   const root = document.createElement("section");
   root.id = "realm-event-meter";
   root.setAttribute("aria-label", "Realm event progress");
-  root.innerHTML = '<div><span class="realm-event-eyebrow">REALM THREAT</span><strong class="realm-event-title">0 / 3 threats defeated</strong><small class="realm-event-detail">Clear regional encounters to awaken public bosses</small></div><i class="realm-event-pips" aria-hidden="true"></i>';
+  root.innerHTML = '<div><span class="realm-event-eyebrow">REALM THREAT</span><strong class="realm-event-title">0 / 3 threats defeated</strong><small class="realm-event-detail">Clear regional encounters to awaken public bosses</small><small class="realm-event-loot" hidden></small></div><i class="realm-event-pips" aria-hidden="true"></i>';
   document.body.append(root);
   const eyebrow = root.querySelector<HTMLElement>(".realm-event-eyebrow")!;
   const title = root.querySelector<HTMLElement>(".realm-event-title")!;
   const detail = root.querySelector<HTMLElement>(".realm-event-detail")!;
+  const loot = root.querySelector<HTMLElement>(".realm-event-loot")!;
   const pips = root.querySelector<HTMLElement>(".realm-event-pips")!;
   let current: RealmEventUpdate | null = null;
   let timer = 0;
@@ -35,6 +36,8 @@ export function createRealmEventUI() {
     eyebrow.textContent = label.eyebrow;
     title.textContent = label.title;
     detail.textContent = label.detail;
+    loot.textContent = current.lootHint ?? "";
+    loot.hidden = !current.lootHint;
     root.dataset.phase = current.phase;
     root.dataset.boss = String(current.realmBoss);
     pips.replaceChildren(...Array.from({ length: current.required }, (_, index) => {
@@ -57,6 +60,8 @@ export function createRealmEventUI() {
       eyebrow.textContent = "REALM THREAT";
       title.textContent = "Waiting for realm status…";
       detail.textContent = "";
+      loot.textContent = "";
+      loot.hidden = true;
       pips.replaceChildren();
     },
   };

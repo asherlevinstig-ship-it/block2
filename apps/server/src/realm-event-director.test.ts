@@ -40,4 +40,13 @@ describe("Realm-style encounter director", () => {
     const boss = REALM_EVENT_DEFINITIONS.find(event => event.realmBoss)!;
     expect(realmEventScale(20, boss)).toEqual({ players: 6, maxHealth: 164, attackDamage: 3, rewardMultiplier: 3.75 });
   });
+
+  it("assigns personal signature gear to every public boss", () => {
+    expect(REALM_EVENT_DEFINITIONS.map(event => [event.key, event.signatureRewards])).toEqual([
+      ["greenwood", ["venom_focus"]],
+      ["stoneheart", ["stone_core_hammer"]],
+      ["ashglass", ["echo_prism"]],
+      ["realm-warden", ["rootbound_hammer", "rootguard_armour"]],
+    ]);
+  });
 });

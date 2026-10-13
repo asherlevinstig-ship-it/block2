@@ -1,11 +1,16 @@
-import type { ItemId } from "@blockcraft/protocol";
+import { ITEM_DEFINITIONS, ITEM_RARITIES, itemRarity, type ItemId } from "@blockcraft/protocol";
 
-export type SignatureItemId = Extract<ItemId, "matriarch_edge" | "venom_focus">;
+export type SignatureItemId = Extract<ItemId,
+  "matriarch_edge" | "venom_focus" | "stone_core_hammer" | "echo_prism" | "rootbound_hammer" | "rootguard_armour">;
 export type SignaturePity = Partial<Record<SignatureItemId, number>>;
 
 export const SIGNATURE_DROP_RULES: Record<SignatureItemId, { chance: number; guaranteedBy: number; source: string }> = {
   matriarch_edge: { chance: .25, guaranteedBy: 4, source: "Crystal Matriarch" },
   venom_focus: { chance: .2, guaranteedBy: 5, source: "Venom Matriarch" },
+  stone_core_hammer: { chance: .3, guaranteedBy: 4, source: "Stoneheart Siege Lord" },
+  echo_prism: { chance: .25, guaranteedBy: 4, source: "Ashglass Oracle" },
+  rootbound_hammer: { chance: .25, guaranteedBy: 4, source: "Realm Stone Warden" },
+  rootguard_armour: { chance: .25, guaranteedBy: 4, source: "Realm Stone Warden" },
 };
 
 export type SignatureDropResult = {
@@ -56,7 +61,9 @@ export function resolveSignatureDrop(itemId: SignatureItemId, ownsItem: boolean,
 
 export function signatureLootHint(itemId: SignatureItemId, ownsItem: boolean, pity: SignaturePity): string {
   const rule = SIGNATURE_DROP_RULES[itemId];
-  if (!ownsItem) return `LEGENDARY · First victory guarantees ${rule.source}'s signature item`;
+  const rarity = ITEM_RARITIES[itemRarity(itemId)].label.toUpperCase();
+  if (!ownsItem) return `${rarity} · First victory guarantees ${ITEM_DEFINITIONS[itemId].name}`;
   const misses = pity[itemId] ?? 0;
-  return `LEGENDARY · ${Math.round(rule.chance * 100)}% chance · guaranteed within ${Math.max(1, rule.guaranteedBy - misses)} clear${rule.guaranteedBy - misses === 1 ? "" : "s"}`;
+  const remaining = Math.max(1, rule.guaranteedBy - misses);
+  return `${ITEM_DEFINITIONS[itemId].name} · ${Math.round(rule.chance * 100)}% · guaranteed within ${remaining} clear${remaining === 1 ? "" : "s"}`;
 }
