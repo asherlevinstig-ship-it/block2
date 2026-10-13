@@ -9,7 +9,6 @@ import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
-import { createRealmEventUI } from "./realm-event-ui.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
@@ -1924,7 +1923,6 @@ const playerInteractionUI = createPlayerInteractionUI({
   trade: id => tradeUI.invite(id),
   party: id => partyUI.invite(id),
 });
-const realmEventUI = createRealmEventUI();
 let activeRealmEventId = "";
 let lastNameplateSampleAt = -Infinity;
 let nearbyTradePlayerId: string | null = null;
@@ -8585,7 +8583,6 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("party:update", update => partyUI.update(update));
   room.onMessage("realm:event", (update: RealmEventUpdate) => {
     activeRealmEventId = update.phase === "active" ? update.eventId ?? "" : "";
-    realmEventUI.update(update);
   });
   room.onMessage("trade:update", update => {
     if (update) playerInteractionUI.close();
@@ -9116,7 +9113,6 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();
-    realmEventUI.reset();
     activeRealmEventId = "";
     playerInteractionUI.close();
     tradeUI.update(null);
