@@ -2014,8 +2014,6 @@ let inspectedDropId: string | null = null;
 let lootPending = false;
 const pendingFloorLoot = new Map<string, number>();
 let lootWorldDetailKey = "";
-const LOOT_EQUIP_HOLD_MS = 550;
-let lootEquipHold: { dropId: string; completed: boolean; timeoutId: number } | null = null;
 function closeLoot() {
   lootPanel.hidden = true; inspectedDropId = null; lootPending = false;
 }
@@ -2035,48 +2033,16 @@ function nearestVisibleLootDrop(maxDistance: number): { id: string; distance: nu
 function nearestLootDrop(): string | null {
   return nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null;
 }
-function lootNeedsInspection(dropId: string, drop: NetworkLootDrop): boolean {
+function lootHasDetails(dropId: string, drop: NetworkLootDrop): boolean {
   return dropId.startsWith("forest-cache:") || isEquipmentItem(drop.itemId) || Boolean(utilityForItem(drop.itemId));
 }
 function interactWithLoot(dropId: string): void {
   const drop = lootVisuals.get(dropId)?.state;
   if (!drop || !room || !worldReady) return;
-  if (lootNeedsInspection(dropId, drop)) { openLoot(dropId); return; }
   if ((pendingFloorLoot.get(dropId) ?? 0) > performance.now()) return;
   pendingFloorLoot.set(dropId, performance.now() + 2_000);
   room.send("loot:collect", { dropId, action: "keep" });
   status.textContent = `Picking up ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}...`;
-}
-function beginLootKeyInteraction(): boolean {
-  const dropId = nearestLootDrop();
-  const drop = dropId ? lootVisuals.get(dropId)?.state : undefined;
-  if (!dropId || !drop || !isItemId(drop.itemId)
-    || (!equipmentForItem(drop.itemId) && !armourForItem(drop.itemId))) return false;
-  const itemId = drop.itemId;
-  const hold = { dropId, completed: false, timeoutId: 0 };
-  hold.timeoutId = window.setTimeout(() => {
-    if (lootEquipHold !== hold || nearestLootDrop() !== dropId || !room || !worldReady || !lootPanel.hidden) {
-      if (lootEquipHold === hold) lootEquipHold = null;
-      delete lootWorldLabel.dataset.holding;
-      return;
-    }
-    hold.completed = true;
-    pendingFloorLoot.set(dropId, performance.now() + 2_000);
-    room.send("loot:collect", { dropId, action: "equip", equip: true });
-    status.textContent = `Equipping ${ITEM_DEFINITIONS[itemId].name}...`;
-    lootWorldLabel.dataset.holding = "complete";
-  }, LOOT_EQUIP_HOLD_MS);
-  lootEquipHold = hold;
-  lootWorldLabel.dataset.holding = "true";
-  return true;
-}
-function finishLootKeyInteraction(): void {
-  const hold = lootEquipHold;
-  if (!hold) return;
-  window.clearTimeout(hold.timeoutId);
-  lootEquipHold = null;
-  delete lootWorldLabel.dataset.holding;
-  if (!hold.completed) interactWithLoot(hold.dropId);
 }
 function appendWorldLootStat(label: string, value: string, trend: "better" | "worse" | "same" = "same"): void {
   const stat = document.createElement("span");
@@ -2136,12 +2102,12 @@ function updateLootWorldLabel(): void {
   const seconds = Math.max(0, Math.ceil((drop.expiresAt - Date.now()) / 1000));
   const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
   const rarity = itemRarity(drop.itemId);
-  const inspect = lootNeedsInspection(nearest.id, drop);
+  const hasDetails = lootHasDetails(nearest.id, drop);
   const equippable = Boolean(equipmentForItem(drop.itemId) || armourForItem(drop.itemId));
   updateLootWorldDetails(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
-  lootWorldName.textContent = `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${inspect || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
-  lootWorldAction.textContent = `${near ? equippable ? "TAP E · INSPECT   HOLD E · EQUIP" : `E · ${inspect ? "INSPECT" : "PICK UP"}` : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
+  lootWorldName.textContent = `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${hasDetails || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
+  lootWorldAction.textContent = `${near ? "E · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.style.left = `${rect.left + screen.x}px`;
   lootWorldLabel.style.top = `${rect.top + screen.y}px`;
@@ -3945,6 +3911,17 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   return { root, marker, revealAt, landedAt, tossFrom, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17, audioPlayed: false };
 }
 
+function removeLootVisual(dropId: string, collectedHere: boolean): void {
+  const visual = lootVisuals.get(dropId);
+  if (visual && collectedHere) {
+    lootPickupBurst(visual.state);
+    combatAudio.play("lootPickup");
+  }
+  visual?.root.destroy();
+  lootVisuals.delete(dropId);
+  pendingFloorLoot.delete(dropId);
+}
+
 function bindLootDrops(joinedRoom: Room): void {
   const callbacks = getStateCallbacks(joinedRoom as Room<any, any>) as any;
   const state = joinedRoom.state as any;
@@ -3963,15 +3940,8 @@ function bindLootDrops(joinedRoom: Room): void {
     showDrop(dropId, drop);
   }, true);
   drops.onRemove((_drop: NetworkLootDrop, dropId: string) => {
-    const visual = lootVisuals.get(dropId);
     const collectedHere = pendingFloorLoot.has(dropId) || inspectedDropId === dropId && lootPending;
-    if (visual && collectedHere) {
-      lootPickupBurst(visual.state);
-      combatAudio.play("lootPickup");
-    }
-    visual?.root.destroy();
-    lootVisuals.delete(dropId);
-    pendingFloorLoot.delete(dropId);
+    removeLootVisual(dropId, collectedHere);
     if (inspectedDropId === dropId && !lootPending) {
       lootMessage.textContent = "That bag was collected or expired.";
       lootEquip.disabled = lootKeep.disabled = true;
@@ -5500,9 +5470,7 @@ function updateTarget(): void {
     const quantity = drop && drop.quantity > 1 ? `${drop.quantity}× ` : "";
     targetLabel.textContent = nearbyLoot.startsWith("forest-cache:")
       ? "Personal Rootbound Cache · press E or Loot to claim"
-      : drop && lootNeedsInspection(nearbyLoot, drop)
-        ? `${itemName} · press E or Loot to inspect and compare`
-        : `${quantity}${itemName} · press E or Loot to pick up`;
+      : `${quantity}${itemName} · press E or Loot to pick up`;
   }
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";
@@ -7073,10 +7041,8 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyH") { event.preventDefault(); requestPotion(); }
   if (event.code === "KeyE") {
     event.preventDefault();
-    if (!beginLootKeyInteraction()) {
-      if (nearbyTradePlayerId) openNearbyPlayerInteraction();
-      else requestPrimaryAction();
-    }
+    if (nearbyTradePlayerId) openNearbyPlayerInteraction();
+    else requestPrimaryAction();
   }
   if (event.code === "KeyC") requestDefense(true);
   if (event.code === "KeyR") {
@@ -7095,7 +7061,6 @@ window.addEventListener("keydown", event => {
   }
 });
 window.addEventListener("keyup", event => {
-  if (event.code === "KeyE") finishLootKeyInteraction();
   if (event.code === "KeyC") requestDefense(false);
   if (event.code === powerAimKey) commitPowerAim();
   if (event.code === "KeyF") commitSpecialAim();
@@ -8757,6 +8722,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (!message.ok) {
         status.textContent = message.message;
         showCombatFeedback(message.message.toUpperCase(), "hurt");
+      } else {
+        removeLootVisual(message.dropId, true);
+        status.textContent = message.message;
       }
       return;
     }

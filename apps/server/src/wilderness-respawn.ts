@@ -1,3 +1,7 @@
+import { CAVE_ENCOUNTERS } from "./cave-encounters.js";
+import { roamingMembership } from "./roaming-packs.js";
+import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
+
 /**
  * The overworld should breathe after a fight. Every enemy leaves at least a
  * forty-second clearing, while each level above one adds another five seconds.
@@ -23,6 +27,13 @@ export function wildernessRespawnDelay(mobId: string, level: number): number {
   const safeLevel = Math.max(1, Math.floor(Number.isFinite(level) ? level : 1));
   return WILDERNESS_RESPAWN_MIN_MS + (safeLevel - 1) * WILDERNESS_RESPAWN_PER_LEVEL_MS
     + stableSlot(mobId) * WILDERNESS_RESPAWN_STAGGER_MS;
+}
+
+/** Normal overworld enemies, including authored cavern encounters, share the same breathing-room rhythm. */
+export function usesOverworldRespawnRhythm(mobId: string, isChampion: boolean): boolean {
+  return !isChampion && (Boolean(CAVE_ENCOUNTERS[mobId])
+    || WILDERNESS_ENCOUNTERS.some(encounter => encounter.id === mobId)
+    || roamingMembership(mobId) !== null);
 }
 
 export function wildernessSpawnClear(spawn: { x: number; y: number; z: number },

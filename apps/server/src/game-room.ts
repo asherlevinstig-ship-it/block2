@@ -32,7 +32,7 @@ import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
 import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
-  wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
+  usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
@@ -1880,9 +1880,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
     mob.materializeUntil = 0;
-    const isWildernessEnemy = this.roomKind === "overworld" && !mob.isChampion
-      && (WILDERNESS_ENCOUNTERS.some(encounter => encounter.id === mobId) || roamingMembership(mobId) !== null);
-    mob.respawnAt = now + (isWildernessEnemy ? wildernessRespawnDelay(mobId, mob.level) : definition.respawnMs);
+    const usesOverworldRhythm = this.roomKind === "overworld" && usesOverworldRespawnRhythm(mobId, mob.isChampion);
+    mob.respawnAt = now + (usesOverworldRhythm ? wildernessRespawnDelay(mobId, mob.level) : definition.respawnMs);
     const armedEvent = this.realmEvents.recordTrigger(mobId, now,
       [...this.state.mobs].filter(([id, candidate]) => candidate.alive && isRealmEventId(id)).map(([id]) => id));
     if (armedEvent) {

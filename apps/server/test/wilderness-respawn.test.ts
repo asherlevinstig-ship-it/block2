@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WILDERNESS_RESPAWN_MIN_MS, WILDERNESS_RESPAWN_PER_LEVEL_MS, WILDERNESS_RESPAWN_SAFE_RADIUS, WILDERNESS_RESPAWN_STAGGER_MS,
-  wildernessRespawnDelay, wildernessSpawnClear } from "../src/wilderness-respawn.js";
+  usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "../src/wilderness-respawn.js";
 
 describe("wilderness respawn rhythm", () => {
   it("waits at least forty seconds and scales upward with enemy level", () => {
@@ -9,6 +9,13 @@ describe("wilderness respawn rhythm", () => {
     expect(wildernessRespawnDelay("enemy:0", 5)).toBe(60_000);
     expect(wildernessRespawnDelay("enemy:0", 9)).toBe(80_000);
     expect(wildernessRespawnDelay("enemy:0", 9) - wildernessRespawnDelay("enemy:0", 8)).toBe(WILDERNESS_RESPAWN_PER_LEVEL_MS);
+  });
+
+  it("applies the level-scaled cooldown to authored cavern enemies", () => {
+    expect(usesOverworldRespawnRhythm("deep-cave-spitter", false)).toBe(true);
+    expect(wildernessRespawnDelay("deep-cave-spitter", 1)).toBeGreaterThanOrEqual(40_000);
+    expect(wildernessRespawnDelay("deep-cave-spitter", 5)).toBeGreaterThanOrEqual(60_000);
+    expect(usesOverworldRespawnRhythm("deep-cave-spitter", true)).toBe(false);
   });
 
   it("rebuilds roaming packs in a predictable wave", () => {
