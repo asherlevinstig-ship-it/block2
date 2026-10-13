@@ -4,6 +4,7 @@ import { REALM_WARDEN_ARENA, REALM_WARDEN_HOME, STONE_BRUTE_ARENA, STONE_BRUTE_A
 import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_EXPEDITION_BOARD_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 import { TOWN_STORAGE_CHEST_POSITION } from "@blockcraft/voxel-world";
+import { WARDEN_VICTORY_TRANSFORM_MS, wardenVictoryActive, wardenVictoryPulse } from "./warden-victory-effects.js";
 
 type Color = readonly [number, number, number];
 const WOOD: Color = [0.24, 0.17, 0.12];
@@ -71,6 +72,9 @@ export class SceneDressing {
   private fireLight: pc.Entity | null = null;
   private forgeLight: pc.Entity | null = null;
   private campfireLight: pc.Entity | null = null;
+  private realmWardenVictoryRoot: pc.Entity | null = null;
+  private realmWardenVictoryLight: pc.Entity | null = null;
+  private realmWardenVictoryUntil = 0;
   private keeper: pc.Entity | null = null;
   private keeperHead: pc.Entity | null = null;
   private keeperArm: pc.Entity | null = null;
@@ -110,11 +114,21 @@ export class SceneDressing {
     if (this.fireLight?.light) this.fireLight.light.intensity = 1.35 + Math.sin(time * 8.3) * 0.11 + Math.sin(time * 13.7) * 0.055;
     if (this.forgeLight?.light) this.forgeLight.light.intensity = 0.85 + Math.sin(time * 10.1) * 0.08 + Math.sin(time * 17.3) * 0.035;
     if (this.campfireLight?.light) this.campfireLight.light.intensity = 0.9 + Math.sin(time * 7.7) * 0.12 + Math.sin(time * 14.9) * 0.05;
+    const wardenVictory = wardenVictoryActive(timeMilliseconds, this.realmWardenVictoryUntil);
+    if (this.realmWardenVictoryRoot) this.realmWardenVictoryRoot.enabled = wardenVictory;
+    if (this.realmWardenVictoryLight?.light) {
+      this.realmWardenVictoryLight.enabled = wardenVictory;
+      this.realmWardenVictoryLight.light.intensity = wardenVictoryPulse(timeMilliseconds);
+    }
     if (this.keeperHead) this.keeperHead.setLocalEulerAngles(0, Math.sin(time * 0.72) * 5, 0);
     if (this.keeperArm) this.keeperArm.setLocalEulerAngles(Math.sin(time * 1.65) * 8 - 8, 0, -6);
     for (const patron of this.patronHeads) {
       patron.entity.setEulerAngles(0, patron.baseYaw + Math.sin(time * 0.47 + patron.phase) * 9, 0);
     }
+  }
+
+  activateRealmWardenVictory(now = performance.now()): void {
+    this.realmWardenVictoryUntil = Math.max(this.realmWardenVictoryUntil, now + WARDEN_VICTORY_TRANSFORM_MS);
   }
 
   private keeperMaterial(color: Color): pc.StandardMaterial {
@@ -217,6 +231,8 @@ export class SceneDressing {
     this.fireLight = null;
     this.forgeLight = null;
     this.campfireLight = null;
+    this.realmWardenVictoryRoot = null;
+    this.realmWardenVictoryLight = null;
     this.keeper = null;
     this.keeperHead = null;
     this.keeperArm = null;
@@ -224,6 +240,7 @@ export class SceneDressing {
     this.patronHeads.length = 0;
     const solid = new BoxBatch();
     const glow = new BoxBatch();
+    const wardenVictory = new BoxBatch();
     const surface = SURFACE_HEIGHT + 1;
     const tavernRead = (x: number, y: number, z: number) => read(x, y, z + TOWN_TAVERN_Z_OFFSET);
 
@@ -327,6 +344,15 @@ export class SceneDressing {
         solid.box(x, 8.5, z, .35, 1, .35, SLATE);
         glow.box(x, 9.08, z, .48, .16, .48, GOLD);
       }
+      for (let x = a.minX + 1; x < a.maxX; x += 2) {
+        for (const z of [a.minZ + .5, a.maxZ + .5]) wardenVictory.box(x + .5, 8.17, z, .72, .25, .32, GOLD);
+      }
+      for (let z = a.minZ + 1; z < a.maxZ; z += 2) {
+        if (z >= 31 && z <= 33) continue;
+        for (const x of [a.minX + .5, a.maxX + .5]) wardenVictory.box(x, 8.17, z + .5, .32, .25, .72, GOLD);
+      }
+      for (const [x, z] of [[80.5, 25.5], [94.5, 25.5], [80.5, 39.5], [94.5, 39.5]] as const)
+        wardenVictory.box(x, 10.35, z, .22, 2.4, .22, CREAM);
     }
 
     // Ore-site pennants are batched with existing dressing, not new draw calls.
@@ -655,6 +681,19 @@ export class SceneDressing {
       const entity = new pc.Entity("batched-world-details");
       entity.addComponent("render", { meshInstances: [new pc.MeshInstance(mesh, material)], castShadows: castsShadow, receiveShadows: true });
       this.root.addChild(entity);
+    }
+    const victoryMesh = wardenVictory.mesh(this.app.graphicsDevice);
+    if (victoryMesh) {
+      this.meshes.push(victoryMesh);
+      this.realmWardenVictoryRoot = new pc.Entity("realm-warden-victory-boundary");
+      this.realmWardenVictoryRoot.addComponent("render", { meshInstances: [new pc.MeshInstance(victoryMesh, this.glow)], castShadows: false, receiveShadows: false });
+      this.realmWardenVictoryRoot.enabled = wardenVictoryActive(performance.now(), this.realmWardenVictoryUntil);
+      this.root.addChild(this.realmWardenVictoryRoot);
+      this.realmWardenVictoryLight = new pc.Entity("realm-warden-victory-light");
+      this.realmWardenVictoryLight.addComponent("light", { type: "omni", color: new pc.Color(1, .72, .22), intensity: 2.15, range: 18, castShadows: false });
+      this.realmWardenVictoryLight.setPosition(REALM_WARDEN_HOME.x, 9.2, REALM_WARDEN_HOME.z);
+      this.realmWardenVictoryLight.enabled = this.realmWardenVictoryRoot.enabled;
+      this.root.addChild(this.realmWardenVictoryLight);
     }
     if (tavernRead(3, 10, 16) === Block.Stone) {
       this.fireLight = new pc.Entity("tavern-hearth-light");

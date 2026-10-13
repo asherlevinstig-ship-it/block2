@@ -265,6 +265,7 @@ import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken } from "./player-profile.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
+import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
 import { advanceIndoorCameraBlend, indoorCameraOffset } from "./indoor-camera.js";
 import { canPlayAtTavernTable, canTalkToTavernKeeper, TAVERN_KEEPER, TAVERN_KEEPER_LINES, TAVERN_QUIZ_TABLE } from "./tavern-keeper.js";
 import { BLACKSMITH_STALL, canTradeAtBlacksmithStall } from "./blacksmith.js";
@@ -1851,6 +1852,8 @@ function isEnemyLootBag(drop: NetworkLootDrop): boolean {
 interface LootVisual {
   root: pc.Entity;
   marker: pc.Entity;
+  beam: pc.Entity;
+  beamUntil: number;
   revealAt: number;
   landedAt: number;
   tossFrom: pc.Vec3;
@@ -3943,6 +3946,7 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const presentationMaterial = bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[rarity];
   const material = lootMaterials[itemId] ?? rarityLootMaterials[rarity];
   const sourceId = lootSourceMob(dropId);
+  const realmWardenDrop = sourceId === "realm-stone-warden";
   const rewardCache = dropId.startsWith("forest-cache:");
   const vaultCache = sourceId === "buried-chamber-brute" && itemId === "miners_lantern";
   const guardianDrop = rewardCache || vaultCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
@@ -4012,8 +4016,9 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   const miniBossDrop = source?.state.isMiniBoss === true;
   const beam = new pc.Entity(`loot-${rarity}-beam`);
   beam.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
-  const beamHeight = miniBossDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
-  beam.setLocalScale(miniBossDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04, beamHeight, miniBossDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04);
+  const beamHeight = realmWardenDrop ? 5.5 : miniBossDrop ? 2.65 : equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
+  const beamWidth = realmWardenDrop ? .11 : miniBossDrop ? .072 : equipmentDrop ? legendaryDrop ? .065 : .05 : .04;
+  beam.setLocalScale(beamWidth, beamHeight, beamWidth);
   beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
   if (miniBossDrop || ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
     const halo = new pc.Entity(`loot-${rarity}-halo`);
@@ -4026,8 +4031,8 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
     : bagTier === "blue" ? new pc.Color(.2, .55, 1) : bagTier === "brown" ? new pc.Color(.55, .3, .12)
       : legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
         : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
-  glow.addComponent("light", { type: "omni", color: tint, intensity: miniBossDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
-    range: miniBossDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
+  glow.addComponent("light", { type: "omni", color: tint, intensity: realmWardenDrop ? 2.2 : miniBossDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
+    range: realmWardenDrop ? 8 : miniBossDrop ? 6 : legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
   glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   const now = performance.now();
   const revealAt = settled ? now : source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
@@ -4036,7 +4041,8 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
     ? new pc.Vec3(source.state.x, source.state.y + .72, source.state.z)
     : new pc.Vec3(drop.x, drop.y + 1.05, drop.z);
   app.root.addChild(root);
-  return { root, marker, revealAt, landedAt, tossFrom, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17, audioPlayed: false };
+  return { root, marker, beam, beamUntil: realmWardenDrop ? landedAt + WARDEN_LOOT_BEAM_MS : Infinity,
+    revealAt, landedAt, tossFrom, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17, audioPlayed: false };
 }
 
 function removeLootVisual(dropId: string, collectedHere: boolean): void {
@@ -6192,6 +6198,7 @@ function updateBossHud(now: number): void {
   }
   if (realmWarden && previous.alive === true && boss?.alive === false) {
     combatAudio.play("dungeonVictory"); createDungeonBurst(boss.x, boss.z, "victory", boss.y + .08);
+    sceneDressing.activateRealmWardenVictory(now);
   }
   if (crystal && bossHudState.visible && boss?.alive && previous.alive !== true) {
     combatAudio.play("dungeonGate"); createDungeonBurst(boss.x, boss.z, "crystal", boss.y + .08);
@@ -7778,6 +7785,7 @@ app.on("update", (dt: number) => {
     const focusPulse = lootId === highlightedLootId ? 1.08 + Math.sin(animationTime * 7) * .025 : 1;
     loot.root.setLocalScale(pileScale * focusPulse, pileScale * focusPulse, pileScale * focusPulse);
     loot.marker.enabled = animationNow >= loot.landedAt;
+    loot.beam.enabled = animationNow >= loot.landedAt && animationNow < loot.beamUntil;
     if (loot.marker.render && isItemId(loot.state.itemId)) loot.marker.render.material = lootWouldOverflow(lootId, loot.state)
       ? fullLootMarkerMaterial : bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[itemRarity(loot.state.itemId)];
     if (!loot.audioPlayed && loot.marker.enabled && (bagTier !== null || isEquipmentItem(loot.state.itemId))) {
