@@ -1808,9 +1808,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const wasElite = mob.isElite;
     for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
     const credited = this.combatContributions.eligible(mobId, mob, this.state.players, now);
+    // A long solo fight can age its early hits out of the contribution window.
+    // Never turn an actual killing blow into a rewardless defeat when nobody
+    // else qualified; the caller has already validated the hit and attacker.
+    const fallbackKiller = this.state.players.get(attackerId);
+    const creditedOrKiller = credited.length || !fallbackKiller || fallbackKiller.health <= 0
+      ? credited : [attackerId];
     const recipients = mobId === CRYSTAL_MATRIARCH_ID && this.roomKind === "silver-depths"
-      ? [...new Set([...credited, ...this.activeSilverDepthsParticipants()])]
-      : credited;
+      ? [...new Set([...creditedOrKiller, ...this.activeSilverDepthsParticipants()])]
+      : creditedOrKiller;
     this.combatContributions.clear(mobId);
     if ((SILVER_DEPTHS_GUARDS as readonly string[]).includes(mobId) || mobId === CRYSTAL_MATRIARCH_ID) {
       for (const playerId of recipients) {
@@ -2074,7 +2080,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       drop.y = y;
       drop.z = z;
       drop.expiresAt = mobId === CRYSTAL_MATRIARCH_ID ? Number.MAX_SAFE_INTEGER : now + LOOT_DESPAWN_MS;
-      this.state.lootDrops.set(`${mobId}:${now}:${++this.lootDropSequence}`, drop);
+      const dropId = `${mobId}:${now}:${++this.lootDropSequence}`;
+      this.state.lootDrops.set(dropId, drop);
+      this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {
+        dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity,
+        x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
+      });
     }
   }
 

@@ -3934,12 +3934,19 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
 function bindLootDrops(joinedRoom: Room): void {
   const callbacks = getStateCallbacks(joinedRoom as Room<any, any>) as any;
   const state = joinedRoom.state as any;
-  if (!state.lootDrops) return;
-  const drops = callbacks(joinedRoom.state).lootDrops;
-  drops.onAdd((drop: NetworkLootDrop, dropId: string) => {
+  const showDrop = (dropId: string, drop: NetworkLootDrop) => {
     if (!lootVisibleToPlayer(drop.ownerId, joinedRoom.sessionId)) return;
     lootVisuals.get(dropId)?.root.destroy();
     lootVisuals.set(dropId, createLootVisual(dropId, drop));
+  };
+  joinedRoom.onMessage("loot:spawned", (message: NetworkLootDrop & { dropId: string }) => {
+    const { dropId, ...drop } = message;
+    showDrop(dropId, drop);
+  });
+  if (!state.lootDrops) return;
+  const drops = callbacks(joinedRoom.state).lootDrops;
+  drops.onAdd((drop: NetworkLootDrop, dropId: string) => {
+    showDrop(dropId, drop);
   }, true);
   drops.onRemove((_drop: NetworkLootDrop, dropId: string) => {
     const visual = lootVisuals.get(dropId);
@@ -8142,6 +8149,7 @@ app.on("update", (dt: number) => {
       `server     ${authoritativeLocalPosition.x.toFixed(3)}, ${authoritativeLocalPosition.y.toFixed(3)}, ${authoritativeLocalPosition.z.toFixed(3)}`,
       `A/B ${movementPilotController ? "COLYSEUS CONTROLS" : movementShadowInput ? "shadow only" : "off"} · diff=${movementShadowDifference?.toFixed(3) ?? "waiting"}m p50/p95=${percentile(movementShadowDifferences, 0.5).toFixed(3)}/${percentile(movementShadowDifferences, 0.95).toFixed(3)}m${movementShadowReset ? " reset" : ""}`,
       `pending    ${pendingPredictionFrames.length} prediction frames · raw d=${localPlayer.getPosition().distance(authoritativeLocalPosition).toFixed(3)}`,
+      `loot       network=${room ? (room.state as any).lootDrops?.size ?? 0 : 0} · rendered=${lootVisuals.size}`,
       `reconcile  d=${reconciliation.distance.toFixed(3)} rate=${Number.isFinite(reconciliation.rate) ? reconciliation.rate.toFixed(1) : "HARD"}`,
       `net visual ${localNetworkVisualOffset.x.toFixed(3)}, ${localNetworkVisualOffset.z.toFixed(3)}`,
       `recovery   ${localRecoveryVisualOffset.x.toFixed(3)}, ${localRecoveryVisualOffset.z.toFixed(3)}`,

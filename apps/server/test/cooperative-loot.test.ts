@@ -61,7 +61,8 @@ describe("cooperative personal loot", () => {
   it("records actual weapon damage and caps overkill at remaining health", () => {
     const { room, internal, mob, rewards } = fixture(); mob.maxHealth = 20; mob.health = 1;
     internal.applyWeaponHit("a", { mainHandId: "stone_core_hammer", step: 3 }, "mob", 10000);
-    expect(mob.health).toBe(0); expect(rewards).toEqual([]); expect(room.state.lootDrops.size).toBe(0);
+    expect(mob.health).toBe(0); expect(rewards.map(reward => reward.playerId)).toEqual(["a"]); expect(room.state.lootDrops.size).toBe(2);
+    rewards.length = 0; room.state.lootDrops.clear();
     const next = new MobState(); Object.assign(next, { x: 100.5, y: 1, z: 100.5, health: 2, maxHealth: 8, armor: 0 }); room.state.mobs.set("next", next);
     internal.applyWeaponHit("a", { mainHandId: "longsword", step: 1 }, "next", 10000);
     internal.applyWeaponHit("b", { mainHandId: "longsword", step: 1 }, "next", 10000);
