@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
 import { WorldRoom } from "./game-room.js";
-import { LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
+import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -47,6 +47,20 @@ describe("manual floor loot", () => {
     }));
     expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({
       ok: true, dropId: "iron-drop", message: "Picked up 2 Iron Ore.",
+    }));
+  });
+
+  it("keeps the drop on the floor and reports when capacity is full", () => {
+    const { room, player, client } = roomWithMaterialDrop();
+    const carried = new InventoryItemState();
+    carried.quantity = 12;
+    player.inventory.set("iron_ore", carried);
+    (room as any).handleLootCollect(client, { dropId: "iron-drop", action: "keep" });
+    expect(room.state.lootDrops.has("iron-drop")).toBe(true);
+    expect(player.inventory.get("iron_ore")?.quantity).toBe(12);
+    expect(room.broadcast).not.toHaveBeenCalledWith("loot:picked-up", expect.anything());
+    expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({
+      ok: false, dropId: "iron-drop", message: "Your Iron Ore capacity is full.",
     }));
   });
 

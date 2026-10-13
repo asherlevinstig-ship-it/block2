@@ -37,7 +37,7 @@ import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
-import { HEALING_POTION, type PotionUpdate } from "@blockcraft/protocol";
+import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation } from "@blockcraft/voxel-world";
@@ -2129,8 +2129,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       for (const reward of bundle) {
         let item = player.inventory.get(reward.itemId);
         const before = item?.quantity ?? 0;
-        const capacity = reward.itemId === "healing_potion" ? HEALING_POTION.capacity
-          : reward.itemId === "iron_ore" || reward.itemId === "silver_ore" ? ironCapacity(player.blacksmithUpgrades) : 65535;
+        const capacity = lootCarryCapacity(reward.itemId, ironCapacity(player.blacksmithUpgrades));
         const quantity = Math.max(0, Math.min(reward.quantity, capacity - before));
         if (quantity === 0) continue;
         if (!item) { item = new InventoryItemState(); player.inventory.set(reward.itemId, item); }
@@ -2179,8 +2178,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     let item = player.inventory.get(itemId);
     const before = item?.quantity ?? 0;
-    const capacity = itemId === "healing_potion" ? HEALING_POTION.capacity
-      : itemId === "iron_ore" || itemId === "silver_ore" ? ironCapacity(player.blacksmithUpgrades) : 65_535;
+    const capacity = lootCarryCapacity(itemId, ironCapacity(player.blacksmithUpgrades));
     if (before + drop.quantity > capacity) return reply(false, `Your ${ITEM_DEFINITIONS[itemId].name} capacity is full.`);
     if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
     item.quantity = inventoryTotal(before, drop.quantity);

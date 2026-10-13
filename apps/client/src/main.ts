@@ -101,6 +101,7 @@ import {
   ITEM_DEFINITIONS,
   ITEM_RARITIES,
   itemRarity,
+  lootCarryCapacity,
   equipmentPerkStats,
   type ItemRarity,
   HEALING_POTION,
@@ -2039,9 +2040,19 @@ function nearestLootDrop(): string | null {
 function lootHasDetails(dropId: string, drop: NetworkLootDrop): boolean {
   return dropId.startsWith("forest-cache:") || isEquipmentItem(drop.itemId) || Boolean(utilityForItem(drop.itemId));
 }
+function lootWouldOverflow(dropId: string, drop: NetworkLootDrop): boolean {
+  if (dropId.startsWith("forest-cache:") || !isItemId(drop.itemId)) return false;
+  return (inventoryCounts.get(drop.itemId) ?? 0) + drop.quantity > lootCarryCapacity(drop.itemId, blacksmithIronCapacity);
+}
 function interactWithLoot(dropId: string): void {
   const drop = lootVisuals.get(dropId)?.state;
   if (!drop || !room || !worldReady) return;
+  if (lootWouldOverflow(dropId, drop)) {
+    const message = `Your ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"} capacity is full.`;
+    status.textContent = message;
+    showCombatFeedback("INVENTORY FULL", "hurt");
+    return;
+  }
   if ((pendingFloorLoot.get(dropId) ?? 0) > performance.now()) return;
   pendingFloorLoot.set(dropId, performance.now() + 2_000);
   room.send("loot:collect", { dropId, action: "keep" });
@@ -2058,7 +2069,7 @@ function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
   const owned = inventoryCounts.get(drop.itemId) ?? 0;
   const hand = equipmentForItem(drop.itemId);
   const armour = armourForItem(drop.itemId);
-  const detailKey = `${dropId}:${drop.itemId}:${drop.quantity}:${owned}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${equipmentRank(drop.itemId)}`;
+  const detailKey = `${dropId}:${drop.itemId}:${drop.quantity}:${owned}:${blacksmithIronCapacity}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${equipmentRank(drop.itemId)}`;
   if (detailKey === lootWorldDetailKey) return;
   lootWorldDetailKey = detailKey;
   lootWorldStats.replaceChildren();
@@ -2089,8 +2100,12 @@ function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
     lootWorldStats.append(description);
   }
   if (lootWorldStats.lastChild?.nodeType === Node.TEXT_NODE) lootWorldStats.lastChild.remove();
-  lootWorldVerdict.textContent = verdict;
-  lootWorldCarry.textContent = `DROP ×${drop.quantity} · PACK ${owned} → ${owned + drop.quantity}`;
+  const capacity = lootCarryCapacity(drop.itemId, blacksmithIronCapacity);
+  const full = lootWouldOverflow(dropId, drop);
+  lootWorldVerdict.textContent = full ? "FULL" : verdict;
+  lootWorldCarry.textContent = capacity < 65_535 && !dropId.startsWith("forest-cache:")
+    ? `DROP ×${drop.quantity} · PACK ${owned} / ${capacity}`
+    : `DROP ×${drop.quantity} · PACK ${owned} → ${owned + drop.quantity}`;
 }
 function updateLootWorldLabel(): void {
   lootWorldLabel.hidden = true;
@@ -2107,11 +2122,13 @@ function updateLootWorldLabel(): void {
   const rarity = itemRarity(drop.itemId);
   const hasDetails = lootHasDetails(nearest.id, drop);
   const equippable = Boolean(equipmentForItem(drop.itemId) || armourForItem(drop.itemId));
+  const full = lootWouldOverflow(nearest.id, drop);
   updateLootWorldDetails(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
   lootWorldName.textContent = `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${hasDetails || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
-  lootWorldAction.textContent = `${near ? "E · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
+  lootWorldAction.textContent = `${near ? full ? "INVENTORY FULL" : "E · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
+  lootWorldLabel.dataset.full = String(full);
   lootWorldLabel.style.left = `${rect.left + screen.x}px`;
   lootWorldLabel.style.top = `${rect.top + screen.y}px`;
   lootWorldLabel.hidden = false;
@@ -3775,6 +3792,7 @@ const rarityLootMaterials: Record<ItemRarity, pc.StandardMaterial> = {
   epic: powerMaterial(new pc.Color(.72, .3, 1), .6),
   legendary: powerMaterial(new pc.Color(1, .58, .12), .82),
 };
+const fullLootMarkerMaterial = powerMaterial(new pc.Color(1, .12, .06), .65);
 function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.StandardMaterial): boolean {
   if (armourForItem(itemId)) {
     addBox(root, "dropped-armour-chest", material, [.64, .58, .3], [0, 0, 0]);
@@ -5478,6 +5496,8 @@ function updateTarget(): void {
     const quantity = drop && drop.quantity > 1 ? `${drop.quantity}× ` : "";
     targetLabel.textContent = nearbyLoot.startsWith("forest-cache:")
       ? "Personal Rootbound Cache · press E or Loot to claim"
+      : drop && lootWouldOverflow(nearbyLoot, drop)
+        ? `${itemName} · inventory full`
       : `${quantity}${itemName} · press E or Loot to pick up`;
   }
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
@@ -7526,6 +7546,8 @@ app.on("update", (dt: number) => {
     const focusPulse = lootId === highlightedLootId ? 1.08 + Math.sin(animationTime * 7) * .025 : 1;
     loot.root.setLocalScale(pileScale * focusPulse, pileScale * focusPulse, pileScale * focusPulse);
     loot.marker.enabled = animationNow >= loot.landedAt;
+    if (loot.marker.render && isItemId(loot.state.itemId)) loot.marker.render.material = lootWouldOverflow(lootId, loot.state)
+      ? fullLootMarkerMaterial : rarityLootMaterials[itemRarity(loot.state.itemId)];
     if (!loot.audioPlayed && loot.marker.enabled && isEquipmentItem(loot.state.itemId)) {
       loot.audioPlayed = true;
       const rarity = itemRarity(loot.state.itemId);

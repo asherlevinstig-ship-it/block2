@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, VENOM_RING_OFFSETS, MATRIARCH_P
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-direct-loot-cave-rhythm-v124";
+export const WORLD_ROOM = "world-loot-capacity-preview-v125";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
@@ -391,6 +391,12 @@ export const ITEM_DEFINITIONS = {
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
+/** Capacity used when collecting a floor drop into the carried inventory. */
+export function lootCarryCapacity(itemId: ItemId, mineralCapacity: number): number {
+  if (itemId === "healing_potion") return HEALING_POTION.capacity;
+  if (itemId === "iron_ore" || itemId === "silver_ore") return mineralCapacity;
+  return 65_535;
+}
 export const ITEM_RARITIES = {
   common: { label: "Common", order: 0 },
   uncommon: { label: "Uncommon", order: 1 },
