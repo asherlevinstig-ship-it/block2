@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderHealthPhase, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderAttackName, leaderExposureLabel, leaderHealthPhase, leaderRematchLabel, realmBossHealthPhase } from "./boss-hud.js";
 const player = { x: 40, y: 8, z: 18, health: 5 };
 const boss = { x: 43, y: 8, z: 18, name: "Matriarch", alive: true, health: 24, maxHealth: 24, enraged: false };
 describe("boss HUD", () => {
@@ -67,6 +67,11 @@ describe("boss HUD", () => {
     expect(leaderExposureLabel(3500, 1000)).toBe("LEADER EXPOSED · 2.5s");
     expect(leaderExposureLabel(3500, 3499)).toBe("LEADER EXPOSED · 0.1s");
     expect(leaderExposureLabel(3500, 3500)).toBe("");
+  });
+  it("keeps empowered rematch and reward information compact beside the health bar", () => {
+    expect(leaderRematchLabel(0, "")).toBe("");
+    expect(leaderRematchLabel(1, "frenzied")).toBe("FRENZIED · R1 · RELIC +1 MAT");
+    expect(leaderRematchLabel(4, "venomous")).toBe("VENOMOUS · R4 · 2 RELICS +2 MAT");
   });
   it("recognises nearby combat without treating distant or idle mobs as combat", () => {
     const active = { x: 5, y: 8, z: 0, alive: true, combatState: "windup", targetId: "tester" };

@@ -1,5 +1,5 @@
 type Pose = { x: number; y: number; z: number };
-export type BossHudMob = Pose & { name: string; alive: boolean; health: number; maxHealth: number; enraged?: boolean; isMiniBoss?: boolean };
+export type BossHudMob = Pose & { name: string; alive: boolean; health: number; maxHealth: number; enraged?: boolean; isMiniBoss?: boolean; leaderRematchTier?: number; leaderModifier?: string };
 export type CombatHudMob = Pose & { alive: boolean; combatState: string; targetId: string };
 export interface BossHudState { visible: boolean; alive?: boolean; enraged: boolean; message: string; messageUntil: number }
 export const initialBossHud = (): BossHudState => ({ visible: false, enraged: false, message: "", messageUntil: 0 });
@@ -89,6 +89,12 @@ export function leaderAttackLabel(pattern: string, combatState: string): string 
 export function leaderExposureLabel(expiresAt: number, now: number): string {
   const remaining = Math.max(0, expiresAt - now);
   return remaining > 0 ? `LEADER EXPOSED · ${(Math.ceil(remaining / 100) / 10).toFixed(1)}s` : "";
+}
+
+export function leaderRematchLabel(tier = 0, modifier = ""): string {
+  if (tier <= 0 || !modifier) return "";
+  const relics = tier >= 4 ? "2 RELICS" : "RELIC";
+  return `${modifier.toUpperCase()} · R${tier} · ${relics} +${Math.min(3, Math.ceil(tier / 2))} MAT`;
 }
 
 export function leaderHealthPhase(health: number, maxHealth: number): 1 | 2 | 3 {

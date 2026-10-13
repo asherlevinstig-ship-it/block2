@@ -42,6 +42,8 @@ import { shouldBecomeWildernessElite, wildernessEliteKind,
 import { AREA_LEADER_FOLLOWERS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
+import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, leaderRematchPressureCadence,
+  leaderRematchStats, leaderRematchTiming } from "./leader-rematches.js";
 import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE,
   dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
@@ -401,6 +403,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly miniBossEngagedAt = new Map<string, number>();
   private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
   private readonly miniBossArenaCover = new Map<string, Map<string, ActiveMiniBossCover>>();
+  private readonly leaderDefeats = new Map<string, number>();
   private readonly realmBossPhases = new Map<string, RealmBossPhase>();
   private readonly mobProgress = new Map<string, MobProgress>();
   private readonly mobUnreachableUntil = new Map<string, number>();
@@ -1983,11 +1986,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isRealmEventId(mobId)) this.realmBossPhases.delete(mobId);
     this.openAreaLeaderAfterFollowerDefeat(mobId, now);
     const areaMainMob = areaMainMobDefinition(mobId);
+    if (areaMainMob) this.leaderDefeats.set(mobId, Math.min(5, (this.leaderDefeats.get(mobId) ?? 0) + 1));
     if (areaMainMob) for (const playerId of recipients) {
+      const rematch = leaderRematch(mobId, mob.leaderRematchTier);
       this.clients.find(client => client.sessionId === playerId)?.send("objective:completed", {
         objectiveId: `area-main-${mobId}`,
-        title: `${areaMainMob.name} Defeated`,
-        rewardLabel: `${areaMainMob.rewardLabel} · ${ITEM_DEFINITIONS[areaMainMob.rewardItemId].name}`,
+        title: `${mob.leaderRematchTier > 0 ? `Empowered ${areaMainMob.name}` : areaMainMob.name} Defeated`,
+        rewardLabel: `${areaMainMob.rewardLabel} · ${ITEM_DEFINITIONS[areaMainMob.rewardItemId].name} · ${rematch.rewardLabel}`,
         coinsGranted: 0,
       } satisfies WorldObjectiveCompleted);
     }
@@ -2074,7 +2079,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.health = reward.health;
       player.stamina = reward.stamina;
       const coinsBefore = player.coins;
-      const coinsGranted = wasElite || Boolean(areaMainMob) ? 5 : 2;
+      const coinsGranted = Boolean(areaMainMob) ? 5 + Math.ceil(mob.leaderRematchTier / 2) : wasElite ? 5 : 2;
       player.coins = Math.min(1_000_000, player.coins + coinsGranted);
       this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level), mob.name);
       void this.persistPlayer(playerId, player);
@@ -2304,7 +2309,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const firstLeaderVictory = Boolean(rewardPlayer && areaReward
       && !this.ownsOrHasPendingItem(ownerId, areaReward.rewardItemId));
     const areaRelicDrops: { itemId: ItemId; quantity: number }[] = rewardPlayer && areaReward
-      ? [{ itemId: areaReward.rewardItemId, quantity: 1 }] : [];
+      ? [{ itemId: areaReward.rewardItemId, quantity: mob.leaderRematchTier >= 4 ? 2 : 1 }] : [];
+    const rematchMaterialQuantity = areaReward ? leaderRematchMaterialBonus(mob.leaderRematchTier) : 0;
+    const rematchMaterialId: ItemId = mob.archetype === "cave_spitter" ? "acid_gland"
+      : mob.archetype === "stone_brute" ? "stone_core" : "crawler_fang";
+    const rematchDrops: { itemId: ItemId; quantity: number }[] = rematchMaterialQuantity > 0
+      ? [{ itemId: rematchMaterialId, quantity: rematchMaterialQuantity }] : [];
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
     const signatureDrops = (itemId: SignatureItemId): { itemId: ItemId; quantity: number }[] => {
@@ -2344,6 +2354,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? [{ itemId: "moonstone" as ItemId, quantity: 2 }, { itemId: "silver_ore" as ItemId, quantity: 6 }]
         : []),
       ...areaRelicDrops,
+      ...rematchDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);
@@ -2375,7 +2386,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
     });
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
-      `${firstLeaderVictory ? "FIRST LEADER VICTORY" : "SIGNATURE DROP"} · ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name} added to your personal cache.`);
+      `${firstLeaderVictory ? "FIRST LEADER VICTORY" : mob.leaderRematchTier > 0 ? `EMPOWERED REMATCH ${mob.leaderRematchTier}` : "SIGNATURE DROP"} · ${areaRelicDrops[0]!.quantity} ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name}${rematchMaterialQuantity ? ` + ${rematchMaterialQuantity} bonus ${ITEM_DEFINITIONS[rematchMaterialId].name}` : ""} added to your personal cache.`);
   }
 
   private resolveLootPickups(now: number): void {
@@ -4177,6 +4188,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence)
           : "slam");
       }
+      if (mob.isMiniBoss && mob.combatState === "idle" && mob.leaderRematchTier > 0) {
+        mob.attackPattern = leaderRematchPattern(mob.attackPattern, mob.archetype, mob.actionSequence, mob.leaderModifier);
+      }
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
       if (!mob.alive && now >= mob.respawnAt) {
@@ -4200,11 +4214,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && !isAreaMiniBoss(id) && candidate.isElite
             && (candidate.alive || candidate.materializeUntil > now)).length;
           const areaMiniBoss = areaMiniBossDefinition(mobId);
+          const pendingRematch = leaderRematch(mobId, this.leaderDefeats.get(mobId) ?? 0);
           mob.isElite = !areaMiniBoss && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
           const eliteKind = wildernessEliteKind(definition.id);
           mob.eliteKind = mob.isElite ? eliteKind : "";
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
           mob.name = areaMiniBoss?.name ?? (mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName);
+          if (areaMiniBoss) {
+            mob.leaderRematchTier = pendingRematch.tier;
+            mob.leaderModifier = pendingRematch.modifier;
+          }
           mob.actionSequence = 0;
           if (areaMiniBoss) mob.attackPattern = areaLeaderPattern(definition.id, 0, 1, mobId);
           else if (mob.isElite) mob.attackPattern = wildernessElitePattern(definition.id, 0);
@@ -4245,6 +4264,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
         if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = crystalMatriarchPattern(0, false); }
         if (mobId === "forge-colossus") { mob.health = mob.maxHealth = 38; mob.attackDamage = 3; mob.attackPattern = "rocks"; }
+        const areaLeader = areaMainMobDefinition(mobId);
+        if (areaLeader) {
+          const rematch = leaderRematch(mobId, this.leaderDefeats.get(mobId) ?? 0);
+          const empowered = leaderRematchStats({ maxHealth: mob.maxHealth, damage: mob.attackDamage, armor: mob.armor,
+            speedMultiplier: mob.speedMultiplier, rewardMultiplier: mob.rewardMultiplier }, rematch);
+          mob.leaderRematchTier = rematch.tier;
+          mob.leaderModifier = rematch.modifier;
+          mob.health = mob.maxHealth = empowered.maxHealth;
+          mob.attackDamage = empowered.damage;
+          mob.armor = empowered.armor;
+          mob.speedMultiplier = empowered.speedMultiplier;
+          mob.rewardMultiplier = empowered.rewardMultiplier;
+        }
         if (mobId === CRYSTAL_MATRIARCH_ID) this.restoreMatriarchCover();
         mob.alive = true;
         mob.respawnAt = 0;
@@ -4317,7 +4349,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.stateUntil = definition.attackKind === "melee" ? mob.attackContactEndAt : mob.attackRecoveryEndAt;
         mob.actionSequence += 1;
         this.lastMobAttackAt.set(mobId, now);
-        if (mob.isMiniBoss && currentAreaLeaderPhase >= 2 && mob.actionSequence % 3 === 0) {
+        if (mob.isMiniBoss && currentAreaLeaderPhase >= 2
+          && mob.actionSequence % leaderRematchPressureCadence(mob.leaderRematchTier, mob.leaderModifier) === 0) {
           this.placeMiniBossArenaPressure(mobId, mob, currentAreaLeaderPhase, now);
         }
         if (!targetPlayer && mob.archetype !== "stone_brute") {
@@ -4482,7 +4515,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? MATRIARCH_PHASE.crystalBurstWindupMs
         : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
-      const windupMs = baseWindupMs + miniBossWindupDelay(mob.isMiniBoss, mob.actionSequence);
+      const rematchTiming = leaderRematchTiming(mob.leaderModifier);
+      const windupMs = Math.round((baseWindupMs + miniBossWindupDelay(mob.isMiniBoss, mob.actionSequence)) * rematchTiming.windup);
       if (definition.attackKind === "projectile" && mob.archetype === "cave_spitter"
         && !allyFireLaneClear(mobId, mob, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
         positioning.sidestepPending = true;
@@ -4498,7 +4532,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const peer = this.state.mobs.get(id);
           return Boolean(peer?.alive && peer.attackStartedAt === startedAt && ["windup", "strike", "recover"].includes(peer.combatState));
         })
-        || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs
+        || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs * rematchTiming.cooldown
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       if (mobId === "frontier-brute" && !mob.isMiniBoss && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);

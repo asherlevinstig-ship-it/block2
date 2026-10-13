@@ -90,6 +90,8 @@ export type LootDropState = SchemaType<typeof LootDropState>;
 export const MobState = schema({
   isChampion: t.boolean().default(false),
   isMiniBoss: t.boolean().default(false),
+  leaderRematchTier: t.int8().default(0),
+  leaderModifier: t.string().default(""),
   isElite: t.boolean().default(false),
   eliteKind: t.string().default(""),
   enraged: t.boolean().default(false),

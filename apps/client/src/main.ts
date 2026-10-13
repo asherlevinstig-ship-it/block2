@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
-import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderHealthPhase, realmBossHealthPhase } from "./boss-hud.js";
+import { activeCombatNearby, advanceBossHud, initialBossHud, leaderAttackLabel, leaderExposureLabel, leaderHealthPhase, leaderRematchLabel, realmBossHealthPhase } from "./boss-hud.js";
 import { forestDungeonAtmosphere, forestDungeonNotice, portalNoticeFeedback } from "./forest-dungeon-presentation.js";
 import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
@@ -1788,6 +1788,8 @@ interface NetworkMob {
   alertUntil: number;
   isChampion: boolean;
   isMiniBoss: boolean;
+  leaderRematchTier: number;
+  leaderModifier: string;
   isElite: boolean;
   eliteKind: string;
   enraged?: boolean;
@@ -4251,7 +4253,7 @@ function bindMobs(joinedRoom: Room): void {
         updateMobVisual(visual);
       });
     };
-    for (const field of ["awarenessState", "alertUntil", "isChampion", "isMiniBoss", "isElite", "eliteKind", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "respawnAt", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
+    for (const field of ["awarenessState", "alertUntil", "isChampion", "isMiniBoss", "leaderRematchTier", "leaderModifier", "isElite", "eliteKind", "attackPattern", "x", "y", "z", "health", "maxHealth", "alive", "hitSequence", "actionSequence", "combatState", "aimCommitted", "attackStartedAt", "attackReleaseAt", "attackContactAt", "attackContactEndAt", "attackRecoveryEndAt", "attackStrikeX", "attackStrikeY", "attackStrikeZ", "stateUntil", "targetId", "staggerSequence", "respawnAt", "materializeUntil", "yaw", "archetype", "armor", "name", "difficultyTier", "level", "attackDamage", "speedMultiplier", "rewardMultiplier"] as const) {
       mobCallbacks.listen(field, () => {
         // Capture movement and combat transitions once from the complete patch.
         // State changes also supply a stationary sample when pursuit stops.
@@ -6249,6 +6251,7 @@ const bossPhase = document.querySelector<HTMLElement>("#boss-phase")!;
 const bossHealth = document.querySelector<HTMLElement>("#boss-health")!;
 const bossHealthFill = document.querySelector<HTMLElement>("#boss-health-fill")!;
 const bossHealthText = document.querySelector<HTMLElement>("#boss-health-text")!;
+const bossRematch = document.querySelector<HTMLElement>("#boss-rematch")!;
 const bossExposed = document.querySelector<HTMLElement>("#boss-exposed")!;
 const bossAttackLabel = document.querySelector<HTMLElement>("#boss-attack-label")!;
 const bossNotice = document.querySelector<HTMLElement>("#boss-notice")!;
@@ -6302,7 +6305,8 @@ function updateBossHud(now: number): void {
     if (boss) createDungeonBurst(boss.x, boss.z, "gate");
   }
   const exposedLabel = boss?.isMiniBoss ? leaderExposureLabel(leaderExposedUntil.get(nextBossId) ?? 0, now) : "";
-  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message, exposedLabel]);
+  const rematchLabel = boss?.isMiniBoss ? leaderRematchLabel(boss.leaderRematchTier, boss.leaderModifier) : "";
+  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
@@ -6322,6 +6326,9 @@ function updateBossHud(now: number): void {
   bossHud.dataset.exposed = String(Boolean(exposedLabel));
   bossExposed.hidden = !exposedLabel;
   bossExposed.textContent = exposedLabel;
+  bossRematch.hidden = !rematchLabel;
+  bossRematch.textContent = rematchLabel;
+  bossRematch.dataset.modifier = boss.leaderModifier || "";
   bossAttackLabel.textContent = boss.alive ? leaderAttackLabel(boss.attackPattern, boss.combatState) : "ENCOUNTER COMPLETE";
   bossAttackLabel.dataset.state = boss.combatState;
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;

@@ -1644,6 +1644,11 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #boss-hud header { display: flex; justify-content: space-between; gap: 8px; font: 800 9px/1.4 system-ui, sans-serif; letter-spacing: .1em; color: #c8b17d; }
 #boss-hud h2 { margin: 5px 0 9px; font: 800 18px/1.2 system-ui, sans-serif; }
 .boss-health-row { display: flex; align-items: stretch; gap: 8px; }
+#boss-rematch { display: grid; place-items: center; flex: 0 0 auto; max-width: 135px; padding: 0 8px; border: 1px solid #dc984e; border-radius: 5px; color: #ffe0a1; background: #4b2916; font: 950 8px/1.15 system-ui, sans-serif; letter-spacing: .035em; text-align: center; }
+#boss-rematch[hidden] { display: none; }
+#boss-rematch[data-modifier="armoured"] { border-color: #b8c8d4; color: #edf7ff; background: #33404a; }
+#boss-rematch[data-modifier="venomous"] { border-color: #9acc5e; color: #e0ffae; background: #30421e; }
+#boss-rematch[data-modifier="relentless"] { border-color: #db6b69; color: #ffd0b0; background: #4b1e20; }
 #boss-health { position: relative; flex: 1 1 auto; min-width: 90px; height: 22px; overflow: hidden; border-radius: 5px; background: #392425; }
 #boss-health-fill { position: absolute; inset: 0; background: linear-gradient(90deg, #ac453d, #ef9c61); transform-origin: left; transition: transform 120ms linear; }
 #boss-health-text { position: relative; z-index: 2; display: block; text-align: center; color: white; text-shadow: 0 1px 2px #000; font: 800 11px/22px system-ui, sans-serif; }
@@ -1679,7 +1684,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #boss-hud[data-encounter="miniboss"] #boss-health { background: #38240f; }
 #boss-hud[data-encounter="miniboss"] #boss-health-fill { background: linear-gradient(90deg, #d56c20, #ffd45e); }
 @media (min-width: 821px) { #boss-hud { left: max(50%, 610px); width: min(430px, calc(100vw - 440px)); } }
-@media (max-width: 520px) { #boss-exposed { padding-inline: 6px; font-size: 8px; letter-spacing: 0; } }
+@media (max-width: 520px) { #boss-exposed { padding-inline: 6px; font-size: 8px; letter-spacing: 0; } #boss-rematch { max-width: 100px; padding-inline: 5px; font-size: 7px; letter-spacing: 0; } }
 #objective-marker i { display: block; color: var(--objective-color, #f5c846); font-style: normal; font-size: 23px; line-height: 24px; }
 #objective-marker[data-kind="encounter"] { --objective-color: #ff9678; }
 #objective-marker[data-kind="miniboss"] { --objective-color: #ffc65c; }
