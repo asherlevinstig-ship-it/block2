@@ -372,7 +372,7 @@ function showDungeonRunResult(update: DungeonRunUpdate): void {
   const silverDepths = update.dungeon === "silver-depths";
   const emberVault = update.dungeon === "ember-vault";
   panel.dataset.dungeon = silverDepths ? "silver-depths" : emberVault ? "ember-vault" : "forest";
-  panel.setAttribute("aria-label", silverDepths ? "Silver Depths expedition results" : emberVault ? "Ember Vault expedition results" : "Forest Dungeon complete");
+  panel.setAttribute("aria-label", silverDepths ? "Silver Depths run results" : emberVault ? "Ember Vault run results" : "Forest Dungeon complete");
   panel.innerHTML = emberVault
     ? '<small>EMBER VAULT · FORGE CONQUERED</small><h2>FORGE COLOSSUS DEFEATED</h2><div class="dungeon-rank"></div><p class="dungeon-run-time"></p><div class="dungeon-stat-grid"><span><small>ENEMIES</small><b data-stat="enemies">0</b></span><span><small>DAMAGE TAKEN</small><b data-stat="damage">0</b></span><span><small>EMBER CORES</small><b data-stat="ember">0</b></span><span><small>CORES HELD</small><b data-stat="wallet">0</b></span><span><small>FORGE LOOT</small><b data-stat="relic">SECURED</b></span></div><strong class="dungeon-run-reward"></strong><p class="dungeon-best-time">The return portal is stable. Collect the Colossus loot before leaving.</p><div class="dungeon-result-actions"><button class="dungeon-return" type="button">CONTINUE</button><button class="dungeon-replay" type="button">RUN AGAIN</button></div>'
     : silverDepths
@@ -4970,7 +4970,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     card.classList.toggle("owned", isOwned);
     const expeditionLocked = upgradeId === "moonstone_edge" && !isOwned;
     button.disabled = isOwned || expeditionLocked || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre;
-    button.textContent = isOwned ? "EQUIPPED" : expeditionLocked ? "EXPEDITION LOCKED" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
+    button.textContent = isOwned ? "EQUIPPED" : expeditionLocked ? "BOSS DROP REQUIRED" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
   }
   const ownedDepths = new Set(update.ownedDepthsRewards ?? []);
   const moonstone = update.moonstone ?? 0;
@@ -5472,7 +5472,7 @@ function updateTarget(): void {
   else if (currentTarget.block === Block.IronOre || currentTarget.block === Block.SilverOre || currentTarget.block === Block.MoonstoneOre) {
     const moonstone = currentTarget.block === Block.MoonstoneOre;
     const silver = currentTarget.block === Block.SilverOre;
-    targetLabel.textContent = moonstone ? "Moonstone seal · fixed expedition mineral · click to mine"
+    targetLabel.textContent = moonstone ? "Moonstone seal · dungeon reward mineral · click to mine"
       : `${silver ? "Silver" : "Iron"} deposit · ${silver ? SILVER_ORE_GOLD_PRICE : IRON_ORE_GOLD_PRICE} gold per ore · click to mine`;
   }
   else if (currentTarget.block === Block.Leaves) targetLabel.textContent = `Greenwood canopy · ${targetKey} · clear foliage`;

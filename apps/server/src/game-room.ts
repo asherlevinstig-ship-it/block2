@@ -2821,7 +2821,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     return 1;
   }
 
-  private sendDungeonBoard(client: Client, message = "Prepare an expedition, then open a reserved portal for your group."): void {
+  private sendDungeonBoard(client: Client, message = "Prepare a dungeon run, then open a reserved portal for your group."): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     const cooldownUntil = this.forestDungeonCooldownUntil.get(client.sessionId) ?? 0;
@@ -2845,17 +2845,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (parsed.data.action === "sync") { this.sendDungeonBoard(client); return; }
     if (Math.abs(player.y - TOWN_EXPEDITION_BOARD_POSITION.y) > 1.6
       || Math.hypot(player.x - TOWN_EXPEDITION_BOARD_POSITION.x, player.z - TOWN_EXPEDITION_BOARD_POSITION.z) > 3) {
-      this.sendDungeonBoard(client, "Move closer to the expedition board."); return;
+      this.sendDungeonBoard(client, "Move closer to the dungeon gate."); return;
     }
     if (!this.parties.isLeader(client.sessionId)) {
-      this.sendDungeonBoard(client, "Only the party leader can launch the expedition."); return;
+      this.sendDungeonBoard(client, "Only the party leader can launch the dungeon run."); return;
     }
     const now = Date.now(), cooldownUntil = this.forestDungeonCooldownUntil.get(client.sessionId) ?? 0;
     if (now < cooldownUntil) {
       this.sendDungeonBoard(client, `Your expedition recovers in ${Math.ceil((cooldownUntil - now) / 1000)} seconds.`); return;
     }
     if (this.forestDungeonActive || this.forestDungeonRun) {
-      this.sendDungeonBoard(client, "The Forest Dungeon is occupied by another expedition."); return;
+      this.sendDungeonBoard(client, "The Forest Dungeon is occupied by another group."); return;
     }
     const cohort = this.parties.cohort(client.sessionId);
     this.forestDungeonUnlocked = true;
@@ -2868,7 +2868,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const memberId of this.forestDungeonRun.allowed) {
       this.clients.find(other => other.sessionId === memberId)?.send("portal:notice", "Expedition portal opened beside the board · enter within 30 seconds.");
     }
-    this.sendDungeonBoard(client, "Reserved expedition portal opened for 30 seconds.");
+    this.sendDungeonBoard(client, "Reserved dungeon portal opened for 30 seconds.");
   }
 
   private sendDungeonLobby(message = "Assemble at the entrance and ready up."): void {
@@ -2994,7 +2994,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return;
     }
     if (activeRun && activeRun.completedAt === 0) {
-      client.send("portal:notice", "This expedition is still active · defeat the Crystal Matriarch before extracting.");
+      client.send("portal:notice", "This dungeon run is still active · defeat the Crystal Matriarch before extracting.");
       return;
     }
     this.forestTravelAt.set(client.sessionId, now);

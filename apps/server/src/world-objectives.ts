@@ -48,7 +48,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       if (!includeFallback) return null;
       const minerals = (player.inventory.get("iron_ore")?.quantity ?? 0) + (player.inventory.get("silver_ore")?.quantity ?? 0);
       return minerals > 0 ? make("blacksmith", "Trade Your Minerals", "Take your minerals to the blacksmith and press E to trade them for gold.", TOWN_BLACKSMITH_STALL_POSITION, "hub")
-        : make("leave-town", "Explore the Wilderness", "Leave through the east gate. Nearby encounters will become your objective as you explore.", { x: 30.5, y: 8, z: 8.5 }, "hub");
+        : make("leave-town", "Explore the Wilderness", "Leave through the east gate. Nearby threats will be marked as you explore.", { x: 30.5, y: 8, z: 8.5 }, "hub");
     }
     const dungeon = isInForestDungeon(player.x, player.z);
     const groups = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({ id: `mob-${id}`, title: mob.name, detail: "Defeat this nearby enemy and collect your item drops.", ids: [id] }))];
@@ -115,28 +115,6 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     return localObjective(false) ?? quest;
   };
   // A dungeon run is its own room and must not inherit an unfinished town quest.
-  const expeditionStage = roomKind === "silver-depths" ? 8 : player.miningExpeditionStage ?? 8;
-  const expedition = (update: WorldObjectiveUpdate, step: number): WorldObjectiveUpdate => preferNearby({ ...update, recommendedLevel: "LV 1–4", progressLabel: `STEP ${step} / 8` });
-  if (expeditionStage === 0) return expedition(make("expedition-briefing", "Speak to the Blacksmith", "Visit the blacksmith stall and press E to receive your first mining expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
-  if (expeditionStage === 1) return expedition(make("expedition-enter-mine", "Enter the East Ore Mine", "Leave through the east gate and descend beneath the gold mine gateway.", { x: 34.5, y: 3, z: 8.5 }, "explore"), 2);
-  if (expeditionStage === 2) return expedition(make("expedition-iron", "Mine Iron Ore", "Find and mine an iron block in the first underground chamber.", { x: 39.5, y: 3, z: 6.5 }, "explore"), 3);
-  if (expeditionStage === 3) return expedition(make("expedition-silver", "Mine Silver Ore", "Push deeper, defeat or evade the chamber spitter, and mine a silver block.", { x: 48.5, y: 1, z: 10.5 }, "explore", 2), 4);
-  if (expeditionStage === 4) return expedition(make("expedition-breach", "Breach the Buried Vault", "Mine through the silver seal at the eastern wall of the deep chamber.", { x: 52.5, y: 1.5, z: 8.5 }, "explore", 3), 5);
-  if (expeditionStage === 5) {
-    const ids = ["buried-vault-crawler", "buried-chamber-brute"];
-    const living = ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive ? [{ id, mob }] : []; });
-    const target = living[0] ?? { id: "buried-chamber-brute", mob: mobs.get("buried-chamber-brute") ?? { x: 56.5, y: 1, z: 9.5 } };
-    const update = make("expedition-warden", "Defeat the Stone Warden", "Clear the Vault Crawler, then dodge the Warden's committed strike and counter during recovery.", target.mob, "encounter", 3);
-    update.targetMobId = target.id; update.targetMobIds = ids; update.completedMobIds = ids.filter(id => mobs.get(id)?.alive === false);
-    return expedition(update, 6);
-  }
-  if (expeditionStage === 6) {
-    const cache = [...lootEntries].find(([, drop]) => drop.ownerId === playerId && drop.itemId === "miners_lantern" && now < drop.expiresAt);
-    return expedition(cache
-      ? make(`loot-${cache[0]}`, "Claim the Miner's Lantern", "Approach your personal vault cache and press E to claim its fixed reward.", cache[1], "loot")
-      : make("expedition-recover-lantern", "Recover the Miner's Lantern", "Your personal cache is inside the vault. If it expired, defeat the Stone Warden again.", mobs.get("buried-chamber-brute") ?? { x: 56.5, y: 1, z: 9.5 }, "encounter", 3), 7);
-  }
-  if (expeditionStage === 7) return expedition(make("expedition-return", "Return to the Blacksmith", "Bring the Miner's Lantern back to town and press E at the blacksmith stall to complete the expedition.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 8);
   const runStage = player.silverDepthsRunStage ?? 1;
   const depthsStage = roomKind === "silver-depths"
     ? runStage <= 1 ? 2 : runStage <= 4 ? 3 : runStage === 5 ? 4 : runStage === 6 ? 5 : 6
@@ -144,8 +122,8 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   const depthsUnlocked = roomKind === "silver-depths" || depthsStage > 0 || (player.level ?? 1) >= 7 && (player.inventory.get("miners_lantern")?.quantity ?? 0) > 0;
   const depths = (update: WorldObjectiveUpdate, _step: number): WorldObjectiveUpdate => preferNearby({ ...update, recommendedLevel: "LV 7–12", progressLabel: "SILVER DEPTHS" });
   if (depthsUnlocked && depthsStage === 0) return depths(make("depths-briefing", "Speak to the Blacksmith", "Your first expedition is complete. Return to the blacksmith to unlock The Silver Depths.", TOWN_BLACKSMITH_STALL_POSITION, "hub"), 1);
-  if (depthsUnlocked && depthsStage === 1) return depths(make("depths-enter", "Enter the Silver Depths", "Use the violet expedition portal in town to begin the level-7 dungeon run.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 2);
-  if (depthsUnlocked && depthsStage === 2) return depths(make("depths-moonstone", "Mine the Moonstone Seal", "Mine one glowing Moonstone block to open the six-lane gate into the expedition wings.", SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, "explore", 3), 3);
+  if (depthsUnlocked && depthsStage === 1) return depths(make("depths-enter", "Enter the Silver Depths", "Use the violet portal in town to begin the level-7 dungeon run.", TOWN_SILVER_DEPTHS_PORTAL_POSITION, "portal", 3), 2);
+  if (depthsUnlocked && depthsStage === 2) return depths(make("depths-moonstone", "Mine the Moonstone Seal", "Mine one glowing Moonstone block to open the six-lane gate into the dungeon wings.", SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, "explore", 3), 3);
   if (depthsUnlocked && depthsStage === 3) {
     const runStage = player.silverDepthsRunStage ?? 2;
     if (runStage === 3 && !player.silverDepthsWing) return depths(make("depths-route-choice", "Choose a Crystal Wing",

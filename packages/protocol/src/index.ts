@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, VENOM_RING_OFFSETS, MATRIARCH_P
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-questless-realm-v114";
+export const WORLD_ROOM = "world-questless-realm-v115";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
@@ -370,7 +370,7 @@ export const ITEM_DEFINITIONS = {
   healing_potion: { id: "healing_potion", name: "Healing Potion", description: "Restore 2 HP · H to drink · carry up to 3" },
   iron_ore: { id: "iron_ore", name: "Iron Ore", description: "Mined iron ore that can be sold to the town blacksmith" },
   silver_ore: { id: "silver_ore", name: "Silver Ore", description: "Wilderness mineral · sell to the blacksmith for 8 gold each" },
-  moonstone: { id: "moonstone", name: "Moonstone", description: "Fixed Silver Depths objective mineral · return it to the blacksmith" },
+  moonstone: { id: "moonstone", name: "Moonstone", description: "Silver Depths reward mineral used for permanent attunements" },
   ember_core: { id: "ember_core", name: "Ember Core", description: "Forge Colossus currency · earned from ranked Ember Vault clears" },
   timber: { id: "timber", name: "Greenwood Timber", description: "Fresh timber harvested from Greenwood oak trees" },
   reinforced_pickaxe: { id: "reinforced_pickaxe", name: "Reinforced Pickaxe", description: "Forged mining tool that extracts two minerals per ore block" },
