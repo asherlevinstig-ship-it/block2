@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RealmEventDirector, REALM_EVENT_DEFINITIONS, realmEventScale } from "./realm-event-director.js";
+import { RealmEventDirector, REALM_BOSS_RETRY_MS, REALM_EVENT_DEFINITIONS, realmEventScale } from "./realm-event-director.js";
 
 const clear = (director: RealmEventDirector, ids: readonly string[], now: number) => {
   let armed = null;
@@ -58,6 +58,18 @@ describe("Realm-style encounter director", () => {
     expect(director.recordLeader("stonehide", 3_000).completed).toBe(2);
     expect(director.recordLeader("silverfang", 4_000)).toEqual({ credited: true, bossArmed: true, completed: 3, required: 3 });
     expect(director.status(4_000)).toMatchObject({ phase: "warning", eventId: "realm-stone-warden", realmBoss: true });
+  });
+
+  it("re-arms an abandoned realm boss without consuming threat progress", () => {
+    const director = new RealmEventDirector();
+    director.recordLeader("one", 1_000); director.recordLeader("two", 1_001); director.recordLeader("three", 1_002);
+    const warning = director.status(1_002);
+    director.release(warning.warningUntil);
+    expect(director.abandon("realm-stone-warden", warning.warningUntil + 1)?.realmBoss).toBe(true);
+    expect(director.status(warning.warningUntil + 1)).toMatchObject({ phase: "cooldown", completed: 3 });
+    expect(director.status(warning.warningUntil + REALM_BOSS_RETRY_MS + 1)).toMatchObject({
+      phase: "warning", eventId: "realm-stone-warden", completed: 3,
+    });
   });
 
   it("assigns personal signature gear to every public boss", () => {

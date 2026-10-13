@@ -134,10 +134,10 @@ describe("world objective director", () => {
   });
   it("reveals the Realm Warden marker only after the player gets nearby", () => {
     const warning = { phase: "warning" as const, eventId: "realm-stone-warden", eventName: "Realm Stone Warden",
-      eventTitle: "Realm Stone Warden · Realm Boss", targetX: 68.5, targetY: 8, targetZ: 34.5,
+      eventTitle: "Realm Stone Warden · Realm Boss", targetX: 87.5, targetY: 8, targetZ: 32.5,
       warningUntil: 18_000, completed: 3, required: 3, realmBoss: true, eliteKills: 0, eliteRequired: 2 };
-    expect(nearbyObjective("tester", player(130, 34), [], [], [], 10_000, null, warning).objectiveId).toBe("realm-boss-warning");
-    expect(nearbyObjective("tester", player(140, 34), [], [], [], 10_000, null, warning).objectiveId).toBe("explore");
+    expect(nearbyObjective("tester", player(145, 32), [], [], [], 10_000, null, warning).objectiveId).toBe("realm-boss-warning");
+    expect(nearbyObjective("tester", player(155, 32), [], [], [], 10_000, null, warning).objectiveId).toBe("explore");
   });
   it("changes to a newly opened portal and stops pointing to slain guards", () => {
     const update = nearbyObjective("tester", player(48, 28), [["cave-spitter", mob(46, 28, { alive: false })]],

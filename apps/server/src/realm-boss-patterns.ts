@@ -55,9 +55,10 @@ export function isRealmBruteBoss(id: string): boolean {
 
 export function fallingRockSites(target: { x: number; y: number; z: number }, sequence: number, count = 3) {
   const start = sequence % 2 === 0 ? 0 : 45;
+  const satellites = Math.max(1, count - 1);
   return Array.from({ length: count }, (_, index) => {
     if (index === 0) return { ...target, radius: 1.65 };
-    const angle = (start + (index - 1) * 180) * Math.PI / 180;
+    const angle = (start + (index - 1) * 360 / satellites) * Math.PI / 180;
     return { x: target.x + Math.sin(angle) * 2.8, y: target.y, z: target.z + Math.cos(angle) * 2.8, radius: 1.45 };
   });
 }

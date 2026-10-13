@@ -197,7 +197,7 @@ import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards, ownsBlacksmithUpgrade, ownsDepthsReward } from "./blacksmith.js";
-import { GREENWOOD_CRAWLER_HOMES, STONE_BRUTE_ARENA_HOME, isInStoneBruteArena } from "@blockcraft/voxel-world";
+import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInRealmWardenArena, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -430,6 +430,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private mobProjectileSequence = 0;
   private weaponProjectileSequence = 0;
   private lootDropSequence = 0;
+  private realmRewardLandingIndex = 0;
+  private realmBossEmptySince = 0;
   private worldSeed = "blockcraft-dev";
   private roomKind: "overworld" | "silver-depths" = "overworld";
   private silverInstanceKey = "";
@@ -1649,6 +1651,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     radiusFromSafeCenter(position) >= MOB_TOWN_MINIMUM_RADIUS - 0.001;
 
   private roamingAllowed(id: string, pose: { x: number; y: number; z: number }): boolean {
+    if (id === REALM_WARDEN_ID) return pose.y >= 6.8 && pose.y <= 9.2 && isInRealmWardenArena(pose.x, pose.z);
+    if (isInRealmWardenArena(pose.x, pose.z)) return false;
     if (SILVER_DEPTHS_CACHE_GUARD_IDS.includes(id)) {
       const iron = SILVER_DEPTHS_CACHE_GUARDS.iron.some(guard => guard.id === id);
       return pose.y >= .8 && pose.y <= 4.5 && pose.x >= 100 && pose.x <= 112
@@ -2146,6 +2150,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.rewardMultiplier *= scale.rewardMultiplier;
     mob.level = enemyLevelForTier(mob.difficultyTier, true, true);
     if (definition.realmBoss) {
+      this.realmRewardLandingIndex = 0;
+      this.realmBossEmptySince = 0;
       mob.materializeUntil = now + 2_500;
       mob.combatState = "recover";
       mob.stateUntil = mob.materializeUntil;
@@ -2164,6 +2170,36 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   /** Kept for focused legacy tests while the one-off wilderness event migrates to the realm director. */
   private advanceWildernessEvent(now: number): void { this.advanceRealmEvent(now); }
+
+  private advanceRealmBossAbandonment(now: number): void {
+    const mob = this.state.mobs.get(REALM_WARDEN_ID);
+    if (this.realmEvents.phase !== "active" || !mob?.alive) { this.realmBossEmptySince = 0; return; }
+    const participantPresent = [...this.state.players.values()].some(player => player.health > 0
+      && Math.abs(player.y - REALM_WARDEN_HOME.y) <= 2.5 && isInRealmWardenArena(player.x, player.z));
+    if (participantPresent) { this.realmBossEmptySince = 0; return; }
+    if (!this.realmBossEmptySince) { this.realmBossEmptySince = now; return; }
+    if (now - this.realmBossEmptySince < 12_000 || !this.realmEvents.abandon(REALM_WARDEN_ID, now)) return;
+    this.realmBossEmptySince = 0;
+    this.state.mobs.delete(REALM_WARDEN_ID);
+    this.mobHomes.delete(REALM_WARDEN_ID);
+    this.mobNavigation.delete(REALM_WARDEN_ID);
+    this.mobAwareness.delete(REALM_WARDEN_ID);
+    this.pendingMobMelee.delete(REALM_WARDEN_ID);
+    this.mobCommittedAim.delete(REALM_WARDEN_ID);
+    this.delayedMatriarchVolleys.delete(REALM_WARDEN_ID);
+    this.realmBossPhases.delete(REALM_WARDEN_ID);
+    this.combatContributions.clear(REALM_WARDEN_ID);
+    for (const [projectileId, projectile] of this.pendingMobProjectiles) {
+      if (projectile.mobId !== REALM_WARDEN_ID) continue;
+      this.pendingMobProjectiles.delete(projectileId);
+      this.resolveProjectileVisual(projectileId, projectile.position, "miss");
+    }
+    for (let index = this.realmBossPendingHazards.length - 1; index >= 0; index--)
+      if (this.realmBossPendingHazards[index]!.mobId === REALM_WARDEN_ID) this.realmBossPendingHazards.splice(index, 1);
+    this.broadcast("chat:notice", "REALM WARDEN WITHDREW · the empty arena has reset. It will awaken again shortly.");
+    this.broadcastRealmEvent(now);
+    this.refreshNearbyObjectives();
+  }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
     if (mobId === "forest-guardian") return;
@@ -2212,11 +2248,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     ]);
     const representative = lootBagRepresentative(items);
     if (!representative) return;
-    const angle = this.lootDropSequence * 0.7;
+    const realmReward = mobId === REALM_WARDEN_ID;
+    const angle = realmReward ? this.realmRewardLandingIndex++ * Math.PI / 4 - Math.PI / 2 : this.lootDropSequence * 0.7;
+    const rewardRadius = realmReward ? 5.5 : .85;
     const landing = findLootLanding(
       { x: mob.x, y: mob.y, z: mob.z },
-      { x: mob.x + Math.cos(angle) * .85, y: mob.y, z: mob.z + Math.sin(angle) * .85 },
+      { x: mob.x + Math.cos(angle) * rewardRadius, y: mob.y, z: mob.z + Math.sin(angle) * rewardRadius },
       this.readWorldBlock,
+      realmReward ? 6.5 : 3.5,
     );
     const drop = new LootDropState();
     Object.assign(drop, {
@@ -3825,6 +3864,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.advanceSilverDepthsRouteHazards(now);
     if (this.roomKind === "overworld") {
       this.advanceRealmEvent(now);
+      this.advanceRealmBossAbandonment(now);
       for (const pack of ROAMING_PACKS) {
         const route = this.roamingRoutes.get(pack.id) ?? createRoamingRouteState(now);
         this.roamingRoutes.set(pack.id, route);

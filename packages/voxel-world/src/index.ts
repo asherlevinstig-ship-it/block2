@@ -110,6 +110,12 @@ export const FRONTIER_BRUTE_COVER = [
   { x: 64, z: 31, height: 3 }, { x: 72, z: 31, height: 2 },
   { x: 61, z: 27, height: 2 }, { x: 74, z: 27, height: 2 },
 ] as const;
+export const REALM_WARDEN_ARENA = { minX: 80, maxX: 94, minZ: 25, maxZ: 39 } as const;
+export const REALM_WARDEN_HOME = { x: 87.5, y: 8, z: 32.5 } as const;
+export const REALM_WARDEN_COVER = [
+  { x: 82, z: 28, height: 3 }, { x: 92, z: 28, height: 2 },
+  { x: 82, z: 36, height: 2 }, { x: 92, z: 36, height: 3 },
+] as const;
 export const ASHEN_REACH = { x: 97, z: 62, radius: 21 } as const;
 export const ASHEN_SPIRE_POSITION = { x: 97.5, y: 8, z: 62.5 } as const;
 export const ASHEN_SENTRY_HOMES = [
@@ -206,6 +212,24 @@ export function frontierBruteArenaBlock(x: number, y: number, z: number): BlockI
   // Uneven perimeter ruins catch rock volleys while the central silver and dodge lanes stay open.
   const pillar = FRONTIER_BRUTE_COVER.find(cover => cover.x === x && cover.z === z);
   return pillar && y <= SURFACE_HEIGHT + pillar.height ? Block.Stone : Block.Air;
+}
+export function isInRealmWardenArena(x: number, z: number): boolean {
+  const a = REALM_WARDEN_ARENA;
+  return x >= a.minX && x <= a.maxX + 1 && z >= a.minZ && z <= a.maxZ + 1;
+}
+/** A dedicated boss court with four solid volley-break pillars and broad, readable dodge lanes. */
+export function realmWardenArenaBlock(x: number, y: number, z: number): BlockId | null {
+  const arena = isInRealmWardenArena(x, z);
+  const approach = x >= 76 && x < REALM_WARDEN_ARENA.minX && z >= 31 && z <= 33;
+  if ((!arena && !approach) || y < SURFACE_HEIGHT) return null;
+  if (y === SURFACE_HEIGHT) {
+    const edge = arena && (x === REALM_WARDEN_ARENA.minX || x === REALM_WARDEN_ARENA.maxX
+      || z === REALM_WARDEN_ARENA.minZ || z === REALM_WARDEN_ARENA.maxZ);
+    const centreRune = arena && (x === 87 || x === 88) && (z === 32 || z === 33);
+    return centreRune ? Block.IronOre : edge || approach ? Block.Dirt : Block.Stone;
+  }
+  const pillar = REALM_WARDEN_COVER.find(cover => cover.x === x && cover.z === z);
+  return pillar && y <= SURFACE_HEIGHT + pillar.height ? Block.Bedrock : Block.Air;
 }
 export function isInStoneBruteArena(x: number, z: number): boolean {
   return x >= STONE_BRUTE_ARENA.minX && x <= STONE_BRUTE_ARENA.maxX + 1
@@ -656,6 +680,7 @@ export function worldToChunk(x: number, z: number): ChunkAddress {
 export function isProtectedVoxel(x: number, z: number): boolean {
   return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS
     || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z) || isInForestDungeon(x, z) || isInEmberVault(x, z)
+    || isInRealmWardenArena(x, z)
     || isSilverDepthsProgressionGate(x, z)
     || (x >= 45 && x <= 46 && z >= 28 && z <= 29)
     || (Math.abs(x - ASHEN_REACH.x) <= 2 && z === ASHEN_REACH.z);
@@ -697,6 +722,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         const mineralBlock = mineralOutcropBlock(worldX, y, worldZ);
         const frontierBlock = frontierBruteArenaBlock(worldX, y, worldZ);
         if (frontierBlock !== null) blocks[chunkIndex(localX, y, localZ)] = frontierBlock;
+        const realmArenaBlock = realmWardenArenaBlock(worldX, y, worldZ);
+        if (realmArenaBlock !== null) blocks[chunkIndex(localX, y, localZ)] = realmArenaBlock;
         const silverGuardBlock = silverGuardEncounterBlock(worldX, y, worldZ);
         if (silverGuardBlock !== null) blocks[chunkIndex(localX, y, localZ)] = silverGuardBlock;
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;

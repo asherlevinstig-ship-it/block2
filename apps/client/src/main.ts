@@ -30,7 +30,7 @@ import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
-import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
+import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
 import { SPITTER_PATTERN, matriarchSecondVolleyYaw, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
@@ -2848,6 +2848,7 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
   const territory = position.y >= SURFACE_HEIGHT && tier > 0 ? wildernessTerritoryAt(position.x, position.z) : null;
   const silverGuard = position.y >= SURFACE_HEIGHT && isInSilverGuardClearing(position.x, position.z);
   const frontierArena = position.y >= SURFACE_HEIGHT && isInFrontierBruteArena(position.x, position.z);
+  const realmWardenArena = position.y >= SURFACE_HEIGHT && isInRealmWardenArena(position.x, position.z);
   const dungeonAtmosphere = forestDungeonAtmosphere(position.x, position.z);
   const forestDungeon = dungeonAtmosphere.room > 0;
   const silverDepths = position.y < 6 && position.x >= SILVER_DEPTHS.minX - .5 && position.x <= SILVER_DEPTHS.maxX + 1.5
@@ -2860,7 +2861,7 @@ function updateDangerZone(tierValue: number, position = localPlayer.getPosition(
       : "Root volleys become committed charges below half health";
   const label = emberVault ? { name: position.x >= 232 ? "COLOSSUS FORGE" : position.x >= 223 ? "EMBER CRUCIBLE" : "THE EMBER VAULT", detail: position.x >= 232 ? "Read the Colossus · dodge the committed smash · claim its forge loot" : "Use iron pillars as cover · clear each sealed forge chamber" }
     : depthsProfile ? { name: depthsProfile.name, detail: depthsProfile.detail }
-    : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
+    : forestDungeon ? { name: dungeonAtmosphere.name, detail: dungeonDetail } : realmWardenArena ? { name: "REALM WARDEN COURT", detail: "Use the four stone pillars · read the marked impacts · punish the Warden between volleys" } : frontierArena ? { name: "FRONTIER BRUTE RUINS", detail: "Sidestep the smash · leave the slam circle · counter during recovery · rich silver and a guaranteed hammer" } : silverGuard ? { name: "SILVER GUARD CLEARING", detail: "Two alternating spitters · use stone cover and fan gaps · dirt trail leads west to the south gate" } : arena ? { name: "STONE BRUTE CLEARING", detail: "One heavy opponent · dodge the marked slam · collect a Stone Core Hammer on defeat" }
     : camp ? { name: "GREENWOOD CRAWLER CAMP", detail: "Three roaming crawlers · exposed iron on the east edge · defeat mobs and collect item drops" } : greenwood
     ? { name: "GREENWOOD OUTSKIRTS", detail: "Ancient oaks · harvest timber · Briar Crawlers roam the camp" }
     : territory ?? DANGER_ZONE_LABELS[tier]!;
@@ -8233,7 +8234,9 @@ app.on("update", (dt: number) => {
   cameraFocus.z += (15 - cameraFocus.z) * indoorCameraBlend * 0.16;
   const viewOffset = indoorCameraOffset(cameraOrbit, indoorCameraBlend);
   const desiredCamera = new pc.Vec3(cameraFocus.x + viewOffset.x, cameraFocus.y - 2 + viewOffset.y, cameraFocus.z + viewOffset.z);
-  if (animationNow < cameraShakeUntil) {
+  const stableRealmCamera = Boolean(mobVisuals.get("realm-stone-warden")?.state.alive)
+    && isInRealmWardenArena(player.x, player.z);
+  if (!stableRealmCamera && animationNow < cameraShakeUntil) {
     const remaining = Math.max(0, (cameraShakeUntil - animationNow) / 360);
     const amplitude = cameraShakeStrength * remaining;
     desiredCamera.x += Math.sin(animationNow * 0.095) * amplitude;

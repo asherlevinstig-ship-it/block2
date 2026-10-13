@@ -18,6 +18,10 @@ import {
   STONE_BRUTE_ARENA,
   STONE_BRUTE_ARENA_HOME,
   isInStoneBruteArena,
+  REALM_WARDEN_ARENA,
+  REALM_WARDEN_HOME,
+  REALM_WARDEN_COVER,
+  isInRealmWardenArena,
   MILESTONE_CAVE_X_OFFSET,
   SURFACE_HEIGHT,
   TERMINAL_VELOCITY,
@@ -98,6 +102,27 @@ describe("deterministic voxel world", () => {
     }
     expect(isInStoneBruteArena(STONE_BRUTE_ARENA_HOME.x, STONE_BRUTE_ARENA_HOME.z)).toBe(true);
     expect(STONE_BRUTE_ARENA.minZ).toBeGreaterThan(GREENWOOD_CAMP.maxZ + 8);
+  });
+  it("builds a protected Realm Warden court with solid cover and open dodge lanes", () => {
+    const cache = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const a = worldToChunk(x, z); const key = `${a.chunkX},${a.chunkZ}`;
+      if (!cache.has(key)) cache.set(key, generateChunk("warden-arena", a.chunkX, a.chunkZ));
+      return getBlock(cache.get(key)!, a.localX, y, a.localZ);
+    };
+    expect(isInRealmWardenArena(REALM_WARDEN_HOME.x, REALM_WARDEN_HOME.z)).toBe(true);
+    expect(isProtectedVoxel(REALM_WARDEN_HOME.x, REALM_WARDEN_HOME.z)).toBe(true);
+    expect(isPlayerSupported(read, REALM_WARDEN_HOME.x, REALM_WARDEN_HOME.y, REALM_WARDEN_HOME.z)).toBe(true);
+    expect(playerCollides(read, REALM_WARDEN_HOME.x, REALM_WARDEN_HOME.y, REALM_WARDEN_HOME.z)).toBe(false);
+    for (const cover of REALM_WARDEN_COVER) {
+      expect(read(cover.x, SURFACE_HEIGHT + 1, cover.z)).toBe(Block.Bedrock);
+      expect(playerCollides(read, cover.x + .5, 8, cover.z + .5)).toBe(true);
+    }
+    for (const [x, z] of [[87.5, 27.5], [87.5, 37.5], [82.5, 32.5], [92.5, 32.5]]) {
+      expect(isInRealmWardenArena(x, z)).toBe(true);
+      expect(playerCollides(read, x, 8, z)).toBe(false);
+    }
+    expect(read(REALM_WARDEN_ARENA.minX, SURFACE_HEIGHT, 32)).toBe(Block.Dirt);
   });
   it("generates identical chunks from the same seed", () => {
     const first = generateChunk("test-world", 0, 0);

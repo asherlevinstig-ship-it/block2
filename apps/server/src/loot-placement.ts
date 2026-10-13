@@ -16,7 +16,7 @@ function clearCorridor(from: LootPosition, to: LootPosition, read: WorldBlockRea
 }
 
 /** Find a nearby, supported and reachable landing point for a defeated enemy's loot. */
-export function findLootLanding(origin: LootPosition, desired: LootPosition, read: WorldBlockReader): LootPosition {
+export function findLootLanding(origin: LootPosition, desired: LootPosition, read: WorldBlockReader, maxDistance = 3.5): LootPosition {
   const candidates: { x: number; z: number }[] = [{ x: desired.x, z: desired.z }];
   const centreX = Math.floor(desired.x) + .5;
   const centreZ = Math.floor(desired.z) + .5;
@@ -28,7 +28,7 @@ export function findLootLanding(origin: LootPosition, desired: LootPosition, rea
   }
   const seen = new Set<string>();
   for (const candidate of candidates) {
-    if (Math.hypot(candidate.x - origin.x, candidate.z - origin.z) > 3.5) continue;
+    if (Math.hypot(candidate.x - origin.x, candidate.z - origin.z) > maxDistance) continue;
     const key = `${candidate.x.toFixed(2)}:${candidate.z.toFixed(2)}`;
     if (seen.has(key)) continue;
     seen.add(key);

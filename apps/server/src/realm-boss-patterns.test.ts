@@ -23,6 +23,8 @@ describe("realm boss patterns", () => {
     const sites = fallingRockSites({ x: 10, y: 8, z: 10 }, 0);
     expect(sites).toHaveLength(3);
     expect(Math.hypot(sites[1]!.x - sites[2]!.x, sites[1]!.z - sites[2]!.z)).toBeGreaterThan(5);
+    const barrage = fallingRockSites({ x: 10, y: 8, z: 10 }, 0, 4);
+    expect(new Set(barrage.map(site => `${site.x.toFixed(2)}:${site.z.toFixed(2)}`))).toHaveLength(4);
   });
 
   it("keeps radial projectile patterns evenly spaced with dodge gaps", () => {

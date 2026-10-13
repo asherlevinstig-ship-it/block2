@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Block, isInStoneBruteArena, STONE_BRUTE_ARENA_HOME, playerCollides, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { Block, isInRealmWardenArena, isInStoneBruteArena, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, playerCollides, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { WorldRoom } from "../src/game-room.js";
 import { MobState, PlayerState, WorldState } from "../src/schema.js";
 
@@ -124,6 +124,14 @@ describe("mob navigation in the authoritative room", () => {
     const player = new PlayerState(); player.x = mob.x + 5; player.y = 1; player.z = mob.z;
     room.state.players.set("player", player); const before = mob.x; tick();
     expect(mob.x).toBeGreaterThan(before);
+  });
+  it("reserves the Realm Warden court for the Warden alone", () => {
+    const { room } = fixture((_x, y) => y <= 7 ? Block.Stone : Block.Air);
+    const internal = room as any;
+    expect(isInRealmWardenArena(REALM_WARDEN_HOME.x, REALM_WARDEN_HOME.z)).toBe(true);
+    expect(internal.roamingAllowed("test", REALM_WARDEN_HOME)).toBe(false);
+    expect(internal.roamingAllowed("realm-stone-warden", REALM_WARDEN_HOME)).toBe(true);
+    expect(internal.roamingAllowed("realm-stone-warden", STONE_BRUTE_ARENA_HOME)).toBe(false);
   });
   it("uses obstacle routing when chasing a player in the room simulation", () => {
     let obstructed = false;

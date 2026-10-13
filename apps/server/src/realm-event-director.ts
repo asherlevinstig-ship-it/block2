@@ -1,5 +1,5 @@
 import type { ItemId } from "@blockcraft/protocol";
-import { ASHEN_SPIRE_POSITION, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
+import { ASHEN_SPIRE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import type { MobArchetypeId } from "./mob-archetypes.js";
 
 export type RealmEventKey = "greenwood" | "stoneheart" | "ashglass" | "realm-warden";
@@ -31,6 +31,7 @@ export const REALM_EVENT_SCALING_RADIUS = 30;
 export const REALM_EVENT_MAX_PLAYERS = 6;
 export const REALM_EVENT_WARNING_MS = 8_000;
 export const REALM_EVENT_COOLDOWN_MS = 45_000;
+export const REALM_BOSS_RETRY_MS = 15_000;
 export const REALM_ELITE_KILLS_PER_THREAT = 2;
 const TRIGGER_WINDOW_MS = 60_000;
 
@@ -66,7 +67,7 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     key: "realm-warden", id: "realm-stone-warden", name: "Realm Stone Warden",
     title: "Realm Stone Warden · Realm Boss",
     detail: "The realm threat has peaked. Rally nearby players, survive the Warden's volleys and slams, and reset the realm cycle.",
-    archetype: "stone_brute", position: { x: 68.5, y: 8, z: 34.5 },
+    archetype: "stone_brute", position: REALM_WARDEN_HOME,
     triggerIds: [], tier: 3,
     baseHealth: 54, healthPerPlayer: 22, baseDamage: 3, rewardMultiplier: 2.5,
     rewards: [{ itemId: "moonstone", quantity: 1 }, { itemId: "healing_potion", quantity: 2 }],
@@ -219,6 +220,17 @@ export class RealmEventDirector {
     this.currentKey = null;
     this.nextAt = now + REALM_EVENT_COOLDOWN_MS;
     return { definition, realmBossArmed: false, realmCleared: false };
+  }
+
+  /** Cleanly withdraw an unattended realm boss without consuming the realm threat. */
+  abandon(mobId: string, now: number): RealmEventDefinition | null {
+    const definition = this.definition;
+    if (this.currentPhase !== "active" || !definition?.realmBoss || definition.id !== mobId) return null;
+    this.currentPhase = "cooldown";
+    this.currentKey = null;
+    this.warningEndsAt = 0;
+    this.nextAt = now + REALM_BOSS_RETRY_MS;
+    return definition;
   }
 
   status(now: number): RealmEventStatus {

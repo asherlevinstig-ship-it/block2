@@ -1,6 +1,6 @@
 import * as pc from "playcanvas";
 import { MINERAL_DEPOSITS, WILDERNESS_CAMPS } from "@blockcraft/voxel-world";
-import { STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
+import { REALM_WARDEN_ARENA, REALM_WARDEN_HOME, STONE_BRUTE_ARENA, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import { Block, CHUNK_SIZE, GREENWOOD_CAMP, SURFACE_HEIGHT, TOWN_BEACON_POSITION, TOWN_BLACKSMITH_STALL_POSITION, TOWN_EXPEDITION_BOARD_POSITION, TOWN_GATE_POSTS, TOWN_TAVERN, TOWN_TAVERN_Z_OFFSET, TOWN_TAVERN_QUIZ_TABLE_POSITION, TOWN_TAVERN_TABLE_CENTERS, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { TAVERN_KEEPER } from "./tavern-keeper.js";
 import { TOWN_STORAGE_CHEST_POSITION } from "@blockcraft/voxel-world";
@@ -310,6 +310,22 @@ export class SceneDressing {
         solid.box(43.6, 9.15, z, 0.6, 0.45, 0.08, SLATE);
         glow.box(43.6, 9.2, z - 0.05, 0.28, 0.12, 0.03, GOLD);
         glow.box(43.6, 9.05, z - 0.05, 0.05, 0.25, 0.03, GOLD);
+      }
+    }
+
+    if (read(REALM_WARDEN_HOME.x | 0, SURFACE_HEIGHT, REALM_WARDEN_HOME.z | 0) !== Block.Air) {
+      // Low luminous boundary stones identify the boss court without obscuring combat or blocking entry gaps.
+      const a = REALM_WARDEN_ARENA;
+      for (let x = a.minX + 1; x < a.maxX; x += 2) {
+        for (const z of [a.minZ + .5, a.maxZ + .5]) glow.box(x + .5, 8.08, z, .62, .12, .24, GOLD);
+      }
+      for (let z = a.minZ + 1; z < a.maxZ; z += 2) {
+        if (z >= 31 && z <= 33) continue;
+        for (const x of [a.minX + .5, a.maxX + .5]) glow.box(x, 8.08, z + .5, .24, .12, .62, GOLD);
+      }
+      for (const [x, z] of [[80.5, 25.5], [94.5, 25.5], [80.5, 39.5], [94.5, 39.5]] as const) {
+        solid.box(x, 8.5, z, .35, 1, .35, SLATE);
+        glow.box(x, 9.08, z, .48, .16, .48, GOLD);
       }
     }
 
