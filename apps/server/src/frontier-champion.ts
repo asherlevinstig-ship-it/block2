@@ -3,6 +3,7 @@ import { isPlayerSupported, type WorldBlockReader } from "@blockcraft/voxel-worl
 import { mobArchetype } from "./mob-archetypes.js";
 import { moveMobSafely } from "./mob-navigation.js";
 import type { Position } from "./action-rules.js";
+import { usesRockVolley } from "./realm-boss-patterns.js";
 export const FRONTIER_CHAMPION_ID = "frontier-brute-west";
 export const SILVER_CHAMPION_ID = "wild-spitter-west";
 export const championPattern = (mob: { archetype: string; actionSequence: number }) => mob.archetype === "cave_spitter"
@@ -20,7 +21,7 @@ export function championChargeHits(start: Position, end: Position, target: Posit
 }
 export function combatMobDefinition(mob: { archetype: string; isChampion?: boolean; attackPattern?: string }) {
   const base = mobArchetype(mob.archetype);
-  if (mob.archetype === "stone_brute" && mob.attackPattern === "rocks") return { ...base, attackKind: "projectile" as const,
+  if (mob.archetype === "stone_brute" && usesRockVolley(mob.attackPattern ?? "")) return { ...base, attackKind: "projectile" as const,
     stopDistance: BRUTE_VOLLEY.attackRange, minimumAttackRange: BRUTE_VOLLEY.minimumRange,
     windupMs: BRUTE_VOLLEY.windupMs, recoverMs: BRUTE_VOLLEY.recoveryMs, cooldownMs: BRUTE_VOLLEY.cooldownMs,
     projectileTravelMs: BRUTE_VOLLEY.travelMs, hazardDurationMs: 0, hazardRadius: 0 };

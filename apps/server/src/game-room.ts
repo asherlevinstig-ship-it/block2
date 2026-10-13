@@ -24,6 +24,8 @@ import { circleCrawler, createCrawlerPositioning, retreatCrawler, type CrawlerPo
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { WILDERNESS_EVENT_ID } from "./wilderness-event.js";
 import { RealmEventDirector, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
+import { ASHGLASS_ORACLE_ID, GREENWOOD_MATRIARCH_ID,
+  fallingRockSites, isRealmSpitterBoss, realmBossPattern, usesDoubleVolley, usesFallingRockZones, usesRockVolley } from "./realm-boss-patterns.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
@@ -429,6 +431,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private silverDepthsNextHazardAt = 0;
   private silverDepthsHazardSequence = 0;
   private readonly silverDepthsPendingHazards: DepthsRouteHazard[] = [];
+  private readonly realmBossPendingHazards: (DepthsRouteHazard & { mobId: string; damage: number })[] = [];
+  private realmBossHazardSequence = 0;
   private silverDepthsSealOpened = false;
   private readonly silverDepthsGates: SilverDepthsGateStatus = { seal: false, iron: false, silver: false, gallery: false, boss: false };
   private silverDepthsAwaitingReady = false;
@@ -3228,8 +3232,45 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const end = { x: aim.x, y: aim.y + .08, z: aim.z };
       this.pendingMobProjectiles.set(projectileId, { projectileId, mobId, archetype: mob.archetype, damage, hazardRadius, hazardDurationMs,
         start, end, position: start, startedAt: now, impactAt: now + travelMs });
-      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: mobId === CRYSTAL_MATRIARCH_ID ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
+      this.broadcast("combat:mob-projectile", { projectileId, mobId, kind: mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID ? "crystal" : mob.archetype === "stone_brute" ? "rock" : "acid", ...origin, targetX: aim.x, targetY: aim.y, targetZ: aim.z, travelMs, releasedAt: now } satisfies MobProjectileReleased);
     }
+  }
+
+  private scheduleRealmFallingRocks(mobId: string, target: { x: number; y: number; z: number }, now: number, damage: number, barrage = false): void {
+    const sequence = ++this.realmBossHazardSequence;
+    const impactAt = now + (barrage ? 1_350 : 1_650);
+    for (const [index, site] of fallingRockSites(target, sequence, barrage ? 4 : 3).entries()) {
+      const hazard = { hazardId: `realm-rock-${sequence}-${index}`, kind: "falling-rock" as const,
+        x: site.x, y: site.y, z: site.z, radius: site.radius, impactAt, expiresAt: impactAt + 550, mobId, damage };
+      this.realmBossPendingHazards.push(hazard);
+      this.broadcast("depths:hazard", hazard satisfies DepthsRouteHazard);
+    }
+  }
+
+  private advanceRealmBossHazards(now: number): void {
+    for (let index = this.realmBossPendingHazards.length - 1; index >= 0; index--) {
+      const hazard = this.realmBossPendingHazards[index]!;
+      const mob = this.state.mobs.get(hazard.mobId);
+      if (!mob?.alive) { this.realmBossPendingHazards.splice(index, 1); continue; }
+      if (now < hazard.impactAt) continue;
+      this.realmBossPendingHazards.splice(index, 1);
+      this.broadcast("depths:hazard-impact", hazard satisfies DepthsRouteHazard);
+      for (const [id, player] of this.state.players) {
+        if (player.health > 0 && !isInsideTownSafeZone(player) && Math.abs(player.y - hazard.y) <= 1.5
+          && Math.hypot(player.x - hazard.x, player.z - hazard.z) <= hazard.radius
+          && hasCombatLineOfSight(hazard, player, this.readWorldBlock))
+          this.damagePlayer(hazard.mobId, id, hazard.damage, now, false, "hazard");
+      }
+    }
+  }
+
+  private teleportAshglassOracle(mob: MobState, target: { x: number; y: number; z: number }, sequence: number): void {
+    const angle = (45 + sequence * 90) * Math.PI / 180;
+    const desired = { x: target.x + Math.sin(angle) * 5, y: target.y, z: target.z + Math.cos(angle) * 5 };
+    const landing = walkableMobSpawn(desired, this.readWorldBlock, pose => this.mobPositionAllowed(pose)
+      && this.championAllowed(ASHGLASS_ORACLE_ID, pose) && !isInsideTownSafeZone(pose));
+    mob.x = landing.x; mob.y = landing.y; mob.z = landing.z;
+    mob.yaw = Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI;
   }
 
   private resolveMobProjectiles(now: number): void {
@@ -3528,6 +3569,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.resolveBrambleSnares(now);
     this.resolveMobProjectiles(now);
     this.resolveMobHazards(now);
+    this.advanceRealmBossHazards(now);
     this.advanceSilverDepthsRouteHazards(now);
     if (this.roomKind === "overworld") {
       this.advanceRealmEvent(now);
@@ -3546,7 +3588,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
       if (!mob.alive && this.roomKind === "silver-depths"
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
-      if (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) {
+      if (isRealmEventId(mobId)) {
+        if (!mob.enraged && mob.health > 0 && mob.health * 2 < mob.maxHealth) mob.enraged = true;
+        if (mob.combatState === "idle") mob.attackPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth) ?? mob.attackPattern;
+      }
+      else if (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) {
         if (!mob.enraged && matriarchEnraged(mob.health, mob.maxHealth)) mob.enraged = true;
         if (mob.combatState === "idle") mob.attackPattern = mobId === CRYSTAL_MATRIARCH_ID
           ? crystalMatriarchPattern(mob.actionSequence, mob.enraged) : matriarchPattern(mob.actionSequence, mob.enraged);
@@ -3563,9 +3609,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const eligible = [...this.state.players.values()].filter(player => player.health > 0 && !isInsideTownSafeZone(player)
           && Math.abs(player.y - mob.y) <= 1.75 && caveEncounterAllows(mobId, player) && this.roamingAllowed(mobId, player) && this.championAllowed(mobId, player));
         const distance = Math.min(...eligible.map(player => Math.hypot(player.x - mob.x, player.z - mob.z)));
-        mob.attackPattern = mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
+        const realmPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth);
+        mob.attackPattern = realmPattern ?? (mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
           : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
-          : mob.isChampion ? championPattern(mob) : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence) : "slam";
+          : mob.isChampion ? championPattern(mob) : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence) : "slam");
       }
       const definition = combatMobDefinition(mob);
       const home = this.mobHomes.get(mobId) ?? definition.spawn;
@@ -3676,15 +3723,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             positioning.sidestepPending = true; this.spitterPositioning.set(mobId, positioning);
             mob.targetId = ""; continue;
           }
-          const shots = mob.attackPattern === "rocks" ? bruteRockEndpoints(mob, aim.yaw)
-            : mob.isChampion && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
+          const shots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, aim.yaw)
+            : mob.isChampion && mobId !== WILDERNESS_EVENT_ID && mobId !== CRYSTAL_MATRIARCH_ID && !isRealmSpitterBoss(mobId) ? spitterChampionShots(mob, aim, mob.attackPattern) : spitterShotEndpoints(mob, aim.yaw, mob.attackPattern);
           const origin = { x: mob.x, y: mob.y, z: mob.z };
-          this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage, definition.hazardRadius, definition.hazardDurationMs);
-          if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) && mob.attackPattern === "double-fan") {
+          const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
+          this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
+            venomPools ? .82 : definition.hazardRadius, venomPools ? 3_600 : definition.hazardDurationMs);
+          if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage, mob.attackPattern === "warden-barrage");
+          if (usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId))) {
             const secondYaw = matriarchSecondVolleyYaw(aim.yaw, Math.max(0, mob.actionSequence - 1));
-            const secondShots = spitterShotEndpoints(mob, secondYaw, mob.attackPattern);
+            const secondShots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, secondYaw) : spitterShotEndpoints(mob, secondYaw, mob.attackPattern);
             this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
           }
+          if (mobId === ASHGLASS_ORACLE_ID && mob.attackPattern === "teleport-burst") this.teleportAshglassOracle(mob, aim, mob.actionSequence);
           mob.targetId = "";
           continue;
         }
@@ -3801,7 +3852,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.yaw = waiting ? Math.atan2(target.x - mob.x, target.z - mob.z) * 180 / Math.PI : pursuit.yaw;
       }
       const lastAttackAt = this.lastMobAttackAt.get(mobId) ?? 0;
-      const windupMs = mobId === CRYSTAL_MATRIARCH_ID && mob.attackPattern === "crystal-burst"
+      const windupMs = (mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")
         ? MATRIARCH_PHASE.crystalBurstWindupMs
         : mobId === "frontier-brute" && mob.attackPattern !== "rocks"
           ? FRONTIER_BRUTE[mob.attackPattern === "smash" ? "smash" : "slam"].windupMs : definition.windupMs;
@@ -4551,7 +4602,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private updateMobStrikeOrigin(mobId: string, mob: MobState): void {
-    if (mob.attackPattern === "rocks") {
+    if (usesRockVolley(mob.attackPattern)) {
       if (!mob.aimCommitted) { mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z; }
       return;
     }
@@ -4594,19 +4645,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const definition = combatMobDefinition(mob);
     mob.attackStartedAt = startedAt;
     mob.attackReleaseAt = releaseAt;
-    if (mob.attackPattern === "rocks") {
+    if (usesRockVolley(mob.attackPattern)) {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt;
       mob.attackRecoveryEndAt = releaseAt + BRUTE_VOLLEY.recoveryMs;
       return;
     }
-    if (mobId === CRYSTAL_MATRIARCH_ID && mob.attackPattern === "crystal-burst") {
+    if ((mobId === CRYSTAL_MATRIARCH_ID || mobId === ASHGLASS_ORACLE_ID) && (mob.attackPattern === "crystal-burst" || mob.attackPattern === "teleport-burst")) {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt;
       mob.attackRecoveryEndAt = releaseAt + MATRIARCH_PHASE.crystalBurstRecoveryMs;
       return;
     }
-    if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) && mob.attackPattern === "double-fan") {
+    if ((mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId)) && usesDoubleVolley(mob.attackPattern)) {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + MATRIARCH_PHASE.volleyGapMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + MATRIARCH_PHASE.recoveryMs;

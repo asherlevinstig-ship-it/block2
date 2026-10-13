@@ -30,7 +30,7 @@ import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
-import { SPITTER_PATTERN, matriarchSecondVolleyYaw, matriarchWarningLanes, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
+import { SPITTER_PATTERN, matriarchSecondVolleyYaw, spitterShotOffsets, spitterWarningLanes } from "@blockcraft/protocol";
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { TOWN_EXPEDITION_BOARD_POSITION } from "@blockcraft/voxel-world";
 import { equipmentPickupCard } from "./equipment-pickup.js";
@@ -3419,15 +3419,16 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
 
 function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance,
   shotOrigin: { x: number; y: number; z: number; name?: string; actionSequence?: number } = { x: 0, y: 0, z: 0 }): void {
-  if (pattern === "rocks" || archetype === "cave_spitter" && pattern !== "pool") {
-    const offsets = pattern === "rocks" ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
-    const lengths = offsets.map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, pattern === "rocks" ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range));
-    const crystalDoubleFan = pattern === "double-fan" && shotOrigin.name === "Crystal Matriarch";
+  const rockVolley = pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage";
+  if (rockVolley || archetype === "cave_spitter" && pattern !== "pool") {
+    const offsets = rockVolley ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
+    const lengths = offsets.map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range));
+    const doubleVolley = pattern === "double-fan" || pattern === "teleport-burst" || pattern === "warden-barrage";
     const secondYaw = matriarchSecondVolleyYaw(yaw, Math.max(0, (shotOrigin.actionSequence ?? 1) - 1));
-    const secondLengths = crystalDoubleFan ? offsets.map(offset => enemyShotGuideLength(
-      { x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, secondYaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range)) : undefined;
-    const lanes = pattern === "rocks" ? bruteRockLanes(yaw, lengths)
-      : crystalDoubleFan ? matriarchWarningLanes(yaw, Math.max(0, (shotOrigin.actionSequence ?? 1) - 1), lengths, secondLengths)
+    const secondLengths = doubleVolley ? offsets.map(offset => enemyShotGuideLength(
+      { x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, secondYaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range)) : undefined;
+    const lanes = rockVolley ? [...bruteRockLanes(yaw, lengths), ...(doubleVolley ? bruteRockLanes(secondYaw, secondLengths) : [])]
+      : doubleVolley ? [...spitterWarningLanes(yaw, pattern, lengths), ...spitterWarningLanes(secondYaw, pattern, secondLengths)]
       : spitterWarningLanes(yaw, pattern, lengths);
     mesh.setPositions(lanes.flatMap(lane => lane.flatMap(point => [point.x, 0, point.z])));
     mesh.setNormals(lanes.flatMap(lane => lane.flatMap(() => [0, 1, 0])));
@@ -7530,12 +7531,12 @@ app.on("update", (dt: number) => {
     mob.entity.setEulerAngles(0, mob.renderYaw, 0);
     const attackElapsed = presentation.elapsed;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
-    const attackPeak = mob.state.attackPattern === "rocks" ? 180 : mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
+    const attackPeak = ["rocks", "falling-rocks", "warden-barrage"].includes(mob.state.attackPattern) ? 180 : mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
     const attackPhase = attackElapsed < attackPeak ? attackElapsed / attackPeak * 0.5
       : 0.5 + (attackElapsed - attackPeak) / (attackDuration - attackPeak) * 0.5;
     const attackStrength = mob.art.matriarch ? mob.state.alive && mob.state.attackStartedAt > 0 && ["windup", "recover"].includes(mob.state.combatState) ? matriarchRecoil(attackElapsed, mob.state.attackPattern === "double-fan") : 0
       : mob.state.attackStartedAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
-    if (mob.isBrute && mob.state.attackPattern !== "charge" && mob.state.attackPattern !== "rocks" && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
+    if (mob.isBrute && mob.state.attackPattern !== "charge" && !["rocks", "falling-rocks", "warden-barrage"].includes(mob.state.attackPattern) && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
       mob.lastImpactStartedAt = mob.state.attackStartedAt;
       createBruteSlamImpact(mob);
     }
@@ -7606,7 +7607,7 @@ app.on("update", (dt: number) => {
     if (mob.warning.enabled) {
       if (mob.warningMesh) {
         const chargeLength = mob.isSpitter && mob.state.attackPattern !== "pool" ? spitterShotOffsets(mob.state.attackPattern).reduce((sum, offset, i) => sum + (i + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range), 0) : mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
-        const warningLength = mob.state.attackPattern === "rocks" ? BRUTE_VOLLEY.offsets.reduce<number>((sum, offset, index) => sum + (index + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, BRUTE_VOLLEY.range), 0) : chargeLength;
+        const warningLength = ["rocks", "falling-rocks", "warden-barrage"].includes(mob.state.attackPattern) ? BRUTE_VOLLEY.offsets.reduce<number>((sum, offset, index) => sum + (index + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, BRUTE_VOLLEY.range), 0) : chargeLength;
         if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || mob.warningSequence !== mob.state.actionSequence || Math.abs(warningLength - mob.warningChargeLength) > .05) {
           updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, warningLength, mob.state);
           mob.warningYaw = mob.state.yaw;
@@ -8359,7 +8360,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("combat:mob-projectile", (message: MobProjectileReleased) => {
     createMobProjectile(message);
-    logMovementEvent(`ACID SHOT ${message.mobId}`);
+    logMovementEvent(`${(message.kind ?? "acid").toUpperCase()} SHOT ${message.mobId}`);
   });
   room.onMessage("combat:mob-hazard", (message: MobHazardPlaced) => {
     createMobHazard(message);
@@ -8369,6 +8370,13 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("depths:hazard-impact", (message: DepthsRouteHazard) => {
     const visual = depthsHazardVisuals.get(message.hazardId);
     if (visual) { visual.impactAt = 0; visual.expiresAt = Math.min(visual.expiresAt, Date.now() + 450); }
+    const player = localPlayer.getPosition();
+    const distance = Math.hypot(player.x - message.x, player.z - message.z);
+    if (distance <= 12) {
+      cameraShakeStrength = Math.max(cameraShakeStrength, Math.max(.1, .34 - distance * .02));
+      cameraShakeUntil = performance.now() + 360;
+      combatAudio.play("seismicImpact", enemyCuePan(message.x, player.x, 12));
+    }
   });
   room.onMessage("power:cast", (message: PowerCast) => {
     if (message.casterId !== room?.sessionId) {

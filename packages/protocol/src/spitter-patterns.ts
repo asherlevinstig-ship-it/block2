@@ -1,6 +1,8 @@
 export const SPITTER_PATTERN = { range: 10, travelMs: 1250, fanOffsets: [-30, -12, 12, 30], laneHalfWidth: .42 } as const;
 export const CRYSTAL_BURST_OFFSETS = [-120, -60, 0, 60, 120, 180] as const;
-export const spitterShotOffsets = (pattern: string): readonly number[] => pattern === "crystal-burst" ? CRYSTAL_BURST_OFFSETS
+export const VENOM_RING_OFFSETS = [-157.5, -112.5, -67.5, -22.5, 22.5, 67.5, 112.5, 157.5] as const;
+export const spitterShotOffsets = (pattern: string): readonly number[] => pattern === "crystal-burst" || pattern === "teleport-burst" ? CRYSTAL_BURST_OFFSETS
+  : pattern === "venom-ring" ? VENOM_RING_OFFSETS
   : pattern === "fan" || pattern === "double-fan" ? SPITTER_PATTERN.fanOffsets : [0];
 export const MATRIARCH_PHASE = { volleyGapMs: 500, recoveryMs: 2600, crystalBurstWindupMs: 1400, crystalBurstRecoveryMs: 3000 } as const;
 export const matriarchEnraged = (health: number, maxHealth: number) => health > 0 && health * 2 < maxHealth;
