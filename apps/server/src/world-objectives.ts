@@ -77,7 +77,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       const target = main ?? nearest;
       const miniBoss = main ? areaMainMobDefinition(main.id) : undefined;
       const update = make(group.id, miniBoss ? miniBoss.name : group.title,
-        miniBoss ? `AREA MINI-BOSS · Defeat ${miniBoss.name}. First victory guarantees ${ITEM_DEFINITIONS[miniBoss.rewardItemId].name}.` : group.detail,
+        miniBoss ? `AREA MINI-BOSS · Defeat ${miniBoss.name} for its richest personal cache. First victory also guarantees ${ITEM_DEFINITIONS[miniBoss.rewardItemId].name}.` : group.detail,
         target.mob, miniBoss ? "miniboss" : "encounter", target.mob.difficultyTier);
       update.recommendedLevel = `LV ${target.mob.level ?? worldLevelRange(target.mob.difficultyTier).min}`;
       update.targetMobId = target.id; update.targetMobIds = group.ids.filter(id => mobs.has(id)); update.completedMobIds = group.ids.filter(id => mobs.get(id)?.alive === false);

@@ -25,6 +25,11 @@ describe("item loot", () => {
       { itemId: "healing_potion", quantity: 1 },
       { itemId: "stone_core_hammer", quantity: 1 },
     ]);
+    expect(lootForArchetype("cave_spitter", "", .999, "miniboss", .999, 3)).toEqual([
+      { itemId: "acid_gland", quantity: 5 },
+      { itemId: "healing_potion", quantity: 2 },
+      { itemId: "acid_gland_focus", quantity: 1 },
+    ]);
     expect(lootForArchetype("stone_brute", "", .39, "elite", .34)).toEqual([
       { itemId: "stone_core", quantity: 2 },
       { itemId: "healing_potion", quantity: 1 },

@@ -51,6 +51,15 @@ describe("Realm-style encounter director", () => {
     expect(director.status(6_000)).toMatchObject({ phase: "warning", eventId: "realm-stone-warden", completed: 3 });
   });
 
+  it("credits each distinct area leader once and awakens the realm boss after three", () => {
+    const director = new RealmEventDirector();
+    expect(director.recordLeader("mossback", 1_000)).toEqual({ credited: true, bossArmed: false, completed: 1, required: 3 });
+    expect(director.recordLeader("mossback", 2_000)).toEqual({ credited: false, bossArmed: false, completed: 1, required: 3 });
+    expect(director.recordLeader("stonehide", 3_000).completed).toBe(2);
+    expect(director.recordLeader("silverfang", 4_000)).toEqual({ credited: true, bossArmed: true, completed: 3, required: 3 });
+    expect(director.status(4_000)).toMatchObject({ phase: "warning", eventId: "realm-stone-warden", realmBoss: true });
+  });
+
   it("assigns personal signature gear to every public boss", () => {
     expect(REALM_EVENT_DEFINITIONS.map(event => [event.key, event.signatureRewards])).toEqual([
       ["greenwood", ["venom_focus"]],

@@ -12,13 +12,13 @@ describe("realm event meter", () => {
     expect(realmEventLabel(base)).toEqual({
       eyebrow: "REALM THREAT",
       title: "2 / 3 threats defeated",
-      detail: "Clear marked encounters or hunt elites",
+      detail: "Defeat area leaders or hunt elites",
     });
   });
 
   it("shows partial elite progress toward bonus Realm Threat", () => {
     expect(realmEventLabel({ ...base, eliteKills: 1, eliteRequired: 2 }).detail)
-      .toBe("Clear marked encounters or hunt elites · elite hunt 1/2");
+      .toBe("Defeat area leaders or hunt elites · elite hunt 1/2");
   });
 
   it("counts down an awakening realm boss", () => {

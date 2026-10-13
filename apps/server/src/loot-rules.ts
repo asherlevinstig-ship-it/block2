@@ -53,15 +53,16 @@ const MATERIAL_LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: Item
   ],
 };
 
-export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipmentRoll = 1, threat: LootThreat = "normal", consumableRoll = 1): readonly { itemId: ItemId; quantity: number }[] {
+export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipmentRoll = 1, threat: LootThreat = "normal", consumableRoll = 1, regionTier = 1): readonly { itemId: ItemId; quantity: number }[] {
   const guard = archetypeId === "cave_spitter" && isSilverGuard(mobId);
   const effectiveThreat = threat === "champion" || threat === "miniboss" || threat === "elite" ? threat : guard ? "guard" : threat;
   const normalMaterials = guard
     ? [{ itemId: "acid_gland" as const, quantity: 2 }, ...(consumableRoll < .18 ? [{ itemId: "healing_potion" as const, quantity: 1 }] : [])]
     : [...MATERIAL_LOOT_BY_ARCHETYPE[archetypeId]];
+  const leaderMultiplier = 3 + Math.max(0, Math.min(2, Math.floor(regionTier) - 1));
   const materials = threat === "miniboss"
-    ? [...normalMaterials.map(entry => ({ ...entry, quantity: entry.quantity * 3 })),
-      { itemId: "healing_potion" as const, quantity: 1 }]
+    ? [...normalMaterials.map(entry => ({ ...entry, quantity: entry.quantity * leaderMultiplier })),
+      { itemId: "healing_potion" as const, quantity: regionTier >= 3 ? 2 : 1 }]
     : threat === "elite"
     ? [...normalMaterials.map(entry => ({ ...entry, quantity: entry.quantity * 2 })),
       ...(consumableRoll < .35 ? [{ itemId: "healing_potion" as const, quantity: 1 }] : [])]

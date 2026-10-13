@@ -118,13 +118,15 @@ export class RealmEventDirector {
   private nextAt = 0;
   private readonly defeated = new Map<string, number>();
   private readonly completed = new Set<RealmEventKey>();
+  private readonly defeatedLeaders = new Set<string>();
   private eliteKills = 0;
 
   get phase(): RealmEventPhase { return this.currentPhase; }
   get definition(): RealmEventDefinition | null { return realmEventDefinition(this.currentKey); }
 
   private threatProgress(): number {
-    return Math.min(REALM_EVENT_REQUIRED, this.completed.size + Math.floor(this.eliteKills / REALM_ELITE_KILLS_PER_THREAT));
+    return Math.min(REALM_EVENT_REQUIRED, this.completed.size + this.defeatedLeaders.size
+      + Math.floor(this.eliteKills / REALM_ELITE_KILLS_PER_THREAT));
   }
 
   private tick(now: number): void {
@@ -171,6 +173,23 @@ export class RealmEventDirector {
     return { bossArmed, eliteKills: this.eliteKills % REALM_ELITE_KILLS_PER_THREAT, eliteRequired: REALM_ELITE_KILLS_PER_THREAT };
   }
 
+  recordLeader(id: string, now: number): { credited: boolean; bossArmed: boolean; completed: number; required: number } {
+    this.tick(now);
+    const current = this.definition;
+    if (current?.realmBoss && (this.currentPhase === "warning" || this.currentPhase === "active")) {
+      return { credited: false, bossArmed: false, completed: this.threatProgress(), required: REALM_EVENT_REQUIRED };
+    }
+    const before = this.defeatedLeaders.size;
+    this.defeatedLeaders.add(id);
+    const credited = this.defeatedLeaders.size > before;
+    let bossArmed = false;
+    if (credited && this.currentPhase === "idle" && this.threatProgress() >= REALM_EVENT_REQUIRED) {
+      this.arm(REALM_EVENT_DEFINITIONS.find(event => event.realmBoss)!, now);
+      bossArmed = true;
+    }
+    return { credited, bossArmed, completed: this.threatProgress(), required: REALM_EVENT_REQUIRED };
+  }
+
   release(now: number): RealmEventDefinition | null {
     if (this.currentPhase !== "warning" || now < this.warningEndsAt) return null;
     this.currentPhase = "active";
@@ -183,6 +202,7 @@ export class RealmEventDirector {
     if (this.currentPhase !== "active" || !definition || definition.id !== mobId) return null;
     if (definition.realmBoss) {
       this.completed.clear();
+      this.defeatedLeaders.clear();
       this.eliteKills = 0;
       this.currentPhase = "cooldown";
       this.currentKey = null;

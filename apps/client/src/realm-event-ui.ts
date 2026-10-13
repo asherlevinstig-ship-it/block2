@@ -16,14 +16,14 @@ export function realmEventLabel(update: RealmEventUpdate, now = Date.now()): { e
   const eliteKills = update.eliteKills ?? 0;
   const eliteDetail = eliteKills > 0 ? ` · elite hunt ${eliteKills}/${update.eliteRequired ?? 2}` : "";
   if (update.phase === "cooldown") return { eyebrow: "REALM STABILISING", title: `${update.completed} / ${update.required} threats defeated`, detail: `Another regional event can awaken shortly${eliteDetail}` };
-  return { eyebrow: "REALM THREAT", title: `${update.completed} / ${update.required} threats defeated`, detail: `Clear marked encounters or hunt elites${eliteDetail}` };
+  return { eyebrow: "REALM THREAT", title: `${update.completed} / ${update.required} threats defeated`, detail: `Defeat area leaders or hunt elites${eliteDetail}` };
 }
 
 export function createRealmEventUI() {
   const root = document.createElement("section");
   root.id = "realm-event-meter";
   root.setAttribute("aria-label", "Realm event progress");
-  root.innerHTML = '<div><span class="realm-event-eyebrow">REALM THREAT</span><strong class="realm-event-title">0 / 3 threats defeated</strong><small class="realm-event-detail">Clear regional encounters to awaken public bosses</small><small class="realm-event-loot" hidden></small></div><i class="realm-event-pips" aria-hidden="true"></i>';
+  root.innerHTML = '<div><span class="realm-event-eyebrow">REALM THREAT</span><strong class="realm-event-title">0 / 3 threats defeated</strong><small class="realm-event-detail">Defeat area leaders to awaken the realm boss</small><small class="realm-event-loot" hidden></small></div><i class="realm-event-pips" aria-hidden="true"></i>';
   document.body.append(root);
   const eyebrow = root.querySelector<HTMLElement>(".realm-event-eyebrow")!;
   const title = root.querySelector<HTMLElement>(".realm-event-title")!;

@@ -4663,6 +4663,15 @@ function showEquipmentPickup(itemId: ItemId, quantity: number, total: number): v
   queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
 }
 
+function showLootNotice(message: string, warning = false): void {
+  const toast = document.createElement("div");
+  toast.className = `resource-toast loot-notice${warning ? " warning" : ""}`;
+  const heading = document.createElement("small"); heading.textContent = warning ? "PACK FULL" : "LOOT BAG";
+  const detail = document.createElement("strong"); detail.textContent = message;
+  toast.append(heading, detail);
+  queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
+}
+
 function updateMining(now: number): void {
   for (let i = miningChips.length - 1; i >= 0; i--) {
     const chip = miningChips[i]!;
@@ -8990,11 +8999,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (!pendingFloorLoot.delete(message.dropId)) return;
       if (!message.ok) {
         status.textContent = message.message;
-        showCombatFeedback(message.message.toUpperCase(), "hurt");
+        showLootNotice(message.message, true);
       } else if (message.remainingItems?.length) {
         updateRemainingLootBag(message.dropId, message.remainingItems);
         status.textContent = message.message;
-        showCombatFeedback("BAG PARTIALLY COLLECTED", "dodge");
+        showLootNotice(message.message, true);
       } else {
         removeLootVisual(message.dropId, true);
         status.textContent = message.message;

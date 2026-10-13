@@ -1916,6 +1916,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.materializeUntil = 0;
     const usesOverworldRhythm = this.roomKind === "overworld" && usesOverworldRespawnRhythm(mobId, mob.isChampion);
     mob.respawnAt = now + (usesOverworldRhythm ? wildernessRespawnDelay(mobId, mob.level) : definition.respawnMs);
+    const leaderProgress = areaMainMob && this.roomKind === "overworld" ? this.realmEvents.recordLeader(mobId, now) : null;
+    if (leaderProgress?.credited) {
+      for (const playerId of recipients) this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
+        leaderProgress.bossArmed
+          ? `REALM THREAT ${leaderProgress.completed}/${leaderProgress.required} · the Realm Stone Warden awakens in 8 seconds.`
+          : `REALM THREAT ${leaderProgress.completed}/${leaderProgress.required} · ${areaMainMob?.name ?? mob.name} defeated. Explore onward; the next nearby leader appears as you approach.`);
+      this.broadcastRealmEvent(now);
+    }
     const armedEvent = this.realmEvents.recordTrigger(mobId, now,
       [...this.state.mobs].filter(([id, candidate]) => candidate.alive && isRealmEventId(id)).map(([id]) => id));
     if (armedEvent) {
@@ -2161,7 +2169,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland", quantity: 3 }, ...signatureDrops("venom_focus")]
       : isRealmEventId(mobId) ? [...(realmEventDefinition(mobId)?.rewards ?? []),
         ...(realmEventDefinition(mobId)?.signatureRewards ?? []).flatMap(itemId => signatureDrops(itemId as SignatureItemId))]
-      : isAreaMiniBoss(mobId) ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "miniboss")]
+      : isAreaMiniBoss(mobId) ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "miniboss", Math.random(), mob.difficultyTier)]
       : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "champion")
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
       : mob.isElite ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "elite", Math.random())]
