@@ -39,11 +39,12 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
-import { AREA_LEADER_FOLLOWERS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
+import { AREA_LEADER_FOLLOWERS, AREA_MAIN_MOBS, areaLeaderPattern, areaLeaderPhase, areaMainMobDefinition, areaMiniBossDefinition, isAreaMiniBoss, leaderForFollower, type AreaLeaderPhase } from "./area-mini-bosses.js";
 import { MINI_BOSS_ENRAGE_MS, miniBossDamage, miniBossOrbitCounterPattern, miniBossWindupDelay, predictedMiniBossAim, updateOrbitPressure, type OrbitPressureState } from "./mini-boss-pressure.js";
 import { miniBossCoverSites, miniBossPressureSites } from "./mini-boss-arena.js";
 import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, leaderRematchPressureCadence,
-  leaderRematchStats, leaderRematchTiming } from "./leader-rematches.js";
+  leaderRematchStats, leaderRematchTiming, leaderTerritory } from "./leader-rematches.js";
+import { RealmHuntBoardRequestSchema, type RealmHuntBoardUpdate, type RealmHuntStatus } from "@blockcraft/protocol";
 import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE,
   dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
@@ -404,6 +405,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly miniBossOrbitPressure = new Map<string, OrbitPressureState>();
   private readonly miniBossArenaCover = new Map<string, Map<string, ActiveMiniBossCover>>();
   private readonly leaderDefeats = new Map<string, number>();
+  private readonly selectedRealmHunts = new Map<string, string>();
   private readonly realmBossPhases = new Map<string, RealmBossPhase>();
   private readonly mobProgress = new Map<string, MobProgress>();
   private readonly mobUnreachableUntil = new Map<string, number>();
@@ -651,6 +653,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     };
     this.onMessage("player:return", client => void this.returnPlayerToTown(client));
     this.onMessage("dungeon:board", (client, payload: unknown) => this.handleDungeonBoard(client, payload));
+    this.onMessage("realm-hunt:board", (client, payload: unknown) => this.handleRealmHuntBoard(client, payload));
     this.onMessage("dungeon:lobby", (client, payload: unknown) => this.handleDungeonLobby(client, payload));
     this.onMessage("depths:lobby", (client, payload: unknown) => this.handleSilverDepthsLobby(client, payload));
     this.onMessage("portal:use", (client, payload: unknown) => {
@@ -904,6 +907,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.profileSaveFingerprints.delete(client.sessionId);
     this.quizRounds.delete(client.sessionId);
     this.objectiveProgress.delete(client.sessionId);
+    this.selectedRealmHunts.delete(client.sessionId);
   }
 
   override onDrop(client: Client): void {
@@ -2186,7 +2190,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const progress = this.objectiveProgress.get(client.sessionId) ?? createObjectiveProgress();
     this.objectiveProgress.set(client.sessionId, progress);
     const now = Date.now();
-    const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, now, progress.id, this.realmEvents.status(now), this.roomKind);
+    let update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, now, progress.id, this.realmEvents.status(now), this.roomKind);
+    const selectedHuntId = this.selectedRealmHunts.get(client.sessionId) ?? "";
+    const selectedHunt = this.state.mobs.get(selectedHuntId);
+    const selectedDefinition = areaMainMobDefinition(selectedHuntId);
+    if (this.roomKind === "overworld" && selectedHunt?.alive && selectedDefinition
+      && Math.abs(player.y - selectedHunt.y) <= 2.5
+      && Math.hypot(player.x - selectedHunt.x, player.z - selectedHunt.z) <= 42
+      && update.kind !== "loot" && update.kind !== "portal") {
+      const rematchLabel = selectedHunt.leaderRematchTier > 0
+        ? `${selectedHunt.leaderModifier.toUpperCase()} · REMATCH ${selectedHunt.leaderRematchTier}` : "ACTIVE HUNT";
+      update = {
+        kind: "hunt", showMarker: true, objectiveId: `realm-hunt-${selectedHuntId}`,
+        title: selectedDefinition.name,
+        detail: `Tracked leader · ${leaderTerritory(selectedHuntId)}`,
+        lootHint: `${ITEM_DEFINITIONS[selectedDefinition.rewardItemId].name} · guaranteed leader relic`,
+        tier: selectedHunt.difficultyTier, recommendedLevel: `LV ${selectedHunt.level}`,
+        targetMobId: selectedHuntId, targetMobIds: [selectedHuntId], completedMobIds: [],
+        progressLabel: rematchLabel,
+        targetX: selectedHunt.x, targetY: selectedHunt.y, targetZ: selectedHunt.z,
+      };
+    }
     const signatureItemId: SignatureItemId | null = update.objectiveId.includes("depths-matriarch") || update.objectiveId === "depths-recover"
       ? "matriarch_edge"
       : update.objectiveId === "greenwood-event" ? "venom_focus" : null;
@@ -3332,6 +3356,58 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.clients.find(other => other.sessionId === memberId)?.send("portal:notice", "Expedition portal opened beside the board · enter within 30 seconds.");
     }
     this.sendDungeonBoard(client, "Reserved dungeon portal opened for 30 seconds.");
+  }
+
+  private sendRealmHuntBoard(client: Client, message = "Select one leader. Guidance awakens only when you approach its territory."): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const now = Date.now();
+    const hunts: RealmHuntStatus[] = AREA_MAIN_MOBS.map(definition => {
+      const mob = this.state.mobs.get(definition.id);
+      const home = this.mobHomes.get(definition.id) ?? mob ?? { x: 0, y: 0, z: 0 };
+      const relicId = definition.rewardItemId as AreaLeaderRelicId;
+      const recipe = LEADER_FORGE_RECIPES[relicId];
+      const relicTotal = (player.inventory.get(relicId)?.quantity ?? 0) + (player.storage.get(relicId)?.quantity ?? 0);
+      const awakened = (player.inventory.get(recipe.markId)?.quantity ?? 0) + (player.storage.get(recipe.markId)?.quantity ?? 0) > 0;
+      const pending = mob?.alive
+        ? { tier: mob.leaderRematchTier, modifier: mob.leaderModifier }
+        : leaderRematch(definition.id, this.leaderDefeats.get(definition.id) ?? 0);
+      return {
+        mobId: definition.id, name: definition.name, territory: leaderTerritory(definition.id),
+        status: !mob?.alive ? "recovering" : pending.tier > 0 ? "empowered" : "alive",
+        respawnSeconds: !mob?.alive ? Math.max(0, Math.ceil(((mob?.respawnAt ?? now) - now) / 1000)) : 0,
+        rematchTier: pending.tier, modifier: pending.modifier,
+        relicId, relicName: ITEM_DEFINITIONS[relicId].name,
+        relicCount: awakened ? 3 : Math.min(3, relicTotal), awakened,
+        forgeName: LEADER_FORGE_MARKS[recipe.markId].name,
+        targetX: home.x, targetY: home.y, targetZ: home.z,
+      } satisfies RealmHuntStatus;
+    });
+    client.send("realm-hunt:board", {
+      selectedMobId: this.selectedRealmHunts.get(client.sessionId) ?? "", hunts, message,
+    } satisfies RealmHuntBoardUpdate);
+  }
+
+  private handleRealmHuntBoard(client: Client, payload: unknown): void {
+    const parsed = RealmHuntBoardRequestSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return;
+    if (parsed.data.action === "sync") { this.sendRealmHuntBoard(client); return; }
+    if (Math.abs(player.y - TOWN_EXPEDITION_BOARD_POSITION.y) > 1.6
+      || Math.hypot(player.x - TOWN_EXPEDITION_BOARD_POSITION.x, player.z - TOWN_EXPEDITION_BOARD_POSITION.z) > 3) {
+      this.sendRealmHuntBoard(client, "Return to the Realm Hunt Board in town to change your tracked leader."); return;
+    }
+    const mobId = parsed.data.mobId ?? "";
+    if (!AREA_MAIN_MOBS.some(definition => definition.id === mobId)) {
+      this.sendRealmHuntBoard(client, "That leader is not recorded on this board."); return;
+    }
+    const deselected = this.selectedRealmHunts.get(client.sessionId) === mobId;
+    if (deselected) this.selectedRealmHunts.delete(client.sessionId);
+    else this.selectedRealmHunts.set(client.sessionId, mobId);
+    this.sendRealmHuntBoard(client, deselected
+      ? "Hunt guidance cleared."
+      : `${areaMainMobDefinition(mobId)?.name ?? "Leader"} tracked. Guidance will appear near its territory.`);
+    this.sendObjectiveState(client, true);
   }
 
   private sendDungeonLobby(message = "Assemble at the entrance and ready up."): void {

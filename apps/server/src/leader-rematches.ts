@@ -62,3 +62,28 @@ export function leaderRematchPattern(base: string, archetype: string, sequence: 
 export function leaderRematchMaterialBonus(tier: number): number {
   return tier <= 0 ? 0 : Math.min(3, Math.ceil(tier / 2));
 }
+
+const LEADER_TERRITORIES: Readonly<Record<string, string>> = {
+  "moss-crawler": "Greenwood Outskirts",
+  "outskirts-crawler-west": "Westroad Outskirts",
+  "outskirts-crawler-north": "Northroad Outskirts",
+  "wild-crawler": "Greenwood Crawler Camp",
+  "frontier-spitter": "Silver Guard Clearing",
+  "wild-spitter-west-north": "Gloomfang Wilds",
+  "stone-brute": "Stone Brute Clearing",
+  "frontier-brute": "Frontier Ruins",
+  "frontier-brute-east": "Eastern Frontier Warband",
+  "ashglass-sentry-east": "Ashen Reach",
+  "outskirts-west-pack:0": "Westroad Roaming Route",
+  "outskirts-north-pack:0": "Northroad Roaming Route",
+  "wilds-west-pack:0": "Gloam Roaming Route",
+  "wilds-east-pack:0": "Sunscar Roaming Route",
+  "shallow-cave-crawler": "Ironburrow Cavern",
+  "deep-cave-spitter": "Silver Chamber",
+  "buried-chamber-brute": "Buried Vault",
+  "frontier-brute-west": "Western Rich Deposit",
+};
+
+export function leaderTerritory(id: string): string {
+  return LEADER_TERRITORIES[id] ?? "Unknown Territory";
+}

@@ -41,7 +41,8 @@ const AREA_MINI_BOSS_BY_ID = new Map(AREA_MINI_BOSSES.map(definition => [definit
 const EXISTING_AREA_BOSSES: readonly AreaMiniBossDefinition[] = [
   { id: "frontier-brute-west", name: "Frontier Stone Champion", rewardLabel: "Frontier Champion Cache", rewardItemId: "frontier_champion_crest" },
 ];
-const AREA_MAIN_MOB_BY_ID = new Map([...AREA_MINI_BOSSES, ...EXISTING_AREA_BOSSES].map(definition => [definition.id, definition]));
+export const AREA_MAIN_MOBS: readonly AreaMiniBossDefinition[] = [...AREA_MINI_BOSSES, ...EXISTING_AREA_BOSSES];
+const AREA_MAIN_MOB_BY_ID = new Map(AREA_MAIN_MOBS.map(definition => [definition.id, definition]));
 
 export function areaMiniBossDefinition(id: string): AreaMiniBossDefinition | undefined {
   return AREA_MINI_BOSS_BY_ID.get(id);

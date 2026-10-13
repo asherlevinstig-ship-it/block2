@@ -147,6 +147,7 @@ import {
   type DungeonRunUpdate,
   type DungeonRewardClaimed,
   type DungeonBoardUpdate,
+  type RealmHuntBoardUpdate,
   type DungeonLobbyUpdate,
   type SilverDepthsLobbyUpdate,
   type ItemId,
@@ -302,7 +303,7 @@ let latestDungeonBoard: DungeonBoardUpdate | null = null;
 const expeditionPanel = document.createElement("section");
 expeditionPanel.id = "expedition-board-panel";
 expeditionPanel.hidden = true;
-expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST DUNGEON</h2><p class="expedition-message"></p><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>Heavy 3-hit combo · finisher roots groups</span></div><button class="expedition-launch" type="button">OPEN DUNGEON PORTAL</button>';
+expeditionPanel.innerHTML = '<button class="expedition-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS</small><h2>FOREST DUNGEON</h2><p class="expedition-message"></p><button class="realm-hunts-open" type="button"><b>REALM HUNTS</b><span>Track leaders · forge awakened weapons</span></button><ol><li data-stage="1">Breach the forest sentinels</li><li data-stage="2">Defeat the thicket guards</li><li data-stage="3">Slay the Ancient Root Guardian</li><li data-stage="4">Collect the Rootbound Cache and escape</li></ol><div class="expedition-stats"><span>GROUP <strong class="expedition-party">SOLO</strong></span><span>BEST <strong class="expedition-best">—</strong></span></div><div class="expedition-reward"><b>GUARANTEED PERSONAL REWARD</b><strong>Rootbound Hammer</strong><span>Heavy 3-hit combo · finisher roots groups</span></div><button class="expedition-launch" type="button">OPEN DUNGEON PORTAL</button>';
 document.body.append(expeditionPanel);
 const formatDungeonTime = (milliseconds: number) => milliseconds > 0
   ? `${Math.floor(milliseconds / 60000)}:${String(Math.floor(milliseconds / 1000) % 60).padStart(2, "0")}` : "—";
@@ -324,6 +325,68 @@ function openDungeonBoard(): void {
 }
 expeditionPanel.querySelector(".expedition-close")!.addEventListener("click", () => { expeditionPanel.hidden = true; });
 expeditionPanel.querySelector(".expedition-launch")!.addEventListener("click", () => room?.send("dungeon:board", { action: "open" }));
+
+let latestRealmHuntBoard: RealmHuntBoardUpdate | null = null;
+let realmHuntPath = "all";
+const realmHuntPanel = document.createElement("section");
+realmHuntPanel.id = "realm-hunt-board-panel";
+realmHuntPanel.hidden = true;
+realmHuntPanel.setAttribute("role", "dialog");
+realmHuntPanel.setAttribute("aria-label", "Realm Hunt Board");
+realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS · REALM HUNT BOARD</small><h2>Choose Your Hunt</h2><p class="realm-hunt-message"></p><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" type="button">FANG PATH</button><button data-path="Venom Surge" type="button">VENOM PATH</button><button data-path="Crusher Break" type="button">CRUSHER PATH</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
+document.body.append(realmHuntPanel);
+
+function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
+  latestRealmHuntBoard = update;
+  realmHuntPanel.querySelector(".realm-hunt-message")!.textContent = update.message;
+  const list = realmHuntPanel.querySelector(".realm-hunt-list")!;
+  list.replaceChildren();
+  const visibleHunts = update.hunts.filter(hunt => realmHuntPath === "all" || hunt.forgeName === realmHuntPath);
+  for (const hunt of visibleHunts) {
+    const row = document.createElement("article");
+    const selected = update.selectedMobId === hunt.mobId;
+    row.className = `realm-hunt-row ${selected ? "selected" : ""}`;
+    row.dataset.status = hunt.status;
+    const heading = document.createElement("div");
+    heading.className = "realm-hunt-heading";
+    const title = document.createElement("strong"); title.textContent = hunt.name;
+    const territory = document.createElement("span"); territory.textContent = hunt.territory;
+    heading.append(title, territory);
+    const status = document.createElement("b");
+    status.className = "realm-hunt-status";
+    status.textContent = hunt.status === "recovering" ? `RECOVERING · ${hunt.respawnSeconds}s`
+      : hunt.status === "empowered" ? `${hunt.modifier.toUpperCase()} · REMATCH ${hunt.rematchTier}` : "ALIVE · FIRST HUNT";
+    const progress = document.createElement("div"); progress.className = "realm-hunt-progress";
+    const relic = document.createElement("span"); relic.textContent = hunt.awakened ? `${hunt.relicName} · AWAKENED` : `${hunt.relicCount} / 3 · ${hunt.relicName}`;
+    const path = document.createElement("em"); path.textContent = hunt.forgeName.toUpperCase();
+    progress.append(relic, path);
+    const track = document.createElement("button"); track.type = "button";
+    track.textContent = selected ? "TRACKING ✓" : "TRACK HUNT";
+    track.addEventListener("click", () => room?.send("realm-hunt:board", { action: "select", mobId: hunt.mobId }));
+    row.append(heading, status, progress, track);
+    list.append(row);
+  }
+}
+
+function openRealmHuntBoard(): void {
+  expeditionPanel.hidden = true;
+  realmHuntPanel.hidden = false;
+  resetMovementControls();
+  room?.send("realm-hunt:board", { action: "sync" });
+}
+expeditionPanel.querySelector(".realm-hunts-open")!.addEventListener("click", openRealmHuntBoard);
+realmHuntPanel.querySelector(".realm-hunt-close")!.addEventListener("click", () => { realmHuntPanel.hidden = true; });
+realmHuntPanel.querySelector(".realm-hunt-back")!.addEventListener("click", () => {
+  realmHuntPanel.hidden = true; openDungeonBoard();
+});
+realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-path]").forEach(button => button.addEventListener("click", () => {
+  realmHuntPath = button.dataset.path ?? "all";
+  realmHuntPanel.querySelectorAll("[data-path]").forEach(candidate => candidate.classList.toggle("active", candidate === button));
+  if (latestRealmHuntBoard) renderRealmHuntBoard(latestRealmHuntBoard);
+}));
+window.setInterval(() => {
+  if (!realmHuntPanel.hidden) room?.send("realm-hunt:board", { action: "sync" });
+}, 3_000);
 
 const dungeonLobbyPanel = document.createElement("section");
 dungeonLobbyPanel.id = "dungeon-lobby-panel";
@@ -6079,9 +6142,9 @@ const movementEventLog: string[] = [];
 function renderWorldObjective(update: WorldObjectiveUpdate): void {
   const changedObjective = currentWorldObjective?.objectiveId !== update.objectiveId;
   currentWorldObjective = update;
-  const mapOnlyEncounter = update.kind === "encounter";
+  const mapOnlyEncounter = update.kind === "encounter" || update.kind === "hunt";
   worldObjective.hidden = mapOnlyEncounter;
-  const mapThreat = update.kind === "encounter" || update.kind === "miniboss";
+  const mapThreat = update.kind === "encounter" || update.kind === "miniboss" || update.kind === "hunt";
   minimap.setThreatState(mapThreat ? {
     x: update.targetX,
     y: update.targetY,
@@ -6090,7 +6153,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   } : null);
   if (changedObjective || update.showMarker === false) objectiveMarker.hidden = update.showMarker === false;
   const recommendation = update.recommendedLevel ?? worldLevelRange(update.tier).label;
-  objectiveTier.textContent = `${update.progressLabel?.startsWith("REALM THREAT") || update.progressLabel === "REALM BOSS" ? "REALM" : update.kind === "miniboss" ? "AREA MINI-BOSS" : update.kind === "hub" ? "SAFE TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "PERSONAL LOOT" : update.kind === "explore" ? "WILDERNESS" : update.progressLabel ? "DUNGEON" : "THREAT"} · ${recommendation}`;
+  objectiveTier.textContent = `${update.kind === "hunt" ? "TRACKED HUNT" : update.progressLabel?.startsWith("REALM THREAT") || update.progressLabel === "REALM BOSS" ? "REALM" : update.kind === "miniboss" ? "AREA MINI-BOSS" : update.kind === "hub" ? "SAFE TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "PERSONAL LOOT" : update.kind === "explore" ? "WILDERNESS" : update.progressLabel ? "DUNGEON" : "THREAT"} · ${recommendation}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
   objectiveLoot.hidden = !update.lootHint;
@@ -6101,7 +6164,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   objectiveMarkerLabel.textContent = update.title.toUpperCase();
   objectiveMarker.dataset.kind = update.kind ?? "encounter";
   objectiveMarker.querySelector("i")!.textContent = objectiveIcon(update.kind);
-  if (mapOnlyEncounter) objectiveMarker.hidden = true;
+  if (update.kind === "encounter") objectiveMarker.hidden = true;
 }
 
 function showObjectiveComplete(message: WorldObjectiveCompleted): void {
@@ -6266,7 +6329,7 @@ function updateBossHud(now: number): void {
   }
   const position = localPlayer.getPosition();
   const inSilverDepths = position.y < 5 && position.x >= 59 && position.x <= 78 && position.z >= 3 && position.z <= 16;
-  const trackedMiniBossId = currentWorldObjective?.kind === "miniboss" ? currentWorldObjective.targetMobId : "";
+  const trackedMiniBossId = currentWorldObjective?.kind === "miniboss" || currentWorldObjective?.kind === "hunt" ? currentWorldObjective.targetMobId : "";
   const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian"
     : isInRealmWardenArena(position.x, position.z) && mobVisuals.has("realm-stone-warden") ? "realm-stone-warden"
       : activeRealmEventId || trackedMiniBossId || "greenwood-venom-matriarch";
@@ -7253,6 +7316,7 @@ function commitSpecialAim(): void {
 
 function requestPrimaryAction(): void {
   if (playerInteractionUI.isOpen()) return;
+  if (!expeditionPanel.hidden || !realmHuntPanel.hidden) return;
   if (!inventoryPanel.hidden) return;
   if (!lootPanel.hidden) return;
   if (!defeatScreen.hidden) return;
@@ -7366,6 +7430,14 @@ window.addEventListener("keydown", event => {
   }
   if (tradeUI.isOpen()) { if (event.code === "Escape") tradeUI.cancel(); return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+  if (!realmHuntPanel.hidden) {
+    if (event.code === "Escape") realmHuntPanel.hidden = true;
+    event.preventDefault(); return;
+  }
+  if (!expeditionPanel.hidden) {
+    if (event.code === "Escape") expeditionPanel.hidden = true;
+    event.preventDefault(); return;
+  }
   if (event.code === "Enter" && lootPanel.hidden && inventoryPanel.hidden && quizPanel.hidden && blacksmithPanel.hidden) { event.preventDefault(); social.open(); return; }
   if (!defeatScreen.hidden) return;
   if (!lootPanel.hidden) {
@@ -7648,8 +7720,10 @@ app.on("update", (dt: number) => {
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const strafe = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden && levelUpPanel.hidden && !playerInteractionUI.isOpen() ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
-  const forward = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden && levelUpPanel.hidden && !playerInteractionUI.isOpen() ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
+  const modalMovementAllowed = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden
+    && levelUpPanel.hidden && expeditionPanel.hidden && realmHuntPanel.hidden && !playerInteractionUI.isOpen();
+  const strafe = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
+  const forward = modalMovementAllowed ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
@@ -8762,6 +8836,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = reward.message;
   });
   room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
+  room.onMessage("realm-hunt:board", (update: RealmHuntBoardUpdate) => renderRealmHuntBoard(update));
   room.onMessage("dungeon:lobby", (update: DungeonLobbyUpdate) => renderDungeonLobby(update));
   room.onMessage("depths:lobby", (update: SilverDepthsLobbyUpdate) => renderSilverDepthsLobby(update));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));
@@ -9310,6 +9385,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
     quizPanel.hidden = true;
     blacksmithPanel.hidden = true;
+    expeditionPanel.hidden = true;
+    realmHuntPanel.hidden = true;
     inventoryPanel.hidden = true;
     inventoryToggle.setAttribute("aria-expanded", "false");
     worldReady = false;

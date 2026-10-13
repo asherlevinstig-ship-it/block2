@@ -2100,6 +2100,29 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .expedition-reward b { color: #84d779; font-size: 9px; letter-spacing: .12em; }.expedition-reward strong { color: #d8ffc8; }.expedition-reward span { color: #9cbd9b; font-size: 11px; }
 .expedition-launch { width: 100%; margin-top: 14px; padding: 12px; cursor: pointer; color: #1c180d; border: 0; border-radius: 7px; background: #d8ba69; font: 900 11px system-ui; letter-spacing: .08em; }
 .expedition-launch:disabled { cursor: default; opacity: .5; }
+.realm-hunts-open { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 11px 12px; cursor: pointer; color: #c7f4d0; border: 1px solid #62bd7b77; border-radius: 8px; background: linear-gradient(135deg, #183829, #10261d); text-align: left; }
+.realm-hunts-open b { font: 900 11px system-ui; letter-spacing: .1em; }.realm-hunts-open span { color: #8eb49a; font: 10px system-ui; }
+
+#realm-hunt-board-panel { position: fixed; z-index: 68; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(760px, calc(100vw - 30px)); max-height: min(820px, calc(100vh - 30px)); box-sizing: border-box; padding: 23px; overflow: hidden; color: #e6f1df; border: 2px solid #6da77a; border-radius: 14px; background: linear-gradient(145deg, #15291ff8, #091711fc 62%, #080e0bfc); box-shadow: 0 0 0 100vmax #020503b8, 0 22px 80px #000d, inset 0 0 40px #75ce8914; font-family: system-ui; }
+#realm-hunt-board-panel[hidden] { display: none; }
+#realm-hunt-board-panel > small { color: #83cc94; font-weight: 900; letter-spacing: .16em; }
+#realm-hunt-board-panel h2 { margin: 6px 0 3px; color: #efffdc; font-size: 25px; }
+.realm-hunt-message { margin: 4px 0 13px; color: #9db2a2; font-size: 12px; }
+.realm-hunt-close { position: absolute; top: 10px; right: 13px; cursor: pointer; color: #d8ebd7; border: 0; background: none; font-size: 25px; }
+.realm-hunt-paths { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 9px; }
+.realm-hunt-paths button { padding: 8px 5px; cursor: pointer; color: #8fa397; border: 1px solid #ffffff18; border-radius: 6px; background: #ffffff08; font: 900 9px system-ui; letter-spacing: .06em; }
+.realm-hunt-paths button.active { color: #162014; border-color: #c8e584; background: #c8e584; }
+.realm-hunt-legend { display: flex; gap: 15px; margin: 8px 2px; color: #91a497; font-size: 10px; }
+.realm-hunt-legend span { display: flex; align-items: center; gap: 5px; }.realm-hunt-legend i { width: 7px; height: 7px; border-radius: 50%; background: #72d88a; box-shadow: 0 0 7px currentColor; }.realm-hunt-legend i[data-status="recovering"] { background: #d7b75e; }.realm-hunt-legend i[data-status="empowered"] { background: #d273ef; }
+.realm-hunt-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; max-height: min(520px, calc(100vh - 255px)); padding-right: 4px; overflow-y: auto; scrollbar-color: #51775c #0d1812; }
+.realm-hunt-row { display: grid; grid-template-columns: 1fr auto; gap: 5px 9px; padding: 10px; border: 1px solid #ffffff14; border-left: 3px solid #65c17c; border-radius: 8px; background: #ffffff07; }
+.realm-hunt-row[data-status="recovering"] { border-left-color: #c9a94d; }.realm-hunt-row[data-status="empowered"] { border-left-color: #c463df; background: #2d173126; }.realm-hunt-row.selected { border-color: #ecdc7e; box-shadow: inset 0 0 18px #e7d45d14; }
+.realm-hunt-heading { min-width: 0; }.realm-hunt-heading strong, .realm-hunt-heading span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.realm-hunt-heading strong { color: #e8f4df; font-size: 12px; }.realm-hunt-heading span { margin-top: 2px; color: #7f9687; font-size: 9px; }
+.realm-hunt-status { grid-column: 2; grid-row: 1; align-self: start; color: #87dc9b; font-size: 8px; letter-spacing: .06em; white-space: nowrap; }.realm-hunt-row[data-status="recovering"] .realm-hunt-status { color: #dabb67; }.realm-hunt-row[data-status="empowered"] .realm-hunt-status { color: #dc8af0; }
+.realm-hunt-progress { grid-column: 1; display: grid; gap: 2px; color: #b9c7ba; font-size: 9px; }.realm-hunt-progress em { color: #d6bf72; font-style: normal; font-weight: 900; letter-spacing: .06em; }
+.realm-hunt-row > button { grid-column: 2; grid-row: 2; align-self: end; padding: 6px 8px; cursor: pointer; color: #142018; border: 0; border-radius: 5px; background: #89ce94; font: 900 8px system-ui; letter-spacing: .05em; }.realm-hunt-row.selected > button { background: #e6d574; }
+.realm-hunt-back { width: 100%; margin-top: 11px; padding: 10px; cursor: pointer; color: #b8c9b9; border: 1px solid #ffffff18; border-radius: 7px; background: #ffffff08; font: 900 10px system-ui; letter-spacing: .08em; }
+@media (max-width: 650px) { #realm-hunt-board-panel { padding: 17px; }.realm-hunt-list { grid-template-columns: 1fr; }.realm-hunt-paths { grid-template-columns: repeat(2, 1fr); }.realm-hunts-open span { display: none; } }
 #dungeon-lobby-panel { position: fixed; z-index: 66; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(430px, calc(100vw - 36px)); box-sizing: border-box; padding: 25px; color: #e7f4de; border: 2px solid #6da95c; border-radius: 14px; background: linear-gradient(145deg, #172b1cf8, #08120dfb); box-shadow: 0 0 0 100vmax #0205038f, 0 18px 60px #000c; font-family: system-ui; }
 #dungeon-lobby-panel[hidden] { display: none; }
 #dungeon-lobby-panel > small { color: #87ca72; font-weight: 900; letter-spacing: .14em; }

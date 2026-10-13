@@ -1070,7 +1070,7 @@ export interface WorldBootstrap {
 }
 
 export type WorldObjectiveUpdate = {
-  kind?: "encounter" | "miniboss" | "portal" | "loot" | "hub" | "explore";
+  kind?: "encounter" | "miniboss" | "hunt" | "portal" | "loot" | "hub" | "explore";
   showMarker?: boolean;
   objectiveId: string;
   title: string;
@@ -1086,6 +1086,26 @@ export type WorldObjectiveUpdate = {
   targetY: number;
   targetZ: number;
 };
+
+export const RealmHuntBoardRequestSchema = z.object({ action: z.enum(["sync", "select"]), mobId: z.string().max(80).optional() }).strict();
+export type RealmHuntStatus = {
+  mobId: string;
+  name: string;
+  territory: string;
+  status: "alive" | "recovering" | "empowered";
+  respawnSeconds: number;
+  rematchTier: number;
+  modifier: string;
+  relicId: AreaLeaderRelicId;
+  relicName: string;
+  relicCount: number;
+  awakened: boolean;
+  forgeName: string;
+  targetX: number;
+  targetY: number;
+  targetZ: number;
+};
+export type RealmHuntBoardUpdate = { selectedMobId: string; hunts: RealmHuntStatus[]; message: string };
 
 export type SilverDepthsWingRewardStatus = {
   wing: "iron" | "silver";
