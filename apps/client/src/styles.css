@@ -542,7 +542,116 @@ canvas.ranged-aim { cursor: none; }
 body:has(#inventory-panel:not([hidden])) #player-trade-prompt,
 body:has(#loot-panel:not([hidden])) #player-trade-prompt,
 body:has(#trade-modal:not([hidden])) #player-trade-prompt,
+body:has(#player-interaction:not([hidden])) #player-trade-prompt,
 body:has(#combat-hud-shell[data-loadout-open="true"]) #player-trade-prompt { display: none; }
+
+#player-interaction {
+  position: fixed;
+  z-index: 89;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 42%, rgb(25 67 59 / 34%), rgb(2 10 10 / 82%));
+  backdrop-filter: blur(5px);
+}
+#player-interaction[hidden] { display: none; }
+.player-interaction-card {
+  width: min(660px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid #79dbc7;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgb(16 43 39 / 98%), rgb(5 19 18 / 99%));
+  color: #effff9;
+  box-shadow: 0 24px 80px #000d, 0 0 44px rgb(77 221 187 / 18%), inset 0 1px #d3fff033;
+}
+.player-interaction-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 22px 24px 17px;
+  border-bottom: 1px solid #75d7c333;
+  background: linear-gradient(90deg, rgb(58 145 123 / 18%), transparent 65%);
+}
+.player-interaction-card header span,
+.player-interaction-level,
+.player-interaction-details dt,
+.player-interaction-health > span {
+  color: #94e8d1;
+  font: 900 10px/1 system-ui;
+  letter-spacing: .16em;
+}
+.player-interaction-card h2 { margin: 7px 0 4px; font: 950 28px/1 system-ui; letter-spacing: -.025em; }
+.player-interaction-level { margin: 0; color: #f3d57b; }
+.player-interaction-close {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #8bdcca55;
+  border-radius: 10px;
+  background: #071c1b;
+  color: #d9fff4;
+  cursor: pointer;
+  font: 700 24px/1 system-ui;
+}
+.player-interaction-body { display: grid; grid-template-columns: 230px 1fr; gap: 22px; padding: 20px 24px; }
+.player-interaction-portrait {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  min-height: 316px;
+  padding: 8px 8px 14px;
+  border: 1px solid #72d5bd36;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 42%, #3f8d7466, #071c19 72%);
+}
+.player-interaction-portrait canvas { width: 200px; height: 236px; max-width: 100%; }
+.player-interaction-state {
+  margin-top: 3px;
+  padding: 6px 10px;
+  border: 1px solid #7be2bd66;
+  border-radius: 999px;
+  background: #173f34;
+  color: #a9f4d3;
+  font: 900 9px/1 system-ui;
+  letter-spacing: .13em;
+}
+.player-interaction-state[data-tone="busy"] { border-color: #efbc5d88; background: #4b3518; color: #ffe19a; }
+.player-interaction-state[data-tone="down"] { border-color: #f27e7388; background: #4b201d; color: #ffada5; }
+.player-interaction-distance { margin-top: 9px; color: #9db9b1; font: 700 11px/1 system-ui; }
+.player-interaction-details { display: grid; align-content: start; gap: 16px; }
+.player-interaction-health { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.player-interaction-health strong { color: #ffd4c5; font: 900 12px/1 system-ui; }
+.player-interaction-health i { grid-column: 1 / -1; height: 8px; overflow: hidden; border-radius: 999px; background: #020908; box-shadow: inset 0 0 0 1px #fff1; }
+.player-interaction-health i b { display: block; width: 100%; height: 100%; transform-origin: left; border-radius: inherit; background: linear-gradient(90deg, #ff6659, #ffb06d); transition: transform 140ms ease; }
+.player-interaction-details dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.player-interaction-details dl div { min-width: 0; padding: 12px; border: 1px solid #84d8c828; border-radius: 10px; background: #061916; }
+.player-interaction-details dt { margin-bottom: 7px; color: #69cbb6; font-size: 8px; }
+.player-interaction-details dd { overflow: hidden; margin: 0; color: #f4fff9; font: 800 13px/1.25 system-ui; text-overflow: ellipsis; }
+.player-interaction-note { margin: 0; color: #8fa8a0; font: 600 11px/1.45 system-ui; }
+.player-interaction-actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 9px; padding: 0 24px 23px; }
+.player-interaction-actions button {
+  min-height: 44px;
+  border: 1px solid #75d7c366;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #256b5b, #17463d);
+  color: #eefff9;
+  cursor: pointer;
+  font: 900 10px/1 system-ui;
+  letter-spacing: .09em;
+}
+.player-interaction-actions .player-interaction-trade { border-color: #d8b45277; background: linear-gradient(180deg, #76591b, #4e390c); color: #fff0b5; }
+.player-interaction-actions .player-interaction-dismiss { padding-inline: 18px; background: #091d1a; color: #a8beb7; }
+.player-interaction-actions button:hover:not(:disabled), .player-interaction-close:hover { filter: brightness(1.18); transform: translateY(-1px); }
+.player-interaction-actions button:disabled { cursor: not-allowed; opacity: .42; }
+@media (max-width: 620px) {
+  #player-interaction { padding: 10px; }
+  .player-interaction-body { grid-template-columns: 150px 1fr; gap: 12px; padding: 14px; }
+  .player-interaction-portrait { min-height: 260px; }
+  .player-interaction-portrait canvas { width: 140px; height: 190px; }
+  .player-interaction-details dl { grid-template-columns: 1fr; }
+  .player-interaction-actions { grid-template-columns: 1fr 1fr; padding: 0 14px 14px; }
+  .player-interaction-dismiss { grid-column: 1 / -1; }
+}
 #combat-reticle span,
 #combat-reticle span::before { position: absolute; content: ""; background: #ffc4b8; }
 #combat-reticle span { top: 15px; left: 8px; width: 14px; height: 2px; }

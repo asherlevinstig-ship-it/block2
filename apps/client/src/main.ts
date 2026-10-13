@@ -8,6 +8,7 @@ import { objectiveGuidance, objectiveIcon } from "./objective-guidance.js";
 import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
+import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectAction, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison, comparisonTrend } from "./loot-comparison.js";
 import { createCharacterPortrait } from "./character-portrait.js";
@@ -1858,20 +1859,80 @@ const remotePlayers = new Map<string, RemotePlayerVisual>();
 const social = createSocialUI((type, payload) => { if (!room || !worldReady) return false; room.send(type, payload); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 const tradeUI = createTradeUI(request => { if (!room || !worldReady) return false; room.send("trade:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); });
 const partyUI = createPartyUI(request => { if (!room || !worldReady) return false; room.send("party:request", request); return true; }, () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); }, id => tradeUI.invite(id), () => room?.sessionId ?? "");
+const playerInteractionUI = createPlayerInteractionUI({
+  stop: () => { resetMovementControls(); requestDefense(false); cancelPowerAim(); cancelSpecialAim(); },
+  trade: id => tradeUI.invite(id),
+  party: id => partyUI.invite(id),
+});
 let lastNameplateSampleAt = -Infinity;
 let nearbyTradePlayerId: string | null = null;
 
-function requestNearbyPlayerTrade(): void {
-  if (!nearbyTradePlayerId || tradeUI.isOpen()) return;
-  const target = (room?.state.players as Map<string, NetworkPlayer> | undefined)?.get(nearbyTradePlayerId);
-  tradeUI.invite(nearbyTradePlayerId);
-  status.textContent = `Trade request sent to ${target?.name || "the nearby explorer"}.`;
+function playerInteractionView(id: string): PlayerInteractionView | null {
+  if (!room) return null;
+  const player = (room.state.players as Map<string, NetworkPlayer>).get(id);
+  const remote = remotePlayers.get(id);
+  if (!player || !remote) return null;
+  const appearance = resolveAppearance({
+    skin: player.appearanceSkin,
+    hair: player.appearanceHair,
+    coat: player.appearanceCoat,
+    hairStyle: player.appearanceHairStyle,
+    coatStyle: player.appearanceCoatStyle,
+  });
+  const handId = Object.hasOwn(MAIN_HAND_DEFINITIONS, player.mainHandId)
+    ? player.mainHandId as keyof typeof MAIN_HAND_DEFINITIONS
+    : "longsword";
+  const armourId = Object.hasOwn(ARMOUR_DEFINITIONS, player.armourId) ? player.armourId as ArmourId : "none";
+  const coatStyle = APPEARANCE_STYLES.coatStyle.find(option => option.id === appearance.coatStyle)?.name ?? "Explorer";
+  const hairStyle = APPEARANCE_STYLES.hairStyle.find(option => option.id === appearance.hairStyle)?.name ?? "Swept";
+  const coatColour = APPEARANCE_PALETTE.coat.find(option => option.id === appearance.coat)?.name ?? "Teal";
+  const position = remote.entity.getPosition();
+  const local = localPlayer.getPosition();
+  const distance = Math.hypot(position.x - local.x, position.z - local.z);
+  const state = player.health <= 0 ? "Defeated"
+    : player.defending ? "Guarding"
+      : remote.actionStartedAt !== null || remote.powerStartedAt !== null ? "In combat"
+        : player.health < player.maxHealth ? "Recovering" : "Exploring";
+  return {
+    id,
+    name: player.name || "Explorer",
+    level: player.level,
+    health: player.health,
+    maxHealth: player.maxHealth,
+    state,
+    stateTone: player.health <= 0 ? "down" : state === "In combat" || state === "Guarding" ? "busy" : "ready",
+    weapon: MAIN_HAND_DEFINITIONS[handId].name,
+    armour: ARMOUR_DEFINITIONS[armourId].name,
+    trait: Object.hasOwn(TRAIT_DEFINITIONS, player.equippedTrait)
+      ? TRAIT_DEFINITIONS[player.equippedTrait as keyof typeof TRAIT_DEFINITIONS].name : "None",
+    appearance: coatColour + " " + coatStyle + " · " + hairStyle + " hair",
+    handId,
+    armourId,
+    appearanceKey: appearance.skin + ":" + appearance.hair + ":" + appearance.coat + ":" + appearance.hairStyle + ":" + appearance.coatStyle,
+    characterRoot: remote.rig.root,
+    distance,
+    partyState: distance > 4 ? "far" : partyUI.isMember(id) ? "member" : partyUI.isFull() ? "full" : "invite",
+  };
 }
 
-playerTradePrompt.addEventListener("click", requestNearbyPlayerTrade);
+function openNearbyPlayerInteraction(): void {
+  if (!nearbyTradePlayerId || tradeUI.isOpen()) return;
+  const view = playerInteractionView(nearbyTradePlayerId);
+  if (view) playerInteractionUI.open(view);
+}
+
+playerTradePrompt.addEventListener("click", openNearbyPlayerInteraction);
 
 function updatePlayerTradePrompt(blocked: boolean): void {
   nearbyTradePlayerId = null;
+  if (playerInteractionUI.isOpen()) {
+    const targetId = playerInteractionUI.targetId();
+    const view = targetId ? playerInteractionView(targetId) : null;
+    if (view) playerInteractionUI.update(view);
+    else playerInteractionUI.close();
+    playerTradePrompt.hidden = true;
+    return;
+  }
   if (blocked || !room || !worldReady || !camera.camera || tradeUI.isOpen() || !defeatScreen.hidden) {
     playerTradePrompt.hidden = true;
     return;
@@ -1902,7 +1963,7 @@ function updatePlayerTradePrompt(blocked: boolean): void {
   playerTradePrompt.style.left = `${rect.left + screen.x}px`;
   playerTradePrompt.style.top = `${rect.top + screen.y}px`;
   playerTradePrompt.hidden = false;
-  playerTradePrompt.setAttribute("aria-label", `Trade with ${nearest.name}`);
+  playerTradePrompt.setAttribute("aria-label", `Interact with ${nearest.name}`);
 }
 const mobVisuals = new Map<string, MobVisual>();
 const lootVisuals = new Map<string, LootVisual>();
@@ -4241,6 +4302,7 @@ function bindPlayers(joinedRoom: Room): void {
   players.onRemove((_player: NetworkPlayer, sessionId: string) => {
     const remote = remotePlayers.get(sessionId);
     if (!remote) return;
+    if (playerInteractionUI.targetId() === sessionId) playerInteractionUI.close();
     remote.entity.destroy();
     remotePlayers.delete(sessionId);
     updatePlayerCount();
@@ -4268,7 +4330,7 @@ function rangedFireAllowed(): boolean {
   const combatMenuPanels = [inventoryPanel, lootPanel, defeatScreen, quizPanel, blacksmithPanel, tavernDialogue];
   return Boolean(room && worldReady && interactionMode === "combat" && rangedPointer.active && !document.hidden
     && WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0
-    && combatMenuPanels.every(panel => panel.hidden === true) && !tradeUI.isOpen()
+    && combatMenuPanels.every(panel => panel.hidden === true) && !tradeUI.isOpen() && !playerInteractionUI.isOpen()
     && !(document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
     && !powerAimActive && !specialAimActive && localPowerStartedAt === null && !localDefending);
 }
@@ -5571,7 +5633,7 @@ returnToTownButton.addEventListener("click", () => {
 });
 window.addEventListener("keydown", event => {
   if (!defeatScreen.hidden || !levelUpPanel.hidden) return;
-  if (tradeUI.isOpen()) return;
+  if (tradeUI.isOpen() || playerInteractionUI.isOpen()) return;
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.code.startsWith("Arrow")) event.preventDefault();
   keys.add(event.code);
@@ -6783,6 +6845,7 @@ function commitSpecialAim(): void {
 }
 
 function requestPrimaryAction(): void {
+  if (playerInteractionUI.isOpen()) return;
   if (!inventoryPanel.hidden) return;
   if (!lootPanel.hidden) return;
   if (!defeatScreen.hidden) return;
@@ -6889,6 +6952,11 @@ for (const button of traitPickerButtons) {
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
   if (!levelUpPanel.hidden) { event.preventDefault(); return; }
+  if (playerInteractionUI.isOpen()) {
+    if (event.code === "Escape") playerInteractionUI.close();
+    event.preventDefault();
+    return;
+  }
   if (tradeUI.isOpen()) { if (event.code === "Escape") tradeUI.cancel(); return; }
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   if (event.code === "Enter" && lootPanel.hidden && inventoryPanel.hidden && quizPanel.hidden && blacksmithPanel.hidden) { event.preventDefault(); social.open(); return; }
@@ -6933,7 +7001,7 @@ window.addEventListener("keydown", event => {
   if (event.code === "KeyE") {
     event.preventDefault();
     if (!beginLootKeyInteraction()) {
-      if (nearbyTradePlayerId) requestNearbyPlayerTrade();
+      if (nearbyTradePlayerId) openNearbyPlayerInteraction();
       else requestPrimaryAction();
     }
   }
@@ -7175,8 +7243,8 @@ app.on("update", (dt: number) => {
   if (frameSamples.length > 240) frameSamples.shift();
   const keyboardStrafe = Number(keys.has("KeyD")) - Number(keys.has("KeyA"));
   const keyboardForward = Number(keys.has("KeyW")) - Number(keys.has("KeyS"));
-  const strafe = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden && levelUpPanel.hidden ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
-  const forward = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden && levelUpPanel.hidden ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
+  const strafe = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden && levelUpPanel.hidden && !playerInteractionUI.isOpen() ? Math.max(-1, Math.min(1, keyboardStrafe + touchStrafe)) : 0;
+  const forward = lootPanel.hidden && defeatScreen.hidden && quizPanel.hidden && blacksmithPanel.hidden && inventoryPanel.hidden && levelUpPanel.hidden && !playerInteractionUI.isOpen() ? Math.max(-1, Math.min(1, keyboardForward - touchForward)) : 0;
   const frameTime = Math.min(dt, 0.05);
   cameraOrbit = advanceCameraOrbit(
     cameraOrbit,
@@ -8207,7 +8275,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("chat:message", message => social.message(message));
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
   room.onMessage("party:update", update => partyUI.update(update));
-  room.onMessage("trade:update", update => tradeUI.update(update));
+  room.onMessage("trade:update", update => {
+    if (update) playerInteractionUI.close();
+    tradeUI.update(update);
+  });
   room.onMessage("world:chunks", (payload: ChunkRegion) => applyChunkRegion(payload));
   room.onMessage("objective:update", (update: WorldObjectiveUpdate) => renderWorldObjective(update));
   room.onMessage("depths:wing-rewards", (update: SilverDepthsWingRewardStatus) => renderDepthsWingRewards(update));
@@ -8709,6 +8780,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();
+    playerInteractionUI.close();
     tradeUI.update(null);
     pendingPings.clear();
     serverClock = createServerClock(performance.now(), Date.now());

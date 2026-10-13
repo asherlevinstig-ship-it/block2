@@ -48,5 +48,18 @@ export function createPartyUI(send: (request: PartyRequest) => boolean, stopMove
     leave.hidden = !value.partyId;
   }
   select.addEventListener("change", () => { inviteButton.disabled = !select.value || current.members.length >= 4; tradeButton.disabled = !select.value; });
-  return { update, notice(text: string) { status.textContent = text; }, reset() { update({ partyId: null, members: [], nearby: [], invite: null }); status.textContent = "Disconnected. Parties are session-only."; } };
+  return {
+    update,
+    invite(targetId: string) {
+      if (current.members.some(member => member.id === targetId)) { status.textContent = "That explorer is already in your party."; return false; }
+      if (current.members.length >= 4) { status.textContent = "Your party is full."; return false; }
+      if (!current.nearby.some(player => player.id === targetId)) { status.textContent = "Move closer before inviting that explorer."; return false; }
+      request({ action: "invite", targetId });
+      return true;
+    },
+    isMember(targetId: string) { return current.members.some(member => member.id === targetId); },
+    isFull() { return current.members.length >= 4; },
+    notice(text: string) { status.textContent = text; },
+    reset() { update({ partyId: null, members: [], nearby: [], invite: null }); status.textContent = "Disconnected. Parties are session-only."; },
+  };
 }
