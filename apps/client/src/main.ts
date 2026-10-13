@@ -27,6 +27,7 @@ import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equ
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
+import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
 import { canUseForestPortal, type ForestPortal, type SilverDepthsWing } from "@blockcraft/protocol";
 import { portalArrivalSnapshot } from "./portal-travel.js";
@@ -709,6 +710,19 @@ function undergroundKnown(x: number, y: number, z: number): boolean {
   if (!playerCutaway.active || localPlayer.getPosition().y >= SURFACE_HEIGHT) return true;
   const band = caveDepthBand(localPlayer.getPosition().y);
   return caveDepthBand(y) === band && Boolean(caveDiscoveries.get(band)?.has(caveCellKey(x, z)));
+}
+
+function undergroundMobVisible(x: number, y: number, z: number): boolean {
+  const player = localPlayer.getPosition();
+  const underground = playerCutaway.active && player.y < SURFACE_HEIGHT;
+  const known = undergroundKnown(x, y, z);
+  const cutawayHidden = isCutawayHidden(Math.floor(x), Math.floor(y), Math.floor(z));
+  const distance = Math.hypot(x - player.x, y - player.y, z - player.z);
+  const lineClear = underground && distance <= 20 && Math.abs(y - player.y) <= 3
+    ? enemyCueLineClear({ x: player.x, y: player.y + .8, z: player.z }, { x, y: y + .8, z }, readCollisionWorldBlock)
+    : false;
+  return undergroundThreatVisible({ underground, known, cutawayHidden,
+    verticalDistance: Math.abs(y - player.y), distance, lineClear });
 }
 
 function updateCaveDiscovery(position: pc.Vec3, now: number): void {
@@ -4042,7 +4056,7 @@ function updateInventoryItem(itemId: ItemId, total: number): void {
 
 function playMobCue(mob: MobVisual, cue: EnemyCue): void {
   const player = localPlayer.getPosition();
-  if (!undergroundKnown(mob.state.x, mob.state.y, mob.state.z)
+  if (!undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z)
     || !enemyCueLineClear({ x: player.x, y: player.y + .8, z: player.z },
       { x: mob.state.x, y: mob.state.y + .8, z: mob.state.z }, readCollisionWorldBlock)) return;
   combatAudio.play(cue, enemyCuePan(mob.state.x, player.x));
@@ -4132,7 +4146,7 @@ function bindMobs(joinedRoom: Room): void {
 function nearestLivingMob(position: pc.Vec3, maximumRange: number): { id: string; visual: MobVisual; distance: number } | null {
   let nearest: { id: string; visual: MobVisual; distance: number } | null = null;
   for (const [id, visual] of mobVisuals) {
-    if (!visual.state.alive || !undergroundKnown(visual.state.x, visual.state.y, visual.state.z)) continue;
+    if (!visual.state.alive || !undergroundMobVisible(visual.state.x, visual.state.y, visual.state.z)) continue;
     const distance = Math.hypot(visual.state.x - position.x, visual.state.y - position.y, visual.state.z - position.z);
     if (distance > maximumRange || (nearest && distance >= nearest.distance)) continue;
     nearest = { id, visual, distance };
@@ -7576,7 +7590,7 @@ app.on("update", (dt: number) => {
     const materializing = !mob.state.alive && mob.state.materializeUntil > serverNow;
     const deathPose = mobDefeatPose(mob.art.rootGuardian ? "root_guardian" : mob.state.archetype, mob.state.alive ? 0 : animationNow - mob.defeatAt);
     const defeat = mob.state.alive ? 0 : deathPose.collapse;
-    const visible = undergroundKnown(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible || materializing) && !isCutawayHidden(Math.floor(mob.state.x), Math.floor(mob.state.y), Math.floor(mob.state.z));
+    const visible = undergroundMobVisible(mob.state.x, mob.state.y, mob.state.z) && (mob.state.alive || deathPose.visible || materializing);
     mob.entity.enabled = visible;
     mob.combatCue.hidden = true;
     mob.levelTag.hidden = true;
