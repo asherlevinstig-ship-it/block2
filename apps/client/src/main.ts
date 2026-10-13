@@ -1834,12 +1834,14 @@ interface NetworkLootDrop {
 
 const LOOT_BAG_TIER_LABEL: Record<LootBagTier, string> = {
   brown: "Brown Loot Bag",
+  pink: "Pink Loot Bag",
   blue: "Blue Loot Bag",
   purple: "Purple Loot Bag",
   white: "White Loot Bag",
 };
 const LOOT_BAG_TIER_RARITY: Record<LootBagTier, ItemRarity> = {
   brown: "common",
+  pink: "uncommon",
   blue: "rare",
   purple: "epic",
   white: "legendary",
@@ -2109,20 +2111,13 @@ function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
   if (!isItemId(drop.itemId)) return;
   if (isEnemyLootBag(drop)) {
     const items = lootItems(drop);
-    const detailKey = `${dropId}:${drop.contentsJson}:${[...inventoryCounts].map(([id, quantity]) => `${id}:${quantity}`).join(",")}:${blacksmithIronCapacity}`;
+    const detailKey = `${dropId}:${drop.contentsJson}`;
     if (detailKey === lootWorldDetailKey) return;
     lootWorldDetailKey = detailKey;
     lootWorldStats.replaceChildren();
-    for (const entry of items) {
-      const owned = inventoryCounts.get(entry.itemId) ?? 0;
-      const capacity = lootCarryCapacity(entry.itemId, blacksmithIronCapacity);
-      appendWorldLootStat(ITEM_DEFINITIONS[entry.itemId].name, `×${entry.quantity}${capacity < 65_535 ? ` · ${owned}/${capacity}` : ""}`,
-        owned >= capacity ? "worse" : "same");
-    }
-    if (lootWorldStats.lastChild?.nodeType === Node.TEXT_NODE) lootWorldStats.lastChild.remove();
     const blocked = items.filter(entry => (inventoryCounts.get(entry.itemId) ?? 0) >= lootCarryCapacity(entry.itemId, blacksmithIronCapacity)).length;
     lootWorldVerdict.textContent = blocked === items.length ? "FULL" : blocked > 0 ? "PARTIAL" : "READY";
-    lootWorldCarry.textContent = `${items.length} ITEM TYPE${items.length === 1 ? "" : "S"} · PICKS UP EVERYTHING THAT FITS`;
+    lootWorldCarry.textContent = `${items.length} STACK${items.length === 1 ? "" : "S"} · DETAILS IN PACK`;
     return;
   }
   const owned = inventoryCounts.get(drop.itemId) ?? 0;
@@ -2187,7 +2182,7 @@ function updateLootWorldLabel(): void {
   updateLootWorldDetails(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
   lootWorldName.textContent = bagTier
-    ? `${LOOT_BAG_TIER_LABEL[bagTier]} · ${items.reduce((total, entry) => total + entry.quantity, 0)} ITEMS`
+    ? LOOT_BAG_TIER_LABEL[bagTier]
     : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${hasDetails || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
   lootWorldAction.textContent = `${near ? full ? "INVENTORY FULL" : "E · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
@@ -3884,6 +3879,7 @@ const rarityLootMaterials: Record<ItemRarity, pc.StandardMaterial> = {
 };
 const lootBagMaterials: Record<LootBagTier, pc.StandardMaterial> = {
   brown: powerMaterial(new pc.Color(.48, .27, .1), .24),
+  pink: powerMaterial(new pc.Color(1, .32, .58), .42),
   blue: powerMaterial(new pc.Color(.16, .5, 1), .5),
   purple: powerMaterial(new pc.Color(.7, .22, 1), .68),
   white: powerMaterial(new pc.Color(1, 1, 1), .95),
@@ -4033,7 +4029,7 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
   }
   const glow = new pc.Entity(`loot-${rarity}-light`);
   const tint = miniBossDrop ? new pc.Color(1, .62, .12) : bagTier === "white" ? new pc.Color(1, 1, 1) : bagTier === "purple" ? new pc.Color(.7, .25, 1)
-    : bagTier === "blue" ? new pc.Color(.2, .55, 1) : bagTier === "brown" ? new pc.Color(.55, .3, .12)
+    : bagTier === "blue" ? new pc.Color(.2, .55, 1) : bagTier === "pink" ? new pc.Color(1, .28, .56) : bagTier === "brown" ? new pc.Color(.55, .3, .12)
       : legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
         : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
   glow.addComponent("light", { type: "omni", color: tint, intensity: realmWardenDrop ? 2.2 : miniBossDrop ? 1.8 : legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,

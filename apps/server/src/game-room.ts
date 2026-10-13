@@ -2262,8 +2262,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (mobId === "forest-guardian") return;
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
     const areaReward = areaMainMobDefinition(mobId);
+    const firstLeaderVictory = Boolean(rewardPlayer && areaReward
+      && !this.ownsOrHasPendingItem(ownerId, areaReward.rewardItemId));
     const areaRelicDrops: { itemId: ItemId; quantity: number }[] = rewardPlayer && areaReward
-      && !this.ownsOrHasPendingItem(ownerId, areaReward.rewardItemId)
       ? [{ itemId: areaReward.rewardItemId, quantity: 1 }] : [];
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
@@ -2335,7 +2336,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
     });
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
-      `FIRST LEADER VICTORY · ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name} added to your personal cache.`);
+      `${firstLeaderVictory ? "FIRST LEADER VICTORY" : "SIGNATURE DROP"} · ${ITEM_DEFINITIONS[areaRelicDrops[0]!.itemId].name} added to your personal cache.`);
   }
 
   private resolveLootPickups(now: number): void {

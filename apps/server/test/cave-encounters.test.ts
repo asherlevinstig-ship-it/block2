@@ -101,7 +101,7 @@ describe("chamber-specific encounters", () => {
     internal.simulatePlayers(0.1);
     expect(room.state.lootDrops.size).toBe(1);
   });
-  it("converts a repeat Stone Warden lantern into useful vault supplies", () => {
+  it("converts the utility lantern on repeat clears while retaining the Warden signature drop", () => {
     vi.spyOn(Math, "random").mockReturnValue(.99);
     const { room, internal } = fixture();
     const mob = room.state.mobs.get("buried-chamber-brute")!;
@@ -110,6 +110,9 @@ describe("chamber-specific encounters", () => {
     visitor.inventory.set("miners_lantern", lantern); visitor.inventory.set("stone_warden_lantern", relic); room.state.players.set("visitor", visitor);
     internal.spawnLootDrops("buried-chamber-brute", mob, 10_000, "visitor");
     const bag = [...room.state.lootDrops.values()][0]!;
-    expect(decodeLootBagItems(bag.contentsJson)).toEqual([{ itemId: "stone_core", quantity: 2 }, { itemId: "silver_ore", quantity: 3 }]);
+    expect(decodeLootBagItems(bag.contentsJson)).toEqual([
+      { itemId: "stone_core", quantity: 2 }, { itemId: "silver_ore", quantity: 3 },
+      { itemId: "stone_warden_lantern", quantity: 1 },
+    ]);
   });
 });

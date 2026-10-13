@@ -470,15 +470,16 @@ export function itemRarity(itemId: string): ItemRarity {
   return Object.hasOwn(EQUIPMENT_RARITY, itemId) ? EQUIPMENT_RARITY[itemId as keyof typeof EQUIPMENT_RARITY] : "common";
 }
 
-export type LootBagTier = "brown" | "blue" | "purple" | "white";
+export type LootBagTier = "brown" | "pink" | "blue" | "purple" | "white";
 export type LootBagItem = { itemId: ItemId; quantity: number };
-const LOOT_BAG_TIER_ORDER: Record<LootBagTier, number> = { brown: 0, blue: 1, purple: 2, white: 3 };
+const LOOT_BAG_TIER_ORDER: Record<LootBagTier, number> = { brown: 0, pink: 1, blue: 2, purple: 3, white: 4 };
 
 export function lootBagTierForItem(itemId: ItemId): LootBagTier {
   const rarity = itemRarity(itemId);
   if (rarity === "legendary") return "white";
-  if (rarity === "rare" || rarity === "epic" || itemId === "moonstone" || itemId === "ember_core") return "purple";
-  if (isEquipmentItem(itemId) || rarity === "uncommon") return "blue";
+  if (rarity === "epic" || itemId === "moonstone" || itemId === "ember_core") return "purple";
+  if (rarity === "rare") return "blue";
+  if (isEquipmentItem(itemId) || rarity === "uncommon") return "pink";
   return "brown";
 }
 

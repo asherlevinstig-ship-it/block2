@@ -4,8 +4,9 @@ import { decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagT
 describe("loot bags", () => {
   it("maps materials and equipment to readable RotMG-style bag tiers", () => {
     expect(lootBagTierForItems([{ itemId: "moss_fibre", quantity: 1 }])).toBe("brown");
-    expect(lootBagTierForItems([{ itemId: "fang_dagger", quantity: 1 }])).toBe("blue");
-    expect(lootBagTierForItems([{ itemId: "stone_core_hammer", quantity: 1 }])).toBe("purple");
+    expect(lootBagTierForItems([{ itemId: "fang_dagger", quantity: 1 }])).toBe("pink");
+    expect(lootBagTierForItems([{ itemId: "stone_core_hammer", quantity: 1 }])).toBe("blue");
+    expect(lootBagTierForItems([{ itemId: "rootbound_hammer", quantity: 1 }])).toBe("purple");
     expect(lootBagTierForItems([{ itemId: "matriarch_edge", quantity: 1 }])).toBe("white");
   });
 
