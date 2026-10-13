@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, playerCollides } from "@blockcraft/voxel-world";
+import { decodeLootBagItems } from "@blockcraft/protocol";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "../src/cave-encounters.js";
 import { WorldRoom } from "../src/game-room.js";
 import { WorldState, PlayerState, InventoryItemState } from "../src/schema.js";
@@ -94,9 +95,10 @@ describe("chamber-specific encounters", () => {
     internal.combatContributions.record("buried-chamber-brute", "visitor", mob.maxHealth, 10_000);
     internal.defeatMob("buried-chamber-brute", mob, "visitor", 10_000);
     expect(visitor.miningExpeditionStage).toBe(6);
-    expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity])).toEqual([["stone_core", 1], ["miners_lantern", 1]]);
+    const bag = [...room.state.lootDrops.values()][0]!;
+    expect(decodeLootBagItems(bag.contentsJson)).toEqual([{ itemId: "stone_core", quantity: 1 }, { itemId: "miners_lantern", quantity: 1 }]);
     internal.simulatePlayers(0.1);
-    expect(room.state.lootDrops.size).toBe(2);
+    expect(room.state.lootDrops.size).toBe(1);
   });
   it("converts a repeat Stone Warden lantern into useful vault supplies", () => {
     vi.spyOn(Math, "random").mockReturnValue(.99);
@@ -105,6 +107,7 @@ describe("chamber-specific encounters", () => {
     const visitor = new PlayerState(); const lantern = new InventoryItemState(); lantern.quantity = 1;
     visitor.inventory.set("miners_lantern", lantern); room.state.players.set("visitor", visitor);
     internal.spawnLootDrops("buried-chamber-brute", mob, 10_000, "visitor");
-    expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity])).toEqual([["stone_core", 2], ["silver_ore", 3]]);
+    const bag = [...room.state.lootDrops.values()][0]!;
+    expect(decodeLootBagItems(bag.contentsJson)).toEqual([{ itemId: "stone_core", quantity: 2 }, { itemId: "silver_ore", quantity: 3 }]);
   });
 });

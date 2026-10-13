@@ -11,7 +11,9 @@ import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
 import { createRealmEventUI } from "./realm-event-ui.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
-import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectAction, type LootCollectResult } from "@blockcraft/protocol";
+import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
+  decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
+  type LootBagItem, type LootBagTier, type LootCollectAction, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison, comparisonTrend } from "./loot-comparison.js";
 import { createCharacterPortrait } from "./character-portrait.js";
 import { rangedStyle } from "./ranged-style.js";
@@ -1812,10 +1814,30 @@ interface NetworkLootDrop {
   ownerId?: string;
   itemId: string;
   quantity: number;
+  contentsJson?: string;
   x: number;
   y: number;
   z: number;
   expiresAt: number;
+}
+
+const LOOT_BAG_TIER_LABEL: Record<LootBagTier, string> = {
+  brown: "Brown Loot Bag",
+  blue: "Blue Loot Bag",
+  purple: "Purple Loot Bag",
+  white: "White Loot Bag",
+};
+const LOOT_BAG_TIER_RARITY: Record<LootBagTier, ItemRarity> = {
+  brown: "common",
+  blue: "rare",
+  purple: "epic",
+  white: "legendary",
+};
+function lootItems(drop: NetworkLootDrop): LootBagItem[] {
+  return decodeLootBagItems(drop.contentsJson ?? "", drop.itemId, drop.quantity);
+}
+function isEnemyLootBag(drop: NetworkLootDrop): boolean {
+  return Boolean(drop.contentsJson);
 }
 
 interface LootVisual {
@@ -2039,10 +2061,13 @@ function nearestLootDrop(): string | null {
   return nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE)?.id ?? null;
 }
 function lootHasDetails(dropId: string, drop: NetworkLootDrop): boolean {
+  if (isEnemyLootBag(drop)) return false;
   return dropId.startsWith("forest-cache:") || isEquipmentItem(drop.itemId) || Boolean(utilityForItem(drop.itemId));
 }
 function lootWouldOverflow(dropId: string, drop: NetworkLootDrop): boolean {
   if (dropId.startsWith("forest-cache:") || !isItemId(drop.itemId)) return false;
+  if (isEnemyLootBag(drop)) return lootItems(drop).every(entry =>
+    (inventoryCounts.get(entry.itemId) ?? 0) >= lootCarryCapacity(entry.itemId, blacksmithIronCapacity));
   return (inventoryCounts.get(drop.itemId) ?? 0) + drop.quantity > lootCarryCapacity(drop.itemId, blacksmithIronCapacity);
 }
 function interactWithLoot(dropId: string): void {
@@ -2057,7 +2082,9 @@ function interactWithLoot(dropId: string): void {
   if ((pendingFloorLoot.get(dropId) ?? 0) > performance.now()) return;
   pendingFloorLoot.set(dropId, performance.now() + 2_000);
   room.send("loot:collect", { dropId, action: "keep" });
-  status.textContent = `Picking up ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}...`;
+  status.textContent = isEnemyLootBag(drop)
+    ? `Opening ${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]}...`
+    : `Picking up ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}...`;
 }
 function appendWorldLootStat(label: string, value: string, trend: "better" | "worse" | "same" = "same"): void {
   const stat = document.createElement("span");
@@ -2067,6 +2094,24 @@ function appendWorldLootStat(label: string, value: string, trend: "better" | "wo
 }
 function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
   if (!isItemId(drop.itemId)) return;
+  if (isEnemyLootBag(drop)) {
+    const items = lootItems(drop);
+    const detailKey = `${dropId}:${drop.contentsJson}:${[...inventoryCounts].map(([id, quantity]) => `${id}:${quantity}`).join(",")}:${blacksmithIronCapacity}`;
+    if (detailKey === lootWorldDetailKey) return;
+    lootWorldDetailKey = detailKey;
+    lootWorldStats.replaceChildren();
+    for (const entry of items) {
+      const owned = inventoryCounts.get(entry.itemId) ?? 0;
+      const capacity = lootCarryCapacity(entry.itemId, blacksmithIronCapacity);
+      appendWorldLootStat(ITEM_DEFINITIONS[entry.itemId].name, `×${entry.quantity}${capacity < 65_535 ? ` · ${owned}/${capacity}` : ""}`,
+        owned >= capacity ? "worse" : "same");
+    }
+    if (lootWorldStats.lastChild?.nodeType === Node.TEXT_NODE) lootWorldStats.lastChild.remove();
+    const blocked = items.filter(entry => (inventoryCounts.get(entry.itemId) ?? 0) >= lootCarryCapacity(entry.itemId, blacksmithIronCapacity)).length;
+    lootWorldVerdict.textContent = blocked === items.length ? "FULL" : blocked > 0 ? "PARTIAL" : "READY";
+    lootWorldCarry.textContent = `${items.length} ITEM TYPE${items.length === 1 ? "" : "S"} · PICKS UP EVERYTHING THAT FITS`;
+    return;
+  }
   const owned = inventoryCounts.get(drop.itemId) ?? 0;
   const hand = equipmentForItem(drop.itemId);
   const armour = armourForItem(drop.itemId);
@@ -2120,13 +2165,17 @@ function updateLootWorldLabel(): void {
   if (screen.z <= 0 || screen.x < 0 || screen.x > rect.width || screen.y < 0 || screen.y > rect.height) return;
   const seconds = Math.max(0, Math.ceil((drop.expiresAt - Date.now()) / 1000));
   const near = nearest.distance <= EQUIPMENT_LOOT_RANGE;
-  const rarity = itemRarity(drop.itemId);
+  const items = lootItems(drop);
+  const bagTier = isEnemyLootBag(drop) ? lootBagTierForItems(items) : null;
+  const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(drop.itemId);
   const hasDetails = lootHasDetails(nearest.id, drop);
   const equippable = Boolean(equipmentForItem(drop.itemId) || armourForItem(drop.itemId));
   const full = lootWouldOverflow(nearest.id, drop);
   updateLootWorldDetails(nearest.id, drop);
   lootWorldLabel.dataset.rarity = rarity;
-  lootWorldName.textContent = `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${hasDetails || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
+  lootWorldName.textContent = bagTier
+    ? `${LOOT_BAG_TIER_LABEL[bagTier]} · ${items.reduce((total, entry) => total + entry.quantity, 0)} ITEMS`
+    : `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${ITEM_DEFINITIONS[drop.itemId].name}${hasDetails || equippable ? ` · ${ITEM_RARITIES[rarity].label.toUpperCase()}` : ""}`;
   lootWorldAction.textContent = `${near ? full ? "INVENTORY FULL" : "E · PICK UP" : `${nearest.distance.toFixed(1)}m · MOVE CLOSER`}${drop.expiresAt < Number.MAX_SAFE_INTEGER ? ` · ${seconds}s` : ""}`;
   lootWorldLabel.dataset.near = String(near);
   lootWorldLabel.dataset.full = String(full);
@@ -3794,6 +3843,12 @@ const rarityLootMaterials: Record<ItemRarity, pc.StandardMaterial> = {
   epic: powerMaterial(new pc.Color(.72, .3, 1), .6),
   legendary: powerMaterial(new pc.Color(1, .58, .12), .82),
 };
+const lootBagMaterials: Record<LootBagTier, pc.StandardMaterial> = {
+  brown: powerMaterial(new pc.Color(.48, .27, .1), .24),
+  blue: powerMaterial(new pc.Color(.16, .5, 1), .5),
+  purple: powerMaterial(new pc.Color(.7, .22, 1), .68),
+  white: powerMaterial(new pc.Color(1, 1, 1), .95),
+};
 const fullLootMarkerMaterial = powerMaterial(new pc.Color(1, .12, .06), .65);
 function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.StandardMaterial): boolean {
   if (armourForItem(itemId)) {
@@ -3847,20 +3902,32 @@ function addDroppedEquipmentModel(root: pc.Entity, itemId: ItemId, material: pc.
   return false;
 }
 
-function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
+function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false): LootVisual {
   const root = new pc.Entity(`loot:${dropId}`);
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
-  const rarity = itemRarity(itemId);
+  const bagItems = lootItems(drop);
+  const groupedBag = isEnemyLootBag(drop);
+  const bagTier = groupedBag ? lootBagTierForItems(bagItems) : null;
+  const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(itemId);
+  const presentationMaterial = bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[rarity];
   const material = lootMaterials[itemId];
   const sourceId = lootSourceMob(dropId);
   const rewardCache = dropId.startsWith("forest-cache:");
   const vaultCache = sourceId === "buried-chamber-brute" && itemId === "miners_lantern";
   const guardianDrop = rewardCache || vaultCache || sourceId === "forest-guardian" && isEquipmentItem(itemId);
-  if (!rewardCache && !isEquipmentItem(itemId)) {
+  if (groupedBag) {
+    addBox(root, `${bagTier}-personal-loot-bag`, presentationMaterial, [.72, .46, .58], [0, -.12, 0]);
+    addBox(root, "loot-bag-fold", presentationMaterial, [.62, .18, .5], [0, .2, .01]).setLocalEulerAngles(0, 0, 4);
+    addBox(root, "loot-bag-clasp", brassMaterial, [.18, .14, .06], [0, -.02, -.31]);
+    addBox(root, "loot-bag-emblem", material, [.28, .22, .065], [0, -.02, -.35]);
+  } else if (!rewardCache && !isEquipmentItem(itemId)) {
     addBox(root, `${rarity}-personal-loot-bag`, rarityLootMaterials[rarity], [.64, .2, .52], [0, -.4, 0]);
     addBox(root, "loot-bag-clasp", brassMaterial, [.15, .11, .05], [0, -.36, -.27]);
   }
-  if (rewardCache) {
+  if (groupedBag) {
+    // Enemy rewards are represented by one RotMG-style bag, regardless of how
+    // many item stacks it contains.
+  } else if (rewardCache) {
     addBox(root, "rootbound-cache-base", weaponWoodMaterial, [1.05, .55, .72], [0, 0, 0]);
     addBox(root, "rootbound-cache-lid", material, [1.08, .22, .76], [0, .38, 0]);
     addBox(root, "rootbound-cache-band", coreGlowMaterial, [.14, .78, .8], [0, .12, 0]);
@@ -3905,32 +3972,34 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop): LootVisual {
   }
   root.setPosition(drop.x, drop.y + 0.36, drop.z);
   const marker = new pc.Entity("personal-loot-marker");
-  marker.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
+  marker.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
   marker.setLocalScale(.85, .012, .85); marker.enabled = false;
   root.addChild(marker);
-  const equipmentDrop = isEquipmentItem(itemId);
-  const legendaryDrop = rarity === "legendary";
+  const equipmentDrop = groupedBag ? bagItems.some(entry => isEquipmentItem(entry.itemId)) : isEquipmentItem(itemId);
+  const legendaryDrop = bagTier === "white" || rarity === "legendary";
   const beam = new pc.Entity(`loot-${rarity}-beam`);
-  beam.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
+  beam.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
   const beamHeight = equipmentDrop ? legendaryDrop ? 2.4 : 1.8 : legendaryDrop ? 1.7 : 1.35;
   beam.setLocalScale(equipmentDrop ? legendaryDrop ? .065 : .05 : .04, beamHeight, equipmentDrop ? legendaryDrop ? .065 : .05 : .04);
   beam.setLocalPosition(0, beamHeight * .52, 0); root.addChild(beam);
   if (ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
     const halo = new pc.Entity(`loot-${rarity}-halo`);
-    halo.addComponent("render", { type: "cylinder", material: rarityLootMaterials[rarity], castShadows: false, receiveShadows: false });
+    halo.addComponent("render", { type: "cylinder", material: presentationMaterial, castShadows: false, receiveShadows: false });
     halo.setLocalScale(legendaryDrop ? 1.25 : .95, .018, legendaryDrop ? 1.25 : .95);
     halo.setLocalPosition(0, -.42, 0); root.addChild(halo);
   }
   const glow = new pc.Entity(`loot-${rarity}-light`);
-  const tint = legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
-    : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
+  const tint = bagTier === "white" ? new pc.Color(1, 1, 1) : bagTier === "purple" ? new pc.Color(.7, .25, 1)
+    : bagTier === "blue" ? new pc.Color(.2, .55, 1) : bagTier === "brown" ? new pc.Color(.55, .3, .12)
+      : legendaryDrop ? new pc.Color(1, .52, .12) : rarity === "epic" ? new pc.Color(.7, .25, 1)
+        : rarity === "rare" ? new pc.Color(.25, .55, 1) : rarity === "uncommon" ? new pc.Color(.28, .88, .4) : new pc.Color(.72, .76, .72);
   glow.addComponent("light", { type: "omni", color: tint, intensity: legendaryDrop ? 1.6 : equipmentDrop ? .85 : .45,
     range: legendaryDrop ? 5.5 : equipmentDrop ? 3.5 : 2.8, castShadows: false });
   glow.setLocalPosition(0, .45, 0); root.addChild(glow);
   const source = sourceId ? mobVisuals.get(sourceId) : undefined;
   const now = performance.now();
-  const revealAt = source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
-  const landedAt = revealAt + (source ? 520 : 260);
+  const revealAt = settled ? now : source ? Math.max(now, Number.isFinite(source.defeatAt) ? source.defeatAt : now) + defeatDuration(source.art.rootGuardian ? "root_guardian" : source.state.archetype) : now + 180;
+  const landedAt = settled ? now : revealAt + (source ? 520 : 260);
   const tossFrom = source
     ? new pc.Vec3(source.state.x, source.state.y + .72, source.state.z)
     : new pc.Vec3(drop.x, drop.y + 1.05, drop.z);
@@ -3946,6 +4015,21 @@ function removeLootVisual(dropId: string, collectedHere: boolean): void {
   }
   visual?.root.destroy();
   lootVisuals.delete(dropId);
+  pendingFloorLoot.delete(dropId);
+}
+
+function updateRemainingLootBag(dropId: string, items: LootBagItem[]): void {
+  const visual = lootVisuals.get(dropId);
+  const representative = lootBagRepresentative(items);
+  if (!visual || !representative) return;
+  const next: NetworkLootDrop = {
+    ...visual.state,
+    itemId: representative.itemId,
+    quantity: representative.quantity,
+    contentsJson: encodeLootBagItems(items),
+  };
+  visual.root.destroy();
+  lootVisuals.set(dropId, createLootVisual(dropId, next, true));
   pendingFloorLoot.delete(dropId);
 }
 
@@ -4497,12 +4581,15 @@ function miningBurst(cell: MiningCell, count: number): void {
 
 function lootPickupBurst(drop: NetworkLootDrop): void {
   const itemId = isItemId(drop.itemId) ? drop.itemId : "moss_fibre";
+  const bagItems = lootItems(drop);
+  const bagTier = isEnemyLootBag(drop) ? lootBagTierForItems(bagItems) : null;
   const origin = new pc.Vec3(drop.x, drop.y + .42, drop.z);
-  const count = Math.min(10, 5 + Math.ceil(Math.log2(Math.max(1, drop.quantity))));
+  const quantity = bagItems.reduce((total, entry) => total + entry.quantity, 0);
+  const count = Math.min(10, 5 + Math.ceil(Math.log2(Math.max(1, quantity))));
   for (let index = 0; index < count; index++) {
     if (miningChips.length >= 24) miningChips.shift()!.entity.destroy();
     const angle = index / count * Math.PI * 2;
-    const entity = addBox(app.root, "loot-pickup-spark", rarityLootMaterials[itemRarity(itemId)], [.07, .07, .07], [origin.x, origin.y, origin.z]);
+    const entity = addBox(app.root, "loot-pickup-spark", bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[itemRarity(itemId)], [.07, .07, .07], [origin.x, origin.y, origin.z]);
     if (entity.render) entity.render.castShadows = false;
     miningChips.push({
       entity,
@@ -5498,6 +5585,8 @@ function updateTarget(): void {
     const quantity = drop && drop.quantity > 1 ? `${drop.quantity}× ` : "";
     targetLabel.textContent = nearbyLoot.startsWith("forest-cache:")
       ? "Personal Rootbound Cache · press E or Loot to claim"
+      : drop && isEnemyLootBag(drop)
+        ? `${LOOT_BAG_TIER_LABEL[lootBagTierForItems(lootItems(drop))]} · press E to collect everything that fits`
       : drop && lootWouldOverflow(nearbyLoot, drop)
         ? `${itemName} · inventory full`
       : `${quantity}${itemName} · press E or Loot to pick up`;
@@ -7552,15 +7641,17 @@ app.on("update", (dt: number) => {
       loot.root.setPosition(loot.state.x, targetY + bob, loot.state.z);
       loot.root.setEulerAngles(0, (animationTime * 58 + loot.phase * 23) % 360, 0);
     }
-    const pileScale = isEquipmentItem(loot.state.itemId) ? 1 : 1 + Math.min(.28, Math.log2(Math.max(1, loot.state.quantity)) * .08);
+    const bagItems = lootItems(loot.state);
+    const bagTier = isEnemyLootBag(loot.state) ? lootBagTierForItems(bagItems) : null;
+    const pileScale = bagTier ? 1 : isEquipmentItem(loot.state.itemId) ? 1 : 1 + Math.min(.28, Math.log2(Math.max(1, loot.state.quantity)) * .08);
     const focusPulse = lootId === highlightedLootId ? 1.08 + Math.sin(animationTime * 7) * .025 : 1;
     loot.root.setLocalScale(pileScale * focusPulse, pileScale * focusPulse, pileScale * focusPulse);
     loot.marker.enabled = animationNow >= loot.landedAt;
     if (loot.marker.render && isItemId(loot.state.itemId)) loot.marker.render.material = lootWouldOverflow(lootId, loot.state)
-      ? fullLootMarkerMaterial : rarityLootMaterials[itemRarity(loot.state.itemId)];
-    if (!loot.audioPlayed && loot.marker.enabled && isEquipmentItem(loot.state.itemId)) {
+      ? fullLootMarkerMaterial : bagTier ? lootBagMaterials[bagTier] : rarityLootMaterials[itemRarity(loot.state.itemId)];
+    if (!loot.audioPlayed && loot.marker.enabled && (bagTier !== null || isEquipmentItem(loot.state.itemId))) {
       loot.audioPlayed = true;
-      const rarity = itemRarity(loot.state.itemId);
+      const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(loot.state.itemId);
       const player = localPlayer.getPosition();
       if (Math.hypot(loot.state.x - player.x, loot.state.z - player.z) <= 18) {
         if (rarity === "rare") combatAudio.play("lootRare", enemyCuePan(loot.state.x, player.x, 18));
@@ -8787,6 +8878,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       if (!message.ok) {
         status.textContent = message.message;
         showCombatFeedback(message.message.toUpperCase(), "hurt");
+      } else if (message.remainingItems?.length) {
+        updateRemainingLootBag(message.dropId, message.remainingItems);
+        status.textContent = message.message;
+        showCombatFeedback("BAG PARTIALLY COLLECTED", "dodge");
       } else {
         removeLootVisual(message.dropId, true);
         status.textContent = message.message;

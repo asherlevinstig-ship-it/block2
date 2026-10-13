@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
+import { decodeLootBagItems } from "@blockcraft/protocol";
 import { WorldRoom } from "../src/game-room.js";
 import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/schema.js";
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
@@ -21,10 +22,14 @@ describe("cooperative personal loot", () => {
   it("gives both contributors independent drops and rewards, but none to bystanders or repeated defeats", () => {
     const { room, contribute, defeat, rewards } = fixture(); contribute("a", 4); contribute("b", 4); defeat();
     expect(rewards.map(reward => reward.playerId)).toEqual(["a", "b"]);
-    for (const owner of ["a", "b"]) expect([...room.state.lootDrops.values()].filter(drop => drop.ownerId === owner).map(drop => drop.itemId)).toEqual(["moss_fibre", "crawler_fang"]);
+    for (const owner of ["a", "b"]) {
+      const drops = [...room.state.lootDrops.values()].filter(drop => drop.ownerId === owner);
+      expect(drops).toHaveLength(1);
+      expect(decodeLootBagItems(drops[0]!.contentsJson).map(entry => entry.itemId)).toEqual(["moss_fibre", "crawler_fang"]);
+    }
     expect(room.state.players.get("a")!.coins).toBe(22); expect(room.state.players.get("b")!.coins).toBe(22);
     expect(room.state.players.get("watcher")!.coins).toBe(20);
-    defeat(); expect(room.state.lootDrops.size).toBe(4); expect(rewards).toHaveLength(2);
+    defeat(); expect(room.state.lootDrops.size).toBe(2); expect(rewards).toHaveLength(2);
   });
   it("rolls optional equipment separately for each contributor", () => {
     const { room, contribute, defeat } = fixture(); vi.mocked(Math.random)
@@ -49,20 +54,20 @@ describe("cooperative personal loot", () => {
     const a = room.state.players.get("a")!; a.x = 110;
     internal.resolveLootPickups(10000); expect(room.state.players.get("b")!.inventory.size).toBe(0);
     a.x = 101; const full = new InventoryItemState(); full.quantity = 65535; a.inventory.set("moss_fibre", full);
-    const fangId = [...room.state.lootDrops].find(([, drop]) => drop.ownerId === "a" && drop.itemId === "crawler_fang")![0];
-    const fibreId = [...room.state.lootDrops].find(([, drop]) => drop.ownerId === "a" && drop.itemId === "moss_fibre")![0];
-    const send = vi.fn(); internal.handleLootCollect({ sessionId: "a", send }, { dropId: fangId, action: "keep" });
-    internal.handleLootCollect({ sessionId: "a", send }, { dropId: fibreId, action: "keep" });
+    const bagId = [...room.state.lootDrops].find(([, drop]) => drop.ownerId === "a")![0];
+    const send = vi.fn(); internal.handleLootCollect({ sessionId: "a", send }, { dropId: bagId, action: "keep" });
     expect(a.inventory.get("crawler_fang")?.quantity).toBe(1);
-    expect(room.state.lootDrops.has(fibreId)).toBe(true);
-    expect(send).toHaveBeenLastCalledWith("loot:result", expect.objectContaining({ ok: false }));
+    expect(room.state.lootDrops.has(bagId)).toBe(true);
+    expect(decodeLootBagItems(room.state.lootDrops.get(bagId)!.contentsJson)).toEqual([{ itemId: "moss_fibre", quantity: 1 }]);
+    expect(send).toHaveBeenLastCalledWith("loot:result", expect.objectContaining({ ok: true,
+      remainingItems: [{ itemId: "moss_fibre", quantity: 1 }] }));
     internal.resolveLootPickups(129999); expect(room.state.lootDrops.size).toBe(1);
     internal.resolveLootPickups(130000); expect(room.state.lootDrops.size).toBe(0);
   });
   it("records actual weapon damage and caps overkill at remaining health", () => {
     const { room, internal, mob, rewards } = fixture(); mob.maxHealth = 20; mob.health = 1;
     internal.applyWeaponHit("a", { mainHandId: "stone_core_hammer", step: 3 }, "mob", 10000);
-    expect(mob.health).toBe(0); expect(rewards.map(reward => reward.playerId)).toEqual(["a"]); expect(room.state.lootDrops.size).toBe(2);
+    expect(mob.health).toBe(0); expect(rewards.map(reward => reward.playerId)).toEqual(["a"]); expect(room.state.lootDrops.size).toBe(1);
     rewards.length = 0; room.state.lootDrops.clear();
     const next = new MobState(); Object.assign(next, { x: 100.5, y: 1, z: 100.5, health: 2, maxHealth: 8, armor: 0 }); room.state.mobs.set("next", next);
     internal.applyWeaponHit("a", { mainHandId: "longsword", step: 1 }, "next", 10000);

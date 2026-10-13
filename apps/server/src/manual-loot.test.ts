@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block } from "@blockcraft/voxel-world";
+import { decodeLootBagItems } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "./schema.js";
 
@@ -64,7 +65,7 @@ describe("manual floor loot", () => {
     }));
   });
 
-  it("combines identical nearby material drops into readable floor piles", () => {
+  it("creates one grouped bag per defeated enemy", () => {
     const room = new WorldRoom(); room.setState(new WorldState());
     room.state.players.set("miner", new PlayerState());
     const mob = new MobState(); Object.assign(mob, { x: 30.5, y: 8, z: 30.5, archetype: "moss_crawler" });
@@ -72,8 +73,12 @@ describe("manual floor loot", () => {
     (room as any).spawnLootDrops("crawler-one", mob, 10_000, "miner");
     (room as any).spawnLootDrops("crawler-two", mob, 10_500, "miner");
     expect(room.state.lootDrops.size).toBe(2);
-    expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity]).sort())
-      .toEqual([["crawler_fang", 2], ["moss_fibre", 2]]);
+    for (const drop of room.state.lootDrops.values()) {
+      expect(decodeLootBagItems(drop.contentsJson)).toEqual([
+        { itemId: "moss_fibre", quantity: 1 },
+        { itemId: "crawler_fang", quantity: 1 },
+      ]);
+    }
   });
 
   it("expires enemy loot after two minutes", () => {

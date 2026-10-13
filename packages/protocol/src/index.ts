@@ -5,7 +5,7 @@ export { SPITTER_PATTERN, CRYSTAL_BURST_OFFSETS, VENOM_RING_OFFSETS, MATRIARCH_P
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-stable-rapid-dodge-v128";
+export const WORLD_ROOM = "world-grouped-loot-bags-v129";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
@@ -106,6 +106,7 @@ export type LootCollectResult = {
   goldGranted?: number;
   materialGranted?: ItemId;
   materialQuantity?: number;
+  remainingItems?: LootBagItem[];
 };
 export const HEALING_POTION = { price: 5, heal: 2, capacity: 3, cooldownMs: 5000 } as const;
 export type PotionUpdate = { phase: "bought" | "healed" | "error"; message: string; quantity: number; gold: number; health: number; maxHealth: number; cooldownUntil: number; healed: number };
@@ -423,6 +424,63 @@ export const EQUIPMENT_RARITY = {
 } as const satisfies Partial<Record<ItemId, ItemRarity>>;
 export function itemRarity(itemId: string): ItemRarity {
   return Object.hasOwn(EQUIPMENT_RARITY, itemId) ? EQUIPMENT_RARITY[itemId as keyof typeof EQUIPMENT_RARITY] : "common";
+}
+
+export type LootBagTier = "brown" | "blue" | "purple" | "white";
+export type LootBagItem = { itemId: ItemId; quantity: number };
+const LOOT_BAG_TIER_ORDER: Record<LootBagTier, number> = { brown: 0, blue: 1, purple: 2, white: 3 };
+
+export function lootBagTierForItem(itemId: ItemId): LootBagTier {
+  const rarity = itemRarity(itemId);
+  if (rarity === "legendary") return "white";
+  if (rarity === "rare" || rarity === "epic" || itemId === "moonstone" || itemId === "ember_core") return "purple";
+  if (isEquipmentItem(itemId) || rarity === "uncommon") return "blue";
+  return "brown";
+}
+
+export function lootBagTierForItems(items: readonly LootBagItem[]): LootBagTier {
+  return items.reduce<LootBagTier>((tier, item) => {
+    const next = lootBagTierForItem(item.itemId);
+    return LOOT_BAG_TIER_ORDER[next] > LOOT_BAG_TIER_ORDER[tier] ? next : tier;
+  }, "brown");
+}
+
+export function normalizeLootBagItems(items: readonly LootBagItem[]): LootBagItem[] {
+  const quantities = new Map<ItemId, number>();
+  for (const item of items) {
+    if (!Object.hasOwn(ITEM_DEFINITIONS, item.itemId)) continue;
+    const quantity = Math.max(0, Math.min(65_535, Math.floor(item.quantity)));
+    if (quantity > 0) quantities.set(item.itemId, Math.min(65_535, (quantities.get(item.itemId) ?? 0) + quantity));
+  }
+  return [...quantities].map(([itemId, quantity]) => ({ itemId, quantity }));
+}
+
+export function encodeLootBagItems(items: readonly LootBagItem[]): string {
+  return JSON.stringify(normalizeLootBagItems(items));
+}
+
+export function decodeLootBagItems(contentsJson: string, fallbackItemId?: string, fallbackQuantity = 1): LootBagItem[] {
+  if (contentsJson) {
+    try {
+      const parsed = JSON.parse(contentsJson) as unknown;
+      if (Array.isArray(parsed)) return normalizeLootBagItems(parsed.flatMap(value => {
+        if (!value || typeof value !== "object") return [];
+        const entry = value as { itemId?: unknown; quantity?: unknown };
+        return typeof entry.itemId === "string" && Object.hasOwn(ITEM_DEFINITIONS, entry.itemId) && typeof entry.quantity === "number"
+          ? [{ itemId: entry.itemId as ItemId, quantity: entry.quantity }] : [];
+      }));
+    } catch { /* Fall back to the legacy single-item fields. */ }
+  }
+  return fallbackItemId && Object.hasOwn(ITEM_DEFINITIONS, fallbackItemId)
+    ? normalizeLootBagItems([{ itemId: fallbackItemId as ItemId, quantity: fallbackQuantity }]) : [];
+}
+
+export function lootBagRepresentative(items: readonly LootBagItem[]): LootBagItem | null {
+  return [...normalizeLootBagItems(items)].sort((a, b) => {
+    const tier = LOOT_BAG_TIER_ORDER[lootBagTierForItem(b.itemId)] - LOOT_BAG_TIER_ORDER[lootBagTierForItem(a.itemId)];
+    if (tier !== 0) return tier;
+    return ITEM_RARITIES[itemRarity(b.itemId)].order - ITEM_RARITIES[itemRarity(a.itemId)].order;
+  })[0] ?? null;
 }
 
 export type EquipmentPerkId = "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain";

@@ -127,10 +127,10 @@ describe("ore to forged sword to item loot", () => {
     vi.spyOn(Math, "random").mockReturnValueOnce(.99).mockReturnValueOnce(.01).mockReturnValue(.99);
     internal.pendingAttacks.set("visitor", { requestId: "sword", mainHandId: "longsword", step: 1, yaw: 90, impactAt: 10_135 });
     internal.resolvePendingAttacks(10_225);
-    expect(mob.alive).toBe(false); expect(room.state.lootDrops.size).toBe(3);
+    expect(mob.alive).toBe(false); expect(room.state.lootDrops.size).toBe(1);
     Object.assign(player, { x: mob.x, y: mob.y, z: mob.z }); internal.resolveLootPickups(10_300);
     expect(player.inventory.has("fang_dagger")).toBe(false);
-    expect(room.state.lootDrops.size).toBe(3);
+    expect(room.state.lootDrops.size).toBe(1);
     for (const [dropId] of [...room.state.lootDrops]) internal.handleLootCollect(client, { dropId, action: "keep" });
     expect(player.inventory.get("fang_dagger")?.quantity).toBe(1);
     expect(player.inventory.get("crawler_fang")?.quantity).toBe(1);

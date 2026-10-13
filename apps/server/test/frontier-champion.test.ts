@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CHAMPION_CHARGE, championChargeOutline } from "@blockcraft/protocol";
+import { CHAMPION_CHARGE, championChargeOutline, decodeLootBagItems } from "@blockcraft/protocol";
 import { Block, playerCollides, type WorldBlockReader } from "@blockcraft/voxel-world";
 import { WorldRoom } from "../src/game-room.js";
 import { MobState, PlayerState, WorldState } from "../src/schema.js";
@@ -27,7 +27,8 @@ describe("frontier champion", () => {
     expect(mob.isChampion).toBe(true); expect(mob.maxHealth).toBe(52); expect(mob.name).toBe("Frontier Stone Champion");
     expect(internal.championAllowed(FRONTIER_CHAMPION_ID, { x: -30, z: 12.5 })).toBe(false);
     internal.spawnLootDrops(FRONTIER_CHAMPION_ID, mob, 10000);
-    expect([...room.state.lootDrops.values()].map(drop => [drop.itemId, drop.quantity])).toEqual([["stone_core", 3], ["stone_core_hammer", 1]]);
+    const bag = [...room.state.lootDrops.values()][0]!;
+    expect(decodeLootBagItems(bag.contentsJson)).toEqual([{ itemId: "stone_core", quantity: 3 }, { itemId: "stone_core_hammer", quantity: 1 }]);
   });
   it("alternates slam then charge with committed aim and long recovery", () => {
     const { internal, mob, player } = fixture(); mob.combatState = "idle"; player.x = 101.5;

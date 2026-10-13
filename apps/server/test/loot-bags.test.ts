@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, type WorldBlockReader } from "@blockcraft/voxel-world";
+import { decodeLootBagItems } from "@blockcraft/protocol";
 import { WorldRoom } from "../src/game-room.js";
 import { InventoryItemState, LootDropState, MobState, PlayerState, WorldState } from "../src/schema.js";
 import { armourDropForMob } from "../src/loot-rules.js";
@@ -36,7 +37,9 @@ describe("authoritative equipment loot bags", () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const mob = new MobState(); mob.archetype = "stone_brute"; mob.difficultyTier = 3;
     internal.spawnLootDrops("frontier", mob, 10000);
-    expect([...room.state.lootDrops.values()].map(drop => drop.itemId)).toEqual(["stone_core", "stone_core_hammer", "iron_armour"]);
+    const bag = [...room.state.lootDrops.values()][0]!;
+    expect(room.state.lootDrops.size).toBe(1);
+    expect(decodeLootBagItems(bag.contentsJson).map(entry => entry.itemId)).toEqual(["stone_core", "stone_core_hammer", "iron_armour"]);
   });
   it.each(["leather_armour", "iron_armour", "rootguard_armour", "bastion_plate"])("keeps %s as an inspectable bag and stores it without equipping", id => {
     const { internal, room, drop, player, collect, persist } = fixture(); drop.itemId = id;

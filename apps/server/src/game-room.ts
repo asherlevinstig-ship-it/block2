@@ -27,7 +27,9 @@ import { RealmEventDirector, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RA
 import { ASHGLASS_ORACLE_ID, GREENWOOD_MATRIARCH_ID,
   fallingRockSites, isRealmSpitterBoss, realmBossPattern, usesDoubleVolley, usesFallingRockZones, usesRockVolley } from "./realm-boss-patterns.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
-import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
+import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema,
+  decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, normalizeLootBagItems,
+  type LootBagItem, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
@@ -1993,9 +1995,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const dropId = `first-expedition-lantern:${client.sessionId}`;
     const drop = new LootDropState();
     Object.assign(drop, CAVE_HIDDEN_HOME, { y: CAVE_HIDDEN_HOME.y + .22, ownerId: client.sessionId,
-      itemId: "miners_lantern", quantity: 1, expiresAt: now + LOOT_DESPAWN_MS });
+      itemId: "miners_lantern", quantity: 1,
+      contentsJson: encodeLootBagItems([{ itemId: "miners_lantern", quantity: 1 }]), expiresAt: now + LOOT_DESPAWN_MS });
     this.state.lootDrops.set(dropId, drop);
-    client.send("loot:spawned", { dropId, ownerId: drop.ownerId, itemId: drop.itemId, quantity: drop.quantity,
+    client.send("loot:spawned", { dropId, ownerId: drop.ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson,
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt });
     client.send("chat:notice", "Stone Warden reward restored · collect your personal Miner's Lantern in the buried chamber.");
   }
@@ -2069,42 +2072,35 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
       : mob.isElite ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "elite", Math.random())]
       : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
-    const drops = [...baseDrops, ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random())];
-    for (const [index, entry] of drops.entries()) {
-      const angle = (index / Math.max(1, drops.length)) * Math.PI * 2 + this.lootDropSequence * 0.7;
-      const landing = findLootLanding(
-        { x: mob.x, y: mob.y, z: mob.z },
-        { x: mob.x + Math.cos(angle) * .85, y: mob.y, z: mob.z + Math.sin(angle) * .85 },
-        this.readWorldBlock,
-      );
-      const x = landing.x;
-      const y = landing.y + .22;
-      const z = landing.z;
-      const stackable = !isEquipmentItem(entry.itemId) && entry.itemId !== "miners_lantern" && entry.itemId !== "moonstone";
-      const nearbyPile = stackable ? [...this.state.lootDrops.values()].find(existing =>
-        existing.ownerId === ownerId && existing.itemId === entry.itemId && existing.expiresAt > now
-        && existing.quantity + entry.quantity <= 255
-        && Math.hypot(existing.x - x, existing.y - y, existing.z - z) <= 1.5) : undefined;
-      if (nearbyPile) {
-        nearbyPile.quantity += entry.quantity;
-        nearbyPile.expiresAt = Math.max(nearbyPile.expiresAt, now + LOOT_DESPAWN_MS);
-        continue;
-      }
-      const drop = new LootDropState();
-      drop.ownerId = ownerId;
-      drop.itemId = entry.itemId;
-      drop.quantity = entry.quantity;
-      drop.x = x;
-      drop.y = y;
-      drop.z = z;
-      drop.expiresAt = now + LOOT_DESPAWN_MS;
-      const dropId = `${mobId}:${now}:${++this.lootDropSequence}`;
-      this.state.lootDrops.set(dropId, drop);
-      this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {
-        dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity,
-        x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
-      });
-    }
+    const items = normalizeLootBagItems([
+      ...baseDrops,
+      ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
+    ]);
+    const representative = lootBagRepresentative(items);
+    if (!representative) return;
+    const angle = this.lootDropSequence * 0.7;
+    const landing = findLootLanding(
+      { x: mob.x, y: mob.y, z: mob.z },
+      { x: mob.x + Math.cos(angle) * .85, y: mob.y, z: mob.z + Math.sin(angle) * .85 },
+      this.readWorldBlock,
+    );
+    const drop = new LootDropState();
+    Object.assign(drop, {
+      ownerId,
+      itemId: representative.itemId,
+      quantity: Math.min(255, representative.quantity),
+      contentsJson: encodeLootBagItems(items),
+      x: landing.x,
+      y: landing.y + .22,
+      z: landing.z,
+      expiresAt: now + LOOT_DESPAWN_MS,
+    });
+    const dropId = `${mobId}:${now}:${++this.lootDropSequence}`;
+    this.state.lootDrops.set(dropId, drop);
+    this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {
+      dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson,
+      x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
+    });
   }
 
   private resolveLootPickups(now: number): void {
@@ -2168,10 +2164,49 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.refreshNearbyObjectives();
       return reply(true, message);
     }
+    if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside the bag with a clear path to it.");
+    if (drop.contentsJson) {
+      if (action !== "keep") return reply(false, "Pick up the bag before managing its equipment.");
+      const collected: { itemId: ItemId; quantity: number; total: number }[] = [];
+      const remaining: LootBagItem[] = [];
+      for (const entry of decodeLootBagItems(drop.contentsJson, drop.itemId, drop.quantity)) {
+        let item = player.inventory.get(entry.itemId);
+        const before = item?.quantity ?? 0;
+        const capacity = lootCarryCapacity(entry.itemId, ironCapacity(player.blacksmithUpgrades));
+        const quantity = Math.max(0, Math.min(entry.quantity, capacity - before));
+        if (quantity > 0) {
+          if (!item) { item = new InventoryItemState(); player.inventory.set(entry.itemId, item); }
+          item.quantity = inventoryTotal(before, quantity);
+          collected.push({ itemId: entry.itemId, quantity, total: item.quantity });
+        }
+        if (quantity < entry.quantity) remaining.push({ itemId: entry.itemId, quantity: entry.quantity - quantity });
+      }
+      if (collected.length === 0) return reply(false, "Your inventory has no room for anything in this bag.", { remainingItems: remaining });
+      if (remaining.length === 0) this.state.lootDrops.delete(parsed.data.dropId);
+      else {
+        const representative = lootBagRepresentative(remaining)!;
+        drop.itemId = representative.itemId;
+        drop.quantity = Math.min(255, representative.quantity);
+        drop.contentsJson = encodeLootBagItems(remaining);
+      }
+      void this.persistPlayer(client.sessionId, player);
+      for (const reward of collected) this.broadcast("loot:picked-up", {
+        playerId: client.sessionId, dropId: parsed.data.dropId, ...reward,
+      } satisfies LootPickedUp);
+      if (collected.some(entry => entry.itemId === "miners_lantern")
+        && this.advanceFirstExpedition(client, "claimed_lantern")) this.sendObjectiveState(client, true);
+      if (collected.some(entry => entry.itemId === "matriarch_edge")) {
+        player.silverDepthsRunStage = 7;
+        if (this.advanceSilverDepthsExpedition(client, "claimed_moonstone")) this.sendObjectiveState(client, true);
+      }
+      const summary = collected.map(entry => `${entry.quantity} ${ITEM_DEFINITIONS[entry.itemId].name}`).join(" · ");
+      return reply(true, remaining.length > 0
+        ? `Collected ${summary} · ${remaining.length} item type${remaining.length === 1 ? "" : "s"} remain because your inventory is full.`
+        : `Loot bag collected · ${summary}.`, { action, itemId: collected[0]?.itemId, remainingItems: remaining });
+    }
     const mainHandId = equipmentForItem(drop.itemId);
     const armourId = armourForItem(drop.itemId);
     const utilityId = drop.itemId === "miners_lantern" || drop.itemId === "moonstone" ? drop.itemId : null;
-    if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside the bag with a clear path to it.");
     if (action === "equip" && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
     const itemId = drop.itemId as ItemId;
     if (action === "dismantle") {

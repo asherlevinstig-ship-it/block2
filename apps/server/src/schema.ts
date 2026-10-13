@@ -78,6 +78,7 @@ export const LootDropState = schema({
   ownerId: t.string().default(""),
   itemId: t.string(),
   quantity: t.uint8().default(1),
+  contentsJson: t.string().default(""),
   x: t.float32(),
   y: t.float32(),
   z: t.float32(),

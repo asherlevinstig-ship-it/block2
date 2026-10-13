@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { decodeLootBagItems } from "@blockcraft/protocol";
 import { SILVER_GUARD_HOMES, playerCollides, isPlayerSupported } from "@blockcraft/voxel-world";
 import { WorldRoom } from "../src/game-room.js";
 import { PlayerState, WorldState } from "../src/schema.js";
@@ -43,8 +44,9 @@ describe("polished silver guard clearing", () => {
     for (const id of SILVER_GUARD_IDS) internal.spawnLootDrops(id, room.state.mobs.get(id), 10000, "contributor");
     const drops = [...room.state.lootDrops.values()];
     expect(drops.every(drop => drop.ownerId === "contributor")).toBe(true);
-    expect(drops.filter(drop => drop.itemId === "healing_potion")).toHaveLength(2);
-    expect(drops.filter(drop => drop.itemId === "acid_gland_focus")).toHaveLength(2);
+    expect(drops).toHaveLength(2);
+    expect(drops.every(drop => decodeLootBagItems(drop.contentsJson).some(entry => entry.itemId === "healing_potion"))).toBe(true);
+    expect(drops.every(drop => decodeLootBagItems(drop.contentsJson).some(entry => entry.itemId === "acid_gland_focus"))).toBe(true);
     expect(lootForArchetype("cave_spitter").some(drop => drop.itemId === "healing_potion")).toBe(false);
   });
 });
