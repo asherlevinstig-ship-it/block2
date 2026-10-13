@@ -37,6 +37,7 @@ import { WILDERNESS_MATERIALIZE_MS, WILDERNESS_RESPAWN_RECHECK_MS,
   usesOverworldRespawnRhythm, wildernessRespawnDelay, wildernessSpawnClear } from "./wilderness-respawn.js";
 import { shouldBecomeWildernessElite, wildernessEliteKind,
   wildernessEliteName, wildernessElitePattern, wildernessEliteStats } from "./wilderness-elites.js";
+import { areaMiniBossDefinition, isAreaMiniBoss } from "./area-mini-bosses.js";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
 import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
@@ -1614,12 +1615,23 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const stats = scaledMobStats(combatMobDefinition(mob), dangerBandAt(home));
       mob.maxHealth = mob.health = stats.maxHealth; mob.rewardMultiplier *= 1.5;
     }
+    const areaMiniBoss = areaMiniBossDefinition(mobId);
+    if (areaMiniBoss && !mob.isChampion) {
+      const stats = wildernessEliteStats({ maxHealth: mob.maxHealth, damage: mob.attackDamage, armor: mob.armor,
+        speedMultiplier: mob.speedMultiplier, rewardMultiplier: mob.rewardMultiplier });
+      mob.health = mob.maxHealth = stats.maxHealth;
+      mob.attackDamage = stats.damage;
+      mob.armor = stats.armor;
+      mob.speedMultiplier = stats.speedMultiplier;
+      mob.rewardMultiplier = stats.rewardMultiplier;
+    }
     mob.name = CAVE_ENCOUNTERS[mobId]?.name ?? (roamingMembership(mobId) ? `Roaming ${mob.name}` : mob.name);
     if (mob.isChampion) mob.name = combatMobDefinition(mob).name;
     if (mobId === "frontier-brute") mob.name = "Frontier Stone Brute";
     if (isAshenSentry(mobId)) mob.name = "Ashglass Sentry";
+    if (areaMiniBoss) mob.name = areaMiniBoss.name;
     this.mobBaseNames.set(mobId, mob.name);
-    mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion, mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
+    mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || Boolean(areaMiniBoss), mobId === CRYSTAL_MATRIARCH_ID || mobId === "forest-guardian" || mobId === "forge-colossus");
     this.state.mobs.set(mobId, mob);
   }
 
@@ -1839,7 +1851,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const definition = combatMobDefinition(mob);
     const recipientsWithLoot = new Set<string>();
     if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) for (const playerId of recipients) {
-      const fixedReward = mob.isChampion || mob.isElite || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
+      const fixedReward = mob.isChampion || mob.isElite || isAreaMiniBoss(mobId) || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
         || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || isRealmEventId(mobId);
       const cadenceId = this.profileTokens.get(playerId) ?? playerId;
       if (!fixedReward && !this.normalLootCadence.record(cadenceId, Math.random())) continue;
@@ -2068,6 +2080,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland", quantity: 3 }, ...signatureDrops("venom_focus")]
       : isRealmEventId(mobId) ? [...(realmEventDefinition(mobId)?.rewards ?? []),
         ...(realmEventDefinition(mobId)?.signatureRewards ?? []).flatMap(itemId => signatureDrops(itemId as SignatureItemId))]
+      : isAreaMiniBoss(mobId) ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "miniboss")]
       : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "champion")
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
       : mob.isElite ? [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "elite", Math.random())]
@@ -3749,13 +3762,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             continue;
           }
           const band = dangerBandAt(home);
-          const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && candidate.isElite
+          const activeElites = [...this.state.mobs.entries()].filter(([id, candidate]) => id !== mobId && !isAreaMiniBoss(id) && candidate.isElite
             && (candidate.alive || candidate.materializeUntil > now)).length;
-          mob.isElite = shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
+          const areaMiniBoss = areaMiniBossDefinition(mobId);
+          mob.isElite = !areaMiniBoss && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
           const eliteKind = wildernessEliteKind(definition.id);
           mob.eliteKind = mob.isElite ? eliteKind : "";
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
-          mob.name = mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName;
+          mob.name = areaMiniBoss?.name ?? (mob.isElite ? wildernessEliteName(eliteKind, baseName) : baseName);
           mob.actionSequence = 0;
           if (mob.isElite) mob.attackPattern = wildernessElitePattern(definition.id, 0);
           mob.x = spawn.x; mob.y = spawn.y; mob.z = spawn.z;
@@ -3769,7 +3783,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.mobAwareness.delete(mobId);
         const band = dangerBandAt(home);
         const baseStats = scaledMobStats(definition, band);
-        const stats = mob.isElite ? wildernessEliteStats(baseStats) : baseStats;
+        const stats = isAreaMiniBoss(mobId) || mob.isElite ? wildernessEliteStats(baseStats) : baseStats;
         mob.x = spawn.x;
         mob.y = spawn.y;
         mob.z = spawn.z;
@@ -3787,7 +3801,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.attackDamage = stats.damage;
         mob.speedMultiplier = stats.speedMultiplier;
         mob.rewardMultiplier = stats.rewardMultiplier;
-        mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite, false);
+        mob.level = enemyLevelForTier(mob.difficultyTier, mob.isChampion || mob.isElite || isAreaMiniBoss(mobId), false);
         if (mob.isChampion) { mob.rewardMultiplier *= 1.5; mob.actionSequence = 0; mob.attackPattern = championPattern(mob); }
         if (mobId === CRYSTAL_MATRIARCH_ID) { mob.health = mob.maxHealth = 28; mob.attackPattern = crystalMatriarchPattern(0, false); }
         if (mobId === "forge-colossus") { mob.health = mob.maxHealth = 38; mob.attackDamage = 3; mob.attackPattern = "rocks"; }

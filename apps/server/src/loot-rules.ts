@@ -12,10 +12,10 @@ export const EQUIPMENT_DROP_CHANCES = {
   iron_armour: .1,
 } as const satisfies Partial<Record<ItemId, number>>;
 
-export type LootThreat = "normal" | "guard" | "elite" | "champion";
+export type LootThreat = "normal" | "guard" | "elite" | "miniboss" | "champion";
 
 function equipmentChance(itemId: keyof typeof EQUIPMENT_DROP_CHANCES, threat: LootThreat): number {
-  if (threat === "champion") return 1;
+  if (threat === "champion" || threat === "miniboss") return 1;
   if (threat === "elite") return .4;
   if (threat === "guard") return .3;
   return EQUIPMENT_DROP_CHANCES[itemId];
@@ -55,11 +55,14 @@ const MATERIAL_LOOT_BY_ARCHETYPE: Record<MobArchetypeId, readonly { itemId: Item
 
 export function lootForArchetype(archetypeId: MobArchetypeId, mobId = "", equipmentRoll = 1, threat: LootThreat = "normal", consumableRoll = 1): readonly { itemId: ItemId; quantity: number }[] {
   const guard = archetypeId === "cave_spitter" && isSilverGuard(mobId);
-  const effectiveThreat = threat === "champion" || threat === "elite" ? threat : guard ? "guard" : threat;
+  const effectiveThreat = threat === "champion" || threat === "miniboss" || threat === "elite" ? threat : guard ? "guard" : threat;
   const normalMaterials = guard
     ? [{ itemId: "acid_gland" as const, quantity: 2 }, ...(consumableRoll < .18 ? [{ itemId: "healing_potion" as const, quantity: 1 }] : [])]
     : [...MATERIAL_LOOT_BY_ARCHETYPE[archetypeId]];
-  const materials = threat === "elite"
+  const materials = threat === "miniboss"
+    ? [...normalMaterials.map(entry => ({ ...entry, quantity: entry.quantity * 3 })),
+      { itemId: "healing_potion" as const, quantity: 1 }]
+    : threat === "elite"
     ? [...normalMaterials.map(entry => ({ ...entry, quantity: entry.quantity * 2 })),
       ...(consumableRoll < .35 ? [{ itemId: "healing_potion" as const, quantity: 1 }] : [])]
     : normalMaterials;

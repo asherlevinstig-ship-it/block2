@@ -1650,6 +1650,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 @media (min-width: 821px) { #boss-hud { left: max(50%, 610px); width: min(430px, calc(100vw - 440px)); } }
 #objective-marker i { display: block; color: var(--objective-color, #f5c846); font-style: normal; font-size: 23px; line-height: 24px; }
 #objective-marker[data-kind="encounter"] { --objective-color: #ff9678; }
+#objective-marker[data-kind="miniboss"] { --objective-color: #ffc65c; }
 #objective-marker[data-kind="portal"] { --objective-color: #b99aff; }
 #objective-marker[data-kind="loot"] { --objective-color: #f5d56d; }
 #objective-marker::before { content: "▲"; display: block; color: var(--objective-color, #f5c846); font-size: 18px; transform: rotate(var(--marker-rotation, 0deg)); }

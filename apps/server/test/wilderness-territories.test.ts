@@ -55,7 +55,7 @@ describe("distinct radial wilderness territories", () => {
     const { room, internal } = fixture();
     for (const id of ASHEN_SENTRY_IDS) {
       const mob = room.state.mobs.get(id)!;
-      expect(mob.name).toBe("Ashglass Sentry");
+      expect(mob.name).toBe(id === "ashglass-sentry-east" ? "Ashglass High Sentry" : "Ashglass Sentry");
       expect(mob.difficultyTier).toBe(3);
       expect(ashenSentryAllows(mob)).toBe(true);
       expect(internal.roamingAllowed(id, { x: 35, y: 8, z: 35 })).toBe(false);

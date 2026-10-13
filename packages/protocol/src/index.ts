@@ -995,7 +995,7 @@ export interface WorldBootstrap {
 }
 
 export type WorldObjectiveUpdate = {
-  kind?: "encounter" | "portal" | "loot" | "hub" | "explore";
+  kind?: "encounter" | "miniboss" | "portal" | "loot" | "hub" | "explore";
   showMarker?: boolean;
   objectiveId: string;
   title: string;

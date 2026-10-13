@@ -45,7 +45,10 @@ describe("world objective director", () => {
     const objective = select(player(67, 35), mobs);
     expect(objective.objectiveId).toBe("frontier-mixed");
     expect(objective.targetMobIds).toHaveLength(3);
-    expect(objective.title).toBe("Frontier Warband");
+    expect(objective.kind).toBe("miniboss");
+    expect(objective.targetMobId).toBe("frontier-brute-east");
+    expect(objective.title).toBe("Frontier Warleader");
+    expect(objective.progressLabel).toBe("MINI-BOSS · HIGHEST LOOT");
   });
   it("guides Silver Depths players to their chosen wing instead of unspawned enemies", () => {
     const pose = { ...player(94, 14, 1), miningExpeditionStage: 8, silverDepthsStage: 3,
@@ -103,6 +106,15 @@ describe("world objective director", () => {
   it("selects the nearby silver encounter without a prerequisite quest", () => {
     expect(select().objectiveId).toBe("silver-guards");
     expect(select().targetMobIds).toEqual(["cave-spitter", "frontier-spitter"]);
+    expect(select().kind).toBe("miniboss");
+    expect(select().targetMobId).toBe("frontier-spitter");
+  });
+
+  it("returns to map-only area guidance after its mini-boss is defeated", () => {
+    const mobs = new Map([["cave-spitter", mob(46.5, 31.5)], ["frontier-spitter", mob(50.5, 25.5, { alive: false })]]);
+    const objective = select(player(48, 28), mobs, "silver-guards");
+    expect(objective.kind).toBe("encounter");
+    expect(objective.targetMobId).toBe("cave-spitter");
   });
 
   it("switches to a closer new encounter, but has a four-metre hysteresis margin", () => {

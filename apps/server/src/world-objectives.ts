@@ -4,21 +4,27 @@ import { REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinit
 import { ASHEN_SENTRY_IDS, MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
+import { areaMainMobDefinition } from "./area-mini-bosses.js";
+import { ROAMING_PACKS, roamingMemberId } from "./roaming-packs.js";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; level?: number; combatState: string; targetId: string };
 type Player = Pose & { health: number; level?: number; miningExpeditionStage?: number; silverDepthsStage?: number; silverDepthsRunStage?: number; silverDepthsWing?: string; inventory: { get(id: string): { quantity: number } | undefined } };
 type Loot = Pose & { ownerId: string; itemId: string; expiresAt: number };
 export interface WorldObjectiveProgress { id: string | null; fingerprint: string }
 export const createObjectiveProgress = (): WorldObjectiveProgress => ({ id: null, fingerprint: "" });
-const GROUPS = [
-  { id: "buried-vault", title: "Breach the Buried Vault", detail: "Mine through the silver seal. Defeat the Vault Crawler and Stone Warden, then claim your personal Miner's Lantern cache.", ids: ["buried-vault-crawler", "buried-chamber-brute"] },
-  { id: "frontier-mixed", title: "Frontier Warband", detail: "Draw out the crawler, dodge the brute's rocks, then pressure the support spitter. Counter during recovery.", ids: [...MIXED_FRONTIER_IDS] },
+interface ObjectiveGroup { id: string; title: string; detail: string; ids: string[]; mainId?: string }
+const GROUPS: ObjectiveGroup[] = [
+  { id: "buried-vault", title: "Breach the Buried Vault", detail: "Mine through the silver seal. Defeat the Vault Crawler and Stone Warden, then claim your personal Miner's Lantern cache.", ids: ["buried-vault-crawler", "buried-chamber-brute"], mainId: "buried-chamber-brute" },
+  { id: "frontier-mixed", title: "Frontier Warband", detail: "Draw out the crawler, dodge the brute's rocks, then pressure the support spitter. Counter during recovery.", ids: [...MIXED_FRONTIER_IDS], mainId: "frontier-brute-east" },
   ...REALM_EVENT_DEFINITIONS.map(event => ({ id: event.key === "greenwood" ? "greenwood-event" : event.realmBoss ? "realm-boss" : `${event.key}-event`, title: event.title, detail: event.detail, ids: [event.id] })),
-  { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Follow the dirt road, clear the three root nests, collect crawler items, then mine the exposed iron seam east of the camp.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"] },
-  { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"] },
-  { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"] },
-  { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against rock volleys, leave the slam circle, then counter during recovery. Collect the hammer and rich silver.", ids: ["frontier-brute"] },
-  { id: "ashen-sentries", title: "Ashglass Sentries", detail: "Use the broken cover and dodge between sweeping fan volleys. Counter after their aimed shot.", ids: [...ASHEN_SENTRY_IDS] },
+  { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Follow the dirt road, clear the three root nests, collect crawler items, then mine the exposed iron seam east of the camp.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"], mainId: "wild-crawler" },
+  { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"], mainId: "frontier-spitter" },
+  { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"], mainId: "stone-brute" },
+  { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against rock volleys, leave the slam circle, then counter during recovery. Collect the hammer and rich silver.", ids: ["frontier-brute"], mainId: "frontier-brute" },
+  { id: "ashen-sentries", title: "Ashglass Sentries", detail: "Use the broken cover and dodge between sweeping fan volleys. Counter after their aimed shot.", ids: [...ASHEN_SENTRY_IDS], mainId: "ashglass-sentry-east" },
+  ...ROAMING_PACKS.map(pack => ({ id: pack.id, title: `${pack.id.includes("outskirts") ? "Outskirts" : "Wilds"} Roaming Pack`,
+    detail: "Hunt the roaming packleader for the area's richest loot, then clear its followers.",
+    ids: pack.offsets.map((_, index) => roamingMemberId(pack, index)), mainId: roamingMemberId(pack, 0) })),
   ...[1, 2, 3].map(stage => ({ id: `forest-stage-${stage}`, title: stage === 3 ? "Ancient Root Guardian" : `Forest Dungeon · Room ${stage}`,
     detail: stage === 3 ? "Use roots against phase-one rock volleys. Below half health, sidestep committed charges and counter during recovery. Collect your equipment bag, then return."
       : stage === 2 ? "Use stone cover and dodge alternating aimed shots and fan gaps to open the guardian gate."
@@ -58,16 +64,25 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
         "The Stone Warden is defeated. There are no more enemies required—approach your personal lantern and press E to pick it up.",
         expeditionLantern[1], "loot");
     }
-    const groups = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({ id: `mob-${id}`, title: mob.name, detail: "Defeat this nearby enemy and collect your item drops.", ids: [id] }))];
+    const groups: ObjectiveGroup[] = [...GROUPS, ...[...mobs].filter(([id]) => !GROUPS.some(group => group.ids.includes(id))).map(([id, mob]) => ({
+      id: `mob-${id}`, title: mob.name, detail: "Defeat this nearby enemy and collect your item drops.", ids: [id],
+      mainId: areaMainMobDefinition(id) ? id : undefined,
+    }))];
     const candidates = groups.flatMap(group => {
       const living = group.ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive && sameFloor(mob) && isInForestDungeon(mob.x, mob.z) === dungeon ? [{ id, mob }] : []; }).sort((a, b) => distance(a.mob) - distance(b.mob));
       const acquisitionRadius = group.ids.some(id => realmEventDefinition(id)) ? REALM_EVENT_TRACKING_RADIUS
         : group.id === previousId ? 32 : dungeon ? 48 : 26;
-      const target = living[0]; if (!target || distance(target.mob) > acquisitionRadius) return [];
-      const update = make(group.id, group.title, group.detail, target.mob, "encounter", target.mob.difficultyTier);
+      const nearest = living[0]; if (!nearest || distance(nearest.mob) > acquisitionRadius) return [];
+      const main = group.mainId ? living.find(entry => entry.id === group.mainId) : undefined;
+      const target = main ?? nearest;
+      const miniBoss = main ? areaMainMobDefinition(main.id) : undefined;
+      const update = make(group.id, miniBoss ? miniBoss.name : group.title,
+        miniBoss ? `AREA MINI-BOSS · Defeat ${miniBoss.name} for this area's largest loot bag.` : group.detail,
+        target.mob, miniBoss ? "miniboss" : "encounter", target.mob.difficultyTier);
       update.recommendedLevel = `LV ${target.mob.level ?? worldLevelRange(target.mob.difficultyTier).min}`;
       update.targetMobId = target.id; update.targetMobIds = group.ids.filter(id => mobs.has(id)); update.completedMobIds = group.ids.filter(id => mobs.get(id)?.alive === false);
-      return [{ update, distance: distance(target.mob), engaged: living.some(({ mob }) => mob.targetId === playerId || mob.combatState !== "idle" && distance(mob) <= 8) }];
+      if (miniBoss) update.progressLabel = "MINI-BOSS · HIGHEST LOOT";
+      return [{ update, distance: distance(nearest.mob), engaged: living.some(({ mob }) => mob.targetId === playerId || mob.combatState !== "idle" && distance(mob) <= 8) }];
     }).sort((a, b) => a.distance - b.distance);
     const lockedFrontier = candidates.find(candidate => candidate.update.objectiveId.includes("frontier"));
     if ((player.level ?? 1) < 10 && lockedFrontier && !lockedFrontier.engaged) {

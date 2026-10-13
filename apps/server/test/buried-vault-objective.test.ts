@@ -11,7 +11,8 @@ describe("buried vault objective", () => {
       ["buried-chamber-brute", mob(56.5, 9.5)],
     ]), new Map(), new Map(), 10_000, null);
     expect(result.objectiveId).toBe("buried-vault");
-    expect(result.title).toBe("Breach the Buried Vault");
+    expect(result.title).toBe("Stone Warden");
+    expect(result.kind).toBe("miniboss");
     expect(result.targetMobIds).toEqual(["buried-vault-crawler", "buried-chamber-brute"]);
   });
 

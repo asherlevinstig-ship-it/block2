@@ -5974,7 +5974,8 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   currentWorldObjective = update;
   const mapOnlyEncounter = update.kind === "encounter";
   worldObjective.hidden = mapOnlyEncounter;
-  minimap.setThreatState(mapOnlyEncounter ? {
+  const mapThreat = update.kind === "encounter" || update.kind === "miniboss";
+  minimap.setThreatState(mapThreat ? {
     x: update.targetX,
     y: update.targetY,
     z: update.targetZ,
@@ -5982,7 +5983,7 @@ function renderWorldObjective(update: WorldObjectiveUpdate): void {
   } : null);
   if (changedObjective || update.showMarker === false) objectiveMarker.hidden = update.showMarker === false;
   const recommendation = update.recommendedLevel ?? worldLevelRange(update.tier).label;
-  objectiveTier.textContent = `${update.progressLabel?.startsWith("REALM THREAT") || update.progressLabel === "REALM BOSS" ? "REALM" : update.kind === "hub" ? "SAFE TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "PERSONAL LOOT" : update.kind === "explore" ? "WILDERNESS" : update.progressLabel ? "DUNGEON" : "THREAT"} · ${recommendation}`;
+  objectiveTier.textContent = `${update.progressLabel?.startsWith("REALM THREAT") || update.progressLabel === "REALM BOSS" ? "REALM" : update.kind === "miniboss" ? "AREA MINI-BOSS" : update.kind === "hub" ? "SAFE TOWN" : update.kind === "portal" ? "PORTAL" : update.kind === "loot" ? "PERSONAL LOOT" : update.kind === "explore" ? "WILDERNESS" : update.progressLabel ? "DUNGEON" : "THREAT"} · ${recommendation}`;
   objectiveTitle.textContent = update.title;
   objectiveDetail.textContent = update.detail;
   objectiveLoot.hidden = !update.lootHint;
