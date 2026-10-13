@@ -22,7 +22,9 @@ import { checkMobProgress, type MobProgress } from "./mob-progress.js";
 import { mobAssistants, MOB_ASSIST_COOLDOWN_MS } from "./mob-assist.js";
 import { circleCrawler, createCrawlerPositioning, retreatCrawler, type CrawlerPositioning } from "./crawler-positioning.js";
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
-import { WildernessEventCycle, wildernessEventScale, WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_SCALING_RADIUS, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
+import { WILDERNESS_EVENT_ID } from "./wilderness-event.js";
+import { RealmEventDirector, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
+import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
@@ -385,7 +387,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly combatContributions = new CombatContributions();
   private readonly silverGuardVolley = new SilverGuardVolley();
   private readonly attackCoordination = new AttackCoordination();
-  private readonly wildernessEvent = new WildernessEventCycle();
+  private readonly realmEvents = new RealmEventDirector();
   private readonly forestPortalCycle = new ForestPortalCycle();
   private forestDungeonActive = false;
   private forestDungeonRun: { id: string; key: string; allowed: Set<string>; entered: Set<string>; ready: Set<string>; claimed: Set<string>; phase: "lobby" | "active"; scalePlayers: number; startedAt: number; completedAt: number } | null = null;
@@ -907,7 +909,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const client of this.clients) if (this.state.players.has(client.sessionId)) {
       client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, now));
       client.send("trade:update", this.trading.snapshot(client.sessionId, this.state.players));
+      client.send("realm:event", this.realmEvents.status(now) satisfies RealmEventUpdate);
     }
+  }
+
+  private broadcastRealmEvent(now: number): void {
+    const update = this.realmEvents.status(now) satisfies RealmEventUpdate;
+    for (const client of this.clients) if (this.state.players.has(client.sessionId)) client.send("realm:event", update);
   }
 
   private restoreExpeditionParty(ticket: string): void {
@@ -1613,7 +1621,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
   private championAllowed(id: string, pose: { x: number; z: number }): boolean {
     const home = this.mobHomes.get(id);
-    return (id !== FRONTIER_CHAMPION_ID && id !== SILVER_CHAMPION_ID && id !== WILDERNESS_EVENT_ID) || !home || Math.hypot(pose.x - home.x, pose.z - home.z) <= 12;
+    return (id !== FRONTIER_CHAMPION_ID && id !== SILVER_CHAMPION_ID && !isRealmEventId(id)) || !home || Math.hypot(pose.x - home.x, pose.z - home.z) <= 12;
   }
 
   private patrolRoamingMember(id: string, mob: MobState, now: number, dt: number, speed: number): void {
@@ -1795,7 +1803,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const recipientsWithLoot = new Set<string>();
     if (!SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId)) for (const playerId of recipients) {
       const fixedReward = mob.isChampion || isSilverGuard(mobId) || mobId === "buried-chamber-brute"
-        || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || mobId === WILDERNESS_EVENT_ID;
+        || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || isRealmEventId(mobId);
       const cadenceId = this.profileTokens.get(playerId) ?? playerId;
       if (!fixedReward && !this.normalLootCadence.record(cadenceId, Math.random())) continue;
       this.spawnLootDrops(mobId, mob, now, playerId);
@@ -1837,26 +1845,36 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.clearMobAttackTimeline(mob);
     this.pendingMobMelee.delete(mobId);
     mob.respawnAt = now + definition.respawnMs;
-    if (this.wildernessEvent.record(mobId, now, this.state.mobs.get(WILDERNESS_EVENT_ID)?.alive === true)) {
+    const armedEvent = this.realmEvents.recordTrigger(mobId, now,
+      [...this.state.mobs].filter(([id, candidate]) => candidate.alive && isRealmEventId(id)).map(([id]) => id));
+    if (armedEvent) {
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
-        if (player && Math.abs(player.y - 8) <= 2.5 && Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) <= WILDERNESS_EVENT_TRACKING_RADIUS)
-          client.send("chat:notice", "Wilderness event · Venom Matriarch arrives at the Greenwood camp in 8 seconds. Gather and prepare!");
+        if (player && Math.abs(player.y - armedEvent.position.y) <= 2.5
+          && Math.hypot(player.x - armedEvent.position.x, player.z - armedEvent.position.z) <= REALM_EVENT_TRACKING_RADIUS)
+          client.send("chat:notice", `Public event incoming · ${armedEvent.name} arrives in 8 seconds. Follow the marker and gather nearby!`);
       }
+      this.broadcastRealmEvent(now);
     }
     if (this.forestPortalCycle.record(mobId, now) && !this.state.portals.has("forest-entry") && !this.forestDungeonActive) {
       this.openTemporaryForestPortal(now);
     }
-    if (mobId === WILDERNESS_EVENT_ID) {
-      this.wildernessEvent.complete(now);
-      const opened = this.openTemporaryForestPortal(now);
+    if (isRealmEventId(mobId)) {
+      const completion = this.realmEvents.complete(mobId, now);
+      const opened = completion?.definition.opensForestPortal ? this.openTemporaryForestPortal(now) : false;
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
-        if (!player || Math.abs(player.y - 8) > 2.5 || Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) > WILDERNESS_EVENT_TRACKING_RADIUS) continue;
-        client.send("chat:notice", opened
-          ? `Public event complete · personal loot has landed and the Forest Dungeon portal is open for ${Math.round(FOREST_PORTAL_LIFETIME_MS / 1000)} seconds.`
-          : "Public event complete · personal loot has landed. The existing Forest Dungeon entrance remains active.");
+        if (!player || !completion || Math.abs(player.y - completion.definition.position.y) > 2.5
+          || Math.hypot(player.x - completion.definition.position.x, player.z - completion.definition.position.z) > REALM_EVENT_TRACKING_RADIUS) continue;
+        client.send("chat:notice", completion.realmCleared
+          ? "REALM CLEARED · personal victory caches have landed. The regional threat cycle has reset."
+          : completion.realmBossArmed
+            ? "REGIONAL THREATS DEFEATED · the Realm Stone Warden awakens in 8 seconds. Rally at the new marker!"
+            : opened
+              ? `Public event complete · personal loot has landed and the Forest Dungeon portal is open for ${Math.round(FOREST_PORTAL_LIFETIME_MS / 1000)} seconds.`
+              : "Public event complete · personal loot has landed. Realm threat has increased.");
       }
+      this.broadcastRealmEvent(now);
     }
     if (FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) this.advanceForestDungeon();
     mob.combatState = "idle";
@@ -1897,7 +1915,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (player.silverDepthsStage === 1 && isInsideSilverDepths(player)) this.advanceSilverDepthsExpedition(client, "entered_depths");
     const progress = this.objectiveProgress.get(client.sessionId) ?? createObjectiveProgress();
     this.objectiveProgress.set(client.sessionId, progress);
-    const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, Date.now(), progress.id, this.wildernessEvent.warningUntil, this.roomKind);
+    const now = Date.now();
+    const update = nearbyObjective(client.sessionId, player, this.state.mobs, this.state.portals, this.state.lootDrops, now, progress.id, this.realmEvents.status(now), this.roomKind);
     const signatureItemId: SignatureItemId | null = update.objectiveId.includes("depths-matriarch") || update.objectiveId === "depths-recover"
       ? "matriarch_edge"
       : update.objectiveId === "greenwood-event" ? "venom_focus" : null;
@@ -1920,28 +1939,34 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     for (const client of this.clients) this.sendObjectiveState(client);
   }
 
-  private advanceWildernessEvent(now: number): void {
-    if (!this.wildernessEvent.release(now)) return;
+  private advanceRealmEvent(now: number): void {
+    const definition = this.realmEvents.release(now);
+    if (!definition) return;
     const nearbyPlayers = [...this.state.players.values()].filter(player => player.health > 0
-      && Math.abs(player.y - WILDERNESS_EVENT_POSITION.y) <= 2.5
-      && Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) <= WILDERNESS_EVENT_SCALING_RADIUS).length;
-    const scale = wildernessEventScale(nearbyPlayers);
-    this.registerMob(WILDERNESS_EVENT_ID, "cave_spitter", WILDERNESS_EVENT_POSITION);
-    const mob = this.state.mobs.get(WILDERNESS_EVENT_ID)!;
-    mob.name = "Greenwood Venom Matriarch";
+      && Math.abs(player.y - definition.position.y) <= 2.5
+      && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= REALM_EVENT_SCALING_RADIUS).length;
+    const scale = realmEventScale(nearbyPlayers, definition);
+    this.registerMob(definition.id, definition.archetype, definition.position);
+    const mob = this.state.mobs.get(definition.id)!;
+    mob.name = definition.name;
     mob.isChampion = true;
     mob.health = mob.maxHealth = scale.maxHealth;
-    mob.attackPattern = "aimed";
+    mob.attackPattern = definition.archetype === "cave_spitter" ? "aimed" : "rocks";
     mob.attackDamage = Math.max(mob.attackDamage, scale.attackDamage);
     mob.rewardMultiplier *= scale.rewardMultiplier;
     mob.level = enemyLevelForTier(mob.difficultyTier, true, true);
     for (const client of this.clients) {
       const player = this.state.players.get(client.sessionId);
-      if (player && Math.abs(player.y - 8) <= 2.5 && Math.hypot(player.x - WILDERNESS_EVENT_POSITION.x, player.z - WILDERNESS_EVENT_POSITION.z) <= WILDERNESS_EVENT_TRACKING_RADIUS)
-        client.send("chat:notice", `Public event live · Venom Matriarch scaled for ${scale.players} adventurer${scale.players === 1 ? "" : "s"}. Deal damage to qualify for personal loot.`);
+      if (player && Math.abs(player.y - definition.position.y) <= 2.5
+        && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= REALM_EVENT_TRACKING_RADIUS)
+        client.send("chat:notice", `${definition.realmBoss ? "REALM BOSS" : "Public event"} live · ${definition.name} scaled for ${scale.players} adventurer${scale.players === 1 ? "" : "s"}. Deal damage to qualify for personal loot.`);
     }
+    this.broadcastRealmEvent(now);
     this.refreshNearbyObjectives();
   }
+
+  /** Kept for focused legacy tests while the one-off wilderness event migrates to the realm director. */
+  private advanceWildernessEvent(now: number): void { this.advanceRealmEvent(now); }
 
   private spawnLootDrops(mobId: string, mob: MobState, now: number, ownerId = ""): void {
     if (mobId === "forest-guardian") return;
@@ -1972,6 +1997,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? [{ itemId: "stone_core", quantity: 2 }, { itemId: "silver_ore", quantity: 3 }]
         : [{ itemId: "stone_core", quantity: 1 }, { itemId: "miners_lantern", quantity: 1 }]
       : mobId === WILDERNESS_EVENT_ID ? [{ itemId: "acid_gland", quantity: 3 }, ...signatureDrops("venom_focus")]
+      : isRealmEventId(mobId) ? [...(realmEventDefinition(mobId)?.rewards ?? [])]
       : mob.isChampion ? lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "champion")
         .map(entry => isEquipmentItem(entry.itemId) ? entry : { ...entry, quantity: 3 })
       : [...lootForArchetype(mob.archetype as MobArchetypeId, mobId, Math.random(), "normal", isSilverGuard(mobId) ? Math.random() : 1)];
@@ -3504,7 +3530,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.resolveMobHazards(now);
     this.advanceSilverDepthsRouteHazards(now);
     if (this.roomKind === "overworld") {
-      this.advanceWildernessEvent(now);
+      this.advanceRealmEvent(now);
       for (const pack of ROAMING_PACKS) {
         const route = this.roamingRoutes.get(pack.id) ?? createRoamingRouteState(now);
         this.roamingRoutes.set(pack.id, route);
@@ -3516,7 +3542,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
     }
     for (const [mobId, mob] of this.state.mobs) {
-      if (mobId === WILDERNESS_EVENT_ID && !mob.alive) continue;
+      if (isRealmEventId(mobId) && !mob.alive) continue;
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
       if (!mob.alive && this.roomKind === "silver-depths"
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;

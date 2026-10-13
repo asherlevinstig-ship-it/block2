@@ -9,6 +9,8 @@ import { createSocialUI } from "./social-ui.js";
 import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
+import { createRealmEventUI } from "./realm-event-ui.js";
+import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, type LootCollectAction, type LootCollectResult } from "@blockcraft/protocol";
 import { weaponComparison, armourComparison, comparisonTrend } from "./loot-comparison.js";
 import { createCharacterPortrait } from "./character-portrait.js";
@@ -1864,6 +1866,8 @@ const playerInteractionUI = createPlayerInteractionUI({
   trade: id => tradeUI.invite(id),
   party: id => partyUI.invite(id),
 });
+const realmEventUI = createRealmEventUI();
+let activeRealmEventId = "";
 let lastNameplateSampleAt = -Infinity;
 let nearbyTradePlayerId: string | null = null;
 
@@ -5932,7 +5936,7 @@ let activeBossId = "";
 function updateBossHud(now: number): void {
   const position = localPlayer.getPosition();
   const inSilverDepths = position.y < 5 && position.x >= 59 && position.x <= 78 && position.z >= 3 && position.z <= 16;
-  const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian" : "greenwood-venom-matriarch";
+  const nextBossId = inSilverDepths ? "crystal-matriarch" : isInForestDungeon(position.x, position.z) ? "forest-guardian" : activeRealmEventId || "greenwood-venom-matriarch";
   const boss = mobVisuals.get(nextBossId)?.state;
   if (activeBossId !== nextBossId) {
     activeBossId = nextBossId; bossHudState = initialBossHud(); bossHudFingerprint = "";
@@ -5961,9 +5965,11 @@ function updateBossHud(now: number): void {
   if (!boss || !bossHudState.visible) return;
   bossName.textContent = boss.name;
   const guardian = nextBossId === "forest-guardian";
-  bossEncounter.textContent = crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : "SHARED WILDERNESS EVENT";
-  bossPhase.textContent = !boss.alive ? "DEFEATED" : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : "VENOM FAN"}`;
-  bossHud.dataset.encounter = crystal ? "crystal" : guardian ? "dungeon" : "wilderness";
+  const realmBoss = /Realm Stone Warden/i.test(boss.name);
+  const bruteEvent = /Stoneheart|Realm Stone Warden/i.test(boss.name);
+  bossEncounter.textContent = crystal ? "SILVER DEPTHS BOSS" : guardian ? "FOREST DUNGEON BOSS" : realmBoss ? "REALM BOSS" : "SHARED WILDERNESS EVENT";
+  bossPhase.textContent = !boss.alive ? "DEFEATED" : bossHudState.enraged ? `PHASE 2 · ${crystal ? "ROTATING CRYSTAL WAVES" : guardian ? "HEARTWOOD CHARGE" : bruteEvent ? "ENRAGED VOLLEYS" : "ENRAGED"}` : `PHASE 1 · ${crystal ? "AIMED SHOT / FAN" : guardian ? "ROOT VOLLEY" : bruteEvent ? "ROCK VOLLEY / SLAM" : "AIMED SHOT / FAN"}`;
+  bossHud.dataset.encounter = crystal ? "crystal" : guardian ? "dungeon" : realmBoss ? "realm" : "wilderness";
   bossHud.dataset.enraged = String(bossHudState.enraged);
   bossHealthFill.style.transform = `scaleX(${Math.max(0, Math.min(1, boss.health / Math.max(1, boss.maxHealth)))})`;
   bossHealthText.textContent = `${Math.max(0, boss.health)} / ${boss.maxHealth}`;
@@ -8275,6 +8281,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("chat:message", message => social.message(message));
   room.onMessage("chat:notice", message => { social.notice(String(message)); partyUI.notice(String(message)); tradeUI.notice(String(message)); });
   room.onMessage("party:update", update => partyUI.update(update));
+  room.onMessage("realm:event", (update: RealmEventUpdate) => {
+    activeRealmEventId = update.phase === "active" ? update.eventId ?? "" : "";
+    realmEventUI.update(update);
+  });
   room.onMessage("trade:update", update => {
     if (update) playerInteractionUI.close();
     tradeUI.update(update);
@@ -8780,6 +8790,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();
+    realmEventUI.reset();
+    activeRealmEventId = "";
     playerInteractionUI.close();
     tradeUI.update(null);
     pendingPings.clear();

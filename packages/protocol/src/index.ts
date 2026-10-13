@@ -22,6 +22,19 @@ export const PartyRequestSchema = z.discriminatedUnion("action", [
 export type PartyRequest = z.infer<typeof PartyRequestSchema>;
 export type PartyUpdate = { partyId: string | null; members: { id: string; name: string; health: number; maxHealth: number; distance: number; leader: boolean }[];
   nearby: { id: string; name: string }[]; invite: { id: string; name: string; expiresAt: number } | null };
+export type RealmEventUpdate = {
+  phase: "idle" | "warning" | "active" | "cooldown";
+  eventId: string | null;
+  eventName: string | null;
+  eventTitle: string | null;
+  targetX: number;
+  targetY: number;
+  targetZ: number;
+  warningUntil: number;
+  completed: number;
+  required: number;
+  realmBoss: boolean;
+};
 export const ChatSendSchema = z.object({ text: z.string().min(1).max(160) });
 export const PlayerNameSchema = z.string().trim().min(2).max(20).regex(/^[A-Za-z0-9 _-]+$/);
 export const APPEARANCE_PALETTE = {

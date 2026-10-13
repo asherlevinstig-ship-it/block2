@@ -14,6 +14,21 @@ export function bossHudCopy(name: string): BossHudCopy {
     enrage: "THE HEARTWOOD BREAKS · CHARGE INCOMING",
     defeat: "ROOT GUARDIAN DEFEATED · CLAIM YOUR REWARD",
   };
+  if (/Realm Stone Warden/i.test(name)) return {
+    arrival: "THE REALM STONE WARDEN HAS AWAKENED",
+    enrage: "REALM PRESSURE SURGES · KEEP MOVING",
+    defeat: "REALM CLEARED · PERSONAL VICTORY CACHES DROPPED",
+  };
+  if (/Stoneheart/i.test(name)) return {
+    arrival: "STONEHEART SIEGE LORD HAS ARRIVED",
+    enrage: "STONEHEART ENRAGED · VOLLEY INCOMING",
+    defeat: "STONEHEART BROKEN · COLLECT YOUR CACHE",
+  };
+  if (/Ashglass/i.test(name)) return {
+    arrival: "ASHGLASS ORACLE HAS MATERIALISED",
+    enrage: "ASHGLASS OVERLOAD · FIND THE FIRING GAPS",
+    defeat: "ASHGLASS ORACLE SHATTERED · COLLECT YOUR CACHE",
+  };
   return {
     arrival: "VENOM MATRIARCH HAS ARRIVED",
     enrage: "ENRAGED · WATCH FOR THE DOUBLE VOLLEY",

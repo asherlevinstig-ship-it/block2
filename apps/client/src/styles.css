@@ -500,6 +500,41 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 .ranged-popup-enemy { color: #ffe9a3; font-size: 28px; }
 .ranged-popup-terrain { color: #b8c2c3; font-size: 36px; }
 canvas.ranged-aim { cursor: none; }
+
+#realm-event-meter {
+  position: fixed;
+  z-index: 34;
+  top: 16px;
+  left: 50%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 10px 13px;
+  transform: translateX(-50%);
+  border: 1px solid rgb(128 187 176 / 35%);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgb(7 25 24 / 94%), rgb(11 39 35 / 92%));
+  box-shadow: 0 10px 34px #0008, inset 0 1px #d9fff01c;
+  color: #edfff8;
+  pointer-events: none;
+}
+#realm-event-meter > div { display: grid; min-width: 0; gap: 3px; }
+.realm-event-eyebrow { color: #77d8c2; font: 900 8px/1 system-ui; letter-spacing: .16em; }
+.realm-event-title { overflow: hidden; font: 900 13px/1.15 system-ui; text-overflow: ellipsis; white-space: nowrap; }
+.realm-event-detail { overflow: hidden; color: #99b9b0; font: 650 9px/1.2 system-ui; text-overflow: ellipsis; white-space: nowrap; }
+.realm-event-pips { display: flex; gap: 5px; }
+.realm-event-pips b { width: 9px; height: 22px; transform: skewX(-12deg); border: 1px solid #69bba955; border-radius: 2px; background: #071714; }
+.realm-event-pips b[data-filled="true"] { border-color: #f1c662; background: linear-gradient(#ffe38c, #c57920); box-shadow: 0 0 10px #e9a83c88; }
+#realm-event-meter[data-phase="warning"] { border-color: #efba5f99; animation: realm-event-pulse 900ms ease-in-out infinite alternate; }
+#realm-event-meter[data-phase="active"] { border-color: #ee786c99; background: linear-gradient(145deg, rgb(48 19 17 / 96%), rgb(24 17 13 / 94%)); }
+#realm-event-meter[data-boss="true"] { border-color: #d793ffbb; background: linear-gradient(145deg, rgb(38 15 52 / 97%), rgb(20 12 32 / 95%)); }
+@keyframes realm-event-pulse { to { box-shadow: 0 10px 34px #0008, 0 0 22px rgb(239 186 95 / 35%); } }
+@media (max-width: 680px) {
+  #realm-event-meter { top: 8px; width: min(360px, calc(100vw - 16px)); padding: 8px 10px; }
+  .realm-event-detail { max-width: 260px; }
+}
 #quiz-table-prompt, #blacksmith-prompt {
   position: fixed;
   z-index: 21;
