@@ -6,7 +6,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v132";
+export const WORLD_ROOM = "world-warden-gate-v133";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
@@ -324,6 +324,19 @@ export const BLACKSMITH_DISMANTLE = {
 } as const satisfies Partial<Record<ItemId, { gold: number; materialId?: ItemId; materialQuantity?: number }>>;
 export type BlacksmithDismantleItemId = keyof typeof BLACKSMITH_DISMANTLE;
 export const BlacksmithDismantleSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_DISMANTLE) as [BlacksmithDismantleItemId, ...BlacksmithDismantleItemId[]]) });
+export const REGIONAL_FORGE_RECIPES = {
+  greenwood: {
+    name: "Greenwood Rootstalker Forge", rankName: "Rootslayer", itemId: "rootstalker_wrap", marks: 5, gold: 80,
+    materials: [{ itemId: "moss_fibre", quantity: 12 }, { itemId: "timber", quantity: 8 }, { itemId: "crawler_fang", quantity: 6 }],
+  },
+  mistfen: {
+    name: "Mistfen Mirebreaker Forge", rankName: "Mirebreaker", itemId: "mirebreaker_mantle", marks: 5, gold: 90,
+    materials: [{ itemId: "acid_gland", quantity: 12 }, { itemId: "silver_ore", quantity: 8 }, { itemId: "moss_fibre", quantity: 4 }],
+  },
+} as const;
+export type RegionalForgeId = keyof typeof REGIONAL_FORGE_RECIPES;
+export type RegionalMarkCounts = Record<RegionalForgeId, number>;
+export const RegionalForgeSchema = z.object({ region: z.enum(["greenwood", "mistfen"]) }).strict();
 export const BLACKSMITH_REFORGE = {
   forged_sword: { materialId: "iron_ore", costs: [{ gold: 18, material: 3 }, { gold: 36, material: 6 }, { gold: 70, material: 10 }] },
   forged_bow: { materialId: "iron_ore", costs: [{ gold: 20, material: 3 }, { gold: 40, material: 6 }, { gold: 75, material: 10 }] },
@@ -368,7 +381,7 @@ export function armouredDamage(damage: number, id: string, kind: IncomingDamageK
   return Math.max(1, damage - armour.reduction - situational - reforgeArmourReduction(reforgeRank));
 }
 export type BlacksmithUpdate = {
-  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "attuned" | "awakened" | "exchanged" | "error";
+  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "attuned" | "awakened" | "exchanged" | "regional-forged" | "error";
   ironOre: number;
   silverOre?: number;
   moonstone?: number;
@@ -393,6 +406,8 @@ export type BlacksmithUpdate = {
   equippedArmourItemId?: ItemId | null;
   leaderRelics?: Partial<Record<AreaLeaderRelicId, number>>;
   leaderMarks?: Partial<Record<LeaderForgemarkId, number>>;
+  regionalMarks?: RegionalMarkCounts;
+  regionalMasteryRanks?: RegionalMarkCounts;
   materialGranted?: ItemId;
   materialQuantity?: number;
   sold?: number;

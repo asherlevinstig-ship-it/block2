@@ -94,11 +94,13 @@ import {
   AREA_LEADER_RELIC_IDS,
   LEADER_FORGE_MARKS,
   LEADER_FORGE_RECIPES,
+  REGIONAL_FORGE_RECIPES,
   type BlacksmithStockId,
   type BlacksmithDismantleItemId,
   type BlacksmithReforgeItemId,
   type AreaLeaderRelicId,
   type LeaderForgemarkId,
+  type RegionalForgeId,
   type EquipmentReforgeRanks,
   reforgeWeaponDamageBonus,
   reforgeArmourReduction,
@@ -5398,12 +5400,17 @@ blacksmithClose.before(reforgeShop);
 const leaderForgeShop = document.createElement("div");
 leaderForgeShop.id = "blacksmith-leader-forge";
 blacksmithClose.before(leaderForgeShop);
+const regionalForgeShop = document.createElement("div");
+regionalForgeShop.id = "blacksmith-regional-forge";
+blacksmithClose.before(regionalForgeShop);
 const attunementShop = document.createElement("div");
 attunementShop.id = "blacksmith-attunement";
 blacksmithClose.before(attunementShop);
 let blacksmithCalling: BuildPathId | null = null;
 let blacksmithEquippedHandItem: ItemId | null = null;
 let blacksmithEquippedArmourItem: ItemId | null = null;
+let regionalMarks: Record<RegionalForgeId, number> = { greenwood: 0, mistfen: 0 };
+let regionalMasteryRanks: Record<RegionalForgeId, number> = { greenwood: 0, mistfen: 0 };
 const attunementCost = (action: "reroll" | "upgrade", tier: 1 | 2 | 3, roll?: EquipmentAffixRoll): number => {
   const base = action === "reroll" ? ATTUNEMENT_REROLL_COST[tier] : ATTUNEMENT_UPGRADE_COST[Math.min(2, tier) as 1 | 2];
   const matching = Boolean(roll && blacksmithCalling && EQUIPMENT_AFFIXES[roll.affixId].pathId === blacksmithCalling);
@@ -5537,6 +5544,43 @@ function renderLeaderForgeShop(): void {
     leaderForgeShop.append(empty);
   }
 }
+function renderRegionalForgeShop(): void {
+  regionalForgeShop.replaceChildren();
+  regionalForgeShop.hidden = blacksmithShopTab !== "regional";
+  if (regionalForgeShop.hidden) return;
+  const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
+  heading.textContent = "REGIONAL FORGE · GUARANTEED LEGENDARY ARMOUR";
+  const help = document.createElement("p"); help.className = "blacksmith-leader-help";
+  help.textContent = "Regional events are the fastest route. Each victory grants one bound mark; five marks plus local materials guarantee the region's legendary armour.";
+  regionalForgeShop.append(heading, help);
+  for (const region of Object.keys(REGIONAL_FORGE_RECIPES) as RegionalForgeId[]) {
+    const recipe = REGIONAL_FORGE_RECIPES[region];
+    const marks = regionalMarks[region];
+    const rank = regionalMasteryRanks[region];
+    const rankReady = rank >= 3;
+    const materialLines = recipe.materials.map(cost => `${inventoryCounts.get(cost.itemId) ?? 0}/${cost.quantity} ${ITEM_DEFINITIONS[cost.itemId].name}`);
+    const materialsReady = recipe.materials.every(cost => (inventoryCounts.get(cost.itemId) ?? 0) >= cost.quantity);
+    const ready = rankReady && marks >= recipe.marks && tavernCoinBalance >= recipe.gold && materialsReady;
+    const card = document.createElement("article"); card.dataset.rarity = "legendary";
+    const title = document.createElement("header");
+    title.innerHTML = `<strong>${ITEM_DEFINITIONS[recipe.itemId].name}</strong><b>${region.toUpperCase()} · ${marks}/${recipe.marks} MARKS</b>`;
+    const effect = document.createElement("p"); effect.textContent = ITEM_DEFINITIONS[recipe.itemId].description;
+    const costs = document.createElement("small");
+    costs.textContent = `${rankReady ? recipe.rankName : `LOCKED · ${recipe.rankName} mastery`} · ${recipe.gold} gold · ${materialLines.join(" · ")}`;
+    const button = document.createElement("button"); button.type = "button";
+    button.textContent = blacksmithPending ? "PLEASE WAIT…" : !rankReady ? `REQUIRES ${recipe.rankName.toUpperCase()}`
+      : marks < recipe.marks ? `WIN ${recipe.marks - marks} MORE EVENT${recipe.marks - marks === 1 ? "" : "S"}`
+      : !materialsReady ? "GATHER REGIONAL MATERIALS" : tavernCoinBalance < recipe.gold ? `NEED ${recipe.gold - tavernCoinBalance} GOLD` : "FORGE LEGENDARY";
+    button.disabled = blacksmithPending || !room || !ready;
+    button.addEventListener("click", () => {
+      if (!room || blacksmithPending || !ready) return;
+      blacksmithPending = true; renderRegionalForgeShop();
+      blacksmithMessage.textContent = `Forging ${ITEM_DEFINITIONS[recipe.itemId].name}…`;
+      room.send("blacksmith:regional-forge", { region });
+    });
+    card.append(title, effect, costs, button); regionalForgeShop.append(card);
+  }
+}
 function renderReforgeShop(): void {
   reforgeShop.replaceChildren();
   reforgeShop.hidden = blacksmithShopTab !== "reforge";
@@ -5643,6 +5687,7 @@ function renderWeaponShop(): void {
   renderReforgeShop();
   renderAttunementShop();
   renderLeaderForgeShop();
+  renderRegionalForgeShop();
   for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {
     tab.setAttribute("aria-pressed", String(tab.dataset.smithTab === blacksmithShopTab));
   }
@@ -5720,6 +5765,8 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithCalling = update.selectedBuildPathId ?? null;
   blacksmithEquippedHandItem = update.equippedMainHandItemId ?? null;
   blacksmithEquippedArmourItem = update.equippedArmourItemId ?? null;
+  regionalMarks = update.regionalMarks ?? regionalMarks;
+  regionalMasteryRanks = update.regionalMasteryRanks ?? regionalMasteryRanks;
   refreshEquipmentProgression();
   refreshInventoryEquipped();
   renderWeaponShop();

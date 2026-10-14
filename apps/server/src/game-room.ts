@@ -13,7 +13,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -772,6 +772,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("blacksmith:reforge", (client, payload) => this.handleBlacksmithReforge(client, payload));
     aliveMessage("blacksmith:attune", (client, payload) => this.handleBlacksmithAttune(client, payload));
     aliveMessage("blacksmith:leader-forge", (client, payload) => this.handleLeaderForge(client, payload));
+    aliveMessage("blacksmith:regional-forge", (client, payload) => this.handleRegionalForge(client, payload));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
     aliveMessage("blacksmith:depths-buy", (client, payload) => this.handleDepthsRewardBuy(client, payload));
@@ -1229,6 +1230,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       leaderRelics: Object.fromEntries(AREA_LEADER_RELIC_IDS.map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       leaderMarks: Object.fromEntries((Object.keys(LEADER_FORGE_MARKS) as LeaderForgemarkId[])
         .map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
+      regionalMarks: { greenwood: this.greenwoodProgress(player).marks, mistfen: this.mistfenProgress(player).marks },
+      regionalMasteryRanks: {
+        greenwood: greenwoodMasteryRank(this.greenwoodProgress(player).points, this.greenwoodProgress(player).discovered),
+        mistfen: mistfenMasteryRank(this.mistfenProgress(player).points, this.mistfenProgress(player).discovered),
+      },
       materialGranted: dismantled?.materialId,
       materialQuantity: dismantled?.materialQuantity,
       message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
@@ -1408,11 +1414,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!material) { material = new InventoryItemState(); player.inventory.set(materialId, material); }
       material.quantity = inventoryTotal(material.quantity, materialQuantity);
     }
+    const recycledRegion: RegionalForgeId | null = itemId === "rootstalker_wrap" ? "greenwood"
+      : itemId === "mirebreaker_mantle" ? "mistfen" : null;
+    if (recycledRegion) this.grantRegionalMark(client.sessionId, recycledRegion);
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     const materialMessage = materialId && materialQuantity ? ` and ${materialQuantity} ${ITEM_DEFINITIONS[materialId].name}` : "";
     const dustMessage = dustGranted > 0 ? ` and ${dustGranted} Attunement Dust` : "";
+    const markMessage = recycledRegion ? ` and 1 ${recycledRegion === "greenwood" ? "Greenwood" : "Mistfen"} Mark` : "";
     this.sendEquipmentAffixes(client);
-    this.sendBlacksmithState(client, `Dismantled ${ITEM_DEFINITIONS[itemId].name} for ${recipe.gold} gold${materialMessage}${dustMessage}.`, "dismantled", 1, recipe.gold,
+    this.sendBlacksmithState(client, `Dismantled ${ITEM_DEFINITIONS[itemId].name} for ${recipe.gold} gold${materialMessage}${dustMessage}${markMessage}.`, "dismantled", 1, recipe.gold,
       undefined, undefined, { itemId, materialId, materialQuantity });
   }
 
@@ -1529,6 +1539,34 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     this.sendBlacksmithState(client,
       `${LEADER_FORGE_MARKS[recipe.markId].name} awakened. ${LEADER_FORGE_MARKS[recipe.markId].perk}.`, "awakened");
+  }
+
+  private handleRegionalForge(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = RegionalForgeSchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a regional forge recipe.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use Regional Forging.", "error");
+    const region = parsed.data.region as RegionalForgeId;
+    const recipe = REGIONAL_FORGE_RECIPES[region];
+    const progress = region === "greenwood" ? this.greenwoodProgress(player) : this.mistfenProgress(player);
+    const rank = region === "greenwood" ? greenwoodMasteryRank(progress.points, progress.discovered) : mistfenMasteryRank(progress.points, progress.discovered);
+    if (rank < 3) return this.sendBlacksmithState(client, `${recipe.rankName} mastery is required to unlock this recipe.`, "error");
+    if (progress.marks < recipe.marks) return this.sendBlacksmithState(client, `You need ${recipe.marks - progress.marks} more ${region === "greenwood" ? "Greenwood" : "Mistfen"} mark${recipe.marks - progress.marks === 1 ? "" : "s"}.`, "error");
+    if (player.coins < recipe.gold) return this.sendBlacksmithState(client, `You need ${recipe.gold - player.coins} more gold.`, "error");
+    for (const cost of recipe.materials) {
+      const held = player.inventory.get(cost.itemId)?.quantity ?? 0;
+      if (held < cost.quantity) return this.sendBlacksmithState(client, `You need ${cost.quantity - held} more ${ITEM_DEFINITIONS[cost.itemId].name}.`, "error");
+    }
+    if ((player.inventory.get(recipe.itemId)?.quantity ?? 0) >= 65_535) return this.sendBlacksmithState(client, "Your pack cannot hold another copy.", "error");
+    player.coins -= recipe.gold;
+    progress.marks -= recipe.marks;
+    for (const cost of recipe.materials) player.inventory.get(cost.itemId)!.quantity -= cost.quantity;
+    let item = player.inventory.get(recipe.itemId);
+    if (!item) { item = new InventoryItemState(); player.inventory.set(recipe.itemId, item); }
+    item.quantity += 1;
+    if (region === "greenwood") this.setGreenwoodProgress(player, progress); else this.setMistfenProgress(player, progress);
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[recipe.itemId].name} forged. Five victories converted into a guaranteed legendary.`, "regional-forged");
   }
 
   private handleBlacksmithForge(client: Client, payload: unknown): void {
@@ -2269,6 +2307,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       else if (isGreenwoodEventFollower(mobId)) this.grantGreenwoodMastery(playerId, 4);
       else if (mobId === WILDERNESS_EVENT_ID) this.grantGreenwoodMastery(playerId,
         defeatedGreenwoodEvent?.masteryReward ?? 14);
+      if (mobId === MISTFEN_EVENT_ID) this.grantRegionalMark(playerId, "mistfen");
+      if (mobId === WILDERNESS_EVENT_ID) this.grantRegionalMark(playerId, "greenwood");
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -4137,6 +4177,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private grantRegionalMark(playerId: string, region: RegionalForgeId, amount = 1): void {
+    const player = this.state.players.get(playerId);
+    if (!player || amount <= 0) return;
+    const progress = region === "greenwood" ? this.greenwoodProgress(player) : this.mistfenProgress(player);
+    progress.marks = Math.min(65_535, progress.marks + amount);
+    if (region === "greenwood") this.setGreenwoodProgress(player, progress); else this.setMistfenProgress(player, progress);
+    const recipe = REGIONAL_FORGE_RECIPES[region];
+    this.clients.find(candidate => candidate.sessionId === playerId)?.send("chat:notice",
+      `${region === "greenwood" ? "GREENWOOD" : "MISTFEN"} MARK +${amount} · ${progress.marks} / ${recipe.marks} for guaranteed ${ITEM_DEFINITIONS[recipe.itemId].name}.`);
+  }
+
   private discoverMistfen(playerId: string, player: PlayerState): void {
     const progress = this.mistfenProgress(player);
     if (this.roomKind !== "overworld" || progress.discovered || player.y < SURFACE_HEIGHT - 1
@@ -4149,15 +4200,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(playerId, player, true);
   }
 
-  private mistfenProgress(player: PlayerState): { points: number; discovered: boolean } {
+  private mistfenProgress(player: PlayerState): { points: number; discovered: boolean; marks: number } {
     try {
-      const value = (JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown; discovered?: unknown } }).mistfen;
+      const value = (JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown; discovered?: unknown; marks?: unknown } }).mistfen;
       return { points: typeof value?.points === "number" && Number.isFinite(value.points)
-        ? Math.max(0, Math.min(MISTFEN_MASTERY_CAP, Math.floor(value.points))) : 0, discovered: value?.discovered === true };
-    } catch { return { points: 0, discovered: false }; }
+        ? Math.max(0, Math.min(MISTFEN_MASTERY_CAP, Math.floor(value.points))) : 0, discovered: value?.discovered === true,
+        marks: typeof value?.marks === "number" && Number.isFinite(value.marks) ? Math.max(0, Math.min(65_535, Math.floor(value.marks))) : 0 };
+    } catch { return { points: 0, discovered: false, marks: 0 }; }
   }
 
-  private setMistfenProgress(player: PlayerState, mistfen: { points: number; discovered: boolean }): void {
+  private setMistfenProgress(player: PlayerState, mistfen: { points: number; discovered: boolean; marks: number }): void {
     let raw: Record<string, unknown> = {};
     try { const parsed = JSON.parse(player.huntLoadoutsJson); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed; }
     catch { /* legacy */ }
@@ -4174,15 +4226,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     return rank;
   }
 
-  private greenwoodProgress(player: PlayerState): { points: number; discovered: boolean } {
+  private greenwoodProgress(player: PlayerState): { points: number; discovered: boolean; marks: number } {
     try {
-      const value = (JSON.parse(player.huntLoadoutsJson) as { greenwood?: { points?: unknown; discovered?: unknown } }).greenwood;
+      const value = (JSON.parse(player.huntLoadoutsJson) as { greenwood?: { points?: unknown; discovered?: unknown; marks?: unknown } }).greenwood;
       return { points: typeof value?.points === "number" && Number.isFinite(value.points)
-        ? Math.max(0, Math.min(GREENWOOD_MASTERY_CAP, Math.floor(value.points))) : 0, discovered: value?.discovered === true };
-    } catch { return { points: 0, discovered: false }; }
+        ? Math.max(0, Math.min(GREENWOOD_MASTERY_CAP, Math.floor(value.points))) : 0, discovered: value?.discovered === true,
+        marks: typeof value?.marks === "number" && Number.isFinite(value.marks) ? Math.max(0, Math.min(65_535, Math.floor(value.marks))) : 0 };
+    } catch { return { points: 0, discovered: false, marks: 0 }; }
   }
 
-  private setGreenwoodProgress(player: PlayerState, greenwood: { points: number; discovered: boolean }): void {
+  private setGreenwoodProgress(player: PlayerState, greenwood: { points: number; discovered: boolean; marks: number }): void {
     let raw: Record<string, unknown> = {};
     try { const parsed = JSON.parse(player.huntLoadoutsJson); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed; }
     catch { /* legacy */ }
