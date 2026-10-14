@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { mistfenMasteryStatus } from "@blockcraft/protocol";
+import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
 import { isInMistfenMarsh } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
@@ -587,6 +587,12 @@ let localMistfenMastery = 0;
 let localMistfenDiscovered = false;
 let lastMistfenMasteryView = "";
 let mistfenGainTimer = 0;
+const greenwoodMasteryPanel = document.querySelector<HTMLElement>("#greenwood-mastery")!;
+const greenwoodMasteryRank = document.querySelector<HTMLElement>("#greenwood-mastery-rank")!;
+const greenwoodMasteryFill = document.querySelector<HTMLElement>("#greenwood-mastery-fill")!;
+const greenwoodMasteryDetail = document.querySelector<HTMLElement>("#greenwood-mastery-detail")!;
+const greenwoodMasteryGain = document.querySelector<HTMLElement>("#greenwood-mastery-gain")!;
+let localGreenwoodMastery = 0, localGreenwoodDiscovered = false, lastGreenwoodMasteryView = "", greenwoodGainTimer = 0;
 
 function updateLocalMistfenProgress(raw: string): void {
   const previous = localMistfenMastery;
@@ -607,6 +613,23 @@ function updateLocalMistfenProgress(raw: string): void {
     mistfenGainTimer = window.setTimeout(() => { mistfenMasteryGain.hidden = true; }, 1800);
   }
   lastMistfenMasteryView = "";
+  updateLocalGreenwoodProgress(raw);
+}
+
+function updateLocalGreenwoodProgress(raw: string): void {
+  const previous = localGreenwoodMastery;
+  try {
+    const greenwood = (JSON.parse(raw) as { greenwood?: { points?: unknown; discovered?: unknown } }).greenwood;
+    localGreenwoodMastery = typeof greenwood?.points === "number" && Number.isFinite(greenwood.points) ? greenwood.points : 0;
+    localGreenwoodDiscovered = greenwood?.discovered === true;
+  } catch { localGreenwoodMastery = 0; localGreenwoodDiscovered = false; }
+  const rank = greenwoodMasteryStatus(localGreenwoodMastery, localGreenwoodDiscovered).rank;
+  minimap.setGreenwoodMastery(rank);
+  if (previous > 0 && localGreenwoodMastery > previous) {
+    greenwoodMasteryGain.textContent = `MASTERY +${localGreenwoodMastery - previous}`; greenwoodMasteryGain.hidden = false;
+    window.clearTimeout(greenwoodGainTimer); greenwoodGainTimer = window.setTimeout(() => { greenwoodMasteryGain.hidden = true; }, 1800);
+  }
+  lastGreenwoodMasteryView = "";
 }
 
 function renderMistfenMastery(position: { x: number; y: number; z: number }): void {
@@ -621,6 +644,16 @@ function renderMistfenMastery(position: { x: number; y: number; z: number }): vo
   mistfenMasteryRank.textContent = mastery.name;
   mistfenMasteryFill.style.transform = `scaleX(${Math.max(0, Math.min(1, mastery.progress))})`;
   mistfenMasteryDetail.textContent = next;
+}
+
+function renderGreenwoodMastery(position: { x: number; y: number; z: number }): void {
+  const visible = worldReady && position.y >= SURFACE_HEIGHT - 1 && isInGreenwoodRegion(position.x, position.z);
+  greenwoodMasteryPanel.hidden = !visible; if (!visible) return;
+  const mastery = greenwoodMasteryStatus(localGreenwoodMastery, localGreenwoodDiscovered);
+  const next = mastery.rank >= 3 ? "Broodmother rematches empowered" : `${mastery.points}/${mastery.nextThreshold} · Next: ${mastery.reward}`;
+  const fingerprint = `${mastery.name}:${mastery.points}:${mastery.progress}:${next}`; if (fingerprint === lastGreenwoodMasteryView) return;
+  lastGreenwoodMasteryView = fingerprint; greenwoodMasteryRank.textContent = mastery.name;
+  greenwoodMasteryFill.style.transform = `scaleX(${Math.max(0, Math.min(1, mastery.progress))})`; greenwoodMasteryDetail.textContent = next;
 }
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -1770,19 +1803,20 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     rootguard_armour: new pc.Entity("rootguard-armour"), bastion_plate: new pc.Entity("bastion-plate"),
     fangstalker_wrap: new pc.Entity("fangstalker-wrap"), venomweave_mantle: new pc.Entity("venomweave-mantle"),
     mirebreaker_mantle: new pc.Entity("mirebreaker-mantle"),
+    rootstalker_wrap: new pc.Entity("rootstalker-wrap"),
     worldsplitter_plate: new pc.Entity("worldsplitter-plate"),
   };
   for (const [id, layer] of Object.entries(armour)) {
     const bastion = id === "bastion_plate", fang = id === "fangstalker_wrap";
     const venom = id === "venomweave_mantle" || id === "mirebreaker_mantle", worldsplitter = id === "worldsplitter_plate";
-    const mirebreaker = id === "mirebreaker_mantle";
+    const mirebreaker = id === "mirebreaker_mantle", rootstalker = id === "rootstalker_wrap";
     const iron = id === "iron_armour" || bastion || worldsplitter;
     const rootguard = id === "rootguard_armour";
-    const material = mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
+    const material = rootstalker ? coloredMaterial(new pc.Color(.32, .46, .18)) : mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
       : venom ? coloredMaterial(new pc.Color(.26, .48, .12))
         : fang ? coloredMaterial(new pc.Color(.38, .18, .1))
           : iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
-    const accent = mirebreaker ? coloredMaterial(new pc.Color(.86, 1, .28)) : venom ? coloredMaterial(new pc.Color(.55, .95, .08))
+    const accent = rootstalker ? coloredMaterial(new pc.Color(.94, .78, .3)) : mirebreaker ? coloredMaterial(new pc.Color(.86, 1, .28)) : venom ? coloredMaterial(new pc.Color(.55, .95, .08))
       : fang ? coloredMaterial(new pc.Color(.92, .78, .46)) : brassMaterial;
     const reinforced = iron || rootguard || venom;
     torso.addChild(layer);
@@ -4205,6 +4239,7 @@ const lootMaterials: Partial<Record<ItemId, pc.StandardMaterial>> = {
   fangstalker_wrap: coloredMaterial(new pc.Color(.72, .28, .12)),
   venomweave_mantle: coloredMaterial(new pc.Color(.38, .82, .12)),
   mirebreaker_mantle: coloredMaterial(new pc.Color(.55, .9, .22)),
+  rootstalker_wrap: coloredMaterial(new pc.Color(.56, .68, .25)),
   worldsplitter_plate: coloredMaterial(new pc.Color(.34, .4, .48)),
   forged_sword: coloredMaterial(new pc.Color(.76, .8, .85)),
   forged_bow: coloredMaterial(new pc.Color(.65, .45, .25)),
@@ -8201,6 +8236,7 @@ app.on("update", (dt: number) => {
   }
   const current = localPlayer.getPosition();
   renderMistfenMastery(current);
+  renderGreenwoodMastery(current);
   const grounded = isPlayerSupported(readCollisionWorldBlock, current.x, current.y, current.z);
   if (movementPilotController) localVerticalVelocity = movementPilotController.pose().pilotVy;
   else if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;

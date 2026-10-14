@@ -286,16 +286,17 @@ export const ARMOUR_DEFINITIONS = {
   fangstalker_wrap: { name: "Fangstalker Wrap", reduction: 1, speed: 1.06, projectileReduction: 0, hazardReduction: 0 },
   venomweave_mantle: { name: "Venomweave Mantle", reduction: 1, speed: .99, projectileReduction: 2, hazardReduction: 2 },
   mirebreaker_mantle: { name: "Mirebreaker Mantle", reduction: 2, speed: 1.02, projectileReduction: 2, hazardReduction: 3 },
+  rootstalker_wrap: { name: "Rootstalker Wrap", reduction: 1, speed: 1.07, projectileReduction: 1, hazardReduction: 2 },
   worldsplitter_plate: { name: "Worldsplitter Plate", reduction: 3, speed: .9, projectileReduction: 1, hazardReduction: 2 },
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
   return id === "leather_armour" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate"
-    || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "worldsplitter_plate" ? id : null;
+    || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "mirebreaker_mantle" || id === "rootstalker_wrap" || id === "worldsplitter_plate" ? id : null;
 }
 export function utilityForItem(id: string): "miners_lantern" | "moonstone" | null { return id === "miners_lantern" || id === "moonstone" ? id : null; }
 export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null || utilityForItem(id) !== null; }
-export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "worldsplitter_plate"]) });
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "mirebreaker_mantle", "rootstalker_wrap", "worldsplitter_plate"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
@@ -314,6 +315,7 @@ export const BLACKSMITH_DISMANTLE = {
   fangstalker_wrap: { gold: 12, materialId: "crawler_fang", materialQuantity: 2 },
   venomweave_mantle: { gold: 14, materialId: "acid_gland", materialQuantity: 2 },
   mirebreaker_mantle: { gold: 26, materialId: "acid_gland", materialQuantity: 3 },
+  rootstalker_wrap: { gold: 24, materialId: "moss_fibre", materialQuantity: 3 },
   worldsplitter_plate: { gold: 18, materialId: "stone_core", materialQuantity: 2 },
 } as const satisfies Partial<Record<ItemId, { gold: number; materialId?: ItemId; materialQuantity?: number }>>;
 export type BlacksmithDismantleItemId = keyof typeof BLACKSMITH_DISMANTLE;
@@ -336,6 +338,7 @@ export const BLACKSMITH_REFORGE = {
   fangstalker_wrap: { materialId: "crawler_fang", costs: [{ gold: 16, material: 3 }, { gold: 34, material: 6 }, { gold: 68, material: 10 }] },
   venomweave_mantle: { materialId: "acid_gland", costs: [{ gold: 18, material: 3 }, { gold: 38, material: 6 }, { gold: 74, material: 10 }] },
   mirebreaker_mantle: { materialId: "acid_gland", costs: [{ gold: 28, material: 4 }, { gold: 58, material: 7 }, { gold: 110, material: 12 }] },
+  rootstalker_wrap: { materialId: "moss_fibre", costs: [{ gold: 26, material: 4 }, { gold: 54, material: 7 }, { gold: 105, material: 12 }] },
   worldsplitter_plate: { materialId: "stone_core", costs: [{ gold: 24, material: 3 }, { gold: 52, material: 6 }, { gold: 98, material: 10 }] },
 } as const satisfies Partial<Record<ItemId, { materialId: ItemId; costs: readonly { gold: number; material: number }[] }>>;
 export type BlacksmithReforgeItemId = keyof typeof BLACKSMITH_REFORGE;
@@ -469,6 +472,7 @@ export const ITEM_DEFINITIONS = {
   fangstalker_wrap: { id: "fangstalker_wrap", name: "Fangstalker Wrap", description: "Rare Fang Hunt armour · reduce damage by 1 · 6% faster movement for close combo pressure" },
   venomweave_mantle: { id: "venomweave_mantle", name: "Venomweave Mantle", description: "Rare Venom Hunt armour · reduce damage by 1 · strong projectile and hazard protection" },
   mirebreaker_mantle: { id: "mirebreaker_mantle", name: "Mirebreaker Mantle", description: "Legendary Mistfen armour · swift movement · exceptional protection from venom pools and projectiles" },
+  rootstalker_wrap: { id: "rootstalker_wrap", name: "Rootstalker Wrap", description: "Legendary Greenwood armour · rapid movement and stamina recovery · strong protection from root pressure" },
   worldsplitter_plate: { id: "worldsplitter_plate", name: "Worldsplitter Plate", description: "Rare Crusher Hunt armour · reduce damage by 3 · heavy projectile and hazard protection · 10% slower" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
@@ -587,6 +591,7 @@ export const EQUIPMENT_RARITY = {
   fangstalker_wrap: "rare",
   venomweave_mantle: "rare",
   mirebreaker_mantle: "legendary",
+  rootstalker_wrap: "legendary",
   worldsplitter_plate: "rare",
   forged_sword: "uncommon",
   forged_bow: "uncommon",
@@ -1616,6 +1621,29 @@ export function mistfenMasteryRank(points: number, discovered = false): MistfenM
   if (score >= 100) return 3;
   if (score >= 40) return 2;
   return 1;
+}
+
+export const GREENWOOD_MASTERY_CAP = 150;
+export const GREENWOOD_MASTERY_RANKS = [
+  { rank: 1, name: "TRAILFINDER", threshold: 5, reward: "Camps and timber groves charted" },
+  { rank: 2, name: "PACKBREAKER", threshold: 40, reward: "Elite crawler packs and improved materials" },
+  { rank: 3, name: "ROOTSLAYER", threshold: 100, reward: "Empowered Broodmother rematches" },
+] as const;
+export function greenwoodMasteryRank(points: number, discovered = false): 0 | 1 | 2 | 3 {
+  if (!discovered) return 0;
+  const score = Math.max(0, Math.floor(points));
+  return score >= 100 ? 3 : score >= 40 ? 2 : 1;
+}
+export function greenwoodMasteryStatus(points: number, discovered = false) {
+  const score = Math.min(GREENWOOD_MASTERY_CAP, Math.max(0, Math.floor(points)));
+  const rank = greenwoodMasteryRank(score, discovered);
+  if (!rank) return { rank, name: "UNDISCOVERED", points: score, nextThreshold: 5, progress: 0, reward: "Enter Greenwood" };
+  const current = GREENWOOD_MASTERY_RANKS[rank - 1]!;
+  const next = rank === 1 ? GREENWOOD_MASTERY_RANKS[1] : rank === 2 ? GREENWOOD_MASTERY_RANKS[2] : undefined;
+  const ceiling = next?.threshold ?? GREENWOOD_MASTERY_CAP;
+  return { rank, name: current.name, points: score, nextThreshold: ceiling,
+    progress: rank === 3 ? score / GREENWOOD_MASTERY_CAP : (score - current.threshold) / Math.max(1, ceiling - current.threshold),
+    reward: next?.reward ?? current.reward };
 }
 
 export function mistfenMasteryStatus(points: number, discovered = false): {

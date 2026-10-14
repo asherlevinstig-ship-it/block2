@@ -1,4 +1,4 @@
-import { ASHEN_SPIRE_POSITION, Block, MISTFEN_MARSH, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
+import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, MISTFEN_MARSH, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
 import { ITEM_DEFINITIONS, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
@@ -89,6 +89,7 @@ export const CHAMPION_WAYPOINT: Waypoint = { x: -48.5, y: SURFACE_HEIGHT + 1, z:
 export const ASHEN_SPIRE_WAYPOINT: Waypoint = { ...ASHEN_SPIRE_POSITION, id: "ashen-spire", name: "Ashen Reach Spire" };
 export const WARDEN_GATE_WAYPOINT: Waypoint = { ...REALM_WARDEN_GATE_POSITION, id: "warden-gate", name: "Warden Gate · Ascendant Challenge" };
 export const MISTFEN_WAYPOINT: Waypoint = { ...MISTFEN_BEHEMOTH_HOME, id: "mistfen-marsh", name: "Mistfen Marsh · LV 5–9" };
+export const GREENWOOD_WAYPOINT: Waypoint = { ...GREENWOOD_CRAWLER_HOMES[0], id: "greenwood-camp", name: "Greenwood Camp · LV 2–5" };
 export function discoverMistfen(player: Position & { y: number }, discovered: Set<string>): boolean {
   if (discovered.has(MISTFEN_WAYPOINT.id) || player.y < SURFACE_HEIGHT - 1
     || Math.hypot(player.x - MISTFEN_WAYPOINT.x, player.z - MISTFEN_WAYPOINT.z) > 22) return false;
@@ -109,6 +110,7 @@ export function knownWaypoints(discovered: Set<string>, wardenGateUnlocked = fal
     ...(discovered.has(CHAMPION_WAYPOINT.id) ? [CHAMPION_WAYPOINT] : []),
     ...(discovered.has(ASHEN_SPIRE_WAYPOINT.id) ? [ASHEN_SPIRE_WAYPOINT] : []),
     ...(discovered.has(MISTFEN_WAYPOINT.id) ? [MISTFEN_WAYPOINT] : []),
+    ...(discovered.has(GREENWOOD_WAYPOINT.id) ? [GREENWOOD_WAYPOINT] : []),
     ...(wardenGateUnlocked ? [WARDEN_GATE_WAYPOINT] : []),
     ...MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).map(point => ({ ...point, y: SURFACE_HEIGHT + 1, id: depositKey(point), name: `${point.block === Block.SilverOre ? "Silver" : "Iron"} deposit (${point.x}, ${point.z})` }))];
 }
@@ -146,6 +148,7 @@ export function parseDiscoveries(raw: string | null): Set<string> {
     allowed.add(CHAMPION_WAYPOINT.id);
     allowed.add(ASHEN_SPIRE_WAYPOINT.id);
     allowed.add(MISTFEN_WAYPOINT.id);
+    allowed.add(GREENWOOD_WAYPOINT.id);
     return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === "string"
       && (allowed.has(value) || /^leader:[a-z0-9:-]+$/.test(value))) : []);
   } catch { return new Set(); }
@@ -169,6 +172,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setThreatState(threat: ThreatMapTarget | null): void;
   setWardenGateUnlocked(unlocked: boolean): void;
   setMistfenMastery(rank: number): void;
+  setGreenwoodMastery(rank: number): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
@@ -221,7 +225,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     const targets = knownWaypoints(discovered, wardenGateUnlocked);
     if (destinations.options.length !== targets.length + 1) destinations.replaceChildren(new Option("Choose a destination…", ""), ...targets.map(target => new Option(target.name, target.id)));
     targets.forEach((target, index) => {
-      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" || target.id === CHAMPION_WAYPOINT.id || target.id === ASHEN_SPIRE_WAYPOINT.id || target.id === MISTFEN_WAYPOINT.id || target.id === WARDEN_GATE_WAYPOINT.id ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
+      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" || target.id === CHAMPION_WAYPOINT.id || target.id === ASHEN_SPIRE_WAYPOINT.id || target.id === MISTFEN_WAYPOINT.id || target.id === GREENWOOD_WAYPOINT.id || target.id === WARDEN_GATE_WAYPOINT.id ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
     });
     destinations.value = waypoint?.id ?? "";
   };
@@ -276,6 +280,16 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (rank >= 1) for (const deposit of MAP_DEPOSITS) {
         if (deposit.block !== Block.SilverOre || Math.hypot(deposit.x - MISTFEN_WAYPOINT.x, deposit.z - MISTFEN_WAYPOINT.z) > 42) continue;
         const key = depositKey(deposit); if (!discovered.has(key)) { discovered.add(key); changed = true; }
+      }
+      if (!changed) return;
+      refreshDestinations(); lastUpdate = -Infinity;
+      try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
+    },
+    setGreenwoodMastery(rank) {
+      if (rank <= 0) return;
+      let changed = false;
+      for (const key of [GREENWOOD_WAYPOINT.id, miniBossDiscoveryKey("wild-crawler")]) {
+        if (!discovered.has(key)) { discovered.add(key); changed = true; }
       }
       if (!changed) return;
       refreshDestinations(); lastUpdate = -Infinity;
@@ -516,6 +530,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
           staticMarker(CHAMPION_WAYPOINT, "CHAMPION", "#ffcf65", "♛");
         if (discovered.has(ASHEN_SPIRE_WAYPOINT.id)) staticMarker(ASHEN_SPIRE_WAYPOINT, "ASH SPIRE", "#ff8b58", "A");
         if (discovered.has(MISTFEN_WAYPOINT.id)) staticMarker(MISTFEN_WAYPOINT, "MISTFEN", "#a8d789", "M");
+        if (discovered.has(GREENWOOD_WAYPOINT.id)) staticMarker(GREENWOOD_WAYPOINT, "GREENWOOD", "#c6d977", "G");
         if (wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "W", true);
       }
       const nearbyCombatTargets = [...nearbyDiscoveredMiniBossTargets(player, elites, discovered), ...activeEliteMapTargets(player, elites)]

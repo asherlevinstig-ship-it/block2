@@ -1856,7 +1856,17 @@ html.boss-hud-active #world-objective { display: none !important; }
 #mistfen-mastery-gain { display: block; margin-top: 4px; color: #dbf57c; font-size: 9px; letter-spacing: .05em; animation: mistfen-gain 1.8s ease both; }
 #mistfen-mastery-gain[hidden] { display: none; }
 @keyframes mistfen-gain { 0% { opacity: 0; transform: translateY(3px); } 15%, 75% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+#greenwood-mastery { margin: 7px 0; padding: 7px 8px; border: 1px solid #d1ad5555; border-radius: 8px; background: linear-gradient(135deg, #263719e8, #151f12e8); }
+#greenwood-mastery[hidden], #greenwood-mastery-gain[hidden] { display: none; }
+#greenwood-mastery > div { display: flex; justify-content: space-between; gap: 8px; }
+#greenwood-mastery small { color: #c7e477; font-size: 8px; font-weight: 900; letter-spacing: .11em; }
+#greenwood-mastery strong, #greenwood-mastery-gain { color: #f1e8a8; font-size: 9px; }
+.greenwood-mastery-track { display: block; height: 4px; margin: 5px 0 4px; overflow: hidden; border-radius: 4px; background: #0b1008; }
+.greenwood-mastery-track i { display: block; width: 100%; height: 100%; transform: scaleX(0); transform-origin: left; background: linear-gradient(90deg, #7ca743, #efce63); transition: transform .25s ease; }
+#greenwood-mastery-detail { margin: 0; color: #c9c7a5; font-size: 8px; }
+#greenwood-mastery-gain { display: block; margin-top: 4px; animation: mistfen-gain 1.8s ease both; }
 .inventory-grid article[data-item="mirebreaker_mantle"] i { background: radial-gradient(circle, #efff75 0 16%, #396b38 19% 52%, #17291a 55%); box-shadow: 0 0 15px #cbff6c90; }
+.inventory-grid article[data-item="rootstalker_wrap"] i { background: radial-gradient(circle, #f5df79 0 16%, #54752f 19% 52%, #2b1c12 55%); box-shadow: 0 0 15px #d8ec6990; }
 #minimap-surface { width: 100%; padding: 8px; border: 1px solid #ffe08c88; border-radius: 6px; color: #ffe8a8; background: #352b15; font: 800 11px system-ui; cursor: pointer; }
 #minimap-surface[aria-pressed="true"] { color: #192418; background: #ffe08c; }
 #minimap-surface[hidden] { display: none; }

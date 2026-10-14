@@ -1,5 +1,5 @@
 import { Client, Room } from "@colyseus/core";
-import { MISTFEN_MASTERY_CAP, mistfenMasteryRank } from "@blockcraft/protocol";
+import { GREENWOOD_MASTERY_CAP, MISTFEN_MASTERY_CAP, greenwoodMasteryRank, mistfenMasteryRank } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { randomUUID } from "node:crypto";
@@ -217,7 +217,7 @@ import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards, ownsBlacksmithUpgrade, ownsDepthsReward } from "./blacksmith.js";
-import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_GATE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInRealmWardenArena, isInStoneBruteArena } from "@blockcraft/voxel-world";
+import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_GATE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInGreenwoodRegion, isInRealmWardenArena, isInStoneBruteArena } from "@blockcraft/voxel-world";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -2239,6 +2239,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level), mob.name);
       this.grantBuildProgress(playerId, mobId === "mistfen-behemoth" ? 5 : Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
       if (isMistfenMob(mobId)) this.grantMistfenMastery(playerId, mobId === "mistfen-behemoth" ? 18 : 3);
+      if (isGreenwoodCampMob(mobId)) this.grantGreenwoodMastery(playerId, mobId === "wild-crawler" ? 18 : 3);
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -2301,6 +2302,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     this.erodeMiniBossArenaCover(leaderId, phase);
     this.placeMiniBossArenaPressure(leaderId, leader, phase, now);
+    if (leaderId === "wild-crawler" && leader.leaderModifier === "rootslayer") {
+      for (const followerId of AREA_LEADER_FOLLOWERS[leaderId] ?? []) {
+        const follower = this.state.mobs.get(followerId);
+        if (follower && !follower.alive) { follower.respawnAt = now; follower.materializeUntil = 0; }
+      }
+    }
     const target = targetId ? this.state.players.get(targetId) : undefined;
     if (!target?.health) return;
     const followers = (AREA_LEADER_FOLLOWERS[leaderId] ?? [])
@@ -2527,6 +2534,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             ? [{ itemId: "mirebreaker_mantle" as ItemId, quantity: 1 }] : [])]
         : [{ itemId: mob.archetype === "cave_spitter" ? "acid_gland" : "moss_fibre", quantity: 1 }]
       : [];
+    const greenwoodProgress = rewardPlayer ? this.greenwoodProgress(rewardPlayer) : { points: 0, discovered: false };
+    const greenwoodRank = greenwoodMasteryRank(greenwoodProgress.points, greenwoodProgress.discovered);
+    const greenwoodMasteryDrops: { itemId: ItemId; quantity: number }[] = isGreenwoodCampMob(mobId) && greenwoodRank >= 2
+      ? mobId === "wild-crawler"
+        ? [{ itemId: "moss_fibre", quantity: greenwoodRank >= 3 ? 3 : 1 },
+          ...(greenwoodRank >= 3 ? [{ itemId: "timber" as ItemId, quantity: 2 }] : []),
+          ...(greenwoodRank >= 3 && mob.leaderModifier === "rootslayer" && !this.ownsOrHasPendingItem(ownerId, "rootstalker_wrap")
+            ? [{ itemId: "rootstalker_wrap" as ItemId, quantity: 1 }] : [])]
+        : [{ itemId: "moss_fibre", quantity: 1 }]
+      : [];
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
     const signatureDrops = (itemId: SignatureItemId): { itemId: ItemId; quantity: number }[] => {
@@ -2569,6 +2586,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...areaRelicDrops,
       ...rematchDrops,
       ...mistfenMasteryDrops,
+      ...greenwoodMasteryDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);
@@ -3802,8 +3820,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private setPlayerBuildData(player: PlayerState, loadouts: HuntLoadoutSlot[], buildPath = parseBuildPathState(player.huntLoadoutsJson)): void {
     const mistfen = this.mistfenProgress(player);
+    const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts, buildPath, affixes: this.equipmentAffixes(player),
-      dust: this.attunementDust(player), offers: this.attunementOffers(player), mistfen });
+      dust: this.attunementDust(player), offers: this.attunementOffers(player), mistfen, greenwood });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -3832,8 +3851,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private setEquipmentAttunements(player: PlayerState, affixes: Partial<Record<ItemId, EquipmentAffixRoll>>,
     dust: number, offers: EquipmentAffixOffers): void {
     const mistfen = this.mistfenProgress(player);
+    const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
-      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, mistfen });
+      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, mistfen, greenwood });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {
@@ -4024,6 +4044,45 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (player.health <= 0 || player.y < SURFACE_HEIGHT - 1 || !isInMistfenMarsh(player.x, player.z)) continue;
       const progress = this.mistfenProgress(player);
       rank = Math.max(rank, mistfenMasteryRank(progress.points, progress.discovered));
+    }
+    return rank;
+  }
+
+  private greenwoodProgress(player: PlayerState): { points: number; discovered: boolean } {
+    try {
+      const value = (JSON.parse(player.huntLoadoutsJson) as { greenwood?: { points?: unknown; discovered?: unknown } }).greenwood;
+      return { points: typeof value?.points === "number" && Number.isFinite(value.points)
+        ? Math.max(0, Math.min(GREENWOOD_MASTERY_CAP, Math.floor(value.points))) : 0, discovered: value?.discovered === true };
+    } catch { return { points: 0, discovered: false }; }
+  }
+
+  private setGreenwoodProgress(player: PlayerState, greenwood: { points: number; discovered: boolean }): void {
+    let raw: Record<string, unknown> = {};
+    try { const parsed = JSON.parse(player.huntLoadoutsJson); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed; }
+    catch { /* legacy */ }
+    player.huntLoadoutsJson = JSON.stringify({ ...raw, greenwood });
+  }
+
+  private grantGreenwoodMastery(playerId: string, amount: number): void {
+    const player = this.state.players.get(playerId), progress = player ? this.greenwoodProgress(player) : null;
+    if (!player || !progress?.discovered || amount <= 0) return;
+    progress.points = Math.min(GREENWOOD_MASTERY_CAP, progress.points + amount);
+    this.setGreenwoodProgress(player, progress);
+  }
+
+  private discoverGreenwood(playerId: string, player: PlayerState): void {
+    const progress = this.greenwoodProgress(player);
+    if (this.roomKind !== "overworld" || progress.discovered || player.y < SURFACE_HEIGHT - 1 || !isInGreenwoodRegion(player.x, player.z)) return;
+    progress.discovered = true; progress.points = Math.max(5, progress.points); this.setGreenwoodProgress(player, progress);
+    void this.persistPlayer(playerId, player, true);
+  }
+
+  private activeGreenwoodMasteryRank(): number {
+    let rank = 0;
+    for (const player of this.state.players.values()) {
+      if (player.health <= 0 || player.y < SURFACE_HEIGHT - 1 || !isInGreenwoodRegion(player.x, player.z)) continue;
+      const progress = this.greenwoodProgress(player);
+      rank = Math.max(rank, greenwoodMasteryRank(progress.points, progress.discovered));
     }
     return rank;
   }
@@ -4948,6 +5007,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private simulatePlayers(deltaTime: number): void {
     if (this.roomKind === "overworld") for (const [playerId, player] of this.state.players) this.discoverMistfen(playerId, player);
+    if (this.roomKind === "overworld") for (const [playerId, player] of this.state.players) this.discoverGreenwood(playerId, player);
     if (Date.now() - this.lastPartyUpdateAt >= 500) {
       if (this.roomKind === "overworld") this.sendPartyUpdates(Date.now());
       else this.lastPartyUpdateAt = Date.now();
@@ -5019,6 +5079,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.health = Math.max(1, Math.ceil(mob.maxHealth * healthRatio));
         mob.attackDamage = Math.min(12, mob.attackDamage + 1);
         mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.08);
+        mob.rewardMultiplier *= 1.35;
+      }
+      if (mobId === "wild-crawler" && mob.alive && mob.leaderRematchTier > 0
+        && mob.leaderModifier !== "rootslayer" && this.activeGreenwoodMasteryRank() >= 3) {
+        const healthRatio = mob.health / Math.max(1, mob.maxHealth);
+        mob.leaderRematchTier = Math.max(5, mob.leaderRematchTier); mob.leaderModifier = "rootslayer";
+        mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.22));
+        mob.health = Math.max(1, Math.ceil(mob.maxHealth * healthRatio));
+        mob.attackDamage = Math.min(12, mob.attackDamage + 1); mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.12);
         mob.rewardMultiplier *= 1.35;
       }
       let currentAreaLeaderPhase: AreaLeaderPhase = 1;
@@ -5115,7 +5184,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const areaMiniBoss = areaMiniBossDefinition(mobId);
           const pendingRematch = leaderRematch(mobId, this.leaderDefeats.get(mobId) ?? 0);
           const mistfenRank = isMistfenMob(mobId) ? this.activeMistfenMasteryRank() : 0;
-          mob.isElite = !areaMiniBoss && (mistfenRank >= 2 || shouldBecomeWildernessElite(band.tier, activeElites, Math.random()));
+          const greenwoodRank = isGreenwoodCampMob(mobId) ? this.activeGreenwoodMasteryRank() : 0;
+          mob.isElite = !areaMiniBoss && (mistfenRank >= 2 || greenwoodRank >= 2 || shouldBecomeWildernessElite(band.tier, activeElites, Math.random()));
           const eliteKind = wildernessEliteKind(definition.id);
           mob.eliteKind = mob.isElite ? eliteKind : "";
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
@@ -5182,6 +5252,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             mob.health = mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.2));
             mob.attackDamage = Math.min(12, mob.attackDamage + 1);
             mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.08);
+            mob.rewardMultiplier *= 1.35;
+          }
+          if (mobId === "wild-crawler" && this.activeGreenwoodMasteryRank() >= 3 && rematch.tier > 0) {
+            mob.leaderRematchTier = Math.max(5, mob.leaderRematchTier); mob.leaderModifier = "rootslayer";
+            mob.health = mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.22));
+            mob.attackDamage = Math.min(12, mob.attackDamage + 1); mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.12);
             mob.rewardMultiplier *= 1.35;
           }
         }
@@ -5302,6 +5378,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const distance = Math.hypot(deltaX, deltaZ);
         if (huntChampion?.pathId === "fang" && mob.attackPattern === "pincer-rush")
           this.placeHuntChampionPincer(mobId, aim, aim.yaw, huntChampion.difficulty, now);
+        if (mobId === "wild-crawler" && mob.leaderModifier === "rootslayer"
+          && (mob.attackPattern === "pincer-rush" || mob.attackPattern === "root-cage"))
+          this.placeHuntChampionPincer(mobId, aim, aim.yaw, "ascendant", now);
         if (crawlerRushDistance(mob.archetype) > 0) {
           const leaderRushMultiplier = mob.isMiniBoss ? currentAreaLeaderPhase === 1 ? 1.18 : currentAreaLeaderPhase === 2 ? 1.28 : 1.36 : 1;
           const championRushMultiplier = huntChampion?.pathId === "fang" ? huntChampionRushMultiplier(mob.attackPattern) : 1;
@@ -5485,7 +5564,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         player.stamina = Math.max(0, player.stamina - guardStaminaCost(GUARD_STAMINA_DRAIN_PER_SECOND, player.equippedTrait as TraitId) * deltaTime);
         if (player.stamina <= 0) player.defending = false;
       } else if (now >= (this.dodgePressure.get(sessionId)?.exhaustedUntil ?? 0)) {
-        player.stamina = Math.min(player.maxStamina, player.stamina + staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId) * deltaTime);
+        const rootstalkerRecovery = player.armourId === "rootstalker_wrap" ? 5 : 0;
+        player.stamina = Math.min(player.maxStamina, player.stamina + (staminaRecoveryWithMomentum(18, player.momentumStacks, player.equippedTrait as TraitId) + rootstalkerRecovery) * deltaTime);
       }
       if (this.movementPilotControllers.has(sessionId)) continue;
       const input = activeMovementInput(this.movementInputs.get(sessionId), now, player.yaw);
@@ -6208,6 +6288,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         player.inventory.set("timber", item);
       }
       item.quantity = inventoryTotal(item.quantity, 1);
+      if (this.roomKind === "overworld" && isInGreenwoodRegion(request.x, request.z)) this.grantGreenwoodMastery(client.sessionId, 2);
       void this.persistPlayer(client.sessionId, player);
       client.send("resource:gathered", { itemId: "timber", quantity: 1, total: item.quantity } satisfies ResourceGathered);
     }

@@ -26,5 +26,6 @@ describe("empowered leader rematches", () => {
     expect(leaderRematchPressureCadence(3, "relentless")).toBe(2);
     expect(leaderRematchMaterialBonus(5)).toBe(3);
     expect(leaderRematchPattern("slam", "stone_brute", 1, "mirebreaker")).toBe("mirestorm");
+    expect(leaderRematchPattern("rush", "moss_crawler", 0, "rootslayer")).toBe("root-cage");
   });
 });

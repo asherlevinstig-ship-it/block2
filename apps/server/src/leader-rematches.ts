@@ -48,6 +48,7 @@ export function leaderRematchPressureCadence(tier: number, modifier: string): nu
 
 export function leaderRematchPattern(base: string, archetype: string, sequence: number, modifier: string): string {
   if (modifier === "mirebreaker") return ["toxic-eruption", "mirestorm", "bog-charge"][sequence % 3]!;
+  if (modifier === "rootslayer") return ["root-cage", "pincer-rush", "alpha-rush"][sequence % 3]!;
   if (!modifier) return base;
   if (modifier === "frenzied" && sequence % 2 === 1)
     return archetype === "cave_spitter" ? "fan" : archetype === "stone_brute" ? "smash" : "alpha-rush";
