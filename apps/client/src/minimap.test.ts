@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, MISTFEN_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, discoverMistfen, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
+import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, MISTFEN_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, discoverMistfen, discoverRoadsideLandmarks, roadsideDiscoveryKey, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
+import { ROADSIDE_DISCOVERIES, SURFACE_HEIGHT } from "@blockcraft/voxel-world";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
@@ -158,6 +159,16 @@ describe("north-up explorer minimap", () => {
     expect(discovered.has(depositKey(deposit))).toBe(true);
     expect(discoverDeposits({ x: 8.5, y: 8, z: 8.5 }, discovered)).toBe(false);
     expect(discovered.size).toBe(1);
+    expect(parseDiscoveries(JSON.stringify([...discovered]))).toEqual(discovered);
+  });
+  it("quietly records roadside landmarks as permanent map knowledge", () => {
+    const discovered = new Set<string>();
+    const landmark = ROADSIDE_DISCOVERIES[0]!;
+    expect(discoverRoadsideLandmarks({ x: landmark.x + 9.1, y: SURFACE_HEIGHT + 1, z: landmark.z }, discovered)).toBe(false);
+    expect(discoverRoadsideLandmarks({ x: landmark.x, y: 3, z: landmark.z }, discovered)).toBe(false);
+    expect(discoverRoadsideLandmarks({ x: landmark.x, y: SURFACE_HEIGHT + 1, z: landmark.z }, discovered)).toBe(true);
+    expect(discovered).toEqual(new Set([roadsideDiscoveryKey(landmark.id)]));
+    expect(discoverRoadsideLandmarks({ x: landmark.x, y: SURFACE_HEIGHT + 1, z: landmark.z }, discovered)).toBe(false);
     expect(parseDiscoveries(JSON.stringify([...discovered]))).toEqual(discovered);
   });
   it("rejects corrupt and unknown saved discovery IDs", () => {

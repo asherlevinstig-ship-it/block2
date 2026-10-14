@@ -4,6 +4,7 @@ import {
   ASHEN_REACH,
   ASHEN_SPIRE_POSITION,
   ASHEN_SENTRY_HOMES,
+  ashenRidgeHeight,
   ashenReachBlock,
   isInAshenReach,
   MISTFEN_BEHEMOTH_HOME,
@@ -15,6 +16,8 @@ import {
   isMistfenApproachTrail,
   isMistfenBoardwalk,
   isMistfenToxicPool,
+  ROADSIDE_DISCOVERIES,
+  roadsideDiscoveryBlock,
   wildernessTerritoryAt,
   MINERAL_DEPOSITS,
   CHUNK_HEIGHT,
@@ -98,6 +101,34 @@ describe("deterministic voxel world", () => {
       if (!isInAshenReach(x, z)) continue;
       expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
       expect(read(x, SURFACE_HEIGHT, z)).toBe(ashenReachBlock(x, SURFACE_HEIGHT, z));
+    }
+    expect(ashenRidgeHeight(ASHEN_REACH.x, ASHEN_REACH.z - 17)).toBeGreaterThan(0);
+    expect(read(ASHEN_REACH.x, SURFACE_HEIGHT + 1, ASHEN_REACH.z - 17)).not.toBe(Block.Air);
+    expect(ashenRidgeHeight(ASHEN_REACH.x - 17, ASHEN_REACH.z)).toBe(0);
+  });
+
+  it("places distinct discoveries beside every regional road while leaving travel lanes open", () => {
+    const cache = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const a = worldToChunk(x, z); const key = `${a.chunkX},${a.chunkZ}`;
+      if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
+      return getBlock(cache.get(key)!, a.localX, y, a.localZ);
+    };
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(11);
+    expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
+    for (const site of ROADSIDE_DISCOVERIES) {
+      expect(isRegionalRoad(site.x, site.z)).toBe(false);
+      expect(read(site.x, SURFACE_HEIGHT, site.z)).not.toBe(Block.Air);
+      let authored = false, structure = false;
+      for (let x = site.x - 2; x <= site.x + 2; x++) for (let z = site.z - 2; z <= site.z + 2; z++) {
+        authored ||= roadsideDiscoveryBlock(x, SURFACE_HEIGHT, z) !== null;
+        structure ||= read(x, SURFACE_HEIGHT + 1, z) !== Block.Air;
+      }
+      expect(authored).toBe(true); expect(structure).toBe(true);
+    }
+    for (const [x, z] of [[70, 9], [42, 29], [70, 32], [87, 50], [-30, -20]] as const) {
+      expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+      expect(isRegionalRoad(x, z)).toBe(true);
     }
   });
   it("exposes supported mineral deposits outside town, with silver farther than iron", () => {
@@ -361,7 +392,10 @@ describe("deterministic voxel world", () => {
     }
     let pools = 0;
     for (let z = MISTFEN_MARSH.minZ; z <= MISTFEN_MARSH.maxZ; z++) for (let x = MISTFEN_MARSH.minX; x <= MISTFEN_MARSH.maxX; x++) {
-      if (isMistfenToxicPool(x, z)) { expect(read(x, SURFACE_HEIGHT, z)).toBe(Block.BogWater); pools++; }
+      if (isMistfenToxicPool(x, z)) {
+        expect(read(x, SURFACE_HEIGHT, z)).toBe(Block.BogWater);
+        pools++;
+      }
     }
     expect(pools).toBeGreaterThan(40);
   });

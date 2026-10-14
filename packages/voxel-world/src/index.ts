@@ -152,6 +152,7 @@ export function isMistfenToxicPool(x: number, z: number): boolean {
   const dx = Math.floor(x) + 44, dz = Math.floor(z) + 29;
   return Math.abs(Math.imul(dx, 17) + Math.imul(dz, 31)) % 13 < 3;
 }
+
 /** Open marshland with two crossing boardwalks, toxic shallows, ruins, and a clear leader island. */
 export function mistfenMarshBlock(x: number, y: number, z: number): BlockId | null {
   const approach = isMistfenApproachTrail(x, z);
@@ -178,7 +179,20 @@ export function mistfenMarshBlock(x: number, y: number, z: number): BlockId | nu
 export function isInAshenReach(x: number, z: number): boolean {
   return Math.hypot(x - ASHEN_REACH.x, z - ASHEN_REACH.z) <= ASHEN_REACH.radius;
 }
-/** Flat ash-and-stone ground, broken cover, and a tall split spire visible on approach. */
+
+/** Broken outer ridges frame the Reach while leaving wide gaps and the western road completely open. */
+export function ashenRidgeHeight(x: number, z: number): number {
+  const dx = Math.floor(x - ASHEN_REACH.x), dz = Math.floor(z - ASHEN_REACH.z);
+  if (!isInAshenReach(x, z) || dx < 0 && Math.abs(dz) <= 3) return 0;
+  const horizontal = Math.abs(dz) >= 16 && Math.abs(dz) <= 18 && Math.abs(dx) <= 11
+    && Math.abs(Math.floor((dx + 13) / 4)) % 3 !== 1;
+  const east = dx >= 16 && dx <= 18 && Math.abs(dz) <= 11
+    && Math.abs(Math.floor((dz + 13) / 4)) % 3 !== 1;
+  if (!horizontal && !east) return 0;
+  return 1 + Math.abs(Math.imul(x, 7) + Math.imul(z, 13)) % 3;
+}
+
+/** Ash-and-stone ground, broken cover, a visible split spire, and an open ring of scorched ridges. */
 export function ashenReachBlock(x: number, y: number, z: number): BlockId | null {
   if (!isInAshenReach(x, z) || y < SURFACE_HEIGHT) return null;
   const dx = x - ASHEN_REACH.x, dz = z - ASHEN_REACH.z;
@@ -193,7 +207,10 @@ export function ashenReachBlock(x: number, y: number, z: number): BlockId | null
   if (core || fork || brokenCap) return y === 15 || y === 13 && Math.abs(dx) === 2 ? Block.IronOre : Block.Bedrock;
   const cover = (Math.abs(dx) === 7 && Math.abs(dz) === 3)
     || (Math.abs(dx) === 4 && Math.abs(dz) === 9);
-  return cover && y <= SURFACE_HEIGHT + 2 ? Block.Stone : Block.Air;
+  if (cover && y <= SURFACE_HEIGHT + 2) return Block.Stone;
+  const ridgeHeight = ashenRidgeHeight(x, z);
+  if (ridgeHeight && y <= SURFACE_HEIGHT + ridgeHeight) return y === SURFACE_HEIGHT + ridgeHeight ? Block.Stone : Block.Bedrock;
+  return Block.Air;
 }
 export const FOREST_DUNGEON = { minX: 156, maxX: 192, minZ: 156, maxZ: 174 } as const;
 export const FOREST_PORTAL_POSITION = { x: 46.5, y: 8, z: 28.5 } as const;
@@ -369,6 +386,55 @@ export const REGIONAL_WAYSTONES = [
   { x: -18, z: 12, name: "Mistfen Road Waystone" },
   { x: -33, z: -8, name: "Mistfen Crossing Waystone" },
 ] as const;
+
+export type RoadsideDiscoveryKind = "cart" | "shrine" | "camp" | "grove" | "ruin";
+/** Small optional landmarks sit beside every long road segment, never in its movement lane. */
+export const ROADSIDE_DISCOVERIES = [
+  { id: "greenwood-root-arch", name: "Rootbound Arch", kind: "grove", x: 43, z: 4 },
+  { id: "eastroad-cart", name: "Abandoned Eastroad Cart", kind: "cart", x: 56, z: 14 },
+  { id: "silver-road-shrine", name: "Silver Road Shrine", kind: "shrine", x: 69, z: 14 },
+  { id: "stone-road-camp", name: "Stonebreak Camp", kind: "camp", x: 54, z: 38 },
+  { id: "frontier-watch", name: "Ruined Frontier Watch", kind: "ruin", x: 69, z: 38 },
+  { id: "warden-cairn", name: "Warden Cairn", kind: "shrine", x: 78, z: 42 },
+  { id: "ashen-pilgrims", name: "Ashen Pilgrim Camp", kind: "camp", x: 82, z: 54 },
+  { id: "scorched-gate", name: "Scorched Gate", kind: "ruin", x: 93, z: 53 },
+  { id: "mistfen-cart", name: "Sunkroad Cart", kind: "cart", x: -16, z: 5 },
+  { id: "mistfen-shrine", name: "Mossbound Shrine", kind: "shrine", x: -39, z: -15 },
+  { id: "mistfen-camp", name: "Drowned Survey Camp", kind: "camp", x: -42, z: -23 },
+] as const satisfies readonly { id: string; name: string; kind: RoadsideDiscoveryKind; x: number; z: number }[];
+
+export function roadsideDiscoveryBlock(x: number, y: number, z: number): BlockId | null {
+  const site = ROADSIDE_DISCOVERIES.find(point => Math.abs(x - point.x) <= 3 && Math.abs(z - point.z) <= 3);
+  if (!site || y < SURFACE_HEIGHT) return null;
+  const dx = x - site.x, dz = z - site.z;
+  if (y === SURFACE_HEIGHT) {
+    const footprint = site.kind === "cart" ? Math.abs(dx) <= 2 && Math.abs(dz) <= 1
+      : site.kind === "shrine" ? Math.abs(dx) + Math.abs(dz) <= 1
+      : site.kind === "camp" ? dz === 0 && Math.abs(dx) <= 2
+      : site.kind === "grove" ? Math.abs(dx) <= 2 && Math.abs(dz) <= 2
+      : (Math.abs(dx) === 2 && dz >= -2 && dz <= 1) || (dz === 2 && dx >= -2 && dx <= 0);
+    if (footprint) return site.kind === "shrine" || site.kind === "ruin" ? Block.Stone : Block.Dirt;
+    return null;
+  }
+  if (site.kind === "cart") {
+    if (y === SURFACE_HEIGHT + 1 && (dz === 0 && Math.abs(dx) <= 2 || Math.abs(dx) === 1 && Math.abs(dz) === 1))
+      return Math.abs(dz) === 1 ? Block.Stone : Block.OakLog;
+  } else if (site.kind === "shrine") {
+    if (dx === 0 && dz === 0 && y <= SURFACE_HEIGHT + 4) return y === SURFACE_HEIGHT + 4 ? Block.IronOre : Block.Stone;
+    if (y === SURFACE_HEIGHT + 1 && Math.abs(dx) + Math.abs(dz) === 1) return Block.Stone;
+  } else if (site.kind === "camp") {
+    if (y === SURFACE_HEIGHT + 1 && dx === 0 && dz === 0) return Block.IronOre;
+    if (y === SURFACE_HEIGHT + 1 && Math.abs(dx) === 2 && dz === 0) return Block.OakLog;
+  } else if (site.kind === "grove") {
+    const trunk = (dx === -1 && dz === 0) || (dx === 1 && dz === 1);
+    if (trunk && y <= SURFACE_HEIGHT + 3) return Block.OakLog;
+    if (y >= SURFACE_HEIGHT + 3 && y <= SURFACE_HEIGHT + 5 && Math.abs(dx) <= 2 && Math.abs(dz) <= 2) return Block.Leaves;
+  } else if (site.kind === "ruin") {
+    const wall = (Math.abs(dx) === 2 && dz >= -2 && dz <= 1) || (dz === 2 && dx >= -2 && dx <= 0);
+    if (wall && y <= SURFACE_HEIGHT + (((dx + dz) & 1) ? 2 : 3)) return Block.Stone;
+  }
+  return y > SURFACE_HEIGHT ? Block.Air : null;
+}
 
 export function isRegionalWaystone(x: number, z: number): boolean {
   const cellX = Math.floor(x), cellZ = Math.floor(z);
@@ -574,7 +640,7 @@ function isGreenwoodTreeCenter(seed: number, x: number, z: number): boolean {
     || z < GREENWOOD_REGION.minZ + 2 || z > GREENWOOD_REGION.maxZ - 2
     || isGreenwoodRoad(x, z) || isGreenwoodCampClearing(x, z)
     || ((z >= 6 && z <= 14) || (x >= 37 && x <= 42 && z >= 9 && z <= GREENWOOD_CAMP.minZ))) return false;
-  return hash32(seed ^ Math.imul(x, 0x45d9f3b) ^ Math.imul(z, 0x119de1f3)) % 13 === 0;
+  return hash32(seed ^ Math.imul(x, 0x45d9f3b) ^ Math.imul(z, 0x119de1f3)) % 10 === 0;
 }
 
 /** Deterministic authored layer for the first Phase 1 wilderness region. */
@@ -834,6 +900,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (mineralBlock !== null) blocks[chunkIndex(localX, y, localZ)] = mineralBlock;
         const ashenBlock = ashenReachBlock(worldX, y, worldZ);
         if (ashenBlock !== null) blocks[chunkIndex(localX, y, localZ)] = ashenBlock;
+        const discoveryBlock = roadsideDiscoveryBlock(worldX, y, worldZ);
+        if (discoveryBlock !== null) blocks[chunkIndex(localX, y, localZ)] = discoveryBlock;
         const dungeonBlock = forestDungeonBlock(worldX, y, worldZ);
         if (dungeonBlock !== null) blocks[chunkIndex(localX, y, localZ)] = dungeonBlock;
         const emberBlock = emberVaultBlock(worldX, y, worldZ);

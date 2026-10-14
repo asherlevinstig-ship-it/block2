@@ -1,4 +1,4 @@
-import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, MISTFEN_MARSH, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
+import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, MISTFEN_MARSH, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, ROADSIDE_DISCOVERIES, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
 import { ITEM_DEFINITIONS, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
@@ -24,6 +24,17 @@ export function activeEliteMapTargets(player: Position & { y: number }, elites: 
     && Math.hypot(elite.x - player.x, elite.z - player.z) <= radius);
 }
 export const miniBossDiscoveryKey = (id: string): string => `leader:${id}`;
+export const roadsideDiscoveryKey = (id: string): string => `landmark:${id}`;
+export function discoverRoadsideLandmarks(player: Position & { y: number }, discovered: Set<string>): boolean {
+  if (player.y < SURFACE_HEIGHT - 1) return false;
+  let changed = false;
+  for (const landmark of ROADSIDE_DISCOVERIES) {
+    const key = roadsideDiscoveryKey(landmark.id);
+    if (discovered.has(key) || Math.hypot(player.x - landmark.x, player.z - landmark.z) > 9) continue;
+    discovered.add(key); changed = true;
+  }
+  return changed;
+}
 export function discoverMiniBosses(player: Position & { y: number }, mobs: readonly EliteMapTarget[], discovered: Set<string>): boolean {
   let changed = false;
   for (const mob of mobs) {
@@ -149,6 +160,7 @@ export function parseDiscoveries(raw: string | null): Set<string> {
     allowed.add(ASHEN_SPIRE_WAYPOINT.id);
     allowed.add(MISTFEN_WAYPOINT.id);
     allowed.add(GREENWOOD_WAYPOINT.id);
+    for (const landmark of ROADSIDE_DISCOVERIES) allowed.add(roadsideDiscoveryKey(landmark.id));
     return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === "string"
       && (allowed.has(value) || /^leader:[a-z0-9:-]+$/.test(value))) : []);
   } catch { return new Set(); }
@@ -437,7 +449,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       const miniBossesChanged = discoverMiniBosses(player, elites, discovered);
       const spireChanged = discoverAshenSpire(player, discovered);
       const mistfenChanged = discoverMistfen(player, discovered);
-      if (depositsChanged || championChanged || miniBossesChanged || spireChanged || mistfenChanged) {
+      const landmarksChanged = discoverRoadsideLandmarks(player, discovered);
+      if (depositsChanged || championChanged || miniBossesChanged || spireChanged || mistfenChanged || landmarksChanged) {
         refreshDestinations();
         try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
       }
@@ -532,6 +545,11 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         if (discovered.has(MISTFEN_WAYPOINT.id)) staticMarker(MISTFEN_WAYPOINT, "MISTFEN", "#a8d789", "M");
         if (discovered.has(GREENWOOD_WAYPOINT.id)) staticMarker(GREENWOOD_WAYPOINT, "GREENWOOD", "#c6d977", "G");
         if (wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "W", true);
+        for (const landmark of ROADSIDE_DISCOVERIES) {
+          if (!discovered.has(roadsideDiscoveryKey(landmark.id))) continue;
+          marker(landmark, mapMarkerLabelVisible(player, landmark, false) ? landmark.name.toUpperCase() : "",
+            "#e4cd94", false, false, "·");
+        }
       }
       const nearbyCombatTargets = [...nearbyDiscoveredMiniBossTargets(player, elites, discovered), ...activeEliteMapTargets(player, elites)]
         .filter((target, index, values) => values.findIndex(candidate => candidate.id === target.id) === index)
