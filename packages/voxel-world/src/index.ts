@@ -349,6 +349,48 @@ export function wildernessSurfaceBlock(x: number, z: number): BlockId {
     : territory?.tier === 2 && patch === 0 ? Block.Dirt : Block.Grass;
 }
 
+/** Continuous roads turn the distant authored regions into one readable overworld. */
+export function isRegionalRoad(x: number, z: number): boolean {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  const eastTrunk = cellX >= 29 && cellX <= 81 && cellZ >= 8 && cellZ <= 10;
+  const greenwoodToStone = cellX >= 40 && cellX <= 43 && cellZ >= 9 && cellZ <= 35;
+  const frontierCrossing = cellX >= 41 && cellX <= 88 && cellZ >= 31 && cellZ <= 34;
+  const wardenToAshen = cellX >= 86 && cellX <= 89 && cellZ >= 33 && cellZ <= 61;
+  const ashenApproach = cellX >= 87 && cellX <= 94 && cellZ >= 60 && cellZ <= 62;
+  return eastTrunk || greenwoodToStone || frontierCrossing || wardenToAshen || ashenApproach
+    || isMistfenApproachTrail(cellX, cellZ) || isMistfenBoardwalk(cellX, cellZ);
+}
+
+export const REGIONAL_WAYSTONES = [
+  { x: 34, z: 5, name: "Greenwood Waystone" },
+  { x: 58, z: 29, name: "Stone Frontier Waystone" },
+  { x: 77, z: 29, name: "Warden Road Waystone" },
+  { x: 82, z: 45, name: "Ashen Road Waystone" },
+  { x: -18, z: 12, name: "Mistfen Road Waystone" },
+  { x: -33, z: -8, name: "Mistfen Crossing Waystone" },
+] as const;
+
+export function isRegionalWaystone(x: number, z: number): boolean {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  return REGIONAL_WAYSTONES.some(marker => marker.x === cellX && marker.z === cellZ);
+}
+
+/** Dirt roads clear headroom; paired stone waystones remain visible over long approaches. */
+export function regionalWaystoneBlock(x: number, y: number, z: number): BlockId | null {
+  if (isRegionalWaystone(x, z)) {
+    if (y === SURFACE_HEIGHT) return Block.Stone;
+    if (y === SURFACE_HEIGHT + 1 || y === SURFACE_HEIGHT + 2) return Block.Stone;
+    if (y > SURFACE_HEIGHT + 2) return Block.Air;
+  }
+  return null;
+}
+
+export function regionalRouteBlock(x: number, y: number, z: number): BlockId | null {
+  if (!isRegionalRoad(x, z)) return null;
+  if (y === SURFACE_HEIGHT) return Block.Dirt;
+  return y > SURFACE_HEIGHT && y <= SURFACE_HEIGHT + 3 ? Block.Air : null;
+}
+
 // Shared by authoritative mining and the local progress presentation.
 export function miningDurationMs(block: number): number {
   if (block === Block.MoonstoneOre) return 1600;
@@ -739,6 +781,7 @@ export function isProtectedVoxel(x: number, z: number): boolean {
     || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z) || isInForestDungeon(x, z) || isInEmberVault(x, z)
     || isInRealmWardenArena(x, z)
     || isMistfenBoardwalk(x, z)
+    || isRegionalWaystone(x, z)
     || isSilverDepthsProgressionGate(x, z)
     || (x >= 45 && x <= 46 && z >= 28 && z <= 29)
     || (Math.abs(x - ASHEN_REACH.x) <= 2 && z === ASHEN_REACH.z);
@@ -769,6 +812,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
       }
 
       for (let y = 1; y < CHUNK_HEIGHT; y += 1) {
+        const routeBlock = regionalRouteBlock(worldX, y, worldZ);
+        if (routeBlock !== null) blocks[chunkIndex(localX, y, localZ)] = routeBlock;
         const caveBlock = milestoneCaveBlock(worldX, y, worldZ);
         if (caveBlock !== null) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
         const greenwoodBlock = greenwoodRegionBlock(seedText, worldX, y, worldZ);
@@ -793,6 +838,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (dungeonBlock !== null) blocks[chunkIndex(localX, y, localZ)] = dungeonBlock;
         const emberBlock = emberVaultBlock(worldX, y, worldZ);
         if (emberBlock !== null) blocks[chunkIndex(localX, y, localZ)] = emberBlock;
+        const waystoneBlock = regionalWaystoneBlock(worldX, y, worldZ);
+        if (waystoneBlock !== null) blocks[chunkIndex(localX, y, localZ)] = waystoneBlock;
         // The authored cave owns its subsurface geometry, regardless of surface biome overlays.
         if (caveBlock !== null && y < SURFACE_HEIGHT) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
         const townBlock = townOfBeginningsBlock(worldX, y, worldZ);

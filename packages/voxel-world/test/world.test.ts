@@ -9,6 +9,9 @@ import {
   MISTFEN_BEHEMOTH_HOME,
   MISTFEN_MARSH,
   isInMistfenMarsh,
+  isRegionalRoad,
+  isRegionalWaystone,
+  REGIONAL_WAYSTONES,
   isMistfenApproachTrail,
   isMistfenBoardwalk,
   isMistfenToxicPool,
@@ -50,6 +53,28 @@ import {
 } from "../src/index.js";
 
 describe("deterministic voxel world", () => {
+  it("connects distant regions with continuous open roads and protected waystones", () => {
+    const cache = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const address = worldToChunk(x, z), key = `${address.chunkX},${address.chunkZ}`;
+      if (!cache.has(key)) cache.set(key, generateChunk("route-test", address.chunkX, address.chunkZ));
+      return getBlock(cache.get(key)!, address.localX, y, address.localZ);
+    };
+    for (const [x, z] of [[31, 9], [70, 9], [42, 29], [70, 32], [87, 50], [92, 61], [-24, 9], [-30, -20]])
+      expect(isRegionalRoad(x, z)).toBe(true);
+    for (const [x, z] of [[70, 9], [87, 50], [92, 61], [-24, 9]]) {
+      expect(read(x, SURFACE_HEIGHT, z)).not.toBe(Block.Air);
+      expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+    }
+    expect(read(70, SURFACE_HEIGHT, 9)).toBe(Block.Dirt);
+    expect(read(-30, SURFACE_HEIGHT, -20)).toBe(Block.OakLog);
+    for (const marker of REGIONAL_WAYSTONES) {
+      expect(isRegionalWaystone(marker.x, marker.z)).toBe(true);
+      expect(isProtectedVoxel(marker.x, marker.z)).toBe(true);
+      expect(read(marker.x, SURFACE_HEIGHT + 2, marker.z)).toBe(Block.Stone);
+    }
+    expect(read(ASHEN_REACH.x, 15, ASHEN_REACH.z)).toBe(Block.IronOre);
+  });
   it("builds a distinct, walkable Ashen Reach with a protected visible spire", () => {
     const cache = new Map<string, ReturnType<typeof generateChunk>>();
     const read = (x: number, y: number, z: number) => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WorldRoom } from "../src/game-room.js";
+import { WORLD_STREAM_CHUNK_RADIUS } from "@blockcraft/protocol";
 
 function requestRegion(knownChunks: { chunkX: number; chunkZ: number; revision: number }[], centerX = 0) {
   let result: { chunks: { chunkX: number; chunkZ: number; revision: number }[] } | undefined;
@@ -17,14 +18,19 @@ function requestRegion(knownChunks: { chunkX: number; chunkZ: number; revision: 
 }
 
 describe("incremental terrain streaming", () => {
-  const known = Array.from({ length: 25 }, (_, i) => ({ chunkX: i % 5 - 2, chunkZ: Math.floor(i / 5) - 2, revision: 2 }));
+  const diameter = WORLD_STREAM_CHUNK_RADIUS * 2 + 1;
+  const known = Array.from({ length: diameter ** 2 }, (_, i) => ({
+    chunkX: i % diameter - WORLD_STREAM_CHUNK_RADIUS,
+    chunkZ: Math.floor(i / diameter) - WORLD_STREAM_CHUNK_RADIUS,
+    revision: 2,
+  }));
   it("does not resend a fully cached region", () => {
     expect(requestRegion(known)?.chunks).toHaveLength(0);
   });
-  it("sends only the five new chunks crossing a boundary", () => {
+  it("sends only one new chunk column crossing a boundary", () => {
     const chunks = requestRegion(known, 1)?.chunks;
-    expect(chunks).toHaveLength(5);
-    expect(chunks?.every(chunk => chunk.chunkX === 3)).toBe(true);
+    expect(chunks).toHaveLength(diameter);
+    expect(chunks?.every(chunk => chunk.chunkX === WORLD_STREAM_CHUNK_RADIUS + 1)).toBe(true);
   });
   it("resends changed or evicted chunks", () => {
     expect(requestRegion(known.map(chunk => ({ ...chunk, revision: chunk.chunkX === 0 && chunk.chunkZ === 0 ? 1 : 2 })))?.chunks)

@@ -1112,8 +1112,8 @@ interface ClientChunk {
 const chunks = new Map<string, ClientChunk>();
 let activeChunkViewKey: string | null = null;
 let requestedChunkRegionKey: string | null = null;
-const ACTIVE_CHUNK_RENDER_RADIUS = 2;
-const CACHED_CHUNK_RADIUS = 4;
+const ACTIVE_CHUNK_RENDER_RADIUS = 3;
+const CACHED_CHUNK_RADIUS = 5;
 let indoorRoofBuilding: (typeof TOWN_BUILDINGS)[number] | null = null;
 const playerCutaway: PlayerCutaway = {
   active: false,
