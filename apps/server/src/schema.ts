@@ -37,6 +37,8 @@ export const PlayerState = schema({
   reforgeRanksJson: t.string().default("{}"),
   signaturePityJson: t.string().default("{}"),
   huntMasteryJson: t.string().default("{}"),
+  huntLoadoutsJson: t.string().default("[]"),
+  huntCollectionRewardClaimed: t.boolean().default(false),
   forestBestTimeMs: t.uint32().default(0),
   silverDepthsBestTimeMs: t.uint32().default(0),
   miningExpeditionStage: t.uint8().default(0),

@@ -152,6 +152,8 @@ import {
   type DungeonBoardUpdate,
   type RealmHuntBoardUpdate,
   type RealmHuntDifficulty,
+  type HuntCollectionUpdate,
+  type HuntSetId,
   type DungeonLobbyUpdate,
   type SilverDepthsLobbyUpdate,
   type ItemId,
@@ -2508,6 +2510,57 @@ for (const entry of EQUIPMENT_COLLECTION) {
   });
   equipmentCollectionGrid.append(card);
 }
+const huntSetGrid = document.querySelector<HTMLElement>("#hunt-set-grid")!;
+const huntLoadoutList = document.querySelector<HTMLElement>("#hunt-loadout-list")!;
+const huntCollectionMessage = document.querySelector<HTMLElement>("#hunt-collection-message")!;
+const huntCollectionReward = document.querySelector<HTMLElement>("#hunt-collection-reward")!;
+let latestHuntCollection: HuntCollectionUpdate | null = null;
+const huntMarkForSet = { fang: "alpha_forgemark", venom: "venom_forgemark", crusher: "crusher_forgemark" } as const;
+const huntTime = (milliseconds?: number): string => milliseconds && milliseconds > 0
+  ? `${Math.floor(milliseconds / 60_000)}:${String(Math.floor(milliseconds / 1_000) % 60).padStart(2, "0")}.${String(Math.floor(milliseconds % 1_000 / 100)).padStart(1, "0")}` : "—";
+
+function renderHuntCollection(update: HuntCollectionUpdate): void {
+  latestHuntCollection = update;
+  huntCollectionMessage.textContent = update.message;
+  huntCollectionMessage.dataset.town = String(update.inTown);
+  huntSetGrid.replaceChildren();
+  let completeSets = 0;
+  for (const setId of Object.keys(HUNT_EQUIPMENT_SETS) as HuntSetId[]) {
+    const definition = HUNT_EQUIPMENT_SETS[setId];
+    const owned = update.sets[setId];
+    const mastery = update.mastery[setId];
+    if (owned.weaponOwned && owned.armourOwned) completeSets += 1;
+    const weaponRank = blacksmithReforgeRanks[definition.weaponId as BlacksmithReforgeItemId] ?? 0;
+    const armourRank = blacksmithReforgeRanks[definition.armourId as BlacksmithReforgeItemId] ?? 0;
+    const weaponValue = BLACKSMITH_DISMANTLE[definition.weaponId as BlacksmithDismantleItemId];
+    const armourValue = BLACKSMITH_DISMANTLE[definition.armourId as BlacksmithDismantleItemId];
+    const card = document.createElement("article");
+    card.className = "hunt-set-card"; card.dataset.complete = String(owned.weaponOwned && owned.armourOwned);
+    card.innerHTML = `<header><div><small>${setId.toUpperCase()} PATH · RANK ${mastery.rank}</small><strong>${definition.name}</strong></div><b>${owned.weaponOwned && owned.armourOwned ? "SET COMPLETE" : `${Number(owned.weaponOwned) + Number(owned.armourOwned)} / 2 PIECES`}</b></header>
+      <div class="hunt-set-pieces"><span data-owned="${owned.weaponOwned}">${owned.weaponOwned ? "✓" : "◇"} ${ITEM_DEFINITIONS[definition.weaponId].name}<small>${rankLabel(weaponRank)} · dismantle ${weaponValue?.gold ?? 0}g</small></span><span data-owned="${owned.armourOwned}">${owned.armourOwned ? "✓" : "◇"} ${ITEM_DEFINITIONS[definition.armourId].name}<small>${rankLabel(armourRank)} · dismantle ${armourValue?.gold ?? 0}g</small></span></div>
+      <p class="hunt-set-bonus" data-active="${owned.weaponOwned && owned.armourOwned}"><b>FULL SET</b>${definition.bonus}</p>
+      <p class="hunt-set-forgemark" data-owned="${owned.forgemarkOwned}"><b>${owned.forgemarkOwned ? "✓ AWAKENED" : "FORGEMARK MISSING"}</b>${ITEM_DEFINITIONS[huntMarkForSet[setId]].name}</p>
+      <div class="hunt-set-times"><span>NORMAL <b>${huntTime(mastery.bestTimesMs.normal)}</b></span><span>VETERAN <b>${mastery.veteranUnlocked ? huntTime(mastery.bestTimesMs.veteran) : "LOCKED"}</b></span><span>ASCENDANT <b>${mastery.ascendantUnlocked ? huntTime(mastery.bestTimesMs.ascendant) : "LOCKED"}</b></span></div>
+      <details><summary>UPGRADE PATHS</summary><p>${equipmentProgressionText(definition.weaponId, weaponRank)}</p><p>${equipmentProgressionText(definition.armourId, armourRank)}</p></details>`;
+    huntSetGrid.append(card);
+  }
+  huntLoadoutList.replaceChildren();
+  for (const slot of [1, 2, 3] as const) {
+    const saved = update.loadouts.find(loadout => loadout.slot === slot);
+    const row = document.createElement("div"); row.className = "hunt-loadout-row";
+    row.innerHTML = `<b>${slot}</b><input maxlength="18" aria-label="Loadout ${slot} name" value="${saved?.name ?? `Loadout ${slot}`}"><span>${saved ? `${MAIN_HAND_DEFINITIONS[saved.mainHandId].name} · ${saved.armourId === "none" ? "No armour" : ITEM_DEFINITIONS[saved.armourId].name}` : "Empty slot"}</span><button class="save" type="button">SAVE</button><button class="equip" type="button" ${saved ? "" : "disabled"}>EQUIP</button>`;
+    const input = row.querySelector<HTMLInputElement>("input")!;
+    row.querySelector<HTMLButtonElement>(".save")!.disabled = !update.inTown;
+    row.querySelector<HTMLButtonElement>(".equip")!.disabled = !saved || !update.inTown;
+    row.querySelector<HTMLButtonElement>(".save")!.addEventListener("click", () => room?.send("hunt:collection", { action: "save", slot, name: input.value }));
+    row.querySelector<HTMLButtonElement>(".equip")!.addEventListener("click", () => room?.send("hunt:collection", { action: "equip", slot }));
+    huntLoadoutList.append(row);
+  }
+  const rewardButton = huntCollectionReward.querySelector<HTMLButtonElement>("button")!;
+  rewardButton.textContent = update.rewardClaimed ? "REWARD CLAIMED" : update.canClaim ? "CLAIM · 150 GOLD + 3 MOONSTONE" : `${completeSets} / 3 SETS`;
+  rewardButton.disabled = !update.canClaim || !update.inTown;
+  rewardButton.onclick = () => room?.send("hunt:collection", { action: "claim" });
+}
 const combatAudio = new CombatAudio();
 const unlockCombatAudio = (): void => combatAudio.unlock();
 window.addEventListener("pointerdown", unlockCombatAudio, { once: true, capture: true });
@@ -4310,6 +4363,7 @@ function refreshEquipmentProgression(): void {
     button.disabled = !owned || (!equipmentForItem(entry.itemId) && !armourForItem(entry.itemId));
     button.textContent = button.disabled && owned ? "AUTO-EQUIPPED" : "PREVIEW";
   }
+  if (latestHuntCollection) renderHuntCollection(latestHuntCollection);
 }
 
 function updateInventoryItem(itemId: ItemId, total: number): void {
@@ -5054,6 +5108,7 @@ function selectInventoryCategory(category: InventoryTab, focus = false): void {
   previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
   previewSlot = category === "armour" ? "armour" : "weapon";
   if (category === "collection") inventoryPreviewDrawer.open = false;
+  if (category === "collection") room?.send("hunt:collection", { action: "sync" });
   refreshInventoryPreview();
   inventoryPanel.scrollTop = 0;
 }
@@ -8959,6 +9014,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   });
   room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
   room.onMessage("realm-hunt:board", (update: RealmHuntBoardUpdate) => renderRealmHuntBoard(update));
+  room.onMessage("hunt:collection", (update: HuntCollectionUpdate) => renderHuntCollection(update));
   room.onMessage("dungeon:lobby", (update: DungeonLobbyUpdate) => renderDungeonLobby(update));
   room.onMessage("depths:lobby", (update: SilverDepthsLobbyUpdate) => renderSilverDepthsLobby(update));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));

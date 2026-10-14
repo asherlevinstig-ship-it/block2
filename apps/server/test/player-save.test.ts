@@ -78,4 +78,18 @@ describe("player saves", () => {
     const parsed = parsePlayerSave(JSON.stringify({ version: 1, inventory: { miners_lantern: 1 }, mainHandId: "longsword" }));
     expect(parsed?.miningExpeditionStage).toBe(7);
   });
+
+  it("persists validated hunt loadouts and the collection reward", () => {
+    const player = new PlayerState();
+    player.huntLoadoutsJson = JSON.stringify([{ slot: 1, name: "Fang Rush", mainHandId: "fang_dagger", armourId: "fangstalker_wrap",
+      equippedPower: "seismic_cleave", equippedPowerSecondary: "lunge_strike", equippedSpecial: "hunters_mark",
+      equippedTrait: "momentum", seismicMastery: "advancing_fault" }]);
+    player.huntCollectionRewardClaimed = true;
+    const parsed = parsePlayerSave(serializePlayerSave(player, 456));
+    expect(parsed?.huntLoadouts?.[0]).toMatchObject({ slot: 1, name: "Fang Rush", mainHandId: "fang_dagger", armourId: "fangstalker_wrap" });
+    expect(parsed?.huntCollectionRewardClaimed).toBe(true);
+    const restored = new PlayerState(); applyPlayerSave(restored, parsed!);
+    expect(JSON.parse(restored.huntLoadoutsJson)[0].name).toBe("Fang Rush");
+    expect(restored.huntCollectionRewardClaimed).toBe(true);
+  });
 });

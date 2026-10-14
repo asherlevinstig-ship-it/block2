@@ -1279,6 +1279,22 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .collection-header h3 { margin: 0; color: #f2e7c9; font-size: 1rem; }
 #collection-progress { padding: 7px 10px; border: 1px solid #a98c4f; border-radius: 999px; background: #382e19; color: #ffe19a; font-size: .72rem; }
 .collection-help { margin: 7px 0 10px; color: #8fa096; font-size: .66rem; line-height: 1.45; }
+.hunt-collection-message { margin: 8px 0 10px; padding: 8px 10px; border: 1px solid #54746055; border-radius: 7px; background: #102219; color: #bad0be; font-size: .62rem; }
+.hunt-collection-message[data-town="false"] { border-color: #a16f4755; color: #dcb98f; }
+#hunt-set-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hunt-set-card { min-width: 0; padding: 10px; border: 1px solid #6c765c66; border-radius: 9px; background: linear-gradient(145deg, #142319, #0a120e); }
+.hunt-set-card[data-complete="true"] { border-color: #b49248; box-shadow: inset 0 0 18px #a77e2522; }
+.hunt-set-card > header { display: flex; align-items: start; justify-content: space-between; gap: 7px; }
+.hunt-set-card header small, .hunt-set-card header strong { display: block; }.hunt-set-card header small { color: #92b17e; font-size: .48rem; }.hunt-set-card header strong { margin-top: 2px; color: #f1dfb3; font-size: .76rem; }
+.hunt-set-card header b { color: #dcb85f; font-size: .48rem; text-align: right; }
+.hunt-set-pieces { display: grid; gap: 5px; margin-top: 9px; }.hunt-set-pieces > span { padding: 6px; border-radius: 6px; background: #0b1610; color: #77867d; font-size: .56rem; }.hunt-set-pieces > span[data-owned="true"] { color: #d7e6d3; }.hunt-set-pieces small { display: block; margin: 2px 0 0 14px; color: #8b9d91; font-size: .46rem; }
+.hunt-set-bonus, .hunt-set-forgemark { margin: 7px 0 0; padding: 6px; border: 1px solid #76643d55; border-radius: 6px; color: #a99c7e; font-size: .5rem; line-height: 1.35; }.hunt-set-bonus b, .hunt-set-forgemark b { display: block; margin-bottom: 2px; color: #d8ba69; font-size: .45rem; }.hunt-set-bonus[data-active="true"] { border-color: #75a64f77; color: #cbe4b7; }.hunt-set-forgemark[data-owned="true"] { border-color: #a778d877; color: #dfc3f5; }
+.hunt-set-times { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 7px; }.hunt-set-times span { padding: 4px 2px; background: #101b15; color: #7f9186; font-size: .4rem; text-align: center; }.hunt-set-times b { display: block; margin-top: 2px; color: #d6dfd2; font-size: .48rem; }
+.hunt-set-card details { margin-top: 7px; color: #aebcae; font-size: .48rem; }.hunt-set-card summary { cursor: pointer; color: #c6a65e; font-weight: 900; }.hunt-set-card details p { margin: 5px 0 0; color: #9aa99f; line-height: 1.35; }
+.hunt-loadouts { margin-top: 10px; padding: 10px; border: 1px solid #51715c55; border-radius: 9px; background: #0c1811; }.hunt-loadouts > header { display: flex; align-items: baseline; gap: 9px; margin-bottom: 7px; }.hunt-loadouts header strong { color: #d8c184; font-size: .62rem; }.hunt-loadouts header span { color: #81938a; font-size: .52rem; }
+#hunt-loadout-list { display: grid; gap: 5px; }.hunt-loadout-row { display: grid; grid-template-columns: 22px 110px minmax(110px, 1fr) 54px 54px; align-items: center; gap: 5px; }.hunt-loadout-row > b { color: #e3bd62; text-align: center; }.hunt-loadout-row input { min-width: 0; padding: 6px; border: 1px solid #526b5a; border-radius: 5px; background: #13231a; color: #e0e9df; font-size: .55rem; }.hunt-loadout-row span { overflow: hidden; color: #91a198; font-size: .5rem; text-overflow: ellipsis; white-space: nowrap; }.hunt-loadout-row button, .hunt-collection-reward button { padding: 6px; border: 1px solid #718a67; border-radius: 5px; background: #1d3323; color: #d6e6cf; font-size: .48rem; font-weight: 900; }.hunt-loadout-row button:disabled, .hunt-collection-reward button:disabled { opacity: .4; }
+.hunt-collection-reward { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid #ba8d3f77; border-radius: 9px; background: #392a1344; }.hunt-collection-reward strong, .hunt-collection-reward span { display: block; }.hunt-collection-reward strong { color: #f0cb70; font-size: .65rem; }.hunt-collection-reward span { margin-top: 2px; color: #aa9a7a; font-size: .5rem; }.hunt-collection-reward button { border-color: #c49a4d; background: #5b3d18; color: #ffe2a0; }
+.collection-subheader { display: flex; align-items: baseline; gap: 9px; margin-top: 13px; padding-top: 10px; border-top: 1px solid #6b765a44; }.collection-subheader strong { color: #d5c08a; font-size: .6rem; }.collection-subheader span { color: #7f9087; font-size: .5rem; }
 #equipment-collection-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 #equipment-collection-grid article { --item-rarity: #667068; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 82px; padding: 9px; border: 1px solid color-mix(in srgb, var(--item-rarity) 55%, transparent); border-radius: 9px; background: linear-gradient(125deg, color-mix(in srgb, var(--item-rarity) 8%, #101914), #09110d); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--item-rarity) 72%, transparent); }
 #equipment-collection-grid article[data-rarity="common"] { --item-rarity: #c9d0ca; }
@@ -1309,6 +1325,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   .inventory-tabs button { font-size: .6rem; }
   .inventory-preview-help { display: none; }
   #equipment-collection-grid { grid-template-columns: 1fr; }
+  #hunt-set-grid { grid-template-columns: 1fr; }
+  .hunt-loadout-row { grid-template-columns: 22px 1fr 48px 48px; }.hunt-loadout-row span { grid-column: 2 / -1; grid-row: 2; }
 }
 .inventory-section h3 { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; }
 .inventory-section h3 span { color: #dcebd2; font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; }

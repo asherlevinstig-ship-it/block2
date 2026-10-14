@@ -1134,6 +1134,11 @@ export const RealmHuntBoardRequestSchema = z.object({
   pathId: z.enum(["fang", "venom", "crusher"]).optional(),
   difficulty: z.enum(["normal", "veteran", "ascendant"]).optional(),
 }).strict();
+export const HuntCollectionRequestSchema = z.object({
+  action: z.enum(["sync", "save", "equip", "claim"]),
+  slot: z.number().int().min(1).max(3).optional(),
+  name: z.string().max(18).optional(),
+}).strict();
 export type RealmHuntDifficulty = "normal" | "veteran" | "ascendant";
 export type RealmHuntStatus = {
   mobId: string;
@@ -1174,6 +1179,15 @@ export type RealmHuntMasteryStatus = { rank: number; bestTimesMs: Partial<Record
   veteranUnlocked: boolean; ascendantUnlocked: boolean };
 export type RealmHuntBoardUpdate = { selectedMobId: string; hunts: RealmHuntStatus[]; contract: RealmHuntContractStatus | null;
   mastery: Record<"fang" | "venom" | "crusher", RealmHuntMasteryStatus>; message: string };
+export type HuntLoadoutSlot = { slot: 1 | 2 | 3; name: string; mainHandId: MainHandId; armourId: ArmourId;
+  equippedPower: PowerId; equippedPowerSecondary: PowerId; equippedSpecial: SpecialId; equippedTrait: TraitId;
+  seismicMastery: SeismicMasteryId };
+export type HuntCollectionUpdate = {
+  loadouts: HuntLoadoutSlot[];
+  mastery: Record<HuntSetId, RealmHuntMasteryStatus>;
+  sets: Record<HuntSetId, { weaponOwned: boolean; armourOwned: boolean; forgemarkOwned: boolean }>;
+  rewardClaimed: boolean; canClaim: boolean; inTown: boolean; message: string;
+};
 
 export type SilverDepthsWingRewardStatus = {
   wing: "iron" | "silver";

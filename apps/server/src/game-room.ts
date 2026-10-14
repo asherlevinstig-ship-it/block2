@@ -12,7 +12,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, HUNT_EQUIPMENT_SETS, HuntCollectionRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type HuntCollectionUpdate, type HuntLoadoutSlot } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -593,6 +593,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     this.onMessage("world:ready", client => {
       client.send("world:bootstrap", this.bootstrapPayload(this.state.players.get(client.sessionId)));
+      this.sendHuntCollection(client);
       if (this.roomKind === "overworld") client.send("party:update", this.parties.snapshot(client.sessionId, this.state.players, Date.now()));
       if (this.roomKind === "overworld") for (const [key, lobby] of this.silverDepthsLobbies)
         if (lobby.members.includes(client.sessionId)) this.sendSilverDepthsLobby(key, lobby);
@@ -683,6 +684,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("player:return", client => void this.returnPlayerToTown(client));
     this.onMessage("dungeon:board", (client, payload: unknown) => this.handleDungeonBoard(client, payload));
     this.onMessage("realm-hunt:board", (client, payload: unknown) => this.handleRealmHuntBoard(client, payload));
+    this.onMessage("hunt:collection", (client, payload: unknown) => this.handleHuntCollection(client, payload));
     this.onMessage("dungeon:lobby", (client, payload: unknown) => this.handleDungeonLobby(client, payload));
     this.onMessage("depths:lobby", (client, payload: unknown) => this.handleSilverDepthsLobby(client, payload));
     this.onMessage("portal:use", (client, payload: unknown) => {
@@ -3611,6 +3613,86 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           ascendantUnlocked: huntDifficultyUnlocked(mastery.rank, "ascendant") }];
       }))) as RealmHuntBoardUpdate["mastery"], message,
     } satisfies RealmHuntBoardUpdate);
+  }
+
+  private huntLoadouts(player: PlayerState): HuntLoadoutSlot[] {
+    try {
+      const parsed = JSON.parse(player.huntLoadoutsJson) as HuntLoadoutSlot[];
+      return Array.isArray(parsed) ? parsed.filter(loadout => [1, 2, 3].includes(loadout.slot)) : [];
+    } catch { return []; }
+  }
+
+  private playerOwns(player: PlayerState, itemId: ItemId): boolean {
+    return (player.inventory.get(itemId)?.quantity ?? 0) + (player.storage.get(itemId)?.quantity ?? 0) > 0;
+  }
+
+  private sendHuntCollection(client: Client, message = "Save and switch hunt loadouts while inside Town."): void {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    const mastery = parseHuntMastery(player.huntMasteryJson);
+    const marks = { fang: "alpha_forgemark", venom: "venom_forgemark", crusher: "crusher_forgemark" } as const;
+    const sets = Object.fromEntries((Object.keys(HUNT_EQUIPMENT_SETS) as HuntSetId[]).map(setId => {
+      const set = HUNT_EQUIPMENT_SETS[setId];
+      return [setId, { weaponOwned: this.playerOwns(player, set.weaponId), armourOwned: this.playerOwns(player, set.armourId),
+        forgemarkOwned: this.playerOwns(player, marks[setId]) }];
+    })) as HuntCollectionUpdate["sets"];
+    const masteryStatus = Object.fromEntries((Object.keys(HUNT_EQUIPMENT_SETS) as HuntSetId[]).map(setId => [setId, {
+      rank: mastery[setId].rank, bestTimesMs: mastery[setId].bestTimesMs,
+      veteranUnlocked: huntDifficultyUnlocked(mastery[setId].rank, "veteran"),
+      ascendantUnlocked: huntDifficultyUnlocked(mastery[setId].rank, "ascendant"),
+    }])) as HuntCollectionUpdate["mastery"];
+    client.send("hunt:collection", { loadouts: this.huntLoadouts(player), mastery: masteryStatus, sets,
+      rewardClaimed: player.huntCollectionRewardClaimed,
+      canClaim: Object.values(sets).every(set => set.weaponOwned && set.armourOwned) && !player.huntCollectionRewardClaimed,
+      inTown: this.roomKind === "overworld" && isInsideTownSafeZone(player), message } satisfies HuntCollectionUpdate);
+  }
+
+  private handleHuntCollection(client: Client, payload: unknown): void {
+    const parsed = HuntCollectionRequestSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return;
+    if (parsed.data.action === "sync") { this.sendHuntCollection(client); return; }
+    if (this.roomKind !== "overworld" || !isInsideTownSafeZone(player)) {
+      this.sendHuntCollection(client, "Loadouts and collection rewards can only be changed inside Town."); return;
+    }
+    if (parsed.data.action === "claim") {
+      const complete = (Object.values(HUNT_EQUIPMENT_SETS)).every(set => this.playerOwns(player, set.weaponId) && this.playerOwns(player, set.armourId));
+      if (!complete || player.huntCollectionRewardClaimed) {
+        this.sendHuntCollection(client, player.huntCollectionRewardClaimed ? "The Hunt Collector reward is already claimed." : "Collect both pieces from all three hunt sets first."); return;
+      }
+      player.huntCollectionRewardClaimed = true;
+      player.coins = Math.min(1_000_000, player.coins + 150);
+      const moonstone = player.inventory.get("moonstone") ?? new InventoryItemState();
+      moonstone.quantity = Math.min(65_535, moonstone.quantity + 3); player.inventory.set("moonstone", moonstone);
+      void this.persistPlayer(client.sessionId, player, true);
+      this.sendHuntCollection(client, "HUNT COLLECTOR COMPLETE · 150 gold and 3 Moonstone added to your pack."); return;
+    }
+    const slot = parsed.data.slot as 1 | 2 | 3 | undefined;
+    if (!slot) return;
+    const loadouts = this.huntLoadouts(player).filter(loadout => loadout.slot !== slot);
+    if (parsed.data.action === "save") {
+      const name = (parsed.data.name ?? `Loadout ${slot}`).replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 18) || `Loadout ${slot}`;
+      loadouts.push({ slot, name, mainHandId: player.mainHandId as HuntLoadoutSlot["mainHandId"], armourId: player.armourId as HuntLoadoutSlot["armourId"],
+        equippedPower: player.equippedPower as HuntLoadoutSlot["equippedPower"], equippedPowerSecondary: player.equippedPowerSecondary as HuntLoadoutSlot["equippedPowerSecondary"],
+        equippedSpecial: player.equippedSpecial as HuntLoadoutSlot["equippedSpecial"], equippedTrait: player.equippedTrait as HuntLoadoutSlot["equippedTrait"],
+        seismicMastery: player.seismicMastery as HuntLoadoutSlot["seismicMastery"] });
+      player.huntLoadoutsJson = JSON.stringify(loadouts.sort((a, b) => a.slot - b.slot));
+      void this.persistPlayer(client.sessionId, player, true);
+      this.sendHuntCollection(client, `${name} saved from your current build.`); return;
+    }
+    const loadout = this.huntLoadouts(player).find(saved => saved.slot === slot);
+    if (!loadout) { this.sendHuntCollection(client, `Loadout ${slot} has not been saved yet.`); return; }
+    if (!canEquipMainHand(loadout.mainHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)
+      || (loadout.armourId !== "none" && (player.inventory.get(loadout.armourId)?.quantity ?? 0) <= 0)) {
+      this.sendHuntCollection(client, `${loadout.name} needs gear that is not in your pack.`); return;
+    }
+    const hand = MAIN_HAND_DEFINITIONS[loadout.mainHandId];
+    player.mainHandId = loadout.mainHandId; player.mainHandTag = hand.tag; player.armourId = loadout.armourId;
+    player.equippedPower = compatiblePowerOrFallback(loadout.equippedPower, hand.tag);
+    player.equippedPowerSecondary = compatiblePowerOrFallback(loadout.equippedPowerSecondary, hand.tag);
+    player.equippedSpecial = loadout.equippedSpecial; player.equippedTrait = loadout.equippedTrait; player.seismicMastery = loadout.seismicMastery;
+    void this.persistPlayer(client.sessionId, player, true);
+    this.sendHuntCollection(client, `${loadout.name} equipped.`);
   }
 
   private handleRealmHuntBoard(client: Client, payload: unknown): void {
