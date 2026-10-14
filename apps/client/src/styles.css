@@ -1199,6 +1199,17 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #build-path-candidates p { color: #819087; }
 #build-path-candidates b { color: #c6b478; font-weight: 700; }
 .build-path-adept { padding-top: 4px; border-top: 1px solid #ffffff12; color: #7fcfc0 !important; }
+#build-path-specializations { margin-top: 8px; padding-top: 8px; border-top: 1px solid #d3b76b33; }
+#build-path-specializations > p { display: flex; justify-content: space-between; margin: 0 1px 6px; color: #e1c16e; font-size: .5rem; font-weight: 900; letter-spacing: .1em; }
+#build-path-specializations > p small { color: #718279; font-size: .45rem; letter-spacing: 0; }
+#build-path-specializations > div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#build-path-specializations button { display: grid; gap: 3px; padding: 8px; border: 1px solid #65837755; border-radius: 7px; background: #0c1c17; color: #dce8df; cursor: pointer; text-align: left; }
+#build-path-specializations button:hover:not(:disabled) { border-color: #7fd8bd; background: #133027; }
+#build-path-specializations button[data-active="true"] { border-color: #e4bd61; background: #312817; box-shadow: inset 0 0 16px #deb64918; }
+#build-path-specializations button:disabled:not([data-active="true"]) { opacity: .42; cursor: default; }
+#build-path-specializations strong { color: #f0d891; font-size: .62rem; }
+#build-path-specializations small { color: #86cdb9; font-size: .47rem; }
+#build-path-specializations span { color: #8c9c93; font-size: .46rem; line-height: 1.35; }
 #build-path-panel[data-selected="tank"] { border-color: #85a5b477; }#build-path-panel[data-selected="mage"] { border-color: #8a78c977; }#build-path-panel[data-selected="assassin"] { border-color: #c4697077; }#build-path-panel[data-selected="thief"] { border-color: #b39a5477; }#build-path-panel[data-selected="ranger"] { border-color: #72a86b77; }
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }

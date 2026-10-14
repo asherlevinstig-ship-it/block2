@@ -193,6 +193,29 @@ export const BUILD_PATHS = {
   ranger: { name: "Ranger", role: "Control the distance", passive: "Path ranks add damage to bow attacks.", adept: "PINNING SHOT · Consecutive bow hits slow, then root their target." },
 } as const;
 export type BuildPathId = keyof typeof BUILD_PATHS;
+export const BUILD_PATH_SPECIALIZATIONS = {
+  tank: [
+    { id: "guardian", name: "Guardian", role: "Extend Fortress Guard", effect: "Protect allies within 5m and prevent 2 damage." },
+    { id: "juggernaut", name: "Juggernaut", role: "Break attackers", effect: "Every guarded hit staggers its attacker." },
+  ],
+  mage: [
+    { id: "arcanist", name: "Arcanist", role: "Amplify the echo", effect: "Arcane Echo repeats at 75% strength." },
+    { id: "elementalist", name: "Elementalist", role: "Bind with power", effect: "Power hits slow surviving enemies for 2 seconds." },
+  ],
+  assassin: [
+    { id: "executioner", name: "Executioner", role: "Commit to the kill", effect: "Shadowstep's empowered strike deals +4 damage." },
+    { id: "phantom", name: "Phantom", role: "Disappear again", effect: "Shadowstep concealment lasts longer and refreshes Power faster." },
+  ],
+  thief: [
+    { id: "trickster", name: "Trickster", role: "Control the pursuit", effect: "Smoke Decoy reaches farther and conceals you longer." },
+    { id: "plunderer", name: "Plunderer", role: "Profit from danger", effect: "Elite and mini-boss victories grant 3 additional gold." },
+  ],
+  ranger: [
+    { id: "marksman", name: "Marksman", role: "Finish the sequence", effect: "The third Pinning Shot deals +2 damage." },
+    { id: "trapper", name: "Trapper", role: "Hold the battlefield", effect: "Pinning slow is stronger and its root lasts 1.8 seconds." },
+  ],
+} as const;
+export type BuildPathSpecializationId = typeof BUILD_PATH_SPECIALIZATIONS[BuildPathId][number]["id"];
 export const BUILD_PATH_RANKS = [
   { rank: 0, name: "Untrained", xp: 0 },
   { rank: 1, name: "Initiate", xp: 10 },
@@ -200,10 +223,11 @@ export const BUILD_PATH_RANKS = [
   { rank: 3, name: "Veteran", xp: 70 },
   { rank: 4, name: "Master", xp: 140 },
 ] as const;
-export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger"]).optional() }).strict();
+export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper"]).optional() }).strict();
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
-  candidates: BuildPathAffinity[]; canChoose: boolean; inTown: boolean; message: string };
+  selectedSpecializationId: BuildPathSpecializationId | null; candidates: BuildPathAffinity[]; canChoose: boolean;
+  canSpecialize: boolean; inTown: boolean; message: string };
 export type BuildPathProc = { pathId: BuildPathId; ability: string; detail: string; durationMs?: number };
 
 export const TAVERN_QUIZ_STARTING_COINS = 20;

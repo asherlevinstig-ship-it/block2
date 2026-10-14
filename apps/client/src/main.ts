@@ -176,6 +176,7 @@ import {
   CHARACTER_MILESTONES,
   BUILD_PATHS,
   BUILD_PATH_RANKS,
+  BUILD_PATH_SPECIALIZATIONS,
   blacksmithRequiredLevel,
   enemyThreat,
   experienceToNextLevel,
@@ -669,6 +670,7 @@ const buildPathRank = document.querySelector<HTMLElement>("#build-path-rank")!;
 const buildPathMessage = document.querySelector<HTMLElement>("#build-path-message")!;
 const buildPathProgress = document.querySelector<HTMLElement>("#build-path-progress")!;
 const buildPathCandidates = document.querySelector<HTMLElement>("#build-path-candidates")!;
+const buildPathSpecializations = document.querySelector<HTMLElement>("#build-path-specializations")!;
 const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
 const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
 const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("#seismic-mastery-picker [data-seismic-mastery]")];
@@ -3051,7 +3053,10 @@ function renderBuildPath(update: BuildPathUpdate): void {
   buildPathPanel.dataset.selected = update.selectedPathId ?? "unbound";
   buildPathPanel.dataset.available = String(update.canChoose);
   buildPathName.textContent = selected?.name.toUpperCase() ?? "UNBOUND";
-  buildPathRank.textContent = selected ? `${rank.name.toUpperCase()} · RANK ${update.rank}` : update.canChoose ? "A PATH IS FORMING" : "REVEALS AT LEVEL 5";
+  const selectedSpecialization = update.selectedPathId && update.selectedSpecializationId
+    ? BUILD_PATH_SPECIALIZATIONS[update.selectedPathId].find(option => option.id === update.selectedSpecializationId) : null;
+  buildPathRank.textContent = selected ? `${rank.name.toUpperCase()} · RANK ${update.rank}${selectedSpecialization ? ` · ${selectedSpecialization.name.toUpperCase()}` : ""}`
+    : update.canChoose ? "A PATH IS FORMING" : "REVEALS AT LEVEL 5";
   buildPathMessage.textContent = update.message;
   const previousThreshold = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank)?.xp ?? 0;
   const span = Math.max(1, (update.nextRankXp ?? previousThreshold) - previousThreshold);
@@ -3060,6 +3065,18 @@ function renderBuildPath(update: BuildPathUpdate): void {
   buildPathProgress.querySelector<HTMLElement>("i")!.style.width = `${Math.round(progress * 100)}%`;
   buildPathProgress.setAttribute("aria-label", update.nextRankXp === null ? "Master rank complete" : `${update.xp} of ${update.nextRankXp} Path Mastery`);
   buildPathCandidates.replaceChildren();
+  const specializationList = buildPathSpecializations.querySelector<HTMLElement>("div")!;
+  specializationList.replaceChildren();
+  buildPathSpecializations.hidden = !selected || update.rank < 3;
+  if (selected && update.selectedPathId && update.rank >= 3) for (const specialization of BUILD_PATH_SPECIALIZATIONS[update.selectedPathId]) {
+    const button = document.createElement("button"); button.type = "button";
+    button.dataset.active = String(specialization.id === update.selectedSpecializationId);
+    button.innerHTML = `<strong>${specialization.name}</strong><small>${specialization.role}</small><span>${specialization.effect}</span>`;
+    button.disabled = Boolean(update.selectedSpecializationId) || !update.canSpecialize || !update.inTown;
+    button.title = update.selectedSpecializationId ? "Veteran path already bound" : update.inTown ? `Bind the ${specialization.name} path` : "Return to Town to specialize";
+    button.addEventListener("click", () => room?.send("build:path", { action: "specialize", specializationId: specialization.id }));
+    specializationList.append(button);
+  }
   if (!update.canChoose) return;
   for (const candidate of update.candidates) {
     const definition = BUILD_PATHS[candidate.pathId];

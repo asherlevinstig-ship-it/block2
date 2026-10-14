@@ -1,6 +1,7 @@
-import { ARMOUR_DEFINITIONS, BUILD_PATH_RANKS, MAIN_HAND_DEFINITIONS, type ArmourId, type BuildPathAffinity, type BuildPathId, type MainHandId, type TraitId } from "@blockcraft/protocol";
+import { ARMOUR_DEFINITIONS, BUILD_PATH_RANKS, BUILD_PATH_SPECIALIZATIONS, MAIN_HAND_DEFINITIONS, type ArmourId, type BuildPathAffinity, type BuildPathId, type BuildPathSpecializationId, type MainHandId, type TraitId } from "@blockcraft/protocol";
 
-export type BuildPathState = { selectedPathId: BuildPathId | null; xp: Partial<Record<BuildPathId, number>> };
+export type BuildPathState = { selectedPathId: BuildPathId | null; xp: Partial<Record<BuildPathId, number>>;
+  specializations: Partial<Record<BuildPathId, BuildPathSpecializationId>> };
 export type BuildAffinitySource = { mainHandId: string; armourId: string; equippedTrait: string; equippedSpecial: string;
   powerPoints: number; vitalityPoints: number; agilityPoints: number };
 
@@ -10,15 +11,21 @@ const safePath = (value: unknown): value is BuildPathId => typeof value === "str
 export function parseBuildPathState(raw: unknown): BuildPathState {
   let value = raw;
   if (typeof value === "string") try { value = JSON.parse(value); } catch { value = null; }
-  if (!value || typeof value !== "object") return { selectedPathId: null, xp: {} };
+  if (!value || typeof value !== "object") return { selectedPathId: null, xp: {}, specializations: {} };
   if ("buildPath" in value && (value as { buildPath?: unknown }).buildPath) value = (value as { buildPath: unknown }).buildPath;
-  const record = value as { selectedPathId?: unknown; xp?: unknown };
+  const record = value as { selectedPathId?: unknown; xp?: unknown; specializations?: unknown };
   const xp: Partial<Record<BuildPathId, number>> = {};
   if (record.xp && typeof record.xp === "object") for (const pathId of PATH_IDS) {
     const amount = (record.xp as Record<string, unknown>)[pathId];
     if (typeof amount === "number" && Number.isFinite(amount) && amount > 0) xp[pathId] = Math.min(65_535, Math.floor(amount));
   }
-  return { selectedPathId: safePath(record.selectedPathId) ? record.selectedPathId : null, xp };
+  const specializations: Partial<Record<BuildPathId, BuildPathSpecializationId>> = {};
+  if (record.specializations && typeof record.specializations === "object") for (const pathId of PATH_IDS) {
+    const choice = (record.specializations as Record<string, unknown>)[pathId];
+    if (typeof choice === "string" && BUILD_PATH_SPECIALIZATIONS[pathId].some(option => option.id === choice))
+      specializations[pathId] = choice as BuildPathSpecializationId;
+  }
+  return { selectedPathId: safePath(record.selectedPathId) ? record.selectedPathId : null, xp, specializations };
 }
 
 export function serializeBuildPathState(state: BuildPathState): string { return JSON.stringify(parseBuildPathState(state)); }
@@ -61,7 +68,13 @@ export function buildPathAffinities(source: BuildAffinitySource): BuildPathAffin
 }
 
 export function chooseBuildPath(state: BuildPathState, pathId: BuildPathId): BuildPathState {
-  return { selectedPathId: pathId, xp: { ...state.xp, [pathId]: state.xp[pathId] ?? 0 } };
+  return { selectedPathId: pathId, xp: { ...state.xp, [pathId]: state.xp[pathId] ?? 0 }, specializations: { ...state.specializations } };
+}
+
+export function chooseBuildSpecialization(state: BuildPathState, pathId: BuildPathId, specializationId: BuildPathSpecializationId): BuildPathState {
+  if (state.selectedPathId !== pathId || buildPathRank(state.xp[pathId] ?? 0) < 3 || state.specializations[pathId]
+    || !BUILD_PATH_SPECIALIZATIONS[pathId].some(option => option.id === specializationId)) return state;
+  return { ...state, specializations: { ...state.specializations, [pathId]: specializationId } };
 }
 
 export function grantBuildPathXp(state: BuildPathState, amount: number): { state: BuildPathState; rankUp: boolean } {
@@ -69,5 +82,5 @@ export function grantBuildPathXp(state: BuildPathState, amount: number): { state
   if (!pathId || amount <= 0) return { state, rankUp: false };
   const before = Math.max(0, state.xp[pathId] ?? 0);
   const after = Math.min(65_535, before + Math.floor(amount));
-  return { state: { selectedPathId: pathId, xp: { ...state.xp, [pathId]: after } }, rankUp: buildPathRank(after) > buildPathRank(before) };
+  return { state: { selectedPathId: pathId, xp: { ...state.xp, [pathId]: after }, specializations: { ...state.specializations } }, rankUp: buildPathRank(after) > buildPathRank(before) };
 }
