@@ -6,7 +6,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v131";
+export const WORLD_ROOM = "world-warden-gate-v132";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
@@ -29,7 +29,8 @@ export type RealmEventUpdate = {
   eventName: string | null;
   eventTitle: string | null;
   eventDetail?: string | null;
-  eventVariant?: "crawler-migration" | "root-nest" | "alpha-ambush" | null;
+  eventVariant?: "crawler-migration" | "root-nest" | "alpha-ambush"
+    | "mireback-stampede" | "toxic-bloom" | "bog-hunt" | null;
   trackingRadius?: number;
   targetX: number;
   targetY: number;

@@ -6,6 +6,7 @@ import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDu
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 import { areaMainMobDefinition } from "./area-mini-bosses.js";
 import { GREENWOOD_EVENT_FOLLOWER_PREFIX, greenwoodEventDefinition } from "./greenwood-events.js";
+import { MISTFEN_EVENT_FOLLOWER_PREFIX, mistfenEventDefinition } from "./mistfen-events.js";
 import { ROAMING_PACKS, roamingMemberId } from "./roaming-packs.js";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; level?: number; combatState: string; targetId: string };
@@ -18,8 +19,9 @@ const GROUPS: ObjectiveGroup[] = [
   { id: "buried-vault", title: "Breach the Buried Vault", detail: "Mine through the silver seal. Defeat the Vault Crawler and Stone Warden, then claim your personal Miner's Lantern cache.", ids: ["buried-vault-crawler", "buried-chamber-brute"], mainId: "buried-chamber-brute" },
   { id: "frontier-mixed", title: "Frontier Warband", detail: "Draw out the crawler, dodge the brute's rocks, then pressure the support spitter. Counter during recovery.", ids: [...MIXED_FRONTIER_IDS], mainId: "frontier-brute-east" },
   ...REALM_EVENT_DEFINITIONS.map(event => ({ id: event.key === "greenwood" ? "greenwood-event" : event.realmBoss ? "realm-boss" : `${event.key}-event`, title: event.title, detail: event.detail,
-    ids: event.key === "greenwood" ? [event.id, ...Array.from({ length: 5 }, (_, index) => `${GREENWOOD_EVENT_FOLLOWER_PREFIX}${index}`)] : [event.id],
-    mainId: event.key === "greenwood" ? event.id : undefined })),
+    ids: event.key === "greenwood" ? [event.id, ...Array.from({ length: 5 }, (_, index) => `${GREENWOOD_EVENT_FOLLOWER_PREFIX}${index}`)]
+      : event.key === "mistfen" ? [event.id, ...Array.from({ length: 5 }, (_, index) => `${MISTFEN_EVENT_FOLLOWER_PREFIX}${index}`)] : [event.id],
+    mainId: event.key === "greenwood" || event.key === "mistfen" ? event.id : undefined })),
   { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Follow the dirt road, clear the three root nests, collect crawler items, then mine the exposed iron seam east of the camp.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"], mainId: "wild-crawler" },
   { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"], mainId: "frontier-spitter" },
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"], mainId: "stone-brute" },
@@ -122,6 +124,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     if (event) {
       event.update.progressLabel = event.update.objectiveId === "realm-boss" ? "REALM BOSS"
         : greenwoodEventDefinition(eventStatus.eventVariant)?.progressLabel
+          ?? mistfenEventDefinition(eventStatus.eventVariant)?.progressLabel
           ?? `REALM THREAT ${eventStatus.completed} / ${eventStatus.required}`;
       return event.update;
     }

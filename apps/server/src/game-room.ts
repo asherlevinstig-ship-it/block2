@@ -29,6 +29,8 @@ import { WILDERNESS_EVENT_ID } from "./wilderness-event.js";
 import { RealmEventDirector, REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
 import { GREENWOOD_EVENT_TRACKING_RADIUS, greenwoodEventDefinition, greenwoodEventFollowers,
   greenwoodEventScale, isGreenwoodEventFollower, type GreenwoodEventKind } from "./greenwood-events.js";
+import { MISTFEN_EVENT_ID, MISTFEN_EVENT_TRACKING_RADIUS, mistfenEventDefinition, mistfenEventFollowers,
+  mistfenEventPattern, mistfenEventScale, isMistfenEventFollower, type MistfenEventKind } from "./mistfen-events.js";
 import { ASHGLASS_ORACLE_ID, GREENWOOD_MATRIARCH_ID, REALM_WARDEN_ID,
   fallingRockSites, isRealmSpitterBoss, realmBossPattern, realmBossPhase, usesDoubleVolley, usesFallingRockZones, usesRockVolley, type RealmBossPhase } from "./realm-boss-patterns.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
@@ -1053,9 +1055,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const update = this.realmEvents.status(now) satisfies RealmEventUpdate;
     const definition = realmEventDefinition(update.eventId);
     const player = this.state.players.get(client.sessionId);
-    if (definition?.key === "greenwood" && player
+    const localEventRadius = definition?.key === "greenwood" ? GREENWOOD_EVENT_TRACKING_RADIUS
+      : definition?.key === "mistfen" ? MISTFEN_EVENT_TRACKING_RADIUS : null;
+    if (localEventRadius && player
       && (Math.abs(player.y - update.targetY) > 2.5
-        || Math.hypot(player.x - update.targetX, player.z - update.targetZ) > GREENWOOD_EVENT_TRACKING_RADIUS)) {
+        || Math.hypot(player.x - update.targetX, player.z - update.targetZ) > localEventRadius)) {
       return { ...update, phase: "idle", eventId: null, eventName: null, eventTitle: null,
         eventDetail: null, eventVariant: null, warningUntil: 0 };
     }
@@ -1871,9 +1875,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     if (EMBER_VAULT_MOBS.some(mob => mob.id === id)) return pose.y >= 7 && pose.y <= 9 && isInEmberVault(pose.x, pose.z);
     if (isGreenwoodCampMob(id)) return greenwoodCampAllows(pose);
+    if (isGreenwoodEventFollower(id)) return isInGreenwoodRegion(pose.x, pose.z) && Math.abs(pose.y - 8) <= 1.5;
     if (isSilverGuard(id)) return silverGuardAllows(pose);
     if (isAshenSentry(id)) return ashenSentryAllows(pose);
     if (isMistfenMob(id)) return mistfenAllows(pose);
+    if (isMistfenEventFollower(id)) return mistfenAllows(pose);
     if (id === "frontier-brute") return frontierBruteAllows(pose);
     if (isMixedFrontierMob(id)) return mixedFrontierAllows(pose);
     const forest = FOREST_DUNGEON_MOBS.find(mob => mob.id === id);
@@ -2053,6 +2059,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const realmRepeatVictory = mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive;
     const defeatedGreenwoodEvent = mobId === WILDERNESS_EVENT_ID
       ? greenwoodEventDefinition(this.realmEvents.greenwoodVariant) : null;
+    const defeatedMistfenEvent = mobId === MISTFEN_EVENT_ID
+      ? mistfenEventDefinition(this.realmEvents.mistfenVariant) : null;
     for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
     const credited = isRealmEventId(mobId)
       ? this.combatContributions.eligiblePersistent(mobId, mob, this.state.players)
@@ -2167,7 +2175,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const usesOverworldRhythm = this.roomKind === "overworld" && usesOverworldRespawnRhythm(mobId, mob.isChampion);
     mob.respawnAt = huntChampion ? now + 5_000
       : now + (usesOverworldRhythm ? wildernessRespawnDelay(mobId, mob.level) : definition.respawnMs);
-    if (isGreenwoodEventFollower(mobId)) mob.respawnAt = Number.MAX_SAFE_INTEGER;
+    if (isGreenwoodEventFollower(mobId) || isMistfenEventFollower(mobId)) mob.respawnAt = Number.MAX_SAFE_INTEGER;
     const leaderProgress = areaMainMob && this.roomKind === "overworld" ? this.realmEvents.recordLeader(mobId, now) : null;
     if (leaderProgress?.credited) {
       for (const playerId of recipients) this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
@@ -2181,7 +2189,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (armedEvent) {
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
-        if (armedEvent.key !== "greenwood" && player && Math.abs(player.y - armedEvent.position.y) <= 2.5
+        if (armedEvent.key !== "greenwood" && armedEvent.key !== "mistfen"
+          && player && Math.abs(player.y - armedEvent.position.y) <= 2.5
           && Math.hypot(player.x - armedEvent.position.x, player.z - armedEvent.position.z) <= REALM_EVENT_TRACKING_RADIUS)
           client.send("chat:notice", `Public event incoming · ${armedEvent.name} arrives in 8 seconds. Follow the marker and gather nearby!`);
       }
@@ -2203,6 +2212,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const completion = realmRepeatVictory ? null : this.realmEvents.complete(mobId, now);
       const opened = completion?.definition.opensForestPortal ? this.openTemporaryForestPortal(now) : false;
       if (mobId === WILDERNESS_EVENT_ID) this.clearGreenwoodEventFollowers();
+      if (mobId === MISTFEN_EVENT_ID) this.clearMistfenEventFollowers();
       if (realmRepeatVictory) {
         this.realmWardenRepeatActive = false;
         this.realmWardenRepeatAvailableAt = now + 60_000;
@@ -2212,7 +2222,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
-        if (!player || !completion || completion.definition.key === "greenwood"
+        if (!player || !completion || completion.definition.key === "greenwood" || completion.definition.key === "mistfen"
           || Math.abs(player.y - completion.definition.position.y) > 2.5
           || Math.hypot(player.x - completion.definition.position.x, player.z - completion.definition.position.z) > REALM_EVENT_TRACKING_RADIUS) continue;
         client.send("chat:notice", completion.realmCleared
@@ -2252,6 +2262,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level), mob.name);
       this.grantBuildProgress(playerId, mobId === "mistfen-behemoth" ? 5 : Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
       if (isMistfenMob(mobId)) this.grantMistfenMastery(playerId, mobId === "mistfen-behemoth" ? 18 : 3);
+      else if (isMistfenEventFollower(mobId)) this.grantMistfenMastery(playerId, 4);
+      else if (mobId === MISTFEN_EVENT_ID) this.grantMistfenMastery(playerId,
+        defeatedMistfenEvent?.masteryReward ?? 15);
       if (isGreenwoodCampMob(mobId)) this.grantGreenwoodMastery(playerId, mobId === "wild-crawler" ? 18 : 3);
       else if (isGreenwoodEventFollower(mobId)) this.grantGreenwoodMastery(playerId, 4);
       else if (mobId === WILDERNESS_EVENT_ID) this.grantGreenwoodMastery(playerId,
@@ -2405,6 +2418,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (signatureItemId) {
       const ownsSignature = (player.inventory.get(signatureItemId)?.quantity ?? 0) + (player.storage.get(signatureItemId)?.quantity ?? 0) > 0;
       update.lootHint = signatureLootHint(signatureItemId, ownsSignature, parseSignaturePity(player.signaturePityJson));
+    } else if (update.objectiveId === "mistfen-event") {
+      const mistfen = this.mistfenProgress(player);
+      const rank = mistfenMasteryRank(mistfen.points, mistfen.discovered);
+      update.lootHint = rank >= 3
+        ? "Mirebreaker cache · acid, silver, healing supplies · Legendary mantle chance"
+        : "Mistfen cache · acid glands, silver and healing supplies";
     } else if (update.kind === "loot") {
       const signatureDrop = [...this.state.lootDrops.values()].find(drop => drop.ownerId === client.sessionId
         && (drop.itemId === "matriarch_edge" || drop.itemId === "venom_focus") && Date.now() < drop.expiresAt);
@@ -2450,20 +2469,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const greenwoodVariant = definition.key === "greenwood" ? this.realmEvents.greenwoodVariant : null;
     const greenwoodScale = greenwoodVariant
       ? greenwoodEventScale(greenwoodVariant, nearby.length, Math.max(1, ...nearby.map(player => player.level))) : null;
+    const mistfenVariant = definition.key === "mistfen" ? this.realmEvents.mistfenVariant : null;
+    const mistfenScale = mistfenVariant
+      ? mistfenEventScale(mistfenVariant, nearby.length, Math.max(1, ...nearby.map(player => player.level))) : null;
+    const regionalScale = greenwoodScale ?? mistfenScale;
     this.registerMob(definition.id, definition.archetype, definition.position);
     const mob = this.state.mobs.get(definition.id)!;
     const greenwoodEvent = greenwoodEventDefinition(greenwoodVariant);
-    mob.name = greenwoodEvent?.name ?? definition.name;
+    const mistfenEvent = mistfenEventDefinition(mistfenVariant);
+    mob.name = greenwoodEvent?.name ?? mistfenEvent?.name ?? definition.name;
     mob.isChampion = true;
-    mob.health = mob.maxHealth = Math.ceil(scale.maxHealth * (greenwoodScale?.healthMultiplier ?? 1));
-    mob.attackPattern = greenwoodVariant === "root-nest" ? "double-fan"
+    mob.health = mob.maxHealth = Math.ceil(scale.maxHealth * (regionalScale?.healthMultiplier ?? 1));
+    mob.attackPattern = mistfenVariant ? mistfenEventPattern(mistfenVariant, 0, mob.health, mob.maxHealth)
+      : greenwoodVariant === "root-nest" ? "double-fan"
       : greenwoodVariant === "alpha-ambush" ? "venom-ring"
       : definition.archetype === "cave_spitter" ? "aimed" : "rocks";
-    mob.attackDamage = Math.max(mob.attackDamage, scale.attackDamage + (greenwoodScale?.damageBonus ?? 0));
-    mob.speedMultiplier *= greenwoodScale?.speedMultiplier ?? 1;
-    mob.rewardMultiplier *= scale.rewardMultiplier * (greenwoodScale?.rewardMultiplier ?? 1);
-    mob.level = Math.max(enemyLevelForTier(mob.difficultyTier, true, true), greenwoodScale?.level ?? 1);
+    mob.attackDamage = Math.max(mob.attackDamage, scale.attackDamage + (regionalScale?.damageBonus ?? 0));
+    mob.speedMultiplier *= regionalScale?.speedMultiplier ?? 1;
+    mob.rewardMultiplier *= scale.rewardMultiplier * (regionalScale?.rewardMultiplier ?? 1);
+    mob.level = Math.max(enemyLevelForTier(mob.difficultyTier, true, true), regionalScale?.level ?? 1);
     if (greenwoodVariant && greenwoodScale) this.spawnGreenwoodEventFollowers(greenwoodVariant, greenwoodScale, definition.position, now);
+    if (mistfenVariant && mistfenScale) this.spawnMistfenEventFollowers(mistfenVariant, mistfenScale, definition.position, now);
     if (definition.realmBoss) {
       this.realmRewardLandingIndex = 0;
       this.realmBossEmptySince = 0;
@@ -2474,7 +2500,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     for (const client of this.clients) {
       const player = this.state.players.get(client.sessionId);
-      const trackingRadius = greenwoodVariant ? GREENWOOD_EVENT_TRACKING_RADIUS
+      const trackingRadius = greenwoodVariant ? GREENWOOD_EVENT_TRACKING_RADIUS : mistfenVariant ? MISTFEN_EVENT_TRACKING_RADIUS
         : definition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS;
       if (player && Math.abs(player.y - definition.position.y) <= 2.5
         && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= trackingRadius)
@@ -2512,6 +2538,33 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.materializeUntil = now + 1_500; mob.combatState = "recover"; mob.stateUntil = mob.materializeUntil;
     }
     if (variant === "root-nest") this.placeHuntChampionPincer(WILDERNESS_EVENT_ID, center, 0, "ascendant", now);
+  }
+
+  private clearMistfenEventFollowers(): void {
+    for (const [id] of this.state.mobs) {
+      if (!isMistfenEventFollower(id)) continue;
+      this.state.mobs.delete(id); this.mobHomes.delete(id); this.mobNavigation.delete(id);
+      this.mobAwareness.delete(id); this.mobBaseNames.delete(id); this.combatContributions.clear(id);
+      this.pendingMobMelee.delete(id); this.mobCommittedAim.delete(id); this.championCharges.delete(id);
+      this.crawlerRushes.delete(id);
+    }
+  }
+
+  private spawnMistfenEventFollowers(variant: MistfenEventKind,
+    scale: ReturnType<typeof mistfenEventScale>, center: { x: number; y: number; z: number }, now: number): void {
+    this.clearMistfenEventFollowers();
+    for (const follower of mistfenEventFollowers(variant, scale.followerCount, center)) {
+      this.registerMob(follower.id, follower.archetype, follower);
+      const mob = this.state.mobs.get(follower.id)!;
+      mob.name = follower.name; mob.isElite = true; mob.eliteKind = variant === "toxic-bloom" ? "venomous" : "stalker";
+      mob.health = mob.maxHealth = Math.ceil(mob.maxHealth * (1.08 + (scale.healthMultiplier - 1) * .65));
+      mob.attackDamage = Math.max(1, mob.attackDamage + scale.damageBonus);
+      mob.speedMultiplier *= scale.speedMultiplier;
+      mob.rewardMultiplier *= 1.4 * scale.rewardMultiplier;
+      mob.level = Math.max(mob.level, scale.level);
+      mob.attackPattern = follower.archetype === "stone_brute" ? "bog-charge" : wildernessElitePattern(follower.archetype, 0);
+      mob.materializeUntil = now + 1_500; mob.combatState = "recover"; mob.stateUntil = mob.materializeUntil;
+    }
   }
 
   private advanceRealmBossAbandonment(now: number): void {
@@ -2577,6 +2630,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ? [{ itemId: rematchMaterialId, quantity: rematchMaterialQuantity }] : [];
     const mistfenProgress = rewardPlayer ? this.mistfenProgress(rewardPlayer) : { points: 0, discovered: false };
     const mistfenRank = mistfenMasteryRank(mistfenProgress.points, mistfenProgress.discovered);
+    const mistfenEventMob = mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId);
+    const activeMistfenEvent = mistfenEventDefinition(this.realmEvents.mistfenVariant);
     const mistfenMasteryDrops: { itemId: ItemId; quantity: number }[] = isMistfenMob(mobId) && mistfenRank >= 2
       ? mobId === "mistfen-behemoth"
         ? [{ itemId: "acid_gland", quantity: mistfenRank >= 3 ? 3 : 1 },
@@ -2585,6 +2640,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             && !this.ownsOrHasPendingItem(ownerId, "mirebreaker_mantle")
             ? [{ itemId: "mirebreaker_mantle" as ItemId, quantity: 1 }] : [])]
         : [{ itemId: mob.archetype === "cave_spitter" ? "acid_gland" : "moss_fibre", quantity: 1 }]
+      : [];
+    const mistfenEventDrops: { itemId: ItemId; quantity: number }[] = mistfenEventMob && mistfenRank >= 2
+      ? isMistfenEventFollower(mobId)
+        ? [{ itemId: mob.archetype === "cave_spitter" ? "acid_gland" : "moss_fibre", quantity: 2 },
+          { itemId: "healing_potion", quantity: 1 }]
+        : [{ itemId: "acid_gland", quantity: 5 }, { itemId: "silver_ore", quantity: 2 },
+          ...(mistfenRank >= 3 && activeMistfenEvent && Math.random() < activeMistfenEvent.legendaryChance
+            ? [{ itemId: "mirebreaker_mantle" as ItemId, quantity: 1 }] : [])]
       : [];
     const greenwoodProgress = rewardPlayer ? this.greenwoodProgress(rewardPlayer) : { points: 0, discovered: false };
     const greenwoodRank = greenwoodMasteryRank(greenwoodProgress.points, greenwoodProgress.discovered);
@@ -2647,6 +2710,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...areaRelicDrops,
       ...rematchDrops,
       ...mistfenMasteryDrops,
+      ...mistfenEventDrops,
       ...greenwoodMasteryDrops,
       ...greenwoodEventDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
@@ -5177,7 +5241,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.enterRealmBossPhase(mobId, mob, currentRealmPhase, now);
         }
         mob.enraged = currentRealmPhase >= 2;
-        if (mob.combatState === "idle") mob.attackPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth) ?? mob.attackPattern;
+        if (mob.combatState === "idle") mob.attackPattern = mobId === MISTFEN_EVENT_ID && this.realmEvents.mistfenVariant
+          ? mistfenEventPattern(this.realmEvents.mistfenVariant, mob.actionSequence, mob.health, mob.maxHealth)
+          : realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth) ?? mob.attackPattern;
       }
       else if (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID) {
         if (!mob.enraged && matriarchEnraged(mob.health, mob.maxHealth)) mob.enraged = true;
@@ -5193,7 +5259,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         mob.attackPattern = orbitCounter ? miniBossOrbitCounterPattern(mob.archetype)
           : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId);
       }
-      else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
+      else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = isMistfenEventFollower(mobId)
+        && this.realmEvents.mistfenVariant === "mireback-stampede" ? "bog-charge"
+        : wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = huntChampion
         ? huntChampionPattern(huntChampion.pathId, mob.actionSequence, currentAreaLeaderPhase, huntChampion.difficulty)
         : mob.isMiniBoss && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now
@@ -5205,13 +5273,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const eligible = [...this.state.players.values()].filter(player => player.health > 0 && !isInsideTownSafeZone(player)
           && Math.abs(player.y - mob.y) <= 1.75 && caveEncounterAllows(mobId, player) && this.roamingAllowed(mobId, player) && this.championAllowed(mobId, player));
         const distance = Math.min(...eligible.map(player => Math.hypot(player.x - mob.x, player.z - mob.z)));
-        const realmPattern = realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth);
+        const realmPattern = mobId === MISTFEN_EVENT_ID && this.realmEvents.mistfenVariant
+          ? mistfenEventPattern(this.realmEvents.mistfenVariant, mob.actionSequence, mob.health, mob.maxHealth)
+          : realmBossPattern(mobId, mob.actionSequence, mob.health, mob.maxHealth);
         const orbitCounter = mob.isMiniBoss && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now;
         mob.attackPattern = realmPattern ?? (mobId === "forest-guardian" && mob.enraged ? championPattern(mob)
           : orbitCounter ? miniBossOrbitCounterPattern(mob.archetype)
           : isAreaMiniBoss(mobId) ? mobId === "frontier-brute" && currentAreaLeaderPhase === 1 && bruteVolleyReady(mob.actionSequence, distance)
               ? "rocks" : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId)
-          : mob.isElite ? wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence)
+          : mob.isElite ? isMistfenEventFollower(mobId) && this.realmEvents.mistfenVariant === "mireback-stampede"
+            ? "bog-charge" : wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence)
           : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
           : huntChampion ? huntChampionPattern(huntChampion.pathId, mob.actionSequence, currentAreaLeaderPhase, huntChampion.difficulty)
           : mob.isChampion ? championPattern(mob)
@@ -5418,7 +5489,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           const championVenom = huntChampion?.pathId === "venom" ? huntChampionVenomHazard(mob.attackPattern) : null;
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
-          const mistfenEruption = mobId === "mistfen-behemoth" && mob.attackPattern === "toxic-eruption";
+          const mistfenEruption = (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID)
+            && mob.attackPattern === "toxic-eruption";
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
             championVenom?.radius ?? (mistfenEruption ? 1.15 : venomPools ? .82 : definition.hazardRadius),
             championVenom?.durationMs ?? (mistfenEruption ? 4_500 : venomPools ? 3_600 : definition.hazardDurationMs));
@@ -5454,7 +5526,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             x: Math.sin(aim.yaw * Math.PI / 180) * lungeDistance, z: Math.cos(aim.yaw * Math.PI / 180) * lungeDistance,
           });
         }
-        if (mob.isChampion && mob.attackPattern === "charge" || mobId === "mistfen-behemoth" && mob.attackPattern === "bog-charge") {
+        if (mob.isChampion && mob.attackPattern === "charge"
+          || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
           this.championCharges.set(mobId, { yaw: aim.yaw, startedAt: now, progress: 0, hit: new Set() });
         } else {
           this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw, impactAt: mob.attackContactAt });
@@ -6415,7 +6488,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackStrikeZ = mob.attackPattern === "pool" ? aim?.z ?? mob.z : mob.z;
       return;
     }
-    if (mob.isChampion && mob.attackPattern === "charge" || mobId === "mistfen-behemoth" && mob.attackPattern === "bog-charge") {
+    if (mob.isChampion && mob.attackPattern === "charge"
+      || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       if (mob.aimCommitted) return;
       mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
       return;
@@ -6464,7 +6538,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackRecoveryEndAt = mob.attackContactEndAt + MATRIARCH_PHASE.recoveryMs;
       return;
     }
-    if (mob.isChampion && mob.attackPattern === "charge" || mobId === "mistfen-behemoth" && mob.attackPattern === "bog-charge") {
+    if (mob.isChampion && mob.attackPattern === "charge"
+      || (mobId === "mistfen-behemoth" || mobId === MISTFEN_EVENT_ID || isMistfenEventFollower(mobId)) && mob.attackPattern === "bog-charge") {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + CHAMPION_CHARGE.recoveryMs;
@@ -6506,7 +6581,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       charge.progress = progress;
       if (progress >= 1 || Math.hypot(next.x - start.x, next.z - start.z) < travel * .8) {
         this.championCharges.delete(id);
-        if (id === "mistfen-behemoth" && charge.hit.size === 0) {
+        if ((id === "mistfen-behemoth" || id === MISTFEN_EVENT_ID) && charge.hit.size === 0) {
           mob.combatState = "recover";
           mob.stateUntil = Math.max(mob.stateUntil, now + 2_500);
           mob.targetId = "";

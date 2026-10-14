@@ -53,7 +53,7 @@ export function greenwoodEventForSequence(sequence: number): GreenwoodEventDefin
   return GREENWOOD_DYNAMIC_EVENTS[Math.max(0, Math.floor(sequence)) % GREENWOOD_DYNAMIC_EVENTS.length]!;
 }
 
-export function greenwoodEventDefinition(kind: GreenwoodEventKind | null | undefined): GreenwoodEventDefinition | null {
+export function greenwoodEventDefinition(kind: string | null | undefined): GreenwoodEventDefinition | null {
   return GREENWOOD_DYNAMIC_EVENTS.find(event => event.kind === kind) ?? null;
 }
 

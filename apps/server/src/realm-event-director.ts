@@ -1,10 +1,12 @@
 import type { ItemId } from "@blockcraft/protocol";
-import { ASHEN_SPIRE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
+import { ASHEN_SPIRE_POSITION, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import type { MobArchetypeId } from "./mob-archetypes.js";
 import { GREENWOOD_EVENT_TRACKING_RADIUS, greenwoodEventForSequence,
   type GreenwoodEventKind } from "./greenwood-events.js";
+import { MISTFEN_EVENT_ID, MISTFEN_EVENT_TRACKING_RADIUS, mistfenEventForSequence,
+  type MistfenEventKind } from "./mistfen-events.js";
 
-export type RealmEventKey = "greenwood" | "stoneheart" | "ashglass" | "realm-warden";
+export type RealmEventKey = "greenwood" | "mistfen" | "stoneheart" | "ashglass" | "realm-warden";
 export type RealmEventPhase = "idle" | "warning" | "active" | "cooldown";
 export type RealmEventDefinition = {
   key: RealmEventKey;
@@ -48,6 +50,15 @@ export const REALM_EVENT_DEFINITIONS: readonly RealmEventDefinition[] = [
     rewards: [{ itemId: "acid_gland", quantity: 3 }], signatureRewards: ["venom_focus"], opensForestPortal: true,
   },
   {
+    key: "mistfen", id: MISTFEN_EVENT_ID, name: "Mistfen Mireheart",
+    title: "Mistfen Mireheart · Regional Event",
+    detail: "Read the marsh hazards, break its escort, and claim survival-focused personal loot.",
+    archetype: "stone_brute", position: MISTFEN_BEHEMOTH_HOME,
+    triggerIds: ["mistfen-behemoth", "mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"], tier: 2,
+    baseHealth: 34, healthPerPlayer: 14, baseDamage: 2, rewardMultiplier: 1.8,
+    rewards: [{ itemId: "acid_gland", quantity: 4 }, { itemId: "healing_potion", quantity: 1 }], signatureRewards: [],
+  },
+  {
     key: "stoneheart", id: "stoneheart-siege-lord", name: "Stoneheart Siege Lord",
     title: "Stoneheart Siege · Public Event",
     detail: "Use the arena pillars against rock volleys, escape the marked slam, then punish its recovery.",
@@ -86,7 +97,7 @@ export type RealmEventStatus = {
   eventName: string | null;
   eventTitle: string | null;
   eventDetail?: string | null;
-  eventVariant?: GreenwoodEventKind | null;
+  eventVariant?: GreenwoodEventKind | MistfenEventKind | null;
   trackingRadius?: number;
   targetX: number;
   targetY: number;
@@ -129,10 +140,13 @@ export class RealmEventDirector {
   private eliteKills = 0;
   private greenwoodSequence = 0;
   private currentGreenwoodVariant: GreenwoodEventKind | null = null;
+  private mistfenSequence = 0;
+  private currentMistfenVariant: MistfenEventKind | null = null;
 
   get phase(): RealmEventPhase { return this.currentPhase; }
   get definition(): RealmEventDefinition | null { return realmEventDefinition(this.currentKey); }
   get greenwoodVariant(): GreenwoodEventKind | null { return this.currentGreenwoodVariant; }
+  get mistfenVariant(): MistfenEventKind | null { return this.currentMistfenVariant; }
 
   private threatProgress(): number {
     return Math.min(REALM_EVENT_REQUIRED, this.completed.size + this.defeatedLeaders.size
@@ -152,6 +166,9 @@ export class RealmEventDirector {
     if (definition.key === "greenwood") {
       this.currentGreenwoodVariant = greenwoodEventForSequence(this.greenwoodSequence++).kind;
     } else this.currentGreenwoodVariant = null;
+    if (definition.key === "mistfen") {
+      this.currentMistfenVariant = mistfenEventForSequence(this.mistfenSequence++).kind;
+    } else this.currentMistfenVariant = null;
     this.currentPhase = "warning";
     this.warningEndsAt = now + REALM_EVENT_WARNING_MS;
     this.nextAt = 0;
@@ -249,14 +266,16 @@ export class RealmEventDirector {
     const definition = this.definition;
     const greenwood = definition?.key === "greenwood"
       ? greenwoodEventForSequence(Math.max(0, this.greenwoodSequence - 1)) : null;
+    const mistfen = definition?.key === "mistfen"
+      ? mistfenEventForSequence(Math.max(0, this.mistfenSequence - 1)) : null;
     return {
       phase: this.currentPhase,
       eventId: definition?.id ?? null,
-      eventName: greenwood?.name ?? definition?.name ?? null,
-      eventTitle: greenwood?.title ?? definition?.title ?? null,
-      eventDetail: greenwood?.detail ?? definition?.detail ?? null,
-      eventVariant: greenwood?.kind ?? null,
-      trackingRadius: greenwood ? GREENWOOD_EVENT_TRACKING_RADIUS
+      eventName: greenwood?.name ?? mistfen?.name ?? definition?.name ?? null,
+      eventTitle: greenwood?.title ?? mistfen?.title ?? definition?.title ?? null,
+      eventDetail: greenwood?.detail ?? mistfen?.detail ?? definition?.detail ?? null,
+      eventVariant: greenwood?.kind ?? mistfen?.kind ?? null,
+      trackingRadius: greenwood ? GREENWOOD_EVENT_TRACKING_RADIUS : mistfen ? MISTFEN_EVENT_TRACKING_RADIUS
         : definition?.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS,
       targetX: definition?.position.x ?? 0,
       targetY: definition?.position.y ?? 0,

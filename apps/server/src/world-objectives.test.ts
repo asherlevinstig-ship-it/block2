@@ -165,6 +165,17 @@ describe("world objective director", () => {
       detail: "Survive the encircling elite pack.", progressLabel: "REGIONAL EVENT · AMBUSH" });
     expect(nearbyObjective("tester", player(5, 18), mobs, [], [], 10_000, null, active).objectiveId).not.toBe("greenwood-event");
   });
+  it("keeps Mistfen event guidance local to the marsh", () => {
+    const active = { phase: "active" as const, eventId: "mistfen-mireheart", eventName: "Toxic Mireheart",
+      eventTitle: "Toxic Bloom", eventDetail: "Destroy the spreading bloom guards.", eventVariant: "toxic-bloom" as const,
+      trackingRadius: 36, targetX: -47.5, targetY: 8, targetZ: -31.5, warningUntil: 0,
+      completed: 0, required: 3, realmBoss: false, eliteKills: 0, eliteRequired: 2 };
+    const mobs = [["mistfen-mireheart", mob(-47.5, -31.5, { name: "Toxic Mireheart", difficultyTier: 2 })]] as const;
+    expect(nearbyObjective("tester", player(-45, -30), mobs, [], [], 10_000, null, active)).toMatchObject({
+      objectiveId: "mistfen-event", title: "Toxic Bloom", progressLabel: "REGIONAL EVENT · TOXIC BLOOM",
+    });
+    expect(nearbyObjective("tester", player(-8, -30), mobs, [], [], 10_000, null, active).objectiveId).not.toBe("mistfen-event");
+  });
   it("changes to a newly opened portal and stops pointing to slain guards", () => {
     const update = nearbyObjective("tester", player(48, 28), [["cave-spitter", mob(46, 28, { alive: false })]],
       [["forest-entry", { x: 46.5, y: 8, z: 28.5, kind: "entry", expiresAt: 12000 }]], [], 10000, "silver-guards");

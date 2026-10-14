@@ -18,6 +18,14 @@ describe("Realm-style encounter director", () => {
     expect(director.release(9_000)?.id).toBe(greenwood.id);
   });
 
+  it("arms a nearby-only rotating Mistfen event from a marsh clear", () => {
+    const director = new RealmEventDirector();
+    const mistfen = REALM_EVENT_DEFINITIONS.find(event => event.key === "mistfen")!;
+    expect(clear(director, mistfen.triggerIds, 2_000)?.id).toBe("mistfen-mireheart");
+    expect(director.status(2_000)).toMatchObject({ eventTitle: "Mireback Stampede",
+      eventVariant: "mireback-stampede", trackingRadius: 36 });
+  });
+
   it("escalates three distinct regional victories into a realm boss and resets after victory", () => {
     const director = new RealmEventDirector();
     let now = 1_000;
@@ -76,6 +84,7 @@ describe("Realm-style encounter director", () => {
   it("assigns personal signature gear to every public boss", () => {
     expect(REALM_EVENT_DEFINITIONS.map(event => [event.key, event.signatureRewards])).toEqual([
       ["greenwood", ["venom_focus"]],
+      ["mistfen", []],
       ["stoneheart", ["stone_core_hammer"]],
       ["ashglass", ["echo_prism"]],
       ["realm-warden", ["rootbound_hammer", "rootguard_armour"]],
