@@ -5,6 +5,7 @@ import { ASHEN_SENTRY_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS } from "./wilderness-
 import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 import { areaMainMobDefinition } from "./area-mini-bosses.js";
+import { GREENWOOD_EVENT_FOLLOWER_PREFIX, greenwoodEventDefinition } from "./greenwood-events.js";
 import { ROAMING_PACKS, roamingMemberId } from "./roaming-packs.js";
 type Pose = { x: number; y: number; z: number };
 type Mob = Pose & { alive: boolean; name: string; difficultyTier: number; level?: number; combatState: string; targetId: string };
@@ -16,7 +17,9 @@ interface ObjectiveGroup { id: string; title: string; detail: string; ids: strin
 const GROUPS: ObjectiveGroup[] = [
   { id: "buried-vault", title: "Breach the Buried Vault", detail: "Mine through the silver seal. Defeat the Vault Crawler and Stone Warden, then claim your personal Miner's Lantern cache.", ids: ["buried-vault-crawler", "buried-chamber-brute"], mainId: "buried-chamber-brute" },
   { id: "frontier-mixed", title: "Frontier Warband", detail: "Draw out the crawler, dodge the brute's rocks, then pressure the support spitter. Counter during recovery.", ids: [...MIXED_FRONTIER_IDS], mainId: "frontier-brute-east" },
-  ...REALM_EVENT_DEFINITIONS.map(event => ({ id: event.key === "greenwood" ? "greenwood-event" : event.realmBoss ? "realm-boss" : `${event.key}-event`, title: event.title, detail: event.detail, ids: [event.id] })),
+  ...REALM_EVENT_DEFINITIONS.map(event => ({ id: event.key === "greenwood" ? "greenwood-event" : event.realmBoss ? "realm-boss" : `${event.key}-event`, title: event.title, detail: event.detail,
+    ids: event.key === "greenwood" ? [event.id, ...Array.from({ length: 5 }, (_, index) => `${GREENWOOD_EVENT_FOLLOWER_PREFIX}${index}`)] : [event.id],
+    mainId: event.key === "greenwood" ? event.id : undefined })),
   { id: "greenwood", title: "Greenwood Crawler Camp", detail: "Follow the dirt road, clear the three root nests, collect crawler items, then mine the exposed iron seam east of the camp.", ids: ["wild-crawler", "greenwood-briar", "greenwood-briar-north"], mainId: "wild-crawler" },
   { id: "silver-guards", title: "Silver Guard Clearing", detail: "Dodge aimed shots and fan gaps using the stone cover. Collect a focus and potion, mine silver, and clear both guards to open the Forest Dungeon portal.", ids: ["cave-spitter", "frontier-spitter"], mainId: "frontier-spitter" },
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"], mainId: "stone-brute" },
@@ -37,6 +40,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
   const eventStatus: RealmEventStatus = typeof realmEvent === "number" ? {
     phase: realmEvent > now ? "warning" : "idle", eventId: realmEvent > now ? WILDERNESS_EVENT_ID : null,
     eventName: realmEvent > now ? "Greenwood Venom Matriarch" : null, eventTitle: realmEvent > now ? "Venom Matriarch · Public Event" : null,
+    eventDetail: null, eventVariant: null, trackingRadius: WILDERNESS_EVENT_TRACKING_RADIUS,
     targetX: WILDERNESS_EVENT_POSITION.x, targetY: WILDERNESS_EVENT_POSITION.y, targetZ: WILDERNESS_EVENT_POSITION.z,
     warningUntil: realmEvent, completed: 0, required: 3, realmBoss: false, eliteKills: 0, eliteRequired: 2,
   } : realmEvent;
@@ -72,7 +76,9 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     const candidates = groups.flatMap(group => {
       const living = group.ids.flatMap(id => { const mob = mobs.get(id); return mob?.alive && sameFloor(mob) && isInForestDungeon(mob.x, mob.z) === dungeon ? [{ id, mob }] : []; }).sort((a, b) => distance(a.mob) - distance(b.mob));
       const realmDefinition = group.ids.map(id => realmEventDefinition(id)).find(Boolean);
-      const acquisitionRadius = realmDefinition ? realmDefinition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS
+      const acquisitionRadius = realmDefinition ? eventStatus.eventId === realmDefinition.id
+        ? eventStatus.trackingRadius ?? (realmDefinition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS)
+        : realmDefinition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS
         : group.id === previousId ? 32 : dungeon ? 48 : 26;
       const nearest = living[0]; if (!nearest || distance(nearest.mob) > acquisitionRadius) return [];
       const main = group.mainId ? living.find(entry => entry.id === group.mainId) : undefined;
@@ -82,6 +88,10 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
         miniBoss ? `AREA MINI-BOSS · Defeat ${miniBoss.name} for its richest personal cache. First victory also guarantees ${ITEM_DEFINITIONS[miniBoss.rewardItemId].name}.` : group.detail,
         target.mob, miniBoss ? "miniboss" : "encounter", target.mob.difficultyTier);
       update.recommendedLevel = `LV ${target.mob.level ?? worldLevelRange(target.mob.difficultyTier).min}`;
+      if (realmDefinition && eventStatus.eventId === realmDefinition.id) {
+        update.title = eventStatus.eventTitle ?? eventStatus.eventName ?? update.title;
+        update.detail = eventStatus.eventDetail ?? update.detail;
+      }
       update.targetMobId = target.id; update.targetMobIds = group.ids.filter(id => mobs.has(id)); update.completedMobIds = group.ids.filter(id => mobs.get(id)?.alive === false);
       if (miniBoss) update.progressLabel = "MINI-BOSS · HIGHEST LOOT";
       return [{ update, distance: distance(nearest.mob), engaged: living.some(({ mob }) => mob.targetId === playerId || mob.combatState !== "idle" && distance(mob) <= 8) }];
@@ -97,19 +107,22 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
     if (eventStatus.phase === "warning" && eventStatus.warningUntil > now) {
       const definition = realmEventDefinition(eventStatus.eventId);
       const point = definition?.position ?? WILDERNESS_EVENT_POSITION;
-      const trackingRadius = definition?.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS;
+      const trackingRadius = eventStatus.trackingRadius
+        ?? (definition?.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS);
       if (sameFloor(point) && distance(point) <= (legacyEventState ? WILDERNESS_EVENT_TRACKING_RADIUS : trackingRadius)) {
         const update = make(definition?.realmBoss ? "realm-boss-warning" : `${definition?.key ?? "greenwood"}-event-warning`,
-          `${eventStatus.eventName ?? "Public event"} · ${Math.ceil((eventStatus.warningUntil - now) / 1000)}s`,
+          `${eventStatus.eventTitle ?? eventStatus.eventName ?? "Public event"} · ${Math.ceil((eventStatus.warningUntil - now) / 1000)}s`,
           definition?.realmBoss ? "The realm threat has peaked. Rally at the marker before the Warden arrives."
-            : "Public event incoming. Follow the marker and gather nearby before it arrives.", point, "encounter", definition?.tier ?? 1);
+            : eventStatus.eventDetail ?? "Regional event incoming. Follow the nearby map marker and gather before it arrives.", point, "encounter", definition?.tier ?? 1);
         update.progressLabel = definition?.realmBoss ? "REALM BOSS" : `REALM THREAT ${eventStatus.completed} / ${eventStatus.required}`;
         return update;
       }
     }
     const event = candidates.find(candidate => candidate.update.targetMobIds.some(id => realmEventDefinition(id)));
     if (event) {
-      event.update.progressLabel = event.update.objectiveId === "realm-boss" ? "REALM BOSS" : `REALM THREAT ${eventStatus.completed} / ${eventStatus.required}`;
+      event.update.progressLabel = event.update.objectiveId === "realm-boss" ? "REALM BOSS"
+        : greenwoodEventDefinition(eventStatus.eventVariant)?.progressLabel
+          ?? `REALM THREAT ${eventStatus.completed} / ${eventStatus.required}`;
       return event.update;
     }
     const loot = drops.filter(([, drop]) => (!drop.ownerId || drop.ownerId === playerId) && now < drop.expiresAt && sameFloor(drop) && distance(drop) <= 6

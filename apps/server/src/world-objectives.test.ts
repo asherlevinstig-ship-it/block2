@@ -154,6 +154,17 @@ describe("world objective director", () => {
     expect(nearbyObjective("tester", player(145, 32), [], [], [], 10_000, null, warning).objectiveId).toBe("realm-boss-warning");
     expect(nearbyObjective("tester", player(155, 32), [], [], [], 10_000, null, warning).objectiveId).toBe("explore");
   });
+  it("reveals a Greenwood regional event only nearby and uses its rotating map identity", () => {
+    const active = { phase: "active" as const, eventId: "greenwood-venom-matriarch", eventName: "Greenwood Pack Alpha",
+      eventTitle: "Alpha Ambush", eventDetail: "Survive the encircling elite pack.", eventVariant: "alpha-ambush" as const,
+      trackingRadius: 34, targetX: 43.5, targetY: 8, targetZ: 18.5, warningUntil: 0,
+      completed: 0, required: 3, realmBoss: false, eliteKills: 0, eliteRequired: 2 };
+    const mobs = [["greenwood-venom-matriarch", mob(43.5, 18.5, { name: "Greenwood Pack Alpha" })]] as const;
+    const nearby = nearbyObjective("tester", player(42, 18), mobs, [], [], 10_000, null, active);
+    expect(nearby).toMatchObject({ objectiveId: "greenwood-event", title: "Alpha Ambush",
+      detail: "Survive the encircling elite pack.", progressLabel: "REGIONAL EVENT · AMBUSH" });
+    expect(nearbyObjective("tester", player(5, 18), mobs, [], [], 10_000, null, active).objectiveId).not.toBe("greenwood-event");
+  });
   it("changes to a newly opened portal and stops pointing to slain guards", () => {
     const update = nearbyObjective("tester", player(48, 28), [["cave-spitter", mob(46, 28, { alive: false })]],
       [["forest-entry", { x: 46.5, y: 8, z: 28.5, kind: "entry", expiresAt: 12000 }]], [], 10000, "silver-guards");

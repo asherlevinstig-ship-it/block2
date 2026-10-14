@@ -27,6 +27,8 @@ import { circleCrawler, createCrawlerPositioning, retreatCrawler, type CrawlerPo
 import { FRONTIER_CHAMPION_ID, SILVER_CHAMPION_ID, championPattern, spitterChampionShots, combatMobDefinition, moveChampionCharge, championChargeHits } from "./frontier-champion.js";
 import { WILDERNESS_EVENT_ID } from "./wilderness-event.js";
 import { RealmEventDirector, REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_TRACKING_RADIUS, REALM_EVENT_SCALING_RADIUS, isRealmEventId, realmEventDefinition, realmEventScale } from "./realm-event-director.js";
+import { GREENWOOD_EVENT_TRACKING_RADIUS, greenwoodEventDefinition, greenwoodEventFollowers,
+  greenwoodEventScale, isGreenwoodEventFollower, type GreenwoodEventKind } from "./greenwood-events.js";
 import { ASHGLASS_ORACLE_ID, GREENWOOD_MATRIARCH_ID, REALM_WARDEN_ID,
   fallingRockSites, isRealmSpitterBoss, realmBossPattern, realmBossPhase, usesDoubleVolley, usesFallingRockZones, usesRockVolley, type RealmBossPhase } from "./realm-boss-patterns.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
@@ -1051,6 +1053,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const update = this.realmEvents.status(now) satisfies RealmEventUpdate;
     const definition = realmEventDefinition(update.eventId);
     const player = this.state.players.get(client.sessionId);
+    if (definition?.key === "greenwood" && player
+      && (Math.abs(player.y - update.targetY) > 2.5
+        || Math.hypot(player.x - update.targetX, player.z - update.targetZ) > GREENWOOD_EVENT_TRACKING_RADIUS)) {
+      return { ...update, phase: "idle", eventId: null, eventName: null, eventTitle: null,
+        eventDetail: null, eventVariant: null, warningUntil: 0 };
+    }
     if (!definition || !player || definition.signatureRewards.length === 0) return update;
     const pity = parseSignaturePity(player.signaturePityJson);
     const signatures = definition.signatureRewards as readonly SignatureItemId[];
@@ -2043,6 +2051,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const wasElite = mob.isElite;
     const huntChampion = this.huntChampions.get(mobId);
     const realmRepeatVictory = mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive;
+    const defeatedGreenwoodEvent = mobId === WILDERNESS_EVENT_ID
+      ? greenwoodEventDefinition(this.realmEvents.greenwoodVariant) : null;
     for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
     const credited = isRealmEventId(mobId)
       ? this.combatContributions.eligiblePersistent(mobId, mob, this.state.players)
@@ -2157,6 +2167,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const usesOverworldRhythm = this.roomKind === "overworld" && usesOverworldRespawnRhythm(mobId, mob.isChampion);
     mob.respawnAt = huntChampion ? now + 5_000
       : now + (usesOverworldRhythm ? wildernessRespawnDelay(mobId, mob.level) : definition.respawnMs);
+    if (isGreenwoodEventFollower(mobId)) mob.respawnAt = Number.MAX_SAFE_INTEGER;
     const leaderProgress = areaMainMob && this.roomKind === "overworld" ? this.realmEvents.recordLeader(mobId, now) : null;
     if (leaderProgress?.credited) {
       for (const playerId of recipients) this.clients.find(client => client.sessionId === playerId)?.send("chat:notice",
@@ -2170,7 +2181,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (armedEvent) {
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
-        if (player && Math.abs(player.y - armedEvent.position.y) <= 2.5
+        if (armedEvent.key !== "greenwood" && player && Math.abs(player.y - armedEvent.position.y) <= 2.5
           && Math.hypot(player.x - armedEvent.position.x, player.z - armedEvent.position.z) <= REALM_EVENT_TRACKING_RADIUS)
           client.send("chat:notice", `Public event incoming · ${armedEvent.name} arrives in 8 seconds. Follow the marker and gather nearby!`);
       }
@@ -2191,6 +2202,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isRealmEventId(mobId)) {
       const completion = realmRepeatVictory ? null : this.realmEvents.complete(mobId, now);
       const opened = completion?.definition.opensForestPortal ? this.openTemporaryForestPortal(now) : false;
+      if (mobId === WILDERNESS_EVENT_ID) this.clearGreenwoodEventFollowers();
       if (realmRepeatVictory) {
         this.realmWardenRepeatActive = false;
         this.realmWardenRepeatAvailableAt = now + 60_000;
@@ -2200,7 +2212,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       for (const client of this.clients) {
         const player = this.state.players.get(client.sessionId);
-        if (!player || !completion || Math.abs(player.y - completion.definition.position.y) > 2.5
+        if (!player || !completion || completion.definition.key === "greenwood"
+          || Math.abs(player.y - completion.definition.position.y) > 2.5
           || Math.hypot(player.x - completion.definition.position.x, player.z - completion.definition.position.z) > REALM_EVENT_TRACKING_RADIUS) continue;
         client.send("chat:notice", completion.realmCleared
           ? "REALM CLEARED · personal victory caches have landed. The regional threat cycle has reset."
@@ -2240,6 +2253,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.grantBuildProgress(playerId, mobId === "mistfen-behemoth" ? 5 : Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
       if (isMistfenMob(mobId)) this.grantMistfenMastery(playerId, mobId === "mistfen-behemoth" ? 18 : 3);
       if (isGreenwoodCampMob(mobId)) this.grantGreenwoodMastery(playerId, mobId === "wild-crawler" ? 18 : 3);
+      else if (isGreenwoodEventFollower(mobId)) this.grantGreenwoodMastery(playerId, 4);
+      else if (mobId === WILDERNESS_EVENT_ID) this.grantGreenwoodMastery(playerId,
+        defeatedGreenwoodEvent?.masteryReward ?? 14);
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -2427,19 +2443,27 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private advanceRealmEvent(now: number): void {
     const definition = this.realmEvents.release(now);
     if (!definition) return;
-    const nearbyPlayers = [...this.state.players.values()].filter(player => player.health > 0
+    const nearby = [...this.state.players.values()].filter(player => player.health > 0
       && Math.abs(player.y - definition.position.y) <= 2.5
-      && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= REALM_EVENT_SCALING_RADIUS).length;
-    const scale = realmEventScale(nearbyPlayers, definition);
+      && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= REALM_EVENT_SCALING_RADIUS);
+    const scale = realmEventScale(nearby.length, definition);
+    const greenwoodVariant = definition.key === "greenwood" ? this.realmEvents.greenwoodVariant : null;
+    const greenwoodScale = greenwoodVariant
+      ? greenwoodEventScale(greenwoodVariant, nearby.length, Math.max(1, ...nearby.map(player => player.level))) : null;
     this.registerMob(definition.id, definition.archetype, definition.position);
     const mob = this.state.mobs.get(definition.id)!;
-    mob.name = definition.name;
+    const greenwoodEvent = greenwoodEventDefinition(greenwoodVariant);
+    mob.name = greenwoodEvent?.name ?? definition.name;
     mob.isChampion = true;
-    mob.health = mob.maxHealth = scale.maxHealth;
-    mob.attackPattern = definition.archetype === "cave_spitter" ? "aimed" : "rocks";
-    mob.attackDamage = Math.max(mob.attackDamage, scale.attackDamage);
-    mob.rewardMultiplier *= scale.rewardMultiplier;
-    mob.level = enemyLevelForTier(mob.difficultyTier, true, true);
+    mob.health = mob.maxHealth = Math.ceil(scale.maxHealth * (greenwoodScale?.healthMultiplier ?? 1));
+    mob.attackPattern = greenwoodVariant === "root-nest" ? "double-fan"
+      : greenwoodVariant === "alpha-ambush" ? "venom-ring"
+      : definition.archetype === "cave_spitter" ? "aimed" : "rocks";
+    mob.attackDamage = Math.max(mob.attackDamage, scale.attackDamage + (greenwoodScale?.damageBonus ?? 0));
+    mob.speedMultiplier *= greenwoodScale?.speedMultiplier ?? 1;
+    mob.rewardMultiplier *= scale.rewardMultiplier * (greenwoodScale?.rewardMultiplier ?? 1);
+    mob.level = Math.max(enemyLevelForTier(mob.difficultyTier, true, true), greenwoodScale?.level ?? 1);
+    if (greenwoodVariant && greenwoodScale) this.spawnGreenwoodEventFollowers(greenwoodVariant, greenwoodScale, definition.position, now);
     if (definition.realmBoss) {
       this.realmRewardLandingIndex = 0;
       this.realmBossEmptySince = 0;
@@ -2450,10 +2474,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     for (const client of this.clients) {
       const player = this.state.players.get(client.sessionId);
-      const trackingRadius = definition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS;
+      const trackingRadius = greenwoodVariant ? GREENWOOD_EVENT_TRACKING_RADIUS
+        : definition.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS;
       if (player && Math.abs(player.y - definition.position.y) <= 2.5
         && Math.hypot(player.x - definition.position.x, player.z - definition.position.z) <= trackingRadius)
-        client.send("chat:notice", `${definition.realmBoss ? "REALM BOSS" : "Public event"} live · ${definition.name} scaled for ${scale.players} adventurer${scale.players === 1 ? "" : "s"}. Deal damage to qualify for personal loot.`);
+        if (definition.realmBoss) client.send("chat:notice", `REALM BOSS live · ${definition.name} scaled for ${scale.players} adventurer${scale.players === 1 ? "" : "s"}. Deal damage to qualify for personal loot.`);
     }
     this.broadcastRealmEvent(now);
     this.refreshNearbyObjectives();
@@ -2461,6 +2486,33 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   /** Kept for focused legacy tests while the one-off wilderness event migrates to the realm director. */
   private advanceWildernessEvent(now: number): void { this.advanceRealmEvent(now); }
+
+  private clearGreenwoodEventFollowers(): void {
+    for (const [id] of this.state.mobs) {
+      if (!isGreenwoodEventFollower(id)) continue;
+      this.state.mobs.delete(id); this.mobHomes.delete(id); this.mobNavigation.delete(id);
+      this.mobAwareness.delete(id); this.mobBaseNames.delete(id); this.combatContributions.clear(id);
+      this.pendingMobMelee.delete(id); this.mobCommittedAim.delete(id); this.crawlerRushes.delete(id);
+    }
+  }
+
+  private spawnGreenwoodEventFollowers(variant: GreenwoodEventKind,
+    scale: ReturnType<typeof greenwoodEventScale>, center: { x: number; y: number; z: number }, now: number): void {
+    this.clearGreenwoodEventFollowers();
+    for (const follower of greenwoodEventFollowers(variant, scale.followerCount, center)) {
+      this.registerMob(follower.id, follower.archetype, follower);
+      const mob = this.state.mobs.get(follower.id)!;
+      mob.name = follower.name; mob.isElite = true; mob.eliteKind = "stalker";
+      mob.health = mob.maxHealth = Math.ceil(mob.maxHealth * (1.05 + (scale.healthMultiplier - 1) * .65));
+      mob.attackDamage = Math.max(1, mob.attackDamage + scale.damageBonus);
+      mob.speedMultiplier *= scale.speedMultiplier;
+      mob.rewardMultiplier *= 1.35 * scale.rewardMultiplier;
+      mob.level = Math.max(mob.level, scale.level);
+      mob.attackPattern = wildernessElitePattern(follower.archetype, 0);
+      mob.materializeUntil = now + 1_500; mob.combatState = "recover"; mob.stateUntil = mob.materializeUntil;
+    }
+    if (variant === "root-nest") this.placeHuntChampionPincer(WILDERNESS_EVENT_ID, center, 0, "ascendant", now);
+  }
 
   private advanceRealmBossAbandonment(now: number): void {
     const mob = this.state.mobs.get(REALM_WARDEN_ID);
@@ -2536,6 +2588,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : [];
     const greenwoodProgress = rewardPlayer ? this.greenwoodProgress(rewardPlayer) : { points: 0, discovered: false };
     const greenwoodRank = greenwoodMasteryRank(greenwoodProgress.points, greenwoodProgress.discovered);
+    const greenwoodEventMob = mobId === WILDERNESS_EVENT_ID || isGreenwoodEventFollower(mobId);
+    const activeGreenwoodEvent = greenwoodEventDefinition(this.realmEvents.greenwoodVariant);
     const greenwoodMasteryDrops: { itemId: ItemId; quantity: number }[] = isGreenwoodCampMob(mobId) && greenwoodRank >= 2
       ? mobId === "wild-crawler"
         ? [{ itemId: "moss_fibre", quantity: greenwoodRank >= 3 ? 3 : 1 },
@@ -2543,6 +2597,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           ...(greenwoodRank >= 3 && mob.leaderModifier === "rootslayer" && !this.ownsOrHasPendingItem(ownerId, "rootstalker_wrap")
             ? [{ itemId: "rootstalker_wrap" as ItemId, quantity: 1 }] : [])]
         : [{ itemId: "moss_fibre", quantity: 1 }]
+      : [];
+    const greenwoodEventDrops: { itemId: ItemId; quantity: number }[] = greenwoodEventMob && greenwoodRank >= 2
+      ? isGreenwoodEventFollower(mobId)
+        ? [{ itemId: "moss_fibre", quantity: 2 }, { itemId: "crawler_fang", quantity: 1 }]
+        : [{ itemId: "moss_fibre", quantity: 4 }, { itemId: "timber", quantity: 3 },
+          ...(greenwoodRank >= 3 && activeGreenwoodEvent && Math.random() < activeGreenwoodEvent.legendaryChance
+            ? [{ itemId: "rootstalker_wrap" as ItemId, quantity: 1 }] : [])]
       : [];
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
@@ -2587,6 +2648,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...rematchDrops,
       ...mistfenMasteryDrops,
       ...greenwoodMasteryDrops,
+      ...greenwoodEventDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);

@@ -12,7 +12,8 @@ describe("Realm-style encounter director", () => {
     const director = new RealmEventDirector();
     const greenwood = REALM_EVENT_DEFINITIONS.find(event => event.key === "greenwood")!;
     expect(clear(director, greenwood.triggerIds, 1_000)?.id).toBe(greenwood.id);
-    expect(director.status(1_000)).toMatchObject({ phase: "warning", completed: 0, required: 3, realmBoss: false });
+    expect(director.status(1_000)).toMatchObject({ phase: "warning", completed: 0, required: 3, realmBoss: false,
+      eventTitle: "Crawler Migration", eventVariant: "crawler-migration", trackingRadius: 34 });
     expect(director.release(8_999)).toBeNull();
     expect(director.release(9_000)?.id).toBe(greenwood.id);
   });

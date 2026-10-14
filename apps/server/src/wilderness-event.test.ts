@@ -116,10 +116,12 @@ describe("shared wilderness event", () => {
     internal.advanceWildernessEvent(9000);
     const boss = room.state.mobs.get("greenwood-venom-matriarch")!;
     expect(boss.maxHealth).toBe(36); expect(boss.isChampion).toBe(true);
+    expect([...room.state.mobs.keys()].filter(id => id.startsWith("greenwood-event-follower-"))).toHaveLength(2);
     internal.advanceWildernessEvent(10000);
     expect(room.state.mobs.get("greenwood-venom-matriarch")).toBe(boss);
     for (const id of ["a", "b"]) internal.combatContributions.record("greenwood-venom-matriarch", id, 12, 10000);
     internal.defeatMob("greenwood-venom-matriarch", boss, "a", 10000);
+    expect([...room.state.mobs.keys()].some(id => id.startsWith("greenwood-event-follower-"))).toBe(false);
     const drops = [...room.state.lootDrops.values()].filter(drop => drop.itemId === "venom_focus");
     expect(drops.map(drop => drop.ownerId).sort()).toEqual(["a", "b"]);
     expect(room.state.portals.get("forest-entry")).toMatchObject({ kind: "entry" });

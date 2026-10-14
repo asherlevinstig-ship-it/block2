@@ -1,6 +1,8 @@
 import type { ItemId } from "@blockcraft/protocol";
 import { ASHEN_SPIRE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME } from "@blockcraft/voxel-world";
 import type { MobArchetypeId } from "./mob-archetypes.js";
+import { GREENWOOD_EVENT_TRACKING_RADIUS, greenwoodEventForSequence,
+  type GreenwoodEventKind } from "./greenwood-events.js";
 
 export type RealmEventKey = "greenwood" | "stoneheart" | "ashglass" | "realm-warden";
 export type RealmEventPhase = "idle" | "warning" | "active" | "cooldown";
@@ -83,6 +85,9 @@ export type RealmEventStatus = {
   eventId: string | null;
   eventName: string | null;
   eventTitle: string | null;
+  eventDetail?: string | null;
+  eventVariant?: GreenwoodEventKind | null;
+  trackingRadius?: number;
   targetX: number;
   targetY: number;
   targetZ: number;
@@ -122,9 +127,12 @@ export class RealmEventDirector {
   private readonly completed = new Set<RealmEventKey>();
   private readonly defeatedLeaders = new Set<string>();
   private eliteKills = 0;
+  private greenwoodSequence = 0;
+  private currentGreenwoodVariant: GreenwoodEventKind | null = null;
 
   get phase(): RealmEventPhase { return this.currentPhase; }
   get definition(): RealmEventDefinition | null { return realmEventDefinition(this.currentKey); }
+  get greenwoodVariant(): GreenwoodEventKind | null { return this.currentGreenwoodVariant; }
 
   private threatProgress(): number {
     return Math.min(REALM_EVENT_REQUIRED, this.completed.size + this.defeatedLeaders.size
@@ -141,6 +149,9 @@ export class RealmEventDirector {
 
   private arm(definition: RealmEventDefinition, now: number): RealmEventDefinition {
     this.currentKey = definition.key;
+    if (definition.key === "greenwood") {
+      this.currentGreenwoodVariant = greenwoodEventForSequence(this.greenwoodSequence++).kind;
+    } else this.currentGreenwoodVariant = null;
     this.currentPhase = "warning";
     this.warningEndsAt = now + REALM_EVENT_WARNING_MS;
     this.nextAt = 0;
@@ -236,11 +247,17 @@ export class RealmEventDirector {
   status(now: number): RealmEventStatus {
     this.tick(now);
     const definition = this.definition;
+    const greenwood = definition?.key === "greenwood"
+      ? greenwoodEventForSequence(Math.max(0, this.greenwoodSequence - 1)) : null;
     return {
       phase: this.currentPhase,
       eventId: definition?.id ?? null,
-      eventName: definition?.name ?? null,
-      eventTitle: definition?.title ?? null,
+      eventName: greenwood?.name ?? definition?.name ?? null,
+      eventTitle: greenwood?.title ?? definition?.title ?? null,
+      eventDetail: greenwood?.detail ?? definition?.detail ?? null,
+      eventVariant: greenwood?.kind ?? null,
+      trackingRadius: greenwood ? GREENWOOD_EVENT_TRACKING_RADIUS
+        : definition?.realmBoss ? REALM_BOSS_TRACKING_RADIUS : REALM_EVENT_TRACKING_RADIUS,
       targetX: definition?.position.x ?? 0,
       targetY: definition?.position.y ?? 0,
       targetZ: definition?.position.z ?? 0,
