@@ -35,15 +35,15 @@ export function realmBossPattern(id: string, sequence: number, health: number, m
 
 export function usesRockVolley(pattern: string): boolean {
   return pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line"
-    || pattern === "toxic-eruption";
+    || pattern === "toxic-eruption" || pattern === "mirestorm";
 }
 
 export function usesFallingRockZones(pattern: string): boolean {
-  return pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
+  return pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line" || pattern === "mirestorm";
 }
 
 export function usesDoubleVolley(pattern: string): boolean {
-  return pattern === "double-fan" || pattern === "teleport-burst" || pattern === "warden-barrage";
+  return pattern === "double-fan" || pattern === "teleport-burst" || pattern === "warden-barrage" || pattern === "mirestorm";
 }
 
 export function isRealmSpitterBoss(id: string): boolean {

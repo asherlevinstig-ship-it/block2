@@ -26,7 +26,7 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       box("#0e1713", 0, 0, 240, 280); box("#213329", 52, 248, 136, 8);
       box("#182c2c", 92, 182, 24, 57); box("#223a3a", 124, 182, 24, 57);
       box("#34291f", 88, 227, 29, 18); box("#34291f", 123, 227, 29, 18);
-      const coat = armour === "worldsplitter_plate" ? "#3e4a56" : armour === "venomweave_mantle" ? "#477a28"
+      const coat = armour === "worldsplitter_plate" ? "#3e4a56" : armour === "mirebreaker_mantle" ? "#396b38" : armour === "venomweave_mantle" ? "#477a28"
         : armour === "fangstalker_wrap" ? "#71351f" : armour === "bastion_plate" ? "#8192a5"
           : armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39"
             : armour === "leather_armour" ? "#95633c" : appearanceHex("coat", appearance.coat);
@@ -60,8 +60,9 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       } else if (armour === "rootguard_armour") {
         box("#60401f", 57, 101, 30, 16); box("#60401f", 153, 101, 30, 16);
         box("#79dd68", 113, 116, 14, 14); box("#60401f", 101, 112, 6, 51); box("#60401f", 133, 112, 6, 51);
-      } else if (armour === "venomweave_mantle") {
-        box("#a4ed35", 110, 116, 20, 20); box("#a4ed35", 99, 112, 6, 51); box("#a4ed35", 135, 112, 6, 51);
+      } else if (armour === "venomweave_mantle" || armour === "mirebreaker_mantle") {
+        const glow = armour === "mirebreaker_mantle" ? "#efff75" : "#a4ed35";
+        box(glow, 110, 116, 20, 20); box(glow, 99, 112, 6, 51); box(glow, 135, 112, 6, 51);
       } else if (armour === "leather_armour" || armour === "fangstalker_wrap") {
         for (let i = 0; i < 5; i++) box("#4d3627", 100 + i * 7, 113 + i * 8, 10, 12);
         if (armour === "fangstalker_wrap") for (let i = 0; i < 3; i++) box("#e8cc7c", 102 + i * 17, 169, 7, 13);

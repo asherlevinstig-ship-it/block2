@@ -168,6 +168,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setEliteStates(elites: EliteMapTarget[]): void;
   setThreatState(threat: ThreatMapTarget | null): void;
   setWardenGateUnlocked(unlocked: boolean): void;
+  setMistfenMastery(rank: number): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
@@ -265,6 +266,20 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     setWardenGateUnlocked(unlocked) {
       if (wardenGateUnlocked === unlocked) return;
       wardenGateUnlocked = unlocked; refreshDestinations(); lastUpdate = -Infinity;
+    },
+    setMistfenMastery(rank) {
+      if (rank <= 0) return;
+      let changed = false;
+      for (const key of [MISTFEN_WAYPOINT.id, miniBossDiscoveryKey("mistfen-behemoth")]) {
+        if (!discovered.has(key)) { discovered.add(key); changed = true; }
+      }
+      if (rank >= 1) for (const deposit of MAP_DEPOSITS) {
+        if (deposit.block !== Block.SilverOre || Math.hypot(deposit.x - MISTFEN_WAYPOINT.x, deposit.z - MISTFEN_WAYPOINT.z) > 42) continue;
+        const key = depositKey(deposit); if (!discovered.has(key)) { discovered.add(key); changed = true; }
+      }
+      if (!changed) return;
+      refreshDestinations(); lastUpdate = -Infinity;
+      try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
     },
     setCaveState(state) { caveState = state; },
     setDungeonState(state) {

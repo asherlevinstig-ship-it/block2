@@ -25,5 +25,6 @@ describe("empowered leader rematches", () => {
     expect(leaderRematchPattern("slam", "stone_brute", 2, "armoured")).toBe("warden-barrage");
     expect(leaderRematchPressureCadence(3, "relentless")).toBe(2);
     expect(leaderRematchMaterialBonus(5)).toBe(3);
+    expect(leaderRematchPattern("slam", "stone_brute", 1, "mirebreaker")).toBe("mirestorm");
   });
 });

@@ -95,6 +95,7 @@ const ATTACK_NAMES: Readonly<Record<string, string>> = {
   charge: "CHARGE",
   "bog-charge": "BOG CHARGE",
   "toxic-eruption": "TOXIC ERUPTION",
+  mirestorm: "MIRESTORM · POOLS + FALLING ROCKS",
   "crystal-burst": "CRYSTAL BURST",
   "teleport-burst": "TELEPORT BURST",
 };
@@ -117,6 +118,7 @@ export function leaderExposureLabel(expiresAt: number, now: number): string {
 }
 
 export function leaderRematchLabel(tier = 0, modifier = ""): string {
+  if (modifier === "mirebreaker") return "MIREBREAKER REMATCH · LEGENDARY CACHE";
   if (tier <= 0 || !modifier) return "";
   const relics = tier >= 4 ? "2 RELICS" : "RELIC";
   return `${modifier.toUpperCase()} · R${tier} · ${relics} +${Math.min(3, Math.ceil(tier / 2))} MAT`;

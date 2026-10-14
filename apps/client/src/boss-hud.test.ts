@@ -64,6 +64,7 @@ describe("boss HUD", () => {
       .toContain("MARSH CACHE DROPPED");
     expect(leaderAttackName("bog-charge")).toBe("BOG CHARGE");
     expect(leaderAttackName("toxic-eruption")).toBe("TOXIC ERUPTION");
+    expect(leaderAttackName("mirestorm")).toContain("MIRESTORM");
   });
   it("keeps Path Champion identity and phase mechanics beside the boss bar", () => {
     const champion = { ...boss, name: "Viridian Brood Oracle", isMiniBoss: true };

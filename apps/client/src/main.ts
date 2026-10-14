@@ -582,11 +582,14 @@ const mistfenMasteryPanel = document.querySelector<HTMLElement>("#mistfen-master
 const mistfenMasteryRank = document.querySelector<HTMLElement>("#mistfen-mastery-rank")!;
 const mistfenMasteryFill = document.querySelector<HTMLElement>("#mistfen-mastery-fill")!;
 const mistfenMasteryDetail = document.querySelector<HTMLElement>("#mistfen-mastery-detail")!;
+const mistfenMasteryGain = document.querySelector<HTMLElement>("#mistfen-mastery-gain")!;
 let localMistfenMastery = 0;
 let localMistfenDiscovered = false;
 let lastMistfenMasteryView = "";
+let mistfenGainTimer = 0;
 
 function updateLocalMistfenProgress(raw: string): void {
+  const previous = localMistfenMastery;
   try {
     const mistfen = (JSON.parse(raw) as { mistfen?: { points?: unknown; discovered?: unknown } }).mistfen;
     localMistfenMastery = typeof mistfen?.points === "number" && Number.isFinite(mistfen.points) ? mistfen.points : 0;
@@ -594,6 +597,14 @@ function updateLocalMistfenProgress(raw: string): void {
   } catch {
     localMistfenMastery = 0;
     localMistfenDiscovered = false;
+  }
+  const rank = mistfenMasteryStatus(localMistfenMastery, localMistfenDiscovered).rank;
+  minimap.setMistfenMastery(rank);
+  if (previous > 0 && localMistfenMastery > previous) {
+    mistfenMasteryGain.textContent = `MASTERY +${localMistfenMastery - previous}`;
+    mistfenMasteryGain.hidden = false;
+    window.clearTimeout(mistfenGainTimer);
+    mistfenGainTimer = window.setTimeout(() => { mistfenMasteryGain.hidden = true; }, 1800);
   }
   lastMistfenMasteryView = "";
 }
@@ -1758,18 +1769,20 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour"),
     rootguard_armour: new pc.Entity("rootguard-armour"), bastion_plate: new pc.Entity("bastion-plate"),
     fangstalker_wrap: new pc.Entity("fangstalker-wrap"), venomweave_mantle: new pc.Entity("venomweave-mantle"),
+    mirebreaker_mantle: new pc.Entity("mirebreaker-mantle"),
     worldsplitter_plate: new pc.Entity("worldsplitter-plate"),
   };
   for (const [id, layer] of Object.entries(armour)) {
     const bastion = id === "bastion_plate", fang = id === "fangstalker_wrap";
-    const venom = id === "venomweave_mantle", worldsplitter = id === "worldsplitter_plate";
+    const venom = id === "venomweave_mantle" || id === "mirebreaker_mantle", worldsplitter = id === "worldsplitter_plate";
+    const mirebreaker = id === "mirebreaker_mantle";
     const iron = id === "iron_armour" || bastion || worldsplitter;
     const rootguard = id === "rootguard_armour";
-    const material = worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
+    const material = mirebreaker ? coloredMaterial(new pc.Color(.2, .42, .22)) : worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
       : venom ? coloredMaterial(new pc.Color(.26, .48, .12))
         : fang ? coloredMaterial(new pc.Color(.38, .18, .1))
           : iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
-    const accent = venom ? coloredMaterial(new pc.Color(.55, .95, .08))
+    const accent = mirebreaker ? coloredMaterial(new pc.Color(.86, 1, .28)) : venom ? coloredMaterial(new pc.Color(.55, .95, .08))
       : fang ? coloredMaterial(new pc.Color(.92, .78, .46)) : brassMaterial;
     const reinforced = iron || rootguard || venom;
     torso.addChild(layer);
@@ -4191,6 +4204,7 @@ const lootMaterials: Partial<Record<ItemId, pc.StandardMaterial>> = {
   bastion_plate: coloredMaterial(new pc.Color(.56, .63, .73)),
   fangstalker_wrap: coloredMaterial(new pc.Color(.72, .28, .12)),
   venomweave_mantle: coloredMaterial(new pc.Color(.38, .82, .12)),
+  mirebreaker_mantle: coloredMaterial(new pc.Color(.55, .9, .22)),
   worldsplitter_plate: coloredMaterial(new pc.Color(.34, .4, .48)),
   forged_sword: coloredMaterial(new pc.Color(.76, .8, .85)),
   forged_bow: coloredMaterial(new pc.Color(.65, .45, .25)),

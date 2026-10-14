@@ -2521,7 +2521,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const mistfenMasteryDrops: { itemId: ItemId; quantity: number }[] = isMistfenMob(mobId) && mistfenRank >= 2
       ? mobId === "mistfen-behemoth"
         ? [{ itemId: "acid_gland", quantity: mistfenRank >= 3 ? 3 : 1 },
-          ...(mistfenRank >= 3 ? [{ itemId: "silver_ore" as ItemId, quantity: 2 }] : [])]
+          ...(mistfenRank >= 3 ? [{ itemId: "silver_ore" as ItemId, quantity: 2 }] : []),
+          ...(mistfenRank >= 3 && mob.leaderModifier === "mirebreaker"
+            && !this.ownsOrHasPendingItem(ownerId, "mirebreaker_mantle")
+            ? [{ itemId: "mirebreaker_mantle" as ItemId, quantity: 1 }] : [])]
         : [{ itemId: mob.archetype === "cave_spitter" ? "acid_gland" : "moss_fibre", quantity: 1 }]
       : [];
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
@@ -4015,6 +4018,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.huntLoadoutsJson = JSON.stringify({ ...raw, mistfen });
   }
 
+  private activeMistfenMasteryRank(): number {
+    let rank = 0;
+    for (const player of this.state.players.values()) {
+      if (player.health <= 0 || player.y < SURFACE_HEIGHT - 1 || !isInMistfenMarsh(player.x, player.z)) continue;
+      const progress = this.mistfenProgress(player);
+      rank = Math.max(rank, mistfenMasteryRank(progress.points, progress.discovered));
+    }
+    return rank;
+  }
+
   private buildPathDamageBonus(player: PlayerState, mob: MobState, mobId: string, playerId: string, now: number, source: "weapon" | "power"): number {
     const state = parseBuildPathState(player.huntLoadoutsJson);
     if (!state.selectedPathId) return 0;
@@ -4997,6 +5010,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!mob.alive && FOREST_DUNGEON_MOBS.some(entry => entry.id === mobId)) continue;
       if (!mob.alive && this.roomKind === "silver-depths"
         && (SILVER_DEPTHS_ENEMY_IDS.includes(mobId) || SILVER_DEPTHS_CACHE_GUARD_IDS.includes(mobId))) continue;
+      if (mobId === "mistfen-behemoth" && mob.alive && mob.leaderRematchTier > 0
+        && mob.leaderModifier !== "mirebreaker" && this.activeMistfenMasteryRank() >= 3) {
+        const healthRatio = mob.health / Math.max(1, mob.maxHealth);
+        mob.leaderRematchTier = Math.max(5, mob.leaderRematchTier);
+        mob.leaderModifier = "mirebreaker";
+        mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.2));
+        mob.health = Math.max(1, Math.ceil(mob.maxHealth * healthRatio));
+        mob.attackDamage = Math.min(12, mob.attackDamage + 1);
+        mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.08);
+        mob.rewardMultiplier *= 1.35;
+      }
       let currentAreaLeaderPhase: AreaLeaderPhase = 1;
       if (mob.isMiniBoss && mob.alive) {
         currentAreaLeaderPhase = huntChampion
@@ -5090,7 +5114,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             && (candidate.alive || candidate.materializeUntil > now)).length;
           const areaMiniBoss = areaMiniBossDefinition(mobId);
           const pendingRematch = leaderRematch(mobId, this.leaderDefeats.get(mobId) ?? 0);
-          mob.isElite = !areaMiniBoss && shouldBecomeWildernessElite(band.tier, activeElites, Math.random());
+          const mistfenRank = isMistfenMob(mobId) ? this.activeMistfenMasteryRank() : 0;
+          mob.isElite = !areaMiniBoss && (mistfenRank >= 2 || shouldBecomeWildernessElite(band.tier, activeElites, Math.random()));
           const eliteKind = wildernessEliteKind(definition.id);
           mob.eliteKind = mob.isElite ? eliteKind : "";
           const baseName = this.mobBaseNames.get(mobId) ?? definition.name;
@@ -5151,6 +5176,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           mob.armor = empowered.armor;
           mob.speedMultiplier = empowered.speedMultiplier;
           mob.rewardMultiplier = empowered.rewardMultiplier;
+          if (mobId === "mistfen-behemoth" && this.activeMistfenMasteryRank() >= 3 && rematch.tier > 0) {
+            mob.leaderRematchTier = Math.max(5, mob.leaderRematchTier);
+            mob.leaderModifier = "mirebreaker";
+            mob.health = mob.maxHealth = Math.min(120, Math.ceil(mob.maxHealth * 1.2));
+            mob.attackDamage = Math.min(12, mob.attackDamage + 1);
+            mob.speedMultiplier = Math.min(1.65, mob.speedMultiplier * 1.08);
+            mob.rewardMultiplier *= 1.35;
+          }
         }
         if (mobId === CRYSTAL_MATRIARCH_ID) this.restoreMatriarchCover();
         mob.alive = true;
