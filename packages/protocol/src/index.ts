@@ -250,7 +250,8 @@ export const EQUIPMENT_AFFIXES = {
 } as const;
 export type EquipmentAffixId = keyof typeof EQUIPMENT_AFFIXES;
 export type EquipmentAffixRoll = { affixId: EquipmentAffixId; tier: 1 | 2 | 3 };
-export type EquipmentAffixUpdate = { affixes: Partial<Record<ItemId, EquipmentAffixRoll>>; message: string };
+export type EquipmentAffixOffers = Partial<Record<ItemId, EquipmentAffixId[]>>;
+export type EquipmentAffixUpdate = { affixes: Partial<Record<ItemId, EquipmentAffixRoll>>; offers?: EquipmentAffixOffers; dust?: number; message: string };
 
 export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;
@@ -337,6 +338,15 @@ export const BLACKSMITH_REFORGE = {
 export type BlacksmithReforgeItemId = keyof typeof BLACKSMITH_REFORGE;
 export type EquipmentReforgeRanks = Partial<Record<BlacksmithReforgeItemId, number>>;
 export const BlacksmithReforgeSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_REFORGE) as [BlacksmithReforgeItemId, ...BlacksmithReforgeItemId[]]) });
+export const AttunementForgeSchema = z.object({
+  action: z.enum(["reroll", "upgrade", "choose"]),
+  itemId: z.enum(Object.keys(BLACKSMITH_REFORGE) as [BlacksmithReforgeItemId, ...BlacksmithReforgeItemId[]]),
+  affixId: z.enum(Object.keys(EQUIPMENT_AFFIXES) as [EquipmentAffixId, ...EquipmentAffixId[]]).optional(),
+}).strict();
+export type AttunementForgeAction = z.infer<typeof AttunementForgeSchema>;
+export const ATTUNEMENT_DUST_YIELD = { 1: 1, 2: 3, 3: 6 } as const;
+export const ATTUNEMENT_REROLL_COST = { 1: 3, 2: 6, 3: 10 } as const;
+export const ATTUNEMENT_UPGRADE_COST = { 1: 6, 2: 12 } as const;
 export function reforgeWeaponDamageBonus(rank: number): number { return Math.max(0, Math.min(3, Math.floor(rank))); }
 export function reforgeArmourReduction(rank: number): number { return Math.max(0, Math.min(2, Math.ceil(Math.max(0, Math.min(3, Math.floor(rank))) / 2))); }
 export function armourStats(id: string) { return ARMOUR_DEFINITIONS[Object.hasOwn(ARMOUR_DEFINITIONS, id) ? id as ArmourId : "none"]; }
@@ -348,7 +358,7 @@ export function armouredDamage(damage: number, id: string, kind: IncomingDamageK
   return Math.max(1, damage - armour.reduction - situational - reforgeArmourReduction(reforgeRank));
 }
 export type BlacksmithUpdate = {
-  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "awakened" | "exchanged" | "error";
+  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "attuned" | "awakened" | "exchanged" | "error";
   ironOre: number;
   silverOre?: number;
   moonstone?: number;
@@ -365,6 +375,12 @@ export type BlacksmithUpdate = {
   reforgeRanks?: EquipmentReforgeRanks;
   reforgeMaterials?: Partial<Record<ItemId, number>>;
   reforgedItemId?: BlacksmithReforgeItemId;
+  attunementDust?: number;
+  attunementAffixes?: Partial<Record<ItemId, EquipmentAffixRoll>>;
+  attunementOffers?: EquipmentAffixOffers;
+  selectedBuildPathId?: BuildPathId | null;
+  equippedMainHandItemId?: ItemId | null;
+  equippedArmourItemId?: ItemId | null;
   leaderRelics?: Partial<Record<AreaLeaderRelicId, number>>;
   leaderMarks?: Partial<Record<LeaderForgemarkId, number>>;
   materialGranted?: ItemId;

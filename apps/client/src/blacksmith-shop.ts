@@ -1,5 +1,5 @@
 import { BLACKSMITH_STOCK, type BlacksmithStockId } from "@blockcraft/protocol";
-export type BlacksmithShopTab = "sell" | "weapons" | "armour" | "reforge" | "leaders" | "dismantle" | "upgrades" | "depths";
+export type BlacksmithShopTab = "sell" | "weapons" | "armour" | "reforge" | "attunement" | "leaders" | "dismantle" | "upgrades" | "depths";
 export function blacksmithShopStock(tab: BlacksmithShopTab): BlacksmithStockId[] {
   if (tab !== "weapons" && tab !== "armour") return [];
   return (Object.keys(BLACKSMITH_STOCK) as BlacksmithStockId[]).filter(id => id.endsWith("armour") === (tab === "armour"));

@@ -10,7 +10,8 @@ import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
-import { EQUIPMENT_AFFIXES, type EquipmentAffixRoll, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+import { ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES,
+  type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { DODGE_EXHAUSTION_MS, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
@@ -2523,6 +2524,8 @@ lootWorldLabel.addEventListener("click", () => {
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
 let equipmentAffixes: Partial<Record<ItemId, EquipmentAffixRoll>> = {};
+let equipmentAffixOffers: EquipmentAffixOffers = {};
+let attunementDust = 0;
 function equipmentAffixLabel(itemId: ItemId): string | null {
   const roll = equipmentAffixes[itemId];
   return roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} · Tier ${roll.tier}` : null;
@@ -5308,6 +5311,92 @@ blacksmithClose.before(reforgeShop);
 const leaderForgeShop = document.createElement("div");
 leaderForgeShop.id = "blacksmith-leader-forge";
 blacksmithClose.before(leaderForgeShop);
+const attunementShop = document.createElement("div");
+attunementShop.id = "blacksmith-attunement";
+blacksmithClose.before(attunementShop);
+let blacksmithCalling: BuildPathId | null = null;
+let blacksmithEquippedHandItem: ItemId | null = null;
+let blacksmithEquippedArmourItem: ItemId | null = null;
+const attunementCost = (action: "reroll" | "upgrade", tier: 1 | 2 | 3, roll?: EquipmentAffixRoll): number => {
+  const base = action === "reroll" ? ATTUNEMENT_REROLL_COST[tier] : ATTUNEMENT_UPGRADE_COST[Math.min(2, tier) as 1 | 2];
+  const matching = Boolean(roll && blacksmithCalling && EQUIPMENT_AFFIXES[roll.affixId].pathId === blacksmithCalling);
+  return matching ? Math.max(1, Math.ceil(base * .8)) : base;
+};
+function sendAttunementAction(action: "reroll" | "upgrade" | "choose", itemId: BlacksmithReforgeItemId, affixId?: keyof typeof EQUIPMENT_AFFIXES): void {
+  if (!room || blacksmithPending) return;
+  blacksmithPending = true; renderAttunementShop();
+  blacksmithMessage.textContent = action === "choose" ? "Binding your chosen boss attunement…" : `${action === "upgrade" ? "Upgrading" : "Rerolling"} ${ITEM_DEFINITIONS[itemId].name}…`;
+  room.send("blacksmith:attune", { action, itemId, ...(affixId ? { affixId } : {}) });
+}
+function renderAttunementShop(): void {
+  attunementShop.replaceChildren();
+  attunementShop.hidden = blacksmithShopTab !== "attunement";
+  if (attunementShop.hidden) return;
+  const heading = document.createElement("h3"); heading.className = "blacksmith-shop-heading";
+  heading.textContent = "ATTUNEMENT FORGE · SHAPE CALLING AFFIXES";
+  const wallet = document.createElement("div"); wallet.className = "attunement-wallet";
+  wallet.innerHTML = `<span>ATTUNEMENT DUST</span><strong>${attunementDust}</strong><small>${blacksmithCalling ? `${BUILD_PATHS[blacksmithCalling].name} focus · matching affixes cost 20% less` : "Choose a Calling to unlock matching-affix discounts"}</small>`;
+  const equipped = document.createElement("div"); equipped.className = "attunement-loadout";
+  const equippedItems = [["MAIN HAND", blacksmithEquippedHandItem], ["ARMOUR", blacksmithEquippedArmourItem]] as const;
+  for (const [slot, itemId] of equippedItems) {
+    const line = document.createElement("span");
+    const roll = itemId ? equipmentAffixes[itemId] : undefined;
+    const active = Boolean(roll && blacksmithCalling && EQUIPMENT_AFFIXES[roll.affixId].pathId === blacksmithCalling);
+    line.dataset.active = String(active);
+    line.innerHTML = `<b>${slot}</b><strong>${itemId ? ITEM_DEFINITIONS[itemId].name : "None"}</strong><small>${roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} T${roll.tier} · ${active ? "ACTIVE" : `requires ${BUILD_PATHS[EQUIPMENT_AFFIXES[roll.affixId].pathId].name}`}` : "No attunement"}</small>`;
+    equipped.append(line);
+  }
+  const help = document.createElement("p"); help.className = "blacksmith-attunement-help";
+  help.textContent = "Dismantle attuned gear for Dust. Reroll changes the affix but keeps its tier. Upgrade preserves the affix; Tier 3 also consumes 1 Moonstone.";
+  attunementShop.append(heading, wallet, equipped, help);
+  for (const [rawItemId, choices] of Object.entries(equipmentAffixOffers) as [ItemId, (keyof typeof EQUIPMENT_AFFIXES)[]][]) {
+    if (!choices?.length || (inventoryCounts.get(rawItemId) ?? 0) <= 0) continue;
+    const offer = document.createElement("article"); offer.className = "attunement-offer"; offer.dataset.rarity = "legendary";
+    const title = document.createElement("header"); title.innerHTML = `<strong>${ITEM_DEFINITIONS[rawItemId].name}</strong><b>BOSS CHOICE · TIER 3</b>`;
+    const options = document.createElement("div"); options.className = "attunement-options";
+    for (const affixId of choices) {
+      const definition = EQUIPMENT_AFFIXES[affixId];
+      const button = document.createElement("button"); button.type = "button";
+      button.innerHTML = `<strong>${definition.name}</strong><small>${BUILD_PATHS[definition.pathId].name} · ${definition.effect}</small>`;
+      button.disabled = blacksmithPending;
+      button.addEventListener("click", () => sendAttunementAction("choose", rawItemId as BlacksmithReforgeItemId, affixId));
+      options.append(button);
+    }
+    offer.append(title, options); attunementShop.append(offer);
+  }
+  let shown = 0;
+  for (const itemId of Object.keys(BLACKSMITH_REFORGE) as BlacksmithReforgeItemId[]) {
+    if ((inventoryCounts.get(itemId) ?? 0) <= 0) continue;
+    shown++;
+    const roll = equipmentAffixes[itemId];
+    const tier = roll?.tier ?? 1;
+    const rerollCost = attunementCost("reroll", tier, roll);
+    const upgradeCost = tier < 3 ? attunementCost("upgrade", tier, roll) : 0;
+    const card = document.createElement("article"); card.dataset.rarity = itemRarity(itemId);
+    const title = document.createElement("header");
+    title.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name}</strong><b>${roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name.toUpperCase()} · T${roll.tier}` : "UNATTUNED"}</b>`;
+    const effect = document.createElement("p"); effect.textContent = roll ? `${BUILD_PATHS[EQUIPMENT_AFFIXES[roll.affixId].pathId].name} · ${EQUIPMENT_AFFIXES[roll.affixId].effect}` : "Reveal a Tier 1 Calling affix.";
+    const actions = document.createElement("div"); actions.className = "attunement-actions";
+    const reroll = document.createElement("button"); reroll.type = "button";
+    reroll.textContent = attunementDust >= rerollCost ? `${roll ? "REROLL" : "ATTUNE"} · ${rerollCost} DUST` : `NEED ${rerollCost - attunementDust} DUST`;
+    reroll.disabled = blacksmithPending || attunementDust < rerollCost;
+    reroll.addEventListener("click", () => sendAttunementAction("reroll", itemId)); actions.append(reroll);
+    if (roll) {
+      const upgrade = document.createElement("button"); upgrade.type = "button";
+      const needsMoonstone = tier === 2 && (inventoryCounts.get("moonstone") ?? 0) < 1;
+      upgrade.textContent = tier >= 3 ? "MAXIMUM TIER" : needsMoonstone ? "TIER 3 · NEED 1 MOONSTONE"
+        : attunementDust < upgradeCost ? `NEED ${upgradeCost - attunementDust} DUST` : `UPGRADE · ${upgradeCost} DUST${tier === 2 ? " + 1 ◆" : ""}`;
+      upgrade.disabled = blacksmithPending || tier >= 3 || attunementDust < upgradeCost || needsMoonstone;
+      upgrade.addEventListener("click", () => sendAttunementAction("upgrade", itemId)); actions.append(upgrade);
+    }
+    card.append(title, effect, actions); attunementShop.append(card);
+  }
+  if (shown === 0) {
+    const empty = document.createElement("p"); empty.className = "blacksmith-attunement-empty";
+    empty.textContent = "No equipment is ready. Recover a weapon or armour piece, then return here to shape its Calling affix.";
+    attunementShop.append(empty);
+  }
+}
 function renderLeaderForgeShop(): void {
   leaderForgeShop.replaceChildren();
   leaderForgeShop.hidden = blacksmithShopTab !== "leaders";
@@ -5434,7 +5523,9 @@ function renderDismantleShop(): void {
     const title = document.createElement("strong"); title.textContent = `${ITEM_DEFINITIONS[itemId].name} · ${ITEM_RARITIES[itemRarity(itemId)].label} ×${owned}`;
     const reward = document.createElement("p");
     const material = "materialId" in recipe ? ` + ${recipe.materialQuantity} ${ITEM_DEFINITIONS[recipe.materialId].name}` : "";
-    reward.textContent = `Returns ${recipe.gold} gold${material}`;
+    const affixTier = owned === 1 ? equipmentAffixes[itemId]?.tier : undefined;
+    const dust = affixTier ? [0, 1, 3, 6][affixTier] : 0;
+    reward.textContent = `Returns ${recipe.gold} gold${material}${dust ? ` + ${dust} Attunement Dust` : ""}`;
     const note = document.createElement("small");
     note.textContent = protectedLastCopy ? "Equipped · keep or equip something else first" : equipped ? "Duplicate copy · equipped copy remains safe" : "Removes one item from your pack";
     const button = document.createElement("button"); button.type = "button";
@@ -5463,6 +5554,7 @@ function renderWeaponShop(): void {
   document.querySelector<HTMLElement>("#blacksmith-depths-shop")!.hidden = blacksmithShopTab !== "depths";
   renderDismantleShop();
   renderReforgeShop();
+  renderAttunementShop();
   renderLeaderForgeShop();
   for (const tab of blacksmithPanel.querySelectorAll<HTMLButtonElement>("[data-smith-tab]")) {
     tab.setAttribute("aria-pressed", String(tab.dataset.smithTab === blacksmithShopTab));
@@ -5535,6 +5627,12 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   for (const [id, quantity] of Object.entries(update.leaderRelics ?? {})) updateInventoryItem(id as AreaLeaderRelicId, quantity ?? 0);
   for (const [id, quantity] of Object.entries(update.leaderMarks ?? {})) updateInventoryItem(id as LeaderForgemarkId, quantity ?? 0);
   blacksmithReforgeRanks = update.reforgeRanks ?? {};
+  attunementDust = update.attunementDust ?? attunementDust;
+  equipmentAffixes = update.attunementAffixes ?? equipmentAffixes;
+  equipmentAffixOffers = update.attunementOffers ?? equipmentAffixOffers;
+  blacksmithCalling = update.selectedBuildPathId ?? null;
+  blacksmithEquippedHandItem = update.equippedMainHandItemId ?? null;
+  blacksmithEquippedArmourItem = update.equippedArmourItemId ?? null;
   refreshEquipmentProgression();
   refreshInventoryEquipped();
   renderWeaponShop();
@@ -5606,6 +5704,10 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   if (update.phase === "reforged" && update.reforgedItemId) {
     const rank = blacksmithReforgeRanks[update.reforgedItemId] ?? 0;
     showCombatFeedback(`${ITEM_DEFINITIONS[update.reforgedItemId].name.toUpperCase()} · ${rankLabel(rank)}`, "dodge");
+    status.textContent = update.message;
+  }
+  if (update.phase === "attuned") {
+    showCombatFeedback("ATTUNEMENT FORGED", "dodge");
     status.textContent = update.message;
   }
   if (update.phase === "awakened") {
@@ -9120,8 +9222,11 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("build:path", (update: BuildPathUpdate) => renderBuildPath(update));
   room.onMessage("equipment:affixes", (update: EquipmentAffixUpdate) => {
     equipmentAffixes = update.affixes ?? {};
+    equipmentAffixOffers = update.offers ?? equipmentAffixOffers;
+    attunementDust = update.dust ?? attunementDust;
     refreshOwnedInventory();
     if (inventoryPreviewDrawer.open) refreshInventoryPreview();
+    if (blacksmithShopTab === "attunement") renderAttunementShop();
     if (update.message && !update.message.startsWith("Equipment attunements strengthen")) status.textContent = update.message;
   });
   room.onMessage("build:path-proc", (proc: BuildPathProc) => {

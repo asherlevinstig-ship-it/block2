@@ -12,7 +12,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -200,7 +200,8 @@ import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
 import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, nextBuildRankXp, parseBuildPathState } from "./build-paths.js";
 import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equipment-reforge.js";
-import { keepBetterAffix, parseEquipmentAffixes, rollEquipmentAffix } from "./equipment-affixes.js";
+import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmentAffixes, parseEquipmentAffixOffers,
+  rollEquipmentAffix, rollEquipmentAffixOptions } from "./equipment-affixes.js";
 import { parseSignaturePity, resolveSignatureDrop, serializeSignaturePity, signatureLootHint, type SignatureItemId } from "./signature-loot.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
@@ -763,6 +764,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     aliveMessage("blacksmith:dismantle", (client, payload) => this.handleBlacksmithDismantle(client, payload));
     aliveMessage("blacksmith:reforge", (client, payload) => this.handleBlacksmithReforge(client, payload));
+    aliveMessage("blacksmith:attune", (client, payload) => this.handleBlacksmithAttune(client, payload));
     aliveMessage("blacksmith:leader-forge", (client, payload) => this.handleLeaderForge(client, payload));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
     aliveMessage("blacksmith:buy", (client, payload) => this.handleBlacksmithBuy(client, payload));
@@ -1204,6 +1206,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       reforgeMaterials: Object.fromEntries([...new Set(Object.values(BLACKSMITH_REFORGE).map(recipe => recipe.materialId))]
         .map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       reforgedItemId,
+      attunementDust: this.attunementDust(player),
+      attunementAffixes: this.equipmentAffixes(player),
+      attunementOffers: this.attunementOffers(player),
+      selectedBuildPathId: parseBuildPathState(player.huntLoadoutsJson).selectedPathId,
+      equippedMainHandItemId: (Object.keys(ITEM_DEFINITIONS) as ItemId[]).find(itemId => equipmentForItem(itemId) === player.mainHandId) ?? null,
+      equippedArmourItemId: Object.hasOwn(ITEM_DEFINITIONS, player.armourId) ? player.armourId as ItemId : null,
       leaderRelics: Object.fromEntries(AREA_LEADER_RELIC_IDS.map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
       leaderMarks: Object.fromEntries((Object.keys(LEADER_FORGE_MARKS) as LeaderForgemarkId[])
         .map(id => [id, player.inventory.get(id)?.quantity ?? 0])),
@@ -1372,9 +1380,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (held + materialQuantity > capacity) return this.sendBlacksmithState(client, `Make room for ${ITEM_DEFINITIONS[materialId].name} before dismantling this item.`, "error");
     }
     item!.quantity = quantity - 1;
+    const affixes = this.equipmentAffixes(player), offers = this.attunementOffers(player);
+    const dismantledTier = quantity === 1 ? affixes[itemId]?.tier ?? 0 : 0;
+    const dustGranted = dismantledTier > 0 ? attunementDustYield(dismantledTier) : 0;
     if (item!.quantity === 0 && Object.hasOwn(BLACKSMITH_REFORGE, itemId)) {
       player.reforgeRanksJson = withReforgeRank(player.reforgeRanksJson, itemId as BlacksmithReforgeItemId, 0);
+      delete affixes[itemId]; delete offers[itemId];
     }
+    this.setEquipmentAttunements(player, affixes, this.attunementDust(player) + dustGranted, offers);
     player.coins += recipe.gold;
     if (materialId && materialQuantity) {
       let material = player.inventory.get(materialId);
@@ -1383,7 +1396,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     const materialMessage = materialId && materialQuantity ? ` and ${materialQuantity} ${ITEM_DEFINITIONS[materialId].name}` : "";
-    this.sendBlacksmithState(client, `Dismantled ${ITEM_DEFINITIONS[itemId].name} for ${recipe.gold} gold${materialMessage}.`, "dismantled", 1, recipe.gold,
+    const dustMessage = dustGranted > 0 ? ` and ${dustGranted} Attunement Dust` : "";
+    this.sendEquipmentAffixes(client);
+    this.sendBlacksmithState(client, `Dismantled ${ITEM_DEFINITIONS[itemId].name} for ${recipe.gold} gold${materialMessage}${dustMessage}.`, "dismantled", 1, recipe.gold,
       undefined, undefined, { itemId, materialId, materialQuantity });
   }
 
@@ -1413,6 +1428,60 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.sendBlacksmithState(client,
       `${ITEM_DEFINITIONS[itemId].name} reforged to Rank ${["I", "II", "III"][currentRank]}.`, "reforged", 0, 0,
       undefined, undefined, undefined, itemId);
+  }
+
+  private handleBlacksmithAttune(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = AttunementForgeSchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose owned equipment and an attunement action.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to use the Attunement Forge.", "error");
+    const { action, itemId, affixId } = parsed.data;
+    if ((player.inventory.get(itemId)?.quantity ?? 0) <= 0) return this.sendBlacksmithState(client, `You need ${ITEM_DEFINITIONS[itemId].name} in your pack first.`, "error");
+    const affixes = this.equipmentAffixes(player), offers = this.attunementOffers(player);
+    const current = affixes[itemId];
+    if (action === "choose") {
+      const choices = offers[itemId] ?? [];
+      if (!affixId || !choices.includes(affixId)) return this.sendBlacksmithState(client, "Choose one of the three boss attunements offered for that item.", "error");
+      affixes[itemId] = { affixId, tier: 3 };
+      delete offers[itemId];
+      this.setEquipmentAttunements(player, affixes, this.attunementDust(player), offers);
+      void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+      const message = `${ITEM_DEFINITIONS[itemId].name} accepted ${affixId.toUpperCase()} · TIER 3.`;
+      this.sendEquipmentAffixes(client, message);
+      return this.sendBlacksmithState(client, message, "attuned");
+    }
+    if (action === "upgrade" && !current) return this.sendBlacksmithState(client, "Reroll this item once to reveal its first attunement.", "error");
+    if (action === "upgrade" && current!.tier >= 3) return this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[itemId].name} already has a Tier 3 attunement.`, "error");
+    const selectedPath = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    const tier = current?.tier ?? 1;
+    const cost = attunementDustCost(action, tier, Boolean(current && selectedPath
+      && EQUIPMENT_AFFIXES[current.affixId].pathId === selectedPath));
+    const dust = this.attunementDust(player);
+    if (dust < cost) return this.sendBlacksmithState(client, `You need ${cost - dust} more Attunement Dust.`, "error");
+    const upgradingToTier3 = action === "upgrade" && tier === 2;
+    const moonstone = player.inventory.get("moonstone");
+    if (upgradingToTier3 && (moonstone?.quantity ?? 0) < 1) return this.sendBlacksmithState(client, "Tier 3 requires 1 Moonstone from a major boss expedition.", "error");
+    let next: EquipmentAffixRoll;
+    if (action === "upgrade") next = { affixId: current!.affixId, tier: (tier + 1) as 2 | 3 };
+    else {
+      next = rollEquipmentAffix(selectedPath, tier);
+      for (let attempt = 0; current && next.affixId === current.affixId && attempt < 8; attempt++) next = rollEquipmentAffix(selectedPath, tier);
+      if (current && next.affixId === current.affixId) {
+        const fallback = (Object.keys(EQUIPMENT_AFFIXES) as EquipmentAffixId[]).find(id => id !== current.affixId
+          && (!selectedPath || EQUIPMENT_AFFIXES[id].pathId === selectedPath))
+          ?? (Object.keys(EQUIPMENT_AFFIXES) as EquipmentAffixId[]).find(id => id !== current.affixId)!;
+        next = { affixId: fallback, tier };
+      }
+    }
+    if (upgradingToTier3) moonstone!.quantity -= 1;
+    affixes[itemId] = next;
+    this.setEquipmentAttunements(player, affixes, dust - cost, offers);
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    const message = action === "upgrade"
+      ? `${ITEM_DEFINITIONS[itemId].name}'s ${next.affixId.toUpperCase()} attunement reached Tier ${next.tier}.`
+      : `${ITEM_DEFINITIONS[itemId].name} rerolled to ${next.affixId.toUpperCase()} · TIER ${next.tier}.`;
+    this.sendEquipmentAffixes(client, message);
+    this.sendBlacksmithState(client, message, "attuned");
   }
 
   private handleLeaderForge(client: Client, payload: unknown): void {
@@ -2642,10 +2711,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       const beforeGold = player.coins;
       player.coins = Math.min(1_000_000, player.coins + recipe.gold);
+      const dustGranted = drop.affixTier > 0 ? attunementDustYield(drop.affixTier) : 0;
+      if (dustGranted > 0) {
+        this.setEquipmentAttunements(player, this.equipmentAffixes(player), this.attunementDust(player) + dustGranted, this.attunementOffers(player));
+        this.sendEquipmentAffixes(client, `Salvaged ${dustGranted} Attunement Dust from ${ITEM_DEFINITIONS[itemId].name}.`);
+      }
       this.state.lootDrops.delete(parsed.data.dropId);
       void this.persistPlayer(client.sessionId, player, true).catch(() => {});
       const materialMessage = materialId && materialQuantity > 0 ? ` · +${materialQuantity} ${ITEM_DEFINITIONS[materialId].name}` : "";
-      return reply(true, `Dismantled ${ITEM_DEFINITIONS[itemId].name} · +${player.coins - beforeGold} gold${materialMessage}.`, {
+      const dustMessage = dustGranted > 0 ? ` · +${dustGranted} Attunement Dust` : "";
+      return reply(true, `Dismantled ${ITEM_DEFINITIONS[itemId].name} · +${player.coins - beforeGold} gold${materialMessage}${dustMessage}.`, {
         action, itemId, goldGranted: player.coins - beforeGold, materialGranted: materialId, materialQuantity,
       });
     }
@@ -2680,7 +2755,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const pickupMessage = utilityId ? `${ITEM_DEFINITIONS[itemId].name} claimed and auto-equipped.`
       : mainHandId || armourId ? `${ITEM_DEFINITIONS[itemId].name} ${action === "equip" ? "equipped" : "kept in your pack"}.`
         : `Picked up ${drop.quantity} ${ITEM_DEFINITIONS[itemId].name}.`;
-    reply(true, `${pickupMessage}${affix ? ` ${affix.affixId.toUpperCase()} T${affix.tier}.` : ""}`, { action, itemId });
+    reply(true, `${pickupMessage}${affix ? ` ${affix.affixId.toUpperCase()} T${affix.tier}.`
+      : drop.affixTier >= 3 && (mainHandId || armourId) ? " Three Tier 3 attunement choices await at the blacksmith." : ""}`, { action, itemId });
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,
@@ -3709,7 +3785,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private setPlayerBuildData(player: PlayerState, loadouts: HuntLoadoutSlot[], buildPath = parseBuildPathState(player.huntLoadoutsJson)): void {
-    player.huntLoadoutsJson = JSON.stringify({ loadouts, buildPath, affixes: this.equipmentAffixes(player) });
+    player.huntLoadoutsJson = JSON.stringify({ loadouts, buildPath, affixes: this.equipmentAffixes(player),
+      dust: this.attunementDust(player), offers: this.attunementOffers(player) });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -3720,12 +3797,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private setEquipmentAffixes(player: PlayerState, affixes: Partial<Record<ItemId, EquipmentAffixRoll>>): void {
-    player.huntLoadoutsJson = JSON.stringify({ loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson), affixes });
+    this.setEquipmentAttunements(player, affixes, this.attunementDust(player), this.attunementOffers(player));
+  }
+
+  private attunementDust(player: PlayerState): number {
+    try {
+      const value = (JSON.parse(player.huntLoadoutsJson) as { dust?: unknown }).dust;
+      return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(65_535, Math.floor(value))) : 0;
+    } catch { return 0; }
+  }
+
+  private attunementOffers(player: PlayerState): EquipmentAffixOffers {
+    try { return parseEquipmentAffixOffers((JSON.parse(player.huntLoadoutsJson) as { offers?: unknown }).offers); }
+    catch { return {}; }
+  }
+
+  private setEquipmentAttunements(player: PlayerState, affixes: Partial<Record<ItemId, EquipmentAffixRoll>>,
+    dust: number, offers: EquipmentAffixOffers): void {
+    player.huntLoadoutsJson = JSON.stringify({ loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
+      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {
     const player = this.state.players.get(client.sessionId);
-    if (player) client.send("equipment:affixes", { affixes: this.equipmentAffixes(player), message } satisfies EquipmentAffixUpdate);
+    if (player) client.send("equipment:affixes", { affixes: this.equipmentAffixes(player), offers: this.attunementOffers(player),
+      dust: this.attunementDust(player), message } satisfies EquipmentAffixUpdate);
   }
 
   private equipmentAffixTier(player: PlayerState, affixId: EquipmentAffixId): number {
@@ -3737,6 +3833,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private attuneEquipment(client: Client, player: PlayerState, itemId: ItemId, tier: number): EquipmentAffixRoll | null {
     if (tier <= 0 || (!equipmentForItem(itemId) && !armourForItem(itemId))) return null;
     const buildPath = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    if (tier >= 3) {
+      const offers = this.attunementOffers(player);
+      offers[itemId] = rollEquipmentAffixOptions(buildPath, 3).map(choice => choice.affixId);
+      this.setEquipmentAttunements(player, this.equipmentAffixes(player), this.attunementDust(player), offers);
+      this.sendEquipmentAffixes(client, `${ITEM_DEFINITIONS[itemId].name} unlocked three Tier 3 attunements at the blacksmith.`);
+      return null;
+    }
     const candidate = rollEquipmentAffix(buildPath, tier), affixes = this.equipmentAffixes(player);
     const kept = keepBetterAffix(affixes[itemId], candidate);
     if (kept === affixes[itemId]) return kept;

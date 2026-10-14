@@ -18,6 +18,7 @@ import {
   type Appearance,
   type HuntLoadoutSlot,
   type EquipmentAffixRoll,
+  type EquipmentAffixOffers,
 } from "@blockcraft/protocol";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { ArmourEquipSchema, type ArmourId } from "@blockcraft/protocol";
@@ -28,7 +29,7 @@ import { parseReforgeRanks, serializeReforgeRanks } from "./equipment-reforge.js
 import { parseSignaturePity, serializeSignaturePity, type SignaturePity } from "./signature-loot.js";
 import { parseHuntMastery, serializeHuntMastery, type HuntMasteryProgress } from "./hunt-mastery.js";
 import { parseBuildPathState, type BuildPathState } from "./build-paths.js";
-import { parseEquipmentAffixes } from "./equipment-affixes.js";
+import { parseEquipmentAffixes, parseEquipmentAffixOffers } from "./equipment-affixes.js";
 
 export const PLAYER_SAVE_VERSION = 1;
 export const PLAYER_SAVE_HASH = "blockcraft:player-saves:v1";
@@ -59,6 +60,8 @@ export interface PlayerSaveData {
   huntCollectionRewardClaimed?: boolean;
   buildPath?: BuildPathState;
   equipmentAffixes?: Partial<Record<ItemId, EquipmentAffixRoll>>;
+  attunementDust?: number;
+  attunementOffers?: EquipmentAffixOffers;
   forestBestTimeMs?: number;
   silverDepthsBestTimeMs?: number;
   miningExpeditionStage?: number;
@@ -125,7 +128,14 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     if (stored > 0) storage[itemId] = Math.min(65_535, Math.floor(stored));
   }
   let equipmentAffixes: Partial<Record<ItemId, EquipmentAffixRoll>> = {};
-  try { equipmentAffixes = parseEquipmentAffixes((JSON.parse(player.huntLoadoutsJson) as { affixes?: unknown }).affixes); } catch { /* legacy */ }
+  let attunementDust = 0;
+  let attunementOffers: EquipmentAffixOffers = {};
+  try {
+    const equipment = JSON.parse(player.huntLoadoutsJson) as { affixes?: unknown; dust?: unknown; offers?: unknown };
+    equipmentAffixes = parseEquipmentAffixes(equipment.affixes);
+    attunementDust = Math.floor(finiteNumber(equipment.dust, 0, 0, 65_535));
+    attunementOffers = parseEquipmentAffixOffers(equipment.offers);
+  } catch { /* legacy */ }
   return {
     version: PLAYER_SAVE_VERSION,
     savedAt: now,
@@ -153,6 +163,8 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     huntCollectionRewardClaimed: player.huntCollectionRewardClaimed,
     buildPath: parseBuildPathState(player.huntLoadoutsJson),
     equipmentAffixes,
+    attunementDust,
+    attunementOffers,
     forestBestTimeMs: player.forestBestTimeMs,
     silverDepthsBestTimeMs: player.silverDepthsBestTimeMs,
     miningExpeditionStage: player.miningExpeditionStage,
@@ -234,6 +246,8 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     huntCollectionRewardClaimed: value.huntCollectionRewardClaimed === true,
     buildPath: parseBuildPathState(value.buildPath),
     equipmentAffixes: parseEquipmentAffixes(value.equipmentAffixes),
+    attunementDust: Math.floor(finiteNumber(value.attunementDust, 0, 0, 65_535)),
+    attunementOffers: parseEquipmentAffixOffers(value.attunementOffers),
     forestBestTimeMs: Math.floor(finiteNumber(value.forestBestTimeMs, 0, 0, 86_400_000)),
     silverDepthsBestTimeMs: Math.floor(finiteNumber(value.silverDepthsBestTimeMs, 0, 0, 86_400_000)),
     miningExpeditionStage: Math.floor(finiteNumber(value.miningExpeditionStage,
@@ -278,7 +292,8 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.signaturePityJson = serializeSignaturePity(save.signaturePity ?? {});
   player.huntMasteryJson = serializeHuntMastery(save.huntMastery ?? {});
   player.huntLoadoutsJson = JSON.stringify({ loadouts: save.huntLoadouts ?? [], buildPath: parseBuildPathState(save.buildPath),
-    affixes: parseEquipmentAffixes(save.equipmentAffixes) });
+    affixes: parseEquipmentAffixes(save.equipmentAffixes), dust: Math.floor(finiteNumber(save.attunementDust, 0, 0, 65_535)),
+    offers: parseEquipmentAffixOffers(save.attunementOffers) });
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;
