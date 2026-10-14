@@ -26,6 +26,7 @@ import { parseRecoveryBags, restoreRecoveryBags, snapshotRecoveryBags, type Reco
 import { parseReforgeRanks, serializeReforgeRanks } from "./equipment-reforge.js";
 import { parseSignaturePity, serializeSignaturePity, type SignaturePity } from "./signature-loot.js";
 import { parseHuntMastery, serializeHuntMastery, type HuntMasteryProgress } from "./hunt-mastery.js";
+import { parseBuildPathState, type BuildPathState } from "./build-paths.js";
 
 export const PLAYER_SAVE_VERSION = 1;
 export const PLAYER_SAVE_HASH = "blockcraft:player-saves:v1";
@@ -54,6 +55,7 @@ export interface PlayerSaveData {
   huntMastery?: HuntMasteryProgress;
   huntLoadouts?: HuntLoadoutSlot[];
   huntCollectionRewardClaimed?: boolean;
+  buildPath?: BuildPathState;
   forestBestTimeMs?: number;
   silverDepthsBestTimeMs?: number;
   miningExpeditionStage?: number;
@@ -88,6 +90,7 @@ function isKeyOf<T extends object>(value: unknown, record: T): value is Extract<
 function parseHuntLoadouts(value: unknown): HuntLoadoutSlot[] {
   let source = value;
   if (typeof source === "string") try { source = JSON.parse(source); } catch { source = []; }
+  if (isRecord(source) && Array.isArray(source.loadouts)) source = source.loadouts;
   if (!Array.isArray(source)) return [];
   const slots: HuntLoadoutSlot[] = [];
   for (const raw of source) {
@@ -103,7 +106,8 @@ function parseHuntLoadouts(value: unknown): HuntLoadoutSlot[] {
     slots.push({ slot, name: typeof raw.name === "string" ? raw.name.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 18) || `Loadout ${slot}` : `Loadout ${slot}`,
       mainHandId: raw.mainHandId, armourId: armour.data.armourId, equippedPower: raw.equippedPower,
       equippedPowerSecondary: raw.equippedPowerSecondary, equippedSpecial: raw.equippedSpecial,
-      equippedTrait: raw.equippedTrait, seismicMastery: raw.seismicMastery });
+      equippedTrait: raw.equippedTrait, seismicMastery: raw.seismicMastery,
+      buildPathId: ["tank", "mage", "assassin", "thief", "ranger"].includes(String(raw.buildPathId)) ? raw.buildPathId as HuntLoadoutSlot["buildPathId"] : null });
   }
   return slots.sort((a, b) => a.slot - b.slot).slice(0, 3);
 }
@@ -142,6 +146,7 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     huntMastery: parseHuntMastery(player.huntMasteryJson),
     huntLoadouts: parseHuntLoadouts(player.huntLoadoutsJson),
     huntCollectionRewardClaimed: player.huntCollectionRewardClaimed,
+    buildPath: parseBuildPathState(player.huntLoadoutsJson),
     forestBestTimeMs: player.forestBestTimeMs,
     silverDepthsBestTimeMs: player.silverDepthsBestTimeMs,
     miningExpeditionStage: player.miningExpeditionStage,
@@ -221,6 +226,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     huntMastery: parseHuntMastery(value.huntMastery),
     huntLoadouts: parseHuntLoadouts(value.huntLoadouts),
     huntCollectionRewardClaimed: value.huntCollectionRewardClaimed === true,
+    buildPath: parseBuildPathState(value.buildPath),
     forestBestTimeMs: Math.floor(finiteNumber(value.forestBestTimeMs, 0, 0, 86_400_000)),
     silverDepthsBestTimeMs: Math.floor(finiteNumber(value.silverDepthsBestTimeMs, 0, 0, 86_400_000)),
     miningExpeditionStage: Math.floor(finiteNumber(value.miningExpeditionStage,
@@ -264,7 +270,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.reforgeRanksJson = serializeReforgeRanks(save.reforgeRanks ?? {});
   player.signaturePityJson = serializeSignaturePity(save.signaturePity ?? {});
   player.huntMasteryJson = serializeHuntMastery(save.huntMastery ?? {});
-  player.huntLoadoutsJson = JSON.stringify(save.huntLoadouts ?? []);
+  player.huntLoadoutsJson = JSON.stringify({ loadouts: save.huntLoadouts ?? [], buildPath: save.buildPath ?? { selectedPathId: null, xp: {} } });
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;

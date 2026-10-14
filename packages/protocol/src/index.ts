@@ -185,6 +185,26 @@ export type ProgressionUpdate = {
   miningPoints: number;
 };
 
+export const BUILD_PATHS = {
+  tank: { name: "Tank", role: "Hold the line", passive: "Path ranks reduce incoming damage while guarding." },
+  mage: { name: "Mage", role: "Shape raw power", passive: "Path ranks shorten Power cooldowns." },
+  assassin: { name: "Assassin", role: "Exploit vulnerability", passive: "Path ranks add damage against marked or weakened enemies." },
+  thief: { name: "Thief", role: "Escape with the prize", passive: "Path ranks improve perfect-dodge recovery and kill gold." },
+  ranger: { name: "Ranger", role: "Control the distance", passive: "Path ranks add damage to bow attacks." },
+} as const;
+export type BuildPathId = keyof typeof BUILD_PATHS;
+export const BUILD_PATH_RANKS = [
+  { rank: 0, name: "Untrained", xp: 0 },
+  { rank: 1, name: "Initiate", xp: 10 },
+  { rank: 2, name: "Adept", xp: 30 },
+  { rank: 3, name: "Veteran", xp: 70 },
+  { rank: 4, name: "Master", xp: 140 },
+] as const;
+export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger"]).optional() }).strict();
+export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
+export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
+  candidates: BuildPathAffinity[]; canChoose: boolean; inTown: boolean; message: string };
+
 export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;
 export const TAVERN_QUIZ_MAX_PAYOUT = 1024;
@@ -1181,7 +1201,7 @@ export type RealmHuntBoardUpdate = { selectedMobId: string; hunts: RealmHuntStat
   mastery: Record<"fang" | "venom" | "crusher", RealmHuntMasteryStatus>; message: string };
 export type HuntLoadoutSlot = { slot: 1 | 2 | 3; name: string; mainHandId: MainHandId; armourId: ArmourId;
   equippedPower: PowerId; equippedPowerSecondary: PowerId; equippedSpecial: SpecialId; equippedTrait: TraitId;
-  seismicMastery: SeismicMasteryId };
+  seismicMastery: SeismicMasteryId; buildPathId: BuildPathId | null };
 export type HuntCollectionUpdate = {
   loadouts: HuntLoadoutSlot[];
   mastery: Record<HuntSetId, RealmHuntMasteryStatus>;

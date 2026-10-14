@@ -174,6 +174,8 @@ import {
   characterPowerBonus,
   characterSpeedMultiplier,
   CHARACTER_MILESTONES,
+  BUILD_PATHS,
+  BUILD_PATH_RANKS,
   blacksmithRequiredLevel,
   enemyThreat,
   experienceToNextLevel,
@@ -181,6 +183,8 @@ import {
   MAX_CHARACTER_STAT_POINTS,
   type CharacterStatId,
   type ProgressionUpdate,
+  type BuildPathUpdate,
+  type BuildPathId,
   type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
@@ -656,6 +660,12 @@ const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
 const powerLoadoutButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-loadout-slots [data-power-slot]")];
 const characterMilestones = document.querySelector<HTMLElement>("#character-milestones")!;
+const buildPathPanel = document.querySelector<HTMLElement>("#build-path-panel")!;
+const buildPathName = document.querySelector<HTMLElement>("#build-path-name")!;
+const buildPathRank = document.querySelector<HTMLElement>("#build-path-rank")!;
+const buildPathMessage = document.querySelector<HTMLElement>("#build-path-message")!;
+const buildPathProgress = document.querySelector<HTMLElement>("#build-path-progress")!;
+const buildPathCandidates = document.querySelector<HTMLElement>("#build-path-candidates")!;
 const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
 const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
 const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("#seismic-mastery-picker [data-seismic-mastery]")];
@@ -2548,7 +2558,7 @@ function renderHuntCollection(update: HuntCollectionUpdate): void {
   for (const slot of [1, 2, 3] as const) {
     const saved = update.loadouts.find(loadout => loadout.slot === slot);
     const row = document.createElement("div"); row.className = "hunt-loadout-row";
-    row.innerHTML = `<b>${slot}</b><input maxlength="18" aria-label="Loadout ${slot} name" value="${saved?.name ?? `Loadout ${slot}`}"><span>${saved ? `${MAIN_HAND_DEFINITIONS[saved.mainHandId].name} · ${saved.armourId === "none" ? "No armour" : ITEM_DEFINITIONS[saved.armourId].name}` : "Empty slot"}</span><button class="save" type="button">SAVE</button><button class="equip" type="button" ${saved ? "" : "disabled"}>EQUIP</button>`;
+    row.innerHTML = `<b>${slot}</b><input maxlength="18" aria-label="Loadout ${slot} name" value="${saved?.name ?? `Loadout ${slot}`}"><span>${saved ? `${MAIN_HAND_DEFINITIONS[saved.mainHandId].name} · ${saved.armourId === "none" ? "No armour" : ITEM_DEFINITIONS[saved.armourId].name}${saved.buildPathId ? ` · ${BUILD_PATHS[saved.buildPathId].name}` : ""}` : "Empty slot"}</span><button class="save" type="button">SAVE</button><button class="equip" type="button" ${saved ? "" : "disabled"}>EQUIP</button>`;
     const input = row.querySelector<HTMLInputElement>("input")!;
     row.querySelector<HTMLButtonElement>(".save")!.disabled = !update.inTown;
     row.querySelector<HTMLButtonElement>(".equip")!.disabled = !saved || !update.inTown;
@@ -3030,6 +3040,35 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
     button.disabled = update.unspentStatPoints <= 0 || update[`${stat}Points` as keyof ProgressionUpdate] as number >= MAX_CHARACTER_STAT_POINTS;
   }
   levelUpPanel.hidden = update.unspentStatPoints <= 0;
+}
+
+function renderBuildPath(update: BuildPathUpdate): void {
+  const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
+  const rank = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank) ?? BUILD_PATH_RANKS[0];
+  buildPathPanel.dataset.selected = update.selectedPathId ?? "unbound";
+  buildPathPanel.dataset.available = String(update.canChoose);
+  buildPathName.textContent = selected?.name.toUpperCase() ?? "UNBOUND";
+  buildPathRank.textContent = selected ? `${rank.name.toUpperCase()} · RANK ${update.rank}` : update.canChoose ? "A PATH IS FORMING" : "REVEALS AT LEVEL 5";
+  buildPathMessage.textContent = update.message;
+  const previousThreshold = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank)?.xp ?? 0;
+  const span = Math.max(1, (update.nextRankXp ?? previousThreshold) - previousThreshold);
+  const progress = update.nextRankXp === null ? 1 : Math.max(0, Math.min(1, (update.xp - previousThreshold) / span));
+  buildPathProgress.toggleAttribute("hidden", !selected);
+  buildPathProgress.querySelector<HTMLElement>("i")!.style.width = `${Math.round(progress * 100)}%`;
+  buildPathProgress.setAttribute("aria-label", update.nextRankXp === null ? "Master rank complete" : `${update.xp} of ${update.nextRankXp} Path Mastery`);
+  buildPathCandidates.replaceChildren();
+  if (!update.canChoose) return;
+  for (const candidate of update.candidates) {
+    const definition = BUILD_PATHS[candidate.pathId];
+    const button = document.createElement("button"); button.type = "button";
+    button.dataset.path = candidate.pathId;
+    button.dataset.active = String(candidate.pathId === update.selectedPathId);
+    button.innerHTML = `<span><strong>${definition.name}</strong><small>${definition.role}</small></span><em>${candidate.score} AFFINITY</em><p>${candidate.reasons.length ? candidate.reasons.join(" · ") : "Your build is only beginning to lean this way."}</p><b>${definition.passive}</b>`;
+    button.disabled = !update.inTown;
+    button.title = update.inTown ? `Choose ${definition.name}` : "Return to Town to change your Calling";
+    button.addEventListener("click", () => room?.send("build:path", { action: "choose", pathId: candidate.pathId as BuildPathId }));
+    buildPathCandidates.append(button);
+  }
 }
 
 function updateMomentum(stacksValue: number): void {
@@ -5007,6 +5046,7 @@ function setInventoryOpen(open: boolean): void {
   inventoryToggle.setAttribute("aria-expanded", String(open));
   if (open) {
     closeTavernDialogue();
+    room?.send("build:path", { action: "sync" });
     inventoryPreviewDrawer.open = true;
     refreshOwnedInventory();
     inventoryPanel.scrollTop = 0;
@@ -9015,6 +9055,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("dungeon:board", (update: DungeonBoardUpdate) => renderDungeonBoard(update));
   room.onMessage("realm-hunt:board", (update: RealmHuntBoardUpdate) => renderRealmHuntBoard(update));
   room.onMessage("hunt:collection", (update: HuntCollectionUpdate) => renderHuntCollection(update));
+  room.onMessage("build:path", (update: BuildPathUpdate) => renderBuildPath(update));
   room.onMessage("dungeon:lobby", (update: DungeonLobbyUpdate) => renderDungeonLobby(update));
   room.onMessage("depths:lobby", (update: SilverDepthsLobbyUpdate) => renderSilverDepthsLobby(update));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));

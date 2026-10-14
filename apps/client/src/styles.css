@@ -1176,6 +1176,29 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #character-milestones small { margin-top: 2px; color: #819084; font-size: .55rem; line-height: 1.25; }
 #character-milestones article[data-unlocked="true"] { border-color: #75aa625c; background: #12251a; opacity: 1; }
 #character-milestones article[data-unlocked="true"] > span { color: #8ddd70; }
+#build-path-panel { margin: -6px 0 14px; padding: 10px; border: 1px solid #75624755; border-radius: 9px; background: linear-gradient(135deg, #18170f, #0a1710); }
+#build-path-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+#build-path-panel header span, #build-path-panel header strong { display: block; }
+#build-path-panel header span { color: #8c9f91; font-size: .48rem; font-weight: 900; letter-spacing: .1em; }
+#build-path-panel header strong { margin-top: 2px; color: #f0d182; font-size: .8rem; }
+#build-path-panel header b { color: #bfa66a; font-size: .5rem; letter-spacing: .07em; }
+#build-path-message { margin: 6px 0 7px; color: #91a096; font-size: .55rem; line-height: 1.35; }
+#build-path-progress { height: 5px; overflow: hidden; margin-bottom: 8px; border-radius: 5px; background: #050b07; }
+#build-path-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #887039, #e8c668); transition: width .25s ease; }
+#build-path-candidates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+#build-path-candidates:empty { display: none; }
+#build-path-candidates button { display: grid; grid-template-columns: 1fr auto; gap: 3px 6px; min-width: 0; padding: 8px; border: 1px solid #63715f55; border-radius: 7px; background: #101c14; color: #d9e3d5; cursor: pointer; text-align: left; }
+#build-path-candidates button:hover:not(:disabled) { border-color: #cfac5f; background: #1d281a; }
+#build-path-candidates button[data-active="true"] { border-color: #e5bd5f; box-shadow: inset 0 0 14px #d4a94522; }
+#build-path-candidates button:disabled { cursor: default; opacity: .55; }
+#build-path-candidates span, #build-path-candidates strong, #build-path-candidates small { display: block; }
+#build-path-candidates strong { color: #efd590; font-size: .63rem; }
+#build-path-candidates small { margin-top: 2px; color: #87998d; font-size: .46rem; }
+#build-path-candidates em { color: #a8c58e; font-size: .44rem; font-style: normal; font-weight: 900; }
+#build-path-candidates p, #build-path-candidates b { grid-column: 1 / -1; margin: 2px 0 0; font-size: .45rem; line-height: 1.3; }
+#build-path-candidates p { color: #819087; }
+#build-path-candidates b { color: #c6b478; font-weight: 700; }
+#build-path-panel[data-selected="tank"] { border-color: #85a5b477; }#build-path-panel[data-selected="mage"] { border-color: #8a78c977; }#build-path-panel[data-selected="assassin"] { border-color: #c4697077; }#build-path-panel[data-selected="thief"] { border-color: #b39a5477; }#build-path-panel[data-selected="ranger"] { border-color: #72a86b77; }
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }
 .inventory-empty { margin: 12px 0; padding: 22px 16px; border: 1px dashed #70876866; border-radius: 9px; color: #92a68e; font-size: .8rem; text-align: center; }
@@ -1554,6 +1577,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   .inventory-header h2 { font-size: 1.55rem; }
   .inventory-summary { grid-template-columns: 1fr 1fr; }
   #character-stats { grid-template-columns: 1fr 1fr; }
+  #build-path-candidates { grid-template-columns: 1fr; }
   .inventory-grid, .equipment-grid { grid-template-columns: 1fr; }
   .inventory-grid article { min-height: 56px; }
   #touch-controls {
