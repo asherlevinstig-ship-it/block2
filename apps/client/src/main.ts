@@ -118,6 +118,9 @@ import {
   itemRarity,
   lootCarryCapacity,
   equipmentPerkStats,
+  HUNT_EQUIPMENT_SETS,
+  huntSetForItem,
+  huntSetForLoadout,
   type ItemRarity,
   HEALING_POTION,
   type PotionUpdate,
@@ -2360,10 +2363,21 @@ function appendEquipmentIdentity(element: HTMLElement, itemId: ItemId | null, ra
   rankNode.textContent = itemId ? rankLabel(rank) : "STARTER"; element.append(rankNode);
   if (!itemId) return;
   const perk = equipmentPerkStats(itemId, rank);
-  if (!perk) return;
-  const perkNode = document.createElement("p"); perkNode.className = "inventory-perk";
-  const perkName = document.createElement("strong"); perkName.textContent = perk.name.toUpperCase();
-  perkNode.append(perkName, document.createTextNode(perk.detail)); element.append(perkNode);
+  if (perk && perk.id !== "fang_set" && perk.id !== "venom_set" && perk.id !== "crusher_set") {
+    const perkNode = document.createElement("p"); perkNode.className = "inventory-perk";
+    const perkName = document.createElement("strong"); perkName.textContent = perk.name.toUpperCase();
+    perkNode.append(perkName, document.createTextNode(perk.detail)); element.append(perkNode);
+  }
+  const setId = huntSetForItem(itemId);
+  if (!setId) return;
+  const set = HUNT_EQUIPMENT_SETS[setId];
+  const candidateHand = itemId === set.weaponId ? set.weaponId : localMainHandId;
+  const candidateArmour = itemId === set.armourId ? set.armourId : localArmourId;
+  const active = huntSetForLoadout(candidateHand, candidateArmour) === setId;
+  const pair = itemId === set.weaponId ? ITEM_DEFINITIONS[set.armourId].name : ITEM_DEFINITIONS[set.weaponId].name;
+  const setNode = document.createElement("p"); setNode.className = "inventory-set-bonus"; setNode.dataset.active = String(active);
+  const setName = document.createElement("strong"); setName.textContent = active ? "2-PIECE SET ACTIVE" : `PAIR WITH ${pair.toUpperCase()}`;
+  setNode.append(setName, document.createTextNode(set.bonus)); element.append(setNode);
 }
 function fillLootComparison(element: HTMLElement, id: MainHandId, rank = equipmentRank(itemForMainHand(id)), compareId?: MainHandId) {
   const comparison = weaponComparison(id, localIronSwordOwned, rank);
@@ -2623,6 +2637,7 @@ function refreshPowerCompatibility(): void {
 }
 
 function refreshInventoryEquipped(): void {
+  combatHud.setArmour(localArmourId);
   const tool = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0 ? "Reinforced Pickaxe" : "Starter Pickaxe";
   inventoryEquipped.textContent = `${MAIN_HAND_DEFINITIONS[localMainHandId].name} · ${tool} · ${armourStats(localArmourId).name}`;
   const handDefinition = MAIN_HAND_DEFINITIONS[localMainHandId];
@@ -9205,8 +9220,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
         createRangedPopup(position, `−${message.damage}`, "damage", message.defeated);
       }
       const perkName = message.perk === "core_quake" ? "CORE QUAKE" : message.perk === "moon_arc" ? "MOON ARC"
-        : message.perk === "echo_chain" ? "ECHO CHAIN" : "ROOTFALL";
-      if (message.attackerId === room?.sessionId) showCombatFeedback(`${perkName}  −${message.damage}`, "dodge");
+        : message.perk === "echo_chain" ? "ECHO CHAIN" : message.perk === "venom_set" ? "VENOM POOL"
+          : message.perk === "crusher_set" ? "WORLDSPLITTER" : "ROOTFALL";
+      if (message.attackerId === room?.sessionId && message.perk !== "venom_set" && message.perk !== "crusher_set")
+        showCombatFeedback(`${perkName}  −${message.damage}`, "dodge");
       logMovementEvent(`${perkName} ${message.mobId} hp=${message.health} defeated=${message.defeated}`);
       return;
     }
@@ -9250,6 +9267,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       else if (message.perk === "alpha_finish") status.textContent += " · Alpha Fang awakened finisher +1 damage.";
       else if (message.perk === "venom_surge") status.textContent += " · Venom Surge awakened bolt +1 damage.";
       else if (message.perk === "crusher_break") status.textContent += " · Crusher Break exploited stagger +1 damage.";
+      if (message.setBonus === "fang") status.textContent += ` · Fangstalker finisher${(message.setBonusDamage ?? 0) > 0 ? " executed a weakened enemy" : ""} · +${message.staminaRestored ?? 0} stamina.`;
+      else if (message.setBonus === "venom") status.textContent += ` · Venomweave poison pool armed${(message.cooldownReducedMs ?? 0) > 0 ? ` · Special −${((message.cooldownReducedMs ?? 0) / 1000).toFixed(1)}s` : ""}.`;
+      else if (message.setBonus === "crusher") status.textContent += " · Worldsplitter shockwave · +1 armour for 3s.";
     }
   });
   room.onMessage("combat:miss", (message: CombatMiss) => {

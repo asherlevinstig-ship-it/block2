@@ -429,6 +429,25 @@ export const ITEM_DEFINITIONS = {
 } as const;
 
 export type ItemId = keyof typeof ITEM_DEFINITIONS;
+export const HUNT_EQUIPMENT_SETS = {
+  fang: { name: "Fangstalker", weaponId: "fang_dagger", armourId: "fangstalker_wrap",
+    bonus: "Finishers restore 12 stamina and deal +2 damage to enemies below 30% health" },
+  venom: { name: "Venomweave", weaponId: "acid_gland_focus", armourId: "venomweave_mantle",
+    bonus: "Every third bolt creates a 3 second poison pool and reduces Special cooldown by 1.5s" },
+  crusher: { name: "Worldsplitter", weaponId: "stone_core_hammer", armourId: "worldsplitter_plate",
+    bonus: "Hits on staggered enemies release a shockwave and grant +1 armour for 3 seconds" },
+} as const satisfies Record<string, { name: string; weaponId: ItemId; armourId: ItemId; bonus: string }>;
+export type HuntSetId = keyof typeof HUNT_EQUIPMENT_SETS;
+export function huntSetForLoadout(mainHandId: string, armourId: string): HuntSetId | null {
+  for (const [setId, set] of Object.entries(HUNT_EQUIPMENT_SETS))
+    if (set.weaponId === mainHandId && set.armourId === armourId) return setId as HuntSetId;
+  return null;
+}
+export function huntSetForItem(itemId: string): HuntSetId | null {
+  for (const [setId, set] of Object.entries(HUNT_EQUIPMENT_SETS))
+    if (set.weaponId === itemId || set.armourId === itemId) return setId as HuntSetId;
+  return null;
+}
 export const AREA_LEADER_RELIC_IDS = [
   "mossback_fang_relic", "westroad_fang_relic", "northroad_fang_relic", "broodmother_heart",
   "silverfang_venom_sac", "gloomfang_venom_sac", "stonehide_core_relic", "ruinbreaker_keystone",
@@ -574,7 +593,7 @@ export function lootBagRepresentative(items: readonly LootBagItem[]): LootBagIte
 }
 
 export type EquipmentPerkId = "core_quake" | "rootfall" | "moon_arc" | "living_guard" | "bastion_ward" | "venom_bloom" | "echo_chain"
-  | "alpha_finish" | "venom_surge" | "crusher_break";
+  | "alpha_finish" | "venom_surge" | "crusher_break" | "fang_set" | "venom_set" | "crusher_set";
 export const EQUIPMENT_PERK_ITEMS = {
   stone_core_hammer: "core_quake",
   rootbound_hammer: "rootfall",
@@ -583,6 +602,9 @@ export const EQUIPMENT_PERK_ITEMS = {
   bastion_plate: "bastion_ward",
   venom_focus: "venom_bloom",
   echo_prism: "echo_chain",
+  fangstalker_wrap: "fang_set",
+  venomweave_mantle: "venom_set",
+  worldsplitter_plate: "crusher_set",
 } as const satisfies Partial<Record<ItemId, EquipmentPerkId>>;
 export function equipmentPerkStats(itemId: string, rank = 0): { id: EquipmentPerkId; name: string; detail: string; damage?: number; radius?: number; durationMs?: number; stamina?: number; cooldownMs?: number; stacks?: number; windowMs?: number } | null {
   const safeRank = Math.max(0, Math.min(3, Math.floor(rank)));
@@ -615,6 +637,9 @@ export function equipmentPerkStats(itemId: string, rank = 0): { id: EquipmentPer
       const radius = 3.5 + safeRank * .25, damage = 1 + Math.ceil(safeRank / 2);
       return { id: "echo_chain", name: "Echo Chain", damage, radius, detail: `Bolts ricochet once for ${damage} damage within ${radius.toFixed(2)}m` };
     }
+    case "fang_set": return { id: "fang_set", name: "Fangstalker Set", detail: HUNT_EQUIPMENT_SETS.fang.bonus, stamina: 12, damage: 2 };
+    case "venom_set": return { id: "venom_set", name: "Venomweave Set", detail: HUNT_EQUIPMENT_SETS.venom.bonus, damage: 1, radius: 2.1, durationMs: 3_000, cooldownMs: 1_500 };
+    case "crusher_set": return { id: "crusher_set", name: "Worldsplitter Set", detail: HUNT_EQUIPMENT_SETS.crusher.bonus, damage: 1, radius: 2.6, durationMs: 3_000 };
     default: return null;
   }
 }
@@ -1252,6 +1277,11 @@ export interface CombatHit {
   perk?: EquipmentPerkId;
   /** Current buildup for stacking perks such as Venom Bloom. */
   perkStacks?: number;
+  /** Active two-piece Hunt set that modified this hit. */
+  setBonus?: HuntSetId;
+  setBonusDamage?: number;
+  staminaRestored?: number;
+  cooldownReducedMs?: number;
 }
 
 export const ROOTBOUND_FINISHER = { radius: 2.35, damage: 1, rootMs: 650 } as const;

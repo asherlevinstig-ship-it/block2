@@ -30,8 +30,8 @@ import { ASHGLASS_ORACLE_ID, GREENWOOD_MATRIARCH_ID, REALM_WARDEN_ID,
   fallingRockSites, isRealmSpitterBoss, realmBossPattern, realmBossPhase, usesDoubleVolley, usesFallingRockZones, usesRockVolley, type RealmBossPhase } from "./realm-boss-patterns.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE, LootCollectRequestSchema,
-  decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, normalizeLootBagItems,
-  type LootBagItem, type LootCollectResult } from "@blockcraft/protocol";
+  decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, normalizeLootBagItems, huntSetForLoadout,
+  type HuntSetId, type LootBagItem, type LootCollectResult } from "@blockcraft/protocol";
 import { WILDERNESS_ENCOUNTERS } from "./wilderness-encounters.js";
 import { ROAMING_PACKS, roamingMemberId, roamingMembership, roamingPackAllows, roamingGoal,
   createRoamingRouteState, advanceRoamingRoute, type RoamingRouteState } from "./roaming-packs.js";
@@ -355,6 +355,18 @@ interface ActiveMobHazard {
   lastDamageAt: Map<string, number>;
 }
 
+interface ActiveVenomSetPool {
+  hazardId: string;
+  ownerId: string;
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  damage: number;
+  expiresAt: number;
+  nextDamageAt: number;
+}
+
 interface ActiveMiniBossCover {
   x: number;
   z: number;
@@ -400,6 +412,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly pendingWeaponProjectiles = new Map<string, PendingWeaponProjectile>();
   private readonly venomBuildup = new Map<string, { stacks: number; expiresAt: number }>();
   private readonly bastionWardReadyAt = new Map<string, number>();
+  private readonly venomSetPools = new Map<string, ActiveVenomSetPool>();
+  private readonly venomSetBuildup = new Map<string, number>();
+  private readonly crusherSetGuardUntil = new Map<string, number>();
+  private huntSetEffectSequence = 0;
   private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
@@ -867,6 +883,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   override async onLeave(client: Client): Promise<void> {
     this.silverDepthsReconnectInvulnerability.delete(client.sessionId);
     this.bastionWardReadyAt.delete(client.sessionId);
+    this.crusherSetGuardUntil.delete(client.sessionId);
+    this.venomSetBuildup.delete(client.sessionId);
+    for (const [id, pool] of this.venomSetPools) if (pool.ownerId === client.sessionId) this.venomSetPools.delete(id);
     for (const key of this.venomBuildup.keys()) if (key.startsWith(`${client.sessionId}:`)) this.venomBuildup.delete(key);
     this.combatContributions.disconnect(client.sessionId);
     for (const [id, drop] of this.state.lootDrops) if (drop.ownerId === client.sessionId) this.state.lootDrops.delete(id);
@@ -2678,6 +2697,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     defense.damage = armouredDamage(defense.damage, player.armourId, kind,
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
+    if (defense.damage > 0 && now <= (this.crusherSetGuardUntil.get(playerId) ?? 0))
+      defense.damage = Math.max(1, defense.damage - 1);
     if (defense.damage > 0 && kind !== "melee" && ownsDepthsReward(player.blacksmithUpgrades, "matriarch_guard")) {
       defense.damage = Math.max(1, defense.damage - 1);
     }
@@ -4186,6 +4207,44 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
   }
 
+  private createVenomSetPool(sessionId: string, origin: MobState, now: number): void {
+    const player = this.state.players.get(sessionId);
+    if (!player) return;
+    const perk = equipmentPerkStats("venomweave_mantle", equipmentReforgeRank(player.reforgeRanksJson, "venomweave_mantle"))!;
+    const hazardId = `venom-set:${sessionId}:${++this.huntSetEffectSequence}`;
+    const pool: ActiveVenomSetPool = {
+      hazardId, ownerId: sessionId, x: origin.x, y: origin.y, z: origin.z,
+      radius: perk.radius ?? 2.1, damage: perk.damage ?? 1,
+      expiresAt: now + (perk.durationMs ?? 3_000), nextDamageAt: now + 700,
+    };
+    this.venomSetPools.set(hazardId, pool);
+    this.broadcast("combat:mob-hazard", { hazardId, mobId: sessionId, kind: "acid", x: pool.x, y: pool.y,
+      z: pool.z, radius: pool.radius, expiresAt: pool.expiresAt } satisfies MobHazardPlaced);
+  }
+
+  private resolveVenomSetPools(now: number): void {
+    for (const [hazardId, pool] of this.venomSetPools) {
+      if (now >= pool.expiresAt) { this.venomSetPools.delete(hazardId); continue; }
+      if (now < pool.nextDamageAt) continue;
+      pool.nextDamageAt = now + 900;
+      const player = this.state.players.get(pool.ownerId);
+      if (!player || player.health <= 0) { this.venomSetPools.delete(hazardId); continue; }
+      for (const [mobId, mob] of this.state.mobs) {
+        if (!mob.alive || mob.health <= 0 || Math.abs(mob.y - pool.y) > 1.75
+          || Math.hypot(mob.x - pool.x, mob.z - pool.z) > pool.radius
+          || !hasCombatLineOfSight(pool, mob, this.readWorldBlock)) continue;
+        const damage = damageAfterArmor(pool.damage, mob.armor);
+        this.combatContributions.record(mobId, pool.ownerId, Math.min(mob.health, damage), now);
+        mob.health = Math.max(0, mob.health - damage); mob.hitSequence += 1;
+        this.alertHitMob(mobId, pool.ownerId, now, pool);
+        if (mob.health === 0) this.defeatMob(mobId, mob, pool.ownerId, now);
+        this.broadcast("combat:hit", { attackerId: pool.ownerId, mainHandId: "acid_gland_focus", mobId,
+          damage, health: mob.health, defeated: !mob.alive, comboStep: 1, knockback: 0,
+          momentumStacks: player.momentumStacks, secondary: true, perk: "venom_set", setBonus: "venom" } satisfies CombatHit);
+      }
+    }
+  }
+
   private advanceSilverDepthsRouteHazards(now: number): void {
     if (this.roomKind !== "silver-depths" || this.silverDepthsEncounterStage !== 2 || !this.silverDepthsWing) return;
     const wing = this.silverDepthsWing;
@@ -4410,6 +4469,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.resolveBrambleSnares(now);
     this.resolveMobProjectiles(now);
     this.resolveMobHazards(now);
+    this.resolveVenomSetPools(now);
     this.advanceRealmBossHazards(now);
     this.advanceSilverDepthsRouteHazards(now);
     if (this.roomKind === "overworld") {
@@ -5925,6 +5985,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       let perk: EquipmentPerkId | undefined;
       let perkStacks: number | undefined;
       let perkBonusDamage = 0;
+      const huntSet = huntSetForLoadout(pending.mainHandId, player.armourId);
+      const huntSetPerk = huntSet ? equipmentPerkStats(player.armourId,
+        equipmentReforgeRank(player.reforgeRanksJson, player.armourId)) : null;
+      let setBonus: HuntSetId | undefined;
+      let setBonusDamage = 0;
+      let staminaRestored = 0;
+      let cooldownReducedMs = 0;
       if (pending.mainHandId === "venom_focus") {
         const venom = equipmentPerkStats("venom_focus", equipmentReforgeRank(player.reforgeRanksJson, "venom_focus"))!;
         const key = `${sessionId}:${mobId}`;
@@ -5947,10 +6014,28 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         && (player.inventory.get("crusher_forgemark")?.quantity ?? 0) > 0) {
         perk = "crusher_break"; perkBonusDamage += 1;
       }
+      const struckStaggered = mob.combatState === "stagger";
+      if (huntSet === "fang" && pending.step === 3) {
+        setBonus = "fang";
+        staminaRestored = Math.min(huntSetPerk?.stamina ?? 12, player.maxStamina - player.stamina);
+        player.stamina += staminaRestored;
+        if (mob.health <= Math.ceil(mob.maxHealth * .3)) setBonusDamage = huntSetPerk?.damage ?? 2;
+      } else if (huntSet === "venom") {
+        const buildup = (this.venomSetBuildup.get(sessionId) ?? 0) + 1;
+        this.venomSetBuildup.set(sessionId, buildup >= 3 ? 0 : buildup);
+        if (buildup >= 3) {
+          setBonus = "venom";
+          cooldownReducedMs = Math.min(huntSetPerk?.cooldownMs ?? 1_500, Math.max(0, player.specialCooldownUntil - now));
+          player.specialCooldownUntil = Math.max(now, player.specialCooldownUntil - cooldownReducedMs);
+        }
+      } else if (huntSet === "crusher" && struckStaggered) {
+        setBonus = "crusher"; setBonusDamage = 1;
+        this.crusherSetGuardUntil.set(sessionId, now + (huntSetPerk?.durationMs ?? 3_000));
+      }
       const damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
-          + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage,
+          + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage + setBonusDamage,
         mob.armor,
       ) + traitBonusDamage + dodgeCounterBonus;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
@@ -5991,8 +6076,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         rootShockwave,
         perk,
         perkStacks,
+        setBonus,
+        setBonusDamage,
+        staminaRestored,
+        cooldownReducedMs,
       };
       this.broadcast("combat:hit", hit);
+      if (setBonus === "venom") this.createVenomSetPool(sessionId, mob, now);
+      if (setBonus === "crusher") {
+        this.applyEquipmentAreaDamage(sessionId, mobId, mob, now, pending.mainHandId, pending.step,
+          huntSetPerk?.radius ?? 2.6, huntSetPerk?.damage ?? 1, "crusher_set");
+      }
       if (mob.alive) this.progressSpecialMark(sessionId, mobId, now);
       const equipmentRank = equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId);
       if (pending.mainHandId === "stone_core_hammer") {

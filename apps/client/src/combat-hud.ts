@@ -5,6 +5,9 @@ import {
   POWER_DEFINITIONS,
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
+  HUNT_EQUIPMENT_SETS,
+  huntSetForLoadout,
+  type ArmourId,
   type MainHandId,
   type PowerId,
   type SeismicMasteryId,
@@ -18,6 +21,7 @@ type CooldownState = { percent: number; label: string; ready: boolean };
 
 const mode = signal<InteractionMode>("build");
 const mainHand = signal<MainHandId>("longsword");
+const armour = signal<ArmourId>("none");
 const ironSwordOwned = signal(false);
 const primaryPower = signal<PowerId>("shockwave");
 const secondaryPower = signal<PowerId>("eruption");
@@ -56,8 +60,10 @@ function MainHandLoadout() {
   const selected = mainHand.value;
   const definition = MAIN_HAND_DEFINITIONS[selected];
   const name = selected === "longsword" && ironSwordOwned.value ? "Iron Sword · +1 DMG" : definition.name;
+  const activeSet = huntSetForLoadout(selected, armour.value);
   return h("div", { id: "main-hand-loadout" },
     h("p", null, h("span", null, "MAIN HAND"), h("strong", { id: "main-hand-name" }, name), h("em", { id: "main-hand-attack" }, definition.attackName)),
+    activeSet ? h("b", { id: "hunt-set-status", "data-set": activeSet }, `${HUNT_EQUIPMENT_SETS[activeSet].name.toUpperCase()} · SET ACTIVE`) : null,
   );
 }
 
@@ -148,6 +154,7 @@ export const combatHud = {
   mount(root: HTMLElement): void { render(h(CombatHud, null), root); },
   setMode(value: InteractionMode): void { setIfChanged(mode, value); },
   setWeapon(value: MainHandId, hasIronSword: boolean): void { batch(() => { setIfChanged(mainHand, value); setIfChanged(ironSwordOwned, hasIronSword); }); },
+  setArmour(value: ArmourId): void { setIfChanged(armour, value); },
   setPowerLoadout(primary: PowerId, secondary: PowerId, active: PowerSlot, level: number): void {
     batch(() => { setIfChanged(primaryPower, primary); setIfChanged(secondaryPower, secondary); setIfChanged(activePowerSlot, active); setIfChanged(characterLevel, level); });
   },

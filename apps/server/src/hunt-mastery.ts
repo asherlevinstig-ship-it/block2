@@ -1,5 +1,5 @@
 import type { HuntPathId } from "./hunt-contracts.js";
-import type { ItemId } from "@blockcraft/protocol";
+import { HUNT_EQUIPMENT_SETS, type ItemId } from "@blockcraft/protocol";
 
 export type HuntDifficulty = "normal" | "veteran" | "ascendant";
 export const HUNT_DIFFICULTIES = ["normal", "veteran", "ascendant"] as const;
@@ -42,9 +42,9 @@ export const huntDifficultyRewardMultiplier = (difficulty: HuntDifficulty): numb
 export const huntDifficultyLives = (difficulty: HuntDifficulty): number => difficulty === "ascendant" ? 3 : 0;
 
 export const HUNT_PATH_EQUIPMENT: Readonly<Record<HuntPathId, { weaponId: ItemId; armourId: ItemId; forgemarkId: ItemId }>> = {
-  fang: { weaponId: "fang_dagger", armourId: "fangstalker_wrap", forgemarkId: "alpha_forgemark" },
-  venom: { weaponId: "acid_gland_focus", armourId: "venomweave_mantle", forgemarkId: "venom_forgemark" },
-  crusher: { weaponId: "stone_core_hammer", armourId: "worldsplitter_plate", forgemarkId: "crusher_forgemark" },
+  fang: { ...HUNT_EQUIPMENT_SETS.fang, forgemarkId: "alpha_forgemark" },
+  venom: { ...HUNT_EQUIPMENT_SETS.venom, forgemarkId: "venom_forgemark" },
+  crusher: { ...HUNT_EQUIPMENT_SETS.crusher, forgemarkId: "crusher_forgemark" },
 };
 
 export function huntEquipmentRewards(pathId: HuntPathId, difficulty: HuntDifficulty, ownsArmour: boolean, roll = Math.random()): ItemId[] {

@@ -303,6 +303,9 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 #main-hand-loadout p span { color: #74b7dc; font-size: .55rem; font-weight: 1000; letter-spacing: .12em; }
 #main-hand-loadout p strong { color: #d7f1ff; font-size: .7rem; }
 #main-hand-loadout p em { color: #90a9b5; font-size: .55rem; font-style: normal; }
+#hunt-set-status { display: block; margin-top: 3px; color: #f6df83; font: 900 .47rem/1 system-ui; letter-spacing: .07em; text-shadow: 0 0 9px #e6b83f80; }
+#hunt-set-status[data-set="venom"] { color: #baf05a; text-shadow: 0 0 9px #86d53080; }
+#hunt-set-status[data-set="crusher"] { color: #ffc06a; text-shadow: 0 0 9px #e28b3f80; }
 #main-hand-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 #main-hand-picker button {
   padding: 6px 5px;
@@ -1259,6 +1262,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-rank { display: block; margin: 3px 0 6px; color: #9eb7aa; font-size: .55rem; font-weight: 900; letter-spacing: .08em; }
 .inventory-perk { margin: 8px 0 0 !important; padding: 7px 8px; border: 1px solid #a778d855; border-radius: 6px; background: #4a246033; color: #ddb8ff !important; }
 .inventory-perk strong { display: block; color: #f0d6ff; font-size: .61rem; }
+.inventory-set-bonus { margin: 6px 0 0 !important; padding: 7px 8px; border: 1px solid #d0ad4e55; border-radius: 6px; background: #4a3b1733; color: #c8b982 !important; }
+.inventory-set-bonus strong { display: block; color: #e0c977; font-size: .58rem; }.inventory-set-bonus[data-active="true"] { border-color: #9ed85d88; background: #263f173d; color: #c9e5a7 !important; }.inventory-set-bonus[data-active="true"] strong { color: #c9f087; }
 .inventory-selection-actions { display: grid; grid-template-columns: 1.1fr 1fr 1.25fr; gap: 6px; margin-top: 10px; }
 .inventory-selection-actions button { min-height: 34px; padding: 7px; border: 1px solid #618975; border-radius: 7px; background: #173426; color: #d8f4df; cursor: pointer; font-size: .56rem; font-weight: 900; letter-spacing: .05em; }
 .inventory-selection-actions button:first-child { border-color: #6ab8da; background: #19465a; color: #dff7ff; }
