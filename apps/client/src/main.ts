@@ -148,6 +148,7 @@ import {
   type DungeonRewardClaimed,
   type DungeonBoardUpdate,
   type RealmHuntBoardUpdate,
+  type RealmHuntDifficulty,
   type DungeonLobbyUpdate,
   type SilverDepthsLobbyUpdate,
   type ItemId,
@@ -328,12 +329,13 @@ expeditionPanel.querySelector(".expedition-launch")!.addEventListener("click", (
 
 let latestRealmHuntBoard: RealmHuntBoardUpdate | null = null;
 let realmHuntPath = "all";
+let realmHuntDifficulty: RealmHuntDifficulty = "normal";
 const realmHuntPanel = document.createElement("section");
 realmHuntPanel.id = "realm-hunt-board-panel";
 realmHuntPanel.hidden = true;
 realmHuntPanel.setAttribute("role", "dialog");
 realmHuntPanel.setAttribute("aria-label", "Realm Hunt Board");
-realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS · REALM HUNT BOARD</small><h2>Choose Your Contract</h2><p class="realm-hunt-message"></p><div class="realm-contract-card" hidden><small>ACTIVE CONTRACT</small><strong></strong><span></span><b></b></div><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" data-contract="fang" type="button">FANG CONTRACT</button><button data-path="Venom Surge" data-contract="venom" type="button">VENOM CONTRACT</button><button data-path="Crusher Break" data-contract="crusher" type="button">CRUSHER CONTRACT</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
+realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS · REALM HUNT BOARD</small><h2>Choose Your Contract</h2><p class="realm-hunt-message"></p><div class="realm-contract-card" hidden><small>ACTIVE CONTRACT</small><strong></strong><span></span><b></b></div><div class="realm-hunt-difficulties"><button class="active" data-hunt-difficulty="normal" type="button"><b>NORMAL</b><span>Standard hunt</span></button><button data-hunt-difficulty="veteran" type="button"><b>VETERAN</b><span>Rank 1 · 1.5× cache</span></button><button data-hunt-difficulty="ascendant" type="button"><b>ASCENDANT</b><span>Rank 3 · 3 lives · 2× cache</span></button></div><div class="realm-hunt-mastery"></div><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" data-contract="fang" type="button">FANG CONTRACT</button><button data-path="Venom Surge" data-contract="venom" type="button">VENOM CONTRACT</button><button data-path="Crusher Break" data-contract="crusher" type="button">CRUSHER CONTRACT</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
 document.body.append(realmHuntPanel);
 
 function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
@@ -343,15 +345,37 @@ function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
   contractCard.hidden = !update.contract;
   if (update.contract) {
     const contract = update.contract;
-    realmHuntPath = contract.forgeName;
-    contractCard.dataset.state = contract.completed ? "complete" : contract.championActive ? "champion" : "active";
-    contractCard.querySelector("strong")!.textContent = contract.completed ? `${contract.pathName.toUpperCase()} COMPLETE`
+    if (!contract.completed) {
+      realmHuntDifficulty = contract.difficulty;
+      realmHuntPath = contract.forgeName;
+    }
+    contractCard.dataset.state = contract.failed ? "failed" : contract.completed ? "complete" : contract.championActive ? "champion" : "active";
+    contractCard.querySelector("strong")!.textContent = contract.failed ? `${contract.pathName.toUpperCase()} FAILED`
+      : contract.completed ? `${contract.pathName.toUpperCase()} COMPLETE`
       : contract.championActive ? `FINAL HUNT · ${contract.championName}` : contract.pathName;
-    contractCard.querySelector("span")!.textContent = contract.completed ? "Champion cache secured · a harder rotation is ready"
+    const lives = contract.difficulty === "ascendant" ? ` · ${contract.livesRemaining} LIVES` : "";
+    contractCard.querySelector("span")!.textContent = contract.failed ? "Ascendant lives spent · begin a new contract"
+      : contract.completed ? "Champion cache secured · mastery and best time recorded"
       : contract.championActive ? "The Path Champion is active in the final territory"
         : `Next: ${contract.targetName} · ${contract.modifier.toUpperCase()} · REMATCH ${contract.tier}`;
-    contractCard.querySelector("b")!.textContent = contract.completed ? "COMPLETE"
-      : contract.championActive ? "CHAMPION" : `${contract.step} / ${contract.required} LEADERS`;
+    contractCard.querySelector("b")!.textContent = contract.failed ? "FAILED"
+      : contract.completed ? "COMPLETE"
+        : `${contract.difficulty.toUpperCase()}${lives} · ${formatDungeonTime(contract.elapsedMs)}`;
+  }
+  realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-hunt-difficulty]").forEach(button => {
+    button.classList.toggle("active", button.dataset.huntDifficulty === realmHuntDifficulty);
+  });
+  const masteryPanel = realmHuntPanel.querySelector(".realm-hunt-mastery")!;
+  masteryPanel.replaceChildren();
+  for (const pathId of ["fang", "venom", "crusher"] as const) {
+    const mastery = update.mastery[pathId];
+    const bestDifficulty: RealmHuntDifficulty | null = mastery.bestTimesMs.ascendant ? "ascendant"
+      : mastery.bestTimesMs.veteran ? "veteran" : mastery.bestTimesMs.normal ? "normal" : null;
+    const record = document.createElement("span");
+    record.innerHTML = `<b>${pathId.toUpperCase()} · R${mastery.rank}</b><small>${bestDifficulty ? `${bestDifficulty.toUpperCase()} BEST ${formatDungeonTime(mastery.bestTimesMs[bestDifficulty] ?? 0)}` : "NO CLEAR YET"}</small>`;
+    masteryPanel.append(record);
+    const button = realmHuntPanel.querySelector<HTMLButtonElement>(`[data-contract="${pathId}"]`);
+    if (button) button.textContent = `${pathId.toUpperCase()} · R${mastery.rank}`;
   }
   realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-path]").forEach(button => {
     const active = button.dataset.contract ? update.contract?.pathId === button.dataset.contract && !update.contract.completed
@@ -403,8 +427,12 @@ realmHuntPanel.querySelector(".realm-hunt-back")!.addEventListener("click", () =
 realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-path]").forEach(button => button.addEventListener("click", () => {
   realmHuntPath = button.dataset.path ?? "all";
   realmHuntPanel.querySelectorAll("[data-path]").forEach(candidate => candidate.classList.toggle("active", candidate === button));
-  if (button.dataset.contract) room?.send("realm-hunt:board", { action: "contract", pathId: button.dataset.contract });
+  if (button.dataset.contract) room?.send("realm-hunt:board", { action: "contract", pathId: button.dataset.contract, difficulty: realmHuntDifficulty });
   if (latestRealmHuntBoard) renderRealmHuntBoard(latestRealmHuntBoard);
+}));
+realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-hunt-difficulty]").forEach(button => button.addEventListener("click", () => {
+  realmHuntDifficulty = button.dataset.huntDifficulty as RealmHuntDifficulty;
+  realmHuntPanel.querySelectorAll("[data-hunt-difficulty]").forEach(candidate => candidate.classList.toggle("active", candidate === button));
 }));
 window.setInterval(() => {
   if (!realmHuntPanel.hidden) room?.send("realm-hunt:board", { action: "sync" });

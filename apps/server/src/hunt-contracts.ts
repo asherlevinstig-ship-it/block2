@@ -1,4 +1,5 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
+import { huntDifficultyLives, type HuntDifficulty } from "./hunt-mastery.js";
 
 export type HuntPathId = "fang" | "venom" | "crusher";
 export type HuntModifier = "frenzied" | "armoured" | "venomous" | "relentless";
@@ -24,6 +25,10 @@ export interface HuntContractState {
   championMobId: string;
   championActive: boolean;
   completed: boolean;
+  failed: boolean;
+  difficulty: HuntDifficulty;
+  startedAt: number;
+  livesRemaining: number;
 }
 
 export const HUNT_PATHS: Readonly<Record<HuntPathId, HuntPathDefinition>> = {
@@ -59,10 +64,11 @@ export function huntContractTargets(pathId: HuntPathId, cycle: number): readonly
   return [leaders[start]!, leaders[(start + stride) % leaders.length]!, leaders[(start + stride * 2) % leaders.length]!];
 }
 
-export function beginHuntContract(pathId: HuntPathId, cycle = 0): HuntContractState {
+export function beginHuntContract(pathId: HuntPathId, cycle = 0, difficulty: HuntDifficulty = "normal", startedAt = Date.now()): HuntContractState {
   const targets = huntContractTargets(pathId, cycle);
   return { pathId, cycle, step: 0, targets, targetMobId: targets[0]!, modifier: HUNT_PATHS[pathId].modifiers[0]!,
-    championMobId: "", championActive: false, completed: false };
+    championMobId: "", championActive: false, completed: false, failed: false, difficulty, startedAt,
+    livesRemaining: huntDifficultyLives(difficulty) };
 }
 
 export function advanceHuntContract(contract: HuntContractState, championMobId: string): HuntContractState {

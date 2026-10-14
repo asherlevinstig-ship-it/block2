@@ -1091,7 +1091,9 @@ export const RealmHuntBoardRequestSchema = z.object({
   action: z.enum(["sync", "select", "contract"]),
   mobId: z.string().max(80).optional(),
   pathId: z.enum(["fang", "venom", "crusher"]).optional(),
+  difficulty: z.enum(["normal", "veteran", "ascendant"]).optional(),
 }).strict();
+export type RealmHuntDifficulty = "normal" | "veteran" | "ascendant";
 export type RealmHuntStatus = {
   mobId: string;
   name: string;
@@ -1122,8 +1124,15 @@ export type RealmHuntContractStatus = {
   championActive: boolean;
   championName: string;
   completed: boolean;
+  failed: boolean;
+  difficulty: RealmHuntDifficulty;
+  livesRemaining: number;
+  elapsedMs: number;
 };
-export type RealmHuntBoardUpdate = { selectedMobId: string; hunts: RealmHuntStatus[]; contract: RealmHuntContractStatus | null; message: string };
+export type RealmHuntMasteryStatus = { rank: number; bestTimesMs: Partial<Record<RealmHuntDifficulty, number>>;
+  veteranUnlocked: boolean; ascendantUnlocked: boolean };
+export type RealmHuntBoardUpdate = { selectedMobId: string; hunts: RealmHuntStatus[]; contract: RealmHuntContractStatus | null;
+  mastery: Record<"fang" | "venom" | "crusher", RealmHuntMasteryStatus>; message: string };
 
 export type SilverDepthsWingRewardStatus = {
   wing: "iron" | "silver";

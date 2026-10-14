@@ -47,6 +47,9 @@ import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, leader
 import { RealmHuntBoardRequestSchema, type RealmHuntBoardUpdate, type RealmHuntContractStatus, type RealmHuntStatus } from "@blockcraft/protocol";
 import { HUNT_PATHS, advanceHuntContract, beginHuntContract, huntContractTier, isHuntPathId,
   type HuntContractState, type HuntPathId } from "./hunt-contracts.js";
+import { completeHuntMastery, huntDifficultyRewardMultiplier, huntDifficultyStatTier,
+  huntDifficultyTiming, huntDifficultyUnlocked, parseHuntMastery, serializeHuntMastery,
+  type HuntDifficulty } from "./hunt-mastery.js";
 import { huntChampionPattern, huntChampionPhase, huntChampionRushMultiplier,
   huntChampionUsesSecondVolley, huntChampionVenomHazard } from "./hunt-champion-combat.js";
 import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE,
@@ -412,8 +415,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly selectedRealmHunts = new Map<string, string>();
   private readonly huntContracts = new Map<string, HuntContractState>();
   private readonly huntContractCycles = new Map<string, Partial<Record<HuntPathId, number>>>();
-  private readonly huntChampions = new Map<string, { ownerId: string; pathId: HuntPathId; name: string }>();
+  private readonly huntChampions = new Map<string, { ownerId: string; pathId: HuntPathId; name: string; difficulty: HuntDifficulty }>();
   private readonly empoweredContractTargets = new Map<string, number>();
+  private readonly empoweredContractDifficulties = new Map<string, HuntDifficulty>();
   private huntChampionSequence = 0;
   private readonly realmBossPhases = new Map<string, RealmBossPhase>();
   private readonly mobProgress = new Map<string, MobProgress>();
@@ -921,6 +925,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.huntContractCycles.delete(client.sessionId);
     for (const [mobId, champion] of this.huntChampions) if (champion.ownerId === client.sessionId) {
       this.huntChampions.delete(mobId); this.state.mobs.delete(mobId); this.mobHomes.delete(mobId);
+      this.empoweredContractDifficulties.delete(mobId);
       this.mobNavigation.delete(mobId); this.mobAwareness.delete(mobId);
     }
   }
@@ -2035,6 +2040,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.pendingMobMelee.delete(mobId);
     mob.materializeUntil = 0;
     this.empoweredContractTargets.delete(mobId);
+    this.empoweredContractDifficulties.delete(mobId);
     const usesOverworldRhythm = this.roomKind === "overworld" && usesOverworldRespawnRhythm(mobId, mob.isChampion);
     mob.respawnAt = huntChampion ? now + 5_000
       : now + (usesOverworldRhythm ? wildernessRespawnDelay(mobId, mob.level) : definition.respawnMs);
@@ -2365,13 +2371,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const rewardPlayer = ownerId ? this.state.players.get(ownerId) : undefined;
     const areaReward = areaMainMobDefinition(mobId);
     const huntChampion = this.huntChampions.get(mobId);
+    const championMultiplier = huntDifficultyRewardMultiplier(huntChampion?.difficulty ?? "normal");
+    const championQuantity = (quantity: number): number => Math.max(1, Math.ceil(quantity * championMultiplier));
     const championRewards: { itemId: ItemId; quantity: number }[] = huntChampion?.pathId === "fang"
-      ? [{ itemId: "fang_dagger", quantity: 1 }, { itemId: "crawler_fang", quantity: 6 }, { itemId: "moss_fibre", quantity: 6 }, { itemId: "healing_potion", quantity: 1 }]
+      ? [{ itemId: "fang_dagger", quantity: 1 }, { itemId: "crawler_fang", quantity: championQuantity(6) }, { itemId: "moss_fibre", quantity: championQuantity(6) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
       : huntChampion?.pathId === "venom"
-        ? [{ itemId: "acid_gland_focus", quantity: 1 }, { itemId: "acid_gland", quantity: 7 }, { itemId: "silver_ore", quantity: 4 }, { itemId: "healing_potion", quantity: 1 }]
+        ? [{ itemId: "acid_gland_focus", quantity: 1 }, { itemId: "acid_gland", quantity: championQuantity(7) }, { itemId: "silver_ore", quantity: championQuantity(4) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
         : huntChampion?.pathId === "crusher"
-          ? [{ itemId: "stone_core_hammer", quantity: 1 }, { itemId: "stone_core", quantity: 7 }, { itemId: "iron_ore", quantity: 6 }, { itemId: "healing_potion", quantity: 1 }]
+          ? [{ itemId: "stone_core_hammer", quantity: 1 }, { itemId: "stone_core", quantity: championQuantity(7) }, { itemId: "iron_ore", quantity: championQuantity(6) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
           : [];
+    if (huntChampion?.difficulty === "ascendant") championRewards.push({ itemId:
+      huntChampion.pathId === "fang" ? "alpha_forgemark" : huntChampion.pathId === "venom" ? "venom_forgemark" : "crusher_forgemark", quantity: 1 });
     const firstLeaderVictory = Boolean(rewardPlayer && areaReward
       && !this.ownsOrHasPendingItem(ownerId, areaReward.rewardItemId));
     const areaRelicDrops: { itemId: ItemId; quantity: number }[] = rewardPlayer && areaReward
@@ -2702,6 +2712,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       } satisfies DefenseResolved);
     }
     if (!defeated) return true;
+    this.recordAscendantHuntDefeat(playerId, now);
     const failedDepthsRun = this.silverDepthsRuns.get(playerId);
     if (failedDepthsRun) this.restoreRunMoonstone(player, failedDepthsRun);
     this.silverDepthsRuns.delete(playerId);
@@ -3405,13 +3416,42 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const contract = this.huntContracts.get(sessionId);
     if (!contract) return null;
     const path = HUNT_PATHS[contract.pathId];
+    const player = this.state.players.get(sessionId);
+    const recordedTime = player ? parseHuntMastery(player.huntMasteryJson)[contract.pathId].bestTimesMs[contract.difficulty] : undefined;
     const targetName = contract.championActive || contract.completed ? path.championName
       : areaMainMobDefinition(contract.targetMobId)?.name ?? "Unknown Leader";
     return { pathId: contract.pathId, pathName: path.name, forgeName: path.forgeName,
       step: Math.min(contract.step, contract.targets.length), required: contract.targets.length,
       targetMobId: contract.targetMobId, targetName, modifier: contract.modifier,
       tier: huntContractTier(contract), championActive: contract.championActive,
-      championName: path.championName, completed: contract.completed };
+      championName: path.championName, completed: contract.completed, failed: contract.failed,
+      difficulty: contract.difficulty, livesRemaining: contract.livesRemaining,
+      elapsedMs: contract.completed && recordedTime ? recordedTime : Math.max(0, Date.now() - contract.startedAt) };
+  }
+
+  private recordAscendantHuntDefeat(playerId: string, now: number): void {
+    const contract = this.huntContracts.get(playerId);
+    if (!contract || contract.completed || contract.difficulty !== "ascendant") return;
+    const livesRemaining = Math.max(0, contract.livesRemaining - 1);
+    const failed = livesRemaining === 0;
+    const next = { ...contract, livesRemaining, failed, completed: failed, championActive: failed ? false : contract.championActive };
+    this.huntContracts.set(playerId, next);
+    if (failed) {
+      this.selectedRealmHunts.delete(playerId);
+      if (contract.championActive) {
+        this.huntChampions.delete(contract.championMobId);
+        this.state.mobs.delete(contract.championMobId);
+        this.mobHomes.delete(contract.championMobId);
+        this.empoweredContractTargets.delete(contract.championMobId);
+        this.empoweredContractDifficulties.delete(contract.championMobId);
+      }
+    }
+    const client = this.clients.find(candidate => candidate.sessionId === playerId);
+    client?.send("chat:notice", failed ? "ASCENDANT CONTRACT FAILED · all three lives are spent."
+      : `ASCENDANT LIFE LOST · ${livesRemaining} ${livesRemaining === 1 ? "life" : "lives"} remain.`);
+    if (client) this.sendRealmHuntBoard(client, failed ? "Ascendant contract failed. Choose a new hunt at the board."
+      : `Ascendant pressure continues · ${livesRemaining} lives remain.`);
+    void now;
   }
 
   private empowerPlayerHuntTarget(sessionId: string): void {
@@ -3420,10 +3460,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const mob = this.state.mobs.get(contract.targetMobId);
     if (!mob?.alive) return;
     const tier = huntContractTier(contract);
+    const strengthTier = tier + huntDifficultyStatTier(contract.difficulty);
     const alreadyApplied = this.empoweredContractTargets.get(contract.targetMobId) ?? 0;
     const existingTier = Math.max(alreadyApplied, mob.leaderRematchTier);
-    if (tier > existingTier) {
-      const extra = tier - existingTier;
+    if (strengthTier > existingTier) {
+      const extra = strengthTier - existingTier;
       const healthGain = Math.max(2, Math.ceil(mob.maxHealth * .1 * extra));
       mob.maxHealth = Math.min(120, mob.maxHealth + healthGain);
       mob.health = Math.min(mob.maxHealth, mob.health + healthGain);
@@ -3434,7 +3475,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.isMiniBoss = true;
     mob.leaderRematchTier = Math.max(mob.leaderRematchTier, tier);
     mob.leaderModifier = contract.modifier;
-    this.empoweredContractTargets.set(contract.targetMobId, Math.max(existingTier, tier));
+    this.empoweredContractTargets.set(contract.targetMobId, Math.max(existingTier, strengthTier));
+    this.empoweredContractDifficulties.set(contract.targetMobId, contract.difficulty);
   }
 
   private spawnHuntChampion(ownerId: string, contract: HuntContractState, origin: { x: number; y: number; z: number }, now: number): void {
@@ -3446,17 +3488,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!mob) return;
     const base = { maxHealth: mob.maxHealth, damage: mob.attackDamage, armor: mob.armor,
       speedMultiplier: mob.speedMultiplier, rewardMultiplier: Math.max(2, mob.rewardMultiplier) };
-    const stats = leaderRematchStats(base, { tier: 5, modifier: path.championModifier, rewardLabel: "PATH CHAMPION CACHE" });
+    const difficultyTier = huntDifficultyStatTier(contract.difficulty);
+    const stats = leaderRematchStats(base, { tier: 5 + difficultyTier, modifier: path.championModifier, rewardLabel: "PATH CHAMPION CACHE" });
     mob.isChampion = true; mob.isMiniBoss = true; mob.name = path.championName;
     mob.health = mob.maxHealth = Math.min(120, Math.ceil(stats.maxHealth * 1.35));
     mob.attackDamage = Math.min(12, stats.damage + 1); mob.armor = stats.armor;
     mob.speedMultiplier = stats.speedMultiplier; mob.rewardMultiplier = stats.rewardMultiplier * 1.5;
-    mob.leaderRematchTier = 5; mob.leaderModifier = path.championModifier;
+    mob.leaderRematchTier = 5 + difficultyTier; mob.leaderModifier = path.championModifier;
     mob.level = Math.min(20, Math.max(mob.level, (this.state.players.get(ownerId)?.level ?? 1) + 3));
     mob.attackPattern = huntChampionPattern(contract.pathId, 0, 1); mob.combatState = "recover";
     mob.materializeUntil = now + 2_500; mob.stateUntil = mob.materializeUntil;
     this.mobBaseNames.set(contract.championMobId, path.championName);
-    this.huntChampions.set(contract.championMobId, { ownerId, pathId: contract.pathId, name: path.championName });
+    this.huntChampions.set(contract.championMobId, { ownerId, pathId: contract.pathId, name: path.championName, difficulty: contract.difficulty });
+    this.empoweredContractDifficulties.set(contract.championMobId, contract.difficulty);
   }
 
   private advancePlayerHuntContract(playerId: string, defeatedMobId: string, defeated: MobState, now: number): void {
@@ -3470,6 +3514,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const cycles = this.huntContractCycles.get(playerId) ?? {};
       cycles[contract.pathId] = contract.cycle + 1; this.huntContractCycles.set(playerId, cycles);
       this.selectedRealmHunts.delete(playerId);
+      const player = this.state.players.get(playerId);
+      if (player) {
+        const mastery = completeHuntMastery(parseHuntMastery(player.huntMasteryJson), contract.pathId,
+          contract.difficulty, Math.max(1, now - contract.startedAt));
+        player.huntMasteryJson = serializeHuntMastery(mastery);
+        void this.persistPlayer(playerId, player, true).catch(() => {});
+        const bestMs = mastery[contract.pathId].bestTimesMs[contract.difficulty] ?? now - contract.startedAt;
+        client?.send("chat:notice", `HUNT MASTERY · ${HUNT_PATHS[contract.pathId].name} rank ${mastery[contract.pathId].rank} · ${contract.difficulty.toUpperCase()} best ${Math.ceil(bestMs / 1000)}s.`);
+      }
       client?.send("objective:completed", { objectiveId: `hunt-contract-${contract.pathId}`,
         title: `${HUNT_PATHS[contract.pathId].name} Complete`,
         rewardLabel: `${HUNT_PATHS[contract.pathId].championName} defeated · champion cache secured`, coinsGranted: 0 } satisfies WorldObjectiveCompleted);
@@ -3489,6 +3542,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private sendRealmHuntBoard(client: Client, message = "Choose a path contract or track one leader. Guidance awakens only near its territory."): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    const playerMastery = parseHuntMastery(player.huntMasteryJson);
     this.empowerPlayerHuntTarget(client.sessionId);
     const now = Date.now();
     const hunts: RealmHuntStatus[] = AREA_MAIN_MOBS.map(definition => {
@@ -3514,7 +3568,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     client.send("realm-hunt:board", {
       selectedMobId: this.selectedRealmHunts.get(client.sessionId) ?? "", hunts,
-      contract: this.realmHuntContractStatus(client.sessionId), message,
+      contract: this.realmHuntContractStatus(client.sessionId),
+      mastery: Object.fromEntries(((["fang", "venom", "crusher"] as const).map(pathId => {
+        const mastery = playerMastery[pathId];
+        return [pathId, { rank: mastery.rank, bestTimesMs: mastery.bestTimesMs,
+          veteranUnlocked: huntDifficultyUnlocked(mastery.rank, "veteran"),
+          ascendantUnlocked: huntDifficultyUnlocked(mastery.rank, "ascendant") }];
+      }))) as RealmHuntBoardUpdate["mastery"], message,
     } satisfies RealmHuntBoardUpdate);
   }
 
@@ -3533,12 +3593,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (current && !current.completed && current.pathId === parsed.data.pathId) {
         this.sendRealmHuntBoard(client, `${HUNT_PATHS[current.pathId].name} is already active.`); return;
       }
+      const difficulty = parsed.data.difficulty ?? "normal";
+      const mastery = parseHuntMastery(player.huntMasteryJson)[parsed.data.pathId];
+      if (!huntDifficultyUnlocked(mastery.rank, difficulty)) {
+        this.sendRealmHuntBoard(client, difficulty === "ascendant"
+          ? "Ascendant unlocks at path rank 3." : "Veteran unlocks after one Normal clear."); return;
+      }
       const cycles = this.huntContractCycles.get(client.sessionId) ?? {};
-      const contract = beginHuntContract(parsed.data.pathId, cycles[parsed.data.pathId] ?? 0);
+      const contract = beginHuntContract(parsed.data.pathId, cycles[parsed.data.pathId] ?? 0, difficulty, Date.now());
       this.huntContracts.set(client.sessionId, contract);
       this.selectedRealmHunts.set(client.sessionId, contract.targetMobId);
       this.empowerPlayerHuntTarget(client.sessionId);
-      this.sendRealmHuntBoard(client, `${HUNT_PATHS[contract.pathId].name} accepted · three leaders, then ${HUNT_PATHS[contract.pathId].championName}.`);
+      this.sendRealmHuntBoard(client, `${difficulty.toUpperCase()} ${HUNT_PATHS[contract.pathId].name} accepted · three leaders, then ${HUNT_PATHS[contract.pathId].championName}.`);
       this.sendObjectiveState(client, true); return;
     }
     const activeContract = this.huntContracts.get(client.sessionId);
@@ -4757,7 +4823,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : (mobId === "frontier-brute" || isAreaMiniBoss(mobId) && mob.archetype === "stone_brute") && mob.attackPattern === "smash"
           ? FRONTIER_BRUTE.smash.windupMs : definition.windupMs;
       const rematchTiming = leaderRematchTiming(mob.leaderModifier);
-      const windupMs = Math.round((baseWindupMs + miniBossWindupDelay(mob.isMiniBoss, mob.actionSequence)) * rematchTiming.windup);
+      const huntTiming = huntDifficultyTiming(this.huntChampions.get(mobId)?.difficulty
+        ?? this.empoweredContractDifficulties.get(mobId) ?? "normal");
+      const windupMs = Math.round((baseWindupMs + miniBossWindupDelay(mob.isMiniBoss, mob.actionSequence))
+        * rematchTiming.windup * huntTiming.windup);
       if (definition.attackKind === "projectile" && mob.archetype === "cave_spitter"
         && !allyFireLaneClear(mobId, mob, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype })))) {
         positioning.sidestepPending = true;
@@ -4773,7 +4842,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const peer = this.state.mobs.get(id);
           return Boolean(peer?.alive && peer.attackStartedAt === startedAt && ["windup", "strike", "recover"].includes(peer.combatState));
         })
-        || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs * rematchTiming.cooldown
+        || circling || rangedPursuit?.repositioning || !target.visible || !inAttackRange || Math.abs(target.y - mob.y) > 1.75 || now - lastAttackAt < definition.cooldownMs * rematchTiming.cooldown * huntTiming.cooldown
         || (definition.attackKind === "projectile" && [...this.pendingMobProjectiles.values()].some(shot => shot.mobId === mobId))
         || !hasCombatLineOfSight(mob, target, this.readWorldBlock)) continue;
       if (mobId === "frontier-brute" && !mob.isMiniBoss && mob.attackPattern !== "rocks") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
