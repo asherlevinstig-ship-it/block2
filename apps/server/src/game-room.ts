@@ -47,7 +47,7 @@ import { leaderRematch, leaderRematchMaterialBonus, leaderRematchPattern, leader
 import { RealmHuntBoardRequestSchema, type RealmHuntBoardUpdate, type RealmHuntContractStatus, type RealmHuntStatus } from "@blockcraft/protocol";
 import { HUNT_PATHS, advanceHuntContract, beginHuntContract, huntContractTier, isHuntPathId,
   type HuntContractState, type HuntPathId } from "./hunt-contracts.js";
-import { completeHuntMastery, huntDifficultyRewardMultiplier, huntDifficultyStatTier,
+import { completeHuntMastery, huntDifficultyRewardMultiplier, huntDifficultyStatTier, huntEquipmentRewards, HUNT_PATH_EQUIPMENT,
   huntDifficultyTiming, huntDifficultyUnlocked, parseHuntMastery, serializeHuntMastery,
   type HuntDifficulty } from "./hunt-mastery.js";
 import { huntChampionPattern, huntChampionPhase, huntChampionPincerSites, huntChampionRushMultiplier,
@@ -2373,15 +2373,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const huntChampion = this.huntChampions.get(mobId);
     const championMultiplier = huntDifficultyRewardMultiplier(huntChampion?.difficulty ?? "normal");
     const championQuantity = (quantity: number): number => Math.max(1, Math.ceil(quantity * championMultiplier));
+    const setRewards = huntChampion ? huntEquipmentRewards(huntChampion.pathId, huntChampion.difficulty,
+      this.ownsOrHasPendingItem(ownerId, HUNT_PATH_EQUIPMENT[huntChampion.pathId].armourId), Math.random()) : [];
     const championRewards: { itemId: ItemId; quantity: number }[] = huntChampion?.pathId === "fang"
-      ? [{ itemId: "fang_dagger", quantity: 1 }, { itemId: "crawler_fang", quantity: championQuantity(6) }, { itemId: "moss_fibre", quantity: championQuantity(6) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
+      ? [...setRewards.map(itemId => ({ itemId, quantity: 1 })), { itemId: "crawler_fang", quantity: championQuantity(6) }, { itemId: "moss_fibre", quantity: championQuantity(6) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
       : huntChampion?.pathId === "venom"
-        ? [{ itemId: "acid_gland_focus", quantity: 1 }, { itemId: "acid_gland", quantity: championQuantity(7) }, { itemId: "silver_ore", quantity: championQuantity(4) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
+        ? [...setRewards.map(itemId => ({ itemId, quantity: 1 })), { itemId: "acid_gland", quantity: championQuantity(7) }, { itemId: "silver_ore", quantity: championQuantity(4) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
         : huntChampion?.pathId === "crusher"
-          ? [{ itemId: "stone_core_hammer", quantity: 1 }, { itemId: "stone_core", quantity: championQuantity(7) }, { itemId: "iron_ore", quantity: championQuantity(6) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
+          ? [...setRewards.map(itemId => ({ itemId, quantity: 1 })), { itemId: "stone_core", quantity: championQuantity(7) }, { itemId: "iron_ore", quantity: championQuantity(6) }, { itemId: "healing_potion", quantity: championQuantity(1) }]
           : [];
-    if (huntChampion?.difficulty === "ascendant") championRewards.push({ itemId:
-      huntChampion.pathId === "fang" ? "alpha_forgemark" : huntChampion.pathId === "venom" ? "venom_forgemark" : "crusher_forgemark", quantity: 1 });
     const firstLeaderVictory = Boolean(rewardPlayer && areaReward
       && !this.ownsOrHasPendingItem(ownerId, areaReward.rewardItemId));
     const areaRelicDrops: { itemId: ItemId; quantity: number }[] = rewardPlayer && areaReward

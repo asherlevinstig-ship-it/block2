@@ -215,14 +215,18 @@ export const ARMOUR_DEFINITIONS = {
   iron_armour: { name: "Iron Armour", reduction: 2, speed: .92, projectileReduction: 0, hazardReduction: 0 },
   rootguard_armour: { name: "Rootguard Armour", reduction: 1, speed: .98, projectileReduction: 2, hazardReduction: 2 },
   bastion_plate: { name: "Bastion Plate", reduction: 2, speed: .94, projectileReduction: 0, hazardReduction: 1 },
+  fangstalker_wrap: { name: "Fangstalker Wrap", reduction: 1, speed: 1.06, projectileReduction: 0, hazardReduction: 0 },
+  venomweave_mantle: { name: "Venomweave Mantle", reduction: 1, speed: .99, projectileReduction: 2, hazardReduction: 2 },
+  worldsplitter_plate: { name: "Worldsplitter Plate", reduction: 3, speed: .9, projectileReduction: 1, hazardReduction: 2 },
 } as const;
 export type ArmourId = keyof typeof ARMOUR_DEFINITIONS;
 export function armourForItem(id: string): Exclude<ArmourId, "none"> | null {
-  return id === "leather_armour" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate" ? id : null;
+  return id === "leather_armour" || id === "iron_armour" || id === "rootguard_armour" || id === "bastion_plate"
+    || id === "fangstalker_wrap" || id === "venomweave_mantle" || id === "worldsplitter_plate" ? id : null;
 }
 export function utilityForItem(id: string): "miners_lantern" | "moonstone" | null { return id === "miners_lantern" || id === "moonstone" ? id : null; }
 export function isEquipmentItem(id: string): boolean { return equipmentForItem(id) !== null || armourForItem(id) !== null || utilityForItem(id) !== null; }
-export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour", "bastion_plate"]) });
+export const ArmourEquipSchema = z.object({ armourId: z.enum(["none", "leather_armour", "iron_armour", "rootguard_armour", "bastion_plate", "fangstalker_wrap", "venomweave_mantle", "worldsplitter_plate"]) });
 export const BLACKSMITH_STOCK = { ...BLACKSMITH_WEAPONS, leather_armour: { price: 30 }, iron_armour: { price: 70 } } as const;
 export type BlacksmithStockId = keyof typeof BLACKSMITH_STOCK;
 export const BlacksmithBuySchema = z.object({ itemId: z.enum(["forged_sword", "forged_bow", "forged_focus", "leather_armour", "iron_armour"]) });
@@ -238,6 +242,9 @@ export const BLACKSMITH_DISMANTLE = {
   echo_prism: { gold: 18, materialId: "silver_ore", materialQuantity: 1 },
   rootguard_armour: { gold: 14, materialId: "moss_fibre", materialQuantity: 2 },
   bastion_plate: { gold: 18, materialId: "stone_core", materialQuantity: 1 },
+  fangstalker_wrap: { gold: 12, materialId: "crawler_fang", materialQuantity: 2 },
+  venomweave_mantle: { gold: 14, materialId: "acid_gland", materialQuantity: 2 },
+  worldsplitter_plate: { gold: 18, materialId: "stone_core", materialQuantity: 2 },
 } as const satisfies Partial<Record<ItemId, { gold: number; materialId?: ItemId; materialQuantity?: number }>>;
 export type BlacksmithDismantleItemId = keyof typeof BLACKSMITH_DISMANTLE;
 export const BlacksmithDismantleSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_DISMANTLE) as [BlacksmithDismantleItemId, ...BlacksmithDismantleItemId[]]) });
@@ -256,6 +263,9 @@ export const BLACKSMITH_REFORGE = {
   iron_armour: { materialId: "iron_ore", costs: [{ gold: 18, material: 3 }, { gold: 38, material: 6 }, { gold: 75, material: 10 }] },
   rootguard_armour: { materialId: "moss_fibre", costs: [{ gold: 20, material: 3 }, { gold: 42, material: 6 }, { gold: 85, material: 10 }] },
   bastion_plate: { materialId: "stone_core", costs: [{ gold: 24, material: 3 }, { gold: 50, material: 6 }, { gold: 95, material: 10 }] },
+  fangstalker_wrap: { materialId: "crawler_fang", costs: [{ gold: 16, material: 3 }, { gold: 34, material: 6 }, { gold: 68, material: 10 }] },
+  venomweave_mantle: { materialId: "acid_gland", costs: [{ gold: 18, material: 3 }, { gold: 38, material: 6 }, { gold: 74, material: 10 }] },
+  worldsplitter_plate: { materialId: "stone_core", costs: [{ gold: 24, material: 3 }, { gold: 52, material: 6 }, { gold: 98, material: 10 }] },
 } as const satisfies Partial<Record<ItemId, { materialId: ItemId; costs: readonly { gold: number; material: number }[] }>>;
 export type BlacksmithReforgeItemId = keyof typeof BLACKSMITH_REFORGE;
 export type EquipmentReforgeRanks = Partial<Record<BlacksmithReforgeItemId, number>>;
@@ -370,6 +380,9 @@ export const ITEM_DEFINITIONS = {
   iron_armour: { id: "iron_armour", name: "Iron Armour", description: "Reduce damage by 2 (minimum hit 1) · 8% slower movement" },
   rootguard_armour: { id: "rootguard_armour", name: "Rootguard Armour", description: "Reduce damage by 1 · extra protection from projectiles and hazards · 2% slower" },
   bastion_plate: { id: "bastion_plate", name: "Bastion Plate", description: "Iron Bastion relic · reduce damage by 2 · extra protection from hazards · 6% slower" },
+  fangstalker_wrap: { id: "fangstalker_wrap", name: "Fangstalker Wrap", description: "Rare Fang Hunt armour · reduce damage by 1 · 6% faster movement for close combo pressure" },
+  venomweave_mantle: { id: "venomweave_mantle", name: "Venomweave Mantle", description: "Rare Venom Hunt armour · reduce damage by 1 · strong projectile and hazard protection" },
+  worldsplitter_plate: { id: "worldsplitter_plate", name: "Worldsplitter Plate", description: "Rare Crusher Hunt armour · reduce damage by 3 · heavy projectile and hazard protection · 10% slower" },
   forged_sword: { id: "forged_sword", name: "Forged Sword", description: "Iron blade · 2 / 2 / 3 combo damage · equip from your pack" },
   forged_bow: { id: "forged_bow", name: "Forged Bow", description: "Steel-braced bow · 2 arrow damage · equip from your pack" },
   forged_focus: { id: "forged_focus", name: "Forged Focus", description: "Smith-made focus · 2 bolt damage · equip from your pack" },
@@ -463,6 +476,9 @@ export const EQUIPMENT_RARITY = {
   iron_armour: "uncommon",
   rootguard_armour: "epic",
   bastion_plate: "epic",
+  fangstalker_wrap: "rare",
+  venomweave_mantle: "rare",
+  worldsplitter_plate: "rare",
   forged_sword: "uncommon",
   forged_bow: "uncommon",
   forged_focus: "uncommon",

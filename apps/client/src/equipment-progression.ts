@@ -31,6 +31,9 @@ export const EQUIPMENT_COLLECTION: readonly EquipmentCollectionEntry[] = [
   { itemId: "iron_armour", slot: "armour", source: "Buy from the Town blacksmith at level 5" },
   { itemId: "rootguard_armour", slot: "armour", source: "Defeat the Root Guardian" },
   { itemId: "bastion_plate", slot: "armour", source: "Defeat the Iron Bastion" },
+  { itemId: "fangstalker_wrap", slot: "armour", source: "Complete a Veteran or Ascendant Fang Hunt" },
+  { itemId: "venomweave_mantle", slot: "armour", source: "Complete a Veteran or Ascendant Venom Hunt" },
+  { itemId: "worldsplitter_plate", slot: "armour", source: "Complete a Veteran or Ascendant Crusher Hunt" },
   { itemId: "reinforced_pickaxe", slot: "tool", source: "Forge at the Town blacksmith" },
   { itemId: "miners_lantern", slot: "light", source: "Recover from a dungeon equipment cache" },
 ] as const;

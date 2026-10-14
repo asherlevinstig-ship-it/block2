@@ -26,7 +26,10 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       box("#0e1713", 0, 0, 240, 280); box("#213329", 52, 248, 136, 8);
       box("#182c2c", 92, 182, 24, 57); box("#223a3a", 124, 182, 24, 57);
       box("#34291f", 88, 227, 29, 18); box("#34291f", 123, 227, 29, 18);
-      const coat = armour === "bastion_plate" ? "#8192a5" : armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39" : armour === "leather_armour" ? "#95633c" : appearanceHex("coat", appearance.coat);
+      const coat = armour === "worldsplitter_plate" ? "#3e4a56" : armour === "venomweave_mantle" ? "#477a28"
+        : armour === "fangstalker_wrap" ? "#71351f" : armour === "bastion_plate" ? "#8192a5"
+          : armour === "iron_armour" ? "#a7bac5" : armour === "rootguard_armour" ? "#315d39"
+            : armour === "leather_armour" ? "#95633c" : appearanceHex("coat", appearance.coat);
       box(coat, 86, 103, 68, 82);
       if (appearance.coatStyle === "short") {
         box(shade(coat, 1.18), 76, 103, 16, 18); box(shade(coat, 1.18), 148, 103, 16, 18);
@@ -50,14 +53,18 @@ export function createInventoryPortrait(canvas: HTMLCanvasElement) {
       } else box(hair, 92, 58, 10, 13);
       box("#282520", 107, 76, 5, 5); box("#282520", 127, 76, 5, 5);
       box("#e4b84f", 92, 98, 56, 11); box("#bf9037", 96, 109, 12, 31);
-      if (armour === "iron_armour" || armour === "bastion_plate") {
+      if (armour === "iron_armour" || armour === "bastion_plate" || armour === "worldsplitter_plate") {
         box("#dbe5ea", 57, 101, 30, 16); box("#dbe5ea", 153, 101, 30, 16); box("#dbe5ea", 117, 113, 7, 47);
         if (armour === "bastion_plate") { box("#d4b574", 109, 122, 22, 22); box("#d4b574", 57, 101, 30, 5); box("#d4b574", 153, 101, 30, 5); }
+        if (armour === "worldsplitter_plate") { box("#e7a64a", 109, 120, 22, 22); box("#303842", 54, 98, 34, 8); box("#303842", 152, 98, 34, 8); }
       } else if (armour === "rootguard_armour") {
         box("#60401f", 57, 101, 30, 16); box("#60401f", 153, 101, 30, 16);
         box("#79dd68", 113, 116, 14, 14); box("#60401f", 101, 112, 6, 51); box("#60401f", 133, 112, 6, 51);
-      } else if (armour === "leather_armour") {
+      } else if (armour === "venomweave_mantle") {
+        box("#a4ed35", 110, 116, 20, 20); box("#a4ed35", 99, 112, 6, 51); box("#a4ed35", 135, 112, 6, 51);
+      } else if (armour === "leather_armour" || armour === "fangstalker_wrap") {
         for (let i = 0; i < 5; i++) box("#4d3627", 100 + i * 7, 113 + i * 8, 10, 12);
+        if (armour === "fangstalker_wrap") for (let i = 0; i < 3; i++) box("#e8cc7c", 102 + i * 17, 169, 7, 13);
       }
       if (hand.includes("bow")) {
         box("#a27742", 191, 107, 8, 99); box("#a27742", 179, 99, 16, 8); box("#a27742", 179, 206, 16, 8); box("#d5d6bc", 179, 108, 2, 98);

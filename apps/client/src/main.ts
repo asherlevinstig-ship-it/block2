@@ -335,8 +335,17 @@ realmHuntPanel.id = "realm-hunt-board-panel";
 realmHuntPanel.hidden = true;
 realmHuntPanel.setAttribute("role", "dialog");
 realmHuntPanel.setAttribute("aria-label", "Realm Hunt Board");
-realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS · REALM HUNT BOARD</small><h2>Choose Your Contract</h2><p class="realm-hunt-message"></p><div class="realm-contract-card" hidden><small>ACTIVE CONTRACT</small><strong></strong><span></span><b></b></div><div class="realm-hunt-difficulties"><button class="active" data-hunt-difficulty="normal" type="button"><b>NORMAL</b><span>Standard three-phase rotation</span></button><button data-hunt-difficulty="veteran" type="button"><b>VETERAN</b><span>Rank 1 · advanced path attack · 1.5× cache</span></button><button data-hunt-difficulty="ascendant" type="button"><b>ASCENDANT</b><span>Rank 3 · overlapping mechanics · 3 lives · 2× cache · Forgemark</span></button></div><div class="realm-hunt-tier-preview">FANG: pincer exits · VENOM: crossing pools · CRUSHER: marked fault lines</div><div class="realm-hunt-mastery"></div><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" data-contract="fang" type="button">FANG CONTRACT</button><button data-path="Venom Surge" data-contract="venom" type="button">VENOM CONTRACT</button><button data-path="Crusher Break" data-contract="crusher" type="button">CRUSHER CONTRACT</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
+realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS · REALM HUNT BOARD</small><h2>Choose Your Contract</h2><p class="realm-hunt-message"></p><div class="realm-contract-card" hidden><small>ACTIVE CONTRACT</small><strong></strong><span></span><b></b></div><div class="realm-hunt-difficulties"><button class="active" data-hunt-difficulty="normal" type="button"><b>NORMAL</b><span>Standard three-phase rotation</span></button><button data-hunt-difficulty="veteran" type="button"><b>VETERAN</b><span>Rank 1 · advanced path attack · 1.5× cache</span></button><button data-hunt-difficulty="ascendant" type="button"><b>ASCENDANT</b><span>Rank 3 · overlapping mechanics · 3 lives · 2× cache</span></button></div><div class="realm-hunt-tier-preview"></div><div class="realm-hunt-rewards"><b>CHAMPION CACHE</b><div><span>FANG</span><strong>Crawler Fang Dagger · Fangstalker Wrap</strong></div><div><span>VENOM</span><strong>Acid Gland Focus · Venomweave Mantle</strong></div><div><span>CRUSHER</span><strong>Stone Core Hammer · Worldsplitter Plate</strong></div></div><div class="realm-hunt-mastery"></div><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" data-contract="fang" type="button">FANG CONTRACT</button><button data-path="Venom Surge" data-contract="venom" type="button">VENOM CONTRACT</button><button data-path="Crusher Break" data-contract="crusher" type="button">CRUSHER CONTRACT</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
 document.body.append(realmHuntPanel);
+
+function renderRealmHuntRewardTier(): void {
+  const preview = realmHuntPanel.querySelector(".realm-hunt-tier-preview")!;
+  preview.textContent = realmHuntDifficulty === "ascendant"
+    ? "ASCENDANT GUARANTEE · path weapon + rare set armour + awakened Forgemark · 2× materials"
+    : realmHuntDifficulty === "veteran"
+      ? "VETERAN CACHE · path weapon + 1.5× materials · first set armour guaranteed, then 35%"
+      : "NORMAL GUARANTEE · path weapon + foundational materials";
+}
 
 function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
   latestRealmHuntBoard = update;
@@ -365,6 +374,7 @@ function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
   realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-hunt-difficulty]").forEach(button => {
     button.classList.toggle("active", button.dataset.huntDifficulty === realmHuntDifficulty);
   });
+  renderRealmHuntRewardTier();
   const masteryPanel = realmHuntPanel.querySelector(".realm-hunt-mastery")!;
   masteryPanel.replaceChildren();
   for (const pathId of ["fang", "venom", "crusher"] as const) {
@@ -433,7 +443,9 @@ realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-path]").forEach(button
 realmHuntPanel.querySelectorAll<HTMLButtonElement>("[data-hunt-difficulty]").forEach(button => button.addEventListener("click", () => {
   realmHuntDifficulty = button.dataset.huntDifficulty as RealmHuntDifficulty;
   realmHuntPanel.querySelectorAll("[data-hunt-difficulty]").forEach(candidate => candidate.classList.toggle("active", candidate === button));
+  renderRealmHuntRewardTier();
 }));
+renderRealmHuntRewardTier();
 window.setInterval(() => {
   if (!realmHuntPanel.hidden) room?.send("realm-hunt:board", { action: "sync" });
 }, 3_000);
@@ -1287,7 +1299,7 @@ interface VoxelCharacterRig {
   minersLantern: pc.Entity;
   silhouette: pc.Entity | null;
   mainHands: Record<MainHandId, pc.Entity>;
-  armour: Record<"leather_armour" | "iron_armour" | "rootguard_armour" | "bastion_plate", pc.Entity>;
+  armour: Record<Exclude<ArmourId, "none">, pc.Entity>;
   locomotionPhase: number;
   locomotionWeight: number;
   travelFrames: TravelFrame[];
@@ -1684,19 +1696,30 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     silhouette.enabled = false;
     root.addChild(silhouette);
   }
-  const armour = { leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour"),
-    rootguard_armour: new pc.Entity("rootguard-armour"), bastion_plate: new pc.Entity("bastion-plate") };
+  const armour: Record<Exclude<ArmourId, "none">, pc.Entity> = {
+    leather_armour: new pc.Entity("leather-armour"), iron_armour: new pc.Entity("iron-armour"),
+    rootguard_armour: new pc.Entity("rootguard-armour"), bastion_plate: new pc.Entity("bastion-plate"),
+    fangstalker_wrap: new pc.Entity("fangstalker-wrap"), venomweave_mantle: new pc.Entity("venomweave-mantle"),
+    worldsplitter_plate: new pc.Entity("worldsplitter-plate"),
+  };
   for (const [id, layer] of Object.entries(armour)) {
-    const bastion = id === "bastion_plate";
-    const iron = id === "iron_armour" || bastion;
+    const bastion = id === "bastion_plate", fang = id === "fangstalker_wrap";
+    const venom = id === "venomweave_mantle", worldsplitter = id === "worldsplitter_plate";
+    const iron = id === "iron_armour" || bastion || worldsplitter;
     const rootguard = id === "rootguard_armour";
-    const material = iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
+    const material = worldsplitter ? coloredMaterial(new pc.Color(.23, .28, .33))
+      : venom ? coloredMaterial(new pc.Color(.26, .48, .12))
+        : fang ? coloredMaterial(new pc.Color(.38, .18, .1))
+          : iron ? bladeMaterial : rootguard ? coloredMaterial(new pc.Color(.16, .34, .18)) : weaponWoodMaterial;
+    const accent = venom ? coloredMaterial(new pc.Color(.55, .95, .08))
+      : fang ? coloredMaterial(new pc.Color(.92, .78, .46)) : brassMaterial;
+    const reinforced = iron || rootguard || venom;
     torso.addChild(layer);
     addBox(layer, "chest-protection", material, [.53, .43, .07], [0, -.025, .205]);
     addBox(layer, "armour-back", material, [.53, .43, .06], [0, -.025, -.185]);
     for (const x of [-.28, .28]) {
-      addBox(layer, "shoulder-rim", bootMaterial, [iron || rootguard ? .28 : .21, .08, iron || rootguard ? .44 : .36], [x, .235, 0]);
-      addBox(layer, "shoulder-protection", material, [iron || rootguard ? .25 : .19, iron || rootguard ? .17 : .1, iron || rootguard ? .42 : .34], [x, .28, 0]);
+      addBox(layer, "shoulder-rim", bootMaterial, [reinforced ? .28 : .21, .08, reinforced ? .44 : .36], [x, .235, 0]);
+      addBox(layer, "shoulder-protection", material, [reinforced ? .25 : .19, reinforced ? .17 : .1, reinforced ? .42 : .34], [x, .28, 0]);
       addBox(layer, "shoulder-rivet", brassMaterial, [.055, .045, .025], [x, .29, iron ? .224 : .184]);
     }
     if (iron) {
@@ -1707,14 +1730,22 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
         addBox(layer, "bastion-crest", brassMaterial, [.22, .23, .035], [0, .025, .29]);
         for (const x of [-.29, .29]) addBox(layer, "bastion-pauldrons", brassMaterial, [.08, .12, .46], [x, .3, 0]);
       }
+      if (worldsplitter) {
+        addBox(layer, "worldsplitter-core", coreGlowMaterial, [.18, .18, .04], [0, .015, .292]);
+        for (const x of [-.31, .31]) addBox(layer, "worldsplitter-spike", brassMaterial, [.1, .18, .48], [x, .31, 0]).setLocalEulerAngles(0, 0, x < 0 ? -12 : 12);
+      }
     } else if (rootguard) {
       addBox(layer, "rootguard-heart", coreGlowMaterial, [.16, .18, .04], [0, .02, .253]).setLocalEulerAngles(0, 0, 45);
       addBox(layer, "rootguard-collar", weaponWoodMaterial, [.43, .11, .4], [0, .225, 0]);
       for (const x of [-.22, .22]) addBox(layer, "rootguard-vine", weaponWoodMaterial, [.075, .48, .055], [x, -.03, .255]).setLocalEulerAngles(0, 0, x < 0 ? -18 : 18);
+    } else if (venom) {
+      addBox(layer, "venom-gland", accent, [.18, .2, .045], [0, .025, .26]);
+      for (const x of [-.2, .2]) addBox(layer, "venom-rib", accent, [.055, .42, .04], [x, -.02, .255]).setLocalEulerAngles(0, 0, x < 0 ? -20 : 20);
     } else {
       const strap = addBox(layer, "leather-cross-strap", bootMaterial, [.06, .47, .035], [0, -.015, .26]);
       strap.setLocalEulerAngles(0, 0, -28);
       addBox(layer, "leather-clasp", brassMaterial, [.1, .09, .025], [.065, .09, .288]);
+      if (fang) for (const x of [-.2, 0, .2]) addBox(layer, "fang-charm", accent, [.055, .14, .055], [x, -.24, .24]).setLocalEulerAngles(0, 0, x * 40);
     }
     layer.enabled = false;
   }
@@ -3963,6 +3994,9 @@ const lootMaterials: Partial<Record<ItemId, pc.StandardMaterial>> = {
   iron_armour: coloredMaterial(new pc.Color(.76, .8, .85)),
   rootguard_armour: coloredMaterial(new pc.Color(.2, .55, .24)),
   bastion_plate: coloredMaterial(new pc.Color(.56, .63, .73)),
+  fangstalker_wrap: coloredMaterial(new pc.Color(.72, .28, .12)),
+  venomweave_mantle: coloredMaterial(new pc.Color(.38, .82, .12)),
+  worldsplitter_plate: coloredMaterial(new pc.Color(.34, .4, .48)),
   forged_sword: coloredMaterial(new pc.Color(.76, .8, .85)),
   forged_bow: coloredMaterial(new pc.Color(.65, .45, .25)),
   forged_focus: coloredMaterial(new pc.Color(.3, .65, .95)),

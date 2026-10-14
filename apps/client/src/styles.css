@@ -969,6 +969,9 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article[data-item="iron_armour"] i { background: linear-gradient(135deg, #dce4ec, #6e8095); }
 .inventory-grid article[data-item="rootguard_armour"] i { background: radial-gradient(circle, #a5f17c 0 18%, #315d39 21% 58%, #6a4224 61%); box-shadow: 0 0 12px #75dc6980; }
 .inventory-grid article[data-item="bastion_plate"] i { background: linear-gradient(135deg, #cfb478 0 20%, #687a8d 21% 72%, #263a4a 73%); box-shadow: 0 0 12px #c9ae6b80; }
+.inventory-grid article[data-item="fangstalker_wrap"] i { background: linear-gradient(135deg, #eed78d 0 18%, #843d20 20% 70%, #2f1b16 72%); box-shadow: 0 0 12px #e5c36b66; }
+.inventory-grid article[data-item="venomweave_mantle"] i { background: radial-gradient(circle, #b9f44c 0 20%, #477a28 22% 62%, #17291a 64%); box-shadow: 0 0 12px #a6e53c70; }
+.inventory-grid article[data-item="worldsplitter_plate"] i { background: linear-gradient(135deg, #e5a946 0 17%, #53606d 19% 68%, #222a31 70%); box-shadow: 0 0 12px #e1a34570; }
 .inventory-grid article[data-item="forged_sword"] i { background: linear-gradient(135deg, #cbd4df 0 55%, #704923 56%); }
 .inventory-grid article[data-item="forged_bow"] i { background: linear-gradient(135deg, #7d512c, #cbd4df); }
 .inventory-grid article[data-item="forged_focus"] i { background: linear-gradient(135deg, #54afff 0 55%, #704923 56%); }
@@ -2117,13 +2120,17 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .realm-hunt-difficulties { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; }
 .realm-hunt-difficulties button { display: grid; gap: 2px; padding: 8px; cursor: pointer; color: #9caf9f; border: 1px solid #ffffff18; border-radius: 7px; background: #ffffff07; text-align: left; }.realm-hunt-difficulties b { font: 900 9px system-ui; letter-spacing: .08em; }.realm-hunt-difficulties span { color: #74877a; font: 8px system-ui; }.realm-hunt-difficulties button.active { color: #f4f8da; border-color: #d0bf68; background: #42391d; }.realm-hunt-difficulties button.active span { color: #c8b96f; }
 .realm-hunt-tier-preview { margin: -1px 0 8px; padding: 6px 8px; color: #9bb5a1; border-left: 2px solid #d0bf68; background: #ffffff05; font: 800 8px/1.4 system-ui; letter-spacing: .035em; }
+.realm-hunt-rewards { display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 5px; align-items: stretch; margin: 0 0 8px; }
+.realm-hunt-rewards > b { align-self: center; color: #d6c46f; font: 900 8px system-ui; letter-spacing: .08em; }
+.realm-hunt-rewards > div { display: grid; gap: 1px; padding: 5px 7px; border: 1px solid #ffffff13; border-radius: 5px; background: #ffffff05; }
+.realm-hunt-rewards span { color: #82d08f; font: 900 7px system-ui; letter-spacing: .08em; }.realm-hunt-rewards strong { color: #b9c8ba; font: 700 7px/1.25 system-ui; }
 .realm-hunt-mastery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }.realm-hunt-mastery > span { display: grid; gap: 1px; padding: 6px 8px; border-left: 2px solid #62bd7b; background: #ffffff06; }.realm-hunt-mastery b { color: #bfe4c7; font: 900 8px system-ui; }.realm-hunt-mastery small { color: #7f9385; font: 7px system-ui; }
 .realm-hunt-paths { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 9px; }
 .realm-hunt-paths button { padding: 8px 5px; cursor: pointer; color: #8fa397; border: 1px solid #ffffff18; border-radius: 6px; background: #ffffff08; font: 900 9px system-ui; letter-spacing: .06em; }
 .realm-hunt-paths button.active { color: #162014; border-color: #c8e584; background: #c8e584; }
 .realm-hunt-legend { display: flex; gap: 15px; margin: 8px 2px; color: #91a497; font-size: 10px; }
 .realm-hunt-legend span { display: flex; align-items: center; gap: 5px; }.realm-hunt-legend i { width: 7px; height: 7px; border-radius: 50%; background: #72d88a; box-shadow: 0 0 7px currentColor; }.realm-hunt-legend i[data-status="recovering"] { background: #d7b75e; }.realm-hunt-legend i[data-status="empowered"] { background: #d273ef; }
-.realm-hunt-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; max-height: min(420px, calc(100vh - 390px)); padding-right: 4px; overflow-y: auto; scrollbar-color: #51775c #0d1812; }
+.realm-hunt-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; max-height: min(380px, calc(100vh - 430px)); padding-right: 4px; overflow-y: auto; scrollbar-color: #51775c #0d1812; }
 .realm-hunt-row { display: grid; grid-template-columns: 1fr auto; gap: 5px 9px; padding: 10px; border: 1px solid #ffffff14; border-left: 3px solid #65c17c; border-radius: 8px; background: #ffffff07; }
 .realm-hunt-row[data-status="recovering"] { border-left-color: #c9a94d; }.realm-hunt-row[data-status="empowered"] { border-left-color: #c463df; background: #2d173126; }.realm-hunt-row.selected { border-color: #ecdc7e; box-shadow: inset 0 0 18px #e7d45d14; }
 .realm-hunt-heading { min-width: 0; }.realm-hunt-heading strong, .realm-hunt-heading span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.realm-hunt-heading strong { color: #e8f4df; font-size: 12px; }.realm-hunt-heading span { margin-top: 2px; color: #7f9687; font-size: 9px; }
@@ -2132,7 +2139,7 @@ body:has(#nearby-chat details[open]) #party-panel { bottom: 340px; }
 .realm-hunt-row > button { grid-column: 2; grid-row: 2; align-self: end; padding: 6px 8px; cursor: pointer; color: #142018; border: 0; border-radius: 5px; background: #89ce94; font: 900 8px system-ui; letter-spacing: .05em; }.realm-hunt-row.selected > button { background: #e6d574; }
 .realm-hunt-row > button:disabled { cursor: default; color: #829086; background: #23352a; }
 .realm-hunt-back { width: 100%; margin-top: 11px; padding: 10px; cursor: pointer; color: #b8c9b9; border: 1px solid #ffffff18; border-radius: 7px; background: #ffffff08; font: 900 10px system-ui; letter-spacing: .08em; }
-@media (max-width: 650px) { #realm-hunt-board-panel { padding: 17px; }.realm-hunt-list { grid-template-columns: 1fr; }.realm-hunt-paths { grid-template-columns: repeat(2, 1fr); }.realm-hunt-difficulties, .realm-hunt-mastery { grid-template-columns: 1fr; }.realm-hunts-open span { display: none; } }
+@media (max-width: 650px) { #realm-hunt-board-panel { padding: 17px; overflow-y: auto; }.realm-hunt-list { grid-template-columns: 1fr; max-height: 320px; }.realm-hunt-paths { grid-template-columns: repeat(2, 1fr); }.realm-hunt-difficulties, .realm-hunt-mastery { grid-template-columns: 1fr; }.realm-hunt-rewards { grid-template-columns: 1fr; }.realm-hunts-open span { display: none; } }
 #dungeon-lobby-panel { position: fixed; z-index: 66; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(430px, calc(100vw - 36px)); box-sizing: border-box; padding: 25px; color: #e7f4de; border: 2px solid #6da95c; border-radius: 14px; background: linear-gradient(145deg, #172b1cf8, #08120dfb); box-shadow: 0 0 0 100vmax #0205038f, 0 18px 60px #000c; font-family: system-ui; }
 #dungeon-lobby-panel[hidden] { display: none; }
 #dungeon-lobby-panel > small { color: #87ca72; font-weight: 900; letter-spacing: .14em; }
