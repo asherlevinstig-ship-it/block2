@@ -1,4 +1,5 @@
 import { Client, Room } from "@colyseus/core";
+import { MISTFEN_MASTERY_CAP, mistfenMasteryRank } from "@blockcraft/protocol";
 import type { SchemaType } from "@colyseus/schema";
 import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement-shadow.js";
 import { randomUUID } from "node:crypto";
@@ -59,7 +60,7 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation, isMistfenToxicPool } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -2237,6 +2238,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (plundererGold > 0) this.grantMasterTrial(playerId, "plunderer", plundererGold);
       this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level), mob.name);
       this.grantBuildProgress(playerId, mobId === "mistfen-behemoth" ? 5 : Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
+      if (isMistfenMob(mobId)) this.grantMistfenMastery(playerId, mobId === "mistfen-behemoth" ? 18 : 3);
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -2514,6 +2516,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : mob.archetype === "stone_brute" ? "stone_core" : "crawler_fang";
     const rematchDrops: { itemId: ItemId; quantity: number }[] = rematchMaterialQuantity > 0
       ? [{ itemId: rematchMaterialId, quantity: rematchMaterialQuantity }] : [];
+    const mistfenProgress = rewardPlayer ? this.mistfenProgress(rewardPlayer) : { points: 0, discovered: false };
+    const mistfenRank = mistfenMasteryRank(mistfenProgress.points, mistfenProgress.discovered);
+    const mistfenMasteryDrops: { itemId: ItemId; quantity: number }[] = isMistfenMob(mobId) && mistfenRank >= 2
+      ? mobId === "mistfen-behemoth"
+        ? [{ itemId: "acid_gland", quantity: mistfenRank >= 3 ? 3 : 1 },
+          ...(mistfenRank >= 3 ? [{ itemId: "silver_ore" as ItemId, quantity: 2 }] : [])]
+        : [{ itemId: mob.archetype === "cave_spitter" ? "acid_gland" : "moss_fibre", quantity: 1 }]
+      : [];
     const ownsLantern = (rewardPlayer?.inventory.get("miners_lantern")?.quantity ?? 0)
       + (rewardPlayer?.storage.get("miners_lantern")?.quantity ?? 0) > 0;
     const signatureDrops = (itemId: SignatureItemId): { itemId: ItemId; quantity: number }[] => {
@@ -2555,6 +2565,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         : []),
       ...areaRelicDrops,
       ...rematchDrops,
+      ...mistfenMasteryDrops,
       ...armourDropForMob(mob.archetype, mob.difficultyTier, Math.random()),
     ]);
     const representative = lootBagRepresentative(items);
@@ -3787,8 +3798,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private setPlayerBuildData(player: PlayerState, loadouts: HuntLoadoutSlot[], buildPath = parseBuildPathState(player.huntLoadoutsJson)): void {
+    const mistfen = this.mistfenProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts, buildPath, affixes: this.equipmentAffixes(player),
-      dust: this.attunementDust(player), offers: this.attunementOffers(player) });
+      dust: this.attunementDust(player), offers: this.attunementOffers(player), mistfen });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -3816,8 +3828,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private setEquipmentAttunements(player: PlayerState, affixes: Partial<Record<ItemId, EquipmentAffixRoll>>,
     dust: number, offers: EquipmentAffixOffers): void {
+    const mistfen = this.mistfenProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
-      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers });
+      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, mistfen });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {
@@ -3956,6 +3969,50 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? `${BUILD_PATHS[pathId].name.toUpperCase()} PATH RANK ${afterRank} · passive strengthened.`
         : trialRequired ? `MASTER XP READY · complete your Veteran trial to activate Rank 4.` : `Path Mastery +${amount}`);
     }
+  }
+
+  private grantMistfenMastery(playerId: string, amount: number): void {
+    const player = this.state.players.get(playerId);
+    if (!player || amount <= 0) return;
+    const progress = this.mistfenProgress(player);
+    if (!progress.discovered) return;
+    const before = mistfenMasteryRank(progress.points, true);
+    progress.points = Math.min(MISTFEN_MASTERY_CAP, progress.points + amount);
+    this.setMistfenProgress(player, progress);
+    const after = mistfenMasteryRank(progress.points, true);
+    if (after > before) {
+      const names = ["", "PATHFINDER", "MARSH HUNTER", "MIREBREAKER"];
+      const rewards = ["", "Marsh routes charted.", "Bonus marsh materials unlocked.", "Enhanced Mireback caches unlocked."];
+      this.clients.find(candidate => candidate.sessionId === playerId)?.send("chat:notice",
+        `MISTFEN MASTERY · ${names[after]} · ${rewards[after]}`);
+    }
+  }
+
+  private discoverMistfen(playerId: string, player: PlayerState): void {
+    const progress = this.mistfenProgress(player);
+    if (this.roomKind !== "overworld" || progress.discovered || player.y < SURFACE_HEIGHT - 1
+      || !isInMistfenMarsh(player.x, player.z)) return;
+    progress.discovered = true;
+    progress.points = Math.max(5, progress.points);
+    this.setMistfenProgress(player, progress);
+    this.clients.find(candidate => candidate.sessionId === playerId)?.send("chat:notice",
+      "MISTFEN MASTERY · PATHFINDER · marsh routes charted. Hunt marsh creatures, mine silver, and defeat Mireback to advance.");
+    void this.persistPlayer(playerId, player, true);
+  }
+
+  private mistfenProgress(player: PlayerState): { points: number; discovered: boolean } {
+    try {
+      const value = (JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown; discovered?: unknown } }).mistfen;
+      return { points: typeof value?.points === "number" && Number.isFinite(value.points)
+        ? Math.max(0, Math.min(MISTFEN_MASTERY_CAP, Math.floor(value.points))) : 0, discovered: value?.discovered === true };
+    } catch { return { points: 0, discovered: false }; }
+  }
+
+  private setMistfenProgress(player: PlayerState, mistfen: { points: number; discovered: boolean }): void {
+    let raw: Record<string, unknown> = {};
+    try { const parsed = JSON.parse(player.huntLoadoutsJson); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed; }
+    catch { /* legacy */ }
+    player.huntLoadoutsJson = JSON.stringify({ ...raw, mistfen });
   }
 
   private buildPathDamageBonus(player: PlayerState, mob: MobState, mobId: string, playerId: string, now: number, source: "weapon" | "power"): number {
@@ -4877,6 +4934,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private simulatePlayers(deltaTime: number): void {
+    if (this.roomKind === "overworld") for (const [playerId, player] of this.state.players) this.discoverMistfen(playerId, player);
     if (Date.now() - this.lastPartyUpdateAt >= 500) {
       if (this.roomKind === "overworld") this.sendPartyUpdates(Date.now());
       else this.lastPartyUpdateAt = Date.now();
@@ -6101,6 +6159,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
       }
       this.grantProgression(client.sessionId, mineral === "moonstone" ? 15 : 4, mineral === "moonstone" ? "Moonstone mined" : "Mineral mined");
+      if (mineral === "silver_ore" && this.roomKind === "overworld" && isInMistfenMarsh(request.x, request.z))
+        this.grantMistfenMastery(client.sessionId, 2);
       void this.persistPlayer(client.sessionId, player);
       client.send("resource:gathered", { itemId: mineral, quantity: item.quantity - before, total: item.quantity } satisfies ResourceGathered);
       let expeditionAdvanced = mineral === "iron_ore" && this.advanceFirstExpedition(client, "mined_iron");

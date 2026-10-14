@@ -1597,4 +1597,35 @@ export interface ActionRejected {
   reason: "payload" | "range" | "protected" | "missing" | "collision" | "stale" | "rate" | "stamina" | "cooldown" | "compatibility" | "moving";
 }
 
+export const MISTFEN_MASTERY_CAP = 150;
+export const MISTFEN_MASTERY_RANKS = [
+  { rank: 1, name: "PATHFINDER", threshold: 5, reward: "Marsh routes charted" },
+  { rank: 2, name: "MARSH HUNTER", threshold: 40, reward: "Bonus marsh materials" },
+  { rank: 3, name: "MIREBREAKER", threshold: 100, reward: "Enhanced Mireback caches" },
+] as const;
+export type MistfenMasteryRank = 0 | 1 | 2 | 3;
+
+export function mistfenMasteryRank(points: number, discovered = false): MistfenMasteryRank {
+  if (!discovered) return 0;
+  const score = Math.max(0, Math.floor(points));
+  if (score >= 100) return 3;
+  if (score >= 40) return 2;
+  return 1;
+}
+
+export function mistfenMasteryStatus(points: number, discovered = false): {
+  rank: MistfenMasteryRank; name: string; points: number; nextThreshold: number; progress: number; reward: string;
+} {
+  const score = Math.min(MISTFEN_MASTERY_CAP, Math.max(0, Math.floor(points)));
+  const rank = mistfenMasteryRank(score, discovered);
+  if (rank === 0) return { rank, name: "UNDISCOVERED", points: score, nextThreshold: 5, progress: 0, reward: "Enter Mistfen Marsh" };
+  const current = MISTFEN_MASTERY_RANKS[rank - 1]!;
+  const next = rank === 1 ? MISTFEN_MASTERY_RANKS[1] : rank === 2 ? MISTFEN_MASTERY_RANKS[2] : undefined;
+  const floor = current.threshold;
+  const ceiling = next?.threshold ?? MISTFEN_MASTERY_CAP;
+  return { rank, name: current.name, points: score, nextThreshold: ceiling,
+    progress: rank === 3 ? score / MISTFEN_MASTERY_CAP : (score - floor) / Math.max(1, ceiling - floor),
+    reward: next?.reward ?? current.reward };
+}
+
 export * from "./melee-strikes.js";

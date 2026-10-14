@@ -1,4 +1,6 @@
 import * as pc from "playcanvas";
+import { mistfenMasteryStatus } from "@blockcraft/protocol";
+import { isInMistfenMarsh } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
@@ -576,6 +578,39 @@ const profileToken = browserProfileToken();
 const adminInvitation = consumeAdminInvitation();
 const minimapPanel = document.querySelector<HTMLDetailsElement>("#minimap")!;
 const minimap = createMinimap(document.querySelector<HTMLCanvasElement>("#minimap-canvas")!, document.querySelector<HTMLElement>("#minimap-detail")!, `blockcraft:minimap:v1:${profileToken}`);
+const mistfenMasteryPanel = document.querySelector<HTMLElement>("#mistfen-mastery")!;
+const mistfenMasteryRank = document.querySelector<HTMLElement>("#mistfen-mastery-rank")!;
+const mistfenMasteryFill = document.querySelector<HTMLElement>("#mistfen-mastery-fill")!;
+const mistfenMasteryDetail = document.querySelector<HTMLElement>("#mistfen-mastery-detail")!;
+let localMistfenMastery = 0;
+let localMistfenDiscovered = false;
+let lastMistfenMasteryView = "";
+
+function updateLocalMistfenProgress(raw: string): void {
+  try {
+    const mistfen = (JSON.parse(raw) as { mistfen?: { points?: unknown; discovered?: unknown } }).mistfen;
+    localMistfenMastery = typeof mistfen?.points === "number" && Number.isFinite(mistfen.points) ? mistfen.points : 0;
+    localMistfenDiscovered = mistfen?.discovered === true;
+  } catch {
+    localMistfenMastery = 0;
+    localMistfenDiscovered = false;
+  }
+  lastMistfenMasteryView = "";
+}
+
+function renderMistfenMastery(position: { x: number; y: number; z: number }): void {
+  const visible = worldReady && position.y >= SURFACE_HEIGHT - 1 && isInMistfenMarsh(position.x, position.z);
+  mistfenMasteryPanel.hidden = !visible;
+  if (!visible) return;
+  const mastery = mistfenMasteryStatus(localMistfenMastery, localMistfenDiscovered);
+  const next = mastery.rank >= 3 ? "Mireback caches empowered" : `${mastery.points}/${mastery.nextThreshold} · Next: ${mastery.reward}`;
+  const fingerprint = `${mastery.name}:${mastery.points}:${mastery.progress}:${next}`;
+  if (fingerprint === lastMistfenMasteryView) return;
+  lastMistfenMasteryView = fingerprint;
+  mistfenMasteryRank.textContent = mastery.name;
+  mistfenMasteryFill.style.transform = `scaleX(${Math.max(0, Math.min(1, mastery.progress))})`;
+  mistfenMasteryDetail.textContent = next;
+}
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -1911,6 +1946,7 @@ interface NetworkPlayer {
   silverDepthsRunStage: number;
   silverDepthsWing: string;
   realmWardenCleared: boolean;
+  huntLoadoutsJson: string;
   dodgeSequence: number;
   invulnerableUntil: number;
   mainHandId: string;
@@ -4612,6 +4648,7 @@ function bindPlayers(joinedRoom: Room): void {
       activateMovementPilot(joinedRoom);
       localSilverDepthsRunStage = player.silverDepthsRunStage;
       localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
+      updateLocalMistfenProgress(player.huntLoadoutsJson);
       updateTavernCoins(player.coins);
       renderCharacterProgression({ reason: "sync", level: player.level, experience: player.experience,
         experienceRequired: experienceToNextLevel(player.level), unspentStatPoints: player.unspentStatPoints,
@@ -4678,6 +4715,7 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("silverDepthsWing", () => {
       if (isLocal) localSilverDepthsWing = player.silverDepthsWing === "iron" || player.silverDepthsWing === "silver" ? player.silverDepthsWing : null;
     }, true);
+    playerCallbacks.listen("huntLoadoutsJson", () => { if (isLocal) updateLocalMistfenProgress(player.huntLoadoutsJson); }, true);
     if (isLocal) {
       playerCallbacks.inventory.onAdd((item: { quantity: number }, itemId: string) => {
         if (!isItemId(itemId)) return;
@@ -8148,6 +8186,7 @@ app.on("update", (dt: number) => {
     }
   }
   const current = localPlayer.getPosition();
+  renderMistfenMastery(current);
   const grounded = isPlayerSupported(readCollisionWorldBlock, current.x, current.y, current.z);
   if (movementPilotController) localVerticalVelocity = movementPilotController.pose().pilotVy;
   else if (grounded && localVerticalVelocity < 0) localVerticalVelocity = 0;

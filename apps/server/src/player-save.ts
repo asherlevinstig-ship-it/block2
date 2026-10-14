@@ -58,6 +58,8 @@ export interface PlayerSaveData {
   huntMastery?: HuntMasteryProgress;
   huntLoadouts?: HuntLoadoutSlot[];
   huntCollectionRewardClaimed?: boolean;
+  mistfenMastery?: number;
+  mistfenDiscovered?: boolean;
   buildPath?: BuildPathState;
   equipmentAffixes?: Partial<Record<ItemId, EquipmentAffixRoll>>;
   attunementDust?: number;
@@ -161,6 +163,8 @@ export function snapshotPlayerSave(player: PlayerState, now = Date.now()): Playe
     huntMastery: parseHuntMastery(player.huntMasteryJson),
     huntLoadouts: parseHuntLoadouts(player.huntLoadoutsJson),
     huntCollectionRewardClaimed: player.huntCollectionRewardClaimed,
+    mistfenMastery: (() => { try { return Math.floor(finiteNumber((JSON.parse(player.huntLoadoutsJson) as { mistfen?: { points?: unknown } }).mistfen?.points, 0, 0, 150)); } catch { return 0; } })(),
+    mistfenDiscovered: (() => { try { return (JSON.parse(player.huntLoadoutsJson) as { mistfen?: { discovered?: unknown } }).mistfen?.discovered === true; } catch { return false; } })(),
     buildPath: parseBuildPathState(player.huntLoadoutsJson),
     equipmentAffixes,
     attunementDust,
@@ -244,6 +248,8 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     huntMastery: parseHuntMastery(value.huntMastery),
     huntLoadouts: parseHuntLoadouts(value.huntLoadouts),
     huntCollectionRewardClaimed: value.huntCollectionRewardClaimed === true,
+    mistfenMastery: Math.floor(finiteNumber(value.mistfenMastery, 0, 0, 150)),
+    mistfenDiscovered: value.mistfenDiscovered === true,
     buildPath: parseBuildPathState(value.buildPath),
     equipmentAffixes: parseEquipmentAffixes(value.equipmentAffixes),
     attunementDust: Math.floor(finiteNumber(value.attunementDust, 0, 0, 65_535)),
@@ -293,7 +299,7 @@ export function applyPlayerSave(player: PlayerState, save: PlayerSaveData): void
   player.huntMasteryJson = serializeHuntMastery(save.huntMastery ?? {});
   player.huntLoadoutsJson = JSON.stringify({ loadouts: save.huntLoadouts ?? [], buildPath: parseBuildPathState(save.buildPath),
     affixes: parseEquipmentAffixes(save.equipmentAffixes), dust: Math.floor(finiteNumber(save.attunementDust, 0, 0, 65_535)),
-    offers: parseEquipmentAffixOffers(save.attunementOffers) });
+    offers: parseEquipmentAffixOffers(save.attunementOffers), mistfen: { points: save.mistfenMastery ?? 0, discovered: save.mistfenDiscovered === true } });
   player.huntCollectionRewardClaimed = save.huntCollectionRewardClaimed === true;
   player.forestBestTimeMs = save.forestBestTimeMs ?? 0;
   player.silverDepthsBestTimeMs = save.silverDepthsBestTimeMs ?? 0;
