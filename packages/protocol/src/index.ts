@@ -231,6 +231,27 @@ export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number
   inTown: boolean; message: string };
 export type BuildPathProc = { pathId: BuildPathId; ability: string; detail: string; durationMs?: number };
 
+export const EQUIPMENT_AFFIXES = {
+  fortified: { name: "Fortified", pathId: "tank", effect: "Reduces incoming damage." },
+  retaliating: { name: "Retaliating", pathId: "tank", effect: "Guarding improves counter pressure." },
+  protector: { name: "Protector", pathId: "tank", effect: "Strengthens ally protection." },
+  echoing: { name: "Echoing", pathId: "mage", effect: "Strengthens Arcane Echo." },
+  volatile: { name: "Volatile", pathId: "mage", effect: "Adds Power damage." },
+  elemental: { name: "Elemental", pathId: "mage", effect: "Strengthens Power slows." },
+  lethal: { name: "Lethal", pathId: "assassin", effect: "Adds damage against weakened enemies." },
+  veiled: { name: "Veiled", pathId: "assassin", effect: "Extends Shadowstep concealment." },
+  executioner: { name: "Executioner", pathId: "assassin", effect: "Strengthens empowered strikes." },
+  elusive: { name: "Elusive", pathId: "thief", effect: "Improves perfect-dodge stamina recovery." },
+  prosperous: { name: "Prosperous", pathId: "thief", effect: "Adds victory gold." },
+  deceptive: { name: "Deceptive", pathId: "thief", effect: "Extends Smoke Decoy concealment." },
+  piercing: { name: "Piercing", pathId: "ranger", effect: "Adds ranged damage." },
+  snaring: { name: "Snaring", pathId: "ranger", effect: "Strengthens Pinning Shot control." },
+  precise: { name: "Precise", pathId: "ranger", effect: "Strengthens every third Pinning Shot." },
+} as const;
+export type EquipmentAffixId = keyof typeof EQUIPMENT_AFFIXES;
+export type EquipmentAffixRoll = { affixId: EquipmentAffixId; tier: 1 | 2 | 3 };
+export type EquipmentAffixUpdate = { affixes: Partial<Record<ItemId, EquipmentAffixRoll>>; message: string };
+
 export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;
 export const TAVERN_QUIZ_MAX_PAYOUT = 1024;

@@ -10,6 +10,7 @@ import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
+import { EQUIPMENT_AFFIXES, type EquipmentAffixRoll, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { DODGE_EXHAUSTION_MS, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
@@ -2002,6 +2003,7 @@ interface NetworkLootDrop {
   y: number;
   z: number;
   expiresAt: number;
+  affixTier?: number;
 }
 
 const LOOT_BAG_TIER_LABEL: Record<LootBagTier, string> = {
@@ -2289,7 +2291,9 @@ function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
     lootWorldStats.replaceChildren();
     const blocked = items.filter(entry => (inventoryCounts.get(entry.itemId) ?? 0) >= lootCarryCapacity(entry.itemId, blacksmithIronCapacity)).length;
     lootWorldVerdict.textContent = blocked === items.length ? "FULL" : blocked > 0 ? "PARTIAL" : "READY";
-    lootWorldCarry.textContent = `${items.length} STACK${items.length === 1 ? "" : "S"} · DETAILS IN PACK`;
+    const attunement = (drop.affixTier ?? 0) > 0 && items.some(entry => equipmentForItem(entry.itemId) || armourForItem(entry.itemId))
+      ? ` · ATTUNEMENT T${drop.affixTier}` : "";
+    lootWorldCarry.textContent = `${items.length} STACK${items.length === 1 ? "" : "S"}${attunement} · DETAILS IN PACK`;
     return;
   }
   const owned = inventoryCounts.get(drop.itemId) ?? 0;
@@ -2330,7 +2334,7 @@ function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
   const full = lootWouldOverflow(dropId, drop);
   lootWorldVerdict.textContent = full ? "FULL" : verdict;
   lootWorldCarry.textContent = capacity < 65_535 && !dropId.startsWith("forest-cache:")
-    ? `DROP ×${drop.quantity} · PACK ${owned} / ${capacity}`
+    ? `DROP ×${drop.quantity}${(hand || armour) && (drop.affixTier ?? 0) > 0 ? ` · ATTUNEMENT T${drop.affixTier}` : ""} · PACK ${owned} / ${capacity}`
     : `DROP ×${drop.quantity} · PACK ${owned} → ${owned + drop.quantity}`;
 }
 function updateLootWorldLabel(): void {
@@ -2380,6 +2384,12 @@ function appendEquipmentIdentity(element: HTMLElement, itemId: ItemId | null, ra
   const rankNode = document.createElement("small"); rankNode.className = "inventory-rank";
   rankNode.textContent = itemId ? rankLabel(rank) : "STARTER"; element.append(rankNode);
   if (!itemId) return;
+  const affix = equipmentAffixes[itemId];
+  if (affix) {
+    const affixNode = document.createElement("p"); affixNode.className = "inventory-affix";
+    const affixName = document.createElement("strong"); affixName.textContent = `${EQUIPMENT_AFFIXES[affix.affixId].name.toUpperCase()} · TIER ${affix.tier}`;
+    affixNode.append(affixName, document.createTextNode(EQUIPMENT_AFFIXES[affix.affixId].effect)); element.append(affixNode);
+  }
   const perk = equipmentPerkStats(itemId, rank);
   if (perk && perk.id !== "fang_set" && perk.id !== "venom_set" && perk.id !== "crusher_set") {
     const perkNode = document.createElement("p"); perkNode.className = "inventory-perk";
@@ -2468,6 +2478,11 @@ function openLoot(id: string) {
       ? `<strong>Moonstone Edge</strong><p>Return this stone to the blacksmith · +1 damage to every weapon</p>`
       : `<strong>${(inventoryCounts.get("miners_lantern") ?? 0) > 0 ? "Already owned" : "Explorer's lamp"}</strong><p>12-block cave light · standard intensity</p>`;
   }
+  if (!rewardCache && !utility && (drop.affixTier ?? 0) > 0) {
+    const attunement = document.createElement("p"); attunement.className = "loot-attunement";
+    attunement.textContent = `TIER ${drop.affixTier} ATTUNEMENT · A Calling-linked affix is revealed on pickup.`;
+    document.querySelector<HTMLElement>("#loot-new")!.append(attunement);
+  }
   lootMessage.textContent = rewardCache ? "Claim this cache before using the victory portal."
     : utility === "moonstone" ? "The Crystal Matriarch's personal cache. Return it to the blacksmith."
     : utility ? "The Stone Warden's personal cache. The lantern auto-equips when claimed."
@@ -2507,6 +2522,11 @@ lootWorldLabel.addEventListener("click", () => {
 });
 const inventoryCounts = new Map<ItemId, number>(Object.keys(ITEM_DEFINITIONS).map(itemId => [itemId as ItemId, 0]));
 let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
+let equipmentAffixes: Partial<Record<ItemId, EquipmentAffixRoll>> = {};
+function equipmentAffixLabel(itemId: ItemId): string | null {
+  const roll = equipmentAffixes[itemId];
+  return roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} · Tier ${roll.tier}` : null;
+}
 const rankLabel = (rank: number): string => rank <= 0 ? "UNFORGED" : `RANK ${["I", "II", "III"][Math.min(3, rank) - 1]}`;
 const equipmentCollectionGrid = document.querySelector<HTMLElement>("#equipment-collection-grid")!;
 for (const entry of EQUIPMENT_COLLECTION) {
@@ -4401,6 +4421,16 @@ function refreshOwnedInventory(): void {
       badge.textContent = ITEM_RARITIES[rarity].label;
       card.querySelector("div")?.append(badge);
     }
+    const affixLabel = equipmentAffixLabel(itemId);
+    let affixBadge = card.querySelector<HTMLElement>(".item-affix");
+    if (affixLabel && !affixBadge) {
+      affixBadge = document.createElement("span"); affixBadge.className = "item-affix";
+      card.querySelector("div")?.append(affixBadge);
+    }
+    if (affixBadge) {
+      affixBadge.hidden = !affixLabel;
+      affixBadge.textContent = affixLabel ?? "";
+    }
   }
   for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
     if (section.dataset.inventoryCategory === "collection") continue;
@@ -4426,7 +4456,10 @@ function refreshEquipmentProgression(): void {
     card.classList.toggle("discovered", owned);
     card.dataset.rarity = owned ? itemRarity(entry.itemId) : "locked";
     card.querySelector<HTMLElement>(".collection-state")!.textContent = equipmentCollectionLabel(entry.itemId, owned, rank);
-    card.querySelector<HTMLElement>(".collection-upgrade")!.textContent = owned ? equipmentProgressionText(entry.itemId, rank) : "Find this item to reveal its rarity and upgrade path.";
+    const affix = equipmentAffixLabel(entry.itemId);
+    card.querySelector<HTMLElement>(".collection-upgrade")!.textContent = owned
+      ? `${equipmentProgressionText(entry.itemId, rank)}${affix ? ` · ${affix}` : ""}`
+      : "Find this item to reveal its rarity and upgrade path.";
     const button = card.querySelector<HTMLButtonElement>("button")!;
     button.disabled = !owned || (!equipmentForItem(entry.itemId) && !armourForItem(entry.itemId));
     button.textContent = button.disabled && owned ? "AUTO-EQUIPPED" : "PREVIEW";
@@ -9085,6 +9118,12 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("realm-hunt:board", (update: RealmHuntBoardUpdate) => renderRealmHuntBoard(update));
   room.onMessage("hunt:collection", (update: HuntCollectionUpdate) => renderHuntCollection(update));
   room.onMessage("build:path", (update: BuildPathUpdate) => renderBuildPath(update));
+  room.onMessage("equipment:affixes", (update: EquipmentAffixUpdate) => {
+    equipmentAffixes = update.affixes ?? {};
+    refreshOwnedInventory();
+    if (inventoryPreviewDrawer.open) refreshInventoryPreview();
+    if (update.message && !update.message.startsWith("Equipment attunements strengthen")) status.textContent = update.message;
+  });
   room.onMessage("build:path-proc", (proc: BuildPathProc) => {
     window.clearTimeout(buildPathProcTimer);
     buildPathProc.dataset.path = proc.pathId;

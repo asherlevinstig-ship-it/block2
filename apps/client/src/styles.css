@@ -57,6 +57,11 @@ body:has(#inventory-panel:not([hidden])) #loot-world-label, body:has(#loot-panel
 .loot-panel[data-rarity] .loot-card { border-color: var(--rarity); box-shadow: 0 20px 70px #0009, 0 0 32px color-mix(in srgb, var(--rarity) 26%, transparent); }
 .loot-panel[data-rarity] .loot-heading, .loot-panel[data-rarity] .loot-card h2 { color: var(--rarity); }
 .loot-rarity, .item-rarity, .smith-rarity { display: inline-block !important; width: fit-content; margin-top: 4px; padding: 2px 5px; border: 1px solid currentColor; border-radius: 999px; font-size: .52rem !important; font-style: normal; line-height: 1; letter-spacing: .08em; text-transform: uppercase; }
+.item-affix { display: inline-block; width: fit-content; margin: 4px 0 0 5px; padding: 2px 5px; border: 1px solid #b686e0; border-radius: 999px; background: #49265d66; color: #e4c1ff; font-size: .5rem; font-weight: 900; line-height: 1; letter-spacing: .05em; text-transform: uppercase; }
+.item-affix[hidden] { display: none; }
+.inventory-affix, .loot-attunement { margin: 7px 0 0; padding: 7px 8px; border: 1px solid #a867d866; border-radius: 7px; background: #41225340; color: #cfb0df; font-size: .56rem; line-height: 1.35; }
+.inventory-affix strong { display: block; margin-bottom: 2px; color: #e4bdff; font-size: .52rem; letter-spacing: .05em; }
+.loot-attunement { color: #e3c0ff !important; font-weight: 850; }
 [data-rarity="common"] { --item-rarity: #c3cbc5; }
 [data-rarity="uncommon"] { --item-rarity: #68dc72; }
 [data-rarity="rare"] { --item-rarity: #63a5ff; }
