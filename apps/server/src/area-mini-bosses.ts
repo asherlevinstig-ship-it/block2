@@ -81,6 +81,12 @@ export function areaLeaderPattern(archetype: string, sequence: number, phase: Ar
     return rotation[sequence % rotation.length]!;
   }
   if (archetype === "stone_brute") {
+    if (leaderId === "mistfen-behemoth") {
+      const rotation = phase === 1 ? ["bog-charge", "slam"]
+        : phase === 2 ? ["toxic-eruption", "bog-charge", "smash"]
+        : ["toxic-eruption", "bog-charge", "warden-barrage"];
+      return rotation[sequence % rotation.length]!;
+    }
     const rotation = phase === 1 ? leaderId === "frontier-brute" ? ["smash", "slam"] : ["rocks", "slam"]
       : phase === 2 ? ["rocks", "smash", "slam"] : ["warden-barrage", "smash", "rocks"];
     return rotation[sequence % rotation.length]!;

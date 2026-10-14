@@ -15,12 +15,15 @@ export function enemyShotGuideLength(from: Point, yaw: number, read: WorldBlockR
 }
 export function enemyCombatCue(mob: EnemyTimeline, now: number) {
   const presentation = enemyAttackPresentation(mob, now);
-  const kind = mob.archetype === "stone_brute" ? mob.attackPattern === "warden-barrage" ? "circle breaker" : mob.attackPattern === "rocks" ? "rock volley" : mob.attackPattern === "charge" ? "charge" : mob.attackPattern === "smash" ? "smash" : "slam" : mob.archetype === "cave_spitter" ? mob.attackPattern === "venom-ring" ? "venom ring" : mob.attackPattern === "crystal-burst" ? "crystal burst" : mob.attackPattern === "double-fan" ? "double fan" : mob.attackPattern === "fan" ? "fan" : mob.attackPattern === "pool" ? "acid pool" : "shot" : mob.attackPattern === "alpha-rush" ? "circle breaker" : "bite";
+  const kind = mob.archetype === "stone_brute" ? mob.attackPattern === "warden-barrage" ? "circle breaker" : mob.attackPattern === "rocks" || mob.attackPattern === "toxic-eruption" ? "rock volley" : mob.attackPattern === "charge" || mob.attackPattern === "bog-charge" ? "charge" : mob.attackPattern === "smash" ? "smash" : "slam" : mob.archetype === "cave_spitter" ? mob.attackPattern === "venom-ring" ? "venom ring" : mob.attackPattern === "crystal-burst" ? "crystal burst" : mob.attackPattern === "double-fan" ? "double fan" : mob.attackPattern === "fan" ? "fan" : mob.attackPattern === "pool" ? "acid pool" : "shot" : mob.attackPattern === "alpha-rush" ? "circle breaker" : "bite";
   const recovery = mob.alive && presentation.phase === "recover" && mob.attackStartedAt > 0 && now < mob.attackRecoveryEndAt;
   const fraction = (start: number, end: number) => Math.max(0, Math.min(1, (now - start) / Math.max(1, end - start)));
+  const attackName = mob.attackPattern === "toxic-eruption" ? "TOXIC ERUPTION"
+    : mob.attackPattern === "bog-charge" ? "BOG CHARGE"
+      : kind === "bite" ? "RUSH" : kind.toUpperCase();
   return {
     kind, recovery, visible: presentation.warning || recovery || mob.alive && mob.enraged === true,
-    label: recovery ? "RECOVER · COUNTER" : !presentation.warning && mob.enraged ? "ENRAGED" : `${mob.enraged ? "ENRAGED · " : ""}${kind === "bite" ? "RUSH" : kind.toUpperCase()} · ${presentation.phase === "strike" ? "STRIKE" : presentation.aimLocked ? "LOCKED" : "AIMING"}`,
+    label: recovery ? "RECOVER · COUNTER" : !presentation.warning && mob.enraged ? "ENRAGED" : `${mob.enraged ? "ENRAGED · " : ""}${attackName} · ${presentation.phase === "strike" ? "STRIKE" : presentation.aimLocked ? "LOCKED" : "AIMING"}`,
     progress: recovery ? 1 - fraction(mob.attackContactEndAt, mob.attackRecoveryEndAt)
       : presentation.phase === "strike" ? 1 : fraction(mob.attackStartedAt, mob.attackReleaseAt),
   };

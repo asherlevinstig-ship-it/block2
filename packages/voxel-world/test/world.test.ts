@@ -9,6 +9,7 @@ import {
   MISTFEN_BEHEMOTH_HOME,
   MISTFEN_MARSH,
   isInMistfenMarsh,
+  isMistfenApproachTrail,
   isMistfenBoardwalk,
   isMistfenToxicPool,
   wildernessTerritoryAt,
@@ -327,6 +328,12 @@ describe("deterministic voxel world", () => {
       expect([Block.OakLog, Block.Stone]).toContain(read(x, SURFACE_HEIGHT, -27));
     }
     expect(read(Math.floor(MISTFEN_BEHEMOTH_HOME.x), SURFACE_HEIGHT, Math.floor(MISTFEN_BEHEMOTH_HOME.z))).toBe(Block.Stone);
+    for (const [x, z] of [[-18, 8], [-26, 8], [-30, -5]] as const) {
+      expect(isMistfenApproachTrail(x, z)).toBe(true);
+      expect(read(x, SURFACE_HEIGHT, z)).toBe(Block.Dirt);
+      expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+      expect(isProtectedVoxel(x, z)).toBe(false);
+    }
     let pools = 0;
     for (let z = MISTFEN_MARSH.minZ; z <= MISTFEN_MARSH.maxZ; z++) for (let x = MISTFEN_MARSH.minX; x <= MISTFEN_MARSH.maxX; x++) {
       if (isMistfenToxicPool(x, z)) { expect(read(x, SURFACE_HEIGHT, z)).toBe(Block.BogWater); pools++; }

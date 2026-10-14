@@ -20,6 +20,11 @@ export function bossHudCopy(name: string, isMiniBoss = false): BossHudCopy {
     enrage: "FINAL PHASE · ROCK BARRAGE",
     defeat: "WORLDSPLITTER DEFEATED · CRUSHER CACHE DROPPED",
   };
+  if (/Mireback Behemoth/i.test(name)) return {
+    arrival: "MIREBACK BEHEMOTH · STAY ON THE BOARDWALKS",
+    enrage: "FINAL PHASE · TOXIC ERUPTIONS QUICKEN",
+    defeat: "MIREBACK DEFEATED · CROWN AND MARSH CACHE DROPPED",
+  };
   if (isMiniBoss) return {
     arrival: `${name.toUpperCase()} DISCOVERED · AREA MINI-BOSS`,
     enrage: `${name.toUpperCase()} IS ENRAGED`,
@@ -88,6 +93,8 @@ const ATTACK_NAMES: Readonly<Record<string, string>> = {
   slam: "GROUND SLAM",
   smash: "FORWARD SMASH",
   charge: "CHARGE",
+  "bog-charge": "BOG CHARGE",
+  "toxic-eruption": "TOXIC ERUPTION",
   "crystal-burst": "CRYSTAL BURST",
   "teleport-burst": "TELEPORT BURST",
 };

@@ -2236,7 +2236,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.coins = Math.min(1_000_000, player.coins + coinsGranted);
       if (plundererGold > 0) this.grantMasterTrial(playerId, "plunderer", plundererGold);
       this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level), mob.name);
-      this.grantBuildProgress(playerId, Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
+      this.grantBuildProgress(playerId, mobId === "mistfen-behemoth" ? 5 : Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
       void this.persistPlayer(playerId, player);
       this.broadcast("combat:reward", {
         playerId,
@@ -5189,9 +5189,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const origin = { x: mob.x, y: mob.y, z: mob.z };
           const championVenom = huntChampion?.pathId === "venom" ? huntChampionVenomHazard(mob.attackPattern) : null;
           const venomPools = mobId === GREENWOOD_MATRIARCH_ID && (mob.attackPattern === "double-fan" || mob.attackPattern === "venom-ring");
+          const mistfenEruption = mobId === "mistfen-behemoth" && mob.attackPattern === "toxic-eruption";
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
-            championVenom?.radius ?? (venomPools ? .82 : definition.hazardRadius),
-            championVenom?.durationMs ?? (venomPools ? 3_600 : definition.hazardDurationMs));
+            championVenom?.radius ?? (mistfenEruption ? 1.15 : venomPools ? .82 : definition.hazardRadius),
+            championVenom?.durationMs ?? (mistfenEruption ? 4_500 : venomPools ? 3_600 : definition.hazardDurationMs));
           if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage,
             mob.attackPattern === "warden-barrage" || mob.attackPattern === "fault-line" && huntChampion?.difficulty === "ascendant");
           if ((usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId) || isAreaMiniBoss(mobId)))
@@ -5221,7 +5222,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
             x: Math.sin(aim.yaw * Math.PI / 180) * lungeDistance, z: Math.cos(aim.yaw * Math.PI / 180) * lungeDistance,
           });
         }
-        if (mob.isChampion && mob.attackPattern === "charge") {
+        if (mob.isChampion && mob.attackPattern === "charge" || mobId === "mistfen-behemoth" && mob.attackPattern === "bog-charge") {
           this.championCharges.set(mobId, { yaw: aim.yaw, startedAt: now, progress: 0, hit: new Set() });
         } else {
           this.pendingMobMelee.set(mobId, { targetId: mob.targetId, yaw: aim.yaw, impactAt: mob.attackContactAt });
@@ -6178,7 +6179,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackStrikeZ = mob.attackPattern === "pool" ? aim?.z ?? mob.z : mob.z;
       return;
     }
-    if (mob.isChampion && mob.attackPattern === "charge") {
+    if (mob.isChampion && mob.attackPattern === "charge" || mobId === "mistfen-behemoth" && mob.attackPattern === "bog-charge") {
       if (mob.aimCommitted) return;
       mob.attackStrikeX = mob.x; mob.attackStrikeY = mob.y; mob.attackStrikeZ = mob.z;
       return;
@@ -6227,7 +6228,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.attackRecoveryEndAt = mob.attackContactEndAt + MATRIARCH_PHASE.recoveryMs;
       return;
     }
-    if (mob.isChampion && mob.attackPattern === "charge") {
+    if (mob.isChampion && mob.attackPattern === "charge" || mobId === "mistfen-behemoth" && mob.attackPattern === "bog-charge") {
       mob.attackContactAt = releaseAt;
       mob.attackContactEndAt = releaseAt + CHAMPION_CHARGE.durationMs;
       mob.attackRecoveryEndAt = mob.attackContactEndAt + CHAMPION_CHARGE.recoveryMs;
@@ -6267,7 +6268,22 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mob.combatState !== "strike") break;
       }
       charge.progress = progress;
-      if (progress >= 1 || Math.hypot(next.x - start.x, next.z - start.z) < travel * .8) this.championCharges.delete(id);
+      if (progress >= 1 || Math.hypot(next.x - start.x, next.z - start.z) < travel * .8) {
+        this.championCharges.delete(id);
+        if (id === "mistfen-behemoth" && charge.hit.size === 0) {
+          mob.combatState = "recover";
+          mob.stateUntil = Math.max(mob.stateUntil, now + 2_500);
+          mob.targetId = "";
+          mob.aimCommitted = false;
+          this.clearMobAttackTimeline(mob);
+          for (const client of this.clients) {
+            const player = this.state.players.get(client.sessionId);
+            if (player?.health && Math.abs(player.y - mob.y) <= 2.5
+              && Math.hypot(player.x - mob.x, player.z - mob.z) <= 28)
+              client.send("leader:exposed", { mobId: id, durationMs: 2_500 } satisfies AreaLeaderExposed);
+          }
+        }
+      }
     }
   }
 

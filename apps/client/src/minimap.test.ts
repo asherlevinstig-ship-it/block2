@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
+import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, MISTFEN_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, discoverMistfen, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
@@ -47,6 +47,15 @@ describe("north-up explorer minimap", () => {
     expect(discoverAshenSpire(ASHEN_SPIRE_WAYPOINT, known)).toBe(true);
     expect(discoverAshenSpire(ASHEN_SPIRE_WAYPOINT, known)).toBe(false);
     expect(knownWaypoints(known)).toContainEqual(ASHEN_SPIRE_WAYPOINT);
+    expect(parseDiscoveries(JSON.stringify([...known]))).toEqual(known);
+  });
+  it("reveals Mistfen only when approached on the surface and remembers it", () => {
+    const known = new Set<string>();
+    expect(discoverMistfen({ ...MISTFEN_WAYPOINT, x: MISTFEN_WAYPOINT.x + 22.1 }, known)).toBe(false);
+    expect(discoverMistfen({ ...MISTFEN_WAYPOINT, y: 3 }, known)).toBe(false);
+    expect(discoverMistfen(MISTFEN_WAYPOINT, known)).toBe(true);
+    expect(discoverMistfen(MISTFEN_WAYPOINT, known)).toBe(false);
+    expect(knownWaypoints(known)).toContainEqual(MISTFEN_WAYPOINT);
     expect(parseDiscoveries(JSON.stringify([...known]))).toEqual(known);
   });
   it("shows the permanent Warden Gate waypoint only after the saved first clear", () => {

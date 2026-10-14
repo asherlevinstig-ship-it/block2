@@ -40,7 +40,8 @@ export function combatMobDefinition(mob: { archetype: string; isChampion?: boole
     windupMs: Math.round(1400 * (rage ? .82 : 1)), recoverMs: Math.round(1900 * (rage ? .78 : 1)), cooldownMs: Math.round(3000 * (rage ? .7 : 1)), projectileTravelMs: mob.attackPattern === "pool" ? 1100 : SPITTER_PATTERN.travelMs,
     hazardDurationMs: mob.attackPattern === "pool" ? 4000 : 0, hazardRadius: mob.attackPattern === "pool" ? 1.6 : 0, respawnMs: 20000 };
   if ((mob.isElite || mob.isMiniBoss) && !mob.isChampion) return { ...base,
-    windupMs: Math.round(base.windupMs * (mob.isMiniBoss ? .95 : .82) * (rage ? .82 : 1)),
+    stopDistance: mob.attackPattern === "bog-charge" ? 4.2 : base.stopDistance,
+    windupMs: Math.round((mob.attackPattern === "bog-charge" ? CHAMPION_CHARGE.windupMs : base.windupMs) * (mob.isMiniBoss ? .95 : .82) * (rage ? .82 : 1)),
     recoverMs: Math.round(base.recoverMs * (mob.isMiniBoss ? 1.12 : .88) * (rage ? .78 : 1)),
     cooldownMs: Math.round(base.cooldownMs * (mob.isMiniBoss ? leaderPhase === 1 ? 1.05 : leaderPhase === 2 ? .98 : .92 : .8) * (rage ? .7 : 1)) };
   return !mob.isChampion ? base : { ...base, name: "Frontier Stone Champion", maxHealth: 28,

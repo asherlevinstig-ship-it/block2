@@ -34,7 +34,8 @@ export function realmBossPattern(id: string, sequence: number, health: number, m
 }
 
 export function usesRockVolley(pattern: string): boolean {
-  return pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
+  return pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line"
+    || pattern === "toxic-eruption";
 }
 
 export function usesFallingRockZones(pattern: string): boolean {

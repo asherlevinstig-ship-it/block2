@@ -57,6 +57,14 @@ describe("boss HUD", () => {
     const defeated = advanceBossHud(arrived, { ...leader, alive: false, health: 0 }, player, 2000);
     expect(defeated.message).toContain("PREMIUM LOOT DROPPED");
   });
+  it("gives the Mireback Behemoth its own encounter and reward language", () => {
+    const mireback = { ...boss, name: "Mireback Behemoth", isMiniBoss: true };
+    expect(advanceBossHud(initialBossHud(), mireback, player, 1000).message).toContain("STAY ON THE BOARDWALKS");
+    expect(advanceBossHud({ ...initialBossHud(), visible: true, alive: true }, { ...mireback, alive: false, health: 0 }, player, 2000).message)
+      .toContain("MARSH CACHE DROPPED");
+    expect(leaderAttackName("bog-charge")).toBe("BOG CHARGE");
+    expect(leaderAttackName("toxic-eruption")).toBe("TOXIC ERUPTION");
+  });
   it("keeps Path Champion identity and phase mechanics beside the boss bar", () => {
     const champion = { ...boss, name: "Viridian Brood Oracle", isMiniBoss: true };
     expect(advanceBossHud(initialBossHud(), champion, player, 1000).message).toContain("WATCH THE GROUND");

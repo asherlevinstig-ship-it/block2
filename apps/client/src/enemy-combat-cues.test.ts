@@ -9,6 +9,10 @@ describe("readable enemy combat cues", () => {
     expect(enemyCombatCue({ ...mob, archetype: "cave_spitter", attackPattern: "venom-ring" }, 1_100).kind).toBe("venom ring");
     expect(enemyCombatCue({ ...mob, archetype: "moss_crawler", attackPattern: "alpha-rush" }, 1_100).kind).toBe("circle breaker");
   });
+  it("keeps Mistfen attacks distinct from generic brute cues", () => {
+    expect(enemyCombatCue({ ...mob, attackPattern: "bog-charge" }, 1_100).label).toBe("BOG CHARGE · AIMING");
+    expect(enemyCombatCue({ ...mob, attackPattern: "toxic-eruption" }, 1_100).label).toBe("TOXIC ERUPTION · AIMING");
+  });
   it("labels rock aim, commitment and the full recovery window", () => {
     const rocks = { ...mob, attackPattern: "rocks", attackContactAt: 2000, attackContactEndAt: 2000, attackRecoveryEndAt: 4400 };
     expect(enemyCombatCue(rocks, 1200).label).toBe("ROCK VOLLEY · AIMING");

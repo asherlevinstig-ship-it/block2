@@ -140,6 +140,10 @@ export function isMistfenBoardwalk(x: number, z: number): boolean {
     || (z === -27 || z === -26) && x >= MISTFEN_MARSH.minX && x <= MISTFEN_MARSH.maxX
     || x >= -49 && x <= -46 && z >= -32 && z <= -30;
 }
+export function isMistfenApproachTrail(x: number, z: number): boolean {
+  return (z === 8 || z === 9) && x >= -30 && x <= -14
+    || (x === -30 || x === -29) && z >= MISTFEN_MARSH.maxZ && z <= 9;
+}
 export function isMistfenToxicPool(x: number, z: number): boolean {
   if (!isInMistfenMarsh(x, z) || isMistfenBoardwalk(x, z)
     || x >= MISTFEN_SILVER_SEAM.minX && x <= MISTFEN_SILVER_SEAM.maxX
@@ -150,7 +154,9 @@ export function isMistfenToxicPool(x: number, z: number): boolean {
 }
 /** Open marshland with two crossing boardwalks, toxic shallows, ruins, and a clear leader island. */
 export function mistfenMarshBlock(x: number, y: number, z: number): BlockId | null {
-  if (!isInMistfenMarsh(x, z)) return null;
+  const approach = isMistfenApproachTrail(x, z);
+  if (!isInMistfenMarsh(x, z) && !approach) return null;
+  if (approach && !isInMistfenMarsh(x, z)) return y === SURFACE_HEIGHT ? Block.Dirt : y > SURFACE_HEIGHT ? Block.Air : null;
   const seam = x >= MISTFEN_SILVER_SEAM.minX && x <= MISTFEN_SILVER_SEAM.maxX
     && z >= MISTFEN_SILVER_SEAM.minZ && z <= MISTFEN_SILVER_SEAM.maxZ;
   if (seam && (y === SURFACE_HEIGHT || y === SURFACE_HEIGHT - 1)) return Block.SilverOre;

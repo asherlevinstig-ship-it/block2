@@ -33,6 +33,9 @@ describe("area mini-bosses", () => {
     expect([0, 1, 2].map(sequence => areaLeaderPattern("cave_spitter", sequence, 3))).toEqual(["venom-ring", "fan", "pool"]);
     expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence, 3))).toEqual(["warden-barrage", "smash", "rocks"]);
     expect([0, 1].map(sequence => areaLeaderPattern("moss_crawler", sequence, 3))).toEqual(["alpha-rush", "pack-rush"]);
+    expect([0, 1].map(sequence => areaLeaderPattern("stone_brute", sequence, 1, "mistfen-behemoth"))).toEqual(["bog-charge", "slam"]);
+    expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence, 2, "mistfen-behemoth"))).toEqual(["toxic-eruption", "bog-charge", "smash"]);
+    expect([0, 1, 2].map(sequence => areaLeaderPattern("stone_brute", sequence, 3, "mistfen-behemoth"))).toEqual(["toxic-eruption", "bog-charge", "warden-barrage"]);
   });
 
   it("advances through a long learning phase and short final stand", () => {
@@ -52,6 +55,7 @@ describe("area mini-bosses", () => {
   it("links authored followers to the leader opening they create", () => {
     expect(leaderForFollower("greenwood-briar")).toBe("wild-crawler");
     expect(leaderForFollower("frontier-support-spitter")).toBe("frontier-brute-east");
+    expect(leaderForFollower("mistfen-spitter")).toBe("mistfen-behemoth");
     expect(leaderForFollower("not-a-follower")).toBeNull();
     expect(Object.values(AREA_LEADER_FOLLOWERS).flat().length).toBeGreaterThan(0);
   });

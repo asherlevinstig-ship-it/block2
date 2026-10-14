@@ -19,6 +19,7 @@ describe("realm boss patterns", () => {
 
   it("classifies rock volleys and leaves gaps between marked impacts", () => {
     expect(usesRockVolley("falling-rocks")).toBe(true);
+    expect(usesRockVolley("toxic-eruption")).toBe(true);
     expect(usesFallingRockZones("warden-barrage")).toBe(true);
     const sites = fallingRockSites({ x: 10, y: 8, z: 10 }, 0);
     expect(sites).toHaveLength(3);

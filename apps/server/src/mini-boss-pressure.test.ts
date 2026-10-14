@@ -41,6 +41,13 @@ describe("mini boss pressure", () => {
     expect(enraged.windupMs).toBeGreaterThanOrEqual(500);
   });
 
+  it("gives the Mireback charge enough stand-off and warning to be readable", () => {
+    const charge = combatMobDefinition({ archetype: "stone_brute", isMiniBoss: true, attackPattern: "bog-charge", health: 20, maxHealth: 20 });
+    const slam = combatMobDefinition({ archetype: "stone_brute", isMiniBoss: true, attackPattern: "slam", health: 20, maxHealth: 20 });
+    expect(charge.stopDistance).toBe(4.2);
+    expect(charge.windupMs).toBeGreaterThan(slam.windupMs);
+  });
+
   it("occasionally holds a telegraph to catch automatic early dodges", () => {
     expect(miniBossWindupDelay(true, 2)).toBe(MINI_BOSS_FEINT_DELAY_MS);
     expect(miniBossWindupDelay(true, 3)).toBe(0);
