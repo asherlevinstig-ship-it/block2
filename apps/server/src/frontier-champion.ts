@@ -10,7 +10,8 @@ export const SILVER_CHAMPION_ID = "wild-spitter-west";
 export const championPattern = (mob: { archetype: string; actionSequence: number }) => mob.archetype === "cave_spitter"
   ? mob.actionSequence % 2 === 0 ? "fan" : "pool" : mob.actionSequence % 2 === 0 ? "slam" : "charge";
 export function spitterChampionShots(start: Position, aim: Position, pattern: string): Position[] {
-  if (["fan", "double-fan", "venom-ring"].includes(pattern)) return spitterShotEndpoints(start, Math.atan2(aim.x - start.x, aim.z - start.z) * 180 / Math.PI, pattern);
+  if (["fan", "double-fan", "venom-ring", "cross-volley"].includes(pattern)) return spitterShotEndpoints(start,
+    Math.atan2(aim.x - start.x, aim.z - start.z) * 180 / Math.PI, pattern === "cross-volley" ? "double-fan" : pattern);
   return [aim];
 }
 export function championChargeHits(start: Position, end: Position, target: Position): boolean {

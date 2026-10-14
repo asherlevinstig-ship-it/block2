@@ -71,6 +71,9 @@ describe("boss HUD", () => {
     expect(leaderAttackLabel("pool", "windup")).toBe("VENOM POOL · INCOMING");
     expect(leaderAttackLabel("rush", "strike")).toBe("PACK RUSH · ACTIVE");
     expect(leaderAttackLabel("crystal-burst", "recover")).toBe("CRYSTAL BURST · RECOVERING");
+    expect(leaderAttackLabel("pincer-rush", "windup")).toBe("PINCER RUSH · EXITS MARKED · INCOMING");
+    expect(leaderAttackLabel("cross-volley", "windup")).toBe("CROSS VOLLEY · FIND THE GAP · INCOMING");
+    expect(leaderAttackLabel("fault-line", "windup")).toBe("FAULT LINE · MOVE OFF THE MARKS · INCOMING");
   });
   it("counts the exposed opening down to zero", () => {
     expect(leaderExposureLabel(3500, 1000)).toBe("LEADER EXPOSED · 2.5s");

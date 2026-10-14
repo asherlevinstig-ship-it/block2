@@ -34,11 +34,11 @@ export function realmBossPattern(id: string, sequence: number, health: number, m
 }
 
 export function usesRockVolley(pattern: string): boolean {
-  return pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage";
+  return pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
 }
 
 export function usesFallingRockZones(pattern: string): boolean {
-  return pattern === "falling-rocks" || pattern === "warden-barrage";
+  return pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
 }
 
 export function usesDoubleVolley(pattern: string): boolean {

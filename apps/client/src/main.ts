@@ -335,7 +335,7 @@ realmHuntPanel.id = "realm-hunt-board-panel";
 realmHuntPanel.hidden = true;
 realmHuntPanel.setAttribute("role", "dialog");
 realmHuntPanel.setAttribute("aria-label", "Realm Hunt Board");
-realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS · REALM HUNT BOARD</small><h2>Choose Your Contract</h2><p class="realm-hunt-message"></p><div class="realm-contract-card" hidden><small>ACTIVE CONTRACT</small><strong></strong><span></span><b></b></div><div class="realm-hunt-difficulties"><button class="active" data-hunt-difficulty="normal" type="button"><b>NORMAL</b><span>Standard hunt</span></button><button data-hunt-difficulty="veteran" type="button"><b>VETERAN</b><span>Rank 1 · 1.5× cache</span></button><button data-hunt-difficulty="ascendant" type="button"><b>ASCENDANT</b><span>Rank 3 · 3 lives · 2× cache</span></button></div><div class="realm-hunt-mastery"></div><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" data-contract="fang" type="button">FANG CONTRACT</button><button data-path="Venom Surge" data-contract="venom" type="button">VENOM CONTRACT</button><button data-path="Crusher Break" data-contract="crusher" type="button">CRUSHER CONTRACT</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
+realmHuntPanel.innerHTML = '<button class="realm-hunt-close" type="button" aria-label="Close">×</button><small>TOWN OF BEGINNINGS · REALM HUNT BOARD</small><h2>Choose Your Contract</h2><p class="realm-hunt-message"></p><div class="realm-contract-card" hidden><small>ACTIVE CONTRACT</small><strong></strong><span></span><b></b></div><div class="realm-hunt-difficulties"><button class="active" data-hunt-difficulty="normal" type="button"><b>NORMAL</b><span>Standard three-phase rotation</span></button><button data-hunt-difficulty="veteran" type="button"><b>VETERAN</b><span>Rank 1 · advanced path attack · 1.5× cache</span></button><button data-hunt-difficulty="ascendant" type="button"><b>ASCENDANT</b><span>Rank 3 · overlapping mechanics · 3 lives · 2× cache · Forgemark</span></button></div><div class="realm-hunt-tier-preview">FANG: pincer exits · VENOM: crossing pools · CRUSHER: marked fault lines</div><div class="realm-hunt-mastery"></div><div class="realm-hunt-paths"><button class="active" data-path="all" type="button">ALL LEADERS</button><button data-path="Alpha Fang" data-contract="fang" type="button">FANG CONTRACT</button><button data-path="Venom Surge" data-contract="venom" type="button">VENOM CONTRACT</button><button data-path="Crusher Break" data-contract="crusher" type="button">CRUSHER CONTRACT</button></div><div class="realm-hunt-legend"><span><i data-status="alive"></i>Alive</span><span><i data-status="recovering"></i>Recovering</span><span><i data-status="empowered"></i>Empowered</span></div><div class="realm-hunt-list"></div><button class="realm-hunt-back" type="button">BACK TO EXPEDITIONS</button>';
 document.body.append(realmHuntPanel);
 
 function renderRealmHuntBoard(update: RealmHuntBoardUpdate): void {
@@ -3634,11 +3634,12 @@ function createHuntersMarkPayoff(mob: MobVisual): void {
 
 function updateStrikeWarningMesh(mesh: pc.Mesh, archetype: string, yaw: number, pattern = "slam", chargeLength: number = CHAMPION_CHARGE.distance,
   shotOrigin: { x: number; y: number; z: number; name?: string; actionSequence?: number } = { x: 0, y: 0, z: 0 }): void {
-  const rockVolley = pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage";
+  const rockVolley = pattern === "rocks" || pattern === "falling-rocks" || pattern === "warden-barrage" || pattern === "fault-line";
   if (rockVolley || archetype === "cave_spitter" && pattern !== "pool") {
     const offsets = rockVolley ? BRUTE_VOLLEY.offsets : spitterShotOffsets(pattern);
     const lengths = offsets.map(offset => enemyShotGuideLength({ x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, yaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range));
-    const doubleVolley = pattern === "double-fan" || pattern === "teleport-burst" || pattern === "warden-barrage";
+    const doubleVolley = pattern === "double-fan" || pattern === "teleport-burst" || pattern === "warden-barrage"
+      || pattern === "cross-volley" || pattern === "fault-line";
     const secondYaw = matriarchSecondVolleyYaw(yaw, Math.max(0, (shotOrigin.actionSequence ?? 1) - 1));
     const secondLengths = doubleVolley ? offsets.map(offset => enemyShotGuideLength(
       { x: shotOrigin.x, y: shotOrigin.y + 1.05, z: shotOrigin.z }, secondYaw + offset, readCollisionWorldBlock, rockVolley ? BRUTE_VOLLEY.range : SPITTER_PATTERN.range)) : undefined;
@@ -6460,7 +6461,9 @@ function updateBossHud(now: number): void {
   bossExposed.hidden = !exposedLabel;
   bossExposed.textContent = exposedLabel;
   bossRematch.hidden = !rematchLabel;
-  bossRematch.textContent = rematchLabel;
+  bossRematch.textContent = pathChampion
+    ? `${boss.leaderRematchTier >= 9 ? "ASCENDANT · TWO MECHANICS" : boss.leaderRematchTier >= 7 ? "VETERAN · ADVANCED ATTACK" : "NORMAL"} · ${boss.leaderRematchTier >= 9 ? "2× CACHE + FORGEMARK" : boss.leaderRematchTier >= 7 ? "1.5× CACHE" : "CHAMPION CACHE"}`
+    : rematchLabel;
   bossRematch.dataset.modifier = boss.leaderModifier || "";
   bossAttackLabel.textContent = boss.alive ? leaderAttackLabel(boss.attackPattern, boss.combatState) : "ENCOUNTER COMPLETE";
   bossAttackLabel.dataset.state = boss.combatState;
@@ -8122,12 +8125,12 @@ app.on("update", (dt: number) => {
     mob.entity.setEulerAngles(0, mob.renderYaw, 0);
     const attackElapsed = presentation.elapsed;
     const attackDuration = mob.isBrute ? 760 : mob.isSpitter ? 520 : 460;
-    const attackPeak = ["rocks", "falling-rocks", "warden-barrage"].includes(mob.state.attackPattern) ? 180 : mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
+    const attackPeak = ["rocks", "falling-rocks", "warden-barrage", "fault-line"].includes(mob.state.attackPattern) ? 180 : mob.isSpitter ? attackDuration / 2 : mobMeleeImpactMs(mob.state.archetype);
     const attackPhase = attackElapsed < attackPeak ? attackElapsed / attackPeak * 0.5
       : 0.5 + (attackElapsed - attackPeak) / (attackDuration - attackPeak) * 0.5;
     const attackStrength = mob.art.matriarch ? mob.state.alive && mob.state.attackStartedAt > 0 && ["windup", "recover"].includes(mob.state.combatState) ? matriarchRecoil(attackElapsed, mob.state.attackPattern === "double-fan") : 0
       : mob.state.attackStartedAt > 0 && mob.state.alive && attackElapsed >= 0 && attackElapsed < attackDuration ? Math.sin(attackPhase * Math.PI) : 0;
-    if (mob.isBrute && mob.state.attackPattern !== "charge" && !["rocks", "falling-rocks", "warden-barrage"].includes(mob.state.attackPattern) && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
+    if (mob.isBrute && mob.state.attackPattern !== "charge" && !["rocks", "falling-rocks", "warden-barrage", "fault-line"].includes(mob.state.attackPattern) && presentation.impactDue && mob.lastImpactStartedAt !== mob.state.attackStartedAt) {
       mob.lastImpactStartedAt = mob.state.attackStartedAt;
       createBruteSlamImpact(mob);
     }
@@ -8216,7 +8219,7 @@ app.on("update", (dt: number) => {
     if (mob.warning.enabled) {
       if (mob.warningMesh) {
         const chargeLength = mob.isSpitter && mob.state.attackPattern !== "pool" ? spitterShotOffsets(mob.state.attackPattern).reduce((sum, offset, i) => sum + (i + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range), 0) : mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
-        const warningLength = ["rocks", "falling-rocks", "warden-barrage"].includes(mob.state.attackPattern) ? BRUTE_VOLLEY.offsets.reduce<number>((sum, offset, index) => sum + (index + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, BRUTE_VOLLEY.range), 0) : chargeLength;
+        const warningLength = ["rocks", "falling-rocks", "warden-barrage", "fault-line"].includes(mob.state.attackPattern) ? BRUTE_VOLLEY.offsets.reduce<number>((sum, offset, index) => sum + (index + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, BRUTE_VOLLEY.range), 0) : chargeLength;
         if (Math.abs(mob.warningYaw - mob.state.yaw) > 0.25 || mob.warningPattern !== mob.state.attackPattern || mob.warningSequence !== mob.state.actionSequence || Math.abs(warningLength - mob.warningChargeLength) > .05) {
           updateStrikeWarningMesh(mob.warningMesh, mob.state.archetype, mob.state.yaw, mob.state.attackPattern, warningLength, mob.state);
           mob.warningYaw = mob.state.yaw;
@@ -8232,7 +8235,7 @@ app.on("update", (dt: number) => {
         mob.warning.setEulerAngles(0, mob.state.yaw, 0);
       }
       const crystalWarning = mob.state.attackPattern === "crystal-burst";
-      const fanWarning = mob.state.attackPattern === "fan" || mob.state.attackPattern === "double-fan" || mob.state.attackPattern === "venom-ring";
+      const fanWarning = mob.state.attackPattern === "fan" || mob.state.attackPattern === "double-fan" || mob.state.attackPattern === "venom-ring" || mob.state.attackPattern === "cross-volley";
       mob.warningMaterial.diffuse.set(crystalWarning ? .72 : mob.isSpitter ? fanWarning ? .35 : .85 : 1,
         crystalWarning ? .32 : mob.isSpitter ? fanWarning ? .62 : 1 : mob.isBrute ? .25 : .72,
         crystalWarning ? 1 : mob.isSpitter ? fanWarning ? 1 : .16 : mob.isBrute ? .08 : .18);

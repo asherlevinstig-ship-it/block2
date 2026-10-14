@@ -50,7 +50,7 @@ import { HUNT_PATHS, advanceHuntContract, beginHuntContract, huntContractTier, i
 import { completeHuntMastery, huntDifficultyRewardMultiplier, huntDifficultyStatTier,
   huntDifficultyTiming, huntDifficultyUnlocked, parseHuntMastery, serializeHuntMastery,
   type HuntDifficulty } from "./hunt-mastery.js";
-import { huntChampionPattern, huntChampionPhase, huntChampionRushMultiplier,
+import { huntChampionPattern, huntChampionPhase, huntChampionPincerSites, huntChampionRushMultiplier,
   huntChampionUsesSecondVolley, huntChampionVenomHazard } from "./hunt-champion-combat.js";
 import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RESTORE,
   dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
@@ -2828,7 +2828,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.setMiniBossArenaBlock(mobId, cover.x, cell.y, cover.z, cell.block, "restore");
     }
     this.miniBossArenaCover.delete(mobId);
-    for (const [hazardId, hazard] of this.mobHazards) if (hazard.mobId === mobId && hazardId.startsWith("arena-pressure:")) {
+    for (const [hazardId, hazard] of this.mobHazards) if (hazard.mobId === mobId
+      && (hazardId.startsWith("arena-pressure:") || hazardId.startsWith("hunt-pincer:"))) {
       this.mobHazards.delete(hazardId);
     }
   }
@@ -2843,6 +2844,19 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         expiresAt, nextDamageAt: now + 550, lastDamageAt: new Map() });
       this.broadcast("combat:mob-hazard", { hazardId, mobId, kind: "pressure", ...site,
         radius: .68, expiresAt } satisfies MobHazardPlaced);
+    }
+  }
+
+  private placeHuntChampionPincer(mobId: string, target: { x: number; y: number; z: number }, yaw: number,
+    difficulty: HuntDifficulty, now: number): void {
+    const duration = difficulty === "ascendant" ? 3_400 : 2_700;
+    for (const [index, site] of huntChampionPincerSites(target, yaw, difficulty).entries()) {
+      const hazardId = `hunt-pincer:${mobId}:${this.state.mobs.get(mobId)?.actionSequence ?? 0}:${index}`;
+      const expiresAt = now + duration;
+      this.mobHazards.set(hazardId, { hazardId, mobId, ...site, radius: .72, damage: 1,
+        expiresAt, nextDamageAt: now + 550, lastDamageAt: new Map() });
+      this.broadcast("combat:mob-hazard", { hazardId, mobId, kind: "pressure", ...site,
+        radius: .72, expiresAt } satisfies MobHazardPlaced);
     }
   }
 
@@ -3496,7 +3510,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     mob.speedMultiplier = stats.speedMultiplier; mob.rewardMultiplier = stats.rewardMultiplier * 1.5;
     mob.leaderRematchTier = 5 + difficultyTier; mob.leaderModifier = path.championModifier;
     mob.level = Math.min(20, Math.max(mob.level, (this.state.players.get(ownerId)?.level ?? 1) + 3));
-    mob.attackPattern = huntChampionPattern(contract.pathId, 0, 1); mob.combatState = "recover";
+    mob.attackPattern = huntChampionPattern(contract.pathId, 0, 1, contract.difficulty); mob.combatState = "recover";
     mob.materializeUntil = now + 2_500; mob.stateUntil = mob.materializeUntil;
     this.mobBaseNames.set(contract.championMobId, path.championName);
     this.huntChampions.set(contract.championMobId, { ownerId, pathId: contract.pathId, name: path.championName, difficulty: contract.difficulty });
@@ -4467,7 +4481,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       else if (mob.isElite && mob.combatState === "idle") mob.attackPattern = wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence);
       else if (mob.isChampion && mob.combatState === "idle") mob.attackPattern = huntChampion
-        ? huntChampionPattern(huntChampion.pathId, mob.actionSequence, currentAreaLeaderPhase)
+        ? huntChampionPattern(huntChampion.pathId, mob.actionSequence, currentAreaLeaderPhase, huntChampion.difficulty)
         : mob.isMiniBoss && (this.miniBossOrbitPressure.get(mobId)?.counterUntil ?? 0) > now
           ? miniBossOrbitCounterPattern(mob.archetype) : championPattern(mob);
       else if (mobId === "frontier-brute" && mob.combatState === "idle") mob.attackPattern = frontierBrutePattern(mob.actionSequence);
@@ -4485,7 +4499,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               ? "rocks" : areaLeaderPattern(mob.archetype, mob.actionSequence, currentAreaLeaderPhase, mobId)
           : mob.isElite ? wildernessElitePattern(mob.archetype as MobArchetypeId, mob.actionSequence)
           : bruteVolleyReady(mob.actionSequence, distance) ? "rocks"
-          : huntChampion ? huntChampionPattern(huntChampion.pathId, mob.actionSequence, currentAreaLeaderPhase)
+          : huntChampion ? huntChampionPattern(huntChampion.pathId, mob.actionSequence, currentAreaLeaderPhase, huntChampion.difficulty)
           : mob.isChampion ? championPattern(mob)
           : mobId === "frontier-brute" ? frontierBrutePattern(mob.actionSequence)
           : "slam");
@@ -4677,11 +4691,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           this.releaseMobVolley(mobId, mob, origin, shots, now, definition.projectileTravelMs, mob.attackDamage,
             championVenom?.radius ?? (venomPools ? .82 : definition.hazardRadius),
             championVenom?.durationMs ?? (venomPools ? 3_600 : definition.hazardDurationMs));
-          if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage, mob.attackPattern === "warden-barrage");
+          if (usesFallingRockZones(mob.attackPattern)) this.scheduleRealmFallingRocks(mobId, aim, now, mob.attackDamage,
+            mob.attackPattern === "warden-barrage" || mob.attackPattern === "fault-line" && huntChampion?.difficulty === "ascendant");
           if ((usesDoubleVolley(mob.attackPattern) && (mobId === WILDERNESS_EVENT_ID || mobId === CRYSTAL_MATRIARCH_ID || isRealmEventId(mobId) || isAreaMiniBoss(mobId)))
             || Boolean(huntChampion && huntChampionUsesSecondVolley(huntChampion.pathId, mob.attackPattern))) {
             const secondYaw = matriarchSecondVolleyYaw(aim.yaw, Math.max(0, mob.actionSequence - 1));
-            const secondShots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, secondYaw) : spitterShotEndpoints(mob, secondYaw, mob.attackPattern);
+            const secondShots = usesRockVolley(mob.attackPattern) ? bruteRockEndpoints(mob, secondYaw)
+              : spitterShotEndpoints(mob, secondYaw, mob.attackPattern === "cross-volley" ? "double-fan" : mob.attackPattern);
             this.delayedMatriarchVolleys.set(mobId, { origin, shots: secondShots, releaseAt: now + MATRIARCH_PHASE.volleyGapMs, damage: mob.attackDamage, travelMs: definition.projectileTravelMs });
           }
           if (mobId === ASHGLASS_ORACLE_ID && mob.attackPattern === "teleport-burst") this.teleportAshglassOracle(mob, aim, mob.actionSequence);
@@ -4691,6 +4707,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const deltaX = aim.x - mob.x;
         const deltaZ = aim.z - mob.z;
         const distance = Math.hypot(deltaX, deltaZ);
+        if (huntChampion?.pathId === "fang" && mob.attackPattern === "pincer-rush")
+          this.placeHuntChampionPincer(mobId, aim, aim.yaw, huntChampion.difficulty, now);
         if (crawlerRushDistance(mob.archetype) > 0) {
           const leaderRushMultiplier = mob.isMiniBoss ? currentAreaLeaderPhase === 1 ? 1.18 : currentAreaLeaderPhase === 2 ? 1.28 : 1.36 : 1;
           const championRushMultiplier = huntChampion?.pathId === "fang" ? huntChampionRushMultiplier(mob.attackPattern) : 1;
