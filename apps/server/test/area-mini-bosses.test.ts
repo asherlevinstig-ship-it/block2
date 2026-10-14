@@ -12,6 +12,7 @@ describe("area mini-bosses", () => {
 
   it("finds named area leaders without treating normal followers as bosses", () => {
     expect(areaMiniBossDefinition("wild-crawler")?.name).toBe("Greenwood Broodmother");
+    expect(areaMiniBossDefinition("south-quarrymaster")?.name).toBe("Redstone Quarrymaster");
     expect(isAreaMiniBoss("frontier-spitter")).toBe(true);
     expect(isAreaMiniBoss("greenwood-briar")).toBe(false);
     expect(areaMainMobDefinition("frontier-brute-west")?.name).toBe("Frontier Stone Champion");
@@ -56,6 +57,7 @@ describe("area mini-bosses", () => {
     expect(leaderForFollower("greenwood-briar")).toBe("wild-crawler");
     expect(leaderForFollower("frontier-support-spitter")).toBe("frontier-brute-east");
     expect(leaderForFollower("mistfen-spitter")).toBe("mistfen-behemoth");
+    expect(leaderForFollower("south-pit-spitter")).toBe("south-quarrymaster");
     expect(leaderForFollower("not-a-follower")).toBeNull();
     expect(Object.values(AREA_LEADER_FOLLOWERS).flat().length).toBeGreaterThan(0);
   });

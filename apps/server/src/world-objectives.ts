@@ -1,7 +1,7 @@
 import { isEquipmentItem, ITEM_DEFINITIONS, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
-import { ASHEN_SENTRY_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
+import { ASHEN_SENTRY_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS, SOUTHERN_QUARRY_IDS } from "./wilderness-encounters.js";
 import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 import { areaMainMobDefinition } from "./area-mini-bosses.js";
@@ -28,6 +28,8 @@ const GROUPS: ObjectiveGroup[] = [
   { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against rock volleys, leave the slam circle, then counter during recovery. Collect the hammer and rich silver.", ids: ["frontier-brute"], mainId: "frontier-brute" },
   { id: "ashen-sentries", title: "Ashglass Sentries", detail: "Use the broken cover and dodge between sweeping fan volleys. Counter after their aimed shot.", ids: [...ASHEN_SENTRY_IDS], mainId: "ashglass-sentry-east" },
   { id: "mistfen", title: "Mistfen Marsh", detail: "Stay on the crossing boardwalks, draw the ambushers out of the toxic pools, then break the Mireback Behemoth during recovery.", ids: [...MISTFEN_IDS], mainId: "mistfen-behemoth" },
+  { id: "southern-patrols", title: "Southern Quarry Patrols", detail: "Follow the southroad, use the quarry shelves as cover, and clear the crawler and spitter patrols guarding the mineral pockets.", ids: [...SOUTHERN_QUARRY_IDS.slice(0, 3)] },
+  { id: "southern-quarry", title: "Redstone Quarrymaster", detail: "Clear the pit escorts, use the broken pillars against volleys, then punish the Quarrymaster during recovery.", ids: [...SOUTHERN_QUARRY_IDS.slice(3)], mainId: "south-quarrymaster" },
   ...ROAMING_PACKS.map(pack => ({ id: pack.id, title: `${pack.id.includes("outskirts") ? "Outskirts" : "Wilds"} Roaming Pack`,
     detail: "Hunt the roaming packleader for the area's richest loot, then clear its followers.",
     ids: pack.offsets.map((_, index) => roamingMemberId(pack, index)), mainId: roamingMemberId(pack, 0) })),
@@ -61,7 +63,7 @@ export function nearbyObjective(playerId: string, player: Player, mobEntries: It
       if (!includeFallback) return null;
       const minerals = (player.inventory.get("iron_ore")?.quantity ?? 0) + (player.inventory.get("silver_ore")?.quantity ?? 0);
       return minerals > 0 ? make("blacksmith", "Trade Your Minerals", "Take your minerals to the blacksmith and press E to trade them for gold.", TOWN_BLACKSMITH_STALL_POSITION, "hub")
-        : make("leave-town", "Explore the Wilderness", "Leave through the east gate. Nearby threats will be marked as you explore.", { x: 30.5, y: 8, z: 8.5 }, "hub");
+        : make("leave-town", "Explore the Wilderness", "Leave by any gate. Roads and nearby threats will reveal themselves as you explore.", { x: 8.5, y: 8, z: 30.5 }, "hub");
     }
     const dungeon = isInForestDungeon(player.x, player.z);
     const expeditionLantern = drops.find(([, drop]) => drop.ownerId === playerId && drop.itemId === "miners_lantern"

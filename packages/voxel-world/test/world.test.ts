@@ -5,6 +5,10 @@ import {
   ASHEN_SPIRE_POSITION,
   ASHEN_SENTRY_HOMES,
   ashenRidgeHeight,
+  SOUTHERN_QUARRY,
+  SOUTHERN_QUARRYMASTER_HOME,
+  SOUTHERN_MOB_HOMES,
+  SOUTHERN_QUARRY_COVER,
   ashenReachBlock,
   isInAshenReach,
   MISTFEN_BEHEMOTH_HOME,
@@ -16,6 +20,9 @@ import {
   isMistfenApproachTrail,
   isMistfenBoardwalk,
   isMistfenToxicPool,
+  isInSouthernQuarry,
+  isSouthernRoad,
+  southernQuarryTierAt,
   ROADSIDE_DISCOVERIES,
   roadsideDiscoveryBlock,
   wildernessTerritoryAt,
@@ -63,7 +70,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("route-test", address.chunkX, address.chunkZ));
       return getBlock(cache.get(key)!, address.localX, y, address.localZ);
     };
-    for (const [x, z] of [[31, 9], [70, 9], [42, 29], [70, 32], [87, 50], [92, 61], [-24, 9], [-30, -20]])
+    for (const [x, z] of [[31, 9], [70, 9], [42, 29], [70, 32], [87, 50], [92, 61], [-24, 9], [-30, -20], [8, 50], [8, 100]])
       expect(isRegionalRoad(x, z)).toBe(true);
     for (const [x, z] of [[70, 9], [87, 50], [92, 61], [-24, 9]]) {
       expect(read(x, SURFACE_HEIGHT, z)).not.toBe(Block.Air);
@@ -114,7 +121,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
       return getBlock(cache.get(key)!, a.localX, y, a.localZ);
     };
-    expect(ROADSIDE_DISCOVERIES).toHaveLength(11);
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(15);
     expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
     for (const site of ROADSIDE_DISCOVERIES) {
       expect(isRegionalRoad(site.x, site.z)).toBe(false);
@@ -130,6 +137,33 @@ describe("deterministic voxel world", () => {
       expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
       expect(isRegionalRoad(x, z)).toBe(true);
     }
+  });
+
+  it("turns the south gate into a staged quarry route with a supported boss pit", () => {
+    const cache = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const a = worldToChunk(x, z); const key = `${a.chunkX},${a.chunkZ}`;
+      if (!cache.has(key)) cache.set(key, generateChunk("south-route", a.chunkX, a.chunkZ));
+      return getBlock(cache.get(key)!, a.localX, y, a.localZ);
+    };
+    expect(isInSouthernQuarry(8, 60)).toBe(true);
+    expect(isInSouthernQuarry(SOUTHERN_QUARRY.maxX + 1, 60)).toBe(false);
+    expect([40, 65, 100].map(z => southernQuarryTierAt(8, z))).toEqual([1, 2, 3]);
+    expect([40, 65, 100].map(z => wildernessTerritoryAt(8, z)?.name))
+      .toEqual(["SOUTHERN CAUSEWAY", "SUNFALL QUARRY", "REDSTONE PIT"]);
+    for (let z = 30; z <= 106; z++) {
+      expect(isSouthernRoad(8, z)).toBe(true);
+      expect(read(8, SURFACE_HEIGHT, z)).toBe(Block.Dirt);
+      expect(read(8, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+      expect(isPlayerSupported(read, 8.5, 8, z + .5)).toBe(true);
+      expect(playerCollides(read, 8.5, 8, z + .5)).toBe(false);
+    }
+    for (const home of [...SOUTHERN_MOB_HOMES, SOUTHERN_QUARRYMASTER_HOME]) {
+      expect(isPlayerSupported(read, home.x, home.y, home.z)).toBe(true);
+      expect(playerCollides(read, home.x, home.y, home.z)).toBe(false);
+    }
+    for (const cover of SOUTHERN_QUARRY_COVER)
+      expect(read(cover.x, SURFACE_HEIGHT + cover.height, cover.z)).toBe(Block.Stone);
   });
   it("exposes supported mineral deposits outside town, with silver farther than iron", () => {
     for (const deposit of MINERAL_DEPOSITS) {

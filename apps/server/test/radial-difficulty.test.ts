@@ -30,6 +30,12 @@ describe("radial danger progression", () => {
     expect(frontier.rewardMultiplier).toBeGreaterThan(normal.rewardMultiplier);
   });
 
+  it("ramps southern danger by authored quarry stage instead of raw distance", () => {
+    expect(dangerBandAt({ x: 8.5, y: 8, z: 42.5 }).tier).toBe(1);
+    expect(dangerBandAt({ x: 8.5, y: 8, z: 68.5 }).tier).toBe(2);
+    expect(dangerBandAt({ x: 8.5, y: 8, z: 101.5 }).tier).toBe(3);
+  });
+
   it("keeps every archetype spawn and a pursuing mob outside the town buffer", () => {
     for (const archetype of Object.values(MOB_ARCHETYPES)) {
       expect(radiusFromSafeCenter(archetype.spawn)).toBeGreaterThanOrEqual(MOB_TOWN_MINIMUM_RADIUS);

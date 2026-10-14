@@ -65,6 +65,25 @@ describe("world objective director", () => {
     expect(objective.progressLabel).toBe("MINI-BOSS · HIGHEST LOOT");
     expect(objective.targetMobId).toBe("mistfen-behemoth");
   });
+  it("reveals the southern patrols before guiding players to the Redstone Quarrymaster", () => {
+    const mobs = new Map([
+      ["south-causeway-crawler", mob(3.5, 44.5, { difficultyTier: 1, level: 2 })],
+      ["south-quarry-spitter-west", mob(-2.5, 67.5, { difficultyTier: 2, level: 5 })],
+      ["south-quarry-spitter-east", mob(18.5, 76.5, { difficultyTier: 2, level: 5 })],
+      ["south-pit-crawler", mob(2.5, 96.5, { difficultyTier: 3, level: 9 })],
+      ["south-pit-spitter", mob(14.5, 97.5, { difficultyTier: 3, level: 9 })],
+      ["south-quarrymaster", mob(8.5, 101.5, { name: "Redstone Quarrymaster", difficultyTier: 3, level: 11 })],
+    ]);
+    expect(select(player(8.5, 8.5), mobs).objectiveId).toBe("leave-town");
+    expect(select(player(8.5, 43), mobs).objectiveId).toBe("southern-patrols");
+    expect(select(player(8.5, 96), mobs)).toMatchObject({
+      objectiveId: "southern-quarry",
+      title: "Redstone Quarrymaster",
+      kind: "miniboss",
+      targetMobId: "south-quarrymaster",
+      progressLabel: "MINI-BOSS · HIGHEST LOOT",
+    });
+  });
   it("guides Silver Depths players to their chosen wing instead of unspawned enemies", () => {
     const pose = { ...player(94, 14, 1), miningExpeditionStage: 8, silverDepthsStage: 3,
       silverDepthsRunStage: 3, silverDepthsWing: "" };

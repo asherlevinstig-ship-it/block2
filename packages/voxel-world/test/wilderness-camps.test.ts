@@ -22,9 +22,9 @@ describe("readable deposit camps", () => {
     for (let x = 40; x <= 48; x++) expect(playerCollides(read, x + .5, 8, 28.5)).toBe(false);
   });
   it("assigns nests, spitter cover and ruins to the right mineral sites", () => {
-    expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "nest")).toHaveLength(3);
-    expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "spitter")).toHaveLength(2);
-    expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "ruin")).toHaveLength(2);
+    expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "nest")).toHaveLength(4);
+    expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "spitter")).toHaveLength(3);
+    expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "ruin")).toHaveLength(3);
   });
   it.each(["camp-test-a", "camp-test-b"])("preserves every ore cell and four walkable approaches for %s", seed => {
     const read = reader(seed);

@@ -6,7 +6,7 @@ export { DODGE_STAMINA_COST, DODGE_CHAIN_COST_STEP, DODGE_MAX_STAMINA_COST, DODG
 // Bump the room identity when authoritative world generation changes. Colyseus
 // Cloud can keep rooms from the previous rolling deployment alive, which would
 // otherwise let a new client join a room still serving the old terrain.
-export const WORLD_ROOM = "world-warden-gate-v135";
+export const WORLD_ROOM = "world-warden-gate-v136";
 export const SILVER_DEPTHS_ROOM = "silver-depths-instance-v3";
 export type RoomTransfer = { room: typeof WORLD_ROOM | typeof SILVER_DEPTHS_ROOM; instanceKey?: string; partySize?: number; returnFrom?: "silver-depths"; retry?: boolean; partyTicket?: string; worldRoomId?: string };
 export interface ForestPortal { kind: string; x: number; y: number; z: number; expiresAt: number }
@@ -527,6 +527,7 @@ export const ITEM_DEFINITIONS = {
   stone_warden_lantern: { id: "stone_warden_lantern", name: "Stone Warden Lantern", description: "Unique vault trophy claimed from the Stone Warden" },
   frontier_champion_crest: { id: "frontier_champion_crest", name: "Frontier Champion Crest", description: "Unique trophy claimed from the Frontier Stone Champion" },
   mireback_crown: { id: "mireback_crown", name: "Mireback Crown", description: "Unique venom-soaked trophy claimed from the Mireback Behemoth" },
+  quarrymaster_sigil: { id: "quarrymaster_sigil", name: "Quarrymaster Sigil", description: "Unique redstone trophy claimed from the Redstone Quarrymaster" },
   alpha_forgemark: { id: "alpha_forgemark", name: "Alpha Forgemark", description: "Leader collection badge · awakens Fang Dagger finishers with +1 damage" },
   venom_forgemark: { id: "venom_forgemark", name: "Venom Forgemark", description: "Leader collection badge · every third Acid Focus hit surges for +1 damage" },
   crusher_forgemark: { id: "crusher_forgemark", name: "Crusher Forgemark", description: "Leader collection badge · Stone Hammer attacks deal +1 damage to staggered enemies" },
@@ -564,7 +565,7 @@ export const AREA_LEADER_RELIC_IDS = [
   "silverfang_venom_sac", "gloomfang_venom_sac", "stonehide_core_relic", "ruinbreaker_keystone",
   "warleader_crest", "ashglass_lens", "westroad_pack_totem", "northroad_pack_totem",
   "gloam_alpha_gland", "sunscar_alpha_gland", "ironburrow_crown", "broodspitter_focus_shard",
-  "stone_warden_lantern", "frontier_champion_crest", "mireback_crown",
+  "stone_warden_lantern", "frontier_champion_crest", "mireback_crown", "quarrymaster_sigil",
 ] as const satisfies readonly ItemId[];
 export type AreaLeaderRelicId = typeof AREA_LEADER_RELIC_IDS[number];
 export const LEADER_FORGE_MARKS = {
@@ -586,6 +587,7 @@ export const LEADER_FORGE_RECIPES = {
   stonehide_core_relic: leaderForgeRecipe("crusher_forgemark"), ruinbreaker_keystone: leaderForgeRecipe("crusher_forgemark"),
   warleader_crest: leaderForgeRecipe("crusher_forgemark"), stone_warden_lantern: leaderForgeRecipe("crusher_forgemark"),
   frontier_champion_crest: leaderForgeRecipe("crusher_forgemark"),
+  quarrymaster_sigil: leaderForgeRecipe("crusher_forgemark"),
 } as const satisfies Record<AreaLeaderRelicId, { markId: LeaderForgemarkId; weaponId: "fang_dagger" | "acid_gland_focus" | "stone_core_hammer"; relics: 3; exchangeGold: 12 }>;
 export const LeaderForgeSchema = z.object({ relicId: z.enum(AREA_LEADER_RELIC_IDS), action: z.enum(["awaken", "exchange"]) });
 /** Capacity used when collecting a floor drop into the carried inventory. */
@@ -641,6 +643,7 @@ export const EQUIPMENT_RARITY = {
   stone_warden_lantern: "epic",
   frontier_champion_crest: "epic",
   mireback_crown: "epic",
+  quarrymaster_sigil: "epic",
   alpha_forgemark: "legendary",
   venom_forgemark: "legendary",
   crusher_forgemark: "legendary",

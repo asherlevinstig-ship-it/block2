@@ -131,6 +131,58 @@ export const MISTFEN_MOB_HOMES = [
   { x: -45.5, y: 8, z: -36.5 },
 ] as const;
 export const MISTFEN_SILVER_SEAM = { minX: -56, maxX: -54, minZ: -39, maxZ: -37 } as const;
+export const SOUTHERN_QUARRY = { minX: -12, maxX: 29, minZ: 31, maxZ: 112 } as const;
+export const SOUTHERN_QUARRYMASTER_HOME = { x: 8.5, y: 8, z: 101.5 } as const;
+export const SOUTHERN_MOB_HOMES = [
+  { x: 3.5, y: 8, z: 44.5 },
+  { x: -2.5, y: 8, z: 67.5 },
+  { x: 18.5, y: 8, z: 76.5 },
+  { x: 2.5, y: 8, z: 96.5 },
+  { x: 14.5, y: 8, z: 97.5 },
+  SOUTHERN_QUARRYMASTER_HOME,
+] as const;
+export const SOUTHERN_QUARRY_COVER = [
+  { x: 1, z: 96, height: 2 }, { x: 16, z: 96, height: 3 },
+  { x: 1, z: 106, height: 3 }, { x: 16, z: 106, height: 2 },
+] as const;
+export function isInSouthernQuarry(x: number, z: number): boolean {
+  return x >= SOUTHERN_QUARRY.minX && x <= SOUTHERN_QUARRY.maxX
+    && z >= SOUTHERN_QUARRY.minZ && z <= SOUTHERN_QUARRY.maxZ;
+}
+export function southernQuarryTierAt(x: number, z: number): 1 | 2 | 3 | null {
+  if (!isInSouthernQuarry(x, z)) return null;
+  return z < 54 ? 1 : z < 84 ? 2 : 3;
+}
+export function isSouthernRoad(x: number, z: number): boolean {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  return cellX >= 7 && cellX <= 10 && cellZ >= 29 && cellZ <= 106
+    || cellZ >= 67 && cellZ <= 70 && cellX >= -4 && cellX <= 10
+    || cellZ >= 86 && cellZ <= 89 && cellX >= 8 && cellX <= 22;
+}
+
+/** A broad, flat combat route framed by quarry cuts and broken ravine walls. */
+export function southernQuarryBlock(x: number, y: number, z: number): BlockId | null {
+  const region = isInSouthernQuarry(x, z), road = isSouthernRoad(x, z);
+  if ((!region && !road) || y < SURFACE_HEIGHT) return null;
+  const tier = southernQuarryTierAt(x, z) ?? 1;
+  if (y === SURFACE_HEIGHT) {
+    if (road) return Block.Dirt;
+    if (z >= 91 && z <= 111 && x >= -2 && x <= 19) return Block.Stone;
+    const scar = Math.abs(Math.imul(x + 17, 11) + Math.imul(z - 27, 5)) % 9;
+    return tier === 1 ? (scar < 2 ? Block.Dirt : Block.Grass)
+      : tier === 2 ? (scar < 5 ? Block.Stone : Block.Dirt)
+      : scar < 2 ? Block.Bedrock : scar < 7 ? Block.Stone : Block.Dirt;
+  }
+  if (road) return y <= SURFACE_HEIGHT + 3 ? Block.Air : null;
+  const sideWall = (x === SOUTHERN_QUARRY.minX + 1 || x === SOUTHERN_QUARRY.maxX - 1)
+    && z >= 51 && z <= 109 && Math.floor((z - 51) / 7) % 3 !== 1;
+  const quarryShelf = (z === 58 || z === 81) && (x >= -8 && x <= 2 || x >= 15 && x <= 25);
+  if ((sideWall || quarryShelf) && y <= SURFACE_HEIGHT + (tier === 3 ? 3 : 2))
+    return tier === 3 ? Block.Bedrock : Block.Stone;
+  const cover = SOUTHERN_QUARRY_COVER.find(point => point.x === x && point.z === z);
+  if (cover && y <= SURFACE_HEIGHT + cover.height) return Block.Stone;
+  return Block.Air;
+}
 export function isInMistfenMarsh(x: number, z: number): boolean {
   return x >= MISTFEN_MARSH.minX && x <= MISTFEN_MARSH.maxX
     && z >= MISTFEN_MARSH.minZ && z <= MISTFEN_MARSH.maxZ;
@@ -353,9 +405,15 @@ export const WILDERNESS_TERRITORIES = [
 ] as const;
 export const ASHEN_REACH_TERRITORY = { tier: 3, name: "ASHEN REACH", detail: "Find the split spire · Ashglass Sentries fire sweeping fans" } as const;
 export const MISTFEN_TERRITORY = { tier: 2, name: "MISTFEN MARSH", detail: "LV 5–9 · use the boardwalks · toxic pools surround the Mireback Behemoth" } as const;
+export const SOUTHERN_TERRITORIES = [
+  { tier: 1, name: "SOUTHERN CAUSEWAY", detail: "LV 1–4 · abandoned carts and crawler patrols line the old road" },
+  { tier: 2, name: "SUNFALL QUARRY", detail: "LV 4–8 · use broken shelves against spitter volleys" },
+  { tier: 3, name: "REDSTONE PIT", detail: "LV 8–12 · the Quarrymaster waits beyond the collapsed lift" },
+] as const;
 export function wildernessTerritoryAt(x: number, z: number) {
   const radius = Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z);
-  return radius < TOWN_SAFE_RADIUS ? null : isInMistfenMarsh(x, z) ? MISTFEN_TERRITORY : isInAshenReach(x, z) ? ASHEN_REACH_TERRITORY
+  const southernTier = southernQuarryTierAt(x, z);
+  return radius < TOWN_SAFE_RADIUS ? null : southernTier ? SOUTHERN_TERRITORIES[southernTier - 1]! : isInMistfenMarsh(x, z) ? MISTFEN_TERRITORY : isInAshenReach(x, z) ? ASHEN_REACH_TERRITORY
     : WILDERNESS_TERRITORIES[radius >= FRONTIER_MINIMUM_RADIUS ? 2 : radius >= WILDS_MINIMUM_RADIUS ? 1 : 0]!;
 }
 /** Flat ground palettes distinguish rings without adding collision geometry. */
@@ -375,7 +433,7 @@ export function isRegionalRoad(x: number, z: number): boolean {
   const wardenToAshen = cellX >= 86 && cellX <= 89 && cellZ >= 33 && cellZ <= 61;
   const ashenApproach = cellX >= 87 && cellX <= 94 && cellZ >= 60 && cellZ <= 62;
   return eastTrunk || greenwoodToStone || frontierCrossing || wardenToAshen || ashenApproach
-    || isMistfenApproachTrail(cellX, cellZ) || isMistfenBoardwalk(cellX, cellZ);
+    || isMistfenApproachTrail(cellX, cellZ) || isMistfenBoardwalk(cellX, cellZ) || isSouthernRoad(cellX, cellZ);
 }
 
 export const REGIONAL_WAYSTONES = [
@@ -385,6 +443,9 @@ export const REGIONAL_WAYSTONES = [
   { x: 82, z: 45, name: "Ashen Road Waystone" },
   { x: -18, z: 12, name: "Mistfen Road Waystone" },
   { x: -33, z: -8, name: "Mistfen Crossing Waystone" },
+  { x: 13, z: 42, name: "Southroad Waystone" },
+  { x: 13, z: 66, name: "Sunfall Quarry Waystone" },
+  { x: 25, z: 84, name: "Redstone Pit Waystone" },
 ] as const;
 
 export type RoadsideDiscoveryKind = "cart" | "shrine" | "camp" | "grove" | "ruin";
@@ -401,6 +462,10 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "mistfen-cart", name: "Sunkroad Cart", kind: "cart", x: -16, z: 5 },
   { id: "mistfen-shrine", name: "Mossbound Shrine", kind: "shrine", x: -39, z: -15 },
   { id: "mistfen-camp", name: "Drowned Survey Camp", kind: "camp", x: -42, z: -23 },
+  { id: "southgate-cart", name: "Southgate Supply Cart", kind: "cart", x: 15, z: 36 },
+  { id: "sunfall-survey", name: "Sunfall Survey Camp", kind: "camp", x: -4, z: 55 },
+  { id: "quarry-shrine", name: "Quarryworker Shrine", kind: "shrine", x: 18, z: 72 },
+  { id: "collapsed-lift", name: "Collapsed Quarry Lift", kind: "ruin", x: -4, z: 89 },
 ] as const satisfies readonly { id: string; name: string; kind: RoadsideDiscoveryKind; x: number; z: number }[];
 
 export function roadsideDiscoveryBlock(x: number, y: number, z: number): BlockId | null {
@@ -497,6 +562,9 @@ export const MINERAL_DEPOSITS = [
   { x: -30, z: 8, block: Block.SilverOre, radius: 1 },
   { x: 68, z: 27, block: Block.SilverOre, radius: 2 },
   { x: -48, z: 8, block: Block.SilverOre, radius: 2 },
+  { x: 18, z: 47, block: Block.IronOre, radius: 1 },
+  { x: -3, z: 69, block: Block.SilverOre, radius: 1 },
+  { x: 20, z: 88, block: Block.SilverOre, radius: 2 },
 ] as const;
 export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, block: Block.IronOre, radius: 1 },
   { x: -55, z: -38, block: Block.SilverOre, radius: 1 }] as const;
@@ -886,6 +954,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (greenwoodBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = greenwoodBlock;
         const mistfenBlock = mistfenMarshBlock(worldX, y, worldZ);
         if (mistfenBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = mistfenBlock;
+        const southernBlock = southernQuarryBlock(worldX, y, worldZ);
+        if (southernBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = southernBlock;
         const arenaBlock = stoneBruteArenaBlock(worldX, y, worldZ);
         if (arenaBlock !== null) blocks[chunkIndex(localX, y, localZ)] = arenaBlock;
         const campBlock = wildernessCampBlock(worldX, y, worldZ);

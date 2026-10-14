@@ -5,7 +5,7 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows, isSouthernQuarryMob, southernQuarryAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -1918,6 +1918,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isAshenSentry(id)) return ashenSentryAllows(pose);
     if (isMistfenMob(id)) return mistfenAllows(pose);
     if (isMistfenEventFollower(id)) return mistfenAllows(pose);
+    if (isSouthernQuarryMob(id)) return southernQuarryAllows(pose);
     if (id === "frontier-brute") return frontierBruteAllows(pose);
     if (isMixedFrontierMob(id)) return mixedFrontierAllows(pose);
     const forest = FOREST_DUNGEON_MOBS.find(mob => mob.id === id);
