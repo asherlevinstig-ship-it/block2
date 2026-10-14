@@ -671,6 +671,7 @@ const buildPathMessage = document.querySelector<HTMLElement>("#build-path-messag
 const buildPathProgress = document.querySelector<HTMLElement>("#build-path-progress")!;
 const buildPathCandidates = document.querySelector<HTMLElement>("#build-path-candidates")!;
 const buildPathSpecializations = document.querySelector<HTMLElement>("#build-path-specializations")!;
+const buildPathMasterTrial = document.querySelector<HTMLElement>("#build-path-master-trial")!;
 const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
 const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
 const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("#seismic-mastery-picker [data-seismic-mastery]")];
@@ -3076,6 +3077,14 @@ function renderBuildPath(update: BuildPathUpdate): void {
     button.title = update.selectedSpecializationId ? "Veteran path already bound" : update.inTown ? `Bind the ${specialization.name} path` : "Return to Town to specialize";
     button.addEventListener("click", () => room?.send("build:path", { action: "specialize", specializationId: specialization.id }));
     specializationList.append(button);
+  }
+  buildPathMasterTrial.hidden = !update.masterTrial;
+  if (update.masterTrial) {
+    buildPathMasterTrial.dataset.complete = String(update.masterTrial.complete);
+    buildPathMasterTrial.querySelector("b")!.textContent = update.masterTrial.complete ? "MASTERED" : `${update.masterTrial.progress} / ${update.masterTrial.target}`;
+    buildPathMasterTrial.querySelector("p")!.textContent = update.masterTrial.description;
+    buildPathMasterTrial.querySelector<HTMLElement>("i")!.style.width = `${Math.round(update.masterTrial.progress / update.masterTrial.target * 100)}%`;
+    buildPathMasterTrial.querySelector("small")!.textContent = update.masterTrial.complete ? update.masterTrial.capstone : `CAPSTONE · ${update.masterTrial.capstone}`;
   }
   if (!update.canChoose) return;
   for (const candidate of update.candidates) {

@@ -1210,6 +1210,16 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #build-path-specializations strong { color: #f0d891; font-size: .62rem; }
 #build-path-specializations small { color: #86cdb9; font-size: .47rem; }
 #build-path-specializations span { color: #8c9c93; font-size: .46rem; line-height: 1.35; }
+#build-path-master-trial { margin-top: 7px; padding: 8px; border: 1px solid #8d744d66; border-radius: 7px; background: #17150d; }
+#build-path-master-trial header { display: flex; justify-content: space-between; }
+#build-path-master-trial header strong { color: #e9c86e; font-size: .5rem; letter-spacing: .11em; }
+#build-path-master-trial header b { color: #9ec6ad; font-size: .48rem; }
+#build-path-master-trial p { margin: 5px 0; color: #c2cec5; font-size: .49rem; }
+#build-path-master-trial > div { height: 4px; overflow: hidden; border-radius: 4px; background: #050a07; }
+#build-path-master-trial > div i { display: block; height: 100%; background: linear-gradient(90deg, #806735, #e2be59); }
+#build-path-master-trial small { display: block; margin-top: 5px; color: #7f9488; font-size: .45rem; line-height: 1.3; }
+#build-path-master-trial[data-complete="true"] { border-color: #70b89288; background: #0d2118; }
+#build-path-master-trial[data-complete="true"] small { color: #83d5af; }
 #build-path-panel[data-selected="tank"] { border-color: #85a5b477; }#build-path-panel[data-selected="mage"] { border-color: #8a78c977; }#build-path-panel[data-selected="assassin"] { border-color: #c4697077; }#build-path-panel[data-selected="thief"] { border-color: #b39a5477; }#build-path-panel[data-selected="ranger"] { border-color: #72a86b77; }
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }

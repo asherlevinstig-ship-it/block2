@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, grantBuildPathXp, parseBuildPathState } from "./build-paths.js";
+import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, parseBuildPathState } from "./build-paths.js";
 
 describe("hidden build paths", () => {
   it("reveals affinities from durable build choices", () => {
@@ -14,7 +14,7 @@ describe("hidden build paths", () => {
     expect(result.rankUp).toBe(true); expect(buildPathRank(result.state.xp.tank ?? 0)).toBe(1);
   });
   it("sanitizes malformed saved state", () => {
-    expect(parseBuildPathState({ selectedPathId: "cheat", xp: { mage: 14.9, tank: -2 } })).toEqual({ selectedPathId: null, xp: { mage: 14 }, specializations: {} });
+    expect(parseBuildPathState({ selectedPathId: "cheat", xp: { mage: 14.9, tank: -2 } })).toEqual({ selectedPathId: null, xp: { mage: 14 }, specializations: {}, trials: {}, mastered: [] });
   });
   it("binds one matching specialization after Veteran rank", () => {
     const veteran = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "ranger"), 70).state;
@@ -22,5 +22,13 @@ describe("hidden build paths", () => {
     expect(specialized.specializations.ranger).toBe("trapper");
     expect(chooseBuildSpecialization(specialized, "ranger", "marksman")).toBe(specialized);
     expect(chooseBuildSpecialization(veteran, "ranger", "guardian")).toBe(veteran);
+  });
+  it("gates Master rank behind the matching specialization trial", () => {
+    let state = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "mage"), 140).state;
+    state = chooseBuildSpecialization(state, "mage", "arcanist");
+    expect(effectiveBuildPathRank(state, "mage")).toBe(3);
+    state = grantMasterTrialProgress(state, "arcanist", 15).state;
+    expect(state.mastered).toContain("arcanist");
+    expect(effectiveBuildPathRank(state, "mage")).toBe(4);
   });
 });

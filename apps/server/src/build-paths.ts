@@ -1,19 +1,27 @@
 import { ARMOUR_DEFINITIONS, BUILD_PATH_RANKS, BUILD_PATH_SPECIALIZATIONS, MAIN_HAND_DEFINITIONS, type ArmourId, type BuildPathAffinity, type BuildPathId, type BuildPathSpecializationId, type MainHandId, type TraitId } from "@blockcraft/protocol";
 
 export type BuildPathState = { selectedPathId: BuildPathId | null; xp: Partial<Record<BuildPathId, number>>;
-  specializations: Partial<Record<BuildPathId, BuildPathSpecializationId>> };
+  specializations: Partial<Record<BuildPathId, BuildPathSpecializationId>>;
+  trials: Partial<Record<BuildPathSpecializationId, number>>; mastered: BuildPathSpecializationId[] };
 export type BuildAffinitySource = { mainHandId: string; armourId: string; equippedTrait: string; equippedSpecial: string;
   powerPoints: number; vitalityPoints: number; agilityPoints: number };
 
 const PATH_IDS = ["tank", "mage", "assassin", "thief", "ranger"] as const;
+const SPECIALIZATION_IDS = PATH_IDS.flatMap(pathId => BUILD_PATH_SPECIALIZATIONS[pathId].map(option => option.id)) as BuildPathSpecializationId[];
 const safePath = (value: unknown): value is BuildPathId => typeof value === "string" && PATH_IDS.includes(value as BuildPathId);
+const safeSpecialization = (value: unknown): value is BuildPathSpecializationId => typeof value === "string" && SPECIALIZATION_IDS.includes(value as BuildPathSpecializationId);
+const specializationDefinition = (specializationId: BuildPathSpecializationId): { id: BuildPathSpecializationId; trialTarget: number } | undefined => {
+  for (const pathId of PATH_IDS) for (const option of BUILD_PATH_SPECIALIZATIONS[pathId])
+    if (option.id === specializationId) return option;
+  return undefined;
+};
 
 export function parseBuildPathState(raw: unknown): BuildPathState {
   let value = raw;
   if (typeof value === "string") try { value = JSON.parse(value); } catch { value = null; }
-  if (!value || typeof value !== "object") return { selectedPathId: null, xp: {}, specializations: {} };
+  if (!value || typeof value !== "object") return { selectedPathId: null, xp: {}, specializations: {}, trials: {}, mastered: [] };
   if ("buildPath" in value && (value as { buildPath?: unknown }).buildPath) value = (value as { buildPath: unknown }).buildPath;
-  const record = value as { selectedPathId?: unknown; xp?: unknown; specializations?: unknown };
+  const record = value as { selectedPathId?: unknown; xp?: unknown; specializations?: unknown; trials?: unknown; mastered?: unknown };
   const xp: Partial<Record<BuildPathId, number>> = {};
   if (record.xp && typeof record.xp === "object") for (const pathId of PATH_IDS) {
     const amount = (record.xp as Record<string, unknown>)[pathId];
@@ -25,7 +33,13 @@ export function parseBuildPathState(raw: unknown): BuildPathState {
     if (typeof choice === "string" && BUILD_PATH_SPECIALIZATIONS[pathId].some(option => option.id === choice))
       specializations[pathId] = choice as BuildPathSpecializationId;
   }
-  return { selectedPathId: safePath(record.selectedPathId) ? record.selectedPathId : null, xp, specializations };
+  const trials: Partial<Record<BuildPathSpecializationId, number>> = {};
+  if (record.trials && typeof record.trials === "object") for (const specializationId of SPECIALIZATION_IDS) {
+    const progress = (record.trials as Record<string, unknown>)[specializationId];
+    if (typeof progress === "number" && Number.isFinite(progress) && progress > 0) trials[specializationId] = Math.floor(progress);
+  }
+  const mastered = Array.isArray(record.mastered) ? [...new Set(record.mastered.filter(safeSpecialization))] : [];
+  return { selectedPathId: safePath(record.selectedPathId) ? record.selectedPathId : null, xp, specializations, trials, mastered };
 }
 
 export function serializeBuildPathState(state: BuildPathState): string { return JSON.stringify(parseBuildPathState(state)); }
@@ -34,6 +48,11 @@ export function buildPathRank(xp: number): number {
   let rank = 0;
   for (const threshold of BUILD_PATH_RANKS) if (xp >= threshold.xp) rank = threshold.rank;
   return rank;
+}
+
+export function effectiveBuildPathRank(state: BuildPathState, pathId: BuildPathId): number {
+  const raw = buildPathRank(state.xp[pathId] ?? 0), specialization = state.specializations[pathId];
+  return raw >= 4 && (!specialization || !state.mastered.includes(specialization)) ? 3 : raw;
 }
 
 export function nextBuildRankXp(xp: number): number | null {
@@ -68,7 +87,7 @@ export function buildPathAffinities(source: BuildAffinitySource): BuildPathAffin
 }
 
 export function chooseBuildPath(state: BuildPathState, pathId: BuildPathId): BuildPathState {
-  return { selectedPathId: pathId, xp: { ...state.xp, [pathId]: state.xp[pathId] ?? 0 }, specializations: { ...state.specializations } };
+  return { ...state, selectedPathId: pathId, xp: { ...state.xp, [pathId]: state.xp[pathId] ?? 0 }, specializations: { ...state.specializations } };
 }
 
 export function chooseBuildSpecialization(state: BuildPathState, pathId: BuildPathId, specializationId: BuildPathSpecializationId): BuildPathState {
@@ -82,5 +101,16 @@ export function grantBuildPathXp(state: BuildPathState, amount: number): { state
   if (!pathId || amount <= 0) return { state, rankUp: false };
   const before = Math.max(0, state.xp[pathId] ?? 0);
   const after = Math.min(65_535, before + Math.floor(amount));
-  return { state: { selectedPathId: pathId, xp: { ...state.xp, [pathId]: after }, specializations: { ...state.specializations } }, rankUp: buildPathRank(after) > buildPathRank(before) };
+  return { state: { ...state, selectedPathId: pathId, xp: { ...state.xp, [pathId]: after }, specializations: { ...state.specializations } }, rankUp: buildPathRank(after) > buildPathRank(before) };
+}
+
+export function grantMasterTrialProgress(state: BuildPathState, specializationId: BuildPathSpecializationId, amount: number): { state: BuildPathState; completed: boolean } {
+  if (amount <= 0 || !state.selectedPathId || state.mastered.includes(specializationId) || state.specializations[state.selectedPathId] !== specializationId)
+    return { state, completed: false };
+  const definition = specializationDefinition(specializationId);
+  if (!definition) return { state, completed: false };
+  const before = state.trials[specializationId] ?? 0, after = Math.min(definition.trialTarget, before + Math.floor(amount));
+  const completed = after >= definition.trialTarget;
+  return { state: { ...state, trials: { ...state.trials, [specializationId]: after },
+    mastered: completed ? [...state.mastered, specializationId] : state.mastered }, completed };
 }

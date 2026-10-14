@@ -195,24 +195,24 @@ export const BUILD_PATHS = {
 export type BuildPathId = keyof typeof BUILD_PATHS;
 export const BUILD_PATH_SPECIALIZATIONS = {
   tank: [
-    { id: "guardian", name: "Guardian", role: "Extend Fortress Guard", effect: "Protect allies within 5m and prevent 2 damage." },
-    { id: "juggernaut", name: "Juggernaut", role: "Break attackers", effect: "Every guarded hit staggers its attacker." },
+    { id: "guardian", name: "Guardian", role: "Extend Fortress Guard", effect: "Protect allies within 5m and prevent 2 damage.", trial: "Prevent 30 damage to allies.", trialTarget: 30, capstone: "AEGIS · Fortress Guard reaches 6m and prevents 3 damage." },
+    { id: "juggernaut", name: "Juggernaut", role: "Break attackers", effect: "Every guarded hit staggers its attacker.", trial: "Stagger 20 attackers through guarding.", trialTarget: 20, capstone: "UNMOVABLE · Guard staggers last twice as long." },
   ],
   mage: [
-    { id: "arcanist", name: "Arcanist", role: "Amplify the echo", effect: "Arcane Echo repeats at 75% strength." },
-    { id: "elementalist", name: "Elementalist", role: "Bind with power", effect: "Power hits slow surviving enemies for 2 seconds." },
+    { id: "arcanist", name: "Arcanist", role: "Amplify the echo", effect: "Arcane Echo repeats at 75% strength.", trial: "Trigger 15 Arcane Echoes.", trialTarget: 15, capstone: "RESONANCE · Arcane Echo repeats at full strength." },
+    { id: "elementalist", name: "Elementalist", role: "Bind with power", effect: "Power hits slow surviving enemies for 2 seconds.", trial: "Defeat 20 Power-slowed enemies.", trialTarget: 20, capstone: "DEEP FREEZE · Power slows are stronger and last 3 seconds." },
   ],
   assassin: [
-    { id: "executioner", name: "Executioner", role: "Commit to the kill", effect: "Shadowstep's empowered strike deals +4 damage." },
-    { id: "phantom", name: "Phantom", role: "Disappear again", effect: "Shadowstep concealment lasts longer and refreshes Power faster." },
+    { id: "executioner", name: "Executioner", role: "Commit to the kill", effect: "Shadowstep's empowered strike deals +4 damage.", trial: "Land 15 empowered killing blows.", trialTarget: 15, capstone: "DEATHBLOW · Empowered killing blows restore 20 stamina." },
+    { id: "phantom", name: "Phantom", role: "Disappear again", effect: "Shadowstep concealment lasts longer and refreshes Power faster.", trial: "Strike from Shadowstep 20 times.", trialTarget: 20, capstone: "VANISH · Shadowstep fully refreshes Power." },
   ],
   thief: [
-    { id: "trickster", name: "Trickster", role: "Control the pursuit", effect: "Smoke Decoy reaches farther and conceals you longer." },
-    { id: "plunderer", name: "Plunderer", role: "Profit from danger", effect: "Elite and mini-boss victories grant 3 additional gold." },
+    { id: "trickster", name: "Trickster", role: "Control the pursuit", effect: "Smoke Decoy reaches farther and conceals you longer.", trial: "Divert 40 pursuing enemies.", trialTarget: 40, capstone: "GRAND ILLUSION · Smoke Decoy also staggers diverted enemies." },
+    { id: "plunderer", name: "Plunderer", role: "Profit from danger", effect: "Elite and mini-boss victories grant 3 additional gold.", trial: "Earn 100 Plunderer bonus gold.", trialTarget: 100, capstone: "KING'S RANSOM · Elite and mini-boss bonus gold increases to 5." },
   ],
   ranger: [
-    { id: "marksman", name: "Marksman", role: "Finish the sequence", effect: "The third Pinning Shot deals +2 damage." },
-    { id: "trapper", name: "Trapper", role: "Hold the battlefield", effect: "Pinning slow is stronger and its root lasts 1.8 seconds." },
+    { id: "marksman", name: "Marksman", role: "Finish the sequence", effect: "The third Pinning Shot deals +2 damage.", trial: "Land 20 third-shot killing blows.", trialTarget: 20, capstone: "DEADEYE · Third Pinning Shots deal +4 damage." },
+    { id: "trapper", name: "Trapper", role: "Hold the battlefield", effect: "Pinning slow is stronger and its root lasts 1.8 seconds.", trial: "Defeat 20 rooted enemies.", trialTarget: 20, capstone: "IRON SNARE · Roots last 2.5 seconds." },
   ],
 } as const;
 export type BuildPathSpecializationId = typeof BUILD_PATH_SPECIALIZATIONS[BuildPathId][number]["id"];
@@ -227,7 +227,8 @@ export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedSpecializationId: BuildPathSpecializationId | null; candidates: BuildPathAffinity[]; canChoose: boolean;
-  canSpecialize: boolean; inTown: boolean; message: string };
+  canSpecialize: boolean; masterTrial: { name: string; description: string; progress: number; target: number; complete: boolean; capstone: string } | null;
+  inTown: boolean; message: string };
 export type BuildPathProc = { pathId: BuildPathId; ability: string; detail: string; durationMs?: number };
 
 export const TAVERN_QUIZ_STARTING_COINS = 20;

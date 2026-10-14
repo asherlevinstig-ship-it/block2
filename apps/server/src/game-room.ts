@@ -198,7 +198,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob
 import { findLootLanding } from "./loot-placement.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
-import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, grantBuildPathXp, nextBuildRankXp, parseBuildPathState } from "./build-paths.js";
+import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, nextBuildRankXp, parseBuildPathState } from "./build-paths.js";
 import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equipment-reforge.js";
 import { parseSignaturePity, resolveSignatureDrop, serializeSignaturePity, signatureLootHint, type SignatureItemId } from "./signature-loot.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
@@ -409,6 +409,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
   private readonly rangerSlows = new Map<string, { until: number; multiplier: number }>();
   private readonly fortressProcAt = new Map<string, number>();
+  private readonly masterTrialMobTags = new Map<string, { playerId: string; specializationId: BuildPathSpecializationId; until: number }>();
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
   private readonly delayedMatriarchVolleys = new Map<string, { origin: { x: number; y: number; z: number }; shots: { x: number; y: number; z: number }[]; releaseAt: number; damage: number; travelMs: number }>();
   private readonly matriarchCoverHits = new Map<string, number>();
@@ -1962,6 +1963,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
+    const masterTrialTag = this.masterTrialMobTags.get(mobId);
+    this.masterTrialMobTags.delete(mobId);
     this.rangerSlows.delete(mobId);
     const wasElite = mob.isElite;
     const huntChampion = this.huntChampions.get(mobId);
@@ -2150,10 +2153,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.stamina = reward.stamina;
       const coinsBefore = player.coins;
       const thiefRank = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "thief" ? this.buildPathRankFor(player, "thief") : 0;
-      const plundererGold = this.buildSpecializationFor(player, "thief") === "plunderer" && (Boolean(areaMainMob) || wasElite || mob.isChampion) ? 3 : 0;
+      const plunderer = this.buildSpecializationFor(player, "thief") === "plunderer";
+      const plundererGold = plunderer && (Boolean(areaMainMob) || wasElite || mob.isChampion)
+        ? this.buildSpecializationMastered(player, "plunderer") ? 5 : 3 : 0;
       const coinsGranted = (Boolean(areaMainMob) ? 5 + Math.ceil(mob.leaderRematchTier / 2) : wasElite ? 5 : 2)
         + (thiefRank > 0 ? Math.min(2, Math.ceil(thiefRank / 2)) : 0) + plundererGold;
       player.coins = Math.min(1_000_000, player.coins + coinsGranted);
+      if (plundererGold > 0) this.grantMasterTrial(playerId, "plunderer", plundererGold);
       this.grantProgression(playerId, mobExperience(mob.archetype, mob.rewardMultiplier, mob.isChampion || wasElite, player.level, mob.level), mob.name);
       this.grantBuildProgress(playerId, Boolean(areaMainMob) || mob.isChampion || wasElite ? 3 : 1);
       void this.persistPlayer(playerId, player);
@@ -2170,6 +2176,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ? "Kill contribution credited · your personal loot is on the ground. Press E beside each drop before it expires."
         : `Kill contribution credited · +${coinsGranted} gold and XP. No item drop this time.`);
     }
+    if (masterTrialTag && masterTrialTag.playerId === attackerId && now <= masterTrialTag.until)
+      this.grantMasterTrial(attackerId, masterTrialTag.specializationId);
   }
 
   private openAreaLeaderAfterFollowerDefeat(followerId: string, now: number): void {
@@ -2681,7 +2689,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const phantom = this.buildSpecializationFor(player, "assassin") === "phantom";
           this.assassinShadowUntil.set(playerId, now + (phantom ? 3_000 : 2_000));
           this.pathConcealedUntil.set(playerId, now + (phantom ? 2_000 : 1_250));
-          if (phantom) player.powerCooldownUntil = Math.max(now, player.powerCooldownUntil - 1_500);
+          if (phantom) player.powerCooldownUntil = this.buildSpecializationMastered(player, "phantom")
+            ? now : Math.max(now, player.powerCooldownUntil - 1_500);
           for (const [targetMobId, awareness] of this.mobAwareness) if (awareness.targetId === playerId) {
             const targetMob = this.state.mobs.get(targetMobId);
             if (targetMob && Math.hypot(targetMob.x - player.x, targetMob.z - player.z) <= 7) {
@@ -2735,10 +2744,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
     if (defense.damage > 0) for (const [guardId, guard] of this.state.players) {
       const guardian = this.buildSpecializationFor(guard, "tank") === "guardian";
+      const guardianMaster = guardian && this.buildSpecializationMastered(guard, "guardian");
       if (guardId === playerId || guard.health <= 0 || !guard.defending || Math.abs(guard.y - player.y) > 2
-        || Math.hypot(guard.x - player.x, guard.z - player.z) > (guardian ? 5 : 4)
+        || Math.hypot(guard.x - player.x, guard.z - player.z) > (guardianMaster ? 6 : guardian ? 5 : 4)
         || parseBuildPathState(guard.huntLoadoutsJson).selectedPathId !== "tank" || this.buildPathRankFor(guard, "tank") < 2) continue;
-      defense.damage = Math.max(0, defense.damage - (guardian ? 2 : 1));
+      const beforeProtection = defense.damage;
+      defense.damage = Math.max(0, defense.damage - (guardianMaster ? 3 : guardian ? 2 : 1));
+      if (guardian) this.grantMasterTrial(guardId, "guardian", beforeProtection - defense.damage);
       if (now - (this.fortressProcAt.get(guardId) ?? 0) >= 600) {
         this.fortressProcAt.set(guardId, now);
         this.buildPathProc(guardId, "tank", "FORTRESS GUARD", `ALLY PROTECTED · ${player.name || "EXPLORER"}`);
@@ -2750,7 +2762,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       defense.damage = Math.max(0, defense.damage - (rank >= 4 ? 2 : rank > 0 ? 1 : 0));
     }
     if (defense.guarded && mob && this.buildSpecializationFor(player, "tank") === "juggernaut") {
-      this.staggerMob(mobId, mob, now, 450, true);
+      this.staggerMob(mobId, mob, now, this.buildSpecializationMastered(player, "juggernaut") ? 900 : 450, true);
+      this.grantMasterTrial(playerId, "juggernaut");
       this.buildPathProc(playerId, "tank", "JUGGERNAUT", "ATTACKER STAGGERED");
     }
     if (defense.damage > 0 && now <= (this.crusherSetGuardUntil.get(playerId) ?? 0))
@@ -3684,7 +3697,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private buildPathRankFor(player: PlayerState, pathId?: BuildPathId): number {
     const state = parseBuildPathState(player.huntLoadoutsJson);
     const selected = pathId ?? state.selectedPathId;
-    return selected ? buildPathRank(state.xp[selected] ?? 0) : 0;
+    return selected ? effectiveBuildPathRank(state, selected) : 0;
   }
 
   private buildSpecializationFor(player: PlayerState, pathId?: BuildPathId): BuildPathSpecializationId | null {
@@ -3693,9 +3706,28 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     return selected && state.selectedPathId === selected ? state.specializations[selected] ?? null : null;
   }
 
+  private buildSpecializationMastered(player: PlayerState, specializationId: BuildPathSpecializationId): boolean {
+    return parseBuildPathState(player.huntLoadoutsJson).mastered.includes(specializationId);
+  }
+
   private buildPathProc(playerId: string, pathId: BuildPathId, ability: string, detail: string, durationMs = 1_400): void {
     this.clients.find(client => client.sessionId === playerId)?.send("build:path-proc",
       { pathId, ability, detail, durationMs } satisfies BuildPathProc);
+  }
+
+  private grantMasterTrial(playerId: string, specializationId: BuildPathSpecializationId, amount = 1): void {
+    const player = this.state.players.get(playerId);
+    if (!player) return;
+    const before = parseBuildPathState(player.huntLoadoutsJson), result = grantMasterTrialProgress(before, specializationId, amount);
+    if (result.state === before) return;
+    this.setPlayerBuildData(player, this.huntLoadouts(player), result.state);
+    const client = this.clients.find(candidate => candidate.sessionId === playerId);
+    const pathId = result.state.selectedPathId;
+    const definition = pathId ? BUILD_PATH_SPECIALIZATIONS[pathId].find(option => option.id === specializationId) : null;
+    if (client && definition) this.sendBuildPath(client, result.completed
+      ? `${definition.name.toUpperCase()} MASTERED · ${definition.capstone}`
+      : `${definition.name} trial · ${result.state.trials[specializationId] ?? 0} / ${definition.trialTarget}`);
+    void this.persistPlayer(playerId, player);
   }
 
   private sendBuildPath(client: Client, message = "Your equipment and stat choices shape a hidden calling."): void {
@@ -3704,11 +3736,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const state = parseBuildPathState(player.huntLoadoutsJson);
     const xp = state.selectedPathId ? state.xp[state.selectedPathId] ?? 0 : 0;
     const candidates = player.level >= 5 ? buildPathAffinities(player) : [];
-    const rank = buildPathRank(xp);
+    const rank = state.selectedPathId ? effectiveBuildPathRank(state, state.selectedPathId) : 0;
+    const specializationId = state.selectedPathId ? state.specializations[state.selectedPathId] ?? null : null;
+    const specialization = state.selectedPathId && specializationId
+      ? BUILD_PATH_SPECIALIZATIONS[state.selectedPathId].find(option => option.id === specializationId) : null;
+    const trialProgress = specializationId ? state.trials[specializationId] ?? 0 : 0;
     client.send("build:path", { selectedPathId: state.selectedPathId, rank, xp,
       nextRankXp: nextBuildRankXp(xp), candidates, canChoose: player.level >= 5,
-      selectedSpecializationId: state.selectedPathId ? state.specializations[state.selectedPathId] ?? null : null,
+      selectedSpecializationId: specializationId,
       canSpecialize: Boolean(state.selectedPathId && rank >= 3 && !state.specializations[state.selectedPathId]),
+      masterTrial: specialization ? { name: specialization.name, description: specialization.trial, progress: trialProgress,
+        target: specialization.trialTarget, complete: state.mastered.includes(specialization.id), capstone: specialization.capstone } : null,
       inTown: this.roomKind === "overworld" && isInsideTownSafeZone(player), message } satisfies BuildPathUpdate);
   }
 
@@ -3755,9 +3793,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.setPlayerBuildData(player, this.huntLoadouts(player), result.state);
     const client = this.clients.find(candidate => candidate.sessionId === playerId);
     const pathId = result.state.selectedPathId;
-    if (client) this.sendBuildPath(client, result.rankUp && pathId
-      ? `${BUILD_PATHS[pathId].name.toUpperCase()} PATH RANK ${buildPathRank(result.state.xp[pathId] ?? 0)} · passive strengthened.`
-      : `Path Mastery +${amount}`);
+    if (client && pathId) {
+      const beforeRank = effectiveBuildPathRank(before, pathId), afterRank = effectiveBuildPathRank(result.state, pathId);
+      const trialRequired = buildPathRank(result.state.xp[pathId] ?? 0) >= 4 && afterRank < 4;
+      this.sendBuildPath(client, afterRank > beforeRank
+        ? `${BUILD_PATHS[pathId].name.toUpperCase()} PATH RANK ${afterRank} · passive strengthened.`
+        : trialRequired ? `MASTER XP READY · complete your Veteran trial to activate Rank 4.` : `Path Mastery +${amount}`);
+    }
   }
 
   private buildPathDamageBonus(player: PlayerState, mob: MobState, mobId: string, playerId: string, now: number, source: "weapon" | "power"): number {
@@ -5264,10 +5306,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const mob = this.state.mobs.get(mobId);
         if (mob && Math.hypot(mob.x - player.x, mob.z - player.z) <= (trickster ? 8 : 6)) {
           this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search"; diverted += 1;
+          if (trickster && this.buildSpecializationMastered(player, "trickster")) this.staggerMob(mobId, mob, now, 700, true);
         }
       }
       if (diverted > 0) this.buildPathProc(client.sessionId, "thief", "SMOKE DECOY", `${diverted} ENEM${diverted === 1 ? "Y" : "IES"} DIVERTED`);
       if (diverted > 0) this.pathConcealedUntil.set(client.sessionId, now + (trickster ? 1_500 : 900));
+      if (trickster && diverted > 0) this.grantMasterTrial(client.sessionId, "trickster", diverted);
     }
   }
 
@@ -5667,7 +5711,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (traitBonusDamage > 0) traitBonusHitCount += 1;
         const shadowstepDamage = shadowstepReady ? assassinSpecialization === "executioner" ? 4 : 2 : 0;
         if (shadowstepReady) { shadowstepReady = false; this.assassinShadowUntil.delete(sessionId); }
-        const echoDamage = arcaneEcho ? damageAfterArmor(Math.max(1, Math.ceil(definition.damage * (mageSpecialization === "arcanist" ? .75 : .5))), mob.armor, true) : 0;
+        const echoStrength = mageSpecialization === "arcanist"
+          ? this.buildSpecializationMastered(player, "arcanist") ? 1 : .75 : .5;
+        const echoDamage = arcaneEcho ? damageAfterArmor(Math.max(1, Math.ceil(definition.damage * echoStrength)), mob.armor, true) : 0;
         arcaneEchoDamage = Math.max(arcaneEchoDamage, echoDamage);
         const damage = damageAfterArmor(definition.damage + payoff.bonusDamage + progressionAttackBonus(player)
           + this.buildPathDamageBonus(player, mob, target.id, sessionId, now, "power") + shadowstepDamage, mob.armor, true)
@@ -5678,7 +5724,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         resolvedDamage = Math.max(resolvedDamage, damage);
         this.combatContributions.record(target.id, sessionId, Math.min(mob.health, damage), now);
         mob.health = Math.max(0, mob.health - damage);
-        if (mob.health > 0 && mageSpecialization === "elementalist") this.rangerSlows.set(target.id, { until: now + 2_000, multiplier: .78 });
+        if (mob.health > 0 && mageSpecialization === "elementalist") {
+          const mastered = this.buildSpecializationMastered(player, "elementalist");
+          this.rangerSlows.set(target.id, { until: now + (mastered ? 3_000 : 2_000), multiplier: mastered ? .58 : .78 });
+          this.masterTrialMobTags.set(target.id, { playerId: sessionId, specializationId: "elementalist", until: now + (mastered ? 3_000 : 2_000) });
+        }
         this.alertHitMob(target.id, sessionId, now);
         mob.hitSequence += 1;
         const radialX = mob.x - impactCenter.x;
@@ -5691,6 +5741,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           x: knockbackDirection.x * definition.knockback, z: knockbackDirection.z * definition.knockback,
         });
         if (mob.health === 0) {
+          if (shadowstepDamage > 0 && assassinSpecialization === "executioner") {
+            this.grantMasterTrial(sessionId, "executioner");
+            if (this.buildSpecializationMastered(player, "executioner")) player.stamina = Math.min(player.maxStamina, player.stamina + 20);
+          }
           this.defeatMob(target.id, mob, sessionId, now);
           defeatedMobIds.push(target.id);
           const consumed = consumedMarks.find(mark => mark.mobId === target.id);
@@ -5704,10 +5758,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           if (consumed) consumed.staggerMs = staggered ? resistedDuration : 0;
         }
       }
-      if (arcaneEcho && targets.length > 0) this.buildPathProc(sessionId, "mage", "ARCANE ECHO", `REPEATED · +${arcaneEchoDamage} DAMAGE`);
+      if (arcaneEcho && targets.length > 0) {
+        this.buildPathProc(sessionId, "mage", "ARCANE ECHO", `REPEATED · +${arcaneEchoDamage} DAMAGE`);
+        if (mageSpecialization === "arcanist") this.grantMasterTrial(sessionId, "arcanist");
+      }
       if (shadowstepActive && !shadowstepReady)
         this.buildPathProc(sessionId, "assassin", assassinSpecialization === "executioner" ? "EXECUTIONER" : "SHADOWSTEP",
           `EMPOWERED STRIKE · +${assassinSpecialization === "executioner" ? 4 : 2} DAMAGE`);
+      if (shadowstepActive && !shadowstepReady && assassinSpecialization === "phantom") this.grantMasterTrial(sessionId, "phantom");
       const fractures = definition.fracturesTerrain && definition.core === "line"
         ? widenedLineFractureColumns(player, pending.yaw, resolvedRange, seismicProfile?.fractureWidth ?? 1)
             .map(column => this.fractureTerrain(pending.requestId, column.x, column.z, player.y))
@@ -6314,7 +6372,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const previousPin = rangerActive ? this.rangerPinning.get(sessionId) : undefined;
       const pinStacks = rangerActive ? previousPin?.mobId === mobId && now <= previousPin.expiresAt ? previousPin.stacks + 1 : 1 : 0;
       const rangerSpecialization = this.buildSpecializationFor(player, "ranger");
-      const pinBonusDamage = pinStacks >= 3 && rangerSpecialization === "marksman" ? 2 : 0;
+      const pinBonusDamage = pinStacks >= 3 && rangerSpecialization === "marksman"
+        ? this.buildSpecializationMastered(player, "marksman") ? 4 : 2 : 0;
       const damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
@@ -6324,6 +6383,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ) + traitBonusDamage + dodgeCounterBonus;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage);
+      if (shadowstepDamage > 0 && assassinSpecialization === "phantom") this.grantMasterTrial(sessionId, "phantom");
+      if (mob.health === 0 && shadowstepDamage > 0 && assassinSpecialization === "executioner") {
+        this.grantMasterTrial(sessionId, "executioner");
+        if (this.buildSpecializationMastered(player, "executioner")) player.stamina = Math.min(player.maxStamina, player.stamina + 20);
+      }
+      if (mob.health === 0 && pinStacks >= 3 && rangerSpecialization === "marksman") this.grantMasterTrial(sessionId, "marksman");
       if (shadowstepDamage > 0) this.buildPathProc(sessionId, "assassin", assassinSpecialization === "executioner" ? "EXECUTIONER" : "SHADOWSTEP",
         `EMPOWERED STRIKE · +${shadowstepDamage} DAMAGE`);
       this.alertHitMob(mobId, sessionId, now, source);
@@ -6336,9 +6401,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (mob.health > 0 && rangerActive) {
         if (pinStacks >= 3) {
-          const rootMs = rangerSpecialization === "trapper" ? 1_800 : 1_000;
+          const rootMs = rangerSpecialization === "trapper"
+            ? this.buildSpecializationMastered(player, "trapper") ? 2_500 : 1_800 : 1_000;
           this.rangerPinning.delete(sessionId); this.rangerSlows.delete(mobId);
           this.staggerMob(mobId, mob, now, rootMs, true);
+          if (rangerSpecialization === "trapper") this.masterTrialMobTags.set(mobId,
+            { playerId: sessionId, specializationId: "trapper", until: now + rootMs });
           this.buildPathProc(sessionId, "ranger", rangerSpecialization === "trapper" ? "TRAPPER" : "PINNING SHOT",
             `ROOTED · ${(rootMs / 1_000).toFixed(1)}s${pinBonusDamage ? " · +2 DAMAGE" : ""}`);
         } else {
