@@ -1,7 +1,8 @@
-import { Block, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, isInGreenwoodRegion, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
+import { Block, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, isInGreenwoodRegion, isInMistfenMarsh, townOfBeginningsBlock, townTavernBlock, townWallBlock } from "@blockcraft/voxel-world";
 
 export type VoxelTextureKind = "bedrock" | "stone" | "dirt" | "grass-top" | "grass-side" | "iron" | "silver" | "moonstone"
   | "forest-grass-top" | "forest-grass-side" | "oak-bark" | "oak-rings" | "leaves"
+  | "mist-grass-top" | "mist-grass-side" | "bog-water"
   | "timber" | "slate-roof" | "paving" | "path" | "dressed-stone" | "bronze";
 
 type Rgb = readonly [number, number, number];
@@ -41,11 +42,13 @@ export function voxelTextureKind(block: number, normalY: number, x: number, y: n
   if (block === Block.Bedrock) return "bedrock";
   if (block === Block.SilverOre) return "silver";
   if (block === Block.MoonstoneOre) return "moonstone";
+  if (block === Block.BogWater) return "bog-water";
   if (block === Block.Stone) return "stone";
   if (block === Block.Dirt) return "dirt";
   if (block === Block.OakLog) return normalY === 0 ? "oak-bark" : "oak-rings";
   if (block === Block.Leaves) return "leaves";
   if (block === Block.Grass && isInGreenwoodRegion(x, z)) return normalY > 0 ? "forest-grass-top" : normalY < 0 ? "dirt" : "forest-grass-side";
+  if (block === Block.Grass && isInMistfenMarsh(x, z)) return normalY > 0 ? "mist-grass-top" : normalY < 0 ? "dirt" : "mist-grass-side";
   if (block === Block.Grass) return normalY > 0 ? "grass-top" : normalY < 0 ? "dirt" : "grass-side";
   return "iron";
 }
@@ -94,6 +97,20 @@ function forestPixel(x: number, y: number): Rgb {
   if (cluster % 11 === 0) return [57, 100, 54];
   if (cluster % 7 === 0) return [72, 118, 60];
   return (x + y) % 5 === 0 ? [64, 109, 56] : [68, 113, 58];
+}
+
+function mistPixel(x: number, y: number): Rgb {
+  const cluster = hashPixel(Math.floor(x / 3), Math.floor(y / 3), 0x466854);
+  if (cluster % 9 === 0) return [75, 99, 69];
+  if (cluster % 7 === 0) return [91, 112, 73];
+  return (x + y) % 6 === 0 ? [69, 91, 66] : [79, 103, 70];
+}
+
+function bogWaterPixel(x: number, y: number): Rgb {
+  const ripple = (y + Math.floor(x / 5) * 3) % 11;
+  if (ripple <= 1) return [105, 139, 71];
+  if (hashPixel(Math.floor(x / 4), Math.floor(y / 4), 0x89ab) % 13 === 0) return [139, 157, 76];
+  return ripple < 5 ? [55, 86, 61] : [43, 70, 57];
 }
 
 function oakPixel(kind: "oak-bark" | "oak-rings", x: number, y: number): Rgb {
@@ -176,6 +193,8 @@ export function createVoxelTexturePixels(kind: VoxelTextureKind, size = 32): Uin
       if (!color) {
         if (kind === "grass-top") color = grassPixel(x, y);
         else if (kind === "forest-grass-top") color = forestPixel(x, y);
+        else if (kind === "mist-grass-top") color = mistPixel(x, y);
+        else if (kind === "bog-water") color = bogWaterPixel(x, y);
         else if (kind === "oak-bark" || kind === "oak-rings") color = oakPixel(kind, x, y);
         else if (kind === "leaves") color = leavesPixel(x, y);
         else if (kind === "grass-side") {
@@ -186,6 +205,10 @@ export function createVoxelTexturePixels(kind: VoxelTextureKind, size = 32): Uin
           const grassDepth = 7 + (hashPixel(Math.floor(x / 4), 0, 29) % 3);
           color = y < grassDepth ? forestPixel(x, y) : earthPixel(x, y);
           if (y === grassDepth) color = [62, 91, 48];
+        } else if (kind === "mist-grass-side") {
+          const grassDepth = 6 + (hashPixel(Math.floor(x / 4), 0, 41) % 3);
+          color = y < grassDepth ? mistPixel(x, y) : earthPixel(x, y);
+          if (y === grassDepth) color = [65, 78, 55];
         } else if (kind === "dirt") color = earthPixel(x, y);
         else if (kind === "bedrock") color = vary(stonePixel(x, y), -60);
         else {

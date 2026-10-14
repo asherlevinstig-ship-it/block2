@@ -82,6 +82,7 @@ const LEADER_TERRITORIES: Readonly<Record<string, string>> = {
   "deep-cave-spitter": "Silver Chamber",
   "buried-chamber-brute": "Buried Vault",
   "frontier-brute-west": "Western Rich Deposit",
+  "mistfen-behemoth": "Mistfen Marsh",
 };
 
 export function leaderTerritory(id: string): string {

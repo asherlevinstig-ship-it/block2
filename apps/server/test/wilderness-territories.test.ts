@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, MINERAL_DEPOSITS, RENEWABLE_MINERAL_DEPOSITS, wildernessTerritoryAt, wildernessSurfaceBlock, authoredMineralAt, playerCollides } from "@blockcraft/voxel-world";
-import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry } from "../src/wilderness-encounters.js";
+import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry, isMistfenMob } from "../src/wilderness-encounters.js";
 import { WorldRoom } from "../src/game-room.js";
 import { WorldState } from "../src/schema.js";
 import { dangerBandAt, MOB_TOWN_MINIMUM_RADIUS, radiusFromSafeCenter } from "../src/radial-difficulty.js";
@@ -24,10 +24,10 @@ describe("distinct radial wilderness territories", () => {
     const { room } = fixture();
     for (const spawn of WILDERNESS_ENCOUNTERS) {
       const mob = room.state.mobs.get(spawn.id)!;
-      expect(mob.difficultyTier).toBe(spawn.archetype === "stone_brute" || isAshenSentry(spawn.id) ? 3 : spawn.archetype === "cave_spitter" ? 2 : 1);
+      expect(mob.difficultyTier).toBe(isMistfenMob(spawn.id) ? 2 : spawn.archetype === "stone_brute" || isAshenSentry(spawn.id) ? 3 : spawn.archetype === "cave_spitter" ? 2 : 1);
       expect(radiusFromSafeCenter(mob)).toBeGreaterThanOrEqual(MOB_TOWN_MINIMUM_RADIUS - .001);
     }
-    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(4);
+    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(5);
     expect(lootForArchetype("stone_brute", "", 0)).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
     expect(lootForArchetype("stone_brute", "", .5)).not.toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
   });
@@ -44,7 +44,7 @@ describe("distinct radial wilderness territories", () => {
   });
   it("places every guard near the appropriate mineral site", () => {
     for (const spawn of WILDERNESS_ENCOUNTERS) {
-      if (isAshenSentry(spawn.id)) continue;
+      if (isAshenSentry(spawn.id) || isMistfenMob(spawn.id)) continue;
       const block = spawn.archetype === "moss_crawler" ? Block.IronOre : Block.SilverOre;
       const nearest = Math.min(...MINERAL_DEPOSITS.filter(d => d.block === block && (spawn.archetype !== "stone_brute" || d.radius === 2))
         .map(d => Math.hypot(spawn.x - d.x, spawn.z - d.z)));

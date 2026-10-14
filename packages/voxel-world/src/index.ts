@@ -122,6 +122,53 @@ export const ASHEN_SPIRE_POSITION = { x: 97.5, y: 8, z: 62.5 } as const;
 export const ASHEN_SENTRY_HOMES = [
   { x: 88.5, y: 8, z: 57.5 }, { x: 106.5, y: 8, z: 67.5 },
 ] as const;
+export const MISTFEN_MARSH = { minX: -58, maxX: -20, minZ: -43, maxZ: -11 } as const;
+export const MISTFEN_BEHEMOTH_HOME = { x: -47.5, y: 8, z: -31.5 } as const;
+export const MISTFEN_MOB_HOMES = [
+  MISTFEN_BEHEMOTH_HOME,
+  { x: -42.5, y: 8, z: -25.5 },
+  { x: -51.5, y: 8, z: -27.5 },
+  { x: -45.5, y: 8, z: -36.5 },
+] as const;
+export const MISTFEN_SILVER_SEAM = { minX: -56, maxX: -54, minZ: -39, maxZ: -37 } as const;
+export function isInMistfenMarsh(x: number, z: number): boolean {
+  return x >= MISTFEN_MARSH.minX && x <= MISTFEN_MARSH.maxX
+    && z >= MISTFEN_MARSH.minZ && z <= MISTFEN_MARSH.maxZ;
+}
+export function isMistfenBoardwalk(x: number, z: number): boolean {
+  return (x === -30 || x === -29) && z >= MISTFEN_MARSH.minZ && z <= MISTFEN_MARSH.maxZ
+    || (z === -27 || z === -26) && x >= MISTFEN_MARSH.minX && x <= MISTFEN_MARSH.maxX
+    || x >= -49 && x <= -46 && z >= -32 && z <= -30;
+}
+export function isMistfenToxicPool(x: number, z: number): boolean {
+  if (!isInMistfenMarsh(x, z) || isMistfenBoardwalk(x, z)
+    || x >= MISTFEN_SILVER_SEAM.minX && x <= MISTFEN_SILVER_SEAM.maxX
+      && z >= MISTFEN_SILVER_SEAM.minZ && z <= MISTFEN_SILVER_SEAM.maxZ
+    || Math.hypot(x - MISTFEN_BEHEMOTH_HOME.x, z - MISTFEN_BEHEMOTH_HOME.z) < 6) return false;
+  const dx = Math.floor(x) + 44, dz = Math.floor(z) + 29;
+  return Math.abs(Math.imul(dx, 17) + Math.imul(dz, 31)) % 13 < 3;
+}
+/** Open marshland with two crossing boardwalks, toxic shallows, ruins, and a clear leader island. */
+export function mistfenMarshBlock(x: number, y: number, z: number): BlockId | null {
+  if (!isInMistfenMarsh(x, z)) return null;
+  const seam = x >= MISTFEN_SILVER_SEAM.minX && x <= MISTFEN_SILVER_SEAM.maxX
+    && z >= MISTFEN_SILVER_SEAM.minZ && z <= MISTFEN_SILVER_SEAM.maxZ;
+  if (seam && (y === SURFACE_HEIGHT || y === SURFACE_HEIGHT - 1)) return Block.SilverOre;
+  if (y === SURFACE_HEIGHT) {
+    if (Math.hypot(x - MISTFEN_BEHEMOTH_HOME.x, z - MISTFEN_BEHEMOTH_HOME.z) < 6) return Block.Stone;
+    if (isMistfenBoardwalk(x, z)) return Block.OakLog;
+    if (isMistfenToxicPool(x, z)) return Block.BogWater;
+    return Block.Grass;
+  }
+  if (y <= SURFACE_HEIGHT) return null;
+  const ruin = (x === -53 || x === -42) && (z === -34 || z === -21) && y <= 10;
+  if (ruin) return Block.Stone;
+  const deadTree = Math.abs(Math.imul(x, 19) + Math.imul(z, 23)) % 29 === 0
+    && !isMistfenBoardwalk(x, z) && !isMistfenToxicPool(x, z)
+    && Math.hypot(x - MISTFEN_BEHEMOTH_HOME.x, z - MISTFEN_BEHEMOTH_HOME.z) >= 7;
+  if (deadTree && y <= 10) return Block.OakLog;
+  return Block.Air;
+}
 export function isInAshenReach(x: number, z: number): boolean {
   return Math.hypot(x - ASHEN_REACH.x, z - ASHEN_REACH.z) <= ASHEN_REACH.radius;
 }
@@ -271,6 +318,7 @@ export const Block = {
   Leaves: 7,
   SilverOre: 8,
   MoonstoneOre: 9,
+  BogWater: 10,
 } as const;
 
 export type BlockId = (typeof Block)[keyof typeof Block];
@@ -281,9 +329,10 @@ export const WILDERNESS_TERRITORIES = [
   { tier: 3, name: "STONE FRONTIER", detail: "Brutes guard rich silver seams · defeat them for Stone Core Hammers" },
 ] as const;
 export const ASHEN_REACH_TERRITORY = { tier: 3, name: "ASHEN REACH", detail: "Find the split spire · Ashglass Sentries fire sweeping fans" } as const;
+export const MISTFEN_TERRITORY = { tier: 2, name: "MISTFEN MARSH", detail: "LV 5–9 · use the boardwalks · toxic pools surround the Mireback Behemoth" } as const;
 export function wildernessTerritoryAt(x: number, z: number) {
   const radius = Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z);
-  return radius < TOWN_SAFE_RADIUS ? null : isInAshenReach(x, z) ? ASHEN_REACH_TERRITORY
+  return radius < TOWN_SAFE_RADIUS ? null : isInMistfenMarsh(x, z) ? MISTFEN_TERRITORY : isInAshenReach(x, z) ? ASHEN_REACH_TERRITORY
     : WILDERNESS_TERRITORIES[radius >= FRONTIER_MINIMUM_RADIUS ? 2 : radius >= WILDS_MINIMUM_RADIUS ? 1 : 0]!;
 }
 /** Flat ground palettes distinguish rings without adding collision geometry. */
@@ -335,7 +384,8 @@ export const MINERAL_DEPOSITS = [
   { x: 68, z: 27, block: Block.SilverOre, radius: 2 },
   { x: -48, z: 8, block: Block.SilverOre, radius: 2 },
 ] as const;
-export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, block: Block.IronOre, radius: 1 }] as const;
+export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, block: Block.IronOre, radius: 1 },
+  { x: -55, z: -38, block: Block.SilverOre, radius: 1 }] as const;
 export const WILDERNESS_CAMPS = MINERAL_DEPOSITS.map(deposit => ({ ...deposit,
   kind: deposit.block === Block.IronOre ? "nest" as const : deposit.radius === 1 ? "spitter" as const : "ruin" as const,
 }));
@@ -682,6 +732,7 @@ export function isProtectedVoxel(x: number, z: number): boolean {
   return Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) <= SPAWN_PROTECTION_RADIUS
     || townWallBlock(x, 8, z) !== null || isCaveReturnRoute(x, z) || isInForestDungeon(x, z) || isInEmberVault(x, z)
     || isInRealmWardenArena(x, z)
+    || isMistfenBoardwalk(x, z)
     || isSilverDepthsProgressionGate(x, z)
     || (x >= 45 && x <= 46 && z >= 28 && z <= 29)
     || (Math.abs(x - ASHEN_REACH.x) <= 2 && z === ASHEN_REACH.z);
@@ -716,6 +767,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (caveBlock !== null) blocks[chunkIndex(localX, y, localZ)] = caveBlock;
         const greenwoodBlock = greenwoodRegionBlock(seedText, worldX, y, worldZ);
         if (greenwoodBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = greenwoodBlock;
+        const mistfenBlock = mistfenMarshBlock(worldX, y, worldZ);
+        if (mistfenBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = mistfenBlock;
         const arenaBlock = stoneBruteArenaBlock(worldX, y, worldZ);
         if (arenaBlock !== null) blocks[chunkIndex(localX, y, localZ)] = arenaBlock;
         const campBlock = wildernessCampBlock(worldX, y, worldZ);

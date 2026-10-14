@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Block, CHUNK_HEIGHT, townOfBeginningsBlock } from "@blockcraft/voxel-world";
 import { createVoxelTexturePixels, voxelCornerLight, voxelTextureKind, type VoxelTextureKind } from "./voxel-textures.js";
 
-const kinds: VoxelTextureKind[] = ["bedrock", "stone", "dirt", "grass-top", "grass-side", "forest-grass-top", "forest-grass-side", "oak-bark", "oak-rings", "leaves", "iron", "timber", "slate-roof", "paving", "path", "dressed-stone", "bronze"];
+const kinds: VoxelTextureKind[] = ["bedrock", "stone", "dirt", "grass-top", "grass-side", "forest-grass-top", "forest-grass-side", "mist-grass-top", "mist-grass-side", "bog-water", "oak-bark", "oak-rings", "leaves", "iron", "silver", "moonstone", "timber", "slate-roof", "paving", "path", "dressed-stone", "bronze"];
 
 describe("procedural voxel textures", () => {
   it("renders silver as a distinct bright blue-white mineral rather than iron", () => {
@@ -35,6 +35,12 @@ describe("procedural voxel textures", () => {
     expect(top[1]).toBeGreaterThan(top[0]!);
     const lowerSideOffset = (24 * 32 + 16) * 4;
     expect(side[lowerSideOffset]).toBeGreaterThan(side[lowerSideOffset + 1]!);
+  });
+
+  it("makes Mistfen ground and toxic pools visually distinct", () => {
+    expect(voxelTextureKind(Block.Grass, 1, -40, 7, -20)).toBe("mist-grass-top");
+    expect(voxelTextureKind(Block.BogWater, 1, -40, 7, -20)).toBe("bog-water");
+    expect(createVoxelTexturePixels("bog-water")).not.toEqual(createVoxelTexturePixels("mist-grass-top"));
   });
 
   it("keeps building finishes distinct from mineable wilderness materials", () => {

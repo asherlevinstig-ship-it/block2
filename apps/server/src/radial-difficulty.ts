@@ -1,5 +1,5 @@
 import type { MobArchetypeDefinition } from "./mob-archetypes.js";
-import { TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
+import { TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS, isInMistfenMarsh } from "@blockcraft/voxel-world";
 
 export const WORLD_SAFE_CENTER = { x: TOWN_CENTER_X, z: TOWN_CENTER_Z } as const;
 export const MOB_TOWN_MINIMUM_RADIUS = TOWN_SAFE_RADIUS + 8;
@@ -44,6 +44,7 @@ export function keepMobOutsideTown(position: { x: number; z: number }): { x: num
 
 export function dangerBandAt(position: { x: number; z: number; y?: number }): DangerBand {
   const radius = radiusFromSafeCenter(position);
+  if ((position.y === undefined || position.y >= 6.8) && isInMistfenMarsh(position.x, position.z)) return DANGER_BANDS[2]!;
   // Town protection is unchanged; outside it, the deeper cave adds danger beyond distance alone.
   const depthTier = radius >= TOWN_SAFE_RADIUS && position.y !== undefined ? position.y <= 2 ? 3 : position.y <= 5 ? 2 : 0 : 0;
   for (let index = DANGER_BANDS.length - 1; index >= 0; index -= 1) {

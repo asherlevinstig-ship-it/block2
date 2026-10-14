@@ -6,6 +6,11 @@ import {
   ASHEN_SENTRY_HOMES,
   ashenReachBlock,
   isInAshenReach,
+  MISTFEN_BEHEMOTH_HOME,
+  MISTFEN_MARSH,
+  isInMistfenMarsh,
+  isMistfenBoardwalk,
+  isMistfenToxicPool,
   wildernessTerritoryAt,
   MINERAL_DEPOSITS,
   CHUNK_HEIGHT,
@@ -303,6 +308,30 @@ describe("deterministic voxel world", () => {
     expect(blocks.filter(block => block === Block.Leaves).length).toBeGreaterThan(20);
     const camp = generateChunk("test-world", 2, 0);
     expect(getBlock(camp, GREENWOOD_CAMP.minX - 32, SURFACE_HEIGHT, GREENWOOD_CAMP.minZ)).toBe(Block.Dirt);
+  });
+  it("authors Mistfen as an open level 5–9 region with two safe crossing routes", () => {
+    expect(isInMistfenMarsh(-40, -27)).toBe(true);
+    expect(isInMistfenMarsh(-19, -27)).toBe(false);
+    expect(wildernessTerritoryAt(-40, -27)?.name).toBe("MISTFEN MARSH");
+    const read = (x: number, y: number, z: number) => {
+      const a = worldToChunk(x, z);
+      return getBlock(generateChunk("mistfen-test", a.chunkX, a.chunkZ), a.localX, y, a.localZ);
+    };
+    for (let z = MISTFEN_MARSH.minZ; z <= MISTFEN_MARSH.maxZ; z++) {
+      expect(isMistfenBoardwalk(-30, z)).toBe(true);
+      expect(read(-30, SURFACE_HEIGHT, z)).toBe(Block.OakLog);
+      expect(read(-30, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+    }
+    for (let x = MISTFEN_MARSH.minX; x <= MISTFEN_MARSH.maxX; x++) {
+      expect(isMistfenBoardwalk(x, -27)).toBe(true);
+      expect([Block.OakLog, Block.Stone]).toContain(read(x, SURFACE_HEIGHT, -27));
+    }
+    expect(read(Math.floor(MISTFEN_BEHEMOTH_HOME.x), SURFACE_HEIGHT, Math.floor(MISTFEN_BEHEMOTH_HOME.z))).toBe(Block.Stone);
+    let pools = 0;
+    for (let z = MISTFEN_MARSH.minZ; z <= MISTFEN_MARSH.maxZ; z++) for (let x = MISTFEN_MARSH.minX; x <= MISTFEN_MARSH.maxX; x++) {
+      if (isMistfenToxicPool(x, z)) { expect(read(x, SURFACE_HEIGHT, z)).toBe(Block.BogWater); pools++; }
+    }
+    expect(pools).toBeGreaterThan(40);
   });
   it.each(["test-world", "another-seed"])("keeps crawler camp sightlines, approach, and mining foundation clear for %s", seed => {
     const cache = new Map<string, ReturnType<typeof generateChunk>>();

@@ -1,5 +1,5 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
-import { ASHEN_REACH, ASHEN_SENTRY_HOMES, SILVER_GUARD_HOMES, isInAshenReach } from "@blockcraft/voxel-world";
+import { ASHEN_REACH, ASHEN_SENTRY_HOMES, MISTFEN_MOB_HOMES, SILVER_GUARD_HOMES, isInAshenReach, isInMistfenMarsh } from "@blockcraft/voxel-world";
 export const ASHEN_SENTRY_IDS = ["ashglass-sentry-west", "ashglass-sentry-east"] as const;
 export const isAshenSentry = (id: string) => ASHEN_SENTRY_IDS.some(member => member === id);
 export const ashenSentryAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
@@ -23,6 +23,10 @@ export const mixedFrontierAllows = (pose: { x: number; y: number; z: number }) =
   && Math.hypot(pose.x - MIXED_FRONTIER_CENTER.x, pose.z - MIXED_FRONTIER_CENTER.z) <= 14;
 export const frontierBruteAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && pose.x >= 56 && pose.x <= 76 && pose.z >= 18 && pose.z <= 35;
+export const MISTFEN_IDS = ["mistfen-behemoth", "mistfen-briar-west", "mistfen-briar-east", "mistfen-spitter"] as const;
+export const isMistfenMob = (id: string) => MISTFEN_IDS.some(member => member === id);
+export const mistfenAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
+  && isInMistfenMarsh(pose.x, pose.z);
 /** Existing encounter IDs remain stable for objective tracking and saved worlds. */
 export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchetypeId; x: number; y: number; z: number }[] = [
   { id: "moss-crawler", archetype: "moss_crawler", x: 35.5, y: 8, z: -8.5 },
@@ -35,5 +39,9 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: "frontier-brute", archetype: "stone_brute", x: 65.5, y: 8, z: 23.5 },
   { id: "frontier-brute-east", archetype: "stone_brute", x: 70.5, y: 8, z: 32.5 },
   { id: "frontier-brute-west", archetype: "stone_brute", x: -48.5, y: 8, z: 12.5 },
+  { id: "mistfen-behemoth", archetype: "stone_brute", ...MISTFEN_MOB_HOMES[0] },
+  { id: "mistfen-briar-west", archetype: "briar_crawler", ...MISTFEN_MOB_HOMES[1] },
+  { id: "mistfen-briar-east", archetype: "briar_crawler", ...MISTFEN_MOB_HOMES[2] },
+  { id: "mistfen-spitter", archetype: "cave_spitter", ...MISTFEN_MOB_HOMES[3] },
   ...ASHEN_SENTRY_IDS.map((id, index) => ({ id, archetype: "cave_spitter" as const, ...ASHEN_SENTRY_HOMES[index]! })),
 ];

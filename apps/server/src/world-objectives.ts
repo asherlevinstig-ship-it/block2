@@ -1,7 +1,7 @@
 import { isEquipmentItem, ITEM_DEFINITIONS, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
-import { ASHEN_SENTRY_IDS, MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
+import { ASHEN_SENTRY_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS } from "./wilderness-encounters.js";
 import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 import { areaMainMobDefinition } from "./area-mini-bosses.js";
@@ -22,6 +22,7 @@ const GROUPS: ObjectiveGroup[] = [
   { id: "stone-clearing", title: "Stone Brute Clearing", detail: "Dodge the marked slam, then counter during recovery.", ids: ["stone-brute"], mainId: "stone-brute" },
   { id: "frontier-ruins", title: "Frontier Brute Ruins", detail: "Use broken pillars against rock volleys, leave the slam circle, then counter during recovery. Collect the hammer and rich silver.", ids: ["frontier-brute"], mainId: "frontier-brute" },
   { id: "ashen-sentries", title: "Ashglass Sentries", detail: "Use the broken cover and dodge between sweeping fan volleys. Counter after their aimed shot.", ids: [...ASHEN_SENTRY_IDS], mainId: "ashglass-sentry-east" },
+  { id: "mistfen", title: "Mistfen Marsh", detail: "Stay on the crossing boardwalks, draw the ambushers out of the toxic pools, then break the Mireback Behemoth during recovery.", ids: [...MISTFEN_IDS], mainId: "mistfen-behemoth" },
   ...ROAMING_PACKS.map(pack => ({ id: pack.id, title: `${pack.id.includes("outskirts") ? "Outskirts" : "Wilds"} Roaming Pack`,
     detail: "Hunt the roaming packleader for the area's richest loot, then clear its followers.",
     ids: pack.offsets.map((_, index) => roamingMemberId(pack, index)), mainId: roamingMemberId(pack, 0) })),

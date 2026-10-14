@@ -50,6 +50,21 @@ describe("world objective director", () => {
     expect(objective.title).toBe("Frontier Warleader");
     expect(objective.progressLabel).toBe("MINI-BOSS · HIGHEST LOOT");
   });
+  it("reveals the Mireback Behemoth dynamically when the player approaches Mistfen", () => {
+    const mobs = new Map([
+      ["mistfen-behemoth", mob(-47.5, -31.5, { name: "Mireback Behemoth", difficultyTier: 2, level: 7 })],
+      ["mistfen-briar-west", mob(-42.5, -25.5, { difficultyTier: 2, level: 6 })],
+      ["mistfen-briar-east", mob(-51.5, -27.5, { difficultyTier: 2, level: 6 })],
+      ["mistfen-spitter", mob(-45.5, -36.5, { difficultyTier: 2, level: 7 })],
+    ]);
+    expect(select(player(8.5, 8.5), mobs).objectiveId).toBe("leave-town");
+    const objective = select(player(-34, -26), mobs);
+    expect(objective.objectiveId).toBe("mistfen");
+    expect(objective.title).toBe("Mireback Behemoth");
+    expect(objective.kind).toBe("miniboss");
+    expect(objective.progressLabel).toBe("MINI-BOSS · HIGHEST LOOT");
+    expect(objective.targetMobId).toBe("mistfen-behemoth");
+  });
   it("guides Silver Depths players to their chosen wing instead of unspawned enemies", () => {
     const pose = { ...player(94, 14, 1), miningExpeditionStage: 8, silverDepthsStage: 3,
       silverDepthsRunStage: 3, silverDepthsWing: "" };

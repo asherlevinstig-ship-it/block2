@@ -499,6 +499,7 @@ export const ITEM_DEFINITIONS = {
   broodspitter_focus_shard: { id: "broodspitter_focus_shard", name: "Broodspitter Focus Shard", description: "Unique underground trophy claimed from the Silver Chamber Broodspitter" },
   stone_warden_lantern: { id: "stone_warden_lantern", name: "Stone Warden Lantern", description: "Unique vault trophy claimed from the Stone Warden" },
   frontier_champion_crest: { id: "frontier_champion_crest", name: "Frontier Champion Crest", description: "Unique trophy claimed from the Frontier Stone Champion" },
+  mireback_crown: { id: "mireback_crown", name: "Mireback Crown", description: "Unique venom-soaked trophy claimed from the Mireback Behemoth" },
   alpha_forgemark: { id: "alpha_forgemark", name: "Alpha Forgemark", description: "Leader collection badge · awakens Fang Dagger finishers with +1 damage" },
   venom_forgemark: { id: "venom_forgemark", name: "Venom Forgemark", description: "Leader collection badge · every third Acid Focus hit surges for +1 damage" },
   crusher_forgemark: { id: "crusher_forgemark", name: "Crusher Forgemark", description: "Leader collection badge · Stone Hammer attacks deal +1 damage to staggered enemies" },
@@ -536,7 +537,7 @@ export const AREA_LEADER_RELIC_IDS = [
   "silverfang_venom_sac", "gloomfang_venom_sac", "stonehide_core_relic", "ruinbreaker_keystone",
   "warleader_crest", "ashglass_lens", "westroad_pack_totem", "northroad_pack_totem",
   "gloam_alpha_gland", "sunscar_alpha_gland", "ironburrow_crown", "broodspitter_focus_shard",
-  "stone_warden_lantern", "frontier_champion_crest",
+  "stone_warden_lantern", "frontier_champion_crest", "mireback_crown",
 ] as const satisfies readonly ItemId[];
 export type AreaLeaderRelicId = typeof AREA_LEADER_RELIC_IDS[number];
 export const LEADER_FORGE_MARKS = {
@@ -554,6 +555,7 @@ export const LEADER_FORGE_RECIPES = {
   silverfang_venom_sac: leaderForgeRecipe("venom_forgemark"), gloomfang_venom_sac: leaderForgeRecipe("venom_forgemark"),
   ashglass_lens: leaderForgeRecipe("venom_forgemark"), gloam_alpha_gland: leaderForgeRecipe("venom_forgemark"),
   sunscar_alpha_gland: leaderForgeRecipe("venom_forgemark"), broodspitter_focus_shard: leaderForgeRecipe("venom_forgemark"),
+  mireback_crown: leaderForgeRecipe("venom_forgemark"),
   stonehide_core_relic: leaderForgeRecipe("crusher_forgemark"), ruinbreaker_keystone: leaderForgeRecipe("crusher_forgemark"),
   warleader_crest: leaderForgeRecipe("crusher_forgemark"), stone_warden_lantern: leaderForgeRecipe("crusher_forgemark"),
   frontier_champion_crest: leaderForgeRecipe("crusher_forgemark"),
@@ -609,6 +611,7 @@ export const EQUIPMENT_RARITY = {
   broodspitter_focus_shard: "epic",
   stone_warden_lantern: "epic",
   frontier_champion_crest: "epic",
+  mireback_crown: "epic",
   alpha_forgemark: "legendary",
   venom_forgemark: "legendary",
   crusher_forgemark: "legendary",

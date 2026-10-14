@@ -4,7 +4,7 @@ import { ShadowMoveInput, stepShadowMovement, type ShadowPose } from "./movement
 import { randomUUID } from "node:crypto";
 import { ADMIN_BOOTSTRAP_HASH, ADMIN_PROFILE_HASH, adminProfileKey, matchesAdminBootstrapPass } from "./admin-access.js";
 import { AttackCoordination, allyFireLaneClear } from "./attack-coordination.js";
-import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern } from "./wilderness-encounters.js";
+import { MIXED_FRONTIER_SPITTER, isMixedFrontierMob, mixedFrontierAllows, isSilverGuard, silverGuardAllows, frontierBruteAllows, isGreenwoodCampMob, greenwoodCampAllows, isAshenSentry, ashenSentryAllows, ashenSentryPattern, isMistfenMob, mistfenAllows } from "./wilderness-encounters.js";
 import { BRUTE_VOLLEY, bruteVolleyReady, bruteRockEndpoints } from "@blockcraft/protocol";
 import { CHAMPION_CHARGE, ChatSendSchema, PlayerNameSchema, AppearanceSchema, type NearbyChatMessage } from "@blockcraft/protocol";
 import { cleanChatText, hearsNearbyChat } from "./nearby-chat.js";
@@ -59,7 +59,7 @@ import { createSpitterPositioning, positionSpitter, type SpitterPositioning } fr
 import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
-import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation } from "@blockcraft/voxel-world";
+import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation, isMistfenToxicPool } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -429,6 +429,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly mobCommittedAim = new Map<string, { x: number; y: number; z: number; yaw: number }>();
   private readonly mobStaggerImmuneUntil = new Map<string, number>();
   private readonly mobHazards = new Map<string, ActiveMobHazard>();
+  private readonly mistfenPoolDamageAt = new Map<string, number>();
   private readonly mobHomes = new Map<string, { x: number; y: number; z: number }>();
   private readonly mobVerticalVelocities = new Map<string, number>();
   private readonly mobNavigation = new Map<string, MobNavigationState>();
@@ -1863,6 +1864,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (isGreenwoodCampMob(id)) return greenwoodCampAllows(pose);
     if (isSilverGuard(id)) return silverGuardAllows(pose);
     if (isAshenSentry(id)) return ashenSentryAllows(pose);
+    if (isMistfenMob(id)) return mistfenAllows(pose);
     if (id === "frontier-brute") return frontierBruteAllows(pose);
     if (isMixedFrontierMob(id)) return mixedFrontierAllows(pose);
     const forest = FOREST_DUNGEON_MOBS.find(mob => mob.id === id);
@@ -4637,6 +4639,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           || !hasCombatLineOfSight(hazard, player, this.readWorldBlock)) continue;
         if (this.damagePlayer(hazard.mobId, playerId, hazard.damage, now, false, "hazard")) hazard.lastDamageAt.set(playerId, now);
       }
+    }
+    for (const [playerId, player] of this.state.players) {
+      if (player.health <= 0 || player.y < 7 || player.y > 9 || !isMistfenToxicPool(player.x, player.z)) continue;
+      const lastDamageAt = this.mistfenPoolDamageAt.get(playerId) ?? 0;
+      if (now - lastDamageAt < 1_250) continue;
+      if (this.damagePlayer("mistfen-pool", playerId, 1, now, false, "hazard")) this.mistfenPoolDamageAt.set(playerId, now);
     }
   }
 
