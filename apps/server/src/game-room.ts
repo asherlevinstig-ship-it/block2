@@ -12,7 +12,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, HUNT_EQUIPMENT_SETS, BUILD_PATHS, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, ITEM_DEFINITIONS, HUNT_EQUIPMENT_SETS, BUILD_PATHS, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -403,6 +403,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly dodgePressure = new Map<string, { chain: number; lastAt: number; exhaustedUntil: number }>();
   private readonly activeDodgeWindows = new Map<string, { startedAt: number; until: number }>();
   private readonly dodgeCounterUntil = new Map<string, number>();
+  private readonly magePowerCasts = new Map<string, number>();
+  private readonly assassinShadowUntil = new Map<string, number>();
+  private readonly pathConcealedUntil = new Map<string, number>();
+  private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
+  private readonly rangerSlowUntil = new Map<string, number>();
+  private readonly fortressProcAt = new Map<string, number>();
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
   private readonly delayedMatriarchVolleys = new Map<string, { origin: { x: number; y: number; z: number }; shots: { x: number; y: number; z: number }[]; releaseAt: number; damage: number; travelMs: number }>();
   private readonly matriarchCoverHits = new Map<string, number>();
@@ -940,6 +946,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.dodgePressure.delete(client.sessionId);
     this.activeDodgeWindows.delete(client.sessionId);
     this.dodgeCounterUntil.delete(client.sessionId);
+    this.magePowerCasts.delete(client.sessionId);
+    this.assassinShadowUntil.delete(client.sessionId);
+    this.pathConcealedUntil.delete(client.sessionId);
+    this.rangerPinning.delete(client.sessionId);
+    this.fortressProcAt.delete(client.sessionId);
     this.profileTokens.delete(client.sessionId);
     this.profileSaveFingerprints.delete(client.sessionId);
     this.quizRounds.delete(client.sessionId);
@@ -1951,6 +1962,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private defeatMob(mobId: string, mob: MobState, attackerId: string, now: number): void {
     if (!mob.alive) return;
+    this.rangerSlowUntil.delete(mobId);
     const wasElite = mob.isElite;
     const huntChampion = this.huntChampions.get(mobId);
     const realmRepeatVictory = mobId === REALM_WARDEN_ID && this.realmWardenRepeatActive;
@@ -2663,6 +2675,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const counterUntil = now + PERFECT_DODGE_COUNTER_MS;
         this.dodgeCounterUntil.set(playerId, counterUntil);
         const thiefRecovery = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "thief" ? this.buildPathRankFor(player, "thief") * 2 : 0;
+        if (parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "assassin" && this.buildPathRankFor(player, "assassin") >= 2) {
+          this.assassinShadowUntil.set(playerId, now + 2_000);
+          this.pathConcealedUntil.set(playerId, now + 1_250);
+          for (const [targetMobId, awareness] of this.mobAwareness) if (awareness.targetId === playerId) {
+            const targetMob = this.state.mobs.get(targetMobId);
+            if (targetMob && Math.hypot(targetMob.x - player.x, targetMob.z - player.z) <= 7) {
+              this.mobAwareness.delete(targetMobId); targetMob.targetId = ""; targetMob.awarenessState = "search";
+            }
+          }
+          this.buildPathProc(playerId, "assassin", "SHADOWSTEP", "CONCEALED · NEXT STRIKE +2", 2_000);
+        }
         player.stamina = Math.min(player.maxStamina, player.stamina + PERFECT_DODGE_STAMINA_RESTORE + thiefRecovery);
         this.clients.find(client => client.sessionId === playerId)?.send("dodge:pressure", {
           phase: "perfect", cost: 0, chain: 0, exhaustedUntil: 0, counterUntil,
@@ -2705,6 +2728,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     defense.damage = armouredDamage(defense.damage, player.armourId, kind,
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
+    if (defense.damage > 0) for (const [guardId, guard] of this.state.players) {
+      if (guardId === playerId || guard.health <= 0 || !guard.defending || Math.abs(guard.y - player.y) > 2
+        || Math.hypot(guard.x - player.x, guard.z - player.z) > 4
+        || parseBuildPathState(guard.huntLoadoutsJson).selectedPathId !== "tank" || this.buildPathRankFor(guard, "tank") < 2) continue;
+      defense.damage = Math.max(0, defense.damage - 1);
+      if (now - (this.fortressProcAt.get(guardId) ?? 0) >= 600) {
+        this.fortressProcAt.set(guardId, now);
+        this.buildPathProc(guardId, "tank", "FORTRESS GUARD", `ALLY PROTECTED · ${player.name || "EXPLORER"}`);
+      }
+      break;
+    }
     if (defense.guarded && defense.damage > 0 && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "tank") {
       const rank = this.buildPathRankFor(player, "tank");
       defense.damage = Math.max(0, defense.damage - (rank >= 4 ? 2 : rank > 0 ? 1 : 0));
@@ -3641,6 +3675,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const state = parseBuildPathState(player.huntLoadoutsJson);
     const selected = pathId ?? state.selectedPathId;
     return selected ? buildPathRank(state.xp[selected] ?? 0) : 0;
+  }
+
+  private buildPathProc(playerId: string, pathId: BuildPathId, ability: string, detail: string, durationMs = 1_400): void {
+    this.clients.find(client => client.sessionId === playerId)?.send("build:path-proc",
+      { pathId, ability, detail, durationMs } satisfies BuildPathProc);
   }
 
   private sendBuildPath(client: Client, message = "Your equipment and stat choices shape a hidden calling."): void {
@@ -4962,6 +5001,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         z: player.z,
         health: player.health,
       })).filter(player => !isInsideTownSafeZone(player)
+        && now >= (this.pathConcealedUntil.get(player.id) ?? 0)
         && caveEncounterAllows(mobId, player)
         && this.roamingAllowed(mobId, player)
         && this.championAllowed(mobId, player)
@@ -5021,8 +5061,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (this.mobPatrols.delete(mobId)) this.mobNavigation.set(mobId, createMobNavigationState());
       const positioning = this.spitterPositioning.get(mobId) ?? createSpitterPositioning();
       if (definition.attackKind === "projectile") this.spitterPositioning.set(mobId, positioning);
+      const movementSpeed = definition.speed * mob.speedMultiplier * (now < (this.rangerSlowUntil.get(mobId) ?? 0) ? .72 : 1);
       const rangedPursuit = mob.archetype === "cave_spitter" && definition.attackKind === "projectile" && target.visible
-        ? positionSpitter(mob, target, home, positioning, now, deltaTime, definition.speed * mob.speedMultiplier,
+        ? positionSpitter(mob, target, home, positioning, now, deltaTime, movementSpeed,
           this.readWorldBlock, pose => this.mobPositionAllowed(pose) && this.roamingAllowed(mobId, pose) && caveEncounterAllows(mobId, pose) && !isInStoneBruteArena(pose.x, pose.z),
           pose => allyFireLaneClear(mobId, pose, target, [...this.state.mobs].map(([id, peer]) => ({ id, x: peer.x, y: peer.y, z: peer.z, alive: peer.alive, archetype: peer.archetype }))))
         : null;
@@ -5035,7 +5076,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               && Math.hypot(peer.x - target.x, peer.z - target.z) <= 8).map(([id]) => id));
           this.crawlerPositioning.set(mobId, flank);
         }
-        circling = circleCrawler(mob, target, flank, now, deltaTime, definition.speed * mob.speedMultiplier, definition.stopDistance);
+        circling = circleCrawler(mob, target, flank, now, deltaTime, movementSpeed, definition.stopDistance);
       } else this.crawlerPositioning.delete(mobId);
       const attackers = () => [...this.state.mobs.entries()].map(([id, peer]) => ({
         id, alive: peer.alive, health: peer.health, archetype: peer.archetype, combatState: peer.combatState, targetId: peer.targetId,
@@ -5044,8 +5085,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const waitingGoal = waiting ? meleeWaitingGoal(mobId, target, [...this.mobAwareness.entries()]
         .filter(([id, awareness]) => awareness.targetId === target.id && this.state.mobs.get(id)?.alive
           && this.state.mobs.get(id)?.archetype !== "cave_spitter").map(([id]) => id), definition.stopDistance + 1.1) : null;
-      const pursuit = waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, definition.speed * mob.speedMultiplier, .2)
-        : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, definition.speed * mob.speedMultiplier, target.visible ? definition.stopDistance : .3);
+      const pursuit = waitingGoal ? pursueTarget(mob, waitingGoal, deltaTime, movementSpeed, .2)
+        : circling ?? rangedPursuit ?? pursueTarget(mob, target, deltaTime, movementSpeed, target.visible ? definition.stopDistance : .3);
       const goal = waitingGoal ?? circling?.goal ?? rangedPursuit?.goal ?? target;
       const stuck = this.moveNavigatingMob(mobId, mob, pursuit, goal, now, pose => this.mobPositionAllowed(pose)
         && (!rangedPursuit?.retreating || Math.hypot(pose.x - home.x, pose.z - home.z) <= 6), !waiting);
@@ -5182,6 +5223,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } satisfies DodgePressureUpdate);
     player.dodgeSequence += 1;
     this.lastDodgeAt.set(client.sessionId, now);
+    if (exhaustedUntil > now && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "thief"
+      && this.buildPathRankFor(player, "thief") >= 2) {
+      let diverted = 0;
+      for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
+        const mob = this.state.mobs.get(mobId);
+        if (mob && Math.hypot(mob.x - player.x, mob.z - player.z) <= 6) {
+          this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search"; diverted += 1;
+        }
+      }
+      if (diverted > 0) this.buildPathProc(client.sessionId, "thief", "SMOKE DECOY", `${diverted} ENEM${diverted === 1 ? "Y" : "IES"} DIVERTED`);
+      if (diverted > 0) this.pathConcealedUntil.set(client.sessionId, now + 900);
+    }
   }
 
   private handleDefense(client: Client, payload: unknown): void {
@@ -5549,6 +5602,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       let resolvedDamage: number = definition.damage;
       let aftershockHitCount = 0;
       let traitBonusHitCount = 0;
+      const mageRank = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "mage" ? this.buildPathRankFor(player, "mage") : 0;
+      const mageCastCount = mageRank >= 2 ? (this.magePowerCasts.get(sessionId) ?? 0) + 1 : 0;
+      if (mageRank >= 2) this.magePowerCasts.set(sessionId, mageCastCount % 3);
+      const arcaneEcho = mageRank >= 2 && mageCastCount % 3 === 0;
+      const shadowstepActive = now <= (this.assassinShadowUntil.get(sessionId) ?? 0);
+      let shadowstepReady = shadowstepActive;
+      let arcaneEchoDamage = 0;
       const rootbound = player.mainHandId === "rootbound_hammer" && definition.core === "line";
       const rootDurationMs = rootbound ? 700 : 0;
       for (const target of targets) {
@@ -5569,8 +5629,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { power: true });
         if (traitBonusDamage > 0) traitBonusHitCount += 1;
+        const shadowstepDamage = shadowstepReady ? 2 : 0;
+        if (shadowstepReady) { shadowstepReady = false; this.assassinShadowUntil.delete(sessionId); }
+        const echoDamage = arcaneEcho ? damageAfterArmor(Math.max(1, Math.ceil(definition.damage * .5)), mob.armor, true) : 0;
+        arcaneEchoDamage = Math.max(arcaneEchoDamage, echoDamage);
         const damage = damageAfterArmor(definition.damage + payoff.bonusDamage + progressionAttackBonus(player)
-          + this.buildPathDamageBonus(player, mob, target.id, sessionId, now, "power"), mob.armor, true) + traitBonusDamage;
+          + this.buildPathDamageBonus(player, mob, target.id, sessionId, now, "power") + shadowstepDamage, mob.armor, true)
+          + traitBonusDamage + echoDamage;
         const aftershock = pending.powerId === "seismic_cleave"
           && isSeismicAftershockTarget(impactCenter, pending.yaw, mob, resolvedRange);
         if (aftershock) aftershockHitCount += 1;
@@ -5602,6 +5667,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           if (consumed) consumed.staggerMs = staggered ? resistedDuration : 0;
         }
       }
+      if (arcaneEcho && targets.length > 0) this.buildPathProc(sessionId, "mage", "ARCANE ECHO", `REPEATED · +${arcaneEchoDamage} DAMAGE`);
+      if (shadowstepActive && !shadowstepReady)
+        this.buildPathProc(sessionId, "assassin", "SHADOWSTEP", "EMPOWERED STRIKE · +2 DAMAGE");
       const fractures = definition.fracturesTerrain && definition.core === "line"
         ? widenedLineFractureColumns(player, pending.yaw, resolvedRange, seismicProfile?.fractureWidth ?? 1)
             .map(column => this.fractureTerrain(pending.requestId, column.x, column.z, player.y))
@@ -6199,15 +6267,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         setBonus = "crusher"; setBonusDamage = 1;
         this.crusherSetGuardUntil.set(sessionId, now + (huntSetPerk?.durationMs ?? 3_000));
       }
+      const shadowstepDamage = now <= (this.assassinShadowUntil.get(sessionId) ?? 0) ? 2 : 0;
+      if (shadowstepDamage > 0) this.assassinShadowUntil.delete(sessionId);
       const damage = damageAfterArmor(
         timing.damage + ironSwordDamageBonus(player.blacksmithUpgrades, pending.mainHandId)
           + reforgeWeaponDamageBonus(equipmentReforgeRank(player.reforgeRanksJson, pending.mainHandId))
           + progressionAttackBonus(player) + this.specialDamageBonus(sessionId, mobId, now) + perkBonusDamage + setBonusDamage
-          + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon"),
+          + this.buildPathDamageBonus(player, mob, mobId, sessionId, now, "weapon") + shadowstepDamage,
         mob.armor,
       ) + traitBonusDamage + dodgeCounterBonus;
       this.combatContributions.record(mobId, sessionId, Math.min(mob.health, damage), now);
       mob.health = Math.max(0, mob.health - damage);
+      if (shadowstepDamage > 0) this.buildPathProc(sessionId, "assassin", "SHADOWSTEP", "EMPOWERED STRIKE · +2 DAMAGE");
       this.alertHitMob(mobId, sessionId, now, source);
       mob.hitSequence += 1;
       player.momentumStacks = gainMomentum(player.momentumStacks, player.equippedTrait as TraitId);
@@ -6215,6 +6286,20 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (this.staggerMob(mobId, mob, now, staggerDuration)) {
         const stagger: CombatStagger = { attackerId: sessionId, mobId, durationMs: staggerDuration };
         this.broadcast("combat:stagger", stagger);
+      }
+      if (mob.health > 0 && player.mainHandTag === "ranged"
+        && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "ranger" && this.buildPathRankFor(player, "ranger") >= 2) {
+        const previousPin = this.rangerPinning.get(sessionId);
+        const stacks = previousPin?.mobId === mobId && now <= previousPin.expiresAt ? previousPin.stacks + 1 : 1;
+        if (stacks >= 3) {
+          this.rangerPinning.delete(sessionId); this.rangerSlowUntil.delete(mobId);
+          this.staggerMob(mobId, mob, now, 1_000, true);
+          this.buildPathProc(sessionId, "ranger", "PINNING SHOT", "ROOTED · 1.0s");
+        } else {
+          this.rangerPinning.set(sessionId, { mobId, stacks, expiresAt: now + 4_000 });
+          this.rangerSlowUntil.set(mobId, now + 1_800);
+          this.buildPathProc(sessionId, "ranger", "PINNING SHOT", `${stacks} / 3 · TARGET SLOWED`);
+        }
       }
       const rootShockwave = pending.mainHandId === "rootbound_hammer" && pending.step === 3;
       if (rootShockwave) this.applyRootboundShockwave(sessionId, mobId, mob, now);

@@ -1198,6 +1198,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #build-path-candidates p, #build-path-candidates b { grid-column: 1 / -1; margin: 2px 0 0; font-size: .45rem; line-height: 1.3; }
 #build-path-candidates p { color: #819087; }
 #build-path-candidates b { color: #c6b478; font-weight: 700; }
+.build-path-adept { padding-top: 4px; border-top: 1px solid #ffffff12; color: #7fcfc0 !important; }
 #build-path-panel[data-selected="tank"] { border-color: #85a5b477; }#build-path-panel[data-selected="mage"] { border-color: #8a78c977; }#build-path-panel[data-selected="assassin"] { border-color: #c4697077; }#build-path-panel[data-selected="thief"] { border-color: #b39a5477; }#build-path-panel[data-selected="ranger"] { border-color: #72a86b77; }
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }
@@ -2289,6 +2290,28 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   pointer-events: none;
   transform: translateX(-50%);
 }
+#build-path-proc {
+  position: fixed;
+  z-index: 19;
+  left: calc(50% + 58px);
+  bottom: max(80px, calc(env(safe-area-inset-bottom) + 80px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid #76c9b366;
+  border-radius: 8px;
+  background: rgb(7 22 18 / 91%);
+  box-shadow: 0 5px 18px #0008;
+  color: #d8ece3;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+#build-path-proc[hidden] { display: none; }
+#build-path-proc strong { color: #8ee7d0; font-size: .58rem; letter-spacing: .11em; }
+#build-path-proc span { color: #c7d3cc; font-size: .52rem; font-weight: 800; letter-spacing: .05em; }
+#build-path-proc.show { animation: build-path-proc 180ms ease-out; }
+@keyframes build-path-proc { from { opacity: 0; transform: translate(-50%, 5px); } to { opacity: 1; transform: translate(-50%, 0); } }
 #combat-hud-shell {
   position: relative;
   display: grid;
@@ -2383,6 +2406,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   #trait-slot { padding: 5px 7px; }
   #trait-slot > small, #trait-picker { display: none !important; }
   #combat-hud-root, #defense-slot { display: none; }
+  #build-path-proc { left: 50%; bottom: calc(142px + env(safe-area-inset-bottom)); }
   #player-hud-root { bottom: calc(142px + env(safe-area-inset-bottom)); width: min(380px, calc(100vw - 28px)); grid-template-columns: 65px minmax(190px, 1fr); }
 }
 

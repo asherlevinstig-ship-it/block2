@@ -184,6 +184,7 @@ import {
   type CharacterStatId,
   type ProgressionUpdate,
   type BuildPathUpdate,
+  type BuildPathProc,
   type BuildPathId,
   type SeismicMasteryId,
   type SpecialApplied,
@@ -656,6 +657,8 @@ const momentumPips = [...document.querySelectorAll<HTMLElement>("#momentum-pips 
 const combatHudRoot = document.querySelector<HTMLElement>("#combat-hud-root")!;
 if (!combatHudRoot) throw new Error("Combat HUD root is missing");
 combatHud.mount(combatHudRoot);
+const buildPathProc = document.querySelector<HTMLElement>("#build-path-proc")!;
+let buildPathProcTimer = 0;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
 const powerLoadoutButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-loadout-slots [data-power-slot]")];
@@ -3063,7 +3066,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
     const button = document.createElement("button"); button.type = "button";
     button.dataset.path = candidate.pathId;
     button.dataset.active = String(candidate.pathId === update.selectedPathId);
-    button.innerHTML = `<span><strong>${definition.name}</strong><small>${definition.role}</small></span><em>${candidate.score} AFFINITY</em><p>${candidate.reasons.length ? candidate.reasons.join(" · ") : "Your build is only beginning to lean this way."}</p><b>${definition.passive}</b>`;
+    button.innerHTML = `<span><strong>${definition.name}</strong><small>${definition.role}</small></span><em>${candidate.score} AFFINITY</em><p>${candidate.reasons.length ? candidate.reasons.join(" · ") : "Your build is only beginning to lean this way."}</p><b>${definition.passive}</b><b class="build-path-adept">ADEPT · ${definition.adept}</b>`;
     button.disabled = !update.inTown;
     button.title = update.inTown ? `Choose ${definition.name}` : "Return to Town to change your Calling";
     button.addEventListener("click", () => room?.send("build:path", { action: "choose", pathId: candidate.pathId as BuildPathId }));
@@ -9056,6 +9059,15 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("realm-hunt:board", (update: RealmHuntBoardUpdate) => renderRealmHuntBoard(update));
   room.onMessage("hunt:collection", (update: HuntCollectionUpdate) => renderHuntCollection(update));
   room.onMessage("build:path", (update: BuildPathUpdate) => renderBuildPath(update));
+  room.onMessage("build:path-proc", (proc: BuildPathProc) => {
+    window.clearTimeout(buildPathProcTimer);
+    buildPathProc.dataset.path = proc.pathId;
+    buildPathProc.querySelector("strong")!.textContent = proc.ability;
+    buildPathProc.querySelector("span")!.textContent = proc.detail;
+    buildPathProc.hidden = false;
+    buildPathProc.classList.remove("show"); void buildPathProc.offsetWidth; buildPathProc.classList.add("show");
+    buildPathProcTimer = window.setTimeout(() => { buildPathProc.hidden = true; }, proc.durationMs ?? 1_400);
+  });
   room.onMessage("dungeon:lobby", (update: DungeonLobbyUpdate) => renderDungeonLobby(update));
   room.onMessage("depths:lobby", (update: SilverDepthsLobbyUpdate) => renderSilverDepthsLobby(update));
   room.onMessage("mineral:status", (payload: MineralDepositStatus[]) => minimap.setMineralStatus(payload));

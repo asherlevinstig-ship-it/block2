@@ -186,11 +186,11 @@ export type ProgressionUpdate = {
 };
 
 export const BUILD_PATHS = {
-  tank: { name: "Tank", role: "Hold the line", passive: "Path ranks reduce incoming damage while guarding." },
-  mage: { name: "Mage", role: "Shape raw power", passive: "Path ranks shorten Power cooldowns." },
-  assassin: { name: "Assassin", role: "Exploit vulnerability", passive: "Path ranks add damage against marked or weakened enemies." },
-  thief: { name: "Thief", role: "Escape with the prize", passive: "Path ranks improve perfect-dodge recovery and kill gold." },
-  ranger: { name: "Ranger", role: "Control the distance", passive: "Path ranks add damage to bow attacks." },
+  tank: { name: "Tank", role: "Hold the line", passive: "Path ranks reduce incoming damage while guarding.", adept: "FORTRESS GUARD · Guarding protects nearby allies." },
+  mage: { name: "Mage", role: "Shape raw power", passive: "Path ranks shorten Power cooldowns.", adept: "ARCANE ECHO · Every third Power repeats at half strength." },
+  assassin: { name: "Assassin", role: "Exploit vulnerability", passive: "Path ranks add damage against marked or weakened enemies.", adept: "SHADOWSTEP · A perfect dodge conceals you and empowers your next strike." },
+  thief: { name: "Thief", role: "Escape with the prize", passive: "Path ranks improve perfect-dodge recovery and kill gold.", adept: "SMOKE DECOY · An exhausted dodge breaks nearby enemy pursuit." },
+  ranger: { name: "Ranger", role: "Control the distance", passive: "Path ranks add damage to bow attacks.", adept: "PINNING SHOT · Consecutive bow hits slow, then root their target." },
 } as const;
 export type BuildPathId = keyof typeof BUILD_PATHS;
 export const BUILD_PATH_RANKS = [
@@ -204,6 +204,7 @@ export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   candidates: BuildPathAffinity[]; canChoose: boolean; inTown: boolean; message: string };
+export type BuildPathProc = { pathId: BuildPathId; ability: string; detail: string; durationMs?: number };
 
 export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;
