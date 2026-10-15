@@ -13,7 +13,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAbilityUpdate, type CallingAbilityEffect, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -3062,6 +3062,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       defense.damage = Math.max(0, defense.damage - 1);
       if (barrierHits === 1) this.mageBarrierHits.delete(playerId);
       else this.mageBarrierHits.set(playerId, barrierHits - 1);
+      this.callingState(playerId, "mage", "mage_mana_shield", "BARRIER", {
+        charges: Math.max(0, barrierHits - 1), clear: barrierHits === 1,
+      });
       this.buildPathProc(playerId, "mage", "MANA SHIELD", barrierHits === 1 ? "SHATTERED" : `${barrierHits - 1} CHARGES REMAIN`);
     }
     if (defense.damage > 0 && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "tank") {
@@ -4112,6 +4115,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       { pathId, ability, detail, durationMs } satisfies BuildPathProc);
   }
 
+  private callingState(playerId: string, pathId: BuildPathId, abilityId: CallingAbilityId, label: string,
+    options: { activeUntil?: number; charges?: number; targetId?: string; clear?: boolean } = {}): void {
+    this.broadcast("calling:state", {
+      playerId, pathId, abilityId, phase: options.clear ? "clear" : "active", label,
+      ...(options.activeUntil ? { activeUntil: options.activeUntil } : {}),
+      ...(options.charges !== undefined ? { charges: options.charges } : {}),
+      ...(options.targetId ? { targetId: options.targetId } : {}),
+    } satisfies CallingStateUpdate);
+  }
+
   private grantMasterTrial(playerId: string, specializationId: BuildPathSpecializationId, amount = 1): void {
     const player = this.state.players.get(playerId);
     if (!player) return;
@@ -4376,6 +4389,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       casterId: client.sessionId, pathId, abilityId, x: player.x, y: player.y, z: player.z,
       yaw: parsed.data.yaw ?? player.yaw, ...(durationMs ? { durationMs } : {}), ...(effectTargetId ? { targetId: effectTargetId } : {}),
     } satisfies CallingAbilityEffect);
+    if (abilityId === "tank_bulwark" || abilityId === "tank_challenge")
+      this.callingState(client.sessionId, pathId, abilityId, "BRACED", { activeUntil: now + (durationMs ?? 3_000) });
+    else if (abilityId === "mage_mana_shield")
+      this.callingState(client.sessionId, pathId, abilityId, "BARRIER", { charges: this.mageBarrierHits.get(client.sessionId) ?? 0 });
+    else if (abilityId === "mage_overload")
+      this.callingState(client.sessionId, pathId, abilityId, "POWER CHARGED");
+    else if (abilityId === "assassin_vanish")
+      this.callingState(client.sessionId, pathId, abilityId, "VANISHED · STRIKE READY", { activeUntil: now + (durationMs ?? 0) });
+    else if (abilityId === "assassin_death_mark" && effectTargetId)
+      this.callingState(client.sessionId, pathId, abilityId, "TARGET EXPOSED", { activeUntil: now + 10_000, targetId: effectTargetId });
+    else if (abilityId === "assassin_blade_dance")
+      this.callingState(client.sessionId, pathId, abilityId, "UNTARGETABLE", { activeUntil: now + (durationMs ?? 0) });
+    else if (abilityId === "thief_smoke_bomb" || abilityId === "thief_decoy")
+      this.callingState(client.sessionId, pathId, abilityId, "CONCEALED", { activeUntil: now + (durationMs ?? 0) });
+    else if (abilityId === "thief_escape_artist")
+      this.callingState(client.sessionId, pathId, abilityId, "EVADING", { activeUntil: now + (durationMs ?? 0) });
+    else if (abilityId.startsWith("ranger_"))
+      this.callingState(client.sessionId, pathId, abilityId, "EMPOWERED SHOTS", { charges: this.rangerCallingFocus.get(client.sessionId)?.hits ?? 0 });
     this.buildPathProc(client.sessionId, pathId, definition.name.toUpperCase(), detail, durationMs ?? 2_000);
   }
 
@@ -4536,6 +4567,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (callingFocus) {
         if (callingFocus.hits <= 1) this.rangerCallingFocus.delete(playerId);
         else this.rangerCallingFocus.set(playerId, { ...callingFocus, hits: callingFocus.hits - 1 });
+        this.callingState(playerId, "ranger", selectedCallingAbility(state, "ranger"), "EMPOWERED SHOTS", {
+          charges: Math.max(0, callingFocus.hits - 1), clear: callingFocus.hits <= 1,
+        });
         this.buildPathProc(playerId, "ranger", "FOCUSED SHOT", `+${callingFocus.bonus} DAMAGE · ${callingFocus.hits - 1} SHOTS REMAIN`);
       }
       return (rank > 0 ? rank >= 4 ? 2 : 1 : 0) + Math.ceil(this.equipmentAffixTier(player, "piercing") / 2)
@@ -6494,6 +6528,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mark && now >= mark.expiresAt) this.specialMarks.delete(sessionId);
         if (payoff.consumed) {
           this.specialMarks.delete(sessionId);
+          if (selectedCallingAbility(parseBuildPathState(player.huntLoadoutsJson), "assassin") === "assassin_death_mark")
+            this.callingState(sessionId, "assassin", "assassin_death_mark", "TARGET EXPOSED", { clear: true });
           consumedMarks.push({
             casterId: sessionId,
             mobId: target.id,
@@ -6507,7 +6543,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const shadowstepDamage = shadowstepReady ? (assassinSpecialization === "executioner" ? 4 : 2)
           + this.equipmentAffixTier(player, "executioner") : 0;
         shadowstepAppliedDamage = Math.max(shadowstepAppliedDamage, shadowstepDamage);
-        if (shadowstepReady) { shadowstepReady = false; this.assassinShadowUntil.delete(sessionId); }
+        if (shadowstepReady) {
+          shadowstepReady = false; this.assassinShadowUntil.delete(sessionId);
+          const activeAbility = selectedCallingAbility(parseBuildPathState(player.huntLoadoutsJson), "assassin");
+          if (activeAbility === "assassin_vanish" || activeAbility === "assassin_blade_dance")
+            this.callingState(sessionId, "assassin", activeAbility, "EMPOWERED STRIKE", { clear: true });
+        }
         const echoStrength = Math.min(1, (mageSpecialization === "arcanist"
           ? this.buildSpecializationMastered(player, "arcanist") ? 1 : .75 : .5)
           + this.equipmentAffixTier(player, "echoing") * .08);
@@ -6564,6 +6605,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       if (mageOverloadBonus > 0 && targets.length > 0) {
         this.mageOverloadReady.delete(sessionId);
+        this.callingState(sessionId, "mage", "mage_overload", "POWER CHARGED", { clear: true });
         this.buildPathProc(sessionId, "mage", "OVERLOAD", `POWER AMPLIFIED · +${mageOverloadBonus} DAMAGE`);
       }
       if (shadowstepActive && !shadowstepReady)
@@ -7190,7 +7232,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const assassinSpecialization = this.buildSpecializationFor(player, "assassin");
       const shadowstepDamage = now <= (this.assassinShadowUntil.get(sessionId) ?? 0)
         ? (assassinSpecialization === "executioner" ? 4 : 2) + this.equipmentAffixTier(player, "executioner") : 0;
-      if (shadowstepDamage > 0) this.assassinShadowUntil.delete(sessionId);
+      if (shadowstepDamage > 0) {
+        this.assassinShadowUntil.delete(sessionId);
+        const activeAbility = selectedCallingAbility(parseBuildPathState(player.huntLoadoutsJson), "assassin");
+        if (activeAbility === "assassin_vanish" || activeAbility === "assassin_blade_dance")
+          this.callingState(sessionId, "assassin", activeAbility, "EMPOWERED STRIKE", { clear: true });
+      }
       const rangerActive = player.mainHandTag === "ranged"
         && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "ranger" && this.buildPathRankFor(player, "ranger") >= 2;
       const previousPin = rangerActive ? this.rangerPinning.get(sessionId) : undefined;

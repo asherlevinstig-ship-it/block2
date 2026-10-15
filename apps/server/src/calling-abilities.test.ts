@@ -38,6 +38,9 @@ describe("hotbar Calling abilities", () => {
       casterId: "hero", pathId, abilityId: `${pathId}_${pathId === "tank" ? "bulwark" : pathId === "mage" ? "arcane_surge" : pathId === "assassin" ? "vanish" : pathId === "thief" ? "smoke_bomb" : "volley_focus"}`,
       x: 50, y: 8, z: 50,
     }));
+    if (pathId !== "mage") expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
+      playerId: "hero", pathId, phase: "active",
+    }));
     if (pathId === "tank") {
       expect(internal.tankBulwarkUntil.get("hero")).toBe(15_000);
       internal.damagePlayer("field-test", "hero", 3, 10_000, false);
@@ -73,6 +76,19 @@ describe("hotbar Calling abilities", () => {
     expect(client.send).toHaveBeenCalledWith("build:path", expect.objectContaining({
       selectedCallingAbilityId: "tank_bulwark",
       message: expect.stringContaining("unlocks at Path Rank 3"),
+    }));
+  });
+
+  it("publishes persistent charges and clears them as they are consumed", () => {
+    const { internal, client, broadcast } = fixture("mage", 70);
+    internal.handleCallingAbilityEquip(client, { abilityId: "mage_mana_shield" });
+    internal.handleCallingAbility(client, { requestId: "shield" });
+    expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
+      abilityId: "mage_mana_shield", charges: 3, phase: "active",
+    }));
+    internal.damagePlayer("attacker", "hero", 3, 10_001, false);
+    expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
+      abilityId: "mage_mana_shield", charges: 2, phase: "active",
     }));
   });
 

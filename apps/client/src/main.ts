@@ -197,6 +197,7 @@ import {
   type BuildPathId,
   type CallingAbilityUpdate,
   type CallingAbilityEffect,
+  type CallingStateUpdate,
   type CallingAbilityId,
   type SeismicMasteryId,
   type SpecialApplied,
@@ -750,6 +751,7 @@ const buildPathProc = document.querySelector<HTMLElement>("#build-path-proc")!;
 let buildPathProcTimer = 0;
 let localBuildPathId: RoleFieldPath | null = null;
 let localCallingAbilityId: CallingAbilityId | null = null;
+let localCallingState: CallingStateUpdate | null = null;
 let localBuildPathRank = 0;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
@@ -3468,6 +3470,13 @@ interface CallingImpactVisual {
   style: "aura" | "shield" | "terrain" | "smoke" | "motion";
 }
 const callingImpactVisuals: CallingImpactVisual[] = [];
+interface CallingPersistentVisual {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  expiresAt: number;
+  abilityId: CallingAbilityId;
+}
+const callingPersistentVisuals = new Map<string, CallingPersistentVisual>();
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
@@ -3655,6 +3664,41 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
   combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" ? "callingMage"
     : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
   if (style === "terrain") combatAudio.play("seismicImpact");
+}
+
+function updateCallingPersistentState(state: CallingStateUpdate): void {
+  const existing = callingPersistentVisuals.get(state.playerId);
+  if (existing) {
+    existing.root.destroy(); existing.material.destroy(); callingPersistentVisuals.delete(state.playerId);
+  }
+  if (state.playerId === room?.sessionId) localCallingState = state.phase === "clear" ? null : state;
+  if (state.phase === "clear") return;
+  const casterAnchor = state.playerId === room?.sessionId ? localPlayer : remotePlayers.get(state.playerId)?.entity;
+  const targetAnchor = state.targetId ? mobVisuals.get(state.targetId)?.entity : undefined;
+  const anchor = targetAnchor ?? casterAnchor;
+  if (!anchor) return;
+  const colors: Record<RoleFieldPath, pc.Color> = {
+    tank: new pc.Color(.25, .76, 1), mage: new pc.Color(.72, .34, 1), assassin: new pc.Color(1, .16, .38),
+    thief: new pc.Color(.3, 1, .55), ranger: new pc.Color(1, .76, .16),
+  };
+  const material = powerMaterial(colors[state.pathId], .68);
+  const root = new pc.Entity(`calling-state:${state.abilityId}`);
+  const count = Math.max(1, state.charges ?? (state.abilityId === "assassin_death_mark" ? 4 : 6));
+  for (let index = 0; index < count; index += 1) {
+    const angle = index / count * Math.PI * 2;
+    const ranger = state.pathId === "ranger";
+    const marked = state.abilityId === "assassin_death_mark";
+    const plate = addBox(root, ranger ? "ready-shot" : marked ? "exposed-rune" : "active-ward", material,
+      ranger ? [.045, .045, .72] : marked ? [.1, .62, .1] : [.17, .46, .07],
+      [Math.sin(angle) * (marked ? .68 : .76), marked ? 1.2 : .65 + index % 2 * .22, Math.cos(angle) * (marked ? .68 : .76)]);
+    plate.setLocalEulerAngles(marked ? (index % 2 ? 38 : -38) : 0, angle * 180 / Math.PI, ranger ? 18 : 0);
+    if (plate.render) plate.render.castShadows = false;
+  }
+  if (state.abilityId === "mage_overload") addBox(root, "overload-core", material, [.2, 1.2, .2], [0, .82, 0]);
+  root.setLocalPosition(0, .03, 0); anchor.addChild(root);
+  callingPersistentVisuals.set(state.playerId, {
+    root, material, expiresAt: state.activeUntil ?? Number.POSITIVE_INFINITY, abilityId: state.abilityId,
+  });
 }
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
@@ -9041,6 +9085,18 @@ app.on("update", (dt: number) => {
     visual.material.opacity = Math.max(0, Math.min(.9, (1 - progress) / Math.max(.01, 1 - fadeStart) * .9));
     visual.material.update();
   }
+  for (const [playerId, visual] of callingPersistentVisuals) {
+    if (Date.now() >= visual.expiresAt) {
+      visual.root.destroy(); visual.material.destroy(); callingPersistentVisuals.delete(playerId);
+      if (playerId === room?.sessionId) localCallingState = null;
+      continue;
+    }
+    const pulse = 1 + Math.sin(animationTime * 5.5) * .04;
+    visual.root.setLocalScale(pulse, pulse, pulse);
+    visual.root.rotate(0, frameTime * (visual.abilityId === "assassin_death_mark" ? -34 : 26), 0);
+    visual.material.opacity = .58 + Math.sin(animationTime * 6) * .1;
+    visual.material.update();
+  }
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
@@ -9198,6 +9254,15 @@ app.on("update", (dt: number) => {
       ? cooldownState(callingRemaining, CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId)?.cooldownMs ?? 1, "READY · G")
       : cooldownState(0, 1, "CHOOSE CALLING", "CHOOSE CALLING"),
   );
+  if (localCallingState?.activeUntil && localCallingState.activeUntil <= Date.now()) localCallingState = null;
+  combatHud.setCallingState(localCallingState ? {
+    label: localCallingState.label,
+    detail: localCallingState.charges !== undefined
+      ? `${localCallingState.charges}`
+      : localCallingState.activeUntil
+        ? `${Math.max(.1, (localCallingState.activeUntil - Date.now()) / 1_000).toFixed(1)}s`
+        : "READY",
+  } : null);
   specialButton.textContent = specialAimActive
     ? "Release"
     : specialRemaining > 0
@@ -9646,6 +9711,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => createCallingImpact(effect));
+  room.onMessage("calling:state", (state: CallingStateUpdate) => updateCallingPersistentState(state));
   room.onMessage("equipment:affixes", (update: EquipmentAffixUpdate) => {
     equipmentAffixes = update.affixes ?? {};
     equipmentAffixOffers = update.offers ?? equipmentAffixOffers;
@@ -9656,6 +9722,10 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     if (update.message && !update.message.startsWith("Equipment attunements strengthen")) status.textContent = update.message;
   });
   room.onMessage("build:path-proc", (proc: BuildPathProc) => {
+    if (localCombatActive()) {
+      buildPathProc.hidden = true;
+      return;
+    }
     window.clearTimeout(buildPathProcTimer);
     buildPathProc.dataset.path = proc.pathId;
     buildPathProc.querySelector("strong")!.textContent = proc.ability;
@@ -10251,6 +10321,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     callingAnticipationVisuals.length = 0;
     for (const visual of callingImpactVisuals) { visual.root.destroy(); visual.material.destroy(); }
     callingImpactVisuals.length = 0;
+    for (const visual of callingPersistentVisuals.values()) { visual.root.destroy(); visual.material.destroy(); }
+    callingPersistentVisuals.clear(); localCallingState = null; combatHud.setCallingState(null);
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();

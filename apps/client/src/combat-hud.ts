@@ -21,6 +21,7 @@ import type { InteractionMode } from "./interaction-mode.js";
 
 type PowerSlot = "primary" | "secondary";
 type CooldownState = { percent: number; label: string; ready: boolean };
+type CallingState = { label: string; detail: string } | null;
 
 const mode = signal<InteractionMode>("build");
 const mainHand = signal<MainHandId>("longsword");
@@ -38,6 +39,7 @@ const calling = signal<BuildPathId | null>(null);
 const callingAbility = signal<CallingAbilityId | null>(null);
 const callingRank = signal(0);
 const callingPending = signal(false);
+const callingState = signal<CallingState>(null);
 const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE", ready: false });
 const specialCooldown = signal<CooldownState>({ percent: 0, label: "READY · F", ready: true });
 const callingCooldown = signal<CooldownState>({ percent: 0, label: "CHOOSE CALLING", ready: false });
@@ -160,12 +162,14 @@ function CallingLoadout() {
   const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === callingAbility.value)
     ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === selected && option.unlockRank === 0);
   const cooldown = callingCooldown.value;
+  const state = callingState.value;
   return h("button", { id: "calling-slot", type: "button", disabled: !selected,
       "aria-label": definition ? `Use ${definition.name}` : "Choose a Calling to unlock its ability",
-      class: `${cooldown.ready && selected && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""}`.trim() },
+      class: `${cooldown.ready && selected && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""} ${state ? "active-state" : ""}`.trim() },
       h("span", null, "CALLING"),
       h("strong", { id: "calling-name" }, definition?.name ?? "Unbound"),
       h("em", { id: "calling-cooldown-label" }, callingPending.value ? "CAST" : cooldown.label),
+      state ? h("b", { id: "calling-state-label" }, h("span", null, state.label), h("small", null, state.detail)) : null,
       h("i", { id: "calling-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
   );
 }
@@ -201,6 +205,9 @@ export const combatHud = {
     batch(() => { setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); });
   },
   setCallingPending(value: boolean): void { setIfChanged(callingPending, value); },
+  setCallingState(value: CallingState): void {
+    if (JSON.stringify(callingState.value) !== JSON.stringify(value)) callingState.value = value;
+  },
   setPowerAiming(value: boolean): void { setIfChanged(powerAiming, value); },
   setSpecialAiming(value: boolean): void { setIfChanged(specialAiming, value); },
   setCooldowns(power: CooldownState, nextSpecial: CooldownState, nextCalling?: CooldownState): void {

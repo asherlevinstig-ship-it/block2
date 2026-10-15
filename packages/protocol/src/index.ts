@@ -248,6 +248,16 @@ export type CallingAbilityEffect = {
   durationMs?: number;
   targetId?: string;
 };
+export type CallingStateUpdate = {
+  playerId: string;
+  pathId: BuildPathId;
+  abilityId: CallingAbilityId;
+  phase: "active" | "clear";
+  label: string;
+  activeUntil?: number;
+  charges?: number;
+  targetId?: string;
+};
 export const BUILD_PATH_SPECIALIZATIONS = {
   tank: [
     { id: "guardian", name: "Guardian", role: "Extend Fortress Guard", effect: "Protect allies within 5m and prevent 2 damage.", trial: "Prevent 30 damage to allies.", trialTarget: 30, capstone: "AEGIS · Fortress Guard reaches 6m and prevents 3 damage." },

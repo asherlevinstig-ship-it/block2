@@ -538,6 +538,34 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
   100% { transform: scale(1); filter: brightness(1); }
 }
 #calling-slot:active { transform: scale(.985); }
+#calling-slot.active-state {
+  border-color: rgb(255 211 91 / 74%);
+  box-shadow: inset 0 0 18px rgb(255 203 75 / 13%), 0 0 13px rgb(255 203 75 / 16%);
+}
+#calling-state-label {
+  position: absolute;
+  z-index: 2;
+  right: 7px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #ffe69b;
+  font-size: .46rem;
+  letter-spacing: .06em;
+  pointer-events: none;
+}
+#calling-state-label span { color: inherit; font-size: inherit; letter-spacing: inherit; }
+#calling-state-label small {
+  min-width: 22px;
+  padding: 1px 4px;
+  border: 1px solid rgb(255 222 125 / 42%);
+  border-radius: 999px;
+  background: rgb(31 23 6 / 72%);
+  color: #fff4c9;
+  font-size: .46rem;
+  text-align: center;
+}
 #calling-ability-picker { display: grid; gap: 5px; }
 #calling-ability-picker button {
   display: grid;
