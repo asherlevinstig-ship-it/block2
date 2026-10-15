@@ -46,6 +46,7 @@ import { SPITTER_PATTERN, matriarchSecondVolleyYaw, spitterShotOffsets, spitterW
 import { TOWN_STORAGE_CHEST_POSITION, isAtTownStorage } from "@blockcraft/voxel-world";
 import { TOWN_EXPEDITION_BOARD_POSITION } from "@blockcraft/voxel-world";
 import { equipmentPickupCard, LOOT_FEED_EQUIPMENT_MS, LOOT_FEED_MATERIAL_MS, LOOT_FEED_MAX_ITEMS } from "./equipment-pickup.js";
+import { bossLootIdentity, equipmentCallingFit } from "./boss-loot-identity.js";
 import { wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { createMinimap } from "./minimap.js";
 import { caveDepthBand, caveCellKey, discoverCave, caveFogRuns } from "./cave-discovery.js";
@@ -2209,6 +2210,7 @@ interface LootVisual {
   state: NetworkLootDrop;
   phase: number;
   audioPlayed: boolean;
+  landingPlayed: boolean;
 }
 
 interface MobVisual {
@@ -5057,7 +5059,8 @@ function createLootVisual(dropId: string, drop: NetworkLootDrop, settled = false
     : new pc.Vec3(drop.x, drop.y + 1.05, drop.z);
   app.root.addChild(root);
   return { root, marker, beam, beamUntil: realmWardenDrop ? landedAt + WARDEN_LOOT_BEAM_MS : Infinity,
-    revealAt, landedAt, tossFrom, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17, audioPlayed: false };
+    revealAt, landedAt, tossFrom, state: drop, phase: [...dropId].reduce((total, character) => total + character.charCodeAt(0), 0) % 17,
+    audioPlayed: false, landingPlayed: false };
 }
 
 function removeLootVisual(dropId: string, collectedHere: boolean): void {
@@ -5725,9 +5728,12 @@ function queueLootToast(toast: HTMLElement, lifetimeMs: number): void {
 
 function showResourcePickup(name: string, quantity: number, itemId?: string): void {
   const toast = document.createElement("div");
-  toast.className = "resource-toast";
+  toast.className = "resource-toast material-pickup";
   if (itemId) toast.dataset.item = itemId;
-  toast.textContent = `+${quantity} ${name}`;
+  const title = document.createElement("small"); title.textContent = "CRAFTING MATERIAL";
+  const detail = document.createElement("strong"); detail.textContent = `+${quantity} ${name}`;
+  const hint = document.createElement("span"); hint.textContent = "Stored in your pack · used for forging and upgrades";
+  toast.append(title, detail, hint);
   queueLootToast(toast, LOOT_FEED_MATERIAL_MS);
 }
 
@@ -5737,9 +5743,12 @@ function showEquipmentPickup(itemId: ItemId, quantity: number, total: number): v
   const toast = document.createElement("div"); toast.className = "resource-toast equipment-pickup";
   toast.dataset.category = card.category.toLowerCase();
   const rarity = itemRarity(itemId); toast.dataset.rarity = rarity;
-  const title = document.createElement("small"); title.textContent = `${total > quantity ? "DUPLICATE" : "NEW"} · ${ITEM_RARITIES[rarity].label.toUpperCase()} ${card.category.toUpperCase()}`;
+  const discovered = total <= quantity;
+  toast.classList.toggle("codex-discovery", discovered);
+  const title = document.createElement("small"); title.textContent = `${discovered ? "CODEX DISCOVERY" : "DUPLICATE"} · ${ITEM_RARITIES[rarity].label.toUpperCase()} ${card.category.toUpperCase()}`;
   const name = document.createElement("strong"); name.textContent = `${card.name}${card.quantity}`;
-  const hint = document.createElement("span"); hint.textContent = card.hint;
+  const fit = equipmentCallingFit(itemId, localBuildPathId);
+  const hint = document.createElement("span"); hint.textContent = discovered ? `${fit} · Press I to compare` : `${fit} · ${card.hint}`;
   toast.append(title, name, hint);
   queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
 }
@@ -7624,6 +7633,9 @@ const bossRematch = document.querySelector<HTMLElement>("#boss-rematch")!;
 const bossExposed = document.querySelector<HTMLElement>("#boss-exposed")!;
 const bossAttackLabel = document.querySelector<HTMLElement>("#boss-attack-label")!;
 const bossNotice = document.querySelector<HTMLElement>("#boss-notice")!;
+const bossLootPreview = document.querySelector<HTMLElement>("#boss-loot-preview")!;
+const bossLootName = document.querySelector<HTMLElement>("#boss-loot-name")!;
+const bossLootFit = document.querySelector<HTMLElement>("#boss-loot-fit")!;
 const leaderExposedUntil = new Map<string, number>();
 let bossHudState = initialBossHud();
 let bossHudFingerprint = "";
@@ -7694,12 +7706,17 @@ function updateBossHud(now: number): void {
   const rematchLabel = boss?.isMiniBoss ? leaderRematchLabel(boss.leaderRematchTier, boss.leaderModifier) : "";
   // Keep combat hierarchy stable even when a fresh objective update renders behind the boss card.
   document.documentElement.classList.toggle("boss-hud-active", bossHudState.visible);
-  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel]);
+  const fingerprint = JSON.stringify([bossHudState.visible, boss?.name, boss?.health, boss?.maxHealth, boss?.combatState, boss?.attackPattern, bossHudState.enraged, bossHudState.message, exposedLabel, rematchLabel, localBuildPathId]);
   if (fingerprint === bossHudFingerprint) return;
   bossHudFingerprint = fingerprint;
   bossHud.hidden = !bossHudState.visible;
   if (!boss || !bossHudState.visible) return;
   bossName.textContent = boss.name;
+  const lootIdentity = bossLootIdentity(nextBossId, boss.name, boss.archetype, localBuildPathId);
+  bossLootPreview.querySelector("span")!.textContent = lootIdentity.dropLabel;
+  bossLootName.textContent = lootIdentity.itemName;
+  bossLootFit.textContent = lootIdentity.fitLabel;
+  bossLootPreview.dataset.match = String(Boolean(localBuildPathId && lootIdentity.callings.includes(localBuildPathId)));
   const guardian = nextBossId === "forest-guardian";
   const realmBoss = /Realm Stone Warden/i.test(boss.name);
   const bruteEvent = /Stoneheart|Realm Stone Warden/i.test(boss.name);
@@ -9333,6 +9350,10 @@ app.on("update", (dt: number) => {
       const rarity = bagTier ? LOOT_BAG_TIER_RARITY[bagTier] : itemRarity(loot.state.itemId);
       const player = localPlayer.getPosition();
       if (Math.hypot(loot.state.x - player.x, loot.state.z - player.z) <= 18) {
+        if (!loot.landingPlayed && ITEM_RARITIES[rarity].order >= ITEM_RARITIES.rare.order) {
+          loot.landingPlayed = true;
+          lootPickupBurst(loot.state);
+        }
         if (rarity === "rare") combatAudio.play("lootRare", enemyCuePan(loot.state.x, player.x, 18));
         if (rarity === "epic") combatAudio.play("lootEpic", enemyCuePan(loot.state.x, player.x, 18));
         if (rarity === "legendary") combatAudio.play("lootLegendary", enemyCuePan(loot.state.x, player.x, 18));
