@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, parseBuildPathState } from "./build-paths.js";
+import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, chooseCallingAbility, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, parseBuildPathState, selectedCallingAbility } from "./build-paths.js";
 
 describe("hidden build paths", () => {
   it("reveals affinities from durable build choices", () => {
@@ -14,7 +14,14 @@ describe("hidden build paths", () => {
     expect(result.rankUp).toBe(true); expect(buildPathRank(result.state.xp.tank ?? 0)).toBe(1);
   });
   it("sanitizes malformed saved state", () => {
-    expect(parseBuildPathState({ selectedPathId: "cheat", xp: { mage: 14.9, tank: -2 } })).toEqual({ selectedPathId: null, xp: { mage: 14 }, specializations: {}, trials: {}, mastered: [] });
+    expect(parseBuildPathState({ selectedPathId: "cheat", xp: { mage: 14.9, tank: -2 } })).toEqual({ selectedPathId: null, xp: { mage: 14 }, specializations: {}, callingAbilities: {}, trials: {}, mastered: [] });
+  });
+  it("persists one rank-gated Calling ability per path", () => {
+    let state = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "tank"), 30).state;
+    state = chooseCallingAbility(state, "tank", "tank_challenge");
+    expect(selectedCallingAbility(state, "tank")).toBe("tank_challenge");
+    expect(parseBuildPathState(JSON.stringify(state)).callingAbilities.tank).toBe("tank_challenge");
+    expect(chooseCallingAbility(state, "tank", "tank_earthbreaker")).toBe(state);
   });
   it("binds one matching specialization after Veteran rank", () => {
     const veteran = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "ranger"), 70).state;

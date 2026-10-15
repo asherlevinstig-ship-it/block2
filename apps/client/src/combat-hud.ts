@@ -6,7 +6,7 @@ import {
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
   HUNT_EQUIPMENT_SETS,
-  CALLING_ABILITIES,
+  CALLING_ABILITY_OPTIONS,
   huntSetForLoadout,
   type ArmourId,
   type MainHandId,
@@ -14,6 +14,7 @@ import {
   type SeismicMasteryId,
   type SpecialId,
   type BuildPathId,
+  type CallingAbilityId,
 } from "@blockcraft/protocol";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import type { InteractionMode } from "./interaction-mode.js";
@@ -34,6 +35,8 @@ const special = signal<SpecialId>("hunters_mark");
 const powerAiming = signal(false);
 const specialAiming = signal(false);
 const calling = signal<BuildPathId | null>(null);
+const callingAbility = signal<CallingAbilityId | null>(null);
+const callingRank = signal(0);
 const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE", ready: false });
 const specialCooldown = signal<CooldownState>({ percent: 0, label: "READY · F", ready: true });
 const callingCooldown = signal<CooldownState>({ percent: 0, label: "CHOOSE CALLING", ready: false });
@@ -125,6 +128,19 @@ function LoadoutDrawer() {
         h("button", { type: "button", "data-special": "bramble_snare", "aria-pressed": String(special.value === "bramble_snare"), disabled: special.value === "venom_fan" }, "SNARE"),
       ),
     ),
+    calling.value ? h("section", { class: "loadout-group" },
+      h("p", null, h("span", null, "CALLING ABILITY"), h("small", null, "One equipped to G")),
+      h("div", { id: "calling-ability-picker", role: "group", "aria-label": "Equipped Calling ability" },
+        CALLING_ABILITY_OPTIONS.filter(option => option.pathId === calling.value).map(option => {
+          const locked = callingRank.value < option.unlockRank;
+          return h("button", { type: "button", "data-calling-ability": option.id,
+              "aria-pressed": String(callingAbility.value === option.id), disabled: locked,
+              title: locked ? `Unlocks at Path Rank ${option.unlockRank}` : option.description },
+            h("span", null, option.category.toUpperCase()), h("strong", null, option.name),
+            h("small", null, locked ? `LOCKED · RANK ${option.unlockRank}` : option.description));
+        }),
+      ),
+    ) : null,
   );
 }
 
@@ -140,12 +156,14 @@ function SpecialLoadout() {
 
 function CallingLoadout() {
   const selected = calling.value;
+  const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === callingAbility.value)
+    ?? CALLING_ABILITY_OPTIONS.find(option => option.pathId === selected && option.unlockRank === 0);
   const cooldown = callingCooldown.value;
   return h("button", { id: "calling-slot", type: "button", disabled: !selected,
-      "aria-label": selected ? `Use ${CALLING_ABILITIES[selected].name}` : "Choose a Calling to unlock its ability",
+      "aria-label": definition ? `Use ${definition.name}` : "Choose a Calling to unlock its ability",
       class: cooldown.ready && selected ? "ready" : "" },
       h("span", null, "CALLING"),
-      h("strong", { id: "calling-name" }, selected ? CALLING_ABILITIES[selected].name : "Unbound"),
+      h("strong", { id: "calling-name" }, definition?.name ?? "Unbound"),
       h("em", { id: "calling-cooldown-label" }, cooldown.label),
       h("i", { id: "calling-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
   );
@@ -178,7 +196,9 @@ export const combatHud = {
   },
   setSeismicMastery(value: SeismicMasteryId): void { setIfChanged(seismicMastery, value); },
   setSpecial(value: SpecialId): void { setIfChanged(special, value); },
-  setCalling(value: BuildPathId | null): void { setIfChanged(calling, value); },
+  setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number): void {
+    batch(() => { setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); });
+  },
   setPowerAiming(value: boolean): void { setIfChanged(powerAiming, value); },
   setSpecialAiming(value: boolean): void { setIfChanged(specialAiming, value); },
   setCooldowns(power: CooldownState, nextSpecial: CooldownState, nextCalling?: CooldownState): void {

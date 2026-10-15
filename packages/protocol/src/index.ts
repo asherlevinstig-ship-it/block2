@@ -204,10 +204,34 @@ export const CALLING_ABILITIES = {
   thief: { name: "Smoke Bomb", cooldownMs: 18_000, description: "Divert nearby enemies, conceal yourself, and restore 20 stamina." },
   ranger: { name: "Volley Focus", cooldownMs: 12_000, description: "Empower your next 3 ranged hits with +1 damage." },
 } as const satisfies Record<BuildPathId, { name: string; cooldownMs: number; description: string }>;
-export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80) }).strict();
+export const CALLING_ABILITY_OPTIONS = [
+  { id: "tank_bulwark", pathId: "tank", name: "Bulwark", category: "Core", unlockRank: 0, cooldownMs: 18_000, description: "Brace and reduce every incoming hit." },
+  { id: "tank_challenge", pathId: "tank", name: "Challenge", category: "Utility", unlockRank: 2, cooldownMs: 20_000, description: "Provoke nearby enemies and recover stamina." },
+  { id: "tank_earthbreaker", pathId: "tank", name: "Earthbreaker", category: "Aggressive", unlockRank: 3, cooldownMs: 22_000, description: "Damage and stagger all nearby enemies." },
+  { id: "mage_arcane_surge", pathId: "mage", name: "Arcane Surge", category: "Core", unlockRank: 0, cooldownMs: 16_000, description: "Refresh Power and restore stamina." },
+  { id: "mage_mana_shield", pathId: "mage", name: "Mana Shield", category: "Utility", unlockRank: 2, cooldownMs: 18_000, description: "Reduce the next three incoming hits." },
+  { id: "mage_overload", pathId: "mage", name: "Overload", category: "Aggressive", unlockRank: 3, cooldownMs: 20_000, description: "Empower the next Power with bonus damage." },
+  { id: "assassin_vanish", pathId: "assassin", name: "Vanish", category: "Core", unlockRank: 0, cooldownMs: 14_000, description: "Break pursuit and empower your next strike." },
+  { id: "assassin_death_mark", pathId: "assassin", name: "Death Mark", category: "Utility", unlockRank: 2, cooldownMs: 16_000, description: "Fully mark the nearest enemy for execution." },
+  { id: "assassin_blade_dance", pathId: "assassin", name: "Blade Dance", category: "Aggressive", unlockRank: 3, cooldownMs: 19_000, description: "Become briefly untouchable and empower your next strike." },
+  { id: "thief_smoke_bomb", pathId: "thief", name: "Smoke Bomb", category: "Core", unlockRank: 0, cooldownMs: 18_000, description: "Divert nearby enemies, conceal, and recover stamina." },
+  { id: "thief_decoy", pathId: "thief", name: "Decoy", category: "Utility", unlockRank: 2, cooldownMs: 20_000, description: "Divert and stagger enemies in a wide area." },
+  { id: "thief_escape_artist", pathId: "thief", name: "Escape Artist", category: "Aggressive", unlockRank: 3, cooldownMs: 16_000, description: "Reset dodge exhaustion and briefly evade all damage." },
+  { id: "ranger_volley_focus", pathId: "ranger", name: "Volley Focus", category: "Core", unlockRank: 0, cooldownMs: 12_000, description: "Empower your next three ranged hits." },
+  { id: "ranger_disengage", pathId: "ranger", name: "Disengage", category: "Utility", unlockRank: 2, cooldownMs: 15_000, description: "Leap backward and empower your next two shots." },
+  { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Greatly empower your next two ranged hits." },
+] as const;
+export type CallingAbilityId = typeof CALLING_ABILITY_OPTIONS[number]["id"];
+export const CallingAbilityEquipRequestSchema = z.object({
+  abilityId: z.enum(["tank_bulwark", "tank_challenge", "tank_earthbreaker", "mage_arcane_surge", "mage_mana_shield", "mage_overload",
+    "assassin_vanish", "assassin_death_mark", "assassin_blade_dance", "thief_smoke_bomb", "thief_decoy", "thief_escape_artist",
+    "ranger_volley_focus", "ranger_disengage", "ranger_deadeye"]),
+}).strict();
+export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80), yaw: z.number().finite().optional() }).strict();
 export type CallingAbilityUpdate = {
   requestId: string;
   pathId: BuildPathId;
+  abilityId: CallingAbilityId;
   ability: string;
   detail: string;
   cooldownUntil: number;
@@ -246,6 +270,7 @@ export const BUILD_PATH_RANKS = [
 export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper"]).optional() }).strict();
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
+  selectedCallingAbilityId: CallingAbilityId | null;
   selectedSpecializationId: BuildPathSpecializationId | null; candidates: BuildPathAffinity[]; canChoose: boolean;
   canSpecialize: boolean; masterTrial: { name: string; description: string; progress: number; target: number; complete: boolean; capstone: string } | null;
   inTown: boolean; message: string };

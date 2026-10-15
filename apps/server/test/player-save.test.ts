@@ -83,21 +83,21 @@ describe("player saves", () => {
     const player = new PlayerState();
     player.huntLoadoutsJson = JSON.stringify({ loadouts: [{ slot: 1, name: "Fang Rush", mainHandId: "fang_dagger", armourId: "fangstalker_wrap",
       equippedPower: "seismic_cleave", equippedPowerSecondary: "lunge_strike", equippedSpecial: "hunters_mark",
-      equippedTrait: "momentum", seismicMastery: "advancing_fault" }], buildPath: { selectedPathId: "assassin", xp: { assassin: 44, mage: 9 }, specializations: { assassin: "executioner" }, trials: { executioner: 7 }, mastered: [] },
+      equippedTrait: "momentum", seismicMastery: "advancing_fault" }], buildPath: { selectedPathId: "assassin", xp: { assassin: 44, mage: 9 }, specializations: { assassin: "executioner" }, callingAbilities: { assassin: "assassin_death_mark" }, trials: { executioner: 7 }, mastered: [] },
       affixes: { fang_dagger: { affixId: "executioner", tier: 2 } }, dust: 7,
       offers: { fangstalker_wrap: ["lethal", "veiled", "executioner"] } });
     player.huntCollectionRewardClaimed = true;
     const parsed = parsePlayerSave(serializePlayerSave(player, 456));
     expect(parsed?.huntLoadouts?.[0]).toMatchObject({ slot: 1, name: "Fang Rush", mainHandId: "fang_dagger", armourId: "fangstalker_wrap" });
     expect(parsed?.huntCollectionRewardClaimed).toBe(true);
-    expect(parsed?.buildPath).toEqual({ selectedPathId: "assassin", xp: { assassin: 44, mage: 9 }, specializations: { assassin: "executioner" }, trials: { executioner: 7 }, mastered: [] });
+    expect(parsed?.buildPath).toEqual({ selectedPathId: "assassin", xp: { assassin: 44, mage: 9 }, specializations: { assassin: "executioner" }, callingAbilities: { assassin: "assassin_death_mark" }, trials: { executioner: 7 }, mastered: [] });
     expect(parsed?.equipmentAffixes).toEqual({ fang_dagger: { affixId: "executioner", tier: 2 } });
     expect(parsed?.attunementDust).toBe(7);
     expect(parsed?.attunementOffers).toEqual({ fangstalker_wrap: ["lethal", "veiled", "executioner"] });
     const restored = new PlayerState(); applyPlayerSave(restored, parsed!);
     expect(JSON.parse(restored.huntLoadoutsJson).loadouts[0].name).toBe("Fang Rush");
     expect(restored.huntCollectionRewardClaimed).toBe(true);
-    expect(JSON.parse(restored.huntLoadoutsJson).buildPath).toEqual({ selectedPathId: "assassin", xp: { assassin: 44, mage: 9 }, specializations: { assassin: "executioner" }, trials: { executioner: 7 }, mastered: [] });
+    expect(JSON.parse(restored.huntLoadoutsJson).buildPath).toEqual({ selectedPathId: "assassin", xp: { assassin: 44, mage: 9 }, specializations: { assassin: "executioner" }, callingAbilities: { assassin: "assassin_death_mark" }, trials: { executioner: 7 }, mastered: [] });
     expect(JSON.parse(restored.huntLoadoutsJson).affixes).toEqual({ fang_dagger: { affixId: "executioner", tier: 2 } });
     expect(JSON.parse(restored.huntLoadoutsJson).dust).toBe(7);
     expect(JSON.parse(restored.huntLoadoutsJson).offers).toEqual({ fangstalker_wrap: ["lethal", "veiled", "executioner"] });

@@ -184,7 +184,7 @@ import {
   BUILD_PATHS,
   BUILD_PATH_RANKS,
   BUILD_PATH_SPECIALIZATIONS,
-  CALLING_ABILITIES,
+  CALLING_ABILITY_OPTIONS,
   blacksmithRequiredLevel,
   enemyThreat,
   experienceToNextLevel,
@@ -196,6 +196,7 @@ import {
   type BuildPathProc,
   type BuildPathId,
   type CallingAbilityUpdate,
+  type CallingAbilityId,
   type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
@@ -747,6 +748,8 @@ combatHud.mount(combatHudRoot);
 const buildPathProc = document.querySelector<HTMLElement>("#build-path-proc")!;
 let buildPathProcTimer = 0;
 let localBuildPathId: RoleFieldPath | null = null;
+let localCallingAbilityId: CallingAbilityId | null = null;
+let localBuildPathRank = 0;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
 const powerLoadoutButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-loadout-slots [data-power-slot]")];
@@ -3024,7 +3027,8 @@ function updateControlsHelp(): void {
   const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
   const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Mouse aim · Hold left-click fire" : "";
   const secondaryHint = localCharacterProgression.level >= 3 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
-  const callingHint = localBuildPathId ? ` · G ${CALLING_ABILITIES[localBuildPathId].name}` : "";
+  const calling = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
+  const callingHint = calling ? ` · G ${calling.name}` : "";
   controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint}${secondaryHint} · ${specialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
 }
 
@@ -3044,13 +3048,14 @@ function requestCallingAbility(): void {
   }
   const now = Date.now();
   if (now < localCallingCooldownUntil) {
-    showCombatFeedback(`${CALLING_ABILITIES[localBuildPathId].name.toUpperCase()} RECHARGING`, "hurt");
+    const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId);
+    showCombatFeedback(`${definition?.name.toUpperCase() ?? "CALLING"} RECHARGING`, "hurt");
     return;
   }
   if (performance.now() < callingAbilityPendingUntil) return;
   callingAbilityPendingUntil = performance.now() + 700;
   callingAbilitySequence += 1;
-  room.send("calling:ability", { requestId: `calling-${callingAbilitySequence}` });
+  room.send("calling:ability", { requestId: `calling-${callingAbilitySequence}`, yaw: cameraOrbit.yaw });
 }
 
 function requestSpecialEquip(specialId: SpecialId): void {
@@ -3185,7 +3190,9 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
 
 function renderBuildPath(update: BuildPathUpdate): void {
   localBuildPathId = update.selectedPathId;
-  combatHud.setCalling(update.selectedPathId);
+  localCallingAbilityId = update.selectedCallingAbilityId;
+  localBuildPathRank = update.rank;
+  combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank);
   updateControlsHelp();
   const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
   const rank = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank) ?? BUILD_PATH_RANKS[0];
@@ -7978,6 +7985,13 @@ for (const button of traitPickerButtons) {
     if (traitId && isTraitId(traitId)) requestTraitEquip(traitId);
   });
 }
+combatHudRoot.addEventListener("click", event => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-calling-ability]");
+  const abilityId = button?.dataset.callingAbility as CallingAbilityId | undefined;
+  if (!button || button.disabled || !abilityId || !room || !worldReady || abilityId === localCallingAbilityId) return;
+  room.send("calling:ability:equip", { abilityId });
+  status.textContent = `Equipping ${CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)?.name ?? "Calling ability"}...`;
+});
 
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
@@ -8967,8 +8981,8 @@ app.on("update", (dt: number) => {
     cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY · R",
       !powerServerReady ? "SERVER UPDATE" : !powerCompatible ? "INCOMPATIBLE" : powerAimActive ? "RELEASE TO CAST" : undefined),
     cooldownState(specialRemaining, specialDefinition.cooldownMs, "READY · F", specialAimActive ? "RELEASE TO ARM" : undefined),
-    localBuildPathId
-      ? cooldownState(callingRemaining, CALLING_ABILITIES[localBuildPathId].cooldownMs, "READY · G")
+    localBuildPathId && localCallingAbilityId
+      ? cooldownState(callingRemaining, CALLING_ABILITY_OPTIONS.find(option => option.id === localCallingAbilityId)?.cooldownMs ?? 1, "READY · G")
       : cooldownState(0, 1, "CHOOSE CALLING", "CHOOSE CALLING"),
   );
   specialButton.textContent = specialAimActive
@@ -9413,7 +9427,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     callingAbilityPendingUntil = 0;
     localCallingCooldownUntil = update.cooldownUntil;
     localBuildPathId = update.pathId;
-    combatHud.setCalling(update.pathId);
+    localCallingAbilityId = update.abilityId;
+    combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank);
     showCombatFeedback(update.ability.toUpperCase(), "dodge");
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });

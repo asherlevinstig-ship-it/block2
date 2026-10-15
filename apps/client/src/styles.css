@@ -526,6 +526,23 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 }
 #calling-slot.ready { box-shadow: inset 0 0 18px rgb(61 231 177 / 16%), 0 0 12px rgb(61 231 177 / 14%); }
 #calling-slot:active { transform: scale(.985); }
+#calling-ability-picker { display: grid; gap: 5px; }
+#calling-ability-picker button {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 2px 8px;
+  padding: 7px 8px;
+  border: 1px solid rgb(83 214 174 / 24%);
+  border-radius: 7px;
+  background: rgb(14 35 29 / 76%);
+  color: #9fb8ae;
+  text-align: left;
+}
+#calling-ability-picker button span { color: #68cbae; font-size: .47rem; font-weight: 1000; letter-spacing: .09em; }
+#calling-ability-picker button strong { font-size: .59rem; }
+#calling-ability-picker button small { grid-column: 1 / -1; color: #82968d; font-size: .49rem; }
+#calling-ability-picker button[aria-pressed="true"] { border-color: #65dab8aa; background: rgb(18 83 66 / 88%); color: #dcfff4; }
+#calling-ability-picker button:disabled { opacity: .48; }
 
 #combat-reticle {
   position: fixed;

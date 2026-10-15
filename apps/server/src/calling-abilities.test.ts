@@ -1,21 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CALLING_ABILITIES, type BuildPathId } from "@blockcraft/protocol";
+import { CALLING_ABILITIES, CALLING_ABILITY_OPTIONS, type BuildPathId, type CallingAbilityId } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
-import { chooseBuildPath, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
+import { chooseBuildPath, grantBuildPathXp, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
 
 describe("hotbar Calling abilities", () => {
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10_000); });
   afterEach(() => vi.useRealTimers());
 
-  function fixture(pathId: BuildPathId) {
+  function fixture(pathId: BuildPathId, xp = 0) {
     const room = new WorldRoom(); room.setState(new WorldState());
     const internal = room as any; internal.roomKind = "overworld";
     vi.spyOn(room, "broadcast").mockImplementation(() => {});
     const player = new PlayerState();
     Object.assign(player, { x: 50, y: 8, z: 50, stamina: 25, maxStamina: 100,
       powerCooldownUntil: 99_000, specialCooldownUntil: 99_000 });
-    player.huntLoadoutsJson = serializeBuildPathState(chooseBuildPath(parseBuildPathState("{}"), pathId));
+    player.huntLoadoutsJson = serializeBuildPathState(grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), pathId), xp).state);
     room.state.players.set("hero", player);
     const client = { sessionId: "hero", send: vi.fn() };
     internal.clients.push(client);
@@ -48,7 +48,28 @@ describe("hotbar Calling abilities", () => {
       expect(player.stamina).toBe(45);
       expect(internal.mobAwareness.has("pursuer")).toBe(false);
     }
-    if (pathId === "ranger") expect(internal.rangerFieldFocusHits.get("hero")).toBe(3);
+    if (pathId === "ranger") expect(internal.rangerCallingFocus.get("hero")).toEqual({ hits: 3, bonus: 1 });
+  });
+
+  it.each(CALLING_ABILITY_OPTIONS)("equips and activates $id when its rank is unlocked", option => {
+    const { internal, player, client } = fixture(option.pathId, 70);
+    const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, health: 20, maxHealth: 20, name: "Target", targetId: "hero" });
+    internal.state.mobs.set("target", mob);
+    internal.mobAwareness.set("target", { targetId: "hero" });
+    internal.handleCallingAbilityEquip(client, { abilityId: option.id as CallingAbilityId });
+    expect(parseBuildPathState(player.huntLoadoutsJson).callingAbilities[option.pathId]).toBe(option.id);
+    internal.handleCallingAbility(client, { requestId: `activate-${option.id}`, yaw: 0 });
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: option.id }));
+  });
+
+  it("keeps locked abilities out of the slot", () => {
+    const { internal, player, client } = fixture("tank");
+    internal.handleCallingAbilityEquip(client, { abilityId: "tank_earthbreaker" });
+    expect(parseBuildPathState(player.huntLoadoutsJson).callingAbilities.tank).toBeUndefined();
+    expect(client.send).toHaveBeenCalledWith("build:path", expect.objectContaining({
+      selectedCallingAbilityId: "tank_bulwark",
+      message: expect.stringContaining("unlocks at Path Rank 3"),
+    }));
   });
 
   it("requires a Calling and enforces the server cooldown", () => {
