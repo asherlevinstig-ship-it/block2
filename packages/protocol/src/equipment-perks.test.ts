@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { equipmentPerkStats } from "./index.js";
+import { EQUIPMENT_AFFIX_RESONANCE, equipmentAffixResonanceForLoadout, equipmentPerkStats } from "./index.js";
 
 describe("fixed equipment perks", () => {
   it("scales weapon identity with reforge rank", () => {
@@ -13,5 +13,17 @@ describe("fixed equipment perks", () => {
     expect(equipmentPerkStats("rootguard_armour", 2)?.detail).toContain("12 stamina");
     expect(equipmentPerkStats("bastion_plate", 3)?.detail).toContain("every 11s");
     expect(equipmentPerkStats("forged_sword", 3)).toBeNull();
+  });
+
+  it("activates a named resonance only when weapon and armour affixes share a Calling", () => {
+    expect(equipmentAffixResonanceForLoadout("fang_dagger", "fangstalker_wrap", {
+      fang_dagger: { affixId: "lethal", tier: 2 },
+      fangstalker_wrap: { affixId: "veiled", tier: 1 },
+    })).toBe("assassin");
+    expect(EQUIPMENT_AFFIX_RESONANCE.assassin.name).toBe("Nightfall");
+    expect(equipmentAffixResonanceForLoadout("fang_dagger", "fangstalker_wrap", {
+      fang_dagger: { affixId: "lethal", tier: 2 },
+      fangstalker_wrap: { affixId: "elusive", tier: 1 },
+    })).toBeNull();
   });
 });

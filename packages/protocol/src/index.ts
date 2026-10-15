@@ -390,6 +390,24 @@ export type EquipmentAffixId = keyof typeof EQUIPMENT_AFFIXES;
 export type EquipmentAffixRoll = { affixId: EquipmentAffixId; tier: 1 | 2 | 3 };
 export type EquipmentAffixOffers = Partial<Record<ItemId, EquipmentAffixId[]>>;
 export type EquipmentAffixUpdate = { affixes: Partial<Record<ItemId, EquipmentAffixRoll>>; offers?: EquipmentAffixOffers; dust?: number; message: string };
+export const EQUIPMENT_AFFIX_RESONANCE = {
+  tank: { name: "Ironwall", effect: "Both equipped Tank affixes gain +1 effective tier." },
+  mage: { name: "Spellweave", effect: "Both equipped Mage affixes gain +1 effective tier." },
+  assassin: { name: "Nightfall", effect: "Both equipped Assassin affixes gain +1 effective tier." },
+  thief: { name: "Ghosthand", effect: "Both equipped Thief affixes gain +1 effective tier." },
+  ranger: { name: "Hawkeye", effect: "Both equipped Ranger affixes gain +1 effective tier." },
+} as const satisfies Record<BuildPathId, { name: string; effect: string }>;
+
+/** A weapon and armour resonate when their attunements support the same classless Calling. */
+export function equipmentAffixResonanceForLoadout(mainHandItemId: string | null, armourItemId: string | null,
+  affixes: Partial<Record<ItemId, EquipmentAffixRoll>>): BuildPathId | null {
+  if (!mainHandItemId || !armourItemId || !Object.hasOwn(ITEM_DEFINITIONS, mainHandItemId)
+    || !Object.hasOwn(ITEM_DEFINITIONS, armourItemId)) return null;
+  const weapon = affixes[mainHandItemId as ItemId], armour = affixes[armourItemId as ItemId];
+  if (!weapon || !armour) return null;
+  const weaponPath = EQUIPMENT_AFFIXES[weapon.affixId].pathId;
+  return EQUIPMENT_AFFIXES[armour.affixId].pathId === weaponPath ? weaponPath : null;
+}
 
 export const TAVERN_QUIZ_STARTING_COINS = 20;
 export const TAVERN_QUIZ_MAX_STAKE = 10;

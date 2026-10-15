@@ -13,7 +13,8 @@ import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
-import { ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES,
+import { ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES, EQUIPMENT_AFFIX_RESONANCE,
+  equipmentAffixResonanceForLoadout,
   type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { DODGE_EXHAUSTION_MS, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
@@ -2482,6 +2483,28 @@ function appendComparisonRow(element: HTMLElement, label: string, value: string,
   const stat = document.createElement("span"); stat.textContent = value;
   row.append(key, stat); element.append(row);
 }
+function appendEquipmentBuildFit(element: HTMLElement, itemId: ItemId): void {
+  const roll = equipmentAffixes[itemId];
+  if (!roll) return;
+  const pathId = EQUIPMENT_AFFIXES[roll.affixId].pathId;
+  const candidateHand = equipmentForItem(itemId) ? itemId : itemForMainHand(localMainHandId);
+  const candidateArmour = armourForItem(itemId) ? itemId : localArmourId === "none" ? null : localArmourId as ItemId;
+  const resonance = equipmentAffixResonanceForLoadout(candidateHand, candidateArmour, equipmentAffixes);
+  const node = document.createElement("p"); node.className = "inventory-build-fit";
+  if (resonance) {
+    node.dataset.fit = "resonance";
+    const definition = EQUIPMENT_AFFIX_RESONANCE[resonance];
+    const active = resonance === localBuildPathId;
+    node.innerHTML = `<strong>${definition.name.toUpperCase()} RESONANCE · ${active ? "ACTIVE" : "READY"}</strong>${definition.effect}${active ? "" : ` Choose the ${BUILD_PATHS[resonance].name} Calling to activate its mechanics.`}`;
+  } else if (pathId === localBuildPathId) {
+    node.dataset.fit = "match";
+    node.innerHTML = `<strong>${BUILD_PATHS[pathId].name.toUpperCase()} BUILD FIT</strong>Supports your current Calling. Pair it with another ${BUILD_PATHS[pathId].name} affix for resonance.`;
+  } else {
+    node.dataset.fit = "off";
+    node.innerHTML = `<strong>${BUILD_PATHS[pathId].name.toUpperCase()} PATH ITEM</strong>Its affix activates through the ${BUILD_PATHS[pathId].name} Calling; keep it for a future or hybrid loadout.`;
+  }
+  element.append(node);
+}
 function appendEquipmentIdentity(element: HTMLElement, itemId: ItemId | null, rank: number): void {
   const rankNode = document.createElement("small"); rankNode.className = "inventory-rank";
   rankNode.textContent = itemId ? rankLabel(rank) : "STARTER"; element.append(rankNode);
@@ -2491,6 +2514,7 @@ function appendEquipmentIdentity(element: HTMLElement, itemId: ItemId | null, ra
     const affixNode = document.createElement("p"); affixNode.className = "inventory-affix";
     const affixName = document.createElement("strong"); affixName.textContent = `${EQUIPMENT_AFFIXES[affix.affixId].name.toUpperCase()} · TIER ${affix.tier}`;
     affixNode.append(affixName, document.createTextNode(EQUIPMENT_AFFIXES[affix.affixId].effect)); element.append(affixNode);
+    appendEquipmentBuildFit(element, itemId);
   }
   const perk = equipmentPerkStats(itemId, rank);
   if (perk && perk.id !== "fang_set" && perk.id !== "venom_set" && perk.id !== "crusher_set") {
@@ -5721,8 +5745,15 @@ function renderAttunementShop(): void {
     line.innerHTML = `<b>${slot}</b><strong>${itemId ? ITEM_DEFINITIONS[itemId].name : "None"}</strong><small>${roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} T${roll.tier} · ${active ? "ACTIVE" : `requires ${BUILD_PATHS[EQUIPMENT_AFFIXES[roll.affixId].pathId].name}`}` : "No attunement"}</small>`;
     equipped.append(line);
   }
+  const resonancePath = equipmentAffixResonanceForLoadout(blacksmithEquippedHandItem, blacksmithEquippedArmourItem, equipmentAffixes);
+  if (resonancePath) {
+    const resonance = document.createElement("strong"); resonance.className = "attunement-resonance";
+    const definition = EQUIPMENT_AFFIX_RESONANCE[resonancePath];
+    resonance.textContent = `${definition.name.toUpperCase()} RESONANCE · ${resonancePath === blacksmithCalling ? "ACTIVE" : `READY · REQUIRES ${BUILD_PATHS[resonancePath].name.toUpperCase()}`} · ${definition.effect}`;
+    equipped.append(resonance);
+  }
   const help = document.createElement("p"); help.className = "blacksmith-attunement-help";
-  help.textContent = "Dismantle attuned gear for Dust. Reroll changes the affix but keeps its tier. Upgrade preserves the affix; Tier 3 also consumes 1 Moonstone.";
+  help.textContent = "Match the Calling on your weapon and armour to activate resonance. Dismantle attuned gear for Dust. Reroll changes the affix but keeps its tier; upgrading preserves it.";
   attunementShop.append(heading, wallet, equipped, help);
   for (const [rawItemId, choices] of Object.entries(equipmentAffixOffers) as [ItemId, (keyof typeof EQUIPMENT_AFFIXES)[]][]) {
     if (!choices?.length || (inventoryCounts.get(rawItemId) ?? 0) <= 0) continue;
@@ -5751,6 +5782,19 @@ function renderAttunementShop(): void {
     const title = document.createElement("header");
     title.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name}</strong><b>${roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name.toUpperCase()} · T${roll.tier}` : "UNATTUNED"}</b>`;
     const effect = document.createElement("p"); effect.textContent = roll ? `${BUILD_PATHS[EQUIPMENT_AFFIXES[roll.affixId].pathId].name} · ${EQUIPMENT_AFFIXES[roll.affixId].effect}` : "Reveal a Tier 1 Calling affix.";
+    if (roll) {
+      const fit = document.createElement("small"); fit.className = "attunement-fit";
+      const pathId = EQUIPMENT_AFFIXES[roll.affixId].pathId;
+      const candidateHand = equipmentForItem(itemId) ? itemId : blacksmithEquippedHandItem;
+      const candidateArmour = armourForItem(itemId) ? itemId : blacksmithEquippedArmourItem;
+      const candidateResonance = equipmentAffixResonanceForLoadout(candidateHand, candidateArmour, equipmentAffixes);
+      fit.dataset.fit = candidateResonance ? "resonance" : pathId === blacksmithCalling ? "match" : "off";
+      fit.textContent = candidateResonance
+        ? `${candidateResonance === blacksmithCalling ? "COMPLETES" : "BUILDS"} ${EQUIPMENT_AFFIX_RESONANCE[candidateResonance].name.toUpperCase()} RESONANCE${candidateResonance === blacksmithCalling ? "" : ` · REQUIRES ${BUILD_PATHS[candidateResonance].name.toUpperCase()}`}`
+        : pathId === blacksmithCalling ? `MATCHES CURRENT ${BUILD_PATHS[pathId].name.toUpperCase()} CALLING`
+          : `ALTERNATE ${BUILD_PATHS[pathId].name.toUpperCase()} BUILD`;
+      card.append(title, effect, fit);
+    } else card.append(title, effect);
     const actions = document.createElement("div"); actions.className = "attunement-actions";
     const reroll = document.createElement("button"); reroll.type = "button";
     reroll.textContent = attunementDust >= rerollCost ? `${roll ? "REROLL" : "ATTUNE"} · ${rerollCost} DUST` : `NEED ${rerollCost - attunementDust} DUST`;
@@ -5764,7 +5808,7 @@ function renderAttunementShop(): void {
       upgrade.disabled = blacksmithPending || tier >= 3 || attunementDust < upgradeCost || needsMoonstone;
       upgrade.addEventListener("click", () => sendAttunementAction("upgrade", itemId)); actions.append(upgrade);
     }
-    card.append(title, effect, actions); attunementShop.append(card);
+    card.append(actions); attunementShop.append(card);
   }
   if (shown === 0) {
     const empty = document.createElement("p"); empty.className = "blacksmith-attunement-empty";

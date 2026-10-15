@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmentAffixes, parseEquipmentAffixOffers,
   rollEquipmentAffix, rollEquipmentAffixOptions } from "./equipment-affixes.js";
+import { WorldRoom } from "./game-room.js";
+import { PlayerState } from "./schema.js";
 
 describe("equipment affixes", () => {
   it("favours the active Calling while retaining off-build possibilities", () => {
@@ -24,5 +26,19 @@ describe("equipment affixes", () => {
     expect(attunementDustCost("reroll", 3, false)).toBe(10);
     expect(attunementDustCost("reroll", 3, true)).toBe(8);
     expect(attunementDustCost("upgrade", 2, true)).toBe(10);
+  });
+
+  it("raises both equipped affixes by one effective tier when their Callings resonate", () => {
+    const room = new WorldRoom() as any;
+    const player = new PlayerState();
+    player.mainHandId = "fang_dagger"; player.armourId = "fangstalker_wrap";
+    player.huntLoadoutsJson = JSON.stringify({ affixes: {
+      fang_dagger: { affixId: "lethal", tier: 2 },
+      fangstalker_wrap: { affixId: "veiled", tier: 1 },
+    } });
+    expect(room.equipmentAffixTier(player, "lethal")).toBe(3);
+    expect(room.equipmentAffixTier(player, "veiled")).toBe(2);
+    player.armourId = "iron_armour";
+    expect(room.equipmentAffixTier(player, "lethal")).toBe(2);
   });
 });
