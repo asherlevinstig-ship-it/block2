@@ -196,6 +196,7 @@ import {
   type BuildPathProc,
   type BuildPathId,
   type CallingAbilityUpdate,
+  type CallingAbilityEffect,
   type CallingAbilityId,
   type SeismicMasteryId,
   type SpecialApplied,
@@ -3518,18 +3519,21 @@ function createCallingAnticipation(pathId: RoleFieldPath): void {
   callingAnticipationVisuals.push({ root, material, startedAt: performance.now() });
 }
 
-function createCallingImpact(update: CallingAbilityUpdate): void {
-  const colors: Record<RoleFieldPath, pc.Color> = {
-    tank: new pc.Color(.28, .72, 1), mage: new pc.Color(.7, .34, 1), assassin: new pc.Color(1, .16, .36),
-    thief: new pc.Color(.25, .9, .48), ranger: new pc.Color(1, .72, .12),
+function createCallingImpact(effect: CallingAbilityEffect): void {
+  const colors: Record<CallingAbilityId, pc.Color> = {
+    tank_bulwark: new pc.Color(.22, .78, 1), tank_challenge: new pc.Color(1, .66, .14), tank_earthbreaker: new pc.Color(1, .36, .08),
+    mage_arcane_surge: new pc.Color(.62, .32, 1), mage_mana_shield: new pc.Color(.26, .58, 1), mage_overload: new pc.Color(1, .18, .84),
+    assassin_vanish: new pc.Color(.44, .12, .72), assassin_death_mark: new pc.Color(1, .08, .18), assassin_blade_dance: new pc.Color(1, .64, .72),
+    thief_smoke_bomb: new pc.Color(.18, .72, .42), thief_decoy: new pc.Color(.42, 1, .48), thief_escape_artist: new pc.Color(.76, 1, .22),
+    ranger_volley_focus: new pc.Color(1, .7, .1), ranger_disengage: new pc.Color(.24, .9, .76), ranger_deadeye: new pc.Color(1, .9, .28),
   };
-  const abilityId = update.abilityId;
+  const abilityId = effect.abilityId;
   const style: CallingImpactVisual["style"] = abilityId === "tank_earthbreaker" ? "terrain"
     : abilityId === "tank_bulwark" || abilityId === "mage_mana_shield" ? "shield"
     : abilityId === "thief_smoke_bomb" || abilityId === "thief_decoy" ? "smoke"
     : abilityId === "assassin_vanish" || abilityId === "assassin_blade_dance" || abilityId === "thief_escape_artist" || abilityId === "ranger_disengage" ? "motion"
     : "aura";
-  const material = powerMaterial(colors[update.pathId], style === "smoke" ? .48 : .9);
+  const material = powerMaterial(colors[abilityId], style === "smoke" ? .48 : .9);
   const root = new pc.Entity(`calling-impact:${abilityId}`);
   const ringRadius = style === "terrain" ? 2.65 : style === "smoke" ? 2.1 : style === "shield" ? .95 : 1.25;
   const segments = style === "terrain" ? 24 : 16;
@@ -3584,19 +3588,72 @@ function createCallingImpact(update: CallingAbilityUpdate): void {
       shard.setLocalEulerAngles(index % 2 ? 20 : -20, angle * 180 / Math.PI, 35);
     }
   }
-  const followsPlayer = style === "shield" || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
-  if (followsPlayer) {
-    root.setLocalPosition(0, .03, 0); localPlayer.addChild(root);
-  } else {
-    const position = localPlayer.getPosition(); root.setPosition(position.x, position.y + .03, position.z); app.root.addChild(root);
+  if (abilityId === "tank_challenge") {
+    for (let index = 0; index < 4; index += 1) {
+      const angle = index * Math.PI / 2;
+      const banner = addBox(root, "challenge-banner", material, [.28, 1.25, .12], [Math.sin(angle) * 1.05, .78, Math.cos(angle) * 1.05]);
+      banner.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 8 : -8);
+    }
+  } else if (abilityId === "mage_arcane_surge") {
+    addBox(root, "arcane-surge-core", material, [.3, 2.2, .3], [0, 1.1, 0]);
+    for (let index = 0; index < 6; index += 1) {
+      const angle = index / 6 * Math.PI * 2;
+      addBox(root, "arcane-surge-ray", material, [.08, 1.2, .08], [Math.sin(angle) * .48, .85, Math.cos(angle) * .48])
+        .setLocalEulerAngles(index % 2 ? 24 : -24, angle * 180 / Math.PI, 35);
+    }
+  } else if (abilityId === "mage_overload") {
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      const arc = addBox(root, "overload-arc", material, [.07, .07, .82], [Math.sin(angle) * .78, .65 + index % 2 * .38, Math.cos(angle) * .78]);
+      arc.setLocalEulerAngles(index % 2 ? 28 : -28, angle * 180 / Math.PI, index % 2 ? 32 : -32);
+    }
+  } else if (abilityId === "assassin_death_mark") {
+    for (let index = 0; index < 4; index += 1) {
+      const angle = Math.PI / 4 + index * Math.PI / 2;
+      const fang = addBox(root, "death-mark-fang", material, [.12, .75, .12], [Math.sin(angle) * .72, 1.15, Math.cos(angle) * .72]);
+      fang.setLocalEulerAngles(index % 2 ? 42 : -42, angle * 180 / Math.PI, 45);
+    }
+  } else if (abilityId === "assassin_blade_dance") {
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      const blade = addBox(root, "blade-dance-blade", material, [.08, .12, .92], [Math.sin(angle) * .92, .65, Math.cos(angle) * .92]);
+      blade.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 22 : -22);
+    }
+  } else if (abilityId === "thief_decoy") {
+    addBox(root, "decoy-body", material, [.48, .78, .3], [0, .88, .62]);
+    addBox(root, "decoy-head", material, [.38, .38, .38], [0, 1.48, .62]);
+    addBox(root, "decoy-left", material, [.18, .7, .18], [-.34, .88, .62]).setLocalEulerAngles(0, 0, -18);
+    addBox(root, "decoy-right", material, [.18, .7, .18], [.34, .88, .62]).setLocalEulerAngles(0, 0, 18);
+  } else if (abilityId.startsWith("ranger_")) {
+    const arrowCount = abilityId === "ranger_deadeye" ? 1 : abilityId === "ranger_disengage" ? 3 : 5;
+    for (let index = 0; index < arrowCount; index += 1) {
+      const spread = (index - (arrowCount - 1) / 2) * .24;
+      const arrow = addBox(root, "ranger-focus-arrow", material, [.055, .055, 1.25], [spread, .9 + Math.abs(spread) * .25, .82]);
+      arrow.setLocalEulerAngles(0, spread * 34, 0);
+    }
+    if (abilityId === "ranger_deadeye") {
+      addBox(root, "deadeye-horizontal", material, [1.5, .055, .055], [0, .9, 1.7]);
+      addBox(root, "deadeye-vertical", material, [.055, 1.5, .055], [0, .9, 1.7]);
+    }
   }
-  root.setEulerAngles(0, cameraOrbit.yaw, 0);
-  const durationMs = style === "shield" ? Math.min(update.durationMs ?? 2_500, 5_500)
-    : style === "smoke" ? Math.min(update.durationMs ?? 2_200, 3_500)
+  const followsPlayer = style === "shield" || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
+  const targetAnchor = abilityId === "assassin_death_mark" && effect.targetId ? mobVisuals.get(effect.targetId)?.entity : undefined;
+  const casterAnchor = effect.casterId === room?.sessionId ? localPlayer : remotePlayers.get(effect.casterId)?.entity;
+  if (targetAnchor) {
+    root.setLocalPosition(0, .03, 0); targetAnchor.addChild(root);
+  } else if (followsPlayer && casterAnchor) {
+    root.setLocalPosition(0, .03, 0); casterAnchor.addChild(root);
+  } else {
+    root.setPosition(effect.x, effect.y + .03, effect.z); app.root.addChild(root);
+  }
+  if (root.parent === app.root) root.setEulerAngles(0, effect.yaw, 0); else root.setLocalEulerAngles(0, effect.yaw, 0);
+  const durationMs = style === "shield" ? Math.min(effect.durationMs ?? 2_500, 5_500)
+    : style === "smoke" ? Math.min(effect.durationMs ?? 2_200, 3_500)
     : style === "motion" ? 650 : style === "terrain" ? 1_150 : 950;
   callingImpactVisuals.push({ root, material, startedAt: performance.now(), durationMs, style });
-  combatAudio.play(update.pathId === "tank" ? "callingTank" : update.pathId === "mage" ? "callingMage"
-    : update.pathId === "assassin" ? "callingShadow" : update.pathId === "thief" ? "callingThief" : "callingRanger");
+  const local = localPlayer.getPosition(), pan = enemyCuePan(effect.x, local.x, 14);
+  combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" ? "callingMage"
+    : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
   if (style === "terrain") combatAudio.play("seismicImpact");
 }
 
@@ -9586,9 +9643,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localBuildPathId = update.pathId;
     localCallingAbilityId = update.abilityId;
     combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank);
-    createCallingImpact(update);
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });
+  room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => createCallingImpact(effect));
   room.onMessage("equipment:affixes", (update: EquipmentAffixUpdate) => {
     equipmentAffixes = update.affixes ?? {};
     equipmentAffixOffers = update.offers ?? equipmentAffixOffers;

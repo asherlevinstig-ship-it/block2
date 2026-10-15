@@ -13,7 +13,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAbilityUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAbilityUpdate, type CallingAbilityEffect, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -4255,6 +4255,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
     let detail = "ACTIVATED";
     let durationMs: number | undefined;
+    let effectTargetId: string | undefined;
     const nearbyMobs = (radius: number) => [...this.state.mobs.entries()].filter(([, mob]) => mob.alive
       && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius);
     if (abilityId === "tank_bulwark") {
@@ -4311,6 +4312,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const target = nearbyMobs(8).sort((a, b) => Math.hypot(a[1].x - player.x, a[1].z - player.z)
         - Math.hypot(b[1].x - player.x, b[1].z - player.z))[0];
       if (target) {
+        effectTargetId = target[0];
         this.specialMarks.set(client.sessionId, { mobId: target[0], expiresAt: now + 10_000, stacks: HUNTERS_MARK.maxStacks });
         detail = `${target[1].name.toUpperCase()} EXPOSED · 10.0s`;
       } else detail = "NO TARGET IN RANGE";
@@ -4370,6 +4372,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...(durationMs ? { durationMs } : {}),
     };
     client.send("calling:ability", update);
+    this.broadcast("calling:ability:effect", {
+      casterId: client.sessionId, pathId, abilityId, x: player.x, y: player.y, z: player.z,
+      yaw: parsed.data.yaw ?? player.yaw, ...(durationMs ? { durationMs } : {}), ...(effectTargetId ? { targetId: effectTargetId } : {}),
+    } satisfies CallingAbilityEffect);
     this.buildPathProc(client.sessionId, pathId, definition.name.toUpperCase(), detail, durationMs ?? 2_000);
   }
 

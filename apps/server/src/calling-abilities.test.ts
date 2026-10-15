@@ -11,7 +11,7 @@ describe("hotbar Calling abilities", () => {
   function fixture(pathId: BuildPathId, xp = 0) {
     const room = new WorldRoom(); room.setState(new WorldState());
     const internal = room as any; internal.roomKind = "overworld";
-    vi.spyOn(room, "broadcast").mockImplementation(() => {});
+    const broadcast = vi.spyOn(room, "broadcast").mockImplementation(() => {});
     const player = new PlayerState();
     Object.assign(player, { x: 50, y: 8, z: 50, stamina: 25, maxStamina: 100,
       powerCooldownUntil: 99_000, specialCooldownUntil: 99_000 });
@@ -19,11 +19,11 @@ describe("hotbar Calling abilities", () => {
     room.state.players.set("hero", player);
     const client = { sessionId: "hero", send: vi.fn() };
     internal.clients.push(client);
-    return { room, internal, player, client };
+    return { room, internal, player, client, broadcast };
   }
 
   it.each(["tank", "mage", "assassin", "thief", "ranger"] as const)("activates %s from the dedicated slot", pathId => {
-    const { internal, player, client } = fixture(pathId);
+    const { internal, player, client, broadcast } = fixture(pathId);
     const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, targetId: "hero" });
     internal.state.mobs.set("pursuer", mob);
     internal.mobAwareness.set("pursuer", { targetId: "hero" });
@@ -34,6 +34,10 @@ describe("hotbar Calling abilities", () => {
       cooldownUntil: 10_000 + CALLING_ABILITIES[pathId].cooldownMs,
     }));
     expect(client.send).toHaveBeenCalledWith("build:path-proc", expect.objectContaining({ pathId }));
+    expect(broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
+      casterId: "hero", pathId, abilityId: `${pathId}_${pathId === "tank" ? "bulwark" : pathId === "mage" ? "arcane_surge" : pathId === "assassin" ? "vanish" : pathId === "thief" ? "smoke_bomb" : "volley_focus"}`,
+      x: 50, y: 8, z: 50,
+    }));
     if (pathId === "tank") {
       expect(internal.tankBulwarkUntil.get("hero")).toBe(15_000);
       internal.damagePlayer("field-test", "hero", 3, 10_000, false);
