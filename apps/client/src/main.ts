@@ -1,6 +1,7 @@
 import * as pc from "playcanvas";
 import { greenwoodMasteryStatus, mistfenMasteryStatus } from "@blockcraft/protocol";
 import { isInMistfenMarsh } from "@blockcraft/voxel-world";
+import { nearestRoleFieldOpportunity, type RoleFieldPath } from "@blockcraft/voxel-world";
 import { confirmedRangedHit, projectileImpactCue } from "./ranged-feedback.js";
 import { heldFireStep } from "./held-fire.js";
 import { rangedAimYaw } from "./ranged-aim.js";
@@ -743,6 +744,7 @@ if (!combatHudRoot) throw new Error("Combat HUD root is missing");
 combatHud.mount(combatHudRoot);
 const buildPathProc = document.querySelector<HTMLElement>("#build-path-proc")!;
 let buildPathProcTimer = 0;
+let localBuildPathId: RoleFieldPath | null = null;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
 const powerPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-picker [data-power]")];
 const powerLoadoutButtons = [...document.querySelectorAll<HTMLButtonElement>("#power-loadout-slots [data-power-slot]")];
@@ -3157,6 +3159,7 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
 }
 
 function renderBuildPath(update: BuildPathUpdate): void {
+  localBuildPathId = update.selectedPathId;
   const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
   const rank = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank) ?? BUILD_PATH_RANKS[0];
   buildPathPanel.dataset.selected = update.selectedPathId ?? "unbound";
@@ -6091,6 +6094,17 @@ function createDungeonBurst(x: number, z: number, kind: "gate" | "victory" | "cr
 }
 let nearbyForestPortal: string | null = null;
 let pendingPortalDestination: { x: number; y: number; z: number } | null = null;
+function nearbyRoleOpportunity() {
+  if (!worldReady || !room || !localBuildPathId) return null;
+  const player = localPlayer.getPosition();
+  return player.y >= SURFACE_HEIGHT - 1 ? nearestRoleFieldOpportunity(player.x, player.z, localBuildPathId) : null;
+}
+function useNearbyRoleOpportunity(): boolean {
+  const opportunity = nearbyRoleOpportunity();
+  if (!opportunity || !room || !defeatScreen.hidden) return false;
+  room.send("role:opportunity", { id: opportunity.id });
+  return true;
+}
 function useNearbyForestPortal(): void {
   if (!worldReady || !room || !nearbyForestPortal || !defeatScreen.hidden) return;
   room.send("portal:use", { id: nearbyForestPortal });
@@ -6264,8 +6278,9 @@ function updateTarget(): void {
   const combatKey = combatMob ? `${combatMob.id}:${combatMob.visual.state.health}:${combatMob.visual.state.combatState}:${combatMob.visual.state.aimCommitted}:${combatMark?.stacks ?? 0}` : "none";
   const chopping = currentTarget?.block === Block.OakLog || currentTarget?.block === Block.Leaves;
   const nearbyLoot = nearestLootDrop();
-  updatePlayerTradePrompt(Boolean(nearbyLoot || nearbyForestPortal || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
-  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${nearbyForestPortal}`;
+  const roleOpportunity = nearbyRoleOpportunity();
+  updatePlayerTradePrompt(Boolean(nearbyLoot || nearbyForestPortal || roleOpportunity || expeditionBoardNearby || blacksmithNearby || quizTableNearby || keeperNearby || chestNearby));
+  const nextKey = `${interactionMode}:${targetKey}:${currentTarget?.block ?? -1}:${availability}:${combatKey}:${keeperNearby}:${quizTableNearby}:${blacksmithNearby}:${expeditionBoardNearby}:${nearbyLoot}:${nearbyForestPortal}:${roleOpportunity?.id ?? "none"}`;
   if (nextKey === targetStateKey) return;
   targetStateKey = nextKey;
   const tint = availability === "ready" ? hit?.block === Block.SilverOre ? new pc.Color(0.55, 0.88, 1) : new pc.Color(1, 0.73, 0.25) : new pc.Color(1, 0.25, 0.2);
@@ -6273,7 +6288,7 @@ function updateTarget(): void {
   targetMaterial.emissive = tint.clone().mulScalar(0.3);
   targetMaterial.opacity = 0.2;
   targetMaterial.update();
-  mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
+  mineButton.textContent = nearbyLoot ? "Loot" : nearbyForestPortal ? "Portal" : roleOpportunity ? roleOpportunity.action : expeditionBoardNearby ? "Board" : blacksmithNearby ? "Trade" : quizTableNearby ? "Play" : keeperNearby ? "Talk" : interactionMode === "build" ? chopping ? "Chop" : "Mine" : "Attack";
   if (nearbyLoot) {
     const drop = lootVisuals.get(nearbyLoot)?.state;
     const itemName = drop && isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "Loot";
@@ -6287,6 +6302,7 @@ function updateTarget(): void {
       : `${quantity}${itemName} · press E or Loot to pick up`;
   }
   else if (nearbyForestPortal) targetLabel.textContent = "Glowing portal · press E or Portal to travel";
+  else if (roleOpportunity) targetLabel.textContent = `${roleOpportunity.name} · ${roleOpportunity.prompt} · press E or ${roleOpportunity.action}`;
   else if (expeditionBoardNearby) targetLabel.textContent = "Forest Dungeon Gate · press E to open a solo or party run";
   else if (blacksmithNearby) targetLabel.textContent = "Blacksmith stall · press E to trade ore or forge equipment";
   else if (quizTableNearby) targetLabel.textContent = "Double or Quit table · press E or Play";
@@ -7840,6 +7856,7 @@ function requestPrimaryAction(): void {
   const nearbyLoot = nearestLootDrop();
   if (nearbyLoot) { interactWithLoot(nearbyLoot); return; }
   if (nearbyForestPortal) { useNearbyForestPortal(); return; }
+  if (useNearbyRoleOpportunity()) return;
   const boardPosition = localPlayer.getPosition();
   if (Math.abs(boardPosition.y - TOWN_EXPEDITION_BOARD_POSITION.y) <= 1.6
     && Math.hypot(boardPosition.x - TOWN_EXPEDITION_BOARD_POSITION.x, boardPosition.z - TOWN_EXPEDITION_BOARD_POSITION.z) <= 3) {

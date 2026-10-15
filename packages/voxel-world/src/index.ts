@@ -468,6 +468,29 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "collapsed-lift", name: "Collapsed Quarry Lift", kind: "ruin", x: -4, z: 89 },
 ] as const satisfies readonly { id: string; name: string; kind: RoadsideDiscoveryKind; x: number; z: number }[];
 
+export type RoleFieldPath = "tank" | "mage" | "assassin" | "thief" | "ranger";
+export const ROLE_FIELD_OPPORTUNITIES = [
+  { id: "tank-stonebreak", landmarkId: "stone-road-camp", pathId: "tank", x: 54, z: 38,
+    name: "Broken Stonebreak Barricade", action: "Fortify", prompt: "Brace the camp and prepare a ward for the next incoming hit." },
+  { id: "mage-silver-shrine", landmarkId: "silver-road-shrine", pathId: "mage", x: 69, z: 14,
+    name: "Dormant Silver Shrine", action: "Attune", prompt: "Channel the shrine to refresh Power and restore stamina." },
+  { id: "assassin-scorched-gate", landmarkId: "scorched-gate", pathId: "assassin", x: 93, z: 53,
+    name: "Scorched Hunter's Gate", action: "Stalk", prompt: "Study the kill route to conceal and empower your next strike." },
+  { id: "thief-eastroad-cart", landmarkId: "eastroad-cart", pathId: "thief", x: 56, z: 14,
+    name: "Eastroad Hidden Compartment", action: "Search", prompt: "Open the concealed compartment and pocket its coin cache." },
+  { id: "ranger-root-arch", landmarkId: "greenwood-root-arch", pathId: "ranger", x: 43, z: 4,
+    name: "Broken Greenwood Trail", action: "Track", prompt: "Read the trail to empower your next three ranged hits." },
+] as const satisfies readonly { id: string; landmarkId: string; pathId: RoleFieldPath; x: number; z: number;
+  name: string; action: string; prompt: string }[];
+
+export function nearestRoleFieldOpportunity(x: number, z: number, pathId: RoleFieldPath, range = 4.5) {
+  return ROLE_FIELD_OPPORTUNITIES
+    .filter(opportunity => opportunity.pathId === pathId)
+    .map(opportunity => ({ opportunity, distance: Math.hypot(x - opportunity.x, z - opportunity.z) }))
+    .filter(candidate => candidate.distance <= range)
+    .sort((a, b) => a.distance - b.distance)[0]?.opportunity ?? null;
+}
+
 export function roadsideDiscoveryBlock(x: number, y: number, z: number): BlockId | null {
   const site = ROADSIDE_DISCOVERIES.find(point => Math.abs(x - point.x) <= 3 && Math.abs(z - point.z) <= 3);
   if (!site || y < SURFACE_HEIGHT) return null;

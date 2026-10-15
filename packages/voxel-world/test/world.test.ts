@@ -24,6 +24,8 @@ import {
   isSouthernRoad,
   southernQuarryTierAt,
   ROADSIDE_DISCOVERIES,
+  ROLE_FIELD_OPPORTUNITIES,
+  nearestRoleFieldOpportunity,
   roadsideDiscoveryBlock,
   wildernessTerritoryAt,
   MINERAL_DEPOSITS,
@@ -136,6 +138,16 @@ describe("deterministic voxel world", () => {
     for (const [x, z] of [[70, 9], [42, 29], [70, 32], [87, 50], [-30, -20]] as const) {
       expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
       expect(isRegionalRoad(x, z)).toBe(true);
+    }
+  });
+
+  it("binds one reachable field opportunity to every implemented Calling", () => {
+    expect(ROLE_FIELD_OPPORTUNITIES.map(opportunity => opportunity.pathId).sort())
+      .toEqual(["assassin", "mage", "ranger", "tank", "thief"]);
+    for (const opportunity of ROLE_FIELD_OPPORTUNITIES) {
+      expect(ROADSIDE_DISCOVERIES.some(landmark => landmark.id === opportunity.landmarkId)).toBe(true);
+      expect(nearestRoleFieldOpportunity(opportunity.x + 1, opportunity.z, opportunity.pathId)?.id).toBe(opportunity.id);
+      expect(nearestRoleFieldOpportunity(opportunity.x + 8, opportunity.z, opportunity.pathId)).toBeNull();
     }
   });
 

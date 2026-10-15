@@ -65,6 +65,7 @@ import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraf
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
+import { ROLE_FIELD_OPPORTUNITIES, nearestRoleFieldOpportunity } from "@blockcraft/voxel-world";
 import { mineralCellOccupied } from "./mineral-regrowth.js";
 import { CAVE_ENCOUNTERS, caveEncounterAllows } from "./cave-encounters.js";
 import { miningDurationMs, miningLineClear } from "@blockcraft/voxel-world";
@@ -415,6 +416,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly pathConcealedUntil = new Map<string, number>();
   private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
   private readonly rangerSlows = new Map<string, { until: number; multiplier: number }>();
+  private readonly rangerFieldFocusHits = new Map<string, number>();
+  private readonly tankFieldWards = new Set<string>();
+  private readonly roleOpportunityReadyAt = new Map<string, number>();
   private readonly fortressProcAt = new Map<string, number>();
   private readonly masterTrialMobTags = new Map<string, { playerId: string; specializationId: BuildPathSpecializationId; until: number }>();
   private readonly pendingMobProjectiles = new Map<string, PendingMobProjectile>();
@@ -704,6 +708,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.onMessage("realm-hunt:board", (client, payload: unknown) => this.handleRealmHuntBoard(client, payload));
     this.onMessage("hunt:collection", (client, payload: unknown) => this.handleHuntCollection(client, payload));
     this.onMessage("build:path", (client, payload: unknown) => this.handleBuildPath(client, payload));
+    aliveMessage("role:opportunity", (client, payload: unknown) => this.handleRoleOpportunity(client, payload));
     this.onMessage("dungeon:lobby", (client, payload: unknown) => this.handleDungeonLobby(client, payload));
     this.onMessage("depths:lobby", (client, payload: unknown) => this.handleSilverDepthsLobby(client, payload));
     this.onMessage("portal:use", (client, payload: unknown) => {
@@ -962,6 +967,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.assassinShadowUntil.delete(client.sessionId);
     this.pathConcealedUntil.delete(client.sessionId);
     this.rangerPinning.delete(client.sessionId);
+    this.rangerFieldFocusHits.delete(client.sessionId);
+    this.tankFieldWards.delete(client.sessionId);
+    for (const key of this.roleOpportunityReadyAt.keys()) if (key.startsWith(`${client.sessionId}:`)) this.roleOpportunityReadyAt.delete(key);
     this.fortressProcAt.delete(client.sessionId);
     this.profileTokens.delete(client.sessionId);
     this.profileSaveFingerprints.delete(client.sessionId);
@@ -3035,6 +3043,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const fortifiedTier = this.equipmentAffixTier(player, "fortified");
       if (fortifiedTier > 0) defense.damage = Math.max(0, defense.damage - (fortifiedTier >= 3 ? 2 : 1));
     }
+    if (defense.damage > 0 && this.tankFieldWards.delete(playerId)) {
+      const absorbedByWard = Math.min(2, defense.damage);
+      defense.damage -= absorbedByWard;
+      this.buildPathProc(playerId, "tank", "FIELD WARD", `${absorbedByWard} DAMAGE PREVENTED`);
+    }
     if (defense.damage > 0) for (const [guardId, guard] of this.state.players) {
       const guardian = this.buildSpecializationFor(guard, "tank") === "guardian";
       const guardianMaster = guardian && this.buildSpecializationMastered(guard, "guardian");
@@ -4143,6 +4156,56 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       : `${BUILD_PATHS[pathId].name.toUpperCase()} CALLING ACCEPTED · relevant victories now build Path Mastery.`);
   }
 
+  private handleRoleOpportunity(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const opportunityId = typeof payload === "object" && payload !== null && "id" in payload && typeof payload.id === "string"
+      ? payload.id : "";
+    const opportunity = ROLE_FIELD_OPPORTUNITIES.find(candidate => candidate.id === opportunityId);
+    if (!player || !opportunity || this.roomKind !== "overworld") return;
+    const pathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    if (pathId !== opportunity.pathId) {
+      client.send("chat:notice", `${opportunity.name.toUpperCase()} · this opportunity belongs to the ${BUILD_PATHS[opportunity.pathId].name} Calling.`);
+      return;
+    }
+    const activePathId = opportunity.pathId;
+    if (player.y < SURFACE_HEIGHT - 1 || nearestRoleFieldOpportunity(player.x, player.z, opportunity.pathId)?.id !== opportunity.id) {
+      client.send("chat:notice", `Move beside ${opportunity.name} to use it.`);
+      return;
+    }
+    const now = Date.now(), cooldownKey = `${client.sessionId}:${opportunity.id}`;
+    const readyAt = this.roleOpportunityReadyAt.get(cooldownKey) ?? 0;
+    if (now < readyAt) {
+      client.send("chat:notice", `${opportunity.name.toUpperCase()} · recovers in ${Math.max(1, Math.ceil((readyAt - now) / 1_000))}s.`);
+      return;
+    }
+    this.roleOpportunityReadyAt.set(cooldownKey, now + 180_000);
+    let detail = "PATH MASTERY +2";
+    if (activePathId === "tank") {
+      this.tankFieldWards.add(client.sessionId);
+      player.stamina = player.maxStamina;
+      detail = "FIELD WARD READY · NEXT HIT −2";
+    } else if (activePathId === "mage") {
+      player.powerCooldownUntil = 0;
+      player.stamina = Math.min(player.maxStamina, player.stamina + 35);
+      detail = "POWER REFRESHED · +35 STAMINA";
+    } else if (activePathId === "assassin") {
+      this.assassinShadowUntil.set(client.sessionId, now + 8_000);
+      this.pathConcealedUntil.set(client.sessionId, now + 8_000);
+      detail = "CONCEALED · NEXT STRIKE EMPOWERED";
+    } else if (activePathId === "thief") {
+      player.coins = Math.min(1_000_000, player.coins + 8);
+      detail = "HIDDEN CACHE · +8 GOLD";
+    } else {
+      this.rangerFieldFocusHits.set(client.sessionId, 3);
+      player.specialCooldownUntil = 0;
+      detail = "TRAIL FOCUS · NEXT 3 RANGED HITS +1";
+    }
+    this.grantBuildProgress(client.sessionId, 2);
+    this.buildPathProc(client.sessionId, activePathId, opportunity.action.toUpperCase(), `${detail} · MASTERY +2`, 2_400);
+    client.send("chat:notice", `${opportunity.name.toUpperCase()} · ${detail}. Returns in 3 minutes.`);
+    void this.persistPlayer(client.sessionId, player, true);
+  }
+
   private grantBuildProgress(playerId: string, amount: number): void {
     const player = this.state.players.get(playerId);
     if (!player) return;
@@ -4271,9 +4334,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const state = parseBuildPathState(player.huntLoadoutsJson);
     if (!state.selectedPathId) return 0;
     const rank = this.buildPathRankFor(player, state.selectedPathId);
+    if (state.selectedPathId === "ranger" && source === "weapon" && player.mainHandTag === "ranged") {
+      const focusHits = this.rangerFieldFocusHits.get(playerId) ?? 0;
+      if (focusHits > 0) {
+        if (focusHits === 1) this.rangerFieldFocusHits.delete(playerId); else this.rangerFieldFocusHits.set(playerId, focusHits - 1);
+        this.buildPathProc(playerId, "ranger", "TRAIL FOCUS", `+1 DAMAGE · ${focusHits - 1} SHOTS REMAIN`);
+      }
+      return (rank > 0 ? rank >= 4 ? 2 : 1 : 0) + Math.ceil(this.equipmentAffixTier(player, "piercing") / 2) + (focusHits > 0 ? 1 : 0);
+    }
     if (rank <= 0) return 0;
-    if (state.selectedPathId === "ranger" && source === "weapon" && player.mainHandTag === "ranged")
-      return (rank >= 4 ? 2 : 1) + Math.ceil(this.equipmentAffixTier(player, "piercing") / 2);
     const mark = this.specialMarks.get(playerId);
     const marked = Boolean(mark && mark.mobId === mobId && mark.expiresAt > now);
     if (state.selectedPathId === "assassin"
