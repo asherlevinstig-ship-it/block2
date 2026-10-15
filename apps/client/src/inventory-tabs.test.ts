@@ -17,7 +17,7 @@ it("starts with one category visible and optional detail sections collapsed", ()
   for (const category of ["tools", "materials", "supplies", "collection"])
     expect(html.match(new RegExp(`data-inventory-category="${category}"[^>]*>`))![0]).toContain(" hidden");
   expect(html).toMatch(/<details id="inventory-progress-drawer">/);
-  expect(html).toMatch(/<details id="inventory-preview-drawer">/);
+  expect(html).toMatch(/<details id="inventory-preview-drawer" open>/);
   expect(html).toMatch(/<details id="character-stats-drawer">/);
   expect(html).toMatch(/<details id="character-milestones-drawer">/);
   expect(html).toContain('id="calling-intro"');

@@ -2895,7 +2895,10 @@ function refreshInventoryEquipped(): void {
     if (value.rarity) button.dataset.rarity = value.rarity; else delete button.dataset.rarity;
   }
   const slot = document.querySelector<HTMLElement>("#inventory-armour-slot");
-  if (slot) slot.textContent = `ARMOUR SLOT: ${armourStats(localArmourId).name}`;
+  if (slot) {
+    slot.querySelector("span")!.textContent = "Armour";
+    slot.querySelector("small")!.textContent = `${armourStats(localArmourId).name} equipped`;
+  }
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-equip-armour]")) {
     const id = button.dataset.equipArmour!;
     button.disabled = id === localArmourId || (id !== "none" && (inventoryCounts.get(id as ItemId) ?? 0) <= 0);
@@ -5644,7 +5647,7 @@ function setInventoryOpen(open: boolean): void {
   if (open) {
     closeTavernDialogue();
     room?.send("build:path", { action: "sync" });
-    inventoryPreviewDrawer.open = false;
+    inventoryPreviewDrawer.open = inventoryPanel.dataset.tab === "gear";
     refreshOwnedInventory();
     inventoryPanel.scrollTop = 0;
     previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
@@ -5734,6 +5737,7 @@ document.querySelector<HTMLButtonElement>("#inventory-customize")!.addEventListe
 });
 const inventoryTabs = [...inventoryPanel.querySelectorAll<HTMLButtonElement>("[data-inventory-tab]")];
 function selectInventoryCategory(category: InventoryTab, focus = false): void {
+  inventoryPanel.dataset.tab = category;
   for (const tab of inventoryTabs) {
     const selected = tab.dataset.inventoryTab === category;
     tab.setAttribute("aria-selected", String(selected)); tab.tabIndex = selected ? 0 : -1;
@@ -5746,7 +5750,7 @@ function selectInventoryCategory(category: InventoryTab, focus = false): void {
     section.hidden = !groups[category].includes(section.dataset.inventoryCategory!);
   previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
   inventoryPreviewDrawer.hidden = category !== "gear";
-  if (category === "collection") inventoryPreviewDrawer.open = false;
+  inventoryPreviewDrawer.open = category === "gear";
   if (category === "collection") room?.send("hunt:collection", { action: "sync" });
   refreshInventoryPreview();
   inventoryPanel.scrollTop = 0;

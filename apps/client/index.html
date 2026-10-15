@@ -273,7 +273,7 @@
       </dl>
       <p id="perf-budget">Collecting a stable sample…</p>
     </aside>
-    <section id="inventory-panel" role="dialog" aria-modal="true" aria-labelledby="inventory-title" hidden>
+    <section id="inventory-panel" role="dialog" aria-modal="true" aria-labelledby="inventory-title" data-tab="gear" hidden>
       <header class="inventory-header">
         <div><p class="eyebrow">EXPLORER'S PACK</p><h2 id="inventory-title">Inventory</h2></div>
         <div class="inventory-header-actions"><button id="inventory-customize" type="button">CUSTOMIZE</button><button id="inventory-close" type="button" aria-label="Close inventory">×</button></div>
@@ -309,8 +309,8 @@
       </nav>
       <div class="inventory-workspace">
       <div class="inventory-content">
-      <details id="inventory-preview-drawer">
-      <summary>Your character &amp; worn gear <span>Show / hide preview</span></summary>
+      <details id="inventory-preview-drawer" open>
+      <summary><strong>YOUR CHARACTER</strong><span>Equipped items</span></summary>
       <section class="inventory-loadout" aria-label="Character and equipment preview">
         <div class="inventory-portrait">
           <div class="equipment-slot-ring" aria-label="Equipped gear">
@@ -325,8 +325,8 @@
           <button id="inventory-preview-reset" type="button">SHOW WORN GEAR</button>
         </div>
         <div class="inventory-preview-stats">
-          <p class="eyebrow">LOADOUT PREVIEW · DOES NOT EQUIP</p>
-          <p class="inventory-preview-help">Drag the character or use the turn buttons. The gear comparison stays beside your pack, so opening this preview is always optional.</p>
+          <p class="eyebrow">PAPER DOLL</p>
+          <p class="inventory-preview-help">Your equipped weapon, armour, tool and light surround your character.</p>
         </div>
       </section>
       <section id="appearance-customizer" aria-label="Character appearance">
@@ -383,7 +383,7 @@
         </div>
       </section>
       <section id="inventory-category-armour" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-gear" data-inventory-category="armour" tabindex="0">
-        <h3 id="inventory-armour-slot">ARMOUR SLOT: No armour</h3>
+        <h3 id="inventory-armour-slot"><span>Armour</span><small>Click compare, then equip</small></h3>
         <button type="button" data-equip-armour="none">REMOVE ARMOUR</button>
         <div class="inventory-grid equipment-grid">
           <article class="equipment" data-item="leather_armour"><i></i><div><strong>Leather Armour</strong><small>−1 damage · minimum hit 1 · full speed</small></div><em data-item-count="leather_armour">0</em><button type="button" data-equip-armour="leather_armour" disabled>EQUIP</button></article>
@@ -398,7 +398,7 @@
         </div>
       </section>
       <section id="inventory-category-weapons" class="inventory-section equipment-section" role="tabpanel" aria-labelledby="inventory-tab-gear" data-inventory-category="weapons" tabindex="0">
-        <h3 id="inventory-equipment-title"><span>Weapons</span><small>Preview or equip your main hand</small></h3>
+        <h3 id="inventory-equipment-title"><span>Backpack</span><small>Weapons ready to equip</small></h3>
         <div class="inventory-grid equipment-grid">
           <article class="equipment" data-item="forged_sword"><i></i><div><strong>Forged Sword</strong><small>2 / 2 / 3 damage · 380 ms opening swing</small></div><em data-item-count="forged_sword">0</em><button type="button" data-equip-main-hand="forged_sword" disabled>EQUIP</button></article>
           <article class="equipment" data-item="forged_bow"><i></i><div><strong>Forged Bow</strong><small>2 damage · 640 ms shot</small></div><em data-item-count="forged_bow">0</em><button type="button" data-equip-main-hand="forged_bow" disabled>EQUIP</button></article>
