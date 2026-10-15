@@ -1578,13 +1578,27 @@ depthsCheckpointReady.addEventListener("click", () => {
   if (room && depthsCheckpointStatus?.phase === "waiting") room.send("depths:ready");
 });
 
+const NEUTRAL_OUTFIT_COLOR = new pc.Color(.16, .19, .17);
+const ARMOUR_OUTFIT_COLORS: Record<ArmourId, pc.Color> = {
+  none: NEUTRAL_OUTFIT_COLOR,
+  leather_armour: new pc.Color(.34, .2, .1),
+  iron_armour: new pc.Color(.34, .4, .48),
+  rootguard_armour: new pc.Color(.13, .3, .15),
+  bastion_plate: new pc.Color(.29, .35, .43),
+  fangstalker_wrap: new pc.Color(.29, .095, .075),
+  venomweave_mantle: new pc.Color(.19, .34, .1),
+  mirebreaker_mantle: new pc.Color(.12, .28, .18),
+  rootstalker_wrap: new pc.Color(.23, .32, .12),
+  worldsplitter_plate: new pc.Color(.16, .19, .23),
+};
+
 function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, withSilhouette = false, appearance: Appearance = DEFAULT_APPEARANCE): VoxelCharacterRig {
   const root = new pc.Entity("voxel-character");
   parent.addChild(root);
   const skinMaterial = coloredMaterial(appearanceColor("skin", appearance.skin));
   skinMaterial.shininess = 12; skinMaterial.update();
   const hairMaterial = coloredMaterial(appearanceColor("hair", appearance.hair));
-  clothing.diffuse = appearanceColor("coat", appearance.coat); clothing.update();
+  clothing.diffuse = NEUTRAL_OUTFIT_COLOR; clothing.update();
 
   // Transform pivots stay at unit scale: attachments retain their real voxel
   // dimensions instead of inheriting the dimensions of a head or torso box.
@@ -1874,11 +1888,29 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
     } else if (venom) {
       addBox(layer, "venom-gland", accent, [.18, .2, .045], [0, .025, .26]);
       for (const x of [-.2, .2]) addBox(layer, "venom-rib", accent, [.055, .42, .04], [x, -.02, .255]).setLocalEulerAngles(0, 0, x < 0 ? -20 : 20);
+      if (mirebreaker) {
+        addBox(layer, "mirebreaker-cowl", material, [.44, .16, .41], [0, .255, -.015]);
+        for (const x of [-.17, .17]) addBox(layer, "mirebreaker-mantle-tail", material, [.17, .38, .055], [x, -.36, -.2]).setLocalEulerAngles(8, 0, x < 0 ? -5 : 5);
+        addBox(layer, "mirebreaker-jade-line", accent, [.35, .045, .035], [0, -.19, .265]);
+      }
+    } else if (rootstalker) {
+      addBox(layer, "rootstalker-cowl", material, [.42, .14, .4], [0, .255, 0]);
+      for (const x of [-.19, .19]) {
+        addBox(layer, "rootstalker-leaf", accent, [.15, .29, .045], [x, -.22, .255]).setLocalEulerAngles(0, 0, x < 0 ? -22 : 22);
+        addBox(layer, "rootstalker-tail", material, [.16, .36, .055], [x, -.35, -.2]);
+      }
+      addBox(layer, "rootstalker-clasp", accent, [.14, .12, .04], [0, .12, .27]).setLocalEulerAngles(0, 0, 45);
     } else {
       const strap = addBox(layer, "leather-cross-strap", bootMaterial, [.06, .47, .035], [0, -.015, .26]);
       strap.setLocalEulerAngles(0, 0, -28);
       addBox(layer, "leather-clasp", brassMaterial, [.1, .09, .025], [.065, .09, .288]);
-      if (fang) for (const x of [-.2, 0, .2]) addBox(layer, "fang-charm", accent, [.055, .14, .055], [x, -.24, .24]).setLocalEulerAngles(0, 0, x * 40);
+      if (fang) {
+        addBox(layer, "fangstalker-cowl", material, [.42, .13, .4], [0, .25, 0]);
+        addBox(layer, "fangstalker-sash", accent, [.085, .5, .04], [-.12, -.02, .27]).setLocalEulerAngles(0, 0, -24);
+        for (const x of [-.2, 0, .2]) addBox(layer, "fang-charm", accent, [.055, .14, .055], [x, -.24, .24]).setLocalEulerAngles(0, 0, x * 40);
+      } else {
+        for (const x of [-.17, .17]) addBox(layer, "leather-pouch", bootMaterial, [.14, .13, .08], [x, -.25, .2]);
+      }
     }
     layer.enabled = false;
   }
@@ -1888,17 +1920,21 @@ function createVoxelCharacter(parent: pc.Entity, clothing: pc.StandardMaterial, 
 }
 
 function setRigAppearance(rig: VoxelCharacterRig, appearance: Appearance): void {
-  for (const group of ["skin", "hair", "coat"] as const) {
+  for (const group of ["skin", "hair"] as const) {
     const material = rig.appearanceMaterials[group];
     material.diffuse = appearanceColor(group, appearance[group]);
     material.update();
   }
   for (const [id, style] of Object.entries(rig.hairStyles)) style.enabled = id === appearance.hairStyle;
-  for (const [id, style] of Object.entries(rig.coatStyles)) style.enabled = id === appearance.coatStyle;
+  for (const [id, style] of Object.entries(rig.coatStyles)) style.enabled = id === "explorer";
 }
 
 function setRigArmour(rig: VoxelCharacterRig, id: string): void {
-  for (const [key, entity] of Object.entries(rig.armour)) entity.enabled = key === id;
+  const armourId = (id in ARMOUR_OUTFIT_COLORS ? id : "none") as ArmourId;
+  for (const [key, entity] of Object.entries(rig.armour)) entity.enabled = key === armourId;
+  rig.scarf.enabled = armourId === "none";
+  rig.appearanceMaterials.coat.diffuse = ARMOUR_OUTFIT_COLORS[armourId];
+  rig.appearanceMaterials.coat.update();
 }
 
 function setRigMainHand(rig: VoxelCharacterRig, mainHandId: MainHandId): void {
