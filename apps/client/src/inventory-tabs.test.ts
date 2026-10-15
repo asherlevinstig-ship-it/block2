@@ -36,6 +36,16 @@ it("uses item cards for comparison and one card action", () => {
   expect(source).toContain('upgrade: "CLEAR UPGRADE"');
   expect(source).toContain('canUnequip ? "UNEQUIP"');
 });
+it("keeps clothing identity item-driven instead of customizable", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+  expect(html).toContain("Clothing comes from items you find.");
+  expect(html).toContain("Clothing and colour come from equipped items");
+  expect(source).toContain('for (const group of ["skin", "hair"] as const)');
+  expect(source).toContain('for (const group of ["hairStyle"] as const)');
+  expect(source).toContain('for (const group of ["skin", "hair", "hairStyle"] as const)');
+  expect(source).not.toContain('label.textContent = group === "hairStyle" ? "Hair shape" : "Outfit shape"');
+});
 it("keeps the inventory shell synchronized with protocol items and equippable main hands", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const itemCounts = new Set([...html.matchAll(/data-item-count="([^"]+)"/g)].map(match => match[1]));

@@ -2240,9 +2240,7 @@ function playerInteractionView(id: string): PlayerInteractionView | null {
     ? player.mainHandId as keyof typeof MAIN_HAND_DEFINITIONS
     : "longsword";
   const armourId = Object.hasOwn(ARMOUR_DEFINITIONS, player.armourId) ? player.armourId as ArmourId : "none";
-  const coatStyle = APPEARANCE_STYLES.coatStyle.find(option => option.id === appearance.coatStyle)?.name ?? "Explorer";
   const hairStyle = APPEARANCE_STYLES.hairStyle.find(option => option.id === appearance.hairStyle)?.name ?? "Swept";
-  const coatColour = APPEARANCE_PALETTE.coat.find(option => option.id === appearance.coat)?.name ?? "Teal";
   const position = remote.entity.getPosition();
   const local = localPlayer.getPosition();
   const distance = Math.hypot(position.x - local.x, position.z - local.z);
@@ -2262,7 +2260,7 @@ function playerInteractionView(id: string): PlayerInteractionView | null {
     armour: ARMOUR_DEFINITIONS[armourId].name,
     trait: Object.hasOwn(TRAIT_DEFINITIONS, player.equippedTrait)
       ? TRAIT_DEFINITIONS[player.equippedTrait as keyof typeof TRAIT_DEFINITIONS].name : "None",
-    appearance: coatColour + " " + coatStyle + " · " + hairStyle + " hair",
+    appearance: hairStyle + " hair · outfit from equipped gear",
     handId,
     armourId,
     appearanceKey: appearance.skin + ":" + appearance.hair + ":" + appearance.coat + ":" + appearance.hairStyle + ":" + appearance.coatStyle,
@@ -2938,9 +2936,9 @@ function updateLocalAppearance(appearance: Appearance): void {
   }
   refreshInventoryPreview();
 }
-for (const group of ["skin", "hair", "coat"] as const) {
+for (const group of ["skin", "hair"] as const) {
   const row = document.createElement("div"); row.className = "appearance-choice";
-  const label = document.createElement("span"); label.textContent = group === "coat" ? "Coat" : group === "hair" ? "Hair" : "Skin";
+  const label = document.createElement("span"); label.textContent = group === "hair" ? "Hair" : "Skin";
   row.append(label);
   for (const option of APPEARANCE_PALETTE[group]) {
     const button = document.createElement("button"); button.type = "button";
@@ -2959,9 +2957,9 @@ for (const group of ["skin", "hair", "coat"] as const) {
   }
   appearanceOptions.append(row);
 }
-for (const group of ["hairStyle", "coatStyle"] as const) {
+for (const group of ["hairStyle"] as const) {
   const row = document.createElement("div"); row.className = "appearance-choice appearance-style-choice";
-  const label = document.createElement("span"); label.textContent = group === "hairStyle" ? "Hair shape" : "Outfit shape";
+  const label = document.createElement("span"); label.textContent = "Hair shape";
   row.append(label);
   for (const option of APPEARANCE_STYLES[group]) {
     const button = document.createElement("button"); button.type = "button";
@@ -10706,13 +10704,13 @@ function showCharacterCreator(): void {
       button.setAttribute("aria-pressed", String(appearance[group] === button.dataset.appearanceId));
     }
   };
-  for (const group of ["skin", "hair", "coat", "hairStyle", "coatStyle"] as const) {
+  for (const group of ["skin", "hair", "hairStyle"] as const) {
     const row = document.createElement("div");
     row.className = `appearance-choice${group.endsWith("Style") ? " appearance-style-choice" : ""}`;
     const label = document.createElement("span");
-    label.textContent = ({ skin: "Skin", hair: "Hair", coat: "Coat", hairStyle: "Hair shape", coatStyle: "Outfit shape" })[group];
+    label.textContent = ({ skin: "Skin", hair: "Hair", hairStyle: "Hair shape" })[group];
     row.append(label);
-    const choices = group === "skin" || group === "hair" || group === "coat"
+    const choices = group === "skin" || group === "hair"
       ? APPEARANCE_PALETTE[group] : APPEARANCE_STYLES[group];
     for (const choice of choices) {
       const button = document.createElement("button"); button.type = "button";
