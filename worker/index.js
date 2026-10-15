@@ -1,5 +1,10 @@
 const GAME_PREFIX = "/game";
 const COLYSEUS_ORIGIN = "https://us-mia-ea26ba04.colyseus.cloud";
+const LEGACY_ASSET_REDIRECTS = new Map([
+  ["/assets/index-DOyyG1l4.css", "/assets/index.css"],
+  ["/assets/index-BZDvdp8L.css", "/assets/index.css"],
+  ["/assets/index-QH2u70CO.js", "/assets/game.js"],
+]);
 
 export function colyseusUpstreamUrl(requestUrl) {
   const incoming = new URL(requestUrl);
@@ -20,6 +25,11 @@ export function isAllowedGameRequest(request) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const currentAsset = LEGACY_ASSET_REDIRECTS.get(url.pathname);
+    if (currentAsset) {
+      url.pathname = currentAsset;
+      return Response.redirect(url, 307);
+    }
     if (url.pathname === GAME_PREFIX || url.pathname.startsWith(`${GAME_PREFIX}/`)) {
       if (!isAllowedGameRequest(request)) return new Response("Not found", { status: 404 });
       const upstream = colyseusUpstreamUrl(request.url);

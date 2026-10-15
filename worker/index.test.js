@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colyseusUpstreamUrl, isAllowedGameRequest } from "./index.js";
+import worker, { colyseusUpstreamUrl, isAllowedGameRequest } from "./index.js";
 
 describe("Colyseus production relay", () => {
   it("rewrites the same-origin matchmaking route to Colyseus Cloud", () => {
@@ -14,5 +14,17 @@ describe("Colyseus production relay", () => {
       headers: { Upgrade: "websocket" },
     }))).toBe(true);
     expect(isAllowedGameRequest(new Request("https://block2.example/game/private"))).toBe(false);
+  });
+});
+
+describe("legacy deployed assets", () => {
+  it("redirects an open tab's old stylesheet to the stable stylesheet", async () => {
+    const response = await worker.fetch(
+      new Request("https://block2.example/assets/index-DOyyG1l4.css"),
+      { ASSETS: { fetch: () => Promise.reject(new Error("asset binding should not be used")) } },
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://block2.example/assets/index.css");
   });
 });
