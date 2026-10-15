@@ -284,6 +284,13 @@
         <div><span>EQUIPPED</span><strong id="inventory-equipped">Longsword</strong></div>
         <div><span>LEVEL</span><strong id="inventory-level">1 · 0 XP</strong></div>
       </div>
+      <section id="build-path-panel" aria-label="Player Calling">
+        <header><div><span>YOUR CALLING</span><strong id="build-path-name">UNBOUND</strong></div><b id="build-path-rank">A PATH IS FORMING</b></header>
+        <p id="build-path-message">Your equipment, abilities and stats are quietly shaping a future Calling.</p>
+        <div id="build-path-progress"><i></i></div>
+        <div class="build-path-summary-action"><span id="build-path-next">Reveals at level 5</span><button id="build-path-open" type="button">VIEW CALLING</button></div>
+        <div id="build-path-specializations" hidden><p>VETERAN SPECIALIZATION <small>Permanent for this Calling</small></p><div></div><article id="build-path-master-trial" hidden><header><strong>MASTER TRIAL</strong><b></b></header><p></p><div><i></i></div><small></small></article></div>
+      </section>
       <section id="character-stats" aria-label="Character progression">
         <header><span>CHARACTER STATS</span><strong id="character-points">NO POINTS AVAILABLE</strong></header>
         <div><span>ATTACK</span><strong id="stat-power">0 · +0 damage</strong></div>
@@ -291,14 +298,7 @@
         <div><span>AGILITY</span><strong id="stat-agility">0 · 100% speed</strong></div>
         <div><span>MINING</span><strong id="stat-mining">0 · ×1 yield</strong></div>
       </section>
-      <section id="character-milestones" aria-label="Character milestone unlocks"></section>
-      <section id="build-path-panel" aria-label="Player Calling">
-        <header><div><span>HIDDEN BUILD PATH</span><strong id="build-path-name">UNBOUND</strong></div><b id="build-path-rank">A PATH IS FORMING</b></header>
-        <p id="build-path-message">Your equipment, abilities and stats are quietly shaping a future Calling.</p>
-        <div id="build-path-progress"><i></i></div>
-        <div id="build-path-candidates"></div>
-        <div id="build-path-specializations" hidden><p>VETERAN SPECIALIZATION <small>Permanent for this Calling</small></p><div></div><article id="build-path-master-trial" hidden><header><strong>MASTER TRIAL</strong><b></b></header><p></p><div><i></i></div><small></small></article></div>
-      </section>
+      <details id="character-milestones-drawer"><summary>Level unlocks <span>Show progression details</span></summary><section id="character-milestones" aria-label="Character milestone unlocks"></section></details>
       <nav class="inventory-tabs" role="tablist" aria-label="Inventory categories">
         <button id="inventory-tab-weapons" type="button" role="tab" aria-controls="inventory-category-weapons" aria-selected="true" data-inventory-tab="weapons">Weapons</button>
         <button id="inventory-tab-armour" type="button" role="tab" aria-controls="inventory-category-armour" aria-selected="false" tabindex="-1" data-inventory-tab="armour">Armour</button>
@@ -307,7 +307,7 @@
         <button id="inventory-tab-supplies" type="button" role="tab" aria-controls="inventory-category-supplies" aria-selected="false" tabindex="-1" data-inventory-tab="supplies">Supplies</button>
         <button id="inventory-tab-collection" type="button" role="tab" aria-controls="inventory-category-collection" aria-selected="false" tabindex="-1" data-inventory-tab="collection">Collection</button>
       </nav>
-      <details id="inventory-preview-drawer" open>
+      <details id="inventory-preview-drawer">
       <summary>Your character &amp; worn gear <span>Show / hide preview</span></summary>
       <section class="inventory-loadout" aria-label="Character and equipment preview">
         <div class="inventory-portrait">
@@ -482,6 +482,14 @@
           <button type="button" data-character-stat="mining"><strong>MINING</strong><small>+1 mineral yield every 2 points</small></button>
         </div>
         <small id="level-up-points">1 point available</small>
+      </div>
+    </section>
+    <section id="calling-intro" role="dialog" aria-modal="true" aria-labelledby="calling-intro-title" hidden>
+      <div class="calling-intro-card">
+        <header><div><span id="calling-intro-eyebrow">YOUR PLAYSTYLE HAS AWAKENED</span><h2 id="calling-intro-title">Choose your Calling</h2></div><button id="calling-intro-close" type="button" aria-label="Choose later">×</button></header>
+        <p id="calling-intro-copy">Choose one clear combat identity. You can change it later while in Town.</p>
+        <div id="build-path-candidates"></div>
+        <footer><span id="calling-intro-status">Your recommended path reflects the gear and stats you use now.</span><button id="calling-intro-later" type="button">CHOOSE LATER</button></footer>
       </div>
     </section>
     <section id="loot-panel" class="loot-panel" hidden role="dialog" aria-modal="true" aria-labelledby="loot-title">

@@ -9,14 +9,17 @@ it("wraps tab keyboard navigation and supports Home/End", () => {
   expect(nextInventoryTab("tools", "End")).toBe("collection");
   expect(nextInventoryTab("materials", "Enter")).toBe("materials");
 });
-it("starts with one category visible and the character preview open", () => {
+it("starts with one category visible and optional detail sections collapsed", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   for (const tab of INVENTORY_TABS) {
     expect(html).toContain(`id="inventory-tab-${tab}"`);
     const panel = html.match(new RegExp(`<section[^>]*data-inventory-category="${tab}"[^>]*>`))![0];
     expect(panel.includes(" hidden")).toBe(tab !== "weapons");
   }
-  expect(html).toMatch(/<details id="inventory-preview-drawer" open>/);
+  expect(html).toMatch(/<details id="inventory-preview-drawer">/);
+  expect(html).toMatch(/<details id="character-milestones-drawer">/);
+  expect(html).toContain('id="calling-intro"');
+  expect(html).toContain('id="build-path-open"');
 });
 it("keeps the inventory shell synchronized with protocol items and equippable main hands", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");

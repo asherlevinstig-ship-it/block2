@@ -65,6 +65,14 @@ export function cooldownState(remainingMs: number, cooldownMs: number, readyLabe
   };
 }
 
+export function visibleCallingAbilities(pathId: BuildPathId, rank: number) {
+  return CALLING_ABILITY_OPTIONS.filter(option => option.pathId === pathId && option.unlockRank <= rank);
+}
+
+export function visibleCallingAugments(abilityId: CallingAbilityId, rank: number) {
+  return CALLING_ABILITY_AUGMENTS.filter(option => option.abilityId === abilityId && option.unlockRank <= rank);
+}
+
 function ModeToggle() {
   return h("div", { id: "mode-toggle", role: "group", "aria-label": "Primary action mode" },
     h("button", { type: "button", "data-mode": "build", "aria-pressed": String(mode.value === "build") }, "BUILD"),
@@ -140,28 +148,25 @@ function LoadoutDrawer() {
     calling.value ? h("section", { class: "loadout-group" },
       h("p", null, h("span", null, "CALLING ABILITY"), h("small", null, "One equipped to G")),
       h("div", { id: "calling-ability-picker", role: "group", "aria-label": "Equipped Calling ability" },
-        CALLING_ABILITY_OPTIONS.filter(option => option.pathId === calling.value).map(option => {
-          const locked = callingRank.value < option.unlockRank;
-          return h("button", { type: "button", "data-calling-ability": option.id,
-              "aria-pressed": String(callingAbility.value === option.id), disabled: locked,
-              title: locked ? `Unlocks at Path Rank ${option.unlockRank}` : option.description },
+        visibleCallingAbilities(calling.value, callingRank.value).map(option =>
+          h("button", { type: "button", "data-calling-ability": option.id,
+              "aria-pressed": String(callingAbility.value === option.id), title: option.description },
             h("span", null, option.category.toUpperCase()), h("strong", null, option.name),
-            h("small", null, locked ? `LOCKED · RANK ${option.unlockRank}` : option.description));
-        }),
+            h("small", null, option.description)),
+        ),
       ),
       callingAbility.value ? h("div", { id: "calling-augment-picker", role: "group", "aria-label": "Calling ability upgrade" },
         h("p", null, h("span", null, "BRANCH UPGRADE"), h("small", null, "Change freely in Town")),
-        CALLING_ABILITY_AUGMENTS.filter(option => option.abilityId === callingAbility.value).map(option => {
-          const rankLocked = callingRank.value < option.unlockRank;
+        visibleCallingAugments(callingAbility.value, callingRank.value).map(option => {
           const mastered = masteredCallingAugments.value.includes(option.id);
           const trial = CALLING_AUGMENT_TRIALS[option.id];
           const progress = callingAugmentProgress.value[option.id] ?? 0;
           return h("button", { type: "button", "data-calling-augment": option.id,
-              "aria-pressed": String(callingAugment.value === option.id), disabled: rankLocked || !mastered,
-              title: rankLocked ? `Unlocks at Path Rank ${option.unlockRank}` : mastered ? option.description : trial.description },
+              "aria-pressed": String(callingAugment.value === option.id), disabled: !mastered,
+              title: mastered ? option.description : trial.description },
             h("strong", null, option.name),
-            h("small", null, rankLocked ? `LOCKED · RANK ${option.unlockRank}` : mastered ? option.description : `TRIAL ${progress}/${trial.target} · ${trial.description}`),
-            !rankLocked && !mastered ? h("i", { class: "calling-trial-fill", style: { width: `${Math.round(progress / trial.target * 100)}%` } }) : null);
+            h("small", null, mastered ? option.description : `TRIAL ${progress}/${trial.target} · ${trial.description}`),
+            !mastered ? h("i", { class: "calling-trial-fill", style: { width: `${Math.round(progress / trial.target * 100)}%` } }) : null);
         }),
       ) : null,
     ) : null,

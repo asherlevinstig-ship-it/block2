@@ -769,8 +769,17 @@ const buildPathRank = document.querySelector<HTMLElement>("#build-path-rank")!;
 const buildPathMessage = document.querySelector<HTMLElement>("#build-path-message")!;
 const buildPathProgress = document.querySelector<HTMLElement>("#build-path-progress")!;
 const buildPathCandidates = document.querySelector<HTMLElement>("#build-path-candidates")!;
+const buildPathNext = document.querySelector<HTMLElement>("#build-path-next")!;
+const buildPathOpen = document.querySelector<HTMLButtonElement>("#build-path-open")!;
 const buildPathSpecializations = document.querySelector<HTMLElement>("#build-path-specializations")!;
 const buildPathMasterTrial = document.querySelector<HTMLElement>("#build-path-master-trial")!;
+const callingIntro = document.querySelector<HTMLElement>("#calling-intro")!;
+const callingIntroTitle = document.querySelector<HTMLElement>("#calling-intro-title")!;
+const callingIntroEyebrow = document.querySelector<HTMLElement>("#calling-intro-eyebrow")!;
+const callingIntroCopy = document.querySelector<HTMLElement>("#calling-intro-copy")!;
+const callingIntroStatus = document.querySelector<HTMLElement>("#calling-intro-status")!;
+const callingIntroClose = document.querySelector<HTMLButtonElement>("#calling-intro-close")!;
+const callingIntroLater = document.querySelector<HTMLButtonElement>("#calling-intro-later")!;
 const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#main-hand-picker [data-main-hand]")];
 const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
 const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("#seismic-mastery-picker [data-seismic-mastery]")];
@@ -3232,6 +3241,7 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
 }
 
 function renderBuildPath(update: BuildPathUpdate): void {
+  const previousPathId = localBuildPathId;
   localBuildPathId = update.selectedPathId;
   localCallingAbilityId = update.selectedCallingAbilityId;
   localCallingAugmentId = update.selectedCallingAugmentId;
@@ -3250,13 +3260,23 @@ function renderBuildPath(update: BuildPathUpdate): void {
     ? BUILD_PATH_SPECIALIZATIONS[update.selectedPathId].find(option => option.id === update.selectedSpecializationId) : null;
   buildPathRank.textContent = selected ? `${rank.name.toUpperCase()} · RANK ${update.rank}${selectedSpecialization ? ` · ${selectedSpecialization.name.toUpperCase()}` : ""}`
     : update.canChoose ? "A PATH IS FORMING" : "REVEALS AT LEVEL 5";
-  buildPathMessage.textContent = update.message;
+  const activeAbility = update.selectedCallingAbilityId
+    ? CALLING_ABILITY_OPTIONS.find(option => option.id === update.selectedCallingAbilityId) : null;
+  buildPathMessage.textContent = selected && activeAbility ? `${activeAbility.name} is equipped to G. ${activeAbility.description}`
+    : update.canChoose ? "Choose one combat identity. You can change it later while in Town."
+      : "Keep exploring. Your Calling becomes available at level 5.";
   const previousThreshold = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank)?.xp ?? 0;
   const span = Math.max(1, (update.nextRankXp ?? previousThreshold) - previousThreshold);
   const progress = update.nextRankXp === null ? 1 : Math.max(0, Math.min(1, (update.xp - previousThreshold) / span));
   buildPathProgress.toggleAttribute("hidden", !selected);
   buildPathProgress.querySelector<HTMLElement>("i")!.style.width = `${Math.round(progress * 100)}%`;
   buildPathProgress.setAttribute("aria-label", update.nextRankXp === null ? "Master rank complete" : `${update.xp} of ${update.nextRankXp} Path Mastery`);
+  const nextRank = BUILD_PATH_RANKS.find(entry => entry.rank > update.rank);
+  buildPathNext.textContent = selected
+    ? update.nextRankXp === null ? "Mastery complete" : `${update.xp}/${update.nextRankXp} mastery · Next: ${nextRank?.name ?? "Master"}`
+    : update.canChoose ? "Three paths are ready" : "Reveals at level 5";
+  buildPathOpen.textContent = selected ? "VIEW CALLING" : update.canChoose ? "CHOOSE CALLING" : "LOCKED";
+  buildPathOpen.disabled = !update.canChoose;
   buildPathCandidates.replaceChildren();
   const specializationList = buildPathSpecializations.querySelector<HTMLElement>("div")!;
   specializationList.replaceChildren();
@@ -3278,19 +3298,60 @@ function renderBuildPath(update: BuildPathUpdate): void {
     buildPathMasterTrial.querySelector<HTMLElement>("i")!.style.width = `${Math.round(update.masterTrial.progress / update.masterTrial.target * 100)}%`;
     buildPathMasterTrial.querySelector("small")!.textContent = update.masterTrial.complete ? update.masterTrial.capstone : `CAPSTONE · ${update.masterTrial.capstone}`;
   }
-  if (!update.canChoose) return;
-  for (const candidate of update.candidates) {
+  if (!update.canChoose) { callingIntro.hidden = true; return; }
+  callingIntroTitle.textContent = selected ? "Your Calling" : "Choose your Calling";
+  callingIntroEyebrow.textContent = selected ? `${selected.name.toUpperCase()} · ${rank.name.toUpperCase()}` : "YOUR PLAYSTYLE HAS AWAKENED";
+  callingIntroCopy.textContent = selected
+    ? "Review the three paths that best fit your current equipment and stats. Changes are allowed only in Town."
+    : "Choose one clear combat identity. Your first ability is available immediately on G.";
+  update.candidates.forEach((candidate, index) => {
     const definition = BUILD_PATHS[candidate.pathId];
+    const starter = CALLING_ABILITY_OPTIONS.find(option => option.pathId === candidate.pathId && option.unlockRank === 0)!;
     const button = document.createElement("button"); button.type = "button";
     button.dataset.path = candidate.pathId;
     button.dataset.active = String(candidate.pathId === update.selectedPathId);
-    button.innerHTML = `<span><strong>${definition.name}</strong><small>${definition.role}</small></span><em>${candidate.score} AFFINITY</em><p>${candidate.reasons.length ? candidate.reasons.join(" · ") : "Your build is only beginning to lean this way."}</p><b>${definition.passive}</b><b class="build-path-adept">ADEPT · ${definition.adept}</b>`;
+    button.dataset.recommended = String(index === 0);
+    const why = candidate.reasons.length ? candidate.reasons.join(" · ") : "a flexible starting loadout";
+    button.innerHTML = `<em>${candidate.pathId === update.selectedPathId ? "CURRENT" : index === 0 ? "RECOMMENDED" : "OPTION"}</em><span><strong>${definition.name}</strong><small>${definition.role}</small></span><p>Recommended by: ${why}</p><b>${starter.name} · Press G</b><small>${starter.description}</small>`;
     button.disabled = !update.inTown;
     button.title = update.inTown ? `Choose ${definition.name}` : "Return to Town to change your Calling";
-    button.addEventListener("click", () => room?.send("build:path", { action: "choose", pathId: candidate.pathId as BuildPathId }));
+    button.addEventListener("click", () => {
+      if (!room || !update.inTown) return;
+      for (const candidateButton of buildPathCandidates.querySelectorAll<HTMLButtonElement>("button")) candidateButton.disabled = true;
+      callingIntroStatus.textContent = `Accepting the ${definition.name} Calling…`;
+      room.send("build:path", { action: "choose", pathId: candidate.pathId as BuildPathId });
+    });
     buildPathCandidates.append(button);
+  });
+  callingIntroStatus.textContent = update.inTown
+    ? "Recommended reflects the gear and stats you use now. You can change later in Town."
+    : "Return to Town before changing your Calling.";
+  if (update.selectedPathId && previousPathId !== update.selectedPathId) {
+    callingIntro.hidden = true;
+    sessionStorage.setItem("calling-intro-seen-v1", "true");
+    status.textContent = `${selected!.name} Calling ready. Press G to use ${activeAbility?.name ?? "your Calling ability"}.`;
+    showCombatFeedback(`${selected!.name.toUpperCase()} · PRESS G`, "dodge");
+  } else if (!update.selectedPathId && update.inTown && !sessionStorage.getItem("calling-intro-seen-v1") && levelUpPanel.hidden) {
+    openCallingIntro();
   }
 }
+
+function openCallingIntro(): void {
+  if (buildPathOpen.disabled) return;
+  if (!inventoryPanel.hidden) setInventoryOpen(false);
+  callingIntro.hidden = false;
+  sessionStorage.setItem("calling-intro-seen-v1", "true");
+  resetMovementControls();
+  window.setTimeout(() => buildPathCandidates.querySelector<HTMLButtonElement>('button[data-recommended="true"]')?.focus(), 0);
+}
+
+function closeCallingIntro(): void {
+  callingIntro.hidden = true;
+  if (!inventoryPanel.hidden) buildPathOpen.focus(); else canvas.focus();
+}
+buildPathOpen.addEventListener("click", openCallingIntro);
+callingIntroClose.addEventListener("click", closeCallingIntro);
+callingIntroLater.addEventListener("click", closeCallingIntro);
 
 function updateMomentum(stacksValue: number): void {
   const safeStacks = Number.isFinite(stacksValue) ? stacksValue : 0;
@@ -5509,7 +5570,7 @@ function setInventoryOpen(open: boolean): void {
   if (open) {
     closeTavernDialogue();
     room?.send("build:path", { action: "sync" });
-    inventoryPreviewDrawer.open = true;
+    inventoryPreviewDrawer.open = false;
     refreshOwnedInventory();
     inventoryPanel.scrollTop = 0;
     previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
@@ -8335,6 +8396,10 @@ combatHudRoot.addEventListener("click", event => {
 window.addEventListener("keydown", event => {
   if (event.repeat) return;
   if (!levelUpPanel.hidden) { event.preventDefault(); return; }
+  if (!callingIntro.hidden) {
+    if (event.code === "Escape") closeCallingIntro();
+    event.preventDefault(); return;
+  }
   if (playerInteractionUI.isOpen()) {
     if (event.code === "Escape") playerInteractionUI.close();
     event.preventDefault();
@@ -8417,7 +8482,7 @@ window.addEventListener("keyup", event => {
   if (event.code === "KeyF") commitSpecialAim();
 });
 canvas.addEventListener("pointerdown", event => {
-  if (!levelUpPanel.hidden) return;
+  if (!levelUpPanel.hidden || !callingIntro.hidden) return;
   if (event.button === 2) {
     rangedFirePointer = null;
     event.preventDefault();

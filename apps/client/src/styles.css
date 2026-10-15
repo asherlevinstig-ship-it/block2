@@ -1324,6 +1324,11 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #character-stats > div span { color: #7f9684; font-size: .5rem; font-weight: 900; letter-spacing: .08em; }
 #character-stats > div strong { margin-top: 3px; color: #dce8d7; font-size: .61rem; }
 #character-milestones { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: -7px 0 14px; }
+#character-milestones-drawer { margin: -5px 0 12px; border: 1px solid #65725f3d; border-radius: 7px; background: #0b1510; }
+#character-milestones-drawer > summary { display: flex; justify-content: space-between; padding: 8px 10px; color: #aab7ad; font-size: .58rem; font-weight: 900; cursor: pointer; }
+#character-milestones-drawer > summary span { color: #74857a; font-weight: 600; }
+#character-milestones-drawer[open] > summary { border-bottom: 1px solid #65725f3d; }
+#character-milestones-drawer #character-milestones { margin: 8px; }
 #character-milestones article { display: grid; grid-template-columns: 34px 1fr; gap: 7px; align-items: center; padding: 8px; border: 1px solid #65725f3d; border-radius: 7px; background: #0b1510; opacity: .62; }
 #character-milestones article > span { color: #b9a56d; font: 900 .62rem system-ui; }
 #character-milestones strong, #character-milestones small { display: block; }
@@ -1340,6 +1345,10 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #build-path-message { margin: 6px 0 7px; color: #91a096; font-size: .55rem; line-height: 1.35; }
 #build-path-progress { height: 5px; overflow: hidden; margin-bottom: 8px; border-radius: 5px; background: #050b07; }
 #build-path-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #887039, #e8c668); transition: width .25s ease; }
+.build-path-summary-action { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.build-path-summary-action span { color: #a6b4a9; font-size: .54rem; }
+.build-path-summary-action button { min-height: 30px; padding: 5px 10px; border: 1px solid #b99b55; border-radius: 6px; background: #4b3b1e; color: #ffe2a0; font-size: .52rem; font-weight: 900; cursor: pointer; }
+.build-path-summary-action button:disabled { opacity: .45; cursor: default; }
 #build-path-candidates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 #build-path-candidates:empty { display: none; }
 #build-path-candidates button { display: grid; grid-template-columns: 1fr auto; gap: 3px 6px; min-width: 0; padding: 8px; border: 1px solid #63715f55; border-radius: 7px; background: #101c14; color: #d9e3d5; cursor: pointer; text-align: left; }
@@ -1376,6 +1385,27 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #build-path-master-trial[data-complete="true"] { border-color: #70b89288; background: #0d2118; }
 #build-path-master-trial[data-complete="true"] small { color: #83d5af; }
 #build-path-panel[data-selected="tank"] { border-color: #85a5b477; }#build-path-panel[data-selected="mage"] { border-color: #8a78c977; }#build-path-panel[data-selected="assassin"] { border-color: #c4697077; }#build-path-panel[data-selected="thief"] { border-color: #b39a5477; }#build-path-panel[data-selected="ranger"] { border-color: #72a86b77; }
+#calling-intro { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgb(2 7 5 / 78%); backdrop-filter: blur(7px); }
+#calling-intro[hidden] { display: none; }
+.calling-intro-card { width: min(920px, 94vw); padding: 22px; border: 2px solid #b8964f; border-radius: 18px; background: linear-gradient(145deg, #15231b 0%, #0a1210 58%, #20190d 100%); box-shadow: 0 28px 100px #000e, inset 0 0 0 4px #293a2d; color: #e8eee5; }
+.calling-intro-card > header { display: flex; justify-content: space-between; gap: 18px; align-items: start; }
+.calling-intro-card > header span { color: #8fd2ad; font-size: .58rem; font-weight: 1000; letter-spacing: .14em; }
+.calling-intro-card h2 { margin: 4px 0 0; color: #f3d686; font: 750 1.7rem Georgia, serif; }
+#calling-intro-close { width: 36px; height: 36px; border: 1px solid #ffffff20; border-radius: 8px; background: #ffffff09; color: #b9c4bb; font-size: 1.35rem; cursor: pointer; }
+#calling-intro-copy { margin: 9px 0 15px; color: #b4c1b8; font-size: .78rem; line-height: 1.45; }
+#calling-intro #build-path-candidates { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+#calling-intro #build-path-candidates button { display: flex; flex-direction: column; min-height: 220px; padding: 15px; border-color: #66806d88; background: linear-gradient(150deg, #14251b, #0c1712); }
+#calling-intro #build-path-candidates button[data-recommended="true"] { border-color: #d7b65f; box-shadow: inset 0 0 24px #d2a94a18, 0 0 18px #0007; }
+#calling-intro #build-path-candidates button[data-active="true"] { border-color: #7edbb4; }
+#calling-intro #build-path-candidates em { align-self: flex-start; margin-bottom: 10px; padding: 4px 7px; border-radius: 999px; background: #635025; color: #ffe19a; font-size: .5rem; letter-spacing: .09em; }
+#calling-intro #build-path-candidates strong { font-size: 1rem; }
+#calling-intro #build-path-candidates small { color: #a6b6ab; font-size: .62rem; line-height: 1.4; }
+#calling-intro #build-path-candidates p { flex: 1; margin: 13px 0; color: #9fb0a4; font-size: .65rem; line-height: 1.45; }
+#calling-intro #build-path-candidates b { margin-bottom: 5px; padding-top: 10px; border-top: 1px solid #ffffff16; color: #83dfc3; font-size: .7rem; }
+.calling-intro-card > footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; }
+.calling-intro-card > footer span { color: #91a198; font-size: .62rem; }
+.calling-intro-card > footer button { min-height: 34px; padding: 6px 12px; border: 1px solid #6e8075; border-radius: 7px; background: #18231d; color: #c5d0c8; font-size: .56rem; font-weight: 900; }
+@media (max-width: 720px) { #calling-intro { padding: 10px; }.calling-intro-card { max-height: 94vh; overflow-y: auto; padding: 15px; }#calling-intro #build-path-candidates { grid-template-columns: 1fr; }#calling-intro #build-path-candidates button { min-height: 150px; }.calling-intro-card > footer { align-items: stretch; flex-direction: column; } }
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }
 .inventory-empty { margin: 12px 0; padding: 22px 16px; border: 1px dashed #70876866; border-radius: 9px; color: #92a68e; font-size: .8rem; text-align: center; }
