@@ -41,8 +41,8 @@ it("keeps the inventory shell synchronized with protocol items and equippable ma
 it("keeps unowned cards hidden after the paper-doll layout applies", () => {
   const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
   const layoutRule = css.indexOf('#inventory-panel[data-tab="gear"] .inventory-grid article.equipment');
-  const ownershipRule = css.lastIndexOf("#inventory-panel .inventory-grid article[hidden]");
+  const ownershipRule = css.lastIndexOf("#inventory-panel[data-tab] .inventory-grid article[hidden]");
   expect(layoutRule).toBeGreaterThan(-1);
   expect(ownershipRule).toBeGreaterThan(layoutRule);
-  expect(css.slice(ownershipRule, ownershipRule + 180)).toContain("display: none");
+  expect(css.slice(ownershipRule, ownershipRule + 240)).toContain("display: none");
 });
