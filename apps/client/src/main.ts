@@ -2867,6 +2867,7 @@ function refreshPowerCompatibility(): void {
   setRigMainHand(localPlayerRig, localMainHandId);
 }
 
+let lastInventoryLoadoutKey = "";
 function refreshInventoryEquipped(): void {
   combatHud.setArmour(localArmourId);
   const tool = (inventoryCounts.get("reinforced_pickaxe") ?? 0) > 0 ? "Reinforced Pickaxe" : "Starter Pickaxe";
@@ -2874,6 +2875,9 @@ function refreshInventoryEquipped(): void {
   const handDefinition = MAIN_HAND_DEFINITIONS[localMainHandId];
   const handItem = ("requiredItemId" in handDefinition ? handDefinition.requiredItemId : null) as ItemId | null;
   const armourItem = localArmourId === "none" ? null : localArmourId as ItemId;
+  const loadoutKey = `${localMainHandId}:${localArmourId}`;
+  const loadoutChanged = lastInventoryLoadoutKey !== "" && lastInventoryLoadoutKey !== loadoutKey;
+  lastInventoryLoadoutKey = loadoutKey;
   const slotValues: Record<string, { name: string; detail: string; rarity?: ItemRarity }> = {
     weapon: {
       name: localMainHandId === "longsword" && localIronSwordOwned ? "Iron Sword" : handDefinition.name,
@@ -2901,9 +2905,23 @@ function refreshInventoryEquipped(): void {
   }
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-equip-armour]")) {
     const id = button.dataset.equipArmour!;
-    button.disabled = id === localArmourId || (id !== "none" && (inventoryCounts.get(id as ItemId) ?? 0) <= 0);
-    button.textContent = id === localArmourId ? "EQUIPPED" : id === "none" ? "REMOVE ARMOUR" : "EQUIP";
+    button.disabled = id !== localArmourId && (inventoryCounts.get(id as ItemId) ?? 0) <= 0;
+    button.textContent = id === localArmourId ? "UNEQUIP" : "EQUIP";
     button.setAttribute("aria-pressed", String(id === localArmourId));
+  }
+  for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipment[data-item]")) {
+    const itemId = card.dataset.item as ItemId;
+    const hand = equipmentForItem(itemId);
+    const armour = armourForItem(itemId);
+    const equipped = hand ? hand === localMainHandId : armour === localArmourId;
+    card.dataset.equipped = String(equipped);
+    card.setAttribute("aria-label", `${ITEM_DEFINITIONS[itemId].name}${equipped ? ", equipped" : ", select to compare"}`);
+  }
+  if (loadoutChanged) {
+    const portrait = document.querySelector<HTMLElement>("#inventory-portrait");
+    portrait?.classList.remove("equipment-change");
+    requestAnimationFrame(() => portrait?.classList.add("equipment-change"));
+    window.setTimeout(() => portrait?.classList.remove("equipment-change"), 520);
   }
   if (!inventoryPanel.hidden) refreshInventoryPreview();
 }
@@ -2975,13 +2993,13 @@ const inventoryDecisionName = document.querySelector<HTMLElement>("#inventory-de
 const inventoryDecisionVerdict = document.querySelector<HTMLElement>("#inventory-decision-verdict")!;
 const inventoryCallingFit = document.querySelector<HTMLElement>("#inventory-calling-fit")!;
 
-type InventoryDecision = "equipped" | "upgrade" | "different" | "lower";
+type InventoryDecision = "equipped" | "upgrade" | "different" | "lower" | "same";
 function decisionFromTrends(trends: ReturnType<typeof comparisonTrend>[]): InventoryDecision {
   const better = trends.filter(trend => trend === "better").length;
   const worse = trends.filter(trend => trend === "worse").length;
-  if (better === 0 && worse === 0) return "equipped";
-  if (better > worse) return "upgrade";
-  if (worse > better) return "lower";
+  if (better === 0 && worse === 0) return "same";
+  if (better > 0 && worse === 0) return "upgrade";
+  if (worse > 0 && better === 0) return "lower";
   return "different";
 }
 function inventoryDecisionForItem(itemId: ItemId): InventoryDecision | null {
@@ -3006,7 +3024,7 @@ function inventoryDecisionForItem(itemId: ItemId): InventoryDecision | null {
   ]);
 }
 const inventoryDecisionLabel: Record<InventoryDecision, string> = {
-  equipped: "CURRENT", upgrade: "BETTER GEAR", different: "STYLE CHOICE", lower: "TRADE-OFF",
+  equipped: "EQUIPPED", upgrade: "CLEAR UPGRADE", different: "TRADE-OFF", lower: "LOWER STATS", same: "SAME STATS",
 };
 
 function refreshInventorySelectionActions(): void {
@@ -3018,8 +3036,9 @@ function refreshInventorySelectionActions(): void {
   inventorySelectionActions.hidden = !itemId || !owned || (!hand && !armour);
   if (inventorySelectionActions.hidden) return;
   const equipped = hand ? hand === localMainHandId : armour === localArmourId;
-  inventorySelectedEquip.disabled = equipped;
-  inventorySelectedEquip.textContent = equipped ? "EQUIPPED" : "EQUIP NOW";
+  const canUnequip = Boolean(armour && armour === localArmourId);
+  inventorySelectedEquip.disabled = equipped && !canUnequip;
+  inventorySelectedEquip.textContent = canUnequip ? "UNEQUIP" : equipped ? "EQUIPPED" : "EQUIP NOW";
   const recipe = Object.hasOwn(BLACKSMITH_DISMANTLE, itemId!)
     ? BLACKSMITH_DISMANTLE[itemId! as BlacksmithDismantleItemId] : null;
   inventorySelectedDismantle.hidden = !recipe;
@@ -3047,6 +3066,8 @@ function refreshInventoryPreview(): void {
   const armour = previewArmour ?? localArmourId;
   const appearanceKey = `${hand}:${armour}:${localAppearance.skin}:${localAppearance.hair}:${localAppearance.coat}:${localAppearance.hairStyle}:${localAppearance.coatStyle}`;
   const comparisonKey = `${appearanceKey}:${localMainHandId}:${localArmourId}:${localIronSwordOwned}:${previewSlot}:${selectedInventoryItem ?? "worn"}:${JSON.stringify(blacksmithReforgeRanks)}`;
+  for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipment[data-item]"))
+    card.dataset.selected = String(card.dataset.item === selectedInventoryItem);
   if (previewOpen) inventoryPortrait!.refresh(hand, armour, appearanceKey);
   if (comparisonKey === inventoryComparisonKey) return;
   inventoryComparisonKey = comparisonKey;
@@ -4979,6 +5000,22 @@ function refreshOwnedInventory(): void {
     }
     empty.hidden = [...section.querySelectorAll<HTMLElement>("article[data-item]")].some(card => !card.hidden);
   }
+  for (const section of inventoryPanel.querySelectorAll<HTMLElement>('[data-inventory-category="weapons"], [data-inventory-category="armour"]')) {
+    const grid = section.querySelector<HTMLElement>(".equipment-grid");
+    if (!grid) continue;
+    grid.querySelectorAll(".inventory-vacant-slot").forEach(slot => slot.remove());
+    const ownedCards = [...grid.querySelectorAll<HTMLElement>("article.equipment[data-item]")].filter(card => !card.hidden);
+    const displaySlots = ownedCards.length === 0 ? 0 : Math.max(6, Math.ceil(ownedCards.length / 3) * 3);
+    for (let index = ownedCards.length; index < displaySlots; index += 1) {
+      const slot = document.createElement("article");
+      slot.className = "inventory-vacant-slot";
+      slot.setAttribute("aria-hidden", "true");
+      slot.innerHTML = "<i></i><span>EMPTY SLOT</span>";
+      grid.append(slot);
+    }
+    const subtitle = section.querySelector<HTMLElement>("h3 small");
+    if (subtitle) subtitle.textContent = `${ownedCards.length} owned · click an item to compare`;
+  }
   refreshEquipmentProgression();
 }
 
@@ -5771,27 +5808,34 @@ document.querySelector("#inventory-preview-reset")!.addEventListener("click", ()
 document.querySelector<HTMLButtonElement>("#inventory-turn-left")!.addEventListener("click", () => inventoryPortrait?.turn(-45));
 document.querySelector<HTMLButtonElement>("#inventory-turn-right")!.addEventListener("click", () => inventoryPortrait?.turn(45));
 for (const card of inventoryPanel.querySelectorAll<HTMLElement>("article.equipment")) {
-  const button = document.createElement("button"); button.type = "button"; button.className = "inventory-preview-button";
-  button.textContent = "COMPARE";
-  button.setAttribute("aria-label", `Compare ${card.querySelector("strong")!.textContent}`);
-  button.addEventListener("click", () => {
+  const selectCard = (): void => {
+    if (card.hidden || (inventoryCounts.get(card.dataset.item as ItemId) ?? 0) <= 0) return;
     const hand = card.querySelector<HTMLElement>("[data-equip-main-hand]")?.dataset.equipMainHand;
     const armour = card.querySelector<HTMLElement>("[data-equip-armour]")?.dataset.equipArmour;
     if (hand && isMainHandId(hand)) { previewHand = hand; previewSlot = "weapon"; selectedInventoryItem = card.dataset.item as ItemId; }
     else if (armour && armourForItem(armour)) { previewArmour = armourForItem(armour)!; previewSlot = "armour"; selectedInventoryItem = card.dataset.item as ItemId; }
+    inventoryComparisonKey = "";
     refreshInventoryPreview();
     inventoryDecisionPanel.scrollIntoView({ block: "nearest" });
+  };
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.addEventListener("click", event => { if (!(event.target as HTMLElement).closest("button")) selectCard(); });
+  card.addEventListener("keydown", event => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault(); selectCard();
   });
   const actions = document.createElement("div"); actions.className = "inventory-item-actions";
   const equip = card.querySelector<HTMLButtonElement>("[data-equip-main-hand], [data-equip-armour]")!;
-  actions.append(equip, button); card.append(actions);
+  equip.addEventListener("click", event => event.stopPropagation());
+  actions.append(equip); card.append(actions);
 }
 inventorySelectedEquip.addEventListener("click", () => {
   if (!selectedInventoryItem) return;
   const hand = equipmentForItem(selectedInventoryItem);
   const armour = armourForItem(selectedInventoryItem);
   if (hand && isMainHandId(hand)) requestMainHandEquip(hand);
-  else if (armour && room && worldReady) room.send("armour:equip", { armourId: armour });
+  else if (armour && room && worldReady) room.send("armour:equip", { armourId: armour === localArmourId ? "none" : armour });
 });
 inventorySelectedKeep.addEventListener("click", () => {
   previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
@@ -8440,7 +8484,8 @@ for (const button of mainHandPickerButtons) {
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-equip-armour]")) {
   button.addEventListener("click", () => {
     if (!room || !worldReady) return;
-    room.send("armour:equip", { armourId: button.dataset.equipArmour });
+    const armourId = button.dataset.equipArmour;
+    room.send("armour:equip", { armourId: armourId === localArmourId ? "none" : armourId });
   });
 }
 for (const button of inventoryEquipButtons) {

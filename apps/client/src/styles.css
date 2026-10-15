@@ -1540,11 +1540,17 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-grid article.equipment button.inventory-preview-button { grid-row: 3; border-color: #91ac9870; background: #152c22; color: #bcd8c7; }
 .inventory-grid article.equipment .inventory-item-actions { grid-column: 1 / -1; display: flex; gap: 6px; }
 .inventory-grid article.equipment .inventory-item-actions button { flex: 1; min-width: 0; grid-row: auto; }
+.inventory-grid article.equipment { cursor: pointer; }
+.inventory-grid article.equipment:focus-visible { outline: 2px solid #d9c071; outline-offset: 2px; }
+.inventory-grid article.equipment[data-selected="true"] { border-color: #e3c565; box-shadow: inset 3px 0 0 #e3c565, 0 0 0 2px #e3c56544; transform: translateY(-2px); }
+.inventory-grid article.equipment[data-equipped="true"] { border-color: #f0c95b; box-shadow: inset 3px 0 0 #f0c95b, 0 0 18px #d6a52a2e; }
+.inventory-grid article.equipment[data-equipped="true"]::before { content: "EQUIPPED"; position: absolute; z-index: 2; top: 7px; left: 7px; padding: 3px 5px; border-radius: 999px; background: #72571f; color: #ffe6a2; font-size: .4rem; font-weight: 1000; letter-spacing: .07em; }
 .inventory-decision-badge { grid-column: 1 / -1; justify-self: start; padding: 3px 6px; border-radius: 999px; background: #313b34; color: #aab8ad; font-size: .46rem; letter-spacing: .06em; }
 .inventory-decision-badge[data-verdict="upgrade"] { background: #1d5730; color: #bff5ca; }
 .inventory-decision-badge[data-verdict="different"] { background: #34424e; color: #c3dbea; }
 .inventory-decision-badge[data-verdict="lower"] { background: #4d2d27; color: #e9b7aa; }
 .inventory-decision-badge[data-verdict="equipped"] { background: #5b451f; color: #ffe09b; }
+.inventory-decision-badge[data-verdict="same"] { background: #33413a; color: #cbd8d0; }
 .inventory-section > button { margin-bottom: 10px; padding: 7px 10px; border: 1px solid #856d43; border-radius: 6px; background: #362d1f; color: #e8d39f; font-size: .65rem; }
 .collection-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .collection-header .eyebrow { margin: 0 0 2px; color: #9bcf83; font-size: .55rem; letter-spacing: .12em; }
@@ -1682,6 +1688,11 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #inventory-panel[data-tab="gear"] .inventory-grid article.equipment > em { position: absolute; top: 6px; right: 6px; min-width: 21px; height: 21px; font-size: .58rem; }
 #inventory-panel[data-tab="gear"] .inventory-grid article.equipment .inventory-item-actions { width: 100%; margin-top: auto; }
 #inventory-panel[data-tab="gear"] .inventory-grid article.equipment .inventory-item-actions button { min-height: 27px; padding: 4px 2px; font-size: .46rem; }
+#inventory-panel[data-tab="gear"] .inventory-vacant-slot { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 148px; border-style: dashed; border-color: #7180773b; background: #07100c66; color: #607068; }
+#inventory-panel[data-tab="gear"] .inventory-vacant-slot i { width: 42px; height: 42px; margin-bottom: 10px; border: 2px dashed #71807755; border-radius: 9px; background: transparent; transform: none; box-shadow: none; }
+#inventory-panel[data-tab="gear"] .inventory-vacant-slot span { font-size: .48rem; font-weight: 900; letter-spacing: .09em; }
+@keyframes inventory-equip-pop { 0% { transform: scale(.96); filter: brightness(1); } 45% { transform: scale(1.035); filter: brightness(1.35) drop-shadow(0 0 16px #ffd76899); } 100% { transform: scale(1); filter: brightness(1); } }
+#inventory-portrait.equipment-change { animation: inventory-equip-pop 500ms ease-out; }
 #inventory-panel[data-tab="gear"] .inventory-decision-badge { order: 3; align-self: center; justify-self: auto; margin: 4px 0; }
 #inventory-panel[data-tab="bag"] .inventory-content { display: block; }
 #inventory-panel[data-tab="bag"] .inventory-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }

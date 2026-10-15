@@ -25,7 +25,16 @@ it("starts with one category visible and optional detail sections collapsed", ()
   expect(html).toContain('id="inventory-decision-panel"');
   expect(html).toContain('id="inventory-decision-verdict"');
   expect(html).toContain('id="inventory-calling-fit"');
+  expect(html).toContain('<section><h3>SELECTED ITEM</h3>');
   expect(html).toContain('>CLEAR</button>');
+});
+it("uses item cards for comparison and one card action", () => {
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+  expect(source).toContain('card.setAttribute("role", "button")');
+  expect(source).toContain('slot.className = "inventory-vacant-slot"');
+  expect(source).not.toContain('button.textContent = "COMPARE"');
+  expect(source).toContain('upgrade: "CLEAR UPGRADE"');
+  expect(source).toContain('canUnequip ? "UNEQUIP"');
 });
 it("keeps the inventory shell synchronized with protocol items and equippable main hands", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
