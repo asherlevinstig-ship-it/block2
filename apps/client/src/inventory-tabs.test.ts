@@ -38,3 +38,11 @@ it("keeps the inventory shell synchronized with protocol items and equippable ma
   expect(new Set(equipButtons)).toEqual(new Set(requiredMainHands));
   expect(equipButtons).toHaveLength(requiredMainHands.length);
 });
+it("keeps unowned cards hidden after the paper-doll layout applies", () => {
+  const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+  const layoutRule = css.indexOf('#inventory-panel[data-tab="gear"] .inventory-grid article.equipment');
+  const ownershipRule = css.lastIndexOf("#inventory-panel .inventory-grid article[hidden]");
+  expect(layoutRule).toBeGreaterThan(-1);
+  expect(ownershipRule).toBeGreaterThan(layoutRule);
+  expect(css.slice(ownershipRule, ownershipRule + 180)).toContain("display: none");
+});
