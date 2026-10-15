@@ -494,6 +494,8 @@ export const BLACKSMITH_DISMANTLE = {
 } as const satisfies Partial<Record<ItemId, { gold: number; materialId?: ItemId; materialQuantity?: number }>>;
 export type BlacksmithDismantleItemId = keyof typeof BLACKSMITH_DISMANTLE;
 export const BlacksmithDismantleSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_DISMANTLE) as [BlacksmithDismantleItemId, ...BlacksmithDismantleItemId[]]) });
+export const BlacksmithHaulSchema = z.object({ action: z.enum(["salvage_duplicates", "store_materials"]) }).strict();
+export type BlacksmithHaulAction = z.infer<typeof BlacksmithHaulSchema>["action"];
 export const REGIONAL_FORGE_RECIPES = {
   greenwood: {
     name: "Greenwood Rootstalker Forge", rankName: "Rootslayer", itemId: "rootstalker_wrap", marks: 5, gold: 80,
@@ -552,7 +554,7 @@ export function armouredDamage(damage: number, id: string, kind: IncomingDamageK
   return Math.max(1, damage - armour.reduction - situational - reforgeArmourReduction(reforgeRank));
 }
 export type BlacksmithUpdate = {
-  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "attuned" | "awakened" | "exchanged" | "regional-forged" | "error";
+  phase: "idle" | "traded" | "purchased" | "dismantled" | "reforged" | "attuned" | "awakened" | "exchanged" | "regional-forged" | "haul" | "error";
   ironOre: number;
   silverOre?: number;
   moonstone?: number;
@@ -583,6 +585,9 @@ export type BlacksmithUpdate = {
   materialQuantity?: number;
   sold?: number;
   goldGranted?: number;
+  haulDuplicateItems?: number;
+  haulDuplicateGold?: number;
+  haulMaterialItems?: number;
   message: string;
 };
 export type DungeonRunUpdate = {

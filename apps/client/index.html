@@ -192,6 +192,18 @@
       <h2>Blacksmith</h2>
       <p class="blacksmith-loop">Mine minerals → sell for gold → buy gear → equip in your pack</p>
       <div class="blacksmith-trade-row gold"><span>YOUR GOLD</span><strong id="blacksmith-gold">20</strong></div>
+      <section id="blacksmith-haul" aria-label="Hunt haul summary">
+        <header><div><small>BACK FROM A HUNT?</small><strong>Sort your haul</strong></div><span>THREE QUICK STEPS</span></header>
+        <div class="blacksmith-haul-actions">
+          <article data-haul="equip"><small>1 · GEAR</small><strong id="haul-equip-name">No upgrade found</strong><span id="haul-equip-detail">Your current gear is still best.</span><button id="haul-equip" type="button" disabled>NOTHING TO EQUIP</button></article>
+          <article data-haul="salvage"><small>2 · DUPLICATES</small><strong id="haul-salvage-count">Pack is tidy</strong><span id="haul-salvage-detail">Your last copy is always protected.</span><button id="haul-salvage" type="button" disabled>NOTHING TO SALVAGE</button></article>
+          <article data-haul="store"><small>3 · MATERIALS</small><strong id="haul-store-count">No materials</strong><span>Store crafting drops; keep ore and currencies ready.</span><button id="haul-store" type="button" disabled>NOTHING TO STORE</button></article>
+        </div>
+        <footer>
+          <div><small>NEXT UPGRADE</small><strong id="haul-upgrade-name">Checking forge…</strong><span id="haul-upgrade-progress"><i></i></span><em id="haul-upgrade-detail">Reviewing your resources</em></div>
+          <div><small>VENTURE NEXT</small><strong id="haul-region-name">Greenwood Camp</strong><em id="haul-region-detail">LV 2–5 · east road</em><button id="haul-track-region" type="button">TRACK ON MAP</button></div>
+        </footer>
+      </section>
       <nav id="blacksmith-shop-tabs" aria-label="Blacksmith shop categories">
         <button type="button" data-smith-tab="sell" aria-pressed="true">Sell minerals</button>
         <button type="button" data-smith-tab="weapons" aria-pressed="false">Weapons</button>

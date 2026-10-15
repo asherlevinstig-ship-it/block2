@@ -33,6 +33,7 @@ import { playerHud } from "./player-hud.js";
 import { combatHud, cooldownState } from "./combat-hud.js";
 import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equipmentProgressionText } from "./equipment-progression.js";
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
+import { haulUpgradeProgress, nextHaulRegion, nextHaulUpgrade, type HaulRegion } from "./blacksmith-haul.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
 import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
@@ -689,6 +690,20 @@ const blacksmithGold = document.querySelector<HTMLElement>("#blacksmith-gold")!;
 const blacksmithPrice = document.querySelector<HTMLElement>("#blacksmith-price")!;
 const blacksmithSell = document.querySelector<HTMLButtonElement>("#blacksmith-sell")!;
 const blacksmithClose = document.querySelector<HTMLButtonElement>("#blacksmith-close")!;
+const haulEquipName = document.querySelector<HTMLElement>("#haul-equip-name")!;
+const haulEquipDetail = document.querySelector<HTMLElement>("#haul-equip-detail")!;
+const haulEquip = document.querySelector<HTMLButtonElement>("#haul-equip")!;
+const haulSalvageCount = document.querySelector<HTMLElement>("#haul-salvage-count")!;
+const haulSalvageDetail = document.querySelector<HTMLElement>("#haul-salvage-detail")!;
+const haulSalvage = document.querySelector<HTMLButtonElement>("#haul-salvage")!;
+const haulStoreCount = document.querySelector<HTMLElement>("#haul-store-count")!;
+const haulStore = document.querySelector<HTMLButtonElement>("#haul-store")!;
+const haulUpgradeName = document.querySelector<HTMLElement>("#haul-upgrade-name")!;
+const haulUpgradeTrack = document.querySelector<HTMLElement>("#haul-upgrade-progress")!;
+const haulUpgradeDetail = document.querySelector<HTMLElement>("#haul-upgrade-detail")!;
+const haulRegionName = document.querySelector<HTMLElement>("#haul-region-name")!;
+const haulRegionDetail = document.querySelector<HTMLElement>("#haul-region-detail")!;
+const haulTrackRegion = document.querySelector<HTMLButtonElement>("#haul-track-region")!;
 const blacksmithUpgradeCards = [...document.querySelectorAll<HTMLElement>("[data-blacksmith-upgrade]")];
 const depthsRewardCards = [...document.querySelectorAll<HTMLElement>("[data-depths-reward]")];
 const tavernDialogueLine = document.querySelector<HTMLElement>("#tavern-dialogue-line")!;
@@ -874,7 +889,7 @@ const modeButtons = [...document.querySelectorAll<HTMLButtonElement>("#mode-togg
 if (!canvas || !status || !targetLabel || !tavernDialogue || !tavernDialogueLine || !tavernDialogueNext || !tavernDialogueClose || !playerCount || !dangerZone || !dangerZoneName || !dangerZoneTier || !dangerZoneDetail || !exitGuide || !performanceToggle || !performancePanel || !inventoryPanel || !inventoryTotal || !inventoryToggle || !inventoryClose || !inventoryBadge || !inventoryEquipped || inventoryCountElements.size !== Object.keys(ITEM_DEFINITIONS).length || inventoryEquipButtons.length !== requiredInventoryMainHands || !movementDebug || !movementDebugLive || !movementDebugEvents || !movementDebugCopy || !joystickZone || !joystickKnob || !mineButton || !dodgeButton || !defenseButton || !powerButton || !specialButton || !touchModeButton || !touchModeLabel || !defenseSlot || !traitSlot || !traitName || !traitDetail || !traitBonus || traitPickerButtons.length !== 3 || momentumPips.length !== MOMENTUM_TRAIT.maxStacks || !powerSlot || !seismicUpgrades || seismicMasteryButtons.length !== 2 || !specialSlot || powerPickerButtons.length !== 4 || specialPickerButtons.length !== 2 || mainHandPickerButtons.length !== 3 || !controlsHelp || !combatReticle || !combatFeedback || modeButtons.length !== 2) {
   throw new Error("Game shell is missing required elements");
 }
-if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
+if ([quizTablePrompt, blacksmithPrompt, playerTradePrompt, playerTradeName, blacksmithPanel, blacksmithMessage, blacksmithOre, blacksmithGold, blacksmithPrice, blacksmithSell, blacksmithClose, haulEquipName, haulEquipDetail, haulEquip, haulSalvageCount, haulSalvageDetail, haulSalvage, haulStoreCount, haulStore, haulUpgradeName, haulUpgradeTrack, haulUpgradeDetail, haulRegionName, haulRegionDetail, haulTrackRegion, quizPanel, quizBalance, quizBalanceAmount, quizPotDisplay, quizPotLabel, quizWinToast, quizAnswerFeedback, quizFeedbackIcon, quizFeedbackTitle, quizFeedbackDetail, quizMessage, quizStakeHeading, quizStakes, quizQuestion, quizPot, quizPrompt, quizChoices, quizDecision, quizDouble, quizQuit, quizClose, tavernCoins].some(element => !element) || blacksmithUpgradeCards.length !== Object.keys(BLACKSMITH_UPGRADES).length) {
   throw new Error("Tavern quiz shell is missing required elements");
 }
 if ([worldObjective, objectiveTier, objectiveTitle, objectiveDetail, objectiveLoot, objectiveProgress, objectiveDistance, objectiveMarker, objectiveMarkerDistance, objectiveMarkerLabel, objectiveComplete, objectiveCompleteTitle, objectiveCompleteReward].some(element => !element)) {
@@ -6443,7 +6458,76 @@ document.querySelector("#blacksmith-open-pack")!.addEventListener("click", () =>
   blacksmithPanel.hidden = true;
   selectInventoryCategory(lastShopPurchaseCategory); setInventoryOpen(true);
 });
+let haulRecommendedItem: ItemId | null = null;
+let haulRecommendedRegion: HaulRegion = nextHaulRegion(1);
+haulEquip.addEventListener("click", () => {
+  if (!room || !haulRecommendedItem) return;
+  const hand = equipmentForItem(haulRecommendedItem), armour = armourForItem(haulRecommendedItem);
+  if (hand) requestMainHandEquip(hand);
+  else if (armour) room.send("armour:equip", { armourId: armour });
+  blacksmithMessage.textContent = `Equipping ${ITEM_DEFINITIONS[haulRecommendedItem].name}…`;
+  window.setTimeout(() => room?.send("blacksmith:sync"), 250);
+});
+haulSalvage.addEventListener("click", () => {
+  if (!room || blacksmithPending) return;
+  blacksmithPending = true; haulSalvage.disabled = true;
+  blacksmithMessage.textContent = "Protecting one copy and salvaging safe duplicates…";
+  room.send("blacksmith:haul", { action: "salvage_duplicates" });
+});
+haulStore.addEventListener("click", () => {
+  if (!room || blacksmithPending) return;
+  blacksmithPending = true; haulStore.disabled = true;
+  blacksmithMessage.textContent = "Storing crafting materials…";
+  room.send("blacksmith:haul", { action: "store_materials" });
+});
+haulTrackRegion.addEventListener("click", () => {
+  minimap.guideTo({ ...haulRecommendedRegion, id: "haul-next", name: haulRecommendedRegion.name });
+  blacksmithPanel.hidden = true;
+  status.textContent = `Map guidance set for ${haulRecommendedRegion.name}.`;
+});
 blacksmithPrice.textContent = `Iron ${IRON_ORE_GOLD_PRICE} · Silver ${SILVER_ORE_GOLD_PRICE} gold`;
+
+function renderBlacksmithHaul(update: BlacksmithUpdate): void {
+  const equipment = (Object.keys(ITEM_DEFINITIONS) as ItemId[])
+    .filter(itemId => isEquipmentItem(itemId) && (inventoryCounts.get(itemId) ?? 0) > 0
+      && inventoryDecisionForItem(itemId) === "upgrade")
+    .sort((a, b) => Number(itemMatchesCalling(b)) - Number(itemMatchesCalling(a))
+      || ITEM_RARITIES[itemRarity(b)].order - ITEM_RARITIES[itemRarity(a)].order);
+  haulRecommendedItem = equipment[0] ?? null;
+  haulEquip.disabled = !haulRecommendedItem;
+  haulEquipName.textContent = haulRecommendedItem ? ITEM_DEFINITIONS[haulRecommendedItem].name : "No upgrade found";
+  haulEquipDetail.textContent = haulRecommendedItem
+    ? `${itemMatchesCalling(haulRecommendedItem) ? "Supports your Calling · " : ""}stronger than your equipped item.`
+    : "Your current gear is still best.";
+  haulEquip.textContent = haulRecommendedItem ? "EQUIP RECOMMENDED" : "NOTHING TO EQUIP";
+
+  const duplicateItems = update.haulDuplicateItems ?? 0;
+  haulSalvageCount.textContent = duplicateItems > 0 ? `${duplicateItems} safe duplicate${duplicateItems === 1 ? "" : "s"}` : "Pack is tidy";
+  haulSalvageDetail.textContent = duplicateItems > 0 ? `Worth up to ${update.haulDuplicateGold ?? 0} gold · last copies protected.` : "Your last copy is always protected.";
+  haulSalvage.disabled = duplicateItems <= 0 || blacksmithPending;
+  haulSalvage.textContent = duplicateItems > 0 ? "SALVAGE DUPLICATES" : "NOTHING TO SALVAGE";
+
+  const materialItems = update.haulMaterialItems ?? 0;
+  haulStoreCount.textContent = materialItems > 0 ? `${materialItems} crafting material${materialItems === 1 ? "" : "s"}` : "No materials";
+  haulStore.disabled = materialItems <= 0 || blacksmithPending;
+  haulStore.textContent = materialItems > 0 ? "STORE MATERIALS" : "NOTHING TO STORE";
+
+  const owned = new Set(update.ownedUpgrades);
+  const nextUpgrade = nextHaulUpgrade(owned);
+  if (nextUpgrade) {
+    const progress = haulUpgradeProgress(nextUpgrade, update.gold, update.ironOre, update.silverOre ?? 0);
+    haulUpgradeName.textContent = BLACKSMITH_UPGRADES[nextUpgrade].name;
+    haulUpgradeTrack.style.setProperty("--haul-progress", `${progress.percent}%`);
+    haulUpgradeDetail.textContent = progress.detail;
+  } else {
+    haulUpgradeName.textContent = "Core upgrades complete";
+    haulUpgradeTrack.style.setProperty("--haul-progress", "100%");
+    haulUpgradeDetail.textContent = "Reforge and attune your favourite equipment.";
+  }
+  haulRecommendedRegion = nextHaulRegion(update.characterLevel);
+  haulRegionName.textContent = haulRecommendedRegion.name;
+  haulRegionDetail.textContent = haulRecommendedRegion.detail;
+}
 
 function renderBlacksmith(update: BlacksmithUpdate): void {
   blacksmithPending = false;
@@ -6477,6 +6561,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
   regionalMasteryRanks = update.regionalMasteryRanks ?? regionalMasteryRanks;
   refreshEquipmentProgression();
   refreshInventoryEquipped();
+  renderBlacksmithHaul(update);
   renderWeaponShop();
   blacksmithSell.disabled = update.ironOre + silver <= 0 || blacksmithPending || update.gold >= 1_000_000;
   const owned = new Set(update.ownedUpgrades);

@@ -13,7 +13,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithHaulSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -291,6 +291,7 @@ type WorldRoomOptions = {
   partySize?: number;
 };
 type ExpeditionPartyTicket = { instanceKey: string; worldRoomId: string; profiles: string[] };
+const HAUL_STORAGE_MATERIALS = ["timber", "moss_fibre", "crawler_fang", "stone_core", "acid_gland"] as const satisfies readonly ItemId[];
 const expeditionPartyKey = (ticket: string) => `blockcraft:expedition-party:${ticket}`;
 function parseExpeditionPartyTicket(raw: unknown): ExpeditionPartyTicket | null {
   if (typeof raw !== "string") return null;
@@ -786,6 +787,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     });
     aliveMessage("blacksmith:sell", client => this.handleBlacksmithSell(client));
     aliveMessage("blacksmith:dismantle", (client, payload) => this.handleBlacksmithDismantle(client, payload));
+    aliveMessage("blacksmith:haul", (client, payload) => this.handleBlacksmithHaul(client, payload));
     aliveMessage("blacksmith:reforge", (client, payload) => this.handleBlacksmithReforge(client, payload));
     aliveMessage("blacksmith:attune", (client, payload) => this.handleBlacksmithAttune(client, payload));
     aliveMessage("equipment:hunt", (client, payload) => this.handleEquipmentAffixHunt(client, payload));
@@ -1228,6 +1230,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     reforgedItemId?: BlacksmithReforgeItemId): void {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    const haulDuplicateItems = (Object.keys(BLACKSMITH_DISMANTLE) as BlacksmithDismantleItemId[])
+      .reduce((total, id) => total + Math.max(0, (player.inventory.get(id)?.quantity ?? 0) - 1), 0);
+    const haulDuplicateGold = (Object.keys(BLACKSMITH_DISMANTLE) as BlacksmithDismantleItemId[])
+      .reduce((total, id) => total + Math.max(0, (player.inventory.get(id)?.quantity ?? 0) - 1) * BLACKSMITH_DISMANTLE[id].gold, 0);
+    const haulMaterialItems = HAUL_STORAGE_MATERIALS.reduce((total, id) => total + (player.inventory.get(id)?.quantity ?? 0), 0);
     client.send("blacksmith:update", {
       phase,
       ironOre: player.inventory.get("iron_ore")?.quantity ?? 0,
@@ -1263,6 +1270,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         greenwood: greenwoodMasteryRank(this.greenwoodProgress(player).points, this.greenwoodProgress(player).discovered),
         mistfen: mistfenMasteryRank(this.mistfenProgress(player).points, this.mistfenProgress(player).discovered),
       },
+      haulDuplicateItems,
+      haulDuplicateGold,
+      haulMaterialItems,
       materialGranted: dismantled?.materialId,
       materialQuantity: dismantled?.materialQuantity,
       message: message ?? blacksmithNextStep(player.blacksmithUpgrades, player.coins, player.inventory.get("iron_ore")?.quantity ?? 0),
@@ -1456,6 +1466,56 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.sendEquipmentAffixes(client);
     this.sendBlacksmithState(client, `Dismantled ${ITEM_DEFINITIONS[itemId].name} for ${recipe.gold} gold${materialMessage}${dustMessage}${markMessage}.`, "dismantled", 1, recipe.gold,
       undefined, undefined, { itemId, materialId, materialQuantity });
+  }
+
+  private handleBlacksmithHaul(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = BlacksmithHaulSchema.safeParse(payload);
+    if (!player || !parsed.success) return this.sendBlacksmithState(client, "Choose a haul action.", "error");
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client, "Stand beside the blacksmith stall to process your haul.", "error");
+    if (parsed.data.action === "store_materials") {
+      let moved = 0;
+      for (const itemId of HAUL_STORAGE_MATERIALS) {
+        const carried = player.inventory.get(itemId);
+        if (!carried?.quantity) continue;
+        let stored = player.storage.get(itemId);
+        if (!stored) { stored = new InventoryItemState(); player.storage.set(itemId, stored); }
+        const quantity = Math.min(carried.quantity, 65_535 - stored.quantity);
+        carried.quantity -= quantity; stored.quantity += quantity; moved += quantity;
+      }
+      if (moved <= 0) return this.sendBlacksmithState(client, "No crafting materials need storing. Ore and currencies stay ready for forging.", "error");
+      void this.persistPlayer(client.sessionId, player);
+      return this.sendBlacksmithState(client, `Stored ${moved} crafting materials. Ore and currencies remain in your pack.`, "haul");
+    }
+    let salvaged = 0, goldGranted = 0;
+    let greenwoodMarks = 0, mistfenMarks = 0;
+    for (const itemId of Object.keys(BLACKSMITH_DISMANTLE) as BlacksmithDismantleItemId[]) {
+      const item = player.inventory.get(itemId), recipe = BLACKSMITH_DISMANTLE[itemId];
+      const spares = Math.max(0, (item?.quantity ?? 0) - 1);
+      if (!item || spares <= 0) continue;
+      const goldRoom = Math.floor((1_000_000 - player.coins - goldGranted) / recipe.gold);
+      const materialId = "materialId" in recipe ? recipe.materialId : undefined;
+      const materialQuantity = "materialQuantity" in recipe ? recipe.materialQuantity : 0;
+      const materialRoom = materialId && materialQuantity
+        ? Math.floor(playerBackpackAddable(player, materialId, materialQuantity * spares) / materialQuantity)
+        : spares;
+      const quantity = Math.max(0, Math.min(spares, goldRoom, materialRoom));
+      if (quantity <= 0) continue;
+      item.quantity -= quantity; salvaged += quantity; goldGranted += quantity * recipe.gold;
+      if (materialId && materialQuantity) {
+        let material = player.inventory.get(materialId);
+        if (!material) { material = new InventoryItemState(); player.inventory.set(materialId, material); }
+        material.quantity += materialQuantity * quantity;
+      }
+      if (itemId === "rootstalker_wrap") greenwoodMarks += quantity;
+      if (itemId === "mirebreaker_mantle") mistfenMarks += quantity;
+    }
+    if (salvaged <= 0) return this.sendBlacksmithState(client, "No safe duplicates to salvage. Your last copy of every item is protected.", "error");
+    player.coins += goldGranted;
+    if (greenwoodMarks) this.grantRegionalMark(client.sessionId, "greenwood", greenwoodMarks);
+    if (mistfenMarks) this.grantRegionalMark(client.sessionId, "mistfen", mistfenMarks);
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    this.sendBlacksmithState(client, `Salvaged ${salvaged} duplicate${salvaged === 1 ? "" : "s"} for ${goldGranted} gold. One copy of every item was protected.`, "haul", salvaged, goldGranted);
   }
 
   private handleBlacksmithReforge(client: Client, payload: unknown): void {
@@ -6653,6 +6713,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.attackChains.delete(client.sessionId);
     player.equippedPower = compatiblePowerOrFallback(player.equippedPower, mainHand.tag);
     player.equippedPowerSecondary = compatiblePowerOrFallback(player.equippedPowerSecondary, mainHand.tag);
+    void this.persistPlayer(client.sessionId, player);
   }
 
   private handleTraitEquip(client: Client, payload: unknown): void {

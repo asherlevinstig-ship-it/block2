@@ -88,6 +88,29 @@ describe("ore to forged sword to item loot", () => {
       phase: "purchased", purchasedUpgradeId: "adventurer_pack",
     }));
   });
+  it("sorts a hunt haul while protecting the final gear copy", () => {
+    const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
+    const persist = vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION);
+    const daggers = new InventoryItemState(); daggers.quantity = 3; player.inventory.set("fang_dagger", daggers);
+    const fibre = new InventoryItemState(); fibre.quantity = 4; player.inventory.set("moss_fibre", fibre);
+    room.state.players.set("hauler", player); const client = { sessionId: "hauler", send: vi.fn() } as any;
+
+    internal.handleBlacksmithHaul(client, { action: "salvage_duplicates" });
+    expect(daggers.quantity).toBe(1);
+    expect(player.inventory.get("crawler_fang")?.quantity).toBe(2);
+    expect(player.coins).toBe(26);
+    expect(client.send).toHaveBeenLastCalledWith("blacksmith:update", expect.objectContaining({
+      phase: "haul", haulDuplicateItems: 0, haulMaterialItems: 6,
+    }));
+
+    internal.handleBlacksmithHaul(client, { action: "store_materials" });
+    expect(fibre.quantity).toBe(0); expect(player.inventory.get("crawler_fang")?.quantity).toBe(0);
+    expect(player.storage.get("moss_fibre")?.quantity).toBe(4);
+    expect(player.storage.get("crawler_fang")?.quantity).toBe(2);
+    expect(daggers.quantity).toBe(1);
+    expect(persist).toHaveBeenCalled();
+  });
   it("attunes completed Silver Depths rewards with Moonstone exactly once", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
     const persist = vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
