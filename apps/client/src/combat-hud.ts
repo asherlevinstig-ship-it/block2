@@ -37,6 +37,7 @@ const specialAiming = signal(false);
 const calling = signal<BuildPathId | null>(null);
 const callingAbility = signal<CallingAbilityId | null>(null);
 const callingRank = signal(0);
+const callingPending = signal(false);
 const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE", ready: false });
 const specialCooldown = signal<CooldownState>({ percent: 0, label: "READY · F", ready: true });
 const callingCooldown = signal<CooldownState>({ percent: 0, label: "CHOOSE CALLING", ready: false });
@@ -161,10 +162,10 @@ function CallingLoadout() {
   const cooldown = callingCooldown.value;
   return h("button", { id: "calling-slot", type: "button", disabled: !selected,
       "aria-label": definition ? `Use ${definition.name}` : "Choose a Calling to unlock its ability",
-      class: cooldown.ready && selected ? "ready" : "" },
+      class: `${cooldown.ready && selected && !callingPending.value ? "ready" : ""} ${callingPending.value ? "anticipating" : ""}`.trim() },
       h("span", null, "CALLING"),
       h("strong", { id: "calling-name" }, definition?.name ?? "Unbound"),
-      h("em", { id: "calling-cooldown-label" }, cooldown.label),
+      h("em", { id: "calling-cooldown-label" }, callingPending.value ? "CAST" : cooldown.label),
       h("i", { id: "calling-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
   );
 }
@@ -199,6 +200,7 @@ export const combatHud = {
   setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number): void {
     batch(() => { setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); });
   },
+  setCallingPending(value: boolean): void { setIfChanged(callingPending, value); },
   setPowerAiming(value: boolean): void { setIfChanged(powerAiming, value); },
   setSpecialAiming(value: boolean): void { setIfChanged(specialAiming, value); },
   setCooldowns(power: CooldownState, nextSpecial: CooldownState, nextCalling?: CooldownState): void {

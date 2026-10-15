@@ -3055,6 +3055,14 @@ function requestCallingAbility(): void {
   if (performance.now() < callingAbilityPendingUntil) return;
   callingAbilityPendingUntil = performance.now() + 700;
   callingAbilitySequence += 1;
+  combatHud.setCallingPending(true);
+  createCallingAnticipation(localBuildPathId);
+  const pendingSequence = callingAbilitySequence;
+  window.setTimeout(() => {
+    if (callingAbilitySequence === pendingSequence && performance.now() >= callingAbilityPendingUntil) {
+      combatHud.setCallingPending(false);
+    }
+  }, 720);
   room.send("calling:ability", { requestId: `calling-${callingAbilitySequence}`, yaw: cameraOrbit.yaw });
 }
 
@@ -3449,6 +3457,8 @@ interface DepthsHazardVisual {
 
 const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
+interface CallingAnticipationVisual { root: pc.Entity; material: pc.StandardMaterial; startedAt: number }
+const callingAnticipationVisuals: CallingAnticipationVisual[] = [];
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
@@ -3470,6 +3480,34 @@ function powerMaterial(color: pc.Color, opacity: number): pc.StandardMaterial {
   material.depthWrite = false;
   material.update();
   return material;
+}
+
+function createCallingAnticipation(pathId: RoleFieldPath): void {
+  const colors: Record<RoleFieldPath, pc.Color> = {
+    tank: new pc.Color(.3, .75, 1),
+    mage: new pc.Color(.67, .36, 1),
+    assassin: new pc.Color(1, .22, .42),
+    thief: new pc.Color(.38, 1, .57),
+    ranger: new pc.Color(1, .76, .2),
+  };
+  const root = new pc.Entity(`calling-anticipation:${pathId}`);
+  const material = powerMaterial(colors[pathId], .86);
+  for (let index = 0; index < 12; index += 1) {
+    const angle = index / 12 * Math.PI * 2;
+    const segment = addBox(root, "calling-ring", material, [.28, .055, .1], [Math.sin(angle) * .72, .08, Math.cos(angle) * .72]);
+    segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+    if (segment.render) segment.render.castShadows = false;
+  }
+  for (let index = 0; index < 4; index += 1) {
+    const angle = index / 4 * Math.PI * 2 + Math.PI / 4;
+    const spark = addBox(root, "calling-spark", material, [.07, .42, .07], [Math.sin(angle) * .42, .3, Math.cos(angle) * .42]);
+    spark.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 22 : -22);
+    if (spark.render) spark.render.castShadows = false;
+  }
+  const position = localPlayer.getPosition();
+  root.setPosition(position.x, position.y + .03, position.z);
+  app.root.addChild(root);
+  callingAnticipationVisuals.push({ root, material, startedAt: performance.now() });
 }
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
@@ -8828,6 +8866,18 @@ app.on("update", (dt: number) => {
     burst.root.rotate(0, frameTime * (burst.kind === "victory" ? 95 : 55), 0);
     burst.material.opacity = Math.max(0, (1 - progress) * .88); burst.material.update();
   }
+  for (let index = callingAnticipationVisuals.length - 1; index >= 0; index -= 1) {
+    const visual = callingAnticipationVisuals[index]!;
+    const progress = (animationNow - visual.startedAt) / 430;
+    if (progress >= 1) {
+      visual.root.destroy(); visual.material.destroy(); callingAnticipationVisuals.splice(index, 1); continue;
+    }
+    const eased = 1 - (1 - Math.max(0, progress)) ** 3;
+    const scale = .45 + eased * 1.2;
+    visual.root.setLocalScale(scale, .65 + Math.sin(progress * Math.PI) * .8, scale);
+    visual.root.rotate(0, frameTime * 150, 0);
+    visual.material.opacity = Math.max(0, (1 - progress) * .86); visual.material.update();
+  }
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
@@ -9425,6 +9475,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("build:path", (update: BuildPathUpdate) => renderBuildPath(update));
   room.onMessage("calling:ability", (update: CallingAbilityUpdate) => {
     callingAbilityPendingUntil = 0;
+    combatHud.setCallingPending(false);
     localCallingCooldownUntil = update.cooldownUntil;
     localBuildPathId = update.pathId;
     localCallingAbilityId = update.abilityId;
@@ -10016,6 +10067,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localSpecialCooldownUntil = 0;
     localCallingCooldownUntil = 0;
     callingAbilityPendingUntil = 0;
+    combatHud.setCallingPending(false);
     localSilverDepthsRunStage = 0;
     localSilverDepthsWing = null;
     lastDepthsCachePhase = null;
@@ -10032,6 +10084,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     forestPortalVisuals.clear(); nearbyForestPortal = null;
     for (const burst of dungeonBurstVisuals) { burst.root.destroy(); burst.material.destroy(); }
     dungeonBurstVisuals.length = 0;
+    for (const visual of callingAnticipationVisuals) { visual.root.destroy(); visual.material.destroy(); }
+    callingAnticipationVisuals.length = 0;
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();

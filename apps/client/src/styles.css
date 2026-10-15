@@ -525,6 +525,18 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
   transition: width 80ms linear;
 }
 #calling-slot.ready { box-shadow: inset 0 0 18px rgb(61 231 177 / 16%), 0 0 12px rgb(61 231 177 / 14%); }
+#calling-slot.anticipating {
+  border-color: rgb(171 255 225 / 92%);
+  background: rgb(21 91 72 / 96%);
+  box-shadow: inset 0 0 24px rgb(95 255 201 / 30%), 0 0 20px rgb(69 245 187 / 35%);
+  animation: calling-anticipation 360ms ease-out both;
+}
+#calling-slot.anticipating em { color: #edfff8; }
+@keyframes calling-anticipation {
+  0% { transform: scale(.96); filter: brightness(1.45); }
+  48% { transform: scale(1.025); filter: brightness(1.2); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
 #calling-slot:active { transform: scale(.985); }
 #calling-ability-picker { display: grid; gap: 5px; }
 #calling-ability-picker button {
