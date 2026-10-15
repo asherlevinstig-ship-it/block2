@@ -1,10 +1,11 @@
 export type EnemyCue = "warning" | "hurt" | "stagger" | "defeat";
 export type PowerCue = "seismicWindup" | "seismicImpact";
+export type CallingCue = "callingTank" | "callingMage" | "callingShadow" | "callingThief" | "callingRanger";
 export type WeaponCue = "hammerImpact" | "rangedHit" | "acidHit" | "venomHit" | "nearMiss";
 export type MiningCue = "miningStone" | "miningIron" | "miningSilver" | "miningBreak";
 export type DungeonCue = "dungeonGate" | "guardianPhase" | "dungeonVictory" | "depthsEntrance" | "depthsWing" | "depthsArena";
 export type LootCue = "lootPickup" | "lootRare" | "lootEpic" | "lootLegendary";
-type CombatCue = EnemyCue | PowerCue | WeaponCue | MiningCue | DungeonCue | LootCue;
+type CombatCue = EnemyCue | PowerCue | CallingCue | WeaponCue | MiningCue | DungeonCue | LootCue;
 
 interface ToneLayer {
   wave: OscillatorType;
@@ -67,6 +68,29 @@ export const POWER_CUE_DEFINITIONS: Record<PowerCue, EnemyCueDefinition> = {
       { wave: "sine", startHz: 54, endHz: 28, gain: 0.12, delayMs: 35, durationMs: 410 },
     ],
   },
+};
+
+export const CALLING_CUE_DEFINITIONS: Record<CallingCue, EnemyCueDefinition> = {
+  callingTank: { minimumIntervalMs: 180, tones: [
+    { wave: "square", startHz: 92, endHz: 46, gain: .075, delayMs: 0, durationMs: 250 },
+    { wave: "triangle", startHz: 260, endHz: 120, gain: .04, delayMs: 24, durationMs: 190 },
+  ] },
+  callingMage: { minimumIntervalMs: 180, tones: [
+    { wave: "sine", startHz: 280, endHz: 980, gain: .05, delayMs: 0, durationMs: 260 },
+    { wave: "triangle", startHz: 560, endHz: 1240, gain: .025, delayMs: 80, durationMs: 240 },
+  ] },
+  callingShadow: { minimumIntervalMs: 180, tones: [
+    { wave: "sawtooth", startHz: 440, endHz: 82, gain: .035, delayMs: 0, durationMs: 210 },
+    { wave: "sine", startHz: 900, endHz: 240, gain: .025, delayMs: 35, durationMs: 170 },
+  ] },
+  callingThief: { minimumIntervalMs: 180, tones: [
+    { wave: "triangle", startHz: 240, endHz: 72, gain: .032, delayMs: 0, durationMs: 260 },
+    { wave: "sine", startHz: 680, endHz: 190, gain: .02, delayMs: 20, durationMs: 190 },
+  ] },
+  callingRanger: { minimumIntervalMs: 180, tones: [
+    { wave: "triangle", startHz: 340, endHz: 760, gain: .04, delayMs: 0, durationMs: 150 },
+    { wave: "sine", startHz: 620, endHz: 1180, gain: .022, delayMs: 70, durationMs: 180 },
+  ] },
 };
 
 export const WEAPON_CUE_DEFINITIONS: Record<WeaponCue, EnemyCueDefinition> = {
@@ -144,6 +168,7 @@ export const LOOT_CUE_DEFINITIONS: Record<LootCue, EnemyCueDefinition> = {
 const COMBAT_CUE_DEFINITIONS: Record<CombatCue, EnemyCueDefinition> = {
   ...ENEMY_CUE_DEFINITIONS,
   ...POWER_CUE_DEFINITIONS,
+  ...CALLING_CUE_DEFINITIONS,
   ...WEAPON_CUE_DEFINITIONS,
   ...MINING_CUE_DEFINITIONS,
   ...DUNGEON_CUE_DEFINITIONS,

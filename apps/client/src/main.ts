@@ -3459,6 +3459,14 @@ const powerTelegraphs = new Map<string, PowerTelegraphVisual>();
 const powerImpactVisuals: PowerImpactVisual[] = [];
 interface CallingAnticipationVisual { root: pc.Entity; material: pc.StandardMaterial; startedAt: number }
 const callingAnticipationVisuals: CallingAnticipationVisual[] = [];
+interface CallingImpactVisual {
+  root: pc.Entity;
+  material: pc.StandardMaterial;
+  startedAt: number;
+  durationMs: number;
+  style: "aura" | "shield" | "terrain" | "smoke" | "motion";
+}
+const callingImpactVisuals: CallingImpactVisual[] = [];
 const powerDebrisVisuals: PowerDebrisVisual[] = [];
 const markPayoffVisuals: MarkPayoffVisual[] = [];
 const brambleSnareVisuals = new Map<string, BrambleSnareVisual>();
@@ -3508,6 +3516,88 @@ function createCallingAnticipation(pathId: RoleFieldPath): void {
   root.setPosition(position.x, position.y + .03, position.z);
   app.root.addChild(root);
   callingAnticipationVisuals.push({ root, material, startedAt: performance.now() });
+}
+
+function createCallingImpact(update: CallingAbilityUpdate): void {
+  const colors: Record<RoleFieldPath, pc.Color> = {
+    tank: new pc.Color(.28, .72, 1), mage: new pc.Color(.7, .34, 1), assassin: new pc.Color(1, .16, .36),
+    thief: new pc.Color(.25, .9, .48), ranger: new pc.Color(1, .72, .12),
+  };
+  const abilityId = update.abilityId;
+  const style: CallingImpactVisual["style"] = abilityId === "tank_earthbreaker" ? "terrain"
+    : abilityId === "tank_bulwark" || abilityId === "mage_mana_shield" ? "shield"
+    : abilityId === "thief_smoke_bomb" || abilityId === "thief_decoy" ? "smoke"
+    : abilityId === "assassin_vanish" || abilityId === "assassin_blade_dance" || abilityId === "thief_escape_artist" || abilityId === "ranger_disengage" ? "motion"
+    : "aura";
+  const material = powerMaterial(colors[update.pathId], style === "smoke" ? .48 : .9);
+  const root = new pc.Entity(`calling-impact:${abilityId}`);
+  const ringRadius = style === "terrain" ? 2.65 : style === "smoke" ? 2.1 : style === "shield" ? .95 : 1.25;
+  const segments = style === "terrain" ? 24 : 16;
+  for (let index = 0; index < segments; index += 1) {
+    const angle = index / segments * Math.PI * 2;
+    const segment = addBox(root, "calling-impact-ring", material,
+      [style === "terrain" ? .5 : .3, style === "shield" ? .12 : .07, style === "terrain" ? .16 : .1],
+      [Math.sin(angle) * ringRadius, .09, Math.cos(angle) * ringRadius]);
+    segment.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+    if (segment.render) segment.render.castShadows = false;
+  }
+  if (style === "shield") {
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index / 12 * Math.PI * 2;
+      const plate = addBox(root, "calling-shield-plate", material, [.34, .72, .08], [Math.sin(angle) * .84, .82, Math.cos(angle) * .84]);
+      plate.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+      if (plate.render) plate.render.castShadows = false;
+    }
+  } else if (style === "terrain") {
+    for (let index = 0; index < 18; index += 1) {
+      const angle = index / 18 * Math.PI * 2 + (index % 2) * .08;
+      const distance = .45 + (index % 6) * .42;
+      const crack = addBox(root, "calling-terrain-fracture", material, [.12, .025, .5 + index % 3 * .16],
+        [Math.sin(angle) * distance, .055, Math.cos(angle) * distance]);
+      crack.setLocalEulerAngles(0, angle * 180 / Math.PI, 0);
+      const rubble = addBox(root, "calling-terrain-rubble", material, [.13 + index % 3 * .04, .12, .13],
+        [Math.sin(angle) * (distance + .2), .16 + index % 2 * .08, Math.cos(angle) * (distance + .2)]);
+      rubble.setLocalEulerAngles(index * 17, index * 31, index * 13);
+    }
+  } else if (style === "smoke") {
+    for (let index = 0; index < 18; index += 1) {
+      const angle = index / 18 * Math.PI * 2;
+      const radius = .45 + index % 4 * .38;
+      const cloud = addBox(root, "calling-smoke-cloud", material, [.38 + index % 3 * .14, .35 + index % 2 * .18, .38 + (index + 1) % 3 * .12],
+        [Math.sin(angle) * radius, .25 + index % 4 * .25, Math.cos(angle) * radius]);
+      cloud.setLocalEulerAngles(index * 11, index * 23, index * 7);
+      if (cloud.render) cloud.render.castShadows = false;
+    }
+  } else if (style === "motion") {
+    for (let index = 0; index < 14; index += 1) {
+      const side = index % 2 ? -1 : 1;
+      const streak = addBox(root, "calling-motion-streak", material, [.06, .08, .5 + index % 4 * .18],
+        [side * (.18 + index % 4 * .16), .25 + index % 3 * .22, .35 + Math.floor(index / 2) * .25]);
+      streak.setLocalEulerAngles(0, side * (8 + index), side * 12);
+      if (streak.render) streak.render.castShadows = false;
+    }
+  } else {
+    for (let index = 0; index < 10; index += 1) {
+      const angle = index / 10 * Math.PI * 2;
+      const shard = addBox(root, "calling-aura-shard", material, [.09, .52 + index % 3 * .18, .09],
+        [Math.sin(angle) * .72, .45 + index % 3 * .24, Math.cos(angle) * .72]);
+      shard.setLocalEulerAngles(index % 2 ? 20 : -20, angle * 180 / Math.PI, 35);
+    }
+  }
+  const followsPlayer = style === "shield" || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
+  if (followsPlayer) {
+    root.setLocalPosition(0, .03, 0); localPlayer.addChild(root);
+  } else {
+    const position = localPlayer.getPosition(); root.setPosition(position.x, position.y + .03, position.z); app.root.addChild(root);
+  }
+  root.setEulerAngles(0, cameraOrbit.yaw, 0);
+  const durationMs = style === "shield" ? Math.min(update.durationMs ?? 2_500, 5_500)
+    : style === "smoke" ? Math.min(update.durationMs ?? 2_200, 3_500)
+    : style === "motion" ? 650 : style === "terrain" ? 1_150 : 950;
+  callingImpactVisuals.push({ root, material, startedAt: performance.now(), durationMs, style });
+  combatAudio.play(update.pathId === "tank" ? "callingTank" : update.pathId === "mage" ? "callingMage"
+    : update.pathId === "assassin" ? "callingShadow" : update.pathId === "thief" ? "callingThief" : "callingRanger");
+  if (style === "terrain") combatAudio.play("seismicImpact");
 }
 
 function createWeaponProjectile(message: WeaponAttackReleased): void {
@@ -8878,6 +8968,22 @@ app.on("update", (dt: number) => {
     visual.root.rotate(0, frameTime * 150, 0);
     visual.material.opacity = Math.max(0, (1 - progress) * .86); visual.material.update();
   }
+  for (let index = callingImpactVisuals.length - 1; index >= 0; index -= 1) {
+    const visual = callingImpactVisuals[index]!;
+    const progress = (animationNow - visual.startedAt) / visual.durationMs;
+    if (progress >= 1) {
+      visual.root.destroy(); visual.material.destroy(); callingImpactVisuals.splice(index, 1); continue;
+    }
+    const eased = 1 - (1 - Math.max(0, progress)) ** 3;
+    if (visual.style === "terrain") visual.root.setLocalScale(.68 + eased * .42, .7 + Math.sin(progress * Math.PI) * .9, .68 + eased * .42);
+    else if (visual.style === "smoke") { const scale = .72 + eased * .62; visual.root.setLocalScale(scale, .82 + eased * .38, scale); visual.root.rotate(0, frameTime * 28, 0); }
+    else if (visual.style === "shield") { const pulse = 1 + Math.sin(animationTime * 8) * .035; visual.root.setLocalScale(pulse, pulse, pulse); visual.root.rotate(0, frameTime * 18, 0); }
+    else if (visual.style === "motion") visual.root.setLocalScale(1 + eased * .45, 1 - eased * .35, 1 + eased * 1.25);
+    else { const pulse = .72 + eased * .48; visual.root.setLocalScale(pulse, .8 + Math.sin(progress * Math.PI) * .55, pulse); visual.root.rotate(0, frameTime * 80, 0); }
+    const fadeStart = visual.style === "shield" ? .76 : visual.style === "smoke" ? .58 : .42;
+    visual.material.opacity = Math.max(0, Math.min(.9, (1 - progress) / Math.max(.01, 1 - fadeStart) * .9));
+    visual.material.update();
+  }
   for (let index = powerImpactVisuals.length - 1; index >= 0; index -= 1) {
     const impact = powerImpactVisuals[index]!;
     const elapsed = animationNow - impact.startedAt;
@@ -9480,7 +9586,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localBuildPathId = update.pathId;
     localCallingAbilityId = update.abilityId;
     combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank);
-    showCombatFeedback(update.ability.toUpperCase(), "dodge");
+    createCallingImpact(update);
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });
   room.onMessage("equipment:affixes", (update: EquipmentAffixUpdate) => {
@@ -10086,6 +10192,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     dungeonBurstVisuals.length = 0;
     for (const visual of callingAnticipationVisuals) { visual.root.destroy(); visual.material.destroy(); }
     callingAnticipationVisuals.length = 0;
+    for (const visual of callingImpactVisuals) { visual.root.destroy(); visual.material.destroy(); }
+    callingImpactVisuals.length = 0;
     pendingPortalDestination = null;
     social.clearNames();
     partyUI.reset();
