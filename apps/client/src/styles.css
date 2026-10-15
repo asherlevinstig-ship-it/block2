@@ -53,13 +53,18 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
 #loot-pack-decision > header small { color: #ff937e; font-size: 8px; font-weight: 1000; letter-spacing: .11em; }
 #loot-pack-decision > header strong { margin-top: 3px; color: var(--rarity); font-size: 15px; }
 #loot-pack-close { width: 32px; height: 32px; border: 1px solid #ffffff22; border-radius: 7px; background: #ffffff08; color: #d9e3da; cursor: pointer; }
-#loot-pack-verdict { margin: 9px 0; color: #aebdb2; font-size: 10px; line-height: 1.35; }
+#loot-pack-verdict { margin: 9px 0; padding: 7px 9px; border-left: 3px solid currentColor; border-radius: 4px; background: #ffffff08; color: #e1c66e; font-size: 10px; font-weight: 1000; line-height: 1.35; letter-spacing: .04em; }
+#loot-pack-verdict[data-tone="good"] { color: #82e39a; background: #17372288; }
+#loot-pack-verdict[data-tone="warning"] { color: #ff927f; background: #421d1a88; }
 #loot-pack-incoming { padding: 9px; border: 1px solid color-mix(in srgb, var(--rarity) 45%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--rarity) 9%, #07100c); }
-#loot-pack-incoming strong, #loot-pack-incoming span { display: block; } #loot-pack-incoming strong { color: #f6eac4; font-size: 12px; } #loot-pack-incoming span { margin-top: 3px; color: #9eb2a5; font-size: 9px; }
+#loot-pack-incoming strong, #loot-pack-incoming span, #loot-pack-incoming small { display: block; } #loot-pack-incoming strong { color: #f6eac4; font-size: 12px; } #loot-pack-incoming span { margin-top: 4px; color: #d7e2d8; font-size: 10px; } #loot-pack-incoming small { margin-top: 4px; color: #82978a; font-size: 8px; line-height: 1.3; }
 #loot-pack-decision > small { display: block; margin: 10px 0 5px; color: #82978a; font-size: 8px; font-weight: 900; letter-spacing: .1em; }
-#loot-pack-candidates { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; max-height: 132px; overflow: auto; }
-#loot-pack-candidates button { min-width: 0; padding: 7px 8px; border: 1px solid #53675b; border-radius: 7px; background: #101c15; color: #b8c6bc; cursor: pointer; font-size: 9px; text-align: left; }
+#loot-pack-candidates { display: grid; grid-template-columns: 1fr; gap: 5px; max-height: 146px; overflow: auto; }
+#loot-pack-candidates button { min-width: 0; padding: 7px 8px; border: 1px solid #53675b; border-radius: 7px; background: #101c15; color: #b8c6bc; cursor: pointer; text-align: left; }
+#loot-pack-candidates button strong, #loot-pack-candidates button span { display: block; } #loot-pack-candidates button strong { font-size: 9px; } #loot-pack-candidates button span { margin-top: 2px; color: #7f9687; font-size: 7px; font-weight: 900; letter-spacing: .06em; }
+#loot-pack-candidates button[data-recommendation="best"] { border-color: #62b675; background: #102b19; } #loot-pack-candidates button[data-recommendation="best"] span { color: #83dfa0; }
 #loot-pack-candidates button[aria-selected="true"] { border-color: #f0c967; background: #40331a; color: #ffe4a0; box-shadow: inset 3px 0 #f0c967; }
+#loot-pack-candidates button[aria-selected="true"] span { color: #f0c967; }
 #loot-pack-candidates p { grid-column: 1 / -1; margin: 0; padding: 8px; color: #d39182; font-size: 9px; }
 .loot-pack-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 10px; }
 .loot-pack-actions button { min-height: 36px; padding: 6px; border: 1px solid #718273; border-radius: 7px; background: #17251c; color: #dce6dc; cursor: pointer; font-size: 8px; font-weight: 1000; }

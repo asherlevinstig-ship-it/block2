@@ -35,6 +35,7 @@ import { EQUIPMENT_COLLECTION, collectionProgress, equipmentCollectionLabel, equ
 import { blacksmithShopStock, shopGoldShortfall, type BlacksmithShopTab } from "./blacksmith-shop.js";
 import { createStorageUI, type StorageUpdate } from "./storage-ui.js";
 import { lootVisibleToPlayer } from "./loot-ownership.js";
+import { incomingLootAdvice, swapCandidateReason, swapCandidateScore } from "./loot-recommendation.js";
 import { undergroundThreatVisible } from "./underground-threat-visibility.js";
 import { cavernRespawnIndicator } from "./cavern-respawn-indicator.js";
 import { SILVER_DEPTHS, SILVER_DEPTHS_CHECKPOINT_POSITION, isInSilverGuardClearing, isInFrontierBruteArena, isInRealmWardenArena, isInForestDungeon, isInEmberVault } from "@blockcraft/voxel-world";
@@ -2420,31 +2421,61 @@ function selectSwapItem(itemId: ItemId): void {
   lootPackSwap.textContent = `SWAP ${ITEM_DEFINITIONS[itemId].name.toUpperCase()}`;
 }
 
+function itemMatchesCalling(itemId: ItemId): boolean {
+  const roll = equipmentAffixes[itemId];
+  return Boolean(localBuildPathId && roll && EQUIPMENT_AFFIXES[roll.affixId].pathId === localBuildPathId);
+}
+
 function openPackDecision(dropId: string, drop: NetworkLootDrop): void {
   if (!isItemId(drop.itemId) || isEnemyLootBag(drop) || dropId.startsWith("forest-cache:")) return;
   inspectedDropId = dropId; selectedSwapItemId = null; lootPending = false;
   lootPackDecision.dataset.rarity = itemRarity(drop.itemId);
   lootPackTitle.textContent = ITEM_DEFINITIONS[drop.itemId].name;
   const decision = inventoryDecisionForItem(drop.itemId);
-  lootPackVerdict.textContent = `${decision ? inventoryDecisionLabel[decision] : "NEW LOOT"} · choose what leaves your pack. The world keeps moving.`;
-  lootPackIncoming.innerHTML = `<strong>${ITEM_DEFINITIONS[drop.itemId].name} ×${drop.quantity}</strong><span>${ITEM_RARITIES[itemRarity(drop.itemId)].label} · ${ITEM_DEFINITIONS[drop.itemId].description}</span>`;
+  const recipe = Object.hasOwn(BLACKSMITH_DISMANTLE, drop.itemId) ? BLACKSMITH_DISMANTLE[drop.itemId as BlacksmithDismantleItemId] : null;
+  const advice = incomingLootAdvice({
+    decision,
+    owned: inventoryCounts.get(drop.itemId) ?? 0,
+    callingMatch: itemMatchesCalling(drop.itemId),
+    rarityOrder: ITEM_RARITIES[itemRarity(drop.itemId)].order,
+    canSalvage: Boolean(recipe),
+  });
+  lootPackVerdict.dataset.tone = advice.tone;
+  lootPackVerdict.textContent = advice.label;
+  lootPackIncoming.dataset.tone = advice.tone;
+  lootPackIncoming.innerHTML = `<strong>${ITEM_DEFINITIONS[drop.itemId].name} ×${drop.quantity}</strong><span>${advice.detail}</span><small>${ITEM_RARITIES[itemRarity(drop.itemId)].label} · ${ITEM_DEFINITIONS[drop.itemId].description}</small>`;
   lootPackCandidates.replaceChildren();
-  const candidates = (Object.keys(ITEM_DEFINITIONS) as ItemId[]).filter(itemId => swapCandidateFits(drop, itemId));
-  for (const itemId of candidates) {
+  const candidates = (Object.keys(ITEM_DEFINITIONS) as ItemId[])
+    .filter(itemId => swapCandidateFits(drop, itemId))
+    .map(itemId => {
+      const input = {
+        rarityOrder: ITEM_RARITIES[itemRarity(itemId)].order,
+        quantity: inventoryCounts.get(itemId) ?? 0,
+        equipment: isEquipmentItem(itemId),
+        callingMatch: itemMatchesCalling(itemId),
+        decision: inventoryDecisionForItem(itemId),
+      };
+      return { itemId, score: swapCandidateScore(input), reason: swapCandidateReason(input) };
+    })
+    .sort((a, b) => a.score - b.score || ITEM_DEFINITIONS[a.itemId].name.localeCompare(ITEM_DEFINITIONS[b.itemId].name))
+    .slice(0, 3);
+  for (const [index, candidate] of candidates.entries()) {
+    const { itemId } = candidate;
     const button = document.createElement("button"); button.type = "button"; button.dataset.itemId = itemId;
+    button.dataset.recommendation = index === 0 ? "best" : "option";
     button.setAttribute("role", "option"); button.setAttribute("aria-selected", "false");
-    button.textContent = `${ITEM_DEFINITIONS[itemId].name} ×${inventoryCounts.get(itemId) ?? 0}`;
+    button.innerHTML = `<strong>${ITEM_DEFINITIONS[itemId].name} ×${inventoryCounts.get(itemId) ?? 0}</strong><span>${index === 0 ? "RECOMMENDED · " : ""}${candidate.reason}</span>`;
     button.addEventListener("click", () => selectSwapItem(itemId)); lootPackCandidates.append(button);
   }
   if (candidates.length === 0) {
     const empty = document.createElement("p"); empty.textContent = "No single carried item frees enough room. Leave this loot or salvage it."; lootPackCandidates.append(empty);
   }
   lootPackSwap.disabled = true; lootPackSwap.textContent = "SELECT ITEM TO SWAP";
-  const recipe = Object.hasOwn(BLACKSMITH_DISMANTLE, drop.itemId) ? BLACKSMITH_DISMANTLE[drop.itemId as BlacksmithDismantleItemId] : null;
   const materialFits = !recipe || !("materialId" in recipe) || localBackpackAddable(recipe.materialId, recipe.materialQuantity) >= recipe.materialQuantity;
   lootPackSalvage.hidden = !recipe; lootPackSalvage.disabled = !materialFits;
   lootPackSalvage.textContent = recipe ? materialFits ? `SALVAGE · +${recipe.gold} GOLD` : "NO ROOM FOR SALVAGE" : "SALVAGE";
-  lootPackDecision.hidden = false; lootPackClose.focus();
+  lootPackDecision.hidden = false;
+  if (candidates[0]) selectSwapItem(candidates[0].itemId); else lootPackClose.focus();
 }
 function nearestVisibleLootDrop(maxDistance: number): { id: string; distance: number } | null {
   const player = localPlayer.getPosition();
