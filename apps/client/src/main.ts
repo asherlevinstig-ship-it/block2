@@ -754,6 +754,8 @@ let buildPathProcTimer = 0;
 let localBuildPathId: RoleFieldPath | null = null;
 let localCallingAbilityId: CallingAbilityId | null = null;
 let localCallingAugmentId: CallingAugmentId | null = null;
+let localCallingAugmentProgress: Partial<Record<CallingAugmentId, number>> = {};
+let localMasteredCallingAugments: CallingAugmentId[] = [];
 let localCallingState: CallingStateUpdate | null = null;
 let localBuildPathRank = 0;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
@@ -3206,8 +3208,11 @@ function renderBuildPath(update: BuildPathUpdate): void {
   localBuildPathId = update.selectedPathId;
   localCallingAbilityId = update.selectedCallingAbilityId;
   localCallingAugmentId = update.selectedCallingAugmentId;
+  localCallingAugmentProgress = update.callingAugmentProgress;
+  localMasteredCallingAugments = update.masteredCallingAugments;
   localBuildPathRank = update.rank;
-  combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId);
+  combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId,
+    update.callingAugmentProgress, update.masteredCallingAugments);
   updateControlsHelp();
   const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
   const rank = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank) ?? BUILD_PATH_RANKS[0];
@@ -9726,7 +9731,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localCallingCooldownUntil = update.cooldownUntil;
     localBuildPathId = update.pathId;
     localCallingAbilityId = update.abilityId;
-    combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank, localCallingAugmentId);
+    combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank, localCallingAugmentId,
+      localCallingAugmentProgress, localMasteredCallingAugments);
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => createCallingImpact(effect));

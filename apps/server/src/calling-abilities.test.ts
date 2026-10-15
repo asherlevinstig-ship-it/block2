@@ -94,6 +94,7 @@ describe("hotbar Calling abilities", () => {
 
   it("equips a town-only branch and applies its authoritative effect", () => {
     const { internal, player, client, broadcast } = fixture("tank", 30);
+    internal.grantCallingTrial("hero", "bulwark_iron_skin", 24);
     player.x = 8.5; player.z = 8.5;
     internal.handleCallingAugmentEquip(client, { augmentId: "bulwark_iron_skin" });
     expect(parseBuildPathState(player.huntLoadoutsJson).callingAugments.tank_bulwark).toBe("bulwark_iron_skin");

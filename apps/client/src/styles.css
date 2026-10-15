@@ -593,6 +593,8 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 }
 #calling-augment-picker > p { grid-column: 1 / -1; margin: 0; }
 #calling-augment-picker button {
+  position: relative;
+  overflow: hidden;
   display: grid;
   gap: 3px;
   min-height: 52px;
@@ -607,6 +609,13 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 #calling-augment-picker button small { color: #a99d72; font-size: .48rem; line-height: 1.25; }
 #calling-augment-picker button[aria-pressed="true"] { border-color: #ffd969aa; background: rgb(93 68 16 / 78%); color: #fff1b9; }
 #calling-augment-picker button:disabled { opacity: .45; }
+.calling-trial-fill {
+  position: absolute;
+  inset: auto auto 0 0;
+  height: 2px;
+  background: #ffd65c;
+  box-shadow: 0 0 8px #ffd65c88;
+}
 
 #combat-reticle {
   position: fixed;

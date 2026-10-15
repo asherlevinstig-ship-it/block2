@@ -255,6 +255,38 @@ export const CALLING_ABILITY_AUGMENTS = [
   { id: "deadeye_execution_rounds", abilityId: "ranger_deadeye", name: "Execution Rounds", unlockRank: 4, description: "+2 additional damage per shot." },
 ] as const satisfies readonly { id: string; abilityId: CallingAbilityId; name: string; unlockRank: number; description: string }[];
 export type CallingAugmentId = typeof CALLING_ABILITY_AUGMENTS[number]["id"];
+export const CALLING_AUGMENT_TRIALS = {
+  bulwark_guardian_wall: { description: "Brace through 8 threatened encounters.", target: 8 },
+  bulwark_iron_skin: { description: "Prevent 24 damage with Bulwark.", target: 24 },
+  challenge_mass_provocation: { description: "Challenge 20 nearby enemies.", target: 20 },
+  challenge_rallying_cry: { description: "Recover 150 stamina with Challenge.", target: 150 },
+  earthbreaker_faultline: { description: "Strike 20 enemies with Earthbreaker.", target: 20 },
+  earthbreaker_crushing_force: { description: "Deal 40 Earthbreaker damage.", target: 40 },
+  surge_deep_reserves: { description: "Recover 180 stamina with Arcane Surge.", target: 180 },
+  surge_temporal_flux: { description: "Surge while Special is recovering 8 times.", target: 8 },
+  shield_prismatic_layers: { description: "Consume 20 Mana Shield charges.", target: 20 },
+  shield_reinforced_rune: { description: "Prevent 25 damage with Mana Shield.", target: 25 },
+  overload_volatile_core: { description: "Deal 30 bonus damage through Overload.", target: 30 },
+  overload_residual_charge: { description: "Land 10 Overloaded Powers.", target: 10 },
+  vanish_deep_cloak: { description: "Break pursuit from 15 enemies with Vanish.", target: 15 },
+  vanish_killing_intent: { description: "Land 12 Vanish-empowered strikes.", target: 12 },
+  mark_lingering_sentence: { description: "Expose 12 enemies with Death Mark.", target: 12 },
+  mark_open_wound: { description: "Defeat 8 exposed enemies.", target: 8 },
+  dance_long_step: { description: "Blade Dance near enemies 10 times.", target: 10 },
+  dance_blade_storm: { description: "Catch 20 enemies inside Blade Dance.", target: 20 },
+  smoke_dense_cloud: { description: "Divert 20 enemies with Smoke Bomb.", target: 20 },
+  smoke_second_wind: { description: "Recover 160 stamina with Smoke Bomb.", target: 160 },
+  decoy_wide_stage: { description: "Divert 25 enemies with Decoy.", target: 25 },
+  decoy_flash_charge: { description: "Stagger 25 enemies with Decoy.", target: 25 },
+  escape_extended_window: { description: "Escape while low on stamina 8 times.", target: 8 },
+  escape_clean_getaway: { description: "Escape while wounded 10 times.", target: 10 },
+  volley_deep_quiver: { description: "Land 25 Volley Focus shots.", target: 25 },
+  volley_heavy_arrows: { description: "Deal 25 Volley Focus bonus damage.", target: 25 },
+  disengage_long_leap: { description: "Disengage from nearby enemies 10 times.", target: 10 },
+  disengage_evasive_roll: { description: "Land 15 empowered Disengage shots.", target: 15 },
+  deadeye_eagle_eye: { description: "Land 15 Deadeye shots.", target: 15 },
+  deadeye_execution_rounds: { description: "Deal 45 Deadeye bonus damage.", target: 45 },
+} as const satisfies Record<CallingAugmentId, { description: string; target: number }>;
 export const CallingAbilityEquipRequestSchema = z.object({
   abilityId: z.enum(["tank_bulwark", "tank_challenge", "tank_earthbreaker", "mage_arcane_surge", "mage_mana_shield", "mage_overload",
     "assassin_vanish", "assassin_death_mark", "assassin_blade_dance", "thief_smoke_bomb", "thief_decoy", "thief_escape_artist",
@@ -330,6 +362,8 @@ export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: s
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;
   selectedCallingAugmentId: CallingAugmentId | null;
+  callingAugmentProgress: Partial<Record<CallingAugmentId, number>>;
+  masteredCallingAugments: CallingAugmentId[];
   selectedSpecializationId: BuildPathSpecializationId | null; candidates: BuildPathAffinity[]; canChoose: boolean;
   canSpecialize: boolean; masterTrial: { name: string; description: string; progress: number; target: number; complete: boolean; capstone: string } | null;
   inTown: boolean; message: string };

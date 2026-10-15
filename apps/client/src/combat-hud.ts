@@ -8,6 +8,7 @@ import {
   HUNT_EQUIPMENT_SETS,
   CALLING_ABILITY_OPTIONS,
   CALLING_ABILITY_AUGMENTS,
+  CALLING_AUGMENT_TRIALS,
   huntSetForLoadout,
   type ArmourId,
   type MainHandId,
@@ -41,6 +42,8 @@ const calling = signal<BuildPathId | null>(null);
 const callingAbility = signal<CallingAbilityId | null>(null);
 const callingRank = signal(0);
 const callingAugment = signal<CallingAugmentId | null>(null);
+const callingAugmentProgress = signal<Partial<Record<CallingAugmentId, number>>>({});
+const masteredCallingAugments = signal<CallingAugmentId[]>([]);
 const callingPending = signal(false);
 const callingState = signal<CallingState>(null);
 const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE", ready: false });
@@ -149,11 +152,16 @@ function LoadoutDrawer() {
       callingAbility.value ? h("div", { id: "calling-augment-picker", role: "group", "aria-label": "Calling ability upgrade" },
         h("p", null, h("span", null, "BRANCH UPGRADE"), h("small", null, "Change freely in Town")),
         CALLING_ABILITY_AUGMENTS.filter(option => option.abilityId === callingAbility.value).map(option => {
-          const locked = callingRank.value < option.unlockRank;
+          const rankLocked = callingRank.value < option.unlockRank;
+          const mastered = masteredCallingAugments.value.includes(option.id);
+          const trial = CALLING_AUGMENT_TRIALS[option.id];
+          const progress = callingAugmentProgress.value[option.id] ?? 0;
           return h("button", { type: "button", "data-calling-augment": option.id,
-              "aria-pressed": String(callingAugment.value === option.id), disabled: locked,
-              title: locked ? `Unlocks at Path Rank ${option.unlockRank}` : option.description },
-            h("strong", null, option.name), h("small", null, locked ? `LOCKED · RANK ${option.unlockRank}` : option.description));
+              "aria-pressed": String(callingAugment.value === option.id), disabled: rankLocked || !mastered,
+              title: rankLocked ? `Unlocks at Path Rank ${option.unlockRank}` : mastered ? option.description : trial.description },
+            h("strong", null, option.name),
+            h("small", null, rankLocked ? `LOCKED · RANK ${option.unlockRank}` : mastered ? option.description : `TRIAL ${progress}/${trial.target} · ${trial.description}`),
+            !rankLocked && !mastered ? h("i", { class: "calling-trial-fill", style: { width: `${Math.round(progress / trial.target * 100)}%` } }) : null);
         }),
       ) : null,
     ) : null,
@@ -214,8 +222,13 @@ export const combatHud = {
   },
   setSeismicMastery(value: SeismicMasteryId): void { setIfChanged(seismicMastery, value); },
   setSpecial(value: SpecialId): void { setIfChanged(special, value); },
-  setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number, augmentId: CallingAugmentId | null = null): void {
-    batch(() => { setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); setIfChanged(callingAugment, augmentId); });
+  setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number, augmentId: CallingAugmentId | null = null,
+    progress: Partial<Record<CallingAugmentId, number>> = {}, mastered: CallingAugmentId[] = []): void {
+    batch(() => {
+      setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); setIfChanged(callingAugment, augmentId);
+      if (JSON.stringify(callingAugmentProgress.value) !== JSON.stringify(progress)) callingAugmentProgress.value = progress;
+      if (JSON.stringify(masteredCallingAugments.value) !== JSON.stringify(mastered)) masteredCallingAugments.value = mastered;
+    });
   },
   setCallingPending(value: boolean): void { setIfChanged(callingPending, value); },
   setCallingState(value: CallingState): void {
