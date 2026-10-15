@@ -389,7 +389,19 @@ export const EQUIPMENT_AFFIXES = {
 export type EquipmentAffixId = keyof typeof EQUIPMENT_AFFIXES;
 export type EquipmentAffixRoll = { affixId: EquipmentAffixId; tier: 1 | 2 | 3 };
 export type EquipmentAffixOffers = Partial<Record<ItemId, EquipmentAffixId[]>>;
-export type EquipmentAffixUpdate = { affixes: Partial<Record<ItemId, EquipmentAffixRoll>>; offers?: EquipmentAffixOffers; dust?: number; message: string };
+export const EQUIPMENT_HUNT_REGIONS = {
+  greenwood: { name: "Greenwood", x: 42.5, y: 8, z: 19.5, tier: 1, paths: ["assassin", "ranger"] },
+  mistfen: { name: "Mistfen Marsh", x: -47.5, y: 8, z: -31.5, tier: 2, paths: ["mage", "thief"] },
+  frontier: { name: "Stone Frontier", x: 68.5, y: 8, z: 34.5, tier: 3, paths: ["tank", "ranger"] },
+  ashen: { name: "Ashen Reach", x: 97.5, y: 8, z: 62.5, tier: 3, paths: ["mage", "assassin"] },
+  quarry: { name: "Redstone Pit", x: 8.5, y: 8, z: 101.5, tier: 3, paths: ["tank", "thief"] },
+} as const satisfies Record<string, { name: string; x: number; y: number; z: number; tier: number; paths: readonly BuildPathId[] }>;
+export type EquipmentHuntRegionId = keyof typeof EQUIPMENT_HUNT_REGIONS;
+export type EquipmentHuntTarget = { affixId: EquipmentAffixId; regionId: EquipmentHuntRegionId; regionName: string;
+  x: number; y: number; z: number; chancePercent: number };
+export const EquipmentAffixHuntSchema = z.object({ affixId: z.enum(Object.keys(EQUIPMENT_AFFIXES) as [EquipmentAffixId, ...EquipmentAffixId[]]).nullable() }).strict();
+export type EquipmentAffixUpdate = { affixes: Partial<Record<ItemId, EquipmentAffixRoll>>; offers?: EquipmentAffixOffers;
+  dust?: number; targetAffixId?: EquipmentAffixId | null; huntTarget?: EquipmentHuntTarget | null; message: string };
 export const EQUIPMENT_AFFIX_RESONANCE = {
   tank: { name: "Ironwall", effect: "Both equipped Tank affixes gain +1 effective tier." },
   mage: { name: "Spellweave", effect: "Both equipped Mage affixes gain +1 effective tier." },

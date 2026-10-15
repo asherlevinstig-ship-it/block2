@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmentAffixes, parseEquipmentAffixOffers,
-  rollEquipmentAffix, rollEquipmentAffixOptions } from "./equipment-affixes.js";
+  rollEquipmentAffix, rollEquipmentAffixOptions, rollTargetedEquipmentAffix } from "./equipment-affixes.js";
 import { WorldRoom } from "./game-room.js";
 import { PlayerState } from "./schema.js";
 
@@ -21,6 +21,11 @@ describe("equipment affixes", () => {
     expect(choices.every(choice => choice.tier === 3)).toBe(true);
     expect(parseEquipmentAffixOffers({ echo_prism: ["echoing", "volatile", "bad"] })).toEqual({ echo_prism: ["echoing", "volatile"] });
   });
+  it("improves a pinned trait only in a compatible hunt region and guarantees it in leader choices", () => {
+    expect(rollTargetedEquipmentAffix("mage", 2, "volatile", true, () => 0)).toEqual({ affixId: "volatile", tier: 2 });
+    expect(rollTargetedEquipmentAffix("mage", 2, "volatile", false, () => 0)).toEqual({ affixId: "echoing", tier: 2 });
+    expect(rollEquipmentAffixOptions("mage", 3, 3, () => .9, "volatile").map(choice => choice.affixId)).toContain("volatile");
+  });
   it("awards more dust for stronger gear and applies the Calling discount", () => {
     expect([1, 2, 3].map(attunementDustYield)).toEqual([1, 3, 6]);
     expect(attunementDustCost("reroll", 3, false)).toBe(10);
@@ -40,5 +45,15 @@ describe("equipment affixes", () => {
     expect(room.equipmentAffixTier(player, "veiled")).toBe(2);
     player.armourId = "iron_armour";
     expect(room.equipmentAffixTier(player, "lethal")).toBe(2);
+  });
+
+  it("persists a voluntary target and recommends the nearest compatible region", () => {
+    const room = new WorldRoom() as any;
+    const player = new PlayerState(); player.x = 8.5; player.z = 8.5;
+    room.setEquipmentAffixTarget(player, "precise");
+    expect(room.equipmentAffixTarget(player)).toBe("precise");
+    expect(room.equipmentHuntTarget(player)).toMatchObject({ affixId: "precise", regionId: "greenwood", chancePercent: 45 });
+    room.setEquipmentAttunements(player, {}, 3, {});
+    expect(room.equipmentAffixTarget(player)).toBe("precise");
   });
 });

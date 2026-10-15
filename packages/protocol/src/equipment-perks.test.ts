@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EQUIPMENT_AFFIX_RESONANCE, equipmentAffixResonanceForLoadout, equipmentPerkStats } from "./index.js";
+import { EQUIPMENT_AFFIX_RESONANCE, EQUIPMENT_HUNT_REGIONS, EquipmentAffixHuntSchema, equipmentAffixResonanceForLoadout, equipmentPerkStats } from "./index.js";
 
 describe("fixed equipment perks", () => {
   it("scales weapon identity with reforge rank", () => {
@@ -25,5 +25,13 @@ describe("fixed equipment perks", () => {
       fang_dagger: { affixId: "lethal", tier: 2 },
       fangstalker_wrap: { affixId: "elusive", tier: 1 },
     })).toBeNull();
+  });
+
+  it("exposes regional hunt affinities and validates a reversible target", () => {
+    expect(EQUIPMENT_HUNT_REGIONS.greenwood.paths).toEqual(["assassin", "ranger"]);
+    expect(EQUIPMENT_HUNT_REGIONS.quarry.paths).toContain("tank");
+    expect(EquipmentAffixHuntSchema.safeParse({ affixId: "precise" }).success).toBe(true);
+    expect(EquipmentAffixHuntSchema.safeParse({ affixId: null }).success).toBe(true);
+    expect(EquipmentAffixHuntSchema.safeParse({ affixId: "cheat" }).success).toBe(false);
   });
 });

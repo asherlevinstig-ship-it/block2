@@ -15,7 +15,7 @@ import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-
 import type { RealmEventUpdate } from "@blockcraft/protocol";
 import { ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES, EQUIPMENT_AFFIX_RESONANCE,
   equipmentAffixResonanceForLoadout,
-  type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+  type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { DODGE_EXHAUSTION_MS, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { equipmentForItem, armourForItem, utilityForItem, isEquipmentItem, EQUIPMENT_LOOT_RANGE,
   decodeLootBagItems, encodeLootBagItems, lootBagRepresentative, lootBagTierForItems,
@@ -2107,6 +2107,7 @@ interface NetworkLootDrop {
   z: number;
   expiresAt: number;
   affixTier?: number;
+  affixRegion?: string;
 }
 
 const LOOT_BAG_TIER_LABEL: Record<LootBagTier, string> = {
@@ -2651,6 +2652,8 @@ let blacksmithReforgeRanks: EquipmentReforgeRanks = {};
 let equipmentAffixes: Partial<Record<ItemId, EquipmentAffixRoll>> = {};
 let equipmentAffixOffers: EquipmentAffixOffers = {};
 let attunementDust = 0;
+let equipmentTargetAffixId: keyof typeof EQUIPMENT_AFFIXES | null = null;
+let equipmentHuntTarget: EquipmentHuntTarget | null = null;
 function equipmentAffixLabel(itemId: ItemId): string | null {
   const roll = equipmentAffixes[itemId];
   return roll ? `${EQUIPMENT_AFFIXES[roll.affixId].name} · Tier ${roll.tier}` : null;
@@ -5735,6 +5738,34 @@ function renderAttunementShop(): void {
   heading.textContent = "ATTUNEMENT FORGE · SHAPE CALLING AFFIXES";
   const wallet = document.createElement("div"); wallet.className = "attunement-wallet";
   wallet.innerHTML = `<span>ATTUNEMENT DUST</span><strong>${attunementDust}</strong><small>${blacksmithCalling ? `${BUILD_PATHS[blacksmithCalling].name} focus · matching affixes cost 20% less` : "Choose a Calling to unlock matching-affix discounts"}</small>`;
+  const hunt = document.createElement("div"); hunt.className = "attunement-hunt";
+  const huntCopy = document.createElement("div");
+  huntCopy.innerHTML = `<strong>TARGETED BUILD HUNT</strong><small>${equipmentHuntTarget
+    ? `${EQUIPMENT_AFFIXES[equipmentHuntTarget.affixId].name} pinned · ${equipmentHuntTarget.chancePercent}% chance in ${equipmentHuntTarget.regionName} · leaders include it in Tier 3 choices`
+    : "Pin one trait. The map will guide you to a compatible region without restricting other drops."}</small>`;
+  const huntSelect = document.createElement("select"); huntSelect.setAttribute("aria-label", "Target equipment trait");
+  huntSelect.append(new Option("Choose a trait…", ""));
+  for (const pathId of Object.keys(BUILD_PATHS) as BuildPathId[]) {
+    const group = document.createElement("optgroup"); group.label = BUILD_PATHS[pathId].name;
+    for (const [affixId, definition] of Object.entries(EQUIPMENT_AFFIXES) as [keyof typeof EQUIPMENT_AFFIXES, typeof EQUIPMENT_AFFIXES[keyof typeof EQUIPMENT_AFFIXES]][])
+      if (definition.pathId === pathId) group.append(new Option(`${definition.name} · ${definition.effect}`, affixId));
+    huntSelect.append(group);
+  }
+  huntSelect.value = equipmentTargetAffixId ?? "";
+  huntSelect.addEventListener("change", () => {
+    if (!room || blacksmithPending) return;
+    blacksmithPending = true;
+    room.send("equipment:hunt", { affixId: huntSelect.value || null });
+    blacksmithMessage.textContent = huntSelect.value ? "Marking the best regions on your map…" : "Clearing the targeted hunt…";
+  });
+  if (equipmentTargetAffixId) {
+    const clear = document.createElement("button"); clear.type = "button"; clear.textContent = "CLEAR";
+    clear.addEventListener("click", () => {
+      if (!room || blacksmithPending) return;
+      blacksmithPending = true; room.send("equipment:hunt", { affixId: null });
+    });
+    hunt.append(huntCopy, huntSelect, clear);
+  } else hunt.append(huntCopy, huntSelect);
   const equipped = document.createElement("div"); equipped.className = "attunement-loadout";
   const equippedItems = [["MAIN HAND", blacksmithEquippedHandItem], ["ARMOUR", blacksmithEquippedArmourItem]] as const;
   for (const [slot, itemId] of equippedItems) {
@@ -5754,7 +5785,7 @@ function renderAttunementShop(): void {
   }
   const help = document.createElement("p"); help.className = "blacksmith-attunement-help";
   help.textContent = "Match the Calling on your weapon and armour to activate resonance. Dismantle attuned gear for Dust. Reroll changes the affix but keeps its tier; upgrading preserves it.";
-  attunementShop.append(heading, wallet, equipped, help);
+  attunementShop.append(heading, wallet, hunt, equipped, help);
   for (const [rawItemId, choices] of Object.entries(equipmentAffixOffers) as [ItemId, (keyof typeof EQUIPMENT_AFFIXES)[]][]) {
     if (!choices?.length || (inventoryCounts.get(rawItemId) ?? 0) <= 0) continue;
     const offer = document.createElement("article"); offer.className = "attunement-offer"; offer.dataset.rarity = "legendary";
@@ -9785,6 +9816,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     equipmentAffixes = update.affixes ?? {};
     equipmentAffixOffers = update.offers ?? equipmentAffixOffers;
     attunementDust = update.dust ?? attunementDust;
+    equipmentTargetAffixId = update.targetAffixId ?? null;
+    equipmentHuntTarget = update.huntTarget ?? null;
+    minimap.setEquipmentHunt(equipmentHuntTarget);
     refreshOwnedInventory();
     if (inventoryPreviewDrawer.open) refreshInventoryPreview();
     if (blacksmithShopTab === "attunement") renderAttunementShop();

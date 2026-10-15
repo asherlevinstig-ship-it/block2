@@ -22,6 +22,13 @@ export function rollEquipmentAffix(pathId: BuildPathId | null, tier: number, ran
   return { affixId: pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))]!, tier: Math.max(1, Math.min(3, Math.floor(tier))) as 1 | 2 | 3 };
 }
 
+export function rollTargetedEquipmentAffix(pathId: BuildPathId | null, tier: number, targetAffixId: EquipmentAffixId | null,
+  regionMatchesTarget: boolean, random = Math.random): EquipmentAffixRoll {
+  if (targetAffixId && regionMatchesTarget && random() < .45)
+    return { affixId: targetAffixId, tier: Math.max(1, Math.min(3, Math.floor(tier))) as 1 | 2 | 3 };
+  return rollEquipmentAffix(pathId, tier, random);
+}
+
 export function keepBetterAffix(current: EquipmentAffixRoll | undefined, candidate: EquipmentAffixRoll): EquipmentAffixRoll {
   return !current || candidate.tier > current.tier ? candidate : current;
 }
@@ -37,8 +44,9 @@ export function parseEquipmentAffixOffers(value: unknown): EquipmentAffixOffers 
   return result;
 }
 
-export function rollEquipmentAffixOptions(pathId: BuildPathId | null, tier: number, count = 3, random = Math.random): EquipmentAffixRoll[] {
-  const chosen: EquipmentAffixId[] = [];
+export function rollEquipmentAffixOptions(pathId: BuildPathId | null, tier: number, count = 3, random = Math.random,
+  guaranteedAffixId: EquipmentAffixId | null = null): EquipmentAffixRoll[] {
+  const chosen: EquipmentAffixId[] = guaranteedAffixId ? [guaranteedAffixId] : [];
   for (let attempt = 0; chosen.length < count && attempt < 24; attempt++) {
     const roll = rollEquipmentAffix(pathId, tier, random);
     if (!chosen.includes(roll.affixId)) chosen.push(roll.affixId);

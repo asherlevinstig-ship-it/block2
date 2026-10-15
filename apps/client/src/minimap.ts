@@ -1,5 +1,5 @@
 import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, MISTFEN_MARSH, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, ROADSIDE_DISCOVERIES, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
-import { ITEM_DEFINITIONS, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
+import { ITEM_DEFINITIONS, type EquipmentHuntTarget, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
 
@@ -185,6 +185,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   setWardenGateUnlocked(unlocked: boolean): void;
   setMistfenMastery(rank: number): void;
   setGreenwoodMastery(rank: number): void;
+  setEquipmentHunt(target: EquipmentHuntTarget | null): void;
   setMineralStatus(statuses: MineralDepositStatus[]): void;
   setCaveState(state: CaveMapState): void;
   setDungeonState(state: DungeonMapState | null): void;
@@ -218,6 +219,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   let champion: (Position & { y: number; alive: boolean }) | null = null;
   let elites: EliteMapTarget[] = [];
   let threat: ThreatMapTarget | null = null;
+  let equipmentHunt: EquipmentHuntTarget | null = null;
   let lastStatusSecond = 0;
   const homeButton = document.querySelector<HTMLButtonElement>("#minimap-home")!;
   const destinations = document.querySelector<HTMLSelectElement>("#minimap-destination")!;
@@ -233,11 +235,14 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     guide.hidden = target === null;
     if (target) { guideName.textContent = target.name; guideDistance.textContent = "Guiding…"; }
   };
+  const navigationTargets = (): Waypoint[] => [...knownWaypoints(discovered, wardenGateUnlocked), ...(equipmentHunt
+    ? [{ x: equipmentHunt.x, y: equipmentHunt.y, z: equipmentHunt.z, id: "equipment-hunt", name: `${equipmentHunt.regionName} · ${equipmentHunt.chancePercent}% target odds` }]
+    : [])];
   const refreshDestinations = () => {
-    const targets = knownWaypoints(discovered, wardenGateUnlocked);
+    const targets = navigationTargets();
     if (destinations.options.length !== targets.length + 1) destinations.replaceChildren(new Option("Choose a destination…", ""), ...targets.map(target => new Option(target.name, target.id)));
     targets.forEach((target, index) => {
-      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" || target.id === CHAMPION_WAYPOINT.id || target.id === ASHEN_SPIRE_WAYPOINT.id || target.id === MISTFEN_WAYPOINT.id || target.id === GREENWOOD_WAYPOINT.id || target.id === WARDEN_GATE_WAYPOINT.id ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
+      destinations.options[index + 1]!.text = target.name + (target.id === "home" || target.id === "smith" || target.id === "mine" || target.id === "equipment-hunt" || target.id === CHAMPION_WAYPOINT.id || target.id === ASHEN_SPIRE_WAYPOINT.id || target.id === MISTFEN_WAYPOINT.id || target.id === GREENWOOD_WAYPOINT.id || target.id === WARDEN_GATE_WAYPOINT.id ? "" : ` — ${mineralStatusLabel(statuses.get(target.id), Date.now())}`);
     });
     destinations.value = waypoint?.id ?? "";
   };
@@ -256,7 +261,7 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
     });
   }
   destinations.addEventListener("change", () => {
-    setWaypoint(knownWaypoints(discovered, wardenGateUnlocked).find(target => target.id === destinations.value) ?? null);
+    setWaypoint(navigationTargets().find(target => target.id === destinations.value) ?? null);
     destinations.blur();
   });
   document.querySelector<HTMLButtonElement>("#waypoint-clear")!.addEventListener("click", () => setWaypoint(null));
@@ -270,7 +275,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (point) pingHandler?.(point.x, point.z);
       return;
     }
-    const target = waypointAtMapPoint(lastPlayer, x, y, discovered, wardenGateUnlocked);
+    const huntWaypoint = equipmentHunt ? navigationTargets().find(target => target.id === "equipment-hunt") ?? null : null;
+    const huntPoint = huntWaypoint ? mapPoint(lastPlayer, huntWaypoint) : null;
+    const target = huntWaypoint && huntPoint && Math.hypot(huntPoint.x - x, huntPoint.y - y) <= 14
+      ? huntWaypoint : waypointAtMapPoint(lastPlayer, x, y, discovered, wardenGateUnlocked);
     if (target) setWaypoint(target);
   });
   const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -306,6 +314,15 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       if (!changed) return;
       refreshDestinations(); lastUpdate = -Infinity;
       try { localStorage.setItem(storageKey, JSON.stringify([...discovered])); } catch { /* Private browsing can disable storage. */ }
+    },
+    setEquipmentHunt(target) {
+      const changed = equipmentHunt?.affixId !== target?.affixId || equipmentHunt?.regionId !== target?.regionId;
+      equipmentHunt = target;
+      refreshDestinations(); lastUpdate = -Infinity;
+      if (!changed) return;
+      if (target) setWaypoint({ x: target.x, y: target.y, z: target.z, id: "equipment-hunt",
+        name: `${target.regionName} · ${target.chancePercent}% target odds` });
+      else if (waypoint?.id === "equipment-hunt") setWaypoint(null);
     },
     setCaveState(state) { caveState = state; },
     setDungeonState(state) {
@@ -545,6 +562,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
         if (discovered.has(MISTFEN_WAYPOINT.id)) staticMarker(MISTFEN_WAYPOINT, "MISTFEN", "#a8d789", "M");
         if (discovered.has(GREENWOOD_WAYPOINT.id)) staticMarker(GREENWOOD_WAYPOINT, "GREENWOOD", "#c6d977", "G");
         if (wardenGateUnlocked) staticMarker(WARDEN_GATE_WAYPOINT, "WARDEN GATE", "#ffe06f", "W", true);
+        if (equipmentHunt) staticMarker({ x: equipmentHunt.x, y: equipmentHunt.y, z: equipmentHunt.z,
+          id: "equipment-hunt", name: equipmentHunt.regionName }, "AFFIX HUNT", "#e59cff", "◆", true);
         for (const landmark of ROADSIDE_DISCOVERIES) {
           if (!discovered.has(roadsideDiscoveryKey(landmark.id))) continue;
           marker(landmark, mapMarkerLabelVisible(player, landmark, false) ? landmark.name.toUpperCase() : "",

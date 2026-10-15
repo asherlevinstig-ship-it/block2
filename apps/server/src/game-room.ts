@@ -13,7 +13,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, EquipmentAffixHuntSchema, EQUIPMENT_HUNT_REGIONS, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CALLING_AUGMENT_TRIALS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, equipmentAffixResonanceForLoadout, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate, type EquipmentHuntRegionId, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -207,7 +207,7 @@ import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave
 import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, chooseCallingAbility, chooseCallingAugment, effectiveBuildPathRank, grantBuildPathXp, grantCallingAugmentProgress, grantMasterTrialProgress, nextBuildRankXp, parseBuildPathState, selectedCallingAbility, selectedCallingAugment } from "./build-paths.js";
 import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equipment-reforge.js";
 import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmentAffixes, parseEquipmentAffixOffers,
-  rollEquipmentAffix, rollEquipmentAffixOptions } from "./equipment-affixes.js";
+  rollEquipmentAffix, rollEquipmentAffixOptions, rollTargetedEquipmentAffix } from "./equipment-affixes.js";
 import { parseSignaturePity, resolveSignatureDrop, serializeSignaturePity, signatureLootHint, type SignatureItemId } from "./signature-loot.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
@@ -222,7 +222,7 @@ import { ForestPortalState } from "./schema.js";
 import { ROOT_LANE_DURATION_MS, ROOT_LANE_RADIUS, guardianCoverHit, rootLaneHazards } from "./root-guardian.js";
 import { canStartTavernQuiz, doubledPayout, drawQuizQuestion, mustSettleQuiz, type QuizRound } from "./tavern-quiz.js";
 import { blacksmithNextStep, buyDepthsReward, canTradeAtBlacksmith, forgeBlacksmithUpgrade, ironCapacity, mineralSale, ironSwordDamageBonus, minedIronQuantity, minedMineral, ownedBlacksmithUpgrades, ownedDepthsRewards, ownsBlacksmithUpgrade, ownsDepthsReward } from "./blacksmith.js";
-import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_GATE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInGreenwoodRegion, isInRealmWardenArena, isInStoneBruteArena } from "@blockcraft/voxel-world";
+import { GREENWOOD_CRAWLER_HOMES, REALM_WARDEN_GATE_POSITION, REALM_WARDEN_HOME, STONE_BRUTE_ARENA_HOME, isInGreenwoodRegion, isInRealmWardenArena, isInStoneBruteArena, isInAshenReach, isInSouthernQuarry, wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import {
   applyWorldDeltasToChunk,
   parseWorldDeltas,
@@ -786,6 +786,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("blacksmith:dismantle", (client, payload) => this.handleBlacksmithDismantle(client, payload));
     aliveMessage("blacksmith:reforge", (client, payload) => this.handleBlacksmithReforge(client, payload));
     aliveMessage("blacksmith:attune", (client, payload) => this.handleBlacksmithAttune(client, payload));
+    aliveMessage("equipment:hunt", (client, payload) => this.handleEquipmentAffixHunt(client, payload));
     aliveMessage("blacksmith:leader-forge", (client, payload) => this.handleLeaderForge(client, payload));
     aliveMessage("blacksmith:regional-forge", (client, payload) => this.handleRegionalForge(client, payload));
     aliveMessage("blacksmith:forge", (client, payload) => this.handleBlacksmithForge(client, payload));
@@ -1529,6 +1530,21 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const message = action === "upgrade"
       ? `${ITEM_DEFINITIONS[itemId].name}'s ${next.affixId.toUpperCase()} attunement reached Tier ${next.tier}.`
       : `${ITEM_DEFINITIONS[itemId].name} rerolled to ${next.affixId.toUpperCase()} · TIER ${next.tier}.`;
+    this.sendEquipmentAffixes(client, message);
+    this.sendBlacksmithState(client, message, "attuned");
+  }
+
+  private handleEquipmentAffixHunt(client: Client, payload: unknown): void {
+    const player = this.state.players.get(client.sessionId);
+    const parsed = EquipmentAffixHuntSchema.safeParse(payload);
+    if (!player || !parsed.success) return;
+    if (!canTradeAtBlacksmith(player)) return this.sendBlacksmithState(client,
+      "Stand beside the blacksmith to focus an equipment hunt.", "error");
+    this.setEquipmentAffixTarget(player, parsed.data.affixId);
+    void this.persistPlayer(client.sessionId, player, true).catch(() => {});
+    const message = parsed.data.affixId
+      ? `${EQUIPMENT_AFFIXES[parsed.data.affixId].name} pinned. Matching regions now have a 45% attunement chance; leaders include it in Tier 3 choices.`
+      : "Equipment hunt cleared. Every Calling affix now uses its normal odds.";
     this.sendEquipmentAffixes(client, message);
     this.sendBlacksmithState(client, message, "attuned");
   }
@@ -2795,11 +2811,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const drop = new LootDropState();
     const affixTier = realmReward || mobId === CRYSTAL_MATRIARCH_ID || mobId === "forge-colossus" || huntChampion?.difficulty === "ascendant"
       ? 3 : isAreaMiniBoss(mobId) || mob.isChampion || mob.isElite || huntChampion ? 2 : Math.random() < .2 ? 1 : 0;
+    const affixRegion = this.equipmentHuntRegionAt(mob.x, mob.z) ?? "";
     Object.assign(drop, {
       ownerId,
       itemId: representative.itemId,
       quantity: Math.min(255, representative.quantity),
       affixTier,
+      affixRegion,
       contentsJson: encodeLootBagItems(items),
       x: landing.x,
       y: landing.y + .22,
@@ -2810,6 +2828,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.state.lootDrops.set(dropId, drop);
     this.clients.find(client => client.sessionId === ownerId)?.send("loot:spawned", {
       dropId, ownerId, itemId: drop.itemId, quantity: drop.quantity, contentsJson: drop.contentsJson, affixTier: drop.affixTier,
+      affixRegion: drop.affixRegion,
       x: drop.x, y: drop.y, z: drop.z, expiresAt: drop.expiresAt,
     });
     if (areaRelicDrops.length) this.clients.find(client => client.sessionId === ownerId)?.send("chat:notice",
@@ -2895,7 +2914,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (quantity < entry.quantity) remaining.push({ itemId: entry.itemId, quantity: entry.quantity - quantity });
       }
       if (collected.length === 0) return reply(false, "Your inventory has no room for anything in this bag.", { remainingItems: remaining });
-      for (const reward of collected) this.attuneEquipment(client, player, reward.itemId, drop.affixTier);
+      for (const reward of collected) this.attuneEquipment(client, player, reward.itemId, drop.affixTier,
+        Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
       if (remaining.length === 0) this.state.lootDrops.delete(parsed.data.dropId);
       else {
         const representative = lootBagRepresentative(remaining)!;
@@ -2956,7 +2976,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (before + drop.quantity > capacity) return reply(false, `Your ${ITEM_DEFINITIONS[itemId].name} capacity is full.`);
     if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
     item.quantity = inventoryTotal(before, drop.quantity);
-    const affix = this.attuneEquipment(client, player, itemId, drop.affixTier);
+    const affix = this.attuneEquipment(client, player, itemId, drop.affixTier,
+      Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
     // Synchronous removal makes competing and replayed requests collect at most once.
     this.state.lootDrops.delete(parsed.data.dropId);
     if (action === "equip" && mainHandId) this.handleMainHandEquip(client, { requestId: `loot-equip-${Date.now()}`, mainHandId });
@@ -4044,7 +4065,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts, buildPath, affixes: this.equipmentAffixes(player),
-      dust: this.attunementDust(player), offers: this.attunementOffers(player), mistfen, greenwood });
+      dust: this.attunementDust(player), offers: this.attunementOffers(player), targetAffixId: this.equipmentAffixTarget(player), mistfen, greenwood });
   }
 
   private equipmentAffixes(player: PlayerState): Partial<Record<ItemId, EquipmentAffixRoll>> {
@@ -4070,18 +4091,46 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     catch { return {}; }
   }
 
+  private equipmentAffixTarget(player: PlayerState): EquipmentAffixId | null {
+    try {
+      const value = (JSON.parse(player.huntLoadoutsJson) as { targetAffixId?: unknown }).targetAffixId;
+      return typeof value === "string" && Object.hasOwn(EQUIPMENT_AFFIXES, value) ? value as EquipmentAffixId : null;
+    } catch { return null; }
+  }
+
+  private setEquipmentAffixTarget(player: PlayerState, targetAffixId: EquipmentAffixId | null): void {
+    let raw: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(player.huntLoadoutsJson) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) raw = parsed as Record<string, unknown>;
+    } catch { /* Replace malformed legacy data with a valid build envelope. */ }
+    player.huntLoadoutsJson = JSON.stringify({ ...raw, targetAffixId });
+  }
+
+  private equipmentHuntTarget(player: PlayerState): EquipmentHuntTarget | null {
+    const affixId = this.equipmentAffixTarget(player);
+    if (!affixId) return null;
+    const pathId = EQUIPMENT_AFFIXES[affixId].pathId;
+    const regions = (Object.entries(EQUIPMENT_HUNT_REGIONS) as [EquipmentHuntRegionId, typeof EQUIPMENT_HUNT_REGIONS[EquipmentHuntRegionId]][])
+      .filter(([, region]) => (region.paths as readonly BuildPathId[]).includes(pathId));
+    const [regionId, region] = regions.sort((a, b) => Math.hypot(player.x - a[1].x, player.z - a[1].z)
+      - Math.hypot(player.x - b[1].x, player.z - b[1].z))[0]!;
+    return { affixId, regionId, regionName: region.name, x: region.x, y: region.y, z: region.z, chancePercent: 45 };
+  }
+
   private setEquipmentAttunements(player: PlayerState, affixes: Partial<Record<ItemId, EquipmentAffixRoll>>,
     dust: number, offers: EquipmentAffixOffers): void {
     const mistfen = this.mistfenProgress(player);
     const greenwood = this.greenwoodProgress(player);
     player.huntLoadoutsJson = JSON.stringify({ loadouts: this.huntLoadouts(player), buildPath: parseBuildPathState(player.huntLoadoutsJson),
-      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, mistfen, greenwood });
+      affixes, dust: Math.max(0, Math.min(65_535, Math.floor(dust))), offers, targetAffixId: this.equipmentAffixTarget(player), mistfen, greenwood });
   }
 
   private sendEquipmentAffixes(client: Client, message = "Equipment attunements strengthen matching Calling mechanics."): void {
     const player = this.state.players.get(client.sessionId);
     if (player) client.send("equipment:affixes", { affixes: this.equipmentAffixes(player), offers: this.attunementOffers(player),
-      dust: this.attunementDust(player), message } satisfies EquipmentAffixUpdate);
+      dust: this.attunementDust(player), targetAffixId: this.equipmentAffixTarget(player), huntTarget: this.equipmentHuntTarget(player),
+      message } satisfies EquipmentAffixUpdate);
   }
 
   private equipmentAffixTier(player: PlayerState, affixId: EquipmentAffixId): number {
@@ -4093,17 +4142,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     return Math.min(4, baseTier + (resonance === EQUIPMENT_AFFIXES[affixId].pathId ? 1 : 0));
   }
 
-  private attuneEquipment(client: Client, player: PlayerState, itemId: ItemId, tier: number): EquipmentAffixRoll | null {
+  private equipmentHuntRegionAt(x: number, z: number): EquipmentHuntRegionId | null {
+    if (isInGreenwoodRegion(x, z)) return "greenwood";
+    if (isInMistfenMarsh(x, z)) return "mistfen";
+    if (isInAshenReach(x, z)) return "ashen";
+    if (isInSouthernQuarry(x, z)) return "quarry";
+    return wildernessTerritoryAt(x, z)?.name === "STONE FRONTIER" ? "frontier" : null;
+  }
+
+  private attuneEquipment(client: Client, player: PlayerState, itemId: ItemId, tier: number,
+    regionId: EquipmentHuntRegionId | null = null): EquipmentAffixRoll | null {
     if (tier <= 0 || (!equipmentForItem(itemId) && !armourForItem(itemId))) return null;
     const buildPath = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    const targetAffixId = this.equipmentAffixTarget(player);
+    const targetPath = targetAffixId ? EQUIPMENT_AFFIXES[targetAffixId].pathId : null;
+    const regionMatchesTarget = Boolean(regionId && targetPath
+      && (EQUIPMENT_HUNT_REGIONS[regionId].paths as readonly BuildPathId[]).includes(targetPath));
     if (tier >= 3) {
       const offers = this.attunementOffers(player);
-      offers[itemId] = rollEquipmentAffixOptions(buildPath, 3).map(choice => choice.affixId);
+      offers[itemId] = rollEquipmentAffixOptions(buildPath, 3, 3, Math.random,
+        regionMatchesTarget ? targetAffixId : null).map(choice => choice.affixId);
       this.setEquipmentAttunements(player, this.equipmentAffixes(player), this.attunementDust(player), offers);
       this.sendEquipmentAffixes(client, `${ITEM_DEFINITIONS[itemId].name} unlocked three Tier 3 attunements at the blacksmith.`);
       return null;
     }
-    const candidate = rollEquipmentAffix(buildPath, tier), affixes = this.equipmentAffixes(player);
+    const candidate = rollTargetedEquipmentAffix(buildPath, tier, targetAffixId, regionMatchesTarget), affixes = this.equipmentAffixes(player);
     const kept = keepBetterAffix(affixes[itemId], candidate);
     if (kept === affixes[itemId]) return kept;
     affixes[itemId] = kept; this.setEquipmentAffixes(player, affixes);
