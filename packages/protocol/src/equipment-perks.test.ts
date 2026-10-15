@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EQUIPMENT_AFFIX_RESONANCE, EQUIPMENT_HUNT_REGIONS, EquipmentAffixHuntSchema, equipmentAffixResonanceForLoadout, equipmentPerkStats } from "./index.js";
+import { AttunementForgeSchema, EQUIPMENT_AFFIX_RESONANCE, EQUIPMENT_HUNT_REGIONS, EquipmentAffixHuntSchema, equipmentAffixResonanceForLoadout, equipmentPerkStats } from "./index.js";
 
 describe("fixed equipment perks", () => {
   it("scales weapon identity with reforge rank", () => {
@@ -33,5 +33,6 @@ describe("fixed equipment perks", () => {
     expect(EquipmentAffixHuntSchema.safeParse({ affixId: "precise" }).success).toBe(true);
     expect(EquipmentAffixHuntSchema.safeParse({ affixId: null }).success).toBe(true);
     expect(EquipmentAffixHuntSchema.safeParse({ affixId: "cheat" }).success).toBe(false);
+    expect(AttunementForgeSchema.safeParse({ action: "focus", itemId: "fang_dagger" }).success).toBe(true);
   });
 });

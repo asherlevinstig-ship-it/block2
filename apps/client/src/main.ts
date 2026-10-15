@@ -13,7 +13,7 @@ import { createPartyUI } from "./party-ui.js";
 import { createTradeUI } from "./trade-ui.js";
 import { createPlayerInteractionUI, type PlayerInteractionView } from "./player-interaction-ui.js";
 import type { RealmEventUpdate } from "@blockcraft/protocol";
-import { ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES, EQUIPMENT_AFFIX_RESONANCE,
+import { ATTUNEMENT_FOCUS_COST, ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES, EQUIPMENT_AFFIX_RESONANCE,
   equipmentAffixResonanceForLoadout,
   type EquipmentAffixOffers, type EquipmentAffixRoll, type EquipmentAffixUpdate, type EquipmentHuntTarget } from "@blockcraft/protocol";
 import { DODGE_EXHAUSTION_MS, dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
@@ -5719,15 +5719,18 @@ let blacksmithEquippedHandItem: ItemId | null = null;
 let blacksmithEquippedArmourItem: ItemId | null = null;
 let regionalMarks: Record<RegionalForgeId, number> = { greenwood: 0, mistfen: 0 };
 let regionalMasteryRanks: Record<RegionalForgeId, number> = { greenwood: 0, mistfen: 0 };
-const attunementCost = (action: "reroll" | "upgrade", tier: 1 | 2 | 3, roll?: EquipmentAffixRoll): number => {
-  const base = action === "reroll" ? ATTUNEMENT_REROLL_COST[tier] : ATTUNEMENT_UPGRADE_COST[Math.min(2, tier) as 1 | 2];
-  const matching = Boolean(roll && blacksmithCalling && EQUIPMENT_AFFIXES[roll.affixId].pathId === blacksmithCalling);
+const attunementCost = (action: "reroll" | "focus" | "upgrade", tier: 1 | 2 | 3, roll?: EquipmentAffixRoll): number => {
+  const base = action === "reroll" ? ATTUNEMENT_REROLL_COST[tier]
+    : action === "focus" ? ATTUNEMENT_FOCUS_COST[tier] : ATTUNEMENT_UPGRADE_COST[Math.min(2, tier) as 1 | 2];
+  const costAffixId = action === "focus" ? equipmentTargetAffixId : roll?.affixId;
+  const matching = Boolean(costAffixId && blacksmithCalling && EQUIPMENT_AFFIXES[costAffixId].pathId === blacksmithCalling);
   return matching ? Math.max(1, Math.ceil(base * .8)) : base;
 };
-function sendAttunementAction(action: "reroll" | "upgrade" | "choose", itemId: BlacksmithReforgeItemId, affixId?: keyof typeof EQUIPMENT_AFFIXES): void {
+function sendAttunementAction(action: "reroll" | "focus" | "upgrade" | "choose", itemId: BlacksmithReforgeItemId, affixId?: keyof typeof EQUIPMENT_AFFIXES): void {
   if (!room || blacksmithPending) return;
   blacksmithPending = true; renderAttunementShop();
-  blacksmithMessage.textContent = action === "choose" ? "Binding your chosen boss attunement…" : `${action === "upgrade" ? "Upgrading" : "Rerolling"} ${ITEM_DEFINITIONS[itemId].name}…`;
+  blacksmithMessage.textContent = action === "choose" ? "Binding your chosen boss attunement…"
+    : `${action === "upgrade" ? "Upgrading" : action === "focus" ? "Focusing" : "Rerolling"} ${ITEM_DEFINITIONS[itemId].name}…`;
   room.send("blacksmith:attune", { action, itemId, ...(affixId ? { affixId } : {}) });
 }
 function renderAttunementShop(): void {
@@ -5784,7 +5787,7 @@ function renderAttunementShop(): void {
     equipped.append(resonance);
   }
   const help = document.createElement("p"); help.className = "blacksmith-attunement-help";
-  help.textContent = "Match the Calling on your weapon and armour to activate resonance. Dismantle attuned gear for Dust. Reroll changes the affix but keeps its tier; upgrading preserves it.";
+  help.textContent = "Match the Calling on your weapon and armour to activate resonance. Dismantle unwanted drops for Dust. Reroll keeps tier; Focused Reforge guarantees your pinned trait at triple cost; upgrading preserves the trait.";
   attunementShop.append(heading, wallet, hunt, equipped, help);
   for (const [rawItemId, choices] of Object.entries(equipmentAffixOffers) as [ItemId, (keyof typeof EQUIPMENT_AFFIXES)[]][]) {
     if (!choices?.length || (inventoryCounts.get(rawItemId) ?? 0) <= 0) continue;
@@ -5808,6 +5811,7 @@ function renderAttunementShop(): void {
     const roll = equipmentAffixes[itemId];
     const tier = roll?.tier ?? 1;
     const rerollCost = attunementCost("reroll", tier, roll);
+    const focusCost = attunementCost("focus", tier, roll);
     const upgradeCost = tier < 3 ? attunementCost("upgrade", tier, roll) : 0;
     const card = document.createElement("article"); card.dataset.rarity = itemRarity(itemId);
     const title = document.createElement("header");
@@ -5832,6 +5836,13 @@ function renderAttunementShop(): void {
     reroll.disabled = blacksmithPending || attunementDust < rerollCost;
     reroll.addEventListener("click", () => sendAttunementAction("reroll", itemId)); actions.append(reroll);
     if (roll) {
+      const focus = document.createElement("button"); focus.type = "button";
+      const alreadyFocused = Boolean(equipmentTargetAffixId && roll.affixId === equipmentTargetAffixId);
+      focus.textContent = !equipmentTargetAffixId ? "PIN TRAIT TO FOCUS" : alreadyFocused ? "PINNED TRAIT ACTIVE"
+        : attunementDust < focusCost ? `FOCUS · NEED ${focusCost - attunementDust} DUST`
+          : `FOCUS ${EQUIPMENT_AFFIXES[equipmentTargetAffixId].name.toUpperCase()} · ${focusCost} DUST`;
+      focus.disabled = blacksmithPending || !equipmentTargetAffixId || alreadyFocused || attunementDust < focusCost;
+      focus.addEventListener("click", () => sendAttunementAction("focus", itemId)); actions.append(focus);
       const upgrade = document.createElement("button"); upgrade.type = "button";
       const needsMoonstone = tier === 2 && (inventoryCounts.get("moonstone") ?? 0) < 1;
       upgrade.textContent = tier >= 3 ? "MAXIMUM TIER" : needsMoonstone ? "TIER 3 · NEED 1 MOONSTONE"

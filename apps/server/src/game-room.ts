@@ -1500,12 +1500,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       this.sendEquipmentAffixes(client, message);
       return this.sendBlacksmithState(client, message, "attuned");
     }
-    if (action === "upgrade" && !current) return this.sendBlacksmithState(client, "Reroll this item once to reveal its first attunement.", "error");
+    if ((action === "upgrade" || action === "focus") && !current) return this.sendBlacksmithState(client, "Attune this item once to reveal its first trait.", "error");
     if (action === "upgrade" && current!.tier >= 3) return this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[itemId].name} already has a Tier 3 attunement.`, "error");
+    const focusTarget = action === "focus" ? this.equipmentAffixTarget(player) : null;
+    if (action === "focus" && !focusTarget) return this.sendBlacksmithState(client, "Pin a trait under Targeted Build Hunt before using Focused Reforge.", "error");
+    if (action === "focus" && current!.affixId === focusTarget) return this.sendBlacksmithState(client,
+      `${ITEM_DEFINITIONS[itemId].name} already has the pinned ${EQUIPMENT_AFFIXES[focusTarget!].name} trait.`, "error");
     const selectedPath = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
     const tier = current?.tier ?? 1;
-    const cost = attunementDustCost(action, tier, Boolean(current && selectedPath
-      && EQUIPMENT_AFFIXES[current.affixId].pathId === selectedPath));
+    const costAffixId = action === "focus" ? focusTarget : current?.affixId;
+    const cost = attunementDustCost(action, tier, Boolean(costAffixId && selectedPath
+      && EQUIPMENT_AFFIXES[costAffixId].pathId === selectedPath));
     const dust = this.attunementDust(player);
     if (dust < cost) return this.sendBlacksmithState(client, `You need ${cost - dust} more Attunement Dust.`, "error");
     const upgradingToTier3 = action === "upgrade" && tier === 2;
@@ -1513,6 +1518,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (upgradingToTier3 && (moonstone?.quantity ?? 0) < 1) return this.sendBlacksmithState(client, "Tier 3 requires 1 Moonstone from a major boss expedition.", "error");
     let next: EquipmentAffixRoll;
     if (action === "upgrade") next = { affixId: current!.affixId, tier: (tier + 1) as 2 | 3 };
+    else if (action === "focus") next = { affixId: focusTarget!, tier: current!.tier };
     else {
       next = rollEquipmentAffix(selectedPath, tier);
       for (let attempt = 0; current && next.affixId === current.affixId && attempt < 8; attempt++) next = rollEquipmentAffix(selectedPath, tier);
@@ -1529,6 +1535,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     void this.persistPlayer(client.sessionId, player, true).catch(() => {});
     const message = action === "upgrade"
       ? `${ITEM_DEFINITIONS[itemId].name}'s ${next.affixId.toUpperCase()} attunement reached Tier ${next.tier}.`
+      : action === "focus"
+        ? `${ITEM_DEFINITIONS[itemId].name} focused into ${next.affixId.toUpperCase()} · TIER ${next.tier}. Tier preserved.`
       : `${ITEM_DEFINITIONS[itemId].name} rerolled to ${next.affixId.toUpperCase()} · TIER ${next.tier}.`;
     this.sendEquipmentAffixes(client, message);
     this.sendBlacksmithState(client, message, "attuned");

@@ -526,13 +526,14 @@ export type BlacksmithReforgeItemId = keyof typeof BLACKSMITH_REFORGE;
 export type EquipmentReforgeRanks = Partial<Record<BlacksmithReforgeItemId, number>>;
 export const BlacksmithReforgeSchema = z.object({ itemId: z.enum(Object.keys(BLACKSMITH_REFORGE) as [BlacksmithReforgeItemId, ...BlacksmithReforgeItemId[]]) });
 export const AttunementForgeSchema = z.object({
-  action: z.enum(["reroll", "upgrade", "choose"]),
+  action: z.enum(["reroll", "focus", "upgrade", "choose"]),
   itemId: z.enum(Object.keys(BLACKSMITH_REFORGE) as [BlacksmithReforgeItemId, ...BlacksmithReforgeItemId[]]),
   affixId: z.enum(Object.keys(EQUIPMENT_AFFIXES) as [EquipmentAffixId, ...EquipmentAffixId[]]).optional(),
 }).strict();
 export type AttunementForgeAction = z.infer<typeof AttunementForgeSchema>;
 export const ATTUNEMENT_DUST_YIELD = { 1: 1, 2: 3, 3: 6 } as const;
 export const ATTUNEMENT_REROLL_COST = { 1: 3, 2: 6, 3: 10 } as const;
+export const ATTUNEMENT_FOCUS_COST = { 1: 9, 2: 18, 3: 30 } as const;
 export const ATTUNEMENT_UPGRADE_COST = { 1: 6, 2: 12 } as const;
 export function reforgeWeaponDamageBonus(rank: number): number { return Math.max(0, Math.min(3, Math.floor(rank))); }
 export function reforgeArmourReduction(rank: number): number { return Math.max(0, Math.min(2, Math.ceil(Math.max(0, Math.min(3, Math.floor(rank))) / 2))); }

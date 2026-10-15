@@ -1,4 +1,4 @@
-import { ATTUNEMENT_DUST_YIELD, ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES, ITEM_DEFINITIONS,
+import { ATTUNEMENT_DUST_YIELD, ATTUNEMENT_FOCUS_COST, ATTUNEMENT_REROLL_COST, ATTUNEMENT_UPGRADE_COST, EQUIPMENT_AFFIXES, ITEM_DEFINITIONS,
   type BuildPathId, type EquipmentAffixId, type EquipmentAffixOffers, type EquipmentAffixRoll, type ItemId } from "@blockcraft/protocol";
 
 const AFFIX_IDS = Object.keys(EQUIPMENT_AFFIXES) as EquipmentAffixId[];
@@ -60,9 +60,10 @@ export function attunementDustYield(tier: number): number {
   return ATTUNEMENT_DUST_YIELD[Math.max(1, Math.min(3, Math.floor(tier))) as 1 | 2 | 3];
 }
 
-export function attunementDustCost(action: "reroll" | "upgrade", tier: number, callingDiscount = false): number {
+export function attunementDustCost(action: "reroll" | "focus" | "upgrade", tier: number, callingDiscount = false): number {
   const normalized = Math.max(1, Math.min(3, Math.floor(tier))) as 1 | 2 | 3;
   const base = action === "reroll" ? ATTUNEMENT_REROLL_COST[normalized]
-    : ATTUNEMENT_UPGRADE_COST[Math.min(2, normalized) as 1 | 2];
+    : action === "focus" ? ATTUNEMENT_FOCUS_COST[normalized]
+      : ATTUNEMENT_UPGRADE_COST[Math.min(2, normalized) as 1 | 2];
   return callingDiscount ? Math.max(1, Math.ceil(base * .8)) : base;
 }

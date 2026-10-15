@@ -30,6 +30,8 @@ describe("equipment affixes", () => {
     expect([1, 2, 3].map(attunementDustYield)).toEqual([1, 3, 6]);
     expect(attunementDustCost("reroll", 3, false)).toBe(10);
     expect(attunementDustCost("reroll", 3, true)).toBe(8);
+    expect(attunementDustCost("focus", 2, false)).toBe(18);
+    expect(attunementDustCost("focus", 2, true)).toBe(15);
     expect(attunementDustCost("upgrade", 2, true)).toBe(10);
   });
 
