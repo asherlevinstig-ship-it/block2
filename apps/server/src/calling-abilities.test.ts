@@ -92,6 +92,20 @@ describe("hotbar Calling abilities", () => {
     }));
   });
 
+  it("equips a town-only branch and applies its authoritative effect", () => {
+    const { internal, player, client, broadcast } = fixture("tank", 30);
+    player.x = 8.5; player.z = 8.5;
+    internal.handleCallingAugmentEquip(client, { augmentId: "bulwark_iron_skin" });
+    expect(parseBuildPathState(player.huntLoadoutsJson).callingAugments.tank_bulwark).toBe("bulwark_iron_skin");
+    player.x = 50; player.z = 50;
+    internal.handleCallingAbility(client, { requestId: "reinforced-bulwark" });
+    expect(broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
+      abilityId: "tank_bulwark", augmentId: "bulwark_iron_skin",
+    }));
+    internal.damagePlayer("attacker", "hero", 3, 10_001, false);
+    expect(player.health).toBe(4);
+  });
+
   it("requires a Calling and enforces the server cooldown", () => {
     const { internal, player, client } = fixture("mage");
     internal.handleCallingAbility(client, { requestId: "first" });

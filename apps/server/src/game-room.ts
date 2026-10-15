@@ -13,7 +13,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, CALLING_ABILITY_AUGMENTS, CallingAbilityRequestSchema, CallingAbilityEquipRequestSchema, CallingAugmentEquipRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type CallingAbilityUpdate, type CallingAbilityEffect, type CallingStateUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -204,7 +204,7 @@ import { inventoryTotal, isLootInPickupRange, lootForArchetype, armourDropForMob
 import { findLootLanding } from "./loot-placement.js";
 import { canEquipMainHand } from "./equipment-rules.js";
 import { PLAYER_SAVE_HASH, applyPlayerSave, parsePlayerSave, serializePlayerSave } from "./player-save.js";
-import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, chooseCallingAbility, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, nextBuildRankXp, parseBuildPathState, selectedCallingAbility } from "./build-paths.js";
+import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, chooseCallingAbility, chooseCallingAugment, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, nextBuildRankXp, parseBuildPathState, selectedCallingAbility, selectedCallingAugment } from "./build-paths.js";
 import { equipmentReforgeRank, parseReforgeRanks, withReforgeRank } from "./equipment-reforge.js";
 import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmentAffixes, parseEquipmentAffixOffers,
   rollEquipmentAffix, rollEquipmentAffixOptions } from "./equipment-affixes.js";
@@ -413,6 +413,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly dodgeCounterUntil = new Map<string, number>();
   private readonly magePowerCasts = new Map<string, number>();
   private readonly assassinShadowUntil = new Map<string, number>();
+  private readonly assassinShadowBonus = new Map<string, number>();
   private readonly pathConcealedUntil = new Map<string, number>();
   private readonly rangerPinning = new Map<string, { mobId: string; stacks: number; expiresAt: number }>();
   private readonly rangerSlows = new Map<string, { until: number; multiplier: number }>();
@@ -422,6 +423,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly tankBulwarkUntil = new Map<string, number>();
   private readonly mageBarrierHits = new Map<string, number>();
   private readonly mageOverloadReady = new Set<string>();
+  private readonly mageOverloadCharges = new Map<string, number>();
   private readonly rangerCallingFocus = new Map<string, { hits: number; bonus: number }>();
   private readonly roleOpportunityReadyAt = new Map<string, number>();
   private readonly fortressProcAt = new Map<string, number>();
@@ -761,6 +763,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
     aliveMessage("calling:ability", (client, payload) => this.handleCallingAbility(client, payload));
     aliveMessage("calling:ability:equip", (client, payload) => this.handleCallingAbilityEquip(client, payload));
+    aliveMessage("calling:augment:equip", (client, payload) => this.handleCallingAugmentEquip(client, payload));
     aliveMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
     aliveMessage("armour:equip", (client, payload) => this.handleArmourEquip(client, payload));
     this.onMessage("loot:collect", (client, payload) => this.handleLootCollect(client, payload));
@@ -972,6 +975,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.dodgeCounterUntil.delete(client.sessionId);
     this.magePowerCasts.delete(client.sessionId);
     this.assassinShadowUntil.delete(client.sessionId);
+    this.assassinShadowBonus.delete(client.sessionId);
     this.pathConcealedUntil.delete(client.sessionId);
     this.rangerPinning.delete(client.sessionId);
     this.rangerFieldFocusHits.delete(client.sessionId);
@@ -980,6 +984,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.tankBulwarkUntil.delete(client.sessionId);
     this.mageBarrierHits.delete(client.sessionId);
     this.mageOverloadReady.delete(client.sessionId);
+    this.mageOverloadCharges.delete(client.sessionId);
     this.rangerCallingFocus.delete(client.sessionId);
     for (const key of this.roleOpportunityReadyAt.keys()) if (key.startsWith(`${client.sessionId}:`)) this.roleOpportunityReadyAt.delete(key);
     this.fortressProcAt.delete(client.sessionId);
@@ -2997,6 +3002,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
           const phantom = this.buildSpecializationFor(player, "assassin") === "phantom";
           const veiledMs = this.equipmentAffixTier(player, "veiled") * 250;
           this.assassinShadowUntil.set(playerId, now + (phantom ? 3_000 : 2_000) + veiledMs);
+          this.assassinShadowBonus.set(playerId, 0);
           this.pathConcealedUntil.set(playerId, now + (phantom ? 2_000 : 1_250) + veiledMs);
           if (phantom) player.powerCooldownUntil = this.buildSpecializationMastered(player, "phantom")
             ? now : Math.max(now, player.powerCooldownUntil - 1_500);
@@ -3053,13 +3059,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
     const bulwarkUntil = this.tankBulwarkUntil.get(playerId) ?? 0;
     if (defense.damage > 0 && now < bulwarkUntil) {
-      defense.damage = Math.max(0, defense.damage - 1);
+      const build = parseBuildPathState(player.huntLoadoutsJson);
+      const bulwarkAbility = selectedCallingAbility(build, "tank");
+      defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, bulwarkAbility) === "bulwark_iron_skin" ? 2 : 1));
     } else if (bulwarkUntil > 0) {
       this.tankBulwarkUntil.delete(playerId);
     }
     const barrierHits = this.mageBarrierHits.get(playerId) ?? 0;
     if (defense.damage > 0 && barrierHits > 0) {
-      defense.damage = Math.max(0, defense.damage - 1);
+      const build = parseBuildPathState(player.huntLoadoutsJson);
+      defense.damage = Math.max(0, defense.damage - (selectedCallingAugment(build, "mage_mana_shield") === "shield_reinforced_rune" ? 2 : 1));
       if (barrierHits === 1) this.mageBarrierHits.delete(playerId);
       else this.mageBarrierHits.set(playerId, barrierHits - 1);
       this.callingState(playerId, "mage", "mage_mana_shield", "BARRIER", {
@@ -4153,6 +4162,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const trialProgress = specializationId ? state.trials[specializationId] ?? 0 : 0;
     client.send("build:path", { selectedPathId: state.selectedPathId, rank, xp,
       selectedCallingAbilityId: state.selectedPathId ? selectedCallingAbility(state, state.selectedPathId) : null,
+      selectedCallingAugmentId: state.selectedPathId ? selectedCallingAugment(state, selectedCallingAbility(state, state.selectedPathId)) : null,
       nextRankXp: nextBuildRankXp(xp), candidates, canChoose: player.level >= 5,
       selectedSpecializationId: specializationId,
       canSpecialize: Boolean(state.selectedPathId && rank >= 3 && !state.specializations[state.selectedPathId]),
@@ -4229,6 +4239,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       detail = "POWER REFRESHED · +35 STAMINA";
     } else if (activePathId === "assassin") {
       this.assassinShadowUntil.set(client.sessionId, now + 8_000);
+      this.assassinShadowBonus.set(client.sessionId, 0);
       this.pathConcealedUntil.set(client.sessionId, now + 8_000);
       detail = "CONCEALED · NEXT STRIKE EMPOWERED";
     } else if (activePathId === "thief") {
@@ -4256,6 +4267,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       return;
     }
     const abilityId = selectedCallingAbility(state, pathId);
+    const augmentId = selectedCallingAugment(state, abilityId);
     const definition = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId)!;
     const now = Date.now();
     const readyAt = this.callingAbilityReadyAt.get(client.sessionId) ?? 0;
@@ -4272,23 +4284,23 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const nearbyMobs = (radius: number) => [...this.state.mobs.entries()].filter(([, mob]) => mob.alive
       && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius);
     if (abilityId === "tank_bulwark") {
-      durationMs = 5_000 + rank * 350;
+      durationMs = 5_000 + rank * 350 + (augmentId === "bulwark_guardian_wall" ? 2_000 : 0);
       this.tankBulwarkUntil.set(client.sessionId, now + durationMs);
-      detail = `BRACED · −1 DAMAGE PER HIT · ${(durationMs / 1_000).toFixed(1)}s`;
+      detail = `BRACED · −${augmentId === "bulwark_iron_skin" ? 2 : 1} DAMAGE PER HIT · ${(durationMs / 1_000).toFixed(1)}s`;
     } else if (abilityId === "tank_challenge") {
-      const targets = nearbyMobs(8 + rank * .5);
+      const targets = nearbyMobs(8 + rank * .5 + (augmentId === "challenge_mass_provocation" ? 3 : 0));
       for (const [mobId] of targets) {
         const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
         provokeMob(awareness, { id: client.sessionId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
         this.mobAwareness.set(mobId, awareness);
       }
-      player.stamina = Math.min(player.maxStamina, player.stamina + 35 + rank * 5);
-      this.tankBulwarkUntil.set(client.sessionId, now + 3_000);
-      durationMs = 3_000;
+      player.stamina = Math.min(player.maxStamina, player.stamina + 35 + rank * 5 + (augmentId === "challenge_rallying_cry" ? 30 : 0));
+      durationMs = 3_000 + (augmentId === "challenge_mass_provocation" ? 1_500 : 0);
+      this.tankBulwarkUntil.set(client.sessionId, now + durationMs);
       detail = `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} CHALLENGED · BRACED`;
     } else if (abilityId === "tank_earthbreaker") {
-      const targets = nearbyMobs(4.2 + rank * .2);
-      const baseDamage = 2 + (rank >= 4 ? 1 : 0);
+      const targets = nearbyMobs(4.2 + rank * .2 + (augmentId === "earthbreaker_faultline" ? 1.8 : 0));
+      const baseDamage = 2 + (rank >= 4 ? 1 : 0) + (augmentId === "earthbreaker_crushing_force" ? 2 : 0);
       for (const [mobId, mob] of targets) {
         const damage = damageAfterArmor(baseDamage, mob.armor, true);
         this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, damage), now);
@@ -4299,20 +4311,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       detail = `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} HIT · ${baseDamage} DAMAGE`;
     } else if (abilityId === "mage_arcane_surge") {
-      const stamina = 30 + rank * 5;
+      const stamina = 30 + rank * 5 + (augmentId === "surge_deep_reserves" ? 25 : 0);
       player.powerCooldownUntil = now;
+      if (augmentId === "surge_temporal_flux") player.specialCooldownUntil = Math.max(now, player.specialCooldownUntil - 4_000);
       player.stamina = Math.min(player.maxStamina, player.stamina + stamina);
       detail = `POWER REFRESHED · +${stamina} STAMINA`;
     } else if (abilityId === "mage_mana_shield") {
-      const hits = rank >= 4 ? 4 : 3;
+      const hits = (rank >= 4 ? 4 : 3) + (augmentId === "shield_prismatic_layers" ? 2 : 0);
       this.mageBarrierHits.set(client.sessionId, hits);
-      detail = `${hits} BARRIER CHARGES · −1 DAMAGE PER HIT`;
+      detail = `${hits} BARRIER CHARGES · −${augmentId === "shield_reinforced_rune" ? 2 : 1} DAMAGE PER HIT`;
     } else if (abilityId === "mage_overload") {
       this.mageOverloadReady.add(client.sessionId);
-      detail = `NEXT POWER +${rank >= 4 ? 4 : 3} DAMAGE`;
+      const charges = augmentId === "overload_residual_charge" ? 2 : 1;
+      this.mageOverloadCharges.set(client.sessionId, charges);
+      detail = `NEXT ${charges > 1 ? `${charges} POWERS` : "POWER"} +${(rank >= 4 ? 4 : 3) + (augmentId === "overload_volatile_core" ? 2 : 0)} DAMAGE`;
     } else if (abilityId === "assassin_vanish") {
-      durationMs = 3_000 + rank * 400;
+      durationMs = 3_000 + rank * 400 + (augmentId === "vanish_deep_cloak" ? 2_000 : 0);
       this.assassinShadowUntil.set(client.sessionId, now + durationMs);
+      this.assassinShadowBonus.set(client.sessionId, augmentId === "vanish_killing_intent" ? 2 : 0);
       this.pathConcealedUntil.set(client.sessionId, now + durationMs);
       for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
         const mob = this.state.mobs.get(mobId);
@@ -4326,16 +4342,29 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         - Math.hypot(b[1].x - player.x, b[1].z - player.z))[0];
       if (target) {
         effectTargetId = target[0];
-        this.specialMarks.set(client.sessionId, { mobId: target[0], expiresAt: now + 10_000, stacks: HUNTERS_MARK.maxStacks });
-        detail = `${target[1].name.toUpperCase()} EXPOSED · 10.0s`;
+        const markMs = 10_000 + (augmentId === "mark_lingering_sentence" ? 5_000 : 0);
+        this.specialMarks.set(client.sessionId, { mobId: target[0], expiresAt: now + markMs, stacks: HUNTERS_MARK.maxStacks });
+        if (augmentId === "mark_open_wound") {
+          this.combatContributions.record(target[0], client.sessionId, Math.min(target[1].health, 2), now);
+          target[1].health = Math.max(0, target[1].health - 2); target[1].hitSequence += 1;
+          if (target[1].health === 0) this.defeatMob(target[0], target[1], client.sessionId, now);
+        }
+        durationMs = markMs;
+        detail = `${target[1].name.toUpperCase()} EXPOSED · ${(markMs / 1_000).toFixed(1)}s`;
       } else detail = "NO TARGET IN RANGE";
     } else if (abilityId === "assassin_blade_dance") {
-      durationMs = 1_000 + rank * 100;
+      durationMs = 1_000 + rank * 100 + (augmentId === "dance_long_step" ? 600 : 0);
       player.invulnerableUntil = Math.max(player.invulnerableUntil, now + durationMs);
       this.assassinShadowUntil.set(client.sessionId, now + 4_000 + rank * 250);
+      this.assassinShadowBonus.set(client.sessionId, 0);
+      if (augmentId === "dance_blade_storm") for (const [mobId, mob] of nearbyMobs(3.5)) {
+        this.combatContributions.record(mobId, client.sessionId, Math.min(mob.health, 2), now);
+        mob.health = Math.max(0, mob.health - 2); mob.hitSequence += 1;
+        if (mob.health === 0) this.defeatMob(mobId, mob, client.sessionId, now);
+      }
       detail = `UNTARGETABLE · NEXT STRIKE EMPOWERED`;
     } else if (abilityId === "thief_smoke_bomb") {
-      durationMs = 2_500 + rank * 350;
+      durationMs = 2_500 + rank * 350 + (augmentId === "smoke_dense_cloud" ? 2_000 : 0);
       const radius = 6 + rank;
       let diverted = 0;
       for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
@@ -4345,41 +4374,48 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
       }
       this.pathConcealedUntil.set(client.sessionId, now + durationMs);
-      const stamina = 20 + rank * 3;
+      const stamina = 20 + rank * 3 + (augmentId === "smoke_second_wind" ? 20 : 0);
       player.stamina = Math.min(player.maxStamina, player.stamina + stamina);
       detail = `${diverted} ENEM${diverted === 1 ? "Y" : "IES"} DIVERTED · +${stamina} STAMINA`;
     } else if (abilityId === "thief_decoy") {
       durationMs = 3_500 + rank * 250;
-      const targets = nearbyMobs(8 + rank * .5);
+      const targets = nearbyMobs(8 + rank * .5 + (augmentId === "decoy_wide_stage" ? 3 : 0));
       for (const [mobId, mob] of targets) {
         const awareness = this.mobAwareness.get(mobId);
         if (awareness?.targetId === client.sessionId) this.mobAwareness.delete(mobId);
         mob.targetId = ""; mob.awarenessState = "search";
-        this.staggerMob(mobId, mob, now, 700 + rank * 100, true);
+        this.staggerMob(mobId, mob, now, 700 + rank * 100 + (augmentId === "decoy_flash_charge" ? 800 : 0), true);
       }
       this.pathConcealedUntil.set(client.sessionId, now + durationMs);
       detail = `${targets.length} ENEM${targets.length === 1 ? "Y" : "IES"} DECOYED · CONCEALED`;
     } else if (abilityId === "thief_escape_artist") {
-      durationMs = 700 + rank * 80;
+      durationMs = 700 + rank * 80 + (augmentId === "escape_extended_window" ? 500 : 0);
       this.dodgePressure.set(client.sessionId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
       player.invulnerableUntil = Math.max(player.invulnerableUntil, now + durationMs);
       player.stamina = player.maxStamina;
+      if (augmentId === "escape_clean_getaway") player.health = Math.min(player.maxHealth, player.health + 1);
       detail = `DODGE RESET · FULL STAMINA · ${(durationMs / 1_000).toFixed(1)}s EVADE`;
     } else if (abilityId === "ranger_disengage") {
       const radians = (parsed.data.yaw ?? player.yaw) * Math.PI / 180;
+      const leap = 3 + (augmentId === "disengage_long_leap" ? 2 : 0);
       const moved = resolvePlayerMotion({ x: player.x, y: player.y, z: player.z },
-        { x: -Math.sin(radians) * 3, y: 0, z: -Math.cos(radians) * 3 }, this.readWorldBlock);
-      Object.assign(player, moved, { invulnerableUntil: Math.max(player.invulnerableUntil, now + 450) });
+        { x: -Math.sin(radians) * leap, y: 0, z: -Math.cos(radians) * leap }, this.readWorldBlock);
+      Object.assign(player, moved, { invulnerableUntil: Math.max(player.invulnerableUntil, now + 450 + (augmentId === "disengage_evasive_roll" ? 450 : 0)) });
       this.rangerCallingFocus.set(client.sessionId, { hits: 2, bonus: 1 });
       detail = `DISENGAGED · NEXT 2 SHOTS +1`;
     } else if (abilityId === "ranger_deadeye") {
-      this.rangerCallingFocus.set(client.sessionId, { hits: 2, bonus: rank >= 4 ? 4 : 3 });
-      detail = `NEXT 2 RANGED HITS +${rank >= 4 ? 4 : 3}`;
+      const hits = 2 + (augmentId === "deadeye_eagle_eye" ? 1 : 0);
+      const bonus = (rank >= 4 ? 4 : 3) + (augmentId === "deadeye_execution_rounds" ? 2 : 0);
+      this.rangerCallingFocus.set(client.sessionId, { hits, bonus });
+      detail = `NEXT ${hits} RANGED HITS +${bonus}`;
     } else {
-      const hits = rank >= 4 ? 4 : 3;
-      this.rangerCallingFocus.set(client.sessionId, { hits, bonus: 1 });
-      detail = `NEXT ${hits} RANGED HITS +1`;
+      const hits = (rank >= 4 ? 4 : 3) + (augmentId === "volley_deep_quiver" ? 2 : 0);
+      const bonus = 1 + (augmentId === "volley_heavy_arrows" ? 1 : 0);
+      this.rangerCallingFocus.set(client.sessionId, { hits, bonus });
+      detail = `NEXT ${hits} RANGED HITS +${bonus}`;
     }
+    const augment = augmentId ? CALLING_ABILITY_AUGMENTS.find(option => option.id === augmentId) : null;
+    if (augment) detail += ` · ${augment.name.toUpperCase()}`;
     const update: CallingAbilityUpdate = {
       requestId: parsed.data.requestId, pathId, abilityId, ability: definition.name, detail, cooldownUntil,
       ...(durationMs ? { durationMs } : {}),
@@ -4388,17 +4424,18 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.broadcast("calling:ability:effect", {
       casterId: client.sessionId, pathId, abilityId, x: player.x, y: player.y, z: player.z,
       yaw: parsed.data.yaw ?? player.yaw, ...(durationMs ? { durationMs } : {}), ...(effectTargetId ? { targetId: effectTargetId } : {}),
+      ...(augmentId ? { augmentId } : {}),
     } satisfies CallingAbilityEffect);
     if (abilityId === "tank_bulwark" || abilityId === "tank_challenge")
       this.callingState(client.sessionId, pathId, abilityId, "BRACED", { activeUntil: now + (durationMs ?? 3_000) });
     else if (abilityId === "mage_mana_shield")
       this.callingState(client.sessionId, pathId, abilityId, "BARRIER", { charges: this.mageBarrierHits.get(client.sessionId) ?? 0 });
     else if (abilityId === "mage_overload")
-      this.callingState(client.sessionId, pathId, abilityId, "POWER CHARGED");
+      this.callingState(client.sessionId, pathId, abilityId, "POWER CHARGED", { charges: this.mageOverloadCharges.get(client.sessionId) ?? 1 });
     else if (abilityId === "assassin_vanish")
       this.callingState(client.sessionId, pathId, abilityId, "VANISHED · STRIKE READY", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "assassin_death_mark" && effectTargetId)
-      this.callingState(client.sessionId, pathId, abilityId, "TARGET EXPOSED", { activeUntil: now + 10_000, targetId: effectTargetId });
+      this.callingState(client.sessionId, pathId, abilityId, "TARGET EXPOSED", { activeUntil: now + (durationMs ?? 10_000), targetId: effectTargetId });
     else if (abilityId === "assassin_blade_dance")
       this.callingState(client.sessionId, pathId, abilityId, "UNTARGETABLE", { activeUntil: now + (durationMs ?? 0) });
     else if (abilityId === "thief_smoke_bomb" || abilityId === "thief_decoy")
@@ -4427,6 +4464,28 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.setPlayerBuildData(player, this.huntLoadouts(player), next);
     void this.persistPlayer(client.sessionId, player, true);
     this.sendBuildPath(client, `${definition.name.toUpperCase()} EQUIPPED · your G slot now uses this ${definition.category.toLowerCase()} ability.`);
+  }
+
+  private handleCallingAugmentEquip(client: Client, payload: unknown): void {
+    const parsed = CallingAugmentEquipRequestSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return;
+    const state = parseBuildPathState(player.huntLoadoutsJson), pathId = state.selectedPathId;
+    const abilityId = pathId ? selectedCallingAbility(state, pathId) : null;
+    const augment = CALLING_ABILITY_AUGMENTS.find(option => option.id === parsed.data.augmentId);
+    if (!pathId || !abilityId || !augment || augment.abilityId !== abilityId) {
+      this.sendBuildPath(client, "That upgrade does not belong to your equipped Calling ability."); return;
+    }
+    if (this.roomKind !== "overworld" || !isInsideTownSafeZone(player)) {
+      this.sendBuildPath(client, "Return to Town to reshape a Calling ability."); return;
+    }
+    if (effectiveBuildPathRank(state, pathId) < augment.unlockRank) {
+      this.sendBuildPath(client, `${augment.name.toUpperCase()} unlocks at Path Rank ${augment.unlockRank}.`); return;
+    }
+    const next = chooseCallingAugment(state, abilityId, parsed.data.augmentId as CallingAugmentId);
+    if (next === state) { this.sendBuildPath(client, "That Calling upgrade is not available."); return; }
+    this.setPlayerBuildData(player, this.huntLoadouts(player), next); void this.persistPlayer(client.sessionId, player, true);
+    this.sendBuildPath(client, `${augment.name.toUpperCase()} EQUIPPED · ${augment.description}`);
   }
 
   private grantBuildProgress(playerId: string, amount: number): void {
@@ -6508,7 +6567,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       let aftershockHitCount = 0;
       let traitBonusHitCount = 0;
       const mageRank = parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "mage" ? this.buildPathRankFor(player, "mage") : 0;
-      const mageOverloadBonus = this.mageOverloadReady.has(sessionId) ? (mageRank >= 4 ? 4 : 3) : 0;
+      const buildState = parseBuildPathState(player.huntLoadoutsJson);
+      const mageOverloadAugment = selectedCallingAugment(buildState, "mage_overload");
+      const mageOverloadBonus = this.mageOverloadReady.has(sessionId)
+        ? (mageRank >= 4 ? 4 : 3) + (mageOverloadAugment === "overload_volatile_core" ? 2 : 0) : 0;
       const mageCastCount = mageRank >= 2 ? (this.magePowerCasts.get(sessionId) ?? 0) + 1 : 0;
       if (mageRank >= 2) this.magePowerCasts.set(sessionId, mageCastCount % 3);
       const arcaneEcho = mageRank >= 2 && mageCastCount % 3 === 0;
@@ -6541,10 +6603,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { power: true });
         if (traitBonusDamage > 0) traitBonusHitCount += 1;
         const shadowstepDamage = shadowstepReady ? (assassinSpecialization === "executioner" ? 4 : 2)
+          + (this.assassinShadowBonus.get(sessionId) ?? 0)
           + this.equipmentAffixTier(player, "executioner") : 0;
         shadowstepAppliedDamage = Math.max(shadowstepAppliedDamage, shadowstepDamage);
         if (shadowstepReady) {
-          shadowstepReady = false; this.assassinShadowUntil.delete(sessionId);
+          shadowstepReady = false; this.assassinShadowUntil.delete(sessionId); this.assassinShadowBonus.delete(sessionId);
           const activeAbility = selectedCallingAbility(parseBuildPathState(player.huntLoadoutsJson), "assassin");
           if (activeAbility === "assassin_vanish" || activeAbility === "assassin_blade_dance")
             this.callingState(sessionId, "assassin", activeAbility, "EMPOWERED STRIKE", { clear: true });
@@ -6604,8 +6667,14 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         if (mageSpecialization === "arcanist") this.grantMasterTrial(sessionId, "arcanist");
       }
       if (mageOverloadBonus > 0 && targets.length > 0) {
-        this.mageOverloadReady.delete(sessionId);
-        this.callingState(sessionId, "mage", "mage_overload", "POWER CHARGED", { clear: true });
+        const charges = this.mageOverloadCharges.get(sessionId) ?? 1;
+        if (charges <= 1) {
+          this.mageOverloadReady.delete(sessionId); this.mageOverloadCharges.delete(sessionId);
+          this.callingState(sessionId, "mage", "mage_overload", "POWER CHARGED", { clear: true });
+        } else {
+          this.mageOverloadCharges.set(sessionId, charges - 1);
+          this.callingState(sessionId, "mage", "mage_overload", "POWER CHARGED", { charges: charges - 1 });
+        }
         this.buildPathProc(sessionId, "mage", "OVERLOAD", `POWER AMPLIFIED · +${mageOverloadBonus} DAMAGE`);
       }
       if (shadowstepActive && !shadowstepReady)
@@ -7231,9 +7300,11 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       }
       const assassinSpecialization = this.buildSpecializationFor(player, "assassin");
       const shadowstepDamage = now <= (this.assassinShadowUntil.get(sessionId) ?? 0)
-        ? (assassinSpecialization === "executioner" ? 4 : 2) + this.equipmentAffixTier(player, "executioner") : 0;
+        ? (assassinSpecialization === "executioner" ? 4 : 2)
+          + (this.assassinShadowBonus.get(sessionId) ?? 0)
+          + this.equipmentAffixTier(player, "executioner") : 0;
       if (shadowstepDamage > 0) {
-        this.assassinShadowUntil.delete(sessionId);
+        this.assassinShadowUntil.delete(sessionId); this.assassinShadowBonus.delete(sessionId);
         const activeAbility = selectedCallingAbility(parseBuildPathState(player.huntLoadoutsJson), "assassin");
         if (activeAbility === "assassin_vanish" || activeAbility === "assassin_blade_dance")
           this.callingState(sessionId, "assassin", activeAbility, "EMPOWERED STRIKE", { clear: true });

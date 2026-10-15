@@ -7,6 +7,7 @@ import {
   SPECIAL_DEFINITIONS,
   HUNT_EQUIPMENT_SETS,
   CALLING_ABILITY_OPTIONS,
+  CALLING_ABILITY_AUGMENTS,
   huntSetForLoadout,
   type ArmourId,
   type MainHandId,
@@ -15,6 +16,7 @@ import {
   type SpecialId,
   type BuildPathId,
   type CallingAbilityId,
+  type CallingAugmentId,
 } from "@blockcraft/protocol";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import type { InteractionMode } from "./interaction-mode.js";
@@ -38,6 +40,7 @@ const specialAiming = signal(false);
 const calling = signal<BuildPathId | null>(null);
 const callingAbility = signal<CallingAbilityId | null>(null);
 const callingRank = signal(0);
+const callingAugment = signal<CallingAugmentId | null>(null);
 const callingPending = signal(false);
 const callingState = signal<CallingState>(null);
 const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE", ready: false });
@@ -143,6 +146,16 @@ function LoadoutDrawer() {
             h("small", null, locked ? `LOCKED · RANK ${option.unlockRank}` : option.description));
         }),
       ),
+      callingAbility.value ? h("div", { id: "calling-augment-picker", role: "group", "aria-label": "Calling ability upgrade" },
+        h("p", null, h("span", null, "BRANCH UPGRADE"), h("small", null, "Change freely in Town")),
+        CALLING_ABILITY_AUGMENTS.filter(option => option.abilityId === callingAbility.value).map(option => {
+          const locked = callingRank.value < option.unlockRank;
+          return h("button", { type: "button", "data-calling-augment": option.id,
+              "aria-pressed": String(callingAugment.value === option.id), disabled: locked,
+              title: locked ? `Unlocks at Path Rank ${option.unlockRank}` : option.description },
+            h("strong", null, option.name), h("small", null, locked ? `LOCKED · RANK ${option.unlockRank}` : option.description));
+        }),
+      ) : null,
     ) : null,
   );
 }
@@ -201,8 +214,8 @@ export const combatHud = {
   },
   setSeismicMastery(value: SeismicMasteryId): void { setIfChanged(seismicMastery, value); },
   setSpecial(value: SpecialId): void { setIfChanged(special, value); },
-  setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number): void {
-    batch(() => { setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); });
+  setCalling(value: BuildPathId | null, abilityId: CallingAbilityId | null, rank: number, augmentId: CallingAugmentId | null = null): void {
+    batch(() => { setIfChanged(calling, value); setIfChanged(callingAbility, abilityId); setIfChanged(callingRank, rank); setIfChanged(callingAugment, augmentId); });
   },
   setCallingPending(value: boolean): void { setIfChanged(callingPending, value); },
   setCallingState(value: CallingState): void {

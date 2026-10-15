@@ -1,8 +1,9 @@
-import { ARMOUR_DEFINITIONS, BUILD_PATH_RANKS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_OPTIONS, MAIN_HAND_DEFINITIONS, type ArmourId, type BuildPathAffinity, type BuildPathId, type BuildPathSpecializationId, type CallingAbilityId, type MainHandId, type TraitId } from "@blockcraft/protocol";
+import { ARMOUR_DEFINITIONS, BUILD_PATH_RANKS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITY_AUGMENTS, CALLING_ABILITY_OPTIONS, MAIN_HAND_DEFINITIONS, type ArmourId, type BuildPathAffinity, type BuildPathId, type BuildPathSpecializationId, type CallingAbilityId, type CallingAugmentId, type MainHandId, type TraitId } from "@blockcraft/protocol";
 
 export type BuildPathState = { selectedPathId: BuildPathId | null; xp: Partial<Record<BuildPathId, number>>;
   specializations: Partial<Record<BuildPathId, BuildPathSpecializationId>>;
   callingAbilities: Partial<Record<BuildPathId, CallingAbilityId>>;
+  callingAugments: Partial<Record<CallingAbilityId, CallingAugmentId>>;
   trials: Partial<Record<BuildPathSpecializationId, number>>; mastered: BuildPathSpecializationId[] };
 export type BuildAffinitySource = { mainHandId: string; armourId: string; equippedTrait: string; equippedSpecial: string;
   powerPoints: number; vitalityPoints: number; agilityPoints: number };
@@ -20,9 +21,9 @@ const specializationDefinition = (specializationId: BuildPathSpecializationId): 
 export function parseBuildPathState(raw: unknown): BuildPathState {
   let value = raw;
   if (typeof value === "string") try { value = JSON.parse(value); } catch { value = null; }
-  if (!value || typeof value !== "object") return { selectedPathId: null, xp: {}, specializations: {}, callingAbilities: {}, trials: {}, mastered: [] };
+  if (!value || typeof value !== "object") return { selectedPathId: null, xp: {}, specializations: {}, callingAbilities: {}, callingAugments: {}, trials: {}, mastered: [] };
   if ("buildPath" in value && (value as { buildPath?: unknown }).buildPath) value = (value as { buildPath: unknown }).buildPath;
-  const record = value as { selectedPathId?: unknown; xp?: unknown; specializations?: unknown; callingAbilities?: unknown; trials?: unknown; mastered?: unknown };
+  const record = value as { selectedPathId?: unknown; xp?: unknown; specializations?: unknown; callingAbilities?: unknown; callingAugments?: unknown; trials?: unknown; mastered?: unknown };
   const xp: Partial<Record<BuildPathId, number>> = {};
   if (record.xp && typeof record.xp === "object") for (const pathId of PATH_IDS) {
     const amount = (record.xp as Record<string, unknown>)[pathId];
@@ -40,13 +41,19 @@ export function parseBuildPathState(raw: unknown): BuildPathState {
     if (typeof choice === "string" && CALLING_ABILITY_OPTIONS.some(option => option.id === choice && option.pathId === pathId))
       callingAbilities[pathId] = choice as CallingAbilityId;
   }
+  const callingAugments: Partial<Record<CallingAbilityId, CallingAugmentId>> = {};
+  if (record.callingAugments && typeof record.callingAugments === "object") for (const ability of CALLING_ABILITY_OPTIONS) {
+    const choice = (record.callingAugments as Record<string, unknown>)[ability.id];
+    if (typeof choice === "string" && CALLING_ABILITY_AUGMENTS.some(option => option.id === choice && option.abilityId === ability.id))
+      callingAugments[ability.id] = choice as CallingAugmentId;
+  }
   const trials: Partial<Record<BuildPathSpecializationId, number>> = {};
   if (record.trials && typeof record.trials === "object") for (const specializationId of SPECIALIZATION_IDS) {
     const progress = (record.trials as Record<string, unknown>)[specializationId];
     if (typeof progress === "number" && Number.isFinite(progress) && progress > 0) trials[specializationId] = Math.floor(progress);
   }
   const mastered = Array.isArray(record.mastered) ? [...new Set(record.mastered.filter(safeSpecialization))] : [];
-  return { selectedPathId: safePath(record.selectedPathId) ? record.selectedPathId : null, xp, specializations, callingAbilities, trials, mastered };
+  return { selectedPathId: safePath(record.selectedPathId) ? record.selectedPathId : null, xp, specializations, callingAbilities, callingAugments, trials, mastered };
 }
 
 export function serializeBuildPathState(state: BuildPathState): string { return JSON.stringify(parseBuildPathState(state)); }
@@ -107,6 +114,18 @@ export function chooseCallingAbility(state: BuildPathState, pathId: BuildPathId,
   if (state.selectedPathId !== pathId || !definition || definition.pathId !== pathId
     || effectiveBuildPathRank(state, pathId) < definition.unlockRank) return state;
   return { ...state, callingAbilities: { ...state.callingAbilities, [pathId]: abilityId } };
+}
+
+export function selectedCallingAugment(state: BuildPathState, abilityId: CallingAbilityId): CallingAugmentId | null {
+  return state.callingAugments[abilityId] ?? null;
+}
+
+export function chooseCallingAugment(state: BuildPathState, abilityId: CallingAbilityId, augmentId: CallingAugmentId): BuildPathState {
+  const ability = CALLING_ABILITY_OPTIONS.find(option => option.id === abilityId);
+  const augment = CALLING_ABILITY_AUGMENTS.find(option => option.id === augmentId && option.abilityId === abilityId);
+  if (!ability || state.selectedPathId !== ability.pathId || selectedCallingAbility(state, ability.pathId) !== abilityId
+    || !augment || effectiveBuildPathRank(state, ability.pathId) < augment.unlockRank) return state;
+  return { ...state, callingAugments: { ...state.callingAugments, [abilityId]: augmentId } };
 }
 
 export function chooseBuildSpecialization(state: BuildPathState, pathId: BuildPathId, specializationId: BuildPathSpecializationId): BuildPathState {

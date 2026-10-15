@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, chooseCallingAbility, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, parseBuildPathState, selectedCallingAbility } from "./build-paths.js";
+import { buildPathAffinities, buildPathRank, chooseBuildPath, chooseBuildSpecialization, chooseCallingAbility, chooseCallingAugment, effectiveBuildPathRank, grantBuildPathXp, grantMasterTrialProgress, parseBuildPathState, selectedCallingAbility, selectedCallingAugment } from "./build-paths.js";
 
 describe("hidden build paths", () => {
   it("reveals affinities from durable build choices", () => {
@@ -14,7 +14,14 @@ describe("hidden build paths", () => {
     expect(result.rankUp).toBe(true); expect(buildPathRank(result.state.xp.tank ?? 0)).toBe(1);
   });
   it("sanitizes malformed saved state", () => {
-    expect(parseBuildPathState({ selectedPathId: "cheat", xp: { mage: 14.9, tank: -2 } })).toEqual({ selectedPathId: null, xp: { mage: 14 }, specializations: {}, callingAbilities: {}, trials: {}, mastered: [] });
+    expect(parseBuildPathState({ selectedPathId: "cheat", xp: { mage: 14.9, tank: -2 } })).toEqual({ selectedPathId: null, xp: { mage: 14 }, specializations: {}, callingAbilities: {}, callingAugments: {}, trials: {}, mastered: [] });
+  });
+  it("persists one rank-gated branch upgrade for an equipped ability", () => {
+    const adept = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "tank"), 30).state;
+    const upgraded = chooseCallingAugment(adept, "tank_bulwark", "bulwark_iron_skin");
+    expect(selectedCallingAugment(upgraded, "tank_bulwark")).toBe("bulwark_iron_skin");
+    expect(parseBuildPathState(JSON.stringify(upgraded)).callingAugments.tank_bulwark).toBe("bulwark_iron_skin");
+    expect(chooseCallingAugment(parseBuildPathState("{}"), "tank_bulwark", "bulwark_iron_skin")).toEqual(parseBuildPathState("{}"));
   });
   it("persists one rank-gated Calling ability per path", () => {
     let state = grantBuildPathXp(chooseBuildPath(parseBuildPathState("{}"), "tank"), 30).state;

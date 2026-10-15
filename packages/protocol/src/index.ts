@@ -222,10 +222,46 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Greatly empower your next two ranged hits." },
 ] as const;
 export type CallingAbilityId = typeof CALLING_ABILITY_OPTIONS[number]["id"];
+export const CALLING_ABILITY_AUGMENTS = [
+  { id: "bulwark_guardian_wall", abilityId: "tank_bulwark", name: "Guardian Wall", unlockRank: 2, description: "+2s duration." },
+  { id: "bulwark_iron_skin", abilityId: "tank_bulwark", name: "Iron Skin", unlockRank: 2, description: "Reduce each hit by 2 instead of 1." },
+  { id: "challenge_mass_provocation", abilityId: "tank_challenge", name: "Mass Provocation", unlockRank: 3, description: "Greater radius and +1.5s brace." },
+  { id: "challenge_rallying_cry", abilityId: "tank_challenge", name: "Rallying Cry", unlockRank: 3, description: "Recover 30 additional stamina." },
+  { id: "earthbreaker_faultline", abilityId: "tank_earthbreaker", name: "Faultline", unlockRank: 4, description: "Greatly increases impact radius." },
+  { id: "earthbreaker_crushing_force", abilityId: "tank_earthbreaker", name: "Crushing Force", unlockRank: 4, description: "+2 damage to every target." },
+  { id: "surge_deep_reserves", abilityId: "mage_arcane_surge", name: "Deep Reserves", unlockRank: 2, description: "Restore 25 additional stamina." },
+  { id: "surge_temporal_flux", abilityId: "mage_arcane_surge", name: "Temporal Flux", unlockRank: 2, description: "Also advances Special recovery by 4s." },
+  { id: "shield_prismatic_layers", abilityId: "mage_mana_shield", name: "Prismatic Layers", unlockRank: 3, description: "+2 barrier charges." },
+  { id: "shield_reinforced_rune", abilityId: "mage_mana_shield", name: "Reinforced Rune", unlockRank: 3, description: "Each charge prevents 2 damage." },
+  { id: "overload_volatile_core", abilityId: "mage_overload", name: "Volatile Core", unlockRank: 4, description: "+2 additional Power damage." },
+  { id: "overload_residual_charge", abilityId: "mage_overload", name: "Residual Charge", unlockRank: 4, description: "The empowerment lasts for two Power hits." },
+  { id: "vanish_deep_cloak", abilityId: "assassin_vanish", name: "Deep Cloak", unlockRank: 2, description: "+2s concealment." },
+  { id: "vanish_killing_intent", abilityId: "assassin_vanish", name: "Killing Intent", unlockRank: 2, description: "+2 empowered-strike damage." },
+  { id: "mark_lingering_sentence", abilityId: "assassin_death_mark", name: "Lingering Sentence", unlockRank: 3, description: "+5s mark duration." },
+  { id: "mark_open_wound", abilityId: "assassin_death_mark", name: "Open Wound", unlockRank: 3, description: "Marking immediately deals 2 damage." },
+  { id: "dance_long_step", abilityId: "assassin_blade_dance", name: "Long Step", unlockRank: 4, description: "+0.6s untargetable duration." },
+  { id: "dance_blade_storm", abilityId: "assassin_blade_dance", name: "Blade Storm", unlockRank: 4, description: "Deals 2 damage to nearby enemies." },
+  { id: "smoke_dense_cloud", abilityId: "thief_smoke_bomb", name: "Dense Cloud", unlockRank: 2, description: "+2s concealment." },
+  { id: "smoke_second_wind", abilityId: "thief_smoke_bomb", name: "Second Wind", unlockRank: 2, description: "Restore 20 additional stamina." },
+  { id: "decoy_wide_stage", abilityId: "thief_decoy", name: "Wide Stage", unlockRank: 3, description: "Greater diversion radius." },
+  { id: "decoy_flash_charge", abilityId: "thief_decoy", name: "Flash Charge", unlockRank: 3, description: "+0.8s stagger." },
+  { id: "escape_extended_window", abilityId: "thief_escape_artist", name: "Extended Window", unlockRank: 4, description: "+0.5s evasion." },
+  { id: "escape_clean_getaway", abilityId: "thief_escape_artist", name: "Clean Getaway", unlockRank: 4, description: "Recover 1 health." },
+  { id: "volley_deep_quiver", abilityId: "ranger_volley_focus", name: "Deep Quiver", unlockRank: 2, description: "+2 empowered shots." },
+  { id: "volley_heavy_arrows", abilityId: "ranger_volley_focus", name: "Heavy Arrows", unlockRank: 2, description: "+1 additional damage per shot." },
+  { id: "disengage_long_leap", abilityId: "ranger_disengage", name: "Long Leap", unlockRank: 3, description: "Leap 2m farther." },
+  { id: "disengage_evasive_roll", abilityId: "ranger_disengage", name: "Evasive Roll", unlockRank: 3, description: "+0.45s invulnerability." },
+  { id: "deadeye_eagle_eye", abilityId: "ranger_deadeye", name: "Eagle Eye", unlockRank: 4, description: "+1 empowered shot." },
+  { id: "deadeye_execution_rounds", abilityId: "ranger_deadeye", name: "Execution Rounds", unlockRank: 4, description: "+2 additional damage per shot." },
+] as const satisfies readonly { id: string; abilityId: CallingAbilityId; name: string; unlockRank: number; description: string }[];
+export type CallingAugmentId = typeof CALLING_ABILITY_AUGMENTS[number]["id"];
 export const CallingAbilityEquipRequestSchema = z.object({
   abilityId: z.enum(["tank_bulwark", "tank_challenge", "tank_earthbreaker", "mage_arcane_surge", "mage_mana_shield", "mage_overload",
     "assassin_vanish", "assassin_death_mark", "assassin_blade_dance", "thief_smoke_bomb", "thief_decoy", "thief_escape_artist",
     "ranger_volley_focus", "ranger_disengage", "ranger_deadeye"]),
+}).strict();
+export const CallingAugmentEquipRequestSchema = z.object({
+  augmentId: z.enum(CALLING_ABILITY_AUGMENTS.map(option => option.id) as [CallingAugmentId, ...CallingAugmentId[]]),
 }).strict();
 export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80), yaw: z.number().finite().optional() }).strict();
 export type CallingAbilityUpdate = {
@@ -247,6 +283,7 @@ export type CallingAbilityEffect = {
   yaw: number;
   durationMs?: number;
   targetId?: string;
+  augmentId?: CallingAugmentId;
 };
 export type CallingStateUpdate = {
   playerId: string;
@@ -292,6 +329,7 @@ export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;
+  selectedCallingAugmentId: CallingAugmentId | null;
   selectedSpecializationId: BuildPathSpecializationId | null; candidates: BuildPathAffinity[]; canChoose: boolean;
   canSpecialize: boolean; masterTrial: { name: string; description: string; progress: number; target: number; complete: boolean; capstone: string } | null;
   inTown: boolean; message: string };

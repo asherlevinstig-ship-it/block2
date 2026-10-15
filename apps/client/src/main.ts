@@ -185,6 +185,7 @@ import {
   BUILD_PATH_RANKS,
   BUILD_PATH_SPECIALIZATIONS,
   CALLING_ABILITY_OPTIONS,
+  CALLING_ABILITY_AUGMENTS,
   blacksmithRequiredLevel,
   enemyThreat,
   experienceToNextLevel,
@@ -199,6 +200,7 @@ import {
   type CallingAbilityEffect,
   type CallingStateUpdate,
   type CallingAbilityId,
+  type CallingAugmentId,
   type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
@@ -751,6 +753,7 @@ const buildPathProc = document.querySelector<HTMLElement>("#build-path-proc")!;
 let buildPathProcTimer = 0;
 let localBuildPathId: RoleFieldPath | null = null;
 let localCallingAbilityId: CallingAbilityId | null = null;
+let localCallingAugmentId: CallingAugmentId | null = null;
 let localCallingState: CallingStateUpdate | null = null;
 let localBuildPathRank = 0;
 const powerSlot = document.querySelector<HTMLButtonElement>("#power-slot")!;
@@ -3202,8 +3205,9 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
 function renderBuildPath(update: BuildPathUpdate): void {
   localBuildPathId = update.selectedPathId;
   localCallingAbilityId = update.selectedCallingAbilityId;
+  localCallingAugmentId = update.selectedCallingAugmentId;
   localBuildPathRank = update.rank;
-  combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank);
+  combatHud.setCalling(update.selectedPathId, update.selectedCallingAbilityId, update.rank, update.selectedCallingAugmentId);
   updateControlsHelp();
   const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
   const rank = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank) ?? BUILD_PATH_RANKS[0];
@@ -3643,6 +3647,12 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     if (abilityId === "ranger_deadeye") {
       addBox(root, "deadeye-horizontal", material, [1.5, .055, .055], [0, .9, 1.7]);
       addBox(root, "deadeye-vertical", material, [.055, 1.5, .055], [0, .9, 1.7]);
+    }
+  }
+  if (effect.augmentId) {
+    for (const side of [-1, 1]) {
+      const sigil = addBox(root, "calling-augment-sigil", material, [.09, .62, .09], [side * 1.05, 1.05, 0]);
+      sigil.setLocalEulerAngles(0, side * 24, side * 42);
     }
   }
   const followsPlayer = style === "shield" || abilityId === "mage_overload" || abilityId === "ranger_volley_focus" || abilityId === "ranger_deadeye";
@@ -8215,6 +8225,15 @@ for (const button of traitPickerButtons) {
   });
 }
 combatHudRoot.addEventListener("click", event => {
+  const augmentButton = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-calling-augment]");
+  const augmentId = augmentButton?.dataset.callingAugment as CallingAugmentId | undefined;
+  if (augmentButton) {
+    if (!augmentButton.disabled && augmentId && room && worldReady && augmentId !== localCallingAugmentId) {
+      room.send("calling:augment:equip", { augmentId });
+      status.textContent = `Equipping ${CALLING_ABILITY_AUGMENTS.find(option => option.id === augmentId)?.name ?? "Calling upgrade"}...`;
+    }
+    return;
+  }
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-calling-ability]");
   const abilityId = button?.dataset.callingAbility as CallingAbilityId | undefined;
   if (!button || button.disabled || !abilityId || !room || !worldReady || abilityId === localCallingAbilityId) return;
@@ -9707,7 +9726,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     localCallingCooldownUntil = update.cooldownUntil;
     localBuildPathId = update.pathId;
     localCallingAbilityId = update.abilityId;
-    combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank);
+    combatHud.setCalling(update.pathId, update.abilityId, localBuildPathRank, localCallingAugmentId);
     status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
   });
   room.onMessage("calling:ability:effect", (effect: CallingAbilityEffect) => createCallingImpact(effect));

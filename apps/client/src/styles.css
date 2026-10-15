@@ -583,6 +583,30 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 #calling-ability-picker button small { grid-column: 1 / -1; color: #82968d; font-size: .49rem; }
 #calling-ability-picker button[aria-pressed="true"] { border-color: #65dab8aa; background: rgb(18 83 66 / 88%); color: #dcfff4; }
 #calling-ability-picker button:disabled { opacity: .48; }
+#calling-augment-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(255 211 91 / 18%);
+}
+#calling-augment-picker > p { grid-column: 1 / -1; margin: 0; }
+#calling-augment-picker button {
+  display: grid;
+  gap: 3px;
+  min-height: 52px;
+  padding: 7px;
+  border: 1px solid rgb(255 211 91 / 24%);
+  border-radius: 7px;
+  background: rgb(42 35 15 / 72%);
+  color: #d9cfa9;
+  text-align: left;
+}
+#calling-augment-picker button strong { font-size: .56rem; }
+#calling-augment-picker button small { color: #a99d72; font-size: .48rem; line-height: 1.25; }
+#calling-augment-picker button[aria-pressed="true"] { border-color: #ffd969aa; background: rgb(93 68 16 / 78%); color: #fff1b9; }
+#calling-augment-picker button:disabled { opacity: .45; }
 
 #combat-reticle {
   position: fixed;
