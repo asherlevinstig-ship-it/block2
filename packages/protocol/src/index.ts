@@ -1007,6 +1007,41 @@ export function equipmentForItem(itemId: string): MainHandId | null {
     .find(id => "requiredItemId" in MAIN_HAND_DEFINITIONS[id] && (MAIN_HAND_DEFINITIONS[id] as MainHandDefinition).requiredItemId === itemId) ?? null;
 }
 
+export const BACKPACK_BASE_SLOTS = 12;
+export const BACKPACK_STACK_SIZE = 25;
+
+/** Number of real backpack slots occupied by one item type. Potions use their own pouch. */
+export function backpackSlotsForItem(itemId: ItemId, quantity: number, mainHandId: MainHandId, armourId: ArmourId): number {
+  if (itemId === "healing_potion" || quantity <= 0) return 0;
+  const weapon = equipmentForItem(itemId);
+  const armour = armourForItem(itemId);
+  const equippedCopies = weapon === mainHandId || armour === armourId ? 1 : 0;
+  const carried = Math.max(0, Math.floor(quantity) - equippedCopies);
+  return weapon || armour ? carried : Math.ceil(carried / BACKPACK_STACK_SIZE);
+}
+
+export function backpackSlotsUsed(quantityForItem: (itemId: ItemId) => number,
+  mainHandId: MainHandId, armourId: ArmourId): number {
+  return (Object.keys(ITEM_DEFINITIONS) as ItemId[]).reduce((slots, itemId) =>
+    slots + backpackSlotsForItem(itemId, quantityForItem(itemId), mainHandId, armourId), 0);
+}
+
+/** Largest part of a pickup that fits after applying stack and equipped-item rules. */
+export function backpackAddableQuantity(quantityForItem: (itemId: ItemId) => number, itemId: ItemId, desired: number,
+  mainHandId: MainHandId, armourId: ArmourId, capacity = BACKPACK_BASE_SLOTS): number {
+  const wanted = Math.max(0, Math.floor(desired));
+  if (wanted === 0 || itemId === "healing_potion") return wanted;
+  const before = quantityForItem(itemId);
+  let low = 0, high = wanted;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    const used = backpackSlotsUsed(id => id === itemId ? before + middle : quantityForItem(id), mainHandId, armourId);
+    if (used <= capacity) low = middle;
+    else high = middle - 1;
+  }
+  return low;
+}
+
 export interface WeaponAttackStep {
   step: 1 | 2 | 3;
   durationMs: number;

@@ -124,6 +124,9 @@ import {
   ITEM_DEFINITIONS,
   ITEM_RARITIES,
   itemRarity,
+  BACKPACK_BASE_SLOTS,
+  backpackAddableQuantity,
+  backpackSlotsUsed,
   lootCarryCapacity,
   equipmentPerkStats,
   HUNT_EQUIPMENT_SETS,
@@ -834,6 +837,9 @@ const depthsWingButtons = [...document.querySelectorAll<HTMLButtonElement>("[dat
 const depthsRouteNodes = [...document.querySelectorAll<HTMLElement>("[data-depths-node]")];
 const inventoryPanel = document.querySelector<HTMLElement>("#inventory-panel")!;
 const inventoryTotal = document.querySelector<HTMLElement>("#inventory-total")!;
+const inventoryCapacity = document.querySelector<HTMLElement>("#inventory-capacity")!;
+const inventoryCapacityLabel = document.querySelector<HTMLElement>("#inventory-capacity-label")!;
+const inventoryCapacitySlots = document.querySelector<HTMLElement>("#inventory-capacity-slots")!;
 const inventoryToggle = document.querySelector<HTMLButtonElement>("#inventory-toggle")!;
 const inventoryClose = document.querySelector<HTMLButtonElement>("#inventory-close")!;
 const inventoryBadge = document.querySelector<HTMLElement>("#inventory-badge")!;
@@ -2403,16 +2409,16 @@ function lootHasDetails(dropId: string, drop: NetworkLootDrop): boolean {
 function lootWouldOverflow(dropId: string, drop: NetworkLootDrop): boolean {
   if (dropId.startsWith("forest-cache:") || !isItemId(drop.itemId)) return false;
   if (isEnemyLootBag(drop)) return lootItems(drop).every(entry =>
-    (inventoryCounts.get(entry.itemId) ?? 0) >= lootCarryCapacity(entry.itemId, blacksmithIronCapacity));
-  return (inventoryCounts.get(drop.itemId) ?? 0) + drop.quantity > lootCarryCapacity(drop.itemId, blacksmithIronCapacity);
+    localBackpackAddable(entry.itemId, entry.quantity) <= 0);
+  return localBackpackAddable(drop.itemId, drop.quantity) < drop.quantity;
 }
 function interactWithLoot(dropId: string): void {
   const drop = lootVisuals.get(dropId)?.state;
   if (!drop || !room || !worldReady) return;
   if (lootWouldOverflow(dropId, drop)) {
-    const message = `Your ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"} capacity is full.`;
+    const message = `PACK FULL · Make room before collecting ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}.`;
     status.textContent = message;
-    showCombatFeedback("INVENTORY FULL", "hurt");
+    showCombatFeedback("PACK FULL", "hurt");
     return;
   }
   if ((pendingFloorLoot.get(dropId) ?? 0) > performance.now()) return;
@@ -2436,7 +2442,7 @@ function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
     if (detailKey === lootWorldDetailKey) return;
     lootWorldDetailKey = detailKey;
     lootWorldStats.replaceChildren();
-    const blocked = items.filter(entry => (inventoryCounts.get(entry.itemId) ?? 0) >= lootCarryCapacity(entry.itemId, blacksmithIronCapacity)).length;
+    const blocked = items.filter(entry => localBackpackAddable(entry.itemId, entry.quantity) <= 0).length;
     lootWorldVerdict.textContent = blocked === items.length ? "FULL" : blocked > 0 ? "PARTIAL" : "READY";
     const attunement = (drop.affixTier ?? 0) > 0 && items.some(entry => equipmentForItem(entry.itemId) || armourForItem(entry.itemId))
       ? ` · ATTUNEMENT T${drop.affixTier}` : "";
@@ -3242,6 +3248,7 @@ function updateMainHandLoadout(mainHandId: MainHandId): void {
   localComboExpiresAt = 0;
   targetStateKey = "";
   refreshPowerCompatibility();
+  refreshBackpackCapacity();
 }
 
 function requestPowerEquip(powerId: PowerId): void {
@@ -5039,18 +5046,32 @@ function refreshOwnedInventory(): void {
     if (!grid) continue;
     grid.querySelectorAll(".inventory-vacant-slot").forEach(slot => slot.remove());
     const ownedCards = [...grid.querySelectorAll<HTMLElement>("article.equipment[data-item]")].filter(card => !card.hidden);
-    const displaySlots = ownedCards.length === 0 ? 0 : Math.max(6, Math.ceil(ownedCards.length / 3) * 3);
-    for (let index = ownedCards.length; index < displaySlots; index += 1) {
-      const slot = document.createElement("article");
-      slot.className = "inventory-vacant-slot";
-      slot.setAttribute("aria-hidden", "true");
-      slot.innerHTML = "<i></i><span>EMPTY SLOT</span>";
-      grid.append(slot);
-    }
     const subtitle = section.querySelector<HTMLElement>("h3 small");
     if (subtitle) subtitle.textContent = `${ownedCards.length} owned · click an item to compare`;
   }
+  refreshBackpackCapacity();
   refreshEquipmentProgression();
+}
+
+function localBackpackAddable(itemId: ItemId, desired: number, mainHandId = localMainHandId, armourId = localArmourId): number {
+  const owned = inventoryCounts.get(itemId) ?? 0;
+  const itemCapacity = lootCarryCapacity(itemId, blacksmithIronCapacity);
+  return Math.min(Math.max(0, itemCapacity - owned), backpackAddableQuantity(
+    id => inventoryCounts.get(id) ?? 0, itemId, desired, mainHandId, armourId));
+}
+
+function refreshBackpackCapacity(): void {
+  const used = backpackSlotsUsed(id => inventoryCounts.get(id) ?? 0, localMainHandId, localArmourId);
+  inventoryTotal.textContent = `${used} / ${BACKPACK_BASE_SLOTS} SLOTS`;
+  inventoryCapacityLabel.textContent = `${used} / ${BACKPACK_BASE_SLOTS} SLOTS${used >= BACKPACK_BASE_SLOTS ? " · FULL" : ""}`;
+  inventoryCapacity.dataset.full = String(used >= BACKPACK_BASE_SLOTS);
+  inventoryCapacitySlots.replaceChildren(...Array.from({ length: BACKPACK_BASE_SLOTS }, (_, index) => {
+    const slot = document.createElement("i");
+    slot.dataset.filled = String(index < used);
+    return slot;
+  }));
+  inventoryBadge.textContent = String(Math.min(used, 99));
+  inventoryToggle.setAttribute("aria-label", `Open inventory, ${used} of ${BACKPACK_BASE_SLOTS} backpack slots used`);
 }
 
 function refreshEquipmentProgression(): void {
@@ -5090,10 +5111,6 @@ function updateInventoryItem(itemId: ItemId, total: number): void {
   if (count) count.textContent = String(total);
   const equipButton = inventoryPanel.querySelector<HTMLButtonElement>(`[data-item="${itemId}"] [data-equip-main-hand]`);
   if (equipButton) equipButton.disabled = total <= 0;
-  const grandTotal = [...inventoryCounts.values()].reduce((sum, quantity) => sum + quantity, 0);
-  inventoryTotal.textContent = grandTotal === 0 ? "EMPTY" : `${grandTotal} ITEM${grandTotal === 1 ? "" : "S"}`;
-  inventoryBadge.textContent = grandTotal > 999 ? "999+" : String(grandTotal);
-  inventoryToggle.setAttribute("aria-label", `Open inventory, ${grandTotal} item${grandTotal === 1 ? "" : "s"}`);
   refreshInventoryEquipped();
   const card = inventoryPanel.querySelector<HTMLElement>(`[data-item="${itemId}"]`);
   if (card) {
@@ -5380,7 +5397,7 @@ function bindPlayers(joinedRoom: Room): void {
     playerCallbacks.listen("armourId", () => {
       if (isLocal) {
         localArmourId = Object.hasOwn(ARMOUR_DEFINITIONS, player.armourId) ? player.armourId as ArmourId : "none";
-        setRigArmour(localPlayerRig, localArmourId); refreshInventoryEquipped();
+        setRigArmour(localPlayerRig, localArmourId); refreshInventoryEquipped(); refreshBackpackCapacity();
       } else if (remote) setRigArmour(remote.rig, player.armourId);
     }, true);
     for (const field of ["appearanceSkin", "appearanceHair", "appearanceCoat", "appearanceHairStyle", "appearanceCoatStyle"] as const) {

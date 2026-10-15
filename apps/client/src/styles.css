@@ -1333,6 +1333,16 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-summary span, .inventory-summary strong { display: block; }
 .inventory-summary span { color: #829288; font-size: .61rem; font-weight: 900; letter-spacing: .11em; }
 .inventory-summary strong { margin-top: 3px; color: #e6d19b; font-size: .9rem; }
+.inventory-capacity { display: grid; grid-template-columns: minmax(190px, .8fr) minmax(260px, 1.2fr); align-items: center; gap: 14px; margin: 0 0 10px; padding: 10px 12px; border: 1px solid #8c754b66; border-radius: 10px; background: linear-gradient(100deg, #171b12, #0b1711); }
+.inventory-capacity > div:first-child { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: baseline; }
+.inventory-capacity span { color: #d6b864; font-size: .58rem; font-weight: 1000; letter-spacing: .12em; }
+.inventory-capacity strong { color: #f2e1ad; font-size: .77rem; text-align: right; }
+.inventory-capacity small { grid-column: 1 / -1; color: #83968a; font-size: .53rem; }
+.inventory-capacity-slots { display: grid; grid-template-columns: repeat(12, minmax(12px, 1fr)); gap: 4px; }
+.inventory-capacity-slots i { aspect-ratio: 1; border: 1px solid #71817355; border-radius: 4px; background: #07100c; box-shadow: inset 0 0 0 2px #ffffff05; }
+.inventory-capacity-slots i[data-filled="true"] { border-color: #c5a55899; background: linear-gradient(145deg, #7e6429, #3e321c); box-shadow: inset 0 0 0 2px #e7ca7240; }
+.inventory-capacity[data-full="true"] { border-color: #d0644d; box-shadow: inset 3px 0 #d0644d; }
+.inventory-capacity[data-full="true"] strong { color: #ff9c84; }
 .inventory-beginner-guide { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid #76a87655; border-radius: 8px; background: #13261a; color: #bdccbf; font-size: .65rem; }
 .inventory-beginner-guide b { display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; background: #d0ac58; color: #1a160b; font-size: .58rem; }
 .inventory-beginner-guide span { color: #7d9d83; }
@@ -1892,6 +1902,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   #inventory-panel { padding: 14px; }
   .inventory-header h2 { font-size: 1.55rem; }
   .inventory-summary { grid-template-columns: 1fr 1fr; }
+  .inventory-capacity { grid-template-columns: 1fr; gap: 8px; }
   .inventory-beginner-guide { flex-wrap: wrap; font-size: .56rem; }
   .inventory-tabs button { grid-template-columns: 24px 1fr; min-height: 46px; padding: 7px; }
   .inventory-tabs button > span { grid-row: auto; font-size: .9rem; }

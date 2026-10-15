@@ -66,6 +66,16 @@ describe("personal chest", () => {
     stack(p, "storage", "fang_dagger", 65534); stack(p, "inventory", "fang_dagger", 10); move(p, "fang_dagger");
     expect(p.storage.get("fang_dagger")?.quantity).toBe(65535); expect(p.inventory.get("fang_dagger")?.quantity).toBe(9);
   });
+  it("keeps withdrawals inside the shared twelve-slot backpack", () => {
+    const p = player();
+    const fullPack = ["timber", "moss_fibre", "crawler_fang", "stone_core", "acid_gland", "mossback_fang_relic",
+      "westroad_fang_relic", "northroad_fang_relic", "broodmother_heart", "silverfang_venom_sac", "ashglass_lens", "quarrymaster_sigil"];
+    for (const itemId of fullPack) stack(p, "inventory", itemId, 1);
+    stack(p, "storage", "fang_dagger", 1);
+    expect(move(p, "fang_dagger", "withdraw")).toContain("PACK FULL");
+    expect(p.inventory.get("fang_dagger")).toBeUndefined();
+    expect(p.storage.get("fang_dagger")?.quantity).toBe(1);
+  });
   it("keeps ownership separate and preserves storage across saves", () => {
     const a = player(), b = player(); stack(a, "inventory", "iron_ore", 8); move(a);
     transferStoredItem(b, { itemId: "iron_ore", direction: "withdraw", quantity: "all", playerId: "other" });

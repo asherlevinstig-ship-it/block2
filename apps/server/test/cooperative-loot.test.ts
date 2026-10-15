@@ -53,14 +53,18 @@ describe("cooperative personal loot", () => {
     const { room, internal, contribute, defeat } = fixture(); contribute("a", 8); defeat();
     const a = room.state.players.get("a")!; a.x = 110;
     internal.resolveLootPickups(10000); expect(room.state.players.get("b")!.inventory.size).toBe(0);
-    a.x = 101; const full = new InventoryItemState(); full.quantity = 65535; a.inventory.set("moss_fibre", full);
+    a.x = 101; const nearlyFull = new InventoryItemState(); nearlyFull.quantity = 24; a.inventory.set("moss_fibre", nearlyFull);
+    for (const itemId of ["timber", "crawler_fang", "stone_core", "acid_gland", "mossback_fang_relic",
+      "westroad_fang_relic", "northroad_fang_relic", "broodmother_heart", "silverfang_venom_sac", "gloomfang_venom_sac", "ashglass_lens", "quarrymaster_sigil"])
+      if (itemId !== "crawler_fang") { const filler = new InventoryItemState(); filler.quantity = 1; a.inventory.set(itemId, filler); }
     const bagId = [...room.state.lootDrops].find(([, drop]) => drop.ownerId === "a")![0];
     const send = vi.fn(); internal.handleLootCollect({ sessionId: "a", send }, { dropId: bagId, action: "keep" });
-    expect(a.inventory.get("crawler_fang")?.quantity).toBe(1);
+    expect(a.inventory.get("moss_fibre")?.quantity).toBe(25);
+    expect(a.inventory.get("crawler_fang")).toBeUndefined();
     expect(room.state.lootDrops.has(bagId)).toBe(true);
-    expect(decodeLootBagItems(room.state.lootDrops.get(bagId)!.contentsJson)).toEqual([{ itemId: "moss_fibre", quantity: 1 }]);
+    expect(decodeLootBagItems(room.state.lootDrops.get(bagId)!.contentsJson)).toEqual([{ itemId: "crawler_fang", quantity: 1 }]);
     expect(send).toHaveBeenLastCalledWith("loot:result", expect.objectContaining({ ok: true,
-      remainingItems: [{ itemId: "moss_fibre", quantity: 1 }] }));
+      remainingItems: [{ itemId: "crawler_fang", quantity: 1 }] }));
     internal.resolveLootPickups(129999); expect(room.state.lootDrops.size).toBe(1);
     internal.resolveLootPickups(130000); expect(room.state.lootDrops.size).toBe(0);
   });

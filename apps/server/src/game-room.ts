@@ -61,7 +61,8 @@ import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RE
   dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
-import { HEALING_POTION, lootCarryCapacity, type PotionUpdate } from "@blockcraft/protocol";
+import { BACKPACK_BASE_SLOTS, HEALING_POTION, backpackAddableQuantity, lootCarryCapacity,
+  type ArmourId, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
 import { RENEWABLE_MINERAL_DEPOSITS, authoredMineralAt, SURFACE_HEIGHT, CAVE_SHALLOW_HOME, CAVE_DEEP_HOME, CAVE_HIDDEN_HOME, SILVER_DEPTHS_SPITTER_HOMES, CRYSTAL_MATRIARCH_HOME, SILVER_DEPTHS_COVER, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, SILVER_DEPTHS_GALLERY_GATE, SILVER_DEPTHS_BOSS_GATE, SILVER_DEPTHS_IRON_GATE, SILVER_DEPTHS_SILVER_GATE, SILVER_DEPTHS_WING_CACHES, silverDepthsPingLocation, isMistfenToxicPool, isInMistfenMarsh } from "@blockcraft/voxel-world";
@@ -210,6 +211,7 @@ import { attunementDustCost, attunementDustYield, keepBetterAffix, parseEquipmen
   rollEquipmentAffix, rollEquipmentAffixOptions, rollTargetedEquipmentAffix } from "./equipment-affixes.js";
 import { parseSignaturePity, resolveSignatureDrop, serializeSignaturePity, signatureLootHint, type SignatureItemId } from "./signature-loot.js";
 import { canUseStorage, transferStoredItem } from "./personal-storage.js";
+import { playerBackpackAddable, playerBackpackHasRoom, playerBackpackSlots } from "./backpack.js";
 import { leaveRecoveryBag, collectRecoveryBag } from "./death-recovery.js";
 import { spitterPattern, spitterShotEndpoints } from "@blockcraft/protocol";
 import { MATRIARCH_PHASE, matriarchEnraged, matriarchPattern, crystalMatriarchPattern, matriarchSecondVolleyYaw } from "@blockcraft/protocol";
@@ -1364,6 +1366,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (id !== "none" && (player.inventory.get(id)?.quantity ?? 0) <= 0) {
       client.send("chat:notice", { message: "You need that armour in your pack before equipping it." }); return;
     }
+    if (!playerBackpackHasRoom(player, player.mainHandId as MainHandId, id)) {
+      client.send("chat:notice", { message: "PACK FULL · Store or dismantle an item before removing that armour." }); return;
+    }
     player.armourId = id;
     void this.persistPlayer(client.sessionId, player);
   }
@@ -1379,6 +1384,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (player.level < requiredLevel) return this.sendBlacksmithState(client, `${ITEM_DEFINITIONS[id].name} unlocks at character level ${requiredLevel}.`, "error");
     const result = weaponPurchase(player.coins, player.inventory.get(id)?.quantity ?? 0, id);
     if (!result.ok) return this.sendBlacksmithState(client, result.message, "error");
+    if (playerBackpackAddable(player, id, 1) < 1) return this.sendBlacksmithState(client, "PACK FULL · Store or dismantle an item before buying gear.", "error");
     let item = player.inventory.get(id);
     if (!item) { item = new InventoryItemState(); player.inventory.set(id, item); }
     player.coins = result.gold;
@@ -2881,6 +2887,16 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         { itemId: "healing_potion", quantity: 1 },
         ...(!veteranSupplies ? [{ itemId: featuredItemId, quantity: 1 }] : []),
       ];
+      const simulated = new Map<ItemId, number>();
+      for (const reward of bundle) {
+        const before = simulated.get(reward.itemId) ?? player.inventory.get(reward.itemId)?.quantity ?? 0;
+        const capacity = lootCarryCapacity(reward.itemId, ironCapacity(player.blacksmithUpgrades));
+        const quantity = Math.max(0, Math.min(reward.quantity, capacity - before,
+          backpackAddableQuantity(id => simulated.get(id) ?? player.inventory.get(id)?.quantity ?? 0,
+            reward.itemId, reward.quantity, player.mainHandId as MainHandId, player.armourId as ArmourId)));
+        if (quantity < reward.quantity) return reply(false, `PACK FULL · The cache needs more room (${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used).`);
+        simulated.set(reward.itemId, before + quantity);
+      }
       for (const reward of bundle) {
         let item = player.inventory.get(reward.itemId);
         const before = item?.quantity ?? 0;
@@ -2913,7 +2929,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         let item = player.inventory.get(entry.itemId);
         const before = item?.quantity ?? 0;
         const capacity = lootCarryCapacity(entry.itemId, ironCapacity(player.blacksmithUpgrades));
-        const quantity = Math.max(0, Math.min(entry.quantity, capacity - before));
+        const quantity = Math.max(0, Math.min(entry.quantity, capacity - before, playerBackpackAddable(player, entry.itemId, entry.quantity)));
         if (quantity > 0) {
           if (!item) { item = new InventoryItemState(); player.inventory.set(entry.itemId, item); }
           item.quantity = inventoryTotal(before, quantity);
@@ -2921,7 +2937,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         if (quantity < entry.quantity) remaining.push({ itemId: entry.itemId, quantity: entry.quantity - quantity });
       }
-      if (collected.length === 0) return reply(false, "Your inventory has no room for anything in this bag.", { remainingItems: remaining });
+      if (collected.length === 0) return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used. The loot stays here.`, { remainingItems: remaining });
       for (const reward of collected) this.attuneEquipment(client, player, reward.itemId, drop.affixTier,
         Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
       if (remaining.length === 0) this.state.lootDrops.delete(parsed.data.dropId);
@@ -2957,6 +2973,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const materialId = recipe.materialId;
       const materialQuantity = recipe.materialQuantity ?? 0;
       if (materialId && materialQuantity > 0) {
+        if (playerBackpackAddable(player, materialId, materialQuantity) < materialQuantity) {
+          return reply(false, `PACK FULL · Dismantling needs room for ${ITEM_DEFINITIONS[materialId].name}.`);
+        }
         let material = player.inventory.get(materialId);
         if (!material) { material = new InventoryItemState(); player.inventory.set(materialId, material); }
         material.quantity = inventoryTotal(material.quantity, materialQuantity);
@@ -2981,7 +3000,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     let item = player.inventory.get(itemId);
     const before = item?.quantity ?? 0;
     const capacity = lootCarryCapacity(itemId, ironCapacity(player.blacksmithUpgrades));
+    const pickupMainHand = action === "equip" && mainHandId ? mainHandId : player.mainHandId as MainHandId;
+    const pickupArmour = action === "equip" && armourId ? armourId : player.armourId as ArmourId;
     if (before + drop.quantity > capacity) return reply(false, `Your ${ITEM_DEFINITIONS[itemId].name} capacity is full.`);
+    if (playerBackpackAddable(player, itemId, drop.quantity, pickupMainHand, pickupArmour) < drop.quantity) {
+      return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used. The loot stays here.`);
+    }
     if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
     item.quantity = inventoryTotal(before, drop.quantity);
     const affix = this.attuneEquipment(client, player, itemId, drop.affixTier,
@@ -6579,6 +6603,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (!canEquipMainHand(parsed.data.mainHandId, itemId => player.inventory.get(itemId)?.quantity ?? 0)) {
       return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "missing" });
     }
+    if (!playerBackpackHasRoom(player, parsed.data.mainHandId, player.armourId as ArmourId)) {
+      client.send("chat:notice", { message: "PACK FULL · Store or dismantle an item before putting that weapon away." });
+      return this.reject(client, { requestId: parsed.data.requestId, action: "loadout", reason: "missing" });
+    }
     player.mainHandId = mainHand.id;
     player.mainHandTag = mainHand.tag;
     if (mainHand.id === "venom_focus") player.equippedSpecial = "venom_fan";
@@ -6886,6 +6914,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("resource:gathered", { itemId: mineral, quantity: 0, total: player.inventory.get(mineral)!.quantity } satisfies ResourceGathered);
       return;
     }
+    const gatheredItem = mineral ?? (block === Block.OakLog ? "timber" : null);
+    const gatheredQuantity = mineral === "moonstone" ? 1 : mineral
+      ? minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player) : gatheredItem ? 1 : 0;
+    if (!cacheWing && gatheredItem && playerBackpackAddable(player, gatheredItem, gatheredQuantity) <= 0) {
+      client.send("chat:notice", { message: `PACK FULL · ${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used. The resource was not harvested.` });
+      return;
+    }
     this.pendingMining.set(client.sessionId, { client, request, block, completesAt: Date.now() + miningDurationMs(block), origin: { x: player.x, y: player.y, z: player.z } });
   }
 
@@ -6950,6 +6985,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         client.send("resource:gathered", { itemId: mineral, quantity: 0, total: carried } satisfies ResourceGathered);
         return;
       }
+    }
+    const gatheredItem = mineral ?? (current === Block.OakLog ? "timber" : null);
+    const gatheredQuantity = mineral === "moonstone" ? 1 : mineral
+      ? minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player) : gatheredItem ? 1 : 0;
+    if (!cacheWing && gatheredItem && playerBackpackAddable(player, gatheredItem, gatheredQuantity) <= 0) {
+      client.send("chat:notice", { message: `PACK FULL · ${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used. The resource stays in the world.` });
+      return;
     }
     setBlock(stored.chunk, address.localX, request.y, address.localZ, Block.Air);
     stored.revision += 1;
