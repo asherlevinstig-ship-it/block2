@@ -1,4 +1,4 @@
-import { BACKPACK_BASE_SLOTS, backpackAddableQuantity, backpackSlotsUsed,
+import { backpackAddableQuantity, backpackCapacity, backpackSlotsUsed,
   type ArmourId, type ItemId, type MainHandId } from "@blockcraft/protocol";
 import type { PlayerState } from "./schema.js";
 
@@ -11,11 +11,11 @@ export function playerBackpackSlots(player: PlayerState, mainHandId = player.mai
 
 export function playerBackpackAddable(player: PlayerState, itemId: ItemId, desired: number,
   mainHandId = player.mainHandId as MainHandId, armourId = player.armourId as ArmourId,
-  capacity = BACKPACK_BASE_SLOTS): number {
+  capacity = backpackCapacity(player.blacksmithUpgrades)): number {
   return backpackAddableQuantity(quantityFor(player), itemId, desired, mainHandId, armourId, capacity);
 }
 
 export function playerBackpackHasRoom(player: PlayerState, mainHandId = player.mainHandId as MainHandId,
-  armourId = player.armourId as ArmourId, capacity = BACKPACK_BASE_SLOTS): boolean {
+  armourId = player.armourId as ArmourId, capacity = backpackCapacity(player.blacksmithUpgrades)): boolean {
   return playerBackpackSlots(player, mainHandId, armourId) <= capacity;
 }

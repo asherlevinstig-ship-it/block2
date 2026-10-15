@@ -124,8 +124,8 @@ import {
   ITEM_DEFINITIONS,
   ITEM_RARITIES,
   itemRarity,
-  BACKPACK_BASE_SLOTS,
   backpackAddableQuantity,
+  backpackCapacity,
   backpackSlotsUsed,
   lootCarryCapacity,
   equipmentPerkStats,
@@ -2371,6 +2371,15 @@ const lootWorldAction = document.querySelector<HTMLElement>("#loot-world-action"
 const lootWorldVerdict = document.querySelector<HTMLElement>("#loot-world-verdict")!;
 const lootWorldStats = document.querySelector<HTMLElement>("#loot-world-stats")!;
 const lootWorldCarry = document.querySelector<HTMLElement>("#loot-world-carry")!;
+const lootPackDecision = document.querySelector<HTMLElement>("#loot-pack-decision")!;
+const lootPackTitle = document.querySelector<HTMLElement>("#loot-pack-title")!;
+const lootPackVerdict = document.querySelector<HTMLElement>("#loot-pack-verdict")!;
+const lootPackIncoming = document.querySelector<HTMLElement>("#loot-pack-incoming")!;
+const lootPackCandidates = document.querySelector<HTMLElement>("#loot-pack-candidates")!;
+const lootPackClose = document.querySelector<HTMLButtonElement>("#loot-pack-close")!;
+const lootPackSwap = document.querySelector<HTMLButtonElement>("#loot-pack-swap")!;
+const lootPackSalvage = document.querySelector<HTMLButtonElement>("#loot-pack-salvage")!;
+const lootPackLeave = document.querySelector<HTMLButtonElement>("#loot-pack-leave")!;
 const lootHeadingLabel = document.querySelector<HTMLElement>(".loot-heading span")!;
 const lootClose = document.querySelector<HTMLButtonElement>("#loot-close")!;
 const lootEquip = document.querySelector<HTMLButtonElement>("#loot-equip")!;
@@ -2381,10 +2390,61 @@ const lootSource = document.querySelector<HTMLElement>("#loot-source")!;
 const lootMessage = document.querySelector<HTMLElement>("#loot-message")!;
 let inspectedDropId: string | null = null;
 let lootPending = false;
+let selectedSwapItemId: ItemId | null = null;
 const pendingFloorLoot = new Map<string, number>();
 let lootWorldDetailKey = "";
 function closeLoot() {
-  lootPanel.hidden = true; inspectedDropId = null; lootPending = false;
+  lootPanel.hidden = true; lootPackDecision.hidden = true; inspectedDropId = null; selectedSwapItemId = null; lootPending = false;
+  inventoryPanel.querySelectorAll<HTMLElement>('[data-swap-selected="true"]').forEach(card => delete card.dataset.swapSelected);
+}
+
+function swapCandidateFits(drop: NetworkLootDrop, carriedItemId: ItemId): boolean {
+  if (!isItemId(drop.itemId) || carriedItemId === drop.itemId || carriedItemId === "healing_potion") return false;
+  const quantity = inventoryCounts.get(carriedItemId) ?? 0;
+  const equipped = equipmentForItem(carriedItemId) === localMainHandId || armourForItem(carriedItemId) === localArmourId;
+  if (quantity <= 0 || equipped && quantity <= 1) return false;
+  const incomingOwned = inventoryCounts.get(drop.itemId) ?? 0;
+  if (incomingOwned + drop.quantity > lootCarryCapacity(drop.itemId, blacksmithIronCapacity)) return false;
+  const slots = backpackSlotsUsed(id => (inventoryCounts.get(id) ?? 0)
+    + (id === drop.itemId ? drop.quantity : 0) - (id === carriedItemId ? 1 : 0), localMainHandId, localArmourId);
+  return slots <= backpackCapacity(localDepthsRewardFlags);
+}
+
+function selectSwapItem(itemId: ItemId): void {
+  selectedSwapItemId = itemId;
+  for (const button of lootPackCandidates.querySelectorAll<HTMLButtonElement>("button"))
+    button.setAttribute("aria-selected", String(button.dataset.itemId === itemId));
+  inventoryPanel.querySelectorAll<HTMLElement>("[data-item]").forEach(card =>
+    card.dataset.swapSelected = String(card.dataset.item === itemId));
+  lootPackSwap.disabled = false;
+  lootPackSwap.textContent = `SWAP ${ITEM_DEFINITIONS[itemId].name.toUpperCase()}`;
+}
+
+function openPackDecision(dropId: string, drop: NetworkLootDrop): void {
+  if (!isItemId(drop.itemId) || isEnemyLootBag(drop) || dropId.startsWith("forest-cache:")) return;
+  inspectedDropId = dropId; selectedSwapItemId = null; lootPending = false;
+  lootPackDecision.dataset.rarity = itemRarity(drop.itemId);
+  lootPackTitle.textContent = ITEM_DEFINITIONS[drop.itemId].name;
+  const decision = inventoryDecisionForItem(drop.itemId);
+  lootPackVerdict.textContent = `${decision ? inventoryDecisionLabel[decision] : "NEW LOOT"} · choose what leaves your pack. The world keeps moving.`;
+  lootPackIncoming.innerHTML = `<strong>${ITEM_DEFINITIONS[drop.itemId].name} ×${drop.quantity}</strong><span>${ITEM_RARITIES[itemRarity(drop.itemId)].label} · ${ITEM_DEFINITIONS[drop.itemId].description}</span>`;
+  lootPackCandidates.replaceChildren();
+  const candidates = (Object.keys(ITEM_DEFINITIONS) as ItemId[]).filter(itemId => swapCandidateFits(drop, itemId));
+  for (const itemId of candidates) {
+    const button = document.createElement("button"); button.type = "button"; button.dataset.itemId = itemId;
+    button.setAttribute("role", "option"); button.setAttribute("aria-selected", "false");
+    button.textContent = `${ITEM_DEFINITIONS[itemId].name} ×${inventoryCounts.get(itemId) ?? 0}`;
+    button.addEventListener("click", () => selectSwapItem(itemId)); lootPackCandidates.append(button);
+  }
+  if (candidates.length === 0) {
+    const empty = document.createElement("p"); empty.textContent = "No single carried item frees enough room. Leave this loot or salvage it."; lootPackCandidates.append(empty);
+  }
+  lootPackSwap.disabled = true; lootPackSwap.textContent = "SELECT ITEM TO SWAP";
+  const recipe = Object.hasOwn(BLACKSMITH_DISMANTLE, drop.itemId) ? BLACKSMITH_DISMANTLE[drop.itemId as BlacksmithDismantleItemId] : null;
+  const materialFits = !recipe || !("materialId" in recipe) || localBackpackAddable(recipe.materialId, recipe.materialQuantity) >= recipe.materialQuantity;
+  lootPackSalvage.hidden = !recipe; lootPackSalvage.disabled = !materialFits;
+  lootPackSalvage.textContent = recipe ? materialFits ? `SALVAGE · +${recipe.gold} GOLD` : "NO ROOM FOR SALVAGE" : "SALVAGE";
+  lootPackDecision.hidden = false; lootPackClose.focus();
 }
 function nearestVisibleLootDrop(maxDistance: number): { id: string; distance: number } | null {
   const player = localPlayer.getPosition();
@@ -2419,6 +2479,7 @@ function interactWithLoot(dropId: string): void {
     const message = `PACK FULL · Make room before collecting ${isItemId(drop.itemId) ? ITEM_DEFINITIONS[drop.itemId].name : "loot"}.`;
     status.textContent = message;
     showCombatFeedback("PACK FULL", "hurt");
+    openPackDecision(dropId, drop);
     return;
   }
   if ((pendingFloorLoot.get(dropId) ?? 0) > performance.now()) return;
@@ -2492,7 +2553,7 @@ function updateLootWorldDetails(dropId: string, drop: NetworkLootDrop): void {
 }
 function updateLootWorldLabel(): void {
   lootWorldLabel.hidden = true;
-  if (!worldReady || !camera.camera || !lootPanel.hidden || !inventoryPanel.hidden || !defeatScreen.hidden) { lootWorldDetailKey = ""; return; }
+  if (!worldReady || !camera.camera || !lootPanel.hidden || !lootPackDecision.hidden || !inventoryPanel.hidden || !defeatScreen.hidden) { lootWorldDetailKey = ""; return; }
   const nearest = nearestVisibleLootDrop(8);
   if (!nearest) return;
   const drop = lootVisuals.get(nearest.id)?.state;
@@ -2672,26 +2733,37 @@ function openLoot(id: string) {
   lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = false;
   lootClose.focus();
 }
-function collectInspectedLoot(action: LootCollectAction) {
+function collectInspectedLoot(action: LootCollectAction, swapItemId?: ItemId) {
   if (!room || !inspectedDropId || lootPending) return;
   lootPending = true; lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = true;
+  lootPackSwap.disabled = lootPackSalvage.disabled = true;
   lootMessage.textContent = action === "dismantle" ? "Dismantling…" : "Collecting…";
   const id = inspectedDropId;
   // Keep/equip can cross an older rolling server safely; dismantle omits the
   // legacy flag so an old server rejects it instead of accidentally keeping it.
-  room.send("loot:collect", action === "dismantle"
-    ? { dropId: id, action }
+  room.send("loot:collect", action === "dismantle" || action === "swap"
+    ? { dropId: id, action, ...(action === "swap" ? { swapItemId } : {}) }
     : { dropId: id, action, equip: action === "equip" });
   window.setTimeout(() => {
     if (inspectedDropId !== id || !lootPending) return;
     lootPending = false; lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = false;
-    lootMessage.textContent = "No confirmation yet. You can try again.";
+    const drop = lootVisuals.get(id)?.state;
+    if (!lootPackDecision.hidden && drop) {
+      openPackDecision(id, drop);
+      lootPackVerdict.textContent = "No confirmation yet. Choose again or leave this loot.";
+    } else {
+      lootMessage.textContent = "No confirmation yet. You can try again.";
+    }
   }, 3000);
 }
 lootClose.addEventListener("click", closeLoot);
 lootEquip.addEventListener("click", () => collectInspectedLoot("equip"));
 lootKeep.addEventListener("click", () => collectInspectedLoot("keep"));
 lootDismantle.addEventListener("click", () => collectInspectedLoot("dismantle"));
+lootPackClose.addEventListener("click", closeLoot);
+lootPackLeave.addEventListener("click", closeLoot);
+lootPackSwap.addEventListener("click", () => { if (selectedSwapItemId) collectInspectedLoot("swap", selectedSwapItemId); });
+lootPackSalvage.addEventListener("click", () => collectInspectedLoot("dismantle"));
 lootWorldLabel.addEventListener("click", () => {
   const nearby = nearestVisibleLootDrop(EQUIPMENT_LOOT_RANGE);
   if (nearby) interactWithLoot(nearby.id);
@@ -5057,21 +5129,23 @@ function localBackpackAddable(itemId: ItemId, desired: number, mainHandId = loca
   const owned = inventoryCounts.get(itemId) ?? 0;
   const itemCapacity = lootCarryCapacity(itemId, blacksmithIronCapacity);
   return Math.min(Math.max(0, itemCapacity - owned), backpackAddableQuantity(
-    id => inventoryCounts.get(id) ?? 0, itemId, desired, mainHandId, armourId));
+    id => inventoryCounts.get(id) ?? 0, itemId, desired, mainHandId, armourId, backpackCapacity(localDepthsRewardFlags)));
 }
 
 function refreshBackpackCapacity(): void {
+  const capacity = backpackCapacity(localDepthsRewardFlags);
   const used = backpackSlotsUsed(id => inventoryCounts.get(id) ?? 0, localMainHandId, localArmourId);
-  inventoryTotal.textContent = `${used} / ${BACKPACK_BASE_SLOTS} SLOTS`;
-  inventoryCapacityLabel.textContent = `${used} / ${BACKPACK_BASE_SLOTS} SLOTS${used >= BACKPACK_BASE_SLOTS ? " · FULL" : ""}`;
-  inventoryCapacity.dataset.full = String(used >= BACKPACK_BASE_SLOTS);
-  inventoryCapacitySlots.replaceChildren(...Array.from({ length: BACKPACK_BASE_SLOTS }, (_, index) => {
+  inventoryTotal.textContent = `${used} / ${capacity} SLOTS`;
+  inventoryCapacityLabel.textContent = `${used} / ${capacity} SLOTS${used >= capacity ? " · FULL" : ""}`;
+  inventoryCapacity.dataset.full = String(used >= capacity);
+  inventoryCapacitySlots.style.setProperty("--backpack-slots", String(capacity));
+  inventoryCapacitySlots.replaceChildren(...Array.from({ length: capacity }, (_, index) => {
     const slot = document.createElement("i");
     slot.dataset.filled = String(index < used);
     return slot;
   }));
   inventoryBadge.textContent = String(Math.min(used, 99));
-  inventoryToggle.setAttribute("aria-label", `Open inventory, ${used} of ${BACKPACK_BASE_SLOTS} backpack slots used`);
+  inventoryToggle.setAttribute("aria-label", `Open inventory, ${used} of ${capacity} backpack slots used`);
 }
 
 function refreshEquipmentProgression(): void {
@@ -5408,6 +5482,7 @@ function bindPlayers(joinedRoom: Room): void {
       localDepthsRewardFlags = player.blacksmithUpgrades;
       localIronSwordOwned = (player.blacksmithUpgrades & 2) !== 0;
       refreshPowerCompatibility();
+      refreshBackpackCapacity();
     }, true);
     playerCallbacks.listen("isAdmin", () => {
       if (!isLocal) return;
@@ -6380,6 +6455,7 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
     const isOwned = owned.has(upgradeId);
     const recipe = BLACKSMITH_UPGRADES[upgradeId];
     const ironCost = card.querySelector<HTMLElement>('[data-cost="iron"]');
+    const silverCost = card.querySelector<HTMLElement>('[data-cost="silver"]');
     const goldCost = card.querySelector<HTMLElement>('[data-cost="gold"]');
     if (ironCost) {
       ironCost.textContent = `${update.ironOre} / ${recipe.ironOre} IRON`;
@@ -6389,10 +6465,16 @@ function renderBlacksmith(update: BlacksmithUpdate): void {
       goldCost.textContent = `${update.gold} / ${recipe.price} GOLD`;
       goldCost.classList.toggle("met", update.gold >= recipe.price);
     }
+    const requiredSilver = "silverOre" in recipe ? recipe.silverOre : 0;
+    if (silverCost) {
+      silverCost.textContent = `${silver} / ${requiredSilver} SILVER`;
+      silverCost.classList.toggle("met", silver >= requiredSilver);
+    }
     card.classList.toggle("owned", isOwned);
     const expeditionLocked = upgradeId === "moonstone_edge" && !isOwned;
-    button.disabled = isOwned || expeditionLocked || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre;
-    button.textContent = isOwned ? "EQUIPPED" : expeditionLocked ? "BOSS DROP REQUIRED" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
+    const prerequisiteLocked = upgradeId === "adventurer_pack" && !owned.has("explorer_pack");
+    button.disabled = isOwned || expeditionLocked || prerequisiteLocked || blacksmithPending || update.gold < recipe.price || update.ironOre < recipe.ironOre || silver < requiredSilver;
+    button.textContent = isOwned ? "EQUIPPED" : expeditionLocked ? "BOSS DROP REQUIRED" : prerequisiteLocked ? "EXPLORER'S PACK FIRST" : upgradeId === "reinforced_pickaxe" ? `BUY · ${recipe.price} GOLD` : "FORGE";
   }
   const ownedDepths = new Set(update.ownedDepthsRewards ?? []);
   const moonstone = update.moonstone ?? 0;
@@ -8592,6 +8674,12 @@ window.addEventListener("keydown", event => {
   }
   if (event.code === "Enter" && lootPanel.hidden && inventoryPanel.hidden && quizPanel.hidden && blacksmithPanel.hidden) { event.preventDefault(); social.open(); return; }
   if (!defeatScreen.hidden) return;
+  if (!lootPackDecision.hidden) {
+    if (event.code === "Escape") { closeLoot(); event.preventDefault(); return; }
+    if (event.code === "Enter" && selectedSwapItemId) {
+      collectInspectedLoot("swap", selectedSwapItemId); event.preventDefault(); return;
+    }
+  }
   if (!lootPanel.hidden) {
     if (event.code === "Escape") closeLoot();
     if (event.code === "Tab") {
@@ -10511,14 +10599,21 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
       return;
     }
     lootPending = false; lootEquip.disabled = lootKeep.disabled = lootDismantle.disabled = !lootVisuals.has(message.dropId);
+    lootPackSwap.disabled = !selectedSwapItemId || !lootVisuals.has(message.dropId);
     lootMessage.textContent = message.message;
     if (message.ok) {
+      if (message.action === "swap" && message.swappedItemId && message.swappedItemTotal !== undefined)
+        updateInventoryItem(message.swappedItemId, message.swappedItemTotal);
       if (message.action === "dismantle" && message.itemId && isItemId(message.itemId)) {
         const toast = document.createElement("div"); toast.className = "resource-toast equipment-pickup"; toast.dataset.rarity = itemRarity(message.itemId);
         toast.innerHTML = `<small>DISMANTLED · ${ITEM_RARITIES[itemRarity(message.itemId)].label.toUpperCase()}</small><strong>${ITEM_DEFINITIONS[message.itemId].name}</strong><span>+${message.goldGranted ?? 0} gold${message.materialGranted ? ` · +${message.materialQuantity ?? 0} ${ITEM_DEFINITIONS[message.materialGranted].name}` : ""}</span>`;
         queueLootToast(toast, LOOT_FEED_EQUIPMENT_MS);
       }
       closeLoot(); status.textContent = message.message;
+    } else if (!lootPackDecision.hidden) {
+      const drop = lootVisuals.get(message.dropId)?.state;
+      if (drop) openPackDecision(message.dropId, drop);
+      lootPackVerdict.textContent = message.message;
     }
   });
   room.onMessage("loot:picked-up", (message: LootPickedUp) => {

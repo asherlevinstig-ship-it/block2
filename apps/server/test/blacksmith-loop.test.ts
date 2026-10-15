@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { backpackCapacity } from "@blockcraft/protocol";
 import { Block, TOWN_BLACKSMITH_STALL_POSITION, worldToChunk, getBlock } from "@blockcraft/voxel-world";
 import { WorldRoom } from "../src/game-room.js";
 import { InventoryItemState, MobState, PlayerState, WorldState } from "../src/schema.js";
@@ -63,6 +64,29 @@ describe("ore to forged sword to item loot", () => {
     const a = worldToChunk(68, 27); const stored = internal.getChunk(a.chunkX, a.chunkZ);
     internal.handleMine(client, { requestId: "upgraded-silver", x: 68, y: 7, z: 27, expectedRevision: stored.revision });
     expect(player.inventory.get("silver_ore")?.quantity).toBe(2);
+  });
+  it("upgrades the backpack from 12 to 16 to 20 slots in order", () => {
+    const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    const player = new PlayerState(); Object.assign(player, TOWN_BLACKSMITH_STALL_POSITION, { coins: 300 });
+    const iron = new InventoryItemState(); iron.quantity = 20; player.inventory.set("iron_ore", iron);
+    const silver = new InventoryItemState(); silver.quantity = 8; player.inventory.set("silver_ore", silver);
+    room.state.players.set("packer", player); const client = { sessionId: "packer", send: vi.fn() } as any;
+
+    internal.handleBlacksmithForge(client, { upgradeId: "adventurer_pack" });
+    expect(backpackCapacity(player.blacksmithUpgrades)).toBe(12);
+    expect(player.coins).toBe(300); expect(iron.quantity).toBe(20); expect(silver.quantity).toBe(8);
+
+    internal.handleBlacksmithForge(client, { upgradeId: "explorer_pack" });
+    expect(backpackCapacity(player.blacksmithUpgrades)).toBe(16);
+    expect(player.coins).toBe(225); expect(iron.quantity).toBe(12); expect(silver.quantity).toBe(8);
+
+    internal.handleBlacksmithForge(client, { upgradeId: "adventurer_pack" });
+    expect(backpackCapacity(player.blacksmithUpgrades)).toBe(20);
+    expect(player.coins).toBe(65); expect(iron.quantity).toBe(0); expect(silver.quantity).toBe(0);
+    expect(client.send).toHaveBeenLastCalledWith("blacksmith:update", expect.objectContaining({
+      phase: "purchased", purchasedUpgradeId: "adventurer_pack",
+    }));
   });
   it("attunes completed Silver Depths rewards with Moonstone exactly once", () => {
     const room = new WorldRoom(); room.setState(new WorldState()); const internal = room as any;

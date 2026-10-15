@@ -45,6 +45,27 @@ body:has(#inventory-panel:not([hidden])) .forest-portal-label { display: none; }
   box-shadow: 0 4px 15px #0009, 0 0 22px #ff3d2f55;
 }
 #loot-world-label[data-full="true"] span { color: #ff8b78; }
+#loot-pack-decision { position: fixed; z-index: 42; right: max(18px, env(safe-area-inset-right)); bottom: max(170px, calc(18px + env(safe-area-inset-bottom))); width: min(330px, calc(100vw - 24px)); padding: 14px; border: 2px solid var(--rarity, #e5c36c); border-radius: 12px; background: linear-gradient(150deg, #1a2a21f7, #090f0cfb); box-shadow: 0 14px 42px #000c, 0 0 22px color-mix(in srgb, var(--rarity, #e5c36c) 25%, transparent); color: #edf3e8; }
+#loot-pack-decision[hidden] { display: none; }
+#loot-pack-decision[data-rarity="common"] { --rarity: #c3cbc5; } #loot-pack-decision[data-rarity="uncommon"] { --rarity: #68dc72; } #loot-pack-decision[data-rarity="rare"] { --rarity: #63a5ff; } #loot-pack-decision[data-rarity="epic"] { --rarity: #c276ff; } #loot-pack-decision[data-rarity="legendary"] { --rarity: #ffb44f; }
+#loot-pack-decision > header { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+#loot-pack-decision > header small, #loot-pack-decision > header strong { display: block; }
+#loot-pack-decision > header small { color: #ff937e; font-size: 8px; font-weight: 1000; letter-spacing: .11em; }
+#loot-pack-decision > header strong { margin-top: 3px; color: var(--rarity); font-size: 15px; }
+#loot-pack-close { width: 32px; height: 32px; border: 1px solid #ffffff22; border-radius: 7px; background: #ffffff08; color: #d9e3da; cursor: pointer; }
+#loot-pack-verdict { margin: 9px 0; color: #aebdb2; font-size: 10px; line-height: 1.35; }
+#loot-pack-incoming { padding: 9px; border: 1px solid color-mix(in srgb, var(--rarity) 45%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--rarity) 9%, #07100c); }
+#loot-pack-incoming strong, #loot-pack-incoming span { display: block; } #loot-pack-incoming strong { color: #f6eac4; font-size: 12px; } #loot-pack-incoming span { margin-top: 3px; color: #9eb2a5; font-size: 9px; }
+#loot-pack-decision > small { display: block; margin: 10px 0 5px; color: #82978a; font-size: 8px; font-weight: 900; letter-spacing: .1em; }
+#loot-pack-candidates { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; max-height: 132px; overflow: auto; }
+#loot-pack-candidates button { min-width: 0; padding: 7px 8px; border: 1px solid #53675b; border-radius: 7px; background: #101c15; color: #b8c6bc; cursor: pointer; font-size: 9px; text-align: left; }
+#loot-pack-candidates button[aria-selected="true"] { border-color: #f0c967; background: #40331a; color: #ffe4a0; box-shadow: inset 3px 0 #f0c967; }
+#loot-pack-candidates p { grid-column: 1 / -1; margin: 0; padding: 8px; color: #d39182; font-size: 9px; }
+.loot-pack-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 10px; }
+.loot-pack-actions button { min-height: 36px; padding: 6px; border: 1px solid #718273; border-radius: 7px; background: #17251c; color: #dce6dc; cursor: pointer; font-size: 8px; font-weight: 1000; }
+#loot-pack-swap { border-color: #d2a94f; background: #5b4218; color: #ffe6a5; } #loot-pack-salvage { border-color: #9f594c; background: #3e201c; color: #ffc8bc; }
+.loot-pack-actions button:disabled { opacity: .4; cursor: default; }
+@media (max-width: 820px) { #loot-pack-decision { right: 10px; bottom: max(278px, calc(18px + env(safe-area-inset-bottom))); } }
 @keyframes loot-focus { 0%, 100% { box-shadow: 0 4px 15px #0009, 0 0 12px color-mix(in srgb, var(--rarity) 25%, transparent); } 50% { box-shadow: 0 4px 15px #0009, 0 0 24px color-mix(in srgb, var(--rarity) 55%, transparent); } }
 @media (max-width: 820px) { #loot-world-label { right: 10px; bottom: max(280px, calc(18px + env(safe-area-inset-bottom))); width: min(240px, calc(100vw - 20px)); } }
 body:has(#inventory-panel:not([hidden])) #loot-world-label, body:has(#loot-panel:not([hidden])) #loot-world-label { display: none; }
@@ -1338,7 +1359,7 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-capacity span { color: #d6b864; font-size: .58rem; font-weight: 1000; letter-spacing: .12em; }
 .inventory-capacity strong { color: #f2e1ad; font-size: .77rem; text-align: right; }
 .inventory-capacity small { grid-column: 1 / -1; color: #83968a; font-size: .53rem; }
-.inventory-capacity-slots { display: grid; grid-template-columns: repeat(12, minmax(12px, 1fr)); gap: 4px; }
+.inventory-capacity-slots { display: grid; grid-template-columns: repeat(var(--backpack-slots, 12), minmax(8px, 1fr)); gap: 4px; }
 .inventory-capacity-slots i { aspect-ratio: 1; border: 1px solid #71817355; border-radius: 4px; background: #07100c; box-shadow: inset 0 0 0 2px #ffffff05; }
 .inventory-capacity-slots i[data-filled="true"] { border-color: #c5a55899; background: linear-gradient(145deg, #7e6429, #3e321c); box-shadow: inset 0 0 0 2px #e7ca7240; }
 .inventory-capacity[data-full="true"] { border-color: #d0644d; box-shadow: inset 3px 0 #d0644d; }

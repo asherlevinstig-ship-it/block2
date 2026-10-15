@@ -95,13 +95,15 @@ export function resolveAppearance(value: unknown): Appearance {
 }
 export type NearbyChatMessage = { senderId: string; name: string; text: string };
 export const EQUIPMENT_LOOT_RANGE = 1.8;
-export type LootCollectAction = "keep" | "equip" | "dismantle";
+export type LootCollectAction = "keep" | "equip" | "dismantle" | "swap";
 export const LootCollectRequestSchema = z.object({
   dropId: z.string().min(1).max(160),
   // `equip` remains accepted for clients crossing a rolling deployment.
   equip: z.boolean().optional(),
-  action: z.enum(["keep", "equip", "dismantle"]).optional(),
-}).refine(value => value.action !== undefined || value.equip !== undefined);
+  action: z.enum(["keep", "equip", "dismantle", "swap"]).optional(),
+  swapItemId: z.string().optional(),
+}).refine(value => value.action !== undefined || value.equip !== undefined)
+  .refine(value => value.action !== "swap" || Boolean(value.swapItemId));
 export type LootCollectResult = {
   ok: boolean;
   dropId: string;
@@ -111,6 +113,8 @@ export type LootCollectResult = {
   goldGranted?: number;
   materialGranted?: ItemId;
   materialQuantity?: number;
+  swappedItemId?: ItemId;
+  swappedItemTotal?: number;
   remainingItems?: LootBagItem[];
 };
 export const HEALING_POTION = { price: 5, heal: 2, capacity: 3, cooldownMs: 5000 } as const;
@@ -431,9 +435,11 @@ export const BLACKSMITH_UPGRADES = {
   iron_sword: { id: "iron_sword", name: "Iron Sword", price: 45, ironOre: 0, description: "Upgrades and equips your longsword · +1 sword damage" },
   miners_pack: { id: "miners_pack", name: "Miner's Pack", price: 25, ironOre: 0, description: "Carry up to 30 of each mineral instead of 12" },
   moonstone_edge: { id: "moonstone_edge", name: "Moonstone Edge", price: 0, ironOre: 0, description: "Expedition reward · permanently adds +1 damage to every weapon" },
+  explorer_pack: { id: "explorer_pack", name: "Explorer's Pack", price: 75, ironOre: 8, silverOre: 0, description: "Expand your backpack from 12 to 16 slots" },
+  adventurer_pack: { id: "adventurer_pack", name: "Adventurer's Pack", price: 160, ironOre: 12, silverOre: 8, description: "Expand your backpack from 16 to 20 slots" },
 } as const;
 export type BlacksmithUpgradeId = keyof typeof BLACKSMITH_UPGRADES;
-export const BlacksmithForgeSchema = z.object({ upgradeId: z.enum(["reinforced_pickaxe", "iron_sword", "miners_pack", "moonstone_edge"]) });
+export const BlacksmithForgeSchema = z.object({ upgradeId: z.enum(["reinforced_pickaxe", "iron_sword", "miners_pack", "moonstone_edge", "explorer_pack", "adventurer_pack"]) });
 export const SILVER_DEPTHS_REWARDS = {
   moonstone_pickaxe: { id: "moonstone_pickaxe", name: "Moonstone Pickaxe", cost: 2, description: "Extract one additional mineral from every ore block" },
   crystal_lantern: { id: "crystal_lantern", name: "Crystal Lantern", cost: 2, description: "Greatly improves visibility throughout the Silver Depths" },
@@ -1008,7 +1014,16 @@ export function equipmentForItem(itemId: string): MainHandId | null {
 }
 
 export const BACKPACK_BASE_SLOTS = 12;
+export const BACKPACK_EXPLORER_SLOTS = 16;
+export const BACKPACK_ADVENTURER_SLOTS = 20;
 export const BACKPACK_STACK_SIZE = 25;
+export const BACKPACK_UPGRADE_BITS = { explorer_pack: 512, adventurer_pack: 1024 } as const;
+
+export function backpackCapacity(upgradeFlags: number): number {
+  if ((upgradeFlags & BACKPACK_UPGRADE_BITS.adventurer_pack) !== 0) return BACKPACK_ADVENTURER_SLOTS;
+  if ((upgradeFlags & BACKPACK_UPGRADE_BITS.explorer_pack) !== 0) return BACKPACK_EXPLORER_SLOTS;
+  return BACKPACK_BASE_SLOTS;
+}
 
 /** Number of real backpack slots occupied by one item type. Potions use their own pouch. */
 export function backpackSlotsForItem(itemId: ItemId, quantity: number, mainHandId: MainHandId, armourId: ArmourId): number {

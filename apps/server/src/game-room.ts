@@ -61,7 +61,7 @@ import { DODGE_EXHAUSTION_MS, PERFECT_DODGE_COUNTER_MS, PERFECT_DODGE_STAMINA_RE
   dodgeChainStaminaCost, nextDodgeChain, type DodgePressureUpdate } from "@blockcraft/protocol";
 import { BRUTE_SLAM, bruteSlamCenter, FRONTIER_BRUTE, frontierBrutePattern, bruteSmashHits, CRAWLER_RUSH_MS, crawlerRushDistance } from "@blockcraft/protocol";
 import { createSpitterPositioning, positionSpitter, type SpitterPositioning } from "./spitter-positioning.js";
-import { BACKPACK_BASE_SLOTS, HEALING_POTION, backpackAddableQuantity, lootCarryCapacity,
+import { HEALING_POTION, backpackAddableQuantity, backpackCapacity, backpackSlotsUsed, lootCarryCapacity,
   type ArmourId, type PotionUpdate } from "@blockcraft/protocol";
 import { canBuyPotionAtKeeper, potionBuyError, potionUseError } from "./healing-potions.js";
 import { MINERAL_REGROWTH_MS, type MineralDepositStatus } from "@blockcraft/protocol";
@@ -1632,12 +1632,17 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const upgradeId = parsed.data.upgradeId as BlacksmithUpgradeId;
     if (upgradeId === "moonstone_edge") return this.sendBlacksmithState(client, "Complete The Silver Depths to unlock the Moonstone Edge.", "error");
     const ore = player.inventory.get("iron_ore");
-    const forge = forgeBlacksmithUpgrade(player.blacksmithUpgrades, player.coins, ore?.quantity ?? 0, upgradeId);
+    const silver = player.inventory.get("silver_ore");
+    const forge = forgeBlacksmithUpgrade(player.blacksmithUpgrades, player.coins, ore?.quantity ?? 0, upgradeId, silver?.quantity ?? 0);
     if (!forge.forged) {
       const message = forge.reason === "owned"
         ? `${BLACKSMITH_UPGRADES[upgradeId].name} is already yours.`
         : forge.reason === "iron_ore"
           ? `You need ${BLACKSMITH_UPGRADES[upgradeId].ironOre} iron ore for ${BLACKSMITH_UPGRADES[upgradeId].name}.`
+        : forge.reason === "silver_ore"
+          ? `You need ${"silverOre" in BLACKSMITH_UPGRADES[upgradeId] ? BLACKSMITH_UPGRADES[upgradeId].silverOre : 0} silver ore for ${BLACKSMITH_UPGRADES[upgradeId].name}.`
+        : forge.reason === "prerequisite"
+          ? "Forge the Explorer's Pack before upgrading to the Adventurer's Pack."
         : `You need ${BLACKSMITH_UPGRADES[upgradeId].price} gold for ${BLACKSMITH_UPGRADES[upgradeId].name}.`;
       return this.sendBlacksmithState(client, message, "error");
     }
@@ -1648,6 +1653,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       player.mainHandTag = "melee";
     }
     if (ore) ore.quantity = forge.ironOre;
+    if (silver) silver.quantity = forge.silverOre;
     if (upgradeId === "reinforced_pickaxe") {
       let pickaxe = player.inventory.get("reinforced_pickaxe");
       if (!pickaxe) {
@@ -2870,7 +2876,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (drop.ownerId && drop.ownerId !== client.sessionId) return reply(false, "That is another player's personal loot.");
     const action = parsed.data.action ?? (parsed.data.equip ? "equip" : "keep");
     if (parsed.data.dropId.startsWith("forest-cache:")) {
-      if (action === "dismantle") return reply(false, "Claim the cache before dismantling equipment at the blacksmith.");
+      if (action !== "keep") return reply(false, "Claim the cache before managing its contents.");
       const run = this.forestDungeonRun;
       if (!run || run.completedAt === 0 || !run.entered.has(client.sessionId) || run.claimed.has(client.sessionId)) return reply(false, "That cache is no longer available.");
       if (!isLootInPickupRange(player, drop, EQUIPMENT_LOOT_RANGE) || !hasCombatLineOfSight(player, drop, this.readWorldBlock)) return reply(false, "Move beside your cache with a clear path to it.");
@@ -2893,8 +2899,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const capacity = lootCarryCapacity(reward.itemId, ironCapacity(player.blacksmithUpgrades));
         const quantity = Math.max(0, Math.min(reward.quantity, capacity - before,
           backpackAddableQuantity(id => simulated.get(id) ?? player.inventory.get(id)?.quantity ?? 0,
-            reward.itemId, reward.quantity, player.mainHandId as MainHandId, player.armourId as ArmourId)));
-        if (quantity < reward.quantity) return reply(false, `PACK FULL · The cache needs more room (${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used).`);
+            reward.itemId, reward.quantity, player.mainHandId as MainHandId, player.armourId as ArmourId, backpackCapacity(player.blacksmithUpgrades))));
+        if (quantity < reward.quantity) return reply(false, `PACK FULL · The cache needs more room (${playerBackpackSlots(player)}/${backpackCapacity(player.blacksmithUpgrades)} slots used).`);
         simulated.set(reward.itemId, before + quantity);
       }
       for (const reward of bundle) {
@@ -2937,7 +2943,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         }
         if (quantity < entry.quantity) remaining.push({ itemId: entry.itemId, quantity: entry.quantity - quantity });
       }
-      if (collected.length === 0) return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used. The loot stays here.`, { remainingItems: remaining });
+      if (collected.length === 0) return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${backpackCapacity(player.blacksmithUpgrades)} slots used. The loot stays here.`, { remainingItems: remaining });
       for (const reward of collected) this.attuneEquipment(client, player, reward.itemId, drop.affixTier,
         Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
       if (remaining.length === 0) this.state.lootDrops.delete(parsed.data.dropId);
@@ -2967,6 +2973,39 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const utilityId = drop.itemId === "miners_lantern" || drop.itemId === "moonstone" ? drop.itemId : null;
     if (action === "equip" && (this.pendingPowers.has(client.sessionId) || this.pendingAttacks.has(client.sessionId) || player.defending)) return reply(false, "Finish your action before equipping, or keep it in your pack.");
     const itemId = drop.itemId as ItemId;
+    if (action === "swap") {
+      const swapItemId = parsed.data.swapItemId;
+      if (!swapItemId || !Object.hasOwn(ITEM_DEFINITIONS, swapItemId)) return reply(false, "Choose an item from your pack to leave behind.");
+      const carriedItemId = swapItemId as ItemId;
+      if (carriedItemId === itemId) return reply(false, "Choose a different carried item to swap.");
+      const carried = player.inventory.get(carriedItemId);
+      if (!carried || carried.quantity <= 0) return reply(false, "That item is no longer in your pack.");
+      const equipped = equipmentForItem(carriedItemId) === player.mainHandId || armourForItem(carriedItemId) === player.armourId;
+      if (equipped && carried.quantity <= 1) return reply(false, "Your equipped copy cannot be left behind. Equip something else first.");
+      const before = player.inventory.get(itemId)?.quantity ?? 0;
+      const itemCapacity = lootCarryCapacity(itemId, ironCapacity(player.blacksmithUpgrades));
+      if (before + drop.quantity > itemCapacity) return reply(false, `Your ${ITEM_DEFINITIONS[itemId].name} stack cannot hold this drop.`);
+      const capacity = backpackCapacity(player.blacksmithUpgrades);
+      const postSlots = backpackSlotsUsed(id => {
+        const quantity = player.inventory.get(id)?.quantity ?? 0;
+        return quantity + (id === itemId ? drop.quantity : 0) - (id === carriedItemId ? 1 : 0);
+      }, player.mainHandId as MainHandId, player.armourId as ArmourId);
+      if (postSlots > capacity) return reply(false, "That swap does not free enough backpack space.");
+      carried.quantity -= 1;
+      let collected = player.inventory.get(itemId);
+      if (!collected) { collected = new InventoryItemState(); player.inventory.set(itemId, collected); }
+      collected.quantity = inventoryTotal(before, drop.quantity);
+      this.attuneEquipment(client, player, itemId, drop.affixTier,
+        Object.hasOwn(EQUIPMENT_HUNT_REGIONS, drop.affixRegion) ? drop.affixRegion as EquipmentHuntRegionId : null);
+      const collectedQuantity = drop.quantity;
+      drop.itemId = carriedItemId; drop.quantity = 1; drop.contentsJson = ""; drop.affixTier = 0; drop.affixRegion = "";
+      void this.persistPlayer(client.sessionId, player);
+      this.broadcast("loot:picked-up", { playerId: client.sessionId, dropId: parsed.data.dropId, itemId,
+        quantity: collectedQuantity, total: collected.quantity } satisfies LootPickedUp);
+      return reply(true, `Swapped ${ITEM_DEFINITIONS[carriedItemId].name} for ${ITEM_DEFINITIONS[itemId].name}. The old item remains on the ground.`, {
+        action, itemId, swappedItemId: carriedItemId, swappedItemTotal: carried.quantity,
+      });
+    }
     if (action === "dismantle") {
       if (utilityId || !Object.hasOwn(BLACKSMITH_DISMANTLE, itemId)) return reply(false, "This item cannot be dismantled from the loot bag.");
       const recipe = BLACKSMITH_DISMANTLE[itemId as BlacksmithDismantleItemId] as { gold: number; materialId?: ItemId; materialQuantity?: number };
@@ -3004,7 +3043,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const pickupArmour = action === "equip" && armourId ? armourId : player.armourId as ArmourId;
     if (before + drop.quantity > capacity) return reply(false, `Your ${ITEM_DEFINITIONS[itemId].name} capacity is full.`);
     if (playerBackpackAddable(player, itemId, drop.quantity, pickupMainHand, pickupArmour) < drop.quantity) {
-      return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used. The loot stays here.`);
+      return reply(false, `PACK FULL · ${playerBackpackSlots(player)}/${backpackCapacity(player.blacksmithUpgrades)} slots used. The loot stays here.`);
     }
     if (!item) { item = new InventoryItemState(); player.inventory.set(itemId, item); }
     item.quantity = inventoryTotal(before, drop.quantity);
@@ -6918,7 +6957,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const gatheredQuantity = mineral === "moonstone" ? 1 : mineral
       ? minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player) : gatheredItem ? 1 : 0;
     if (!cacheWing && gatheredItem && playerBackpackAddable(player, gatheredItem, gatheredQuantity) <= 0) {
-      client.send("chat:notice", { message: `PACK FULL · ${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used. The resource was not harvested.` });
+      client.send("chat:notice", { message: `PACK FULL · ${playerBackpackSlots(player)}/${backpackCapacity(player.blacksmithUpgrades)} slots used. The resource was not harvested.` });
       return;
     }
     this.pendingMining.set(client.sessionId, { client, request, block, completesAt: Date.now() + miningDurationMs(block), origin: { x: player.x, y: player.y, z: player.z } });
@@ -6990,7 +7029,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const gatheredQuantity = mineral === "moonstone" ? 1 : mineral
       ? minedIronQuantity(player.blacksmithUpgrades) + progressionMiningBonus(player) : gatheredItem ? 1 : 0;
     if (!cacheWing && gatheredItem && playerBackpackAddable(player, gatheredItem, gatheredQuantity) <= 0) {
-      client.send("chat:notice", { message: `PACK FULL · ${playerBackpackSlots(player)}/${BACKPACK_BASE_SLOTS} slots used. The resource stays in the world.` });
+      client.send("chat:notice", { message: `PACK FULL · ${playerBackpackSlots(player)}/${backpackCapacity(player.blacksmithUpgrades)} slots used. The resource stays in the world.` });
       return;
     }
     setBlock(stored.chunk, address.localX, request.y, address.localZ, Block.Air);

@@ -250,7 +250,7 @@ export function parsePlayerSave(raw: string | null): PlayerSaveData | null {
     miningPoints: Math.floor(finiteNumber(value.miningPoints, 0, 0, 5)),
     coins: Math.floor(finiteNumber(value.coins, TAVERN_QUIZ_STARTING_COINS, 0, 1_000_000)),
     potionCooldownUntil: finiteNumber(value.potionCooldownUntil, 0, 0, Number.MAX_SAFE_INTEGER),
-    blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 511)),
+    blacksmithUpgrades: Math.floor(finiteNumber(value.blacksmithUpgrades, 0, 0, 2047)),
     reforgeRanks: parseReforgeRanks(value.reforgeRanks),
     signaturePity: parseSignaturePity(value.signaturePity),
     huntMastery: parseHuntMastery(value.huntMastery),

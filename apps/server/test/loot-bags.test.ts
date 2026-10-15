@@ -96,6 +96,21 @@ describe("authoritative equipment loot bags", () => {
     expect(player.inventory.get("fang_dagger")?.quantity).toBe(1); expect(player.mainHandId).toBe("longsword");
     expect(persist).toHaveBeenCalled(); expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({ ok: true }));
   });
+  it("atomically swaps one carried item and leaves it on the ground", () => {
+    const { internal, room, player, drop, client } = fixture();
+    for (const itemId of ["timber", "moss_fibre", "crawler_fang", "stone_core", "acid_gland", "mossback_fang_relic",
+      "westroad_fang_relic", "northroad_fang_relic", "broodmother_heart", "silverfang_venom_sac", "ashglass_lens", "quarrymaster_sigil"]) {
+      const item = new InventoryItemState(); item.quantity = 1; player.inventory.set(itemId, item);
+    }
+    internal.handleLootCollect(client, { dropId: "bag", action: "swap", swapItemId: "moss_fibre" });
+    expect(player.inventory.get("fang_dagger")?.quantity).toBe(1);
+    expect(player.inventory.get("moss_fibre")?.quantity).toBe(0);
+    expect(room.state.lootDrops.get("bag")?.itemId).toBe("moss_fibre");
+    expect(drop.quantity).toBe(1);
+    expect(client.send).toHaveBeenCalledWith("loot:result", expect.objectContaining({
+      ok: true, action: "swap", swappedItemId: "moss_fibre", swappedItemTotal: 0,
+    }));
+  });
   it("dismantles equipment directly from a personal bag without first adding the item", () => {
     const { internal, room, player, client, drop, persist } = fixture();
     drop.itemId = "stone_core_hammer";

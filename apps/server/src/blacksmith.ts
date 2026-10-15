@@ -18,6 +18,8 @@ const UPGRADE_BITS: Record<BlacksmithUpgradeId, number> = {
   iron_sword: 2,
   miners_pack: 4,
   moonstone_edge: 8,
+  explorer_pack: 512,
+  adventurer_pack: 1024,
 };
 
 const DEPTHS_REWARD_BITS: Record<SilverDepthsRewardId, number> = {
@@ -56,15 +58,21 @@ export function forgeBlacksmithUpgrade(
   gold: number,
   ironOre: number,
   upgradeId: BlacksmithUpgradeId,
-): { flags: number; gold: number; ironOre: number; forged: boolean; reason?: "owned" | "gold" | "iron_ore" } {
-  if (ownsBlacksmithUpgrade(flags, upgradeId)) return { flags, gold, ironOre, forged: false, reason: "owned" };
+  silverOre = 0,
+): { flags: number; gold: number; ironOre: number; silverOre: number; forged: boolean; reason?: "owned" | "gold" | "iron_ore" | "silver_ore" | "prerequisite" } {
+  if (ownsBlacksmithUpgrade(flags, upgradeId)) return { flags, gold, ironOre, silverOre, forged: false, reason: "owned" };
+  if (upgradeId === "adventurer_pack" && !ownsBlacksmithUpgrade(flags, "explorer_pack"))
+    return { flags, gold, ironOre, silverOre, forged: false, reason: "prerequisite" };
   const recipe = BLACKSMITH_UPGRADES[upgradeId];
-  if (ironOre < recipe.ironOre) return { flags, gold, ironOre, forged: false, reason: "iron_ore" };
-  if (gold < recipe.price) return { flags, gold, ironOre, forged: false, reason: "gold" };
+  if (ironOre < recipe.ironOre) return { flags, gold, ironOre, silverOre, forged: false, reason: "iron_ore" };
+  const silverCost = "silverOre" in recipe ? recipe.silverOre : 0;
+  if (silverOre < silverCost) return { flags, gold, ironOre, silverOre, forged: false, reason: "silver_ore" };
+  if (gold < recipe.price) return { flags, gold, ironOre, silverOre, forged: false, reason: "gold" };
   return {
     flags: flags | UPGRADE_BITS[upgradeId],
     gold: gold - recipe.price,
     ironOre: ironOre - recipe.ironOre,
+    silverOre: silverOre - silverCost,
     forged: true,
   };
 }

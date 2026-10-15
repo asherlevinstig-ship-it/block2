@@ -34,7 +34,7 @@ it("uses item cards for comparison and one card action", () => {
   const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
   expect(source).toContain('card.setAttribute("role", "button")');
   expect(source).toContain("backpackSlotsUsed");
-  expect(source).toContain("BACKPACK_BASE_SLOTS");
+  expect(source).toContain("backpackCapacity");
   expect(source).not.toContain('button.textContent = "COMPARE"');
   expect(source).toContain('upgrade: "CLEAR UPGRADE"');
   expect(source).toContain('canUnequip ? "UNEQUIP"');

@@ -35,6 +35,14 @@
       <em id="loot-world-verdict"></em><strong id="loot-world-name"></strong><small id="loot-world-stats"></small>
       <small id="loot-world-carry"></small><span id="loot-world-action"></span><i id="loot-world-hold" aria-hidden="true"><b></b></i>
     </button>
+    <aside id="loot-pack-decision" hidden aria-labelledby="loot-pack-title">
+      <header><div><small>PACK FULL · QUICK DECISION</small><strong id="loot-pack-title">Make room for loot</strong></div><button id="loot-pack-close" type="button" aria-label="Leave loot">×</button></header>
+      <p id="loot-pack-verdict">Choose one carried item to leave behind.</p>
+      <div id="loot-pack-incoming"></div>
+      <small>SELECT AN ITEM TO LEAVE</small>
+      <div id="loot-pack-candidates" role="listbox" aria-label="Carried items that can be swapped"></div>
+      <div class="loot-pack-actions"><button id="loot-pack-swap" type="button" disabled>SWAP</button><button id="loot-pack-salvage" type="button">SALVAGE LOOT</button><button id="loot-pack-leave" type="button">LEAVE</button></div>
+    </aside>
     <div id="cave-entrance" hidden>↓ EAST ORE MINE <small>Shallow iron pockets · deep silver · guarded chambers<br>Follow gold lanterns back up · sell minerals to the blacksmith</small></div>
     <section id="hud">
       <p class="eyebrow">MILESTONE 01</p>
@@ -210,6 +218,8 @@
         <article data-blacksmith-upgrade="reinforced_pickaxe"><span class="upgrade-icon">⛏</span><div><strong>Reinforced Pickaxe</strong><small>Auto-equips · mine 2 minerals per ore block · no ore required</small><span class="forge-costs"><b data-cost="gold">0 / 12 GOLD</b></span></div><button type="button">BUY · 12 GOLD</button></article>
         <article data-blacksmith-upgrade="iron_sword"><span class="upgrade-icon">⚔</span><div><strong>Iron Sword</strong><small>Equips your longsword · +1 sword damage</small><span class="forge-costs"><b data-cost="gold">0 / 45 GOLD</b></span></div><button type="button">FORGE</button></article>
         <article data-blacksmith-upgrade="miners_pack"><span class="upgrade-icon">▣</span><div><strong>Miner's Pack</strong><small>Carry 30 of each mineral instead of 12</small><span class="forge-costs"><b data-cost="gold">0 / 25 GOLD</b></span></div><button type="button">FORGE</button></article>
+        <article data-blacksmith-upgrade="explorer_pack"><span class="upgrade-icon">▦</span><div><strong>Explorer's Pack</strong><small>Expand your backpack from 12 to 16 slots</small><span class="forge-costs"><b data-cost="iron">0 / 8 IRON</b><b data-cost="gold">0 / 75 GOLD</b></span></div><button type="button">FORGE</button></article>
+        <article data-blacksmith-upgrade="adventurer_pack"><span class="upgrade-icon">▦</span><div><strong>Adventurer's Pack</strong><small>Expand your backpack from 16 to 20 slots</small><span class="forge-costs"><b data-cost="iron">0 / 12 IRON</b><b data-cost="silver">0 / 8 SILVER</b><b data-cost="gold">0 / 160 GOLD</b></span></div><button type="button">FORGE</button></article>
         <article data-blacksmith-upgrade="moonstone_edge"><span class="upgrade-icon">◆</span><div><strong>Moonstone Edge</strong><small>The Silver Depths reward · permanent +1 damage to every weapon</small></div><button type="button" disabled>EXPEDITION LOCKED</button></article>
       </div>
       </div>

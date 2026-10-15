@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKPACK_BASE_SLOTS, BACKPACK_STACK_SIZE, HEALING_POTION, backpackAddableQuantity,
+import { BACKPACK_BASE_SLOTS, BACKPACK_STACK_SIZE, HEALING_POTION, backpackAddableQuantity, backpackCapacity,
   backpackSlotsUsed, lootCarryCapacity, type ItemId } from "./index.js";
 
 describe("floor loot carry capacity", () => {
@@ -26,5 +26,11 @@ describe("floor loot carry capacity", () => {
     expect(backpackAddableQuantity(id => quantities.get(id) ?? 0, "fang_dagger", 1, "longsword", "none")).toBe(1);
     quantities.set("crawler_fang", 25);
     expect(backpackAddableQuantity(id => quantities.get(id) ?? 0, "fang_dagger", 1, "longsword", "none")).toBe(0);
+  });
+
+  it("expands through the two permanent blacksmith pack upgrades", () => {
+    expect(backpackCapacity(0)).toBe(12);
+    expect(backpackCapacity(512)).toBe(16);
+    expect(backpackCapacity(512 | 1024)).toBe(20);
   });
 });
