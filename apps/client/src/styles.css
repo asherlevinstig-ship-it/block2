@@ -1292,7 +1292,8 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 #inventory-panel[data-storage="true"] > .inventory-summary, #inventory-panel[data-storage="true"] > .inventory-tabs,
 #inventory-panel[data-storage="true"] > .inventory-section, #inventory-panel[data-storage="true"] > #inventory-preview-drawer,
 #inventory-panel[data-storage="true"] > .inventory-workspace, #inventory-panel[data-storage="true"] > #build-path-panel,
-#inventory-panel[data-storage="true"] > #character-stats-drawer, #inventory-panel[data-storage="true"] > #character-milestones-drawer { display: none; }
+#inventory-panel[data-storage="true"] > #character-stats-drawer, #inventory-panel[data-storage="true"] > #character-milestones-drawer,
+#inventory-panel[data-storage="true"] > #inventory-progress-drawer, #inventory-panel[data-storage="true"] > .inventory-beginner-guide { display: none; }
 #personal-storage[hidden], #storage-prompt[hidden] { display: none; }
 .storage-help, .storage-message { color: #a9b99f; font-size: .75rem; line-height: 1.5; }
 .storage-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -1318,6 +1319,14 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-summary span, .inventory-summary strong { display: block; }
 .inventory-summary span { color: #829288; font-size: .61rem; font-weight: 900; letter-spacing: .11em; }
 .inventory-summary strong { margin-top: 3px; color: #e6d19b; font-size: .9rem; }
+.inventory-beginner-guide { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid #76a87655; border-radius: 8px; background: #13261a; color: #bdccbf; font-size: .65rem; }
+.inventory-beginner-guide b { display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; background: #d0ac58; color: #1a160b; font-size: .58rem; }
+.inventory-beginner-guide span { color: #7d9d83; }
+#inventory-progress-drawer { margin: 0 0 11px; border: 1px solid #65725f3d; border-radius: 8px; background: #0a1410; }
+#inventory-progress-drawer > summary { display: flex; justify-content: space-between; padding: 9px 11px; color: #b6c4b8; cursor: pointer; font-size: .64rem; font-weight: 900; }
+#inventory-progress-drawer > summary span { color: #75867b; font-size: .54rem; font-weight: 600; }
+#inventory-progress-drawer[open] { padding: 0 9px 9px; }
+#inventory-progress-drawer[open] > summary { margin: 0 -9px 9px; border-bottom: 1px solid #65725f3d; }
 #character-stats-drawer, #character-milestones-drawer { margin: -5px 0 12px; border: 1px solid #65725f3d; border-radius: 7px; background: #0b1510; }
 #character-stats-drawer > summary, #character-milestones-drawer > summary { display: flex; justify-content: space-between; padding: 8px 10px; color: #aab7ad; font-size: .58rem; font-weight: 900; cursor: pointer; }
 #character-stats-drawer > summary span, #character-milestones-drawer > summary span { color: #74857a; font-weight: 600; }
@@ -1411,13 +1420,21 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-section[hidden] { display: none; }
 .inventory-grid article[hidden], .potion-inventory[hidden], .inventory-empty[hidden] { display: none; }
 .inventory-empty { margin: 12px 0; padding: 22px 16px; border: 1px dashed #70876866; border-radius: 9px; color: #92a68e; font-size: .8rem; text-align: center; }
-.inventory-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
-.inventory-tabs button { min-height: 38px; padding: 8px 4px; border: 1px solid #6b88614d; border-radius: 7px; background: #13261b; color: #a3b69f; font-size: .72rem; font-weight: 800; }
+.inventory-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.inventory-tabs button { display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto; align-items: center; min-height: 54px; padding: 8px 10px; border: 1px solid #6b88614d; border-radius: 9px; background: linear-gradient(145deg, #172a1e, #0d1912); color: #a3b69f; text-align: left; }
+.inventory-tabs button > span { grid-row: 1 / 3; color: #d5b762; font-size: 1.1rem; text-align: center; }
+.inventory-tabs button > strong { color: inherit; font-size: .7rem; letter-spacing: .08em; }
+.inventory-tabs button > small { color: #718379; font-size: .5rem; }
 .inventory-tabs button[aria-selected="true"] { background: #4a3a1c; color: #ffe0a0; border-color: #c6a054; }
+.inventory-tabs button[aria-selected="true"] > small { color: #d0bd8f; }
 .inventory-tabs button:hover, .inventory-tabs button:focus-visible { border-color: #e6c582; color: #fff0ce; }
 .inventory-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 318px; gap: 14px; align-items: start; }
 .inventory-workspace:has(#inventory-decision-panel[hidden]) { grid-template-columns: 1fr; }
-.inventory-content { min-width: 0; }
+.inventory-content { display: flex; flex-direction: column; min-width: 0; }
+#inventory-category-weapons, #inventory-category-tools, #inventory-category-collection { order: 1; }
+#inventory-category-armour, #inventory-category-supplies { order: 2; margin-top: 14px; padding-top: 13px; border-top: 1px solid #ffffff12; }
+#inventory-category-materials { order: 3; margin-top: 14px; padding-top: 13px; border-top: 1px solid #ffffff12; }
+#inventory-preview-drawer { order: 10; }
 #inventory-decision-panel { position: sticky; z-index: 3; top: 0; padding: 13px; border: 1px solid #799b75; border-radius: 11px; background: linear-gradient(145deg, #15251b, #09130f); box-shadow: 0 12px 30px #0008, inset 3px 0 0 #6e9a69; }
 #inventory-decision-panel[hidden] { display: none; }
 #inventory-decision-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 8px; padding-bottom: 9px; border-bottom: 1px solid #ffffff14; }
@@ -1810,6 +1827,10 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
   #inventory-panel { padding: 14px; }
   .inventory-header h2 { font-size: 1.55rem; }
   .inventory-summary { grid-template-columns: 1fr 1fr; }
+  .inventory-beginner-guide { flex-wrap: wrap; font-size: .56rem; }
+  .inventory-tabs button { grid-template-columns: 24px 1fr; min-height: 46px; padding: 7px; }
+  .inventory-tabs button > span { grid-row: auto; font-size: .9rem; }
+  .inventory-tabs button > small { display: none; }
   #character-stats { grid-template-columns: 1fr 1fr; }
   #build-path-candidates { grid-template-columns: 1fr; }
   .inventory-grid, .equipment-grid { grid-template-columns: 1fr; }

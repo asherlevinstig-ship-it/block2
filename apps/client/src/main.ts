@@ -3003,7 +3003,7 @@ function inventoryDecisionForItem(itemId: ItemId): InventoryDecision | null {
   ]);
 }
 const inventoryDecisionLabel: Record<InventoryDecision, string> = {
-  equipped: "EQUIPPED", upgrade: "UPGRADE", different: "DIFFERENT", lower: "TRADE-OFF",
+  equipped: "CURRENT", upgrade: "BETTER GEAR", different: "STYLE CHOICE", lower: "TRADE-OFF",
 };
 
 function refreshInventorySelectionActions(): void {
@@ -3065,13 +3065,13 @@ function refreshInventoryPreview(): void {
   inventoryDecisionVerdict.textContent = inventoryDecisionLabel[decision];
   inventoryDecisionPanel.dataset.verdict = decision;
   const roll = equipmentAffixes[selectedInventoryItem];
-  if (!localBuildPathId) inventoryCallingFit.textContent = "Neutral for now · choose a Calling to reveal build synergy.";
-  else if (!roll) inventoryCallingFit.textContent = `Neutral gear · no special ${BUILD_PATHS[localBuildPathId].name} bonus.`;
+  if (!localBuildPathId) inventoryCallingFit.textContent = "No combat style chosen yet. This item still works normally.";
+  else if (!roll) inventoryCallingFit.textContent = `Works normally with your ${BUILD_PATHS[localBuildPathId].name} style.`;
   else {
     const itemPath = EQUIPMENT_AFFIXES[roll.affixId].pathId;
     inventoryCallingFit.textContent = itemPath === localBuildPathId
-      ? `✓ ${BUILD_PATHS[itemPath].name} synergy · this affix supports your current Calling.`
-      : `No ${BUILD_PATHS[localBuildPathId].name} synergy · this affix is tuned for ${BUILD_PATHS[itemPath].name}.`;
+      ? `✓ Great for your ${BUILD_PATHS[itemPath].name} style.`
+      : `Built for ${BUILD_PATHS[itemPath].name}, not your current ${BUILD_PATHS[localBuildPathId].name} style.`;
   }
   const changed = hand !== localMainHandId || armour !== localArmourId;
   document.querySelector<HTMLElement>("#inventory-preview-label")!.textContent = changed ? "Preview only · not equipped" : "Currently equipped";
@@ -5739,11 +5739,13 @@ function selectInventoryCategory(category: InventoryTab, focus = false): void {
     tab.setAttribute("aria-selected", String(selected)); tab.tabIndex = selected ? 0 : -1;
     if (selected && focus) tab.focus();
   }
-  for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]")) {
-    section.hidden = section.dataset.inventoryCategory !== category;
-  }
+  const groups: Record<InventoryTab, string[]> = {
+    gear: ["weapons", "armour"], bag: ["tools", "supplies", "materials"], collection: ["collection"],
+  };
+  for (const section of inventoryPanel.querySelectorAll<HTMLElement>("[data-inventory-category]"))
+    section.hidden = !groups[category].includes(section.dataset.inventoryCategory!);
   previewHand = undefined; previewArmour = undefined; selectedInventoryItem = undefined;
-  previewSlot = category === "armour" ? "armour" : "weapon";
+  inventoryPreviewDrawer.hidden = category !== "gear";
   if (category === "collection") inventoryPreviewDrawer.open = false;
   if (category === "collection") room?.send("hunt:collection", { action: "sync" });
   refreshInventoryPreview();
@@ -5829,7 +5831,7 @@ let blacksmithIronCapacity = 12;
 let blacksmithShopTab: BlacksmithShopTab = "sell";
 let blacksmithCharacterLevel = 1;
 let selectedDepthsRewardId: SilverDepthsRewardId = "depths_compass";
-let lastShopPurchaseCategory: InventoryTab = "weapons";
+let lastShopPurchaseCategory: InventoryTab = "gear";
 const weaponShop = document.createElement("div");
 weaponShop.id = "blacksmith-weapons";
 blacksmithClose.before(weaponShop);
@@ -6218,7 +6220,7 @@ function renderWeaponShop(): void {
     button.disabled = levelLocked || !room || blacksmithPending || tavernCoinBalance < BLACKSMITH_STOCK[id].price || owned >= 65535;
     button.addEventListener("click", () => {
       if (!room || blacksmithPending) return;
-      lastShopPurchaseCategory = armour ? "armour" : "weapons";
+      lastShopPurchaseCategory = "gear";
       blacksmithPending = true; renderWeaponShop();
       blacksmithMessage.textContent = `Buying ${ITEM_DEFINITIONS[id].name}...`;
       room.send("blacksmith:buy", { itemId: id });

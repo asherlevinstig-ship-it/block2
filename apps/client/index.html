@@ -284,8 +284,10 @@
         <div><span>EQUIPPED</span><strong id="inventory-equipped">Longsword</strong></div>
         <div><span>LEVEL</span><strong id="inventory-level">1 · 0 XP</strong></div>
       </div>
+      <p class="inventory-beginner-guide"><b>1</b> Pick an item <span>→</span> <b>2</b> Compare it <span>→</span> <b>3</b> Equip if you like it</p>
+      <details id="inventory-progress-drawer"><summary>Combat style &amp; progress <span>Optional details</span></summary>
       <section id="build-path-panel" aria-label="Player Calling">
-        <header><div><span>YOUR CALLING</span><strong id="build-path-name">UNBOUND</strong></div><b id="build-path-rank">A PATH IS FORMING</b></header>
+        <header><div><span>COMBAT STYLE</span><strong id="build-path-name">NOT CHOSEN</strong></div><b id="build-path-rank">UNLOCKS AT LEVEL 5</b></header>
         <p id="build-path-message">Your equipment, abilities and stats are quietly shaping a future Calling.</p>
         <div id="build-path-progress"><i></i></div>
         <div class="build-path-summary-action"><span id="build-path-next">Reveals at level 5</span><button id="build-path-open" type="button">VIEW CALLING</button></div>
@@ -299,13 +301,11 @@
         <div><span>MINING</span><strong id="stat-mining">0 · ×1 yield</strong></div>
       </section></details>
       <details id="character-milestones-drawer"><summary>Level unlocks <span>Show progression details</span></summary><section id="character-milestones" aria-label="Character milestone unlocks"></section></details>
+      </details>
       <nav class="inventory-tabs" role="tablist" aria-label="Inventory categories">
-        <button id="inventory-tab-weapons" type="button" role="tab" aria-controls="inventory-category-weapons" aria-selected="true" data-inventory-tab="weapons">Weapons</button>
-        <button id="inventory-tab-armour" type="button" role="tab" aria-controls="inventory-category-armour" aria-selected="false" tabindex="-1" data-inventory-tab="armour">Armour</button>
-        <button id="inventory-tab-tools" type="button" role="tab" aria-controls="inventory-category-tools" aria-selected="false" tabindex="-1" data-inventory-tab="tools">Tools</button>
-        <button id="inventory-tab-materials" type="button" role="tab" aria-controls="inventory-category-materials" aria-selected="false" tabindex="-1" data-inventory-tab="materials">Materials</button>
-        <button id="inventory-tab-supplies" type="button" role="tab" aria-controls="inventory-category-supplies" aria-selected="false" tabindex="-1" data-inventory-tab="supplies">Supplies</button>
-        <button id="inventory-tab-collection" type="button" role="tab" aria-controls="inventory-category-collection" aria-selected="false" tabindex="-1" data-inventory-tab="collection">Collection</button>
+        <button id="inventory-tab-gear" type="button" role="tab" aria-selected="true" data-inventory-tab="gear"><span>⚔</span><strong>GEAR</strong><small>Weapons &amp; armour</small></button>
+        <button id="inventory-tab-bag" type="button" role="tab" aria-selected="false" tabindex="-1" data-inventory-tab="bag"><span>◆</span><strong>BAG</strong><small>Loot, tools &amp; potions</small></button>
+        <button id="inventory-tab-collection" type="button" role="tab" aria-selected="false" tabindex="-1" data-inventory-tab="collection"><span>★</span><strong>COLLECTION</strong><small>Sets &amp; discoveries</small></button>
       </nav>
       <div class="inventory-workspace">
       <div class="inventory-content">
@@ -334,7 +334,7 @@
         <div id="appearance-options"></div>
       </section>
       </details>
-      <section id="inventory-category-materials" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-materials" data-inventory-category="materials" tabindex="0" hidden>
+      <section id="inventory-category-materials" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-bag" data-inventory-category="materials" tabindex="0" hidden>
         <h3 id="inventory-materials-title"><span>Materials</span><small>Mine, collect and trade</small></h3>
         <div class="inventory-grid materials">
           <article data-item="iron_ore"><i></i><div><strong>Iron Ore</strong><small>Mineral · sell at the blacksmith</small></div><em data-item-count="iron_ore">0</em></article>
@@ -371,18 +371,18 @@
           <article data-item="crusher_forgemark" data-rarity="legendary"><i></i><div><strong>Crusher Forgemark</strong><small>Completed leader set · Core Hammer break awakened</small></div><em data-item-count="crusher_forgemark">0</em></article>
         </div>
       </section>
-      <section id="inventory-category-supplies" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-supplies" data-inventory-category="supplies" tabindex="0" hidden>
+      <section id="inventory-category-supplies" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-bag" data-inventory-category="supplies" tabindex="0" hidden>
         <h3 id="inventory-consumables-title">Supplies</h3>
         <article class="potion-inventory" data-item="healing_potion"><strong>Healing Potion</strong><small>Restores 2 HP · H to drink · carry 3</small><em data-item-count="healing_potion">0</em></article>
       </section>
-      <section id="inventory-category-tools" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-tools" data-inventory-category="tools" tabindex="0" hidden>
+      <section id="inventory-category-tools" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-bag" data-inventory-category="tools" tabindex="0" hidden>
         <h3 id="inventory-tools-title"><span>Tools</span><small>Mining equipment auto-equips when acquired</small></h3>
         <div class="inventory-grid tools-grid">
           <article data-item="reinforced_pickaxe"><i></i><div><strong>Reinforced Pickaxe</strong><small>Equipped tool · mine 2 minerals per ore block</small></div><em data-item-count="reinforced_pickaxe">0</em></article>
           <article data-item="miners_lantern"><i></i><div><strong>Miner's Lantern</strong><small>Auto-equipped · brighter, wider underground light</small></div><em data-item-count="miners_lantern">0</em></article>
         </div>
       </section>
-      <section id="inventory-category-armour" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-armour" data-inventory-category="armour" tabindex="0" hidden>
+      <section id="inventory-category-armour" class="inventory-section" role="tabpanel" aria-labelledby="inventory-tab-gear" data-inventory-category="armour" tabindex="0">
         <h3 id="inventory-armour-slot">ARMOUR SLOT: No armour</h3>
         <button type="button" data-equip-armour="none">REMOVE ARMOUR</button>
         <div class="inventory-grid equipment-grid">
@@ -397,7 +397,7 @@
           <article class="equipment" data-item="worldsplitter_plate"><i></i><div><strong>Worldsplitter Plate</strong><small>Rare Crusher set · −3 damage · heavy protection · 10% slower</small></div><em data-item-count="worldsplitter_plate">0</em><button type="button" data-equip-armour="worldsplitter_plate" disabled>EQUIP</button></article>
         </div>
       </section>
-      <section id="inventory-category-weapons" class="inventory-section equipment-section" role="tabpanel" aria-labelledby="inventory-tab-weapons" data-inventory-category="weapons" tabindex="0">
+      <section id="inventory-category-weapons" class="inventory-section equipment-section" role="tabpanel" aria-labelledby="inventory-tab-gear" data-inventory-category="weapons" tabindex="0">
         <h3 id="inventory-equipment-title"><span>Weapons</span><small>Preview or equip your main hand</small></h3>
         <div class="inventory-grid equipment-grid">
           <article class="equipment" data-item="forged_sword"><i></i><div><strong>Forged Sword</strong><small>2 / 2 / 3 damage · 380 ms opening swing</small></div><em data-item-count="forged_sword">0</em><button type="button" data-equip-main-hand="forged_sword" disabled>EQUIP</button></article>
@@ -424,10 +424,10 @@
       </section>
       </div>
       <aside id="inventory-decision-panel" aria-label="Selected equipment comparison" hidden>
-        <header><div><span>GEAR DECISION</span><strong id="inventory-decision-name">Select an item</strong></div><b id="inventory-decision-verdict">COMPARE</b></header>
+        <header><div><span>ITEM CHECK</span><strong id="inventory-decision-name">Select an item</strong></div><b id="inventory-decision-verdict">COMPARE</b></header>
         <div class="inventory-comparison">
-          <section><h3>Worn</h3><div id="inventory-worn-stats"></div></section>
-          <section><h3>Selected</h3><div id="inventory-selected-stats" aria-live="polite"></div></section>
+          <section><h3>YOU HAVE</h3><div id="inventory-worn-stats"></div></section>
+          <section><h3>NEW ITEM</h3><div id="inventory-selected-stats" aria-live="polite"></div></section>
         </div>
         <p id="inventory-calling-fit">Select a weapon or armour piece to see how it fits your Calling.</p>
         <div id="inventory-selection-actions" class="inventory-selection-actions" hidden>
