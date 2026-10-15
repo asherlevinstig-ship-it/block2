@@ -291,13 +291,13 @@
         <div class="build-path-summary-action"><span id="build-path-next">Reveals at level 5</span><button id="build-path-open" type="button">VIEW CALLING</button></div>
         <div id="build-path-specializations" hidden><p>VETERAN SPECIALIZATION <small>Permanent for this Calling</small></p><div></div><article id="build-path-master-trial" hidden><header><strong>MASTER TRIAL</strong><b></b></header><p></p><div><i></i></div><small></small></article></div>
       </section>
-      <section id="character-stats" aria-label="Character progression">
+      <details id="character-stats-drawer"><summary>Character stats <span>Show combat and gathering details</span></summary><section id="character-stats" aria-label="Character progression">
         <header><span>CHARACTER STATS</span><strong id="character-points">NO POINTS AVAILABLE</strong></header>
         <div><span>ATTACK</span><strong id="stat-power">0 · +0 damage</strong></div>
         <div><span>DEFENCE</span><strong id="stat-vitality">0 · 5 max HP</strong></div>
         <div><span>AGILITY</span><strong id="stat-agility">0 · 100% speed</strong></div>
         <div><span>MINING</span><strong id="stat-mining">0 · ×1 yield</strong></div>
-      </section>
+      </section></details>
       <details id="character-milestones-drawer"><summary>Level unlocks <span>Show progression details</span></summary><section id="character-milestones" aria-label="Character milestone unlocks"></section></details>
       <nav class="inventory-tabs" role="tablist" aria-label="Inventory categories">
         <button id="inventory-tab-weapons" type="button" role="tab" aria-controls="inventory-category-weapons" aria-selected="true" data-inventory-tab="weapons">Weapons</button>
@@ -307,6 +307,8 @@
         <button id="inventory-tab-supplies" type="button" role="tab" aria-controls="inventory-category-supplies" aria-selected="false" tabindex="-1" data-inventory-tab="supplies">Supplies</button>
         <button id="inventory-tab-collection" type="button" role="tab" aria-controls="inventory-category-collection" aria-selected="false" tabindex="-1" data-inventory-tab="collection">Collection</button>
       </nav>
+      <div class="inventory-workspace">
+      <div class="inventory-content">
       <details id="inventory-preview-drawer">
       <summary>Your character &amp; worn gear <span>Show / hide preview</span></summary>
       <section class="inventory-loadout" aria-label="Character and equipment preview">
@@ -324,16 +326,7 @@
         </div>
         <div class="inventory-preview-stats">
           <p class="eyebrow">LOADOUT PREVIEW · DOES NOT EQUIP</p>
-          <div class="inventory-comparison">
-            <section><h3>Worn</h3><div id="inventory-worn-stats"></div></section>
-            <section><h3>Selected</h3><div id="inventory-selected-stats" aria-live="polite"></div></section>
-          </div>
-          <div id="inventory-selection-actions" class="inventory-selection-actions" hidden>
-            <button id="inventory-selected-equip" type="button">EQUIP</button>
-            <button id="inventory-selected-keep" type="button">KEEP IN PACK</button>
-            <button id="inventory-selected-dismantle" type="button">DISMANTLE AT SMITH</button>
-          </div>
-          <p class="inventory-preview-help">Drag the character or use the turn buttons. Preview any item below; EQUIP wears owned gear. Remove armour to reveal your coat.</p>
+          <p class="inventory-preview-help">Drag the character or use the turn buttons. The gear comparison stays beside your pack, so opening this preview is always optional.</p>
         </div>
       </section>
       <section id="appearance-customizer" aria-label="Character appearance">
@@ -429,6 +422,21 @@
         <p class="collection-help">Undiscovered equipment stays out of your pack. Its silhouette and source live here so every drop has a clear goal.</p>
         <div id="equipment-collection-grid"></div>
       </section>
+      </div>
+      <aside id="inventory-decision-panel" aria-label="Selected equipment comparison" hidden>
+        <header><div><span>GEAR DECISION</span><strong id="inventory-decision-name">Select an item</strong></div><b id="inventory-decision-verdict">COMPARE</b></header>
+        <div class="inventory-comparison">
+          <section><h3>Worn</h3><div id="inventory-worn-stats"></div></section>
+          <section><h3>Selected</h3><div id="inventory-selected-stats" aria-live="polite"></div></section>
+        </div>
+        <p id="inventory-calling-fit">Select a weapon or armour piece to see how it fits your Calling.</p>
+        <div id="inventory-selection-actions" class="inventory-selection-actions" hidden>
+          <button id="inventory-selected-equip" type="button">EQUIP</button>
+          <button id="inventory-selected-keep" type="button">CLEAR</button>
+          <button id="inventory-selected-dismantle" type="button">DISMANTLE AT SMITH</button>
+        </div>
+      </aside>
+      </div>
       <section id="personal-storage" hidden aria-label="Personal chest">
         <p class="storage-help">Only your items · saved between visits · remove equipped copies before storing them · no gold storage</p>
         <div id="storage-content"></div>
