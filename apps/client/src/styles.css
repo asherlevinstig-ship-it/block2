@@ -493,6 +493,40 @@ button:disabled, button[aria-disabled="true"] { cursor: not-allowed; }
 }
 #special-slot:active { transform: scale(.985); }
 
+#calling-slot {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  overflow: hidden;
+  border: 1px solid rgb(83 214 174 / 48%);
+  border-radius: 9px;
+  background: rgb(17 65 54 / 84%);
+  color: #d5fff0;
+  text-align: left;
+}
+#calling-slot span,
+#calling-slot strong,
+#calling-slot em { position: relative; z-index: 1; }
+#calling-slot span { color: #70dfbd; font-size: .58rem; font-weight: 1000; letter-spacing: .11em; }
+#calling-slot strong { font-size: .72rem; }
+#calling-slot em { color: #a5f3d8; font-size: .58rem; font-style: normal; font-weight: 900; }
+#calling-slot:disabled { border-color: #ffffff1b; background: rgb(24 31 28 / 82%); color: #718079; }
+#calling-slot:disabled span, #calling-slot:disabled em { color: #718079; }
+#calling-cooldown-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: rgb(5 15 12 / 74%);
+  pointer-events: none;
+  transition: width 80ms linear;
+}
+#calling-slot.ready { box-shadow: inset 0 0 18px rgb(61 231 177 / 16%), 0 0 12px rgb(61 231 177 / 14%); }
+#calling-slot:active { transform: scale(.985); }
+
 #combat-reticle {
   position: fixed;
   z-index: 16;
@@ -2352,7 +2386,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   z-index: 18;
   bottom: max(16px, env(safe-area-inset-bottom));
   left: calc(50% + 58px);
-  width: min(590px, calc(100vw - 150px));
+  width: min(640px, calc(100vw - 150px));
   pointer-events: none;
   transform: translateX(-50%);
 }
@@ -2381,7 +2415,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
 #combat-hud-shell {
   position: relative;
   display: grid;
-  grid-template-columns: 94px minmax(130px, 1fr) minmax(132px, 1fr) minmax(132px, 1fr) 46px;
+  grid-template-columns: 82px minmax(112px, 1fr) repeat(3, minmax(112px, 1fr)) 44px;
   gap: 6px;
   align-items: stretch;
   pointer-events: auto;
@@ -2390,6 +2424,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
 #main-hand-loadout,
 #power-slot,
 #special-slot,
+#calling-slot,
 #loadout-toggle { height: 56px; margin: 0; }
 #mode-toggle { align-self: stretch; gap: 3px; padding: 3px; border-radius: 9px; }
 #mode-toggle button { min-width: 0; padding: 5px 4px; font-size: .54rem; letter-spacing: .06em; }
@@ -2398,10 +2433,10 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
 #main-hand-loadout p span { font-size: .45rem; }
 #main-hand-loadout p strong { overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
 #main-hand-loadout p em { font-size: .46rem; }
-#power-slot, #special-slot { grid-template: auto auto / 1fr auto; gap: 1px 6px; padding: 7px 9px; }
-#power-slot span, #special-slot span { grid-column: 1; font-size: .48rem; }
-#power-slot strong, #special-slot strong { grid-row: 2; grid-column: 1; overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
-#power-slot em, #special-slot em { grid-row: 1 / 3; grid-column: 2; font-size: .5rem; }
+#power-slot, #special-slot, #calling-slot { grid-template: auto auto / 1fr auto; gap: 1px 6px; padding: 7px 9px; }
+#power-slot span, #special-slot span, #calling-slot span { grid-column: 1; font-size: .48rem; }
+#power-slot strong, #special-slot strong, #calling-slot strong { grid-row: 2; grid-column: 1; overflow: hidden; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+#power-slot em, #special-slot em, #calling-slot em { grid-row: 1 / 3; grid-column: 2; font-size: .5rem; }
 #loadout-toggle {
   display: grid;
   place-content: center;
@@ -2419,7 +2454,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
   position: fixed;
   z-index: 18;
   bottom: max(16px, env(safe-area-inset-bottom));
-  left: calc(50% - 353px);
+  left: calc(50% - 385px);
   width: 110px;
   height: 56px;
   margin: 0;
@@ -2461,7 +2496,7 @@ body:has(#combat-hud-shell[data-loadout-open="true"]) #blacksmith-prompt { displ
 
 @media (max-width: 900px) and (pointer: fine) {
   #defense-slot { left: 18px; bottom: 18px; }
-  #combat-hud-root { width: min(590px, calc(100vw - 150px)); }
+  #combat-hud-root { width: min(640px, calc(100vw - 150px)); }
 }
 
 @media (pointer: coarse), (max-width: 820px) {

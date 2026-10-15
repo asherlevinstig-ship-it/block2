@@ -184,6 +184,7 @@ import {
   BUILD_PATHS,
   BUILD_PATH_RANKS,
   BUILD_PATH_SPECIALIZATIONS,
+  CALLING_ABILITIES,
   blacksmithRequiredLevel,
   enemyThreat,
   experienceToNextLevel,
@@ -194,6 +195,7 @@ import {
   type BuildPathUpdate,
   type BuildPathProc,
   type BuildPathId,
+  type CallingAbilityUpdate,
   type SeismicMasteryId,
   type SpecialApplied,
   type SpecialConsumed,
@@ -761,6 +763,7 @@ const mainHandPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("
 const seismicUpgrades = document.querySelector<HTMLElement>("#seismic-upgrades")!;
 const seismicMasteryButtons = [...document.querySelectorAll<HTMLButtonElement>("#seismic-mastery-picker [data-seismic-mastery]")];
 const specialSlot = document.querySelector<HTMLButtonElement>("#special-slot")!;
+const callingSlot = document.querySelector<HTMLButtonElement>("#calling-slot")!;
 const specialPickerButtons = [...document.querySelectorAll<HTMLButtonElement>("#special-picker [data-special]")];
 const controlsHelp = document.querySelector<HTMLElement>("#controls-help")!;
 const combatReticle = document.querySelector<HTMLElement>("#combat-reticle")!;
@@ -2721,6 +2724,8 @@ let localPowerFacingYaw: number | null = null;
 let localPowerStepApplied = false;
 let localPowerCooldownUntil = 0;
 let localSpecialCooldownUntil = 0;
+let localCallingCooldownUntil = 0;
+let callingAbilityPendingUntil = 0;
 let localMainHandId: MainHandId = "longsword";
 let localArmourId: ArmourId = "none";
 let localIronSwordOwned = false;
@@ -2740,6 +2745,7 @@ let localEquippedSpecial: SpecialId = "hunters_mark";
 let localActivePower: PowerId | null = null;
 let powerSequence = 0;
 let specialSequence = 0;
+let callingAbilitySequence = 0;
 let specialEquipSequence = 0;
 let powerEquipSequence = 0;
 let seismicMasterySequence = 0;
@@ -3018,7 +3024,8 @@ function updateControlsHelp(): void {
   const specialHint = special.castType === "tap" ? `F ${special.name}` : `Hold F place ${special.name}`;
   const fireHint = WEAPON_ATTACK_DEFINITIONS[localMainHandId].projectileTravelMs > 0 ? " · Mouse aim · Hold left-click fire" : "";
   const secondaryHint = localCharacterProgression.level >= 3 ? ` · T ${POWER_DEFINITIONS[localSecondaryPower].name}` : "";
-  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint}${secondaryHint} · ${specialHint} · Q mode · E/click acts${fireHint}`;
+  const callingHint = localBuildPathId ? ` · G ${CALLING_ABILITIES[localBuildPathId].name}` : "";
+  controlsHelp.textContent = `WASD move · Arrows camera · I inventory · H potion · Hold C/right-click Guard · Space dodge/cancel · ${powerHint}${secondaryHint} · ${specialHint}${callingHint} · Q mode · E/click acts${fireHint}`;
 }
 
 function updateSpecialLoadout(specialId: SpecialId): void {
@@ -3026,6 +3033,24 @@ function updateSpecialLoadout(specialId: SpecialId): void {
   combatHud.setSpecial(specialId);
   specialButton.textContent = specialId === "venom_fan" ? "Fan" : specialId === "hunters_mark" ? "Mark" : "Snare";
   updateControlsHelp();
+}
+
+function requestCallingAbility(): void {
+  if (!room || !worldReady) return;
+  if (!localBuildPathId) {
+    status.textContent = "Choose a Calling in Town to unlock this ability slot.";
+    showCombatFeedback("CALLING UNBOUND", "hurt");
+    return;
+  }
+  const now = Date.now();
+  if (now < localCallingCooldownUntil) {
+    showCombatFeedback(`${CALLING_ABILITIES[localBuildPathId].name.toUpperCase()} RECHARGING`, "hurt");
+    return;
+  }
+  if (performance.now() < callingAbilityPendingUntil) return;
+  callingAbilityPendingUntil = performance.now() + 700;
+  callingAbilitySequence += 1;
+  room.send("calling:ability", { requestId: `calling-${callingAbilitySequence}` });
 }
 
 function requestSpecialEquip(specialId: SpecialId): void {
@@ -3160,6 +3185,8 @@ function renderCharacterProgression(update: ProgressionUpdate, maximumHealth = p
 
 function renderBuildPath(update: BuildPathUpdate): void {
   localBuildPathId = update.selectedPathId;
+  combatHud.setCalling(update.selectedPathId);
+  updateControlsHelp();
   const selected = update.selectedPathId ? BUILD_PATHS[update.selectedPathId] : null;
   const rank = BUILD_PATH_RANKS.find(entry => entry.rank === update.rank) ?? BUILD_PATH_RANKS[0];
   buildPathPanel.dataset.selected = update.selectedPathId ?? "unbound";
@@ -7990,12 +8017,12 @@ window.addEventListener("keydown", event => {
   }
   if (!blacksmithPanel.hidden) {
     if (event.code === "Escape") blacksmithPanel.hidden = true;
-    if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyC"].includes(event.code)) event.preventDefault();
+    if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyG", "KeyC"].includes(event.code)) event.preventDefault();
     return;
   }
   if (!quizPanel.hidden) {
     if (event.code === "Escape") quizPanel.hidden = true;
-    if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyC"].includes(event.code)) event.preventDefault();
+    if (["Escape", "Space", "KeyE", "KeyQ", "KeyR", "KeyF", "KeyG", "KeyC"].includes(event.code)) event.preventDefault();
     return;
   }
   if (event.code === "Escape" && !tavernDialogue.hidden) {
@@ -8025,6 +8052,7 @@ window.addEventListener("keydown", event => {
     beginPowerAim();
   }
   if (event.code === "KeyF") beginSpecialAim();
+  if (event.code === "KeyG") { event.preventDefault(); requestCallingAbility(); }
   if (event.code === "Space") {
     event.preventDefault();
     if (!event.repeat) requestDodge();
@@ -8102,6 +8130,10 @@ specialSlot.addEventListener("pointerup", event => {
   if (specialAimPointerId === event.pointerId) commitSpecialAim();
 });
 specialSlot.addEventListener("pointercancel", cancelSpecialAim);
+callingSlot.addEventListener("click", event => {
+  event.preventDefault();
+  requestCallingAbility();
+});
 powerButton.addEventListener("pointerdown", event => {
   event.preventDefault();
   powerButton.setPointerCapture(event.pointerId);
@@ -8930,10 +8962,14 @@ app.on("update", (dt: number) => {
   powerButton.textContent = !powerServerReady ? "Wait" : !powerCompatible ? "Locked" : powerAimActive ? "Release" : powerRemaining > 0 ? `${Math.ceil(powerRemaining / 1000)}s` : "Power";
   const specialRemaining = Math.max(0, localSpecialCooldownUntil - Date.now());
   const specialDefinition = SPECIAL_DEFINITIONS[localEquippedSpecial];
+  const callingRemaining = Math.max(0, localCallingCooldownUntil - Date.now());
   combatHud.setCooldowns(
     cooldownState(powerRemaining, POWER_DEFINITIONS[localEquippedPower].cooldownMs, "READY · R",
       !powerServerReady ? "SERVER UPDATE" : !powerCompatible ? "INCOMPATIBLE" : powerAimActive ? "RELEASE TO CAST" : undefined),
     cooldownState(specialRemaining, specialDefinition.cooldownMs, "READY · F", specialAimActive ? "RELEASE TO ARM" : undefined),
+    localBuildPathId
+      ? cooldownState(callingRemaining, CALLING_ABILITIES[localBuildPathId].cooldownMs, "READY · G")
+      : cooldownState(0, 1, "CHOOSE CALLING", "CHOOSE CALLING"),
   );
   specialButton.textContent = specialAimActive
     ? "Release"
@@ -9373,6 +9409,14 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
   room.onMessage("realm-hunt:board", (update: RealmHuntBoardUpdate) => renderRealmHuntBoard(update));
   room.onMessage("hunt:collection", (update: HuntCollectionUpdate) => renderHuntCollection(update));
   room.onMessage("build:path", (update: BuildPathUpdate) => renderBuildPath(update));
+  room.onMessage("calling:ability", (update: CallingAbilityUpdate) => {
+    callingAbilityPendingUntil = 0;
+    localCallingCooldownUntil = update.cooldownUntil;
+    localBuildPathId = update.pathId;
+    combatHud.setCalling(update.pathId);
+    showCombatFeedback(update.ability.toUpperCase(), "dodge");
+    status.textContent = `${update.ability} · ${update.detail.toLowerCase()}.`;
+  });
   room.onMessage("equipment:affixes", (update: EquipmentAffixUpdate) => {
     equipmentAffixes = update.affixes ?? {};
     equipmentAffixOffers = update.offers ?? equipmentAffixOffers;
@@ -9737,7 +9781,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     authoritativeLocalPosition.set(spawn.x, spawn.y, spawn.z);
     cameraFocus.set(spawn.x, spawn.y, spawn.z);
     cameraFollow = { x: spawn.x, z: spawn.z };
-    localPowerCooldownUntil = 0; localSpecialCooldownUntil = 0;
+    localPowerCooldownUntil = 0; localSpecialCooldownUntil = 0; localCallingCooldownUntil = 0;
     cutawaySliceY = null;
     defeatScreen.hidden = true;
     worldReady = false;
@@ -9955,6 +9999,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     objectiveComplete.hidden = true;
     powerServerReady = false;
     localSpecialCooldownUntil = 0;
+    localCallingCooldownUntil = 0;
+    callingAbilityPendingUntil = 0;
     localSilverDepthsRunStage = 0;
     localSilverDepthsWing = null;
     lastDepthsCachePhase = null;

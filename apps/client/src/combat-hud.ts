@@ -6,12 +6,14 @@ import {
   SEISMIC_CLEAVE_UPGRADES,
   SPECIAL_DEFINITIONS,
   HUNT_EQUIPMENT_SETS,
+  CALLING_ABILITIES,
   huntSetForLoadout,
   type ArmourId,
   type MainHandId,
   type PowerId,
   type SeismicMasteryId,
   type SpecialId,
+  type BuildPathId,
 } from "@blockcraft/protocol";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
 import type { InteractionMode } from "./interaction-mode.js";
@@ -31,8 +33,10 @@ const seismicMastery = signal<SeismicMasteryId>("advancing_fault");
 const special = signal<SpecialId>("hunters_mark");
 const powerAiming = signal(false);
 const specialAiming = signal(false);
+const calling = signal<BuildPathId | null>(null);
 const powerCooldown = signal<CooldownState>({ percent: 0, label: "SERVER UPDATE", ready: false });
 const specialCooldown = signal<CooldownState>({ percent: 0, label: "READY · F", ready: true });
+const callingCooldown = signal<CooldownState>({ percent: 0, label: "CHOOSE CALLING", ready: false });
 const loadoutOpen = signal(false);
 
 const POWER_IDS = ["shockwave", "seismic_cleave", "eruption", "lunge_strike"] as const;
@@ -134,12 +138,26 @@ function SpecialLoadout() {
   );
 }
 
+function CallingLoadout() {
+  const selected = calling.value;
+  const cooldown = callingCooldown.value;
+  return h("button", { id: "calling-slot", type: "button", disabled: !selected,
+      "aria-label": selected ? `Use ${CALLING_ABILITIES[selected].name}` : "Choose a Calling to unlock its ability",
+      class: cooldown.ready && selected ? "ready" : "" },
+      h("span", null, "CALLING"),
+      h("strong", { id: "calling-name" }, selected ? CALLING_ABILITIES[selected].name : "Unbound"),
+      h("em", { id: "calling-cooldown-label" }, cooldown.label),
+      h("i", { id: "calling-cooldown-fill", style: { width: `${cooldown.percent}%` } }),
+  );
+}
+
 function CombatHud() {
   return h("div", { id: "combat-hud-shell", "data-loadout-open": String(loadoutOpen.value) },
     h(ModeToggle, null),
     h(MainHandLoadout, null),
     h(PowerLoadout, null),
     h(SpecialLoadout, null),
+    h(CallingLoadout, null),
     h("button", { id: "loadout-toggle", type: "button", "aria-expanded": String(loadoutOpen.value), "aria-controls": "combat-loadout-drawer", onClick: () => { loadoutOpen.value = !loadoutOpen.value; } },
       h("span", { "aria-hidden": "true" }, "⚙"), h("strong", null, "KIT")),
     h(LoadoutDrawer, null),
@@ -160,12 +178,14 @@ export const combatHud = {
   },
   setSeismicMastery(value: SeismicMasteryId): void { setIfChanged(seismicMastery, value); },
   setSpecial(value: SpecialId): void { setIfChanged(special, value); },
+  setCalling(value: BuildPathId | null): void { setIfChanged(calling, value); },
   setPowerAiming(value: boolean): void { setIfChanged(powerAiming, value); },
   setSpecialAiming(value: boolean): void { setIfChanged(specialAiming, value); },
-  setCooldowns(power: CooldownState, nextSpecial: CooldownState): void {
+  setCooldowns(power: CooldownState, nextSpecial: CooldownState, nextCalling?: CooldownState): void {
     batch(() => {
       if (JSON.stringify(powerCooldown.value) !== JSON.stringify(power)) powerCooldown.value = power;
       if (JSON.stringify(specialCooldown.value) !== JSON.stringify(nextSpecial)) specialCooldown.value = nextSpecial;
+      if (nextCalling && JSON.stringify(callingCooldown.value) !== JSON.stringify(nextCalling)) callingCooldown.value = nextCalling;
     });
   },
 };

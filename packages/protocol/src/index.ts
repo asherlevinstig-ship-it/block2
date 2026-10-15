@@ -197,6 +197,22 @@ export const BUILD_PATHS = {
   ranger: { name: "Ranger", role: "Control the distance", passive: "Path ranks add damage to bow attacks.", adept: "PINNING SHOT · Consecutive bow hits slow, then root their target." },
 } as const;
 export type BuildPathId = keyof typeof BUILD_PATHS;
+export const CALLING_ABILITIES = {
+  tank: { name: "Bulwark", cooldownMs: 18_000, description: "Brace for 5 seconds, reducing every incoming hit by 1." },
+  mage: { name: "Arcane Surge", cooldownMs: 16_000, description: "Immediately refresh Power and restore 30 stamina." },
+  assassin: { name: "Vanish", cooldownMs: 14_000, description: "Break pursuit, conceal yourself, and empower your next strike." },
+  thief: { name: "Smoke Bomb", cooldownMs: 18_000, description: "Divert nearby enemies, conceal yourself, and restore 20 stamina." },
+  ranger: { name: "Volley Focus", cooldownMs: 12_000, description: "Empower your next 3 ranged hits with +1 damage." },
+} as const satisfies Record<BuildPathId, { name: string; cooldownMs: number; description: string }>;
+export const CallingAbilityRequestSchema = z.object({ requestId: z.string().min(1).max(80) }).strict();
+export type CallingAbilityUpdate = {
+  requestId: string;
+  pathId: BuildPathId;
+  ability: string;
+  detail: string;
+  cooldownUntil: number;
+  durationMs?: number;
+};
 export const BUILD_PATH_SPECIALIZATIONS = {
   tank: [
     { id: "guardian", name: "Guardian", role: "Extend Fortress Guard", effect: "Protect allies within 5m and prevent 2 damage.", trial: "Prevent 30 damage to allies.", trialTarget: 30, capstone: "AEGIS · Fortress Guard reaches 6m and prevents 3 damage." },

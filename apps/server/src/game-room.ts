@@ -13,7 +13,7 @@ import { PartyRequestSchema } from "@blockcraft/protocol";
 import { Parties } from "./parties.js";
 import { TradeRequestSchema } from "@blockcraft/protocol";
 import { Trading } from "./trading.js";
-import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
+import { BLACKSMITH_STOCK, BLACKSMITH_DISMANTLE, BLACKSMITH_REFORGE, REGIONAL_FORGE_RECIPES, BlacksmithBuySchema, BlacksmithDismantleSchema, BlacksmithReforgeSchema, RegionalForgeSchema, AttunementForgeSchema, ITEM_DEFINITIONS, EQUIPMENT_AFFIXES, HUNT_EQUIPMENT_SETS, BUILD_PATHS, BUILD_PATH_SPECIALIZATIONS, CALLING_ABILITIES, CallingAbilityRequestSchema, HuntCollectionRequestSchema, BuildPathRequestSchema, ArmourEquipSchema, armourStats, armouredDamage, reforgeWeaponDamageBonus, equipmentPerkStats, type EquipmentPerkId, type BlacksmithDismantleItemId, type BlacksmithReforgeItemId, type RegionalForgeId, type HuntCollectionUpdate, type HuntLoadoutSlot, type BuildPathId, type BuildPathUpdate, type BuildPathProc, type BuildPathSpecializationId, type CallingAbilityUpdate, type EquipmentAffixId, type EquipmentAffixRoll, type EquipmentAffixOffers, type EquipmentAffixUpdate } from "@blockcraft/protocol";
 import { AREA_LEADER_RELIC_IDS, LEADER_FORGE_MARKS, LEADER_FORGE_RECIPES, LeaderForgeSchema,
   type AreaLeaderRelicId, type LeaderForgemarkId } from "@blockcraft/protocol";
 import { weaponPurchase } from "./blacksmith.js";
@@ -418,6 +418,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly rangerSlows = new Map<string, { until: number; multiplier: number }>();
   private readonly rangerFieldFocusHits = new Map<string, number>();
   private readonly tankFieldWards = new Set<string>();
+  private readonly callingAbilityReadyAt = new Map<string, number>();
+  private readonly tankBulwarkUntil = new Map<string, number>();
   private readonly roleOpportunityReadyAt = new Map<string, number>();
   private readonly fortressProcAt = new Map<string, number>();
   private readonly masterTrialMobTags = new Map<string, { playerId: string; specializationId: BuildPathSpecializationId; until: number }>();
@@ -754,6 +756,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     aliveMessage("power:seismic-mastery", (client, payload) => this.handleSeismicMasteryEquip(client, payload));
     aliveMessage("special", (client, payload) => this.handleSpecial(client, payload));
     aliveMessage("special:equip", (client, payload) => this.handleSpecialEquip(client, payload));
+    aliveMessage("calling:ability", (client, payload) => this.handleCallingAbility(client, payload));
     aliveMessage("main-hand:equip", (client, payload) => this.handleMainHandEquip(client, payload));
     aliveMessage("armour:equip", (client, payload) => this.handleArmourEquip(client, payload));
     this.onMessage("loot:collect", (client, payload) => this.handleLootCollect(client, payload));
@@ -969,6 +972,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.rangerPinning.delete(client.sessionId);
     this.rangerFieldFocusHits.delete(client.sessionId);
     this.tankFieldWards.delete(client.sessionId);
+    this.callingAbilityReadyAt.delete(client.sessionId);
+    this.tankBulwarkUntil.delete(client.sessionId);
     for (const key of this.roleOpportunityReadyAt.keys()) if (key.startsWith(`${client.sessionId}:`)) this.roleOpportunityReadyAt.delete(key);
     this.fortressProcAt.delete(client.sessionId);
     this.profileTokens.delete(client.sessionId);
@@ -3039,6 +3044,12 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     defense.damage = armouredDamage(defense.damage, player.armourId, kind,
       equipmentReforgeRank(player.reforgeRanksJson, player.armourId));
+    const bulwarkUntil = this.tankBulwarkUntil.get(playerId) ?? 0;
+    if (defense.damage > 0 && now < bulwarkUntil) {
+      defense.damage = Math.max(0, defense.damage - 1);
+    } else if (bulwarkUntil > 0) {
+      this.tankBulwarkUntil.delete(playerId);
+    }
     if (defense.damage > 0 && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "tank") {
       const fortifiedTier = this.equipmentAffixTier(player, "fortified");
       if (fortifiedTier > 0) defense.damage = Math.max(0, defense.damage - (fortifiedTier >= 3 ? 2 : 1));
@@ -4204,6 +4215,74 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     this.buildPathProc(client.sessionId, activePathId, opportunity.action.toUpperCase(), `${detail} · MASTERY +2`, 2_400);
     client.send("chat:notice", `${opportunity.name.toUpperCase()} · ${detail}. Returns in 3 minutes.`);
     void this.persistPlayer(client.sessionId, player, true);
+  }
+
+  private handleCallingAbility(client: Client, payload: unknown): void {
+    const parsed = CallingAbilityRequestSchema.safeParse(payload);
+    const player = this.state.players.get(client.sessionId);
+    if (!parsed.success || !player) return;
+    const pathId = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
+    if (!pathId) {
+      client.send("chat:notice", "Choose a Calling in Town before using a Calling ability.");
+      return;
+    }
+    const now = Date.now();
+    const readyAt = this.callingAbilityReadyAt.get(client.sessionId) ?? 0;
+    if (now < readyAt) {
+      client.send("chat:notice", `${CALLING_ABILITIES[pathId].name.toUpperCase()} · recovers in ${Math.max(1, Math.ceil((readyAt - now) / 1_000))}s.`);
+      return;
+    }
+    const rank = this.buildPathRankFor(player, pathId);
+    const definition = CALLING_ABILITIES[pathId];
+    const cooldownUntil = now + definition.cooldownMs;
+    this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
+    let detail = "ACTIVATED";
+    let durationMs: number | undefined;
+    if (pathId === "tank") {
+      durationMs = 5_000 + rank * 350;
+      this.tankBulwarkUntil.set(client.sessionId, now + durationMs);
+      detail = `BRACED · −1 DAMAGE PER HIT · ${(durationMs / 1_000).toFixed(1)}s`;
+    } else if (pathId === "mage") {
+      const stamina = 30 + rank * 5;
+      player.powerCooldownUntil = now;
+      player.stamina = Math.min(player.maxStamina, player.stamina + stamina);
+      detail = `POWER REFRESHED · +${stamina} STAMINA`;
+    } else if (pathId === "assassin") {
+      durationMs = 3_000 + rank * 400;
+      this.assassinShadowUntil.set(client.sessionId, now + durationMs);
+      this.pathConcealedUntil.set(client.sessionId, now + durationMs);
+      for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
+        const mob = this.state.mobs.get(mobId);
+        if (mob && Math.hypot(mob.x - player.x, mob.z - player.z) <= 8) {
+          this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search";
+        }
+      }
+      detail = `VANISHED · NEXT STRIKE EMPOWERED · ${(durationMs / 1_000).toFixed(1)}s`;
+    } else if (pathId === "thief") {
+      durationMs = 2_500 + rank * 350;
+      const radius = 6 + rank;
+      let diverted = 0;
+      for (const [mobId, awareness] of this.mobAwareness) if (awareness.targetId === client.sessionId) {
+        const mob = this.state.mobs.get(mobId);
+        if (mob && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius) {
+          this.mobAwareness.delete(mobId); mob.targetId = ""; mob.awarenessState = "search"; diverted += 1;
+        }
+      }
+      this.pathConcealedUntil.set(client.sessionId, now + durationMs);
+      const stamina = 20 + rank * 3;
+      player.stamina = Math.min(player.maxStamina, player.stamina + stamina);
+      detail = `${diverted} ENEM${diverted === 1 ? "Y" : "IES"} DIVERTED · +${stamina} STAMINA`;
+    } else {
+      const hits = rank >= 4 ? 4 : 3;
+      this.rangerFieldFocusHits.set(client.sessionId, hits);
+      detail = `NEXT ${hits} RANGED HITS +1`;
+    }
+    const update: CallingAbilityUpdate = {
+      requestId: parsed.data.requestId, pathId, ability: definition.name, detail, cooldownUntil,
+      ...(durationMs ? { durationMs } : {}),
+    };
+    client.send("calling:ability", update);
+    this.buildPathProc(client.sessionId, pathId, definition.name.toUpperCase(), detail, durationMs ?? 2_000);
   }
 
   private grantBuildProgress(playerId: string, amount: number): void {
