@@ -129,6 +129,7 @@ import {
   type ChunkSnapshot,
   type CombatHit,
   type CombatMiss,
+  type CombatTimingEvent,
   type CombatReward,
   type CombatStagger,
   type DefenseResolved,
@@ -274,6 +275,7 @@ interface PendingAttack {
   step: 1 | 2 | 3;
   impactAt: number;
   lastSweepAt?: number;
+  releaseReported?: boolean;
 }
 
 interface SilverDepthsRunStats {
@@ -1959,6 +1961,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
 
   private reject(client: Client, rejection: ActionRejected): void {
     client.send("action:rejected", rejection);
+  }
+
+  private sendCombatTiming(sessionId: string, event: CombatTimingEvent): void {
+    this.clients.find(client => client.sessionId === sessionId)?.send("combat:timing", event);
   }
 
   private specialDamageBonus(sessionId: string, mobId: string, now: number): number {
@@ -4808,6 +4814,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...(durationMs ? { durationMs } : {}),
     };
     client.send("calling:ability", update);
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "calling", phase: "accepted", serverTime: now });
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "calling", phase: "resolved", serverTime: now, outcome: "applied" });
     this.broadcast("calling:ability:effect", {
       casterId: client.sessionId, pathId, abilityId, x: effectPosition.x, y: effectPosition.y, z: effectPosition.z,
       yaw: parsed.data.yaw ?? player.yaw, ...(durationMs ? { durationMs } : {}), ...(effectTargetId ? { targetId: effectTargetId } : {}),
@@ -6553,6 +6561,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     } satisfies DodgePressureUpdate);
     player.dodgeSequence += 1;
     this.lastDodgeAt.set(client.sessionId, now);
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "dodge", phase: "accepted", serverTime: now });
     if (exhaustedUntil > now && parseBuildPathState(player.huntLoadoutsJson).selectedPathId === "thief"
       && this.buildPathRankFor(player, "thief") >= 2) {
       let diverted = 0;
@@ -6579,6 +6588,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.yaw = parsed.data.yaw;
     if (!parsed.data.active) {
       player.defending = false;
+      this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "defense", phase: "accepted", serverTime: Date.now() });
       return;
     }
     if (player.stamina < GUARD_MINIMUM_STAMINA) {
@@ -6589,6 +6599,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     player.defending = true;
     player.defenseStartedAt = Date.now();
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "defense", phase: "accepted", serverTime: player.defenseStartedAt });
   }
 
   private handlePower(client: Client, payload: unknown): void {
@@ -6674,6 +6685,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       ...(target ? { target } : {}),
     };
     this.broadcast("power:cast", cast);
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "power", phase: "accepted", serverTime: now, scheduledAt: now + definition.windupMs });
   }
 
   private handleSpecial(client: Client, payload: unknown): void {
@@ -6711,6 +6723,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         this.broadcast("combat:projectile", { projectileId, attackerId: client.sessionId, mainHandId: "venom_focus", x: player.x, y: player.y, z: player.z,
           targetX: endpoint.x, targetY: endpoint.y, targetZ: endpoint.z, travelMs: fan.travelMs, releasedAt: now } satisfies WeaponAttackReleased);
       }
+      this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "special", phase: "accepted", serverTime: now });
+      this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "special", phase: "resolved", serverTime: now, outcome: "applied" });
       return;
     }
     if (parsed.data.specialId === "bramble_snare") {
@@ -6732,6 +6746,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         expiresAt,
         cooldownUntil: player.specialCooldownUntil,
       } satisfies BrambleSnarePlaced);
+      this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "special", phase: "accepted", serverTime: now });
+      this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "special", phase: "resolved", serverTime: now, outcome: "applied" });
       return;
     }
     if (parsed.data.target) return this.reject(client, { requestId: parsed.data.requestId, action: "special", reason: "payload" });
@@ -6753,6 +6769,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       stacks: HUNTERS_MARK.initialStacks,
       maxStacks: HUNTERS_MARK.maxStacks,
     } satisfies SpecialApplied);
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "special", phase: "accepted", serverTime: now });
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "special", phase: "resolved", serverTime: now, outcome: "applied" });
   }
 
   private handleSpecialEquip(client: Client, payload: unknown): void {
@@ -6863,6 +6881,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       powerId: pending.powerId,
       reason,
     } satisfies PowerCancelled);
+    this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "power", phase: "resolved", serverTime: Date.now(), outcome: "cancelled" });
     return true;
   }
 
@@ -7096,6 +7115,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         ...(rootbound ? { rootbound: true, rootDurationMs } : {}),
       };
       this.broadcast("power:resolved", resolved);
+      this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "power", phase: "resolved", serverTime: now, outcome: targets.length ? "hit" : "miss" });
       for (const consumed of consumedMarks) this.broadcast("special:consumed", consumed);
     }
   }
@@ -7310,6 +7330,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     player.yaw = parsed.data.yaw;
     player.attackStep = step;
     player.actionSequence += 1;
+    this.sendCombatTiming(client.sessionId, { requestId: parsed.data.requestId, action: "attack", phase: "accepted", serverTime: now, scheduledAt: now + timing.impactMs });
   }
 
   private clearMobAttackTimeline(mob: MobState): void {
@@ -7501,6 +7522,10 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         const start = pending.impactAt - strike.beforeImpactMs;
         const end = pending.impactAt + strike.afterImpactMs;
         if (now < start) continue;
+        if (!pending.releaseReported) {
+          pending.releaseReported = true;
+          this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "released", serverTime: now });
+        }
         const player = this.state.players.get(sessionId);
         if (!player) { this.pendingAttacks.delete(sessionId); continue; }
         const targets = [...this.state.mobs.entries()].filter(([, mob]) => mob.alive)
@@ -7515,11 +7540,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         } else if (now >= end) {
           this.pendingAttacks.delete(sessionId);
           this.broadcast("combat:miss", { attackerId: sessionId, mainHandId: pending.mainHandId, comboStep: pending.step } satisfies CombatMiss);
+          this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "miss" });
         }
         continue;
       }
       if (now < pending.impactAt) continue;
       this.pendingAttacks.delete(sessionId);
+      this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "released", serverTime: now });
       const player = this.state.players.get(sessionId);
       if (!player) continue;
       const attackDefinition = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId];
@@ -7571,6 +7598,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       if (!target) {
         const miss: CombatMiss = { attackerId: sessionId, mainHandId: pending.mainHandId, comboStep: pending.step };
         this.broadcast("combat:miss", miss);
+        this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "miss" });
         continue;
       }
       this.applyWeaponHit(sessionId, pending, target.id, now);
@@ -7599,6 +7627,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       } else this.broadcast("combat:miss", {
         attackerId: projectile.attackerId, mainHandId: projectile.mainHandId, comboStep: projectile.step,
       } satisfies CombatMiss);
+      if (!collision?.targetId && projectile.requestId.startsWith("attack-"))
+        this.sendCombatTiming(projectile.attackerId, { requestId: projectile.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "miss" });
     }
   }
 
@@ -7649,7 +7679,15 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const mob = this.state.mobs.get(mobId);
       const timing = WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[pending.step - 1]
         ?? WEAPON_ATTACK_DEFINITIONS[pending.mainHandId].attacks[0];
-      if (!player || player.health <= 0 || !mob || !mob.alive || !timing) return;
+      if (!player || player.health <= 0 || !mob || !mob.alive || !timing) {
+        if (pending.requestId?.startsWith("attack-")) {
+          this.sendCombatTiming(sessionId, {
+            requestId: pending.requestId, action: "attack", phase: "resolved",
+            serverTime: now, outcome: "miss",
+          });
+        }
+        return;
+      }
       const dodgeCounterBonus = now <= (this.dodgeCounterUntil.get(sessionId) ?? 0) ? 1 : 0;
       if (dodgeCounterBonus > 0) this.dodgeCounterUntil.delete(sessionId);
       const traitBonusDamage = executionerDamageBonus(player.equippedTrait as TraitId, mob, { comboStep: pending.step });
@@ -7801,6 +7839,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         cooldownReducedMs,
       };
       this.broadcast("combat:hit", hit);
+      if (pending.requestId?.startsWith("attack-"))
+        this.sendCombatTiming(sessionId, { requestId: pending.requestId, action: "attack", phase: "resolved", serverTime: now, outcome: "hit" });
       if (setBonus === "venom") this.createVenomSetPool(sessionId, mob, now);
       if (setBonus === "crusher") {
         this.applyEquipmentAreaDamage(sessionId, mobId, mob, now, pending.mainHandId, pending.step,

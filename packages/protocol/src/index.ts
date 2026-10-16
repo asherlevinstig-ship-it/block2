@@ -1668,6 +1668,16 @@ export interface CombatMiss {
   comboStep: number;
 }
 
+/** Owner-only diagnostics; never changes combat authority or outcomes. */
+export interface CombatTimingEvent {
+  requestId: string;
+  action: "attack" | "dodge" | "defense" | "power" | "special" | "calling";
+  phase: "accepted" | "released" | "resolved";
+  serverTime: number;
+  scheduledAt?: number;
+  outcome?: "hit" | "miss" | "cancelled" | "applied";
+}
+
 export interface WeaponAttackReleased {
   /** Authoritative release time, used to catch up delayed presentation without replaying the flight. */
   releasedAt?: number;

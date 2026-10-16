@@ -69,6 +69,7 @@ import { bruteRecoveryPose, enemyAwarenessCue, enemyCombatCue, enemyCueLineClear
 import { replayPendingMovement, type PredictionFrame } from "./prediction-replay.js";
 import { advanceCameraOrbit, cameraOrbitOffset, initialCameraOrbit } from "./camera-orbit.js";
 import { advanceCameraFollow, advanceCameraHeight } from "./camera-follow.js";
+import { CombatSyncRecorder } from "./combat-sync.js";
 import {
   advanceDodgeVisualOffset,
   advancePredictedDodgeStamina,
@@ -159,6 +160,7 @@ import {
   type ChunkSnapshot,
   type CombatHit,
   type CombatMiss,
+  type CombatTimingEvent,
   type CombatReward,
   type CombatStagger,
   type DefenseResolved,
@@ -3487,7 +3489,9 @@ function requestCallingAbility(slot: "power" | "special" = "power"): void {
       combatHud.setCallingPending(false);
     }
   }, 720);
-  room.send("calling:ability", { requestId: `calling-${callingAbilitySequence}`, yaw: cameraOrbit.yaw, slot });
+  const requestId = `calling-${callingAbilitySequence}`;
+  combatSync.start("calling", requestId, performance.now());
+  room.send("calling:ability", { requestId, yaw: cameraOrbit.yaw, slot });
 }
 
 function requestSpecialEquip(specialId: SpecialId): void {
@@ -8066,6 +8070,7 @@ const snapFrameHistory: StopTraceFrame[] = [];
 const completedSnapTraces: string[] = [];
 let activeSnapTrace: StopTrace | null = null;
 let snapSequence = 0;
+const combatSync = new CombatSyncRecorder();
 
 function recordSnapDiagnostic(cause: string, before: pc.Vec3, after: pc.Vec3): void {
   if (!worldReady) return;
@@ -8098,7 +8103,9 @@ function requestDefense(active: boolean): void {
   }
   defenseSequence += 1;
   setDefensePresentation(active);
-  room.send("defense", { requestId: `defense-${defenseSequence}`, active, yaw: localFacingYaw });
+  const requestId = `defense-${defenseSequence}`;
+  combatSync.start("defense", requestId, performance.now());
+  room.send("defense", { requestId, active, yaw: localFacingYaw });
   if (active) {
     showCombatFeedback("GUARD", "dodge");
     status.textContent = "Guarding · time the opening 0.24 seconds to parry frontal attacks.";
@@ -8180,7 +8187,7 @@ function logMovementEvent(message: string): void {
 movementDebugCopy.addEventListener("click", async () => {
   const trace = activeStopTrace ? formatStopTrace(activeStopTrace) : completedStopTrace;
   const snapTrace = activeSnapTrace ? formatStopTrace(activeSnapTrace, "SNAP") : "";
-  const text = `SNAP DIAGNOSTICS v1\nurl=${window.location.origin}${window.location.pathname} room=${activeRoomName}\n${movementDebugLive.textContent ?? ""}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
+  const text = `SNAP DIAGNOSTICS v1\nurl=${window.location.origin}${window.location.pathname} room=${activeRoomName}\n${movementDebugLive.textContent ?? ""}\n\nCOMBAT SYNC (owner-only timings; up/down estimated from clock sync)\n${combatSync.snapshot()}\n\nSNAP EVENTS (oldest first)\n${snapDiagnosticEvents.join("\n") || "No snap detected yet."}\n\nEVENTS\n${movementEventLog.join("\n")}\n\n${[...completedSnapTraces, snapTrace].filter(Boolean).join("\n\n")}\n\n${trace}`;
   await navigator.clipboard.writeText(text);
   movementDebugCopy.textContent = "COPIED";
   window.setTimeout(() => { movementDebugCopy.textContent = "COPY LOG"; }, 1000);
@@ -8506,7 +8513,9 @@ function requestAttack(): void {
   localComboStep = comboStep;
   localComboExpiresAt = attackDefinition.combo ? now + timing.durationMs + attackDefinition.comboWindowMs : 0;
   attackSequence += 1;
-  room.send("attack", { requestId: `attack-${attackSequence}`, yaw: localActionFacingYaw });
+  const requestId = `attack-${attackSequence}`;
+  combatSync.start("attack", requestId, now);
+  room.send("attack", { requestId, yaw: localActionFacingYaw });
   logMovementEvent(`ACTION ${localMainHandId} step=${comboStep} impact=${timing.impactMs}ms yaw=${localActionFacingYaw.toFixed(1)}`);
   const attackName = attackDefinition.combo
     ? `${MAIN_HAND_DEFINITIONS[localMainHandId].attackName} ${comboStep}`
@@ -8581,8 +8590,10 @@ function requestDodge(): void {
   updateActiveChunkMeshes(predicted);
   localDodgeStartedAt = now;
   dodgeSequence += 1;
+  const requestId = `dodge-${dodgeSequence}`;
+  combatSync.start("dodge", requestId, now);
   room.send("dodge", {
-    requestId: `dodge-${dodgeSequence}`,
+    requestId,
     strafe: direction.x,
     forward: direction.z,
     yaw: localFacingYaw,
@@ -8728,9 +8739,11 @@ function castPower(yaw: number, target?: { x: number; y: number; z: number }): v
   localPowerStepApplied = false;
   localPowerCooldownUntil = Date.now() + definition.cooldownMs;
   powerSequence += 1;
+  const requestId = `power-${powerSequence}`;
   const telegraphPosition = definition.core === "ground" && target ? target : player;
   startPowerTelegraph(room.sessionId, powerId, telegraphPosition.x, telegraphPosition.y, telegraphPosition.z, yaw, definition.windupMs, shape);
-  room.send("power", { requestId: `power-${powerSequence}`, powerId, yaw, ...(target ? { target } : {}) });
+  combatSync.start("power", requestId, performance.now());
+  room.send("power", { requestId, powerId, yaw, ...(target ? { target } : {}) });
   if (powerId === "seismic_cleave") combatAudio.play("seismicWindup");
   showCombatFeedback(definition.name.toUpperCase(), "dodge");
   logMovementEvent(`POWER ${definition.id} yaw=${yaw.toFixed(1)}`);
@@ -8795,7 +8808,9 @@ function requestHuntersMark(): void {
   localFacingYaw = yaw;
   localSpecialCooldownUntil = Date.now() + HUNTERS_MARK.cooldownMs;
   specialSequence += 1;
-  room.send("special", { requestId: `special-${specialSequence}`, specialId: "hunters_mark", yaw });
+  const requestId = `special-${specialSequence}`;
+  combatSync.start("special", requestId, performance.now());
+  room.send("special", { requestId, specialId: "hunters_mark", yaw });
   status.textContent = `Marking ${target.visual.state.name}...`;
   logMovementEvent(`SPECIAL ${HUNTERS_MARK.id} target=${target.id} yaw=${yaw.toFixed(1)}`);
 }
@@ -8841,7 +8856,9 @@ function beginSpecialAim(pointerId: number | null = null): void {
     const pose = localPlayer.getPosition();
     const target = nearestLivingMob(pose, SPECIAL_DEFINITIONS.venom_fan.range);
     const yaw = rangedPointer.active ? mouseRangedYaw(localFacingYaw) : target ? movementYaw(target.visual.state.x - pose.x, target.visual.state.z - pose.z, localFacingYaw) : localFacingYaw;
-    room.send("special", { requestId: `venom-${Date.now()}`, specialId: "venom_fan", yaw });
+    const requestId = `venom-${Date.now()}`;
+    combatSync.start("special", requestId, performance.now());
+    room.send("special", { requestId, specialId: "venom_fan", yaw });
     localSpecialCooldownUntil = Date.now() + definition.cooldownMs;
     localFacingYaw = yaw;
     showCombatFeedback("VENOM FAN", "dodge");
@@ -8902,7 +8919,9 @@ function commitSpecialAim(): void {
   specialButton.classList.remove("aiming");
   localSpecialCooldownUntil = Date.now() + BRAMBLE_SNARE.cooldownMs;
   specialSequence += 1;
-  room.send("special", { requestId: `special-${specialSequence}`, specialId: "bramble_snare", yaw, target });
+  const requestId = `special-${specialSequence}`;
+  combatSync.start("special", requestId, performance.now());
+  room.send("special", { requestId, specialId: "bramble_snare", yaw, target });
   showCombatFeedback("SNARE ARMED", "dodge");
   status.textContent = "Bramble Snare armed · the first enemy entering it will be rooted.";
   logMovementEvent(`SPECIAL ${BRAMBLE_SNARE.id} ${target.x.toFixed(1)},${target.z.toFixed(1)}`);
@@ -9809,6 +9828,14 @@ app.on("update", (dt: number) => {
     }
     mob.warning.enabled = presentation.warning && cueVisible;
     if (mob.warning.enabled) {
+      if (camera.camera) {
+        const warningScreen = camera.camera.worldToScreen(new pc.Vec3(mob.state.attackStrikeX, mob.state.attackStrikeY, mob.state.attackStrikeZ));
+        const bounds = canvas.getBoundingClientRect();
+        if (warningScreen.z > 0 && warningScreen.x >= 0 && warningScreen.x <= bounds.width
+          && warningScreen.y >= 0 && warningScreen.y <= bounds.height)
+          combatSync.warning(mobId, mob.state.actionSequence, mob.state.attackStartedAt,
+            mob.state.attackContactAt, animationNow + serverClock.offset);
+      }
       if (mob.warningMesh) {
         const chargeLength = mob.isSpitter && mob.state.attackPattern !== "pool" ? spitterShotOffsets(mob.state.attackPattern).reduce((sum, offset, i) => sum + (i + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, SPITTER_PATTERN.range), 0) : mob.state.attackPattern === "charge" ? Math.min(CHAMPION_CHARGE.distance, enemyShotGuideLength({ x: mob.state.attackStrikeX, y: mob.state.attackStrikeY + .8, z: mob.state.attackStrikeZ }, mob.state.yaw, readCollisionWorldBlock)) : CHAMPION_CHARGE.distance;
         const warningLength = ["rocks", "falling-rocks", "warden-barrage", "fault-line"].includes(mob.state.attackPattern) ? BRUTE_VOLLEY.offsets.reduce<number>((sum, offset, index) => sum + (index + 1) * enemyShotGuideLength({ x: mob.state.x, y: mob.state.y + 1.05, z: mob.state.z }, mob.state.yaw + offset, readCollisionWorldBlock, BRUTE_VOLLEY.range), 0) : chargeLength;
@@ -10686,6 +10713,9 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     showCombatFeedback(message.startsWith("Recovered") ? "BAG RECOVERED" : "RECOVERY", "dodge");
   });
   room.onMessage("block:changed", applyBlockChange);
+  room.onMessage("combat:timing", (event: CombatTimingEvent) => {
+    combatSync.receive(event, performance.now(), serverClock.offset, serverClock.synchronized);
+  });
   room.onMessage("combat:projectile", (message: WeaponAttackReleased) => {
     createWeaponProjectile(message);
     logMovementEvent(`${message.mainHandId === "bow" ? "ARROW" : "ARCANE"} RELEASED`);
@@ -11109,6 +11139,8 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     pendingPings.delete(message.id);
   });
   room.onMessage("action:rejected", (message: ActionRejected) => {
+    if (["attack", "dodge", "defense", "power", "special", "calling"].includes(message.action))
+      combatSync.reject(message.requestId, message.action, message.reason, performance.now());
     if (message.action === "mine" && message.requestId === pendingMine?.requestId) cancelMining();
     status.textContent = message.action === "mine" ? miningMessage(message.reason) : `Server rejected ${message.action}: ${message.reason}`;
     logMovementEvent(`REJECT ${message.action} reason=${message.reason}`);
@@ -11173,6 +11205,7 @@ async function connect(initialCharacter?: { name: string; appearance: Appearance
     }
   });
   room.onLeave(() => {
+    combatSync.clear();
     movementShadowInput = null;
     movementPilotReady = false;
     movementPilotController = null;
