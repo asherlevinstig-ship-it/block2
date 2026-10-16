@@ -122,7 +122,7 @@ function parseHuntLoadouts(value: unknown): HuntLoadoutSlot[] {
       mainHandId: raw.mainHandId, armourId: armour.data.armourId, equippedPower: raw.equippedPower,
       equippedPowerSecondary: raw.equippedPowerSecondary, equippedSpecial: raw.equippedSpecial,
       equippedTrait: raw.equippedTrait, seismicMastery: raw.seismicMastery,
-      buildPathId: ["tank", "mage", "assassin", "thief", "ranger"].includes(String(raw.buildPathId)) ? raw.buildPathId as HuntLoadoutSlot["buildPathId"] : null });
+      buildPathId: ["tank", "mage", "assassin", "thief", "ranger", "healer"].includes(String(raw.buildPathId)) ? raw.buildPathId as HuntLoadoutSlot["buildPathId"] : null });
   }
   return slots.sort((a, b) => a.slot - b.slot).slice(0, 3);
 }

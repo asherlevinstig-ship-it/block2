@@ -7,6 +7,7 @@ describe("hidden build paths", () => {
       equippedSpecial: "hunters_mark", powerPoints: 3, vitalityPoints: 0, agilityPoints: 1 });
     expect(candidates[0]?.pathId).toBe("mage");
     expect(candidates[0]?.reasons).toContain("focus weapon");
+    expect(candidates.at(-1)?.pathId).toBe("healer");
   });
   it("retains progress and ranks up the selected path", () => {
     const selected = chooseBuildPath(parseBuildPathState("{}"), "tank");

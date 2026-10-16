@@ -509,7 +509,7 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "northwatch-watchpost", name: "Ruined Northwatch Post", kind: "ruin", x: 20, z: -62 },
 ] as const satisfies readonly { id: string; name: string; kind: RoadsideDiscoveryKind; x: number; z: number }[];
 
-export type RoleFieldPath = "tank" | "mage" | "assassin" | "thief" | "ranger";
+export type RoleFieldPath = "tank" | "mage" | "assassin" | "thief" | "ranger" | "healer";
 export const ROLE_FIELD_OPPORTUNITIES = [
   { id: "tank-stonebreak", landmarkId: "stone-road-camp", pathId: "tank", x: 54, z: 38,
     name: "Broken Stonebreak Barricade", action: "Fortify", prompt: "Brace the camp and prepare a ward for the next incoming hit." },

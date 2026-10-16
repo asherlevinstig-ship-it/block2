@@ -113,4 +113,20 @@ describe("player saves", () => {
     expect(JSON.parse(restored.huntLoadoutsJson).dust).toBe(7);
     expect(JSON.parse(restored.huntLoadoutsJson).offers).toEqual({ fangstalker_wrap: ["lethal", "veiled", "executioner"] });
   });
+  it("round-trips a saved Healer Calling and loadout", () => {
+    const player = new PlayerState();
+    player.huntLoadoutsJson = JSON.stringify({
+      loadouts: [{ slot: 1, name: "Medic", mainHandId: "longsword", armourId: "none",
+        equippedPower: "seismic_cleave", equippedPowerSecondary: "lunge_strike", equippedSpecial: "hunters_mark",
+        equippedTrait: "momentum", seismicMastery: "advancing_fault", buildPathId: "healer" }],
+      buildPath: { selectedPathId: "healer", xp: { healer: 70 }, specializations: { healer: "lifebinder" },
+        callingAbilities: { healer: "healer_field_mend" } },
+    });
+    const parsed = parsePlayerSave(serializePlayerSave(player))!;
+    expect(parsed.buildPath.selectedPathId).toBe("healer");
+    expect(parsed.huntLoadouts?.[0]?.buildPathId).toBe("healer");
+    const restored = new PlayerState(); applyPlayerSave(restored, parsed);
+    expect(JSON.parse(restored.huntLoadoutsJson).buildPath.selectedPathId).toBe("healer");
+    expect(JSON.parse(restored.huntLoadoutsJson).loadouts[0].buildPathId).toBe("healer");
+  });
 });

@@ -32,10 +32,11 @@ describe("kill contributions", () => {
     credit.clear("boss");
     expect(credit.eligiblePersistent("boss", mob, [["early", player]])).toEqual([]);
   });
-  it("counts real defensive support toward persistent boss credit, but not recent damage", () => {
+  it("counts real defensive support toward recent and persistent boss credit", () => {
     const credit = new CombatContributions();
-    credit.recordSupport("boss", "tank", 2);
-    expect(credit.eligible("boss", mob, [["tank", player]], 1_000)).toEqual([]);
+    credit.recordSupport("boss", "tank", 2, 1_000);
+    expect(credit.eligible("boss", mob, [["tank", player]], 1_000)).toEqual(["tank"]);
+    expect(credit.eligible("boss", mob, [["tank", player]], 21_001)).toEqual([]);
     expect(credit.eligiblePersistent("boss", mob, [["tank", player], ["spectator", player]])).toEqual(["tank"]);
     credit.disconnect("tank");
     expect(credit.eligiblePersistent("boss", mob, [["tank", player]])).toEqual([]);

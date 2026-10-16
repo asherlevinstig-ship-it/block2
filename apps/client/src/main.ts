@@ -3577,7 +3577,7 @@ function renderBuildPath(update: BuildPathUpdate): void {
   callingIntroTitle.textContent = selected ? "Your Calling" : "Choose your Calling";
   callingIntroEyebrow.textContent = selected ? `${selected.name.toUpperCase()} · ${rank.name.toUpperCase()}` : "YOUR PLAYSTYLE HAS AWAKENED";
   callingIntroCopy.textContent = selected
-    ? "Review the three paths that best fit your current equipment and stats. Changes are allowed only in Town."
+    ? "Review gear-based paths, or choose Healer for team support. Changes are allowed only in Town."
     : "Choose one clear combat identity. Your first ability is available immediately on G.";
   update.candidates.forEach((candidate, index) => {
     const definition = BUILD_PATHS[candidate.pathId];
@@ -3883,6 +3883,7 @@ function createCallingAnticipation(pathId: RoleFieldPath): void {
     assassin: new pc.Color(1, .22, .42),
     thief: new pc.Color(.38, 1, .57),
     ranger: new pc.Color(1, .76, .2),
+    healer: new pc.Color(.34, 1, .78),
   };
   const root = new pc.Entity(`calling-anticipation:${pathId}`);
   const material = powerMaterial(colors[pathId], .86);
@@ -3911,6 +3912,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     assassin_vanish: new pc.Color(.44, .12, .72), assassin_death_mark: new pc.Color(1, .08, .18), assassin_blade_dance: new pc.Color(1, .64, .72),
     thief_smoke_bomb: new pc.Color(.18, .72, .42), thief_decoy: new pc.Color(.42, 1, .48), thief_escape_artist: new pc.Color(.76, 1, .22),
     ranger_volley_focus: new pc.Color(1, .7, .1), ranger_disengage: new pc.Color(.24, .9, .76), ranger_deadeye: new pc.Color(1, .9, .28),
+    healer_field_mend: new pc.Color(.25, 1, .72),
   };
   const abilityId = effect.abilityId;
   const style: CallingImpactVisual["style"] = abilityId === "tank_earthbreaker" ? "terrain"
@@ -3979,6 +3981,13 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
       const banner = addBox(root, "challenge-banner", material, [.28, 1.25, .12], [Math.sin(angle) * 1.05, .78, Math.cos(angle) * 1.05]);
       banner.setLocalEulerAngles(0, angle * 180 / Math.PI, index % 2 ? 8 : -8);
     }
+  } else if (abilityId === "healer_field_mend") {
+    addBox(root, "mend-cross-horizontal", material, [.88, .16, .16], [0, 1.05, 0]);
+    addBox(root, "mend-cross-vertical", material, [.16, .88, .16], [0, 1.05, 0]);
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      addBox(root, "mend-light", material, [.09, .48, .09], [Math.sin(angle) * .7, .6 + index % 3 * .22, Math.cos(angle) * .7]);
+    }
   } else if (abilityId === "mage_arcane_surge") {
     addBox(root, "arcane-surge-core", material, [.3, 2.2, .3], [0, 1.1, 0]);
     for (let index = 0; index < 6; index += 1) {
@@ -4043,7 +4052,7 @@ function createCallingImpact(effect: CallingAbilityEffect): void {
     : style === "motion" ? 650 : style === "terrain" ? 1_150 : 950;
   callingImpactVisuals.push({ root, material, startedAt: performance.now(), durationMs, style });
   const local = localPlayer.getPosition(), pan = enemyCuePan(effect.x, local.x, 14);
-  combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" ? "callingMage"
+  combatAudio.play(effect.pathId === "tank" ? "callingTank" : effect.pathId === "mage" || effect.pathId === "healer" ? "callingMage"
     : effect.pathId === "assassin" ? "callingShadow" : effect.pathId === "thief" ? "callingThief" : "callingRanger", pan);
   if (style === "terrain") combatAudio.play("seismicImpact");
 }
@@ -4061,7 +4070,7 @@ function updateCallingPersistentState(state: CallingStateUpdate): void {
   if (!anchor) return;
   const colors: Record<RoleFieldPath, pc.Color> = {
     tank: new pc.Color(.25, .76, 1), mage: new pc.Color(.72, .34, 1), assassin: new pc.Color(1, .16, .38),
-    thief: new pc.Color(.3, 1, .55), ranger: new pc.Color(1, .76, .16),
+    thief: new pc.Color(.3, 1, .55), ranger: new pc.Color(1, .76, .16), healer: new pc.Color(.25, 1, .72),
   };
   const material = powerMaterial(colors[state.pathId], .68);
   const root = new pc.Entity(`calling-state:${state.abilityId}`);

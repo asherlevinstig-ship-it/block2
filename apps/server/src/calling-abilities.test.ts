@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CALLING_ABILITIES, CALLING_ABILITY_OPTIONS, type BuildPathId, type CallingAbilityId } from "@blockcraft/protocol";
 import { WorldRoom } from "./game-room.js";
 import { MobState, PlayerState, WorldState } from "./schema.js";
-import { chooseBuildPath, grantBuildPathXp, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
+import { chooseBuildPath, chooseBuildSpecialization, grantBuildPathXp, parseBuildPathState, serializeBuildPathState } from "./build-paths.js";
 
 describe("hotbar Calling abilities", () => {
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(10_000); });
@@ -22,11 +22,12 @@ describe("hotbar Calling abilities", () => {
     return { room, internal, player, client, broadcast };
   }
 
-  it.each(["tank", "mage", "assassin", "thief", "ranger"] as const)("activates %s from the dedicated slot", pathId => {
+  it.each(["tank", "mage", "assassin", "thief", "ranger", "healer"] as const)("activates %s from the dedicated slot", pathId => {
     const { internal, player, client, broadcast } = fixture(pathId);
     const mob = new MobState(); Object.assign(mob, { x: 52, y: 8, z: 50, alive: true, targetId: "hero" });
     internal.state.mobs.set("pursuer", mob);
     internal.mobAwareness.set("pursuer", { targetId: "hero" });
+    if (pathId === "healer") player.health = 2;
     internal.handleCallingAbility(client, { requestId: `use-${pathId}` });
 
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({
@@ -35,10 +36,10 @@ describe("hotbar Calling abilities", () => {
     }));
     expect(client.send).toHaveBeenCalledWith("build:path-proc", expect.objectContaining({ pathId }));
     expect(broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({
-      casterId: "hero", pathId, abilityId: `${pathId}_${pathId === "tank" ? "bulwark" : pathId === "mage" ? "arcane_surge" : pathId === "assassin" ? "vanish" : pathId === "thief" ? "smoke_bomb" : "volley_focus"}`,
+      casterId: "hero", pathId, abilityId: `${pathId}_${pathId === "tank" ? "bulwark" : pathId === "mage" ? "arcane_surge" : pathId === "assassin" ? "vanish" : pathId === "thief" ? "smoke_bomb" : pathId === "healer" ? "field_mend" : "volley_focus"}`,
       x: 50, y: 8, z: 50,
     }));
-    if (pathId !== "mage") expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
+    if (pathId !== "mage" && pathId !== "healer") expect(broadcast).toHaveBeenCalledWith("calling:state", expect.objectContaining({
       playerId: "hero", pathId, phase: "active",
     }));
     if (pathId === "tank") {
@@ -56,6 +57,7 @@ describe("hotbar Calling abilities", () => {
       expect(internal.mobAwareness.has("pursuer")).toBe(false);
     }
     if (pathId === "ranger") expect(internal.rangerCallingFocus.get("hero")).toEqual({ hits: 3, bonus: 1 });
+    if (pathId === "healer") expect(player.health).toBe(4);
   });
 
   it.each(CALLING_ABILITY_OPTIONS)("equips and activates $id when its rank is unlocked", option => {
@@ -65,6 +67,7 @@ describe("hotbar Calling abilities", () => {
     internal.mobAwareness.set("target", { targetId: "hero" });
     internal.handleCallingAbilityEquip(client, { abilityId: option.id as CallingAbilityId });
     expect(parseBuildPathState(player.huntLoadoutsJson).callingAbilities[option.pathId]).toBe(option.id);
+    if (option.pathId === "healer") player.health = 2;
     internal.handleCallingAbility(client, { requestId: `activate-${option.id}`, yaw: 0 });
     expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: option.id }));
   });
@@ -101,6 +104,44 @@ describe("hotbar Calling abilities", () => {
     room.state.mobs.set("northwatch-watchbreaker", boss);
     internal.damagePlayer("northwatch-watchbreaker", "ally", 2, 10_000, false);
     expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toContain("hero");
+  });
+
+  it("heals an injured ally before self and credits actual boss-fight healing", () => {
+    const { room, internal, player, client, broadcast } = fixture("healer", 70);
+    vi.spyOn(internal, "persistPlayer").mockResolvedValue(undefined);
+    player.health = 2;
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 1, maxHealth: 5 });
+    room.state.players.set("ally", ally);
+    const boss = new MobState(); Object.assign(boss, { x: 53, y: 8, z: 50, alive: true, isMiniBoss: true,
+      combatState: "windup", health: 52, maxHealth: 52 });
+    room.state.mobs.set("northwatch-watchbreaker", boss);
+    internal.handleCallingAbility(client, { requestId: "heal-ally" });
+    expect(ally.health).toBe(4); expect(player.health).toBe(2);
+    expect(client.send).toHaveBeenCalledWith("calling:ability", expect.objectContaining({ abilityId: "healer_field_mend", detail: expect.stringContaining("+3 HP") }));
+    expect(broadcast).toHaveBeenCalledWith("calling:ability:effect", expect.objectContaining({ targetId: "ally", x: ally.x, z: ally.z }));
+    expect(internal.combatContributions.eligiblePersistent("northwatch-watchbreaker", boss, room.state.players)).toEqual(["hero"]);
+    internal.defeatMob("northwatch-watchbreaker", boss, "ally", 10_100);
+    expect([...room.state.lootDrops.values()].some(drop => drop.ownerId === "hero")).toBe(true);
+  });
+
+  it("does not spend Field Mend cooldown when nobody is injured, then can self-heal", () => {
+    const { internal, player, client } = fixture("healer");
+    internal.handleCallingAbility(client, { requestId: "no-target" });
+    expect(internal.callingAbilityReadyAt.has("hero")).toBe(false);
+    player.health = 3;
+    internal.handleCallingAbility(client, { requestId: "self-heal" });
+    expect(player.health).toBe(5);
+    expect(internal.callingAbilityReadyAt.get("hero")).toBe(25_000);
+  });
+
+  it("Field Medic restores stamina to an injured ally", () => {
+    const { room, internal, player, client } = fixture("healer", 70);
+    player.huntLoadoutsJson = serializeBuildPathState(chooseBuildSpecialization(parseBuildPathState(player.huntLoadoutsJson), "healer", "field_medic"));
+    const ally = new PlayerState(); Object.assign(ally, { x: 52, y: 8, z: 50, health: 3, maxHealth: 5, stamina: 40, maxStamina: 100 });
+    room.state.players.set("ally", ally);
+    internal.handleCallingAbility(client, { requestId: "field-medic" });
+    expect(ally.health).toBe(5); expect(ally.stamina).toBe(50);
+    expect(parseBuildPathState(player.huntLoadoutsJson).trials.field_medic).toBe(10);
   });
 
   it("publishes persistent charges and clears them as they are consumed", () => {

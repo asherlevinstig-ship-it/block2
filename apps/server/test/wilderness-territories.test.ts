@@ -181,7 +181,7 @@ describe("distinct radial wilderness territories", () => {
       const player = new PlayerState(); Object.assign(player, { x: boss.x + 2, y: boss.y, z: boss.z });
       room.state.players.set(id, player);
     }
-    internal.combatContributions.recordSupport("northwatch-watchbreaker", "tank", 3);
+    internal.combatContributions.recordSupport("northwatch-watchbreaker", "tank", 3, 10_000);
     internal.combatContributions.record("northwatch-watchbreaker", "assassin", 3, 10_000);
     internal.defeatMob("northwatch-watchbreaker", boss, "assassin", 90_000);
     const owners = [...room.state.lootDrops.values()].map(drop => drop.ownerId);

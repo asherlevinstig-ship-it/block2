@@ -199,6 +199,7 @@ export const BUILD_PATHS = {
   assassin: { name: "Assassin", role: "Exploit vulnerability", passive: "Path ranks add damage against marked or weakened enemies.", adept: "SHADOWSTEP · A perfect dodge conceals you and empowers your next strike." },
   thief: { name: "Thief", role: "Escape with the prize", passive: "Path ranks improve perfect-dodge recovery and kill gold.", adept: "SMOKE DECOY · An exhausted dodge breaks nearby enemy pursuit." },
   ranger: { name: "Ranger", role: "Control the distance", passive: "Path ranks add damage to bow attacks.", adept: "PINNING SHOT · Consecutive bow hits slow, then root their target." },
+  healer: { name: "Healer", role: "Keep allies standing", passive: "Path ranks strengthen your nearby-ally heal.", adept: "FIELD MEND · Heal an injured ally on G; useful healing earns boss credit." },
 } as const;
 export type BuildPathId = keyof typeof BUILD_PATHS;
 export const CALLING_ABILITIES = {
@@ -207,6 +208,7 @@ export const CALLING_ABILITIES = {
   assassin: { name: "Vanish", cooldownMs: 14_000, description: "Break pursuit, conceal yourself, and empower your next strike." },
   thief: { name: "Smoke Bomb", cooldownMs: 18_000, description: "Divert nearby enemies, conceal yourself, and restore 20 stamina." },
   ranger: { name: "Volley Focus", cooldownMs: 12_000, description: "Empower your next 3 ranged hits with +1 damage." },
+  healer: { name: "Field Mend", cooldownMs: 15_000, description: "Restore 2 HP to a nearby injured ally (or yourself if alone)." },
 } as const satisfies Record<BuildPathId, { name: string; cooldownMs: number; description: string }>;
 export const CALLING_ABILITY_OPTIONS = [
   { id: "tank_bulwark", pathId: "tank", name: "Bulwark", category: "Core", unlockRank: 0, cooldownMs: 18_000, description: "Brace and reduce every incoming hit." },
@@ -224,6 +226,7 @@ export const CALLING_ABILITY_OPTIONS = [
   { id: "ranger_volley_focus", pathId: "ranger", name: "Volley Focus", category: "Core", unlockRank: 0, cooldownMs: 12_000, description: "Empower your next three ranged hits." },
   { id: "ranger_disengage", pathId: "ranger", name: "Disengage", category: "Utility", unlockRank: 2, cooldownMs: 15_000, description: "Leap backward and empower your next two shots." },
   { id: "ranger_deadeye", pathId: "ranger", name: "Deadeye", category: "Aggressive", unlockRank: 3, cooldownMs: 18_000, description: "Greatly empower your next two ranged hits." },
+  { id: "healer_field_mend", pathId: "healer", name: "Field Mend", category: "Core", unlockRank: 0, cooldownMs: 15_000, description: "Heal the most injured nearby ally; self-heal if no ally needs help." },
 ] as const;
 export type CallingAbilityId = typeof CALLING_ABILITY_OPTIONS[number]["id"];
 export const CALLING_ABILITY_AUGMENTS = [
@@ -294,7 +297,7 @@ export const CALLING_AUGMENT_TRIALS = {
 export const CallingAbilityEquipRequestSchema = z.object({
   abilityId: z.enum(["tank_bulwark", "tank_challenge", "tank_earthbreaker", "mage_arcane_surge", "mage_mana_shield", "mage_overload",
     "assassin_vanish", "assassin_death_mark", "assassin_blade_dance", "thief_smoke_bomb", "thief_decoy", "thief_escape_artist",
-    "ranger_volley_focus", "ranger_disengage", "ranger_deadeye"]),
+    "ranger_volley_focus", "ranger_disengage", "ranger_deadeye", "healer_field_mend"]),
 }).strict();
 export const CallingAugmentEquipRequestSchema = z.object({
   augmentId: z.enum(CALLING_ABILITY_AUGMENTS.map(option => option.id) as [CallingAugmentId, ...CallingAugmentId[]]),
@@ -352,6 +355,10 @@ export const BUILD_PATH_SPECIALIZATIONS = {
     { id: "marksman", name: "Marksman", role: "Finish the sequence", effect: "The third Pinning Shot deals +2 damage.", trial: "Land 20 third-shot killing blows.", trialTarget: 20, capstone: "DEADEYE · Third Pinning Shots deal +4 damage." },
     { id: "trapper", name: "Trapper", role: "Hold the battlefield", effect: "Pinning slow is stronger and its root lasts 1.8 seconds.", trial: "Defeat 20 rooted enemies.", trialTarget: 20, capstone: "IRON SNARE · Roots last 2.5 seconds." },
   ],
+  healer: [
+    { id: "lifebinder", name: "Lifebinder", role: "Restore more health", effect: "Field Mend restores 1 additional HP.", trial: "Restore 30 HP to injured allies.", trialTarget: 30, capstone: "DEEP RESTORATION · Field Mend restores 1 more HP." },
+    { id: "field_medic", name: "Field Medic", role: "Restore stamina too", effect: "Field Mend also restores 10 stamina.", trial: "Restore 100 ally stamina with Field Mend.", trialTarget: 100, capstone: "SECOND WIND · Field Mend restores 20 stamina." },
+  ],
 } as const;
 export type BuildPathSpecializationId = typeof BUILD_PATH_SPECIALIZATIONS[BuildPathId][number]["id"];
 export const BUILD_PATH_RANKS = [
@@ -361,7 +368,7 @@ export const BUILD_PATH_RANKS = [
   { rank: 3, name: "Veteran", xp: 70 },
   { rank: 4, name: "Master", xp: 140 },
 ] as const;
-export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper"]).optional() }).strict();
+export const BuildPathRequestSchema = z.object({ action: z.enum(["sync", "choose", "specialize"]), pathId: z.enum(["tank", "mage", "assassin", "thief", "ranger", "healer"]).optional(), specializationId: z.enum(["guardian", "juggernaut", "arcanist", "elementalist", "executioner", "phantom", "trickster", "plunderer", "marksman", "trapper", "lifebinder", "field_medic"]).optional() }).strict();
 export type BuildPathAffinity = { pathId: BuildPathId; score: number; reasons: string[] };
 export type BuildPathUpdate = { selectedPathId: BuildPathId | null; rank: number; xp: number; nextRankXp: number | null;
   selectedCallingAbilityId: CallingAbilityId | null;
@@ -412,6 +419,7 @@ export const EQUIPMENT_AFFIX_RESONANCE = {
   assassin: { name: "Nightfall", effect: "Both equipped Assassin affixes gain +1 effective tier." },
   thief: { name: "Ghosthand", effect: "Both equipped Thief affixes gain +1 effective tier." },
   ranger: { name: "Hawkeye", effect: "Both equipped Ranger affixes gain +1 effective tier." },
+  healer: { name: "Sanctuary", effect: "Matching Healer affixes gain +1 effective tier." },
 } as const satisfies Record<BuildPathId, { name: string; effect: string }>;
 
 /** A weapon and armour resonate when their attunements support the same classless Calling. */

@@ -10,7 +10,7 @@ export type BuildPathState = { selectedPathId: BuildPathId | null; xp: Partial<R
 export type BuildAffinitySource = { mainHandId: string; armourId: string; equippedTrait: string; equippedSpecial: string;
   powerPoints: number; vitalityPoints: number; agilityPoints: number };
 
-const PATH_IDS = ["tank", "mage", "assassin", "thief", "ranger"] as const;
+const PATH_IDS = ["tank", "mage", "assassin", "thief", "ranger", "healer"] as const;
 const SPECIALIZATION_IDS = PATH_IDS.flatMap(pathId => BUILD_PATH_SPECIALIZATIONS[pathId].map(option => option.id)) as BuildPathSpecializationId[];
 const safePath = (value: unknown): value is BuildPathId => typeof value === "string" && PATH_IDS.includes(value as BuildPathId);
 const safeSpecialization = (value: unknown): value is BuildPathSpecializationId => typeof value === "string" && SPECIALIZATION_IDS.includes(value as BuildPathSpecializationId);
@@ -93,7 +93,7 @@ export function buildPathAffinities(source: BuildAffinitySource): BuildPathAffin
   const trait = source.equippedTrait as TraitId;
   const values: Record<BuildPathId, { score: number; reasons: string[] }> = {
     tank: { score: 0, reasons: [] }, mage: { score: 0, reasons: [] }, assassin: { score: 0, reasons: [] },
-    thief: { score: 0, reasons: [] }, ranger: { score: 0, reasons: [] },
+    thief: { score: 0, reasons: [] }, ranger: { score: 0, reasons: [] }, healer: { score: 0, reasons: ["team support"] },
   };
   const add = (id: BuildPathId, score: number, reason: string) => { values[id].score += score; values[id].reasons.push(reason); };
   if (armour.reduction >= 2) add("tank", armour.reduction * 3, "heavy armour");
@@ -109,8 +109,10 @@ export function buildPathAffinities(source: BuildAffinitySource): BuildPathAffin
   if (trait === "momentum") add("thief", 3, "Momentum trait");
   if (hand.tag === "ranged") add("ranger", 10, "bow weapon");
   if (source.equippedSpecial === "bramble_snare") add("ranger", 5, "Bramble Snare");
-  return PATH_IDS.map(pathId => ({ pathId, score: values[pathId].score, reasons: values[pathId].reasons }))
+  const strongest = PATH_IDS.filter(pathId => pathId !== "healer")
+    .map(pathId => ({ pathId, score: values[pathId].score, reasons: values[pathId].reasons }))
     .sort((a, b) => b.score - a.score || PATH_IDS.indexOf(a.pathId) - PATH_IDS.indexOf(b.pathId)).slice(0, 3);
+  return [...strongest, { pathId: "healer", score: 0, reasons: ["team support"] }];
 }
 
 export function chooseBuildPath(state: BuildPathState, pathId: BuildPathId): BuildPathState {

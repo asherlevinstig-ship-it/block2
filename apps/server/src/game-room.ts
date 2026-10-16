@@ -2226,10 +2226,9 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const defeatedMistfenEvent = mobId === MISTFEN_EVENT_ID
       ? mistfenEventDefinition(this.realmEvents.mistfenVariant) : null;
     for (const key of this.venomBuildup.keys()) if (key.endsWith(`:${mobId}`)) this.venomBuildup.delete(key);
-    const credited = isRealmEventId(mobId) || mobId === "northwatch-watchbreaker"
+    const credited = isRealmEventId(mobId) || mob.isMiniBoss
       ? this.combatContributions.eligiblePersistent(mobId, mob, this.state.players)
       : this.combatContributions.eligible(mobId, mob, this.state.players, now);
-    // A long solo fight can age its early hits out of the contribution window.
     // Never turn an actual killing blow into a rewardless defeat when nobody
     // else qualified; the caller has already validated the hit and attacker.
     const fallbackKiller = this.state.players.get(attackerId);
@@ -3331,7 +3330,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const beforeProtection = defense.damage;
       defense.damage = Math.max(0, defense.damage - (guardianMaster ? 3 : guardian ? 2 : 1) - (protectorTier >= 2 ? 1 : 0));
       if (mobId === "northwatch-watchbreaker" && beforeProtection > defense.damage)
-        this.combatContributions.recordSupport(mobId, guardId, beforeProtection - defense.damage);
+        this.combatContributions.recordSupport(mobId, guardId, beforeProtection - defense.damage, now);
       if (guardian) this.grantMasterTrial(guardId, "guardian", beforeProtection - defense.damage);
       if (now - (this.fortressProcAt.get(guardId) ?? 0) >= 600) {
         this.fortressProcAt.set(guardId, now);
@@ -4481,7 +4480,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     const pathId = parsed.data.pathId;
     const candidates = buildPathAffinities(player);
     if (!pathId || !candidates.some(candidate => candidate.pathId === pathId)) {
-      this.sendBuildPath(client, "That path is not among your three strongest affinities. Change your build and check again."); return;
+      this.sendBuildPath(client, "Choose a recommended path or Healer for team support. Change gear to reveal other paths."); return;
     }
     const previous = parseBuildPathState(player.huntLoadoutsJson).selectedPathId;
     this.setPlayerBuildData(player, this.huntLoadouts(player), chooseBuildPath(parseBuildPathState(player.huntLoadoutsJson), pathId));
@@ -4560,12 +4559,24 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       client.send("chat:notice", `${definition.name.toUpperCase()} · recovers in ${Math.max(1, Math.ceil((readyAt - now) / 1_000))}s.`);
       return;
     }
+    const healTarget = abilityId === "healer_field_mend"
+      ? [...this.state.players.entries()].filter(([, target]) => target.health > 0 && target.health < target.maxHealth
+        && Math.abs(target.y - player.y) <= 2.5 && Math.hypot(target.x - player.x, target.z - player.z) <= 8
+        && hasCombatLineOfSight(player, target, this.readWorldBlock))
+        .sort(([idA, a], [idB, b]) => Number(idA === client.sessionId) - Number(idB === client.sessionId)
+          || a.health / a.maxHealth - b.health / b.maxHealth
+          || Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z))[0] : undefined;
+    if (abilityId === "healer_field_mend" && !healTarget) {
+      client.send("chat:notice", "FIELD MEND · no injured ally within 8m and line of sight.");
+      return;
+    }
     const rank = this.buildPathRankFor(player, pathId);
     const cooldownUntil = now + definition.cooldownMs;
     this.callingAbilityReadyAt.set(client.sessionId, cooldownUntil);
     let detail = "ACTIVATED";
     let durationMs: number | undefined;
     let effectTargetId: string | undefined;
+    let effectPosition = player;
     const nearbyMobs = (radius: number) => [...this.state.mobs.entries()].filter(([, mob]) => mob.alive
       && Math.abs(mob.y - player.y) <= 2.5 && Math.hypot(mob.x - player.x, mob.z - player.z) <= radius);
     if (abilityId === "tank_bulwark") {
@@ -4578,7 +4589,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       for (const [mobId, mob] of targets) {
         const awareness = this.mobAwareness.get(mobId) ?? createMobAwareness();
         if (mobId === "northwatch-watchbreaker" && awareness.targetId && awareness.targetId !== client.sessionId)
-          this.combatContributions.recordSupport(mobId, client.sessionId, Math.ceil(mob.maxHealth * .05));
+          this.combatContributions.recordSupport(mobId, client.sessionId, Math.ceil(mob.maxHealth * .05), now);
         provokeMob(awareness, { id: client.sessionId, x: player.x, y: player.y, z: player.z, health: player.health }, now);
         this.mobAwareness.set(mobId, awareness);
       }
@@ -4621,6 +4632,31 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const charges = augmentId === "overload_residual_charge" ? 2 : 1;
       this.mageOverloadCharges.set(client.sessionId, charges);
       detail = `NEXT ${charges > 1 ? `${charges} POWERS` : "POWER"} +${(rank >= 4 ? 4 : 3) + (augmentId === "overload_volatile_core" ? 2 : 0)} DAMAGE`;
+    } else if (abilityId === "healer_field_mend") {
+      const [targetId, target] = healTarget!;
+      const specialization = this.buildSpecializationFor(player, "healer");
+      const heal = 2 + (rank >= 2 ? 1 : 0) + (rank >= 4 ? 1 : 0)
+        + (specialization === "lifebinder" ? 1 + Number(this.buildSpecializationMastered(player, "lifebinder")) : 0);
+      const restored = Math.min(heal, target.maxHealth - target.health);
+      target.health += restored;
+      const staminaBefore = target.stamina;
+      if (specialization === "field_medic") target.stamina = Math.min(target.maxStamina, target.stamina
+        + (this.buildSpecializationMastered(player, "field_medic") ? 20 : 10));
+      const staminaRestored = Math.round(target.stamina - staminaBefore);
+      effectTargetId = targetId; effectPosition = target;
+      detail = `${targetId === client.sessionId ? "SELF" : target.name || "ALLY"} +${restored} HP${staminaRestored ? ` · +${staminaRestored} STAMINA` : ""}`;
+      if (targetId !== client.sessionId) this.clients.find(candidate => candidate.sessionId === targetId)
+        ?.send("chat:notice", `${player.name || "A HEALER"} used Field Mend · +${restored} HP${staminaRestored ? ` · +${staminaRestored} stamina` : ""}.`);
+      let engagedBoss = false;
+      if (targetId !== client.sessionId) for (const [mobId, mob] of this.state.mobs) {
+        if (!mob.alive || !mob.isMiniBoss || (mob.combatState === "idle" && !this.mobAwareness.get(mobId)?.targetId)
+          || Math.abs(mob.y - target.y) > 2.5 || Math.hypot(mob.x - target.x, mob.z - target.z) > 22) continue;
+        this.combatContributions.recordSupport(mobId, client.sessionId, restored, now);
+        engagedBoss = true;
+      }
+      if (engagedBoss) this.grantBuildProgress(client.sessionId, 2);
+      if (targetId !== client.sessionId && specialization === "lifebinder") this.grantMasterTrial(client.sessionId, "lifebinder", restored);
+      if (targetId !== client.sessionId && specialization === "field_medic") this.grantMasterTrial(client.sessionId, "field_medic", staminaRestored);
     } else if (abilityId === "assassin_vanish") {
       durationMs = 3_000 + rank * 400 + (augmentId === "vanish_deep_cloak" ? 2_000 : 0);
       this.assassinShadowUntil.set(client.sessionId, now + durationMs);
@@ -4732,7 +4768,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     };
     client.send("calling:ability", update);
     this.broadcast("calling:ability:effect", {
-      casterId: client.sessionId, pathId, abilityId, x: player.x, y: player.y, z: player.z,
+      casterId: client.sessionId, pathId, abilityId, x: effectPosition.x, y: effectPosition.y, z: effectPosition.z,
       yaw: parsed.data.yaw ?? player.yaw, ...(durationMs ? { durationMs } : {}), ...(effectTargetId ? { targetId: effectTargetId } : {}),
       ...(augmentId ? { augmentId } : {}),
     } satisfies CallingAbilityEffect);
