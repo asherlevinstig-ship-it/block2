@@ -1,13 +1,38 @@
-import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, MISTFEN_MARSH, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, ROADSIDE_DISCOVERIES, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, WILDS_MINIMUM_RADIUS, FRONTIER_MINIMUM_RADIUS } from "@blockcraft/voxel-world";
+import { ASHEN_SPIRE_POSITION, Block, GREENWOOD_CRAWLER_HOMES, GREENWOOD_REGION, MISTFEN_BEHEMOTH_HOME, REALM_WARDEN_GATE_POSITION, RENEWABLE_MINERAL_DEPOSITS, ROADSIDE_DISCOVERIES, SILVER_DEPTHS_ROOMS, silverDepthsPingLocation, SURFACE_HEIGHT, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SAFE_RADIUS, isInAshenReach, isInMistfenMarsh, isInNorthwatchHighlands, isMistfenBoardwalk, isMistfenToxicPool, isRegionalRoad, southernQuarryTierAt, wildernessTerritoryAt } from "@blockcraft/voxel-world";
 import { ITEM_DEFINITIONS, type EquipmentHuntTarget, type MineralDepositStatus, type SilverDepthsCacheStatus, type SilverDepthsGateStatus, type SilverDepthsPing } from "@blockcraft/protocol";
 import { MINE_ENTRANCE, caveDepth, type CaveMapState } from "./cave-navigation.js";
 import { SILVER_DEPTHS_MAP_GATES, silverDepthsMapRoute, type DungeonMapRoute } from "./silver-depths-navigation.js";
 
 export const MAP_SIZE = 220;
 export const MAP_RANGE = 72;
+const SURFACE_TERRAIN_SIZE = MAP_SIZE / 2;
 export const DISCOVERY_RADIUS = 10;
 export const THREAT_GUIDANCE_RADIUS = 28;
 export const MAP_THREAT_DISPLAY_RADIUS = 24;
+type MapColor = readonly [number, number, number];
+const SURFACE_MAP_COLORS = {
+  town: [35, 74, 60], outskirts: [58, 79, 54], wilds: [71, 78, 57], frontier: [83, 73, 55],
+  greenwood: [38, 82, 45], mistfen: [35, 65, 58], mistfenPool: [22, 88, 75],
+  causeway: [79, 87, 57], quarry: [111, 88, 60], redstone: [116, 66, 52],
+  northwatch: [67, 81, 88], ashen: [106, 65, 50], road: [165, 137, 85], boardwalk: [176, 152, 96],
+} as const satisfies Record<string, MapColor>;
+/** Use the same region and road boundaries as the generated surface world. */
+export function surfaceMapColorAt(x: number, z: number): MapColor {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  if (isMistfenBoardwalk(cellX, cellZ) && isInMistfenMarsh(cellX, cellZ)) return SURFACE_MAP_COLORS.boardwalk;
+  if (isRegionalRoad(cellX, cellZ)) return SURFACE_MAP_COLORS.road;
+  if (Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z) < TOWN_SAFE_RADIUS) return SURFACE_MAP_COLORS.town;
+  const southernTier = southernQuarryTierAt(cellX, cellZ);
+  if (southernTier) return southernTier === 1 ? SURFACE_MAP_COLORS.causeway
+    : southernTier === 2 ? SURFACE_MAP_COLORS.quarry : SURFACE_MAP_COLORS.redstone;
+  if (isInNorthwatchHighlands(cellX, cellZ)) return SURFACE_MAP_COLORS.northwatch;
+  if (isInMistfenMarsh(cellX, cellZ)) return isMistfenToxicPool(cellX, cellZ) ? SURFACE_MAP_COLORS.mistfenPool : SURFACE_MAP_COLORS.mistfen;
+  if (isInAshenReach(cellX, cellZ)) return SURFACE_MAP_COLORS.ashen;
+  if (cellX >= GREENWOOD_REGION.minX && cellX <= GREENWOOD_REGION.maxX
+    && cellZ >= GREENWOOD_REGION.minZ && cellZ <= GREENWOOD_REGION.maxZ) return SURFACE_MAP_COLORS.greenwood;
+  const tier = wildernessTerritoryAt(x, z)?.tier;
+  return tier === 3 ? SURFACE_MAP_COLORS.frontier : tier === 2 ? SURFACE_MAP_COLORS.wilds : SURFACE_MAP_COLORS.outskirts;
+}
 type Position = { x: number; z: number };
 export type ThreatMapTarget = Position & { y: number; name: string };
 export function nearbyThreatMapTarget(
@@ -285,6 +310,10 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
   });
   const ratio = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = MAP_SIZE * ratio; canvas.height = MAP_SIZE * ratio;
+  const surfaceTerrainCanvas = document.createElement("canvas");
+  surfaceTerrainCanvas.width = surfaceTerrainCanvas.height = SURFACE_TERRAIN_SIZE;
+  const surfaceTerrainContext = surfaceTerrainCanvas.getContext("2d");
+  const surfaceTerrainPixels = surfaceTerrainContext?.createImageData(SURFACE_TERRAIN_SIZE, SURFACE_TERRAIN_SIZE);
   return {
     setChampionState(value) { champion = value; },
     setEliteStates(values) { elites = values; },
@@ -505,24 +534,21 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, MAP_SIZE, MAP_SIZE);
       ctx.fillStyle = underground ? "#071310" : "#482329"; ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-      // Draw the real radial zones in world coordinates, not the clamped marker coordinates.
       const scale = MAP_SIZE / (MAP_RANGE * 2);
-      const townX = MAP_SIZE / 2 + (TOWN_CENTER_X - player.x) * scale;
-      const townY = MAP_SIZE / 2 + (TOWN_CENTER_Z - player.z) * scale;
-      for (const [radius, fill] of (underground ? [] : [[FRONTIER_MINIMUM_RADIUS, "#52432a"], [WILDS_MINIMUM_RADIUS, "#465038"], [TOWN_SAFE_RADIUS, "#234a3c"]]) as [number, string][]) {
-        ctx.beginPath(); ctx.arc(townX, townY, radius * scale, 0, Math.PI * 2);
-        ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = "#dfd1a344"; ctx.lineWidth = 1; ctx.stroke();
-      }
-      if (!underground && discovered.has(MISTFEN_WAYPOINT.id)) {
-        ctx.fillStyle = "#263d35cc"; ctx.strokeStyle = "#7eb37d99"; ctx.lineWidth = 1.5;
-        ctx.fillRect(MAP_SIZE / 2 + (MISTFEN_MARSH.minX - player.x) * scale,
-          MAP_SIZE / 2 + (MISTFEN_MARSH.minZ - player.z) * scale,
-          (MISTFEN_MARSH.maxX - MISTFEN_MARSH.minX + 1) * scale,
-          (MISTFEN_MARSH.maxZ - MISTFEN_MARSH.minZ + 1) * scale);
-        ctx.strokeRect(MAP_SIZE / 2 + (MISTFEN_MARSH.minX - player.x) * scale,
-          MAP_SIZE / 2 + (MISTFEN_MARSH.minZ - player.z) * scale,
-          (MISTFEN_MARSH.maxX - MISTFEN_MARSH.minX + 1) * scale,
-          (MISTFEN_MARSH.maxZ - MISTFEN_MARSH.minZ + 1) * scale);
+      if (!underground && surfaceTerrainContext && surfaceTerrainPixels) {
+        const pixels = surfaceTerrainPixels.data;
+        for (let py = 0; py < SURFACE_TERRAIN_SIZE; py++) {
+          const worldZ = player.z + (py * 2 + 1 - MAP_SIZE / 2) / scale;
+          for (let px = 0; px < SURFACE_TERRAIN_SIZE; px++) {
+            const worldX = player.x + (px * 2 + 1 - MAP_SIZE / 2) / scale;
+            const color = surfaceMapColorAt(worldX, worldZ);
+            const offset = (py * SURFACE_TERRAIN_SIZE + px) * 4;
+            pixels[offset] = color[0]; pixels[offset + 1] = color[1]; pixels[offset + 2] = color[2]; pixels[offset + 3] = 255;
+          }
+        }
+        surfaceTerrainContext.putImageData(surfaceTerrainPixels, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(surfaceTerrainCanvas, 0, 0, MAP_SIZE, MAP_SIZE);
       }
       if (underground) {
         ctx.fillStyle = "#354a49";
@@ -629,7 +655,8 @@ export function createMinimap(canvas: HTMLCanvasElement, detail: HTMLElement, st
       const distance = Math.round(Math.hypot(player.x - TOWN_CENTER_X, player.z - TOWN_CENTER_Z));
       const depositCount = MAP_DEPOSITS.filter(point => discovered.has(depositKey(point))).length;
       const threatDetail = nearbyThreat ? ` · Nearby threat: ${nearbyThreat.name}` : "";
-      detail.textContent = `${underground ? `Depth ${caveDepth(player.y)} · ${caveState.chambers.length} chambers discovered` : `${distance}m from town · ${depositCount} deposits found`}${threatDetail}`;
+      const territory = wildernessTerritoryAt(player.x, player.z)?.name ?? "TOWN";
+      detail.textContent = `${underground ? `Depth ${caveDepth(player.y)} · ${caveState.chambers.length} chambers discovered` : `${territory} · ${distance}m from town · ${depositCount} deposits found`}${threatDetail}`;
       canvas.setAttribute("aria-label", `North-up ${underground ? `underground map at depth ${caveDepth(player.y)}, explored cells only` : "surface map"}. ${caveState.chambers.length} chambers discovered.${nearbyThreat ? ` Nearby threat: ${nearbyThreat.name}.` : ""} White arrow shows your facing.`);
     },
   };

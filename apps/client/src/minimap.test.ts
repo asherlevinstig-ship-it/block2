@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { activeEliteMapTargets, clusterThreatMapTargets, discoveredMiniBossTargets, discoverMiniBosses, miniBossDiscoveryKey, mineralStatusLabel, discoverChampion, CHAMPION_WAYPOINT, ASHEN_SPIRE_WAYPOINT, MISTFEN_WAYPOINT, WARDEN_GATE_WAYPOINT, discoverAshenSpire, discoverMistfen, discoverRoadsideLandmarks, roadsideDiscoveryKey, isPathChampionName, mapMarkerLabelVisible, nearbyDiscoveredMiniBossTargets, nearbyThreatMapTarget, THREAT_GUIDANCE_RADIUS } from "./minimap.js";
 import { ROADSIDE_DISCOVERIES, SURFACE_HEIGHT } from "@blockcraft/voxel-world";
-import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, waypointAtMapPoint, waypointDirection } from "./minimap.js";
+import { HOME_WAYPOINT, MAP_DEPOSITS, MAP_SIZE, DISCOVERY_RADIUS, depositKey, discoverDeposits, dungeonMapPoints, dungeonPingAtMapClick, knownWaypoints, mapPoint, mapFacing, parseDiscoveries, surfaceMapColorAt, waypointAtMapPoint, waypointDirection } from "./minimap.js";
 
 describe("north-up explorer minimap", () => {
+  it("draws authored terrain and roads rather than only distance rings", () => {
+    expect(surfaceMapColorAt(8.5, 8.5)).toEqual([35, 74, 60]);
+    expect(surfaceMapColorAt(39.5, 18.5)).toEqual([38, 82, 45]);
+    expect(surfaceMapColorAt(20.5, 70.5)).toEqual([111, 88, 60]);
+    expect(surfaceMapColorAt(2.5, 101.5)).toEqual([116, 66, 52]);
+    expect(surfaceMapColorAt(8.5, 70.5)).toEqual([165, 137, 85]);
+    expect(surfaceMapColorAt(21.5, -60.5)).toEqual([67, 81, 88]);
+    expect(surfaceMapColorAt(97.5, 62.5)).toEqual([106, 65, 50]);
+    expect(surfaceMapColorAt(-30.5, -26.5)).toEqual([176, 152, 96]);
+  });
   it("reveals dynamic threat guidance only when nearby on the same floor", () => {
     const threat = { x: 20, y: 8, z: 0, name: "Realm Warden" };
     expect(nearbyThreatMapTarget({ x: 0, y: 8, z: 0 }, threat)).toEqual(threat);
