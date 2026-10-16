@@ -28,7 +28,8 @@ describe("Realm Hunt Board", () => {
       const client = { sessionId: "hunter", send: vi.fn() };
       internal.handleRealmHuntBoard(client, { action: "sync" });
       const initial = client.send.mock.calls.find(call => call[0] === "realm-hunt:board")?.[1] as RealmHuntBoardUpdate;
-      expect(initial.hunts).toHaveLength(20);
+      expect(initial.hunts).toHaveLength(21);
+      expect(initial.hunts.some(hunt => hunt.mobId === "northwatch-watchbreaker")).toBe(true);
       expect(initial.contract).toBeNull();
       expect(initial.hunts.find(hunt => hunt.mobId === "moss-crawler")).toMatchObject({
         status: "empowered", rematchTier: 2, modifier: "armoured", relicCount: 2, forgeName: "Alpha Fang",

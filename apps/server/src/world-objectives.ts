@@ -1,7 +1,7 @@
 import { isEquipmentItem, ITEM_DEFINITIONS, worldLevelRange, type ForestPortal, type ItemId, type WorldObjectiveUpdate } from "@blockcraft/protocol";
 import { WILDERNESS_EVENT_ID, WILDERNESS_EVENT_POSITION, WILDERNESS_EVENT_TRACKING_RADIUS } from "./wilderness-event.js";
 import { REALM_BOSS_TRACKING_RADIUS, REALM_EVENT_DEFINITIONS, REALM_EVENT_TRACKING_RADIUS, realmEventDefinition, type RealmEventStatus } from "./realm-event-director.js";
-import { ASHEN_SENTRY_IDS, FRONTIER_BRUTE_GROUP_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS, SOUTHERN_QUARRY_IDS, STONE_BRUTE_GROUP_IDS } from "./wilderness-encounters.js";
+import { ASHEN_SENTRY_IDS, FRONTIER_BRUTE_GROUP_IDS, MISTFEN_IDS, MIXED_FRONTIER_IDS, NORTHWATCH_IDS, SOUTHERN_QUARRY_IDS, STONE_BRUTE_GROUP_IDS } from "./wilderness-encounters.js";
 import { ASHEN_SPIRE_POSITION, FOREST_DUNGEON_MOBS, isInAshenReach, isInForestDungeon, TOWN_CENTER_X, TOWN_CENTER_Z, TOWN_SAFE_RADIUS, TOWN_BLACKSMITH_STALL_POSITION, TOWN_SILVER_DEPTHS_PORTAL_POSITION, SILVER_DEPTHS_EXIT_POSITION, SILVER_DEPTHS_MOONSTONE_SEAL_POSITION, SILVER_DEPTHS_CHECKPOINT_POSITION, CRYSTAL_MATRIARCH_HOME } from "@blockcraft/voxel-world";
 import { SILVER_DEPTHS_ANTECHAMBER_IDS, SILVER_DEPTHS_ENCOUNTERS, silverDepthsStageSpawns } from "./silver-depths-encounters.js";
 import { areaMainMobDefinition } from "./area-mini-bosses.js";
@@ -31,6 +31,8 @@ const GROUPS: ObjectiveGroup[] = [
   { id: "mistfen", title: "Mistfen Marsh", detail: "Stay on the crossing boardwalks, draw the ambushers out of the toxic pools, then break the Mireback Behemoth during recovery.", ids: [...MISTFEN_IDS], mainId: "mistfen-behemoth" },
   { id: "southern-patrols", title: "Southern Quarry Patrols", detail: "Follow the southroad, use the quarry shelves as cover, and clear the crawler and spitter patrols guarding the mineral pockets.", ids: [...SOUTHERN_QUARRY_IDS.slice(0, 3)] },
   { id: "southern-quarry", title: "Redstone Quarrymaster", detail: "Clear the pit escorts, use the broken pillars against volleys, then punish the Quarrymaster during recovery.", ids: [...SOUTHERN_QUARRY_IDS.slice(3)], mainId: "south-quarrymaster" },
+  { id: "northwatch-approach", title: "Northwatch Ridge Patrol", detail: "Follow the north road past the abandoned cart and shrine. Split the crawler and spitter patrol before the watchpost.", ids: [...NORTHWATCH_IDS.slice(0, 2)] },
+  { id: "northwatch-watchpost", title: "Northwatch Watchbreaker", detail: "Clear the ridge escorts to expose the Watchbreaker. Use the ruined post against its rocks, then counter after the slam.", ids: [...NORTHWATCH_IDS.slice(2)], mainId: "northwatch-watchbreaker" },
   ...ROAMING_PACKS.map(pack => ({ id: pack.id, title: `${pack.id.includes("outskirts") ? "Outskirts" : "Wilds"} Roaming Pack`,
     detail: "Hunt the roaming packleader for the area's richest loot, then clear its followers.",
     ids: pack.offsets.map((_, index) => roamingMemberId(pack, index)), mainId: roamingMemberId(pack, 0) })),

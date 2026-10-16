@@ -145,6 +145,41 @@ export const SOUTHERN_QUARRY_COVER = [
   { x: 1, z: 96, height: 2 }, { x: 16, z: 96, height: 3 },
   { x: 1, z: 106, height: 3 }, { x: 16, z: 106, height: 2 },
 ] as const;
+export const NORTHWATCH_HIGHLANDS = { minX: -9, maxX: 29, minZ: -84, maxZ: -34 } as const;
+export const NORTHWATCH_LEADER_HOME = { x: 15.5, y: 8, z: -72.5 } as const;
+export const NORTHWATCH_MOB_HOMES = [
+  { x: 7.5, y: 8, z: -42.5 }, { x: 18.5, y: 8, z: -54.5 },
+  { x: 14.5, y: 8, z: -68.5 }, { x: 21.5, y: 8, z: -70.5 }, NORTHWATCH_LEADER_HOME,
+] as const;
+export function isInNorthwatchHighlands(x: number, z: number): boolean {
+  return x >= NORTHWATCH_HIGHLANDS.minX && x <= NORTHWATCH_HIGHLANDS.maxX
+    && z >= NORTHWATCH_HIGHLANDS.minZ && z <= NORTHWATCH_HIGHLANDS.maxZ;
+}
+export function isNorthwatchRoad(x: number, z: number): boolean {
+  const cellX = Math.floor(x), cellZ = Math.floor(z);
+  return cellX >= 8 && cellX <= 10 && cellZ >= -76 && cellZ <= -30
+    || cellZ >= -73 && cellZ <= -70 && cellX >= 9 && cellX <= 16;
+}
+/** Wind-scoured stone ridges frame an open leader clearing; the road always has headroom. */
+export function northwatchHighlandsBlock(x: number, y: number, z: number): BlockId | null {
+  if (!isInNorthwatchHighlands(x, z) || y < SURFACE_HEIGHT) return null;
+  const road = isNorthwatchRoad(x, z);
+  const clearing = Math.hypot(x - NORTHWATCH_LEADER_HOME.x, z - NORTHWATCH_LEADER_HOME.z) < 8;
+  if (y === SURFACE_HEIGHT) {
+    if (road) return Block.Dirt;
+    if (clearing) return Block.Stone;
+    const scar = Math.abs(Math.imul(x + 13, 17) + Math.imul(z - 7, 11)) % 11;
+    return z < -58 ? scar < 7 ? Block.Stone : Block.Grass : scar < 4 ? Block.Stone : Block.Grass;
+  }
+  if (road || clearing) return y <= SURFACE_HEIGHT + 4 ? Block.Air : null;
+  const ridge = (x === -5 || x === 26) && z <= -47 && z >= -80 && Math.abs(z) % 9 < 6;
+  const brokenSpur = (z === -57 || z === -63) && (x >= -3 && x <= 3 || x >= 22 && x <= 27);
+  if ((ridge || brokenSpur) && y <= SURFACE_HEIGHT + (z < -64 ? 3 : 2)) return Block.Stone;
+  const windPine = Math.abs(Math.imul(x, 19) + Math.imul(z, 23)) % 67 === 0 && x > -3 && x < 25;
+  if (windPine && y <= SURFACE_HEIGHT + 3) return Block.OakLog;
+  if (windPine && y === SURFACE_HEIGHT + 4) return Block.Leaves;
+  return null;
+}
 export function isInSouthernQuarry(x: number, z: number): boolean {
   return x >= SOUTHERN_QUARRY.minX && x <= SOUTHERN_QUARRY.maxX
     && z >= SOUTHERN_QUARRY.minZ && z <= SOUTHERN_QUARRY.maxZ;
@@ -410,10 +445,11 @@ export const SOUTHERN_TERRITORIES = [
   { tier: 2, name: "SUNFALL QUARRY", detail: "LV 4–8 · use broken shelves against spitter volleys" },
   { tier: 3, name: "REDSTONE PIT", detail: "LV 8–12 · the Quarrymaster waits beyond the collapsed lift" },
 ] as const;
+export const NORTHWATCH_TERRITORY = { tier: 3, name: "NORTHWATCH HIGHLANDS", detail: "LV 8–12 · follow the ridge road · break the Watchbreaker escort" } as const;
 export function wildernessTerritoryAt(x: number, z: number) {
   const radius = Math.hypot(x - TOWN_CENTER_X, z - TOWN_CENTER_Z);
   const southernTier = southernQuarryTierAt(x, z);
-  return radius < TOWN_SAFE_RADIUS ? null : southernTier ? SOUTHERN_TERRITORIES[southernTier - 1]! : isInMistfenMarsh(x, z) ? MISTFEN_TERRITORY : isInAshenReach(x, z) ? ASHEN_REACH_TERRITORY
+  return radius < TOWN_SAFE_RADIUS ? null : southernTier ? SOUTHERN_TERRITORIES[southernTier - 1]! : isInNorthwatchHighlands(x, z) ? NORTHWATCH_TERRITORY : isInMistfenMarsh(x, z) ? MISTFEN_TERRITORY : isInAshenReach(x, z) ? ASHEN_REACH_TERRITORY
     : WILDERNESS_TERRITORIES[radius >= FRONTIER_MINIMUM_RADIUS ? 2 : radius >= WILDS_MINIMUM_RADIUS ? 1 : 0]!;
 }
 /** Flat ground palettes distinguish rings without adding collision geometry. */
@@ -433,7 +469,7 @@ export function isRegionalRoad(x: number, z: number): boolean {
   const wardenToAshen = cellX >= 86 && cellX <= 89 && cellZ >= 33 && cellZ <= 61;
   const ashenApproach = cellX >= 87 && cellX <= 94 && cellZ >= 60 && cellZ <= 62;
   return eastTrunk || greenwoodToStone || frontierCrossing || wardenToAshen || ashenApproach
-    || isMistfenApproachTrail(cellX, cellZ) || isMistfenBoardwalk(cellX, cellZ) || isSouthernRoad(cellX, cellZ);
+    || isMistfenApproachTrail(cellX, cellZ) || isMistfenBoardwalk(cellX, cellZ) || isSouthernRoad(cellX, cellZ) || isNorthwatchRoad(cellX, cellZ);
 }
 
 export const REGIONAL_WAYSTONES = [
@@ -446,6 +482,8 @@ export const REGIONAL_WAYSTONES = [
   { x: 13, z: 42, name: "Southroad Waystone" },
   { x: 13, z: 66, name: "Sunfall Quarry Waystone" },
   { x: 25, z: 84, name: "Redstone Pit Waystone" },
+  { x: 8, z: -46, name: "Northwatch Road Waystone" },
+  { x: 8, z: -65, name: "Northwatch Ridge Waystone" },
 ] as const;
 
 export type RoadsideDiscoveryKind = "cart" | "shrine" | "camp" | "grove" | "ruin";
@@ -466,6 +504,9 @@ export const ROADSIDE_DISCOVERIES = [
   { id: "sunfall-survey", name: "Sunfall Survey Camp", kind: "camp", x: -4, z: 55 },
   { id: "quarry-shrine", name: "Quarryworker Shrine", kind: "shrine", x: 18, z: 72 },
   { id: "collapsed-lift", name: "Collapsed Quarry Lift", kind: "ruin", x: -4, z: 89 },
+  { id: "northwatch-cart", name: "Abandoned Northwatch Cart", kind: "cart", x: 15, z: -40 },
+  { id: "windworn-shrine", name: "Windworn Shrine", kind: "shrine", x: 2, z: -54 },
+  { id: "northwatch-watchpost", name: "Ruined Northwatch Post", kind: "ruin", x: 20, z: -62 },
 ] as const satisfies readonly { id: string; name: string; kind: RoadsideDiscoveryKind; x: number; z: number }[];
 
 export type RoleFieldPath = "tank" | "mage" | "assassin" | "thief" | "ranger";
@@ -588,6 +629,7 @@ export const MINERAL_DEPOSITS = [
   { x: 18, z: 47, block: Block.IronOre, radius: 1 },
   { x: -3, z: 69, block: Block.SilverOre, radius: 1 },
   { x: 20, z: 88, block: Block.SilverOre, radius: 2 },
+  { x: 23, z: -77, block: Block.SilverOre, radius: 2 },
 ] as const;
 export const RENEWABLE_MINERAL_DEPOSITS = [...MINERAL_DEPOSITS, { x: 49, z: 20, block: Block.IronOre, radius: 1 },
   { x: -55, z: -38, block: Block.SilverOre, radius: 1 }] as const;
@@ -979,6 +1021,8 @@ export function generateChunk(seedText: string, chunkX: number, chunkZ: number):
         if (mistfenBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = mistfenBlock;
         const southernBlock = southernQuarryBlock(worldX, y, worldZ);
         if (southernBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = southernBlock;
+        const northwatchBlock = northwatchHighlandsBlock(worldX, y, worldZ);
+        if (northwatchBlock !== null && caveBlock === null) blocks[chunkIndex(localX, y, localZ)] = northwatchBlock;
         const arenaBlock = stoneBruteArenaBlock(worldX, y, worldZ);
         if (arenaBlock !== null) blocks[chunkIndex(localX, y, localZ)] = arenaBlock;
         const campBlock = wildernessCampBlock(worldX, y, worldZ);

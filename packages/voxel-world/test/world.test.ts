@@ -9,6 +9,9 @@ import {
   SOUTHERN_QUARRYMASTER_HOME,
   SOUTHERN_MOB_HOMES,
   SOUTHERN_QUARRY_COVER,
+  NORTHWATCH_LEADER_HOME,
+  isInNorthwatchHighlands,
+  isNorthwatchRoad,
   ashenReachBlock,
   isInAshenReach,
   MISTFEN_BEHEMOTH_HOME,
@@ -123,7 +126,7 @@ describe("deterministic voxel world", () => {
       if (!cache.has(key)) cache.set(key, generateChunk("density-test", a.chunkX, a.chunkZ));
       return getBlock(cache.get(key)!, a.localX, y, a.localZ);
     };
-    expect(ROADSIDE_DISCOVERIES).toHaveLength(15);
+    expect(ROADSIDE_DISCOVERIES).toHaveLength(18);
     expect(new Set(ROADSIDE_DISCOVERIES.map(site => site.kind)).size).toBe(5);
     for (const site of ROADSIDE_DISCOVERIES) {
       expect(isRegionalRoad(site.x, site.z)).toBe(false);
@@ -139,6 +142,28 @@ describe("deterministic voxel world", () => {
       expect(read(x, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
       expect(isRegionalRoad(x, z)).toBe(true);
     }
+  });
+
+  it("authors a bounded north road, ridge clearing, and silver destination", () => {
+    expect(isInNorthwatchHighlands(15, -72)).toBe(true);
+    expect(isInNorthwatchHighlands(15, -20)).toBe(false);
+    expect(wildernessTerritoryAt(15, -72)?.name).toBe("NORTHWATCH HIGHLANDS");
+    expect(isNorthwatchRoad(9, -50)).toBe(true);
+    expect(isNorthwatchRoad(9, -72)).toBe(true);
+    expect(isNorthwatchRoad(9, -90)).toBe(false);
+    const chunks = new Map<string, ReturnType<typeof generateChunk>>();
+    const read = (x: number, y: number, z: number) => {
+      const address = worldToChunk(x, z); const key = `${address.chunkX},${address.chunkZ}`;
+      if (!chunks.has(key)) chunks.set(key, generateChunk("northwatch-test", address.chunkX, address.chunkZ));
+      return getBlock(chunks.get(key)!, address.localX, y, address.localZ);
+    };
+    for (let z = -76; z <= -30; z++) {
+      expect(read(9, SURFACE_HEIGHT + 1, z)).toBe(Block.Air);
+      expect(read(9, SURFACE_HEIGHT, z)).not.toBe(Block.Air);
+    }
+    expect(read(Math.floor(NORTHWATCH_LEADER_HOME.x), SURFACE_HEIGHT + 1, Math.floor(NORTHWATCH_LEADER_HOME.z))).toBe(Block.Air);
+    expect(read(23, SURFACE_HEIGHT, -77)).toBe(Block.SilverOre);
+    expect(read(26, SURFACE_HEIGHT + 1, -68)).toBe(Block.Stone);
   });
 
   it("binds one reachable field opportunity to every implemented Calling", () => {

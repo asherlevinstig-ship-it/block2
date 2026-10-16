@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Block, MINERAL_DEPOSITS, RENEWABLE_MINERAL_DEPOSITS, wildernessTerritoryAt, wildernessSurfaceBlock, authoredMineralAt, playerCollides } from "@blockcraft/voxel-world";
-import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry, isMistfenMob, isSouthernQuarryMob, southernQuarryAllows } from "../src/wilderness-encounters.js";
+import { WILDERNESS_ENCOUNTERS, ASHEN_SENTRY_IDS, ashenSentryAllows, ashenSentryPattern, isAshenSentry, isMistfenMob, isNorthwatchMob, northwatchAllows, isSouthernQuarryMob, southernQuarryAllows } from "../src/wilderness-encounters.js";
 import { WorldRoom } from "../src/game-room.js";
 import { WorldState } from "../src/schema.js";
 import { dangerBandAt, MOB_TOWN_MINIMUM_RADIUS, radiusFromSafeCenter } from "../src/radial-difficulty.js";
 import { lootForArchetype } from "../src/loot-rules.js";
+import { areaMiniBossDefinition, leaderForFollower } from "../src/area-mini-bosses.js";
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 function fixture() {
   const room = new WorldRoom(); room.setState(new WorldState());
@@ -27,7 +28,7 @@ describe("distinct radial wilderness territories", () => {
       expect(mob.difficultyTier).toBe(dangerBandAt(spawn).tier);
       expect(radiusFromSafeCenter(mob)).toBeGreaterThanOrEqual(MOB_TOWN_MINIMUM_RADIUS - .001);
     }
-    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(10);
+    expect(WILDERNESS_ENCOUNTERS.filter(e => e.archetype === "cave_spitter" && !isAshenSentry(e.id))).toHaveLength(12);
     expect(lootForArchetype("stone_brute", "", 0)).toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
     expect(lootForArchetype("stone_brute", "", .5)).not.toContainEqual({ itemId: "stone_core_hammer", quantity: 1 });
   });
@@ -44,7 +45,7 @@ describe("distinct radial wilderness territories", () => {
   });
   it("places every guard near the appropriate mineral site", () => {
     for (const spawn of WILDERNESS_ENCOUNTERS) {
-      if (isAshenSentry(spawn.id) || isMistfenMob(spawn.id) || isSouthernQuarryMob(spawn.id)) continue;
+      if (isAshenSentry(spawn.id) || isMistfenMob(spawn.id) || isSouthernQuarryMob(spawn.id) || isNorthwatchMob(spawn.id)) continue;
       const block = spawn.archetype === "moss_crawler" ? Block.IronOre : Block.SilverOre;
       const nearest = Math.min(...MINERAL_DEPOSITS.filter(d => d.block === block && (spawn.archetype !== "stone_brute" || d.radius === 2))
         .map(d => Math.hypot(spawn.x - d.x, spawn.z - d.z)));
@@ -52,6 +53,9 @@ describe("distinct radial wilderness territories", () => {
     }
     for (const spawn of WILDERNESS_ENCOUNTERS.filter(spawn => isSouthernQuarryMob(spawn.id))) {
       expect(southernQuarryAllows(spawn)).toBe(true);
+    }
+    for (const spawn of WILDERNESS_ENCOUNTERS.filter(spawn => isNorthwatchMob(spawn.id))) {
+      expect(northwatchAllows(spawn)).toBe(true);
     }
   });
   it("keeps Ashglass Sentries by the spire and gives them a distinct readable volley rhythm", () => {
@@ -64,6 +68,16 @@ describe("distinct radial wilderness territories", () => {
       expect(internal.roamingAllowed(id, { x: 35, y: 8, z: 35 })).toBe(false);
     }
     expect([0, 1, 2, 3].map(ashenSentryPattern)).toEqual(["fan", "fan", "aimed", "fan"]);
+  });
+  it("keeps the Northwatch leader guarded and its trophy in the forge progression", () => {
+    const { room, internal } = fixture();
+    const leader = room.state.mobs.get("northwatch-watchbreaker")!;
+    expect(leader.isMiniBoss).toBe(true);
+    expect(leader.difficultyTier).toBe(3);
+    expect(areaMiniBossDefinition("northwatch-watchbreaker")?.rewardItemId).toBe("watchbreaker_crest");
+    expect(leaderForFollower("northwatch-briar")).toBe("northwatch-watchbreaker");
+    expect(leaderForFollower("northwatch-guard")).toBe("northwatch-watchbreaker");
+    expect(internal.roamingAllowed("northwatch-watchbreaker", { x: 8, y: 8, z: -20 })).toBe(false);
   });
   it("patrols generated terrain smoothly without placing mobs in solid blocks or inside town", () => {
     vi.useFakeTimers(); vi.setSystemTime(10000);

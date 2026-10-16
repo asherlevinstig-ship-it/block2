@@ -24,7 +24,7 @@ describe("readable deposit camps", () => {
   it("assigns nests, spitter cover and ruins to the right mineral sites", () => {
     expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "nest")).toHaveLength(4);
     expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "spitter")).toHaveLength(3);
-    expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "ruin")).toHaveLength(3);
+    expect(WILDERNESS_CAMPS.filter(camp => camp.kind === "ruin")).toHaveLength(4);
   });
   it.each(["camp-test-a", "camp-test-b"])("preserves every ore cell and four walkable approaches for %s", seed => {
     const read = reader(seed);

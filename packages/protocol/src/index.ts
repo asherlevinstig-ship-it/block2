@@ -704,6 +704,7 @@ export const ITEM_DEFINITIONS = {
   frontier_champion_crest: { id: "frontier_champion_crest", name: "Frontier Champion Crest", description: "Unique trophy claimed from the Frontier Stone Champion" },
   mireback_crown: { id: "mireback_crown", name: "Mireback Crown", description: "Unique venom-soaked trophy claimed from the Mireback Behemoth" },
   quarrymaster_sigil: { id: "quarrymaster_sigil", name: "Quarrymaster Sigil", description: "Unique redstone trophy claimed from the Redstone Quarrymaster" },
+  watchbreaker_crest: { id: "watchbreaker_crest", name: "Watchbreaker Crest", description: "Unique highland trophy claimed from the Northwatch Watchbreaker · awaken a Crusher Forgemark at the leader forge" },
   alpha_forgemark: { id: "alpha_forgemark", name: "Alpha Forgemark", description: "Leader collection badge · awakens Fang Dagger finishers with +1 damage" },
   venom_forgemark: { id: "venom_forgemark", name: "Venom Forgemark", description: "Leader collection badge · every third Acid Focus hit surges for +1 damage" },
   crusher_forgemark: { id: "crusher_forgemark", name: "Crusher Forgemark", description: "Leader collection badge · Stone Hammer attacks deal +1 damage to staggered enemies" },
@@ -741,7 +742,7 @@ export const AREA_LEADER_RELIC_IDS = [
   "silverfang_venom_sac", "gloomfang_venom_sac", "stonehide_core_relic", "ruinbreaker_keystone",
   "warleader_crest", "ashglass_lens", "westroad_pack_totem", "northroad_pack_totem",
   "gloam_alpha_gland", "sunscar_alpha_gland", "ironburrow_crown", "broodspitter_focus_shard",
-  "stone_warden_lantern", "frontier_champion_crest", "mireback_crown", "quarrymaster_sigil",
+  "stone_warden_lantern", "frontier_champion_crest", "mireback_crown", "quarrymaster_sigil", "watchbreaker_crest",
 ] as const satisfies readonly ItemId[];
 export type AreaLeaderRelicId = typeof AREA_LEADER_RELIC_IDS[number];
 export const LEADER_FORGE_MARKS = {
@@ -764,6 +765,7 @@ export const LEADER_FORGE_RECIPES = {
   warleader_crest: leaderForgeRecipe("crusher_forgemark"), stone_warden_lantern: leaderForgeRecipe("crusher_forgemark"),
   frontier_champion_crest: leaderForgeRecipe("crusher_forgemark"),
   quarrymaster_sigil: leaderForgeRecipe("crusher_forgemark"),
+  watchbreaker_crest: leaderForgeRecipe("crusher_forgemark"),
 } as const satisfies Record<AreaLeaderRelicId, { markId: LeaderForgemarkId; weaponId: "fang_dagger" | "acid_gland_focus" | "stone_core_hammer"; relics: 3; exchangeGold: 12 }>;
 export const LeaderForgeSchema = z.object({ relicId: z.enum(AREA_LEADER_RELIC_IDS), action: z.enum(["awaken", "exchange"]) });
 /** Capacity used when collecting a floor drop into the carried inventory. */
@@ -820,6 +822,7 @@ export const EQUIPMENT_RARITY = {
   frontier_champion_crest: "epic",
   mireback_crown: "epic",
   quarrymaster_sigil: "epic",
+  watchbreaker_crest: "epic",
   alpha_forgemark: "legendary",
   venom_forgemark: "legendary",
   crusher_forgemark: "legendary",

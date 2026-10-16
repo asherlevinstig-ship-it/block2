@@ -46,7 +46,7 @@ export const HUNT_PATHS: Readonly<Record<HuntPathId, HuntPathDefinition>> = {
   },
   crusher: {
     id: "crusher", name: "Crusher Contract", forgeName: "Crusher Break",
-    leaders: ["stone-brute", "frontier-brute", "frontier-brute-east", "buried-chamber-brute", "frontier-brute-west"],
+    leaders: ["stone-brute", "frontier-brute", "frontier-brute-east", "buried-chamber-brute", "frontier-brute-west", "northwatch-watchbreaker"],
     modifiers: ["armoured", "relentless", "frenzied"],
     championName: "Worldsplitter Colossus", championArchetype: "stone_brute", championModifier: "armoured",
   },

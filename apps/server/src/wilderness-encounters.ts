@@ -1,5 +1,5 @@
 import type { MobArchetypeId } from "./mob-archetypes.js";
-import { ASHEN_REACH, ASHEN_SENTRY_HOMES, MISTFEN_MOB_HOMES, SILVER_GUARD_HOMES, SOUTHERN_MOB_HOMES, isInAshenReach, isInMistfenMarsh, isInSouthernQuarry } from "@blockcraft/voxel-world";
+import { ASHEN_REACH, ASHEN_SENTRY_HOMES, MISTFEN_MOB_HOMES, NORTHWATCH_MOB_HOMES, SILVER_GUARD_HOMES, SOUTHERN_MOB_HOMES, isInAshenReach, isInMistfenMarsh, isInNorthwatchHighlands, isInSouthernQuarry } from "@blockcraft/voxel-world";
 export const ASHEN_SENTRY_IDS = ["ashglass-sentry-west", "ashglass-sentry-east"] as const;
 export const isAshenSentry = (id: string) => ASHEN_SENTRY_IDS.some(member => member === id);
 export const ashenSentryAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
@@ -40,6 +40,10 @@ export const SOUTHERN_QUARRY_IDS = ["south-causeway-crawler", "south-quarry-spit
 export const isSouthernQuarryMob = (id: string) => SOUTHERN_QUARRY_IDS.some(member => member === id);
 export const southernQuarryAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
   && isInSouthernQuarry(pose.x, pose.z);
+export const NORTHWATCH_IDS = ["northwatch-scout", "northwatch-spitter", "northwatch-briar", "northwatch-guard", "northwatch-watchbreaker"] as const;
+export const isNorthwatchMob = (id: string) => NORTHWATCH_IDS.some(member => member === id);
+export const northwatchAllows = (pose: { x: number; y: number; z: number }) => Math.abs(pose.y - 8) <= 1.5
+  && isInNorthwatchHighlands(pose.x, pose.z);
 /** Existing encounter IDs remain stable for objective tracking and saved worlds. */
 export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchetypeId; x: number; y: number; z: number }[] = [
   { id: "moss-crawler", archetype: "moss_crawler", x: 35.5, y: 8, z: -8.5 },
@@ -67,4 +71,9 @@ export const WILDERNESS_ENCOUNTERS: readonly { id: string; archetype: MobArchety
   { id: SOUTHERN_QUARRY_IDS[3], archetype: "briar_crawler", ...SOUTHERN_MOB_HOMES[3] },
   { id: SOUTHERN_QUARRY_IDS[4], archetype: "cave_spitter", ...SOUTHERN_MOB_HOMES[4] },
   { id: SOUTHERN_QUARRY_IDS[5], archetype: "stone_brute", ...SOUTHERN_MOB_HOMES[5] },
+  { id: NORTHWATCH_IDS[0], archetype: "briar_crawler", ...NORTHWATCH_MOB_HOMES[0] },
+  { id: NORTHWATCH_IDS[1], archetype: "cave_spitter", ...NORTHWATCH_MOB_HOMES[1] },
+  { id: NORTHWATCH_IDS[2], archetype: "briar_crawler", ...NORTHWATCH_MOB_HOMES[2] },
+  { id: NORTHWATCH_IDS[3], archetype: "cave_spitter", ...NORTHWATCH_MOB_HOMES[3] },
+  { id: NORTHWATCH_IDS[4], archetype: "stone_brute", ...NORTHWATCH_MOB_HOMES[4] },
 ];
