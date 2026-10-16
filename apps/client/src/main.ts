@@ -304,7 +304,8 @@ import {
   voxelCharacterPose,
 } from "./character-animation.js";
 import { isPowerCompatibleWithMainHand } from "./power-loadout.js";
-import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken } from "./player-profile.js";
+import { characterCreationNeeded, createGuestProfileToken, finishCharacterCreation, getOrCreateProfileToken,
+  profileBackups, restoreProfile, startNewAdventure } from "./player-profile.js";
 import { CombatAudio, enemyCuePan, enemyCuesForTransition, type EnemyCue, type EnemyCueSnapshot } from "./combat-audio.js";
 import { SceneDressing } from "./scene-dressing.js";
 import { WARDEN_LOOT_BEAM_MS } from "./warden-victory-effects.js";
@@ -861,6 +862,16 @@ const inventoryCapacityLabel = document.querySelector<HTMLElement>("#inventory-c
 const inventoryCapacitySlots = document.querySelector<HTMLElement>("#inventory-capacity-slots")!;
 const inventoryToggle = document.querySelector<HTMLButtonElement>("#inventory-toggle")!;
 const inventoryClose = document.querySelector<HTMLButtonElement>("#inventory-close")!;
+const inventoryProfile = document.querySelector<HTMLButtonElement>("#inventory-profile")!;
+const profileControls = document.querySelector<HTMLElement>("#profile-controls")!;
+const adventureStart = document.querySelector<HTMLButtonElement>("#adventure-start")!;
+const adventureConfirm = document.querySelector<HTMLElement>("#adventure-confirm")!;
+const adventureConfirmYes = document.querySelector<HTMLButtonElement>("#adventure-confirm-yes")!;
+const adventureConfirmNo = document.querySelector<HTMLButtonElement>("#adventure-confirm-no")!;
+const adventureRestore = document.querySelector<HTMLElement>("#adventure-restore")!;
+const adventureBackup = document.querySelector<HTMLSelectElement>("#adventure-backup")!;
+const adventureRestoreButton = document.querySelector<HTMLButtonElement>("#adventure-restore-button")!;
+const adventureStatus = document.querySelector<HTMLElement>("#adventure-status")!;
 const inventoryBadge = document.querySelector<HTMLElement>("#inventory-badge")!;
 const inventoryEquipped = document.querySelector<HTMLElement>("#inventory-equipped")!;
 const inventoryCountElements = new Map<ItemId, HTMLElement>(
@@ -5927,6 +5938,9 @@ tavernDialogueClose.addEventListener("click", closeTavernDialogue);
 
 function setInventoryOpen(open: boolean): void {
   if (open) closeLoot();
+  profileControls.hidden = true;
+  adventureConfirm.hidden = true;
+  inventoryProfile.setAttribute("aria-expanded", "false");
   inventoryPanel.hidden = !open;
   delete inventoryPanel.dataset.storage;
   document.querySelector("#inventory-title")!.textContent = "Inventory";
@@ -5954,6 +5968,57 @@ function setInventoryOpen(open: boolean): void {
 
 inventoryToggle.addEventListener("click", () => setInventoryOpen(inventoryPanel.hasAttribute("hidden")));
 inventoryClose.addEventListener("click", () => setInventoryOpen(false));
+function currentProfileName(): string {
+  return room ? (room.state.players as Map<string, NetworkPlayer>).get(room.sessionId)?.name || "Explorer" : "Explorer";
+}
+function refreshProfileControls(): void {
+  adventureBackup.replaceChildren(...profileBackups(window.localStorage).map((backup, index) => {
+    const option = document.createElement("option");
+    option.value = backup.token;
+    option.textContent = `${backup.name || "Explorer"} · saved ${new Date(backup.savedAt).toLocaleDateString()} · ${index + 1}`;
+    return option;
+  }));
+  adventureRestore.hidden = adventureBackup.options.length === 0;
+}
+inventoryProfile.addEventListener("click", () => {
+  profileControls.hidden = !profileControls.hidden;
+  inventoryProfile.setAttribute("aria-expanded", String(!profileControls.hidden));
+  adventureConfirm.hidden = true;
+  adventureStatus.textContent = "";
+  if (!profileControls.hidden) {
+    try { refreshProfileControls(); } catch { adventureStatus.textContent = "Browser storage is unavailable; characters cannot be switched here."; }
+  }
+});
+adventureStart.addEventListener("click", () => { adventureConfirm.hidden = false; adventureConfirmYes.focus(); });
+adventureConfirmNo.addEventListener("click", () => { adventureConfirm.hidden = true; adventureStart.focus(); });
+async function switchAdventure(action: (name: string) => void): Promise<void> {
+  const name = currentProfileName();
+  adventureConfirmYes.disabled = true;
+  adventureRestoreButton.disabled = true;
+  adventureStatus.textContent = "Saving your current character…";
+  try {
+    await room?.leave();
+    action(name);
+    try {
+      window.sessionStorage.removeItem("calling-intro-seen-v1");
+      window.localStorage.removeItem(CODEX_HUNT_STORAGE_KEY);
+    } catch { /* Browser storage may be unavailable. */ }
+    window.location.assign(`${window.location.origin}/`);
+  } catch (error) {
+    adventureStatus.textContent = `Could not switch character: ${error instanceof Error ? error.message : String(error)}. Reload to reconnect.`;
+    profileControls.hidden = false;
+    inventoryPanel.hidden = false;
+    adventureConfirmYes.disabled = false;
+    adventureRestoreButton.disabled = false;
+  }
+}
+adventureConfirmYes.addEventListener("click", () => void switchAdventure(name =>
+  startNewAdventure(window.localStorage, newGuestProfileToken, name, Date.now())));
+adventureRestoreButton.addEventListener("click", () => {
+  const selected = adventureBackup.value;
+  if (!selected) return;
+  void switchAdventure(name => restoreProfile(window.localStorage, selected, name, Date.now()));
+});
 playerLevel.addEventListener("click", () => {
   if (localCharacterProgression.unspentStatPoints > 0) levelUpPanel.hidden = false;
   else setInventoryOpen(true);

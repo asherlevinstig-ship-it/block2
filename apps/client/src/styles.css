@@ -1358,9 +1358,19 @@ body:has(#tavern-quiz:not([hidden])) #touch-controls, body:has(#blacksmith-panel
 .inventory-header p { margin: 0; color: #aede8e; }
 .inventory-header h2 { margin: 2px 0 0; color: #f2e4c5; font: 700 2rem Georgia, serif; }
 .inventory-header-actions { display: flex; align-items: center; gap: 7px; }
-#inventory-customize { min-height: 38px; padding: 0 11px; border: 1px solid #b5a069; border-radius: 9px; background: #3b321e; color: #ffe5aa; font-size: .62rem; font-weight: 900; letter-spacing: .04em; cursor: pointer; }
-#inventory-customize:hover, #inventory-customize:focus-visible { border-color: #ffe5aa; background: #574527; }
-#inventory-panel[data-storage="true"] #inventory-customize { display: none; }
+#inventory-customize, #inventory-profile { min-height: 38px; padding: 0 11px; border: 1px solid #b5a069; border-radius: 9px; background: #3b321e; color: #ffe5aa; font-size: .62rem; font-weight: 900; letter-spacing: .04em; cursor: pointer; }
+#inventory-customize:hover, #inventory-customize:focus-visible, #inventory-profile:hover, #inventory-profile:focus-visible { border-color: #ffe5aa; background: #574527; }
+#inventory-panel[data-storage="true"] #inventory-customize, #inventory-panel[data-storage="true"] #inventory-profile { display: none; }
+#profile-controls { margin: 12px 0; padding: 14px; border: 1px solid #8b9b745c; border-radius: 10px; background: #101d15; }
+#profile-controls[hidden], #adventure-confirm[hidden], #adventure-restore[hidden] { display: none; }
+#profile-controls > strong, #adventure-restore label { display: block; color: #d8c58e; font-size: .68rem; font-weight: 900; letter-spacing: .06em; }
+#profile-controls p { max-width: 620px; color: #b7c8b5; font-size: .72rem; line-height: 1.5; }
+#profile-controls button, #profile-controls select { min-height: 36px; margin: 3px 6px 3px 0; padding: 7px 10px; border: 1px solid #8f9d77; border-radius: 7px; background: #253b2b; color: #f1ead6; font: 800 .65rem system-ui; cursor: pointer; }
+#profile-controls select { max-width: 100%; }
+#adventure-confirm { margin-top: 10px; padding: 10px; border: 1px solid #e0ad6480; border-radius: 8px; background: #2e2316; }
+#adventure-confirm-yes { background: #70462b !important; }
+#adventure-restore { margin-top: 12px; padding-top: 12px; border-top: 1px solid #ffffff1b; }
+#adventure-status { min-height: 1em; margin-bottom: 0; color: #ffd28a !important; }
 #inventory-close { width: 38px; height: 38px; border: 1px solid #ffffff24; border-radius: 9px; background: #ffffff09; color: #b9c4bb; cursor: pointer; font-size: 1.5rem; line-height: 1; }
 #inventory-close:hover { border-color: #d4b574; color: white; }
 .inventory-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 10px; }
