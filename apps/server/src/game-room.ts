@@ -252,7 +252,7 @@ import { silverDepthsMoonstoneReward, silverDepthsRank } from "./silver-depths-r
 import { advanceMobGravity, createMobNavigationState, moveMobSafely, navigateMob, walkableMobSpawn, type MobNavigationState } from "./mob-navigation.js";
 import { MOB_PATROL_RADIUS, patrolDestination, type MobPatrolState } from "./mob-patrol.js";
 import { STAGGER_IMMUNITY_MS, basicStaggerDuration, bodyPoint, flightPoint, hasCombatLineOfSight, projectileImpact, meleeSweepImpact } from "./combat-impact.js";
-import { compensatedActionAt } from "./combat-lag.js";
+import { compensatedActionAt, MAX_COMBAT_LAG_COMPENSATION_MS } from "./combat-lag.js";
 import { FOREST_CACHE_DUPLICATE_GOLD, forestCacheFeaturedReward, forestCacheRewardLabel } from "./forest-dungeon-rewards.js";
 import { chooseCharacterStat, grantCharacterExperience, mobExperience, progressionAttackBonus, progressionMiningBonus, progressionSnapshot, progressionSpeedMultiplier } from "./character-progression.js";
 import { enemyLevelForTier } from "@blockcraft/protocol";
@@ -277,6 +277,20 @@ interface PendingAttack {
   impactAt: number;
   lastSweepAt?: number;
   releaseReported?: boolean;
+}
+
+interface PendingIncomingHit {
+  mobId: string;
+  playerId: string;
+  damage: number;
+  kind: "melee" | "projectile";
+  contactAt: number;
+  contactX: number;
+  contactY: number;
+  contactZ: number;
+  defending: boolean;
+  defenseStartedAt: number;
+  insideGuardArc: boolean;
 }
 
 interface SilverDepthsRunStats {
@@ -410,6 +424,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   private readonly pendingAttacks = new Map<string, PendingAttack>();
   private readonly pendingMining = new Map<string, { client: Client; request: MineBlockRequest; block: number; completesAt: number; origin: { x: number; y: number; z: number } }>();
   private readonly pendingMobMelee = new Map<string, { targetId: string; yaw: number; impactAt: number; lastSweepAt?: number }>();
+  private readonly pendingIncomingHits: PendingIncomingHit[] = [];
   private readonly crawlerRushes = new Map<string, { yaw: number; distance: number; startedAt: number; progress: number }>();
   private readonly championCharges = new Map<string, { yaw: number; startedAt: number; progress: number; hit: Set<string> }>();
   private readonly pendingPowers = new Map<string, PendingPower>();
@@ -963,6 +978,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       // Always finish room cleanup even if external save storage is unavailable.
     }
     this.state.players.delete(client.sessionId);
+    for (let index = this.pendingIncomingHits.length - 1; index >= 0; index--)
+      if (this.pendingIncomingHits[index]!.playerId === client.sessionId) this.pendingIncomingHits.splice(index, 1);
     this.silverDepthsRuns.delete(client.sessionId);
     this.silverDepthsDisconnected.delete(client.sessionId);
     if (depthsRun?.completedAt === 0) this.broadcastSilverDepthsPartyStatus();
@@ -3227,12 +3244,13 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
   }
 
   private damagePlayer(mobId: string, playerId: string, damage: number, now: number, blockable = true,
-    kind: IncomingDamageKind = "melee"): boolean {
+    kind: IncomingDamageKind = "melee", contact?: PendingIncomingHit): boolean {
     const player = this.state.players.get(playerId);
     if (!player || player.health <= 0 || isInsideTownSafeZone(player) || !caveEncounterAllows(mobId, player)) return false;
-    if (now < player.invulnerableUntil) {
-      const dodge = this.activeDodgeWindows.get(playerId);
-      if (dodge && now >= dodge.startedAt && now <= dodge.until) {
+    const dodge = this.activeDodgeWindows.get(playerId);
+    const lateDodgeCoversContact = !!contact && !!dodge && dodge.startedAt <= contact.contactAt && contact.contactAt <= dodge.until;
+    if (contact ? lateDodgeCoversContact : now < player.invulnerableUntil) {
+      if (dodge && (contact ? lateDodgeCoversContact : now >= dodge.startedAt && now <= dodge.until)) {
         this.activeDodgeWindows.delete(playerId);
         this.dodgePressure.set(playerId, { chain: 0, lastAt: Number.NEGATIVE_INFINITY, exhaustedUntil: 0 });
         const counterUntil = now + PERFECT_DODGE_COUNTER_MS;
@@ -3270,7 +3288,8 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     if (leader?.alive && (leader.archetype === "moss_crawler" || leader.archetype === "briar_crawler")) damage += 1;
     if (mob?.isMiniBoss) damage = miniBossDamage(damage);
     const defense = blockable && mob
-      ? resolveDefense(damage, player.defending, player.defenseStartedAt, now, isAttackInGuardArc(player, mob))
+      ? resolveDefense(damage, contact?.defending ?? player.defending, contact?.defenseStartedAt ?? player.defenseStartedAt,
+        contact?.contactAt ?? now, contact?.insideGuardArc ?? isAttackInGuardArc(player, mob))
       : { damage, guarded: false, parried: false };
     const traitId = player.equippedTrait as TraitId;
     if (defense.guarded) {
@@ -3432,6 +3451,33 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       mob.targetId = "";
     }
     return true;
+  }
+
+  private queueIncomingHit(mobId: string, playerId: string, damage: number, now: number,
+    kind: "melee" | "projectile" = "melee"): void {
+    const player = this.state.players.get(playerId);
+    if (!player) return;
+    // Offline/test actors and already protected players do not need a late-input window.
+    if (!this.clients.some(client => client.sessionId === playerId)
+      || now < player.invulnerableUntil || this.pendingIncomingHits.length >= 256) {
+      this.damagePlayer(mobId, playerId, damage, now, true, kind);
+      return;
+    }
+    const mob = this.state.mobs.get(mobId);
+    this.pendingIncomingHits.push({ mobId, playerId, damage, kind, contactAt: now,
+      contactX: player.x, contactY: player.y, contactZ: player.z,
+      defending: player.defending, defenseStartedAt: player.defenseStartedAt,
+      insideGuardArc: !!mob && isAttackInGuardArc(player, mob),
+    });
+  }
+
+  private resolvePendingIncomingHits(now: number): void {
+    while (this.pendingIncomingHits[0] && now - this.pendingIncomingHits[0].contactAt >= MAX_COMBAT_LAG_COMPENSATION_MS) {
+      const hit = this.pendingIncomingHits.shift()!;
+      const player = this.state.players.get(hit.playerId);
+      if (!player || Math.hypot(player.x - hit.contactX, player.y - hit.contactY, player.z - hit.contactZ) > 4) continue;
+      this.damagePlayer(hit.mobId, hit.playerId, hit.damage, now, true, hit.kind, hit);
+    }
   }
 
   private forestGate(x: number, open: boolean): void {
@@ -5673,7 +5719,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       const definition = mobArchetype(projectile.archetype);
       const target = collision?.targetId ? this.state.players.get(collision.targetId) : undefined;
       if (target && collision?.targetId) {
-        this.damagePlayer(projectile.mobId, collision.targetId, projectile.damage, now, true, "projectile");
+        this.queueIncomingHit(projectile.mobId, collision.targetId, projectile.damage, now, "projectile");
       }
       const hazardDurationMs = projectile.hazardDurationMs ?? definition.hazardDurationMs;
       const hazardRadius = projectile.hazardRadius ?? definition.hazardRadius;
@@ -5965,6 +6011,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
     }
     const now = Date.now();
     if (this.roomKind === "overworld" && this.silverDepthsLobbies.size) this.validateSilverDepthsLobbies(now);
+    this.resolvePendingIncomingHits(now);
     if (this.roomKind === "overworld") {
       const entrance = this.state.portals.get("forest-entry");
       if (entrance && entrance.expiresAt > 0 && now >= entrance.expiresAt) {
@@ -7442,7 +7489,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
       for (const [playerId, player] of this.state.players) {
         if (charge.hit.has(playerId) || player.health <= 0 || Math.abs(player.y - mob.y) > 1.1
           || !hasCombatLineOfSight(start, player, this.readWorldBlock)) continue;
-        if (championChargeHits(start, next, player)) { charge.hit.add(playerId); this.damagePlayer(id, playerId, mob.attackDamage, now); }
+        if (championChargeHits(start, next, player)) { charge.hit.add(playerId); this.queueIncomingHit(id, playerId, mob.attackDamage, now); }
         if (mob.combatState !== "strike") break;
       }
       charge.progress = progress;
@@ -7498,7 +7545,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
               : Math.abs(target.y - center.y) > BRUTE_SLAM.verticalRange || Math.hypot(target.x - center.x, target.z - center.z) > BRUTE_SLAM.radius)
             || !hasCombatLineOfSight(mob, target, this.readWorldBlock)
             || !hasCombatLineOfSight(center, target, this.readWorldBlock)) continue;
-          this.damagePlayer(mobId, id, mob.attackDamage, now);
+          this.queueIncomingHit(mobId, id, mob.attackDamage, now);
         }
         if (mob.isMiniBoss) this.damageMiniBossArenaCover(mobId, center,
           mob.attackPattern === "smash" ? 2.25 : BRUTE_SLAM.radius);
@@ -7515,7 +7562,7 @@ export class WorldRoom extends Room<{ state: WorldState; input: SchemaType<typeo
         (Math.min(now, end) - start) / (end - start), [{ id: pending.targetId, x: player.x, y: player.y, z: player.z }], this.readWorldBlock);
       pending.lastSweepAt = Math.min(now, end);
       if (hit || now >= end) this.pendingMobMelee.delete(mobId);
-      if (hit) this.damagePlayer(mobId, hit, mob.attackDamage, now);
+      if (hit) this.queueIncomingHit(mobId, hit, mob.attackDamage, now);
     }
   }
 
